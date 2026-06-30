@@ -33,7 +33,6 @@ int ObPxRFStaticInfo::init(const ObIArray<int64_t> &p2p_dh_ids, bool is_shared)
     ret = OB_INIT_TWICE;
     LOG_WARN("twice init bf static info", K(ret));
   } else if (OB_FAIL(p2p_dh_ids_.assign(p2p_dh_ids))) {
-    LOG_WARN("failed to assign", K(ret));
   } else {
     is_shared_ = is_shared;
     is_inited_ = true;
@@ -47,7 +46,6 @@ int ObPxRFStaticInfo::assign(const ObPxRFStaticInfo &other)
   is_inited_ = other.is_inited_;
   is_shared_ = other.is_shared_;
   if (OB_FAIL(p2p_dh_ids_.assign(other.p2p_dh_ids_))) {
-    LOG_WARN("failed to assign p2p_dh_ids_");
   }
   return ret;
 }
@@ -60,9 +58,7 @@ int ObPxQueryRangeInfo::init(int64_t table_id, int64_t range_column_cnt,
   table_id_ = table_id;
   range_column_cnt_ = range_column_cnt;
   if (OB_FAIL(prefix_col_idxs_.assign(prefix_col_idxs))) {
-    LOG_WARN("failed to assign prefix_col_idxs");
   } else if (OB_FAIL(prefix_col_obj_metas_.assign(prefix_col_obj_metas))) {
-    LOG_WARN("failed to assign prefix_col_obj_metas");
   }
   return ret;
 }
@@ -73,9 +69,7 @@ int ObPxQueryRangeInfo::assign(const ObPxQueryRangeInfo &other)
   table_id_ = other.table_id_;
   range_column_cnt_ = other.range_column_cnt_;
   if (OB_FAIL(prefix_col_idxs_.assign(other.prefix_col_idxs_))) {
-    LOG_WARN("failed to assign prefix_col_idxs");
   } else if (OB_FAIL(prefix_col_obj_metas_.assign(other.prefix_col_obj_metas_))) {
-    LOG_WARN("failed to assign prefix_col_obj_metas");
   }
   return ret;
 }

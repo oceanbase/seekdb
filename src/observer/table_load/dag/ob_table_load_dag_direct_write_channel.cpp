@@ -55,7 +55,6 @@ int ObTableLoadDagDirectWriteChannel::init(ObTableLoadDag *dag, ObTableLoadDirec
     dag_ = dag;
     op_ = op;
     if (OB_FAIL(inner_init())) {
-      LOG_WARN("fail to init", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -142,7 +141,6 @@ int ObTableLoadDagDirectChunkWriter::init(ObTableLoadDagWriteChannel *write_chan
                             .part_tablet_id_.tablet_id_;
     }
     if (OB_FAIL(batch_writer_map_.create(64, "TLD_BW_Map", "TLD_BW_Map"))) {
-      LOG_WARN("fail to create hashmap", KR(ret));
     } else if (OB_ISNULL(selector_ = static_cast<uint16_t *>(
                            allocator_.alloc(sizeof(uint16_t) * max_batch_size_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -166,13 +164,11 @@ int ObTableLoadDagDirectChunkWriter::new_batch_writer(const ObTabletID &tablet_i
   ObDirectLoadInsertTabletContext *insert_tablet_ctx = nullptr;
   if (OB_FAIL(write_channel_->op_->op_ctx_->insert_table_ctx_->get_tablet_context(
         tablet_id, insert_tablet_ctx))) {
-    LOG_WARN("fail to get tablet context ", KR(ret), K(tablet_id));
   } else if (OB_ISNULL(batch_writer = OB_NEWx(BatchWriter, &batch_writer_allocator_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new BatchWriter", KR(ret));
   } else if (OB_FAIL(batch_writer->init(insert_tablet_ctx,
                                         write_channel_->op_->op_ctx_->dml_row_handler_))) {
-    LOG_WARN("fail to init batch writer", KR(ret));
   }
   if (OB_FAIL(ret)) {
     if (nullptr != batch_writer) {
@@ -205,11 +201,8 @@ int ObTableLoadDagDirectChunkWriter::get_batch_writer(const ObTabletID &tablet_i
   if (OB_SUCC(ret) && nullptr == batch_writer) {
     // new batch writer
     if (OB_FAIL(new_batch_writer(tablet_id, batch_writer))) {
-      LOG_WARN("fail to new batch writer", KR(ret), K(tablet_id));
     } else if (OB_FAIL(batch_writer_map_.set_refactored(tablet_id, batch_writer))) {
-      LOG_WARN("fail to set refactored", KR(ret), K(tablet_id));
     } else if (OB_FAIL(batch_writers_.push_back(batch_writer))) {
-      LOG_WARN("fail to push back", KR(ret));
     }
     if (OB_FAIL(ret)) {
       if (nullptr != batch_writer) {
@@ -235,9 +228,7 @@ int ObTableLoadDagDirectChunkWriter::append_row(const ObTabletID &tablet_id,
   } else {
     BatchWriter *batch_writer = nullptr;
     if (OB_FAIL(get_batch_writer(tablet_id, batch_writer))) {
-      LOG_WARN("fail to get batch writer", KR(ret), K(tablet_id));
     } else if (OB_FAIL(batch_writer->append_row(datum_row))) {
-      LOG_WARN("fail to append row", KR(ret));
     }
   }
   return ret;
@@ -260,9 +251,7 @@ int ObTableLoadDagDirectChunkWriter::append_batch(ObIVector *tablet_id_vector,
   } else if (is_single_part_) { // 单分区场景
     BatchWriter *batch_writer = nullptr;
     if (OB_FAIL(get_batch_writer(single_tablet_id_, batch_writer))) {
-      LOG_WARN("fail to get batch writer", KR(ret));
     } else if (OB_FAIL(batch_writer->append_batch(batch_rows))) {
-      LOG_WARN("fail to append batch", KR(ret));
     }
   } else { // 多分区场景
     const int64_t num_rows = batch_rows.size();
@@ -274,9 +263,7 @@ int ObTableLoadDagDirectChunkWriter::append_batch(ObIVector *tablet_id_vector,
     if (all_tablet_id_is_same) { // 数据属于同一个分区
       const ObTabletID tablet_id(tablet_ids[0]);
       if (OB_FAIL(get_batch_writer(tablet_id, batch_writer))) {
-        LOG_WARN("fail to get batch writer", KR(ret));
       } else if (OB_FAIL(batch_writer->append_batch(batch_rows))) {
-        LOG_WARN("fail to append batch", KR(ret));
       }
     } else { // 数据属于多个分区
       const ObTableLoadStoreWriteCtx::TabletIdxMap &tablet_idx_map =
@@ -309,9 +296,7 @@ int ObTableLoadDagDirectChunkWriter::append_batch(ObIVector *tablet_id_vector,
         if (size > 0) {
           const ObTabletID tablet_id(tablet_ids[selector_[start]]);
           if (OB_FAIL(get_batch_writer(tablet_id, batch_writer))) {
-            LOG_WARN("fail to get batch writer", KR(ret));
           } else if (OB_FAIL(batch_writer->append_selective(batch_rows, selector_ + start, size))) {
-            LOG_WARN("fail to px write", KR(ret));
           }
         }
       }
@@ -337,7 +322,6 @@ int ObTableLoadDagDirectChunkWriter::close(ObTableLoadStoreTrans *trans, const i
     for (int64_t i = 0; OB_SUCC(ret) && i < batch_writers_.count(); ++i) {
       BatchWriter *batch_writer = batch_writers_.at(i);
       if (OB_FAIL(batch_writer->close())) {
-        LOG_WARN("fail to close", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {

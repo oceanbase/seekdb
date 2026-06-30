@@ -60,7 +60,6 @@ int ObDirectLoadInsertTableRowHandler::init(ObDirectLoadInsertTabletContext *ins
   } else {
     if (insert_tablet_ctx->get_online_opt_stat_gather()) {
       if (OB_FAIL(insert_tablet_ctx->get_table_ctx()->get_sql_statistics(sql_statistics_))) {
-        LOG_WARN("fail to get sql statistics", KR(ret));
       }
     }
     if (OB_SUCC(ret) && insert_tablet_ctx->has_lob_storage()) {
@@ -69,7 +68,6 @@ int ObDirectLoadInsertTableRowHandler::init(ObDirectLoadInsertTabletContext *ins
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to new ObDirectLoadLobBuilder", KR(ret));
       } else if (OB_FAIL(lob_builder_->init(insert_tablet_ctx, lob_allocator))) {
-        LOG_WARN("fail to init lob builder", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {

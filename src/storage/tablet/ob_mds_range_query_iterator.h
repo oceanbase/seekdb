@@ -148,7 +148,6 @@ int ObSingleTabletMdsRangeQueryIterator<K, T>::init(
     ret = common::OB_INIT_TWICE;
     MDS_LOG(WARN, "init twice", K(ret), K_(is_inited));
   } else if (OB_FAIL(ObMdsRangeQueryIteratorHelper::check_mds_data_complete(tablet_handle, is_mds_data_complete))) {
-    MDS_LOG(WARN, "failed to check mds data is complete or not.");
   } else if (!is_mds_data_complete) {
     ret = OB_EAGAIN;
     MDS_LOG(INFO, "MDS data is incomplete. Please try again later to retrieve the full dataset.", K(ret));
@@ -161,12 +160,10 @@ int ObSingleTabletMdsRangeQueryIterator<K, T>::init(
       MDS_LOG(WARN, "failed to get mds table", K(ret));
     }
   } else if (OB_FAIL(mds_table_iter_.init(mds_table, mds_node_filter, scan_param.timeout_))) {
-    MDS_LOG(WARN, "failed to init mds table iter", K(ret));
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(mds_sstable_iter_.init(scan_param, tablet_handle, store_ctx))) {
-    MDS_LOG(WARN, "fail to init mds sstable iter", K(ret), K(scan_param));
   } else {
     read_version_range_ = scan_param.read_version_range_;
     collector_ = scan_param.mds_collector_;
@@ -245,7 +242,6 @@ int ObSingleTabletMdsRangeQueryIterator<K, T>::advance_mds_sstable_iter()
       }
     } // while
     if (FAILEDx(get_key_from_dump_kv(mds_sstable_val_, mds_sstable_key_))) {
-      MDS_LOG(WARN, "fail to get key", K(ret), K_(mds_sstable_val));
     } else {
       MDS_LOG(DEBUG, "succeed to get next from mds sstable iter", K(ret), K_(mds_sstable_key), K_(mds_sstable_val));
     }
@@ -265,10 +261,8 @@ int ObSingleTabletMdsRangeQueryIterator<K, T>::output_from_mds_table(common::ObI
     MDS_LOG(WARN, "mds table val is null", KR(ret), KP(mds_table_val_));
   } else {
     if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, kv))) {
-      MDS_LOG(WARN, "fail to alloc and new", K(ret));
     } else {
       if (OB_FAIL(convert_user_node_to_dump_kv(allocator, mds_table_key_, *mds_table_val_, *kv))) {
-        MDS_LOG(WARN, "fail to convert to mds dump kv", K(ret), K_(mds_table_key), KPC_(mds_table_val));
       }
       if (OB_FAIL(ret)) {
         ObTabletObjLoadHelper::free(allocator, kv);
@@ -284,10 +278,8 @@ int ObSingleTabletMdsRangeQueryIterator<K, T>::output_from_mds_sstable(common::O
   int ret = common::OB_SUCCESS;
 
   if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, kv))) {
-    MDS_LOG(WARN, "fail to alloc and new", K(ret));
   } else {
     if (OB_FAIL(kv->assign(mds_sstable_val_, allocator))) {
-      MDS_LOG(WARN, "fail to copy", K(ret), K_(mds_sstable_val));
     }
     if (OB_FAIL(ret)) {
       ObTabletObjLoadHelper::free(allocator, kv);
@@ -311,9 +303,7 @@ int ObSingleTabletMdsRangeQueryIterator<K, T>::convert_user_node_to_dump_kv(
   mds::MdsDumpNode &node = kv.v_;
 
   if (OB_FAIL(key.init(mds_table_id, mds_unit_id, user_key, allocator))) {
-    MDS_LOG(WARN, "fail to init mds dump key", K(ret), K(mds_table_id), K(mds_unit_id), K(user_key));
   } else if (OB_FAIL(node.init(mds_table_id, mds_unit_id, user_node, allocator))) {
-    MDS_LOG(WARN, "fail to init mds dump node", K(ret), K(mds_table_id), K(mds_unit_id), K(user_node));
   }
 
   return ret;
@@ -326,7 +316,6 @@ int ObSingleTabletMdsRangeQueryIterator<K, T>::get_key_from_dump_kv(const mds::M
   const common::ObString &key_str = kv.k_.key_;
   int64_t pos = 0;
   if (OB_FAIL(k.mds_deserialize(key_str.ptr(), key_str.length(), pos))) {
-    MDS_LOG(WARN, "fail to deserialize", K(ret));
   }
 
   return ret;
@@ -348,14 +337,12 @@ int ObSingleTabletMdsRangeQueryIterator<K, T>::get_next_mds_kv(
   if (OB_FAIL(ret)) {
   } else if (!mds_table_key_.is_valid()) {
     if (OB_FAIL(advance_mds_table_iter())) {
-      MDS_LOG(WARN, "fail to advance mds table iter", K(ret));
     }
   }
 
   if (OB_FAIL(ret)) {
   } else if (!mds_sstable_key_.is_valid()) {
     if (OB_FAIL(advance_mds_sstable_iter())) {
-      MDS_LOG(WARN, "fail to advance mds table iter", K(ret));
     }
   }
 
@@ -367,45 +354,33 @@ int ObSingleTabletMdsRangeQueryIterator<K, T>::get_next_mds_kv(
   } else if (mds_table_end_) {
     // use mds sstable
     if (OB_FAIL(output_from_mds_sstable(allocator, kv))) {
-      MDS_LOG(WARN, "fail to output from mds sstable", K(ret));
     } else if (OB_FAIL(advance_mds_sstable_iter())) {
-      MDS_LOG(WARN, "fail to advance mds sstable iter", K(ret));
     }
   } else if (mds_sstable_end_) {
     // use mds table
     if (OB_FAIL(output_from_mds_table(allocator, kv))) {
-      MDS_LOG(WARN, "fail to output from mds table", K(ret));
     } else if (OB_FAIL(advance_mds_table_iter())) {
-      MDS_LOG(WARN, "fail to advance mds table iter", K(ret));
     }
   } else if (OB_UNLIKELY(!mds_table_key_.is_valid() || !mds_sstable_key_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     MDS_LOG(WARN, "unexpected error, both mds table key and mds sstable key should be valid",
         K(ret), K_(mds_table_key), K_(mds_sstable_key));
   } else if (OB_FAIL(mds::compare_binary_key(mds_table_key_, mds_sstable_key_, compare_result))) {
-    MDS_LOG(WARN, "fail to compare binary key", K(ret));
   } else if (compare_result < 0) {
     // use mds table
     if (OB_FAIL(output_from_mds_table(allocator, kv))) {
-      MDS_LOG(WARN, "fail to output from mds table", K(ret));
     } else if (OB_FAIL(advance_mds_table_iter())) {
-      MDS_LOG(WARN, "fail to advance mds table iter", K(ret));
     }
   } else if (compare_result == 0) {
     // use mds table, both iter advance
     if (OB_FAIL(output_from_mds_table(allocator, kv))) {
-      MDS_LOG(WARN, "fail to output from mds table", K(ret));
     } else if (OB_FAIL(advance_mds_table_iter())) {
-      MDS_LOG(WARN, "fail to advance mds table iter", K(ret));
     } else if (OB_FAIL(advance_mds_sstable_iter())) {
-      MDS_LOG(WARN, "fail to advance mds sstable iter", K(ret));
     }
   } else {
     // use mds sstable
     if (OB_FAIL(output_from_mds_sstable(allocator, kv))) {
-      MDS_LOG(WARN, "fail to output from mds sstable", K(ret));
     } else if (OB_FAIL(advance_mds_sstable_iter())) {
-      MDS_LOG(WARN, "fail to advance mds sstable iter", K(ret));
     }
   }
 

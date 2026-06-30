@@ -317,7 +317,6 @@ int ObDMLSqlSplicer::append_value(const T &obj, bool &is_null, common::FalseType
       is_null = false;
       if (OB_FAIL(values_.append_fmt(mode_ == NAKED_VALUE_MODE ? "%.*s" : "'%.*s'",
           static_cast<int32_t>(pos), buf))) {
-        SHARE_LOG(WARN, "append value failed", K(pos), K(ret));
       }
     }
   }
@@ -346,7 +345,6 @@ int ObDMLSqlSplicer::add_column(const char *col_name, const T &value)
     ret = common::OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "invalid column name", K(ret), KP(col_name));
   } else if (OB_FAIL(add_column(is_pk, col_name, value))) {
-    SHARE_LOG(WARN, "add column failed", K(ret), K(is_pk), K(col_name), K(value));
   }
   return ret;
 }
@@ -360,7 +358,6 @@ int ObDMLSqlSplicer::add_pk_column(const char *col_name, const T &value)
     ret = common::OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "invalid column name", K(ret), KP(col_name));
   } else if (OB_FAIL(add_column(is_pk, col_name, value))) {
-    SHARE_LOG(WARN, "add column failed", K(ret), K(is_pk), K(col_name), K(value));
   }
   return ret;
 }
@@ -375,9 +372,7 @@ int ObDMLSqlSplicer::add_column(
     ret = common::OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "invalid column name", K(ret), KP(col_name));
   } else if (OB_FAIL(append_value(value, is_null))) {
-    SHARE_LOG(WARN, "append value failed", K(ret), K(value));
   } else if (OB_FAIL(add_column(is_primary_key, is_null, col_name))) {
-    SHARE_LOG(WARN, "add column failed", K(ret));
   }
   return ret;
 }

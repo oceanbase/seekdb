@@ -84,7 +84,6 @@ int ObGeoBoxClipVisitor::get_geometry(ObGeometry *&geo)
       for (uint32_t i = 0; OB_SUCC(ret) && i < res_geo_->size(); ++i) {
         if (OB_FAIL(mpt->push_back(
                 *reinterpret_cast<ObWkbGeomInnerPoint const *>((*res_geo_)[i].val())))) {
-          LOG_WARN("failed to add point to multipoint", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -100,7 +99,6 @@ int ObGeoBoxClipVisitor::get_geometry(ObGeometry *&geo)
       for (uint32_t i = 0; OB_SUCC(ret) && i < res_geo_->size(); ++i) {
         if (OB_FAIL(
                 mpy->push_back(*reinterpret_cast<ObCartesianPolygon const *>(&(*res_geo_)[i])))) {
-          LOG_WARN("failed to add point to multipoint", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -116,7 +114,6 @@ int ObGeoBoxClipVisitor::get_geometry(ObGeometry *&geo)
       for (uint32_t i = 0; OB_SUCC(ret) && i < res_geo_->size(); ++i) {
         if (OB_FAIL(mls->push_back(
                 *reinterpret_cast<ObCartesianLineString const *>(&(*res_geo_)[i])))) {
-          LOG_WARN("failed to add point to multipoint", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -149,7 +146,6 @@ int ObGeoBoxClipVisitor::visit(ObCartesianPoint *geo)
     // do nothing
   } else if (get_position(geo->x(), geo->y()) == ObBoxPosition::INSIDE) {
     if (OB_FAIL(res_geo_->push_back(*geo))) {
-      LOG_WARN("fail to push back geometry", K(ret));
     }
   }
   return ret;
@@ -164,7 +160,6 @@ int ObGeoBoxClipVisitor::visit(ObCartesianMultipoint *geo)
       const ObWkbGeomInnerPoint &pt = (*geo)[i];
       if (get_position(pt.get<0>(), pt.get<1>()) == ObBoxPosition::INSIDE) {
         if (OB_FAIL(mpt.push_back(pt))) {
-          LOG_WARN("fail to push geometry", K(ret), K(geo->size()), K(i));
         }
       }
     }
@@ -180,7 +175,6 @@ int ObGeoBoxClipVisitor::visit(ObCartesianMultipoint *geo)
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to alloc memory for geometry", K(ret));
         } else if (OB_FAIL(res_geo_->push_back(*pt))) {
-          LOG_WARN("fail to push back geometry", K(ret));
         }
       }
     }
@@ -252,7 +246,6 @@ int ObGeoBoxClipVisitor::construct_intersect_line(const ObCartesianLineString &l
   int ret = OB_SUCCESS;
   for (int32_t j = first_inside_idx; OB_SUCC(ret) && j < last_idx; ++j) {
     if (OB_FAIL(intersect_line.push_back(line[j]))) {
-      LOG_WARN("fail to push back geometry", K(ret));
     }
   }
   return ret;
@@ -278,11 +271,9 @@ int ObGeoBoxClipVisitor::line_visit_inside_or_edge(const ObCartesianLineString &
       bool clip_box = !cur_pt_edge.equals(line[idx]) && !same_edge_positions(clip_pos, prev_pos);
       if (first_inside_idx < idx - 1 || !new_line.empty() || clip_box) {
         if (OB_FAIL(construct_intersect_line(line, first_inside_idx, idx, new_line))) {
-          LOG_WARN("fail to construct intersect line", K(ret), K(first_inside_idx), K(idx));
         } else if (clip_box && OB_FAIL(new_line.push_back(cur_pt_edge))) {
           LOG_WARN("fail to push back geometry", K(ret));
         } else if (OB_FAIL(mls->push_back(new_line))) {
-          LOG_WARN("fail to push back geometry", K(ret));
         } else {
           new_line.clear();
         }
@@ -291,9 +282,7 @@ int ObGeoBoxClipVisitor::line_visit_inside_or_edge(const ObCartesianLineString &
       if (same_edge_positions(prev_pos, pos)) {
         if (first_inside_idx < idx - 1 || !new_line.empty()) {
           if (OB_FAIL(construct_intersect_line(line, first_inside_idx, idx, new_line))) {
-            LOG_WARN("fail to construct intersect line", K(ret), K(first_inside_idx), K(idx));
           } else if (OB_FAIL(mls->push_back(new_line))) {
-            LOG_WARN("fail to push back geometry", K(ret));
           } else {
             new_line.clear();
           }
@@ -311,14 +300,11 @@ int ObGeoBoxClipVisitor::line_visit_inside_or_edge(const ObCartesianLineString &
     // all points are inside
     completely_inside = true;
     if (OB_FAIL(mls->push_back(line))) {
-      LOG_WARN("fail to push back geometry", K(ret));
     }
   } else if (pos != ObBoxPosition::OUTSIDE
              && (first_inside_idx < idx - 1 || !new_line.empty())) {
     if (OB_FAIL(construct_intersect_line(line, first_inside_idx, idx, new_line))) {
-      LOG_WARN("fail to construct intersect line", K(ret), K(first_inside_idx), K(idx));
     } else if (OB_FAIL(mls->push_back(new_line))) {
-      LOG_WARN("fail to push back geometry", K(ret));
     } else {
       new_line.clear();
     }
@@ -361,7 +347,6 @@ int ObGeoBoxClipVisitor::line_visit_outside(const ObCartesianLineString &line, i
     if (pos == ObBoxPosition::INSIDE) {
       // first inside point
       if (OB_FAIL(new_line.push_back(pt))) {
-        LOG_WARN("fail to push back geometry", K(ret));
       }
     } else if (pos == ObBoxPosition::OUTSIDE) {
       // Two outside points line[idx] and line[idx - 1] may connected through the box
@@ -375,11 +360,8 @@ int ObGeoBoxClipVisitor::line_visit_outside(const ObCartesianLineString &line, i
           && pos > ObBoxPosition::OUTSIDE            // intersects with box
           && !same_edge_positions(prev_pos, pos)) {  // not in same edge
         if (OB_FAIL(new_line.push_back(pt))) {
-          LOG_WARN("fail to push back geometry", K(ret));
         } else if (OB_FAIL(new_line.push_back(to_pt))) {
-          LOG_WARN("fail to push back geometry", K(ret));
         } else if (OB_FAIL(mls->push_back(new_line))) {
-          LOG_WARN("fail to push back geometry", K(ret));
         } else {
           new_line.clear();
         }
@@ -388,7 +370,6 @@ int ObGeoBoxClipVisitor::line_visit_outside(const ObCartesianLineString &line, i
       ObBoxPosition prev_pos = get_position(pt.get<0>(), pt.get<1>());
       if (!same_edge_positions(prev_pos, pos)) {
         if (OB_FAIL(new_line.push_back(pt))) {
-          LOG_WARN("fail to push back geometry", K(ret));
         }
       }
     }
@@ -416,11 +397,9 @@ int ObGeoBoxClipVisitor::line_visit(
       ObBoxPosition pos = get_position(line[idx].get<0>(), line[idx].get<1>());
       if (pos == ObBoxPosition::OUTSIDE) {
         if (OB_FAIL(line_visit_outside(line, idx, mls, pos, new_line))) {
-          LOG_WARN("fail to do line visit outside", K(ret), K(pos), K(idx));
         }
       } else {  // edge or inside
         if (OB_FAIL(line_visit_inside_or_edge(line, idx, mls, pos, new_line, completely_inside))) {
-          LOG_WARN("fail to do line visit inside or edge", K(ret), K(pos), K(idx));
         }
       }
     }
@@ -436,11 +415,9 @@ int ObGeoBoxClipVisitor::visit(ObCartesianLineString *geo)
   if (geo->is_empty()) {
     // do nothing
   } else if (OB_FAIL(line_visit(*geo, mls, inside))) {
-    LOG_WARN("fail to do line visit", K(ret));
   } else if (!mls->empty()) {
     for (uint32_t i = 0; OB_SUCC(ret) && i < mls->size(); ++i) {
       if (OB_FAIL(res_geo_->push_back((*mls)[i]))) {
-        LOG_WARN("fail to push back geometry", K(ret));
       }
     }
   }
@@ -455,13 +432,11 @@ int ObGeoBoxClipVisitor::visit(ObCartesianMultilinestring *geo)
   if (!geo->is_empty()) {
     for (uint32_t i = 0; OB_SUCC(ret) && i < geo->size(); ++i) {
       if (OB_FAIL(line_visit((*geo)[i], mls, inside))) {
-        LOG_WARN("fail to do line visit", K(ret));
       }
     }
     if (OB_SUCC(ret) && !mls->empty()) {
       for (uint32_t i = 0; OB_SUCC(ret) && i < mls->size(); ++i) {
         if (OB_FAIL(res_geo_->push_back((*mls)[i]))) {
-          LOG_WARN("fail to push back geometry", K(ret));
         }
       }
     }
@@ -487,7 +462,6 @@ int ObGeoBoxClipVisitor::reconnect_multi_line(ObCartesianMultilinestring &mls)
         if (!first[i].equals(prev_pt)) {
           prev_pt = first[i];
           if (OB_FAIL(last.push_back(prev_pt))) {
-            LOG_WARN("fail to push back geometry", K(ret));
           }
         }
       }
@@ -504,15 +478,10 @@ int ObGeoBoxClipVisitor::box_to_linearring(ObCartesianLinearring &ring)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ring.push_back(ObWkbGeomInnerPoint(xmin_, ymin_)))) {
-    LOG_WARN("failt to push back geometry", K(ret));
   } else if (OB_FAIL(ring.push_back(ObWkbGeomInnerPoint(xmin_, ymax_)))) {
-    LOG_WARN("failt to push back geometry", K(ret));
   } else if (OB_FAIL(ring.push_back(ObWkbGeomInnerPoint(xmax_, ymax_)))) {
-    LOG_WARN("failt to push back geometry", K(ret));
   } else if (OB_FAIL(ring.push_back(ObWkbGeomInnerPoint(xmax_, ymin_)))) {
-    LOG_WARN("failt to push back geometry", K(ret));
   } else if (OB_FAIL(ring.push_back(ObWkbGeomInnerPoint(xmin_, ymin_)))) {
-    LOG_WARN("failt to push back geometry", K(ret));
   }
   return ret;
 }
@@ -571,7 +540,6 @@ int ObGeoBoxClipVisitor::close_ring(
     if (is_closed) {
       if (x1 != x2 || y1 != y2) {
         if (OB_FAIL(ring.push_back(ObWkbGeomInnerPoint(x2, y2)))) {
-          LOG_WARN("fail to push back geometry", K(ret));
         }
       }
     } else if (pos & ObBoxPosition::OUTSIDE || end_pos & ObBoxPosition::OUTSIDE
@@ -590,7 +558,6 @@ int ObGeoBoxClipVisitor::close_ring(
         y1 = ymin_;
       }
       if (OB_FAIL(ring.push_back(ObWkbGeomInnerPoint(x1, y1)))) {
-        LOG_WARN("fail to push back geometry", K(ret));
       }
     }
   }
@@ -679,9 +646,7 @@ int ObGeoBoxClipVisitor::make_polygon_ext_ring(ObCartesianMultilinestring &mls, 
   if (mls.empty()) {
     ObCartesianPolygon poly;
     if (OB_FAIL(box_to_linearring(poly.exterior_ring()))) {
-      LOG_WARN("fail to convert box to ring", K(ret));
     } else if (OB_FAIL(new_mpy.push_back(poly))) {
-      LOG_WARN("fail to push back geometry", K(ret));
     }
   } else {
     ObCartesianLinearring ring;
@@ -690,7 +655,6 @@ int ObGeoBoxClipVisitor::make_polygon_ext_ring(ObCartesianMultilinestring &mls, 
       if (ring.empty()) {
         for (int i = 0; i < mls[0].size() && OB_SUCC(ret); ++i) {
           if (OB_FAIL(ring.push_back(mls[0][i]))) {
-            LOG_WARN("failt to push back geometry", K(ret), K(i));
           }
         }
         if (OB_SUCC(ret)) {
@@ -708,7 +672,6 @@ int ObGeoBoxClipVisitor::make_polygon_ext_ring(ObCartesianMultilinestring &mls, 
         double cur_dist = 0.0;
         if (OB_FAIL(distance(ring.back().get<0>(), ring.back().get<1>(),
                 mls[i][0].get<0>(), mls[i][0].get<1>(), cur_dist))) {
-          LOG_WARN("fail to get distance", K(ret), K(i), K(mls.size()));
         } else if (min_dist < 0 || cur_dist < min_dist) {
           min_dist = cur_dist;
           min_pos = i;
@@ -718,7 +681,6 @@ int ObGeoBoxClipVisitor::make_polygon_ext_ring(ObCartesianMultilinestring &mls, 
       } else if (min_dist < 0 || dist < min_dist) {
         if (OB_FAIL(close_ring(ring, ring.back().get<0>(), ring.back().get<1>(),
                 ring.front().get<0>(), ring.front().get<1>()))) {
-          LOG_WARN("fail to close ring", K(ret));
         } else if (FALSE_IT(reorder_ring(ring))) {
         } else if (ring.size() < 4) {
           ret = OB_ERR_GIS_INVALID_DATA;
@@ -727,7 +689,6 @@ int ObGeoBoxClipVisitor::make_polygon_ext_ring(ObCartesianMultilinestring &mls, 
           ObCartesianPolygon poly;
           poly.exterior_ring() = ring;
           if (OB_FAIL(new_mpy.push_back(poly))) {
-            LOG_WARN("fail to push back geometry", K(ret));
           }
           ring.clear();
         }
@@ -735,11 +696,9 @@ int ObGeoBoxClipVisitor::make_polygon_ext_ring(ObCartesianMultilinestring &mls, 
         ObCartesianLineString &min_line = mls[min_pos];
         if (OB_FAIL(close_ring(ring, ring.back().get<0>(), ring.back().get<1>(),
                 min_line.front().get<0>(), min_line.front().get<1>()))) {
-          LOG_WARN("fail to close ring", K(ret));
         }
         for (uint32_t i = 1; OB_SUCC(ret) && i < min_line.size(); ++i) {
           if (OB_FAIL(ring.push_back(min_line[i]))) {
-            LOG_WARN("fail to push back geometry", K(ret));
           }
         }
         if (OB_SUCC(ret) && OB_FAIL(mls.remove(min_pos))) {
@@ -758,7 +717,6 @@ int ObGeoBoxClipVisitor::make_polygons(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(make_polygon_ext_ring(mls, new_mpy))) {
-    LOG_WARN("fail to make polygon exterior ring", K(ret));
   }
   // merge mpy (inner rings) to new_mpy
   for (uint32_t i = 0; OB_SUCC(ret) && i < mpy.size(); ++i) {
@@ -766,7 +724,6 @@ int ObGeoBoxClipVisitor::make_polygons(
     ObCartesianLinearring &ext_ring = poly.exterior_ring();
     if (new_mpy.size() == 1) {
       if (OB_FAIL(new_mpy[0].interior_rings().push_back(ext_ring))) {
-        LOG_WARN("fail to push back linearring", K(ret));
       }
     } else {
       for (uint32_t j = 0; OB_SUCC(ret) && j < new_mpy.size(); ++j) {
@@ -778,7 +735,6 @@ int ObGeoBoxClipVisitor::make_polygons(
           LOG_WARN("build gis context failed", K(ret), K(gis_context.get_geo_count()));
         } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::CoveredBy>::geo_func::eval(
                        gis_context, is_covered_by))) {
-          LOG_WARN("eval Within functor failed", K(ret));
         } else if (is_covered_by && OB_FAIL(new_mpy[j].interior_rings().push_back(ext_ring))) {
           LOG_WARN("fail to push back linearring", K(ret));
         }
@@ -857,11 +813,9 @@ int ObGeoBoxClipVisitor::visit_polygon_inner_ring(
   ObCartesianPolygon tmp_py;
   tmp_py.exterior_ring() = inner_ring;
   if (OB_FAIL(line_visit(inner_ring, inner_mls, is_inside))) {
-    LOG_WARN("fail to do line visit", K(ret));
   } else if (is_inside) {
     // becomes exterior ring
     if (OB_FAIL(ext_mpy.push_back(tmp_py))) {
-      LOG_WARN("fail to push back geometry", K(ret));
     }
   } else {
     if (inner_mls->empty()) {
@@ -874,19 +828,16 @@ int ObGeoBoxClipVisitor::visit_polygon_inner_ring(
         LOG_WARN("build gis context failed", K(ret), K(gis_context.get_geo_count()));
       } else if (OB_FAIL(
                      ObGeoFunc<ObGeoFuncType::Within>::gis_func::eval(gis_context, is_within))) {
-        LOG_WARN("eval Within functor failed", K(ret));
       }
     } else {
       if (!is_ring_ccw(tmp_py.exterior_ring())) {
         reverse_mls(*inner_mls);
       }
       if (OB_FAIL(reconnect_multi_line(*inner_mls))) {
-        LOG_WARN("fail to reconnect multi line", K(ret));
       }
       // merge inner_mls into ext_mls
       for (int i = 0; OB_SUCC(ret) && i < inner_mls->size(); ++i) {
         if (OB_FAIL(ext_mls.push_back((*inner_mls)[i]))) {
-          LOG_WARN("failt to push back geometry", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -905,7 +856,6 @@ int ObGeoBoxClipVisitor::visit_polygon_ext_ring(const ObCartesianLinearring &ext
   ObCartesianPolygon tmp_py;
   tmp_py.exterior_ring() = ext_ring;
   if (OB_FAIL(line_visit(tmp_py.exterior_ring(), ext_mls, is_ext_inside))) {
-    LOG_WARN("fail to do line visit", K(ret));
   } else if (ext_mls->empty()) {
     // ext ring completely outside, but maybe inner ring is inside/on edge
     double xmid = xmin_ + (xmax_ - xmin_) / 2;
@@ -916,7 +866,6 @@ int ObGeoBoxClipVisitor::visit_polygon_ext_ring(const ObCartesianLinearring &ext
       LOG_WARN("build gis context failed", K(ret), K(gis_context.get_geo_count()));
     } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Within>::gis_func::eval(
                    gis_context, is_inner_inside))) {
-      LOG_WARN("eval Within functor failed", K(ret));
     }
   } else {
     if (is_ring_ccw(tmp_py.exterior_ring())) {
@@ -941,37 +890,27 @@ int ObGeoBoxClipVisitor::visit_polygon(ObCartesianPolygon &poly, ObCartesianMult
     bool is_inner_inside = true;
     bool is_ext_inside = false;
     if (OB_FAIL(visit_polygon_ext_ring(poly.exterior_ring(), is_inner_inside, is_ext_inside, ext_mls))) {
-      LOG_WARN("fail to visit polygon exterior ring", K(ret), K(is_inner_inside), K(is_ext_inside));
     } else if (!is_inner_inside) {
       // do nothing
     } else if (is_ext_inside) {
       // completely inside
       if (OB_FAIL(mpy->push_back(poly))) {
-        LOG_WARN("fail to push back geometry", K(ret));
       }
     } else if (OB_FAIL(reconnect_multi_line(*ext_mls))) {
-      LOG_WARN("fail to reconnect multi line", K(ret));
     } else {
       ObGeomVector<oceanbase::common::ObCartesianLinearring> &inner_rings = poly.interior_rings();
       ObCartesianMultipolygon tmp_mpy;
       bool is_within = false;
       for (uint32_t i = 0; OB_SUCC(ret) && i < inner_rings.size() && !is_within; ++i) {
         if (OB_FAIL(visit_polygon_inner_ring(inner_rings[i], tmp_mpy, *ext_mls, is_within))) {
-          LOG_WARN("fail to visit polygon inner ring",
-              K(ret),
-              K(i),
-              K(inner_rings.size()),
-              K(is_within));
         }
       }
       if (OB_SUCC(ret) && !is_within) {
         ObCartesianMultipolygon new_mpy;
         if (OB_FAIL(make_polygons(*ext_mls, tmp_mpy, new_mpy))) {
-          LOG_WARN("fail to make polygons", K(ret));
         }
         for (int i = 0; OB_SUCC(ret) && i < new_mpy.size(); ++i) {
           if (OB_FAIL(mpy->push_back(new_mpy[i]))) {
-            LOG_WARN("fail to push back geometry", K(ret));
           }
         }
       }
@@ -987,11 +926,9 @@ int ObGeoBoxClipVisitor::visit(ObCartesianPolygon *geo)
   if (geo->is_empty()) {
     // do nothing
   } else if (OB_FAIL(visit_polygon(*geo, mpy))) {
-    LOG_WARN("fail to visit polygon", K(ret));
   } else if (!mpy->empty()) {
     for (uint32_t i = 0; OB_SUCC(ret) && i < mpy->size(); ++i) {
       if (OB_FAIL(res_geo_->push_back((*mpy)[i]))) {
-        LOG_WARN("fail to push back geometry", K(ret));
       }
     }
   }
@@ -1005,14 +942,12 @@ int ObGeoBoxClipVisitor::visit(ObCartesianMultipolygon *geo)
     ObCartesianMultipolygon *mpy = nullptr;
     for (uint32_t i = 0; OB_SUCC(ret) && i < geo->size(); ++i) {
       if (OB_FAIL(visit_polygon((*geo)[i], mpy))) {
-        LOG_WARN("fail to do line visit", K(ret));
       } else {
       }
     }
     if (OB_SUCC(ret) && !mpy->empty()) {
       for (uint32_t i = 0; OB_SUCC(ret) && i < mpy->size(); ++i) {
         if (OB_FAIL(res_geo_->push_back((*mpy)[i]))) {
-          LOG_WARN("fail to push back geometry", K(ret));
         }
       }
     }

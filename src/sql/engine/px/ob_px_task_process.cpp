@@ -124,7 +124,6 @@ int ObPxTaskProcess::process()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session or sqc_handler is NULL", K(ret));
   } else if (OB_FAIL(session->store_query_string(ObString::make_string("PX DFO EXECUTING")))) {
-    LOG_WARN("store query string to session failed", K(ret));
   } else {
     // Set diagnostic function environment
     ObPxRpcInitSqcArgs &arg = arg_.sqc_handler_->get_sqc_init_arg();
@@ -159,7 +158,6 @@ int ObPxTaskProcess::process()
       exec_start_timestamp_ = enqueue_timestamp_;
 
       if (OB_FAIL(do_process())) {
-        LOG_WARN("failed to process", K(1UL), K(ret), K(get_qc_id()), K(get_dfo_id()));
       }
       // Monitoring item statistics end
       exec_end_timestamp_ = ObTimeUtility::current_time();
@@ -281,22 +279,18 @@ int ObPxTaskProcess::execute(const ObOpSpec &root_spec)
         if (OB_FAIL(ctx.fill_px_batch_info(arg_.get_sqc_handler()->
           get_sqc_init_arg().sqc_.get_rescan_batch_params(), i,
           arg_.des_phy_plan_->get_expr_frame_info().rt_exprs_))) {
-          LOG_WARN("fail to fill batch info", K(ret));
         } else if (OB_FAIL(arg_.get_sqc_handler()->get_sub_coord().
           get_sqc_ctx().gi_pump_.regenerate_gi_task())) {
-          LOG_WARN("fail to generate gi task array", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (0 == i) {
         if (OB_FAIL(root->open())) {
-          LOG_WARN("fail open dfo op", K(ret));
         } else if (batch_count > 1) {
           static_cast<ObPxTransmitOp *>(root)->set_batch_param_remain(true);
         }
       } else if (0 != i) {
         if (OB_FAIL(root->rescan())) {
-          LOG_WARN("fail to rescan dfo op", K(ret));
         } else if (i + 1 == batch_count) {
           static_cast<ObPxTransmitOp *>(root)->set_batch_param_remain(false);
         }
@@ -329,7 +323,6 @@ int ObPxTaskProcess::execute(const ObOpSpec &root_spec)
       }
       if (OB_SUCCESS != (tmp_ret = ObInterruptUtil::interrupt_tasks(arg_.get_sqc_handler()->get_sqc_init_arg().sqc_,
                                               OB_GOT_SIGNAL_ABORTING))) {
-        LOG_WARN("interrupt_tasks failed", K(tmp_ret));
       }
     }
     if (OB_SUCCESS != (close_ret = root->close())) {
@@ -359,7 +352,6 @@ int ObPxTaskProcess::do_process()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid task id from sqc", K(ret));
   } else if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("check task processor inner stat fail", K(ret));
   } else {
     // 1. Build execution environment
     //   - reference sql/executor/ob_executor_rpc_processor.cpp
@@ -392,10 +384,8 @@ int ObPxTaskProcess::do_process()
                   KP(gctx_.executor_rpc_));
       } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(
                   schema_guard_))) {
-        LOG_WARN("fail to get schema guard", K(ret));
       } else if (OB_FAIL(schema_guard_.get_schema_version(
                  arg_.task_.px_worker_execute_start_schema_version_))) {
-        LOG_WARN("get px worker start schema version failed", K(ret));
       } else {
         // Used for the initialization of parameters of the virtual table for remote execution
         ObVirtualTableCtx vt_ctx;
@@ -427,9 +417,7 @@ int ObPxTaskProcess::do_process()
         // So eval_ctx must be created before operator create
         ObOperator *op = nullptr;
         if (OB_FAIL(arg_.op_spec_root_->create_operator(*arg_.exec_ctx_, op))) {
-          LOG_WARN("create operator from spec failed", K(ret));
         } else if (OB_FAIL(visitor.visit(*arg_.exec_ctx_, *arg_.op_spec_root_, setter))) {
-          LOG_WARN("fail apply task id to dfo exchanges", K(task_id), K(ret));
         } else if (OB_ISNULL(op)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected status: op root is null", K(ret));
@@ -446,7 +434,6 @@ int ObPxTaskProcess::do_process()
       if (OB_NOT_NULL(arg_.sqc_handler_) && OB_NOT_NULL(arg_.exec_ctx_)) {
         ObIArray<ObSqlTempTableCtx> &ctx = arg_.sqc_handler_->get_sqc_init_arg().sqc_.get_temp_table_ctx();
         if (OB_FAIL(arg_.exec_ctx_->get_temp_table_ctx().assign(ctx))) {
-          LOG_WARN("failed to assign temp table ctx", K(ret));
         }
       }
     }
@@ -460,7 +447,6 @@ int ObPxTaskProcess::do_process()
           arg_.exec_ctx_->get_my_session()->get_process_query_time());
         ObExtraServerAliveCheck::Guard check_guard(*arg_.exec_ctx_, qc_alive_checker);
         if (OB_FAIL(execute(*arg_.op_spec_root_))) {
-          LOG_WARN("failed to execute plan", K(ret), K(arg_.op_spec_root_->id_));
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -500,7 +486,6 @@ int ObPxTaskProcess::do_process()
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS == ERRSIM_INTERRUPT_QC_FAILED) {
         if (OB_SUCCESS != (tmp_ret = ObInterruptUtil::interrupt_qc(arg_.task_, ret, arg_.exec_ctx_))) {
-          LOG_WARN("interrupt_qc failed", K(tmp_ret));
         }
       }
     }
@@ -529,7 +514,6 @@ int ObPxTaskProcess::record_user_error_msg(int retcode)
         const common::ObWarningBuffer::WarningItem *item = wb->get_warning_item(idx);
         if (item != NULL) {
           if (OB_FAIL(rcode.warnings_.push_back(*item))) {
-            RPC_OBCALL_LOG(WARN, "Failed to add warning", K(ret));
           }
         } else {
           not_null = false;

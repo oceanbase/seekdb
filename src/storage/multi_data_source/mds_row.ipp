@@ -885,7 +885,6 @@ void MdsRow<K, V>::report_event_(const char (&event_str)[N],
     ret = OB_ERR_UNEXPECTED;
     MDS_LOG(ERROR, "not expected ptr", K(*this));
   } else if (OB_FAIL(node.fill_event_(event, event_str, stack_buffer, buffer_size))) {
-    MDS_LOG(WARN, "fail fill mds event", K(*this));
   } else {
     observer::MdsEventKey key(MdsRowBase<K, V>::p_mds_unit_->p_mds_table_->ls_id_,
                               MdsRowBase<K, V>::p_mds_unit_->p_mds_table_->tablet_id_);

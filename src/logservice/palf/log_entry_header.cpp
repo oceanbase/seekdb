@@ -177,16 +177,12 @@ int LogEntryHeader::generate_padding_log_buf(const int64_t padding_data_len,
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(padding_data_len), K(scn), KP(out_buf), K(padding_valid_data_len));
   } else if(OB_FAIL(base_header.serialize(out_buf, padding_valid_data_len, serialize_base_header_pos))) {
-    PALF_LOG(WARN, "serailize ObLogBaseHeader failed", K(padding_data_len), KP(out_buf), K(padding_valid_data_len),
-        K(serialize_base_header_pos));
   } else if (FALSE_IT(serialize_base_header_pos = serialize_header_pos + header_len)) {
   } else if (OB_FAIL(header.generate_padding_header_(out_buf+serialize_base_header_pos,
                                                      base_header_len,
                                                      padding_data_len,
                                                      scn))) {
-    PALF_LOG(WARN, "generaet LogEntryHeader failed", K(padding_data_len), K(scn), KP(out_buf), K(padding_valid_data_len));
   } else if (OB_FAIL(header.serialize(out_buf, header_len, serialize_header_pos))) {
-    PALF_LOG(WARN, "serialize LogEntryHeader failed", K(padding_data_len), K(scn), KP(out_buf), K(padding_valid_data_len));
   } else {
     PALF_LOG(INFO, "generate_padding_log_buf success", K(header), K(padding_data_len), K(scn), KP(out_buf), K(padding_valid_data_len));
   }

@@ -47,7 +47,6 @@ int ObExprRegexp::assign(const ObExprOperator &other)
     LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObFuncExprOperator::assign(other))) {
-      LOG_WARN("copy in Base class ObFuncExprOperator failed", K(ret));
     } else {
       this->regexp_idx_ = tmp_other->regexp_idx_;
       this->pattern_is_const_ = tmp_other->pattern_is_const_;
@@ -89,7 +88,6 @@ int ObExprRegexp::calc_result_type2(ObExprResType &type,
                                               type2.get_collation_type(),
                                               res_cs_level,
                                               res_cs_type))) {
-      LOG_WARN("fail to aggregate collation", K(ret), K(type1), K(type2));
   } else {
     type.set_int32();
     type.set_precision(DEFAULT_PRECISION_FOR_BOOL);
@@ -103,7 +101,6 @@ int ObExprRegexp::calc_result_type2(ObExprResType &type,
     type2.set_calc_type(ObVarcharType);
     type2.set_calc_collation_level(type.get_collation_level());
     if (OB_FAIL(ObExprRegexContext::check_need_utf8(raw_expr->get_param_expr(1), need_utf8))) {
-      LOG_WARN("fail to check need utf8", K(ret));
     } else if (need_utf8) {
       type2.set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF8MB4_BIN : CS_TYPE_UTF8MB4_GENERAL_CI);
     } else {
@@ -113,7 +110,6 @@ int ObExprRegexp::calc_result_type2(ObExprResType &type,
     need_utf8 = false;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObExprRegexContext::check_need_utf8(raw_expr->get_param_expr(0), need_utf8))) {
-      LOG_WARN("fail to check need utf8", K(ret));
     } else if (need_utf8) {
       type1.set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF8MB4_BIN : CS_TYPE_UTF8MB4_GENERAL_CI);
     } else {
@@ -191,7 +187,6 @@ int ObExprRegexp::regexp_match(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
       if (NULL == (regex_ctx = static_cast<RegExpCtx *>(
                   ctx.exec_ctx_.get_expr_op_ctx(expr.expr_ctx_id_)))) {
         if (OB_FAIL(ctx.exec_ctx_.create_expr_op_ctx(expr.expr_ctx_id_, regex_ctx))) {
-          LOG_WARN("create expr regex context failed", K(ret), K(expr));
         } else if (OB_ISNULL(regex_ctx)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("NULL context returned", K(ret));
@@ -211,13 +206,10 @@ int ObExprRegexp::regexp_match(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
       const ObCollationType constexpr expected_bin_coll = CS_TYPE_UTF16_BIN;
       const ObCollationType constexpr expected_ci_coll = CS_TYPE_UTF16_GENERAL_CI;
       if (OB_FAIL(RegExpCtx::get_regexp_flags(match_string, is_case_sensitive, false, true, flags))) {
-        LOG_WARN("failed to get regexp flags", K(ret));
       } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_regexp_session_vars(regexp_vars))) {
-        LOG_WARN("fail to get regexp");
       } else if (OB_FAIL(regex_ctx->init(reusable ? ctx.exec_ctx_.get_allocator() : tmp_alloc,
                                          regexp_vars,
                                          pattern->get_string(), flags, reusable, expr.args_[1]->datum_meta_.cs_type_))) {
-        LOG_WARN("init regex context failed", K(ret), K(pattern->get_string()));
       } else if (expr.args_[0]->datum_meta_.cs_type_ != expected_ci_coll &&
                  expr.args_[0]->datum_meta_.cs_type_ != expected_bin_coll) {
         if (OB_FAIL(ObExprUtil::convert_string_collation(text->get_string(),
@@ -225,7 +217,6 @@ int ObExprRegexp::regexp_match(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
                                                          text_utf,
                                                          is_case_sensitive ? expected_bin_coll : expected_ci_coll,
                                                          tmp_alloc))) {
-          LOG_WARN("convert charset failed", K(ret));
         }
       } else {
         text_utf = text->get_string();
@@ -234,7 +225,6 @@ int ObExprRegexp::regexp_match(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr
       } else if (OB_FAIL(regex_ctx->match(tmp_alloc, text_utf,
                                           is_case_sensitive ? expected_bin_coll : expected_ci_coll,
                                           start_pos - 1, match))) {
-        LOG_WARN("regex match failed", K(ret));
       } else {
         expr_datum.set_int32(match);
       }

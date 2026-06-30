@@ -139,7 +139,6 @@ bool EnableFillCacheFunctor::operator()() const
   if (!state_mgr_->is_leader_active()) {
     // don't submit fill cache task when it isn't a leader
   } else if (OB_FAIL(palf_env_impl_->get_options(options))) {
-    PALF_LOG(WARN, "get_options failed", K(ret));
   } else {
     // don't submit fill cache task when it isn't allowed
     bool_ret = options.enable_log_cache_;
@@ -353,7 +352,6 @@ int LogKVCache::get_log(const LogKVCacheKey &key, LogKVCacheValueHandle &val_han
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", K(ret), K(key));
   } else if (OB_FAIL(get(key, val_handle.value_, val_handle.handle_))) {
-    CLOG_LOG(WARN, "get from cache failed", K(ret), K(key));
   } else if (OB_ISNULL(val_handle.value_)) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "get a null value from kv cache", K(ret), K(key));
@@ -369,7 +367,6 @@ int LogKVCache::put_log(const LogKVCacheKey &key, const LogKVCacheValue &value)
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", K(ret), K(key), K(value));
   } else if (OB_FAIL(put(key, value, false /* overwrite */))) {
-    CLOG_LOG(WARN, "put log failed", K(ret), K(key), K(value));
   } 
   return ret;
 }
@@ -440,7 +437,6 @@ int LogColdCache::init(const int64_t palf_id,
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "LogColdCache init failed", K(ret), K(palf_id), KP(palf_env_impl), KP(log_storage));
   } else if (OB_FAIL(log_storage->get_logical_block_size(logical_block_size_))) {
-    PALF_LOG(WARN, "get_logical_block_size failed", K(ret), K(palf_id));
   } else {
     
     palf_id_ = palf_id;
@@ -482,7 +478,6 @@ int LogColdCache::alloc_kv_pair(const int64_t flashback_version,
                                       sizeof(LogKVCacheValue) + CACHE_LINE_SIZE,
                                       fill_buf.kvpair_, fill_buf.handle_,
                                       fill_buf.inst_handle_))) {
-    PALF_LOG(WARN, "alloc kvpair failed", K(ret), K(palf_id_));
   } else {
     fill_buf.kvpair_->key_ = new (fill_buf.kvpair_->key_) LogKVCacheKey(palf_id_, aligned_lsn, flashback_version);
     fill_buf.buf_ = reinterpret_cast<char *>(fill_buf.kvpair_->value_) + sizeof(LogKVCacheValue);
@@ -527,14 +522,10 @@ int LogColdCache::read(const int64_t flashback_version,
     // reading from disk directly if other error codes happen
     int original_ret = ret;
     if (OB_FAIL(read_from_disk_(lsn, in_read_size, read_buf, out_read_size, io_ctx))) {
-      PALF_LOG(WARN, "read_from_disk_ failed", K(ret), K(original_ret), K(lsn), K(in_read_size), K(out_read_size));
     }
   } else if (OB_FAIL(allow_filling_cache_(iterator_info, enable_fill_cache))) {
-    PALF_LOG(WARN, "allow_filling_cache failed", K(ret), K(enable_fill_cache), PRINT_INFO);
   } else if (OB_FAIL(deal_with_miss_(enable_fill_cache, cache_lines_read_size, read_buf.buf_len_, read_lsn,
                                      real_read_size, cache_out_read_size, iterator_info))) {
-    PALF_LOG(WARN, "fail to deal with miss", K(ret), K(cache_lines_read_size), K(enable_fill_cache),
-             K(read_lsn), K(real_read_size), K(out_read_size), K(cache_out_read_size), PRINT_INFO);
   } else if (FALSE_IT(read_buf.buf_ += cache_out_read_size)) {
   } else if (OB_FAIL(read_from_disk_(read_lsn, real_read_size, read_buf,
                                      disk_out_read_size, io_ctx))) {
@@ -546,7 +537,6 @@ int LogColdCache::read(const int64_t flashback_version,
 
     if (!enable_fill_cache) {
     } else if (OB_FAIL(fill_cache_lines_(flashback_version, read_lsn, disk_out_read_size, read_buf.buf_ + cache_out_read_size))) {
-      PALF_LOG(WARN, "fail to fill cache", K(ret), K(read_lsn), K(flashback_version), K(out_read_size), PRINT_INFO);
     } else if (0 == cache_out_read_size) {
       // if read_buf isn't large enough, read_lsn is equal to lsn, which means 'diff' is 0;
       // if read_buf is large enough, adjust read_lsn to new_read_lsn to read more log (up to 'diff') for filling first missing cache line
@@ -570,7 +560,6 @@ int LogColdCache::fill_cache_line(FillBuf &fill_buf)
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "can't fill incomplete cache line", K(fill_buf));
   } else if (OB_FAIL(kv_cache_->put_kvpair(fill_buf.inst_handle_, fill_buf.kvpair_, fill_buf.handle_, true /* overwrite*/))) {
-    PALF_LOG(WARN, "failed to put kvpair", K(ret), K(fill_buf));
   } else {
     PALF_LOG(TRACE, "put kvpair into cold cache successfully", K(fill_buf));
   }
@@ -584,7 +573,6 @@ int LogColdCache::allow_filling_cache_(LogIteratorInfo *iterator_info, bool &ena
   PalfOptions options;
   enable_fill_cache = false;
   if (OB_FAIL(palf_env_impl_->get_options(options))) {
-    PALF_LOG(WARN, "get options failed", K(ret));
   } else {
     enable_fill_cache = options.enable_log_cache_ && iterator_info->get_allow_filling_cache();
   }
@@ -648,9 +636,6 @@ int LogColdCache::get_cache_lines_(const LSN &lsn,
     if (OB_FAIL(get_cache_line_(cache_read_lsn, flashback_version,
                                 in_read_size, read_pos, buf,
                                 curr_round_read_size))) {
-      PALF_LOG(WARN, "fail to get cache line", K(ret), K(cache_read_lsn),
-               K(flashback_version), K(in_read_size), K(read_pos),
-               K(out_read_size), PRINT_INFO);
     } else {
       read_pos += curr_round_read_size;
       out_read_size += curr_round_read_size;
@@ -690,7 +675,6 @@ int LogColdCache::get_cache_line_(const LSN &cache_read_lsn,
   int tmp_ret = OB_SUCCESS;
   char *cache_log_buf = NULL;
   if (OB_FAIL(kv_cache_->get_log(key, val_handle))) {
-    PALF_LOG(WARN, "fail to get log from kv cache", K(ret), K(key), PRINT_INFO);
   } else if (OB_ISNULL((cache_log_buf = val_handle.value_->get_buf()))) {
     ret = OB_ERR_UNEXPECTED;
     PALF_LOG(WARN, "get null buf from log kv cache", K(ret), K(key));
@@ -756,8 +740,6 @@ int LogColdCache::fill_cache_lines_(const int64_t flashback_version,
 
       OB_ASSERT(LogCacheUtils::is_lower_align_with_start(fill_lsn, CACHE_LINE_SIZE));
       if (OB_FAIL(fill_cache_line_(flashback_version, fill_lsn, curr_round_fill_size, fill_pos, buf))) {
-        PALF_LOG(WARN, "fill cache line failed", K(ret), K(flashback_version),
-                 K(fill_lsn), K(curr_round_fill_size), K(fill_pos), PRINT_INFO);
       } else {
         remained_size -= curr_round_fill_size;
         fill_pos += curr_round_fill_size;
@@ -792,7 +774,6 @@ int LogColdCache::fill_cache_line_(const int64_t flashback_version,
   LogKVCacheKey new_key(palf_id_, fill_lsn, flashback_version);
   LogKVCacheValue new_value;
   if (OB_FAIL(new_value.init(buf + fill_pos, fill_size))) {
-    PALF_LOG(WARN, "new value init failed", K(ret), K(new_key), K(new_value));
   } else if (OB_SUCC(kv_cache_->put_log(new_key, new_value))) {
     // fill successfully
     PALF_LOG(TRACE, "fill cache successfully", K(fill_lsn), K(fill_pos), K(fill_size), K(palf_id_));   
@@ -818,7 +799,6 @@ int LogColdCache::read_from_disk_(const LSN &read_lsn,
 
   if (OB_FAIL(log_reader_->pread(read_block_id, real_read_offset,
                                  in_read_size, read_buf, out_read_size, io_ctx))) {
-    PALF_LOG(WARN, "read_from_disk failed", K(ret), K(read_lsn), K(in_read_size));
   } else {
     PALF_LOG(TRACE, "read_from_disk succeed", K(read_lsn), K(in_read_size),
              K(in_read_size), K(read_lsn), K(out_read_size));
@@ -921,9 +901,7 @@ int LogCache::init(const int64_t palf_id,
     ret = OB_INIT_TWICE;
     PALF_LOG(WARN, "LogCache init failed", K(ret));
   } else if (OB_FAIL(hot_cache_.init(palf_id, palf_handle_impl))){
-    PALF_LOG(WARN, "hot cache init failed", K(ret), K(palf_id));
   } else if (OB_FAIL(cold_cache_.init(palf_id, palf_env_impl, log_storage))) {
-    PALF_LOG(WARN, "cold cache init failed", K(ret), K(palf_id));
   } else {
     palf_id_ = palf_id;
     is_inited_ = true;
@@ -960,7 +938,6 @@ int LogCache::read(const int64_t flashback_version,
   } else if (FALSE_IT(io_ctx.inc_miss_cnt(is_cold_cache))) {
   } else if (OB_FAIL(read_cold_cache_(flashback_version, lsn, in_read_size,
                                       read_buf, out_read_size, io_ctx))) {
-    PALF_LOG(WARN, "fail to read from cold cache", K(ret), K(lsn), K(in_read_size), K(read_buf), K(out_read_size));
   } else {
     // read data from kv cache successfully
   }
@@ -985,7 +962,6 @@ int LogCache::fill_cache_when_slide(const LSN &lsn,
     PALF_LOG(WARN, "invalid argument", K(ret), K(lsn), K(fill_size), K(flashback_version));
     // make sure that fill_lsn, fill_size, fill_buf_.fill_pos is match before enter 'while'
   } else if (OB_FAIL(try_update_fill_buf_(flashback_version, fill_lsn, remained_size))) {
-    PALF_LOG(WARN, "try update fill_buf failed", K(ret), K(lsn), K(flashback_version), K(fill_buf_), K(remained_size));
   } else {
     OB_ASSERT(fill_buf_.is_valid() && fill_lsn == fill_buf_.aligned_lsn_ + fill_buf_.fill_pos_);
     
@@ -1011,11 +987,9 @@ int LogCache::fill_cache_when_slide(const LSN &lsn,
           PALF_LOG(TRACE, "successfully memcpy committed logs from hot cache to fill_buf", 
                    K(fill_lsn), K(remained_size), K(out_read_size), K(fill_buf_));
         } else if (OB_FAIL(cold_cache_.fill_cache_line(fill_buf_))) {
-          PALF_LOG(WARN, "fill_cache_line failed", K(ret), K(fill_lsn), K(remained_size), K(fill_buf_));
         } else if (FALSE_IT(fill_lsn = fill_lsn + out_read_size)) {
         // current cache line is full, update fill_buf for next fill
         } else if (OB_FAIL(update_fill_buf_(flashback_version, fill_lsn))) {
-          PALF_LOG(WARN, "failed to update fill_buf, stop filling cold cache", K(ret), K(flashback_version), K(fill_lsn));
         } else {
           OB_ASSERT(fill_lsn == LogCacheUtils::lower_align_with_start(fill_lsn, CACHE_LINE_SIZE));
           PALF_LOG(TRACE, "insert kv into cold cache and update fill_buf successfully", K(fill_lsn), K(remained_size), K(fill_buf_));
@@ -1064,7 +1038,6 @@ int LogCache::read_cold_cache_(const int64_t flashback_version,
     PALF_LOG(WARN, "invalid argument", K(ret), K(lsn), K(in_read_size), K(read_buf));
   } else if (OB_FAIL(cold_cache_.read(flashback_version, lsn, in_read_size,
                                       read_buf, out_read_size, io_ctx))) {
-    PALF_LOG(WARN, "read cold cache failed", K(ret), K(lsn), K(in_read_size), K(read_buf), K(out_read_size));
   } else {
     PALF_LOG(TRACE, "read cold cache successfully", K(lsn), K(in_read_size), K(read_buf), K(out_read_size));
   }
@@ -1084,7 +1057,6 @@ int LogCache::try_update_fill_buf_(const int64_t flashback_version,
   if (!fill_buf_.is_valid()) {
     if (aligned_lsn == fill_lsn) {
       if (OB_FAIL(update_fill_buf_(flashback_version, fill_lsn))) {
-        PALF_LOG(WARN, "update fill_buf failed", K(ret), K(fill_lsn), K(aligned_lsn), K(flashback_version), K(fill_buf_));
       }
     } else {
       ret = OB_DISCONTINUOUS_LOG;
@@ -1117,7 +1089,6 @@ int LogCache::try_update_fill_buf_(const int64_t flashback_version,
                K(ret), K(fill_size), K(diff), K(upper_aligned_lsn), K(fill_lsn));
     } else if (FALSE_IT(fill_lsn = fill_lsn + diff)) {
     } else if (OB_FAIL(update_fill_buf_(flashback_version, fill_lsn))) {
-      PALF_LOG(WARN, "update fill_buf failed", K(ret), K(fill_lsn), K(aligned_lsn), K(flashback_version), K(fill_buf_));
     } else {
       ret = OB_SUCCESS;
       fill_size = fill_size - diff;
@@ -1135,7 +1106,6 @@ int LogCache::update_fill_buf_(const int64_t flashback_version,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(cold_cache_.alloc_kv_pair(flashback_version, aligned_lsn, fill_buf_))) {
-    PALF_LOG(WARN, "failed to alloc kv pair", K(ret), K(flashback_version), K(aligned_lsn));
   } else {
     fill_buf_.update_state(aligned_lsn, flashback_version);
     PALF_LOG(TRACE, "update fill_buf successfully", K(fill_buf_));

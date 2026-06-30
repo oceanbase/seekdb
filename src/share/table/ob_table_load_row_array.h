@@ -90,7 +90,6 @@ int ObTableLoadRowArray<T>::deserialize(DESERIAL_PARAMS)
       OB_UNIS_DECODE(row);
       if (OB_SUCC(ret)) {
         if (OB_FAIL(array_.push_back(row))) {
-          OB_LOG(WARN, "fail to push back row to array", K(ret), K(row));
         }
       }
     }
@@ -115,7 +114,6 @@ int ObTableLoadRowArray<T>::push_back(const T &obj_row)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(array_.push_back(obj_row))) {
-    OB_LOG(WARN, "failed to push back obj_row to array", KR(ret));
   }
 
   return ret;
@@ -127,7 +125,6 @@ int ObTableLoadRowArray<T>::assign(const ObTableLoadRowArray<T> &other)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(array_.assign(other.array_))) {
-    OB_LOG(WARN, "failed to assign other array", KR(ret));
   } else {
     allocator_handle_ = other.allocator_handle_;
   }

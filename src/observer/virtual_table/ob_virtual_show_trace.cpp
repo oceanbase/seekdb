@@ -105,7 +105,6 @@ int ObVirtualShowTrace::retrive_all_span_info()
                                                      table_id);
             // retrive data from client
             if (OB_FAIL(sql_client_retry_weak.read(res, sql))) {
-              SERVER_LOG(WARN, "failed to read data", K(ret));
             } else if (NULL == (result = res.get_result())) {
               ret = OB_ERR_UNEXPECTED;
               SERVER_LOG(WARN, "failed to get result", K(ret));
@@ -113,7 +112,6 @@ int ObVirtualShowTrace::retrive_all_span_info()
               while (OB_SUCC(ret) && OB_SUCC(result->next())) {
                 sql::ObFLTShowTraceRec* rec;
                 if (OB_FAIL(alloc_trace_rec(rec))) {
-                  SERVER_LOG(WARN, "failed to alloc record", K(ret));
                 } else if (OB_ISNULL(rec)) {
                   ret = OB_ERR_UNEXPECTED;
                   SERVER_LOG(WARN, "record ptr is null");
@@ -156,7 +154,6 @@ int ObVirtualShowTrace::read_show_trace_rec_from_result(sqlclient::ObMySQLResult
   int64_t ipstr_len = 0;
   char *tag_buf = NULL;
   if (OB_FAIL(get_tag_buf(tag_buf))) {
-    SERVER_LOG(WARN, "failed to get tag buf", K(ret));
   } else {
     // trace_id
     EXTRACT_STRBUF_FIELD_MYSQL(mysql_result, "trace_id", trace_id_buf, OB_MAX_SPAN_LENGTH, trace_id_len);
@@ -191,7 +188,6 @@ int ObVirtualShowTrace::read_show_trace_rec_from_result(sqlclient::ObMySQLResult
       MEMSET(tag_buf, 0x00, OB_MAX_SPAN_TAG_LENGTH);
       EXTRACT_STRBUF_FIELD_MYSQL(mysql_result, "tags", tag_buf, OB_MAX_SPAN_TAG_LENGTH, tag_len);
       if (OB_FAIL(ob_write_string(alloc_, ObString(tag_len, tag_buf), rec.data_.tags_))) {
-        SERVER_LOG(WARN, "failed to deep copy tag", K(ret));
       }
     }
 
@@ -202,7 +198,6 @@ int ObVirtualShowTrace::read_show_trace_rec_from_result(sqlclient::ObMySQLResult
       MEMSET(tag_buf, 0x00, OB_MAX_SPAN_TAG_LENGTH);
       EXTRACT_STRBUF_FIELD_MYSQL(mysql_result, "logs", tag_buf, OB_MAX_SPAN_TAG_LENGTH, log_len);
       if (OB_FAIL(ob_write_string(alloc_, ObString(log_len, tag_buf), rec.data_.logs_))) {
-        SERVER_LOG(WARN, "failed to deep copy log", K(ret));
       }
     }
 
@@ -275,9 +270,7 @@ int ObVirtualShowTrace::generate_span_info_tree()
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "record ptr is null", K(i));
         } else if (OB_FAIL(tmp_arr.push_back(root_arr.at(i)))) {
-          LOG_WARN("failed to add root span to array", K(ret), K(i));
         } else if (OB_FAIL(find_child_span_info(NULL, root_arr.at(i)->data_.span_id_, tmp_arr, depth+1))) {
-          LOG_WARN("failed to find child span info", K(ret));
         } else {
           // do nothing
         }
@@ -346,7 +339,6 @@ int ObVirtualShowTrace::merge_span_info() {
         } else {
           sql::ObFLTShowTraceRec* rec;
           if (OB_FAIL(alloc_trace_rec(rec))) {
-            SERVER_LOG(WARN, "failed to alloc record", K(ret));
           } else if (OB_ISNULL(rec)) {
             ret = OB_ERR_UNEXPECTED;
             SERVER_LOG(WARN, "record ptr is null");
@@ -381,7 +373,6 @@ int ObVirtualShowTrace::merge_range_span_info(int64_t l, int64_t r, sql::ObFLTSh
   } else if (FALSE_IT(rec = *show_trace_arr_.at(l))) {
     // do nothing
   } else if (OB_FAIL(get_tag_buf(tag_buf))) {
-    SERVER_LOG(WARN, "failed to get tag buf", K(ret));
   } else {
     // merge tags
     int64_t pos = 0;
@@ -413,7 +404,6 @@ int ObVirtualShowTrace::merge_range_span_info(int64_t l, int64_t r, sql::ObFLTSh
     } else {
       tag_buf[pos-1] = ']';
       if (OB_FAIL(ob_write_string(alloc_, ObString(pos, tag_buf), rec.data_.tags_))) {
-        SERVER_LOG(WARN, "failed to deep copy log", K(ret));
       }
     }
 
@@ -445,7 +435,6 @@ int ObVirtualShowTrace::merge_range_span_info(int64_t l, int64_t r, sql::ObFLTSh
     } else {
       tag_buf[pos-1] = ']';
       if (OB_FAIL(ob_write_string(alloc_, ObString(pos, tag_buf), rec.data_.logs_))) {
-        SERVER_LOG(WARN, "failed to deep copy log", K(ret));
       }
     }
   }
@@ -541,7 +530,6 @@ int ObVirtualShowTrace::find_child_span_info(sql::ObFLTShowTraceRec::trace_forma
 
        if(OB_FAIL(ret)){
        } else if (OB_FAIL(tmp_arr.push_back(show_trace_arr_.at(i)))) {
-         LOG_WARN("failed to push back show trace value", K(ret), K(i));
        }
      } else {
        // do nothing
@@ -641,12 +629,10 @@ int ObVirtualShowTrace::find_child_span_info(sql::ObFLTShowTraceRec::trace_forma
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "record ptr is null", K(i));
     } else if (OB_FAIL(arr.push_back(tmp_arr.at(i)))) {
-      LOG_WARN("failed to push back show trace value", K(ret), K(i));
     } else if (OB_FAIL(find_child_span_info(tmp_arr.at(i)->formatter_.tree_line_,
                                             tmp_arr.at(i)->data_.span_id_,
                                             arr,
                                             depth+1))) {
-      LOG_WARN("failed to push back show trace value", K(ret), K(i));
     } else {
       // do nothing
     }
@@ -665,11 +651,8 @@ int ObVirtualShowTrace::inner_get_next_row(common::ObNewRow *&row)
     // init inner iterator varaibales
     show_trace_arr_.reset();
     if (OB_FAIL(retrive_all_span_info())) {
-      SERVER_LOG(WARN, "failed to retrive all span info", K(ret));
     } else if (OB_FAIL(merge_span_info())) {
-      SERVER_LOG(WARN, "failed to merge span info", K(ret));
     } else if (OB_FAIL(generate_span_info_tree())) {
-      SERVER_LOG(WARN, "failed to generate span info tree", K(ret));
     } else {
       is_first_get_ = false;
       show_trace_rec_idx_ = 0;
@@ -696,7 +679,6 @@ int ObVirtualShowTrace::inner_get_next_row(common::ObNewRow *&row)
       sql::ObFLTShowTraceRec rec = *show_trace_arr_.at(show_trace_rec_idx_);
       ++show_trace_rec_idx_;
       if (OB_FAIL(fill_cells(rec))) {
-        SERVER_LOG(WARN, "fail to fill cells", K(rec));
       } else {
         row = &cur_row_;
       }

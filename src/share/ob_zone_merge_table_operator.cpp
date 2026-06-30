@@ -42,7 +42,6 @@ int ObZoneMergeTableOperator::init()
     ret = OB_NOT_INIT;
     LOG_WARN("meta_db_pool_ not initialized", K(ret));
   } else if (OB_FAIL(storage_.init(GCTX.meta_db_pool_))) {
-    LOG_WARN("failed to init storage", K(ret));
   }
   return ret;
 }
@@ -79,7 +78,6 @@ int ObZoneMergeTableOperator::load_zone_merge_infos(
   } else {
     ret = storage_.get_all(infos);
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to get all zone merge infos from storage", K(ret));
     }
   }
   return ret;
@@ -97,7 +95,6 @@ int ObZoneMergeTableOperator::insert_zone_merge_infos(
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < infos.count(); ++i) {
       if (OB_FAIL(storage_.insert_or_update(infos.at(i)))) {
-        LOG_WARN("failed to insert or update zone merge info", K(ret), K(i));
       }
     }
   }
@@ -116,7 +113,6 @@ int ObZoneMergeTableOperator::update_partial_zone_merge_info(
     // Use SQLite storage - partial update is same as full update for SQLite
     ret = storage_.insert_or_update(info);
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to insert or update zone merge info", K(ret), K(info));
     }
   }
   return ret;
@@ -134,7 +130,6 @@ int ObZoneMergeTableOperator::update_zone_merge_infos(
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < infos.count(); ++i) {
       if (OB_FAIL(storage_.insert_or_update(infos.at(i)))) {
-        LOG_WARN("failed to insert or update zone merge info", K(ret), K(i));
       }
     }
   }
@@ -156,11 +151,9 @@ int ObZoneMergeTableOperator::get_zone_list(
   } else {
     ObArray<ObZoneMergeInfo> infos;
     if (OB_FAIL(storage_.get_all(infos))) {
-      LOG_WARN("failed to get all zone merge infos", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < infos.count(); ++i) {
         if (OB_FAIL(zone_list.push_back(GCTX.config_->zone.str()))) {
-          LOG_WARN("failed to push back zone", K(ret));
         }
       }
     }

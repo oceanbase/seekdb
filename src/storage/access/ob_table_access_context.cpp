@@ -214,7 +214,6 @@ int ObTableAccessContext::init(ObTableScanParam &scan_param,
     STORAGE_LOG(ERROR, "Unexpected access context reuse scenario",
         K(ret), KP(stmt_allocator_), KP(allocator_), K(scan_param));
   } else if (OB_FAIL(init_scan_allocator(scan_param))) {
-    LOG_WARN("Failed to init scan allocator", K(ret));
   } else {
     stmt_allocator_ = scan_param.allocator_;
     cached_iter_node_ = cached_iter_node;
@@ -238,8 +237,6 @@ int ObTableAccessContext::init(ObTableScanParam &scan_param,
     mds_collector_ = scan_param.mds_collector_;
     row_scan_cnt_ = scan_param.row_scan_cnt_;
     if(OB_FAIL(build_lob_locator_helper(scan_param, ctx, trans_version_range))) {
-      STORAGE_LOG(WARN, "Failed to build lob locator helper", K(ret));
-      // new static engine do not need fill scale
     } else if (!micro_block_handle_mgr_.is_valid()
                && OB_FAIL(micro_block_handle_mgr_.init(
                   static_cast<sql::ObStoragePushdownFlag>(scan_param.pd_storage_flag_).is_enable_prefetch_limiting(),
@@ -302,7 +299,6 @@ int ObTableAccessContext::init(const common::ObQueryFlag &query_flag,
       need_release_truncate_part_filter_ = false;
       truncate_part_filter_ = mvcc_mds_filter->truncate_part_filter_;
       if (OB_FAIL(ctx.init_mds_filter(*mvcc_mds_filter))) {
-        LOG_WARN("failed to init mds filter on StoreCtx", KR(ret), KPC(mvcc_mds_filter));
       }
     } else {
       ctx.clear_mds_filter();
@@ -346,7 +342,6 @@ int ObTableAccessContext::init(const common::ObQueryFlag &query_flag,
       need_release_truncate_part_filter_ = false;
       truncate_part_filter_ = mvcc_mds_filter->truncate_part_filter_;
       if (OB_FAIL(ctx.init_mds_filter(*mvcc_mds_filter))) {
-        LOG_WARN("failed to init mds filter on StoreCtx", KR(ret), KPC(mvcc_mds_filter));
       }
     } else {
       ctx.clear_mds_filter();
@@ -477,7 +472,6 @@ int ObTableAccessContext::init_scan_allocator(ObTableScanParam &scan_param)
         .set_properties(lib::USE_TL_PAGE_OPTIONAL)
         .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(scan_mem_, param))) {
-        LOG_WARN("fail to create entity", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -492,11 +486,9 @@ int ObTableAccessContext::init_mview_scan_info(const int64_t multi_version_start
   int ret = OB_SUCCESS;
   if (nullptr != mview_scan_info_) {
   } else if (OB_FAIL(build_mview_scan_info_if_need(query_flag_, op_filters, eval_ctx, stmt_allocator_, mview_scan_info_))) {
-    LOG_WARN("Failed to build mview scan info", K(ret));
   }
   if (OB_FAIL(ret) || nullptr == mview_scan_info_) {
   } else if (OB_FAIL(mview_scan_info_->check_and_update_version_range(multi_version_start, trans_version_range_))) {
-    LOG_WARN("Failed to check and update version range", K(ret), K(multi_version_start), K(trans_version_range_), KPC_(mview_scan_info));
   }
   return ret;
 }
@@ -585,7 +577,6 @@ int ObTableAccessContext::rescan_reuse(ObTableScanParam &scan_param)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_scan_allocator(scan_param))) {
-    LOG_WARN("Failed to init scan allocator", K(ret));
   } else {
     out_cnt_ = 0;
     if (nullptr != table_scan_stat_) {
@@ -663,7 +654,6 @@ int ObTableAccessContext::check_filtered_by_base_version(ObDatumRow &row)
   if (nullptr != truncate_part_filter_) {
     bool filtered = false;
     if (OB_FAIL(truncate_part_filter_->filter(row, filtered, false/*check_filter*/, true/*check_version*/))) {
-      LOG_WARN("failed to do truncate part filter", K(ret));
     } else if (filtered) {
       row.row_flag_.reset();
       row.row_flag_.set_flag(DF_NOT_EXIST);

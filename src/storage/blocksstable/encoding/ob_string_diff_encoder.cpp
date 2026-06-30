@@ -49,8 +49,6 @@ int ObStringDiffEncoder::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_index, rows))) {
-    LOG_WARN("init base column encoder failed",
-        K(ret), K(ctx), K(column_index), "row count", rows.count());
   } else {
     const ObObjTypeStoreClass sc = get_store_class_map()[
         ob_obj_type_class(column_type_.get_type())];
@@ -100,7 +98,6 @@ int ObStringDiffEncoder::traverse(bool &suitable)
         LOG_WARN("not supported extend object type",
             K(ret), K(datum), K_(column_type), K_(column_index));
       } else if (OB_FAIL(traverse_cell(data, diff, suitable, datum, i))) {
-        LOG_WARN("traverse cell failed", K(ret), K(datum));
       }
     }
     if (OB_SUCC(ret) && suitable && hex_string_map_.can_packing()) {
@@ -109,7 +106,6 @@ int ObStringDiffEncoder::traverse(bool &suitable)
         const ObDatum &datum = rows_->at(i).get_datum(column_index_);
         if (!datum.is_null() && !datum.is_nop()) {
           if (OB_FAIL(traverse_cell(data, diff, suitable, datum, i))) {
-            LOG_WARN("traverse cell failed", K(ret), K(datum));
           }
         }
       }
@@ -128,7 +124,6 @@ int ObStringDiffEncoder::traverse(bool &suitable)
             common_size_ += desc.count_;
           }
           if (OB_FAIL(diff_descs_.push_back(desc))) {
-            LOG_WARN("add diff description failed", K(ret), K(desc));
           } else {
             begin = i;
             if (i < string_size_) {
@@ -260,7 +255,6 @@ int ObStringDiffEncoder::store_meta(ObBufferWriter &buf_writer)
         + sizeof(ObStringDiffHeader::DiffDesc) * diff_descs_.count()
         + (hex_packing ? hex_string_map_.size_ : 0) + common_size_;
     if (OB_FAIL(buf_writer.advance_zero(size))) {
-      LOG_WARN("advance meta store size failed", K(ret), K(size));
     } else {
       header_->string_size_ = static_cast<uint16_t>(string_size_);
       header_->diff_desc_cnt_ = static_cast<uint8_t>(diff_descs_.count());
@@ -324,13 +318,10 @@ int ObStringDiffEncoder::store_data(
     if (STORED_NOT_EXT != ext_val) {
       if (OB_FAIL(bs.set(column_header_.extend_value_index_,
           extend_value_bit_, static_cast<int64_t>(ext_val)))) {
-        LOG_WARN("store extend value bit failed",
-            K(ret), K_(column_header), K_(extend_value_bit), K(ext_val));
       }
     } else {
       ColumnStoreFiller filler(*this);
       if (OB_FAIL(filler(row_id, datum, buf, len))) {
-        LOG_WARN("fill data failed", K(ret), K(row_id), K(datum), KP(buf), K(len));
       }
     }
   }
@@ -414,7 +405,6 @@ int ObStringDiffEncoder::store_fix_data(ObBufferWriter &buf_writer)
     EmptyGetter getter;
     ColumnStoreFiller filler(*this);
     if (OB_FAIL(fill_column_store(buf_writer, *ctx_->col_datums_, getter, filler))) {
-      LOG_WARN("fill column store failed", K(ret));
     }
   }
   return ret;

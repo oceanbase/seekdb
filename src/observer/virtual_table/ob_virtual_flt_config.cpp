@@ -59,7 +59,6 @@ int ObVirtualFLTConfig::get_row_from_tenants()
   } else {
     MOD_SCOPE {
       if (OB_FAIL(get_row_from_specified_tenant(is_sub_end))) {
-        SERVER_LOG(WARN, "fail to insert plan by tenant id", K(ret));
       } else if (is_sub_end) {
         iter_end_ = true;
         ret = OB_ITER_END;
@@ -79,9 +78,7 @@ int ObVirtualFLTConfig::get_row_from_specified_tenant(bool &is_end)
   } else if (OB_INVALID_ID == static_cast<uint64_t>(rec_array_idx_)) {
     ObFLTControlInfoManager mgr;
     if (OB_FAIL(mgr.init())) {
-      SERVER_LOG(WARN,"failed to init full link trace info manager", K(ret));
     } else if (OB_FAIL(mgr.get_all_flt_config(rec_list_, *allocator_))) {
-      SERVER_LOG(WARN,"failed to fill flt configs", K(ret));
     } else {
       rec_array_idx_ = 0;
     }
@@ -102,7 +99,6 @@ int ObVirtualFLTConfig::get_row_from_specified_tenant(bool &is_end)
         ObFLTConfRec& rec = rec_list_.at(rec_array_idx_);
         ++rec_array_idx_;
         if (OB_FAIL(fill_cells(rec))) {
-          SERVER_LOG(WARN, "fail to fill cells", K(rec));
         } else {
           is_filled = true;
         }

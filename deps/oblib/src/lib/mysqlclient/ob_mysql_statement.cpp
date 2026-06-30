@@ -136,7 +136,6 @@ int ObMySQLStatement::wait_for_mysql(int &status)
   int res = 0;
   while (res <= 0 && OB_SUCC(ret)) {
     if (OB_FAIL(THIS_WORKER.check_status())) {
-      LOG_WARN("check status failed", K(ret));
     } else {
 #ifdef _WIN32
       res = WSAPoll(&pfd, 1, timeout);
@@ -174,7 +173,6 @@ ObMySQLResult *ObMySQLStatement::execute_query(bool enable_use_result)
     LOG_TRACE("status after mysql_real_query_start", K(status), K(err), K(sql_str_));
     while (status && OB_SUCC(ret)) {
       if (OB_FAIL(wait_for_mysql(status))) {
-        LOG_WARN("wait for mysql failed", K(ret));
       } else {
         status = mysql_real_query_cont(&err, stmt_, status);
       }
@@ -201,7 +199,6 @@ ObMySQLResult *ObMySQLStatement::execute_query(bool enable_use_result)
         conn_->set_usable(false);
       }
     } else if (OB_FAIL(result_.init(enable_use_result))) {
-      LOG_WARN("fail to init sql result", K(ret));
     } else {
       result = &result_;
     }

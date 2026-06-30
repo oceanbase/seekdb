@@ -54,7 +54,6 @@ int ObDirectLoadExternalFragment::assign(const ObDirectLoadExternalFragment &oth
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(file_handle_.assign(other.file_handle_))) {
-    LOG_WARN("fail to assign file handle", KR(ret));
   } else {
     file_size_ = other.file_size_;
     row_count_ = other.row_count_;
@@ -86,7 +85,6 @@ int ObDirectLoadExternalFragmentArray::assign(const ObDirectLoadExternalFragment
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(fragments_.assign(other.fragments_))) {
-    LOG_WARN("fail to assign vector", KR(ret));
   }
   return ret;
 }
@@ -95,7 +93,6 @@ int ObDirectLoadExternalFragmentArray::push_back(const ObDirectLoadExternalFragm
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(fragments_.push_back(fragment))) {
-    LOG_WARN("fail to push back fragment", KR(ret));
   }
   return ret;
 }
@@ -105,7 +102,6 @@ int ObDirectLoadExternalFragmentArray::push_back(const ObDirectLoadExternalFragm
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < other.count(); ++i) {
     if (OB_FAIL(fragments_.push_back(other.at(i)))) {
-      LOG_WARN("fail to push back fragment", KR(ret));
     }
   }
   return ret;

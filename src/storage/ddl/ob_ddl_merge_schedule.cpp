@@ -92,7 +92,6 @@ int ObDDLMergeScheduler::check_need_merge_for_idem_sn(ObTablet &tablet, ObArray<
       /* try create ddl kv mgr, for emtpy table */
       ObDDLKvMgrHandle ddl_kv_mgr_handle;
       if (OB_FAIL(tablet.get_ddl_kv_mgr(ddl_kv_mgr_handle, true /* try create */))) {
-        LOG_WARN("failed to get tablet ddl kv mgr", K(ret));
       }
     }
   }
@@ -152,7 +151,6 @@ int check_full_major_exist(const ObTablet &tablet, bool &full_major_exist)
   const ObTabletMeta &tablet_meta = tablet.get_tablet_meta();
   ObTabletMemberWrapper<ObTabletTableStore> table_store_wrapper;
   if (OB_FAIL(tablet.fetch_table_store(table_store_wrapper))) {
-    LOG_WARN("fetch table store failed", K(ret));
   } else if (nullptr != table_store_wrapper.get_member()->get_major_sstables().get_boundary_table(false/*first*/)) {
     full_major_exist = true;
   }
@@ -168,9 +166,7 @@ int ObDDLMergeScheduler::check_tablet_need_merge(ObTablet &tablet, ObDDLKvMgrHan
   if (!ddl_kv_mgr_handle.is_valid()) {
     /* if ddl kv mgr handle is not valid, skip not need to get ddl kvs */
   } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->get_ddl_kvs(false /* for both frozen & active*/, ddl_kv_handles))) {
-    LOG_WARN("failed to get ddl kv", K(ret));
   } else if (OB_FAIL(check_full_major_exist(tablet, full_major_exist))) {
-    LOG_WARN("failed to check full major exist", K(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -206,7 +202,6 @@ int ObDDLMergeScheduler::schedule_ddl_merge(ObLSHandle &ls_handle,
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObDDLMergeScheduler::check_tablet_need_merge(*tablet_handle.get_obj(), ddl_kv_mgr_handle, need_schedule_merge, ddl_kv_type))) {
-    LOG_WARN("failed to check tablet need merge", K(ret), K(ls_id), K(tablet_id));
   } else if (need_schedule_merge) {
     LOG_INFO("need schedule merge", K(ret), K(ls_id), K(tablet_id), K(need_schedule_merge), K(ddl_kv_type));
   }
@@ -281,12 +276,9 @@ int ObDDLMergeScheduler::schedule_tablet_ddl_major_merge(
       LOG_WARN("get tablet direct load mgr failed", K(ret), "tablet_id", tablet_handle.get_obj()->get_tablet_meta().tablet_id_);
     }
   } else if (OB_FAIL(tablet_handle.get_obj()->get_ddl_kv_mgr(ddl_kv_mgr_handle))) {
-    LOG_WARN("get ddl kv mgr failed", K(ret));
   } else if (FALSE_IT(ddl_commit_scn = direct_load_mgr_handle.get_full_obj()->get_commit_scn(tablet_handle.get_obj()->get_tablet_meta()))) {
   } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->try_flush_ddl_commit_scn(ls_handle, tablet_handle, direct_load_mgr_handle, ddl_commit_scn))) {
-    LOG_WARN("try flush ddl commit scn failed", K(ret), "tablet_id", tablet_handle.get_obj()->get_tablet_meta().tablet_id_);
   } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->check_has_freezed_ddl_kv(has_freezed_ddl_kv))) {
-    LOG_WARN("check has freezed ddl kv failed", K(ret));
   } else if (OB_FAIL(direct_load_mgr_handle.get_full_obj()->prepare_ddl_merge_param(*tablet_handle.get_obj(), param))) {
     if (OB_EAGAIN != ret) {
       LOG_WARN("prepare major merge param failed", K(ret), "tablet_id", tablet_handle.get_obj()->get_tablet_meta().tablet_id_);
@@ -309,13 +301,10 @@ int ObDDLMergeScheduler::schedule_tablet_ddl_major_merge(
     ObArenaAllocator arena(ObMemAttr("DDL_Mrg_Par"));
     ObTabletDDLCompleteMdsUserData  ddl_complete;
     if (OB_FAIL(ObDDLUtil::is_major_exist(ls_id, tablet_handle.get_obj()->get_tablet_meta().tablet_id_, is_major_sstable_exist))) {
-      LOG_WARN("failed to check major sstable exist", K(ret), K(ls_id), K(tablet_handle.get_obj()->get_tablet_meta().tablet_id_));
     } else if (is_major_sstable_exist) {
       LOG_INFO("major sstable already exist, don't need to schdule ddl merge", K(ret), K(ls_id), K(tablet_handle.get_obj()->get_tablet_meta().tablet_id_));
     } else if (OB_FAIL(tablet_handle.get_obj()->get_ddl_kv_mgr(ddl_kv_mgr_handle))) {
-      LOG_WARN("get ddl kv mgr failed", K(ret));
     } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->check_has_freezed_ddl_kv(has_freezed_ddl_kv))) {
-      LOG_WARN("check has freezed ddl kv failed", K(ret));
     } else if (OB_FAIL(tablet_handle.get_obj()->get_ddl_complete(share::SCN::max_scn(), arena, ddl_complete))) {
       if (OB_EMPTY_RESULT == ret) {
         ret = OB_SUCCESS;
@@ -326,10 +315,8 @@ int ObDDLMergeScheduler::schedule_tablet_ddl_major_merge(
     if (OB_FAIL(ret)) {
     } else if (ddl_complete.has_complete_ || has_freezed_ddl_kv) {
       if (OB_FAIL(ObDirectLoadMgrUtil::generate_merge_param(ddl_complete, *(tablet_handle.get_obj()), param))) {
-        LOG_WARN("failed to generate merge param", K(ret), K(ddl_complete));
       } else if (FALSE_IT(param.rec_scn_ = ddl_kv_mgr_handle.get_obj()->get_max_freeze_scn())) {
       } else if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_ddl_table_merge_dag(param))) {
-        LOG_WARN("try schedule ddl merge dag failed when ddl kv is full ", K(ret), K(param));
       } else {
         FLOG_INFO("schedule ddl merge task", K(ret), K(ls_handle.get_ls()->get_ls_id()), K(tablet_handle.get_obj()->get_tablet_id()), K(param));
       }

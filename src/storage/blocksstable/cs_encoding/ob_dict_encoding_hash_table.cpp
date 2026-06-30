@@ -34,7 +34,6 @@ bool ObDictNodeCmp::operator()(const ObDictHashNode &lhs, const ObDictHashNode &
   int cmp_ret = 0;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(cmp_func_.cmp_func_(lhs.datum_, rhs.datum_, cmp_ret))) {
-    LOG_WARN("failed to compare datums", K(ret), K(lhs.datum_), K(rhs.datum_));
   } else {
     res = cmp_ret < 0;
   }

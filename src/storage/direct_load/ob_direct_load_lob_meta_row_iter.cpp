@@ -73,11 +73,8 @@ int ObDirectLoadLobMetaRowIter::init(const ObDirectLoadLobMetaIterParam &param,
     scan_merge_param.datum_utils_ = param.datum_utils_;
     scan_merge_param.dml_row_handler_ = &conflict_handler_;
     if (OB_FAIL(init_range())) {
-      LOG_WARN("fail to init range", KR(ret));
     } else if (OB_FAIL(scan_range_.assign(param.tablet_id_, range))) {
-      LOG_WARN("fail to assign range", KR(ret));
     } else if (OB_FAIL(scan_merge_.init(scan_merge_param, sstable_array, scan_range_))) {
-      LOG_WARN("fail to init scan merge ", KR(ret));
     } else {
       param_ = param;
       origin_table_ = &origin_table;
@@ -146,11 +143,9 @@ int ObDirectLoadLobMetaRowIter::get_next_row(const ObDirectLoadDatumRow *&result
         ++lob_id_row_cnt_;
         if (datum_row_.is_delete_) {
           if (OB_FAIL(param_.dml_row_handler_->handle_delete_row(param_.tablet_id_, datum_row_))) {
-            LOG_WARN("fail to handle delete row", KR(ret));
           }
         } else {
           if (OB_FAIL(param_.dml_row_handler_->handle_insert_row(param_.tablet_id_, datum_row_))) {
-            LOG_WARN("fail to handle insert row", KR(ret));
           }
         }
       }
@@ -182,18 +177,14 @@ int ObDirectLoadLobMetaRowIter::switch_next_lob_id()
     range_.end_key_.datums_[ObLobMetaUtil::LOB_ID_COL_ID] = lob_id_row_->storage_datums_[ObLobMetaUtil::LOB_ID_COL_ID];
     if (OB_FAIL(
           range_.start_key_.prepare_memtable_readable(*param_.col_descs_, range_allocator_))) {
-      LOG_WARN("fail to prepare memtable readable", KR(ret), K(range_));
     } else if (OB_FAIL(
                  range_.end_key_.prepare_memtable_readable(*param_.col_descs_, range_allocator_))) {
-      LOG_WARN("fail to prepare memtable readable", KR(ret), K(range_));
     } else {
       if (nullptr == origin_scanner_) {
         if (OB_FAIL(origin_table_->scan(range_, allocator_, origin_scanner_, true /*skip_read_lob*/))) {
-          LOG_WARN("fail to scan origin table", KR(ret));
         }
       } else {
         if (OB_FAIL(origin_scanner_->open(range_))) {
-          LOG_WARN("fail to open origin scanner", KR(ret));
         }
       }
     }

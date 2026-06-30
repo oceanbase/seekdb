@@ -191,7 +191,6 @@ int ObGroupScanIter::get_next_row()
         }
       } else if (OB_FAIL(group_id_expr_->eval(*row_store_.eval_ctx_,
                                               datum_group_idx))) {
-        LOG_WARN("fail to eval group id", K(ret));
       } else {
         last_group_idx_ = datum_group_idx->get_int();
       }
@@ -203,7 +202,6 @@ int ObGroupScanIter::get_next_row()
       } else {
         //last_group_idx_ > cur_group_idx_
         if (OB_FAIL(row_store_.save(false, 0, 1))) {
-          LOG_WARN("fail to save last row", K(ret));
         } else {
           ret = OB_ITER_END;
         }

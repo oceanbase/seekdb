@@ -126,7 +126,6 @@ int ObMySQLLockTableExecutor::lock_tables_(sql::ObSQLSessionInfo *session,
                               table_id,
                               lock_mode,
                               timeout_us))) {
-        LOG_WARN("lock table failed", K(ret), K(table_id), K(lock_mode));
       }
     }
   }
@@ -156,18 +155,13 @@ int ObMySQLLockTableExecutor::lock_table_(sql::ObSQLSessionInfo *session,
 
   if (OB_FAIL(arg.owner_id_.convert_from_client_sessid(client_session_id,
                                                        client_session_create_ts))) {
-    LOG_WARN("convert client_session_id to owner_id failed", K(ret), K(client_session_id));
   } else if (OB_FAIL(ObTableLockDetector::record_detect_info_to_inner_table(session,
                                                                             LOCK_TABLE,
                                                                             arg,
                                                                             /*for_dbms_lock*/ false,
                                                                             need_record_to_lock_table))) {
-    LOG_WARN("record_detect_info_to_inner_table failed", K(ret), K(arg));
-    // TODO: yanyuan.cxf lock twice just update the lock cnt now.
-    // will unlock and lock again later just like mysql.
   } else if (need_record_to_lock_table) {
     if (OB_FAIL(lock_service->lock(*tx_desc, tx_param, arg))) {
-      LOG_WARN("lock table failed", K(ret), KPC(tx_desc), K(arg));
     }
   }
 

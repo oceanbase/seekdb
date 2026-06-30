@@ -92,7 +92,6 @@ public:
     doc_word_found_ = src.doc_word_found_;
 
     if (OB_FAIL(snapshot_.assign(src.snapshot_))) {
-      STORAGE_LOG(WARN, "failed to assign snapshot", K(ret));
     }
     return ret;
   }

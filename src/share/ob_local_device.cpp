@@ -304,9 +304,7 @@ int ObLocalDevice::init(const common::ObIODOpts &opts)
     ret = OB_INIT_TWICE;
     SHARE_LOG(WARN, "The local device has been inited, ", K(ret));
   } else if (OB_FAIL(allocator_.init(OB_MALLOC_MIDDLE_BLOCK_SIZE, default_blk_alloc, mem_attr))) {
-    SHARE_LOG(WARN, "Fail to init allocator", K(ret));
   } else if (OB_FAIL(iocb_pool_.init(allocator_))) {
-    SHARE_LOG(WARN, "Fail to init iocb pool", K(ret));
   } else if (0 == opts.opt_cnt_) {
     SHARE_LOG(INFO, "For utl_file usage, skip initializing block_file");
   } else {
@@ -397,14 +395,11 @@ int ObLocalDevice::reconfig(const common::ObIODOpts &opts)
       int64_t new_datafile_size = block_file_size_;
       if (OB_FAIL(ObIODeviceLocalFileOp::get_block_file_size(sstable_dir_, reserved_size, block_size_,
           datafile_size, datafile_disk_percentage, new_datafile_size))) {
-        SHARE_LOG(WARN, "Fail to get block file size", K(ret), K(reserved_size), K(block_size_),
-            K(datafile_size), K(datafile_disk_percentage));
       } else if (RL_IS_ENABLED && new_datafile_size > RL_CONF.get_max_datafile_size()) {
         ret = OB_RESOURCE_OUT;
         SHARE_LOG(WARN, "block file size too large", K(ret), K(datafile_size), K(new_datafile_size),
             K(RL_CONF.get_max_datafile_size()));
       } else if (OB_FAIL(resize_block_file(new_datafile_size))) {
-        SHARE_LOG(WARN, "Fail to open block file, ", K(ret), K(new_datafile_size), K(datafile_size));
       }
     }
   }
@@ -439,7 +434,6 @@ int ObLocalDevice::start(const common::ObIODOpts &opts)
       free_block_cnt_, free_block_push_pos_, free_block_pop_pos_, "LDBlockBitMap");
     if (OB_FAIL(ObIODeviceLocalFileOp::open_block_file(store_dir_, sstable_dir_, block_size_,
         block_file_size_, disk_percentage_, opts.opts_[0].value_.value_int64, is_exist, block_file_attr))) {
-      SHARE_LOG(WARN, "Fail to open block file, ", K(ret));
     } else {
       opts.opts_[0].set("need_format_super_block", !is_exist);
     }
@@ -482,7 +476,6 @@ int ObLocalDevice::open(const char *pathname, const int flags, const mode_t mode
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIODeviceLocalFileOp::open(pathname, flags, mode, fd, opts))) {
-    SHARE_LOG(WARN, "Fail to open", K(ret), K(pathname), K(flags), K(mode), K(fd));
   }
   return ret;
 }
@@ -503,7 +496,6 @@ int ObLocalDevice::close(const ObIOFd &fd)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIODeviceLocalFileOp::close(fd))) {
-    SHARE_LOG(WARN, "Fail to close", K(ret), K(fd));
   }
   return ret;
 }
@@ -512,7 +504,6 @@ int ObLocalDevice::mkdir(const char *pathname, mode_t mode)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIODeviceLocalFileOp::mkdir(pathname, mode))) {
-    SHARE_LOG(WARN, "Fail to mkdir", K(ret), K(pathname), K(mode));
   }
   return ret;
 }
@@ -521,7 +512,6 @@ int ObLocalDevice::rmdir(const char *pathname)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIODeviceLocalFileOp::rmdir(pathname))) {
-    SHARE_LOG(WARN, "Fail to rmdir", K(ret), K(pathname));
   }
   return ret;
 }
@@ -530,7 +520,6 @@ int ObLocalDevice::unlink(const char *pathname)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIODeviceLocalFileOp::unlink(pathname))) {
-    SHARE_LOG(WARN, "Fail to unlink", K(ret), K(pathname));
   }
   return ret;
 }
@@ -547,7 +536,6 @@ int ObLocalDevice::rename(const char *oldpath, const char *newpath)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIODeviceLocalFileOp::rename(oldpath, newpath))) {
-    SHARE_LOG(WARN, "Fail to rename", K(ret), K(oldpath), K(newpath));
   }
   return ret;
 }
@@ -556,7 +544,6 @@ int ObLocalDevice::seal_file(const ObIOFd &fd)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIODeviceLocalFileOp::seal_file(fd))) {
-    SHARE_LOG(WARN, "Fail to seal_file", K(ret), K(fd));
   }
   return ret;
 }
@@ -565,7 +552,6 @@ int ObLocalDevice::scan_dir(const char *dir_name, int (*func)(const dirent *entr
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIODeviceLocalFileOp::scan_dir(dir_name, func))) {
-    SHARE_LOG(WARN, "Fail to scan_dir", K(ret), K(dir_name));
   }
   return ret;
 }
@@ -574,7 +560,6 @@ int ObLocalDevice::is_tagging(const char *pathname, bool &is_tagging)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIODeviceLocalFileOp::is_tagging(pathname, is_tagging))) {
-    SHARE_LOG(WARN, "Fail to check is_tagging", K(ret), K(pathname));
   }
   return ret;
 }
@@ -583,7 +568,6 @@ int ObLocalDevice::scan_dir(const char *dir_name, common::ObBaseDirEntryOperator
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIODeviceLocalFileOp::scan_dir(dir_name, op))) {
-    SHARE_LOG(WARN, "Fail to scan_dir", K(ret), K(dir_name));
   }
   return ret;
 }
@@ -592,7 +576,6 @@ int ObLocalDevice::fsync(const ObIOFd &fd)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIODeviceLocalFileOp::fsync(fd))) {
-    SHARE_LOG(WARN, "Fail to fsync", K(ret), K(fd));
   }
   return ret;
 }
@@ -601,7 +584,6 @@ int ObLocalDevice::fdatasync(const ObIOFd &fd)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIODeviceLocalFileOp::fdatasync(fd))) {
-    SHARE_LOG(WARN, "Fail to fdatasync", K(ret), K(fd));
   }
   return ret;
 }
@@ -610,7 +592,6 @@ int ObLocalDevice::fallocate(const ObIOFd &fd, mode_t mode, const int64_t offset
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIODeviceLocalFileOp::fallocate(fd, mode, offset, len))) {
-    SHARE_LOG(WARN, "Fail to fallocate", K(ret), K(fd), K(mode), K(offset), K(len));
   }
   return ret;
 }
@@ -619,7 +600,6 @@ int ObLocalDevice::lseek(const ObIOFd &fd, const int64_t offset, const int whenc
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIODeviceLocalFileOp::lseek(fd, offset, whence, result_offset))) {
-    SHARE_LOG(WARN, "Fail to lseek", K(ret), K(fd), K(offset), K(whence));
   }
   return ret;
 }
@@ -628,7 +608,6 @@ int ObLocalDevice::truncate(const char *pathname, const int64_t len)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIODeviceLocalFileOp::truncate(pathname, len))) {
-    SHARE_LOG(WARN, "Fail to truncate", K(ret), K(pathname), K(len));
   }
   return ret;
 }
@@ -637,7 +616,6 @@ int ObLocalDevice::exist(const char *pathname, bool &is_exist)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIODeviceLocalFileOp::exist(pathname, is_exist))) {
-    SHARE_LOG(WARN, "Fail to check is exist", K(ret), K(pathname));
   }
   return ret;
 }
@@ -646,7 +624,6 @@ int ObLocalDevice::stat(const char *pathname, ObIODFileStat &statbuf)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIODeviceLocalFileOp::stat(pathname, statbuf))) {
-    SHARE_LOG(WARN, "Fail to stat", K(ret), K(pathname));
   }
   return ret;
 }
@@ -655,7 +632,6 @@ int ObLocalDevice::fstat(const ObIOFd &fd, ObIODFileStat &statbuf)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIODeviceLocalFileOp::fstat(fd, statbuf))) {
-    SHARE_LOG(WARN, "Fail to fstat", K(ret), K(fd));
   }
   return ret;
 }
@@ -805,7 +781,6 @@ int ObLocalDevice::alloc_blocks(
         ret = OB_SUCCESS;
         break;
       } else if (OB_FAIL(blocks.push_back(tmp_fd))) {
-        SHARE_LOG(WARN, "Push free block fail", K(ret), K(tmp_fd));
       }
     }
   }
@@ -927,23 +902,17 @@ int ObLocalDevice::pread(
       ret = OB_INVALID_ARGUMENT;
       SHARE_LOG(WARN, "super block read offset or checker is invalid", K(ret), K(offset), KP(checker));
     } else if (OB_FAIL(ObIODeviceLocalFileOp::pread_impl(block_fd_, buf, size, 0, read_size))) {
-      SHARE_LOG(WARN, "read main super block fail", K(ret), K(offset), K(size), KP(buf), K(block_fd_), KERRMSG);
     } else if (OB_FAIL(checker->do_check(buf, read_size))) {
-      SHARE_LOG(WARN, "check main super block fail", K(ret), K(read_size), KP(buf));
     } else if (OB_FAIL(ObIODeviceLocalFileOp::pread_impl(block_fd_, buf, size, block_size_, read_size))) {
-      SHARE_LOG(WARN, "read main super block fail", K(ret), K(block_size_), K(size), KP(buf), K(block_fd_), KERRMSG);
     } else if (OB_FAIL(checker->do_check(buf, read_size))) {
-      SHARE_LOG(WARN, "check backup super block fail", K(ret), K(read_size), KP(buf));
     }
   } else {
     if (fd.is_block_file()) {
       const int64_t block_file_offset = get_block_file_offset(fd, offset);
       if (OB_FAIL(ObIODeviceLocalFileOp::pread_impl(block_fd_, buf, size, block_file_offset, read_size))) {
-        SHARE_LOG(WARN, "failed to pread", K(ret), K(block_fd_), K(size), K(block_file_offset));
       }
     } else if (fd.is_normal_file()) {
       if (OB_FAIL(ObIODeviceLocalFileOp::pread_impl(fd.second_id_, buf, size, offset, read_size))) {
-        SHARE_LOG(WARN, "failed to pread", K(ret), K(fd), K(size), K(offset));
       }
     }
 
@@ -953,7 +922,6 @@ int ObLocalDevice::pread(
     }
     if (OB_SUCC(ret) && nullptr != checker) {
       if (OB_FAIL(checker->do_check(buf, read_size))) {
-        SHARE_LOG(WARN, "check pread result fail", K(ret), KP(buf), K(read_size));
       }
     }
   }
@@ -979,21 +947,16 @@ int ObLocalDevice::pwrite(
     } else if (OB_FAIL(ObIODeviceLocalFileOp::pwrite_impl(block_fd_, buf, size, 0, write_size))) {
         SHARE_LOG(WARN, "Fail to write main superblock, try backup", K(ret), K(write_size), K(offset), K(size), KP(buf));
         if (OB_FAIL(ObIODeviceLocalFileOp::pwrite_impl(block_fd_, buf, size, block_size_, write_size))) {
-          SHARE_LOG(WARN, "Neither main nor backup superblock write success!!!", K(ret), K(write_size), K(offset), K(size), KP(buf));
         }
     } else if (OB_UNLIKELY(OB_SUCCESS != ObIODeviceLocalFileOp::pwrite_impl(block_fd_, buf, size, 1 * block_size_ + offset, write_size))) {
-      // main superblock success, allow backup failure
-      SHARE_LOG(WARN, "Fail to write backup superblock", K(write_size), K(offset), K(size), KP(buf));
     }
   } else {
     if (fd.is_block_file()) {
       const int64_t block_file_offset = get_block_file_offset(fd, offset);
       if (OB_FAIL(ObIODeviceLocalFileOp::pwrite_impl(block_fd_, buf, size, block_file_offset, write_size))) {
-        SHARE_LOG(WARN, "failed to pwrite", K(ret), K(block_fd_), KP(buf), K(size), K(block_file_offset));
       }
     } else if (fd.is_normal_file()) {
       if (OB_FAIL(ObIODeviceLocalFileOp::pwrite_impl(fd.second_id_, buf, size, offset, write_size))) {
-        SHARE_LOG(WARN, "failed to pwrite", K(ret), K(fd), KP(buf), K(size), K(offset));
       }
     }
 
@@ -1018,7 +981,6 @@ int ObLocalDevice::read(
     ret = OB_NOT_INIT;
     SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
   } else if (OB_FAIL(ObIODeviceLocalFileOp::read(fd, buf, size, read_size))) {
-    SHARE_LOG(WARN, "Fail to read", K(ret), K(fd), K(buf), K(size));
   }
   return ret;
 }
@@ -1034,7 +996,6 @@ int ObLocalDevice::write(
     ret = OB_NOT_INIT;
     SHARE_LOG(WARN, "The ObLocalDevice has not been inited, ", K(ret));
   } else if (OB_FAIL(ObIODeviceLocalFileOp::write(fd, buf, size, write_size))) {
-    SHARE_LOG(WARN, "Fail to write", K(ret), K(fd), K(buf), K(size));
   }
   return ret;
 }
@@ -1468,7 +1429,6 @@ int ObLocalDevice::check_space_full(
     SHARE_LOG(WARN, "The ObLocalDevice has not been marked", K(ret));
   } else if (OB_FAIL(get_data_disk_used_percentage_(required_size,
                                                     used_percent))) {
-    SHARE_LOG(WARN, "Fail to get disk used percentage", K(ret));
   } else {
     if (GCONF.data_disk_usage_limit_percentage != NO_LIMIT_PERCENT
         && used_percent >= GCONF.data_disk_usage_limit_percentage) {
@@ -1496,7 +1456,6 @@ int ObLocalDevice::check_write_limited() const
     SHARE_LOG(WARN, "The ObLocalDevice has not been marked", K(ret));
   } else if (OB_FAIL(get_data_disk_used_percentage_(required_size,
                                                     used_percent))) {
-    SHARE_LOG(WARN, "Fail to get disk used percentage", K(ret));
   } else if (limit_percent != 0 && used_percent >= limit_percent) {
     ret = OB_SERVER_OUTOF_DISK_SPACE;
     if (REACH_TIME_INTERVAL(60 * 1000 * 1000 /* 1min */)) {
@@ -1521,7 +1480,6 @@ int ObLocalDevice::get_data_disk_used_percentage_(
     ret = OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "invalid argument", K(ret), K(required_size));
   } else if (OB_FAIL(SERVER_STORAGE_META_SERVICE.get_reserved_size(reserved_size))) {
-    SHARE_LOG(WARN, "Fail to get reserved size", K(ret));
   } else {
     int64_t max_block_cnt = get_max_block_count(reserved_size);
     int64_t actual_free_block_cnt = free_block_cnt_;

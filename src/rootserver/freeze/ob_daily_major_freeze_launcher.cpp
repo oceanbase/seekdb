@@ -81,9 +81,7 @@ int ObDailyMajorFreezeLauncher::start()
     ret = OB_NOT_INIT;
     LOG_WARN("ObDailyMajorFreezeLauncher not init", KR(ret));
   } else if (OB_FAIL(TG_START(lib::TGDefIDs::MFLaunchTimer))) {
-    LOG_WARN("start MFLaunch timer failed", KR(ret));
   } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::MFLaunchTimer, *this, LAUNCHER_INTERVAL_US, true/*is_repeat*/))) {
-    LOG_WARN("schedule MFLaunch timer failed", KR(ret));
   } else {
     stop_ = false;
     LOG_INFO("ObDailyMajorFreezeLauncher start succ");
@@ -105,13 +103,10 @@ void ObDailyMajorFreezeLauncher::runTimerTask()
       LOG_TRACE("run daily major freeze launcher");
 
       if (OB_FAIL(try_launch_major_freeze())) {
-        LOG_WARN("fail to try_launch_major_freeze", KR(ret));
       }
       if (OB_TMP_FAIL(try_gc_freeze_info())) {
-        LOG_WARN("fail to try_gc_freeze_info", KR(tmp_ret));
       }
       if (OB_TMP_FAIL(try_gc_tablet_checksum())) {
-        LOG_WARN("fail to try_gc_tablet_checksum", KR(tmp_ret));
       }
       LOG_INFO("daily major_freeze_launcher stopped");
     }
@@ -184,7 +179,6 @@ int ObDailyMajorFreezeLauncher::try_launch_major_freeze()
           ObMajorFreezeParam param;
           param.freeze_reason_ = MF_DAILY_MERGE;
           if (OB_FAIL(param.add_freeze_info())) {
-            LOG_WARN("fail to push_back", KR(ret));
           } else if (OB_FAIL(ObMajorFreezeHelper::major_freeze(param))) {
             if ((OB_TIMEOUT == ret)) {
               ret = OB_EAGAIN; // in order to try launch major freeze again, set ret = OB_EAGAIN here
@@ -236,7 +230,6 @@ int ObDailyMajorFreezeLauncher::try_gc_freeze_info()
   } else if ((now - gc_freeze_info_last_timestamp_) < MODIFY_GC_INTERVAL) {
     // nothing
   } else if (OB_FAIL(merge_info_mgr_->try_gc_freeze_info())) {
-    LOG_WARN("fail to gc_freeze_info", KR(ret));
   } else {
     gc_freeze_info_last_timestamp_ = now;
   }
@@ -264,7 +257,6 @@ int ObDailyMajorFreezeLauncher::try_gc_tablet_checksum()
           || tablet_ckm_gc_compaction_scn_.is_valid()) {
         // do nothing, so as to decrease the frequency of load all distinct compaction_scn
       } else if (OB_FAIL(ObTabletChecksumOperator::load_all_compaction_scn(*sql_proxy_, all_compaction_scn))) {
-        LOG_WARN("fail to load all compaction scn", KR(ret));
       } else {
         last_check_tablet_ckm_us_ = now;
         // 2. check if need gc tablet_checksum
@@ -272,13 +264,10 @@ int ObDailyMajorFreezeLauncher::try_gc_tablet_checksum()
           const int64_t compaction_scn_cnt = all_compaction_scn.count();
           tablet_ckm_gc_compaction_scn_ = all_compaction_scn.at(compaction_scn_cnt - MIN_RESERVED_COUNT - 1);
           if (OB_FAIL(merge_info_mgr_->get_gts(cur_gts_scn))) {
-            LOG_WARN("fail to get_gts", KR(ret));
           } else {
             min_keep_compaction_scn = SCN::minus(cur_gts_scn, MAX_KEEP_INTERVAL_NS);
             const SCN special_tablet_ckm_gc_compaction_scn = MIN(min_keep_compaction_scn, tablet_ckm_gc_compaction_scn_);
             if (OB_FAIL(ObTabletChecksumOperator::delete_special_tablet_checksum_items(*sql_proxy_, special_tablet_ckm_gc_compaction_scn))) {
-              LOG_WARN("fail to delete special tablet checksum items", KR(ret),
-                       K(special_tablet_ckm_gc_compaction_scn));
             }
           }
         }
@@ -289,7 +278,6 @@ int ObDailyMajorFreezeLauncher::try_gc_tablet_checksum()
         int64_t affected_rows = 0;
         if (OB_FAIL(ObTabletChecksumOperator::delete_tablet_checksum_items(*sql_proxy_,
                     tablet_ckm_gc_compaction_scn_, BATCH_DELETE_CNT, affected_rows))) {
-          LOG_WARN("fail to delete tablet checksum items", KR(ret), K_(tablet_ckm_gc_compaction_scn));
         } else if (0 == affected_rows) {
           // already delete all tablet_checksum with comapction_scn <= tablet_ckm_gc_compaction_scn_
           tablet_ckm_gc_compaction_scn_.set_invalid();

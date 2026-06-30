@@ -357,7 +357,6 @@ OB_INLINE int ObDatumRowkey::deep_copy(ObDatumRowkey &dest, char *buf, const int
     int64_t pos = sizeof(ObStorageDatum) * datum_cnt_;
     for (int64_t i = 0; OB_SUCC(ret) && i < datum_cnt_; i++) {
       if (OB_FAIL(datums[i].deep_copy(datums_[i], buf, buf_len, pos))) {
-        STORAGE_LOG(WARN, "Failed to deep copy storage datum", K(ret), K(i), K(*this));
       }
     }
     if (OB_SUCC(ret)) {
@@ -389,7 +388,6 @@ OB_INLINE int ObDatumRowkey::deep_copy(ObDatumRowkey &dest, common::ObIAllocator
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_LOG(WARN, "Failed to alloc memory for datum rowkey", K(ret), K(deep_copy_size));
   } else if (OB_FAIL(deep_copy(dest, buf, deep_copy_size))) {
-    STORAGE_LOG(WARN, "Failed to deep copy datum rowkey", K(ret));
   }
 
   if (OB_FAIL(ret) && nullptr != buf) {
@@ -434,7 +432,6 @@ OB_INLINE int ObDatumRowkey::semi_copy(ObDatumRowkey &dest, common::ObIAllocator
     ObStorageDatum *datums = const_cast<ObStorageDatum *> (dest.datums_);
     for (int64_t i = 0; OB_SUCC(ret) && i < datum_cnt_; i++) {
       if (OB_FAIL(datums[i].deep_copy(datums_[i], allocator))) {
-        STORAGE_LOG(WARN, "Failed to deep copy datum", K(ret), K(i), K(datums_[i]));
       }
     }
   }

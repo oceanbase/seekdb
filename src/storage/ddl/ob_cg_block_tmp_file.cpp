@@ -56,7 +56,6 @@ int ObCGBlock::StoreHeader::serialize(char* buf, const int64_t buf_len, int64_t&
                                                buf_len,
                                                pos,
                                                header_))) {
-    LOG_WARN("fail to serialize store header", K(ret));
   }
   return ret;
 }
@@ -71,7 +70,6 @@ int ObCGBlock::StoreHeader::deserialize(const char* buf, const int64_t data_len,
                                                data_len,
                                                pos,
                                                &header_))) {
-    LOG_WARN("fail to deserialize store header", K(ret));
   }
   return ret;
 }
@@ -157,9 +155,7 @@ int ObCGBlockFile::BlockStore::open()
     ret = OB_INIT_TWICE;
     LOG_WARN("block store file initialized twice", K(ret));
   } else if (OB_FAIL(share::g_mp->tenant_tmp_file_manager()->alloc_dir(file_dir_))) {
-    LOG_WARN("failed to alloc file dir", K(ret));
   } else if (OB_FAIL(share::g_mp->tenant_tmp_file_manager()->open(fd_, file_dir_, nullptr/*label*/))) {
-    LOG_WARN("failed to open tmp file", K(ret), K(file_dir_));
   } else {
     file_size_ = 0;
     file_offset_ = 0;
@@ -178,7 +174,6 @@ int ObCGBlockFile::BlockStore::close()
     ret = OB_NOT_INIT;
     LOG_WARN("cg block tmp file do not initialized", K(ret));
   } else if (OB_FAIL(share::g_mp->tenant_tmp_file_manager()->remove(fd_))) {
-    LOG_WARN("fail to remove tmp file fd", K(ret), K(fd_));
   } else {
     is_inited_ = false;
     LOG_INFO("success to close cg block tmp file", K(ret), K(file_dir_), K(fd_));
@@ -196,16 +191,13 @@ int ObCGBlockFile::BlockStore::append_cg_block(const ObCGBlock &cg_block)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("cg block is not initialized", K(ret), K(cg_block));
   } else if (OB_FAIL(write_cg_block_header(cg_block.get_store_header()))) {
-    LOG_WARN("fail to write cg block header", K(ret), K(cg_block));
   } else {
     const char *buf = cg_block.get_macro_block_buffer();
     const int64_t macro_buffer_size = cg_block.get_macro_buffer_size();
     const int64_t timeout_ms = get_tmp_file_io_timeout_ms();
     tmp_file::ObTmpFileIOInfo io_info;
     if (OB_FAIL(get_io_info(buf, macro_buffer_size, timeout_ms, io_info))) {
-      LOG_WARN("fail to get io info", K(ret));
     } else if (OB_FAIL(share::g_mp->tenant_tmp_file_manager()->write(io_info))) {
-      LOG_WARN("fail to write cg block data", K(ret), K(io_info));
     } else {
       file_size_ += macro_buffer_size;
       remain_data_size_ += macro_buffer_size;
@@ -228,7 +220,6 @@ int ObCGBlockFile::BlockStore::get_next_cg_block(ObCGBlock &cg_block)
     if (!store_header_.is_valid() && OB_FAIL(read_cg_block_header(store_header_))) {
       LOG_WARN("fail to read cg block header", K(ret));
     } else if (OB_FAIL(cg_block.init(store_header_))) {
-      LOG_WARN("fail to init cg block", K(ret), K(store_header));
     } else {
       const int64_t timeout_ms = get_tmp_file_io_timeout_ms();
       tmp_file::ObTmpFileIOInfo io_info;
@@ -239,9 +230,7 @@ int ObCGBlockFile::BlockStore::get_next_cg_block(ObCGBlock &cg_block)
       int64_t read_buffer_size = is_tail_cg_block ? macro_buffer_size : cg_block.get_total_size();
       
       if (OB_FAIL(get_io_info(buf, read_buffer_size, timeout_ms, io_info))) {
-        LOG_WARN("fail to get io info", K(ret));
-      } else if (OB_FAIL(share::g_mp->tenant_tmp_file_manager()->pread(io_info, file_offset_, handle))) { // TODO @youchuan.yc using aio
-        LOG_WARN("fail to read tmp file", K(ret), K(io_info), K(file_offset_));
+      } else if (OB_FAIL(share::g_mp->tenant_tmp_file_manager()->pread(io_info, file_offset_, handle))) {
       } else {
         file_offset_ += read_buffer_size;
         remain_data_size_ -= (macro_buffer_size - curr_cg_block_offset_);
@@ -257,7 +246,6 @@ int ObCGBlockFile::BlockStore::get_next_cg_block(ObCGBlock &cg_block)
         } else {
           // false == is_tail_cg_block
           if (OB_FAIL(take_cg_block_header(cg_block))) {
-            LOG_WARN("fail to take cg block header", K(ret), K(cg_block));
           } else if (!store_header_.is_valid()) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("cg block store header is invalid", K(ret), K(store_header_));
@@ -331,12 +319,8 @@ int ObCGBlockFile::BlockStore::write_cg_block_header(const ObCGBlock::StoreHeade
   } else if (OB_FAIL(cg_block_store_header.serialize(header_buf,
                                                      store_header_size,
                                                      pos))) {
-    LOG_WARN("fail to serialize cg block store header",
-        K(ret), K(cg_block_store_header), K(store_header_size), K(pos));
   } else if (OB_FAIL(get_io_info(header_buf, store_header_size, timeout_ms, io_info))) {
-    LOG_WARN("fail to get io info", K(ret));
   } else if (OB_FAIL(share::g_mp->tenant_tmp_file_manager()->write(io_info))) {
-    LOG_WARN("fail to write cg block data", K(ret), K(io_info));
   } else {
     file_size_ += store_header_size;
   }
@@ -357,16 +341,12 @@ int ObCGBlockFile::BlockStore::read_cg_block_header(ObCGBlock::StoreHeader &cg_b
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("cg block file offset is not as expected", K(ret), K(file_offset_));
   } else if (OB_FAIL(get_io_info(header_buf, store_header_size, timeout_ms, io_info))) {
-    LOG_WARN("fail to get io info", K(ret));
   } else if (OB_FAIL(share::g_mp->tenant_tmp_file_manager()->pread(io_info, file_offset_, handle))) {
-    LOG_WARN("fail to read tmp file", K(ret), K(io_info), K(file_offset_));
   } else {
     int64_t pos = 0;
     if (OB_FAIL(cg_block_store_header.deserialize(header_buf,
                                                   store_header_size,
                                                   pos))) {
-      LOG_WARN("fail to deserialize cg block store header",
-          KP(header_buf), K(store_header_size), K(pos));
     } else {
       file_offset_ += store_header_size;
     }
@@ -384,8 +364,6 @@ int ObCGBlockFile::BlockStore::take_cg_block_header(const ObCGBlock &cg_block)
   if (OB_FAIL(store_header_.deserialize(header_buf,
                                         store_header_.get_serialize_size(),
                                         pos))) {
-    LOG_WARN("fail to deserialize cg block store header",
-        KP(header_buf), K(store_header_size), K(pos));
   }
   return ret;
 }
@@ -415,7 +393,6 @@ int ObCGBlockFile::open(const ObTabletID tablet_id,
     scan_idx_ = scan_idx;
     cg_idx_ = cg_idx;
     if (OB_FAIL(block_store_.open())) {
-      LOG_WARN("fail to open block store", K(ret));
     } else {
       is_inited_ = true;
     }
@@ -430,7 +407,6 @@ int ObCGBlockFile::close()
     ret = OB_NOT_INIT;
     LOG_WARN("cg block tmp file do not initialized", K(ret));
   } else if (OB_FAIL(block_store_.close())) {
-    LOG_WARN("fail to remove tmp file fd", K(ret), K(block_store_));
   } else {
     is_inited_ = false;
   }
@@ -447,7 +423,6 @@ int ObCGBlockFile::append_cg_block(const ObCGBlock &cg_block)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("cg block is not initialized", K(ret), K(cg_block));
   } else if (OB_FAIL(block_store_.append_cg_block(cg_block))) {
-    LOG_WARN("fail to append cg block", K(ret), K(cg_block), K(*this));
   }
   return ret;
 }
@@ -478,7 +453,6 @@ int ObCGBlockFile::put_cg_block_back(const ObCGBlock &cg_block)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("cg block is not initialized", K(ret), K(cg_block));
   } else if (OB_FAIL(block_store_.put_cg_block_back(cg_block))) {
-    LOG_WARN("fail to put cg block back", K(ret), K(cg_block));
   }
   return ret;
 }
@@ -522,10 +496,7 @@ int ObCGBlockFileWriter::write(const char *buf, const bool is_complete_macro_blo
                                    ObCGBlock::DATA_VERSION_4_4_0_0_AFTER,
                                    is_complete_macro_block,
                                    buf_size))) {
-    LOG_WARN("fail to initialized cg block",
-        K(ret), KP(buf), K(is_complete_macro_block), K(buf_size));
   } else if (OB_FAIL(cg_block_file_->append_cg_block(cg_block))) {
-    LOG_WARN("fail to append cg block", K(ret), K(cg_block), K(*this));
   }
   return ret;
 }

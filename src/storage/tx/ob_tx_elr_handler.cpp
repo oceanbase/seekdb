@@ -39,7 +39,6 @@ int ObTxELRHandler::check_and_early_lock_release(bool has_row_updated, ObPartTra
     ctx->trans_service_->get_tx_version_mgr().update_max_commit_ts(ctx->ctx_tx_data_.get_commit_version(), true);
     if (has_row_updated) {
       if (OB_FAIL(ctx->acquire_ctx_ref())) {
-        TRANS_LOG(WARN, "get trans ctx error", K(ret), K(*this));
       } else {
         set_elr_prepared();
       }

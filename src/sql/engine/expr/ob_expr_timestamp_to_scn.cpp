@@ -62,24 +62,20 @@ int calc_timestamp_to_scn_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN(" session or tz_info is null", KP(session), KP(cur_tz_info), K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, in_datum))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else if (OB_ISNULL(in_datum)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("in_datum is NULL", K(expr), K(ret));
   } else if (in_datum->is_null()) {
      ret = OB_INVALID_ARGUMENT_FOR_TIMESTAMP_TO_SCN;
   } else if (OB_FAIL(session->get_sys_variable(share::SYS_VAR_SYSTEM_TIME_ZONE, sys_time_zone))) {
-    LOG_WARN("Get sys variable error", K(ret));
   } else if (OB_FAIL(tz_info_wrap.init_time_zone(sys_time_zone,
                                                  OB_INVALID_VERSION,
                                                  *(const_cast<ObTZInfoMap *>(cur_tz_info->get_tz_info_map()))))) {
-    LOG_WARN("tz_info_wrap init_time_zone fail", KR(ret), K(sys_time_zone));
   } else {
     uint64_t scn_value = palf::LOG_INVALID_LSN_VAL;
     const ObTimeZoneInfo *sys_tz_info = tz_info_wrap.get_time_zone_info();
     const int64_t datetime_value = in_datum->get_datetime();
     if (OB_FAIL(ObTimeConverter::datetime_to_scn_value(datetime_value, sys_tz_info, scn_value))) {
-      LOG_WARN("failed to convert datetime to scn_val", K(ret), K(datetime_value));
     } else {
       res_datum.set_uint(scn_value);
     }

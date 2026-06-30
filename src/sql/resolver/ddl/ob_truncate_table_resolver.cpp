@@ -64,8 +64,6 @@ int ObTruncateTableResolver::resolve(const ParseNode &parser_tree)
         if (OB_FAIL(resolve_table_relation_node(relation_node,
                                                 table_name,
                                                 database_name))) {
-          LOG_WARN("failed to resolve table name.",
-                       K(table_name), K(database_name), K(ret));
         } else {
           truncate_table_stmt->set_table_name(table_name);
           truncate_table_stmt->set_database_name(database_name);

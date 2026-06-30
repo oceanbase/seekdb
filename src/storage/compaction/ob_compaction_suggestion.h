@@ -395,7 +395,6 @@ int ObInfoRingArray<T>::get_list(ObIArray<T> &input_array)
   SpinRLockGuard guard(lock_);
   for (int i = 0; OB_SUCC(ret) && i < size(); ++i) {
     if (OB_FAIL(input_array.push_back(array_[i]))) {
-      STORAGE_LOG(WARN, "failed to push into input array", K(ret), K(i), K(array_[i]));
     }
   }
   return ret;

@@ -97,7 +97,6 @@ int ObTransDeadlockDetectorAdapter::get_session_info(const uint32_t session_id, 
     DETECT_LOG(WARN, "GCTX.session_mgr is NULL",
                      KR(ret), K(session_id), KP(GCTX.session_mgr_), K(lbt()));
   } else if (OB_FAIL(GCTX.session_mgr_->get_session(session_id, session_info))) {
-    DETECT_LOG(WARN, "get session info failed", KR(ret), K(session_id), K(lbt()));
   } else {
     guard.set_session(session_info);
   }
@@ -115,7 +114,6 @@ int ObTransDeadlockDetectorAdapter::kill_tx(const uint32_t sess_id)
     ret = OB_INVALID_ARGUMENT;
     DETECT_LOG(WARN, "invalid argument", K(ret), K(sess_id));
   } else if (OB_FAIL(get_session_info(sess_id, session_guard))) {
-    DETECT_LOG(WARN, "get session guard failed", K(ret), K(sess_id));
   } else if (!session_guard.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(WARN, "session guard invalid", K(ret), K(sess_id));
@@ -127,9 +125,7 @@ int ObTransDeadlockDetectorAdapter::kill_tx(const uint32_t sess_id)
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(WARN, "can't get lock wait mgr", K(ret), K(sess_id), K(*session_info));
   } else if (OB_FAIL(GCTX.session_mgr_->kill_deadlock_tx(session_info))) {
-    DETECT_LOG(WARN, "fail to kill transaction", K(ret), K(sess_id), K(*session_info));
   } else if (OB_FAIL(GCTX.session_mgr_->set_query_deadlocked(*session_info))) {
-    DETECT_LOG(WARN, "set query dealocked failed", K(ret), K(sess_id), K(*session_info));
   } else {
     session_info->reset_tx_variable();
     mgr->notify_deadlocked_session(sess_id);
@@ -148,7 +144,6 @@ int ObTransDeadlockDetectorAdapter::kill_stmt(const uint32_t sess_id)
     ret = OB_INVALID_ARGUMENT;
     DETECT_LOG(WARN, "invalid argument", K(ret), K(sess_id));
   } else if (OB_FAIL(get_session_info(sess_id, session_guard))) {
-    DETECT_LOG(WARN, "get session guard failed", K(ret), K(sess_id));
   } else if (!session_guard.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(WARN, "session guard invalid", K(ret), K(sess_id));
@@ -160,7 +155,6 @@ int ObTransDeadlockDetectorAdapter::kill_stmt(const uint32_t sess_id)
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(WARN, "can't get lock wait mgr", K(ret), K(sess_id), K(*session_info));
   } else if (OB_FAIL(GCTX.session_mgr_->set_query_deadlocked(*session_info))) {
-    TRANS_LOG(WARN, "set query dealocked failed", K(ret), K(sess_id), K(*session_info));
   } else {
     mgr->notify_deadlocked_session(sess_id);
     TRANS_LOG(INFO, "set query dealocked success in oracle mode", K(ret), K(sess_id), K(*session_info));
@@ -236,7 +230,6 @@ public:
       SessionGuard session_guard;
       ObTransID self_trans_id;
       if (OB_FAIL(ObTransDeadlockDetectorAdapter::get_session_info(sess_id_, session_guard))) {
-        DETECT_LOG(WARN, "got session info is NULL", KR(ret), K(session_guard), K(sess_id_));
       } else if (!session_guard.is_valid()) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_ISNULL(session_guard->get_tx_desc())) {
@@ -297,11 +290,8 @@ int ObTransDeadlockDetectorAdapter::gen_dependency_resource_array_(const ObIArra
       ret = OB_ERR_UNEXPECTED;
       DETECT_LOG(ERROR, "invalid trans id and addr");
     } else if (OB_FAIL(binary_key.set_user_key(blocked_trans_ids_and_addrs.at(idx).tx_id_))) {
-      DETECT_LOG(ERROR, "fail to create key");
     } else if (OB_FAIL(resource.set_args(blocked_trans_ids_and_addrs.at(idx).scheduler_addr_, binary_key))) {
-      DETECT_LOG(ERROR, "fail to create resource");
     } else if (OB_FAIL(dependency_resources.push_back(resource))) {
-      DETECT_LOG(ERROR, "fail to push resource");
     }
   }
   return ret;
@@ -322,13 +312,11 @@ int ObTransDeadlockDetectorAdapter::register_to_deadlock_detector_(const ObTrans
   if (OB_UNLIKELY(conflict_tx_ids.empty())) {
     DETECT_LOG(INFO, "conflict tx idx is empty", PRINT_WRAPPER);
   } else if (OB_FAIL(session_guard->get_query_timeout(query_timeout))) {
-    DETECT_LOG(ERROR, "get query timeout ts failed", PRINT_WRAPPER);
   } else if (OB_ISNULL(session_guard->get_tx_desc())) {
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(ERROR, "tx desc on session is NULL", PRINT_WRAPPER);
   } else if (FALSE_IT(self_tx_scheduler = session_guard->get_tx_desc()->get_addr())) {
   } else if (OB_FAIL(gen_dependency_resource_array_(conflict_tx_ids, blocked_resources))) {
-    DETECT_LOG(WARN, "fail to generate block resource", PRINT_WRAPPER);
   } else if (OB_ISNULL(share::g_mp->dead_lock_detector_mgr())) {
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(ERROR, "mtl deadlock detector mgr is null", PRINT_WRAPPER);
@@ -338,14 +326,11 @@ int ObTransDeadlockDetectorAdapter::register_to_deadlock_detector_(const ObTrans
                                                                ~session_guard->get_tx_desc()->get_active_ts(),
                                                                3_s,
                                                                10))) {
-    DETECT_LOG(WARN, "fail to register deadlock", PRINT_WRAPPER);
   } else {
     share::g_mp->dead_lock_detector_mgr()->set_timeout(self_tx_id, query_timeout);
     if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->block(self_tx_id, blocked_resources))) {
-      DETECT_LOG(WARN, "block on resource failed", PRINT_WRAPPER);
     } else if (self_tx_scheduler != GCTX.self_addr()) {
       if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->add_parent(self_tx_id, self_tx_scheduler, self_tx_id))) {
-        DETECT_LOG(WARN, "scheduler is not self, set parent failed", PRINT_WRAPPER);
       } else {
         DETECT_LOG(INFO, "remote execution register to deadlock detector success, scheduler is not self", PRINT_WRAPPER);
       }
@@ -382,12 +367,9 @@ int ObTransDeadlockDetectorAdapter::replace_conflict_trans_ids_(const ObTransID 
       ret = OB_ERR_UNEXPECTED;
       DETECT_LOG(ERROR, "mtl deadlock detector mgr is null", PRINT_WRAPPER);
     } else if (OB_FAIL(gen_dependency_resource_array_(conflict_tx_ids, blocked_resources))) {
-      DETECT_LOG(ERROR, "generate dependency array failed", PRINT_WRAPPER);
     } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->get_block_list(self_tx_id, current_blocked_resources))) {
-      DETECT_LOG(WARN, "generate dependency array failed", PRINT_WRAPPER);
     } else if (check_at_least_one_holder_same(current_blocked_resources, blocked_resources)) {
       if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->replace_block_list(self_tx_id, blocked_resources))) {
-        DETECT_LOG(WARN, "replace block list failed", PRINT_WRAPPER);
       }
       (void) share::g_mp->dead_lock_detector_mgr()->dec_count_down_allow_detect(self_tx_id);
     } else {
@@ -416,7 +398,6 @@ int ObTransDeadlockDetectorAdapter::register_or_replace_conflict_trans_ids(const
   } else if (conflict_tx_ids.empty()) {
     DETECT_LOG(WARN, "empty conflict tx ids", PRINT_WRAPPER);
   } else if (OB_FAIL(get_session_info(self_session_id, session_guard))) {
-    DETECT_LOG(ERROR, "fail to get session info", PRINT_WRAPPER);
   } else if (!session_guard.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(ERROR, "fail to get session info", PRINT_WRAPPER);
@@ -424,16 +405,13 @@ int ObTransDeadlockDetectorAdapter::register_or_replace_conflict_trans_ids(const
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(ERROR, "MTL ObDeadLockDetectorMgr is NULL", PRINT_WRAPPER);
   } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->check_detector_exist(self_tx_id, is_detector_exist))) {
-    DETECT_LOG(WARN, "fail to get detector exist status", PRINT_WRAPPER);
   } else if (!is_detector_exist) {
     if (OB_FAIL(register_to_deadlock_detector_(self_tx_id, self_session_id, conflict_tx_ids, session_guard))) {
-      DETECT_LOG(WARN, "register new detector in remote execution failed", PRINT_WRAPPER);
     } else {
       DETECT_LOG(INFO, "register new detector in remote execution", PRINT_WRAPPER);
     }
   } else {
     if (OB_FAIL(replace_conflict_trans_ids_(self_tx_id, conflict_tx_ids, session_guard))) {
-      DETECT_LOG(INFO, "replace block list in remote execution", PRINT_WRAPPER);
     }
   }
   return ret;
@@ -446,11 +424,9 @@ int ObTransDeadlockDetectorAdapter::get_session_related_info_(const uint32_t ses
   int ret = OB_SUCCESS;
   SessionGuard session_guard;
   if (OB_FAIL(get_session_info(sess_id, session_guard))) {
-    DETECT_LOG(WARN, "get session failed", KR(ret), K(sess_id));
   } else if (!session_guard.is_valid()) {
     DETECT_LOG(WARN, "get session failed", K(sess_id), K(session_guard));
   } else if (OB_FAIL(session_guard.get_session().get_query_timeout(query_timeout))) {
-    DETECT_LOG(WARN, "get query timeout failed", K(sess_id));
   }
   return ret;
 }
@@ -468,9 +444,7 @@ int ObTransDeadlockDetectorAdapter::get_trans_scheduler_info_on_participant(cons
     ret = OB_BAD_NULL_ERROR;
     DETECT_LOG(ERROR, "ls_service is NULL", PRINT_WRAPPER);
   } else if (OB_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::DEADLOCK_MOD))) {
-    DETECT_LOG(WARN, "fail to get ls", PRINT_WRAPPER);
   } else if (OB_FAIL(ls_handle.get_ls()->get_tx_scheduler(trans_id, scheduler_addr))) {
-    DETECT_LOG(WARN, "fail to get tx scheduler", PRINT_WRAPPER);
   }
   return ret;
   #undef PRINT_WRAPPER
@@ -490,11 +464,9 @@ int ObTransDeadlockDetectorAdapter::get_conflict_trans_scheduler(const ObTransID
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(WARN, "can not get ls service", PRINT_WRAPPER);
   } else if (OB_FAIL(ls_service->get_ls_iter(iter, storage::ObLSGetMod::DEADLOCK_MOD))) {
-    DETECT_LOG(WARN, "fail to get ls iter", PRINT_WRAPPER);
   } else {
     do {
       if (OB_FAIL(iter->get_next(ls))) {
-        DETECT_LOG(WARN, "get next iter failed", PRINT_WRAPPER);
       } else if (OB_FAIL(ls->get_tx_scheduler(self_trans_id, scheduler_addr))) {
         if (ret == OB_TRANS_CTX_NOT_EXIST) {
           ret = OB_SUCCESS;
@@ -530,9 +502,7 @@ int ObTransDeadlockDetectorAdapter::create_detector_node_and_set_parent_if_neede
   ObAddr scheduler_addr;
   SessionGuard guard;
   if (OB_FAIL(get_session_related_info_(sess_id, query_timeout))) {
-    DETECT_LOG(WARN, "fail to get session related info", PRINT_WRAPPER);
   } else if (OB_FAIL(ObTransDeadlockDetectorAdapter::get_session_info(sess_id, guard))) {
-    DETECT_LOG(WARN, "fail to get session related info", PRINT_WRAPPER);
   } else if (!guard.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(ERROR, "get session failed", PRINT_WRAPPER);
@@ -545,12 +515,10 @@ int ObTransDeadlockDetectorAdapter::create_detector_node_and_set_parent_if_neede
                                                                on_detect_op,
                                                                on_collect_op,
                                                                ~trans_begin_ts))) {
-    DETECT_LOG(WARN, "fail to register key", PRINT_WRAPPER);
   } else {
     share::g_mp->dead_lock_detector_mgr()->set_timeout(self_trans_id, query_timeout);
     if (scheduler_addr != GCTX.self_addr()) {
       if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->add_parent(self_trans_id, scheduler_addr, self_trans_id))) {
-        DETECT_LOG(WARN, "fail to get add parent", PRINT_WRAPPER);
       }
     }
   }
@@ -651,19 +619,14 @@ int ObTransDeadlockDetectorAdapter::lock_wait_mgr_reconstruct_detector_waiting_f
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(WARN, "fail to get ObDeadLockDetectorMgr", PRINT_WRAPPER);
   } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->check_detector_exist(self_trans_id, exist))) {
-    DETECT_LOG(WARN, "fail to check detector exist", PRINT_WRAPPER);
   } else if (exist) {
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(share::g_mp->dead_lock_detector_mgr()->unregister_key(self_trans_id))) {
-      DETECT_LOG(WARN, "fail to unregister key", K(tmp_ret), PRINT_WRAPPER);
     }
   }
   if (OB_FAIL(ret)) {
-    DETECT_LOG(WARN, "local execution register to deadlock detector waiting for row failed", PRINT_WRAPPER);
   } else if (OB_FAIL(create_detector_node_and_set_parent_if_needed_(on_collect_op, self_trans_id, sess_id))) {
-    DETECT_LOG(WARN, "fail to create detector node", PRINT_WRAPPER);
   } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->block(self_trans_id, func))) {
-    DETECT_LOG(WARN, "fail to block on call back function", PRINT_WRAPPER);
   } else {
     DETECT_LOG(TRACE, "local execution register to deadlock detector waiting for row success", PRINT_WRAPPER);
   }
@@ -692,21 +655,15 @@ int ObTransDeadlockDetectorAdapter::lock_wait_mgr_reconstruct_detector_waiting_f
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(WARN, "fail to get ObDeadLockDetectorMgr", PRINT_WRAPPER);
   } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->check_detector_exist(self_trans_id, exist))) {
-    DETECT_LOG(WARN, "fail to check detector exist", PRINT_WRAPPER);
   } else if (exist) {
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(share::g_mp->dead_lock_detector_mgr()->unregister_key(self_trans_id))) {
-      DETECT_LOG(WARN, "fail to unregister key", K(tmp_ret), PRINT_WRAPPER);
     }
   }
   if (OB_FAIL(ret)) {
-    DETECT_LOG(WARN, "local execution register to deadlock detector waiting for row failed", PRINT_WRAPPER);
   } else if (OB_FAIL(get_conflict_trans_scheduler(conflict_trans_id, scheduler_addr))) {
-    DETECT_LOG(WARN, "fail to get conflict trans scheduler addr", PRINT_WRAPPER);
   } else if (OB_FAIL(create_detector_node_and_set_parent_if_needed_(on_collect_op, self_trans_id, sess_id))) {
-    DETECT_LOG(WARN, "fail to create detector node", PRINT_WRAPPER);
   } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->block(self_trans_id, scheduler_addr, conflict_trans_id))) {
-    DETECT_LOG(WARN, "fail to block on conflict trans", PRINT_WRAPPER);
   } else {
     DETECT_LOG(TRACE, "local execution register to deadlock detector waiting for trans success", PRINT_WRAPPER);
   }
@@ -725,9 +682,7 @@ int ObTransDeadlockDetectorAdapter::change_detector_waiting_obj_from_row_to_tran
     ret = OB_ERR_UNEXPECTED;
     DETECT_LOG(WARN, "fail to get ObDeadLockDetectorMgr", PRINT_WRAPPER);
   } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->activate_all(self_trans_id))) {
-    DETECT_LOG(WARN, "fail to activate all", PRINT_WRAPPER);
   } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->block(self_trans_id, scheduler_addr, conflict_trans_id))) {
-    DETECT_LOG(WARN, "fail to block on conflict trans", PRINT_WRAPPER);
   } else {
     DETECT_LOG(INFO, "change denpendency relationship from row to trnas", PRINT_WRAPPER);
   }
@@ -774,9 +729,7 @@ int ObTransDeadlockDetectorAdapter::autonomous_register_to_deadlock(const ObTran
                                                     return common::OB_SUCCESS;
                                                   },
                                                   ObDetectorPriority(PRIORITY_RANGE::EXTREMELY_HIGH, 0)))) {
-    DETECT_LOG(WARN, "register key failed", PRINT_WRAPPER);
   } else if (OB_FAIL(share::g_mp->dead_lock_detector_mgr()->block(last_trans_id, now_trans_id))) {
-    DETECT_LOG(WARN, "block resource failed", PRINT_WRAPPER);
   } else {
     share::g_mp->dead_lock_detector_mgr()->set_timeout(last_trans_id, query_timeout);
     DETECT_LOG(INFO, "register autonomous deadlock dependency success", PRINT_WRAPPER);

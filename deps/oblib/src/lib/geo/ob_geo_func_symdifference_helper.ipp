@@ -64,7 +64,6 @@ static int apply_bg_symdifference_pt_pt(
   const GeoType1 *geo1 = nullptr;
   const GeoType2 *geo2 = nullptr;
   if (OB_FAIL(get_specific_geos(g1, g2, context, geo1, geo2, res))) {
-    LOG_WARN("fail to get specific geometry", K(ret));
   } else {
     ObArenaAllocator tmp_alloc;
     GeometryRes *union_res = OB_NEWx(GeometryRes, &tmp_alloc, g1->get_srid(), tmp_alloc);
@@ -110,7 +109,6 @@ static int push_disjoint_point(PtBinType &geo1, GeoType &geo2, const ObGeoEvalCt
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to allocate memory for geometry", K(ret));
     } else if (OB_FAIL(res.push_back(*reinterpret_cast<ObGeometry *>(pt)))) {
-      LOG_WARN("fail to push back geometry", K(ret));
     }
   }
   return ret;
@@ -122,13 +120,10 @@ static int push_not_empty_geo(ObGeometry &geo, const ObGeoEvalCtx &context, Geom
   int ret = OB_SUCCESS;
   bool is_geo_empty = false;
   if (OB_FAIL(ObGeoTypeUtil::check_empty(&geo, is_geo_empty))) {
-    LOG_WARN("fail to check is geometry empty", K(ret));
   } else if (!is_geo_empty) {
     ObGeoToTreeVisitor geom_visitor(context.get_allocator());
     if (OB_FAIL(geo.do_visit(geom_visitor))) {
-      LOG_WARN("failed to convert bin to tree", K(ret));
     } else if (OB_FAIL(res.push_back(*geom_visitor.get_geometry()))) {
-      LOG_WARN("fail to push back geometry", K(ret));
     }
   }
   return ret;
@@ -143,11 +138,8 @@ static int apply_bg_symdifference_pl_pa(const ObGeometry *g1, const ObGeometry *
   const PtBinType *pt = nullptr;
   const GeoType *geo2 = nullptr;
   if (OB_FAIL(get_specific_geos(g1, g2, context, pt, geo2, res))) {
-    LOG_WARN("fail to get specific geometry", K(ret));
   } else if (OB_FAIL(push_not_empty_geo(*const_cast<ObGeometry *>(g2), context, *res))) {
-    LOG_WARN("fail to push back not empty geometry", K(ret));
   } else if (OB_FAIL(push_disjoint_point(*pt, *geo2, context, strategy, *res))) {
-    LOG_WARN("fail to push disjoint point", K(ret));
   } else {
     result = res;
   }
@@ -164,7 +156,6 @@ static int apply_bg_symdifference(const ObGeometry *g1, const ObGeometry *g2,
   const GeoType1 *geo1 = nullptr;
   const GeoType2 *geo2 = nullptr;
   if (OB_FAIL(get_specific_geos(g1, g2, context, geo1, geo2, res))) {
-    LOG_WARN("fail to get specific geometry", K(ret));
   } else if (strategy == ObBGStrategyType::DEFAULT_NONE) {
     bg::sym_difference(*geo1, *geo2, *res);
   } else if (OB_ISNULL(context.get_srs())) {
@@ -194,9 +185,7 @@ static int apply_bg_symdifference_la(const ObGeometry *g1, const ObGeometry *g2,
   const GeoType2 *geo2 = nullptr;
   ObIAllocator *allocator = context.get_allocator();
   if (OB_FAIL(get_specific_geos(g1, g2, context, geo1, geo2, res))) {
-    LOG_WARN("fail to get specific geometry", K(ret));
   } else if (OB_FAIL(push_not_empty_geo(*const_cast<ObGeometry *>(g2), context, *res))) {
-    LOG_WARN("fail to push back not empty geometry", K(ret));
   }
   if (OB_SUCC(ret)) {
     typename GeoCollType::sub_ml_type *diff_res =
@@ -220,7 +209,6 @@ static int apply_bg_symdifference_la(const ObGeometry *g1, const ObGeometry *g2,
       typename GeoCollType::sub_ml_type::iterator iter = diff_res->begin();
       for (; OB_SUCC(ret) && iter != diff_res->end(); iter++) {
         if (OB_FAIL(res->push_back(*iter))) {
-          LOG_WARN("fail to push back geometry to collection", K(ret));
         }
       }
     }
@@ -240,14 +228,11 @@ static int apply_bg_symdifference_mpl_mpa(const ObGeometry *g1, const ObGeometry
   const MptType *mpt_bin = nullptr;
   const GeoType *geo2 = nullptr;
   if (OB_FAIL(get_specific_geos(g1, g2, context, mpt_bin, geo2, res))) {
-    LOG_WARN("fail to get specific geometry", K(ret));
   } else if (OB_FAIL(push_not_empty_geo(*const_cast<ObGeometry *>(g2), context, *res))) {
-    LOG_WARN("fail to push back not empty geometry", K(ret));
   }
   typename MptType::const_iterator iter = mpt_bin->begin();
   for (; OB_SUCC(ret) && iter != mpt_bin->end(); iter++) {
     if (OB_FAIL(push_disjoint_point(*iter, *geo2, context, strategy, *res))) {
-      LOG_WARN("fail to push disjoint point", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -268,15 +253,12 @@ static int apply_bg_symdifference_coll_common(const ObGeometry *g1, const ObGeom
     ret = OB_ERR_GIS_INVALID_DATA;
     LOG_WARN("input geometry is wrong", K(ret), K(g1->type()), K(g2->type()));
   } else if (OB_FAIL(ObGeoTypeUtil::check_empty(const_cast<ObGeometry *>(g2), is_g2_empty))) {
-    LOG_WARN("check geo empty failed", K(ret));
   } else if (is_g2_empty) {
     if (OB_FAIL(ObGeoFuncUtils::apply_bg_to_tree(g1, context, result))) {
-      LOG_WARN("fail to apply bg to tree", K(ret));
     }
   } else {
     ObGeometry *geo2 = const_cast<ObGeometry *>(g2);
     if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<GcTreeType>(context, geo2, mpt, mls, mpy))) {
-      LOG_WARN("failed to prepare gc", K(ret));
     } else if (OB_ISNULL(mpt) || OB_ISNULL(mls) || OB_ISNULL(mpt)) {
       ret = OB_ERR_NULL_VALUE;
       LOG_WARN("unexpected null geometry collection split", K(ret), K(mpt), K(mls), K(mpt));
@@ -291,9 +273,7 @@ static int simplify_and_push_geometry(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL((ObGeoTypeUtil::simplify_multi_geo<GcTreeType>(push_geo, allocator)))) {
-    LOG_WARN("fail to simplify result", K(ret));
   } else if (OB_FAIL(geo_coll.push_back(*push_geo))) {
-    LOG_WARN("fail to push back geometry", K(ret));
   }
   return ret;
 }
@@ -308,19 +288,16 @@ static int apply_bg_symdifference_pt_coll(const ObGeometry *g1, const ObGeometry
   typename GcTreeType::sub_mp_type *mpy = nullptr;
   if (OB_FAIL(
           apply_bg_symdifference_coll_common<GcTreeType>(g1, g2, context, result, mpt, mls, mpy))) {
-    LOG_WARN("fail to apply symdifference collection common", K(ret));
   } else if (OB_ISNULL(result)) {
     ObIAllocator *allocator = context.get_allocator();
     ObGeometry *g1_tree = nullptr;
     ObGeoToTreeVisitor tree_visitor(allocator);
     ObGeometry *mpt_res = nullptr;
     if (OB_FAIL(const_cast<ObGeometry *>(g1)->do_visit(tree_visitor))) {
-      LOG_WARN("fail to convert geometry to tree", K(ret));
     } else if (FALSE_IT(g1_tree = tree_visitor.get_geometry())) {
     } else if (OB_FAIL((apply_bg_symdifference_pt_pt<PtTreeType,
                    typename GcTreeType::sub_mpt_type,
                    typename GcTreeType::sub_mpt_type>(g1_tree, mpt, context, mpt_res)))) {
-      LOG_WARN("fail to do symdifference between pointlike and pointlike type", K(ret));
     } else {
       uint32_t srid = g1->get_srid();
       ObArenaAllocator tmp_alloc;
@@ -385,13 +362,11 @@ static int apply_bg_symdifference_line_coll(const ObGeometry *g1, const ObGeomet
   typename GcTreeType::sub_mp_type *mpy = nullptr;
   if (OB_FAIL(
           apply_bg_symdifference_coll_common<GcTreeType>(g1, g2, context, result, mpt, mls, mpy))) {
-    LOG_WARN("fail to apply symdifference collection common", K(ret));
   } else if (OB_ISNULL(result)) {
     ObIAllocator *allocator = context.get_allocator();
     ObGeometry *g1_tree = nullptr;
     ObGeoToTreeVisitor tree_visitor(allocator);
     if (OB_FAIL(const_cast<ObGeometry *>(g1)->do_visit(tree_visitor))) {
-      LOG_WARN("fail to convert geometry to tree", K(ret));
     } else if (FALSE_IT(g1_tree = tree_visitor.get_geometry())) {
     } else {
       ObArenaAllocator tmp_alloc;
@@ -461,7 +436,6 @@ static int apply_bg_symdifference_poly_coll(const ObGeometry *g1, const ObGeomet
   typename GcTreeType::sub_mp_type *mpy = nullptr;
   if (OB_FAIL(
           apply_bg_symdifference_coll_common<GcTreeType>(g1, g2, context, result, mpt, mls, mpy))) {
-    LOG_WARN("fail to apply symdifference collection common", K(ret));
   } else if (OB_ISNULL(result)) {
     ObIAllocator *allocator = context.get_allocator();
     const GeomType *g1_bin = reinterpret_cast<const GeomType *>(g1->val());
@@ -576,9 +550,7 @@ private:
       ret = OB_ERR_GIS_INVALID_DATA;
       LOG_WARN("input geometry should be GEOMETRYCOLLECTION", K(ret), K(g1->type()), K(g2->type()));
     } else if (OB_FAIL(ObGeoTypeUtil::check_empty(const_cast<ObGeometry *>(g1), is_g1_empty))) {
-      LOG_WARN("check geo empty failed", K(ret));
     } else if (OB_FAIL(ObGeoTypeUtil::check_empty(const_cast<ObGeometry *>(g2), is_g2_empty))) {
-      LOG_WARN("check geo empty failed", K(ret));
     } else if (is_g1_empty) {
       if (is_g2_empty) {
         GcTreeType *res_coll = OB_NEWx(GcTreeType, allocator, g1->get_srid(), *allocator);
@@ -589,7 +561,6 @@ private:
           result = res_coll;
         }
       } else if (OB_FAIL(ObGeoFuncUtils::apply_bg_to_tree(g2, context, result))) {
-        LOG_WARN("fail to apply bg to tree", K(ret));
       }
     } else {
       typename GcTreeType::sub_mpt_type *mpt1 = nullptr;
@@ -605,32 +576,20 @@ private:
       ObGeometry *mls_res_bin = nullptr;
       const ObSrsItem *srs = context.get_srs();
       if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<GcTreeType>(context, geo1, mpt1, mls1, mpy1))) {
-        LOG_WARN("failed to prepare gc", K(ret));
       } else if (OB_ISNULL(mpt1) || OB_ISNULL(mls1) || OB_ISNULL(mpy1)) {
         ret = OB_ERR_GIS_INVALID_DATA;
         LOG_WARN("unexpected null geometry collection split", K(ret));
       } else if (OB_FAIL(ObGeoTypeUtil::tree_to_bin(*allocator, mpy1, mpy_bin, srs))) {
-        LOG_WARN("fail to convert geometry tree to bin", K(ret));
       } else if (OB_FAIL(ObGeoTypeUtil::tree_to_bin(*allocator, mls1, mls_bin, srs))) {
-        LOG_WARN("fail to convert geometry tree to bin", K(ret));
       } else if (OB_FAIL(ObGeoTypeUtil::tree_to_bin(*allocator, mpt1, mpt_bin, srs))) {
-        LOG_WARN("fail to convert geometry tree to bin", K(ret));
       } else if (OB_FAIL(eval_wkb_fn(mpy_bin, g2, context, mpy_res))) {
-        LOG_WARN("fail to eval wkb binary", K(ret));
       } else if (OB_FAIL(!mpy_res->is_empty() && (ObGeoTypeUtil::simplify_multi_geo<GcTreeType>(mpy_res, *allocator)))) {
-        LOG_WARN("fail to simplify result", K(ret));
       } else if (OB_FAIL(ObGeoTypeUtil::tree_to_bin(*allocator, mpy_res, mpy_res_bin, srs))) {
-        LOG_WARN("fail to convert geometry tree to bin", K(ret));
       } else if (OB_FAIL(eval_wkb_fn(mls_bin, mpy_res_bin, context, mls_res))) {
-        LOG_WARN("fail to eval wkb binary", K(ret));
       } else if (OB_FAIL(!mls_res->is_empty() && (ObGeoTypeUtil::simplify_multi_geo<GcTreeType>(mls_res, *allocator)))) {
-        LOG_WARN("fail to simplify result", K(ret));
       } else if (OB_FAIL(ObGeoTypeUtil::tree_to_bin(*allocator, mls_res, mls_res_bin, srs))) {
-        LOG_WARN("fail to convert geometry tree to bin", K(ret));
       } else if (OB_FAIL(eval_wkb_fn(mpt_bin, mls_res_bin, context, result))) {
-        LOG_WARN("fail to eval wkb binary", K(ret));
       } else if (OB_FAIL(!result->is_empty() && (ObGeoTypeUtil::simplify_multi_geo<GcTreeType>(result, *allocator)))) {
-        LOG_WARN("fail to simplify result", K(ret));
       }
     }
     return ret;

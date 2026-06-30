@@ -113,7 +113,6 @@ int ObLSTabletIterator::get_tablet_ids(ObIArray<ObTabletID> &ids) const
   int ret = OB_SUCCESS;
   ids.reset();
   if (OB_FAIL(ids.assign(tablet_ids_))) {
-    LOG_WARN("fail to get tablet ids", K(ret));
   }
   return ret;
 }
@@ -229,7 +228,6 @@ int ObHALSTabletIterator::get_next_tablet(ObTabletHandle &handle)
       LOG_WARN("failed to get next tablet id", K(ret));
     }
   } else if (OB_FAIL(ls_tablet_service_->get_tablet(tablet_id, handle, 0, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-    LOG_WARN("failed to get tablet", K(ret), K(tablet_id));
   }
 
   return ret;

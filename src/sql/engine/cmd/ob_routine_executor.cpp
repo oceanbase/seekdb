@@ -26,8 +26,8 @@
 #include "pl/ob_pl_package.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
 #include "src/pl/pl_cache/ob_pl_cache_mgr.h"
-#include "src/pl/ob_pl_build.h"
-#include "src/pl/ob_pl_build_utils.h"
+#include "src/pl/ob_pl_compile.h"
+#include "src/pl/ob_pl_compile_utils.h"
 
 namespace oceanbase
 {
@@ -48,7 +48,6 @@ int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &st
   obcall::ObRoutineDDLRes res;
   bool has_error = ERROR_STATUS_HAS_ERROR == crt_routine_arg.error_info_.get_error_status();
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
-    LOG_WARN("fail to get first stmt" , K(ret));
   } else {
     crt_routine_arg.ddl_stmt_str_ = first_stmt;
   }
@@ -57,7 +56,6 @@ int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &st
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_routine_with_res(crt_routine_arg, res); }))) {
-    LOG_WARN("rpc proxy create procedure failed", K(ret), "dst", GCTX.self_addr());
   }
   if (OB_SUCC(ret)
       && !has_error
@@ -67,10 +65,10 @@ int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &st
     OZ (ObSPIService::force_refresh_schema(res.store_routine_schema_version_));
     OZ (ctx.get_task_exec_ctx().schema_service_->
       get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
-    OZ (pl::ObPLBuildUtils::build(ctx,
+    OZ (pl::ObPLCompilerUtils::compile(ctx,
                                        database_id,
                                        routine_name,
-                                       pl::ObPLBuildUtils::get_pl_unit_type(type),
+                                       pl::ObPLCompilerUtils::get_compile_type(type),
                                        res.store_routine_schema_version_));
   }
   if(crt_routine_arg.with_if_not_exist_ && ret == OB_ERR_SP_ALREADY_EXISTS) {
@@ -107,7 +105,6 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
   } else if (OB_FAIL(ob_write_string(ctx.get_allocator(),
                                      ctx.get_my_session()->get_current_query_string(),
                                      ctx.get_stmt_factory()->get_query_ctx()->get_sql_stmt()))) {
-    LOG_WARN("fail to set query string");
   } else if (OB_ISNULL(call_proc_info = stmt.get_call_proc_info())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("call procedure info is null", K(ret));
@@ -142,7 +139,6 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
           param.reset();
           param.ObObj::reset();
           if (OB_FAIL(ObSQLUtils::calc_sql_expression_without_row(ctx, *expr, param))) {
-            LOG_WARN("failed to calc exec param expr", K(i), K(*expr), K(ret));
           } else {
             if (expr->get_is_pl_mock_default_expr()) {
               param.set_is_pl_mock_default_param(true);
@@ -158,12 +154,10 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
             }
             if (OB_FAIL(ret)) {
             } else if (OB_FAIL(params.push_back(param))) {
-              LOG_WARN("push back error", K(i), K(*expr), K(ret));
             } else {
               params.at(params.count() - 1).set_param_meta();
               if (call_proc_info->get_output_count() > 0) {
                 if (OB_FAIL(null_params.push_back(param.is_null()))) {
-                  LOG_WARN("fail to push back", K(ret));
                 }
               }
             }
@@ -187,10 +181,8 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
         LOG_DEBUG("params", "param", ctx.get_physical_plan_ctx()->get_param_store().at(i), K(i));
         ObObjParam param = ctx.get_physical_plan_ctx()->get_param_store().at(i);
         if (OB_FAIL(params.push_back(param))) {
-          LOG_WARN("push back error", K(i), K(ret));
         } else if (call_proc_info->get_output_count() > 0) {
           if (OB_FAIL(null_params.push_back(param.is_null()))) {
-            LOG_WARN("fail to push back", K(ret));
           }
         }
       }
@@ -212,7 +204,6 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
                                               params,
                                               nocopy_params,
                                               result))) {
-        LOG_WARN("failed to execute pl",  K(ret), K(package_id), K(routine_id), K(pkg_id));
       }
       if (OB_FAIL(ret)) {
       } else if (call_proc_info->get_output_count() > 0) {
@@ -261,11 +252,9 @@ int ObCallProcedureExecutor::execute(ObExecContext &ctx, ObCallProcedureStmt &st
                     ret = OB_ERR_UNEXPECTED;
                     LOG_WARN("Unexpected result expr", K(*expr), K(ret));
                   } else if (OB_FAIL(ObSQLUtils::wrap_expr_ctx(stmt.get_stmt_type(), ctx, ctx.get_allocator(), expr_ctx))) {
-                    LOG_WARN("Failed to wrap expr ctx", K(ret));
                   } else {
                     const ObString var_name = expr->get_expr_items().at(1).get_obj().get_string();
                     if (FAILEDx(ObVariableSetExecutor::set_user_variable(out_value, var_name, expr_ctx))) {
-                      LOG_WARN("set user variable failed", K(ret));
                     }
                   }
                 } else {
@@ -303,7 +292,6 @@ int ObDropRoutineExecutor::execute(ObExecContext &ctx, ObDropRoutineStmt &stmt)
   obcall::ObDropRoutineArg &drop_routine_arg = stmt.get_routine_arg();
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
-    LOG_WARN("fail to get first stmt" , K(ret));
   } else {
     drop_routine_arg.ddl_stmt_str_ = first_stmt;
   }
@@ -312,7 +300,6 @@ int ObDropRoutineExecutor::execute(ObExecContext &ctx, ObDropRoutineStmt &stmt)
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_routine(drop_routine_arg); }))) {
-    LOG_WARN("rpc proxy drop procedure failed", K(ret), "dst", GCTX.self_addr());
   }
   return ret;
 }
@@ -336,7 +323,6 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("pl engine is null", K(ret));
     } else if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
-      LOG_WARN("fail to get first stmt" , K(ret));
     } else {
       alter_routine_arg.ddl_stmt_str_ = first_stmt;
     }
@@ -345,7 +331,6 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
       ret = OB_NOT_INIT;
       LOG_WARN("get task executor context failed", K(ret));
     } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->alter_routine_with_res(alter_routine_arg, res); }))) {
-      LOG_WARN("rpc proxy alter procedure failed", K(ret), "dst", GCTX.self_addr());
     }
     if (OB_SUCC(ret)
         && !has_error
@@ -355,10 +340,10 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
       OZ (ObSPIService::force_refresh_schema(res.store_routine_schema_version_));
       OZ (ctx.get_task_exec_ctx().schema_service_->
         get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
-      OZ (pl::ObPLBuildUtils::build(ctx,
+      OZ (pl::ObPLCompilerUtils::compile(ctx,
                                          database_id,
                                          routine_name,
-                                         pl::ObPLBuildUtils::get_pl_unit_type(type),
+                                         pl::ObPLCompilerUtils::get_compile_type(type),
                                          res.store_routine_schema_version_));
     }
   } else {
@@ -396,10 +381,10 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
       CK (OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
       OZ (ctx.get_task_exec_ctx().schema_service_->
         get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
-      OZ (pl::ObPLBuildUtils::build(ctx,
+      OZ (pl::ObPLCompilerUtils::compile(ctx,
                                          database_id,
                                          routine_name,
-                                         pl::ObPLBuildUtils::get_pl_unit_type(type),
+                                         pl::ObPLCompilerUtils::get_compile_type(type),
                                          routine_info->get_schema_version()));
     }
   }

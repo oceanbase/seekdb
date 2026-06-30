@@ -212,8 +212,6 @@ int ObTxLSStateMgr::switch_tx_ls_state(const TxLSAction action, const share::SCN
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(execute_tx_ls_action_(action))) {
-    TRANS_LOG(WARN, "execute tx ls action failed", K(ret), K(ret), "action", action_str(action),
-              K(start_working_scn), KPC(this));
   }
   return ret;
 }

@@ -547,7 +547,6 @@ public:
     } else {
       ref_context = new (ptr) __MemoryContext__(/*need_free*/true, di, this, args...);
       if (OB_FAIL(ref_context->init())) {
-        OB_LOG(WARN, "init failed", K(ret));
       }
     }
 
@@ -576,7 +575,6 @@ public:
 
     new (&ref_context) __MemoryContext__(/*need_free*/false, di, parent, args...);
     if (OB_FAIL(ref_context.init())) {
-      OB_LOG(WARN, "init failed", K(ret));
     }
     if (OB_FAIL(ret)) {
       ref_context.deinit();
@@ -861,7 +859,6 @@ public:
     if (OB_LIKELY(condition)) {
       __MemoryContext__ *tmp_context = reinterpret_cast<__MemoryContext__*>(buf0_);
       if (OB_FAIL(CURRENT_CONTEXT->create_context(context_, *tmp_context, nullptr, args...))) {
-        OB_LOG(WARN, "create context failed", K(ret));
       } else {
         Flow *tmp_flow = new (buf1_) Flow(context_);
         if (OB_FAIL(tmp_flow->init())) {

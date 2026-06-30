@@ -39,11 +39,8 @@ int ObTenantThreadHelper::create(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("thread name is null", KR(ret));
   } else if (OB_FAIL(TG_CREATE_TENANT(tg_def_id, tg_id_))) {
-    LOG_ERROR("create tg failed", KR(ret));
   } else if (OB_FAIL(TG_SET_RUNNABLE(tg_id_, *this))) {
-    LOG_ERROR("set thread runable fail", KR(ret));
   } else if (OB_FAIL(thread_cond_.init(ObWaitEventIds::REENTRANT_THREAD_COND_WAIT))) {
-    LOG_WARN("fail to init cond, ", KR(ret));
   } else {
     thread_name_ = thread_name;
     is_created_ = true;
@@ -60,12 +57,10 @@ int ObTenantThreadHelper::start()
     LOG_WARN("not init", KR(ret));
   } else if (is_first_time_to_start_) {
     if (OB_FAIL(TG_START(tg_id_))) {
-      LOG_WARN("fail ed to start at first time", KR(ret), K(tg_id_), K(thread_name_));
     } else {
       is_first_time_to_start_ = false;
     }
   } else if (OB_FAIL(TG_REENTRANT_LOGICAL_START(tg_id_))) {
-    LOG_WARN("failed to start", KR(ret));
   }
   LOG_INFO("[TENANT THREAD] thread start", KR(ret), K(tg_id_), K(thread_name_));
   return ret;
@@ -143,11 +138,9 @@ int ObTenantThreadHelper::switch_to_leader()
   int ret = OB_SUCCESS;
   LOG_INFO("[TENANT THREAD] thread start", K(tg_id_), K(thread_name_));
   if (OB_FAIL(start())) {
-    LOG_WARN("failed to start thread", KR(ret));
   } else {
     ObThreadCondGuard guard(thread_cond_);
     if (OB_FAIL(thread_cond_.broadcast())) {
-      LOG_WARN("failed to weakup thread cond", KR(ret));
     }
   }
   LOG_INFO("[TENANT THREAD] thread start finish", K(tg_id_), K(thread_name_));
@@ -166,7 +159,6 @@ int ObTenantThreadHelper::wait_tenant_schema_ready_()
     while (!is_ready && !has_set_stop()) {
       ret = OB_SUCCESS;
       if (OB_FAIL(get_tenant_schema( tenant_schema))) {
-        LOG_WARN("failed to get tenant schema", KR(ret));
       } else if (tenant_schema.is_creating()) {
         ret = OB_NEED_WAIT;
         LOG_WARN("tenant schema not ready, no need tenant balance", KR(ret), K(tenant_schema));
@@ -192,7 +184,6 @@ int ObTenantThreadHelper::wait_tenant_schema_and_version_ready_()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret));
   } else if (OB_FAIL(wait_tenant_schema_ready_())) {
-    LOG_WARN("failed to wait tenant schema ready", KR(ret));
   }
   return ret;
 }
@@ -225,14 +216,11 @@ int ObTenantThreadHelper::get_tenant_schema(
     LOG_WARN("unexpected error", KR(ret), KP(GCTX.schema_service_));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
           schema_guard))) {
-    LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_tenant_info(cur_tenant_schema))) {
-    LOG_WARN("failed to get tenant ids", KR(ret));
   } else if (OB_ISNULL(cur_tenant_schema)) {
     ret = OB_TENANT_NOT_EXIST;
     LOG_WARN("tenant not exist", KR(ret));
   } else if (OB_FAIL(tenant_schema.assign(*cur_tenant_schema))) {
-    LOG_WARN("failed to get cur tenant schema", KR(ret), KP(cur_tenant_schema));
   }
   return ret;
 }

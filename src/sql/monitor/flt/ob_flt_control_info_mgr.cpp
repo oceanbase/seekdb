@@ -201,7 +201,6 @@ int ObFLTControlInfoManager::apply_control_info()
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "sessionMgr is NULL", K(ret));
   } else if (OB_FAIL(session_mgr->for_each_session(reset_op))) {
-    SERVER_LOG(WARN, "fill scanner fail", K(ret));
   } else {
     // do nothing
   }
@@ -213,7 +212,6 @@ int ObFLTControlInfoManager::apply_control_info()
   } else {
     ObFLTApplyByTenantOp t_op(tenant_info_);
     if (OB_FAIL(session_mgr->for_each_session(t_op))) {
-      SERVER_LOG(WARN, "fill scanner fail", K(ret));
     } else {
       // do nothing
     }
@@ -227,7 +225,6 @@ int ObFLTControlInfoManager::apply_control_info()
     for (int64_t i=0; OB_SUCC(ret) && i<mod_infos_.count(); i++) {
       ObFLTApplyByModActOp mod_op(mod_infos_.at(i));
       if (OB_FAIL(session_mgr->for_each_session(mod_op))) {
-        SERVER_LOG(WARN, "fill scanner fail", K(ret));
       } else {
         // do nothing
       }
@@ -242,7 +239,6 @@ int ObFLTControlInfoManager::apply_control_info()
     for (int64_t i=0; OB_SUCC(ret) && i<identifier_infos_.count(); i++) {
       ObFLTApplyByClientIDOp i_op(identifier_infos_.at(i));
       if (OB_FAIL(session_mgr->for_each_session(i_op))) {
-        SERVER_LOG(WARN, "fill scanner fail", K(ret), K(lbt()));
       } else {
         // do nothing
       }
@@ -263,7 +259,6 @@ int ObFLTControlInfoManager::set_control_info(sql::ObExecContext &ctx)
   // generate json
   HEAP_VAR(char[OB_MAX_CONFIG_VALUE_LEN], buf) {
     if (OB_FAIL(to_json(alloc_, val))) {
-      LOG_WARN("failed to generate json", K(ret));
     } else {
       Tidy tidy(val);
       // from json to string
@@ -275,9 +270,7 @@ int ObFLTControlInfoManager::set_control_info(sql::ObExecContext &ctx)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("sql_proxy is null", K(ret));
       } else if (OB_FAIL(sql.assign_fmt("ALTER SYSTEM SET `_trace_control_info` = '%s'", trace_info.ptr()))) {
-        LOG_WARN("failed to set trace control info", K(ret));
       } else if (OB_FAIL(sql_proxy->write(sql.ptr(), affected_rows))) {
-        LOG_WARN("execute sql failed", K(ret), K(sql));
       } else {
         // do nothing
       }
@@ -356,7 +349,6 @@ int ObFLTControlInfoManager::from_json_mod_act(json::Value *&con_val)
           LOG_WARN("unexpected address type", K(ret), "type", it->value_->get_type());
         } else if (OB_FAIL(ob_write_string(alloc_, it->value_->get_string(),
                                         mod_con.mod_name_))) {
-          LOG_WARN("fail to write string", K(it->value_->get_string()), K(ret));
         } else {
           // do nothing
         }
@@ -369,16 +361,13 @@ int ObFLTControlInfoManager::from_json_mod_act(json::Value *&con_val)
           LOG_WARN("unexpected address type", K(ret), "type", it->value_->get_type());
         } else if (OB_FAIL(ob_write_string(alloc_, it->value_->get_string(),
                                         mod_con.act_name_))) {
-          LOG_WARN("fail to write string", K(it->value_->get_string()), K(ret));
         } else {
           // do nothing
         }
       } else if (OB_FAIL(from_json_control_info(mod_con.control_info_, it))) {
-        LOG_WARN("failed to resolve control_info", K(ret));
       }
     }
     if (OB_FAIL(mod_infos_.push_back(mod_con))) {
-      LOG_WARN("failed to push back id info", K(ret));
     }
   }
 
@@ -406,16 +395,13 @@ int ObFLTControlInfoManager::from_json_identifier(json::Value *&con_val)
           LOG_WARN("unexpected address type", K(ret), "type", it->value_->get_type());
         } else if (OB_FAIL(ob_write_string(alloc_, it->value_->get_string(),
                                         client_id_con_info.identifier_name_))) {
-          LOG_WARN("fail to write string", K(it->value_->get_string()), K(ret));
         } else {
           // do nothing
         }
       } else if (OB_FAIL(from_json_control_info(client_id_con_info.control_info_, it))) {
-        LOG_WARN("failed to resolve control_info", K(ret));
       }
     }
     if (OB_FAIL(identifier_infos_.push_back(client_id_con_info))) {
-      LOG_WARN("failed to push back id info", K(ret));
     }
   }
   return ret;
@@ -432,9 +418,7 @@ int ObFLTControlInfoManager::from_json(ObArenaAllocator &allocator, char *buf, c
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("buf len is not valid", K(ret), K(buf_len));
   } else if (OB_FAIL(parser.init(&allocator))) {
-    LOG_WARN("parser init failed", K(ret));
   } else if (OB_FAIL(parser.parse(buf, buf_len, data))) {
-    LOG_WARN("parse json failed", K(ret));
   } else if (NULL == data) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("no root value", K(ret));
@@ -457,7 +441,6 @@ int ObFLTControlInfoManager::from_json(ObArenaAllocator &allocator, char *buf, c
               LOG_WARN("not object in array", K(ret), "type", client_id->get_type());
               break;
             } else if (OB_FAIL(from_json_identifier(client_id))) {
-              LOG_WARN("failed to resolve control info from json", K(ret));
             } else {
               // do nothing
             }
@@ -475,7 +458,6 @@ int ObFLTControlInfoManager::from_json(ObArenaAllocator &allocator, char *buf, c
               LOG_WARN("not object in array", K(ret), "type", mod_act->get_type());
               break;
             } else if (OB_FAIL(from_json_mod_act(mod_act))) {
-              LOG_WARN("failed to resolve control info from json", K(ret));
             } else {
               // do nothing
             }
@@ -493,7 +475,6 @@ int ObFLTControlInfoManager::from_json(ObArenaAllocator &allocator, char *buf, c
         } else {
           DLIST_FOREACH(x, it->value_->get_object()) {
             if (OB_FAIL(from_json_control_info(tenant_info_, x))){
-              LOG_WARN("failed to resolve control info from json", K(ret));
             } else {
             }
           }
@@ -640,7 +621,6 @@ int ObFLTControlInfoManager::to_json_identifier(ObIAllocator &allocator, json::V
       id_name->value_ = id_name_val;
       id_val->object_add(id_name);
       if (OB_FAIL(to_json_contorl_info(allocator, identifier_infos_.at(i).control_info_, id_val))) {
-        LOG_WARN("failed to convert control info to json", K(ret));
       }
       ret_val->array_add(id_val);
     }
@@ -705,7 +685,6 @@ int ObFLTControlInfoManager::to_json_mod_act(ObIAllocator &allocator, json::Valu
       mod_act_val->object_add(mod_name);
       mod_act_val->object_add(act_name);
       if (OB_FAIL(to_json_contorl_info(allocator, mod_infos_.at(i).control_info_, mod_act_val))) {
-        LOG_WARN("failed to convert control info to json", K(ret));
       }
       ret_val->array_add(mod_act_val);
     }
@@ -778,7 +757,6 @@ int ObFLTControlInfoManager::to_json(ObIAllocator &allocator, json::Value *&ret_
       type_i_value->set_type(JT_ARRAY);
       type_i->name_ = TYPE_I;
       if (OB_FAIL(to_json_identifier(allocator, type_i_value))) {
-        LOG_WARN("failed to generate json fo identifier", K(ret));
       } else {
         type_i->value_ = type_i_value;
       }
@@ -805,7 +783,6 @@ int ObFLTControlInfoManager::to_json(ObIAllocator &allocator, json::Value *&ret_
       type_m_value->set_type(JT_ARRAY);
       type_m->name_ = TYPE_MOD_ACT;
       if (OB_FAIL(to_json_mod_act(allocator, type_m_value))) {
-        LOG_WARN("failed to generate json fo identifier", K(ret));
       } else {
         type_m->value_ = type_m_value;
       }
@@ -831,7 +808,6 @@ int ObFLTControlInfoManager::to_json(ObIAllocator &allocator, json::Value *&ret_
       type_t_value->set_type(JT_OBJECT);
       type_t->name_ = TYPE_TENANT;
       if (OB_FAIL(to_json_contorl_info(allocator, tenant_info_, type_t_value))) {
-        LOG_WARN("failed to generate json fo identifier", K(ret));
       } else {
         type_t->value_ = type_t_value;
       }
@@ -845,11 +821,8 @@ int ObFLTControlInfoManager::add_identifier_con_info(sql::ObExecContext &ctx, Ob
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(identifier_infos_.push_back(i_coninfo))) {
-    LOG_WARN("failed to add identifier infos", K(ret));
   } else if (OB_FAIL(set_control_info(ctx))) {
-    LOG_WARN("failed to set control info", K(ret));
   } else if (OB_FAIL(apply_control_info())) {
-    LOG_WARN("failed to apply control info", K(ret));
   } else {
     // do nothing
   }
@@ -874,13 +847,10 @@ int ObFLTControlInfoManager::remove_identifier_con_info(sql::ObExecContext &ctx,
   int ret = OB_SUCCESS;
   int64_t idx = -1;
   if (OB_FAIL(find_identifier_con_info(client_id, idx))) {
-    LOG_WARN("failed to find module action control info", K(ret));
   } else if (idx >= 0 && idx < identifier_infos_.count() && OB_FAIL(identifier_infos_.remove(idx))) {
     LOG_WARN("failed to remove identifier infos ", K(ret), K(idx));
   } else if (OB_FAIL(set_control_info(ctx))) {
-    LOG_WARN("failed to set control info", K(ret));
   } else if (OB_FAIL(apply_control_info())) {
-    LOG_WARN("failed to apply control info", K(ret));
   } else {
     // do nothing
   }
@@ -891,11 +861,8 @@ int ObFLTControlInfoManager::add_mod_act_con_info(sql::ObExecContext &ctx, ObMod
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(mod_infos_.push_back(mod_coninfo))) {
-    LOG_WARN("failed to add identifier infos", K(ret));
   } else if (OB_FAIL(set_control_info(ctx))) {
-    LOG_WARN("failed to set control info", K(ret));
   } else if (OB_FAIL(apply_control_info())) {
-    LOG_WARN("failed to apply control info", K(ret));
   } else {
     // do nothing
   }
@@ -923,13 +890,10 @@ int ObFLTControlInfoManager::remove_mod_act_con_info(sql::ObExecContext &ctx,
   int ret = OB_SUCCESS;
   int64_t idx = -1;
   if (OB_FAIL(find_mod_act_con_info(mod, act, idx))) {
-    LOG_WARN("failed to find module action control info", K(ret));
   } else if (idx >= 0 && idx < mod_infos_.count() && OB_FAIL(mod_infos_.remove(idx))) {
     LOG_WARN("failed to remove mod_infos", K(ret), K(idx));
   } else if (OB_FAIL(set_control_info(ctx))) {
-    LOG_WARN("failed to set control info", K(ret));
   } else if (OB_FAIL(apply_control_info())) {
-    LOG_WARN("failed to apply control info", K(ret));
   } else {
     // do nothing
   }
@@ -941,9 +905,7 @@ int ObFLTControlInfoManager::add_tenant_con_info(sql::ObExecContext &ctx, FLTCon
   int ret = OB_SUCCESS;
   tenant_info_ = coninfo;
   if (OB_FAIL(set_control_info(ctx))) {
-    LOG_WARN("failed to set control info", K(ret));
   } else if (OB_FAIL(apply_control_info())) {
-    LOG_WARN("failed to apply control info", K(ret));
   } else {
     // do nothing
   }
@@ -955,9 +917,7 @@ int ObFLTControlInfoManager::remove_tenant_con_info(sql::ObExecContext &ctx)
   int ret = OB_SUCCESS;
   tenant_info_.reset();
   if (OB_FAIL(set_control_info(ctx))) {
-    LOG_WARN("failed to set control info", K(ret));
   } else if (OB_FAIL(apply_control_info())) {
-    LOG_WARN("failed to apply control info", K(ret));
   } else {
     // do nothing
   }
@@ -973,7 +933,6 @@ int ObFLTControlInfoManager::init()
     ObString trace_info(strlen(GCONF._trace_control_info.str()),
                                 GCONF._trace_control_info.str());
     if (OB_FAIL(from_json(alloc_, trace_info.ptr(), trace_info.length()))) {
-      LOG_WARN("failed to resolve json val", K(ret));
     } else {
       // do nothing
     }
@@ -988,7 +947,6 @@ int ObFLTControlInfoManager::get_mod_act_con_info(common::ObString mod,
   int ret = OB_SUCCESS;
   int64_t idx = -1;
   if (OB_FAIL(find_mod_act_con_info(mod, act, idx))) {
-    LOG_WARN("failed to find module action control info", K(ret));
   } else if (idx >= 0 && idx < mod_infos_.count()) {
     coninfo = mod_infos_.at(idx).control_info_;
   } else {
@@ -1004,7 +962,6 @@ int ObFLTControlInfoManager::get_client_id_con_info(common::ObString client_id,
   int ret = OB_SUCCESS;
   int64_t idx = -1;
   if (OB_FAIL(find_identifier_con_info(client_id, idx))) {
-      LOG_WARN("failed to find module action control info", K(ret));
   } else if (idx >= 0 && idx < identifier_infos_.count()) {
     coninfo = identifier_infos_.at(idx).control_info_;
   } else {
@@ -1036,7 +993,6 @@ int ObFLTControlInfoManager::find_appropriate_con_info(sql::ObSQLSessionInfo &se
       // do nothing
     } else if (OB_FAIL(get_mod_act_con_info(sess.get_module_name(),
                                         sess.get_action_name(), con))) {
-      LOG_WARN("failed to get control info for client info", K(ret));
     } else if (!con.is_valid()) {
       // not find
     } else {
@@ -1048,7 +1004,6 @@ int ObFLTControlInfoManager::find_appropriate_con_info(sql::ObSQLSessionInfo &se
     } else if (sess.get_client_identifier().empty()) {
       // do nothing
     } else if (OB_FAIL(get_client_id_con_info(sess.get_client_identifier(), con))) {
-      LOG_WARN("failed to get control info for client info", K(ret));
     } else if (!con.is_valid()) {
       // not find
     } else {
@@ -1070,7 +1025,6 @@ int ObFLTControlInfoManager::get_all_flt_config(common::ObIArray<ObFLTConfRec> &
   rec.type_ = FLT_TENANT_TYPE;
   rec.control_info_ = tenant_info_;
   if (OB_FAIL(rec_list.push_back(rec))) {
-    LOG_WARN("failed to push back flt config rec", K(ret));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < mod_infos_.count(); i++) {
@@ -1079,11 +1033,8 @@ int ObFLTControlInfoManager::get_all_flt_config(common::ObIArray<ObFLTConfRec> &
     rec.type_ = FLT_MOD_ACT_TYPE;
     rec.control_info_ = mod_infos_.at(i).control_info_;
     if (OB_FAIL(ob_write_string(alloc, mod_infos_.at(i).mod_name_, rec.mod_name_))) {
-      LOG_WARN("failed to write string", K(mod_infos_.at(i).mod_name_), K(ret));
     } else if (OB_FAIL(ob_write_string(alloc, mod_infos_.at(i).act_name_, rec.act_name_))) {
-      LOG_WARN("failed to write string", K(mod_infos_.at(i).act_name_), K(ret));
     } else if (OB_FAIL(rec_list.push_back(rec))) {
-      LOG_WARN("failed to push back flt config rec", K(ret));
     }
   }
 
@@ -1093,9 +1044,7 @@ int ObFLTControlInfoManager::get_all_flt_config(common::ObIArray<ObFLTConfRec> &
     rec.type_ = FLT_CLIENT_ID_TYPE;
     rec.control_info_ = identifier_infos_.at(i).control_info_;
     if (OB_FAIL(ob_write_string(alloc, identifier_infos_.at(i).identifier_name_, rec.identifier_name_))) {
-      LOG_WARN("failed to write string", K(mod_infos_.at(i).mod_name_), K(ret));
     } else if (OB_FAIL(rec_list.push_back(rec))) {
-      LOG_WARN("failed to push back flt config rec", K(ret));
     }
   }
   return ret;

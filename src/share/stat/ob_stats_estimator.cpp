@@ -51,9 +51,7 @@ int ObStatsEstimator::gen_select_filed()
     if (i != 0 && OB_FAIL(select_fields_.append(", "))) {
       LOG_WARN("failed to append delimiter", K(ret));
     } else if (OB_FAIL(stat_items_.at(i)->gen_expr(buf, buf_size, pos))) {
-      LOG_WARN("failed to gen select expr", K(ret));
     } else if (OB_FAIL(select_fields_.append(buf, pos))) {
-      LOG_WARN("failed to append stat item expr", K(ret));
     }
   }
   return ret;
@@ -70,12 +68,10 @@ int ObStatsEstimator::add_from_table(common::ObIAllocator &allocator,
               allocator,
               db_name,
               new_db_name))) {
-    LOG_WARN("fail to generate new name with escape character", K(ret), K(db_name));
   } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                     allocator,
                     table_name,
                     new_tbl_name))) {
-    LOG_WARN("fail to generate new name with escape character", K(ret), K(table_name));
   } else {
     db_name_ = new_db_name;
     from_table_ = new_tbl_name;
@@ -88,7 +84,6 @@ int ObStatsEstimator::pack(ObSqlString &raw_sql_str)
   int ret = OB_SUCCESS;
   // SELECT <hint> <fields> FROM <table> <partition hint>
   if (OB_FAIL(gen_select_filed())) {
-    LOG_WARN("failed to generate select filed", K(ret));
   } else if (OB_FAIL(raw_sql_str.append_fmt("SELECT %.*s %.*s FROM `%.*s`.`%.*s` %.*s %.*s %.*s %.*s %.*s" ,
                                             other_hints_.length(),
                                             other_hints_.ptr(),
@@ -108,7 +103,6 @@ int ObStatsEstimator::pack(ObSqlString &raw_sql_str)
                                             where_string_.ptr(),
                                             group_by_string_.length(),
                                             group_by_string_.ptr()))) {
-    LOG_WARN("failed to build query sql stmt", K(ret));
   } else {
     LOG_TRACE("OptStat: basic stat query sql", K(raw_sql_str));
   }
@@ -158,7 +152,6 @@ int ObStatsEstimator::fill_sample_info(common::ObIAllocator &alloc,
   } else if (OB_FAIL(fill_sample_info(alloc,
                                       sample_info.sample_value_,
                                       sample_info.is_block_sample_))) {
-    LOG_WARN("failed to fill sample info", K(ret));
   } else {
     sample_value_ = sample_info.sample_value_;
   }
@@ -211,7 +204,6 @@ int ObStatsEstimator::fill_parallel_info(common::ObIAllocator &alloc,
         ObString degree_str;
         degree_str.assign_ptr(buf, real_len);
         if (OB_FAIL(add_hint(degree_str, alloc))) {
-          LOG_WARN("failed to add hint", K(ret));
         } else {
           LOG_TRACE("succeed to add degree string", K(degree_str));
         }
@@ -241,7 +233,6 @@ int ObStatsEstimator::fill_query_timeout_info(common::ObIAllocator &alloc,
         ObString query_timeout_str;
         query_timeout_str.assign_ptr(buf, real_len);
         if (OB_FAIL(add_hint(query_timeout_str, alloc))) {
-          LOG_WARN("failed to add hint", K(ret));
         } else {
           LOG_TRACE("succeed to add query timeout string", K(query_timeout_str));
         }
@@ -306,7 +297,6 @@ int ObStatsEstimator::fill_partition_info(ObIAllocator &allocator,
                                                 partition_infos.at(i).part_name_.length(),
                                                 partition_infos.at(i).part_name_.ptr(),
                                                 i == partition_infos.count() - 1 ? ")" : ", "))) {
-        LOG_WARN("failed to append", K(ret));
       } else {/*do nothing*/}
     }
     if (OB_SUCC(ret)) {
@@ -416,7 +406,6 @@ int ObStatsEstimator::do_estimate(const ObOptStatGatherParam &gather_param,
       LOG_WARN("get unexpected empty", K(ret), K(sql_proxy), K(dst_opt_stats.empty()),
                                        K(session), K(raw_sql.empty()));
     } else if (OB_FAIL(session->save_session(*session_value))) {
-      LOG_WARN("failed to save session", K(ret));
     } else if (session->is_in_external_catalog()
                && OB_FAIL(session->set_internal_catalog_db())) {
       LOG_WARN("failed to set catalog", K(ret));
@@ -432,13 +421,11 @@ int ObStatsEstimator::do_estimate(const ObOptStatGatherParam &gather_param,
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       if (OB_FAIL(pool->acquire(session, conn))) {
-        LOG_WARN("failed to acquire inner connection", K(ret));
       } else if (OB_ISNULL(conn)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("conn is null", K(ret), K(conn));
       } else if (OB_FALSE_IT(conn->set_group_id(static_cast<int64_t>(gather_param.consumer_group_id_)))) {
       } else if (OB_FAIL(conn->execute_read(raw_sql.ptr(), proxy_result))) {
-        LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to execute sql", K(ret));
@@ -448,16 +435,12 @@ int ObStatsEstimator::do_estimate(const ObOptStatGatherParam &gather_param,
             ObObj tmp;
             ObObj val;
             if (OB_FAIL(client_result->get_obj(i, tmp))) {
-              LOG_WARN("failed to get object", K(ret));
             } else if (OB_FAIL(ob_write_obj(allocator_, tmp, val))) {
-              LOG_WARN("failed to write object", K(ret));
             } else if (OB_FAIL(add_result(val))) {
-              LOG_WARN("failed to add result", K(ret));
             }
           }
           if (OB_SUCC(ret)) {
             if (OB_FAIL(decode(allocator_))) {
-              LOG_WARN("failed to decode results", K(ret));
             } else if (need_copy_basic_stat &&
                        OB_FAIL(copy_basic_opt_stat(src_opt_stat, dst_opt_stats))) {
               LOG_WARN("failed to copy stat to target opt stat", K(ret));
@@ -499,7 +482,6 @@ int ObStatsEstimator::decode(ObIAllocator &allocator)
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < stat_items_.count(); ++i) {
     if (OB_FAIL(stat_items_.at(i)->decode(results_.at(i), allocator))) {
-      LOG_WARN("failed to decode statistic result", K(ret));
     }
   }
   return ret;
@@ -531,7 +513,6 @@ int ObStatsEstimator::copy_basic_opt_stat(ObOptStat &src_opt_stat,
         dst_opt_stats.at(i).table_stat_->set_avg_row_size(tmp_tab_stat->get_avg_row_size());
         dst_opt_stats.at(i).table_stat_->set_sample_size(tmp_tab_stat->get_row_count());
         if (OB_FAIL(copy_basic_col_stats(tmp_tab_stat->get_row_count(), row_cnt, tmp_col_stats, dst_opt_stats.at(i).column_stats_))) {
-          LOG_WARN("failed to copy col stat", K(ret));
         } else {/*do nothing*/}
       } else {/*do nothing*/}
     }

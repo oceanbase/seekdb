@@ -185,21 +185,13 @@ int ObTableStatParam::assign(const ObTableStatParam &other)
   weight_iops_ = other.weight_iops_;
   skip_rate_sample_cnt_ = other.skip_rate_sample_cnt_;
   if (OB_FAIL(part_infos_.assign(other.part_infos_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else if (OB_FAIL(subpart_infos_.assign(other.subpart_infos_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else if (OB_FAIL(approx_part_infos_.assign(other.approx_part_infos_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else if (OB_FAIL(column_params_.assign(other.column_params_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else if (OB_FAIL(no_regather_partition_ids_.assign(other.no_regather_partition_ids_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else if (OB_FAIL(all_part_infos_.assign(other.all_part_infos_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else if (OB_FAIL(all_subpart_infos_.assign(other.all_subpart_infos_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else if (OB_FAIL(column_group_params_.assign(other.column_group_params_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else {/*do nothing*/}
   return ret;
 }
@@ -281,9 +273,7 @@ int ObOptStatGatherParam::assign(const ObOptStatGatherParam &other)
   part_level_ = other.part_level_;
   consumer_group_id_ = other.consumer_group_id_;
   if (OB_FAIL(partition_infos_.assign(other.partition_infos_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else if (OB_FAIL(column_params_.assign(other.column_params_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else {/*do nothing*/}
   return ret;
 }
@@ -328,9 +318,7 @@ int AsyncStatTable::assign(const AsyncStatTable &other)
   int ret = OB_SUCCESS;
   table_id_ = other.table_id_;
   if (OB_FAIL(partition_ids_.assign(other.partition_ids_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else if (OB_FAIL(tablet_ids_.assign(other.tablet_ids_))) {
-    LOG_WARN("failed to assign", K(ret));
   }
   return ret;
 }
@@ -613,17 +601,14 @@ int ObOptStatGatherAudit::add_basic_estimate_audit(const ObIArray<PartInfo> & pa
       LOG_WARN("failed to allocate audit item", K(ret));
     } else if (OB_FALSE_IT(item = new(ptr) BasicStatAuditItem(allocator_, is_index))) {
     } else if (OB_FAIL(item->part_ids_.init(parts.count()))) {
-      LOG_WARN("failed to init fixed array", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < parts.count(); ++i) {
         if (OB_FAIL(item->part_ids_.push_back(parts.at(i).part_id_))) {
-          LOG_WARN("failed to push back part ids", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
         item->cost_time_ = cost_time;
         if (OB_FAIL(audit_items_.push_back(item))) {
-          LOG_WARN("failed to push back audit item", K(ret));
         }
       }
     }
@@ -642,7 +627,6 @@ int ObOptStatGatherAudit::add_histogram_estimate_audit(uint64_t part_id, int64_t
       LOG_WARN("failed to allocate audit item", K(ret));
     } else if (OB_FALSE_IT(item = new(ptr) HistogramAuditItem(part_id, topk_cost, hybrid_cost))) {
     } else if (OB_FAIL(audit_items_.push_back(item))) {
-      LOG_WARN("failed to push back audit item", K(ret));
     }
   }
   return ret;
@@ -661,7 +645,6 @@ int ObOptStatGatherAudit::add_refine_estimate_audit(bool use_skip_index, uint64_
       LOG_WARN("failed to allocate audit item", K(ret));
     } else if (OB_FALSE_IT(item = new(ptr) RefineMinMaxAuditItem(type, part_id, cost_time))) {
     } else if (OB_FAIL(audit_items_.push_back(item))) {
-      LOG_WARN("failed to push back audit item", K(ret));
     }
   }
   return ret;
@@ -678,7 +661,6 @@ int ObOptStatGatherAudit::add_flush_stats_audit(int64_t cost_time)
       LOG_WARN("failed to allocate audit item", K(ret));
     } else if (OB_FALSE_IT(item = new(ptr) FlushStatsAuditItem(cost_time))) {
     } else if (OB_FAIL(audit_items_.push_back(item))) {
-      LOG_WARN("failed to push back audit item", K(ret));
     }
   }
   return ret;
@@ -695,7 +677,6 @@ int ObOptStatGatherAudit::add_flush_block_count_audit(int64_t cost_time)
       LOG_WARN("failed to allocate audit item", K(ret));
     } else if (OB_FALSE_IT(item = new(ptr) FlushBlockCountAuditItem(cost_time))) {
     } else if (OB_FAIL(audit_items_.push_back(item))) {
-      LOG_WARN("failed to push back audit item", K(ret));
     }
   }
   return ret;
@@ -712,7 +693,6 @@ int ObOptStatGatherAudit::add_flush_skip_rate_audit(int64_t cost_time)
       LOG_WARN("failed to allocate audit item", K(ret));
     } else if (OB_FALSE_IT(item = new(ptr) FlushSkipRateAuditItem(cost_time))) {
     } else if (OB_FAIL(audit_items_.push_back(item))) {
-      LOG_WARN("failed to push back audit item", K(ret));
     }
   }
   return ret;

@@ -53,7 +53,6 @@ int ObTableLoadDagParallelMerger::init_merge_ctx()
   param.file_mgr_ = store_ctx_->tmp_file_mgr_;
   param.ctx_ = store_ctx_->ctx_;
   if (OB_FAIL(merge_ctx_.init(param, store_table_ctx->ls_partition_ids_))) {
-    LOG_WARN("fail to init merge ctx", KR(ret), K(param));
   }
   return ret;
 }
@@ -71,19 +70,15 @@ int ObTableLoadDagParallelMerger::init_merge_task(ObTableLoadStoreCtx *store_ctx
     store_ctx_ = store_ctx;
     op_ctx_ = op_ctx;
     if (OB_FAIL(init_merge_ctx())) {
-      LOG_WARN("fail to init merge ctx", KR(ret));
     } else if (ObDirectLoadMergeMode::MERGE_WITH_ORIGIN_QUERY_FOR_LOB == op_ctx_->merge_mode_) {
       if (OB_FAIL(merge_ctx_.build_del_lob_task(op_ctx_->table_store_, store_ctx_->thread_cnt_, true/*for_dag*/))) {
-        LOG_WARN("fail to build del lob task", KR(ret));
       }
     } else {
       if (OB_FAIL(merge_ctx_.build_merge_task(op_ctx_->table_store_, store_ctx_->thread_cnt_))) {
-        LOG_WARN("fail to build merge task", KR(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(task_iter_.init(&merge_ctx_))) {
-      LOG_WARN("fail to init task iter", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -124,7 +119,6 @@ int ObTableLoadDagParallelMerger::prepare_clear_table()
       {
         ObDirectLoadTableHandleArray *table_handle_array = it->second;
         if (OB_FAIL(all_table_handles_.add(*table_handle_array))) {
-          LOG_WARN("fail to add table handles", KR(ret));
         }
       }
       if (OB_SUCC(ret)) {

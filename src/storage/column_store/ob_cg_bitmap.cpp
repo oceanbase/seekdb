@@ -45,7 +45,6 @@ int ObCGBitmap::get_first_valid_idx(const ObCSRange &range, ObCSRowId &row_idx) 
                                             range.get_row_count(),
                                             is_reverse_scan_,
                                             valid_offset))){
-    LOG_WARN("Fail to get next valid idx", K(ret), K(range), KPC(this));
   }
   if (OB_SUCC(ret) && -1 != valid_offset) {
     row_idx = start_row_id_ + valid_offset;
@@ -61,11 +60,9 @@ int ObCGBitmap::set_bitmap(const ObCSRowId start, const int64_t row_count, const
     LOG_WARN("Invalid argument", K(ret), K(start), K_(start_row_id), K(row_count), K(bitmap));
   } else if (filter_constant_type_.is_constant()) {
     if (OB_FAIL(bitmap.set_bitmap_batch(0, row_count, filter_constant_type_.is_always_true()))) {
-      LOG_WARN("Fail to set bitmap batch", K(ret), K(row_count));
     }
   } else if (!is_reverse) {
     if (OB_FAIL(bitmap.copy_from(bitmap_, start - start_row_id_, row_count))) {
-      LOG_WARN("Fail to copy bitmap", K(ret), K(start), K(row_count), KPC(this));
     }
   } else {
     for (int64_t i = 0; i < row_count; i++) {
@@ -295,7 +292,6 @@ int convert_bitmap_to_cs_index(int32_t *row_ids,
         current = upper_bound + 1;
       } else if (OB_FAIL(const_cast<ObCGBitmap *>(filter_bitmap)->get_row_ids(
                   row_ids, row_cap, current, query_range, data_range, batch_size, is_reverse_scan))) {
-        LOG_WARN("Fail to get row ids", K(ret), K(current), K(data_range), K(query_range));
       }
     } else {
       ObCSRowId lower_bound = MAX(query_range.start_row_id_, data_range.start_row_id_);
@@ -323,7 +319,6 @@ int convert_bitmap_to_cs_index(int32_t *row_ids,
         current = lower_bound - 1;
       } else if (OB_FAIL(const_cast<ObCGBitmap *>(filter_bitmap)->get_row_ids(
                   row_ids, row_cap, current, query_range, data_range, batch_size, is_reverse_scan))) {
-        LOG_WARN("Fail to get row ids", K(ret), K(current), K(data_range), K(query_range));
       }
     }
   }
@@ -435,7 +430,6 @@ int ObCGBitmap::bit_and(const ObCGBitmap &right)
       filter_constant_type_.set_always_false();
     } else {
       if (OB_FAIL(bitmap_.copy_from(right.bitmap_, 0, right.bitmap_.size()))) {
-        LOG_WARN("Fail to copy bitmap", K(ret), KPC(this), K(right));
       } else {
         max_filter_constant_id_ = OB_INVALID_CS_ROW_ID;
         filter_constant_type_.set_uncertain();
@@ -453,7 +447,6 @@ int ObCGBitmap::bit_and(const ObCGBitmap &right)
       filter_constant_type_.set_always_false();
     } else {
       if (OB_FAIL(bitmap_.bit_and(right.bitmap_))) {
-        LOG_WARN("Fail to bit and", K(ret), KPC(this), K(right));
       }
     }
   }
@@ -480,7 +473,6 @@ int ObCGBitmap::bit_or(const ObCGBitmap &right)
       max_filter_constant_id_ = is_reverse_scan_ ? MAX(max_filter_constant_id_, right_constant_id) : MIN(max_filter_constant_id_, right_constant_id);
     } else {
       if (OB_FAIL(bitmap_.copy_from(right.bitmap_, 0, right.bitmap_.size()))) {
-        LOG_WARN("Fail to copy bitmap", K(ret), KPC(this), K(right));
       } else {
         max_filter_constant_id_ = OB_INVALID_CS_ROW_ID;
         filter_constant_type_.set_uncertain();
@@ -493,7 +485,6 @@ int ObCGBitmap::bit_or(const ObCGBitmap &right)
     } else if (right_constant_type.is_always_false()) {
     } else {
       if (OB_FAIL(bitmap_.bit_or(right.bitmap_))) {
-        LOG_WARN("Fail to bit_or bitmap", K(ret), KPC(this), K(right));
       }
     }
   }
@@ -508,7 +499,6 @@ int ObCGBitmap::get_next_valid_idx_directly(
   OB_ASSERT(row_id >= start_row_id_);
   const int64_t start_offset = row_id - start_row_id_;
   if (OB_FAIL(bitmap_.next_valid_idx(start_offset, bitmap_.size() - start_offset, is_reverse_scan_, offset))) {
-    STORAGE_LOG(WARN, "fail to get next valid idx", K(ret), K_(start_row_id), K_(bitmap));
   } else if (OB_UNLIKELY(-1 == offset)) {
     ret = OB_ITER_END;
   } else {
@@ -530,7 +520,6 @@ int ObCGBitmap::bit_and(const ObBitmap &right)
     } else {
       filter_constant_type_.set_uncertain();
       if (OB_FAIL(bitmap_.copy_from(right, 0, right.size()))) {
-        STORAGE_LOG(WARN, "Fail to copy bitmap", K(ret), K(right.size()));
       }
     }
   } else if (filter_constant_type_.is_always_false()) {
@@ -540,7 +529,6 @@ int ObCGBitmap::bit_and(const ObBitmap &right)
     } else if (right.is_all_false()) {
       reuse(start_row_id_, false);
     } else if (OB_FAIL(bitmap_.bit_and(right))) {
-      STORAGE_LOG(WARN, "fail to do bit and", K_(bitmap), K(right));
     }
   }
   return ret;

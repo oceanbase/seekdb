@@ -220,7 +220,6 @@ int ObOrderPerservingEncoder::make_order_perserving_encode_from_object(
         ret = OB_BUF_NOT_ENOUGH;
         LOG_TRACE("no enough memory to do encoding", K(ret), K(data.len_), K(param.type_));
       } else if (OB_FAIL(encode_from_decint(data.get_decimal_int(), data.len_, to, to_len))) {
-        LOG_WARN("encode from decimal int failed", K(ret));
       }
       break;
     }
@@ -342,7 +341,6 @@ int ObOrderPerservingEncoder::encode_from_string_varlen(
     LOG_TRACE("no enough memory to do encoding for string", K(ret));
   } else if (str.empty() || (str.length()==1 && *str.ptr()=='\0')) {
     if (OB_FAIL(encode_tails(to, max_buf_len, to_len, param.is_memcmp_, cs, str.length()==1 && *str.ptr()=='\0'))) {
-      LOG_WARN("failed to encode tails", K(ret));
     }
   } else if (cs == CS_TYPE_COLLATION_FREE || cs == CS_TYPE_BINARY) {
 #if OB_USE_MULTITARGET_CODE

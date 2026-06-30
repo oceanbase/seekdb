@@ -170,7 +170,6 @@ private:
         ObGeometry *sub_g1 = NULL;
         bool is_geog = (g1->crs() == oceanbase::common::ObGeoCRS::Geographic);
         if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(*allocator, sub_type, is_geog, true, sub_g1))) {
-          LOG_WARN("failed to create wkb", K(ret), K(sub_type));
         } else {
           // Length is not used, cannot get real length until iter move to the next
           ObString wkb_nosrid(WKB_COMMON_WKB_HEADER_LEN, reinterpret_cast<const char *>(sub_ptr));
@@ -189,7 +188,6 @@ private:
         ObGeometry *sub_g2 = NULL;
         bool is_geog = (g2->crs() == oceanbase::common::ObGeoCRS::Geographic);
         if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(*allocator, sub_type, is_geog, true, sub_g2))) {
-          LOG_WARN("failed to create wkb", K(ret), K(sub_type));
         } else {
           // Length is not used, cannot get real length until iter move to the next
           ObString wkb_nosrid(WKB_COMMON_WKB_HEADER_LEN, reinterpret_cast<const char *>(sub_ptr));

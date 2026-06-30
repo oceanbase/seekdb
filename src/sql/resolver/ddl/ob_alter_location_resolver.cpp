@@ -100,12 +100,10 @@ int ObAlterLocationResolver::resolve(const ParseNode &parse_tree)
     } else if (FALSE_IT(location_name.assign_ptr(child_node->str_value_, static_cast<int32_t>(child_node->str_len_)))) {
       // do nothing
     } else if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
-      LOG_WARN("failed to get name case mode", K(ret));
     } else if (OB_LOWERCASE_AND_INSENSITIVE == case_mode
                && OB_FAIL(ObCharset::tolower(cs_type, location_name, location_name, *allocator_))) {
       LOG_WARN("failed to lower string", K(ret));
     } else if (OB_FAIL(create_location_stmt->set_location_name(location_name))) {
-      LOG_WARN("set location name failed", K(ret));
     } else {
       alter_type = child_node->value_;
     }
@@ -120,7 +118,6 @@ int ObAlterLocationResolver::resolve(const ParseNode &parse_tree)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema guard is null", K(ret));
     } else if (OB_FAIL(schema_guard->get_location_schema_by_name(location_name, location_schema))) {
-      LOG_WARN("failed to get schema by location name", K(ret), K(location_name));
     } else if (OB_ISNULL(location_schema)) {
       ret = OB_LOCATION_OBJ_NOT_EXIST;
       LOG_WARN("location object does't exist", K(ret), K(location_name));
@@ -147,7 +144,6 @@ int ObAlterLocationResolver::resolve(const ParseNode &parse_tree)
         storage_info = &back_up_backup;
         // verify url
         if (OB_FAIL(storage_info->set(location_url.ptr(), access_info.ptr()))) {
-          LOG_WARN("failed validate url and access info", K(ret));
         } else {
           create_location_stmt->set_location_url(location_url);
           create_location_stmt->set_location_access_info(access_info);
@@ -178,7 +174,6 @@ int ObAlterLocationResolver::resolve(const ParseNode &parse_tree)
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("invalid argument.", K(ret));
         } else if (OB_FAIL(get_alter_credential_field_name(credential_params, option_node->value_))) {
-          LOG_WARN("failed to get field name", K(ret), K(option_node->value_));
         } else {
           ObString tmp;
           tmp.assign_ptr(option_node->str_value_, static_cast<int32_t>(option_node->str_len_));
@@ -190,7 +185,6 @@ int ObAlterLocationResolver::resolve(const ParseNode &parse_tree)
             ObString masked_sql;
             if (OB_FAIL(ObDCLResolver::mask_password_for_passwd_node(
                           allocator_, cur_sql, option_node, masked_sql, true))) {
-              LOG_WARN("fail to gen masked sql", K(ret));
             } else {
               cur_sql = masked_sql;
             }
@@ -208,13 +202,9 @@ int ObAlterLocationResolver::resolve(const ParseNode &parse_tree)
     ObString storage_info_cstr = credential_params.string();
     if (OB_SUCC(ret)) {
       if (OB_FAIL(storage_info->set(uri_cstr.ptr(), storage_info_cstr.ptr()))) {
-        LOG_WARN("failed to set storage info", K(ret));
       } else if (OB_FAIL(storage_info->get_storage_info_str(storage_info_buf, sizeof(storage_info_buf)))) {
-        LOG_WARN("failed to get storage info str", K(ret));
       } else if (OB_FAIL(create_location_stmt->set_location_url(location_url))) {
-        LOG_WARN("failed to set external file location", K(ret));
       } else if (OB_FAIL(create_location_stmt->set_location_access_info(storage_info_buf))) {
-        LOG_WARN("failed to set external file location access info", K(ret));
       }
     }
   }

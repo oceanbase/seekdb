@@ -90,7 +90,6 @@ int ObIMvccCtx::register_row_commit_cb(const storage::ObTableIterParam &param,
       cb->set_is_link();
 
       if (OB_FAIL(append_callback(cb))) {
-        TRANS_LOG(ERROR, "register callback failed", K(*this), K(ret));
       }
 
       if (OB_FAIL(ret)) {
@@ -170,7 +169,6 @@ int ObIMvccCtx::register_row_commit_cb(const storage::ObTableIterParam &param,
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(append_callback(head, tail, length))) {
-      TRANS_LOG(ERROR, "register callback failed", K(*this), K(ret));
     } else {
       TRANS_LOG(DEBUG, "register callback succeed", K(*this), K(ret),
                 KPC(head), KPC(tail), K(length), K(mvcc_results));
@@ -259,14 +257,12 @@ int ObIMvccCtx::register_table_lock_cb_(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "alloc row callback failed", K(ret));
   } else if (OB_FAIL(mt_key.encode(&rowkey))) {
-    TRANS_LOG(WARN, "encode memtable key failed", K(ret));
   } else {
     cb->set(mt_key, lock_op);
     if (replay_scn.is_valid()) {
       cb->set_scn(replay_scn);
     }
     if (OB_FAIL(append_callback(cb))) {
-      TRANS_LOG(WARN, "append table lock callback failed", K(ret), K(*cb));
     } else {
       TRANS_LOG(DEBUG, "append table lock callback", K(*cb));
     }
@@ -290,7 +286,6 @@ int ObIMvccCtx::register_table_lock_cb(
   } else if (OB_FAIL(register_table_lock_cb_(memtable,
                                              lock_op,
                                              cb))) {
-    TRANS_LOG(WARN, "register tablelock callback failed", K(ret), KPC(lock_op));
   } else {
     // do nothing
   }
@@ -312,7 +307,6 @@ int ObIMvccCtx::register_table_lock_replay_cb(
                                              lock_op,
                                              cb,
                                              scn))) {
-    TRANS_LOG(WARN, "register tablelock callback failed", K(ret), KPC(lock_op));
   } else {
     TRANS_LOG(DEBUG, "replay register table lock callback", K(*cb));
   }
@@ -350,7 +344,6 @@ int ObIMvccCtx::register_ext_info_commit_cb(
   int ret = OB_SUCCESS;
   storage::ObExtInfoCbRegister cb_register;
   if (OB_FAIL(cb_register.register_cb(this, timeout, dml_flag, seq_no_st, seq_no_cnt, index_data, index_data_type, header, ext_info_data))) {
-    TRANS_LOG(WARN, "register ext info callback failed", K(ret), K(cb_register), K(*this));
   }
   return ret;
 }
@@ -406,8 +399,6 @@ int ObMvccWriteGuard::write_auth(storage::ObStoreCtx &store_ctx)
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(WARN, "store_ctx was not prepared for write", K(ret), K(store_ctx));
   } else if (OB_FAIL(mem_ctx->write_auth(exclusive_))) {
-    TRANS_LOG(WARN, "tx ctx write auth fail", K(ret),
-              K(exclusive_), K(store_ctx), KPC(mem_ctx));
   } else {
     ctx_ = mem_ctx;
     write_seq_no_ = store_ctx.mvcc_acc_ctx_.tx_scn_;

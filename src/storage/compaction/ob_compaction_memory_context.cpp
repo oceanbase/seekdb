@@ -185,7 +185,6 @@ int ObCompactionBuffer::init(const int64_t capacity, const int64_t reserve_size)
 
   if (OB_SUCC(ret)) {
     if(OB_FAIL(reserve(reserve_size))) {
-      STORAGE_LOG(WARN, "failed to reserve", K(ret), K(reserve_size));
     } else {
       default_reserve_ = reserve_size;
       is_inited_ = true;
@@ -250,7 +249,6 @@ int ObCompactionBuffer::expand(const int64_t size)
     }
     expand_size = MIN(expand_size, capacity_);
     if (OB_FAIL(reserve(expand_size))) {
-      STORAGE_LOG(WARN, "fail to reserve", K(ret), K(expand_size));
     }
   }
 
@@ -294,7 +292,6 @@ int ObCompactionBuffer::ensure_space(const int64_t append_size)
     ret = OB_BUF_NOT_ENOUGH;
   } else if (len_ + append_size > buffer_size_) {
     if (OB_FAIL(expand(len_ + append_size))) {
-      STORAGE_LOG(WARN, "failed to expand size", K(ret), K(len_), K(append_size));
     }
   } 
 

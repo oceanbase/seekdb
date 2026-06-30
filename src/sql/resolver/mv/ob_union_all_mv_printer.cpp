@@ -40,10 +40,7 @@ int ObUnionAllMVPrinter::gen_refresh_dmls(ObIArray<ObDMLStmt*> &dml_stmts)
     } else if (OB_FAIL(gen_child_refresh_dmls(child_refresh_types_.at(i),
                                               *mv_def_stmt_.get_set_query(i),
                                               cur_dml_stmts))) {
-      LOG_WARN("failed to get child refresh dmls", K(ret), K(i), K(child_refresh_types_.at(i)),
-                                          KPC(mv_def_stmt_.get_set_query(i)));
     } else if (OB_FAIL(append(dml_stmts, cur_dml_stmts))) {
-      LOG_WARN("failed to append dml stmts", K(ret));
     }
   }
   return ret;
@@ -71,21 +68,18 @@ int ObUnionAllMVPrinter::gen_child_refresh_dmls(const ObMVRefreshableType refres
       case OB_MV_FAST_REFRESH_SIMPLE_MAV: {
         ObSimpleMAVPrinter printer(ctx_, mv_schema_, mv_container_schema_, child_sel_stmt, *mlog_tables_, expand_aggrs_);
         if (OB_FAIL(printer.gen_child_refresh_dmls_for_union_all(marker_idx_, dml_stmts))) {
-          LOG_WARN("failed to gen child refresh dmls for union all", K(ret));
         }
         break;
       }
       case OB_MV_FAST_REFRESH_SIMPLE_MJV: {
         ObSimpleMJVPrinter printer(ctx_, mv_schema_, mv_container_schema_, child_sel_stmt, *mlog_tables_);
         if (OB_FAIL(printer.gen_child_refresh_dmls_for_union_all(marker_idx_, dml_stmts))) {
-          LOG_WARN("failed to gen child refresh dmls for union all", K(ret));
         }
         break;
       }
       case OB_MV_FAST_REFRESH_SIMPLE_JOIN_MAV: {
         ObSimpleJoinMAVPrinter printer(ctx_, mv_schema_, mv_container_schema_, child_sel_stmt, *mlog_tables_, expand_aggrs_);
         if (OB_FAIL(printer.gen_child_refresh_dmls_for_union_all(marker_idx_, dml_stmts))) {
-          LOG_WARN("failed to gen child refresh dmls for union all", K(ret));
         }
         break;
       }

@@ -40,11 +40,9 @@ int ObTenantVirtualConcurrentLimitSql::is_need_output(const ObOutlineInfo *outli
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("parameter is NULL", K(ret), K(outline_info), K(schema_guard_));
   } else if (OB_FAIL(outline_info->has_concurrent_limit_param(has_limit))) {
-    LOG_WARN("fail to judge whether outline_info has limit param", K(ret));
   } else if (false == has_limit) {
     is_output = false;
   } else if (OB_FAIL(is_database_recycle(outline_info->get_database_id(), is_recycle))) {
-    LOG_WARN("fail to judge database recycle", K(ret), KPC(outline_info));
   } else {
     is_output = !is_recycle;
   }
@@ -56,7 +54,6 @@ int ObTenantVirtualConcurrentLimitSql::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTenantVirtualOutlineBase::inner_open())) {
-    LOG_WARN("fail to inner open", K(ret));
   } else {
     param_idx_ = 0;
   }
@@ -85,14 +82,12 @@ int ObTenantVirtualConcurrentLimitSql::get_next_concurrent_limit_row(const ObOut
       LOG_WARN("fail to get outline param", K(ret), K(param_idx_));
     } else if (param->is_concurrent_limit_param()) {
       if (OB_FAIL(fill_cells(outline_info, param))) {
-        LOG_WARN("fail to fill cells", K(ret), K(param_idx_), K(outline_info_idx_));
       } else {
         ++param_idx_;
       }
     } else {
       ++param_idx_;
       if (OB_FAIL(SMART_CALL(get_next_concurrent_limit_row(outline_info, is_iter_end)))) {
-        LOG_WARN("fail to get next concurrent_limit_row", K(ret), K(param_idx_), K(outline_info_idx_));
       }
     }
   }
@@ -113,15 +108,12 @@ int ObTenantVirtualConcurrentLimitSql::inner_get_next_row(common::ObNewRow *&row
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("outline info is NULL", K(ret), K(outline_info_idx_));
   } else if (OB_FAIL(is_need_output(outline_info, is_output))) {
-    LOG_WARN("fail to judge output", K(ret), KPC(outline_info));
   } else if (is_output) {
     if (OB_FAIL(get_next_concurrent_limit_row(outline_info, is_iter_end))) {
-      LOG_WARN("fail to fill cells", K(ret), K(outline_info), K(outline_info_idx_));
     } else if (is_iter_end) {
       ++outline_info_idx_;
       param_idx_ = 0;
       if (OB_FAIL(SMART_CALL(inner_get_next_row(row)))) {
-        LOG_WARN("fail to get_next_row", K(ret));
       }
     } else {
       row = &cur_row_;
@@ -129,7 +121,6 @@ int ObTenantVirtualConcurrentLimitSql::inner_get_next_row(common::ObNewRow *&row
   } else {
     ++outline_info_idx_;
     if (OB_FAIL(SMART_CALL(inner_get_next_row(row)))) {
-      LOG_WARN("fail to get_next_row", K(ret));
     }
   }
   return ret;
@@ -165,7 +156,6 @@ int ObTenantVirtualConcurrentLimitSql::fill_cells(const ObOutlineInfo *outline_i
         case DATABASE_NAME : {
           DBInfo db_info;
           if (OB_FAIL(database_infos_.get_refactored(outline_info->get_database_id(), db_info))) {
-            LOG_WARN("fail to ge value from database_infos", K(ret), K(outline_info->get_database_id()));
           } else {
             cells[cell_idx].set_varchar(db_info.db_name_);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -175,7 +165,6 @@ int ObTenantVirtualConcurrentLimitSql::fill_cells(const ObOutlineInfo *outline_i
         case OUTLINE_NAME : {
           ObString outline_name;
           if (OB_FAIL(ob_write_string(*allocator_, outline_info->get_name_str(), outline_name))) {
-            LOG_WARN("fail to deep copy obstring", K(ret), K(outline_info->get_name_str()), K(outline_name));
           } else {
             cells[cell_idx].set_varchar(outline_name);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -185,7 +174,6 @@ int ObTenantVirtualConcurrentLimitSql::fill_cells(const ObOutlineInfo *outline_i
         case  OUTLINE_CONTENT : {
           ObString outline_content;
           if (OB_FAIL(ob_write_string(*allocator_, outline_info->get_outline_content_str(), outline_content))) {
-            LOG_WARN("fail to deep copy obstring", K(ret), K(outline_info->get_outline_content_str()), K(outline_content));
           } else {
             cells[cell_idx].set_lob_value(ObLongTextType, outline_content.ptr(),
                                           static_cast<int32_t>(outline_content.length()));
@@ -197,9 +185,7 @@ int ObTenantVirtualConcurrentLimitSql::fill_cells(const ObOutlineInfo *outline_i
           ObString local_str;
           ObString visible_sigature;
           if (OB_FAIL(outline_info->get_visible_signature(local_str))) {
-            LOG_WARN("fail to get visibale signature", K(ret));
           } else if (OB_FAIL(ob_write_string(*allocator_, local_str, visible_sigature))) {
-            LOG_WARN("fail to deep copy ObString", K(ret), K(local_str), K(visible_sigature));
           } else {
             cells[cell_idx].set_lob_value(ObLongTextType, visible_sigature.ptr(),
                                           static_cast<int32_t>(visible_sigature.length()));
@@ -210,7 +196,6 @@ int ObTenantVirtualConcurrentLimitSql::fill_cells(const ObOutlineInfo *outline_i
         case SQL_TEXT : {
           ObString sql_text;
           if (OB_FAIL(ob_write_string(*allocator_, param->get_sql_text(), sql_text))) {
-            LOG_WARN("fail to deep copy obstring", K(ret), K(param->get_sql_text()), K(sql_text));
           } else {
             cells[cell_idx].set_lob_value(ObLongTextType, sql_text.ptr(),
                                           static_cast<int32_t>(sql_text.length()));
@@ -229,9 +214,7 @@ int ObTenantVirtualConcurrentLimitSql::fill_cells(const ObOutlineInfo *outline_i
             cells[cell_idx].set_lob_value(ObLongTextType, "", 0);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           } else if (OB_FAIL(outline_info->get_visible_signature(visible_signature))) {
-            LOG_WARN("fail to get visibale signature", K(ret));
           } else if (OB_FAIL(ObOutlineInfo::gen_limit_sql(visible_signature, param, *session_, *allocator_, limit_sql))) {
-            LOG_WARN("fail to gen limit sql", K(ret), K(visible_signature), KPC(param), K(limit_sql));
           } else {
             cells[cell_idx].set_lob_value(ObLongTextType, limit_sql.ptr(),
                                           static_cast<int32_t>(limit_sql.length()));

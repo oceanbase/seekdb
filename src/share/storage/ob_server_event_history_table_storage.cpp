@@ -45,7 +45,6 @@ int ObServerEventHistoryTableStorage::init(ObSQLiteConnectionPool *pool)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid pool", K(ret));
   } else if (OB_FAIL(create_table_if_not_exists())) {
-    LOG_WARN("failed to create table", K(ret));
   }
   if (OB_FAIL(ret)) {
     pool_ = nullptr;
@@ -65,7 +64,6 @@ int ObServerEventHistoryTableStorage::create_table_if_not_exists()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_SERVER_EVENT_HISTORY, nullptr))) {
-      LOG_WARN("failed to create table", K(ret));
     }
   }
   return ret;
@@ -111,7 +109,6 @@ int ObServerEventHistoryTableStorage::insert(const ObServerEventHistoryEntry &en
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to acquire connection", K(ret));
       } else if (OB_FAIL(guard->execute(insert_sql, binder))) {
-        LOG_WARN("failed to execute insert", K(ret));
       }
     }
   }
@@ -141,11 +138,9 @@ int ObServerEventHistoryTableStorage::insert_all(const ObIArray<ObServerEventHis
     } else {
       // Begin transaction for batch insert
       if (OB_FAIL(guard->begin_transaction())) {
-        LOG_WARN("failed to begin transaction", K(ret));
       } else {
         ObSQLiteStmt *stmt = nullptr;
         if (OB_FAIL(guard->prepare_execute(insert_sql, stmt))) {
-          LOG_WARN("failed to prepare execute", K(ret));
         } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < entries.count(); ++i) {
             const ObServerEventHistoryEntry &entry = entries.at(i);
@@ -172,7 +167,6 @@ int ObServerEventHistoryTableStorage::insert_all(const ObIArray<ObServerEventHis
                 return OB_SUCCESS;
               };
               if (OB_FAIL(guard->step_execute(stmt, binder))) {
-                LOG_WARN("failed to step execute", K(ret));
               }
             }
           }
@@ -184,11 +178,9 @@ int ObServerEventHistoryTableStorage::insert_all(const ObIArray<ObServerEventHis
           if (OB_FAIL(ret)) {
             int rollback_ret = guard->rollback();
             if (OB_SUCCESS != rollback_ret) {
-              LOG_WARN("failed to rollback", K(rollback_ret));
             }
           } else {
             if (OB_FAIL(guard->commit())) {
-              LOG_WARN("failed to commit", K(ret));
             }
           }
         }
@@ -215,14 +207,12 @@ int ObServerEventHistoryTableStorage::delete_expired(int64_t gmt_create_before, 
                                 "  LIMIT %ld"
                                 ")",
                                 gmt_create_before, limit))) {
-      LOG_WARN("failed to format sql", K(ret));
     } else {
       ObSQLiteConnectionGuard guard(pool_);
       if (!guard) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to acquire connection", K(ret));
       } else if (OB_FAIL(guard->execute(sql.ptr(), nullptr))) {
-        LOG_WARN("failed to execute delete", K(ret));
       }
     }
   }

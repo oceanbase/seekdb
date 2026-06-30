@@ -40,7 +40,6 @@ int ObMemDumpQueue::push(void *p)
       STORAGE_LOG(WARN, "the push operation has been timeout n times", K(count));
       continue;
     } else if (OB_FAIL(ret)) {
-      STORAGE_LOG(WARN, "fail to push item", KR(ret));
     } else {
       break;
     }
@@ -132,17 +131,13 @@ int ObDirectLoadMemContext::init_enc_params(const ObIArray<ObColDesc> &column_de
       tablet_id_col_desc.col_type_.set_collation_type(CS_TYPE_BINARY);
       tablet_id_col_desc.col_order_ = ObOrderType::ASC;
       if (OB_FAIL(init_enc_param(tablet_id_col_desc, tmp_enc_param))) {
-        LOG_WARN("fail to init enc param", KR(ret));
       } else if (OB_FAIL(enc_params.push_back(tmp_enc_param))) {
-        LOG_WARN("fail to push back", KR(ret));
       }
     }
     //init primary key enc_param
     for (int i = 0; OB_SUCC(ret) && i < rowkey_column_num; i++) {
       if (OB_FAIL(init_enc_param(column_descs.at(i), tmp_enc_param))) {
-        LOG_WARN("fail to init enc param", KR(ret));
       } else if (OB_FAIL(enc_params.push_back(tmp_enc_param))) {
-        LOG_WARN("fail to push back", KR(ret));
       }
     }
     //init seq no enc_param
@@ -153,9 +148,7 @@ int ObDirectLoadMemContext::init_enc_params(const ObIArray<ObColDesc> &column_de
       seq_no_col_desc.col_order_ =
         (dup_action == sql::ObLoadDupActionType::LOAD_REPLACE) ? ObOrderType::DESC : ObOrderType::ASC;
       if (OB_FAIL(init_enc_param(seq_no_col_desc, tmp_enc_param))) {
-        LOG_WARN("fail to init enc param", KR(ret));
       } else if (OB_FAIL(enc_params.push_back(tmp_enc_param))) {
-        LOG_WARN("fail to push back", KR(ret));
       }
     }
     
@@ -243,7 +236,6 @@ int ObDirectLoadMemContext::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(mem_dump_queue_.init(1024))) {
-    LOG_WARN("fail to init mem dump queue", KR(ret));
   }
   return ret;
 }
@@ -259,7 +251,6 @@ int ObDirectLoadMemContext::init_enc_params(
     LOG_WARN("invalid argument", KR(ret), K(dup_action), K(table_data_desc_));
   } else if (OB_FAIL(init_enc_params(column_descs, table_data_desc_.rowkey_column_num_, dup_action,
                                      enc_params_))) {
-    LOG_WARN("fail to init enc params", KR(ret));
   }
   return ret;
 }
@@ -271,11 +262,9 @@ int ObDirectLoadMemContext::add_tables_from_table_compactor(
   int ret = OB_SUCCESS;
   ObDirectLoadTableHandle table;
   if (OB_FAIL(compactor.get_table(table, table_mgr_))) {
-    LOG_WARN("fail to get table", KR(ret));
   } else {
     lib::ObMutexGuard guard(mutex_);
     if (OB_FAIL(tables_handle_.add(table))) {
-      LOG_WARN("fail to push table", KR(ret));
     }
   }
   return ret;
@@ -287,7 +276,6 @@ int ObDirectLoadMemContext::add_tables_from_table_array(
   int ret = OB_SUCCESS;
   lib::ObMutexGuard guard(mutex_);
   if (OB_FAIL(tables_handle_.add(table_array))) {
-    LOG_WARN("fail to push table array", KR(ret));
   }
   return ret;
 }
@@ -307,14 +295,12 @@ int ObDirectLoadMemContext::acquire_chunk(ChunkType *&chunk)
     if (exe_mode_ == observer::ObTableLoadExeMode::MAX_TYPE) {
       sort_memory = mem_chunk_size_;
     } else if (OB_FAIL(observer::ObTableLoadService::get_sort_memory(sort_memory))) {
-      LOG_WARN("fail to get sort memory", KR(ret));
     }
     if (OB_SUCC(ret)) {
       if (OB_ISNULL(chunk = OB_NEW(ChunkType, mem_attr))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to new ObDirectLoadExternalMultiPartitionRowChunk", KR(ret));
       } else if (OB_FAIL(chunk->init(sort_memory))) {
-        LOG_WARN("fail to init external sort", KR(ret));
       }
     }
     if (OB_FAIL(ret)) {

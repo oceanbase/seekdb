@@ -100,18 +100,14 @@ public:
     item.score_ = score;
     int64_t doc_idx;
     if (OB_FAIL(add_doc_id(doc_id))) {
-      SHARE_LOG(WARN, "failed to add doc id", K(ret));
     } else if (OB_FALSE_IT(doc_idx = doc_ids_count() - 1)) {
     } else if (OB_FALSE_IT(item.doc_idx_ = doc_idx)) {
     } else if (heap_.count() < limit_size_) {
       if (OB_FAIL(heap_.push(item))) {
-        SHARE_LOG(WARN, "failed to push heap", K(ret));
       }
     } else if (cmp_(item, heap_.top())) {
       if (OB_FAIL(heap_.pop())) {
-        SHARE_LOG(WARN, "failed to pop heap", K(ret));
       } else if (OB_FAIL(heap_.push(item))) {
-        SHARE_LOG(WARN, "failed to push heap", K(ret));
       }
     }
 

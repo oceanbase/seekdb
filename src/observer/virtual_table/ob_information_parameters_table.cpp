@@ -55,7 +55,6 @@ int ObInformationParametersTable::fill_row_cells(const ObRoutineInfo *routine_in
         case (SPECIFIC_SCHEMA): {
           const ObDatabaseSchema *db_schema = NULL;
           if (OB_FAIL(schema_guard_->get_database_schema( routine_info->get_database_id(), db_schema))) {
-            SERVER_LOG(WARN, "Failed to get database schema", K(routine_info->get_database_id()), K(ret));
           } else if (OB_ISNULL(db_schema)) {
             ret = OB_ERR_UNEXPECTED;
             SERVER_LOG(WARN, "Database schema should not be NULL", K(ret));
@@ -105,7 +104,6 @@ int ObInformationParametersTable::fill_row_cells(const ObRoutineInfo *routine_in
                                            param_type.get_obj_type(),
                                            param_type.get_collation_type(),
                                            param_info->get_extended_type_info()))) {
-            SERVER_LOG(WARN, "fail to get data type str", K(ret), K(param_type.get_obj_type()));
           } else {
             ObString type_val(OB_MAX_SYS_PARAM_NAME_LENGTH, static_cast<int32_t>(strlen(data_type_str)), data_type_str);
             cells[col_idx].set_varchar(type_val);
@@ -128,7 +126,6 @@ int ObInformationParametersTable::fill_row_cells(const ObRoutineInfo *routine_in
             ObCollationType coll = param_type.get_collation_type();
             int64_t mbmaxlen = 0;
             if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(coll, mbmaxlen))) {
-              SERVER_LOG(WARN, "failed to get mbmaxlen", K(ret), K(coll));
             } else {
               cells[col_idx].set_uint64(static_cast<uint64_t>(
                         mbmaxlen * param_type.get_length()));
@@ -183,7 +180,6 @@ int ObInformationParametersTable::fill_row_cells(const ObRoutineInfo *routine_in
                                            param_type.get_scale(),
                                            param_type.get_collation_type(),
                                            param_info->get_extended_type_info()))) {
-            SERVER_LOG(WARN,"fail to get column type str",K(ret), K(param_type.get_obj_type()));
           } else {
             ObString type_val(OB_MAX_SYS_PARAM_NAME_LENGTH, static_cast<int32_t>(strlen(column_type_str)),column_type_str);
             cells[col_idx].set_varchar(type_val);
@@ -233,7 +229,6 @@ int ObInformationParametersTable::inner_get_next_row(common::ObNewRow *&row)
       } else {
         ObArray<const ObRoutineInfo *> routine_array;
         if (OB_FAIL(schema_guard_->get_routine_infos_in_tenant( routine_array))) {
-          SERVER_LOG(WARN, "Get routine info with tenant id error", K(ret));
         } else {
           const ObRoutineInfo *routine_info = NULL;
           const ObRoutineParam *param_info = NULL;
@@ -248,9 +243,7 @@ int ObInformationParametersTable::inner_get_next_row(common::ObNewRow *&row)
                   ret = OB_ERR_UNEXPECTED;
                   SERVER_LOG(WARN, "Parameter info should not be NULL", K(ret));
                 } else if (OB_FAIL(fill_row_cells(routine_info, param_info, cur_row_.cells_))) {
-                  SERVER_LOG(WARN, "fail to fill current row", K(ret));
                 } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
-                  SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
                 }
               } // end of for parameters count
             } //end of else

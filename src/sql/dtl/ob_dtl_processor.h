@@ -75,7 +75,6 @@ int ObDtlPacketProc<Packet>::decode(const ObDtlLinkedBuffer &buffer)
   int64_t size = buffer.size();
   int64_t &pos = buffer.pos();
   if (OB_FAIL(common::serialization::decode(buf, size, pos, pkt_))) {
-    SQL_DTL_LOG(WARN, "decode DTL packet fail", K(size), K(pos));
   } else {
   }
   return ret;
@@ -123,7 +122,6 @@ int ObDtlPacketEmptyProc<Packet>::decode(const ObDtlLinkedBuffer &buffer)
   int64_t &pos = buffer.pos();
   Packet pkt;
   if (OB_FAIL(common::serialization::decode(buf, size, pos, pkt))) {
-    SQL_DTL_LOG(WARN, "decode DTL packet fail", K(size), K(pos));
   }
   return ret;
 }

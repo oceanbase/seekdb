@@ -53,7 +53,6 @@ int ObLogErrLog::get_plan_item_info(PlanText &plan_text,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
-    LOG_WARN("failed to get base plan item info", K(ret));
   } else {
     ObString &name = get_err_log_define().err_log_table_name_;
     BUF_PRINT_OB_STR(name.ptr(), 
@@ -92,7 +91,6 @@ int ObLogErrLog::extract_err_log_info()
     LOG_WARN("get unexpected null", K(del_upd_stmt_), K(get_stmt()), K(ret));
   } else if (OB_FAIL(ObLogDelUpd::generate_errlog_info(*del_upd_stmt_,
                                                        get_err_log_define()))) {
-    LOG_WARN("failed to generate errlog info", K(ret));
   } else if (del_upd_stmt_->is_insert_stmt()) {
     ObSEArray<ObRawExpr *, 4> tmp;
     const ObInsertStmt *ins_stmt = static_cast<const ObInsertStmt *>(del_upd_stmt_);
@@ -108,19 +106,14 @@ int ObLogErrLog::extract_err_log_info()
       LOG_WARN("invalid params", K(ret), K(ins_stmt->value_from_select()), K(table));
     } else if (OB_FAIL(ins_stmt->get_column_exprs(table->table_id_,
                                                   column_exprs))) {
-      LOG_WARN("failed to get column exprs", K(ret));
     } else if (OB_FAIL(ObTransformUtils::convert_column_expr_to_select_expr(
                          column_exprs,
                          static_cast<const ObSelectStmt&>(*get_stmt()),
                          select_exprs))) {
-      LOG_WARN("failed to convert column expr to select", K(ret));
     } else if (OB_FAIL(copier.add_replaced_expr(column_exprs, select_exprs))) {
-      LOG_WARN("failed to add replace pair", K(ret));
     } else if (OB_FAIL(copier.copy_on_replace(get_err_log_define().err_log_value_exprs_,
                                               tmp))) {
-      LOG_WARN("failed to copy on replace exprs", K(ret));
     } else if (OB_FAIL(get_err_log_define().err_log_value_exprs_.assign(tmp))) {
-      LOG_WARN("failed to assign err log values", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < get_err_log_define().err_log_value_exprs_.count(); ++i) {
         ObRawExpr *&expr = get_err_log_define().err_log_value_exprs_.at(i);
@@ -140,9 +133,7 @@ int ObLogErrLog::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(append(all_exprs, get_err_log_define().err_log_value_exprs_))) {
-    LOG_WARN("failed to add err log value expr into context", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
-    LOG_WARN("failed to get op exprs", K(ret));
   } else { /*do nothing*/ }
 
   return ret;
@@ -152,7 +143,6 @@ int ObLogErrLog::inner_replace_op_exprs(ObRawExprReplacer &replacer)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(replace_exprs_action(replacer, get_err_log_define().err_log_value_exprs_))) {
-    LOG_WARN("failed to replace err log value exprs", K(ret));
   }
   return ret;
 }

@@ -250,7 +250,6 @@ int ObDeadLockDetectorMgr::register_key(const KeyType &key,
   UserBinaryKey binary_key;
 
   if (OB_FAIL(binary_key.set_user_key(key))) {
-    DETECT_LOG(WARN, "user key seialized to binary code failed", PRINT_WRAPPER);
   } else if (common::OB_SUCCESS == (ret = detector_map_.get(binary_key, p_detector))) {
     ret = common::OB_ENTRY_EXIST;
     detector_map_.revert(p_detector);
@@ -264,7 +263,6 @@ int ObDeadLockDetectorMgr::register_key(const KeyType &key,
                                                           count_down_allow_detect,
                                                           auto_activate_when_detected,
                                                           p_detector))) {
-      DETECT_LOG(WARN, "create new detector instance failed", PRINT_WRAPPER, KP(p_detector));
     } else if (OB_FAIL(detector_map_.insert_and_get(binary_key, p_detector))) {
       DETECT_LOG(WARN, "detector_map_ insert key and value failed", PRINT_WRAPPER, KP(p_detector));
       inner_alloc_handle_.inner_factory_.release(p_detector);
@@ -296,7 +294,6 @@ int ObDeadLockDetectorMgr::check_detector_exist(const KeyType &key, bool &exist)
   UserBinaryKey user_key;
   DetectorRefGuard ref_guard;
   if (OB_FAIL(user_key.set_user_key(key))) {
-    DETECT_LOG(WARN, "user key serialization failed", PRINT_WRAPPER);
   } else if (OB_FAIL(get_detector_(user_key, ref_guard))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       exist = false;
@@ -328,7 +325,6 @@ int ObDeadLockDetectorMgr::unregister_key(const KeyType &key)
   UserBinaryKey user_key;
 
   if (OB_FAIL(user_key.set_user_key(key))) {
-    DETECT_LOG(WARN, "user key serialization failed", PRINT_WRAPPER);
   } else {
     ret = unregister_key_(user_key);
   }
@@ -366,9 +362,7 @@ int ObDeadLockDetectorMgr::block(const T1 &src_key,
   DetectorRefGuard ref_guard;
   UserBinaryKey src_user_key;
   if (OB_FAIL(src_user_key.set_user_key(src_key))) {
-    DETECT_LOG(WARN, "src_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(get_detector_(src_user_key, ref_guard))) {
-    DETECT_LOG(WARN, "get_detector failed", PRINT_WRAPPER);
   } else {
     for (int64_t idx = 0; idx < appened_list.count() && OB_SUCC(ret); ++idx) {
       if (OB_FAIL(ref_guard.get_detector()->block(appened_list.at(idx)))) {
@@ -406,15 +400,11 @@ int ObDeadLockDetectorMgr::block(const T1 &src_key,
   UserBinaryKey dest_user_key;
 
   if (OB_FAIL(src_user_key.set_user_key(src_key))) {
-    DETECT_LOG(WARN, "src_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(dest_user_key.set_user_key(dest_key))) {
-    DETECT_LOG(WARN, "dest_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(get_detector_(src_user_key, ref_guard))) {
-    DETECT_LOG(WARN, "get_detector failed", PRINT_WRAPPER);
   } else {
     ObDependencyResource resource(dest_addr, dest_user_key);
     if (OB_FAIL(ref_guard.get_detector()->block(resource))) {
-      DETECT_LOG(WARN, "detector block op failed", PRINT_WRAPPER);
     } else {
       DETECT_LOG(INFO, "detector block op success", PRINT_WRAPPER);
     }
@@ -437,11 +427,8 @@ int ObDeadLockDetectorMgr::block(const T &src_key,
   UserBinaryKey src_user_key;
 
   if (OB_FAIL(src_user_key.set_user_key(src_key))) {
-    DETECT_LOG(WARN, "src_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(get_detector_(src_user_key, ref_guard))) {
-    DETECT_LOG(WARN, "get_detector failed", PRINT_WRAPPER);
   } else if (OB_FAIL(ref_guard.get_detector()->block(func))) {
-    DETECT_LOG(WARN, "block on callback failed", PRINT_WRAPPER);
   } else {}
 
   return ret;
@@ -466,9 +453,7 @@ int ObDeadLockDetectorMgr::replace_block_list(const T &src_key,
   UserBinaryKey src_user_key;
 
   if (OB_FAIL(src_user_key.set_user_key(src_key))) {
-    DETECT_LOG(WARN, "src_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(get_detector_(src_user_key, ref_guard))) {
-    DETECT_LOG(WARN, "get_detector failed", PRINT_WRAPPER);
   } else if (OB_FAIL(ref_guard.get_detector()->replace_block_list(new_list))) {
     // DETECT_LOG(WARN, "replace block list failed", PRINT_WRAPPER);
   } else {
@@ -490,11 +475,8 @@ int ObDeadLockDetectorMgr::get_block_list(const T &src_key,
   UserBinaryKey src_user_key;
 
   if (OB_FAIL(src_user_key.set_user_key(src_key))) {
-    DETECT_LOG(WARN, "src_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(get_detector_(src_user_key, ref_guard))) {
-    DETECT_LOG(WARN, "get_detector failed", PRINT_WRAPPER);
   } else if (OB_FAIL(ref_guard.get_detector()->get_block_list(cur_list))) {
-    DETECT_LOG(WARN, "get block list failed", PRINT_WRAPPER);
   } else {
     // DETECT_LOG(INFO, "replace block list success", PRINT_WRAPPER);
   }
@@ -514,9 +496,7 @@ int ObDeadLockDetectorMgr::dec_count_down_allow_detect(const T &src_key)
   UserBinaryKey src_user_key;
 
   if (OB_FAIL(src_user_key.set_user_key(src_key))) {
-    DETECT_LOG(WARN, "src_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(get_detector_(src_user_key, ref_guard))) {
-    DETECT_LOG(WARN, "get_detector failed", PRINT_WRAPPER);
   } else {
     ref_guard.get_detector()->dec_count_down_allow_detect();
   }
@@ -561,11 +541,9 @@ int ObDeadLockDetectorMgr::activate(const T1 &src_key,
   } else if (OB_FAIL(dest_user_key.set_user_key(dest_key))) {
     DETECT_LOG(WARN, "dest_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(get_detector_(src_user_key, ref_guard))) {
-    DETECT_LOG(WARN, "get_detector failed", PRINT_WRAPPER);
   } else {
     ObDependencyResource resource(dest_addr, dest_user_key);
     if (OB_FAIL(ref_guard.get_detector()->activate(resource))) {
-      DETECT_LOG(WARN, "detector activate op failed", PRINT_WRAPPER, K(resource));
     } else {
       DETECT_LOG(INFO, "detector activate op success", PRINT_WRAPPER, K(resource));
     }
@@ -588,11 +566,8 @@ int ObDeadLockDetectorMgr::activate_all(const T1 &src_key)
   UserBinaryKey dest_user_key;
 
   if (OB_FAIL(src_user_key.set_user_key(src_key))) {
-    DETECT_LOG(WARN, "src_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(get_detector_(src_user_key, ref_guard))) {
-    DETECT_LOG(WARN, "get_detector failed", PRINT_WRAPPER);
   } else if (OB_FAIL(ref_guard.get_detector()->activate_all())) {
-    DETECT_LOG(WARN, "activate all failed", PRINT_WRAPPER);
   }
   return ret;
   #undef PRINT_WRAPPER
@@ -620,13 +595,10 @@ int ObDeadLockDetectorMgr::add_parent(const KeyType1 &key,
   UserBinaryKey dest_user_key;
 
   if (OB_FAIL(src_user_key.set_user_key(key))) {
-    DETECT_LOG(WARN, "src_user_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(dest_user_key.set_user_key(parent_key))) {
-    DETECT_LOG(WARN, "dest_user_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_SUCC(get_detector_(src_user_key, ref_guard))) {
     ObDependencyResource resource(dest_addr, dest_user_key);
     if (OB_FAIL(ref_guard.get_detector()->add_parent(resource))) {
-      DETECT_LOG(WARN, "detector add parent failed", PRINT_WRAPPER, K(resource));
     } else {
       DETECT_LOG(INFO, "detector add parent success", PRINT_WRAPPER, K(resource));
     }
@@ -647,9 +619,7 @@ int ObDeadLockDetectorMgr::set_timeout(const KeyType &key, const int64_t timeout
   UserBinaryKey user_key;
 
   if (OB_FAIL(user_key.set_user_key(key))) {
-    DETECT_LOG(WARN, "dest_user_key serialzation failed", PRINT_WRAPPER);
   } else if (OB_FAIL(get_detector_(user_key, ref_guard))) {
-    DETECT_LOG(WARN, "con not get obj", PRINT_WRAPPER);
   } else {
     if (timeout > 1_hour && REACH_TIME_INTERVAL(1_s)) {
       DETECT_LOG(INFO, "timeout value more than 1 hour", PRINT_WRAPPER);

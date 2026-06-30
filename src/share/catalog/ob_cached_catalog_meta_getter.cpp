@@ -43,9 +43,7 @@ int ObCatalogSchemaCacheKey::deep_copy(char *buf, const int64_t buf_len, ObIKVCa
   } else {
     new_value->catalog_id_ = catalog_id_;
     if (OB_FAIL(ob_write_string(allocator, namespace_name_, new_value->namespace_name_))) {
-      LOG_WARN("failed to deep copy filter name", K(ret));
     } else if (OB_FAIL(ob_write_string(allocator, table_name_, new_value->table_name_))) {
-      LOG_WARN("failed to deep copy definition", K(ret));
     } else {
       key = new_value;
     }
@@ -128,14 +126,12 @@ int ObCachedCatalogSchemaMgr::get_table_schema(ObCatalogMetaGetter *meta_getter,
                                                      tbl_name,
                                                      case_mode,
                                                      is_cache_valid))) {
-    LOG_WARN("fail to check table cache valid", K(ret));
   } else if (is_cache_valid) {
     OZ(table_schema.assign(*cached_table_schema));
   }
 
   if ((OB_SUCC(ret) && !is_cache_valid)) {
     if (OB_FAIL(meta_getter->fetch_table_schema(catalog_id, ns_name, tbl_name, case_mode, table_schema))) {
-      LOG_WARN("fail to fetch table schema from remote", K(ret), K(cache_key));
     } else {
       schema::ObSchemaCacheValue tmp_cache_value{schema::ObSchemaType::TABLE_SCHEMA, &table_schema};
       table_schema.set_schema_version(ObTimeUtil::current_time_s());
@@ -164,7 +160,6 @@ int ObCachedCatalogSchemaMgr::check_table_schema_cache_valid_(ObCatalogMetaGette
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid meta_getter", K(ret));
   } else if (OB_FAIL(meta_getter->fetch_basic_table_info(catalog_id, ns_name, tbl_name, case_mode, table_info))) {
-    LOG_WARN("fetch_table_basic_info failed", K(ret));
   } else if (cached_time >= table_info.last_modification_time_s) {
     is_valid = true;
   }
@@ -209,7 +204,6 @@ int ObCachedCatalogMetaGetter::fetch_table_schema(const uint64_t catalog_id,
     LOG_WARN("invalid argument", K(ret), K(catalog_id), K(ns_name), K(tbl_name), K(case_mode));
   } else if (OB_FAIL(ObCachedCatalogSchemaMgr::get_instance()
                          .get_table_schema(&delegate_, catalog_id, ns_name, tbl_name, case_mode, table_schema))) {
-    LOG_WARN("get cached table schema failed", K(ret), K(catalog_id), K(ns_name), K(tbl_name), K(case_mode));
   } else {
     table_schema.set_database_id(original_db_id);
     table_schema.set_table_id(original_tbl_id);

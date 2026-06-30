@@ -101,7 +101,6 @@ int quick_add_batch_rows_for_count(IAggregate *agg, RuntimeContext &agg_ctx,
   SQL_LOG(DEBUG, "count: quick add batch rows", K(ret), K(*reinterpret_cast<int64_t *>(agg_cell)),
           K(agg_col_id), K(is_single_row_agg));
   if (OB_FAIL(ret)) {
-    SQL_LOG(WARN, "count: quick add batch rows failed", K(ret));
   }
   return ret;
 }

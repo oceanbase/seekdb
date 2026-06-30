@@ -93,7 +93,6 @@ int ObTableLoadRow<T>::init(int64_t count,
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "allocator is null", KR(ret));
   } else if (OB_FAIL(allocate_cells(cells, count, allocator_handle))) {
-    OB_LOG(WARN, "failed to alloate cells", KR(ret), K(count));
   } else {
     allocator_handle_ = allocator_handle;
     cells_ = cells;
@@ -135,12 +134,10 @@ int ObTableLoadRow<T>::deep_copy(const ObTableLoadRow<T> &other,
 
   reset();
   if (OB_FAIL(allocate_cells(cells, other.count_, allocator_handle))) {
-    OB_LOG(WARN, "failed to allocate cells", KR(ret), K(other.count_));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < other.count_; i ++) {
     if (OB_FAIL(observer::ObTableLoadUtils::deep_copy(other.cells_[i],
         cells[i], *allocator_handle))) {
-      OB_LOG(WARN, "fail to deep copy object", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -157,7 +154,6 @@ int ObTableLoadRow<T>::project(const ObIArray<int64_t> &idx_projector, ObTableLo
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(projected_row.init(idx_projector.count(), allocator_handle_))) {
-    OB_LOG(WARN, "failed to alloate cells", KR(ret), K(idx_projector.count()));
   } else {
     for (int64_t i = 0; i < idx_projector.count(); ++i) {
       const int64_t idx = idx_projector.at(i);
@@ -194,7 +190,6 @@ int ObTableLoadRow<T>::deserialize(DESERIAL_PARAMS)
   if (OB_SUCC(ret) && (count > 0)) {
     T *cells = nullptr;
     if (OB_FAIL(allocate_cells(cells, count, allocator_handle_))) {
-      OB_LOG(WARN, "failed to allocate cells", KR(ret), K(count));
     } else {
       OB_UNIS_DECODE_ARRAY(cells, count);
     }

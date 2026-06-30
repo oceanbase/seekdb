@@ -494,7 +494,6 @@ public:
   {
     int ret = assign(other);
     if (OB_FAIL(ret)) {
-      COMMON_LOG(WARN, "assign failed", K(ret), K(*this));
     }
     return *this;
   }
@@ -550,7 +549,6 @@ public:
     over_write_value = (V(0));
 
     if (OB_UNLIKELY(OB_SUCCESS != (ret = init()))) {
-      COMMON_LOG(WARN, "not initialize pointer hash map", K(ret), K(*this));
     } else {
       ret = find_set_pos(key, value, sub_map_idx, pos, overwrite);
       if (OB_SUCC(ret)) {

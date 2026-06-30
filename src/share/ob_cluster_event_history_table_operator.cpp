@@ -27,7 +27,6 @@ int ObAllClusterEventHistoryTableOperator::init(ObSQLiteConnectionPool *pool)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObEventHistoryTableOperator::init(pool, ObEventHistoryType::CLUSTER))) {
-    SHARE_LOG(WARN, "fail to init event history table operator with SQLite", KR(ret));
   }
   return ret;
 }

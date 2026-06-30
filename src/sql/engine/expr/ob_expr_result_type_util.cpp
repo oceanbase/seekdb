@@ -502,7 +502,6 @@ int ObExprResultTypeUtil::deduce_max_string_length_oracle(const ObDataTypeCastPa
     length_semantics = calc_ls;
   }
   if (OB_FAIL(CHECK_STRING_RES_TYPE_ORACLE(target_type))) {
-    LOG_WARN("invalid target_type", K(ret));
   } else {
     if (orig_type.is_literal()) {
       ObArenaAllocator oballocator(ObModIds::OB_SQL_RES_TYPE);
@@ -516,7 +515,6 @@ int ObExprResultTypeUtil::deduce_max_string_length_oracle(const ObDataTypeCastPa
                       &res_accuracy);
       ObObj out;
       if (OB_FAIL(ObObjCaster::to_type(target_type.get_type(), cast_ctx, orig_obj, out))) {
-        LOG_WARN("failed to cast obj", K(ret), K(orig_obj), K(target_type.get_type()));
       } else {
         if (LS_BYTE == length_semantics) {
           length = out.get_string_len();
@@ -535,7 +533,6 @@ int ObExprResultTypeUtil::deduce_max_string_length_oracle(const ObDataTypeCastPa
       }
     } else if (orig_type.is_string_or_lob_locator_type()) {
       if (OB_FAIL(CHECK_STRING_RES_TYPE_ORACLE(orig_type))) {
-        LOG_WARN("invalid orig_type", K(ret), K(orig_type));
       } else if (orig_type.is_clob()) {
         if (target_type.is_clob()) {
           length = orig_type.get_length();
@@ -582,7 +579,6 @@ int ObExprResultTypeUtil::deduce_max_string_length_oracle(const ObDataTypeCastPa
         // deduce by format
         if (OB_FAIL(ObTimeConverter::deduce_max_len_from_oracle_dfm(
                       dtc_params.get_nls_format(orig_type.get_type()), ascii_bytes))) {
-          LOG_WARN("fail to deduce max len from dfm format", K(ret));
         }
       } else {
         // TODO: support rowid and urowid
@@ -622,14 +618,11 @@ int ObExprResultTypeUtil::get_array_calc_type(ObExecContext *exec_ctx,
     ObObjMeta element_meta;
     if (OB_FAIL(ObArrayExprUtils::check_array_type_compatibility(exec_ctx, type1.get_subschema_id(),
                                                                   type2.get_subschema_id(), is_compatiable))) {
-      LOG_WARN("failed to check array compatibilty", K(ret));
     } else if (!is_compatiable) {
       ret = OB_ERR_ARRAY_TYPE_MISMATCH;
       LOG_WARN("nested type is mismatch", K(ret));
     } else if (OB_FAIL(ObArrayExprUtils::get_array_element_type(exec_ctx, type1.get_subschema_id(), coll_elem1_type, depth, l_is_vec))) {
-      LOG_WARN("failed to get array element type", K(ret));
     } else if (OB_FAIL(ObArrayExprUtils::get_array_element_type(exec_ctx, type2.get_subschema_id(), coll_elem2_type, depth, r_is_vec))) {
-      LOG_WARN("failed to get array element type", K(ret));
     } else if (l_is_vec || r_is_vec) {
       // cast to vec
       l_is_vec ? calc_type.set_collection(type1.get_subschema_id()) : calc_type.set_collection(type2.get_subschema_id());
@@ -643,7 +636,6 @@ int ObExprResultTypeUtil::get_array_calc_type(ObExecContext *exec_ctx,
       }
     } else if (OB_FAIL(get_array_calc_type(exec_ctx, coll_elem1_type, coll_elem2_type,
                                            depth, calc_type, element_meta))) {
-      LOG_WARN("failed to get array calc type", K(ret));
     }
   }
   return ret;
@@ -707,10 +699,8 @@ int ObExprResultTypeUtil::get_array_calc_type(ObExecContext *exec_ctx,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("invalid subschema type", K(ret), K(type1), K(type2));
   } else if (OB_FAIL(ObArrayUtil::get_type_name(ObNestedType::OB_ARRAY_TYPE, elem_data, type_name, MAX_LEN, depth))) {
-    LOG_WARN("failed to convert len to string", K(ret));
   } else if (FALSE_IT(type_info.assign_ptr(type_name, static_cast<ObString::obstr_size_t>(strlen(type_name))))) {
   } else if (OB_FAIL(exec_ctx->get_subschema_id_by_type_string(type_info, subschema_id))) {
-    LOG_WARN("failed get subschema id", K(ret), K(type_info));
   } else {
     calc_type.set_collection(subschema_id);
     element_meta = elem_data.meta_;
@@ -760,7 +750,6 @@ int ObExprResultTypeUtil::assign_type_array(const ObIArray<ObRawExprResType> &sr
   dest.reset();
   for (int64_t i = 0; OB_SUCC(ret) && i < src.count(); ++i) {
     if (OB_FAIL(dest.push_back(src.at(i)))) {
-      LOG_WARN("failed to push back", K(ret));
     }
   }
   return ret;
@@ -778,9 +767,7 @@ int ObExprResultTypeUtil::get_collection_calc_type(ObExecContext *exec_ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("exec ctx is null", K(ret));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_info_by_subschema_id(exec_ctx, type1.get_subschema_id(), l_coll_info))) {
-    LOG_WARN("failed to get left coll type", K(ret), K(type1.get_subschema_id()));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_info_by_subschema_id(exec_ctx, type2.get_subschema_id(), r_coll_info))) {
-    LOG_WARN("failed to get right coll type", K(ret), K(type2.get_subschema_id()));
   } else if (!l_coll_info->has_same_super_type(*r_coll_info)) {
     ret = OB_ERR_ARRAY_TYPE_MISMATCH;
     LOG_WARN("nested type is mismatch", K(ret));
@@ -807,12 +794,9 @@ int ObExprResultTypeUtil::get_collection_calc_type(ObExecContext *exec_ctx,
       ObDataType r_map_value_type = r_map_type->get_basic_meta(value_depth);
       if (OB_FAIL(get_array_calc_type(exec_ctx, l_map_key_type, r_map_key_type,
                                              key_depth, key_calc_type, key_meta))) {
-        LOG_WARN("failed to get key calc type", K(ret));
       } else if (OB_FAIL(get_array_calc_type(exec_ctx, l_map_value_type, r_map_value_type,
                                              value_depth, value_calc_type, value_meta))) {
-        LOG_WARN("failed to get value calc type", K(ret));
       } else if (OB_FAIL(ObArrayExprUtils::deduce_map_subschema_id(exec_ctx, key_calc_type.get_subschema_id(), value_calc_type.get_subschema_id(), subschema_id))) {
-        LOG_WARN("failed to deduce map subschema id", K(ret));
       } else {
         calc_type.set_collection(subschema_id);
       }
@@ -839,7 +823,6 @@ int ObExprResultTypeUtil::get_collection_calc_type(ObExecContext *exec_ctx,
       }
     } else if (OB_FAIL(get_array_calc_type(exec_ctx, coll_elem1_type, coll_elem2_type,
                                            depth, calc_type, element_meta))) {
-      LOG_WARN("failed to get array calc type", K(ret));
     }
   }
   return ret;

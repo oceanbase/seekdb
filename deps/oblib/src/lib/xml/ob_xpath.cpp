@@ -43,9 +43,7 @@ int ObPathCtx::init(ObMulModeMemCtx* ctx, ObIMulModeBase *doc_root, ObIMulModeBa
     if (doc_root->data_type() == OB_XML_TYPE) {
       ret = bin_pool_.init(sizeof(ObXmlBin), tmp_alloc_);
       if (OB_FAIL(bin_pool_.init(sizeof(ObXmlBin), tmp_alloc_))) {
-        LOG_WARN("fail to init binary pool", K(ret));
       } else if (OB_FAIL(init_extend())) {
-        LOG_WARN("fail to init extend", K(ret));
       }
     } else if (doc_root->data_type() == OB_JSON_TYPE) {
       // ret = bin_pool_.init(sizeof(ObJsonBin), tmp_alloc_);
@@ -67,11 +65,8 @@ int ObPathCtx::init_extend()
     ObXmlBin extend(doc_root_->get_mem_ctx());
     extend_ = &extend;
     if (OB_FAIL(bin->get_extend(extend))) {
-      LOG_WARN("fail to get extend", K(ret));
-    } else if (OB_FAIL(bin->remove_extend())) { 
-      LOG_WARN("fail to remove extend", K(ret));
+    } else if (OB_FAIL(bin->remove_extend())) {
     } else if (OB_FAIL(alloc_new_bin(extend_))){
-      LOG_WARN("fail init extend", K(ret));
     }
   } else {
     extend_ = nullptr; // without extend area
@@ -90,9 +85,7 @@ int ObPathCtx::reinit(ObIMulModeBase* doc, ObIAllocator *tmp_alloc)
   defined_ns_ = 0;
   if (doc->data_type() == OB_XML_TYPE) {
     if (OB_FAIL(bin_pool_.init(sizeof(ObXmlBin), tmp_alloc_))) {
-      LOG_WARN("fail to init binary pool", K(ret));
     } else if (OB_FAIL(init_extend())) {
-      LOG_WARN("fail to init extend", K(ret));
     }
   } else if (doc->data_type() == OB_JSON_TYPE) {
     // ret = bin_pool_.init(sizeof(ObJsonBin), tmp_alloc_);
@@ -113,16 +106,13 @@ int ObPathCtx::push_ancestor(ObIMulModeBase*& base_node)
     LOG_WARN("should not be null", K(ret));
   } else if (base_node->is_tree()) { 
     if (OB_FAIL(ancestor_record_.push(base_node))) {
-      LOG_WARN("should be inited", K(ret));
     }
   } else {
     if (add_ns_ && base_node->check_if_defined_ns()) {
       ++defined_ns_;
     }
     if (OB_FAIL(alloc_new_bin(base_node))) {
-      LOG_WARN("allocate xmlbin failed", K(ret));
     } else if (OB_FAIL(ancestor_record_.push(base_node))) {
-      LOG_WARN("should be inited", K(ret));
     }
   }
   return ret;
@@ -227,7 +217,6 @@ int ObPathFilterNode::init(const ObXpathFilterChar& filter_char, ObPathNode* lef
     ret = OB_BAD_NULL_ERROR;
     LOG_WARN("should not be null", K(ret));
   } else if (OB_FAIL(ObPathUtil::char_to_filter_type(filter_char, type))) {
-    LOG_WARN("fail to get filter type", K(ret));
   } else {
     node_type_.set_filter_type(type);
     if (ObPathParserUtil::is_boolean_ans(type)) {
@@ -237,9 +226,7 @@ int ObPathFilterNode::init(const ObXpathFilterChar& filter_char, ObPathNode* lef
     contain_relative_path_ = (ObPathUtil::check_contain_relative_path(left) || ObPathUtil::check_contain_relative_path(right));
     need_cache_ = (ObPathUtil::check_need_cache(left) || ObPathUtil::check_need_cache(right));
     if (OB_FAIL(this->append(left))) {
-      LOG_WARN("fail to append arg", K(ret));
     } else if (OB_FAIL(this->append(right))) {
-      LOG_WARN("fail to append arg", K(ret));
     } else if (!pred && ObPathParserUtil::is_illegal_comp_for_filter(type, left, right)) {
       ret = OB_OP_NOT_ALLOW;
       LOG_WARN("Given XPATH expression not supported", K(ret));
@@ -258,7 +245,6 @@ int ObPathFilterOpNode::append_filter(ObPathNode* filter)
     need_cache_ = true;
   }
   if (OB_FAIL(append(filter))) {
-    LOG_WARN("fail to append filter", K(ret));
   }
   return ret;
 }
@@ -358,7 +344,6 @@ int ObPathLocationNode::set_check_ns_by_nodetest(ObIAllocator *allocator, ObStri
         ObString ns_str;
         if (default_ns.length() != 0) {
           if (OB_FAIL(ob_write_string(*allocator, default_ns, ns_str))) {
-            LOG_WARN("fail to wirte string", K(ret), K(default_ns));
           }
         } 
         if (OB_SUCC(ret)) set_ns_info(ns_str.ptr(), ns_str.length());
@@ -376,7 +361,6 @@ int ObPathRootNode::node_to_string(ObStringBuffer& str)
   if (node_type_.is_root()) {
     if (node_type_.is_xml_path() && size() == 0) {
       if (OB_FAIL(str.append("/"))) {
-        LOG_WARN("root fail to string", K(ret), K(str));
       }
     } /*else if (node_type_.is_json_path()) {
       if (OB_FAIL(str.append("$"))) {
@@ -389,7 +373,6 @@ int ObPathRootNode::node_to_string(ObStringBuffer& str)
           ret = OB_BAD_NULL_ERROR;
           LOG_WARN("should not be null", K(ret), K(str));
         } else if (OB_FAIL(temp_node->node_to_string(str))) {
-          LOG_WARN("location node fail to string", K(ret), K(str));
         }
       } // end for
     } // end child is null
@@ -419,9 +402,7 @@ int ObPathLocationNode::node_to_string(ObStringBuffer& str)
       LOG_WARN("fail to append slash", K(ret));
     } else if (node_type_.get_location_type() == ObLocationType::PN_ELLIPSIS && OB_FAIL(str.append("/"))) {
     } else if (OB_FAIL(axis_to_string(str))) {
-      LOG_WARN("fail to append axis", K(ret));
     } else if (OB_FAIL(nodetest_to_string(str))) {
-      LOG_WARN("fail to append nodetest", K(ret));
     } else if (has_filter_ && size() > 0) {
       for (int64_t i = 0; i < size() && OB_SUCC(ret); ++i) {
         ObPathNode* temp_node = static_cast<ObPathNode*>(member(i));
@@ -429,11 +410,8 @@ int ObPathLocationNode::node_to_string(ObStringBuffer& str)
           ret = OB_BAD_NULL_ERROR;
           LOG_WARN("should not be null", K(ret), K(str));
         } else if (OB_FAIL(str.append("["))) {
-          LOG_WARN("fail to append [", K(ret));
         } else if (OB_FAIL(temp_node->node_to_string(str))) {
-          LOG_WARN("location node fail to string", K(ret), K(str));
         } else if (OB_FAIL(str.append("]"))) {
-          LOG_WARN("fail to append ]", K(ret));
         }
       } 
     } // if without filter, do nothing
@@ -446,7 +424,6 @@ int ObPathLocationNode::axis_to_string(ObStringBuffer& str)
   INIT_SUCC(ret);
   if (node_axis_ != ObPathNodeAxis::CHILD) {
     if (OB_FAIL(str.append(axis_str_map[node_axis_ - ObPathNodeAxis::SELF]))) {
-      LOG_WARN("fail to append axis", K(axis_str_map[node_axis_ - ObPathNodeAxis::SELF]), K(ret));
     }
   }
   return ret;
@@ -456,9 +433,7 @@ int ObPathLocationNode::nodetest_to_string(ObStringBuffer& str)
   INIT_SUCC(ret);
   if (check_namespace_ && OB_NOT_NULL(node_content_.namespace_.name_) && node_content_.namespace_.len_ > 0) {
     if (OB_FAIL(str.append(node_content_.namespace_.name_, node_content_.namespace_.len_))) {
-      LOG_WARN("fail to append axis", K(ret));
     } else if (OB_FAIL(str.append(":"))) {
-      LOG_WARN("fail to append :", K(ret));
     }
   }
   if (OB_FAIL(ret)) { 
@@ -468,31 +443,25 @@ int ObPathLocationNode::nodetest_to_string(ObStringBuffer& str)
       case ObSeekType::TEXT:
       case ObSeekType::COMMENT: {
         if (OB_FAIL(str.append(nodetest_str_map[seek_type_ - ObSeekType::NODES]))) {
-          LOG_WARN("fail to append axis", K(nodetest_str_map[seek_type_ - ObSeekType::NODES]), K(ret));
         }
         break;
       }
       case ObSeekType::PROCESSING_INSTRUCTION: {
         if (OB_FAIL(str.append(ObPathItem::PROCESSING_INSTRUCTION))) {
-          LOG_WARN("fail to append processing_instruction", K(ret));
         } else if (node_content_.key_.len_ > 0 && OB_FAIL(str.append("\""))) {
           LOG_WARN("fail to append \"", K(ret));
         } else if (OB_FAIL(str.append(node_content_.key_.name_, node_content_.key_.len_))) {
-          LOG_WARN("fail to append processing_instruction name", K(node_content_.key_.name_), K(ret));
         } else if (node_content_.key_.len_ > 0 &&OB_FAIL(str.append("\""))) {
           LOG_WARN("fail to append \"", K(ret));
         } else if (OB_FAIL(str.append(")"))) {
-          LOG_WARN("fail to append )", K(ret));
         }
         break;
       }
       default: {
         if (node_content_.has_wildcard_) {
           if (OB_FAIL(str.append("*"))) {
-            LOG_WARN("fail to append *", K(ret));
           }
         } else if (OB_FAIL(str.append(node_content_.key_.name_, node_content_.key_.len_))) {
-          LOG_WARN("fail to append key name", K(node_content_.key_.name_), K(ret));
         }
         break;
       }
@@ -510,7 +479,6 @@ int ObPathFilterNode::filter_arg_to_string(ObStringBuffer& str, bool is_left)
     ret = OB_BAD_NULL_ERROR;
     LOG_WARN("should not be null", K(ret), K(str));
   } else if (OB_FAIL(temp_node->node_to_string(str))) {
-    LOG_WARN("location node fail to string", K(ret), K(str));
   }
   return ret;
 }
@@ -522,8 +490,6 @@ int ObPathFilterNode::filter_type_to_string(ObStringBuffer& str)
     ObFilterType xml_filter = node_type_.get_filter_type();
     if (xml_filter >= ObFilterType::PN_CMP_UNION && xml_filter <= ObFilterType::PN_CMP_MOD) {
       if (OB_FAIL(str.append(filter_type_str_map[xml_filter - ObFilterType::PN_NOT_COND]))) {
-        LOG_WARN("fail to append axis", 
-        K(filter_type_str_map[xml_filter - ObFilterType::PN_NOT_COND]), K(ret));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -544,11 +510,8 @@ int ObPathFilterNode::node_to_string(ObStringBuffer& str)
       ret = OB_INVALID_ARGUMENT_NUM;
       LOG_WARN("wrong arg num", K(size()), K(ret));
     } else if (OB_FAIL(filter_arg_to_string(str, true))) {
-      LOG_WARN("left arg fail to str", K(size()), K(ret));
     } else if (OB_FAIL(filter_type_to_string(str))) {
-      LOG_WARN("filter type fail to str", K(size()), K(ret));
     } else if (OB_FAIL(filter_arg_to_string(str, false))) {
-      LOG_WARN("rigth arg fail to str", K(size()), K(ret));
     }
   } else {
     ret = OB_NOT_SUPPORTED;
@@ -582,7 +545,6 @@ int ObPathFilterOpNode::node_to_string(ObStringBuffer& str)
     if (OB_ISNULL(left_)) {
     } else if (OB_FAIL(filter_op_arg_to_str(true, str))) {
     } else if (OB_FAIL(left_->node_to_string(str))) {
-      LOG_WARN("left arg fail to str", K(size()), K(ret));
     } else {
       for (int64_t i = 0; i < size() && OB_SUCC(ret); ++i) {
         ObPathNode* temp_node = static_cast<ObPathNode*>(member(i));
@@ -590,11 +552,8 @@ int ObPathFilterOpNode::node_to_string(ObStringBuffer& str)
           ret = OB_BAD_NULL_ERROR;
           LOG_WARN("should not be null", K(ret), K(str));
         } else if (OB_FAIL(str.append("["))) {
-          LOG_WARN("fail to append [", K(ret));
         } else if (OB_FAIL(temp_node->node_to_string(str))) {
-          LOG_WARN("location node fail to string", K(ret), K(str));
         } else if (OB_FAIL(str.append("]"))) {
-          LOG_WARN("fail to append ]", K(ret));
         }
       }
     }
@@ -602,7 +561,6 @@ int ObPathFilterOpNode::node_to_string(ObStringBuffer& str)
     } else if (OB_ISNULL(right_)) {
     } else if (OB_FAIL(filter_op_arg_to_str(false, str))) {
     } else if (OB_FAIL(right_->node_to_string(str))) {
-      LOG_WARN("right arg fail to str", K(size()), K(ret));
     } // right to string
   } else {
     ret = OB_NOT_SUPPORTED;
@@ -617,10 +575,7 @@ int ObPathFuncNode::node_to_string(ObStringBuffer& str)
   if (node_type_.is_xml_path()) {
     ObFuncType xml_func = node_type_.get_func_type();
     if (OB_FAIL(str.append(func_str_map[xml_func - ObFuncType::PN_ABS]))) {
-      LOG_WARN("fail to append function", 
-      K(func_str_map[xml_func - ObFuncType::PN_ABS]), K(ret));
     } else if (OB_FAIL(func_arg_to_string(str))) {
-      LOG_WARN("arg fail to append )", K(ret));
     }
   } else {
     ret = OB_NOT_SUPPORTED;
@@ -639,7 +594,6 @@ int ObPathFuncNode::func_arg_to_string(ObStringBuffer& str)
         ret = OB_BAD_NULL_ERROR;
         LOG_WARN("should not be null", K(ret), K(str));
       } else if (OB_FAIL(temp_node->node_to_string(str))) {
-        LOG_WARN("location node fail to string", K(ret), K(str));
       } else if ( i + 1 < size() && OB_FAIL(str.append(", "))) {
         LOG_WARN("fail to append ','", K(ret));
       } 
@@ -648,7 +602,6 @@ int ObPathFuncNode::func_arg_to_string(ObStringBuffer& str)
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(str.append(")"))) {
-    LOG_WARN("fail to append ')'", K(ret));
   }
   return ret;
 }
@@ -661,11 +614,8 @@ int ObPathArgNode::node_to_string(ObStringBuffer& str)
     switch (xml_arg) {
       case ObArgType::PN_STRING: {
         if (OB_FAIL(str.append("\""))) {
-          LOG_WARN("fail to append quote", K(ret));
         } else if (OB_FAIL(str.append(arg_.str_.name_, arg_.str_.len_))) {
-          LOG_WARN("fail to append literal", K(ret));
         } else if (OB_FAIL(str.append("\""))) {
-          LOG_WARN("fail to append quote", K(ret));
         }
         break;
       }
@@ -679,7 +629,6 @@ int ObPathArgNode::node_to_string(ObStringBuffer& str)
         } else {
           ObString num_str(sizeof(buf), static_cast<int32_t>(length), buf);
           if (OB_FAIL(str.append(num_str))) {
-            LOG_WARN("fail to set j_buf len", K(ret), K(str.length()), K(num_str));
           }
         }
         break;
@@ -689,17 +638,14 @@ int ObPathArgNode::node_to_string(ObStringBuffer& str)
            ret = OB_BAD_NULL_ERROR;
           LOG_WARN("should not be null", K(ret), K(str));
         } else if (OB_FAIL(arg_.subpath_->node_to_string(str))) {
-          LOG_WARN("fail to append processing_instruction name", K(ret));
         }
         break;
       }
       case ObArgType::PN_BOOLEAN: {
         if (arg_.boolean_ == true) {
           if (OB_FAIL(str.append("true"))) {
-            LOG_WARN("fail to append true", K(ret));
           }
         } else if (OB_FAIL(str.append("false"))) {
-          LOG_WARN("fail to append false", K(ret));
         }
         break;
       }
@@ -753,7 +699,6 @@ int ObPathUtil::trans_scalar_to_base(ObIAllocator *allocator, ObPathArgNode* arg
       } else {
         ObStringBuffer buf(allocator);
         if (OB_FAIL(arg->node_to_string(buf))) {
-          LOG_WARN("fail to string", K(ret));
         } else {
           res->set_text(ObString(buf.length(), buf.ptr()));
           base = res;
@@ -852,7 +797,6 @@ int ObPathFuncNode::check_is_legal_arg()
     switch (node_type_.get_func_type()) {
       case ObFuncType::PN_COUNT: {
         if (OB_FAIL(check_is_legal_count_arg())) {
-          LOG_WARN("Function call with invalid arguments for count", K(ret));
         }
         break;
       }
@@ -886,17 +830,13 @@ int ObPathRootNode::init_adapt(ObPathCtx &ctx, ObIMulModeBase*& ans)
         ret = OB_BAD_NULL_ERROR;
         LOG_WARN("should not be null", K(ans), K(loc));
       } else if (OB_FAIL(ObPathUtil::get_seek_iterator(ctx.alloc_, loc, ada))) {
-        LOG_WARN("fail to alloc ada", K(ret));
       } else if (OB_FAIL(ada->init(ctx, loc, ans))) {
-        LOG_WARN("fail to init ada", K(ret));
       } else if (OB_FAIL(adapt_.push_back(ada))) {
-        LOG_WARN("fail to push ada", K(ret));
       } else {
         ++iter_pos_;
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(next_adapt(ctx, ans))) {
-        LOG_WARN("fail to get next", K(ret));
       } else if (OB_ISNULL(ans)) {
         ret = OB_ITER_END;
       }
@@ -914,11 +854,8 @@ int ObPathRootNode::init_adapt(ObPathCtx &ctx, ObIMulModeBase*& ans)
           ret = OB_BAD_NULL_ERROR;
           LOG_WARN("should not be null", K(ans), K(loc));
         } else if (OB_FAIL(ObPathUtil::get_seek_iterator(ctx.alloc_, loc, ada))) {
-          LOG_WARN("fail to alloc ada", K(ret));
         } else if (OB_FAIL(ada->init(ctx, loc, ans))) {
-          LOG_WARN("fail to init ada", K(ret));
         } else if (OB_FAIL(adapt_.push_back(ada))) {
-          LOG_WARN("fail to push ada", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -926,7 +863,6 @@ int ObPathRootNode::init_adapt(ObPathCtx &ctx, ObIMulModeBase*& ans)
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(next_adapt(ctx, ans))) {
-        LOG_WARN("fail to get next", K(ret));
       } else if (OB_ISNULL(ans)) {
         ret = OB_ITER_END;
       }
@@ -997,7 +933,6 @@ int ObPathRootNode::eval_node(ObPathCtx &ctx, ObSeekResult& res)
     }
   } else if (!is_seeked_ || iter_pos_ == -1) {
     if (OB_FAIL(init_adapt(ctx, ans))) {
-      LOG_WARN("fail to init", K(ret));
     }
   } else if (OB_FAIL(next_adapt(ctx, ans))) {
     if (ret != OB_ITER_END) {
@@ -1061,13 +996,11 @@ int ObPathFuncNode::eval_node(ObPathCtx &ctx, ObSeekResult& res)
     case ObFuncType::PN_FALSE:
     case ObFuncType::PN_TRUE: {
       if (OB_FAIL(eval_true_or_false(ctx, node_type_.get_func_type() == ObFuncType::PN_TRUE, res))) {
-        LOG_WARN("fail to eval position", K(ret));
       }
       break;
     }
     case ObFuncType::PN_COUNT: {
       if (OB_FAIL(eval_count(ctx, res))) {
-        LOG_WARN("fail to eval position", K(ret));
       }
       break;
     }
@@ -1215,7 +1148,6 @@ int ObPathUtil::add_dup_if_missing(ObIAllocator* allocator, ObIMulModeBase*& pat
       ObXmlBin* old_bin = static_cast<ObXmlBin*>(path_res);
       ObXmlBin* new_ans = nullptr;
       if (OB_FAIL(ObPathUtil::alloc_binary(allocator, new_ans))) {
-        LOG_WARN("fail to alloc", K(ret));
       } else {
         new_ans = new (new_ans) ObXmlBin(*old_bin);
         pos = dup.end();
@@ -1245,7 +1177,6 @@ int ObPathUtil::alloc_num_arg(ObMulModeMemCtx *ctx, ObPathArgNode*& arg, ObParse
     } else {
       num_arg = new (num_arg) ObPathArgNode(ctx, parser_type);
       if (OB_FAIL(num_arg->init(num, false))) {
-       LOG_WARN("fail to init", K(ret));
       } else {
         arg = num_arg;
       }
@@ -1268,7 +1199,6 @@ int ObPathUtil::alloc_boolean_arg(ObMulModeMemCtx *ctx, ObPathArgNode*& arg, ObP
     } else {
       boolean_arg = new (boolean_arg) ObPathArgNode(ctx, parser_type);
       if (OB_FAIL(boolean_arg->init(ans, false))) {
-       LOG_WARN("fail to init", K(ret));
       } else {
         arg = boolean_arg;
       }
@@ -1302,7 +1232,6 @@ int ObPathFuncNode::eval_count(ObPathCtx &ctx, ObSeekResult& res)
           ret = OB_SUCCESS;
           ObPathArgNode* ans = nullptr;
           if (OB_FAIL(ObPathUtil::alloc_num_arg(ctx.ctx_, ans, node_type_.get_path_type(), count))) {
-            LOG_WARN("fail to alloc arg", K(ret));
           } else {
             res.is_scalar_ = true;
             res.result_.scalar_ = ans;
@@ -1329,7 +1258,6 @@ int ObPathFuncNode::eval_true_or_false(ObPathCtx &ctx, bool is_true, ObSeekResul
     is_seeked_ = true;
     ObPathArgNode* ans = nullptr;
     if (OB_FAIL(ObPathUtil::alloc_boolean_arg(ctx.ctx_, ans, node_type_.get_path_type(), is_true))) {
-      LOG_WARN("fail to alloc arg", K(ret));
     } else {
       res.is_scalar_ = true;
       res.result_.scalar_ = ans;
@@ -1353,7 +1281,6 @@ int ObSeekIterator::init(ObPathCtx &ctx, ObPathLocationNode* location, ObIMulMod
     ada_root_ = ada_root;
     ObXmlPathFilter* filter = nullptr;
     if (OB_FAIL(ObXmlUtil::alloc_filter_node(ctx.alloc_, filter))) {
-      LOG_WARN("fail to alloc arg node", K(ret));
     } else if (OB_FALSE_IT(filter = new (filter) ObXmlPathFilter(location, &ctx))) {
     } else if (OB_FALSE_IT(seek_info_.filter_ = filter)) {
     } else if (location->get_node_type().get_location_type() == PN_ELLIPSIS) {
@@ -1370,7 +1297,6 @@ int ObSeekIterator::init(ObPathCtx &ctx, ObPathLocationNode* location, ObIMulMod
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(location->set_seek_info(seek_info_))) {
-      LOG_WARN("fail to set seek info", K(ret));
     }
   }
   return ret;
@@ -1471,7 +1397,6 @@ int ObSeekIterator::next_attribute(ObPathCtx &ctx, ObIMulModeBase*& res)
     ret = OB_ITER_END;
   } else if (!is_seeked_) {
     if (OB_FAIL(ctx.push_ancestor(ada_root_))) {
-      LOG_WARN("fail to push ancestor", K(ret));
     } else {
       iter_.construct(ada_root_, seek_info_);
       is_seeked_ = true;
@@ -1498,7 +1423,6 @@ int ObSeekIterator::next_namespace(ObPathCtx &ctx, ObIMulModeBase*& res)
     ret = OB_ITER_END;
   } else if (!is_seeked_) {
     if (OB_FAIL(ctx.push_ancestor(ada_root_))) {
-      LOG_WARN("fail to push ancestor", K(ret));
     } else {
       iter_.construct(ada_root_, seek_info_);
       is_seeked_ = true;
@@ -1519,7 +1443,6 @@ int ObSeekIterator::next_child(ObPathCtx &ctx, ObIMulModeBase*& res)
   ObIMulModeBase* tmp_res = nullptr;
   if (!is_seeked_) {
     if (OB_FAIL(ctx.push_ancestor(ada_root_))) {
-      LOG_WARN("fail to push parent", K(ret));
     } else {
       iter_.construct(ada_root_, seek_info_);
     }
@@ -1548,7 +1471,6 @@ int ObSeekIterator::next_parent(ObPathCtx &ctx, ObIMulModeBase*& res)
     // parent node must only one, if already seeked, then ITER_END
     // push cur node into ancestor_record
     if (OB_FAIL(ctx.push_ancestor(ada_root_))) {
-      LOG_WARN("fail to push parent", K(ret));
     } else {
       res = nullptr;
       ret = OB_ITER_END;
@@ -1562,7 +1484,6 @@ int ObSeekIterator::next_parent(ObPathCtx &ctx, ObIMulModeBase*& res)
       ret = OB_BAD_NULL_ERROR;
       LOG_WARN("should not be null", K(ret));
     } else if (OB_FAIL(filter_ans(top, filtered))) {
-      LOG_WARN("fail to filter", K(ret));
     } else if (filtered) {
       if (top->is_tree()) {
         ret = ctx.pop_ancestor();
@@ -1570,9 +1491,7 @@ int ObSeekIterator::next_parent(ObPathCtx &ctx, ObIMulModeBase*& res)
         // record parent 
         ada_root_ = top;
         if (OB_FAIL(ctx.alloc_new_bin(ada_root_))) {
-          LOG_WARN("fail to record parent", K(ret));
         } else if (OB_FAIL(ctx.pop_ancestor())) {
-          LOG_WARN("fail to pop parent", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -1609,7 +1528,6 @@ int ObSeekIterator::next_self(ObPathCtx &ctx, ObIMulModeBase*& res)
       // if wildcard, do not need filter
       filtered = true;
     } else if (OB_FAIL((*filter)(ada_root_, filtered))) {
-      LOG_WARN("fail to filter xnode", K(ret));
     }
     if (OB_FAIL(ret)) {
     } else if (filtered) {
@@ -1634,7 +1552,6 @@ int ObSeekComplexIterator::ellipsis_inner_next(ObPathCtx &ctx, ObIMulModeBase*& 
     // if not valid, seek its child
     if (!top.is_eval_cur_) {
       if (OB_FAIL(filter_ans(top.cur_, filtered))) {
-        LOG_WARN("fail to filter", K(ret));
       } else if (filtered) {
         res = top.cur_;
       }
@@ -1643,7 +1560,6 @@ int ObSeekComplexIterator::ellipsis_inner_next(ObPathCtx &ctx, ObIMulModeBase*& 
       ObIMulModeBase* unfilter_res = nullptr;
       // checked top node, get its child
       if (OB_FAIL(ctx.push_ancestor(top.cur_))) {
-        LOG_WARN("fail to push", K(ret));
       } else if (OB_FAIL(top.next(unfilter_res)) || OB_ISNULL(unfilter_res)) {
         if (ret == OB_ITER_END) {
           res = nullptr;
@@ -1657,8 +1573,7 @@ int ObSeekComplexIterator::ellipsis_inner_next(ObPathCtx &ctx, ObIMulModeBase*& 
         child_iter.alter_filter(nullptr);
         child_iter.is_eval_cur_ = false;
         iter_stack_.push(child_iter);
-      } else if (OB_FAIL(filter_ans(unfilter_res, filtered))) { // leaf node, do not push, but filter
-        LOG_WARN("fail to filter", K(ret));
+      } else if (OB_FAIL(filter_ans(unfilter_res, filtered))) {
       } else if (filtered) {
         res = unfilter_res;
       }
@@ -1710,7 +1625,6 @@ int ObSeekAncestorIterator::next_ancestor(ObPathCtx &ctx, bool include_self, ObI
       // record ancestor
       ObIMulModeBase* top = ctx.top_ancestor();
       if (OB_FAIL(anc_stack_push(ctx, top))) {
-        LOG_WARN("fail to push", K(ret));
       } else {
         ctx.pop_ancestor();
       }
@@ -1740,12 +1654,9 @@ int ObSeekAncestorIterator::anc_stack_push(ObPathCtx &ctx, ObIMulModeBase* push_
     LOG_WARN("should not be null", K(ret));
   } else if (push_node->is_tree()) { 
     if (OB_FAIL(anc_stack_.push(push_node))) {
-      LOG_WARN("should be inited", K(ret));
     }
   } else if (OB_FAIL(ctx.alloc_new_bin(push_node))) {
-    LOG_WARN("allocate xmlbin failed", K(ret));
   } else if (OB_FAIL(anc_stack_.push(push_node))) {
-    LOG_WARN("should be inited", K(ret));
   }
   return ret;
 }
@@ -1773,12 +1684,10 @@ int ObSeekAncestorIterator::ancestor_inner_next(ObPathCtx &ctx, ObIMulModeBase*&
   } else {
     ObIMulModeBase* top = anc_stack_.top();
     if (OB_FAIL(ctx.push_ancestor(top))) {
-      LOG_WARN("fail to push", K(ret));
     } else {
       anc_stack_pop(ctx);
       bool filtered = false;
       if (OB_FAIL(filter_ans(top, filtered))) {
-        LOG_WARN("fail to filter", K(ret));
       } else if (filtered) {
         res = top;
       }
@@ -1796,7 +1705,6 @@ int ObSeekIterator::filter_ans(ObIMulModeBase* ans, bool& filtered)
     ret = OB_BAD_NULL_ERROR;
     LOG_WARN("should not be null", K(ret));
   } else if (OB_FAIL((*seek_filter)(ans, filtered))) {
-    LOG_WARN("fail to filter xnode", K(ret));
   }
   return ret;
 }
@@ -1836,8 +1744,7 @@ int ObPathVarObject::add(const common::ObString &key, ObDatum *value, bool with_
       } else {
         low_iter->set_value(value);
       }
-    } else if (OB_FAIL(object_array_.push_back(pair))) {// not found, push back, sort
-      LOG_WARN("fail to push back", K(ret));
+    } else if (OB_FAIL(object_array_.push_back(pair))) {
     } else { // sort again.
       ObPathKeyCompare cmp;
       lib::ob_sort(object_array_.begin(), object_array_.end(), cmp);
@@ -1904,7 +1811,6 @@ int ObPathUtil::pop_char_stack(ObFilterCharPointers& char_stack)
   uint64_t size = char_stack.size();
   if (size > 0) {
     if (OB_FAIL(char_stack.remove(size - 1))) {
-      LOG_WARN("fail to remove char top.", K(ret), K(char_stack[size - 1]));
     }
   } else {
     ret = OB_ERR_NULL_VALUE;
@@ -1920,7 +1826,6 @@ int ObPathUtil::pop_node_stack(ObPathVectorPointers& node_stack, ObPathNode*& to
   if (size > 0) {
     top_node = node_stack[size - 1];
     if (OB_FAIL(node_stack.remove(size - 1))) {
-      LOG_WARN("fail to remove char top.",K(ret), K(top_node));
     }
   } else {
     ret = OB_ERR_NULL_VALUE;
@@ -1938,12 +1843,10 @@ int ObPathExprIter::open()
   } else {
     ObParserType parser_type;
     if (OB_FAIL(ObPathUtil::get_parser_type(doc_, parser_type))) {
-      LOG_WARN("fail to init parser type", K(ret));
     } else {
       ObPathParser parser(ctx_, parser_type, path_, default_ns_, pass_var_);
       // parse
       if (OB_FAIL(parser.parse_path())) {
-        LOG_WARN("fail to parse", K(ret));
       } else {
         path_node_ = parser.get_root();
         ret = path_ctx_.init(ctx_, doc_, doc_, tmp_allocator_, true, need_record_, add_ns_);
@@ -1981,7 +1884,6 @@ int ObPathExprIter::get_first_axis(ObPathNodeAxis& first_axis)
   INIT_SUCC(ret);
   ObPathNode* first = nullptr;
   if (OB_FAIL(get_first_node(first))) {
-    LOG_WARN("fail to get first node", K(ret));
   } else if (OB_ISNULL(first)) {
     first_axis = ObPathNodeAxis::ERROR_AXIS;
   } else if (first->get_node_type().is_location() 
@@ -2000,7 +1902,6 @@ int ObPathExprIter::get_first_seektype(ObSeekType& first_seektype)
   INIT_SUCC(ret);
   ObPathNode* first = nullptr;
   if (OB_FAIL(get_first_node(first))) {
-    LOG_WARN("fail to get first node", K(ret));
   } else if (OB_ISNULL(first)) {
     first_seektype = ObSeekType::ERROR_SEEK;
   } else if (first->get_node_type().is_location() 
@@ -2037,14 +1938,12 @@ int ObPathExprIter::get_next_node(ObIMulModeBase*& res)
         }
       } else if (path_res.is_scalar_) {
         if (OB_FAIL(ObPathUtil::trans_scalar_to_base(tmp_allocator_, path_res.result_.scalar_, res))) {
-          LOG_WARN("fail to trans", K(ret));
         }
         end_seek = true;
       } else if (OB_ISNULL(path_res.result_.base_)) { 
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("res is NULL", K(ret));
       } else if (OB_FAIL(ObPathUtil::add_dup_if_missing(tmp_allocator_, path_res.result_.base_, dup_, end_seek))) {
-        LOG_WARN("fail to trans", K(ret));
       } else if (add_ns_ && ((path_res.result_.base_->type() == M_ELEMENT && path_ctx_.defined_ns_ > 0)
                  || ((path_res.result_.base_->type() == M_ELEMENT || path_res.result_.base_->type() == M_DOCUMENT
                  || path_res.result_.base_->type() == M_CONTENT) && OB_NOT_NULL(path_ctx_.extend_)))
@@ -2172,7 +2071,6 @@ int ObXmlPathFilter::operator()(ObIMulModeBase* doc, bool& filtered)
     && !(path_->get_wildcard_info() && !path_->get_prefix_ns_info())) { // if * without prefix_ns do not check
       ObString node_ns_value;
       if (OB_FAIL(doc->get_ns_value(path_ctx_->ancestor_record_, node_ns_value, path_ctx_->extend_))) {
-        LOG_WARN("failed to get ns from element node", K(ret), K(doc->is_tree()));
       } else if (ns_value.length() == 0 || OB_ISNULL(ns_value.ptr())) {
         filtered = (node_ns_value.length() == 0 || OB_ISNULL(node_ns_value.ptr())) ? true : false;
       } else {
@@ -2195,14 +2093,12 @@ int ObPathUtil::logic_compare_rule(ObPathCtx &ctx, ObPathNode *path_node, bool &
     ret = OB_BAD_NULL_ERROR;
     LOG_WARN("get path node null", K(ret));
   } else if (OB_FAIL(ObPathUtil::get_arg_type(node_type, path_node))) {
-    LOG_WARN("fail to get node type", K(ret));
   } else if (OB_ISNULL(arg_node = static_cast<ObPathArgNode*>(path_node))) {
     ret = OB_BAD_NULL_ERROR;
     LOG_WARN("get arg node null", K(ret));
   } else if (ObArgType::PN_SUBPATH == node_type)  {
     ObSeekVector seek_vector;
     if (OB_FAIL(get_seek_vec(ctx, path_node, seek_vector))) {
-      LOG_WARN("left get_seek_vec failed", K(ret), K(path_node));
     } else if (seek_vector.size() > 0) {
       ret_bool = true;
     } else {
@@ -2214,9 +2110,7 @@ int ObPathUtil::logic_compare_rule(ObPathCtx &ctx, ObPathNode *path_node, bool &
   } else {
     ObNodeTypeAndContent *content = nullptr;
     if (OB_FAIL(ObPathUtil::alloc_node_content_info(ctx.alloc_, &arg_node->arg_, node_type, content))) {
-      LOG_WARN("alloc node content info failed", K(ret), K(node_type));
     } else if (OB_FAIL(ObXmlUtil::check_bool_rule(content, ret_bool))) {
-      LOG_WARN("check bool rule failed", K(ret), K(content));
     }
   }
   return ret;
@@ -2235,7 +2129,6 @@ int ObPathUtil::alloc_node_set_vector(ObPathCtx &ctx, ObPathNode *path_node, ObA
   } else if (ObArgType::PN_SUBPATH == node_type) {
     ObSeekVector seek_vector;
     if (OB_FAIL(get_seek_vec(ctx, path_node, seek_vector))) {
-      LOG_WARN("left get_seek_vec failed", K(ret), K(path_node));
     } else if (seek_vector.size() == 0) {
       if (path_node->node_type_.is_root()) {
         ObPathNode *member_path = nullptr;
@@ -2247,9 +2140,7 @@ int ObPathUtil::alloc_node_set_vector(ObPathCtx &ctx, ObPathNode *path_node, ObA
             if (location_node->get_axis() == ObPathNodeAxis::ATTRIBUTE) {
               ObString input_str("");
               if (OB_FAIL(ObPathUtil::alloc_node_content_info(ctx.alloc_, &input_str, content))) {
-                LOG_WARN("alloc node content info failed", K(ret));
               } else if (OB_FAIL(node_vec.push_back(content))){
-                LOG_WARN("failed to push back content.", K(ret));
               }
             }
           }
@@ -2263,9 +2154,7 @@ int ObPathUtil::alloc_node_set_vector(ObPathCtx &ctx, ObPathNode *path_node, ObA
       } else if (OB_FAIL(ObPathUtil::alloc_node_content_info(ctx.alloc_, &(arg_node->arg_), 
                                                               arg_node->node_type_.get_arg_type(), 
                                                               content))) {
-        LOG_WARN("alloc node content info failed", K(ret));
       } else if (OB_FAIL(node_vec.push_back(content))) {
-        LOG_WARN("failed to push back content.", K(ret));
       }
     } else {
       for (int i = 0; OB_SUCC(ret) && i < seek_vector.size(); i++) {
@@ -2285,18 +2174,13 @@ int ObPathUtil::alloc_node_set_vector(ObPathCtx &ctx, ObPathNode *path_node, ObA
               && OB_FAIL(base->get_value(text_str))) {
             LOG_WARN("get value failed", K(ret));
           } else if (OB_FAIL(ObPathUtil::alloc_node_content_info(ctx.alloc_, &text_str, content))) {
-            LOG_WARN("alloc node content info failed", K(ret), K(text_str));
           } else if (OB_FAIL(node_vec.push_back(content))) {
-            LOG_WARN("failed to push back content.", K(ret));
           }
-		    } else if (OB_FAIL(ObXmlUtil::get_array_from_mode_base(base, node_array))) { // get children
-			    LOG_WARN("get child array failed", K(ret));
+		    } else if (OB_FAIL(ObXmlUtil::get_array_from_mode_base(base, node_array))) {
 		    } else if (node_array.size() == 0) {
           ObString text("");
           if (OB_FAIL(ObPathUtil::alloc_node_content_info(ctx.alloc_, &text, content))) {
-            LOG_WARN("alloc node content info", K(ret));
           } else if (OB_FAIL(node_vec.push_back(content))) {
-            LOG_WARN("failed to push back content.", K(ret));
           }
         } else {
           ObString text;
@@ -2308,9 +2192,7 @@ int ObPathUtil::alloc_node_set_vector(ObPathCtx &ctx, ObPathNode *path_node, ObA
           } else if (!is_scalar && OB_FAIL(ObXmlUtil::dfs_xml_text_node(ctx.ctx_, base, text))) {
             LOG_WARN("dfs get text failed", K(ret));
           } else if (OB_FAIL(ObPathUtil::alloc_node_content_info(ctx.alloc_, &text, content))) {
-            LOG_WARN("alloc node content info failed", K(ret), K(text));
           } else if (OB_FAIL(node_vec.push_back(content))) {
-            LOG_WARN("failed to push back content.", K(ret));
           }
         }
       }
@@ -2324,9 +2206,7 @@ int ObPathUtil::alloc_node_set_vector(ObPathCtx &ctx, ObPathNode *path_node, ObA
       ret = OB_BAD_NULL_ERROR;
       LOG_WARN("scalar get null", K(ret));
     } else if (OB_FAIL(ObPathUtil::alloc_node_content_info(ctx.alloc_, &arg_node->arg_, node_type, content))) {
-      LOG_WARN("alloc node content info failed", K(ret), K(node_type));
     } else if (OB_FAIL(node_vec.push_back(content))) {
-      LOG_WARN("failed to push back content.", K(ret));
     }
   }
   return ret;
@@ -2354,9 +2234,7 @@ int ObPathUtil::filter_compare(ObPathCtx &ctx,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("right size unexpect", K(ret));
     } else if (OB_FAIL(ObXmlUtil::to_boolean(&right[0]->content_->str_, str_bool))) {
-      LOG_WARN("right to boolean failed", K(ret), K(right[0]));
     } else if (OB_FAIL(ObXmlUtil::compare(left[0]->content_->boolean_, str_bool, op, ret_bool))) {
-      LOG_WARN("compare failed", K(ret), K(left[0]), K(str_bool));
     }
   } else if ((ObFilterType::PN_CMP_UNEQUAL == op || ObFilterType::PN_CMP_EQUAL == op) &&
               ((left_type == ObArgType::PN_SUBPATH && left.size() == 0 && right_type == ObArgType::PN_BOOLEAN) ||
@@ -2373,11 +2251,8 @@ int ObPathUtil::filter_compare(ObPathCtx &ctx,
           bool left_bool = false;
           bool right_bool = false;
           if (OB_FAIL(ObXmlUtil::check_bool_rule(left[i], left_bool))) {
-            LOG_WARN("check left bool rule failed", K(ret), K(left[i]));
           } else if (OB_FAIL(ObXmlUtil::check_bool_rule(right[j], right_bool))) {
-            LOG_WARN("check right bool rule failed", K(ret), K(right[j]));
           } else if (OB_FAIL(ObXmlUtil::compare(left_bool, right_bool, op, ret_bool))) {
-            LOG_WARN("compare failed", K(ret), K(left_bool), K(right_bool));
           }
         } else if (ObXpathArgType::XC_TYPE_NUMBER == target_type) {
           double left_double = 0.0;
@@ -2393,7 +2268,6 @@ int ObPathUtil::filter_compare(ObPathCtx &ctx,
             ret = OB_SUCCESS;
             ret_bool = op == ObFilterType::PN_CMP_UNEQUAL ? true : false;
           } else if (OB_FAIL(ObXmlUtil::compare(left_double, right_double, op, ret_bool))) {
-            LOG_WARN("compare failed", K(ret), K(left_double), K(right_double));
           }
         } else if (ObXpathArgType::XC_TYPE_STRING == target_type) {
           char *str_left = NULL;
@@ -2405,19 +2279,15 @@ int ObPathUtil::filter_compare(ObPathCtx &ctx,
               && OB_SUCC(ObXmlUtil::to_number(left[i], left_double))
               && OB_SUCC(ObXmlUtil::to_number(right[j], right_double))) {
             if (OB_FAIL(ObXmlUtil::compare(left_double, right_double, op, ret_bool))) {
-              LOG_WARN("compare failed", K(ret), K(left_double), K(right_double));
             }
           } else if (OB_FAIL(ObXmlUtil::to_string(*ctx.alloc_, left[i], str_left))) {
-            LOG_WARN("check left bool rule failed", K(ret), K(left[i]));
           } else if (OB_FAIL(ObXmlUtil::to_string(*ctx.alloc_, right[j], str_right))) {
-            LOG_WARN("check right bool rule failed", K(ret), K(right[j]));
           } else if ((op == ObFilterType::PN_CMP_EQUAL || op == ObFilterType::PN_CMP_UNEQUAL) 
                       && OB_ISNULL(str_left) && OB_ISNULL(str_right)) {
             ret_bool = op == ObFilterType::PN_CMP_EQUAL ? true : false;
           } else if (OB_ISNULL(str_left) || OB_ISNULL(str_right)) {
             ret_bool = false;
           } else if (OB_FAIL(ObXmlUtil::compare(ObString(strlen(str_left), str_left), ObString(strlen(str_right), str_right), op, ret_bool))) {
-            LOG_WARN("compare failed", K(ret), K(str_left), K(str_right));
           }
         } else {
           ret = OB_ERR_UNEXPECTED;
@@ -2429,10 +2299,8 @@ int ObPathUtil::filter_compare(ObPathCtx &ctx,
   if (OB_SUCC(ret)) {
     ObPathArgNode* ans = nullptr;
     if (OB_FAIL(ObXmlUtil::alloc_arg_node(ctx.alloc_, ans))) {
-      LOG_WARN("fail to alloc arg node", K(ret));
     } else if (OB_FALSE_IT(ans = new (ans) ObPathArgNode(ctx.ctx_, ObParserType::PARSER_XML_PATH))) {
     } else if (OB_FAIL(ans->init(ret_bool, false))) {
-      LOG_WARN("fail to init arg node", K(ret));
     } else {
       res.is_scalar_ = true;
       res.result_.scalar_ = ans;
@@ -2449,23 +2317,18 @@ int ObPathUtil::filter_logic_compare(ObPathCtx &ctx, ObPathNode* left_node, ObPa
   bool left_bool = false;
   bool right_bool = false;
   if (OB_FAIL(ObPathUtil::logic_compare_rule(ctx, left_node, left_bool))) {
-    LOG_WARN("left logic compare rule failed", K(ret), K(left_node));
   } else if (op == ObFilterType::PN_AND_COND && !left_bool) {
     ret_bool = false;
   } else if (op == ObFilterType::PN_OR_COND && left_bool) {
     ret_bool = true;
   } else if (OB_FAIL(ObPathUtil::logic_compare_rule(ctx, right_node, right_bool))) {
-    LOG_WARN("right logic compare rule failed", K(ret), K(right_node));
   } else if (OB_FAIL(ObXmlUtil::logic_compare(left_bool, right_bool, op, ret_bool))) {
-    LOG_WARN("logic compare failed", K(ret), K(left_bool), K(right_bool));
   }
   if (OB_SUCC(ret)) {
     ObPathArgNode* ans = nullptr;
     if (OB_FAIL(ObXmlUtil::alloc_arg_node(ctx.alloc_, ans))) {
-      LOG_WARN("fail to alloc arg node", K(ret));
     } else if (OB_FALSE_IT(ans = new (ans) ObPathArgNode(ctx.ctx_, ObParserType::PARSER_XML_PATH))) {
     } else if (OB_FAIL(ans->init(ret_bool, false))) {
-      LOG_WARN("fail to init arg node", K(ret));
     } else {
       res.is_scalar_ = true;
       res.result_.scalar_ = ans;
@@ -2494,7 +2357,6 @@ int ObPathFilterOpNode::get_filter_ans(ObFilterOpAns& ans, ObPathCtx& filter_ctx
     } else if (OB_FALSE_IT(filter_node->is_seeked_ = false)) {
     } else if (OB_FAIL(filter_node->eval_node(filter_ctx, filter))) {
     } else if (OB_FAIL(ObPathUtil::seek_res_to_boolean(filter, filter_ans))) {
-      LOG_WARN("seek res to boolean failed", K(ret));
     } else if (!filter_ans) {
       end_loop = true;
       ans = FILTERED_FALSE;
@@ -2512,7 +2374,6 @@ int ObPathFilterOpNode::get_valid_res(ObPathCtx &ctx, ObSeekResult& res, bool is
   bool end_seek = false;
   while (OB_SUCC(ret) && !end_seek) {
     if (OB_FAIL(eval_path->eval_node(ctx, res))) {
-      LOG_WARN("fail to seek", K(ret));
     } else if (res.is_scalar_) {
       end_seek = true;
     } else if (OB_NOT_NULL(res.result_.base_)) {
@@ -2533,7 +2394,6 @@ int ObPathFilterOpNode::init_right_without_filter(ObPathCtx &ctx, ObSeekResult& 
   while (OB_SUCC(ret) && !get_valid_right) {
     ObSeekResult left_res;
     if (OB_FAIL(get_valid_res(ctx, left_res, true))) {
-      LOG_WARN("fail to eval left");
     } else if (left_res.is_scalar_) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("shoudl not be scalar");
@@ -2566,7 +2426,6 @@ int ObPathFilterOpNode::init_right_with_filter(ObPathCtx &ctx, ObSeekResult& res
   while (OB_SUCC(ret) && !get_valid_right) {
     ObSeekResult left_res;
     if (OB_FAIL(get_valid_res(ctx, left_res, true))) {
-      LOG_WARN("fail to eval left");
     } else if (left_res.is_scalar_) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("shoudl not be scalar");
@@ -2574,7 +2433,6 @@ int ObPathFilterOpNode::init_right_with_filter(ObPathCtx &ctx, ObSeekResult& res
       ctx.cur_doc_ = left_res.result_.base_;
       ObFilterOpAns ans;
       if (OB_FAIL(get_filter_ans(ans, ctx))) {
-        LOG_WARN("fail to get filter ans");
       } else if (ans == FILTERED_TRUE) {
         if (OB_NOT_NULL(right_)) {
           ObSeekResult right_res;
@@ -2617,7 +2475,6 @@ int ObPathFilterOpNode::eval_node(ObPathCtx &ctx, ObSeekResult& res)
     if (ans_ == ObFilterOpAns::NOT_FILTERED) {
       ObFilterOpAns ans;
       if (OB_FAIL(get_filter_ans(ans, ctx))) {
-        LOG_WARN("fail to get filter ans");
       }
       ans_ = ans;
     } 
@@ -2697,15 +2554,12 @@ int ObPathFilterNode::eval_node(ObPathCtx &ctx, ObSeekResult& res)
     ObNodeSetVector left_node_vec;
     ObNodeSetVector rigth_node_vec;
     if (OB_FAIL(ObPathUtil::get_filter_node_result(ctx, member(0), left_node))) {
-      LOG_WARN("get left filter result failed", K(ret));
     } else if (OB_FAIL(ObPathUtil::get_filter_node_result(ctx, member(1), right_node))) {
-      LOG_WARN("get right filter result failed", K(ret));
     } else if (OB_ISNULL(left_node) || OB_ISNULL(right_node)) {
       ret = OB_BAD_NULL_ERROR;
       LOG_WARN("node is null", K(ret), K(left_node), K(right_node));
     } else if (op == ObFilterType::PN_AND_COND || op == ObFilterType::PN_OR_COND) {
       if (OB_FAIL(ObPathUtil::filter_logic_compare(ctx, left_node, right_node, op, res))) {
-        LOG_WARN("filter_logic_compare failed", K(ret));
       }
     } else if (op == ObFilterType::PN_CMP_UNION) {
       if (in_predication_) {
@@ -2720,13 +2574,9 @@ int ObPathFilterNode::eval_node(ObPathCtx &ctx, ObSeekResult& res)
         LOG_WARN("union out_predication_ not implement", K(ret));
       }
     } else if (OB_FAIL(ObPathUtil::get_arg_type(left_type, left_node))) {
-      LOG_WARN("fail to get left type", K(ret));
     } else if (OB_FAIL(ObPathUtil::get_arg_type(right_type, right_node))) {
-      LOG_WARN("fail to get right type", K(ret));
     } else if (OB_FAIL(ObPathUtil::alloc_node_set_vector(ctx, left_node, left_type, left_node_vec))) {
-      LOG_WARN("alloc left node set vector failed", K(ret));
     } else if (OB_FAIL(ObPathUtil::alloc_node_set_vector(ctx, right_node, right_type, rigth_node_vec))) {
-      LOG_WARN("alloc right node set vector failed", K(ret));
     } else {
       switch (op) {
       case ObFilterType::PN_CMP_UNEQUAL:
@@ -2739,7 +2589,6 @@ int ObPathFilterNode::eval_node(ObPathCtx &ctx, ObSeekResult& res)
                                                 left_node_vec, left_type, 
                                                 rigth_node_vec, right_type,
                                                 op, res))) {
-          LOG_WARN("filter_compare failed", K(ret));
         }
         break;
 
@@ -2786,7 +2635,6 @@ int ObPathUtil::get_filter_node_result(ObPathCtx &ctx, ObLibTreeNodeBase* filter
     ObSeekResult seek_result;
     filter_node->is_seeked_ = false;
     if (OB_FAIL(filter_node->eval_node(ctx, seek_result))) {
-      LOG_WARN("filter node eval node fail", K(ret));
     } else if (!seek_result.is_scalar_) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("eval result size 0", K(ret));
@@ -2819,7 +2667,6 @@ int ObPathUtil::get_seek_vec(ObPathCtx &ctx, ObPathNode *from_node, ObSeekVector
   INIT_SUCC(ret);
   ObArgType node_type = ObArgType::PN_ARG_ERROR;
   if (OB_FAIL(ObPathUtil::get_arg_type(node_type, from_node))) {
-    LOG_WARN("fail to get node type", K(ret));
   } else if (node_type == ObArgType::PN_SUBPATH) {
     ObSeekResult path_res;
     bool end_seek = false;
@@ -2830,16 +2677,12 @@ int ObPathUtil::get_seek_vec(ObPathCtx &ctx, ObPathNode *from_node, ObSeekVector
         }
       } else if (path_res.is_scalar_) {
         if (OB_FAIL(res.push_back(path_res))) {
-          LOG_WARN("fail to push", K(ret));
         }
       } else if (path_res.result_.base_->is_tree()) {
         if (OB_FAIL(res.push_back(path_res))) {
-          LOG_WARN("fail to push_back value into result", K(ret), K(res.size()));
         }
       } else if (OB_FAIL(ctx.alloc_new_bin(path_res.result_.base_))) {
-        LOG_WARN("fail to alloc", K(ret));
       } else if (OB_FAIL(res.push_back(path_res))) {
-        LOG_WARN("fail to push_back value into result", K(ret), K(res.size()));
       }
     } // end while
     if (ret == OB_ITER_END) {
@@ -2926,9 +2769,7 @@ int ObPathUtil::collect_ancestor_ns(ObIMulModeBase* extend,
         ObXmlBin buff(*current);
         ObXmlBin* tmp = &buff;
         if (OB_FAIL(current->construct(tmp, nullptr))) {
-          LOG_WARN("failed to dup bin.", K(ret));
         } else if (OB_FAIL(tmp->set_at(pos))) {
-          LOG_WARN("failed to set at child.", K(ret));
         } else if (tmp->type() == M_NAMESPACE) {
           // get ns info
           ObXmlAttribute* ns_node = nullptr;
@@ -2936,9 +2777,7 @@ int ObPathUtil::collect_ancestor_ns(ObIMulModeBase* extend,
           ObString value;
           // init ns node
           if (OB_FAIL(tmp->get_key(key))) {
-            LOG_WARN("failed to eval key.", K(ret));
           } else if (OB_FAIL(tmp->get_value(value))) {
-            LOG_WARN("failed to eval value.", K(ret));
           } else if (OB_ISNULL(ns_node = static_cast<ObXmlAttribute*>(tmp_alloc->alloc(sizeof(ObXmlAttribute))))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
             LOG_WARN("failed to allocate attribute node.", K(ret));
@@ -2954,7 +2793,6 @@ int ObPathUtil::collect_ancestor_ns(ObIMulModeBase* extend,
           } else if (OB_NOT_NULL(ns_map.get(key)) && OB_FAIL(ns_map.erase_refactored(key))) {
             LOG_WARN("fail to delete ns from map", K(ret), K(key));
           } else if (OB_FAIL(ns_map.set_refactored(key, ns_vec[ns_vec.size() - 1]))) {
-            LOG_WARN("fail to add ns from map", K(ret), K(key));
           }
         } else if (tmp->type() == M_ATTRIBUTE) {
         } else {
@@ -2982,15 +2820,12 @@ int ObPathUtil::add_ns_if_need(ObPathCtx &ctx, ObIMulModeBase*& res)
     ns_vec.set_block_size(PATH_DEFAULT_PAGE_SIZE);
     int map_size = (ctx.ancestor_record_.size() > 0 ) ? 4 * ctx.ancestor_record_.size() : ctx.extend_->attribute_size();
     if (OB_FAIL(ns_map.create(map_size, "PATH_PARENT_NS"))) {
-      LOG_WARN("ns map create failed", K(ret));
     } else if (OB_FAIL(collect_ancestor_ns(ctx.extend_, ctx.ancestor_record_, ns_map, ns_vec, ctx.get_tmp_alloc()))) {
-      LOG_WARN("ns map init failed", K(ret));
     } else {
       ObXmlElement element_ns(ObMulModeNodeType::M_ELEMENT, ctx.doc_root_->get_mem_ctx());
       ret = element_ns.init();
       for (ns_map_iter = ns_map.begin(); OB_SUCC(ret) && ns_map_iter != ns_map.end(); ns_map_iter++) {
         if (OB_FAIL(element_ns.add_attribute(ns_map_iter->second))) {
-          LOG_WARN("fail to add ns", K(ret));
         }
       }
       // serialize element node as extend area
@@ -3047,7 +2882,6 @@ int ObPathUtil::get_seek_iterator(common::ObIAllocator *allocator, ObPathLocatio
   if (loc->is_complex_seektype()) {
     ObSeekComplexIterator* tmp_ada = nullptr;
     if (OB_FAIL(ObPathUtil::alloc_complex_iterator(allocator, tmp_ada))) {
-      LOG_WARN("fail to alloc location node", K(ret));
     } else {
       tmp_ada = new (tmp_ada) ObSeekComplexIterator(allocator);
       ada = tmp_ada;
@@ -3055,7 +2889,6 @@ int ObPathUtil::get_seek_iterator(common::ObIAllocator *allocator, ObPathLocatio
   } else if (loc->is_ancestor_axis()) {
     ObSeekAncestorIterator* tmp_ada = nullptr;
     if (OB_FAIL(ObPathUtil::alloc_ancestor_iterator(allocator, tmp_ada))) {
-      LOG_WARN("fail to alloc location node", K(ret));
     } else {
       tmp_ada = new (tmp_ada) ObSeekAncestorIterator(allocator);
       ada = tmp_ada;
@@ -3063,7 +2896,6 @@ int ObPathUtil::get_seek_iterator(common::ObIAllocator *allocator, ObPathLocatio
   } else {
     ObSeekIterator* tmp_ada = nullptr;
     if (OB_FAIL(ObPathUtil::alloc_iterator(allocator, tmp_ada))) {
-      LOG_WARN("fail to alloc location node", K(ret));
     } else {
       tmp_ada = new (tmp_ada) ObSeekIterator();
       ada = tmp_ada;

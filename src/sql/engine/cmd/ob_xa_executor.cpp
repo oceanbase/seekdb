@@ -69,7 +69,6 @@ int ObXaRollbackExecutor::execute(ObExecContext &ctx, ObXaRollBackStmt &stmt)
 int ObXaExecutorUtil::get_org_cluster_id(ObSQLSessionInfo *session, int64_t &org_cluster_id) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(session->get_ob_org_cluster_id(org_cluster_id))) {
-    LOG_WARN("fail to get ob_org_cluster_id", K(ret));
   } else if (OB_INVALID_ORG_CLUSTER_ID == org_cluster_id ||
              OB_INVALID_CLUSTER_ID == org_cluster_id) {
     org_cluster_id = ObServerConfig::get_instance().cluster_id;

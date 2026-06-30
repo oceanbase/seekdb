@@ -51,13 +51,11 @@ struct StringFloatCastImpl
         if (std::is_same<OUT_TYPE, float>::value) {
           float out_f = 0.0;
           if (OB_FAIL(ObDataTypeCastUtil::common_string_float_wrap(expr, in_str, out_f))) {
-            SQL_LOG(WARN, "common_string_float_fastfloat failed", K(ret));
           } else {
             output_vector->set_float(i, out_f);
           }
         } else if (std::is_same<OUT_TYPE, double>::value) {
           if (OB_FAIL(common_string_double(expr, in_type, cs_type, out_type, in_str, tmp_datum))) {
-            SQL_LOG(WARN, "common_string_double failed", K(ret));
           } else {
             double out_d = tmp_datum.get_double();
             output_vector->set_double(i, out_d);
@@ -75,7 +73,6 @@ struct StringFloatCastImpl
             if(OB_FAIL(ret) && is_diagnosis) {
               // overwrite ret on diagnosis node
               if (OB_FAIL(ctx.exec_ctx_.get_diagnosis_manager().add_warning_info(ret, i))) {
-                SQL_LOG(WARN, "failed to add warning info", K(ret), K(i));
               } else {
                 // set null to avoid accessing invalid data before setting skip
                 // in ObTableScanOp::do_diagnosis
@@ -93,7 +90,6 @@ struct StringFloatCastImpl
               if(OB_FAIL(ret) && is_diagnosis) {
                 // overwrite ret on diagnosis node
                 if (OB_FAIL(ctx.exec_ctx_.get_diagnosis_manager().add_warning_info(ret, i))) {
-                  SQL_LOG(WARN, "failed to add warning info", K(ret), K(i));
                 } else {
                   // set null to avoid accessing invalid data before setting skip
                   // in ObTableScanOp::do_diagnosis
@@ -115,7 +111,6 @@ struct StringFloatCastImpl
             if(OB_FAIL(ret) && is_diagnosis) {
               // overwrite ret on diagnosis node
               if (OB_FAIL(ctx.exec_ctx_.get_diagnosis_manager().add_warning_info(ret, i))) {
-                SQL_LOG(WARN, "failed to add warning info", K(ret), K(i));
               } else {
                 // set null to avoid accessing invalid data before setting skip
                 // in ObTableScanOp::do_diagnosis

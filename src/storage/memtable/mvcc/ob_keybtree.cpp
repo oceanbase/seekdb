@@ -777,7 +777,6 @@ int Iterator<BtreeKey, BtreeVal>::set_key_range(const BtreeKey min_key,
   int ret = OB_SUCCESS;
   int cmp = 0;
   if (OB_FAIL(scan_handle_.acquire_ref())) {
-    OB_LOG(ERROR, "acquire_ref fail", K(ret));
   } else if (OB_FAIL(scan_handle_.find_path(ATOMIC_LOAD(&btree_.root_), min_key))) {
     // do nothing
   } else {
@@ -1495,13 +1494,11 @@ int ObKeyBtree<BtreeKey, BtreeVal>::insert(const BtreeKey key, BtreeVal &value)
   BTREE_ASSERT(((uint64_t)value & 7ULL) == 0);
   handle.get_is_in_delete() = false;
   if (OB_FAIL(handle.acquire_ref())) {
-    OB_LOG(ERROR, "acquire_ref fail", K(ret));
   } else {
     ret = OB_EAGAIN;
   }
   while (OB_EAGAIN == ret) {
     if (OB_FAIL(handle.find_path(old_root = ATOMIC_LOAD(&root_), key))) {
-      OB_LOG(ERROR, "path.search error", K(root_), K(ret));
     } else if (OB_FAIL(handle.insert_and_split_upward(key, value, new_root = old_root))) {
       // do nothing
     } else if (old_root != new_root) {
@@ -1530,7 +1527,6 @@ int ObKeyBtree<BtreeKey, BtreeVal>::get(const BtreeKey key, BtreeVal &value)
   int ret = OB_SUCCESS;
   GetHandle handle(*this);
   if (OB_FAIL(handle.acquire_ref())) {
-    OB_LOG(ERROR, "acquire_ref fail", K(ret));
   } else if (OB_FAIL(handle.get(ATOMIC_LOAD(&root_), key, value))) {
     if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
       OB_LOG(ERROR, "btree.get(key) fail", KR(ret), K(key), K(value));

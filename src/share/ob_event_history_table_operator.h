@@ -239,7 +239,6 @@ int ObEventHistoryTableOperator::add_event(const char *module, const char *event
     ret = common::OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "neither module or event can be NULL", KP(module), KP(event), K(ret));
   } else if (OB_FAIL(gen_event_ts(event_ts))) {
-    SHARE_LOG(WARN, "gen_event_ts failed", K(ret));
   } else if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
     SHARE_LOG(WARN, "storage not initialized", K(ret));
@@ -254,9 +253,7 @@ int ObEventHistoryTableOperator::add_event(const char *module, const char *event
 
     common::ObCStringHelper helper;
     if (OB_FAIL((build_entry_helper_<0, Truncate>(entry, helper, std::forward<Rest>(others)...)))) {
-      SHARE_LOG(WARN, "build entry failed", K(ret));
     } else if (OB_FAIL(storage_.insert(entry))) {
-      SHARE_LOG(WARN, "failed to insert event", K(ret));
     }
   }
   ObTaskController::get().allow_next_syslog();
@@ -279,7 +276,6 @@ int ObEventHistoryTableOperator::sync_add_event(const char *module, const char *
     ret = common::OB_INVALID_ARGUMENT;
     SHARE_LOG(WARN, "neither module or event can be NULL", KP(module), KP(event), K(ret));
   } else if (OB_FAIL(gen_event_ts(event_ts))) {
-    SHARE_LOG(WARN, "gen_event_ts failed", K(ret));
   } else if (!storage_.is_inited()) {
     ret = OB_NOT_INIT;
     SHARE_LOG(WARN, "storage not initialized", K(ret));
@@ -294,9 +290,7 @@ int ObEventHistoryTableOperator::sync_add_event(const char *module, const char *
 
     common::ObCStringHelper helper;
     if (OB_FAIL((build_entry_helper_<0, false>(entry, helper, std::forward<Rest>(others)...)))) {
-      SHARE_LOG(WARN, "build entry failed", K(ret));
     } else if (OB_FAIL(storage_.insert(entry))) {
-      SHARE_LOG(WARN, "failed to insert event", K(ret));
     } else {
       ObTaskController::get().allow_next_syslog();
       SHARE_LOG(INFO, "event table sync add event success", K(ret), K(event_type_));
@@ -344,7 +338,6 @@ int ObEventHistoryTableOperator::async_add_tenant_event(
     temp_entry.event_.assign_ptr(event, static_cast<int32_t>(strlen(event)));
     common::ObCStringHelper helper;
     if (OB_FAIL((build_entry_helper_<0, false>(temp_entry, helper, std::forward<Rest>(others)...)))) {
-      SHARE_LOG(WARN, "build entry failed", K(ret));
     } else {
       // Copy name-value pairs from temp_entry to entry
       entry.name1_ = temp_entry.name1_;
@@ -362,7 +355,6 @@ int ObEventHistoryTableOperator::async_add_tenant_event(
       entry.extra_info_ = temp_entry.extra_info_;
       
       if (OB_FAIL(tenant_storage_.insert(entry))) {
-        SHARE_LOG(WARN, "failed to insert tenant event", K(ret));
       }
     }
   }
@@ -433,9 +425,7 @@ int ObEventHistoryTableOperator::add_event_helper_(share::ObDMLSqlSplicer &dml, 
   } else
   #endif
   if (OB_FAIL(dml.add_column(names[Floor], name))) {
-    SHARE_LOG(WARN, "add column failed", K(ret), K(Floor));
   } else if (OB_FAIL(dml.add_column(values[Floor], converter.convert(value)))) {
-    SHARE_LOG(WARN, "add column failed", K(ret), K(Floor));
   } else if (OB_FAIL((add_event_helper_<Floor + 1, Truncate>(dml, std::forward<Rest>(others)...)))){
   }
   return ret;
@@ -450,7 +440,6 @@ int ObEventHistoryTableOperator::add_event_helper_(share::ObDMLSqlSplicer &dml)
   if (Floor < 6) {
     for (int64_t idx = Floor; OB_SUCCESS == ret && idx < 6; ++idx) {
       if (OB_FAIL(dml.add_column(values[idx], ""))) {
-        SHARE_LOG(WARN, "add column failed", K(ret), K(idx));
       }
     }
   }
@@ -464,7 +453,6 @@ int ObEventHistoryTableOperator::add_event_helper_(share::ObDMLSqlSplicer &dml, 
   static_assert(Floor == 6, "if there is an extra_info column, it must be 13th args in this row, no more, no less");
   int ret = OB_SUCCESS;
   if (OB_FAIL(dml.add_column(names[Floor], extra_info))) {
-    SHARE_LOG(WARN, "add column failed", K(ret), K(Floor));
   }
   return ret;
 }

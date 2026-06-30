@@ -48,7 +48,6 @@ ObMViewTransaction::ObSessionParamSaved::~ObSessionParamSaved()
   int ret = OB_SUCCESS;
   if (nullptr != session_info_) {
     if (OB_FAIL(restore())) {
-      LOG_WARN("fail to restore session param", KR(ret));
     }
   }
 }
@@ -65,7 +64,6 @@ int ObMViewTransaction::ObSessionParamSaved::save(ObSQLSessionInfo *session_info
   } else {
     bool autocommit = false;
     if (OB_FAIL(session_info->get_autocommit(autocommit))) {
-      LOG_WARN("fail to get autocommit", KR(ret));
     } else {
       const int64_t max_database_name_len = OB_MAX_DATABASE_NAME_BUF_LENGTH * OB_MAX_CHAR_LEN;
       const ObString database_name = session_info->get_database_name();
@@ -90,7 +88,6 @@ int ObMViewTransaction::ObSessionParamSaved::save(ObSQLSessionInfo *session_info
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(session_info->get_sys_variable(
                          ObSysVarClassType::SYS_VAR_COLLATION_CONNECTION, collation_connection_var_))) {
-        LOG_WARN("fail to get sys varibale", K(ret));
       }
       LOG_DEBUG("print session var when save", K(collation_connection_var_));
     }
@@ -145,7 +142,6 @@ ObMViewTransaction::ObSessionSavedForInner::~ObSessionSavedForInner()
   int ret = OB_SUCCESS;
   if (nullptr != session_info_) {
     if (OB_FAIL(restore())) {
-      LOG_WARN("fail to restore session param", KR(ret));
     }
   }
 }
@@ -180,7 +176,6 @@ int ObMViewTransaction::ObSessionSavedForInner::save(ObSQLSessionInfo *session_i
     // save session
     if (OB_SUCC(ret)) {
       if (OB_FAIL(session_info->save_session(*session_saved_value))) {
-        LOG_WARN("fail to save session", K(ret));
       } else {
         session_saved_value_ = session_saved_value;
       }
@@ -190,7 +185,6 @@ int ObMViewTransaction::ObSessionSavedForInner::save(ObSQLSessionInfo *session_i
       MEMCPY(database_name_buf, database_name.ptr(), database_name.length());
       database_name_buf[database_name.length()] = '\0';
       if (OB_FAIL(session_info->set_default_database(OB_SYS_DATABASE_NAME))) {
-        LOG_WARN("fail to set default database", KR(ret));
       } else {
         session_info->set_database_id(OB_SYS_DATABASE_ID);
         database_id_ = database_id;
@@ -205,7 +199,6 @@ int ObMViewTransaction::ObSessionSavedForInner::save(ObSQLSessionInfo *session_i
       // restore session
       if (nullptr != session_saved_value_) {
         if (OB_TMP_FAIL(session_info->restore_session(*session_saved_value_))) {
-          LOG_WARN("failed to restore session", KR(tmp_ret));
         } else {
           session_saved_value_ = nullptr;
         }
@@ -213,7 +206,6 @@ int ObMViewTransaction::ObSessionSavedForInner::save(ObSQLSessionInfo *session_i
       // restore default database
       if (nullptr != database_name_) {
         if (OB_FAIL(session_info->set_default_database(database_name_))) {
-          LOG_WARN("fail to set default database", KR(ret));
         } else {
           session_info->set_database_id(database_id_);
           database_id_ = OB_INVALID_ID;
@@ -281,7 +273,6 @@ ObMViewTransaction::~ObMViewTransaction()
   int ret = OB_SUCCESS;
   if (in_trans_) {
     if (OB_FAIL(end(OB_SUCCESS == get_errno()))) {
-      LOG_WARN("fail to end", KR(ret));
     }
   }
 }
@@ -302,7 +293,6 @@ int ObMViewTransaction::connect(ObSQLSessionInfo *session_info, ObISQLClient *sq
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected connection pool", KR(ret));
     } else if (OB_FAIL(pool->acquire_spi_conn(session_info, conn))) {
-      LOG_WARN("acquire connection failed", KR(ret), K(pool), K(session_info));
     } else if (OB_ISNULL(conn)) {
       ret = OB_INNER_STAT_ERROR;
       LOG_WARN("connection can not be NULL", KR(ret), K_(pool));
@@ -311,7 +301,6 @@ int ObMViewTransaction::connect(ObSQLSessionInfo *session_info, ObISQLClient *sq
       LOG_WARN("inactive sql client", KR(ret));
       int tmp_ret = pool->release(conn, OB_SUCCESS == ret);
       if (OB_SUCCESS != tmp_ret) {
-        LOG_WARN("release connection failed", K(tmp_ret));
       }
       conn = nullptr;
     } else {
@@ -335,7 +324,6 @@ int ObMViewTransaction::start_transaction()
     LOG_WARN("conn_ is NULL", KR(ret));
   } else {
     if (OB_FAIL(conn->start_transaction(false /*with_snapshot*/))) {
-      LOG_WARN("fail to start transaction", KR(ret));
     }
     if (OB_SUCCESS == get_errno()) {
       set_errno(ret);
@@ -354,11 +342,9 @@ int ObMViewTransaction::end_transaction(const bool commit)
   } else {
     if (commit) {
       if (OB_FAIL(conn->commit())) {
-        LOG_WARN("fail to do commit", KR(ret));
       }
     } else {
       if (OB_FAIL(conn->rollback())) {
-        LOG_WARN("fail to do rollback", KR(ret));
       }
     }
     if (OB_SUCCESS == get_errno()) {
@@ -385,16 +371,13 @@ int ObMViewTransaction::start(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected session is in trans", KR(ret));
   } else if (OB_FAIL(session_param_saved_.save(session_info))) {
-    LOG_WARN("fail to save session param", KR(ret));
   } else if (OB_FALSE_IT(session_info->set_database_id(database_id))) {
   } else if (OB_FALSE_IT(session_info->set_default_database(database_name))) {
   } else if (OB_FAIL(connect(session_info, sql_client))) {
-    LOG_WARN("fail to connect", KR(ret));
   } else {
     
     start_time_ = ObTimeUtility::current_time();
     if (OB_FAIL(start_transaction())) {
-      LOG_WARN("failed to start transaction", KR(ret));
     } else {
       session_info_ = session_info;
       in_trans_ = true;
@@ -405,7 +388,6 @@ int ObMViewTransaction::start(
     int tmp_ret = OB_SUCCESS;
     close();
     if (OB_TMP_FAIL(session_param_saved_.restore())) {
-      LOG_WARN("fail to restore session param", KR(tmp_ret));
     }
   }
   return ret;
@@ -417,7 +399,6 @@ int ObMViewTransaction::end(const bool commit)
   int tmp_ret = OB_SUCCESS;
   if (in_trans_) {
     if (OB_FAIL(end_transaction(commit))) {
-      LOG_WARN("fail to end transation", KR(ret));
     } else {
       LOG_DEBUG("end transaction success", K(commit));
     }
@@ -438,7 +419,6 @@ int ObMViewTransaction::save_session_for_inner()
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("session info can not be NULL", KR(ret), KP(session_info_));
   } else if (OB_FAIL(session_saved_for_inner_.save(session_info_))) {
-    LOG_WARN("fail to save session for inner", KR(ret));
   }
   return ret;
 }
@@ -450,7 +430,6 @@ int ObMViewTransaction::restore_session_for_inner()
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("session info can not be NULL", KR(ret), KP(session_info_));
   } else if (OB_FAIL(session_saved_for_inner_.restore())) {
-    LOG_WARN("fail to restore session for inner", KR(ret));
   }
   return ret;
 }
@@ -468,7 +447,6 @@ int ObMViewTransaction::set_compact_mode(ObCompatibilityMode compact_mode)
   } else {
     if (OB_FAIL(conn->set_session_variable(OB_SV_COMPATIBILITY_MODE,
                                            static_cast<int64_t>(compact_mode)))) {
-      LOG_WARN("fail to set inner connection compact mode", KR(ret), K(compact_mode));
     }
   }
   return ret;
@@ -494,9 +472,7 @@ ObMViewTransactionInnerMySQLGuard::ObMViewTransactionInnerMySQLGuard(ObMViewTran
     need_reset_ = true;
     old_compact_mode_ = trans_.get_compatibility_mode();
     if (OB_FAIL(trans_.save_session_for_inner())) {
-      LOG_WARN("fail to save session for inner", KR(ret));
     } else if (OB_FAIL(trans_.set_compact_mode(ObCompatibilityMode::MYSQL_MODE))) {
-      LOG_WARN("fail to set mysql compact mode", KR(ret));
     }
   }
 }

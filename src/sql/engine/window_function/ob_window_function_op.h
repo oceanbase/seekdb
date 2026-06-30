@@ -369,7 +369,6 @@ public:
       if (!ra_rs_.is_empty_save_row_cnt() && OB_FAIL(process_dump<true>())) {
         SQL_ENG_LOG(WARN, "fail to dump_by_priority", K(ret), K(ObToStringExprRow(*ctx, exprs)));
       } else if (OB_FAIL(ra_rs_.add_row(exprs, ctx, stored_row))) {
-        SQL_ENG_LOG(WARN, "fail to add_row for ra_rs_", K(ret));
       } else {
         stored_row_cnt_++;
         row_cnt_ += add_row_cnt;
@@ -387,7 +386,6 @@ public:
       if (!ra_rs_.is_empty_save_row_cnt() && OB_FAIL(process_dump<false>())) {
         SQL_ENG_LOG(WARN, "fail to dump_by_priority", K(ret));
       } else if (OB_FAIL(ra_rs_.add_row(datums, stored_row))) {
-        SQL_ENG_LOG(WARN, "fail to add_row for ra_rs_", K(ret));
       } else {
         row_cnt_ += add_row_cnt;
         ++stored_row_cnt_;
@@ -407,7 +405,6 @@ public:
                   K(begin_idx_), K(output_row_idx_),
       K(row_cnt_), K(stored_row_cnt_), K(ObToStringExprRow(*ctx, exprs)));
       if (OB_FAIL(add_row(exprs, ctx, stored_row, add_row_cnt))) {
-        LOG_WARN("fail to add_row", K(ret));
       }
       return ret;
     }
@@ -433,7 +430,6 @@ public:
       const int64_t mem_ctx_id = common::ObCtxIds::WORK_AREA;
       const char *label = common::ObModIds::OB_SQL_WINDOW_ROW_STORE;
       if (OB_FAIL(ra_rs_.init(mem_limit, mem_ctx_id, label))) {
-        LOG_WARN("init ra datum store failed", K(ret));
       } else if (OB_ISNULL(op_.mem_context_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("null memory context", K(ret));
@@ -1093,7 +1089,6 @@ int ObWindowFunctionSpec::rd_sort_cmp(const STORE_ROW_L *l,
   } else {
     for (int64_t i = begin; 0 == cmp_ret && i < end && OB_SUCC(ret); i++) {
       if (OB_FAIL(rd_sort_cmp_funcs_.at(i).cmp_func_(l->cells()[i], r->cells()[i], cmp_ret))) {
-        SQL_ENG_LOG(WARN, "compare failed", K(ret));
       } else if (!rd_sort_collations_.at(i).is_ascending_) {
         cmp_ret = cmp_ret * (-1);
       }
@@ -1122,7 +1117,6 @@ int ObWindowFunctionOp::update_mem_limit_version_periodically()
         return 0 == ((++amm_periodic_cnt_) % UPDATE_MEM_SIZE_PERIODIC_CNT);
       },
       updated))) {
-    LOG_WARN("failed to update max available memory size periodically", K(ret));
   } else if ((updated || need_dump()) &&
       OB_FAIL(sql_mem_processor_.extend_max_memory_size(
                 &mem_context_->get_malloc_allocator(),

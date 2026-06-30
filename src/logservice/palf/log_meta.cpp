@@ -44,7 +44,6 @@ int LogMeta::generate_by_palf_base_info(const PalfBaseInfo &palf_base_info,
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(INFO, "invalid argument", KPC(this), K(access_mode), K(palf_base_info));
   } else if (OB_FAIL(log_snapshot_meta_.generate(palf_base_info.curr_lsn_, palf_base_info.prev_log_info_, palf_base_info.curr_lsn_))) {
-    PALF_LOG(WARN, "generate snapshot_meta failed", K(ret), K(palf_base_info));
   } else {
     const int64_t prev_log_proposal_id = palf_base_info.prev_log_info_.log_proposal_id_;
     const SCN &prev_scn = palf_base_info.prev_log_info_.scn_;
@@ -74,7 +73,6 @@ int LogMeta::load(const char *buf, int64_t buf_len)
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(buf), K(buf_len));
   } else if (OB_FAIL(this->deserialize(buf, buf_len, pos))) {
-    PALF_LOG(ERROR, "deserialize failed", K(ret));
   }
   return ret;
 }

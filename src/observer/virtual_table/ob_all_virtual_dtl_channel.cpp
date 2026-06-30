@@ -63,7 +63,6 @@ int ObVirtualDtlChannelOp::operator()(ObDtlChannel *ch)
   chan_info.get_info(ch);
   if (channels_->count() < MAX_CHANNEL_CNT_PER_TENANT) {
     if (OB_FAIL(channels_->push_back(chan_info))) {
-      LOG_WARN("failed to push back channel info", K(ret));
     }
   }
   return ret;
@@ -80,7 +79,6 @@ int ObVirtualDtlChannelIterator::init()
   int ret = OB_SUCCESS;
   channels_.set_block_allocator(ObWrapperAllocator(iter_allocator_));
   if (OB_FAIL(get_all_channels())) {
-    LOG_WARN("failed to get all channels", K(ret));
   }
   return ret;
 }
@@ -90,7 +88,6 @@ int ObVirtualDtlChannelIterator::get_all_channels()
   int ret = OB_SUCCESS;
   ObVirtualDtlChannelOp op(&channels_);
   if (OB_FAIL(DTL.foreach_refactored(op))) {
-    LOG_WARN("failed to get all channels", K(ret));
   }
   return ret;
 }
@@ -135,7 +132,6 @@ int ObAllVirtualDtlChannel::inner_open()
   int ret = OB_SUCCESS;
   if (!start_to_read_) {
     if (OB_FAIL(iter_.init())) {
-      LOG_WARN("failed to init iterator", K(ret));
     } else {
       start_to_read_ = true;
       char ipbuf[common::OB_IP_STR_BUFF];
@@ -146,7 +142,6 @@ int ObAllVirtualDtlChannel::inner_open()
       } else {
         ipstr_ = ObString::make_string(ipbuf);
         if (OB_FAIL(ob_write_string(*allocator_, ipstr_, ipstr_))) {
-          SERVER_LOG(WARN, "failed to write string", K(ret));
         }
         port_ = addr.get_port();
       }
@@ -312,7 +307,6 @@ int ObAllVirtualDtlChannel::inner_get_next_row(ObNewRow *&row)
       arena_allocator_.reuse();
     }
   } else if (OB_FAIL(get_row(ch_info, row))) {
-    LOG_WARN("failed to get row from channel info", K(ret));
   }
   return ret;
 }

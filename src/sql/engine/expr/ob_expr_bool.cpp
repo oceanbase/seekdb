@@ -118,7 +118,6 @@ CHECK_IS_TRUE_FUNC_NAME(other_type)
         }
         cmp_result = 1; // outrow json must not be zero
       } else if (OB_FAIL(ObJsonExprHelper::is_json_zero(j_str, cmp_result))) {
-        LOG_WARN("failed: compare json", K(ret));
       } else {
         res_datum.set_int32(cmp_result);
       }
@@ -213,7 +212,6 @@ inline int get_bool<>(const ObString &j_str,
     }
     is_true = 1; // outrow json must not be zero
   } else if (OB_FAIL(ObJsonExprHelper::is_json_zero(tmp_str, is_true))) {
-    LOG_WARN("failed: compare json", K(ret));
   } else {
     res = is_true;
   }
@@ -241,7 +239,6 @@ static int eval_vector_expr_bool(const ObExpr &expr,
       bool arg_is_true = false;
       if (OB_FAIL(get_bool((arg_vec->*get_data)(idx),
                             arg_vec->get_length(idx), expr, arg_is_true))) {
-        LOG_WARN("failed to check is true", K(ret));
       } else if (isFixedLenRes) {
         data_ptr[idx] = static_cast<int64_t>(arg_is_true);
       } else {
@@ -259,7 +256,6 @@ static int eval_vector_expr_bool(const ObExpr &expr,
         bool arg_is_true = false;
         if (OB_FAIL(get_bool((arg_vec->*get_data)(idx),
                               arg_vec->get_length(idx), expr, arg_is_true))) {
-          LOG_WARN("failed to check is true", K(ret));
         } else {
           res_vec->set_int(idx, static_cast<int64_t>(arg_is_true));
         }
@@ -307,7 +303,6 @@ int ObExprBool::calc_vector_bool_expr(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval bool param", K(ret));
   } else {
     ObObjType data_type = expr.args_[0]->datum_meta_.type_;
     VectorFormat arg_format = expr.args_[0]->get_format(ctx);

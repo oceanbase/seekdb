@@ -84,7 +84,6 @@ int ObCOPrefetcher::refresh_blockscan_checker_for_column_store(const int64_t sta
       // There are no more data blocks in current range.
       bool is_last = false;
       if (OB_FAIL(is_last_range(is_last))) {
-        LOG_WARN("Failed to judge last range", K(ret), K(border_rowkey), K(start_micro_idx));
       } else if (!is_last) {
         // There are more ranges in this scan.
         // Go to columnar scan for next range.
@@ -95,7 +94,6 @@ int ObCOPrefetcher::refresh_blockscan_checker_for_column_store(const int64_t sta
       }
       LOG_DEBUG("ObCOPrefetcher::refresh_blockscan_checker", K_(block_scan_state));
     } else if (OB_FAIL(refresh_blockscan_checker_internal(start_micro_idx, border_rowkey))) {
-      LOG_WARN("Failed to refresh blockscan checker", K(ret), K(border_rowkey), K(start_micro_idx));
     }
   }
   LOG_TRACE("[COLUMNSTORE] COPrefetcher refresh_blockscan_checker [end]", K(ret), K(border_rowkey), K_(block_scan_state), K(start_micro_idx),
@@ -117,7 +115,6 @@ int ObCOPrefetcher::refresh_blockscan_checker_internal(
   //    from get_cur_level_of_block_scan() to (n - 1) level in columnar store scan mode later.
   // b. is_advance_to is false, we will continue to check leaf level in this function.
   if (OB_FAIL(refresh_each_levels(border_rowkey, is_advanced_to))) {
-    LOG_WARN("Failed to refresh each levels", K(ret), K(start_micro_idx));
   }
 
   // Advance leaf level if needed.
@@ -128,8 +125,6 @@ int ObCOPrefetcher::refresh_blockscan_checker_internal(
     } else if (OB_FAIL(refresh_blockscan_checker_in_leaf_level(
                         start_micro_idx,
                         border_rowkey))) {
-      LOG_WARN("Failed to refresh blockscan checker in leaf level",
-                K(ret), K(border_rowkey), K(start_micro_idx));
     }
   }
 
@@ -180,7 +175,6 @@ int ObCOPrefetcher::refresh_each_levels(
       ObCSRange cs_range;
       if (tree_handle.reach_scanner_end()) {
       } else if (OB_FAIL(tree_handle.advance_to_border(border_rowkey, range_idx, cs_range))) {
-        LOG_WARN("Failed to advance to border in this level", K(ret), K(border_rowkey), K(level));
       } else if (FALSE_IT(is_advanced_to = cs_range.is_valid())) {
       } else if (is_advanced_to) {
         block_scan_border_row_id_ = is_reverse ? cs_range.end_row_id_ + 1
@@ -193,7 +187,6 @@ int ObCOPrefetcher::refresh_each_levels(
     if (OB_SUCC(ret)) {
       if (is_advanced_to) {
         if (OB_FAIL(reset_each_levels(level + 1))) {
-          LOG_WARN("Failed to reset each level", K(ret), K(level));
         } else {
           block_scan_state_ = PENDING_BLOCK_SCAN;
           // When reach here, never reach scanner end if level is 0.
@@ -270,7 +263,6 @@ int ObCOPrefetcher::refresh_blockscan_checker_in_leaf_level(
   if (micro_end_idx >= start_micro_idx) {
     can_blockscan_ = true;
     if (OB_FAIL(check_data_infos_border(start_micro_idx, micro_end_idx, border_rowkey, is_reverse))) {
-      LOG_WARN("Failed to check data infos border", K(ret), K(border_rowkey), K(start_micro_idx));
     } else if (can_blockscan_) {
       can_blockscan_ = false;
       pos = micro_end_idx + 1;
@@ -327,7 +319,6 @@ int ObCOPrefetcher::advance_index_tree_level(
   if (OB_FAIL(co_index_tree_level_handle.advance_to_border(border_rowkey_,
                                                            cur_range_fetch_idx_,
                                                            cs_range))) {
-    LOG_WARN("Failed to advance to border", K(ret), K_(border_rowkey));
   } else if (FALSE_IT(is_advanced_to = cs_range.is_valid())) {
   } else if (is_advanced_to) {
     const bool is_reverse = access_ctx_->query_flag_.is_reverse_scan();
@@ -337,7 +328,6 @@ int ObCOPrefetcher::advance_index_tree_level(
   if (OB_SUCC(ret)) {
     if (OB_LIKELY(!co_index_tree_level_handle.reach_scanner_end())) {
       if (OB_FAIL(try_jumping_to_next_skip_level(co_index_tree_level_handle, false))) {
-        LOG_WARN("Failed to try jumping to next skip level", K(ret), K_(border_rowkey));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -426,7 +416,6 @@ int ObCOPrefetcher::ObCOIndexTreeLevelHandle::try_advancing_fetch_idx(
     ObCommonDatumRowkey endkey;
     if (prefetch_idx == fetch_idx_) {
       if (OB_FAIL(index_scanner_.get_end_key(endkey))) {
-        LOG_WARN("Failed to get end key", K(ret));
       }
     } else {
       endkey = index_info.endkey_;
@@ -438,7 +427,6 @@ int ObCOPrefetcher::ObCOIndexTreeLevelHandle::try_advancing_fetch_idx(
       int cmp_ret = 0;
       if (OB_FAIL(endkey.compare(border_rowkey, *prefetcher.datum_utils_,
                                               cmp_ret, false))) {
-        LOG_WARN("Failed to compare rowkey", K(ret), K(border_rowkey));
       } else if (!is_reverse) {
         if (cmp_ret < 0) {
           if (is_range_end) {
@@ -483,7 +471,6 @@ int ObCOPrefetcher::ObCOIndexTreeLevelHandle::advance_to_border(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(index_scanner_.advance_to_border(rowkey, range_idx, cs_range))) {
-    LOG_WARN("index scanner failed to advance to border", K(rowkey), K(range_idx));
   }
   return ret;
 }
@@ -501,14 +488,12 @@ int ObCOPrefetcher::ObCOIndexTreeLevelHandle::forward(
     int8_t fetch_idx = fetch_idx_ % INDEX_TREE_PREFETCH_DEPTH;
     ObMicroIndexInfo &index_info = index_block_read_handles_[fetch_idx].index_info_;
     if (OB_FAIL(index_block_read_handles_[fetch_idx].data_handle_.get_micro_block_data(nullptr, index_block_, false))) {
-      LOG_WARN("Fail to get index block data", K(ret), KPC(this), K(index_block_), K(fetch_idx_), K(prefetch_idx_));
     } else if (index_info.is_get()) {
       if (OB_FAIL(index_scanner_.open(
           index_info.get_macro_id(),
           index_block_,
           index_info.get_query_key(),
           index_info.range_idx()))) {
-        LOG_WARN("Fail to open index scanner", K(ret), KPC(this));
       }
     } else if (OB_FAIL(index_scanner_.open(
         index_info.get_macro_id(),
@@ -531,7 +516,6 @@ int ObCOPrefetcher::ObCOIndexTreeLevelHandle::forward(
       } else if (OB_LIKELY(OB_BEYOND_THE_RANGE == ret)) {
         // Current level is end in current range, try advancing skip level.
         if (OB_FAIL(co_prefetcher.try_jumping_to_next_skip_level(*this, true))) {
-          LOG_WARN("Failed to try jumping to next skip level", K(ret), K_(co_prefetcher.border_rowkey));
         } else {
           ret = OB_SUCCESS;
         }

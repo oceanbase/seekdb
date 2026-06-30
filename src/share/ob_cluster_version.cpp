@@ -109,7 +109,6 @@ int ObClusterVersion::init(const ObServerConfig *config)
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid argument", KR(ret), KP(config));
   } else if (OB_FAIL(refresh_cluster_version(config->min_observer_version.str()))) {
-    COMMON_LOG(WARN, "refresh cluster version error", KR(ret));
   } else {
     config_ = config;
     COMMON_LOG(INFO, "cluster version inited success", K_(cluster_version));
@@ -145,7 +144,6 @@ int64_t ObClusterVersion::print_vsn(char *buf, const int64_t buf_len, uint64_t v
   const uint8_t minor_patch = OB_VSN_MINOR_PATCH(version);
   if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%lu(%u, %u, %u, %u)",
               version, major, minor, major_patch, minor_patch))) {
-    COMMON_LOG(WARN, "fail to print vsn", KR(ret), K(version));
   }
   if (OB_FAIL(ret)) {
     pos = OB_INVALID_INDEX;
@@ -222,7 +220,6 @@ int ObClusterVersion::tenant_need_upgrade(bool &need_upgrade)
   int ret = OB_SUCCESS;
   uint64_t data_version = 0;
   if (OB_FAIL(get_tenant_data_version(data_version))) {
-    COMMON_LOG(WARN, "fail to get tenant data version", KR(ret));
   } else {
     need_upgrade = (data_version < DATA_CURRENT_VERSION);
   }
@@ -237,7 +234,6 @@ int ObClusterVersion::is_valid(const char *verstr)
   if (NULL == verstr) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(parse_version(verstr, items, MAX_VERSION_ITEM))) {
-    COMMON_LOG(WARN, "invalid version", "version_str", verstr);
   }
   return ret;
 }
@@ -249,9 +245,7 @@ int ObClusterVersion::get_version(const common::ObString &verstr, uint64_t &vers
   version = 0;
 
   if (OB_FAIL(databuff_printf(buf, OB_CLUSTER_VERSION_LENGTH, "%.*s", verstr.length(), verstr.ptr()))) {
-    COMMON_LOG(WARN, "failed to print version", K(ret), K(verstr));
   } else if (OB_FAIL(get_version(buf, version))) {
-    COMMON_LOG(WARN, "failed to get version", K(ret), K(buf));
   }
 
   return ret;
@@ -264,7 +258,6 @@ int ObClusterVersion::get_version(const char *verstr, uint64_t &version)
   if (NULL == verstr) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(parse_version(verstr, items, MAX_VERSION_ITEM))) {
-    COMMON_LOG(WARN, "invalid version", "version_str", verstr);
   } else {
     version = cal_version(items[ObClusterVersion::MAJOR_POS],
                           items[ObClusterVersion::MINOR_POS],

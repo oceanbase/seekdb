@@ -241,7 +241,6 @@ int ObFixedHashMap<Key, Value, HashFunc>::get(Key key, Value &value)
     ret = common::OB_NOT_INIT;
     SHARE_LOG(WARN, "not init", K(ret));
   } else if (OB_FAIL(hash_func_(key, hash_val))) {
-    SHARE_LOG(WARN, "hash failed", K(ret));
   } else {
     ret = common::OB_ENTRY_NOT_EXIST;
     const int64_t pos = hash_val % bucket_num_;
@@ -295,7 +294,6 @@ int ObFixedHashMap<Key, Value, HashFunc>::set(const Key &key, const Value &value
     ret = common::OB_SIZE_OVERFLOW;
     SHARE_LOG(WARN, "hashmap is full", K(ret), K_(size), K_(node_num));
   } else if (OB_FAIL(hash_func_(key, hash_val))) {
-    SHARE_LOG(WARN, "hash failed", K(ret));
   } else {
     const int64_t pos = hash_val % bucket_num_;
     Node *node = buckets_[pos];
@@ -334,7 +332,6 @@ int ObFixedHashMap<Key, Value, HashFunc>::erase(const Key &key)
     ret = common::OB_NOT_INIT;
     SHARE_LOG(WARN, "not init", K(ret));
   } else if (OB_FAIL(hash_func_(key, hash_val))) {
-    SHARE_LOG(WARN, "hash failed", K(ret));
   } else {
     ret = common::OB_ENTRY_NOT_EXIST;
     const int64_t pos = hash_val % bucket_num_;
@@ -542,7 +539,6 @@ int ObSimpleFixedArray<T>::init(const int64_t capacity, const char *label)
     this->set_allocator(&local_allocator_);
     ret = this->common::ObFixedArrayImpl<T, common::ObArenaAllocator>::init(capacity);
     if (OB_FAIL(ret)) {
-      SHARE_LOG(WARN, "array init failed", K(ret), K(capacity));
     } else {
       inited_ = true;
     }

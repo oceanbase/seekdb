@@ -57,7 +57,6 @@ int ObDirectLoadMultipleHeapTableSorter::add_table(const ObDirectLoadTableHandle
     ObDirectLoadExternalTable *external_table =
       static_cast<ObDirectLoadExternalTable *>(table_handle.get_table());
     if (OB_FAIL(fragments_.push_back(external_table->get_fragments()))) {
-      LOG_WARN("fail to push back", KR(ret));
     }
   }
   return ret;
@@ -72,14 +71,12 @@ int ObDirectLoadMultipleHeapTableSorter::acquire_chunk(ObDirectLoadMultipleHeapT
   if (mem_ctx_->exe_mode_ == ObTableLoadExeMode::MAX_TYPE) {
     sort_memory = mem_ctx_->heap_table_mem_chunk_size_;
   } else if (OB_FAIL(ObTableLoadService::get_sort_memory(sort_memory))) {
-    LOG_WARN("fail to get sort memory", KR(ret));
   }
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(chunk = OB_NEW(ObDirectLoadMultipleHeapTableMap, mem_attr, sort_memory))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadMultipleHeapTableMap", KR(ret));
     } else if (OB_FAIL(chunk->init())) {
-      LOG_WARN("fail to init external sort", KR(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -110,11 +107,8 @@ int ObDirectLoadMultipleHeapTableSorter::close_chunk(ObDirectLoadMultipleHeapTab
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("chunk is null", KR(ret));
   } else if (OB_FAIL(chunk->get_all_key_sorted(keys))) {
-    LOG_WARN("fail to get keys", KR(ret));
   } else if (OB_FAIL(datum_row.init(mem_ctx_->table_data_desc_.column_count_))) {
-    LOG_WARN("fail to init datum row", KR(ret));
   } else if (OB_FAIL(table_builder.init(table_builder_param))) {
-    LOG_WARN("fail to init table builder", KR(ret));
   }
   // Write to table_builder in order of tablet_id
   for (int64_t i = 0; OB_SUCC(ret) && i < keys.count(); i++) {
@@ -122,22 +116,17 @@ int ObDirectLoadMultipleHeapTableSorter::close_chunk(ObDirectLoadMultipleHeapTab
     ObArray<const ObDirectLoadConstExternalMultiPartitionRow *> bag;
     
     if (OB_FAIL(chunk->get(tablet_id, bag))) {
-      LOG_WARN("fail to get bag", KR(ret));
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < bag.count(); j++) {
       const ObDirectLoadConstExternalMultiPartitionRow *row = bag.at(j);
       if (OB_FAIL(row->to_datum_row(datum_row))) {
-        LOG_WARN("fail to transfer dataum row", KR(ret));
       } else if (OB_FAIL(table_builder.append_row(tablet_id, datum_row))) {
-        LOG_WARN("fail to append row", KR(ret));
       }
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(table_builder.close())) {
-      LOG_WARN("fail to close table builder", KR(ret));
     } else if (OB_FAIL(get_tables(table_builder))) {
-      LOG_WARN("fail to get tables", KR(ret));
     }
   }
 
@@ -155,9 +144,7 @@ int ObDirectLoadMultipleHeapTableSorter::get_tables(
   int ret = OB_SUCCESS;
   ObDirectLoadTableHandleArray table_array;
   if (OB_FAIL(table_builder.get_tables(table_array, mem_ctx_->table_mgr_))) {
-    LOG_WARN("fail to get tables", KR(ret));
   } else if (OB_FAIL(heap_table_array_->add(table_array))) {
-    LOG_WARN("fail to add table array", KR(ret));
   } else {
     ATOMIC_AAF(&ctx_->job_stat_->store_.compact_stage_product_tmp_files_, table_array.count());
   }
@@ -185,9 +172,7 @@ int ObDirectLoadMultipleHeapTableSorter::work()
     ExternalReader external_reader;
     if (OB_FAIL(external_reader.init(mem_ctx_->table_data_desc_.external_data_block_size_,
                                      mem_ctx_->table_data_desc_.compressor_type_))) {
-      LOG_WARN("fail to init external reader", KR(ret));
     } else if (OB_FAIL(external_reader.open(fragment.file_handle_, 0, fragment.file_size_))) {
-      LOG_WARN("fail to open file", KR(ret));
     }
     while (OB_SUCC(ret) && OB_LIKELY(!mem_ctx_->has_error_)) {
       if (row == nullptr && OB_FAIL(external_reader.get_next_item(row))) {
@@ -207,7 +192,6 @@ int ObDirectLoadMultipleHeapTableSorter::work()
           } else {
             ret = OB_SUCCESS;
             if (OB_FAIL(close_chunk(chunk))) {
-              LOG_WARN("fail to close chunk", KR(ret));
             }
           }
         } else {

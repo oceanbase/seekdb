@@ -155,7 +155,6 @@ static int get_executable_name(ObSqlString &exe_name)
       last_slash++;
     }
     if (OB_FAIL(exe_name.assign(last_slash))) {
-      LOG_WARN("fail to assign exe name to `sql string`", K(ret));
     }
   }
 #endif

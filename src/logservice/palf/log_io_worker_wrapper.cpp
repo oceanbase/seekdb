@@ -62,7 +62,6 @@ int LogIOWorkerWrapper::init(const LogIOWorkerConfig &config,
              KP(palf_env_impl));
   } else if (OB_FAIL(create_and_init_log_io_workers_(config, cb_thread_pool_tg_id,
                                           allocator, palf_env_impl))) {
-    LOG_WARN("init_log_io_workers_ failed", K(config));
   } else {
     is_user_tenant_ = false;
     log_writer_parallelism_ = config.io_worker_num_;
@@ -89,7 +88,6 @@ int LogIOWorkerWrapper::start()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(start_())) {
-    LOG_WARN("failed to start log_io_workers_");
   } else {
     LOG_INFO("success to start LogIOWorkerWrapper", KPC(this));
   }
@@ -158,8 +156,6 @@ int LogIOWorkerWrapper::create_and_init_log_io_workers_(const LogIOWorkerConfig 
     bool need_ignoring_throttling = false;
     if (OB_FAIL(iow->init(config, cb_thread_pool_tg_id, allocator,
                           &throttle_, need_ignoring_throttling, palf_env_impl))) {
-      PALF_LOG(WARN, "init LogIOWorker failed", K(i), K(config),
-               K(cb_thread_pool_tg_id), KP(allocator), KP(palf_env_impl));
     } else {
       log_writer_parallelism_++;
       PALF_LOG(INFO, "init LogIOWorker success", K(i), K(config),
@@ -180,7 +176,6 @@ int LogIOWorkerWrapper::start_()
   for (int64_t i = 0; i < log_writer_parallelism_ && OB_SUCC(ret); i++) {
     LogIOWorker *iow = log_io_workers_ + i;
     if (OB_FAIL(iow->start())) {
-      PALF_LOG(WARN, "start LogIOWorker failed", K(i));
     }
   }
   return ret;

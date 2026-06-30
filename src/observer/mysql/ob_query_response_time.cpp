@@ -101,7 +101,6 @@ int ObRespTimeInfoCollector::setup(uint32_t base)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(utility_.setup(base))) {
-    LOG_WARN("failed to setup utility",K(ret), K(base));
   }
   return ret;
 }
@@ -121,49 +120,41 @@ int ObRespTimeInfoCollector::collect(const sql::stmt::StmtType sql_type, const b
     LOG_WARN("invalid pos in utility", K(ret), K(pos));
   } else if (is_inner_sql) {
     if (OB_FAIL(inner_sql_info_.collect(pos, resp_time))) {
-      LOG_WARN("inner sql info failed to collect resp time", K(ret), K(pos), K(resp_time), K(utility_.bound_count()));
     }
   } else {
     switch (sql_type) {
       case sql::stmt::T_SELECT : {
         if (OB_FAIL(select_sql_info_.collect(pos, resp_time))) {
-          LOG_WARN("select info failed to collect resp time", K(ret), K(pos), K(resp_time), K(utility_.bound_count()));
         }
         break;
       }
       case sql::stmt::T_INSERT : {
         if (OB_FAIL(insert_sql_info_.collect(pos, resp_time))) {
-          LOG_WARN("insert info failed to collect resp time", K(ret), K(pos), K(resp_time), K(utility_.bound_count()));
         }
         break;
       }
       case sql::stmt::T_DELETE : {
         if (OB_FAIL(delete_sql_info_.collect(pos, resp_time))) {
-          LOG_WARN("delete info failed to collect resp time", K(ret), K(pos), K(resp_time), K(utility_.bound_count()));
         }
         break;
       }
       case sql::stmt::T_UPDATE : {
         if (OB_FAIL(update_sql_info_.collect(pos, resp_time))) {
-          LOG_WARN("update info failed to collect resp time", K(ret), K(pos), K(resp_time), K(utility_.bound_count()));
         }
         break;
       }
       case sql::stmt::T_REPLACE : {
         if (OB_FAIL(replace_sql_info_.collect(pos, resp_time))) {
-          LOG_WARN("replace info failed to collect resp time", K(ret), K(pos), K(resp_time), K(utility_.bound_count()));
         }
         break;
       }
       case sql::stmt::T_XA_COMMIT : {
         if (OB_FAIL(commit_sql_info_.collect(pos, resp_time))) {
-          LOG_WARN("commit info failed to collect resp time", K(ret), K(pos), K(resp_time), K(utility_.bound_count()));
         }
         break;
       }
       default: {
         if (OB_FAIL(other_sql_info_.collect(pos, resp_time))) {
-          LOG_WARN("other info failed to collect resp time", K(ret), K(pos), K(resp_time), K(utility_.bound_count()));
         }
         break;
       }
@@ -180,7 +171,6 @@ int ObRespTimeInfoCollector::flush(int64_t base /*=OB_INVALID_ID*/)
   if (!true) {
   } else {
     if (OB_FAIL(setup(base == OB_INVALID_ID ? GCONF.query_response_time_range_base : base))) {
-      LOG_WARN("failed to setup utility", K(ret));
     }
   }
 
@@ -285,7 +275,6 @@ int ObTenantQueryRespTimeCollector::mtl_init(ObTenantQueryRespTimeCollector *&t_
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tenant query response time collector is null", K(ret));
   } else if (OB_FAIL(t_resp_time_collector->init())) {
-    LOG_WARN("failed to init tenant query response time collector", K(ret));
   }
   return ret;
 }
@@ -307,7 +296,6 @@ int ObTenantQueryRespTimeCollector::collect(const sql::stmt::StmtType sql_type, 
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(multi_collector_.at(pos).collect(sql_type, is_inner_sql, resp_time))) {
-    LOG_WARN("failed to collect response time",K(ret), K(pos), K(sql_type), K(resp_time), K(is_inner_sql));
   }
 
   return ret;
@@ -319,7 +307,6 @@ int ObTenantQueryRespTimeCollector::get_sum_value(ObRespTimeInfoCollector &total
   int ret = OB_SUCCESS;
   RLockGuard rlock_guard(rwlock_);
   if (OB_FAIL(total_collector.flush(multi_collector_.at(0).utility().base()))) {
-    LOG_WARN("failed to flush total collector", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < multi_ways_count_; i++) {
       for (int64_t j = 0; OB_SUCC(ret) && j < total_collector.utility().bound_count(); j++) {
@@ -344,7 +331,6 @@ int ObTenantQueryRespTimeCollector::flush()
   WLockGuard wlock_guard(rwlock_);
   for (int64_t i = 0; OB_SUCC(ret) && i < multi_ways_count_; i++) {
     if (OB_FAIL(multi_collector_.at(i).flush())) {
-      LOG_WARN("failed to flush resp time info collector", K(ret), K(i));
     }
   }
   return ret;

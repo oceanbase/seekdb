@@ -28,11 +28,9 @@ int ObCompactionTimerTask::restart_schedule_timer_task(
   int ret = OB_SUCCESS;
   bool is_exist = false;
   if (OB_FAIL(TG_TASK_EXIST(tg_id, timer_task, is_exist))) {
-    LOG_ERROR("failed to check merge schedule task exist", K(ret));
   } else if (is_exist && OB_FAIL(TG_CANCEL_R(tg_id, timer_task))) {
     LOG_WARN("failed to cancel task", K(ret));
   } else if (OB_FAIL(TG_SCHEDULE(tg_id, timer_task, schedule_interval, true/*repeat*/))) {
-    LOG_WARN("Fail to schedule timer task", K(ret));
   }
   return ret;
 }

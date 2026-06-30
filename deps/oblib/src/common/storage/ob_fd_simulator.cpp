@@ -106,7 +106,6 @@ int ObFdSimulator::init()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       OB_LOG(WARN, "fail to alloc mem for init fd management(second stage)!");
     } else if (OB_FAIL(init_manager_array(second_array))) {
-      OB_LOG(WARN, "fail to init fd mng!");
     } else {
       is_init_ = true;
     }
@@ -127,7 +126,6 @@ int ObFdSimulator::extend_second_array()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       OB_LOG(WARN, "fail to extend second array for fd mng!", K(second_array_num_), K(ret));
     } else if (OB_FAIL(init_manager_array(second_array_p))) {
-      OB_LOG(WARN, "fail to init extend second array for fd mng!", K(second_array_num_), K(ret));
     }
   }
   return ret;
@@ -183,9 +181,7 @@ int ObFdSimulator::get_fd(void* ctx, const int device_type, const int flag, ObIO
     OB_LOG(WARN, "fail to alloc fd, maybe need extend second array!");
     /*after the first fail, try to extend*/
     if (OB_FAIL(extend_second_array())) {
-      OB_LOG(WARN, "fail to extand second fd array, it is full!", K(second_array_num_));
     } else if (OB_FAIL(try_get_fd_inner(first_array_, second_array_num_, ctx, fd))) {
-      OB_LOG(WARN, "fail to alloc fd, it is impossible!");
     }
   }
 

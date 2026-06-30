@@ -271,7 +271,6 @@ int ObDirectLoadVectorUtils::check_rowkey_length(const ObDirectLoadBatchRows &ba
         if (col_desc.col_type_.is_lob_storage()) {
           // For LOB columns, use the new sum_lob_length method
           if (OB_FAIL(vector->sum_lob_length(rowkey_len, row_count))) {
-            LOG_WARN("fail to sum lob bytes usage", KR(ret), K(col_idx), K(col_desc));
           }
         } else {
           // For non-LOB columns, use the existing sum_bytes_usage method
@@ -308,7 +307,6 @@ int ObDirectLoadVectorUtils::make_const_tablet_id_vector(const ObTabletID &table
     LOG_WARN("invalid args", KR(ret), K(tablet_id));
   } else {
     if (OB_FAIL(new_vector(VEC_UNIFORM_CONST, tablet_id_value_tc, allocator, vector))) {
-      LOG_WARN("fail to new uniform const vector", KR(ret));
     } else {
       ObUniformBase *uniform_vec = static_cast<ObUniformBase *>(vector);
       ObStorageDatum *storage_datum = nullptr;
@@ -585,7 +583,6 @@ int ObDirectLoadVectorUtils::make_const_multi_version_vector(const int64_t value
   int ret = OB_SUCCESS;
   vector = nullptr;
   if (OB_FAIL(new_vector(VEC_UNIFORM_CONST, multi_version_value_tc, allocator, vector))) {
-    LOG_WARN("fail to new uniform const vector", KR(ret));
   } else {
     ObUniformBase *uniform_vec = static_cast<ObUniformBase *>(vector);
     ObStorageDatum *storage_datum = nullptr;

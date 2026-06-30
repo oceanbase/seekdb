@@ -52,7 +52,6 @@ int ObIColumnDecoder::get_is_null_bitmap_from_fixed_column(
       MEMSET(read_buf, 0, sizeof(uint64_t) * bm_block_count);
       for (int64_t i = 0; OB_SUCC(ret) && i < bm_block_count - 1; ++i) {
         if (OB_FAIL(ObBitStream::get(col_data, pd_filter_info.start_ + i * bm_block_bits, bm_block_bits, read_buf[i]))) {
-          LOG_WARN("Get extended value from column meta failed", K(ret), K(col_ctx));
         }
       }
       if (OB_FAIL(ret)) {
@@ -61,10 +60,8 @@ int ObIColumnDecoder::get_is_null_bitmap_from_fixed_column(
                     pd_filter_info.start_ + (bm_block_count - 1) * bm_block_bits,
                     bm_block_bits,
                     read_buf[bm_block_count - 1]))) {
-        LOG_WARN("Get extended value from column meta failed", K(ret), K(col_ctx));
       } else {
         if (OB_FAIL(result_bitmap.load_blocks_from_array(read_buf, row_count))) {
-          LOG_WARN("Failed to load result_bitmap from fix_size column null bitmap", K(ret));
         }
       }
     }
@@ -96,16 +93,13 @@ int ObIColumnDecoder::get_is_null_bitmap_from_var_column(
       for (int64_t offset = 0; OB_SUCC(ret) && offset < pd_filter_info.count_; ++offset) {
         row_id = offset + pd_filter_info.start_;
         if (OB_FAIL(locate_row_data(col_ctx, row_index, row_id, row_data, row_len))) {
-          LOG_WARN("Failed to get row_data offset from row index", K(ret));
         } else if (OB_FAIL(ObBitStream::get(
                               reinterpret_cast<const unsigned char*>(row_data),
                               col_ctx.col_header_->extend_value_index_,
                               col_ctx.micro_block_header_->extend_value_bit_,
                               value))) {
-          LOG_WARN("Get extended value from row data failed", K(ret), K(col_ctx));
         } else if (value & static_cast<uint64_t>(1)) {
           if (OB_FAIL(result_bitmap.set(offset))) {
-            LOG_WARN("Failed to set result bitmap", K(ret), K(offset));
           }
         }
       }
@@ -128,7 +122,6 @@ int ObIColumnDecoder::set_null_datums_from_fixed_column(
     row_id = row_ids[i];
     if (OB_FAIL(ObBitStream::get(col_data, row_id * ctx.micro_block_header_->extend_value_bit_,
         ctx.micro_block_header_->extend_value_bit_, val))) {
-      LOG_WARN("Get extend value failed", K(ret), K(ctx));
     } else {
       datums[i].null_ = STORED_NOT_EXT != val;
       datums[i].len_ = 0;
@@ -152,13 +145,11 @@ int ObIColumnDecoder::set_null_datums_from_var_column(
   for (int64_t i = 0; OB_SUCC(ret) && i < row_cap; ++i) {
     row_id = row_ids[i];
     if (OB_FAIL(locate_row_data(ctx, row_index, row_id, row_data, row_len))) {
-      LOG_WARN("Failed to get row_data offset from row index", K(ret), K(row_id));
     } else if (OB_FAIL(ObBitStream::get(
         reinterpret_cast<const unsigned char *>(row_data),
         ctx.col_header_->extend_value_index_,
         ctx.micro_block_header_->extend_value_bit_,
         val))) {
-      LOG_WARN("Failed to get extend value from row data", K(ret), K(ctx));
     } else {
       datums[i].null_ = STORED_NOT_EXT != val;
       datums[i].len_ = 0;
@@ -207,7 +198,6 @@ int ObIColumnDecoder::batch_locate_var_len_row(
   } else if (FALSE_IT(vector_ctx.reset_tmp_arr())) {
   } else if (OB_FAIL(row_index->batch_get(vector_ctx.row_ids_, vector_ctx.row_cap_,
       ctx.has_extend_value(), vector_ctx.ptr_arr_, vector_ctx.len_arr_))) {
-    LOG_WARN("failed to batch get var row index", K(ret));
   } else if (ctx.has_extend_value()) {
     const int64_t null_idx = ctx.col_header_->extend_value_index_;
     for (int64_t i = 0; OB_SUCC(ret) && i < vector_ctx.row_cap_; ++i) {
@@ -240,12 +230,10 @@ int ObIColumnDecoder::get_null_count(
   for (int64_t i = 0; OB_SUCC(ret) && i < row_cap; ++i) {
     row_id = row_ids[i];
     if (OB_FAIL(row_index->get(row_id, row_data, row_len))) {
-      LOG_WARN("get row data failed", K(ret), K(row_id));
     }
     ObBitStream bs(reinterpret_cast<unsigned char *>(const_cast<char *>(row_data)), row_len);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(decode(const_cast<ObColumnDecoderCtx &>(ctx), datum, row_id, bs, row_data, row_len))) {
-      LOG_WARN("failed to decode datum", K(ret));
     } else if (datum.is_null()) {
       null_count++;
     }
@@ -267,7 +255,6 @@ int ObIColumnDecoder::get_null_count_from_fixed_column(
     row_id = row_ids[i];
     if (OB_FAIL(ObBitStream::get(col_data, row_id * ctx.micro_block_header_->extend_value_bit_,
         ctx.micro_block_header_->extend_value_bit_, val))) {
-      LOG_WARN("Get extend value failed", K(ret), K(ctx));
     } else if (STORED_NOT_EXT != val) {
       null_count++;
     }
@@ -290,13 +277,11 @@ int ObIColumnDecoder::get_null_count_from_var_column(
   for (int64_t i = 0; OB_SUCC(ret) && i < row_cap; ++i) {
     row_id = row_ids[i];
     if (OB_FAIL(locate_row_data(ctx, row_index, row_id, row_data, row_len))) {
-      LOG_WARN("Failed to get row_data offset from row index", K(ret), K(row_id));
     } else if (OB_FAIL(ObBitStream::get(
         reinterpret_cast<const unsigned char *>(row_data),
         ctx.col_header_->extend_value_index_,
         ctx.micro_block_header_->extend_value_bit_,
         val))) {
-      LOG_WARN("Failed to get extend value from row data", K(ret), K(ctx));
     } else if (STORED_NOT_EXT != val) {
       null_count++;
     }
@@ -319,11 +304,9 @@ int ObIColumnDecoder::get_null_count_from_extend_value(
     if (ctx.is_fix_length() || ctx.is_bit_packing()) {
       if (OB_FAIL(get_null_count_from_fixed_column(
           ctx, row_ids, row_cap, col_data, null_count))) {
-        LOG_WARN("Failed to get null count from fixed data", K(ret), K(ctx));
       }
     } else if (OB_FAIL(get_null_count_from_var_column(
         ctx, row_index, row_ids, row_cap, null_count))) {
-      LOG_WARN("Failed to get null count from var data", K(ret), K(ctx));
     }
   } else {
     null_count = 0;
@@ -423,7 +406,6 @@ int ObSpanColumnDecoder::decode_exception_vector(
   }
   #undef LOAD_VEC_BY_TYPE
   if (OB_FAIL(ret)) {
-    LOG_WARN("failed to decode inter column exception data", K(ret), K(vec_tc), K(decoder_ctx));
   }
   return ret;
 }
@@ -496,8 +478,6 @@ int ObSpanColumnDecoder::decode_refed_range(
       ptr_arr, len_arr, row_id_arr, row_cap, vec_offset, raw_vector_ctx.vec_header_);
   if (OB_FAIL(decoder_ctx.ref_decoder_->decode_vector(
       *decoder_ctx.ref_ctx_, row_index, ref_range_decode_ctx))) {
-    LOG_WARN("Failed to decode vector from referenced column", K(ret),
-        K(decoder_ctx), K(ref_start_idx), K(ref_end_idx));
   }
   return ret;
 }

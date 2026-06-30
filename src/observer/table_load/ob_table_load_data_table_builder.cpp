@@ -67,13 +67,9 @@ int ObTableLoadDataTableBuilder::init(const ObTableLoadDataTableBuildParam &para
     builder_param.extra_buf_ = reinterpret_cast<char *>(1);
     builder_param.extra_buf_size_ = 4096;
     if (OB_FAIL(index_row_.init(param.project_->get_src_column_num()))) {
-      LOG_WARN("fail to init datum row", KR(ret));
     } else if (OB_FAIL(ack_row_.init(param.table_data_desc_.column_count_))) {
-      LOG_WARN("fail to init datum row", KR(ret));
     } else if (OB_FAIL(delete_row_.init(param.table_data_desc_.column_count_))) {
-      LOG_WARN("fail to init datum row", KR(ret));
     } else if (OB_FAIL(table_builder_.init(builder_param))) {
-      LOG_WARN("fail to init new_builder", KR(ret));
     } else {
       datum_utils_ = param.datum_utils_;
       project_ = param.project_;
@@ -96,9 +92,7 @@ int ObTableLoadDataTableBuilder::append_ack_row(const ObTabletID &tablet_id,
     ack_row_.seq_no_ = datum_row.seq_no_;
     ObTabletID data_tablet_id;
     if (OB_FAIL(project_->projector(tablet_id, datum_row, data_tablet_id, ack_row_))) {
-      LOG_WARN("fail to projector", KR(ret), K(tablet_id), K(datum_row));
     } else if (OB_FAIL(table_builder_.append_row(data_tablet_id, ack_row_))) {
-      LOG_WARN("fail to append row", KR(ret));
     }
   }
   return ret;
@@ -115,9 +109,7 @@ int ObTableLoadDataTableBuilder::append_delete_row(const ObTabletID &tablet_id,
     delete_row_.seq_no_ = datum_row.seq_no_;
     ObTabletID data_tablet_id;
     if (OB_FAIL(project_->projector(tablet_id, datum_row, data_tablet_id, delete_row_))) {
-      LOG_WARN("fail to projector", KR(ret), K(tablet_id), K(datum_row));
     } else if (OB_FAIL(table_builder_.append_row(data_tablet_id, delete_row_))) {
-      LOG_WARN("fail to append row", KR(ret));
     }
   }
   return ret;
@@ -134,11 +126,8 @@ int ObTableLoadDataTableBuilder::append_delete_row(const ObTabletID &tablet_id,
     delete_row_.seq_no_ = row.seq_no_;
     ObTabletID data_tablet_id;
     if (OB_FAIL(row.to_datum_row(index_row_))) {
-      LOG_WARN("fail to get datum row", KR(ret), K(row));
     } else if (OB_FAIL(project_->projector(tablet_id, index_row_, data_tablet_id, delete_row_))) {
-      LOG_WARN("fail to projector", KR(ret), K(tablet_id), K(index_row_));
     } else if (OB_FAIL(table_builder_.append_row(data_tablet_id, delete_row_))) {
-      LOG_WARN("fail to append row", KR(ret));
     }
   }
   return ret;
@@ -155,11 +144,8 @@ int ObTableLoadDataTableBuilder::append_delete_row(const ObDirectLoadMultipleDat
     const ObTabletID &tablet_id = row.rowkey_.tablet_id_;
     ObTabletID data_tablet_id;
     if (OB_FAIL(row.to_datum_row(index_row_))) {
-      LOG_WARN("fail to get datum row", KR(ret), K(row));
     } else if (OB_FAIL(project_->projector(tablet_id, index_row_, data_tablet_id, delete_row_))) {
-      LOG_WARN("fail to projector", KR(ret), K(tablet_id), K(index_row_));
     } else if (OB_FAIL(table_builder_.append_row(data_tablet_id, delete_row_))) {
-      LOG_WARN("fail to append row", KR(ret));
     }
   }
   return ret;
@@ -173,7 +159,6 @@ int ObTableLoadDataTableBuilder::close()
     LOG_WARN("ObTableLoadDataTableBuilder not init", KR(ret), KP(this));
   } else {
     if (OB_FAIL(table_builder_.close())) {
-      LOG_WARN("fail to close table builder", KR(ret));
     }
   }
   return ret;
@@ -188,7 +173,6 @@ int ObTableLoadDataTableBuilder::get_tables(ObDirectLoadTableHandleArray &table_
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadDataTableBuilder not init", KR(ret), KP(this));
   } else if (OB_FAIL(table_builder_.get_tables(table_array, table_mgr))) {
-    LOG_WARN("fail to get tables", KR(ret));
   }
   return ret;
 }

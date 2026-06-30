@@ -53,7 +53,6 @@ int ObTenantMutilAllocatorMgr::delete_tenant_log_allocator()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(delete_tenant_mutil_allocator_())) {
-    OB_LOG(WARN, "delete_tenant_mutil_allocator_ failed", K(ret));
   } else {
     OB_LOG(INFO, "delete_tenant_mutil_allocator_ success");
   }
@@ -77,7 +76,6 @@ int ObTenantMutilAllocatorMgr::get_tenant_mutil_allocator_(TMA *&out_allocator)
     if (NULL == out_allocator) {
       // Need create new allocator
       if (OB_FAIL(create_tenant_mutil_allocator_(out_allocator))) {
-        OB_LOG(WARN, "fail to create_tenant_mutil_allocator_", K(ret));
       }
     }
   }
@@ -138,7 +136,6 @@ int ObTenantMutilAllocatorMgr::create_tenant_mutil_allocator_(TMA *&out_allocato
     } else {
       TMA *tmp_tma = NULL;
       if (OB_FAIL(construct_allocator_(tmp_tma))) {
-        OB_LOG(WARN, "fail to construct_allocator_", K(ret));
       } else if (!ATOMIC_BCAS(&tma_, NULL, tmp_tma)) {
         out_allocator = ATOMIC_LOAD(&tma_);
         if (NULL != tmp_tma) {
@@ -204,7 +201,6 @@ int ObTenantMutilAllocatorMgr::update_tenant_mem_limit(const share::ObUnitInfoGe
         // If the unit type of tenant is not Log, need to subtract
         // the reserved memory of memstore
         if (OB_TMP_FAIL(get_tenant_memstore_limit_percent_(cur_memstore_limit_percent))) {
-          OB_LOG(WARN, "memstore_limit_percentage val is unexpected", K(cur_memstore_limit_percent));
         } else if (cur_memstore_limit_percent > 100 || cur_memstore_limit_percent <= 0) {
           OB_LOG(WARN, "memstore_limit_percentage val is unexpected", K(cur_memstore_limit_percent));
         } else {
@@ -213,7 +209,6 @@ int ObTenantMutilAllocatorMgr::update_tenant_mem_limit(const share::ObUnitInfoGe
       }
       ObTenantMutilAllocator *tma= NULL;
       if (OB_TMP_FAIL(get_tenant_mutil_allocator_(tma))) {
-        OB_LOG(WARN, "get_tenant_mutil_allocator_ failed", K(tmp_ret));
       } else if (NULL == tma) {
         OB_LOG(WARN, "get_tenant_mutil_allocator_ failed");
       } else {
@@ -230,7 +225,6 @@ int ObTenantMutilAllocatorMgr::update_tenant_mem_limit(const share::ObUnitInfoGe
       MOD_SCOPE {
         ObMemstoreAllocator &memstore_allocator = share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
         if (OB_FAIL(memstore_allocator.set_memstore_threshold())) {
-          OB_LOG(WARN, "failed to set_memstore_threshold of memstore allocator", K(ret));
         } else {
           OB_LOG(INFO, "succ to set_memstore_threshold of memstore allocator", K(ret));
         }

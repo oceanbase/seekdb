@@ -152,7 +152,6 @@ int ObStorageMetaValue::deep_copy(char *buf, const int64_t buf_len, ObIKVCacheVa
 #endif
     pvalue = new (buf) ObStorageMetaValue();
     if (OB_FAIL(obj_->deep_copy(new_buf, buf_len - pos, pvalue->obj_))) {
-      LOG_WARN("fail to deep copy storage meta object", K(ret), KP(buf), K(buf_len));
     } else {
       pvalue->type_ = type_;
       value = pvalue;
@@ -224,17 +223,14 @@ int ObStorageMetaValue::process_sstable(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(buf), K(size), K(handle));
   } else if (OB_FAIL(sstable.deserialize(allocator, buf, size, pos))) {
-    LOG_WARN("fail to deserialize sstable", K(ret), KP(buf), K(size));
   } else if (OB_ISNULL(tmp_buf = static_cast<char *>(allocator.alloc(sstable.get_deep_copy_size())))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate buffer", K(ret), K(sstable.get_deep_copy_size()));
   } else if (OB_FAIL(sstable.deep_copy(tmp_buf, sstable.get_deep_copy_size(), tiny_meta))) {
-    LOG_WARN("fail to deep copy sstable", K(ret), KP(tmp_buf), K(sstable));
   } else {
     ObStorageMetaCacheValue *cache_value = handle.get_cache_value();
     ObStorageMetaValue value(MetaType::SSTABLE, tiny_meta);
     if (OB_FAIL(OB_STORE_CACHE.get_storage_meta_cache().put_and_fetch(key, value, cache_value->value_, cache_value->cache_handle_))) {
-      LOG_WARN("fail to put and fetch value into storage meta cache", K(ret), K(key), K(value), K(cache_value));
     } else {
       LOG_DEBUG("succeed to process sstable", K(ret), K(value), KPC(cache_value));
     }
@@ -263,17 +259,14 @@ int ObStorageMetaValue::process_co_sstable(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(buf), K(size), K(handle));
   } else if (OB_FAIL(co_sstable.deserialize(allocator, buf, size, pos))) {
-    LOG_WARN("fail to deserialize co sstable", K(ret), KP(buf), K(size));
   } else if (OB_ISNULL(tmp_buf = static_cast<char *>(allocator.alloc(co_sstable.get_deep_copy_size())))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate buffer", K(ret), K(co_sstable.get_deep_copy_size()));
   } else if (OB_FAIL(co_sstable.deep_copy(tmp_buf, co_sstable.get_deep_copy_size(), tiny_meta))) {
-    LOG_WARN("fail to deep copy co sstable", K(ret), KP(tmp_buf), K(co_sstable));
   } else {
     ObStorageMetaCacheValue *cache_value = handle.get_cache_value();
     ObStorageMetaValue value(MetaType::CO_SSTABLE, tiny_meta);
     if (OB_FAIL(OB_STORE_CACHE.get_storage_meta_cache().put_and_fetch(key, value, cache_value->value_, cache_value->cache_handle_))) {
-      LOG_WARN("fail to put and fetch value into secondary meta cache", K(ret), K(key), K(value), K(cache_value));
     }
   }
   if (OB_NOT_NULL(tiny_meta)) {
@@ -300,20 +293,17 @@ int ObStorageMetaValue::process_table_store(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(buf), K(size), K(handle));
   } else if (OB_FAIL(table_store.deserialize(allocator, *tablet, buf, size, pos))) {
-    LOG_WARN("fail to deserialize table store", K(ret), KP(buf), K(size));
   } else if (FALSE_IT(time_guard.click("deserialize"))) {
   } else if (OB_ISNULL(tmp_buf = static_cast<char *>(allocator.alloc(table_store.get_deep_copy_size())))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate buffer", K(ret), K(table_store.get_deep_copy_size()));
   } else if (FALSE_IT(time_guard.click("allocate"))) {
   } else if (OB_FAIL(table_store.deep_copy(tmp_buf, table_store.get_deep_copy_size(), tiny_meta))) {
-    LOG_WARN("fail to deep copy table store", K(ret), KP(tmp_buf), K(table_store));
   } else {
     time_guard.click("deep_copy");
     ObStorageMetaCacheValue *cache_value = handle.get_cache_value();
     ObStorageMetaValue value(MetaType::TABLE_STORE, tiny_meta);
     if (OB_FAIL(OB_STORE_CACHE.get_storage_meta_cache().put_and_fetch(key, value, cache_value->value_, cache_value->cache_handle_))) {
-      LOG_WARN("fail to put and fetch value into storage meta cache", K(ret), K(key), K(value), K(cache_value));
     }
     time_guard.click("put_cache");
   }
@@ -418,9 +408,7 @@ int ObStorageMetaHandle::get_sstable(blocksstable::ObSSTable *&sstable)
   const ObStorageMetaValue *meta_value = nullptr;
   sstable = nullptr;
   if (OB_FAIL(get_value(meta_value))) {
-    LOG_WARN("fail to get sstable value", K(ret), K_(phy_addr), K_(io_handle), K_(cache_handle));
   } else if (OB_FAIL(meta_value->get_sstable(sstable))) {
-    LOG_WARN("fail to get loaded sstable", K(ret), KPC(meta_value));
   }
   return ret;
 }
@@ -446,7 +434,6 @@ int ObStorageMetaHandle::wait()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected meta address", K(ret), K_(phy_addr));
   } else if (OB_FAIL(io_handle_.wait())) {
-    LOG_WARN("fail to wait io handle", K(ret), K(io_handle_));
   }
   return ret;
 }
@@ -455,7 +442,6 @@ int ObStorageMetaCache::init(const char *cache_name)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL((common::ObKVCache<ObStorageMetaKey, ObStorageMetaValue>::init(cache_name)))) {
-    LOG_WARN("fail to init storage meta kv cache", K(ret));
   }
   return ret;
 }
@@ -503,10 +489,8 @@ int ObStorageMetaCache::ObStorageMetaIOCallback::do_process(const char *buf, con
   } else if (OB_UNLIKELY(nullptr != arena_allocator_)) { // bypass cache processor
     if (OB_FAIL(ObStorageMetaValue::bypass_processor[meta_type_](meta_type_, *arena_allocator_,
         handle_, buf, buf_len))) {
-      LOG_WARN("fail to process io buf", K(ret), K(meta_type_), KP(buf), K(buf_len));
     }
   } else if (OB_FAIL(ObStorageMetaValue::processor[meta_type_](handle_, key_, buf, buf_len, tablet_))) {
-    LOG_WARN("fail to process io buf", K(ret), K(meta_type_), KP(buf), K(buf_len));
   }
   return ret;
 }
@@ -533,13 +517,11 @@ int ObStorageMetaCache::get_meta(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key), K(type));
   } else if (OB_FAIL(meta_handle.cache_handle_.new_value(share::g_mp->tenant_meta_mem_mgr()->get_meta_cache_io_allocator()))) {
-    LOG_WARN("fail to new cache handle value", K(ret));
   } else if (OB_FAIL(get(key, meta_handle.cache_handle_.get_cache_value()->value_,
       meta_handle.cache_handle_.get_cache_value()->cache_handle_))) {
     if (OB_UNLIKELY(OB_ENTRY_NOT_EXIST != ret)) {
       LOG_WARN("fail to get storage meta from cache", K(ret), K(type), K(key));
     } else if (OB_FAIL(prefetch(type, key, meta_handle, tablet))) {
-      LOG_WARN("fail to prefetch", K(ret), K(type), K(key));
     } else {
       EVENT_INC(ObStatEventIds::STORAGE_META_CACHE_MISS);
     }
@@ -564,7 +546,6 @@ int ObStorageMetaCache::bypass_get_meta(
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("Don't supported for table store", K(ret), K(type), K(key));
   } else if (OB_FAIL(get_meta_and_bypass_cache(type, key, allocator, meta_handle))) {
-    LOG_WARN("fail to get meta and bypass cache", K(ret), K(type), K(key));
   }
   return ret;
 }
@@ -591,9 +572,7 @@ int ObStorageMetaCache::batch_get_meta_and_bypass_cache(
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("Don't supported for table store", K(ret), K(meta_type), K(key));
       } else if (OB_FAIL(get_meta_and_bypass_cache(meta_type, key, allocator, meta_handle))) {
-        LOG_WARN("fail to do get meta", K(ret), K(meta_type), K(key), K(meta_handle));
       } else if (OB_FAIL(meta_handles.push_back(meta_handle))) {
-        LOG_WARN("fail to push back meta handle", K(ret), K(meta_handle));
       }
     }
     if (OB_SUCC(ret) && OB_UNLIKELY(keys.count() != meta_handles.count())) {
@@ -630,7 +609,6 @@ int ObStorageMetaCache::prefetch(
                                                    tablet,
                                                    nullptr/*bypass_cache if nullptr*/);
       if (OB_FAIL(read_io(key.get_meta_addr(), *callback, meta_handle))) {
-        LOG_WARN("fail to read storage meta from io", K(ret), K(key), K(meta_handle));
       }
       if (OB_FAIL(ret) && OB_NOT_NULL(callback->get_allocator())) { //Avoid double_free with io_handle
         callback->~ObStorageMetaIOCallback();
@@ -652,7 +630,6 @@ int ObStorageMetaCache::get_meta_and_bypass_cache(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(key), K(type));
   } else if (OB_FAIL(handle.cache_handle_.new_value(share::g_mp->tenant_meta_mem_mgr()->get_meta_cache_io_allocator()))) {
-    LOG_WARN("fail to new cache handle value", K(ret));
   } else {
     void *buf = nullptr;
     common::ObIAllocator &io_allocator = share::g_mp->tenant_meta_mem_mgr()->get_meta_cache_io_allocator();
@@ -668,7 +645,6 @@ int ObStorageMetaCache::get_meta_and_bypass_cache(
                                                    nullptr/*tablet*/,
                                                    &allocator/*bypass_cache if nullptr*/);
       if (OB_FAIL(read_io(key.get_meta_addr(), *callback, handle))) {
-        LOG_WARN("fail to read storage meta from io", K(ret), K(key), K(handle));
       }
       if (OB_FAIL(ret) && OB_NOT_NULL(callback->get_allocator())) { //Avoid double_free with io_handle
         callback->~ObStorageMetaIOCallback();
@@ -701,7 +677,6 @@ int ObStorageMetaCache::read_io(
     read_info.ls_epoch_ = 0; /* ls_epoch for share storage */
     handle.phy_addr_ = meta_addr;
     if (OB_FAIL(ObSharedObjectReaderWriter::async_read(read_info, handle.io_handle_))) {
-      LOG_WARN("fail to async read", K(ret), K(read_info));
     }
   }
   return ret;

@@ -168,7 +168,6 @@ int get_file_path(const common::ObString &uri, char *buf, const int64_t buf_size
     STORAGE_LOG(WARN, "invalid uri", K(ret), K(uri));
   } else if (OB_FAIL(databuff_printf(buf, buf_size, "%.*s",
              static_cast<int>(uri.length() - offset), uri.ptr() + offset))) {
-    STORAGE_LOG(WARN, "failed to fill path", K(ret), K(uri));
   } else if (strlen(buf) <= 0 && buf[0] != '/') {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid file path", K(ret), K(uri), KCSTRING(buf));
@@ -243,7 +242,6 @@ int ObStorageFileUtil::is_exist(const common::ObString &uri, bool &exist)
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid args", K(ret), K(uri));
   } else if (OB_FAIL(get_file_path(uri, path, sizeof(path)))) {
-    STORAGE_LOG(WARN, "failed to fill path", K(ret), K(uri));
   } else if (0 == ::access(path, F_OK)) {
     exist = true;
   } else if (ENOENT != errno && ENOTDIR != errno) {
@@ -272,7 +270,6 @@ int ObStorageFileUtil::get_file_length(const common::ObString &uri, int64_t &fil
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid args", K(ret), K(uri));
   } else if (OB_FAIL(get_file_path(uri, path, sizeof(path)))) {
-    STORAGE_LOG(WARN, "failed to fill path", K(ret), K(uri));
   } else if (0 != ::stat64(path, &file_info)) {
     convert_io_error(errno, ret);
     STORAGE_LOG(WARN, "file not exist",
@@ -303,7 +300,6 @@ int ObStorageFileUtil::head_object_meta(const common::ObString &uri, ObStorageOb
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid args", K(ret), K(uri));
   } else if (OB_FAIL(get_file_path(uri, path, sizeof(path)))) {
-    STORAGE_LOG(WARN, "failed to fill path", K(ret), K(uri));
   } else if (0 != ::stat64(path, &file_info)) {
     if (ENOENT == errno || ENOTDIR == errno) {
     } else {
@@ -334,7 +330,6 @@ int ObStorageFileUtil::del_file(const common::ObString &uri)
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid args", K(ret), K(uri));
   } else if (OB_FAIL(get_file_path(uri, path, sizeof(path)))) {
-    STORAGE_LOG(WARN, "failed to fill path", K(ret), K(uri));
   } else if (0 != ::unlink(path)) {
     convert_io_error(errno, ret);
     if (OB_OBJECT_NOT_EXIST == ret) {
@@ -368,10 +363,8 @@ int ObStorageFileUtil::write_single_file(const common::ObString &uri, const char
   ObStorageFileSingleWriter writer;
 
   if (OB_FAIL(writer.open(uri))) {
-    STORAGE_LOG(WARN, "failed to open writer", K(ret), K(uri));
   } else {
     if (OB_FAIL(writer.write(buf, size))) {
-      STORAGE_LOG(WARN, "failed to writer", K(ret), K(size), K(uri));
     }
 
     if (OB_SUCCESS != (tmp_ret = writer.close())) {
@@ -392,7 +385,6 @@ int ObStorageFileUtil::mkdir(const common::ObString &uri)
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid args", K(ret), K(uri));
   } else if (OB_FAIL(get_file_path(uri, path, sizeof(path)))) {
-    STORAGE_LOG(WARN, "failed to fill path", K(ret), K(uri));
   } else {
     // find the first not exist dir
     int64_t pos = 0;
@@ -482,7 +474,6 @@ int ObStorageFileUtil::list_files(const common::ObString &uri, common::ObBaseDir
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "dir path is invalid", K(ret), KCSTRING(dir_path));
   } else if (OB_FAIL(get_file_path(uri, dir_path, sizeof(dir_path)))) {
-    STORAGE_LOG(WARN, "failed to fill path", K(ret), K(uri));
   } else if (OB_ISNULL(open_dir = ::opendir(dir_path))) {
     if (ENOENT != errno) {
       convert_io_error(errno, ret);
@@ -528,7 +519,6 @@ int ObStorageFileUtil::list_files(const common::ObString &uri, common::ObBaseDir
           op.set_size(size);
         }
         if (OB_FAIL(op.func(&entry))) {
-          SHARE_LOG(WARN, "fail to operate dir entry", K(ret), KCSTRING(entry.d_name));
         }
       }
     } else {
@@ -553,7 +543,6 @@ int ObStorageFileUtil::list_files(const common::ObString &uri, ObStorageListCtxB
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "invalid argument", K(ret), K(list_ctx), KCSTRING(dir_path));
   } else if (OB_FAIL(get_file_path(uri, dir_path, sizeof(dir_path)))) {
-    STORAGE_LOG(WARN, "failed to fill path", K(ret), K(uri));
   } else {
     list_ctx.rsp_num_ = 0;
     list_ctx.has_next_ = false;
@@ -597,7 +586,6 @@ int ObStorageFileUtil::list_files(const common::ObString &uri, ObStorageListCtxB
           // not a file
         } else if (DT_DIR == list_ctx.next_entry_.d_type) {
           if (OB_FAIL(check_is_appendable(uri, list_ctx.next_entry_, is_appendable_file))) {
-            OB_LOG(WARN, "fail to check is_appendable", K(ret), K(uri));
           } else if (is_appendable_file) {
             is_file = true;
           }
@@ -666,14 +654,11 @@ int ObStorageFileUtil::check_is_appendable(
   char tmp_uri_buf[OB_MAX_URI_LENGTH] = "";
   if (OB_FAIL(databuff_printf(logic_appendable_obj_name, sizeof(logic_appendable_obj_name), "%s/%s",
                               uri.ptr(), cur_entry.d_name))) {
-    OB_LOG(WARN, "fail to construct logic_appendable_obj_name", K(ret), K(uri), K(cur_entry.d_name));
   } else if (OB_FAIL(construct_fragment_full_name(logic_appendable_obj_name,
                                                   OB_ADAPTIVELY_APPENDABLE_FORMAT_META,
                                                   tmp_uri_buf, sizeof(tmp_uri_buf)))) {
-    OB_LOG(WARN, "fail to construct fragment full name", K(ret), K(uri), K(cur_entry.d_name));
   } else {
     if (OB_FAIL(head_object_meta(tmp_uri_buf, obj_meta))) {
-      OB_LOG(WARN, "fail to head object meta", K(ret), K(tmp_uri_buf));
     } else {
       is_appendable_file = obj_meta.is_exist_;
     }
@@ -778,7 +763,6 @@ int ObStorageFileUtil::list_directories(
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "dir path is invalid", K(ret), KCSTRING(dir_path));
   } else if (OB_FAIL(get_file_path(uri, dir_path, sizeof(dir_path)))) {
-    STORAGE_LOG(WARN, "failed to fill path", K(ret), K(uri));
   } else if (OB_ISNULL(open_dir = ::opendir(dir_path))) {
     if (ENOENT != errno) {
       convert_io_error(errno, ret);
@@ -822,7 +806,6 @@ int ObStorageFileUtil::list_directories(
       }
       if (OB_SUCC(ret) && is_directory) {
         if (OB_FAIL(op.func(&entry))) {
-          SHARE_LOG(WARN, "fail to operate dir entry", K(ret), KCSTRING(entry.d_name));
         }
       }
     } else {
@@ -894,7 +877,6 @@ int ObStorageFileReader::open(const common::ObString &uri,
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "cannot open twice", K(ret), K(uri));
   } else if (OB_FAIL(get_file_path(uri, path_, sizeof(path_)))) {
-    STORAGE_LOG(WARN, "failed to fill path", K(ret), K(uri));
   } else if (-1 == (fd_ = ::open(path_, O_RDONLY
 #ifdef _WIN32
       | _O_BINARY
@@ -921,7 +903,6 @@ int ObStorageFileReader::open(const common::ObString &uri,
       is_opened_ = true;
     } else {
       if (OB_SUCCESS != (tmp_ret = close())) {
-        STORAGE_LOG(WARN, "failed to close", K(ret), K(tmp_ret), KCSTRING(path_));
       }
     }
   }
@@ -1137,9 +1118,7 @@ int ObStorageFileSingleWriter::open(const common::ObString &uri, common::ObObjec
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "cannot open twice", K(ret), K(uri));
   } else if (OB_FAIL(get_file_path(uri, real_path_, sizeof(real_path_)))) {
-    STORAGE_LOG(WARN, "failed to fill path", K(ret), K(uri));
   } else if (OB_FAIL(databuff_printf(path_, sizeof(path_), TMP_NAME_FORMAT, real_path_, cur_ts))) {
-    STORAGE_LOG(WARN, "failed to fill tmp_path", K(ret), K(uri));
   } else {
     is_file_path_obtained_ = true;
   }
@@ -1167,12 +1146,10 @@ int ObStorageFileSingleWriter::write(const char *buf, const int64_t buf_size)
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "not opened", K(ret));
   } else if (OB_FAIL(ObStorageFileBaseWriter::open(flags))) {
-    STORAGE_LOG(WARN, "fail to open", K(ret), K(flags));
   } else if (OB_ISNULL(buf) || buf_size < 0) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid args", K(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(inner_pwrite(buf, buf_size, 0/*offset*/))) {
-    STORAGE_LOG(WARN, "fail to inner pwrite", K(ret), KP(buf), K(buf_size));
   }
 
   if (OB_FAIL(ret)) {
@@ -1209,7 +1186,6 @@ int ObStorageFileSingleWriter::close_and_rename()
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "not opened", K(ret), K(fd_));
   } else if (OB_FAIL(ObStorageFileBaseWriter::close())) {
-    STORAGE_LOG(WARN, "failed to do close", K(ret), KCSTRING(path_), KCSTRING(real_path_));
   }
 
   if (OB_SUCC(ret)) {
@@ -1262,11 +1238,8 @@ int ObStorageFileMultipleWriter::open(const common::ObString &uri, common::ObObj
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "cannot open twice", K(ret), K(uri));
   } else if (OB_FAIL(get_file_path(uri, real_path_, sizeof(real_path_)))) {
-    STORAGE_LOG(WARN, "failed to fill path", K(ret), K(uri));
   } else if (OB_FAIL(databuff_printf(path_, sizeof(path_), TMP_NAME_FORMAT, real_path_, cur_ts))) {
-    STORAGE_LOG(WARN, "failed to fill tmp_path", K(ret), K(uri));
   } else if (OB_FAIL(ObStorageFileBaseWriter::open(flags))) {
-    STORAGE_LOG(WARN, "failed to do_open", K(ret), K(uri), K(flags));
   }
 
   if (OB_FAIL(ret)) {
@@ -1291,7 +1264,6 @@ int ObStorageFileMultipleWriter::write(const char *buf, const int64_t buf_size)
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid args", K(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(inner_pwrite(buf, buf_size, offset))) {
-    STORAGE_LOG(WARN, "fail to inner pwrite", K(ret), KP(buf), K(buf_size), K(offset));
   }
 
   if (OB_FAIL(ret)) {
@@ -1305,7 +1277,6 @@ int ObStorageFileMultipleWriter::close()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(close_and_rename())) {
-    STORAGE_LOG(WARN, "fail to close and rename", K(ret));
   }
   return ret;
 }
@@ -1350,22 +1321,17 @@ int ObStorageFileAppender::open(const common::ObString &uri, common::ObObjectSto
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "cannot open twice", K(ret), K(uri));
   } else if (OB_FAIL(get_open_flag_and_mode_(flags, need_lock))) {
-    STORAGE_LOG(WARN, "failed to get open flag and mode", K(ret), K(uri));
   } else if (OB_FAIL(get_file_path(uri, path_, sizeof(path_)))) {
-    STORAGE_LOG(WARN, "failed to fill path", K(ret), K(uri));
   } else if (OB_FAIL(ObStorageFileBaseWriter::open(flags))) {
-    STORAGE_LOG(WARN, "failed to do_open", K(ret), K(uri), K(flags));
   } else if (! need_lock) {
     // do nothing
   } else if (OB_FAIL(lock_file(fd_))) {
-    STORAGE_LOG(WARN, "failed to lock file", K(ret), KCSTRING(path_), K(flags));
   } else {
     need_unlock_ = true;
   }
 
   if (OB_FAIL(ret)) {
     if (OB_SUCCESS != (tmp_ret = close())) {
-      STORAGE_LOG(WARN, "failed to close appender", K(tmp_ret), K(uri));
     }
   }
   return ret;
@@ -1386,7 +1352,6 @@ int ObStorageFileAppender::pwrite(const char *buf, const int64_t buf_size, const
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid args", K(ret), KP(buf), K(buf_size), K(offset));
   } else if (OB_FAIL(inner_pwrite(buf, buf_size, offset))) {
-    STORAGE_LOG(WARN, "fail to inner pwrite", K(ret), KP(buf), K(buf_size), K(offset));
   }
 
   if (OB_FAIL(ret)) {
@@ -1499,7 +1464,6 @@ int ObStorageFileMultiPartWriter::close()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObStorageFileBaseWriter::close())) {
-    STORAGE_LOG(WARN, "fail to close fd", K(ret));
   }
   return ret;
 }
@@ -1537,10 +1501,8 @@ int ObStorageParallelFileMultiPartWriter::open(const ObString &uri, ObObjectStor
     ret = OB_INIT_TWICE;
     OB_LOG(WARN, "nfs multipart writer already opened, cannot open again", K(ret), K(uri));
   } else if (OB_FAIL(get_file_path(uri, real_path_, sizeof(real_path_)))) {
-    OB_LOG(WARN, "failed to fill path", K(ret), K(uri));
   } else if (OB_FAIL(databuff_printf(path_, sizeof(path_), TMP_NAME_FORMAT,
                                      OB_FILE_PREFIX, real_path_, cur_ts))) {
-    OB_LOG(WARN, "failed to fill tmp_path", K(ret), K(uri));
   } else {
     MEMCPY(real_path_, uri.ptr(), uri.length());
     real_path_[uri.length()] = '\0';
@@ -1562,13 +1524,10 @@ int ObStorageParallelFileMultiPartWriter::upload_part(
     OB_LOG(WARN, "invalid argument", K(ret), KP(buf), K(size));
   } else if (OB_FAIL(databuff_printf(part_file_path, sizeof(part_file_path),
                                      "%s##%ld", path_, part_id))) {
-    OB_LOG(WARN, "failed to fill part_file_path", K(ret), K(part_id), K_(path));
   } else {
     {
       SpinWLockGuard guard(lock_);
       if (OB_FAIL(uploaded_part_id_list_.push_back(part_id))) {
-        OB_LOG(WARN, "fail to push cur part id into list",
-            K(ret), K(part_id), K(uploaded_part_id_list_.count()));
       } else {
         max_part_size_ = MAX(max_part_size_, size);
       }
@@ -1576,7 +1535,6 @@ int ObStorageParallelFileMultiPartWriter::upload_part(
 
     ObStorageFileUtil util;
     if (FAILEDx(util.write_single_file(part_file_path, buf, size))) {
-      OB_LOG(WARN, "fail to write part file", K(ret), K(part_id), K(part_file_path), K(size));
     }
   }
 
@@ -1613,34 +1571,24 @@ int ObStorageParallelFileMultiPartWriter::complete()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       OB_LOG(WARN, " fail to alloc memory for read buffer", K(ret), K_(max_part_size));
     } else if (OB_FAIL(writer.open(real_path_))) {
-      OB_LOG(WARN, "fail to open writer for final file", K(ret), K_(real_path));
     }
 
     for (int64_t i = 0; OB_SUCC(ret) && i < uploaded_part_id_list_.count(); i++) {
       cur_part_id = uploaded_part_id_list_[i];
       if (OB_FAIL(databuff_printf(part_file_path, OB_MAX_URI_LENGTH,
                                   "%s##%ld", path_, cur_part_id))) {
-        OB_LOG(WARN, "failed to fill part_file_path", K(ret), K(cur_part_id), K_(path));
       } else if (OB_FAIL(reader.open(part_file_path))) {
-        OB_LOG(WARN, "fail to open reader for part file", K(ret), K(cur_part_id), K(part_file_path));
       } else {
         cur_part_file_size = reader.get_length();
         read_size = -1;
         if (FAILEDx(reader.pread(read_buf, cur_part_file_size, 0, read_size))) {
-          OB_LOG(WARN, "fail to read part file content",
-              K(ret), K(cur_part_file_size), K(part_file_path));
         } else if (OB_UNLIKELY(cur_part_file_size != read_size)) {
           ret = OB_ERR_UNEXPECTED;
           OB_LOG(ERROR, "unexpected error, read size is not equal to expected size",
               K(ret), K(cur_part_file_size), K(read_size), K(part_file_path));
         } else if (OB_FAIL(writer.write(read_buf, cur_part_file_size))) {
-          OB_LOG(WARN, "fail to write part file data",
-              K(ret), K(cur_part_file_size), K(part_file_path));
         } else if (OB_FAIL(reader.close())) {
-          OB_LOG(WARN, "fail to close part file reader",
-              K(ret), K(cur_part_file_size), K(part_file_path));
         } else if (OB_FAIL(util.del_file(part_file_path))) {
-          OB_LOG(WARN, "fail to delete part file", K(ret), K(part_file_path));
         } else {
           cur_written_size += cur_part_file_size;
         }
@@ -1674,7 +1622,6 @@ int ObStorageParallelFileMultiPartWriter::abort()
       cur_part_id = uploaded_part_id_list_[i];
       if (OB_FAIL(databuff_printf(part_file_path, sizeof(part_file_path),
                                   "%s##%ld", path_, cur_part_id))) {
-        OB_LOG(WARN, "failed to fill part_file_path", K(ret), K(cur_part_id), K_(path));
       } else if (OB_FAIL(util.del_file(part_file_path))) {
         if (OB_OBJECT_NOT_EXIST == ret) {
           ret = OB_SUCCESS;

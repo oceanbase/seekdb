@@ -1091,7 +1091,6 @@ int ObDDLResolver::resolve_split_at_partition(STMT *stmt, const ParseNode *node,
                                                       part_func_exprs,
                                                       stmt->get_part_values_exprs(),
                                                       in_tablegroup))) {
-      SQL_RESV_LOG(WARN, "failed to resolve expr_list", K(ret));
     } else {
       expr_num = node->children_[1]->num_child_;
     }
@@ -1102,7 +1101,6 @@ int ObDDLResolver::resolve_split_at_partition(STMT *stmt, const ParseNode *node,
                                                    stmt->get_part_values_exprs(),
                                                    expr_num,
                                                    in_tablegroup))) {
-      SQL_RESV_LOG(WARN, "failed to resolve expr_list", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -1134,7 +1132,6 @@ int ObDDLResolver::resolve_split_at_partition(STMT *stmt, const ParseNode *node,
         ObString part_name(static_cast<int32_t>(part_name_node->str_len_),
                            part_name_node->str_value_);
         if (OB_FAIL(first_part.set_part_name(part_name))) {
-          SQL_RESV_LOG(WARN,"failed to set partition_name", K(ret), K(part_name));
         }
       } else {
         first_part.set_is_empty_partition_name(true);
@@ -1146,7 +1143,6 @@ int ObDDLResolver::resolve_split_at_partition(STMT *stmt, const ParseNode *node,
         ObString part_name(static_cast<int32_t>(part_name_node->str_len_),
                            part_name_node->str_value_);
         if (OB_FAIL(second_part.set_part_name(part_name))) {
-          SQL_RESV_LOG(WARN,"failed to set partition_name", K(ret), K(part_name));
         }
       } else {
         second_part.set_is_empty_partition_name(true);
@@ -1157,16 +1153,12 @@ int ObDDLResolver::resolve_split_at_partition(STMT *stmt, const ParseNode *node,
     }
     if (OB_SUCC(ret) && check_part_name) {
       if (OB_FAIL(t_schema.check_part_name(first_part))) {
-        SQL_RESV_LOG(WARN,"failed to check part name", K(ret), K(first_part), K(t_schema));
       } else if (OB_FAIL(t_schema.check_part_name(second_part))) {
-        SQL_RESV_LOG(WARN,"failed to check part name", K(ret), K(second_part), K(t_schema));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(t_schema.add_partition(first_part))) {
-      SQL_RESV_LOG(WARN,"failed to add partition", K(ret), K(first_part), K(t_schema));
     } else if (OB_FAIL(t_schema.add_partition(second_part))) {
-      SQL_RESV_LOG(WARN,"failed to add partition", K(ret), K(second_part), K(t_schema));
     }
   }
   return ret;
@@ -1231,7 +1223,6 @@ int ObDDLResolver::resolve_split_into_partition(STMT *stmt, const ParseNode *nod
                                                                  part_func_exprs,
                                                                  stmt->get_part_values_exprs(),
                                                                  in_tablegroup))) {
-          SQL_RESV_LOG(WARN, "failed to resolve expr_list", K(ret));
         } else {
           expr_num = part_node->children_[ObDDLResolver::PARTITION_ELEMENT_NODE]->num_child_;
         }
@@ -1242,7 +1233,6 @@ int ObDDLResolver::resolve_split_into_partition(STMT *stmt, const ParseNode *nod
                                                        stmt->get_part_values_exprs(),
                                                        expr_num,
                                                        in_tablegroup))) {
-          SQL_RESV_LOG(WARN, "failed to resolve expr_list", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -1251,19 +1241,16 @@ int ObDDLResolver::resolve_split_into_partition(STMT *stmt, const ParseNode *nod
         ObString part_name(static_cast<int32_t>(part_node->children_[ObDDLResolver::PARTITION_NAME_NODE]->str_len_),
                            part_node->children_[ObDDLResolver::PARTITION_NAME_NODE]->str_value_);
         if (OB_FAIL(part.set_part_name(part_name))) {
-          SQL_RESV_LOG(WARN,"failed to set partition name", K(ret), K(part_name));
         }
       } else {
         part.set_is_empty_partition_name(true);
       }
       if (OB_SUCC(ret) && check_part_name) {
         if (OB_FAIL(t_schema.check_part_name(part))) {
-          SQL_RESV_LOG(WARN,"failed to check part name", K(ret), K(part), K(t_schema));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(t_schema.add_partition(part))) {
-        SQL_RESV_LOG(WARN,"failed to add partition", K(ret), K(part), K(t_schema));
       }
     }//end for
   }
@@ -1289,14 +1276,11 @@ int ObDDLResolver::create_name_for_empty_partition(ObIArray<PARTITION> &partitio
       int64_t pos = 0;
       if (OB_FAIL(databuff_printf(part_name, OB_MAX_PARTITION_NAME_LENGTH,
           pos, "P%ld", max_part_id))) {
-        SQL_RESV_LOG(WARN, "failed to print databuff", K(ret), K(max_part_id));
       } else if (FALSE_IT(part_name_str.assign(part_name, static_cast<int32_t>(pos)))) {
         // never reach
       } else if (OB_FAIL(check_partition_name_valid(partitions, part_name_str, is_valid))) {
-        SQL_RESV_LOG(WARN, "failed to check partition name valid", K(ret), K(part_name_str));
       } else if (is_valid) {
         if (OB_FAIL(part.set_part_name(part_name_str))) {
-          SQL_RESV_LOG(WARN, "failed to set partition name", K(ret), K(part_name_str));
         } else {
           part.set_is_empty_partition_name(false);
           ++max_part_id;

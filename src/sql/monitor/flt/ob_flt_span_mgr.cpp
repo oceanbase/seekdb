@@ -37,15 +37,11 @@ namespace sql
     if (inited_) {
       ret = OB_INIT_TWICE;
     } else if (OB_FAIL(queue_.init("SqlFltSpanRec", queue_size))) {
-      SERVER_LOG(WARN, "Failed to init ObMySQLRequestQueue", K(ret));
     } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::ReqMemEvict, tg_id_))) {
-      SERVER_LOG(WARN, "create failed", K(ret));
     } else if (OB_FAIL(TG_START(tg_id_))) {
-      SERVER_LOG(WARN, "init timer fail", K(ret));
     } else if (OB_FAIL(allocator_.init(FLT_SPAN_PAGE_SIZE,
                                       "SqlFltSpanRec",
                                        INT64_MAX))) {
-       SERVER_LOG(WARN, "failed to init allocator", K(ret));
     } else {
       mem_limit_ = max_mem_size;
       inited_ = true;
@@ -76,7 +72,6 @@ namespace sql
     int64_t mem_limit = lib::get_tenant_memory_limit();
     int64_t queue_size = MAX_QUEUE_SIZE;
     if (OB_FAIL(span_mgr->init(mem_limit, queue_size))) {
-      LOG_WARN("failed to init request manager", K(ret));
     } else {
       // do nothing
     }

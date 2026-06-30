@@ -43,12 +43,8 @@ int ObPluginHandle::init(ObPluginMgr *plugin_mgr, const ObString &dl_dir, const 
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate memory for dl handle", K(ret));
   } else if (OB_FAIL(dl_handle_->init(dl_dir, dl_name))) {
-      LOG_WARN("failed to open dl", K(ret));
   } else if (OB_FAIL(dl_handle_->read_value<ObPluginVersion>(OBP_DYNAMIC_PLUGIN_API_VERSION_NAME, api_version_))) {
-    LOG_WARN("failed to read interface version value from dl",
-             K(OBP_DYNAMIC_PLUGIN_API_VERSION_NAME), K(dl_dir), K(dl_name), K(ret));
   } else if (OB_FAIL(dl_handle_->read_symbol(OBP_DYNAMIC_PLUGIN_PLUGIN_NAME, reinterpret_cast<void *&>(plugin_)))) {
-    LOG_WARN("failed to read plugins from dl", K(OBP_DYNAMIC_PLUGIN_PLUGIN_NAME), K(dl_dir), K(dl_name), K(ret));
   } else if (OB_ISNULL(plugin_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("failed to get plugins from dl, got null");

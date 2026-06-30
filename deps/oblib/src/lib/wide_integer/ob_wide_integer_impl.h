@@ -1094,7 +1094,6 @@ int from_number(const number::ObNumber &nmb, Allocator &allocator, const int16_t
   int512_t res = 0;
   void *cp_data = nullptr;
   if (OB_FAIL(from_number_to_int512(nmb, scale, res))) {
-    COMMON_LOG(WARN, "from number to int512_t failed", K(ret));
   } else if (nmb.is_zero()) {
     if (OB_ISNULL(decint = (ObDecimalInt *)allocator.alloc(sizeof(int32_t)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1137,7 +1136,6 @@ int from_number_to_decimal_fixed_length(const number::ObNumber &nmb,
   int512_t res = 0;
   void *cp_data = nullptr;
   if (OB_FAIL(from_number_to_int512(nmb, scale, res))) {
-    COMMON_LOG(WARN, "from number to int512_t failed", K(ret));
   } else if (OB_ISNULL(cp_data = allocator.alloc(int_bytes))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     COMMON_LOG(WARN, "allocate memory failed", K(ret));
@@ -1271,7 +1269,6 @@ int to_number(const ObWideInteger<Bits, Signed> &x, int16_t scale, Allocator &al
       } else {
         numb.assign(desc.desc_, copy_digits);
         if (OB_FAIL(numb.normalize_(digits + idx, digit_len))) {
-          COMMON_LOG(WARN, "normalize number failed", K(ret));
         }
       }
     } else if (digit_len == 0) {
@@ -1377,7 +1374,6 @@ int to_number(const int64_t v, int16_t scale, Allocator &allocator, number::ObNu
       } else {
         nmb.assign(desc.desc_, copy_digits);
         if (OB_FAIL(nmb.normalize_(digits + idx, digit_len))) {
-          COMMON_LOG(WARN, "normalize number failed", K(ret));
         }
       }
     } else if (digit_len == 0) {

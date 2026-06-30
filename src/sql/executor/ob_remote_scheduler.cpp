@@ -45,11 +45,9 @@ int ObRemoteScheduler::schedule(ObExecContext &ctx, ObPhysicalPlan *phy_plan)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("session is null", K(ret), K(ctx.get_sql_ctx()));
     } else if (OB_FAIL(execute_with_sql(ctx, phy_plan))) {
-      LOG_WARN("execute with sql failed", K(ret));
     }
   } else {
     if (OB_FAIL(execute_with_plan(ctx, phy_plan))) {
-      LOG_WARN("execute with plan failed", K(ret));
     }
   }
   LOG_TRACE("remote_scheduler", K(ctx.use_remote_sql()), KPC(phy_plan));
@@ -77,7 +75,6 @@ int ObRemoteScheduler::execute_with_plan(ObExecContext &ctx, ObPhysicalPlan *phy
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("not init", K(phy_plan), K(ret));
   } else if (OB_FAIL(task_exec_ctx.reset_and_init_stream_handler())) {
-    LOG_WARN("reset and init stream handler failed", K(ret));
   } else if (OB_UNLIKELY(NULL == (plan_ctx = ctx.get_physical_plan_ctx()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("plan ctx is NULL", K(ret));
@@ -90,13 +87,11 @@ int ObRemoteScheduler::execute_with_plan(ObExecContext &ctx, ObPhysicalPlan *phy
                                  ob_execution_id,
                                  task_factory,
                                  jc))) {
-      LOG_WARN("fail parse job for scheduler.", K(ret));
     }
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(jc.get_ready_jobs(jobs))) {
-      LOG_WARN("fail get jobs.", K(ret));
     } else if (OB_UNLIKELY(2 != jobs.count())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected job count. expect 2, actual", "job_count", jobs.count());
@@ -116,9 +111,7 @@ int ObRemoteScheduler::execute_with_plan(ObExecContext &ctx, ObPhysicalPlan *phy
       // It obtains the current handler through get_stream_handler()
       // Then block waiting to receive the result on handler
       if (OB_FAIL(remote_job_executor.execute(ctx))) {
-        LOG_WARN("fail execute remote job", K(ret));
       } else if (OB_FAIL(local_job_executor.execute(ctx))) {
-        LOG_WARN("fail execute local job", K(ret));
       }
     }
   }
@@ -129,8 +122,6 @@ int ObRemoteScheduler::execute_with_plan(ObExecContext &ctx, ObPhysicalPlan *phy
     const static int64_t MAX_JC_STATUS_BUF_LEN = 4096;
     char jc_status_buf[MAX_JC_STATUS_BUF_LEN];
     if (OB_SUCCESS != (print_ret = jc.print_status(jc_status_buf, MAX_JC_STATUS_BUF_LEN))) {
-      LOG_WARN("fail to print job control status",
-               K(ret), K(print_ret), LITERAL_K(MAX_JC_STATUS_BUF_LEN));
     } else {
       LOG_WARN("fail to schedule, print job's status",
                K(ret), K(print_ret), "job_status", jc_status_buf);
@@ -150,7 +141,6 @@ int ObRemoteScheduler::build_remote_task(ObExecContext &ctx,
   ObSQLSessionInfo *session = nullptr;
   share::ObLSArray task_ls_list;
   if (OB_FAIL(remote_task.assign_dependency_tables(dependency_tables))) {
-    LOG_WARN("fail to assign dependency_tables", K(ret));
   }
   remote_task.set_ctrl_server(ctx.get_addr());
   remote_task.set_session(ctx.get_my_session());
@@ -165,11 +155,8 @@ int ObRemoteScheduler::build_remote_task(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(DAS_CTX(ctx).get_all_lsid(task_ls_list))) {
-    LOG_WARN("get ls ids failed", K(ret));
   } else if(OB_FAIL(remote_task.assign_ls_list(task_ls_list))) {
-    LOG_WARN("fail to assign ls list", K(ret));
   } else if (OB_FAIL(session->get_trans_result().add_touched_ls(task_ls_list))) {
-    LOG_WARN("add touched ls failed", K(ret));
   } else if (OB_ISNULL(DAS_CTX(ctx).get_table_loc_list().get_first()) ||
              OB_ISNULL(first_tablet_loc = DAS_CTX(ctx).get_table_loc_list().get_first()->get_first_tablet_loc())) {
     ret = OB_ERR_UNEXPECTED;
@@ -182,7 +169,6 @@ int ObRemoteScheduler::build_remote_task(ObExecContext &ctx,
     task_id.set_task_id(0);
     remote_task.set_task_id(task_id);
     if (OB_FAIL(remote_task.set_snapshot(ctx.get_das_ctx().get_snapshot()))) {
-      LOG_WARN("fail to set snapshot", K(ret));
     }
   }
   return ret;
@@ -206,11 +192,8 @@ int ObRemoteScheduler::execute_with_sql(ObExecContext &ctx, ObPhysicalPlan *phy_
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(phy_plan), K(session), K(plan_ctx));
   } else if (OB_FAIL(task_exec_ctx.reset_and_init_stream_handler())) {
-    LOG_WARN("reset and init stream handler failed", K(ret));
   } else if (OB_FAIL(ObTaskExecutorCtxUtil::get_stream_handler(ctx, handler))) {
-    LOG_WARN("fail get task response handler", K(ret));
   } else if (OB_FAIL(ObTaskExecutorCtxUtil::get_task_executor_rpc(ctx, rpc))) {
-    LOG_WARN("fail get executor rpc", K(ret));
   } else if (OB_ISNULL(session)
              || OB_ISNULL(plan_ctx)
              || OB_ISNULL(handler)
@@ -222,17 +205,13 @@ int ObRemoteScheduler::execute_with_sql(ObExecContext &ctx, ObPhysicalPlan *phy_
   } else if (FALSE_IT(handler->set_use_remote_protocol_v2())) {
     // Use the new remote sync execute protocol
   } else if (OB_FAIL(handler->reset_and_init_result())) {
-    LOG_WARN("fail to reset and init result", K(ret));
   } else if (OB_FAIL(build_remote_task(ctx, task, phy_plan->get_dependency_table()))) {
-    LOG_WARN("build remote task failed", K(ret), K(task));
   } else if (OB_FAIL(session->add_changed_package_info(ctx))) {
-    LOG_WARN("failed to add changed package info to session", K(ret));
   } else {
     session->reset_all_package_changed_info();
     LOG_DEBUG("execute remote task", K(task));
     ObOperator *op = NULL;
     if (OB_FAIL(phy_plan->get_root_op_spec()->create_operator(ctx, op))) {
-      LOG_WARN("create operator from spec failed", K(ret));
     } else if (OB_ISNULL(op)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("created operator is NULL", K(ret));
@@ -255,7 +234,6 @@ int ObRemoteScheduler::execute_with_sql(ObExecContext &ctx, ObPhysicalPlan *phy_
                                      *handler,
                                      has_sent_task,
                                      has_transfer_err))) {
-      LOG_WARN("task execute failed", K(ret));
     }
 
     // handle tx relative info if plan involved in transaction

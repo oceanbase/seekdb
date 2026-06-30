@@ -110,13 +110,10 @@ int ObSQLClientRetryWeak::read_without_check_sys_variable(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null pointer", K(ret));
   } else if (OB_FAIL(conn->set_session_variable(check_sys_variable_name, static_cast<int64_t>(check_sys_variable_)))) {
-    LOG_WARN("failed to set session variable ob_check_sys_variable", K(ret));
   } else {
 
     ret = conn->execute_read(sql, res);
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to read without check sys variable", K(ret), K(sql),
-               K_(check_sys_variable), K_(snapshot_timestamp));
     } else {
       LOG_TRACE("read without check sys variable succeeded!", K(ret), K(sql),
                 K_(check_sys_variable), K_(snapshot_timestamp));
@@ -125,7 +122,6 @@ int ObSQLClientRetryWeak::read_without_check_sys_variable(
     int check_sys_variable = 1;
     int tmp_ret = conn->set_session_variable(check_sys_variable_name, check_sys_variable);
     if (OB_SUCCESS != tmp_ret) {
-      LOG_WARN("failed to set session variable ob_check_sys_variable", K(ret));
     }
     ret = (OB_SUCCESS == ret) ? tmp_ret : ret;
   }
@@ -154,7 +150,6 @@ int ObSQLClientRetryWeak::read(ReadResult &res, const char *sql, const int32_t g
       if (OB_NOT_NULL(conn)) {
         // for transaction
       } else if (OB_FAIL(single_conn_proxy.connect(group_id, sql_client_))) {
-        LOG_WARN("failed to get mysql connect", KR(ret));
       } else {
         conn = single_conn_proxy.get_connection();
       }

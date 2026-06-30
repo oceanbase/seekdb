@@ -45,9 +45,7 @@ int ObAllVirtualPalfStat::inner_get_next_row(common::ObNewRow *&row)
       int64_t palf_id = -1;
       palf_handle.get_palf_id(palf_id);
       if (OB_FAIL(palf_handle.stat(log_stat.palf_stat_))) {
-        SERVER_LOG(WARN, "PalfHandle stat failed", K(ret), K(palf_id));
       } else if (OB_FAIL(insert_log_stat_(log_stat, &cur_row_))){
-        SERVER_LOG(WARN, "ObAllVirtualPalfStat insert_log_stat_ failed", K(ret), K(palf_id), K(log_stat));
       } else {
         SERVER_LOG(TRACE, "iterate this log_stream success", K(palf_id), K(log_stat));
         scanner_.add_row(cur_row_);
@@ -58,12 +56,10 @@ int ObAllVirtualPalfStat::inner_get_next_row(common::ObNewRow *&row)
     if (NULL == log_service) {
       SERVER_LOG(INFO, "tenant has no ObLogService");
     } else if (OB_FAIL(log_service->iterate_palf(func_iterate_palf))) {
-      SERVER_LOG(WARN, "ObLogService iterate_palf failed", K(ret));
     } else {
       SERVER_LOG(TRACE, "itearte this tenant success");
     }
     if (OB_FAIL(ret)) {
-      SERVER_LOG(WARN, "iterate log stat failed", K(ret));
     } else {
       scanner_it_ = scanner_.begin();
       start_to_read_ = true;
@@ -91,7 +87,6 @@ int ObAllVirtualPalfStat::insert_log_stat_(const logservice::ObLogStat &log_stat
     switch (col_id) {
       case OB_APP_MIN_COLUMN_ID: {
         if (OB_FAIL(role_to_string(palf_stat.role_, role_str_, sizeof(role_str_)))) {
-          SERVER_LOG(WARN, "role_to_string failed", K(ret), K(palf_stat));
         } else {
           cur_row_.cells_[i].set_varchar(ObString::make_string(role_str_));
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(
@@ -118,7 +113,6 @@ int ObAllVirtualPalfStat::insert_log_stat_(const logservice::ObLogStat &log_stat
       }
       case OB_APP_MIN_COLUMN_ID + 3: {
         if (OB_FAIL(palf::access_mode_to_string(palf_stat.access_mode_, access_mode_str_, sizeof(access_mode_str_)))) {
-          SERVER_LOG(WARN, "access_mode_to_string failed", K(ret), K(palf_stat));
         } else {
           cur_row_.cells_[i].set_varchar(ObString::make_string(access_mode_str_));
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(
@@ -128,7 +122,6 @@ int ObAllVirtualPalfStat::insert_log_stat_(const logservice::ObLogStat &log_stat
       }
       case OB_APP_MIN_COLUMN_ID + 4: {
         if (OB_FAIL(member_list_to_string_(palf_stat.paxos_member_list_))) {
-          SERVER_LOG(WARN, "memberlist to_string failed", K(ret), K(palf_stat));
         } else {
           cur_row_.cells_[i].set_varchar(member_list_buf_.string());
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(
@@ -190,7 +183,6 @@ int ObAllVirtualPalfStat::insert_log_stat_(const logservice::ObLogStat &log_stat
       }
       case OB_APP_MIN_COLUMN_ID + 15: {
         if (OB_FAIL(learner_list_to_string_(palf_stat.degraded_list_, degraded_list_buf_))) {
-          SERVER_LOG(WARN, "learner list to_string failed", K(ret), K(palf_stat));
         } else {
           cur_row_.cells_[i].set_varchar(ObString::make_string(degraded_list_buf_));
           cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(
@@ -200,7 +192,6 @@ int ObAllVirtualPalfStat::insert_log_stat_(const logservice::ObLogStat &log_stat
       }
       case OB_APP_MIN_COLUMN_ID + 16: {
         if (OB_FAIL(learner_list_to_string_(palf_stat.learner_list_, learner_list_buf_))) {
-          SERVER_LOG(WARN, "learner list to_string failed", K(ret), K(palf_stat));
         } else {
           ObString learner_list_str = ObString::make_string(learner_list_buf_);
           cur_row_.cells_[i].set_lob_value(ObLongTextType, learner_list_str.ptr(), static_cast<int32_t>(learner_list_str.length()));
@@ -224,11 +215,8 @@ int ObAllVirtualPalfStat::member_list_to_string_(
     ret = OB_INVALID_ARGUMENT;
     SERVER_LOG(WARN, "invalid member list count", KR(ret));
   } else if (OB_FAIL(member_list.get_member_by_index(0/*index*/, member))) {
-    SERVER_LOG(WARN, "fail to get member by index", KR(ret));
   } else if (OB_FAIL(member.get_server().ip_port_to_string(ip_port, sizeof(ip_port)))) {
-    SERVER_LOG(WARN, "convert server to string failed", KR(ret), K(member));
   } else if (OB_FAIL(member_list_buf_.append_fmt("%.*s:%ld", static_cast<int>(sizeof(ip_port)), ip_port, member.get_timestamp()))) {
-    SERVER_LOG(WARN, "failed to append ip_port to string", KR(ret), K(member));
   }
   return ret;
 }
@@ -245,7 +233,6 @@ int ObAllVirtualPalfStat::learner_list_to_string_(
   ObMember tmp_learner;
   for (int64_t i = 0; i < count && (OB_SUCCESS == ret); ++i) {
     if (OB_FAIL(learner_list.get_learner(i, tmp_learner))) {
-      SERVER_LOG(WARN, "get_learner failed", KR(ret), K(i));
     }
     if (0 != pos) {
       if (pos + 1 < MAX_LEARNER_LIST_LENGTH) {
@@ -257,7 +244,6 @@ int ObAllVirtualPalfStat::learner_list_to_string_(
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(tmp_learner.get_server().ip_port_to_string(buf, sizeof(buf)))) {
-      SERVER_LOG(WARN, "convert server to string failed", KR(ret), K(tmp_learner));
     } else {
       int n = snprintf(output_buf + pos, MAX_LEARNER_LIST_LENGTH - pos, \
           "%s:%ld", buf, tmp_learner.get_timestamp());

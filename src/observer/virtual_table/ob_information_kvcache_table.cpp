@@ -68,7 +68,6 @@ int ObInfoSchemaKvCacheTable::inner_get_next_row(ObNewRow *&row)
       SERVER_LOG(WARN, "Fail to get cache inst", K(ret));
     }
   } else if (OB_FAIL(process_row(inst))) {
-    SERVER_LOG(WARN, "Fail to process current row", K(ret));
   } else {
     row = &cur_row_;
   }
@@ -89,7 +88,6 @@ int ObInfoSchemaKvCacheTable::set_ip()
   } else {
     ipstr_ = ObString::make_string(ipbuf);
     if (OB_FAIL(ob_write_string(*allocator_, ipstr_, ipstr_))) {
-      SERVER_LOG(WARN, "Failed to write string", K(ret));
     }
     port_ = addr_->get_port();
   }
@@ -102,9 +100,7 @@ int ObInfoSchemaKvCacheTable::inner_open()
 
   inst_handles_.reuse();
   if (OB_FAIL(set_ip())) {
-    SERVER_LOG(WARN, "Fail to set ip from addr", K(ret), K(addr_));
   } else if (OB_FAIL(ObKVGlobalCache::get_instance().get_cache_inst_info(inst_handles_))) {
-    SERVER_LOG(WARN, "Fail to get cache info", K(ret));
   }
 
   return ret;
@@ -165,7 +161,6 @@ int ObInfoSchemaKvCacheTable::process_row(const ObKVCacheInst *inst)
           ret = OB_IO_ERROR;
           SERVER_LOG(WARN, "Fail to snprintf hit ratio", K(ret), K(errno), KERRNOMSG(errno));
         } else if (OB_FAIL(num.from(buf, str_buf_))) {
-          SERVER_LOG(WARN, "Fail to cast to number", K(ret));
         } else {
           cells_[cell_idx].set_number(num);
         }

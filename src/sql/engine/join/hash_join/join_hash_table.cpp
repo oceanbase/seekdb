@@ -78,7 +78,6 @@ int JoinHashTable::init(JoinTableCtx &hjt_ctx, ObIAllocator &allocator)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new hash table", K(ret));
   } else if (OB_FAIL(hash_table_->init(allocator, hjt_ctx.max_batch_size_))) {
-    LOG_WARN("alloc bucket array failed", K(ret));
   }
   return ret;
 }
@@ -91,7 +90,6 @@ int JoinHashTable::init_generic_ht(JoinTableCtx &hjt_ctx, ObIAllocator &allocato
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new hash table", K(ret));
   } else if (OB_FAIL(hash_table_->init(allocator, hjt_ctx.max_batch_size_))) {
-    LOG_WARN("alloc bucket array failed", K(ret));
   }
   return ret;
 }
@@ -115,7 +113,6 @@ int JoinHashTable::build(JoinPartitionRowIter &iter, JoinTableCtx &ctx) {
       }
     } else if (OB_FAIL(hash_table_->insert_batch(ctx,
             const_cast<ObHJStoredRow **>(ctx.stored_rows_), read_size, used_buckets, collisions))) {
-      LOG_WARN("fail to insert batch", K(ret));
     }
     LOG_DEBUG("build hash join table", K(read_size), K(ret));
   }

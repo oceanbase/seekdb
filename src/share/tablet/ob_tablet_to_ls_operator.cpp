@@ -220,7 +220,6 @@ int ObTabletToLSTableOperator::construct_results_(
   int ret = OB_SUCCESS;
   while (OB_SUCC(ret) && OB_SUCC(res.next())) {
     if (OB_FAIL(ls_ids.push_back(SYS_LS))) {
-      LOG_WARN("fail to push back", KR(ret), K(ls_ids));
     }
   }
   if (OB_ITER_END != ret) {
@@ -247,8 +246,6 @@ int ObTabletToLSTableOperator::batch_update(
     int64_t end_idx = min(MAX_BATCH_COUNT, infos.count());
     while (OB_SUCC(ret) && start_idx < end_idx) {
       if (OB_FAIL(inner_batch_update_by_sql_(sql_proxy, infos, start_idx, end_idx))) {
-        LOG_WARN("fail to inner batch get by sql",
-            KR(ret), K(infos), K(start_idx), K(end_idx));
       } else {
         start_idx = end_idx;
         end_idx = min(start_idx + MAX_BATCH_COUNT, infos.count());
@@ -276,9 +273,7 @@ int ObTabletToLSTableOperator::update_table_to_tablet_id_mapping(common::ObISQLC
        || OB_FAIL(dml_splicer.add_column("table_id", table_id))) {
       LOG_WARN("fail to add column", K(ret), K(tablet_id), K(table_id));
     } else if (OB_FAIL(dml_splicer.splice_update_sql(OB_ALL_TABLET_TO_LS_TNAME, sql))) {
-      LOG_WARN("fail to splice batch insert update sql", K(ret), K(sql));
     } else if (OB_FAIL(sql_proxy.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to write sql", K(ret), K(sql), K(affected_rows));
     } else if(!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("expect one row", K(ret), K(sql), K(affected_rows));
@@ -317,14 +312,10 @@ int ObTabletToLSTableOperator::inner_batch_update_by_sql_(
           || OB_FAIL(dml_splicer.add_column("transfer_seq", info.get_transfer_seq())))) {
         LOG_WARN("fail to add column", KR(ret), K(info));
       } else if (OB_FAIL(dml_splicer.finish_row())) {
-        LOG_WARN("fail to finish row", KR(ret));
       }
     }
     if (FAILEDx(dml_splicer.splice_batch_insert_update_sql(OB_ALL_TABLET_TO_LS_TNAME, sql))) {
-      LOG_WARN("fail to splice batch insert update sql", KR(ret), K(sql));
     } else if (OB_FAIL(sql_proxy.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to write sql", KR(ret), K(sql),
-          K(affected_rows), K(infos), K(start_idx), K(end_idx));
     } else {
       LOG_TRACE("update tablet_to_ls success",
           K(affected_rows), K(start_idx), K(end_idx));
@@ -350,8 +341,6 @@ int ObTabletToLSTableOperator::batch_remove(
           tablet_ids,
           start_idx,
           end_idx))) {
-        LOG_WARN("fail to inner batch remove by sql",
-            KR(ret), K(tablet_ids), K(start_idx), K(end_idx));
       } else {
         start_idx = end_idx;
         end_idx = min(start_idx + MAX_BATCH_COUNT, tablet_ids.count());
@@ -381,7 +370,6 @@ int ObTabletToLSTableOperator::inner_batch_remove_by_sql_(
   } else if (OB_FAIL(sql.append_fmt(
       "DELETE FROM %s WHERE tablet_id IN (",
       OB_ALL_TABLET_TO_LS_TNAME))) {
-    LOG_WARN("fail to assign sql", KR(ret));
   } else {
     int64_t affected_rows = 0;
     for (int64_t idx = start_idx; OB_SUCC(ret) && (idx < end_idx); ++idx) {
@@ -390,13 +378,10 @@ int ObTabletToLSTableOperator::inner_batch_remove_by_sql_(
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid tablet_id with tenant", KR(ret), K(tablet_id));
       } else if (OB_FAIL(sql.append_fmt("%s %lu", start_idx == idx ? "" : ",", tablet_id.id()))) {
-        LOG_WARN("fail to assign sql", KR(ret), K(tablet_id));
       }
     }
     if (FAILEDx(sql.append_fmt(")"))) {
-      LOG_WARN("fail to assign sql", KR(ret));
     } else if (OB_FAIL(sql_proxy.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to write sql", KR(ret), K(sql), K(affected_rows));
     }
   }
   return ret;
@@ -453,9 +438,7 @@ int ObTabletToLSTableOperator::construct_results_(
         true/*skip_null_error*/, true/*skip_column_error*/, 0/*default value*/);
 
     if (FAILEDx(info.init(ObTabletID(tablet_id), ObLSID(ls_id), table_id, transfer_seq))) {
-      LOG_WARN("init failed", KR(ret), K(tablet_id), K(ls_id), K(table_id), K(transfer_seq));
     } else if (OB_FAIL(infos.push_back(info))) {
-      LOG_WARN("fail to push back", KR(ret), K(info));
     }
   }
   if (OB_ITER_END == ret) {
@@ -481,7 +464,6 @@ int ObTabletToLSTableOperator::construct_results_(
     EXTRACT_INT_FIELD_MYSQL(res, "tablet_id", tablet_id, int64_t);
 
     if (FAILEDx(pairs.push_back(ObTabletLSPair(ObTabletID(tablet_id), ObLSID(ls_id))))) {
-      LOG_WARN("fail to push back", KR(ret), K(tablet_id), K(ls_id));
     }
   }
   if (OB_ITER_END == ret) {
@@ -508,7 +490,6 @@ int ObTabletToLSTableOperator::get_ls_by_tablet(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(tablet_id));
   } else if (OB_FAIL(tablet_ids.push_back(tablet_id))) {
-    LOG_WARN("push back failed", KR(ret), K(tablet_id));
   } else {
     int64_t start_idx = 0;
     int64_t end_idx = 1;
@@ -518,8 +499,6 @@ int ObTabletToLSTableOperator::get_ls_by_tablet(
         start_idx,
         end_idx,
         ls_ids))) {
-      LOG_WARN("fail to inner batch get by sql",
-          KR(ret), K(tablet_ids), K(start_idx), K(end_idx));
     } else if (ls_ids.empty()) {
       ret = OB_ENTRY_NOT_EXIST;
       LOG_WARN("tablet not found", KR(ret), K(tablet_id));
@@ -580,10 +559,7 @@ int ObTabletToLSTableOperator::construct_results_(
         ObLSID(ls_id),
         now,
         transfer_seq))) {
-      LOG_WARN("init tablet_ls_cache failed", KR(ret),
-          K(tablet_id), K(ls_id), K(now), K(transfer_seq));
     } else if (OB_FAIL(tablet_ls_caches.push_back(tablet_ls_cache))) {
-      LOG_WARN("fail to push back", KR(ret), K(tablet_ls_cache));
     }
   }
   if (OB_ITER_END == ret) {
@@ -642,18 +618,15 @@ int ObTabletToLSTableOperator::get_tablet_ls_pairs_cnt(
   } else if (OB_FAIL(sql.append_fmt(
       "select count(*) as cnt from %s",
       OB_ALL_TABLET_TO_LS_TNAME))) {
-    LOG_WARN("failed to append fmt", K(ret));
   } else {
     common::sqlclient::ObMySQLResult *result = nullptr;
     int64_t cnt = 0;
     SMART_VAR(ObISQLClient::ReadResult, res) {
       if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
-        LOG_WARN("fail to do read", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result", KR(ret), K(sql));
       } else if (OB_FAIL(result->get_int("cnt", cnt))) {
-        LOG_WARN("failed to get int", KR(ret), K(cnt));
       } else {
         input_cnt = cnt;
       }

@@ -187,7 +187,6 @@ int ObAllDtlIntermResultMonitor::inner_get_next_row(ObNewRow *&row)
   ObObj *cells = cur_row_.cells_;
   if (!start_to_read_) {
     if (OB_FAIL(fill_scanner())) {
-      SERVER_LOG(WARN, "fill scanner failed", K(ret));
     } else {
       start_to_read_ = true;
     }
@@ -224,7 +223,6 @@ int ObAllDtlIntermResultMonitor::fill_scanner()
                                   cur_row_);
           MOD_SCOPE {
             if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->generate_monitor_info_rows(monitor_getter))) {
-              SERVER_LOG(WARN, "generate monitor info array failed", K(ret));
             }
           } else {
             // During the iteration process, tenants may be deleted,
@@ -238,7 +236,6 @@ int ObAllDtlIntermResultMonitor::fill_scanner()
                                   cur_row_);
       MOD_SCOPE {
         if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->generate_monitor_info_rows(monitor_getter))) {
-          SERVER_LOG(WARN, "generate monitor info array failed", K(ret));
         }
       }
     }

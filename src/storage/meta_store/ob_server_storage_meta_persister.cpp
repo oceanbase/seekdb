@@ -38,7 +38,6 @@ int ObServerStorageMetaPersister::init(ObStorageLogger *server_slogger)
     ret = OB_INIT_TWICE;
     LOG_WARN("has inited", K(ret));
   } else if (OB_FAIL(allocator_.init(common::OB_MALLOC_NORMAL_BLOCK_SIZE, attr, MEM_LIMIT))) {
-    LOG_WARN("fail to init fifo allocator", K(ret));
   } else {
     server_slogger_ = server_slogger;
     
@@ -63,7 +62,6 @@ int ObServerStorageMetaPersister::prepare_create_tenant(const ObTenantMeta &meta
   } else  {
     epoch = 0;
     if (OB_FAIL(write_prepare_create_tenant_slog_(meta))) {
-      LOG_WARN("fail to write prepare create tenant slog", K(ret), K(meta));
     }
 
   }
@@ -78,7 +76,6 @@ int ObServerStorageMetaPersister::commit_create_tenant(const int64_t epoch)
     LOG_WARN("not init", K(ret));
   } else if (!is_shared_storage_)  {
     if (OB_FAIL(write_commit_create_tenant_slog_())) {
-      LOG_WARN("fail to write commit create tenant slog", K(ret));
     }
   } else {
   }
@@ -93,7 +90,6 @@ int ObServerStorageMetaPersister::abort_create_tenant(const int64_t epoch)
     LOG_WARN("not init", K(ret));
   } else if (!is_shared_storage_)  {
     if (OB_FAIL(write_abort_create_tenant_slog_())) {
-      LOG_WARN("fail to write abort create tenant slog", K(ret));
     }
   } else {
   }
@@ -108,7 +104,6 @@ int ObServerStorageMetaPersister::commit_delete_tenant(const int64_t epoch)
     LOG_WARN("not init", K(ret));
   } else if (!is_shared_storage_)  {
     if (OB_FAIL(write_commit_delete_tenant_slog_())) {
-      LOG_WARN("fail to write commit delete tenant slog", K(ret));
     }
   } else {
   }
@@ -127,7 +122,6 @@ int ObServerStorageMetaPersister::update_tenant_super_block(
     LOG_WARN("not init", K(ret));
   } else  {
     if (OB_FAIL(write_update_tenant_super_block_slog_(super_block))) {
-      LOG_WARN("fail to write update tenant super block slog", K(ret), K(super_block));
     }
 
   }
@@ -143,7 +137,6 @@ int ObServerStorageMetaPersister::update_tenant_unit(
     LOG_WARN("not init", K(ret));
   } else  {
     if (OB_FAIL(write_update_tenant_unit_slog_(unit))) {
-      LOG_WARN("fail to write update tenant unit slog", K(ret), K(unit));
     }
 
   }
@@ -158,33 +151,26 @@ int ObServerStorageMetaPersister::clear_tenant_log_dir()
   bool exist = true;
 
   if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_tenant_clog_dir(tenant_clog_dir))) {
-    LOG_WARN("fail to get tenant clog dir", K(ret));
   } else if (OB_FAIL(FileDirectoryUtils::is_exists(tenant_clog_dir, exist))) {
-    LOG_WARN("fail to check exist", K(ret));
   } else if (exist) {
     // defense code begin
     int tmp_ret = OB_SUCCESS;
     bool directory_empty = true;
     if (OB_TMP_FAIL(FileDirectoryUtils::is_empty_directory(tenant_clog_dir, directory_empty))) {
-      LOG_WARN("fail to check directory whether is empty", KR(tmp_ret), K(tenant_clog_dir));
     }
     if (!directory_empty) {
       LOG_DBA_ERROR(OB_ERR_UNEXPECTED, "msg", "clog directory must be empty when delete tenant", K(tenant_clog_dir));
     }
     // defense code end
     if (OB_FAIL(FileDirectoryUtils::delete_directory_rec(tenant_clog_dir))) {
-      LOG_WARN("fail to delete clog dir", K(ret), K(tenant_clog_dir));
     }
   }
 
   if (OB_SUCC(ret) && !is_shared_storage_) {
     if (OB_FAIL(SERVER_STORAGE_META_SERVICE.get_slogger_manager().get_tenant_slog_dir(tenant_slog_dir))) {
-      LOG_WARN("fail to get tenant slog dir", K(ret));
     } else if (OB_FAIL(FileDirectoryUtils::is_exists(tenant_slog_dir, exist))) {
-      LOG_WARN("fail to check exist", K(ret));
     } else if (exist) {
       if (OB_FAIL(FileDirectoryUtils::delete_directory_rec(tenant_slog_dir))) {
-        LOG_WARN("fail to delete slog dir", K(ret), K(tenant_slog_dir));
       }
     }
   }
@@ -201,7 +187,6 @@ int ObServerStorageMetaPersister::write_prepare_create_tenant_slog_(const ObTena
   log_param.data_ = &log_entry;
   log_param.cmd_ = cmd;
   if (OB_FAIL(server_slogger_->write_log(log_param))) {
-    LOG_WARN("failed to write put tenant slog", K(ret), K(log_param));
   }
 
   return ret;
@@ -217,7 +202,6 @@ int ObServerStorageMetaPersister::write_commit_create_tenant_slog_()
   log_param.data_ = &log_entry;
   log_param.cmd_ = cmd;
   if (OB_FAIL(server_slogger_->write_log(log_param))) {
-    LOG_WARN("failed to write slog", K(ret), K(log_param));
   }
 
   return ret;
@@ -232,7 +216,6 @@ int ObServerStorageMetaPersister::write_abort_create_tenant_slog_()
   log_param.data_ = &log_entry;
   log_param.cmd_ = cmd;
   if (OB_FAIL(server_slogger_->write_log(log_param))) {
-    LOG_WARN("failed to write slog", K(ret), K(log_param));
   }
 
   return ret;
@@ -248,7 +231,6 @@ int ObServerStorageMetaPersister::write_prepare_delete_tenant_slog_()
   log_param.data_ = &log_entry;
   log_param.cmd_ = cmd;
   if (OB_FAIL(server_slogger_->write_log(log_param))) {
-    LOG_WARN("failed to write slog", K(ret), K(log_param));
   }
 
   return ret;
@@ -264,7 +246,6 @@ int ObServerStorageMetaPersister::write_commit_delete_tenant_slog_()
   log_param.data_ = &log_entry;
   log_param.cmd_ = cmd;
   if (OB_FAIL(server_slogger_->write_log(log_param))) {
-    LOG_WARN("failed to write slog", K(ret), K(log_param));
   }
 
   return ret;
@@ -287,7 +268,6 @@ int ObServerStorageMetaPersister::write_update_tenant_super_block_slog_(
     log_param.cmd_ = ObIRedoModule::gen_cmd(ObRedoLogMainType::OB_REDO_LOG_SERVER_TENANT,
       ObRedoLogSubType::OB_REDO_LOG_UPDATE_TENANT_SUPER_BLOCK);
     if (OB_FAIL(server_slogger_->write_log(log_param))) {
-      LOG_WARN("fail to write tenant super block slog", K(ret), K(log_param));
     }
   }
   return ret;
@@ -303,7 +283,6 @@ int ObServerStorageMetaPersister::write_update_tenant_unit_slog_(const ObUnitInf
   log_param.data_ = &log_entry;
   log_param.cmd_ = cmd;
   if (OB_FAIL(server_slogger_->write_log(log_param))) {
-    LOG_WARN("failed to write tenant unit slog", K(ret), K(log_param));
   }
 
   return ret;

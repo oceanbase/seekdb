@@ -189,9 +189,7 @@ public:
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "unexpected null meta", K(ret));
     } else if (OB_FAIL(left->get_rowkey(left_key))) {
-      STORAGE_LOG(WARN, "Failed to get last key", K(ret), KPC(left));
     } else if (OB_FAIL(right->get_rowkey(right_key))) {
-      STORAGE_LOG(WARN, "Failed to get last key", K(ret), KPC(right));
     } else if (OB_FAIL(left_key.compare(right_key, datum_utils_, cmp_ret))) {
       STORAGE_LOG(WARN, "Failed to compare last key", K(ret), KPC(left), KPC(right));
       cmp_ret = 0;

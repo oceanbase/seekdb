@@ -43,7 +43,6 @@ int HashBasedDistinctVecExtraResult::rewind()
   int ret = OB_SUCCESS;
   if (nullptr != hp_infras_ && need_rewind_) {
     if (OB_FAIL(hp_infras_->rewind())) {
-      LOG_WARN("rewind iterator failed", K(ret));
     } else {
       got_row_ = false;
     }
@@ -92,7 +91,6 @@ int HashBasedDistinctVecExtraResult::init_vector_default(ObEvalCtx &ctx, const i
     if (VEC_INVALID != header.format_) {
       // do nothing
     } else if (OB_FAIL(expr->init_vector_default(ctx, size))) {
-      LOG_WARN("failed to init vector default", K(ret));
     }
   }
   return ret;
@@ -107,7 +105,6 @@ int HashBasedDistinctVecExtraResult::init_hp_infras()
   } else if (OB_FAIL(hp_infras_mgr_->init_one_hp_infras(need_rewind_,
                                                         &aggr_info_->distinct_collations_,
                                                         aggr_info_->param_exprs_, hp_infras_))) {
-    LOG_WARN("failed to init hash partition infrastructure", K(ret));
   } else {
     inited_hp_infras_ = true;
   }
@@ -133,9 +130,7 @@ int HashBasedDistinctVecExtraResult::init_distinct_set(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to init hash values for batch", K(ret), K(eval_ctx.max_batch_size_));
     } else if (OB_FAIL(init_my_skip(eval_ctx.max_batch_size_))) {
-      LOG_WARN("failed to init my skip", K(ret), K(eval_ctx.max_batch_size_));
     } else if (OB_FAIL(brs_holder_.init(aggr_info.param_exprs_, eval_ctx))) {
-      LOG_WARN("failed to init result holder", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -178,11 +173,9 @@ int HashBasedDistinctVecExtraResult::insert_row_for_batch(const common::ObIArray
   } else if (OB_FAIL(hp_infras_->calc_hash_value_for_batch(
                exprs, (start_pos > 0 || nullptr == skip) ? *my_skip_ : *skip, end_pos, false,
                hash_values_for_batch_))) {
-    LOG_WARN("failed to calc hash values batch", K(ret));
   } else if (OB_FAIL(hp_infras_->insert_row_for_batch(
                exprs, hash_values_for_batch_, end_pos,
                (start_pos > 0 || nullptr == skip) ? my_skip_ : skip, output_vec))) {
-    LOG_WARN("failed to insert batch rows", K(ret));
   } else {
     // int64_t got_rows = end_pos - output_vec->accumulate_bit_cnt(end_pos);
   }
@@ -202,23 +195,18 @@ int HashBasedDistinctVecExtraResult::build_distinct_data_for_batch(
     if (OB_ITER_END == ret) {
       ret = OB_SUCCESS;
       if (OB_FAIL(hp_infras_->finish_insert_row())) {
-        LOG_WARN("failed to finish to insert row", K(ret));
       } else if (OB_FAIL(hp_infras_->close_cur_part(InputSide::LEFT))) {
-        LOG_WARN("failed to close cur part", K(ret));
       } else {
         LOG_TRACE("trace break out of the loop");
         break;
       }
     } else if (OB_FAIL(ret)) {
-      LOG_WARN("failed to get left next batch", K(ret));
     } else if (OB_FAIL(try_check_status())) {
-      LOG_WARN("failed to check status", K(ret));
     } else if (OB_FAIL(hp_infras_->insert_row_for_batch(exprs,
                                                         hash_values_for_batch_,
                                                         read_rows,
                                                         nullptr,
                                                         output_vec))) {
-      LOG_WARN("failed to insert batch rows, dump", K(ret));
     }
   }
   return ret;
@@ -234,9 +222,7 @@ int HashBasedDistinctVecExtraResult::get_next_unique_hash_table_batch(
     if (!inited_hp_infras_ && OB_FAIL(init_hp_infras())) {
       LOG_WARN("failed to init hash partition infrastructure", K(ret));
     } else if (OB_FAIL(hp_infras_->finish_insert_row())) {
-      LOG_WARN("failed to finish to insert row", K(ret));
     } else if (OB_FAIL(hp_infras_->open_hash_table_part())) {
-      LOG_WARN("failed to open hash table part", K(ret));
     } else {
       got_row_ = true;
     }
@@ -248,27 +234,21 @@ int HashBasedDistinctVecExtraResult::get_next_unique_hash_table_batch(
                                                            nullptr))) {
     if (OB_ITER_END == ret) {
       if (OB_FAIL(hp_infras_->end_round())) {
-        LOG_WARN("failed to end round", K(ret));
       } else if (OB_FAIL(hp_infras_->start_round())) {
-        LOG_WARN("failed to open round", K(ret));
       } else if (OB_FAIL(hp_infras_->get_next_partition(InputSide::LEFT))) {
         if (OB_ITER_END != ret) {
           LOG_WARN("failed to get dumped partitions", K(ret));
         }
       } else if (OB_FAIL(hp_infras_->open_cur_part(InputSide::LEFT))) {
-        LOG_WARN("failed to open cur part");
       } else if (OB_FAIL(hp_infras_->resize(
           hp_infras_->get_cur_part_row_cnt(InputSide::LEFT)))) {
-        LOG_WARN("failed to init hash table", K(ret));
       } else if (OB_FAIL(build_distinct_data_for_batch(exprs, max_row_cnt))) {
         if (OB_ITER_END == ret) {
           ret = OB_ERR_UNEXPECTED;
         }
         LOG_WARN("failed to build distinct data", K(ret));
       } else if (OB_FAIL(hp_infras_->open_hash_table_part())) {
-        LOG_WARN("failed to open hash table part", K(ret));
       } else if (OB_FAIL(SMART_CALL(get_next_unique_hash_table_batch(exprs, max_row_cnt, read_rows)))) {
-        LOG_WARN("failed to get next unique hash table batch", K(ret));
       }
     } else {
       LOG_WARN("failed to get next batch in hash table", K(ret));
@@ -450,17 +430,13 @@ int DataStoreVecExtraResult::init_data_set(ObAggrInfo &aggr_info, ObEvalCtx &eva
       SQL_LOG(WARN, "allocate memory failed", K(ret));
     } else if (FALSE_IT(cur_collation = new (cur_collation_buf) ObSortCollations(allocator))) {
     } else if (OB_FAIL(sort_key->init(sort_collations_.count()))) {
-      SQL_LOG(WARN, "failed to init", K(ret));
     } else if (OB_FAIL(cur_collation->init(sort_collations_.count()))) {
-      SQL_LOG(WARN, "failed to init", K(ret));
     }
     for (int i = 0; i < sort_collations_.count() && OB_SUCC(ret); i++) {
       ObExpr *cur_expr = param_expr.at(sort_collations_.at(i).field_idx_);
       if (is_contain(*sort_key, cur_expr)) {
       } else if (OB_FAIL(sort_key->push_back(cur_expr))) {
-        SQL_LOG(WARN, "failed to push back", K(ret));
       } else if (OB_FAIL(cur_collation->push_back(sort_collations_.at(i)))) {
-        SQL_LOG(WARN, "failed to push back", K(ret));
       } else {
         int last_idx = cur_collation->count() - 1;
         cur_collation->at(last_idx).field_idx_ = last_idx;
@@ -476,7 +452,6 @@ int DataStoreVecExtraResult::init_data_set(ObAggrInfo &aggr_info, ObEvalCtx &eva
         SQL_LOG(WARN, "allocate memory failed", K(ret));
       } else if (FALSE_IT(addon_keys = new (addon_keys_buf) ExprFixedArray(allocator))) {
       } else if (OB_FAIL(addon_keys->init(init_size))) {
-        SQL_LOG(WARN, "failed to init", K(ret));
       } else {
         for (int i = 0; i < param_expr.count() && OB_SUCC(ret) && addon_keys->count() < init_size;
              i++) {
@@ -502,7 +477,6 @@ int DataStoreVecExtraResult::init_data_set(ObAggrInfo &aggr_info, ObEvalCtx &eva
         SQL_LOG(WARN, "allocate memory failed", K(ret));
       } else if (FALSE_IT(sort_ = new (sort_buf) ObSortVecOpProvider(*op_monitor_info))) {
       } else if (OB_FAIL(sort_->init(context))) {
-        LOG_WARN("failed to init sort", K(ret));
       } else {
         sort_->set_operator_type(op_monitor_info->get_operator_type());
         sort_->set_operator_id(op_monitor_info->get_op_id());
@@ -518,13 +492,11 @@ int DataStoreVecExtraResult::init_data_set(ObAggrInfo &aggr_info, ObEvalCtx &eva
     } else if (OB_FALSE_IT(store_ = new (store_buf) ObTempRowStore()))  {
     } else if (OB_FAIL(store_->init(aggr_info.param_exprs_, eval_ctx.max_batch_size_, attr, INT64_MAX,
                                     true, 0, ObCompressorType::NONE_COMPRESSOR))) {
-      LOG_WARN("init temp row store failed", K(ret));
     }
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(data_store_brs_holder_.init(aggr_info.param_exprs_, eval_ctx))) {
-      LOG_WARN("failed to init result holder", K(ret));
     } else {
       data_store_inited_ = true;
     }
@@ -680,18 +652,14 @@ int HybridHistVecExtraResult::init_data_set(ObIAllocator &allocator,
     LOG_WARN("get unexpected error", K(ret), K(aggr_info.param_exprs_.count()),
                                      K(aggr_info.bucket_num_param_expr_));
   } else if (OB_FAIL(aggr_info.bucket_num_param_expr_->eval(eval_ctx, bucket_num_result))) {
-    LOG_WARN("eval failed", K(ret));
   } else if (OB_ISNULL(bucket_num_result)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(bucket_num_result));
   } else if (OB_FAIL(get_param_int_val(aggr_info.bucket_num_param_expr_, 
                                        bucket_num_result,
                                        bucket_num_))) {
-    LOG_WARN("failed to get int param val", K(ret), K(bucket_num_result));
   } else if (OB_FAIL(init_batch_vector(allocator, eval_ctx.max_batch_size_))) {
-    LOG_WARN("failed to init batch vector", K(ret));
   } else if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
-    LOG_WARN("create entity failed");
   } else if (OB_ISNULL(mem_context_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null memory entity returned");
@@ -702,11 +670,9 @@ int HybridHistVecExtraResult::init_data_set(ObIAllocator &allocator,
                                  true, 
                                  sizeof(BucketDesc), 
                                  ObCompressorType::NONE_COMPRESSOR))) {
-    LOG_WARN("init temp row store failed", K(ret));
   } else if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(), 0, 
                                              op_monitor_info_.get_operator_type(), 
                                              0, &eval_ctx.exec_ctx_))) {
-    LOG_WARN("failed to init sql memory manager processor", K(ret));
   } else {
     store_.set_allocator(mem_context_->get_malloc_allocator());
     store_.set_callback(&sql_mem_processor_);
@@ -749,7 +715,6 @@ int HybridHistVecExtraResult::compute_hybrid_hist_result(
   if (num_distinct_ == 0) {
     // do nothing
   } else if (OB_FAIL(store_.begin(vec_result_iter))) {
-    LOG_WARN("failed to read temp store", K(ret));
   } else {
     int64_t row_index = 0;
     constexpr int64_t MAX_BATCH_SIZE = 256;
@@ -806,16 +771,13 @@ int HybridHistVecExtraResult::compute_hybrid_hist_result(
             ObObj ep_val;
             ObDatum datum = rows[i]->get_datum(store_.get_row_meta(), 0);
             if (OB_FAIL(datum.to_obj(ep_val, obj_meta))) {
-              LOG_WARN("failed to obj", K(ret));
             } else if (OB_FAIL(ob_write_obj(allocator, ep_val, ep_val))) {
-              LOG_WARN("failed to write obj", K(ret), K(ep_val));
             } else {
               ObHistBucket bkt(ep_val, ep_count, ep_num);
               if (!is_pop) {
                 ++un_pop_bucket;
               }
               if (OB_FAIL(histogram.add_hist_bucket(bkt))) {
-                LOG_WARN("failed add hist bucket", K(ret));
               }
             }
             if (dynamic_size && bucket_num_ > pop_count_ + un_pop_bucket) {
@@ -849,7 +811,6 @@ int HybridHistVecExtraResult::process_dump()
       &mem_context_->get_malloc_allocator(),
       max_available_rowcnt_checker,
       updated))) {
-    LOG_WARN("failed to update max available memory size periodically", K(ret));
   } else if (need_dump() && GCONF.is_sql_operator_dump_enabled()
           && OB_FAIL(sql_mem_processor_.extend_max_memory_size(
             &mem_context_->get_malloc_allocator(),
@@ -858,7 +819,6 @@ int HybridHistVecExtraResult::process_dump()
     LOG_WARN("failed to extend max memory size", K(ret));
   } else if (dumped) {
     if (OB_FAIL(store_.dump(false))) {
-      LOG_WARN("failed to dump row store", K(ret));
     } else {
       sql_mem_processor_.reset();
       sql_mem_processor_.set_number_pass(1);
@@ -920,7 +880,6 @@ int HybridHistVecExtraResult::flush_batch_rows(bool need_dump)
     }
     if (need_dump) {
       if (OB_FAIL(process_dump())) {
-        SQL_LOG(WARN, "failed to process dump", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -936,9 +895,7 @@ int HybridHistVecExtraResult::flush_batch_rows(bool need_dump)
           }
           MEMSET(rows, 0, batch_idx_);
           if (OB_FAIL(vecs.push_back(batch_vector_))) {
-            LOG_WARN("failed to push back batch vector", K(ret));
           } else if (OB_FAIL(store_.add_batch(vecs, selector, batch_idx_, rows))) {
-            LOG_WARN("failed to add batch to store", K(ret));
           } else {
             for (int64_t i = 0; OB_SUCC(ret) && i < batch_idx_ - 1; ++i) {
               if (OB_ISNULL(rows[i])) {

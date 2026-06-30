@@ -93,7 +93,6 @@ int ObTableLoadPreSortWriter::write(int32_t session_id,
       if (OB_FAIL(store_writer_->cast_row(session_id, row.obj_row_, datum_row))) {
         LOG_INFO("write row error", K(ret), K(row));
         if (OB_FAIL(error_row_handler_->handle_error_row(ret))) {
-          LOG_WARN("failed to handle error row", K(ret), K(row));
         } else {
           ret = OB_SUCCESS;
         }
@@ -101,7 +100,6 @@ int ObTableLoadPreSortWriter::write(int32_t session_id,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("datum row is nullptr", KR(ret));
       } else if (OB_FAIL(append_row(row.tablet_id_, *datum_row))) {
-        LOG_WARN("fail to append row", KR(ret));
       } 
     } // for
     if (OB_SUCC(ret)) {
@@ -135,9 +133,7 @@ int ObTableLoadPreSortWriter::px_write(ObIVector *tablet_id_vector,
     for (int64_t i = 0; OB_SUCC(ret) && i < batch_rows.size(); ++i) {
       tablet_id = ObDirectLoadVectorUtils::get_tablet_id(tablet_id_vector, i);
       if (OB_FAIL(batch_rows.get_datum_row(i, datum_row_))) {
-        LOG_WARN("fail to get datum row", KR(ret), K(i), K(batch_rows));
       } else if (OB_FAIL(append_row(tablet_id, datum_row_))) {
-        LOG_WARN("fail to append row", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -165,7 +161,6 @@ int ObTableLoadPreSortWriter::append_row(const ObTabletID &tablet_id,
   external_row_.tablet_id_ = tablet_id;
   if (OB_FAIL(external_row_.external_row_.from_datum_row(datum_row,
                                                          mem_ctx_->table_data_desc_.rowkey_column_num_))) {
-    LOG_WARN("fail to cast row from datum row", KR(ret));
   } else if (chunk_ == nullptr && OB_FAIL(chunks_manager_->get_chunk(chunk_node_id_, chunk_))) {
     LOG_WARN("fail to get chunk", KR(ret));
   } else if (FALSE_IT(const_row = external_row_)) {
@@ -175,9 +170,7 @@ int ObTableLoadPreSortWriter::append_row(const ObTabletID &tablet_id,
     } else {
       ret = OB_SUCCESS;
       if (OB_FAIL(chunks_manager_->close_and_acquire_chunk(chunk_node_id_, chunk_))) {
-        LOG_WARN("fail to close chunk", KR(ret));
       } else if (OB_FAIL(chunk_->add_item(const_row))) {
-        LOG_WARN("fail to add item", KR(ret));
       }
     }
   }
@@ -192,7 +185,6 @@ int ObTableLoadPreSortWriter::close()
     LOG_WARN("ObTableLoadPreSortWriter is not init", KR(ret));
   } else if (OB_LIKELY(-1 != chunk_node_id_ && nullptr != chunk_)) {
     if (OB_FAIL(chunks_manager_->push_chunk(chunk_node_id_))) {
-      LOG_WARN("fail to push chunk", K(chunk_node_id_), KR(ret));
     } else {
       chunk_ = nullptr;
       chunk_node_id_ = -1;

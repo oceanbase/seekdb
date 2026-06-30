@@ -71,15 +71,10 @@ ObMViewRefreshRunStats &ObMViewRefreshRunStats::operator=(const ObMViewRefreshRu
     log_purge_time_ = src_schema.log_purge_time_;
     complete_stats_avaliable_ = src_schema.complete_stats_avaliable_;
     if (OB_FAIL(deep_copy_str(src_schema.mviews_, mviews_))) {
-      LOG_WARN("deep copy mviews failed", KR(ret), K(src_schema.mviews_));
     } else if (OB_FAIL(deep_copy_str(src_schema.base_tables_, base_tables_))) {
-      LOG_WARN("deep copy base tables failed", KR(ret), K(src_schema.base_tables_));
     } else if (OB_FAIL(deep_copy_str(src_schema.method_, method_))) {
-      LOG_WARN("deep copy method failed", KR(ret), K(src_schema.method_));
     } else if (OB_FAIL(deep_copy_str(src_schema.rollback_seg_, rollback_seg_))) {
-      LOG_WARN("deep copy rollback seg failed", KR(ret), K(src_schema.rollback_seg_));
     } else if (OB_FAIL(deep_copy_str(src_schema.trace_id_, trace_id_))) {
-      LOG_WARN("deep copy trace id failed", KR(ret), K(src_schema.trace_id_));
     }
   }
   return *this;
@@ -212,12 +207,10 @@ int ObMViewRefreshRunStats::insert_run_stats(ObISQLClient &sql_client,
     
     ObDMLSqlSplicer dml;
     if (OB_FAIL(run_stats.gen_insert_run_stats_dml(dml))) {
-      LOG_WARN("fail to gen insert run stats dml", KR(ret), K(run_stats));
     } else {
       ObDMLExecHelper exec(sql_client);
       int64_t affected_rows = 0;
       if (OB_FAIL(exec.exec_insert(OB_ALL_MVIEW_REFRESH_RUN_STATS_TNAME, dml, affected_rows))) {
-        LOG_WARN("execute insert failed", KR(ret));
       } else if (OB_UNLIKELY(!is_single_row(affected_rows))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows unexpected to be one", KR(ret), K(affected_rows));
@@ -241,9 +234,7 @@ int ObMViewRefreshRunStats::dec_num_mvs_current(ObISQLClient &sql_client,
     if (OB_FAIL(sql.assign_fmt("update %s set num_mvs_current = num_mvs_current - %ld"
                                " where refresh_id = %ld;",
                                OB_ALL_MVIEW_REFRESH_RUN_STATS_TNAME, dec_val, refresh_id))) {
-      LOG_WARN("fail to assign sql", KR(ret));
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", KR(ret), K(sql));
     } else if (OB_UNLIKELY(!(is_single_row(affected_rows) || is_zero_row(affected_rows)))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("affected_rows unexpected to be one or zero", KR(ret), K(affected_rows));
@@ -265,11 +256,9 @@ int ObMViewRefreshRunStats::drop_empty_run_stats(ObISQLClient &sql_client,
     ObSqlString sql;
     if (OB_FAIL(sql.assign_fmt("delete from %s where num_mvs_current <= 0",
                                OB_ALL_MVIEW_REFRESH_RUN_STATS_TNAME))) {
-      LOG_WARN("fail to assign sql", KR(ret));
     } else if (limit > 0 && OB_FAIL(sql.append_fmt(" limit %ld", limit))) {
       LOG_WARN("fail to append sql", KR(ret));
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", KR(ret), K(sql));
     }
   }
   return ret;
@@ -402,9 +391,7 @@ int ObMViewRefreshStats::insert_refresh_stats(const ObMViewRefreshStats &refresh
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(refresh_stat));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-    LOG_WARN("fail to start trans", K(ret));
   } else if (OB_FAIL(insert_refresh_stats(trans, refresh_stat))) {
-    LOG_WARN("fail to insert record", K(ret), K(refresh_stat));
   }
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
@@ -428,13 +415,10 @@ int ObMViewRefreshStats::insert_refresh_stats(ObISQLClient &sql_client,
     
     ObDMLSqlSplicer dml;
     if (OB_FAIL(refresh_stats.gen_insert_refresh_stats_dml(dml))) {
-      LOG_WARN("fail to gen insert refresh stats dml", KR(ret),
-               K(refresh_stats));
     } else {
       ObDMLExecHelper exec(sql_client);
       int64_t affected_rows = 0;
       if (OB_FAIL(exec.exec_insert(OB_ALL_MVIEW_REFRESH_STATS_TNAME, dml, affected_rows))) {
-        LOG_WARN("execute insert failed", KR(ret));
       } else if (OB_UNLIKELY(!is_single_row(affected_rows))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows unexpected to be one", KR(ret), K(affected_rows));
@@ -463,7 +447,6 @@ int ObMViewRefreshStats::drop_refresh_stats_record(ObISQLClient &sql_client,
       ObDMLExecHelper exec(sql_client);
       int64_t affected_rows = 0;
       if (OB_FAIL(exec.exec_delete(OB_ALL_MVIEW_REFRESH_STATS_TNAME, dml, affected_rows))) {
-        LOG_WARN("execute delete failed", KR(ret));
       }
     }
   }
@@ -490,7 +473,6 @@ int ObMViewRefreshStats::collect_record_ids(ObISQLClient &sql_client,
       if (OB_FAIL(
             sql.assign_fmt("select refresh_id, mview_id, retry_id from %s where 0 = 0",
                            OB_ALL_MVIEW_REFRESH_STATS_TNAME))) {
-        LOG_WARN("fail to assign sql", KR(ret));
       } else if (filter_param.has_mview_id() &&
                  OB_FAIL(sql.append_fmt(" and mview_id = %ld", filter_param.get_mview_id()))) {
         LOG_WARN("fail to append sql", KR(ret));
@@ -501,7 +483,6 @@ int ObMViewRefreshStats::collect_record_ids(ObISQLClient &sql_client,
       } else if (limit > 0 && OB_FAIL(sql.append_fmt(" limit %ld", limit))) {
         LOG_WARN("fail to append sql", KR(ret));
       } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("result is null", KR(ret));
@@ -645,12 +626,10 @@ int ObMViewRefreshChangeStats::insert_change_stats(ObISQLClient &sql_client,
     
     ObDMLSqlSplicer dml;
     if (OB_FAIL(change_stats.gen_insert_change_stats_dml(dml))) {
-      LOG_WARN("fail to gen insert change stats dml", KR(ret), K(change_stats));
     } else {
       ObDMLExecHelper exec(sql_client);
       int64_t affected_rows = 0;
       if (OB_FAIL(exec.exec_insert(OB_ALL_MVIEW_REFRESH_CHANGE_STATS_TNAME, dml, affected_rows))) {
-        LOG_WARN("execute insert failed", KR(ret));
       } else if (OB_UNLIKELY(!is_single_row(affected_rows))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows unexpected to be one", KR(ret), K(affected_rows));
@@ -679,7 +658,6 @@ int ObMViewRefreshChangeStats::drop_change_stats_record(
       ObDMLExecHelper exec(sql_client);
       int64_t affected_rows = 0;
       if (OB_FAIL(exec.exec_delete(OB_ALL_MVIEW_REFRESH_CHANGE_STATS_TNAME, dml, affected_rows))) {
-        LOG_WARN("execute delete failed", KR(ret));
       }
     }
   }
@@ -719,11 +697,8 @@ ObMViewRefreshStmtStats &ObMViewRefreshStmtStats::operator=(
     execution_time_ = src_schema.execution_time_;
     result_ = src_schema.result_;
     if (OB_FAIL(deep_copy_str(src_schema.sql_id_, sql_id_))) {
-      LOG_WARN("deep copy sql id failed", KR(ret), K(src_schema.sql_id_));
     } else if (OB_FAIL(deep_copy_str(src_schema.stmt_, stmt_))) {
-      LOG_WARN("deep copy stmt failed", KR(ret), K(src_schema.stmt_));
     } else if (OB_FAIL(deep_copy_str(src_schema.execution_plan_, execution_plan_))) {
-      LOG_WARN("deep copy execution plan failed", KR(ret), K(src_schema.execution_plan_));
     }
   }
   return *this;
@@ -818,12 +793,10 @@ int ObMViewRefreshStmtStats::insert_stmt_stats(ObISQLClient &sql_client,
     
     ObDMLSqlSplicer dml;
     if (OB_FAIL(stmt_stats.gen_insert_stmt_stats_dml(dml))) {
-      LOG_WARN("fail to gen insert stmt stats dml", KR(ret), K(stmt_stats));
     } else {
       ObDMLExecHelper exec(sql_client);
       int64_t affected_rows = 0;
       if (OB_FAIL(exec.exec_insert(OB_ALL_MVIEW_REFRESH_STMT_STATS_TNAME, dml, affected_rows))) {
-        LOG_WARN("execute insert failed", KR(ret));
       } else if (OB_UNLIKELY(!is_single_row(affected_rows))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows unexpected to be one", KR(ret), K(affected_rows));
@@ -852,7 +825,6 @@ int ObMViewRefreshStmtStats::drop_stmt_stats_record(ObISQLClient &sql_client,
       ObDMLExecHelper exec(sql_client);
       int64_t affected_rows = 0;
       if (OB_FAIL(exec.exec_delete(OB_ALL_MVIEW_REFRESH_STMT_STATS_TNAME, dml, affected_rows))) {
-        LOG_WARN("execute delete failed", KR(ret));
       }
     }
   }

@@ -86,7 +86,6 @@ int ObCgMacroBlockWriter::init(
     blocksstable::ObMacroMetaTempStore *macro_meta_store = nullptr;
 
     if (OB_FAIL(pre_warm_param.init(param.ls_id_, table_key.tablet_id_))) {
-      LOG_WARN("fail to init pre warm param", KR(ret), K(param.ls_id_), K(table_key.tablet_id_));
     } else if (OB_FAIL(data_desc_.init(true/*is ddl*/,
                                        *tablet_param.storage_schema_,  
                                        param.ls_id_,
@@ -102,12 +101,10 @@ int ObCgMacroBlockWriter::init(
                                        table_key.column_group_idx_/*table_cg_idx*/,
                                        exec_mode,
                                        true/*need_submit_io*/))) {
-      LOG_WARN("fail to init data store desc", KR(ret), K(param.direct_load_type_));
     } else if (FALSE_IT(data_desc_.get_static_desc().schema_version_ = param.schema_version_)) {
       /* set as a fixed schema version */
     } else if (OB_FAIL(index_builder_.init(data_desc_.get_desc(),
                                            ObSSTableIndexBuilder::DISABLE /*small sstable op*/))) {
-      LOG_WARN("fail to init index builder", KR(ret), K(param), K(table_key), K(data_desc_));
     } else {
       // for build the tail index block in macro block
       data_desc_.get_desc().sstable_index_builder_ = &index_builder_;
@@ -135,14 +132,12 @@ int ObCgMacroBlockWriter::init(
       init_param.seq_no_ = seq_no;
       init_param.macro_meta_store_ = macro_meta_store;
       if (OB_FAIL(inc_redo_callback->init(init_param))) {
-        LOG_WARN("fail to init inc redo callback", KR(ret));
       }
     }
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObSSTablePrivateObjectCleaner::get_cleaner_from_data_store_desc(
                  data_desc_.get_desc(), object_cleaner))) {
-      LOG_WARN("fail to get cleaner from data store desc", KR(ret));
     } else if (OB_ISNULL(object_cleaner)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("object cleaner is nullptr", KR(ret));
@@ -153,8 +148,6 @@ int ObCgMacroBlockWriter::init(
                                                 pre_warm_param,
                                                 *object_cleaner,
                                                 ddl_redo_callback_))) {
-      LOG_WARN("fail to open macro block writer", KR(ret), K(param), K(table_key), K(data_desc_),
-               K(start_sequence), KPC(object_cleaner));
     }
   } else { // 全量
     share::SCN mock_start_scn;
@@ -184,7 +177,6 @@ int ObCgMacroBlockWriter::init(
     macro_seq_param.start_ = start_sequence.macro_data_seq_;
     
     if (OB_FAIL(pre_warm_param.init(ls_id, table_key.tablet_id_))) {
-      LOG_WARN("fail to initialize pre warm param", K(ret), K(ls_id), K(table_key.tablet_id_));
     } else if (OB_FAIL(data_desc_.init(true/*is ddl*/,
                                        *tablet_param.storage_schema_,  
                                        ls_id,
@@ -200,9 +192,7 @@ int ObCgMacroBlockWriter::init(
                                        cg_idx,
                                        exec_mode,
                                        need_submit_io))) {
-      LOG_WARN("fail to initialize data store desc", K(ret));
     } else if (OB_FAIL(index_builder_.init(data_desc_.get_desc(), space_opt_mode/*small sstable op*/))) {
-      LOG_WARN("fail to initialize sstable index builder", K(ret), K(ls_id), K(table_key), K(data_desc_));
     } else {
       // for build the tail index block in macro block
       data_desc_.get_desc().sstable_index_builder_ = &index_builder_;
@@ -210,7 +200,6 @@ int ObCgMacroBlockWriter::init(
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObDDLUtil::get_ddl_write_stat(param, table_key, ddl_write_stat))) {
-      LOG_WARN("get ddl write stat failed", K(ret), K(table_key), K(with_cs_replica), K(param), KPC(ddl_write_stat));
     } else if (OB_ISNULL(ddl_redo_callback_ = ddl_redo_callback = OB_NEW(
                            ObDDLRedoLogWriterCallback, ObMemAttr("ddl_redo_cb")))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -234,13 +223,11 @@ int ObCgMacroBlockWriter::init(
       init_param.macro_meta_store_ = macro_meta_store;
       init_param.write_stat_ = ddl_write_stat;
       if (OB_FAIL(ddl_redo_callback->init(init_param))) {
-        LOG_WARN("fail to initialize redo log callback", K(ret), K(init_param));
       }
     }
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObSSTablePrivateObjectCleaner::get_cleaner_from_data_store_desc(data_desc_.get_desc(), object_cleaner))) {
-      LOG_WARN("fail to get cleaner from data store desc", K(ret), K(data_desc_.get_desc()));
     } else {
       if (OB_FAIL(macro_block_writer_.open(data_desc_.get_desc(),
                                            parallel_idx,
@@ -248,8 +235,6 @@ int ObCgMacroBlockWriter::init(
                                            pre_warm_param,
                                            *object_cleaner,
                                            ddl_redo_callback_))) {
-        LOG_WARN("fail to open macro block writer",
-            K(ret), K(ls_id), K(table_key), K(data_desc_), K(start_sequence), KPC(object_cleaner));
       }
     }
   }
@@ -266,7 +251,6 @@ int ObCgMacroBlockWriter::append_row(const ObDatumRow &cg_row)
     ret = OB_NOT_INIT;
     LOG_WARN("not initialized", K(ret), K(is_inited_));
   } else if (OB_FAIL(macro_block_writer_.append_row(cg_row))) {
-    LOG_WARN("write column group row failed", K(ret), K(cg_row));
   }
   return ret;
 }
@@ -278,7 +262,6 @@ int ObCgMacroBlockWriter::append_batch(const blocksstable::ObBatchDatumRows &cg_
     ret = OB_NOT_INIT;
     LOG_WARN("not initialized", K(ret), K(is_inited_));
   } else if (OB_FAIL(macro_block_writer_.append_batch(cg_rows))) {
-    LOG_WARN("write column group row failed", K(ret), K(cg_rows));
   }
   return ret;
 }
@@ -290,7 +273,6 @@ int ObCgMacroBlockWriter::close()
     ret = OB_NOT_INIT;
     LOG_WARN("not initialized", K(ret), K(is_inited_));
   } else if (OB_FAIL(macro_block_writer_.close())) {
-    LOG_WARN("fail to close macro block writer", K(ret));
   }
   return ret;
 }

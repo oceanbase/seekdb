@@ -93,7 +93,6 @@ int ObHashPartInfrasVecGroup::init_one_hp_infras(
     ret = OB_NOT_SUPPORTED;
     SQL_ENG_LOG(WARN, "Two-way input does not support rewind", K(ret), K(need_rewind), K(ways_));
   } else if (OB_FAIL(try_get_hp_infras_from_free_list(hp_infras, exprs))) {
-    SQL_ENG_LOG(WARN, "failed to try get hash partition infrastructure", K(ret));
   } else if (nullptr == hp_infras || hp_infras->is_destroyed()) {
     if (nullptr == hp_infras && OB_FAIL(alloc_hp_infras(hp_infras))) {
       SQL_ENG_LOG(WARN, "failed to alloc hash partition infrastructure", K(ret));
@@ -101,21 +100,16 @@ int ObHashPartInfrasVecGroup::init_one_hp_infras(
       hp_infras = new (hp_infras) HashPartInfrasVec();
       if (OB_FAIL(hp_infras->init(enable_sql_dumped_, unique_, true, ways_, batch_size,
                                   exprs, sql_mem_processor_, compressor_type_, need_rewind))) {
-        SQL_ENG_LOG(WARN, "failed to init hash partition infrastructure", K(ret));
       } else if (OB_FAIL(hp_infras->set_funcs(sort_collations, eval_ctx_))) {
-        SQL_ENG_LOG(WARN, "failed to set funcs", K(ret));
       } else if (FALSE_IT(
                    hp_infras->set_hp_infras_group_func(total_mem_used_func, slice_cnt_func))) {
       } else if (OB_FAIL(init_hash_table(hp_infras, est_rows_ * RATIO, width_))) {
-        SQL_ENG_LOG(WARN, "failed to init hash table", K(ret));
       } else if (batch_size > 0 && OB_FAIL(hp_infras->init_my_skip(batch_size))) {
         SQL_ENG_LOG(WARN, "failed to init hp skip", K(ret));
       }
     }
   } else if (OB_FAIL(hp_infras->set_need_rewind(need_rewind))) {
-    SQL_ENG_LOG(WARN, "failed to set need rewind", K(ret));
   } else if (OB_FAIL(hp_infras->start_round())) {
-    SQL_ENG_LOG(WARN, "failed to start round", K(ret));
   } else {
     hp_infras->set_hp_infras_group_func(total_mem_used_func, slice_cnt_func);
   }
@@ -142,11 +136,9 @@ int ObHashPartInfrasVecGroup::init_hash_table(HashPartInfrasVec *&hp_infras, con
                         est_rows, width, ObHashPartInfrasVecMgr::MIN_BUCKET_COUNT,
                         ObHashPartInfrasVecMgr::MAX_BUCKET_COUNT))) {
   } else if (OB_FAIL(hp_infras->start_round())) {
-    SQL_ENG_LOG(WARN, "failed to start round", K(ret));
   } else if (OB_FAIL(hp_infras->init_hash_table(est_bucket_num_,
                                                 ObHashPartInfrasVecMgr::MIN_BUCKET_COUNT,
                                                 ObHashPartInfrasVecMgr::MAX_BUCKET_COUNT))) {
-    SQL_ENG_LOG(WARN, "failed to init hash table", K(ret));
   } else {
     SQL_ENG_LOG(TRACE, "init_hash_table", K(est_bucket_num_), K(est_rows), K(width));
   }
@@ -225,7 +217,6 @@ int ObHashPartInfrasVecMgr::init(bool enable_sql_dumped, const int64_t est_rows,
   } else if (OB_FAIL(hp_infras_group_.init(enable_sql_dumped, est_rows, width, unique,
                                            ways, eval_ctx, sql_mem_processor, io_event_observer,
                                            compressor_type))) {
-    SQL_ENG_LOG(WARN, "failed to init hash infras group", K(ret));
   } else {
     inited_ = true;
   }
@@ -236,7 +227,6 @@ int ObHashPartInfrasVecMgr::free_one_hp_infras(HashPartInfrasVec *&hp_infras)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(hp_infras_group_.free_one_hp_infras(hp_infras))) {
-    SQL_ENG_LOG(WARN, "failed to free one hp infras", K(ret));
   }
   return ret;
 }
@@ -255,7 +245,6 @@ int ObHashPartInfrasVecMgr::init_one_hp_infras(const bool need_rewind,
     SQL_ENG_LOG(WARN, "unexpected status: func is null", K(ret));
   } else if (OB_FAIL(hp_infras_group_.init_one_hp_infras(hp_infras, exprs, sort_collations,
                                                          need_rewind))) {
-    SQL_ENG_LOG(WARN, "failed to create one hash partition infrastructure", K(ret));
   }
   return ret;
 }

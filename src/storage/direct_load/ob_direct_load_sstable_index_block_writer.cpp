@@ -44,7 +44,6 @@ int ObDirectLoadSSTableIndexBlockWriter::append_entry(const ObDirectLoadSSTableI
   ObDirectLoadSSTableIndexBlock::Entry item;
   item.offset_ = entry.offset_ + entry.size_;
   if (OB_FAIL(this->write_item(item))) {
-    STORAGE_LOG(WARN, "fail to write item", KR(ret));
   } else {
     if (0 == entry_count_) {
       start_offset_ = entry.offset_;

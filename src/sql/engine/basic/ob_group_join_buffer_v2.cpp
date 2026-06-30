@@ -72,20 +72,16 @@ int ObDriverRowBuffer::init(ObOperator *op,
     param.set_mem_attr(mem_attr)
             .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
-      LOG_WARN("create entity failed", KR(ret));
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null memory entity", KR(ret));
     } else if (OB_FAIL(left_store_.init(left_->get_spec().output_, eval_ctx_->max_batch_size_, mem_attr, UINT64_MAX, true, 0, compressor_type, false, false))) {
-      LOG_WARN("init row store failed", KR(ret));
     } else if (FALSE_IT(left_store_.set_allocator(mem_context_->get_malloc_allocator()))) {
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(last_batch_.init(left_->get_spec().output_,
                                    *eval_ctx_))) {
-        LOG_WARN("init batch failed", KR(ret));
       } else if (OB_FAIL(init_left_batch_rows())) {
-        LOG_WARN("failed to init left batch rows", K(ret));
       }
     }
   }
@@ -129,8 +125,6 @@ int ObDriverRowBuffer::rescan_left()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(left_->rescan())) {
-    LOG_WARN("rescan left failed", KR(ret),
-              K(left_->get_spec().get_id()), K(left_->op_name()));
   }
   return ret;
 }
@@ -172,7 +166,6 @@ int ObDriverRowBuffer::add_row_to_store()
   int ret = OB_SUCCESS;
   ObCompactRow *compact_row = nullptr;
   if (OB_FAIL(left_store_.add_row(left_->get_spec().output_, *eval_ctx_, compact_row))) {
-    LOG_WARN("add row failed", KR(ret));
   }
   return ret;
 }
@@ -186,7 +179,6 @@ int ObDriverRowBuffer::init_group_params()
     }
   } else if (OB_FAIL(group_params_.allocate_array(ctx_->get_allocator(),
                                                   rescan_params_->count()))) {
-    LOG_WARN("allocate group params array failed", KR(ret), K(rescan_params_->count()));
   } else {
     int64_t obj_buf_size = sizeof(ObObjParam) * max_group_size_;
     for (int64_t i = 0; OB_SUCC(ret) && i < group_params_.count(); ++i) {
@@ -210,7 +202,6 @@ int ObDriverRowBuffer::init_group_params()
   } else if (rescan_params_info_.empty()) { // only perform once
     int64_t rescan_params_info_cnt = group_params_.count();
     if (OB_FAIL(rescan_params_info_.allocate_array(ctx_->get_allocator(),rescan_params_info_cnt))) {
-      LOG_WARN("failed to allocate group param info", K(ret), K(rescan_params_info_cnt));
     } else {
       // collect rescan params of current nlj op
       int64_t j = 0;
@@ -242,16 +233,13 @@ int ObDriverRowBuffer::deep_copy_dynamic_obj()
     ObDatum* res_datum = nullptr;
     // NOTE: use eval_vector here
     if (OB_FAIL(src_expr->eval(*eval_ctx_, res_datum))) {
-      LOG_WARN("failed to eval src expr", K(ret));
     } else if (OB_ISNULL(res_datum)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("the result ObDatum of res expr is nullptr", K(ret));
     } else if (OB_FAIL(res_datum->to_obj(tmp_obj, src_expr->obj_meta_, src_expr->obj_datum_map_))) {
-      LOG_WARN("failed to convert ObDatum to ObObj", K(ret));
     } else if (OB_FAIL(ob_write_obj(mem_context_->get_arena_allocator(),
                              tmp_obj,
                              group_params_.at(i).data_[group_params_.at(i).count_]))) {
-      LOG_WARN("deep copy dynamic param failed", KR(ret), K(i), K(param_idx));
     } else {
       group_params_.at(i).count_++;
     }
@@ -283,7 +271,6 @@ int ObDriverRowBuffer::fill_cur_row_group_param()
       dst->get_eval_info(*eval_ctx_).clear_evaluated_flag();
       ObDynamicParamSetter::clear_parent_evaluated_flag(*eval_ctx_, *dst);
       if (OB_FAIL(param_datum.from_obj(arr.data_[cur_group_idx_], dst->obj_datum_map_))) {
-        LOG_WARN("fail to cast datum", K(ret));
       } else {
         plan_ctx->get_param_store_for_update().at(param_idx) = arr.data_[cur_group_idx_];
         dst->set_evaluated_projected(*eval_ctx_);
@@ -306,7 +293,6 @@ int ObDriverRowBuffer::batch_fill_group_buffer(const int64_t max_row_cnt)
     const ObBatchRows *batch_rows = &left_->get_brs();
     reset_buffer_state();
     if (OB_FAIL(init_group_params())) {
-      LOG_WARN("init group params failed", KR(ret));
     }
     while (OB_SUCC(ret) && !is_full() && !batch_rows->end_) {
       op_->clear_evaluated_flag();
@@ -314,7 +300,6 @@ int ObDriverRowBuffer::batch_fill_group_buffer(const int64_t max_row_cnt)
         op_->set_pushdown_param_null(*rescan_params_);
       }
       if (OB_FAIL(left_->get_next_batch(max_row_cnt, batch_rows))) {
-        LOG_WARN("get next batch from left failed", KR(ret));
       } else if (batch_rows->end_) {
         is_left_end_ = true;
       } else {
@@ -325,9 +310,7 @@ int ObDriverRowBuffer::batch_fill_group_buffer(const int64_t max_row_cnt)
             batch_info_guard.set_batch_idx(l_idx);
             batch_info_guard.set_batch_size(batch_rows->size_);
             if (OB_FAIL(add_row_to_store())) {
-              LOG_WARN("store left row failed", KR(ret));
             } else if (OB_FAIL(deep_copy_dynamic_obj())) {
-              LOG_WARN("deep copy dynamic obj failed", KR(ret));
             }
           }
         }
@@ -342,7 +325,6 @@ int ObDriverRowBuffer::batch_fill_group_buffer(const int64_t max_row_cnt)
       if (batch_rows->size_ == 0 && batch_rows->end_) {
         // do nothing
       } else if (OB_FAIL(last_batch_.save(spec_->max_batch_size_))) {
-        LOG_WARN("failed to save last batch", K(ret));
       } else {
         save_last_batch_ = true;
       }
@@ -352,7 +334,6 @@ int ObDriverRowBuffer::batch_fill_group_buffer(const int64_t max_row_cnt)
           // this could happen if we have skipped all rows
           ret = OB_ITER_END;
         } else if (OB_FAIL(left_store_.begin(left_store_iter_))) {
-          LOG_WARN("begin iterator for chunk row store failed", KR(ret));
         }
       }
     }
@@ -443,7 +424,6 @@ int ObDriverRowIterator::init(ObOperator *op, const int64_t op_group_scan_size,
     ctx_ = &op->get_exec_ctx();
     if (OB_SUCC(ret) && op_->is_vectorized()) {
       if (OB_FAIL(left_batch_.init(left_->get_spec().output_, *eval_ctx_))) {
-        LOG_WARN("failed to init left batch result holder", K(ret));
       }
     }
     if (OB_SUCC(ret) && is_group_rescan_) {
@@ -459,7 +439,6 @@ int ObDriverRowIterator::init(ObOperator *op, const int64_t op_group_scan_size,
       }
 
       if (OB_FAIL(join_buffer_.init(op, max_group_size, group_scan_size, rescan_params))) {
-        LOG_WARN("failed to init group join buffer for group rescan", K(ret));
       }
     }
   }
@@ -475,11 +454,9 @@ int ObDriverRowIterator::get_next_left_batch(int64_t max_rows, const ObBatchRows
   if (!is_group_rescan_) {
     op_->set_pushdown_param_null(*rescan_params_);
     if (OB_FAIL(left_->get_next_batch(max_rows, batch_rows))) {
-      LOG_WARN("failed to get batch from left child", K(ret));
     }
   } else {
     if (OB_FAIL(join_buffer_.get_next_left_batch(max_rows, batch_rows))) {
-      LOG_WARN("failed to get next batch from join buffer", K(ret));
     }
   }
   left_brs_ = batch_rows;
@@ -491,14 +468,12 @@ int ObDriverRowIterator::fill_cur_row_group_param()
   int ret = OB_SUCCESS;
   if (is_group_rescan_) {
     if (OB_FAIL(join_buffer_.fill_cur_row_group_param())) {
-      LOG_WARN("failed to fill group param from join buffer", K(ret));
     }
   } else {
     int64_t param_cnt = rescan_params_->count();
     for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
       const ObDynamicParamSetter &rescan_param = rescan_params_->at(i);
       if (OB_FAIL(rescan_param.set_dynamic_param_vec2(*eval_ctx_, *(left_brs_->skip_)))) {
-        LOG_WARN("fail to set dynamic param", K(ret), K(l_idx_));
       }
     }
   }
@@ -529,7 +504,6 @@ int ObDriverRowIterator::get_next_left_row()
       if (need_backup_left_ && OB_FAIL(left_batch_.restore())) {
         LOG_WARN("failed to restore left batch rows", K(ret));
       } else if (OB_FAIL(get_next_left_batch(op_max_batch_size_, left_brs_))) {
-        LOG_WARN("failed to get next left batch", K(ret));
       } else if (left_brs_->end_) {
         ret = OB_ITER_END;
       } else if (need_backup_left_ && OB_FAIL(left_batch_.save(left_->is_vectorized() ? op_max_batch_size_ : 1))) { // backup left_batch for NLJ
@@ -547,7 +521,6 @@ int ObDriverRowIterator::drive_row_extend(int size)
   int ret = OB_SUCCESS;
   int min_vec_size = 0;
   if (OB_FAIL(get_min_vec_size_from_drive_row(min_vec_size))) {
-    LOG_WARN("failed to get min vector size of drive row", K(ret));
   } else if (left_expr_extend_size_ < size || min_vec_size < size) {
     left_batch_.drive_row_extended(l_idx_, 0, size);
     left_expr_extend_size_ = size;
@@ -566,11 +539,9 @@ int ObDriverRowIterator::rescan_left()
   int ret = OB_SUCCESS;
   if (is_group_rescan_) {
     if (OB_FAIL(join_buffer_.rescan_left())) {
-      LOG_WARN("failed to rescan left in group rescan", K(ret));
     }
   } else {
     if (OB_FAIL(left_->rescan())) {
-      LOG_WARN("failed to rescan left op", K(ret));
     }
   }
   return ret;

@@ -75,7 +75,6 @@ int ObSequenceResolver<T>::resolve_sequence_options(T *stmt, ParseNode *node)
       for (int32_t i = 0; OB_SUCC(ret) && i < num; i++) {
         option_node = node->children_[i];
         if (OB_FAIL(resolve_sequence_option(stmt, option_node))) {
-          SQL_LOG(WARN, "resolve sequence option failed", K(ret));
         }
       }
       stmt->option().set_cache_order_mode(share::NEW_ACTION);
@@ -141,10 +140,8 @@ int ObSequenceResolver<T>::resolve_sequence_option(T *stmt, ParseNode *node)
                                                          option_bitset, 
                                                          share::ObSequenceArg::INCREMENT_BY, 
                                                          true))) {
-          SQL_LOG(WARN, "fail resolve basic info from option", K(ret), K(option_node->type_));
         } else if (T_NUMBER == option_node->children_[0]->type_) {
           if (OB_FAIL(get_normalized_number(*option_node->children_[0], allocator, num))) {
-            SQL_LOG(WARN, "fail normalize number", K(ret));
           } else  {
             ret = stmt->option().set_increment_by(num);
           }
@@ -166,10 +163,8 @@ int ObSequenceResolver<T>::resolve_sequence_option(T *stmt, ParseNode *node)
                                                          option_bitset,
                                                          share::ObSequenceArg::START_WITH,
                                                          true))) {
-          SQL_LOG(WARN, "fail resolve basic info from option", K(ret), K(option_node->type_));
         } else if (T_NUMBER == option_node->children_[0]->type_) {
           if (OB_FAIL(get_normalized_number(*option_node->children_[0], allocator, num))) {
-            SQL_LOG(WARN, "fail normalize number", K(ret));
           } else  {
             ret = stmt->option().set_start_with(num);
           }
@@ -191,10 +186,8 @@ int ObSequenceResolver<T>::resolve_sequence_option(T *stmt, ParseNode *node)
                                                          option_bitset,
                                                          share::ObSequenceArg::MAXVALUE,
                                                          true))) {
-          SQL_LOG(WARN, "fail resolve basic info from option", K(ret), K(option_node->type_));
         } else if (T_NUMBER == option_node->children_[0]->type_) {
           if (OB_FAIL(get_normalized_number(*option_node->children_[0], allocator, num))) {
-            SQL_LOG(WARN, "fail normalize number", K(ret));
           } else  {
             ret = stmt->option().set_max_value(num);
           }
@@ -216,10 +209,8 @@ int ObSequenceResolver<T>::resolve_sequence_option(T *stmt, ParseNode *node)
                                                          option_bitset,
                                                          share::ObSequenceArg::MINVALUE,
                                                          true))) {
-          SQL_LOG(WARN, "fail resolve basic info from option", K(ret), K(option_node->type_));
         } else if (T_NUMBER == option_node->children_[0]->type_) {
           if (OB_FAIL(get_normalized_number(*option_node->children_[0], allocator, num))) {
-            SQL_LOG(WARN, "fail normalize number", K(ret));
           } else  {
             ret = stmt->option().set_min_value(num);
           }
@@ -241,7 +232,6 @@ int ObSequenceResolver<T>::resolve_sequence_option(T *stmt, ParseNode *node)
                                                          option_bitset,
                                                          share::ObSequenceArg::NOMAXVALUE,
                                                          false))) {
-          SQL_LOG(WARN, "fail resolve basic info from option", K(ret), K(option_node->type_));
         } else {
           stmt->option().set_nomaxvalue();
         }
@@ -256,7 +246,6 @@ int ObSequenceResolver<T>::resolve_sequence_option(T *stmt, ParseNode *node)
                                                          option_bitset,
                                                          share::ObSequenceArg::NOMINVALUE,
                                                          false))) {
-          SQL_LOG(WARN, "fail resolve basic info from option", K(ret), K(option_node->type_));
         } else {
           stmt->option().set_nominvalue();
         }
@@ -271,10 +260,8 @@ int ObSequenceResolver<T>::resolve_sequence_option(T *stmt, ParseNode *node)
                                                          option_bitset,
                                                          share::ObSequenceArg::CACHE,
                                                          true))) {
-          SQL_LOG(WARN, "fail resolve basic info from option", K(ret), K(option_node->type_));
         } else if (T_NUMBER == option_node->children_[0]->type_) {
           if (OB_FAIL(get_normalized_number(*option_node->children_[0], allocator, num))) {
-            SQL_LOG(WARN, "fail normalize number", K(ret));
           } else {
             ret = stmt->option().set_cache_size(num);
           }
@@ -296,7 +283,6 @@ int ObSequenceResolver<T>::resolve_sequence_option(T *stmt, ParseNode *node)
                                                          option_bitset,
                                                          share::ObSequenceArg::NOCACHE,
                                                          false))) {
-          SQL_LOG(WARN, "fail resolve basic info from option", K(ret), K(option_node->type_));
         } else {
           stmt->option().set_cache_size(share::ObSequenceOption::NO_CACHE);
         }
@@ -311,7 +297,6 @@ int ObSequenceResolver<T>::resolve_sequence_option(T *stmt, ParseNode *node)
                                                          option_bitset,
                                                          share::ObSequenceArg::CYCLE,
                                                          false))) {
-          SQL_LOG(WARN, "fail resolve basic info from option", K(ret), K(option_node->type_));
         } else {
           stmt->option().set_cycle_flag(true);
         }
@@ -326,7 +311,6 @@ int ObSequenceResolver<T>::resolve_sequence_option(T *stmt, ParseNode *node)
                                                          option_bitset,
                                                          share::ObSequenceArg::NOCYCLE,
                                                          false))) {
-          SQL_LOG(WARN, "fail resolve basic info from option", K(ret), K(option_node->type_));
         } else {
           stmt->option().set_cycle_flag(false);
         }
@@ -341,7 +325,6 @@ int ObSequenceResolver<T>::resolve_sequence_option(T *stmt, ParseNode *node)
                                                          option_bitset,
                                                          share::ObSequenceArg::ORDER,
                                                          false))) {
-          SQL_LOG(WARN, "fail resolve basic info from option", K(ret), K(option_node->type_));
         } else {
           stmt->option().set_order_flag(true);
         }
@@ -356,7 +339,6 @@ int ObSequenceResolver<T>::resolve_sequence_option(T *stmt, ParseNode *node)
                                                          option_bitset,
                                                          share::ObSequenceArg::NOORDER,
                                                          false))) {
-          SQL_LOG(WARN, "fail resolve basic info from option", K(ret), K(option_node->type_));
         } else {
           stmt->option().set_order_flag(false);
         }
@@ -370,7 +352,6 @@ int ObSequenceResolver<T>::resolve_sequence_option(T *stmt, ParseNode *node)
                                                          option_bitset,
                                                          share::ObSequenceArg::RESTART,
                                                          false))) {
-          SQL_LOG(WARN, "fail resolve basic info from option", K(ret), K(option_node->type_));
         }
         break;
       }
@@ -411,7 +392,6 @@ int ObSequenceResolver<T>::resolve_sequence_option_inner(
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(option_bitset.add_member(option_index))) {
-      SQL_LOG(WARN, "failed to add member to bitset!", K(ret), K(option_index));
     }
   }
   return ret;
@@ -427,7 +407,6 @@ int ObSequenceResolver<T>::get_normalized_number(
   if (OB_FAIL(num.from(node.str_value_,
                        static_cast<int32_t>(node.str_len_),
                        allocator))) {
-    SQL_LOG(WARN, "fail convert number", K(ret));
   } else if (num > share::ObSequenceMaxMinInitializer::max_value()) {
     num.shadow_copy(share::ObSequenceMaxMinInitializer::max_value());
   } else if (num < share::ObSequenceMaxMinInitializer::min_value()) {

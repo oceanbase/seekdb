@@ -122,7 +122,6 @@ int ObSqlWorkareaHistogram::get_server_ip_and_port()
   } else {
     ipstr_ = ObString::make_string(ipbuf);
     if (OB_FAIL(ob_write_string(*allocator_, ipstr_, ipstr_))) {
-      LOG_WARN("failed to write string", K(ret));
     }
     port_ = addr.get_port();
   }
@@ -179,11 +178,9 @@ int ObSqlWorkareaHistogram::inner_get_next_row(common::ObNewRow *&row)
   int ret = OB_SUCCESS;
   if (!start_to_read_) {
     if (OB_FAIL(iter_.init())) {
-      LOG_WARN("failed to init iterator", K(ret));
     } else {
       start_to_read_ = true;
       if (OB_FAIL(get_server_ip_and_port())) {
-        LOG_WARN("failed to get server ip and port", K(ret));
       }
     }
   }
@@ -195,7 +192,6 @@ int ObSqlWorkareaHistogram::inner_get_next_row(common::ObNewRow *&row)
       LOG_WARN("failed to get next channel", K(ret));
     }
   } else if (OB_FAIL(fill_row(*wa_histogram, row))) {
-    LOG_WARN("failed to get row from channel info", K(ret));
   }
   return ret;
 }

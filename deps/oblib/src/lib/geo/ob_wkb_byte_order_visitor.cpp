@@ -43,9 +43,7 @@ int ObWkbByteOrderVisitor::append_point(double x, double y)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(buffer_.append(x))) {
-    LOG_WARN("failed to append point value x", K(ret), K(x));
   } else if (OB_FAIL(buffer_.append(y))) {
-    LOG_WARN("failed to append point value y", K(ret), K(y));
   }
   return ret;
 }
@@ -55,13 +53,9 @@ int ObWkbByteOrderVisitor::append_head_info(T *geo, int reserve_len)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(buffer_.reserve(reserve_len))) {
-    LOG_WARN("fail to alloc memory", K(ret), K(reserve_len));
   } else if (OB_FAIL(buffer_.append(static_cast<char>(to_bo_)))) {
-    LOG_WARN("failed to append little endian", K(ret));
   } else if (OB_FAIL(buffer_.append(static_cast<uint32_t>(geo->type())))) {
-    LOG_WARN("failed to append type", K(ret), K(geo->type()));
   } else if (OB_FAIL(buffer_.append(static_cast<uint32_t>(geo->size())))) {
-    LOG_WARN("failed to append num value", K(ret), K(geo->size()));
   }
   return ret;
 }
@@ -71,15 +65,10 @@ int ObWkbByteOrderVisitor::visit(ObIWkbPoint *geo)
   int ret = OB_SUCCESS;
   uint32_t reserve_len = EWKB_COMMON_WKB_HEADER_LEN + WKB_GEO_DOUBLE_STORED_SIZE * 2;
   if (OB_FAIL(init(geo))) {
-    LOG_WARN("fail to init geometry", K(ret));
   } else if (OB_FAIL(buffer_.reserve(reserve_len))) {
-    LOG_WARN("fail to alloc memory", K(ret), K(reserve_len));
   } else if (OB_FAIL(buffer_.append(static_cast<char>(to_bo_)))) {
-    LOG_WARN("failed to append point little endian", K(ret));
   } else if (OB_FAIL(buffer_.append(static_cast<uint32_t>(geo->type())))) {
-    LOG_WARN("failed to append point type", K(ret));
   } else if (OB_FAIL(append_point(geo->x(), geo->y()))) {
-    LOG_WARN("failed to point value", K(ret), K(geo->x()), K(geo->y()));
   }
   return ret;
 }
@@ -90,14 +79,12 @@ int ObWkbByteOrderVisitor::append_line(T_IBIN *geo)
   int ret = OB_SUCCESS;
   uint32_t reserve_len = WKB_COMMON_WKB_HEADER_LEN + geo->size() * 2 * WKB_GEO_DOUBLE_STORED_SIZE;
   if (OB_FAIL(append_head_info(geo, reserve_len))) {
-    LOG_WARN("failed to append line string head info", K(ret));
   } else {
     const T_BIN *line = reinterpret_cast<const T_BIN *>(geo->val());
     typename T_BIN::iterator iter = line->begin();
     for (; OB_SUCC(ret) && iter != line->end(); iter++) {
       if (OB_FAIL(append_point(iter->template get<0>(from_bo_),
               iter->template get<1>(from_bo_)))) {
-        LOG_WARN("failed to point value", K(ret));
       }
     }
   }
@@ -108,9 +95,7 @@ int ObWkbByteOrderVisitor::visit(ObIWkbGeomLineString *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init(geo))) {
-    LOG_WARN("fail to init geometry", K(ret));
   } else if (OB_FAIL((append_line<ObIWkbGeomLineString, ObWkbGeomLineString>(geo)))) {
-    LOG_WARN("fail to append line", K(ret));
   }
   return ret;
 }
@@ -119,9 +104,7 @@ int ObWkbByteOrderVisitor::visit(ObIWkbGeogLineString *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init(geo))) {
-    LOG_WARN("fail to init geometry", K(ret));
   } else if (OB_FAIL((append_line<ObIWkbGeogLineString, ObWkbGeogLineString>(geo)))) {
-    LOG_WARN("fail to append line", K(ret));
   }
   return ret;
 }
@@ -132,7 +115,6 @@ int ObWkbByteOrderVisitor::append_polygon(T_IBIN *geo)
   int ret = OB_SUCCESS;
   uint32_t reserve_len = 0;
   if (OB_FAIL(append_head_info(geo, WKB_COMMON_WKB_HEADER_LEN))) {
-    LOG_WARN("failed to append head info", K(ret));
   } else {
     T_BIN &poly = *(T_BIN *)(geo->val());
     T_BIN_RING &exterior = poly.exterior_ring();
@@ -140,15 +122,12 @@ int ObWkbByteOrderVisitor::append_polygon(T_IBIN *geo)
       uint32_t ext_num = exterior.size(from_bo_);
       reserve_len = WKB_GEO_ELEMENT_NUM_SIZE + ext_num * 2 * WKB_GEO_DOUBLE_STORED_SIZE;
       if (OB_FAIL(buffer_.reserve(reserve_len))) {
-        LOG_WARN("fail to alloc memory", K(ret), K(reserve_len));
       } else if (OB_FAIL(buffer_.append(ext_num))) {
-        LOG_WARN("fail to append ring size", K(ret));
       }
       typename T_BIN_RING::iterator iter = exterior.begin();
       for (; OB_SUCC(ret) && iter != exterior.end(from_bo_); ++iter) {
         if (OB_FAIL(append_point(iter->template get<0>(from_bo_),
                 iter->template get<1>(from_bo_)))) {
-          LOG_WARN("fail to appendInnerPoint", K(ret));
         }
       }
     }
@@ -159,15 +138,12 @@ int ObWkbByteOrderVisitor::append_polygon(T_IBIN *geo)
       uint32_t inner_num = iterInnerRing->size(from_bo_);
       reserve_len = WKB_GEO_ELEMENT_NUM_SIZE + inner_num * 2 * WKB_GEO_DOUBLE_STORED_SIZE;
       if (OB_FAIL(buffer_.reserve(reserve_len))) {
-        LOG_WARN("fail to alloc memory", K(ret), K(reserve_len));
       } else if (OB_FAIL(buffer_.append(inner_num))) {
-        LOG_WARN("fail to append ring size", K(ret));
       }
       typename T_BIN_RING::iterator iter = (*iterInnerRing).begin();
       for (; OB_SUCC(ret) && iter != (*iterInnerRing).end(from_bo_); ++iter) {
         if (OB_FAIL(append_point(iter->template get<0>(from_bo_),
                 iter->template get<1>(from_bo_)))) {
-          LOG_WARN("fail to appendInnerPoint", K(ret));
         }
       }
     }
@@ -179,11 +155,9 @@ int ObWkbByteOrderVisitor::visit(ObIWkbGeogPolygon *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init(geo))) {
-    LOG_WARN("fail to init geometry", K(ret));
   } else if (OB_FAIL(
                  (append_polygon<ObIWkbGeogPolygon, ObWkbGeogPolygon, ObWkbGeogLinearRing, ObWkbGeogPolygonInnerRings>(
                      geo)))) {
-    LOG_WARN("fail to append polygon", K(ret));
   }
   return ret;
 }
@@ -192,11 +166,9 @@ int ObWkbByteOrderVisitor::visit(ObIWkbGeomPolygon *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init(geo))) {
-    LOG_WARN("fail to init geometry", K(ret));
   } else if (OB_FAIL(
                  (append_polygon<ObIWkbGeomPolygon, ObWkbGeomPolygon, ObWkbGeomLinearRing, ObWkbGeomPolygonInnerRings>(
                      geo)))) {
-    LOG_WARN("fail to append polygon", K(ret));
   }
   return ret;
 }
@@ -208,7 +180,6 @@ int ObWkbByteOrderVisitor::append_multipoint(T_IBIN *geo)
   uint32_t size = geo->size();
   uint32_t reserve_len = size * (EWKB_COMMON_WKB_HEADER_LEN + WKB_GEO_DOUBLE_STORED_SIZE * 2);
   if (OB_FAIL(buffer_.reserve(reserve_len))) {
-    LOG_WARN("fail to alloc memory", K(ret), K(reserve_len));
   } else {
     char *ptr = reinterpret_cast<char*>(geo->val());
     uint32_t sz = geo->size();
@@ -220,7 +191,6 @@ int ObWkbByteOrderVisitor::append_multipoint(T_IBIN *geo)
       T_IPOINT point;
       point.set_data(data);
       if (OB_FAIL(visit(&point))) {
-        LOG_WARN("fail to do point visit", K(ret));
       }
     }
   }
@@ -231,14 +201,11 @@ int ObWkbByteOrderVisitor::visit(ObIWkbGeogMultiPoint *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init(geo))) {
-    LOG_WARN("fail to init geometry", K(ret));
   } else if (OB_FAIL(append_head_info(geo, WKB_COMMON_WKB_HEADER_LEN))) {
-    LOG_WARN("failed to append head info", K(ret));
   } else if (OB_FAIL((append_multipoint<ObIWkbGeogMultiPoint,
                  ObWkbGeogMultiPoint,
                  ObIWkbGeogPoint,
                  ObWkbGeogPoint>(geo)))) {
-    LOG_WARN("fail to append multipoint", K(ret));
   }
   return ret;
 }
@@ -247,14 +214,11 @@ int ObWkbByteOrderVisitor::visit(ObIWkbGeomMultiPoint *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init(geo))) {
-    LOG_WARN("fail to init geometry", K(ret));
   } else if (OB_FAIL(append_head_info(geo, WKB_COMMON_WKB_HEADER_LEN))) {
-    LOG_WARN("failed to append head info", K(ret));
   } else if (OB_FAIL((append_multipoint<ObIWkbGeomMultiPoint,
                  ObWkbGeomMultiPoint,
                  ObIWkbGeomPoint,
                  ObWkbGeomPoint>(geo)))) {
-    LOG_WARN("fail to append multipoint", K(ret));
   }
   return ret;
 }
@@ -263,9 +227,7 @@ int ObWkbByteOrderVisitor::visit(ObIWkbGeogMultiLineString *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init(geo))) {
-    LOG_WARN("fail to init geometry", K(ret));
   } else if (OB_FAIL(append_head_info(geo, WKB_COMMON_WKB_HEADER_LEN))) {
-    LOG_WARN("failed to append head info", K(ret));
   }
   return ret;
 }
@@ -274,9 +236,7 @@ int ObWkbByteOrderVisitor::visit(ObIWkbGeomMultiLineString *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init(geo))) {
-    LOG_WARN("fail to init geometry", K(ret));
   } else if (OB_FAIL(append_head_info(geo, WKB_COMMON_WKB_HEADER_LEN))) {
-    LOG_WARN("failed to append head info", K(ret));
   }
   return ret;
 }
@@ -285,9 +245,7 @@ int ObWkbByteOrderVisitor::visit(ObIWkbGeogMultiPolygon *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init(geo))) {
-    LOG_WARN("fail to init geometry", K(ret));
   } else if (OB_FAIL(append_head_info(geo, WKB_COMMON_WKB_HEADER_LEN))) {
-    LOG_WARN("failed to append head info", K(ret));
   }
   return ret;
 }
@@ -296,9 +254,7 @@ int ObWkbByteOrderVisitor::visit(ObIWkbGeomMultiPolygon *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init(geo))) {
-    LOG_WARN("fail to init geometry", K(ret));
   } else if (OB_FAIL(append_head_info(geo, WKB_COMMON_WKB_HEADER_LEN))) {
-    LOG_WARN("failed to append head info", K(ret));
   }
   return ret;
 }
@@ -307,9 +263,7 @@ int ObWkbByteOrderVisitor::visit(ObIWkbGeogCollection *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init(geo))) {
-    LOG_WARN("fail to init geometry", K(ret));
   } else if (OB_FAIL(append_head_info(geo, WKB_COMMON_WKB_HEADER_LEN))) {
-    LOG_WARN("failed to append head info", K(ret));
   }
   return ret;
 }
@@ -318,9 +272,7 @@ int ObWkbByteOrderVisitor::visit(ObIWkbGeomCollection *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init(geo))) {
-    LOG_WARN("fail to init geometry", K(ret));
   } else if (OB_FAIL(append_head_info(geo, WKB_COMMON_WKB_HEADER_LEN))) {
-    LOG_WARN("failed to append head info", K(ret));
   }
   return ret;
 }

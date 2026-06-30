@@ -80,9 +80,6 @@ int ObWriterArgs::init(const ObWriteMacroParam &param,
           ObMacroDataSeq start_sequence;
           if (OB_FAIL(ObDDLUtil::init_macro_block_seq(param.slice_idx_,
                                                       start_sequence))) {
-            LOG_WARN("fail to initialize start sequence", K(ret), K(param.direct_load_type_),
-                                                          K(param.tablet_id_),
-                                                          K(param.slice_idx_));
           } else {
             parallel_idx_ = param.slice_idx_;
             macro_seq_param_.seq_type_ = ObMacroSeqParam::SEQ_TYPE_INC;
@@ -105,11 +102,8 @@ int ObWriterArgs::init(const ObWriteMacroParam &param,
                                           param.cg_idx_,
                                           exec_mode,
                                           need_submit_io))) {
-          LOG_WARN("fail to initialize data store desc", K(ret));
         } else if (OB_FAIL(index_builder_.init(data_desc_.get_desc(),
                                               space_opt_mode/*small sstable op*/))) {
-          LOG_WARN("fail to initialize sstable index builder",
-              K(ret), K(ls_id), K(cg_table_key), K(data_desc_), K(space_opt_mode));
         } else {
           // for build the tail index block in macro block
           data_desc_.get_desc().sstable_index_builder_ = &index_builder_;
@@ -117,7 +111,6 @@ int ObWriterArgs::init(const ObWriteMacroParam &param,
 
         if (OB_SUCC(ret)) {
           if (OB_FAIL(ObSSTablePrivateObjectCleaner::get_cleaner_from_data_store_desc(data_desc_.get_desc(), object_cleaner_))) {
-            LOG_WARN("fail to get cleaner from data store desc", K(ret), K(data_desc_.get_desc()));
           } else if (OB_ISNULL(object_cleaner_)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("object cleaner is nullptr", KR(ret));
@@ -148,7 +141,6 @@ int ObWriterArgs::init(const ObWriteMacroParam &param,
           init_param.is_inc_major_log_ = param.ddl_dag_ ? param.ddl_dag_->is_inc_major_log() : false ;
           ObDDLWriteStat *ddl_write_stat = nullptr;
           if (OB_FAIL(ObDDLUtil::get_ddl_write_stat(param, cg_table_key, ddl_write_stat))) {
-            LOG_WARN("get ddl write stat failed", K(ret), K(cg_table_key), K(param), KPC(ddl_write_stat));
           } else {
             init_param.write_stat_ = ddl_write_stat;
           }
@@ -159,7 +151,6 @@ int ObWriterArgs::init(const ObWriteMacroParam &param,
               ret = OB_ALLOCATE_MEMORY_FAILED;
               LOG_WARN("failed to alloc memory", K(ret));
             } else if (OB_FAIL(static_cast<ObDDLRedoLogWriterCallback *>(ddl_redo_callback_)->init(init_param))) {
-              LOG_WARN("fail to init full ddl_redo_callback_", KR(ret), K(init_param));
             }
           }
         }

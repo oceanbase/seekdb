@@ -34,7 +34,6 @@ int ObStrDictColumnEncoder::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnCSEncoder::init(ctx, column_index, row_count))) {
-    LOG_WARN("init base column encoder failed", K(ret), K(ctx), K(column_index), K(row_count));
   } else {
     column_header_.type_ = type_;
     dict_encoding_meta_.distinct_val_cnt_ = ctx.ht_->distinct_val_cnt();
@@ -43,9 +42,7 @@ int ObStrDictColumnEncoder::init(
       dict_encoding_meta_.set_has_null();
     }
     if (OB_FAIL(build_string_dict_encoder_ctx_())) {
-      LOG_WARN("fail to build string dict encoder ctx", K(ret));
     } else if (OB_FAIL(build_ref_encoder_ctx_())) {
-      LOG_WARN("fail to build ref encoder ctx", K(ret));
     }
   }
   return ret;
@@ -77,9 +74,7 @@ int ObStrDictColumnEncoder::build_string_dict_encoder_ctx_()
     ObPreviousColumnEncoding *pre_col_encoding = nullptr;
     if (OB_FAIL(string_dict_enc_ctx_.build_string_stream_meta(
         ctx_->fix_data_size_, false/*use_zero_len_as_null*/, ctx_->dict_var_data_size_))) {
-      LOG_WARN("fail to build_string_stream_meta", K(ret));
     } else if (OB_FAIL(get_previous_cs_encoding(pre_col_encoding))) {
-      LOG_WARN("get_previous_cs_encoding fail", K(ret));
     } else if (OB_FAIL(string_dict_enc_ctx_.build_string_stream_encoder_info(
         ctx_->encoding_ctx_->compressor_type_, is_force_raw_,
         &ctx_->encoding_ctx_->cs_encoding_opt_,
@@ -87,7 +82,6 @@ int ObStrDictColumnEncoder::build_string_dict_encoder_ctx_()
         int_stream_idx,
         ctx_->encoding_ctx_->major_working_cluster_version_,
         ctx_->allocator_))) {
-      LOG_WARN("fail to build_string_stream_encoder_info", K(ret), KPC_(ctx));
     }
   }
 
@@ -104,9 +98,7 @@ int ObStrDictColumnEncoder::store_column(ObMicroBufferWriter &buf_writer)
   } else if (! ctx_->has_stored_meta_ && OB_FAIL(store_column_meta(buf_writer))) {
     LOG_WARN("fail to store dict encoding meta", K(ret), K_(dict_encoding_meta));
   } else if (OB_FAIL(store_dict_(buf_writer))) {
-    LOG_WARN("fail to store dict", K(ret), K_(dict_encoding_meta));
   } else if (OB_FAIL(store_dict_ref_(buf_writer))) {
-    LOG_WARN("fail to store dict ref", K(ret), K_(dict_encoding_meta));
   }
 
   return ret;
@@ -119,7 +111,6 @@ int ObStrDictColumnEncoder::sort_dict_()
   if (!ctx_->need_sort_ || dict_encoding_meta_.distinct_val_cnt_ == 0) {
     // do nothing
   } else if (OB_FAIL(do_sort_dict_())) {
-    LOG_WARN("fail to do_sort_dict", K(ret));
   }
   return ret;
 }
@@ -128,9 +119,7 @@ int ObStrDictColumnEncoder::store_column_meta(ObMicroBufferWriter &buf_writer)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(sort_dict_())) {
-    LOG_WARN("fail to do_sort_dict", K(ret));
   } else if (OB_FAIL(store_dict_encoding_meta_(buf_writer))) {
-    LOG_WARN("fail to store dict encoding meta", K(ret), K_(dict_encoding_meta));
   }
   return ret;
 }
@@ -146,7 +135,6 @@ int ObStrDictColumnEncoder::store_dict_(ObMicroBufferWriter &buf_writer)
     ObSEArray<uint32_t, 2> offsets;
     if (OB_FAIL(string_encoder.encode(
         string_dict_enc_ctx_, datum_iter, buf_writer, ctx_->all_string_buf_writer_, offsets))) {
-      LOG_WARN("fail to store dict string stream", K(ret), K(string_dict_enc_ctx_));
     } else if (OB_UNLIKELY(offsets.count() != 1 && offsets.count() != 2)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("stream offsets count unexpected", K(ret), K(offsets));
@@ -160,7 +148,6 @@ int ObStrDictColumnEncoder::store_dict_(ObMicroBufferWriter &buf_writer)
 
     for (int64_t i = 0; OB_SUCC(ret) && i < offsets.count(); i++) {
       if (OB_FAIL(stream_offsets_.push_back(offsets.at(i)))) {
-        LOG_WARN("fail to push back", K(ret));
       }
     }
   }

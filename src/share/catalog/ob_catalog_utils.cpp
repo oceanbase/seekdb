@@ -61,7 +61,6 @@ int ObSwitchCatalogHelper::restore() {
   } else if (OB_FAIL(session_info_->set_default_catalog_db(old_catalog_id_,
                                                            old_db_id_,
                                                            old_database_name_.string()))) {
-    LOG_WARN("failed to restore catalog and db", K(ret));
   }
   return ret;
 }

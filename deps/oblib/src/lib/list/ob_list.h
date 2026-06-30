@@ -341,7 +341,6 @@ public:
     } else {
       node_ptr_t tmp = root_.next;
       if (OB_FAIL(copy_assign(value, tmp->data))) {
-        _OB_LOG(ERROR, "copy assign failed, ret=%d", ret);
       } else {
         root_.next = tmp->next;
         tmp->next->prev = root_;
@@ -481,8 +480,6 @@ public:
     int64_t tmp_pos = pos;
     int64_t sz = size();
     if (OB_SUCCESS != (ret = serialization::encode_i64(buf, buf_len, tmp_pos, sz))) {
-      _OB_LOG(WARN, "serialize size=%ld fail, ret=%d buf=%p buf_len=%ld pos=%ld",
-                sz, ret, buf, buf_len, tmp_pos);
     } else {
       const_iterator iter;
       for (iter = begin(); iter != end(); iter++) {
@@ -504,8 +501,6 @@ public:
     int64_t tmp_pos = pos;
     int64_t sz = 0;
     if (OB_SUCCESS != (ret = serialization::decode_i64(buf, data_len, tmp_pos, &sz))) {
-      _OB_LOG(WARN, "deserialize size fail, ret=%d buf=%p date_len=%ld pos=%ld",
-                ret, buf, data_len, tmp_pos);
     } else {
       clear();
       for (int64_t i = 0; i < sz; i++) {

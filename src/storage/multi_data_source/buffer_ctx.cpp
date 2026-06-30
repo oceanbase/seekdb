@@ -155,7 +155,6 @@ int BufferCtxNode::deserialize(const char *buf, const int64_t buf_len, int64_t &
   } else {
     if (tx_buffer_node) {
       if (OB_FAIL(get_ctx_type_id_by_multi_data_source_type_idx(tx_buffer_node->get_data_source_type(), ctx_type_idx))) {
-        MDS_LOG(ERROR, "fail get_ctx_type_id_by_multi_data_source_type_idx", KR(ret), K(ctx_type_idx));
       }
     }
     if (OB_FAIL(ret)) {

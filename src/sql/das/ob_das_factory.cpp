@@ -212,7 +212,6 @@ int ObDASTaskFactory::create_das_ctdef(ObDASOpType op_type, ObIAllocator &alloc,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid das op type", K(ret), K(op_type));
   } else if (OB_FAIL(G_DAS_ALLOC_FUNCTION_ARRAY[op_type].ctdef_func_(alloc, ctdef))) {
-    LOG_WARN("allocate das ctdef failed", K(ret), K(op_type));
   }
   return ret;
 }
@@ -232,7 +231,6 @@ int ObDASTaskFactory::create_das_rtdef(ObDASOpType op_type, ObIAllocator &alloc,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid das op type", K(ret), K(op_type));
   } else if (OB_FAIL(G_DAS_ALLOC_FUNCTION_ARRAY[op_type].rtdef_func_(alloc, rtdef))) {
-    LOG_WARN("allocate das rtdef failed", K(ret), K(op_type));
   }
   return ret;
 }
@@ -244,7 +242,6 @@ int ObDASTaskFactory::create_das_task_op(ObDASOpType op_type, ObIDASTaskOp *&das
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid das op type", K(ret), K(op_type));
   } else if (OB_FAIL(G_DAS_ALLOC_FUNCTION_ARRAY[op_type].op_func_(allocator_, das_op))) {
-    LOG_WARN("allocate das task op failed", K(ret), K(op_type));
   } else {
     das_op->set_type(op_type);
   }
@@ -259,7 +256,6 @@ int ObDASTaskFactory::create_das_task_result(ObDASOpType op_type, ObIDASTaskResu
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid das op type", K(ret), K(op_type));
   } else if (OB_FAIL(G_DAS_ALLOC_FUNCTION_ARRAY[op_type].result_func_(allocator_, das_result))) {
-    LOG_WARN("allocate das task op result failed", K(ret), K(op_type));
   }
   STORE_DAS_OBJ(das_result_store_, das_result, ObIDASTaskResult);
   return ret;

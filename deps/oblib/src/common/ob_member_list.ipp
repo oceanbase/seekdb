@@ -229,7 +229,6 @@ int ObMemberListBase<MAX_MEMBER_NUM>::get_addr_array(ObIArray<common::ObAddr> &a
   addr_array.reset();
   for (int64_t i = 0; OB_SUCCESS == ret && i < member_number_; ++i) {
     if (OB_FAIL(addr_array.push_back(member_[i].get_server()))) {
-      CLOG_LOG(WARN, "push back addr failed", K(ret));
     }
   }
   return ret;

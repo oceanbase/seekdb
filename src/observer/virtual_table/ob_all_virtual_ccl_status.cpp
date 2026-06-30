@@ -43,9 +43,7 @@ int ObGetAllCCLStatusOp::operator()(common::hash::HashMapPair<ObFormatSQLIDCCLRu
     ccl_status.cur_concurrency_ = entry.second->cur_concurrency_;
     ccl_status.max_concurrency_ = entry.second->max_concurrency_;
     if (OB_FAIL(ob_write_string(*allocator_, entry.second->format_sqlid_, ccl_status.format_sqlid_))) {
-      LOG_WARN("ob write client info str failed", K(ret));
     } else if (OB_FAIL(tmp_ccl_status_.push_back(ccl_status))) {
-      SERVER_LOG(WARN, "fail to push_back ccl_status", K(ret), K(ccl_status));
     }
   }
 
@@ -85,9 +83,7 @@ int ObAllVirtualCCLStatus::inner_get_next_row(ObNewRow *&row)
   } else if (FALSE_IT(get_all_op.set_allocator(allocator_))) {
   } else if (tmp_ccl_status_.count() == 0) {
     if (OB_FAIL(share::g_mp->sqlccl_rule_manager()->get_rule_level_concurrency_map().foreach_refactored(get_all_op))) {
-      LOG_WARN("fail to get ccl status from rule_level_concurrency_map", K(ret));
     } else if (OB_FAIL(share::g_mp->sqlccl_rule_manager()->get_format_sqlid_level_concurrency_map().foreach_refactored(get_all_op))) {
-      LOG_WARN("fail to get ccl status from format_sqlid_level_concurrency_map", K(ret));
     }
   }
 

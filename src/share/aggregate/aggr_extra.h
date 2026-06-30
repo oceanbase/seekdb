@@ -226,7 +226,6 @@ public:
     int ret = OB_SUCCESS;
     if (OB_UNLIKELY(tmp_batch_idx_ >= tmp_batch_cap_)) {
       if (OB_FAIL(flush_batch_rows())) {
-        SQL_LOG(WARN, "failed to flush batch rows", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -245,7 +244,6 @@ public:
                                                tmp_batch_payload_lens_,
                                                tmp_batch_hash_vals_,
                                                tmp_batch_idx_))) {
-      SQL_LOG(WARN, "failed to add batch items", K(ret));
     } else {
       tmp_batch_idx_ = 0;
     }
@@ -406,7 +404,6 @@ public:
     int ret = OB_SUCCESS;
     if (OB_UNLIKELY(batch_idx_ >= max_batch_size_)) {
       if (OB_FAIL(flush_batch_rows(false))) {
-        SQL_LOG(WARN, "failed to flush batch rows", K(ret));
       }
     }
     if (OB_SUCC(ret)) {

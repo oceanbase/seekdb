@@ -29,9 +29,7 @@ int ObGroupByVecOp::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOperator::inner_open())) {
-    LOG_WARN("failed to inner_open", K(ret));
   } else if (OB_FAIL(aggr_processor_.init())) {
-    LOG_WARN("failed to init", K(ret));
   } else {
     LOG_DEBUG("finish inner_open");
   }
@@ -49,7 +47,6 @@ int ObGroupByVecOp::calculate_3stage_agg_info(char *aggr_row, const RowMeta &row
   } else if (OB_FAIL(calculate_3stage_agg_info(aggregate::Processor::get_groupby_stored_row(
                          row_meta,
                          aggr_row), row_meta, batch_idx, start_agg_id, end_agg_id))) {
-    LOG_WARN("failed to calc 3 stage info", K(ret));
   }
   return ret;
 }
@@ -135,9 +132,7 @@ int ObGroupByVecOp::inner_rescan()
   int ret = OB_SUCCESS;
   aggr_processor_.reuse();
   if (OB_FAIL(ObOperator::inner_rescan())) {
-    LOG_WARN("failed to rescan", K(ret));
   } else if (OB_FAIL(aggr_processor_.init())) {
-    LOG_WARN("failed to init", K(ret));
   } else {
     LOG_DEBUG("finish rescan");
   }
@@ -149,9 +144,7 @@ int ObGroupByVecOp::inner_switch_iterator()
   int ret = OB_SUCCESS;
   aggr_processor_.reuse();
   if (OB_FAIL(ObOperator::inner_switch_iterator())) {
-    LOG_WARN("failed to switch_iterator", K(ret));
   } else if (OB_FAIL(aggr_processor_.init())) {
-    LOG_WARN("failed to init", K(ret));
   } else {
     LOG_DEBUG("finish switch_iterator");
   }
@@ -163,7 +156,6 @@ int ObGroupByVecOp::inner_close()
   int ret = OB_SUCCESS;
   aggr_processor_.reuse();
   if (OB_FAIL(ObOperator::inner_close())) {
-    LOG_WARN("failed to inner_close", K(ret));
   } else {
     LOG_DEBUG("finish inner_close");
   }

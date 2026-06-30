@@ -408,7 +408,6 @@ int ObIWkbVisitorImplement::linestring_do_visitor(T_IBIN *geo, ObIGeoVisitor &vi
   INIT_SUCC(ret);
   if (visitor.prepare(geo)) {
     if (OB_FAIL(visitor.visit(geo))) {
-      OB_LOG(WARN,"failed to do wkb line string visit", K(ret));
     } else if (visitor.is_end(geo) || geo->is_empty()) {
       // do nothing
     } else {
@@ -426,7 +425,6 @@ int ObIWkbVisitorImplement::linestring_do_visitor(T_IBIN *geo, ObIGeoVisitor &vi
         ObString data(sizeof(wkb_point), reinterpret_cast<char *>(&wkb_point));
         point.set_data(data);
         if (OB_FAIL(point.do_visit(visitor))) {
-          OB_LOG(WARN,"failed to do wkb point visit", K(ret));
         } else if (need_set) {
           iter->template set<0>(point.x());
           iter->template set<1>(point.y());
@@ -436,7 +434,6 @@ int ObIWkbVisitorImplement::linestring_do_visitor(T_IBIN *geo, ObIGeoVisitor &vi
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(visitor.finish(geo))) {
-      OB_LOG(WARN,"failed to finish visit", K(ret));
     }
   }
   return ret;
@@ -448,7 +445,6 @@ int ObIWkbVisitorImplement::multipoint_do_visitor(T_IBIN *geo, ObIGeoVisitor &vi
   INIT_SUCC(ret);
   if (visitor.prepare(geo)) {
     if (OB_FAIL(visitor.visit(geo))) {
-      OB_LOG(WARN,"failed to do multi point visit", K(ret));
     } else if (visitor.is_end(geo) || geo->is_empty()) {
       // do nothing
     } else {
@@ -459,14 +455,12 @@ int ObIWkbVisitorImplement::multipoint_do_visitor(T_IBIN *geo, ObIGeoVisitor &vi
         ObString data(sizeof(T_POINT), reinterpret_cast<char *>(iter.operator->()));
         point.set_data(data);
         if (OB_FAIL(point.do_visit(visitor))) {
-          OB_LOG(WARN,"failed to do point visit", K(ret));
         }
       } 
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(visitor.finish(geo))) {
-      OB_LOG(WARN,"failed to finish visit", K(ret));
     }
   }
   return ret;
@@ -478,7 +472,6 @@ int ObIWkbVisitorImplement::polygon_do_visitor(T_IBIN *geo, ObIGeoVisitor &visit
   INIT_SUCC(ret);
   if (visitor.prepare(geo)) {
     if (OB_FAIL(visitor.visit(geo))) {
-      OB_LOG(WARN,"failed to do wkb polygon visit", K(ret));
     } else if (visitor.is_end(geo) || geo->size() == 0) {
       // do nothing
     } else {
@@ -487,7 +480,6 @@ int ObIWkbVisitorImplement::polygon_do_visitor(T_IBIN *geo, ObIGeoVisitor &visit
       ObString data(sizeof(T_RING), reinterpret_cast<const char *>(&polygon->exterior_ring()));
       ring.set_data(data);
       if (OB_FAIL(ring.do_visit(visitor))) {
-        OB_LOG(WARN,"failed to do geog polygon exterior ring visit", K(ret));
       } else {
         const T_INNER_RING &rings = polygon->inner_rings();
         typename T_INNER_RING::iterator iter = rings.begin();
@@ -495,7 +487,6 @@ int ObIWkbVisitorImplement::polygon_do_visitor(T_IBIN *geo, ObIGeoVisitor &visit
           data.assign_ptr(reinterpret_cast<const char *>(iter.operator->()), static_cast<ObString::obstr_size_t>(sizeof(T_RING)));
           ring.set_data(data);
           if (OB_FAIL(ring.do_visit(visitor))) {
-            OB_LOG(WARN,"failed to do geog polygon inner ring visit", K(ret));
           } 
         }
       }
@@ -510,7 +501,6 @@ int ObIWkbVisitorImplement::collection_do_visitor(T_IBIN *geo, ObIGeoVisitor &vi
   INIT_SUCC(ret);
   if (visitor.prepare(geo)) {
     if (OB_FAIL(visitor.visit(geo))) {
-      OB_LOG(WARN,"failed to do wkb multi visit", K(ret));
     } else if (visitor.is_end(geo) || geo->is_empty()) {
       // do nothing
     } else {
@@ -521,14 +511,12 @@ int ObIWkbVisitorImplement::collection_do_visitor(T_IBIN *geo, ObIGeoVisitor &vi
         ObString data(sizeof(T_ITEM), reinterpret_cast<char *>(iter.operator->()));
         item.set_data(data);
         if (OB_FAIL(item.do_visit(visitor))) {
-          OB_LOG(WARN,"failed to do wkb item visit", K(ret));
         }
       } 
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(visitor.finish(geo))) {
-      OB_LOG(WARN,"failed to finish visit", K(ret));
     }
   }
 

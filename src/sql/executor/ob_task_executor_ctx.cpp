@@ -82,7 +82,6 @@ int ObTaskExecutorCtx::set_table_locations(const ObTablePartitionInfoArray &tabl
   ObPhyTableLocation phy_table_loc;
   int64_t N = table_partition_infos.count();
   if (OB_FAIL(table_locations_.reserve(N))) {
-    LOG_WARN("fail reserve locations", K(ret), K(N));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
     phy_table_loc.reset();
@@ -93,9 +92,7 @@ int ObTaskExecutorCtx::set_table_locations(const ObTablePartitionInfoArray &tabl
     } else if (partition_info->get_table_location().use_das()) {
       //do nothing, DAS's location is maintained and calculated by itself
     } else if (OB_FAIL(phy_table_loc.assign_from_phy_table_loc_info(partition_info->get_phy_tbl_location_info()))) {
-      LOG_WARN("fail to assign_from_phy_table_loc_info", K(ret), K(i), K(partition_info->get_phy_tbl_location_info()), K(N));
     } else if (OB_FAIL(table_locations_.push_back(phy_table_loc))) {
-      LOG_WARN("fail to push back into table locations", K(ret), K(i), K(phy_table_loc), K(N));
     }
   }
   return ret;
@@ -106,9 +103,7 @@ int ObTaskExecutorCtx::append_table_location(const ObCandiTableLoc &phy_location
   int ret = OB_SUCCESS;
   ObPhyTableLocation phy_table_loc;
   if (OB_FAIL(phy_table_loc.assign_from_phy_table_loc_info(phy_location_info))) {
-    LOG_WARN("assign from physical table location info failed", K(ret));
   } else if (OB_FAIL(table_locations_.push_back(phy_table_loc))) {
-    LOG_WARN("store table location failed", K(ret));
   }
   return ret;
 }

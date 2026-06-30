@@ -102,7 +102,6 @@ int ObInfoSchemaSessionVariablesTable::inner_get_next_row(ObNewRow *&row)
                   } else {
                     sys_var_show_str.reset();
                     if (OB_FAIL(sys_var->to_show_str(*allocator_, *session_, sys_var_show_str))) {
-                      SERVER_LOG(WARN, "fail to convert to show string", K(ret), K(*sys_var));
                     } else {
                       cells[cell_idx].set_varchar(sys_var_show_str);
                     }

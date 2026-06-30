@@ -203,7 +203,6 @@ int ObIWkbGeogCollection::do_visit(ObIGeoVisitor &visitor)
   INIT_SUCC(ret);
   if (visitor.prepare(this)) {
     if (OB_FAIL(visitor.visit(this))) {
-      LOG_WARN("failed to do wkb geog multi polygon visit", K(ret));
     } else if (visitor.is_end(this) || is_empty_inner()) {
       // do nothing
     } else {
@@ -225,7 +224,6 @@ int ObIWkbGeogCollection::do_visit(ObIGeoVisitor &visitor)
               ObString data(total_len - pos, reinterpret_cast<const char *>(point));
               i_point.set_data(data);
               if (OB_FAIL(i_point.do_visit(visitor))) {
-                LOG_WARN("failed to do wkb collection_point visit", K(ret));
               } else {
                 pos += i_point.length();
               }
@@ -237,7 +235,6 @@ int ObIWkbGeogCollection::do_visit(ObIGeoVisitor &visitor)
               ObString data(total_len - pos, reinterpret_cast<const char *>(line));
               i_line.set_data(data);
               if (OB_FAIL(i_line.do_visit(visitor))) {
-                LOG_WARN("failed to do wkb collection_line visit", K(ret));
               } else {
                 pos += i_line.length();
               }
@@ -249,7 +246,6 @@ int ObIWkbGeogCollection::do_visit(ObIGeoVisitor &visitor)
               ObString data(total_len - pos, reinterpret_cast<const char *>(poly));
               polygon.set_data(data);
               if (OB_FAIL(polygon.do_visit(visitor))) {
-                LOG_WARN("failed to do wkb geog collection_polygon visit", K(ret));
               } else {
                 pos += polygon.length();
               }
@@ -261,7 +257,6 @@ int ObIWkbGeogCollection::do_visit(ObIGeoVisitor &visitor)
               ObString data(total_len - pos, reinterpret_cast<const char *>(mp));
               multi_points.set_data(data);
               if (OB_FAIL(multi_points.do_visit(visitor))) {
-                LOG_WARN("failed to do wkb geog collection_multi_points visit", K(ret));
               } else {
                 pos += multi_points.length();
               }
@@ -273,7 +268,6 @@ int ObIWkbGeogCollection::do_visit(ObIGeoVisitor &visitor)
               ObString data(total_len - pos, reinterpret_cast<const char *>(ml));
               multi_lines.set_data(data);
               if (OB_FAIL(multi_lines.do_visit(visitor))) {
-                LOG_WARN("failed to do wkb geog collection_multi_lines visit", K(ret));
               } else {
                 pos += multi_lines.length();
               }
@@ -285,7 +279,6 @@ int ObIWkbGeogCollection::do_visit(ObIGeoVisitor &visitor)
               ObString data(total_len - pos, reinterpret_cast<const char *>(mp));
               multi_polygons.set_data(data);
               if (OB_FAIL(multi_polygons.do_visit(visitor))) {
-                LOG_WARN("failed to do wkb geog collection_multi_polygons visit", K(ret));
               } else {
                 pos += multi_polygons.length();
               }
@@ -297,7 +290,6 @@ int ObIWkbGeogCollection::do_visit(ObIGeoVisitor &visitor)
               ObString data(total_len - pos, reinterpret_cast<const char *>(subgc));
               sub_collection.set_data(data);
               if (OB_FAIL(sub_collection.do_visit(visitor))) {
-                LOG_WARN("failed to do wkb geog sub collection visit", K(ret));
               } else {
                 pos += sub_collection.length();
               }
@@ -315,7 +307,6 @@ int ObIWkbGeogCollection::do_visit(ObIGeoVisitor &visitor)
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(visitor.finish(this))) {
-      LOG_WARN("failed to finish visit", K(ret));
     }
   }
   return ret;
@@ -368,7 +359,6 @@ int ObIWkbGeomCollection::do_visit(ObIGeoVisitor &visitor)
   INIT_SUCC(ret);
   if (visitor.prepare(this)) {
     if (OB_FAIL(visitor.visit(this))) {
-      LOG_WARN("failed to do wkb geom collection visit", K(ret));
     } else if (visitor.is_end(this) || is_empty_inner()) {
       // do nothing
     } else {
@@ -390,7 +380,6 @@ int ObIWkbGeomCollection::do_visit(ObIGeoVisitor &visitor)
               ObString data(total_len - pos, reinterpret_cast<const char *>(point));
               i_point.set_data(data);
               if (OB_FAIL(i_point.do_visit(visitor))) {
-                LOG_WARN("failed to do wkb collection_point visit", K(ret));
               } else {
                 pos += i_point.length();
               }
@@ -402,7 +391,6 @@ int ObIWkbGeomCollection::do_visit(ObIGeoVisitor &visitor)
               ObString data(total_len - pos, reinterpret_cast<const char *>(line));
               i_line.set_data(data);
               if (OB_FAIL(i_line.do_visit(visitor))) {
-                LOG_WARN("failed to do wkb collection_line visit", K(ret));
               } else {
                 pos += i_line.length();
               }
@@ -414,7 +402,6 @@ int ObIWkbGeomCollection::do_visit(ObIGeoVisitor &visitor)
               ObString data(total_len - pos, reinterpret_cast<const char *>(poly));
               polygon.set_data(data);
               if (OB_FAIL(polygon.do_visit(visitor))) {
-                LOG_WARN("failed to do wkb geom collection_polygon visit", K(ret));
               } else {
                 pos += polygon.length();
               }
@@ -426,7 +413,6 @@ int ObIWkbGeomCollection::do_visit(ObIGeoVisitor &visitor)
               ObString data(total_len - pos, reinterpret_cast<const char *>(mp));
               multi_points.set_data(data);
               if (OB_FAIL(multi_points.do_visit(visitor))) {
-                LOG_WARN("failed to do wkb geom collection_multi_points visit", K(ret));
               } else {
                 pos += multi_points.length();
               }
@@ -438,7 +424,6 @@ int ObIWkbGeomCollection::do_visit(ObIGeoVisitor &visitor)
               ObString data(total_len - pos, reinterpret_cast<const char *>(ml));
               multi_lines.set_data(data);
               if (OB_FAIL(multi_lines.do_visit(visitor))) {
-                LOG_WARN("failed to do wkb geom collection_multi_lines visit", K(ret));
               } else {
                 pos += multi_lines.length();
               }
@@ -450,7 +435,6 @@ int ObIWkbGeomCollection::do_visit(ObIGeoVisitor &visitor)
               ObString data(total_len - pos, reinterpret_cast<const char *>(mp));
               multi_polygons.set_data(data);
               if (OB_FAIL(multi_polygons.do_visit(visitor))) {
-                LOG_WARN("failed to do wkb geom collection_multi_polygons visit", K(ret));
               } else {
                 pos += multi_polygons.length();
               }
@@ -462,7 +446,6 @@ int ObIWkbGeomCollection::do_visit(ObIGeoVisitor &visitor)
               ObString data(total_len - pos, reinterpret_cast<const char *>(subgc));
               sub_collection.set_data(data);
               if (OB_FAIL(sub_collection.do_visit(visitor))) {
-                LOG_WARN("failed to do wkb geom sub collection visit", K(ret));
               } else {
                 pos += sub_collection.length();
               }
@@ -480,7 +463,6 @@ int ObIWkbGeomCollection::do_visit(ObIGeoVisitor &visitor)
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(visitor.finish(this))) {
-      LOG_WARN("failed to finish visit", K(ret));
     }
   }
   return ret;

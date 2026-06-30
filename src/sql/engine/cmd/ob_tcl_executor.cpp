@@ -50,7 +50,6 @@ int ObEndTransExecutor::end_trans(ObExecContext &ctx, ObEndTransStmt &stmt)
       ctx.set_need_disconnect(false);
     }
   } else if (OB_FAIL(ObSqlTransControl::explicit_end_trans(ctx, stmt.get_is_rollback(), stmt.get_hint()))) {
-    LOG_WARN("fail end trans", K(ret));
   }
   return ret;
 }
@@ -64,7 +63,6 @@ int ObStartTransExecutor::start_trans(ObExecContext &ctx, ObStartTransStmt &stmt
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObSqlTransControl::explicit_start_trans(ctx, stmt.get_read_only(), stmt.get_hint()))) {
-    LOG_WARN("fail start trans", K(ret));
   }
   return ret;
 }
@@ -79,7 +77,6 @@ int ObCreateSavePointExecutor::execute(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid param", K(ret), K(session));
   } else if (OB_FAIL(ObSqlTransControl::create_savepoint(ctx, stmt.get_sp_name(), true))) {
-    LOG_WARN("fail create savepoint", K(ret), K(stmt.get_sp_name()));
   } else if (!session->has_explicit_start_trans()) {
     if (OB_FAIL(session->get_autocommit(ac))) {
       LOG_WARN("session autocommit unknown, assume `True`", K(ret), KPC(session));
@@ -103,7 +100,6 @@ int ObRollbackSavePointExecutor::execute(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid param", K(ret), K(session));
   } else if (OB_FAIL(ObSqlTransControl::rollback_savepoint(ctx, stmt.get_sp_name()))) {
-    LOG_WARN("fail rollback to savepoint", K(ret), K(stmt.get_sp_name()));
   }
   return ret;
 }
@@ -117,7 +113,6 @@ int ObReleaseSavePointExecutor::execute(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid param", K(ret), K(session));
   } else if (OB_FAIL(ObSqlTransControl::release_savepoint(ctx, stmt.get_sp_name()))) {
-    LOG_WARN("fail release savepoint", K(ret), K(stmt.get_sp_name()));
   }
   return ret;
 }

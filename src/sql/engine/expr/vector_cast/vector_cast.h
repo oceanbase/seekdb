@@ -150,7 +150,6 @@ struct VecCastFormatWrapper
   }
     int ret = OB_SUCCESS;
     if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-      SQL_LOG(WARN, "eval vector failed", K(ret));
     } else {
       VectorFormat in_fmt = expr.args_[0]->get_format(ctx);
       VectorFormat out_fmt = expr.get_format(ctx);
@@ -201,7 +200,6 @@ struct VecCastFormatWrapper
       }
       }
       if (OB_FAIL(ret)) {
-        SQL_LOG(WARN, "choose format failed", K(in_fmt), K(out_fmt), K(in_tc), K(out_tc));
       }
     }
     return ret;
@@ -224,11 +222,9 @@ struct _vector_caster_impl<in_tc, out_tc, EXPLICIT_CAST_FLAG, IN_VECTOR, OUT_VEC
       expr, ctx, skip, bound);
     int warning = ret;
     if (OB_FAIL(ret)) {
-      SQL_LOG(WARN, "implicit cast failed", K(in_tc), K(out_tc), K(bound));
     } else {
       ret = BatchValueRangeChecker<out_tc, OUT_VECTOR>::check(expr, ctx, bound, skip, warning);
       if (OB_FAIL(ret)) {
-        SQL_LOG(WARN, "accuracy check failed", K(ret), K(out_tc));
       }
     }
     return ret;

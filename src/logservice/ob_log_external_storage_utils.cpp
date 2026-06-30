@@ -42,11 +42,8 @@ int get_and_init_io_device(const ObString &uri,
   // TODO(zjf225077): Remove this set of ObLogExternalStorageIOTaskHandleAdapter, and unify the use of ObBackupIoAdapter
   ObStorageIdMod storage_id_mod(storage_id, ObStorageUsedMod::STORAGE_USED_CLOG);
   if (OB_FAIL(tmp_storage_info.set(uri.ptr(), storage_info.ptr()))) {
-    CLOG_LOG(WARN, "set ObBackupStorageInfo failed", K(uri), KP(io_device));
   } else if (OB_FAIL(ObDeviceManager::get_instance().get_device(uri, tmp_storage_info, storage_id_mod, io_device))) {
-    CLOG_LOG(WARN, "get_device from ObDeviceManager failed", K(uri), KP(io_device));
   } else if (OB_FAIL(io_device->start(opts))) {
-    CLOG_LOG(WARN, "start io device failed", K(uri), KP(io_device));
   } else {
     CLOG_LOG(TRACE, "get_io_device success", K(uri), KP(io_device));
   }
@@ -89,11 +86,9 @@ int open_io_fd(const ObString &uri,
   // TODO by runlin: support write
   ObStorageAccessType access_type;
   if (OB_FAIL(convert_to_storage_access_type(open_flag, access_type))) {
-    CLOG_LOG(WARN, "convert_to_storage_access_type failed", K(open_flag));
   } else if (FALSE_IT(opt.set("AccessType", OB_STORAGE_ACCESS_TYPES_STR[access_type]))) {
     // flag=-1 and mode=0 are invalid, because ObObjectDevice does not use flag and mode;
   } else if (OB_FAIL(io_device->open(uri.ptr(), -1, 0, io_fd, &iod_opts))) {
-    CLOG_LOG(WARN, "open fd failed", K(uri), K(open_flag));
   } else {
     CLOG_LOG(TRACE, "open fd success", K(uri), K(open_flag));
   }
@@ -108,7 +103,6 @@ int close_io_fd(ObIODevice *io_device,
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "io device is empty");
   } else if (OB_FAIL(io_device->close(io_fd))) {
-    CLOG_LOG(WARN, "fail to close fd!", K(io_fd));
   } else {
     CLOG_LOG(TRACE, "close_io_fd success", KP(io_device), K(io_fd));
   }
@@ -168,9 +162,7 @@ int ObLogExternalStorageCtx::init(const ObString &uri,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     CLOG_LOG(WARN, "allocate memory failed", KR(ret));
   } else if (OB_FAIL(get_and_init_io_device(uri, storage_info, storage_id, io_device))) {
-    CLOG_LOG(WARN, "get_and_init_io_device failed", KR(ret));
   } else if (OB_FAIL(open_io_fd(uri, flag, io_device, io_fd))) {
-    CLOG_LOG(WARN, "open_io_fd failed", KR(ret));
   } else {
     for (int64_t i = 0; i < concurrency; i++) {
       new(tmp_ptr+i)ObLogExternalStorageCtxItem(io_fd, io_device);
@@ -210,12 +202,10 @@ int ObLogExternalStorageCtx::wait(int64_t &out_size)
     //     record first errno in for loop.
     for (int64_t i = 0; i < count_; i++) {
       if (OB_TMP_FAIL(get_item(i, item))) {
-        CLOG_LOG(WARN, "get_item failed", KR(ret), K(i), KPC(this));
       } else if (OB_UNLIKELY(!item->is_valid())) {
         tmp_ret = OB_ERR_UNEXPECTED;
         CLOG_LOG(ERROR, "unexpected error, item is invalid", KR(ret), K(i), KPC(this), K(item));
       } else if (OB_TMP_FAIL(item->io_handle_.wait())) {
-        CLOG_LOG(WARN, "wait io_handle failed", KR(ret), K(i), KPC(this));
       } else {
         out_size += item->io_handle_.get_data_size();
         CLOG_LOG(TRACE, "wait success", K(i), K(out_size), KPC(item));
@@ -326,9 +316,7 @@ int ObLogExternalStorageHandleAdapter::get_file_size(const ObString &uri,
   ObIODevice *io_device = NULL;
   uint64_t storage_id = OB_INVALID_ID;
   if (OB_FAIL(get_and_init_io_device(uri, storage_info, storage_id, io_device))) {
-    CLOG_LOG(WARN, "get_io_device failed", K(uri), KP(io_device));
   } else if (OB_FAIL(io_device->adaptive_stat(uri.ptr(), file_stat))) {
-    CLOG_LOG(WARN, "stat io deveice failed", K(uri));
   } else {
     file_size = file_stat.size_;
     CLOG_LOG(TRACE, "get_file_size success", K(uri), KP(io_device), K(file_size));
@@ -350,8 +338,6 @@ int ObLogExternalStorageHandleAdapter::async_pread(const int64_t offset,
     CLOG_LOG(WARN, "invalid argument", KR(ret), K(offset), KP(buf), K(read_buf_size), K(io_ctx));
   } else if (OB_FAIL(io_adapter.async_pread(*io_ctx.io_device_, io_ctx.io_fd_, buf,
                                             offset, read_buf_size, io_ctx.io_handle_, common::ObIOModule::CLOG_READ_IO))) {
-    CLOG_LOG(WARN, "pread failed", KR(ret), K(io_ctx), K(offset), K(read_buf_size),
-             KP(buf), K(time_guard));
   } else if (FALSE_IT(time_guard.click("after async_pread"))) {
   } else {
     CLOG_LOG(TRACE, "pread success", K(time_guard), K(io_ctx), K(offset), K(read_buf_size), KP(buf));

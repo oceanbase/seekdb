@@ -63,9 +63,7 @@ int ObDagTempMacroFlusher::write_disk(ObMacroBlock& macro_block, const bool is_c
               macro_block.get_data_size(),
               simplified_buffer,
               simplified_buffer_size))) {
-    STORAGE_LOG(WARN, "fail to simplify macro block", K(ret));
   } else if (OB_FAIL(temp_file_writer_->write(simplified_buffer, !is_close_flush, simplified_buffer_size))) {
-    STORAGE_LOG(WARN, "fail to write macro block to temp file", K(ret));
   }
   return ret;
 }
@@ -101,9 +99,7 @@ int ObDagSliceMacroFlusher::write_disk(ObMacroBlock& macro_block, const bool is_
         macro_block.get_data_size(),
         simplified_buffer,
         simplified_buffer_size))) {
-    STORAGE_LOG(WARN, "fail to simplify macro block", K(ret));
   } else if (OB_FAIL(temp_file_writer_->write(simplified_buffer, !is_close_flush, simplified_buffer_size))) {
-    STORAGE_LOG(WARN, "fail to write macro block to temp file", K(ret));
   }
   return ret;
 }

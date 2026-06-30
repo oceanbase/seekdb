@@ -70,7 +70,6 @@ int ObExprSTArea::eval_st_area(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
   ObObjType input_type = gis_arg->datum_meta_.type_;
 
   if (OB_FAIL(temp_allocator.eval_arg(gis_arg, ctx, gis_datum))) {
-    LOG_WARN("eval geo arg failed", K(ret));
   } else if (gis_datum->is_null()) {
     res.set_null();
   } else {
@@ -82,19 +81,15 @@ int ObExprSTArea::eval_st_area(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
     lib::MemoryContext *mem_ctx = nullptr;
     if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *gis_datum,
         gis_arg->datum_meta_, gis_arg->obj_meta_.has_lob_header(), wkb))) {
-      LOG_WARN("fail to get real string data", K(ret), K(wkb));
     } else if (FALSE_IT(temp_allocator.set_baseline_size(wkb.length()))) {
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb, srs, true, N_ST_AREA))) {
-      LOG_WARN("fail to get srs item", K(ret), K(wkb));
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb, geo, srs, N_ST_AREA, GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {
-      LOG_WARN("get geo by wkb failed", K(ret));
     } else if (geo->type() != ObGeoType::POLYGON && geo->type() != ObGeoType::MULTIPOLYGON) {
       ret = OB_ERR_UNEXPECTED_GEOMETRY_TYPE;
       LOG_WARN("unexpected geometry type for st_area", K(ret));
       LOG_USER_ERROR(OB_ERR_UNEXPECTED_GEOMETRY_TYPE, "POLYGON/MULTIPOLYGON", 
         ObGeoTypeUtil::get_geo_name_by_type(geo->type()), N_ST_AREA);
     } else if (OB_FAIL(guard.init())) {
-      LOG_WARN("fail to init geo allocator guard", K(ret));
     } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
       ret = OB_ERR_NULL_VALUE;
       LOG_WARN("fail to get mem ctx", K(ret));
@@ -103,7 +98,6 @@ int ObExprSTArea::eval_st_area(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
       int correct_result;
       double result = 0.0;
       if (OB_FAIL(gis_context.append_geo_arg(geo))) {
-        LOG_WARN("build gis context failed", K(ret), K(gis_context.get_geo_count()));
       } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Area>::geo_func::eval(gis_context, result))) {
         LOG_WARN("eval st area failed", K(ret));
         ObGeoExprUtils::geo_func_error_handle(ret, N_ST_AREA);

@@ -50,15 +50,12 @@ int ObDASCtx::init(const ObPhysicalPlan &plan, ObExecContext &ctx)
                                                   partition_ids,
                                                   first_level_part_ids,
                                                   dtc_params))) {
-      LOG_WARN("calculate partition ids failed", K(ret));
     } else if (OB_FAIL(extended_table_loc(das_location.get_loc_meta(), table_loc))) {
-      LOG_WARN("extended table location failed", K(ret));
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < tablet_ids.count(); ++j) {
       ObDASTabletLoc *tablet_loc = nullptr;
       if (OB_FAIL(extended_tablet_loc(*table_loc, tablet_ids.at(j), tablet_loc, partition_ids.at(j),
                                       first_level_part_ids.empty() ? OB_INVALID_ID : first_level_part_ids.at(j)))) {
-        LOG_WARN("extended tablet location failed", K(ret));
       }
     }
   }
@@ -117,7 +114,6 @@ int ObDASCtx::get_das_tablet_mapper(const uint64_t ref_table_id,
     //and record the server list in tablet_mapper
     //the tablet_id and partition id of the virtual table is the index of server list
     if (OB_FAIL(location_router_.get_vt_svr_pair(real_table_id, tablet_mapper.vt_svr_pair_))) {
-      LOG_WARN("get virtual table server pair failed", K(ret), K(real_table_id));
     }
   }
   return ret;
@@ -144,7 +140,6 @@ int ObDASCtx::extended_tablet_loc(ObDASTableLoc &table_loc,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(table_loc.get_tablet_loc_by_id(tablet_id, tablet_loc))) {
-    LOG_WARN("get tablet loc failed", KR(ret));
   }
   if (OB_SUCC(ret) && tablet_loc == nullptr) {
     LOG_DEBUG("tablet location is not exists, begin to construct it", K(table_loc), K(tablet_id));
@@ -157,9 +152,7 @@ int ObDASCtx::extended_tablet_loc(ObDASTableLoc &table_loc,
     } else if (OB_FAIL(location_router_.get_tablet_loc(*table_loc.loc_meta_,
                                                        tablet_id,
                                                        *tablet_loc))) {
-      LOG_WARN("nonblock get tablet location failed", K(ret), KPC(table_loc.loc_meta_), K(tablet_id));
     } else if (OB_FAIL(table_loc.add_tablet_loc(tablet_loc))) {
-      LOG_WARN("store tablet location info failed", K(ret));
     } else {
       tablet_loc->loc_meta_ = table_loc.loc_meta_;
       tablet_loc->partition_id_ = partition_id;
@@ -195,7 +188,6 @@ int ObDASCtx::extended_tablet_loc(ObDASTableLoc &table_loc,
   int ret = OB_SUCCESS;
   const ObOptTabletLoc &opt_tablet_loc = candi_tablet_loc.get_partition_location();
   if (OB_FAIL(table_loc.get_tablet_loc_by_id(opt_tablet_loc.get_tablet_id(), tablet_loc))) {
-    LOG_WARN("get tablet loc failed", KR(ret), K(opt_tablet_loc.get_tablet_id()));
   }
   if (OB_SUCC(ret) && tablet_loc == nullptr) {
     ObLSReplicaLocation replica_loc;
@@ -204,7 +196,6 @@ int ObDASCtx::extended_tablet_loc(ObDASTableLoc &table_loc,
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate tablet loc buf failed", K(ret), K(sizeof(ObDASTabletLoc)));
     } else if (OB_FAIL(candi_tablet_loc.get_selected_replica(replica_loc))) {
-      LOG_WARN("fail to get selected replica", K(ret), K(candi_tablet_loc));
     } else {
       tablet_loc = new(tablet_buf) ObDASTabletLoc();
       tablet_loc->server_ = replica_loc.get_server();
@@ -214,7 +205,6 @@ int ObDASCtx::extended_tablet_loc(ObDASTableLoc &table_loc,
       tablet_loc->first_level_part_id_ = opt_tablet_loc.get_first_level_part_id();
       tablet_loc->loc_meta_ = table_loc.loc_meta_;
       if (OB_FAIL(table_loc.add_tablet_loc(tablet_loc))) {
-        LOG_WARN("store tablet loc failed", K(ret), K(tablet_loc));
       }
     }
     //build related tablet location
@@ -255,7 +245,6 @@ OB_INLINE int ObDASCtx::build_related_tablet_loc(ObDASTabletLoc &tablet_loc)
       //we will use get_all_tablet_and_object_id() to build the related tablet_id map when
       //dml operator's table loc was inited
       if (OB_FAIL(build_related_tablet_map(*tablet_loc.loc_meta_))) {
-        LOG_WARN("build related tablet map failed", K(ret), KPC(tablet_loc.loc_meta_));
       } else if (OB_ISNULL(rv = related_tablet_map_.get_related_tablet_id(tablet_loc.tablet_id_,
                                                                           related_table_id))) {
         ret = OB_ERR_UNEXPECTED;
@@ -274,9 +263,7 @@ OB_INLINE int ObDASCtx::build_related_tablet_loc(ObDASTabletLoc &tablet_loc)
       related_tablet_loc->first_level_part_id_ = rv->first_level_part_id_;
       tablet_loc.next_ = related_tablet_loc;
       if (OB_FAIL(location_router_.save_touched_tablet_id(related_tablet_loc->tablet_id_))) {
-        LOG_WARN("save touched tablet id failed", K(ret), KPC(related_tablet_loc));
       } else if (OB_FAIL(related_table_loc->add_tablet_loc(related_tablet_loc))) {
-        LOG_WARN("add related tablet location failed", K(ret));
       }
     }
     LOG_DEBUG("build related tablet loc", K(ret), K(tablet_loc), KPC(related_tablet_loc),
@@ -293,7 +280,6 @@ OB_INLINE int ObDASCtx::build_related_table_loc(ObDASTableLoc &table_loc)
          OB_SUCC(ret) && node != table_loc.tablet_locs_end(); ++node) {
       ObDASTabletLoc *tablet_loc = *node;
       if (OB_FAIL(build_related_tablet_loc(*tablet_loc))) {
-        LOG_WARN("build related tablet loc failed", K(ret));
       }
     }
   }
@@ -312,7 +298,6 @@ int ObDASCtx::extended_table_loc(const ObDASTableLocMeta &loc_meta, ObDASTableLo
     } else if (OB_ISNULL(table_loc = new(loc_buf) ObDASTableLoc(allocator_))) {
       //do nothing
     } else if (OB_FAIL(table_locs_.push_back(table_loc))) {
-      LOG_WARN("extended table location failed", K(ret));
     } else {
       table_loc->loc_meta_ = &loc_meta;
       LOG_DEBUG("extended table loc", K(loc_meta));
@@ -329,11 +314,9 @@ int ObDASCtx::extended_table_loc(const ObDASTableLocMeta &loc_meta, ObDASTableLo
       } else if (OB_ISNULL(related_table_loc = new(related_loc_buf) ObDASTableLoc(allocator_))) {
         //do nothing
       } else if (OB_FAIL(table_locs_.push_back(related_table_loc))) {
-        LOG_WARN("extended table location failed", K(ret));
       } else {
         ObDASTableLocMeta *related_loc_meta = new(loc_meta_buf) ObDASTableLocMeta(allocator_);
         if (OB_FAIL(loc_meta.init_related_meta(related_table_id, *related_loc_meta))) {
-          LOG_WARN("init related meta failed", K(ret), K(related_table_id));
         } else {
           related_table_loc->loc_meta_ = related_loc_meta;
         }
@@ -352,15 +335,12 @@ int ObDASCtx::add_candi_table_loc(const ObDASTableLocMeta &loc_meta,
   LOG_DEBUG("das table loc assign begin", K(loc_meta));
   const ObCandiTabletLocIArray &candi_tablet_locs = candi_table_loc.get_phy_part_loc_info_list();
   if (OB_FAIL(ObDASUtils::build_table_loc_meta(allocator_, loc_meta, final_meta))) {
-    LOG_WARN("build table loc meta failed", K(ret));
   } else if (OB_FAIL(extended_table_loc(*final_meta, table_loc))) {
-    LOG_WARN("extended table loc failed", K(ret), K(loc_meta));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < candi_tablet_locs.count(); ++i) {
     const ObCandiTabletLoc &candi_tablet_loc = candi_tablet_locs.at(i);
     ObDASTabletLoc *tablet_loc = nullptr;
     if (OB_FAIL(extended_tablet_loc(*table_loc, candi_tablet_loc, tablet_loc))) {
-      LOG_WARN("extended tablet loc failed", K(ret));
     }
   }
   LOG_DEBUG("das table loc assign finish", K(candi_table_loc), K(loc_meta), K(table_loc->get_tablet_locs()));
@@ -377,9 +357,7 @@ int ObDASCtx::add_final_table_loc(const ObDASTableLocMeta &loc_meta,
   ObDASTableLocMeta *final_meta = nullptr;
   LOG_DEBUG("das table loc assign begin", K(loc_meta));
   if (OB_FAIL(ObDASUtils::build_table_loc_meta(allocator_, loc_meta, final_meta))) {
-    LOG_WARN("build table loc meta failed", K(ret));
   } else if (OB_FAIL(extended_table_loc(*final_meta, table_loc))) {
-    LOG_WARN("extended table loc failed", K(ret), K(loc_meta));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
     ObDASTabletLoc *tablet_loc = nullptr;
@@ -390,7 +368,6 @@ int ObDASCtx::add_final_table_loc(const ObDASTableLocMeta &loc_meta,
                                     tablet_loc,
                                     partition_ids.at(i),
                                     first_level_part_id))) {
-      LOG_WARN("extended tablet loc failed", K(ret));
     }
   }
   LOG_DEBUG("das table loc assign finish", K(loc_meta), K(table_loc->get_tablet_locs()));
@@ -406,7 +383,6 @@ int ObDASCtx::build_table_loc_meta(const ObDASTableLocMeta &src,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDASUtils::build_table_loc_meta(allocator_, src, dst))) {
-    LOG_WARN("build table loc meta failed", K(ret));
   }
   return ret;
 }
@@ -534,9 +510,7 @@ int ObDASCtx::build_related_tablet_map(const ObDASTableLocMeta &loc_meta)
   ObArray<ObTabletID> tablet_ids;
   ObArray<ObObjectID> partition_ids;
   if (OB_FAIL(get_das_tablet_mapper(loc_meta.ref_table_id_, tablet_mapper, &loc_meta.related_table_ids_))) {
-    LOG_WARN("get das tablet mapper failed", K(ret));
   } else if (OB_FAIL(tablet_mapper.get_all_tablet_and_object_id(tablet_ids, partition_ids))) {
-    LOG_WARN("build related tablet_id map failed", K(ret), K(loc_meta));
   }
   return ret;
 }
@@ -592,7 +566,6 @@ OB_DEF_DESERIALIZE(ObDASCtx)
     } else {
       table_loc = new(table_buf) ObDASTableLoc(allocator_);
       if (OB_FAIL(table_locs_.push_back(table_loc))) {
-        LOG_WARN("store table locs failed", K(ret));
       }
     }
     OB_UNIS_DECODE(*table_loc);

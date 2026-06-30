@@ -273,7 +273,6 @@ int ObLogicalPlanRawData::compress_logical_plan(ObIAllocator &allocator,
     //do nothing
   } else if (OB_FAIL(common::ObCompressorPool::get_instance().get_compressor(compressor_type,
                                                                              compressor))) {
-    LOG_WARN("fail to get compressor", K(compressor_type), K(ret));
   } else if (OB_ISNULL(compressor)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect null compressor", K(ret));
@@ -287,7 +286,6 @@ int ObLogicalPlanRawData::compress_logical_plan(ObIAllocator &allocator,
                                           compress_buf,
                                           compress_size, 
                                           compress_size))) {
-    LOG_WARN("failed to compress data", K(ret));
   } else if (compress_size >= total_size) {
     //will not use compress buffer
     logical_plan_ = buf;
@@ -330,7 +328,6 @@ int ObLogicalPlanRawData::uncompress_logical_plan(ObIAllocator &allocator,
     }
   } else if (OB_FAIL(common::ObCompressorPool::get_instance().get_compressor(compressor_type,
                                                                              compressor))) {
-    LOG_WARN("fail to get compressor", K(compressor_type), K(ret));
   } else if (OB_ISNULL(compressor)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect null compressor", K(ret));
@@ -344,7 +341,6 @@ int ObLogicalPlanRawData::uncompress_logical_plan(ObIAllocator &allocator,
                                             uncompress_buf,
                                             uncompress_size, 
                                             uncompress_size))) {
-    LOG_WARN("failed to compress data", K(ret));
   }
   if (OB_FAIL(ret) || NULL == uncompress_buf) {
     //do nothing

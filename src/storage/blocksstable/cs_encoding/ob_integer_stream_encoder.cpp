@@ -129,30 +129,25 @@ int ObIntegerStreamEncoder::encode(
     void *int_arr = nullptr;
     uint64_t arr_count = 0;
     if (OB_FAIL(convert_func(datum_iter, ctx, null_replace_value, int_arr, arr_count))) {
-      LOG_WARN("fail to convert to uint", KR(ret));
     } else {
       switch (ctx.meta_.get_width_tag()) {
         case ObIntegerStream::UintWidth::UW_1_BYTE : {
           if (OB_FAIL(inner_encode<uint8_t>(int_arr, arr_count, writer))) {
-            LOG_WARN("fail to encode to uint8", KR(ret));
           }
           break;
         }
         case ObIntegerStream::UintWidth::UW_2_BYTE : {
           if (OB_FAIL(inner_encode<uint16_t>(int_arr, arr_count, writer))) {
-            LOG_WARN("fail to encode to uint16", KR(ret));
           }
           break;
         }
         case ObIntegerStream::UintWidth::UW_4_BYTE : {
           if (OB_FAIL(inner_encode<uint32_t>(int_arr, arr_count, writer))) {
-            LOG_WARN("fail to encode to uint32", KR(ret));
           }
           break;
         }
         case ObIntegerStream::UintWidth::UW_8_BYTE : {
           if (OB_FAIL(inner_encode<uint64_t>(int_arr, arr_count, writer))) {
-            LOG_WARN("fail to encode to uint64", KR(ret));
           }
           break;
         }
@@ -173,9 +168,7 @@ int ObIntegerStreamEncoder::encode_stream_meta(ObMicroBufferWriter &buf_writer)
   int64_t buf_len = buf_writer.remain_buffer_size();
   int64_t pos = 0;
   if (OB_FAIL(ctx_->meta_.serialize(buf, buf_len, pos))) {
-    LOG_WARN("fail to serialize stream meta", K(ret), K(pos), KP(buf), K(buf_len));
   } else if (OB_FAIL(buf_writer.advance(pos))) {
-    LOG_WARN("fail to advance", KR(ret), K(buf_writer), K(pos));
   }
 
   return ret;

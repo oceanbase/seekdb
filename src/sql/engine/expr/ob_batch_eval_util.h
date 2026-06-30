@@ -371,7 +371,6 @@ struct _nmb_eval_op_impl
     } else {
       ObNumber tmp_num;
       if (OB_FAIL(nmb_fast_op(l_num, r_num, tmp_num, local_alloc))) {
-        SQL_LOG(WARN, "num arith op failed", K(ret), K(l_num), K(r_num));
       } else {
         const_cast<number::ObCompactNumber *>(res_num)->desc_ = tmp_num.d_;
         uint32_t *digits = &(const_cast<number::ObCompactNumber *>(res_num)->digits_[0]);
@@ -498,7 +497,6 @@ int def_batch_arith_op(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(binary_operand_batch_eval(expr, ctx, skip, size, false))) {
-    SQL_LOG(WARN, "bianry operand batch evaluate failed", K(ret), K(expr));
   } else {
     ret = call_functor_with_arg_iter<ArithOp, ObDoArithBatchEval>(expr, ctx, skip, size, args...);
   }
@@ -537,7 +535,6 @@ inline int def_number_vector_arith_op(VECTOR_EVAL_FUNC_ARG_DECL, NmbFastOp &nmb_
   EvalBound pvt_bound = bound;
   bool right_evaluated = true;
   if (OB_FAIL(binary_operand_vector_eval(expr, ctx, skip, pvt_bound, false, right_evaluated))) {
-    SQL_LOG(WARN, "binary number batch evaluation failure", K(ret));
   } else {
     const VectorFormat left_format = expr.args_[0]->get_format(ctx);
     const VectorFormat right_format = expr.args_[1]->get_format(ctx);
@@ -583,7 +580,6 @@ int def_fixed_len_vector_arith_op(VECTOR_EVAL_FUNC_ARG_DECL, Args &... args)
   EvalBound pvt_bound = bound;
   bool right_evaluated = true;
   if (OB_FAIL(binary_operand_vector_eval(expr, ctx, skip, pvt_bound, false, right_evaluated))) {
-    SQL_LOG(WARN, "binary operand vector evaluate failed", K(ret), K(expr));
   } else {
     const VectorFormat left_format = expr.args_[0]->get_format(ctx);
     const VectorFormat right_format = expr.args_[1]->get_format(ctx);
@@ -638,7 +634,6 @@ int def_variable_len_vector_arith_op(VECTOR_EVAL_FUNC_ARG_DECL, Args &... args)
   bool right_evaluated = true;
   if (OB_FAIL(binary_operand_vector_eval(expr, ctx, skip, pvt_bound, false,
                                          right_evaluated))) {
-    SQL_LOG(WARN, "binary operand vector evaluate failed", K(ret), K(expr));
   } else {
     const VectorFormat left_format = expr.args_[0]->get_format(ctx);
     const VectorFormat right_format = expr.args_[1]->get_format(ctx);
@@ -681,7 +676,6 @@ int def_nested_vector_arith_op(VECTOR_EVAL_FUNC_ARG_DECL, Args &... args)
   bool right_evaluated = true;
   if (OB_FAIL(binary_operand_vector_eval(expr, ctx, skip, pvt_bound, false,
                                          right_evaluated))) {
-    SQL_LOG(WARN, "binary operand vector evaluate failed", K(ret), K(expr));
   } else {
     const ObExpr &left = *expr.args_[0];
     const ObExpr &right = *expr.args_[1];
@@ -957,17 +951,11 @@ struct ObNestedVectorArithOpFunc : public Base
     ObIArrayType *res_obj = NULL;
     ObString res_str;
     if (OB_FAIL(Base::construct_param(tmp_allocator, ctx, left_meta_id, left, left_obj))) {
-      SQL_ENG_LOG(WARN, "get array failed", K(ret));
     } else if (OB_FAIL(Base::construct_param(tmp_allocator, ctx, right_meta_id, right, right_obj))) {
-      SQL_ENG_LOG(WARN, "get array failed", K(ret));
     } else if (OB_FAIL(Base::construct_res_obj(tmp_allocator, ctx, res_meta_id, res_obj))) {
-      SQL_ENG_LOG(WARN, "get array failed", K(ret));
     } else if (OB_FAIL(Base()(*res_obj, *left_obj, *right_obj))) {
-      SQL_ENG_LOG(WARN, "exec calculate func failed", K(ret)); 
     } else if (OB_FAIL(res_obj->init())) {
-      SQL_ENG_LOG(WARN, "init nested obj failed", K(ret)); 
     } else if (OB_FAIL(Base::get_res_batch(ctx, res_obj, expr, idx, &res_vec))) {
-      SQL_ENG_LOG(WARN, "get array binary string failed", K(ret));
     }
     return ret;
   }
@@ -997,11 +985,8 @@ struct ObNestedArithOpWrap : public Base
     ObString res_str;
     if (OB_FAIL(Base::construct_params(tmp_allocator, ctx, left_meta_id, right_meta_id, res_meta_id,
                                           left, right, left_obj, right_obj, res_obj))) {
-      SQL_ENG_LOG(WARN, "get array failed", K(ret));
     } else if (OB_FAIL(Base()(*res_obj, *left_obj, *right_obj))) {
-      SQL_ENG_LOG(WARN, "exec calculate func failed", K(ret)); 
     } else if (OB_FAIL(Base::get_res(ctx, res_obj, expr, res_str))) {
-      SQL_ENG_LOG(WARN, "get array binary string failed", K(ret));
     } else {
       res.set_string(res_str);
     }
@@ -1024,9 +1009,7 @@ struct ObNestedArithOpBaseFunc
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(res_obj->init())) {
-      LOG_WARN("array init failed", K(ret));
     } else if (OB_FAIL(ObArrayExprUtils::set_array_res(res_obj, expr, ctx, res_vec, row_idx))) {
-      LOG_WARN("set array res failed", K(ret));
     }
     return ret;
   }

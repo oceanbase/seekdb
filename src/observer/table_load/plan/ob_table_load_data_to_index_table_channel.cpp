@@ -55,7 +55,6 @@ int ObTableLoadDataToIndexTableChannel::create_row_projector()
   } else if (OB_FAIL(row_projector_->init(
                up_table_op_->op_ctx_->store_table_ctx_->schema_->table_id_,
                down_table_op_->op_ctx_->store_table_ctx_->schema_->table_id_))) {
-    LOG_WARN("fail to init row projector", KR(ret));
   }
   return ret;
 }
@@ -73,16 +72,13 @@ int ObTableLoadDataToIndexTableChannel::handle_insert_row(const ObTabletID &tabl
   } else {
     ObTableLoadTableBuilder *table_builder = nullptr;
     if (OB_FAIL(table_builder_mgr_.get_table_builder(table_builder))) {
-      LOG_WARN("fail to get table builder", KR(ret));
     } else {
       ObDirectLoadDatumRow &insert_datum_row = table_builder->get_insert_datum_row();
       insert_datum_row.seq_no_ = datum_row.seq_no_;
       ObTabletID index_tablet_id;
       if (OB_FAIL(
             row_projector_->projector(tablet_id, datum_row, index_tablet_id, insert_datum_row))) {
-        LOG_WARN("fail to project row", KR(ret));
       } else if (OB_FAIL(table_builder->append_row(index_tablet_id, insert_datum_row))) {
-        LOG_WARN("fail to append row", KR(ret));
       }
     }
   }
@@ -102,16 +98,13 @@ int ObTableLoadDataToIndexTableChannel::handle_insert_row(const ObTabletID &tabl
   } else {
     ObTableLoadTableBuilder *table_builder = nullptr;
     if (OB_FAIL(table_builder_mgr_.get_table_builder(table_builder))) {
-      LOG_WARN("fail to get table builder", KR(ret));
     } else {
       ObDirectLoadDatumRow &insert_datum_row = table_builder->get_insert_datum_row();
       insert_datum_row.seq_no_ = 0; // seq_no丢失
       ObTabletID index_tablet_id;
       if (OB_FAIL(
             row_projector_->projector(tablet_id, datum_row, index_tablet_id, insert_datum_row))) {
-        LOG_WARN("fail to project row", KR(ret));
       } else if (OB_FAIL(table_builder->append_row(index_tablet_id, insert_datum_row))) {
-        LOG_WARN("fail to append row", KR(ret));
       }
     }
   }
@@ -131,19 +124,15 @@ int ObTableLoadDataToIndexTableChannel::handle_insert_batch(const ObTabletID &ta
   } else {
     ObTableLoadTableBuilder *table_builder = nullptr;
     if (OB_FAIL(table_builder_mgr_.get_table_builder(table_builder))) {
-      LOG_WARN("fail to get table builder", KR(ret));
     } else {
       ObDirectLoadDatumRow &insert_datum_row = table_builder->get_insert_datum_row();
       insert_datum_row.seq_no_ = 0; // seq_no丢失
       ObTabletID index_tablet_id;
       if (OB_FAIL(row_projector_->get_dest_tablet_id(tablet_id, index_tablet_id))) {
-        LOG_WARN("fail to get index tablet id", KR(ret));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < datum_rows.row_count_; ++i) {
         if (OB_FAIL(row_projector_->projector(datum_rows, i, insert_datum_row))) {
-          LOG_WARN("fail to projector", KR(ret), K(tablet_id));
         } else if (OB_FAIL(table_builder->append_row(index_tablet_id, insert_datum_row))) {
-          LOG_WARN("fail to append row", KR(ret));
         }
       }
     }
@@ -164,16 +153,13 @@ int ObTableLoadDataToIndexTableChannel::handle_delete_row(const ObTabletID &tabl
   } else {
     ObTableLoadTableBuilder *table_builder = nullptr;
     if (OB_FAIL(table_builder_mgr_.get_table_builder(table_builder))) {
-      LOG_WARN("fail to get table builder", KR(ret));
     } else {
       ObDirectLoadDatumRow &insert_datum_row = table_builder->get_delete_datum_row();
       insert_datum_row.seq_no_ = datum_row.seq_no_;
       ObTabletID index_tablet_id;
       if (OB_FAIL(
             row_projector_->projector(tablet_id, datum_row, index_tablet_id, insert_datum_row))) {
-        LOG_WARN("fail to project row", KR(ret));
       } else if (OB_FAIL(table_builder->append_row(index_tablet_id, insert_datum_row))) {
-        LOG_WARN("fail to append row", KR(ret));
       }
     }
   }
@@ -215,7 +201,6 @@ int ObTableLoadDataToIndexTableChannel::handle_update_row(const ObTabletID &tabl
   } else if (result_row == &new_row) {
     ObTableLoadTableBuilder *table_builder = nullptr;
     if (OB_FAIL(table_builder_mgr_.get_table_builder(table_builder))) {
-      LOG_WARN("fail to get table builder", KR(ret));
     } else {
       ObDirectLoadDatumRow &insert_datum_row = table_builder->get_insert_datum_row();
       ObDirectLoadDatumRow &delete_datum_row = table_builder->get_delete_datum_row();
@@ -224,10 +209,8 @@ int ObTableLoadDataToIndexTableChannel::handle_update_row(const ObTabletID &tabl
       ObTabletID index_tablet_id;
       if (OB_FAIL(
             row_projector_->projector(tablet_id, new_row, index_tablet_id, insert_datum_row))) {
-        LOG_WARN("fail to projector", KR(ret), K(tablet_id), K(new_row));
       } else if (OB_FAIL(row_projector_->projector(tablet_id, old_row, index_tablet_id,
                                                    delete_datum_row))) {
-        LOG_WARN("fail to projector", KR(ret), K(tablet_id), K(old_row));
       } else {
         ObDatumRowkey new_key(
           insert_datum_row.storage_datums_,
@@ -239,18 +222,15 @@ int ObTableLoadDataToIndexTableChannel::handle_update_row(const ObTabletID &tabl
         if (OB_FAIL(old_key.compare(
               new_key, down_table_op_->op_ctx_->store_table_ctx_->schema_->datum_utils_,
               cmp_ret))) {
-          LOG_WARN("fail to compare", KR(ret));
         } else {
           // when cmp_ret == 0, insert new row is equal to  delete old row and insert new row.
           if (0 != cmp_ret) {
             if (OB_FAIL(table_builder->append_row(index_tablet_id, delete_datum_row))) {
-              LOG_WARN("fail to append row", KR(ret));
             }
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(table_builder->append_row(index_tablet_id, insert_datum_row))) {
-            LOG_WARN("fail to append row", KR(ret));
           }
         }
       }
@@ -272,16 +252,13 @@ int ObTableLoadDataToIndexTableChannel::handle_insert_delete_conflict(const ObTa
   } else {
     ObTableLoadTableBuilder *table_builder = nullptr;
     if (OB_FAIL(table_builder_mgr_.get_table_builder(table_builder))) {
-      LOG_WARN("fail to get table builder", KR(ret));
     } else {
       ObDirectLoadDatumRow &insert_datum_row = table_builder->get_insert_datum_row();
       insert_datum_row.seq_no_ = 0; // seq_no丢失
       ObTabletID index_tablet_id;
       if (OB_FAIL(
             row_projector_->projector(tablet_id, datum_row, index_tablet_id, insert_datum_row))) {
-        LOG_WARN("fail to project row", KR(ret));
       } else if (OB_FAIL(table_builder->append_row(index_tablet_id, insert_datum_row))) {
-        LOG_WARN("fail to append row", KR(ret));
       }
     }
   }

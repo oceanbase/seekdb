@@ -63,7 +63,6 @@ public:
     if (other.n_bit_ == 0) {
       //do nothing
     } else if(OB_FAIL(init(alloc_, other.n_bit_))) {
-      COMMON_LOG(WARN, "fail to init hyperloglog", K(ret));
     } else {
       merge(other);
     }

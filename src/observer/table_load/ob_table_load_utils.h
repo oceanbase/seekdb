@@ -133,11 +133,9 @@ int ObTableLoadUtils::deep_copy(const common::ObIArray<T> &src, table::ObTableLo
   dest.reset();
   if (!src.empty()) {
     if (OB_FAIL(dest.create(src.count(), allocator))) {
-      OB_LOG(WARN, "fail to create", KR(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < src.count(); ++i) {
       if (OB_FAIL(deep_copy(src.at(i), dest[i], allocator))) {
-        OB_LOG(WARN, "fail to deep copy", KR(ret));
       }
     }
   }

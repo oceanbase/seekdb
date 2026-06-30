@@ -40,7 +40,6 @@ int OMPKResheader::serialize(char *buffer, int64_t len, int64_t &pos) const
     ret = OB_INVALID_ARGUMENT;
   } else {
     if (OB_FAIL(ObMySQLUtil::store_length(buffer, len, field_count_, pos))) {
-      LOG_WARN("serialize field count fail", KP(buffer), K(len), K(pos), K(field_count_));
     }
   }
 

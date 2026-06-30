@@ -34,7 +34,6 @@ int ObCachedGeomBase::init()
   } else if (!is_inited_) {
     ObGeoVertexCollectVisitor vertex_visitor(vertexes_);
     if (OB_FAIL(origin_geo_->do_visit(vertex_visitor))) {
-      LOG_WARN("failed to collect geo vertexes", K(ret));
     } else {
       x_min_ = vertex_visitor.get_x_min();
       x_max_ = vertex_visitor.get_x_max();
@@ -49,7 +48,6 @@ int ObCachedGeomBase::intersects(ObGeometry& geo, ObGeoEvalCtx& gis_context, boo
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Intersects>::geo_func::eval(gis_context, res))) {
-    LOG_WARN("eval st intersection failed", K(ret));
   } else if (geo.type() == ObGeoType::POINT
             && origin_geo_->type() == ObGeoType::POINT
             && res == true
@@ -62,7 +60,6 @@ int ObCachedGeomBase::contains(ObGeometry& geo, ObGeoEvalCtx& gis_context, bool 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Within>::gis_func::eval(gis_context, res))) {
-    LOG_WARN("eval Within functor failed", K(ret));
   }
   return ret;
 }
@@ -70,7 +67,6 @@ int ObCachedGeomBase::cover(ObGeometry& geo, ObGeoEvalCtx& gis_context, bool &re
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObGeoFunc<ObGeoFuncType::CoveredBy>::geo_func::eval(gis_context, res))) {
-    LOG_WARN("eval st coveredBy failed", K(ret));
   }
   return ret;
 }
@@ -78,7 +74,6 @@ int ObCachedGeomBase::within(ObGeometry& geo, ObGeoEvalCtx& gis_context, bool &r
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Within>::gis_func::eval(gis_context, res))) {
-    LOG_WARN("eval st withIn failed", K(ret));
   }
   return ret;
 }
@@ -95,7 +90,6 @@ int ObCachedGeomBase::check_any_vertexes_in_geo(ObGeometry& geo, bool &res)
     for (uint32_t i = 0; i < size && OB_SUCC(ret) && !res; i++) {
       ObGeoPointLocationVisitor point_loc_visitor(get_vertexes()[i]);
       if (OB_FAIL(geo.do_visit(point_loc_visitor))) {
-        LOG_WARN("failed to do point location visitor", K(ret));
       } else if (point_loc_visitor.get_point_location() == ObPointLocation::INTERIOR
                 || point_loc_visitor.get_point_location() == ObPointLocation::BOUNDARY) {
         res = true;

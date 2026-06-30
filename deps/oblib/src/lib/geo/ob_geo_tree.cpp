@@ -77,7 +77,6 @@ int ObCartesianPolygon::push_back(const ObLinearring &ring)
     exterior_ = static_cast<const ObCartesianLinearring &>(ring);
   } else {
     if(OB_FAIL(inner_rings_.push_back(static_cast<const ObCartesianLinearring &>(ring)))) {
-      LOG_WARN("fail to push_back to ObCartesianPolygon rings.", K(ret));
     }
   }
   return ret;
@@ -96,7 +95,6 @@ int ObGeographPolygon::push_back(const ObLinearring &ring)
     exterior_ = static_cast<const ObGeographLinearring &>(ring);
   } else {
     if(OB_FAIL(inner_rings_.push_back(static_cast<const ObGeographLinearring &>(ring)))) {
-      LOG_WARN("fail to push_back to ObGeographPolygon rings.", K(ret));
     }
   }
   return ret;
@@ -232,14 +230,12 @@ int ObGeoTreeVisitorImplement::line_do_visit(T_GEO *geo, ObIGeoVisitor &visitor)
   int ret = OB_SUCCESS;
   if (visitor.prepare(geo)) {
     if (OB_FAIL(visitor.visit(geo))) {
-      LOG_WARN("failed to do tree geog line string visit", K(ret));
     } else if (visitor.is_end(geo) || geo->empty()) {
       // do nothing
     } else {
       for (int32_t i = 0; i < geo->size() && OB_SUCC(ret) && !visitor.is_end(geo); i++) {
         T_ITEM item((*geo)[i].template get<0>(), (*geo)[i].template get<1>());
         if (OB_FAIL(item.do_visit(visitor))) {
-          LOG_WARN("failed to do tree geog line string visit", K(ret));
         } else {
           (*geo)[i].template set<0>(item.x());
           (*geo)[i].template set<1>(item.y());
@@ -256,16 +252,13 @@ int ObGeoTreeVisitorImplement::polygon_do_visit(T_GEO *geo, ObIGeoVisitor &visit
   int ret = OB_SUCCESS;
   if (visitor.prepare(geo)) {
     if (OB_FAIL(visitor.visit(geo))) {
-      LOG_WARN("failed to do tree polygon visit", K(ret));
     } else if (visitor.is_end(geo) || geo->empty()) {
       // do nothing
     } else {
       if (OB_FAIL(geo->exterior_ring().do_visit(visitor))) {
-        LOG_WARN("failed to do tree polygon exterior ring visit", K(ret));
       }
       for (uint64_t i = 0; i < geo->inner_ring_size() && OB_SUCC(ret) && !visitor.is_end(geo); i++) {
         if (OB_FAIL(geo->inner_ring(i).do_visit(visitor))) {
-          LOG_WARN("failed to do tree polygon inner ring visit", K(ret));
         }
       }
     }
@@ -279,13 +272,11 @@ int ObGeoTreeVisitorImplement::collection_do_visit(T_GEO *geo, ObIGeoVisitor &vi
   int ret = OB_SUCCESS;
   if (visitor.prepare(geo)) {
     if (OB_FAIL(visitor.visit(geo))) {
-      LOG_WARN("failed to do tree collection geo visit", K(ret));
     } else if (visitor.is_end(geo) || geo->empty()) {
       // do nothing
     } else {
       for (int32_t i = 0; i < geo->size() && OB_SUCC(ret) && !visitor.is_end(geo); i++) {
         if (OB_FAIL((*geo)[i].do_visit(visitor))) {
-          LOG_WARN("failed to do tree item visit", K(ret));
         }
       }
     }
@@ -413,7 +404,6 @@ int ObCartesianGeometrycollection::resize(int64_t size) {
   int ret = OB_SUCCESS;
   if (size > geoms_.size()) {
     if (OB_FAIL(geoms_.prepare_allocate(size))) {
-      OB_LOG(WARN, "failed to resize ObGeomVector", K(ret), K(size));
     }
   } else {
     while (size != geoms_.size()) {
@@ -427,7 +417,6 @@ int ObGeographGeometrycollection::resize(int64_t size) {
   int ret = OB_SUCCESS;
   if (size > geoms_.size()) {
     if (OB_FAIL(geoms_.prepare_allocate(size))) {
-      OB_LOG(WARN, "failed to resize ObGeomVector", K(ret), K(size));
     }
   } else {
     while (size != geoms_.size()) {

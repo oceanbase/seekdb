@@ -71,7 +71,6 @@ int ObMajorChecksumInfo::assign(
     row_count_ = other.row_count_;
     data_checksum_ = other.data_checksum_;
     if (OB_FAIL(column_ckm_struct_.assign(*allocator, other.column_ckm_struct_))) {
-      LOG_WARN("failed to assgin column checksums", KR(ret), K(other));
     }
   }
   if (OB_SUCC(ret) && OB_UNLIKELY(!is_valid())) {
@@ -95,7 +94,6 @@ int ObMajorChecksumInfo::deep_copy(
     dest.row_count_ = row_count_;
     dest.data_checksum_ = data_checksum_;
     if (OB_FAIL(column_ckm_struct_.deep_copy(buf, buf_len, pos, dest.column_ckm_struct_))) {
-      LOG_WARN("failed to deep copy column checksum", KR(ret), K_(column_ckm_struct));
     }
   }
   if (OB_SUCC(ret) && OB_UNLIKELY(!dest.is_valid())) {
@@ -120,7 +118,6 @@ int ObMajorChecksumInfo::init_from_merge_result(
     data_checksum_ = res.data_checksum_;
     exec_mode_ = ctx.get_exec_mode();
     if (OB_FAIL(column_ckm_struct_.assign(allocator, res.data_column_checksums_))) {
-      LOG_WARN("fail to assign column checksum array", K(ret), KPC(this), K(res));
     } else if (OB_UNLIKELY(!is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("after init from merge result, major checksum info is not valid", KR(ret), KPC(this));
@@ -151,13 +148,10 @@ int ObMajorChecksumInfo::init_from_sstable(
     if (sstable.is_co_sstable()) {
       const ObCOSSTableV2 &co_sstable = static_cast<const ObCOSSTableV2 &>(sstable);
       if (OB_FAIL(co_sstable.fill_column_ckm_array(storage_schema, tmp_col_ckm_array))) {
-        LOG_WARN("fail to fill column checksum array", K(ret), KPC(this), K(sstable));
       }
     } else if (OB_FAIL(sstable.fill_column_ckm_array(tmp_col_ckm_array))) {
-      LOG_WARN("fail to fill column checksum array", K(ret), KPC(this), K(sstable));
     }
     if (FAILEDx(column_ckm_struct_.assign(allocator, tmp_col_ckm_array))) {
-      LOG_WARN("fail to assign column checksum array", K(ret), KPC(this), K(sstable));
     } else if (OB_UNLIKELY(!is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("after init from sstable, major checksum info is not valid", KR(ret), KPC(this));
@@ -186,7 +180,6 @@ int ObMajorChecksumInfo::serialize(char *buf, const int64_t buf_len, int64_t &po
   if (!is_empty()) {
     LST_DO_CODE(OB_UNIS_ENCODE, row_count_, data_checksum_);
     if (OB_FAIL(column_ckm_struct_.serialize(buf, buf_len, pos))) {
-      LOG_WARN("Fail to serialize column checksum", K(ret), K_(column_ckm_struct));
     }
   }
   return ret;
@@ -199,7 +192,6 @@ int ObMajorChecksumInfo::deserialize(common::ObArenaAllocator &allocator, const 
   if (!is_empty()) {
     LST_DO_CODE(OB_UNIS_DECODE, row_count_, data_checksum_);
     if (OB_FAIL(column_ckm_struct_.deserialize(allocator, buf, data_len, pos))) {
-      LOG_WARN("Fail to deserialize column count", K(ret));
     } else if (OB_UNLIKELY(!is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("deserialize ckm info is not valid", K(ret), KPC(this));
@@ -232,9 +224,7 @@ int ObCOMajorChecksumInfo::prepare_column_ckm_array(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(res));
   } else if (OB_FAIL(ctx.get_schema()->get_stored_column_count_in_sstable(column_count))) {
-    LOG_WARN("failed to get column count", KR(ret), K(column_count));
   } else if (OB_FAIL(column_ckm_struct_.reserve(allocator, column_count))) {
-    LOG_WARN("failed to reserve array", KR(ret), K(column_count));
   } else {
     compaction_scn_ = ctx.get_merge_version();
     exec_mode_ = ctx.get_exec_mode();

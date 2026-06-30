@@ -131,7 +131,6 @@ int ObDirectLoadDataBlockDecoder<Header>::init(int64_t data_block_size,
     if (common::ObCompressorType::NONE_COMPRESSOR != compressor_type) {
       if (OB_FAIL(common::ObCompressorPool::get_instance().get_compressor(compressor_type,
                                                                           compressor_))) {
-        STORAGE_LOG(WARN, "fail to get compressor, ", KR(ret), K(compressor_type));
       }
     }
     if (OB_SUCC(ret)) {
@@ -182,7 +181,6 @@ int ObDirectLoadDataBlockDecoder<Header>::prepare_data_block(char *buf, int64_t 
     pos_ = 0;
     // deserialize header
     if (OB_FAIL(header_.deserialize(buf, buf_size, pos_))) {
-      STORAGE_LOG(WARN, "fail to deserialize header", KR(ret), K(buf_size), K(pos_));
     } else {
       data_size = header_.occupy_size_;
       if (OB_UNLIKELY(data_size > buf_size)) {
@@ -205,11 +203,9 @@ int ObDirectLoadDataBlockDecoder<Header>::prepare_data_block(char *buf, int64_t 
       int64_t decompress_size = 0;
       if (header_.data_size_ > data_block_size_) {
         if (OB_FAIL(realloc_decompress_buf(header_.data_size_))) {
-          STORAGE_LOG(WARN, "fail to realloc_decompress_buf", KR(ret));
         }
       } else {
         if (OB_FAIL(realloc_decompress_buf(data_block_size_))) {
-          STORAGE_LOG(WARN, "fail to realloc_decompress_buf", KR(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -220,7 +216,6 @@ int ObDirectLoadDataBlockDecoder<Header>::prepare_data_block(char *buf, int64_t 
       } else if (OB_FAIL(compressor_->decompress(buf + pos_, header_.occupy_size_ - pos_,
                                                  decompress_buf_ + pos_,
                                                  decompress_buf_size_ - pos_, decompress_size))) {
-        STORAGE_LOG(WARN, "fail to decompress", KR(ret));
       } else if (OB_UNLIKELY(decompress_size + pos_ != header_.data_size_)) {
         ret = common::OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "unexpected decompress size", KR(ret), K(header_), K(decompress_size));
@@ -254,7 +249,6 @@ int ObDirectLoadDataBlockDecoder<Header>::read_next_item(T &item)
   if (pos_ >= buf_size_) {
     ret = common::OB_ITER_END;
   } else if (OB_FAIL(item.deserialize(buf_, buf_size_, pos_))) {
-    STORAGE_LOG(WARN, "fail to deserialize item", KR(ret), K(buf_size_), K(pos_));
   }
   return ret;
 }
@@ -268,7 +262,6 @@ int ObDirectLoadDataBlockDecoder<Header>::read_item(int64_t pos, T &item)
     ret = common::OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "unexpected read pos", KR(ret));
   } else if (OB_FAIL(item.deserialize(buf_, buf_size_, pos))) {
-    STORAGE_LOG(WARN, "fail to deserialize item", KR(ret), K(buf_size_), K(pos));
   }
   return ret;
 }

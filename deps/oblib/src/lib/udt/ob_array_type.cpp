@@ -75,14 +75,12 @@ int ObArrayTypeObjFactory::construct(common::ObIAllocator &alloc, const ObCollec
     if (arr_type->element_type_->type_id_ == ObNestedType::OB_BASIC_TYPE) {
       ObCollectionBasicType *elem_type = static_cast<ObCollectionBasicType *>(arr_type->element_type_);
       if (FAILEDx(construct_basic_elem(alloc, *elem_type, arr_obj, read_only))) {
-        OB_LOG(WARN, "failed to construct basic element", K(ret), K(array_meta.type_id_));
       }
     } else if (arr_type->element_type_->type_id_ == ObNestedType::OB_ARRAY_TYPE
                || arr_type->element_type_->type_id_ == ObNestedType::OB_VECTOR_TYPE) {
       CONSTRUCT_ARRAY_OBJ(ObArrayNested, char);
       ObIArrayType *arr_child = NULL;
       if (FAILEDx(construct(alloc, *arr_type->element_type_, arr_child, read_only))) {
-        OB_LOG(WARN, "failed to construct child element", K(ret), K(array_meta.type_id_));
       } else {
         arr_obj->set_element_type(static_cast<int32_t>(ObCollectionSQLType));
         ObArrayNested *nested_arr = static_cast<ObArrayNested *>(arr_obj);
@@ -142,9 +140,7 @@ int ObArrayTypeObjFactory::construct(common::ObIAllocator &alloc, const ObCollec
         ret = OB_INVALID_ARGUMENT;
         OB_LOG(WARN, "map key and value should be array type", K(ret), K(map_type->key_type_->type_id_), K(map_type->value_type_->type_id_));
       } else if (OB_FAIL(construct(alloc, *map_type->key_type_, map_key, read_only))) {
-        OB_LOG(WARN, "failed to construct map key", K(ret), K(array_meta.type_id_));
       } else if (OB_FAIL(construct(alloc, *map_type->value_type_, map_value, read_only))) {
-        OB_LOG(WARN, "failed to construct map value", K(ret), K(array_meta.type_id_));
       }
       if (OB_SUCC(ret)) {
         arr_obj->set_element_type(static_cast<int32_t>(ObCollectionSQLType));

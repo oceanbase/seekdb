@@ -38,12 +38,10 @@ int ObSearchMethodOp::add_row(const ObIArray<ObExpr *> &exprs, ObEvalCtx &eval_c
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("exprs empty", K(ret));
   } else if (OB_FAIL(last_row.save_store_row(exprs, eval_ctx, ROW_EXTRA_SIZE))) {
-    LOG_WARN("save store row failed", K(ret));
   } else if (OB_ISNULL(last_row.store_row_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stored_row of last_stored_row is null", K(ret));
   } else if (OB_FAIL(input_rows_.push_back(last_row.store_row_))) {
-    LOG_WARN("Push new row to result input error", K(ret));
   } else {
   }
   return ret;
@@ -65,7 +63,6 @@ int ObSearchMethodOp::is_same_row(ObChunkDatumStore::StoredRow &row_1st,
     is_cycle = true;
     for (int64_t i = 0; OB_SUCC(ret) && i < left_output_.count(); i++) {
       if (OB_FAIL(left_output_.at(i)->basic_funcs_->null_first_cmp_(cells_1st[i], cells_2nd[i], cmp_ret))) {
-        LOG_WARN("failed to compare", K(ret), K(i));
       } else if (0 != cmp_ret) {
         is_cycle = false;
         break;
@@ -137,7 +134,6 @@ int ObBreadthFirstSearchOp::is_breadth_cycle_node(ObTreeNode &node)
       ObChunkDatumStore::StoredRow* row_2nd = tmp->stored_row_;
       // From Bianque's perspective, the detection of cycle takes up most of the time in hierarchical queries, and it is particularly slow.
       if (OB_FAIL(is_same_row(*row_1st, *row_2nd, node.is_cycle_))) {
-        LOG_WARN("Failed to compare the two row", K(ret), KPC(row_1st), KPC(row_2nd));
       } else if (node.is_cycle_) {
         break;
       } else {
@@ -157,12 +153,9 @@ int ObBreadthFirstSearchOp::get_next_nocycle_node(ObList<ObTreeNode,
   bool got_row = false;
   while(OB_SUCC(ret) && !search_queue_.empty()) {
     if (OB_FAIL(search_queue_.pop_front(node))) {
-      LOG_WARN("Get row from hold queue failed", K(ret));
     } else if (OB_FAIL(result_output.push_back(node))) {
-      LOG_WARN("Failed to push row to output ", K(ret));
     } else if (node.is_cycle_) {
       if (OB_FAIL(recycle_rows_.push_back(node.stored_row_))) {
-        LOG_WARN("Failed to push back rows", K(ret));
       }
     } else {
       got_row = true;
@@ -188,7 +181,6 @@ int ObBreadthFirstSearchOp::add_result_rows()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_new_nodes(current_parent_node_, input_rows_.count()))) {
-    LOG_WARN("Failed to init new bst node", K(ret));
   } else {
     ARRAY_FOREACH(input_rows_, i) {
       void* ptr = nullptr;
@@ -207,9 +199,7 @@ int ObBreadthFirstSearchOp::add_result_rows()
         node.in_bstree_node_ = tmp;
         node.tree_level_ = last_node_level_ + 1;
         if (OB_FAIL(is_breadth_cycle_node(node))) {
-          LOG_WARN("Find cycle failed", K(ret));
         } else if (OB_FAIL(search_results_.push_back(node))) {
-          LOG_WARN("Push back data to layer_results failed", K(ret));
         } else {
           LOG_DEBUG("Result node", K(node));
         }
@@ -229,7 +219,6 @@ int ObBreadthFirstSearchOp::finish_add_row(bool sort)
   } else {
     ARRAY_FOREACH(search_results_, i) {
       if (OB_FAIL(search_queue_.push_back(search_results_.at(i)))) {
-        LOG_WARN("Push back failed", K(ret));
       }
     }
   }
@@ -273,13 +262,10 @@ int ObBreadthFirstSearchBulkOp::get_next_nocycle_bulk(
     if (FALSE_IT(node = search_results_.at(i))) {
       LOG_WARN("Get row from hold queue failed", K(ret));
     } else if (OB_FAIL(result_output.push_back(node))) {
-      LOG_WARN("Failed to push row to output ", K(ret));
     } else if (node.is_cycle_) {
       if (OB_FAIL(recycle_rows_.push_back(node.stored_row_))) {
-        LOG_WARN("Failed to push back rows", K(ret));
       }
     } else if (OB_FAIL(fake_table_bulk_rows.push_back(node.stored_row_))) {
-      LOG_WARN("Failed to push back rows", K(ret));
     }
   }
 
@@ -319,9 +305,7 @@ int ObBreadthFirstSearchBulkOp::add_result_rows(bool left_branch)
       LOG_WARN("Unexpected input row", K(ret));
     } else if (FALSE_IT(tree_node.stored_row_ = input_rows_.at(i))) {
     } else if (OB_FAIL(search_results_.push_back(tree_node))) {
-      LOG_WARN("Failed to push back result rows", K(ret));
     } else if (OB_FAIL(last_iter_input_rows_.push_back(input_rows_.at(i)))) {
-      LOG_WARN("Failed to push back last iter input rows");
     } else {
       LOG_DEBUG("Result node", K(tree_node));
     }
@@ -336,7 +320,6 @@ int ObBreadthFirstSearchBulkOp::add_row(const ObIArray<ObExpr *> &exprs, ObEvalC
   int ret = OB_SUCCESS;
   if (OB_ISNULL(malloc_allocator_)) {
     if (OB_FAIL(init_mem_context())) {
-      LOG_WARN("Failed to init mem context", K(ret));
     } else if (OB_ISNULL(malloc_allocator_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Malloc allocator not init in mysql mode", K(ret));
@@ -354,12 +337,10 @@ int ObBreadthFirstSearchBulkOp::add_row(const ObIArray<ObExpr *> &exprs, ObEvalC
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("exprs empty", K(ret));
     } else if (OB_FAIL(save_to_store_row(*allocator, exprs, eval_ctx, store_row))) {
-      LOG_WARN("save store row failed", K(ret));
     } else if (OB_ISNULL(store_row)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("stored_row  is null", K(ret));
     } else if (OB_FAIL(input_rows_.push_back(store_row))) {
-      LOG_WARN("Push new row to result input error", K(ret));
     }
   }
   return ret;
@@ -371,7 +352,6 @@ int ObBreadthFirstSearchBulkOp::init_mem_context()
   lib::ContextParam param;
   param.set_mem_attr("CTESearchBulk", ObCtxIds::WORK_AREA);
   if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
-    LOG_WARN("create entity failed", K(ret));
   } else if (OB_ISNULL(mem_context_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null memory entity returned", K(ret));
@@ -419,7 +399,6 @@ int ObBreadthFirstSearchBulkOp::save_to_store_row(ObIAllocator &allocator,
   int ret = OB_SUCCESS;
   int64_t row_size;
   if (OB_FAIL(ObChunkDatumStore::row_copy_size(exprs, eval_ctx, row_size))) {
-    LOG_WARN("failed to calc copy size", K(ret));
   } else {
     int64_t head_size = sizeof(ObChunkDatumStore::StoredRow);
     int64_t buffer_len = row_size + head_size + ROW_EXTRA_SIZE;
@@ -430,7 +409,6 @@ int ObBreadthFirstSearchBulkOp::save_to_store_row(ObIAllocator &allocator,
     } else if (OB_FAIL(ObChunkDatumStore::StoredRow::build(store_row, exprs, eval_ctx, buf,
                                                            buffer_len,
                                                            static_cast<int32_t>(ROW_EXTRA_SIZE)))) {
-      LOG_WARN("failed to build stored row", K(ret), K(buffer_len), K(row_size));
     }
   }
   return ret;

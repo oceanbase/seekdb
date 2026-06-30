@@ -106,13 +106,8 @@ int ObSrvNetworkFrame::init()
   deliver_.set_host(gctx_.self_addr());
 
   if (OB_FAIL(request_qhandler_.init())) {
-    LOG_ERROR("init rpc request qhandler fail", K(ret));
-
   } else if (OB_FAIL(deliver_.init())) {
-    LOG_ERROR("init rpc deliverer fail", K(ret));
-
   } else if (OB_FAIL(reload_ssl_config())) {
-    LOG_ERROR("load_ssl_config fail", K(ret));
   } else {
     LOG_INFO("init rpc network frame successfully",
              "ssl_client_authentication", GCONF.ssl_client_authentication.str());
@@ -156,7 +151,6 @@ int ObSrvNetworkFrame::start(bool disable_tcp)
     if (OB_FAIL(obmysql::global_sql_nio_server->start(
             GCONF.mysql_port, &deliver_, sql_net_thread_count,
             GCONF._enable_numa_aware, disable_tcp))) {
-      LOG_ERROR("sql nio server start failed", K(ret));
     }
   }
   return ret;
@@ -190,7 +184,6 @@ int ObSrvNetworkFrame::reload_config()
   if (OB_FAIL(update_tcp_keepalive_parameters_for_sql_nio_server(enable_tcp_keepalive,
                                                                         tcp_keepidle, tcp_keepintvl,
                                                                         tcp_keepcnt))) {
-    LOG_WARN("Failed to set sql tcp keepalive parameters for sql nio server", K(ret));
   }
   return ret;
 }
@@ -360,7 +353,6 @@ int ObSrvNetworkFrame::reload_ssl_config()
       if (OB_SUCC(ret)) {
         int64_t ssl_key_expired_time = 0;
         if (OB_FAIL(extract_expired_time(OB_SSL_CERT_FILE, ssl_key_expired_time))) {
-          OB_LOG(WARN, "extract_expired_time intl failed", K(ret), K(use_bkmi));
         } else {
           GCTX.ssl_key_expired_time_ =  ssl_key_expired_time;
           last_ssl_info_hash_ = new_hash_value;
@@ -370,7 +362,6 @@ int ObSrvNetworkFrame::reload_ssl_config()
             if (enable_new_sql_nio()) {
               common::ObSSLConfig ssl_config(!use_bkmi, use_sm, ca_cert, public_cert, private_key, NULL, NULL);
               if (OB_FAIL(ob_ssl_load_config(OB_SSL_CTX_ID_SQL_NIO, ssl_config))) {
-                LOG_WARN("create ssl ctx failed!", K(ret));
               } else {
                 LOG_INFO("create ssl ctx success!", K(use_bkmi), K(use_sm));
               }

@@ -89,7 +89,6 @@ int ObMdsTableMergeTask::process()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null dag", K(ret), KPC(mds_merge_dag_));
   } else if (OB_FAIL(mds_merge_dag_->alloc_merge_ctx())) {
-    LOG_WARN("failed to prepare merge ctx", K(ret), KPC_(mds_merge_dag), KPC(mds_merge_dag_));
   } else if (OB_ISNULL(ctx_ptr = static_cast<ObTabletMergeCtx *>(mds_merge_dag_->get_ctx()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ctx is unexpected null", KR(ret), KPC_(mds_merge_dag), KPC(mds_merge_dag_));
@@ -116,7 +115,6 @@ int ObMdsTableMergeTask::process()
     const int64_t mds_construct_sequence = mds_merge_dag_->get_mds_construct_sequence();
     ObTableHandleV2 table_handle;
     if (OB_FAIL(ctx.get_ls_and_tablet())) {
-      LOG_WARN("failed to get ls and tablet", KR(ret), K(ctx), KPC(mds_merge_dag_));
     } else if (OB_ISNULL(ls = ctx.get_ls())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ls is null", K(ret), K(ls_id), "ls_handle", ctx.static_param_.ls_handle_, KPC(mds_merge_dag_));
@@ -124,7 +122,6 @@ int ObMdsTableMergeTask::process()
       ret = OB_CANCELED;
       LOG_INFO("ls offline, skip merge", K(ret), K(ctx), KPC(mds_merge_dag_));
     } else if (OB_FAIL(ctx.init_tablet_merge_info())) {
-      LOG_WARN("failed to init tablet merge info", K(ret), K(ls_id), K(tablet_id), KPC(mds_merge_dag_));
     } else if (OB_ISNULL(tablet = ctx.get_tablet())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tablet is null", K(ret), K(ls_id), K(tablet_id));
@@ -253,12 +250,9 @@ int ObMdsTableMergeTask::build_mds_sstable(
 
   SMART_VARS_2((ObMdsTableMiniMerger, mds_mini_merger), (ObTabletDumpMds2MiniOperator, op)) {
     if (OB_FAIL(mds_mini_merger.init(ctx, op))) {
-      LOG_WARN("fail to init mds mini merger", K(ret), K(ctx), K(ls_id), K(tablet_id));
     } else if (OB_FAIL(ctx.get_tablet()->scan_mds_table_with_op(mds_construct_sequence, op))) {
-      LOG_WARN("fail to scan mds table with op", K(ret), K(ctx), K(ls_id), K(tablet_id));
     } else if (OB_FAIL(mds_mini_merger.generate_mds_mini_sstable(
           ctx.mem_ctx_.get_allocator(), table_handle))) {
-      LOG_WARN("fail to generate mds mini sstable with mini merger", K(ret), K(mds_mini_merger));
     }
   }
 

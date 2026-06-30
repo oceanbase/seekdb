@@ -100,7 +100,6 @@ int get_grouping_id(const ObAggrInfo &aggr_info, const int64_t seq,
     number::ObNumber tmp_nmb;
     ObNumStackOnceAlloc tmp_alloc;
     if (OB_FAIL(wide::to_number(res, 0, tmp_alloc, tmp_nmb))) {
-      SQL_LOG(WARN, "to_number failed", K(ret));
     } else {
       grouping_id->desc_ = tmp_nmb.d_;
       MEMCPY(grouping_id->digits_, tmp_nmb.get_digits(), tmp_nmb.d_.len_ * sizeof(uint32_t));

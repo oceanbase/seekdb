@@ -532,7 +532,6 @@ int ObPathParser::check_nodetest(const ObString& str, ObSeekType& seek_type, cha
           ObXPathUtil::skip_whitespace(expression_, index_);
           if (index_ + 2 < len_ && is_literal_begin()) {
             if (OB_FAIL(get_xpath_literal(arg, arg_len))) {
-              LOG_WARN("fail to get literal of PROCESSING_INSTRUCTION", K(ret), K(index_));
             }
           }
         }
@@ -568,7 +567,6 @@ int ObPathParser::to_string(ObStringBuffer& str)
     LOG_WARN("should not be null", K(ret), K(str));
   } else {
     if (OB_FAIL(root_node_->node_to_string(str))) {
-      LOG_WARN("fail to string", K(ret), K(str));
     }
   }
   return ret;
@@ -582,7 +580,6 @@ int ObPathParser::parse_path(ObPathArgType patharg_type)
     ObPathNode* path_node = nullptr;
     if (parser_type_ == ObParserType::PARSER_XML_PATH) {
       if (OB_FAIL(parse_filter_node(path_node, patharg_type))) {
-        LOG_WARN("parse failed", K(ret), K(index_), K(expression_));
       } else { 
         root_node_ = path_node;
       }
@@ -599,7 +596,6 @@ int ObPathParser::parse_location_path(ObPathArgType patharg_type)
   INIT_SUCC(ret);
   ObPathRootNode* root_node = nullptr;
   if (OB_FAIL(alloc_root_node(root_node))) {
-    LOG_WARN("allocate row buffer failed at path_node", K(ret), K(index_), K(expression_));
   } else {
     root_node = new (root_node) ObPathRootNode(ctx_, parser_type_);
     root_node_ = root_node;
@@ -621,7 +617,6 @@ int ObPathParser::parse_location_path(ObPathArgType patharg_type)
   } else if (root_node->need_trans_ > 0) {
     ObPathNode* op_root = nullptr;
     if (OB_FAIL(trans_to_filter_op(root_node, root_node->need_trans_, true, op_root))) {
-      LOG_WARN("Converting location to filter op failed!", K(ret), K(root_node->need_trans_));
     } else {
       root_node_ = op_root;
     }
@@ -641,7 +636,6 @@ int ObPathParser::trans_to_filter_op(ObPathRootNode*& origin_root, int filter_nu
     ret = OB_BAD_NULL_ERROR;
     LOG_WARN("should not be null", K(ret));
   } else if (OB_FAIL(alloc_filter_op_node(op))) {
-    LOG_WARN("allocate row buffer failed at path_node", K(ret), K(index_), K(expression_));
   } else {
     op = new (op) ObPathFilterOpNode(ctx_, parser_type_);
     if (!is_first) {
@@ -666,9 +660,7 @@ int ObPathParser::trans_to_filter_op(ObPathRootNode*& origin_root, int filter_nu
         for (int j = 0; OB_SUCC(ret) && j < location->size();) {
           ObPathNode* tmp_filter = static_cast<ObPathNode*>(location->member(j));
           if (OB_FAIL(op->append_filter(tmp_filter))) {
-            LOG_WARN("fail to append filter", K(ret));
           } else if (OB_FAIL(location->remove(j))) {
-            LOG_WARN("fail to remove filter", K(ret));
           }
         }
         location->has_filter_ = false;
@@ -683,8 +675,7 @@ int ObPathParser::trans_to_filter_op(ObPathRootNode*& origin_root, int filter_nu
             op->init_left(origin_root);
             --filter_num;
           }
-        } else if (OB_FAIL(alloc_root_node(right))) { 
-          LOG_WARN("fail to alloc right", K(ret));
+        } else if (OB_FAIL(alloc_root_node(right))) {
         } else {
           // if not the last location, need a new root for right arg
           right = new (right) ObPathRootNode(ctx_, parser_type_);
@@ -695,9 +686,7 @@ int ObPathParser::trans_to_filter_op(ObPathRootNode*& origin_root, int filter_nu
           ret =  OB_ERR_UNEXPECTED;
           LOG_WARN("wrong idx", K(ret), K(i), K(filter_idx));
         } else if (OB_FAIL(origin_root->remove(i))) {
-          LOG_WARN("fail to append location", K(ret));
         } else if (OB_FAIL(right->append(location))) {
-          LOG_WARN("fail to append location", K(ret));
         } else if (right->size() == 1) {
           location->is_absolute_ = false;
         }
@@ -720,7 +709,6 @@ int ObPathParser::trans_to_filter_op(ObPathRootNode*& origin_root, int filter_nu
   } else {
     ObPathNode* right_op = nullptr;
     if (OB_FAIL(trans_to_filter_op(right, filter_num, false, right_op))) {
-      LOG_WARN("fail to get right op", K(ret));
     } else if (OB_NOT_NULL(right_op)){
       op->init_right(right_op);
       op_root = op;
@@ -743,18 +731,15 @@ int ObPathParser::parse_xpath_node(ObPathArgType patharg_type)
   } else if (path_prefix_match(ObPathItem::DOUBLE_SLASH)) {
     ++index_;
     if (OB_FAIL(parse_double_slash_node())) {
-      LOG_WARN("failed to parse location node.", K(ret), K(index_), K(expression_));
     }
     is_first_node_ = false;
   } else if (expression_[index_] == ObPathItem::SLASH) {
     ++index_;
     if (OB_FAIL(parse_location_node(true))) {
-      LOG_WARN("failed to parse location node.", K(ret), K(index_), K(expression_));
     }
     is_first_node_ = false;
   } else if (is_first_node_) {
     if (OB_FAIL(parse_primary_expr_node(patharg_type))) {
-      LOG_WARN("failed to parse location node.", K(ret), K(index_), K(expression_));
     }
     is_first_node_ = false;
   } else {
@@ -780,14 +765,11 @@ int ObPathParser::parse_location_node(bool is_absolute)
   // if not .. or . , should parse axis first and then nodetest
   } else if (path_prefix_match(ObPathItem::DOUBLE_DOT)) {
     if (OB_FAIL(parse_double_dot_node(is_absolute))) {
-      LOG_WARN("fail to parse '..' ", K(ret), K(index_));
     }
   } else if (expression_[index_] == ObPathItem::DOT) {
     if (OB_FAIL(parse_single_dot_node(is_absolute))) {
-      LOG_WARN("fail to parse '.' ", K(ret), K(index_));
     }
   } else if (OB_FAIL(parse_non_abbrevited_location_node(is_absolute))) {
-    LOG_WARN("fail to parse absolute_location ", K(ret), K(index_));
   }
   return ret;
 }
@@ -797,23 +779,17 @@ int ObPathParser::parse_non_abbrevited_location_node(bool is_absolute)
   INIT_SUCC(ret);
   ObPathLocationNode* location_node = nullptr;
   if (OB_FAIL(alloc_location_node(location_node))) {
-    LOG_WARN("fail to alloc location node", K(ret), K(index_), K(expression_));
   } else {
     location_node = new (location_node) ObPathLocationNode(ctx_, parser_type_);
     location_node->is_absolute_ = is_absolute;
     if (OB_FAIL(location_node->init(ObLocationType::PN_KEY))) {
-      LOG_WARN("fail to init ellipsis_node", K(ret), K(index_), K(expression_));
     } else if (OB_FAIL(parse_axis_info(location_node))) {
-      LOG_WARN("fail to parse_axis_info ", K(ret), K(index_));
     } else if (OB_FAIL(parse_nodetest_info(location_node))) {
-      LOG_WARN("fail to parse_axis_info ", K(ret), K(index_));
     } else if (index_ < len_ && expression_[index_] == ObPathItem::BEGIN_ARRAY) { 
       while (OB_SUCC(ret) && index_ < len_ && expression_[index_] == ObPathItem::BEGIN_ARRAY) {
         ObPathNode* filter = nullptr;
         if (OB_FAIL(parse_filter_node(filter, ObPathArgType::IN_FILTER))) {
-          LOG_WARN("fail to parse filter", K(ret), K(index_));
         } else if (OB_FAIL(location_node->append(filter))) {
-          LOG_WARN("fail to append filter", K(ret), K(index_));
         }
         ObXPathUtil::skip_whitespace(expression_, index_);
       }
@@ -826,7 +802,6 @@ int ObPathParser::parse_non_abbrevited_location_node(bool is_absolute)
     // if successed, add to root
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(root_node_->append(location_node))) {
-      LOG_WARN("fail to append location node", K(ret), K(index_), K(expression_));
     }
   }
   return ret;
@@ -953,9 +928,7 @@ int ObPathParser::parse_func_arg(ObPathFuncNode*& func_node, ObPathArgType patha
     while (OB_SUCC(ret) && index_ < len_ && expression_[index_] != ObPathItem::BRACE_END) {
       ObPathNode* arg = nullptr;
       if (OB_FAIL(parse_arg(arg, patharg_type, false, false))) {
-        LOG_WARN("fail to get arg", K(ret), K(index_), K(expression_));
       } else if (OB_FAIL(func_node->append(arg))) {
-        LOG_WARN("fail to append arg", K(ret), K(index_), K(expression_));
       } else {
         ObXPathUtil::skip_whitespace(expression_, index_);
         if (index_ < len_ && expression_[index_] == ',') {
@@ -978,7 +951,6 @@ int ObPathParser::parse_func_arg(ObPathFuncNode*& func_node, ObPathArgType patha
   // check arg_num
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(func_node->check_is_legal_arg())) {
-    LOG_WARN("Function call with invalid number of arguments", K(ret));
   }
   return ret;
 }
@@ -991,11 +963,9 @@ int ObPathParser::parse_func_node(ObPathArgType patharg_type)
   } else if (func_type != ObFuncType::PN_FUNC_ERROR) {
     ObPathFuncNode* func_node = nullptr;
     if (OB_FAIL(alloc_func_node(func_node))) {
-      LOG_WARN("allocate row buffer failed at path_node", K(ret), K(index_), K(expression_));
     } else {
       func_node = new (func_node) ObPathFuncNode(ctx_, parser_type_);
       if (OB_FAIL(func_node->init(func_type))) {
-        LOG_WARN("fail to init ellipsis_node", K(ret), K(index_), K(expression_));
       } else if (patharg_type == ObPathArgType::NOT_SUBPATH 
                 && ObPathParserUtil::is_func_must_in_pred(func_type)) {
         //OBE-31012: Given XPATH expression not supported
@@ -1007,9 +977,7 @@ int ObPathParser::parse_func_node(ObPathArgType patharg_type)
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(parse_func_arg(func_node, patharg_type))) {
-        LOG_WARN("fail to parse function arg", K(ret), K(index_), K(expression_));
       } else if (OB_FAIL(func_node->checek_cache_and_abs())) {
-        LOG_WARN("fail to init function bool", K(ret));
       } else {
         root_node_ = func_node;
       }
@@ -1033,7 +1001,6 @@ int ObPathParser::parse_primary_expr_node(ObPathArgType patharg_type)
       LOG_WARN("Invalid reference.", K(ret), K(index_));
     } else {
       if (OB_FAIL(parse_location_node(false))) {
-        LOG_WARN("fail to parse function.", K(ret), K(index_));
       } // is function
     } 
   } // all space, not error
@@ -1192,15 +1159,12 @@ int ObPathParser::get_subpath_str(bool is_filter, ObString& subpath)
       in_loop = false;
     } else if (is_literal_begin()) {
       if (OB_FAIL(jump_over_quote())) {
-        LOG_WARN("invalid quoted value", K(ret));
       }
     } else if (expression_[index_] == ObPathItem::BEGIN_ARRAY) {
       if (OB_FAIL(jump_over_brace(false))) {
-        LOG_WARN("invalid value", K(ret));
       }
     } else if (expression_[index_] == ObPathItem::BRACE_START) {
       if (OB_FAIL(jump_over_brace(true))) {
-        LOG_WARN("invalid value", K(ret));
       }
     } else {
       ObXPathUtil::skip_whitespace(expression_, index_);
@@ -1290,7 +1254,6 @@ int ObPathParser::get_xpath_subpath(ObPathNode*& node, bool is_filter, ObPathArg
   INIT_SUCC(ret);
   ObString subpath;
   if (OB_FAIL(get_subpath_str(is_filter, subpath))) {
-    LOG_WARN("fail to get subpath str", K(ret));
   } else if (OB_FAIL(parse_subpath(subpath, node, is_filter, patharg_type))) {
     if (patharg_type != NOT_SUBPATH) ret = OB_ERR_PARSER_SYNTAX; // subpath parsing failed
     LOG_WARN("fail to parse subpath", K(ret));
@@ -1323,7 +1286,6 @@ int ObPathParser::parse_namespace_info(ObPathLocationNode*& location, ObString& 
       } else {
         ObString ns_str;
         if (OB_FAIL(ob_write_string(*allocator_, pass_data->get_string(), ns_str))) {
-          LOG_WARN("fail to save ns str", K(ret));
         } else {
           location->set_ns_info(ns_str.ptr(), ns_str.length());
           location->set_check_ns_info(true);
@@ -1353,7 +1315,6 @@ int ObPathParser::parse_nodetest_info(ObPathLocationNode*& location)
     uint64_t name_len = 0;
     bool is_nodetest = false;
     if (OB_FAIL(get_xpath_ident(name, name_len, is_nodetest))) {
-      LOG_WARN("wrong path expression", K(ret), K(index_));
     } else {
       ObString name_ident(name_len, name);
       ObString ns_str = name_ident.split_on(ObPathItem::COLON);
@@ -1362,14 +1323,12 @@ int ObPathParser::parse_nodetest_info(ObPathLocationNode*& location)
         ret = OB_INVALID_ARGUMENT; // could be tagname or nodetest or wildcard, must >= 1
         LOG_WARN("wrong name ident", K(ret), K(ns_str));
       } else if (OB_FAIL(parse_namespace_info(location, ns_str))) {
-        LOG_WARN("fail to set ns info", K(ret), K(index_));
       } else if (is_nodetest) { // node(), text(), pi(), comment()
         // get_nodetest
         ObSeekType nodetest = ObSeekType::ERROR_SEEK;
         char* arg = nullptr;
         uint64_t arg_len = 0;
         if (OB_FAIL(check_nodetest(name_ident, nodetest, arg, arg_len))) {
-          LOG_WARN("fail to get nodetest", K(ret), K(name_ident));
         } else if (nodetest != ObSeekType::ERROR_SEEK) {
           location->set_nodetest_by_name(nodetest, arg, arg_len);
         } else {
@@ -1411,7 +1370,6 @@ int ObPathParser::parse_nodetest_info(ObPathLocationNode*& location)
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(location->set_check_ns_by_nodetest(allocator_, default_ns_))) {
-        LOG_WARN("wrong type for ns", K(ret), K(name_ident));
       }
     }
   }
@@ -1542,11 +1500,9 @@ int ObPathParser::parse_double_slash_node()
     ret = OB_ERR_PARSER_SYNTAX; // OBE-31011: XML parsing failed
     LOG_WARN("Function call with invalid arguments", K(ret));
   } else if (OB_FAIL(alloc_location_node(ellipsis_node))) {
-    LOG_WARN("allocate row buffer failed at path_node", K(ret), K(index_), K(expression_));
   } else {
     ellipsis_node = new (ellipsis_node) ObPathLocationNode(ctx_, parser_type_);
     if (OB_FAIL(ellipsis_node->init(ObLocationType::PN_ELLIPSIS))) {
-      LOG_WARN("fail to init ellipsis_node", K(ret), K(index_), K(expression_));
     } else { 
       ObXPathUtil::skip_whitespace(expression_, index_);
       ellipsis_node->is_absolute_ = true;
@@ -1566,7 +1522,6 @@ int ObPathParser::parse_double_slash_node()
         ellipsis_node->set_nodetest(ObSeekType::NODES);
         ellipsis_node->set_wildcard_info(true);
       } else if (OB_FAIL(parse_axis_info(ellipsis_node))) {
-        LOG_WARN("fail to parse_axis_info ", K(ret), K(index_));
       } 
 
       // Compatible with Oracle:
@@ -1585,9 +1540,7 @@ int ObPathParser::parse_double_slash_node()
             while (OB_SUCC(ret) && index_ < len_ && expression_[index_] == ObPathItem::BEGIN_ARRAY) {
               ObPathNode* filter = nullptr;
               if (OB_FAIL(parse_filter_node(filter, ObPathArgType::IN_FILTER))) {
-                LOG_WARN("fail to parse filter", K(ret), K(index_));
               } else if (OB_FAIL(ellipsis_node->append(filter))) {
-                LOG_WARN("fail to append filter", K(ret), K(index_));
               }
               ObXPathUtil::skip_whitespace(expression_, index_);
             }
@@ -1615,7 +1568,6 @@ int ObPathParser::parse_double_slash_node()
       } else if (OB_FAIL(ellipsis_node->init(ObLocationType::PN_KEY, 
                                               ObSeekType::NODES, 
                                               ObPathNodeAxis::DESCENDANT_OR_SELF))) {
-        LOG_WARN("fail to init ellipsis_node", K(ret), K(index_), K(expression_));
       } else { 
         ellipsis_node->set_wildcard_info(true);
         ellipsis_node->is_absolute_ = true;
@@ -1625,7 +1577,6 @@ int ObPathParser::parse_double_slash_node()
     // if successed, add to root
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(root_node_->append(ellipsis_node))) {
-      LOG_WARN("fail to append location node", K(ret), K(index_), K(expression_));
     }
   }
   return ret;
@@ -1636,7 +1587,6 @@ int ObPathParser::parse_double_dot_node(bool is_absolute)
   INIT_SUCC(ret);
   ObPathLocationNode* parent_node = nullptr;
   if (OB_FAIL(alloc_location_node(parent_node))) {
-    LOG_WARN("allocate row buffer failed at path_node", K(ret), K(index_), K(expression_));
   } else {
     // skip .. and space
     index_ += strlen(ObPathItem::DOUBLE_DOT);
@@ -1646,11 +1596,9 @@ int ObPathParser::parse_double_dot_node(bool is_absolute)
     if (OB_FAIL(parent_node->init(ObLocationType::PN_KEY,
                                   ObSeekType::NODES, 
                                   ObPathNodeAxis::PARENT))) {
-      LOG_WARN("fail to init parent_node", K(ret), K(index_), K(expression_));
     } else { 
       parent_node->set_wildcard_info(true);
       if (OB_FAIL(root_node_->append(parent_node))) {
-        LOG_WARN("failed to append location node.", K(ret), K(index_), K(expression_));
       } else if (index_ < len_ && expression_[index_] != ObPathItem::SLASH) { 
         // '/..' must be followed by a new step, if not end
         ret = OB_ERR_PARSER_SYNTAX; // OBE-31011: XML parsing failed
@@ -1666,7 +1614,6 @@ int ObPathParser::parse_single_dot_node(bool is_absolute)
   INIT_SUCC(ret);
   ObPathLocationNode* self_node = nullptr;
   if (OB_FAIL(alloc_location_node(self_node))) {
-    LOG_WARN("allocate row buffer failed at path_node", K(ret), K(index_), K(expression_));
   } else {
     // skip . and space
     ++index_;
@@ -1676,18 +1623,14 @@ int ObPathParser::parse_single_dot_node(bool is_absolute)
     if (OB_FAIL(self_node->init(ObLocationType::PN_KEY,
                                 ObSeekType::NODES,
                                 ObPathNodeAxis::SELF))) {
-      LOG_WARN("fail to init self_node", K(ret), K(index_), K(expression_));
     } else { 
       self_node->set_wildcard_info(true);
       if (OB_FAIL(root_node_->append(self_node))) {
-        LOG_WARN("failed to append location node.", K(ret), K(index_), K(expression_));
       } else if (index_ < len_ && expression_[index_] == ObPathItem::BEGIN_ARRAY) { 
         while (OB_SUCC(ret) && index_ < len_ && expression_[index_] == ObPathItem::BEGIN_ARRAY) {
           ObPathNode* filter = nullptr;
           if (OB_FAIL(parse_filter_node(filter, ObPathArgType::IN_FILTER))) {
-            LOG_WARN("fail to parse filter", K(ret), K(index_));
           } else if (OB_FAIL(self_node->append(filter))) {
-            LOG_WARN("fail to append filter", K(ret), K(index_));
           }
           ObXPathUtil::skip_whitespace(expression_, index_);
         }
@@ -1702,7 +1645,6 @@ int ObPathParser::parse_single_dot_node(bool is_absolute)
         LOG_WARN("/.* is not allowed", K(ret), K(index_), K(expression_));
       } else if (index_ < len_ && ObPathParserUtil::is_xml_name_start_char(expression_[index_])) { 
         if (OB_FAIL(parse_nodetest_info(self_node))) {
-          LOG_WARN("wrong node test", K(ret), K(index_), K(expression_));
         } else if (self_node->get_seek_type() != ObSeekType::ELEMENT
           || (self_node->get_seek_type() == ObSeekType::ELEMENT && self_node->is_key_null())) {
           self_node->set_nodetest(ObSeekType::NODES);
@@ -1886,7 +1828,6 @@ int ObPathParser::parse_arg(ObPathNode*& arg, ObPathArgType patharg_type, bool i
     ObPathArgNode* arg_node = nullptr;
     // filter arg: string, number, subpath
     if (OB_FAIL(alloc_arg_node(arg_node))) {
-      LOG_WARN("fail to alloc arg node", K(ret), K(index_), K(expression_));
     } else {
       arg_node = new (arg_node) ObPathArgNode(ctx_, parser_type_);
     }
@@ -1895,11 +1836,9 @@ int ObPathParser::parse_arg(ObPathNode*& arg, ObPathArgType patharg_type, bool i
       // parse number
       double num;
       if (OB_FAIL(get_xpath_number(num))) {
-        LOG_WARN("fail to get literal", K(ret), K(index_), K(expression_));
       } else {
         num = (negtive) ? -num : num;
         if (OB_FAIL(arg_node->init(num, patharg_type == ObPathArgType::IN_FILTER))) {
-          LOG_WARN("fail to init arg node", K(ret), K(num));
         } else {
           arg = arg_node;
         }
@@ -1909,21 +1848,17 @@ int ObPathParser::parse_arg(ObPathNode*& arg, ObPathArgType patharg_type, bool i
       char* literal_ptr = nullptr;
       uint64_t literal_len = 0;
       if (OB_FAIL(get_xpath_literal(literal_ptr, literal_len))) {
-        LOG_WARN("fail to get literal", K(ret), K(index_), K(expression_));
       } else {
         // if the filter string has entity ref, need to transform to entity char, like '&lt;' -> '<'
         ObString escape_str = ObString(literal_len, literal_ptr);
         if (OB_FAIL(ObXmlUtil::revert_escape_character(*allocator_, escape_str, escape_str))) {
-          LOG_WARN("fail to revert escape str", K(ret), K(escape_str));
         } else if (OB_FAIL(arg_node->init(escape_str.ptr(), escape_str.length(), patharg_type == ObPathArgType::IN_FILTER))) {
-          LOG_WARN("fail to init arg node", K(ret), K(literal_ptr), K(literal_len));
         } else {
           arg = arg_node;
         }
       }
     } // is literal
   } else if (OB_FAIL(get_xpath_subpath(arg, is_filter, patharg_type))) {
-    LOG_WARN("fail to get literal", K(ret), K(index_), K(expression_));
   } // parse subpath
   return ret;
 }
@@ -2093,13 +2028,11 @@ int ObPathParser::push_filter_char_in(const ObXpathFilterChar& in, ObPathVectorP
     switch (priority) {
       case ObPathPriority::PUSH_STACK: {
         if (OB_FAIL(char_stack.push_back(in))) {
-          LOG_WARN("fail to push char", K(ret), K(in));
         }
         break;
       }
       case ObPathPriority::MATCH: {
         if (OB_FAIL(ObPathUtil::pop_char_stack(char_stack))) {
-          LOG_WARN("fail to pop char", K(ret), K(in));
         }
         break;
       }
@@ -2107,21 +2040,15 @@ int ObPathParser::push_filter_char_in(const ObXpathFilterChar& in, ObPathVectorP
         while (OB_SUCC(ret) && size_c > 1 && filter_comparison[top][in] == ObPathPriority::POP_STACK) {
           ObPathFilterNode* filter_node = nullptr;
           if (OB_FAIL(alloc_filter_node(filter_node))) {
-            LOG_WARN("fail to alloc filter node", K(ret), K(index_), K(expression_));
           } else {
             filter_node = new (filter_node) ObPathFilterNode(ctx_, parser_type_);
             ObPathNode *left = nullptr;
             ObPathNode *right = nullptr;
             if (OB_FAIL(ObPathUtil::pop_node_stack(node_stack, right))) {
-              LOG_WARN("fail to get arg", K(ret), K(index_), K(expression_));
             } else if (OB_FAIL(ObPathUtil::pop_node_stack(node_stack, left))) {
-              LOG_WARN("fail to get arg", K(ret), K(index_), K(expression_));
             } else if (OB_FAIL(filter_node->init(top, left, right, patharg_type == ObPathArgType::IN_FILTER))) {
-              LOG_WARN("fail to init", K(ret), K(index_), K(expression_));
             } else if (OB_FAIL(node_stack.push_back(filter_node))) {
-              LOG_WARN("fail to push filter node", K(ret), K(index_), K(expression_));
-            } else if (OB_FAIL(ObPathUtil::pop_char_stack(char_stack))) { // pop char top
-              LOG_WARN("fail to pop char", K(ret), K(in));
+            } else if (OB_FAIL(ObPathUtil::pop_char_stack(char_stack))) {
             } else {
               size_c = char_stack.size();
             }
@@ -2135,10 +2062,8 @@ int ObPathParser::push_filter_char_in(const ObXpathFilterChar& in, ObPathVectorP
         if (OB_FAIL(ret)) {
         } else if (filter_comparison[top][in] == ObPathPriority::PUSH_STACK) {
           if (OB_FAIL(char_stack.push_back(in))) {
-            LOG_WARN("fail to push char", K(ret), K(in));
           }
         } else if (OB_FAIL(ObPathUtil::pop_char_stack(char_stack))) {
-          LOG_WARN("fail to pop char", K(ret), K(in));
         }
         break;
       }
@@ -2167,7 +2092,6 @@ int ObPathParser::parse_filter_node(ObPathNode*& filter, ObPathArgType patharg_t
       || (patharg_type == ObPathArgType::IN_FILTER 
       && expression_[index_] == ObPathItem::BEGIN_ARRAY && ++index_)) {
       if (OB_FAIL(char_stack.push_back(ObXpathFilterChar::CHAR_BEGIN_FILTER))) {
-        LOG_WARN("fail to push_back charactor", K(ret), K(index_), K(expression_));
       } else {
         ObXPathUtil::skip_whitespace(expression_, index_);
         while (OB_SUCC(ret) && index_ < len_ && char_stack.size() > 0) {
@@ -2183,7 +2107,6 @@ int ObPathParser::parse_filter_node(ObPathNode*& filter, ObPathArgType patharg_t
             LOG_WARN("fail to get char type", K(ret), K(index_), K(expression_));
           } else if (filter_char < ObXpathFilterChar::CMP_CHAR_MAX) {
             if (OB_FAIL(push_filter_char_in(filter_char, node_stack, char_stack, patharg_type))) {
-              LOG_WARN("fail to push char", K(ret), K(filter_char));
             }
           } else { // must be arg
             ObPathNode* arg = nullptr;
@@ -2197,9 +2120,7 @@ int ObPathParser::parse_filter_node(ObPathNode*& filter, ObPathArgType patharg_t
               minus = (count_minus % 2 == 0) ? false : true;
             } 
             if (OB_FAIL(parse_arg(arg, patharg_type, true, minus))) {
-              LOG_WARN("fail to parse filter arg", K(ret), K(index_), K(expression_));
             } else if (OB_FAIL(node_stack.push_back(arg))) {
-              LOG_WARN("fail to push arg", K(ret), K(index_), K(expression_));
             }
           }
           ObXPathUtil::skip_whitespace(expression_, index_);
@@ -2208,7 +2129,6 @@ int ObPathParser::parse_filter_node(ObPathNode*& filter, ObPathArgType patharg_t
         if (OB_SUCC(ret) && (index_ >= len_ && patharg_type != ObPathArgType::IN_FILTER)) {
           // push ']' in
           if (OB_FAIL(push_filter_char_in(ObXpathFilterChar::CHAR_END_FILTER, node_stack, char_stack, patharg_type))) {
-            LOG_WARN("fail to push char", K(ret));
           }
         }
         if (OB_FAIL(ret)) {

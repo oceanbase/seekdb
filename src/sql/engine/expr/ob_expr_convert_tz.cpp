@@ -65,12 +65,9 @@ int ObExprConvertTZ::calc_convert_tz(int64_t timestamp_data,
     if (OB_ERR_UNKNOWN_TIME_ZONE == ret) {
       ret = OB_SUCCESS;
       if(OB_FAIL(ObExprConvertTZ::parse_string(timestamp_data, tz_str_s, session, false))){
-        LOG_WARN("source time zone parse failed", K(ret), K(tz_str_s));
       } else if(OB_FAIL(ObExprConvertTZ::parse_string(timestamp_data, tz_str_d, session, true))){
-        LOG_WARN("source time zone parse failed", K(ret), K(tz_str_d));
       }
     } else if (OB_SUCCESS != ret) {
-      LOG_DEBUG("calc_convert_tz failed", K(ret), K(tz_str_s), K(tz_str_d));
     }
   }
   if (OB_FAIL(ret)) {
@@ -122,9 +119,7 @@ int ObExprConvertTZ::calc_convert_tz_timestamp(const ObExpr &expr,
 
   if (OB_FAIL(ret) || OB_FAIL(cvrt_ctx->find_tz_ret_)) {
   } else if (OB_FAIL(handle_timezone_offset(timestamp_data, cvrt_ctx->tz_info_wrap_src_, false))) {
-    LOG_WARN("handle source timezone offset failed", K(ret));
   } else if (OB_FAIL(handle_timezone_offset(timestamp_data, cvrt_ctx->tz_info_wrap_dst_, true))) {
-    LOG_WARN("handle destination timezone offset failed", K(ret));
   }
 
   return ret;
@@ -134,7 +129,6 @@ int ObExprConvertTZ::handle_timezone_offset(int64_t &timestamp_data, const Conve
   int ret = OB_SUCCESS;
   if (tz_info_wrap.is_position_class()) {
     if (OB_FAIL(calc(timestamp_data, tz_info_wrap.get_tz_info_pos(), is_destination))) {
-      LOG_WARN("calc failed", K(ret), K(timestamp_data));
     }
   } else if (tz_info_wrap.is_offset_class()) {
     int32_t offset = tz_info_wrap.get_tz_offset();
@@ -235,7 +229,6 @@ int ObExprConvertTZ::parse_string(int64_t &timestamp_data, const ObString &tz_st
   } else if (OB_SUCC(find_time_zone_pos(tz_str, *tz_info, target_tz_pos))) {
     // Successfully found in timezone map, proceed with calculation
     if (OB_FAIL(calc(timestamp_data, *target_tz_pos, input_utc_time))) {
-      LOG_WARN("calc failed", K(ret), K(timestamp_data));
     }
     if (NULL != target_tz_pos) {
       const_cast<ObTZInfoMap *>(tz_info->get_tz_info_map())->revert_tz_info_pos(target_tz_pos);
@@ -246,7 +239,6 @@ int ObExprConvertTZ::parse_string(int64_t &timestamp_data, const ObString &tz_st
     LOG_DEBUG("time zone not found in tz_info, try str_to_offset", K(tz_str));
     if (OB_FAIL(ObTimeConverter::str_to_offset(tz_str, offset, ret_more,
                                 true /* need_check_valid */))) {
-      LOG_WARN("both time zone search and str_to_offset failed", K(ret), K(tz_str));
     } else if(OB_FAIL(ret_more)) {
       ret = ret_more;
     } else {
@@ -272,7 +264,6 @@ int ObExprConvertTZ::find_time_zone_pos(const ObString &tz_name,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tz_info_map is NULL", K(ret));
   } else if (OB_FAIL(tz_info_map->get_tz_info_by_name(tz_name, tz_info_pos))) {
-    LOG_WARN("fail to get_tz_info_by_name", K(tz_name), K(ret));
   } else {
     tz_info_pos->set_error_on_overlap_time(tz_info.is_error_on_overlap_time());
   }
@@ -290,7 +281,6 @@ int ObExprConvertTZ::find_time_zone_pos(const ObString &tz_name,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tz_info_map is NULL", K(ret));
   } else if (OB_FAIL(tz_info_map->get_tz_info_by_name(tz_name, tz_info_pos))) {
-    LOG_WARN("fail to get_tz_info_by_name", K(tz_name), K(ret));
   } else {
     tz_info_pos.set_error_on_overlap_time(tz_info.is_error_on_overlap_time());
   }
@@ -304,11 +294,9 @@ int ObExprConvertTZ::calc(int64_t &timestamp_data, const ObTimeZoneInfoPos &tz_i
   const int64_t input_value = timestamp_data;
   if (input_utc_time) {
     if (OB_FAIL(ObTimeConverter::timestamp_to_datetime(input_value, &tz_info_pos, timestamp_data))) {
-      LOG_WARN("add timezone offset to utc time failed", K(ret), K(timestamp_data));
     }
   } else {
     if (OB_FAIL(ObTimeConverter::datetime_to_timestamp(input_value, &tz_info_pos, timestamp_data))) {
-      LOG_WARN("sub timezone offset fail", K(ret));
     }
   }
   LOG_DEBUG("convert tz calc", K(timestamp_data), K(input_utc_time));
@@ -350,7 +338,6 @@ int ObExprConvertTZ::eval_convert_tz(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   ObDatum *time_zone_s = NULL;
   ObDatum *time_zone_d = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, timestamp, time_zone_s, time_zone_d))) {
-    LOG_WARN("calc param value failed", K(ret));
   } else if (OB_UNLIKELY(timestamp->is_null() || time_zone_s->is_null() || time_zone_d->is_null())) {
     res.set_null();
   } else {
@@ -358,12 +345,10 @@ int ObExprConvertTZ::eval_convert_tz(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
     if (expr.args_[1]->is_const_expr() && expr.args_[2]->is_const_expr()) {
       if(OB_FAIL(calc_convert_tz_const(expr, ctx, timestamp_data, time_zone_s->get_string(), time_zone_d->get_string(),
                                   ctx.exec_ctx_.get_my_session(), res))) {
-        LOG_WARN("calc convert tz zone failed", K(ret));
       }
     } else {
       if (OB_FAIL(calc_convert_tz(timestamp_data, time_zone_s->get_string(), time_zone_d->get_string(),
                                     ctx.exec_ctx_.get_my_session(), res))) {
-        LOG_WARN("calc convert tz zone failed", K(ret));
       }
     }
   }
@@ -383,9 +368,7 @@ int ObExprConvertTZ::convert_tz_vector(const ObExpr &expr,
   ResVec *res_vec = static_cast<ResVec *>(expr.get_vector(ctx));
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   if (OB_FAIL(expr.args_[1]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval fmt failed", K(ret));
   } else if (OB_FAIL(expr.args_[2]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval fmt failed", K(ret));
   } else {
     ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
     for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {
@@ -403,12 +386,9 @@ int ObExprConvertTZ::convert_tz_vector(const ObExpr &expr,
           if (OB_ERR_UNKNOWN_TIME_ZONE == ret) {
             ret = OB_SUCCESS;
             if(OB_FAIL(ObExprConvertTZ::parse_string(res_val, tz_str_s, session, false))){
-              LOG_WARN("source time zone parse failed", K(ret), K(tz_str_s));
             } else if(OB_FAIL(ObExprConvertTZ::parse_string(res_val, tz_str_d, session, true))){
-              LOG_WARN("source time zone parse failed", K(ret), K(tz_str_d));
             }
           } else if (OB_SUCCESS != ret) {
-            LOG_DEBUG("calc_convert_tz failed", K(ret), K(tz_str_s), K(tz_str_d));
           }
         }
         if (OB_FAIL(ret)){
@@ -442,9 +422,7 @@ int ObExprConvertTZ::convert_tz_vector_const(const ObExpr &expr,
   int64_t const_skip = 0;
   const ObBitVector *param_skip = to_bit_vector(&const_skip);
   if (OB_FAIL(expr.args_[1]->eval_vector(ctx, *param_skip, EvalBound(1)))) {
-    LOG_WARN("eval fmt failed", K(ret));
   } else if (OB_FAIL(expr.args_[2]->eval_vector(ctx, *param_skip, EvalBound(1)))) {
-    LOG_WARN("eval fmt failed", K(ret));
   } else if (expr.args_[1]->get_vector(ctx)->is_null(0) ||
               expr.args_[1]->get_vector(ctx)->get_string(0).empty() ||
               expr.args_[2]->get_vector(ctx)->is_null(0) ||
@@ -514,7 +492,6 @@ int ObExprConvertTZ::calc_convert_tz_vector(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval date_format param", K(ret));
   } else {
     VectorFormat arg_format = expr.args_[0]->get_format(ctx);
     VectorFormat res_format = expr.get_format(ctx);
@@ -529,7 +506,6 @@ int ObExprConvertTZ::calc_convert_tz_vector(const ObExpr &expr,
       }
     }
     if (OB_FAIL(ret)) {
-      LOG_WARN("expr calculation failed", K(ret));
     }
   }
   return ret;

@@ -60,12 +60,9 @@ int ObCSDispatcher::init()
   if (is_inited_) {
     ret = common::OB_INIT_TWICE;
   } else if (OB_FAIL(tx_ring_.init(0, 256))) {
-    LOG_WARN("ObCSDispatcher: init tx_ring failed", K(ret));
   } else if (OB_FAIL(dispatch_cond_.init(ObWaitEventIds::THREAD_IDLING_COND_WAIT))) {
-    LOG_WARN("ObCSDispatcher: dispatch_cond init failed", K(ret));
   } else if (FALSE_IT(ObThreadPool::set_run_wrapper(MTL_CTX()))) {
   } else if (OB_FAIL(ObThreadPool::init())) {
-    LOG_WARN("ObCSDispatcher: thread pool init failed", K(ret));
   } else {
     next_sn_ = 0;
     dispatch_sn_ = 0;
@@ -83,7 +80,6 @@ int ObCSDispatcher::start()
     LOG_WARN("ObCSDispatcher: not inited", K(ret));
   } else {
     if (OB_FAIL(ObThreadPool::start())) {
-      LOG_WARN("ObCSDispatcher: thread pool start failed", K(ret));
     } else {
       LOG_INFO("CSDispatcher: thread pool started successfully");
     }
@@ -105,7 +101,6 @@ int ObCSDispatcher::init_refresh_scn_()
     ret = common::OB_NOT_INIT;
     LOG_WARN("ObCSDispatcher: wait bootstrap", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_refreshed_schema_version(schema_version))) {
-    LOG_WARN("get schema_version failed", KR(ret));
   } else if (schema_version <= 0 || !ObSchemaService::is_formal_version(schema_version)) {
     ret = OB_SCHEMA_EAGAIN;
     LOG_WARN("schema is not formal", KR(ret));
@@ -113,7 +108,6 @@ int ObCSDispatcher::init_refresh_scn_()
     SCN current_refresh_scn;
     if (OB_FAIL(ObGlobalStatProxy::get_change_stream_refresh_scn(
             *GCTX.sql_proxy_, false /* for_update */, current_refresh_scn))) {
-      LOG_WARN("CSDispatcher: failed to load change_stream_refresh_scn", KR(ret));
     } else {
       const int64_t loaded_refresh_scn = static_cast<int64_t>(current_refresh_scn.get_val_for_gts());
       // Recovery baseline must follow persisted global_stat exactly.
@@ -193,7 +187,6 @@ int ObCSDispatcher::push(ObCSTxInfo *tx)
     // Assign sn AFTER set() succeeds to avoid leaving gaps in the ring buffer.
     const int64_t sn = next_sn_;
     if (OB_FAIL(tx_ring_.set(sn, tx))) {
-      LOG_WARN("ObCSDispatcher: tx_ring set failed", K(ret), K(sn));
     } else {
       next_sn_++;
       tx->in_dispatch_time_ = ObTimeUtil::current_time();
@@ -336,7 +329,6 @@ static int add_tx_redo_to_subtasks(ObCSTxInfo &tx,
     ObCSRedoRecord &redo = tx.redo_list_.at(i);
     int64_t added = 0;
     if (OB_FAIL(parse_redo_record(redo, tx, exec_ctx, added))) {
-      LOG_WARN("add_tx_redo_to_subtasks: parse_redo_record failed", K(ret), K(i));
     } else {
       row_count += added;
     }
@@ -449,7 +441,6 @@ int ObCSDispatcher::do_dispatch_()
     // to detect that this batch should be aborted.  dispatcher_epoch_ is
     // only updated after recovery completes, which is the correct semantics.
     if (OB_FAIL(exec_ctx->sub_tasks_.prepare_allocate(executor_count))) {
-      LOG_WARN("prepare_allocate sub_tasks failed", KR(ret), K(executor_count));
     } else {
       for (int64_t i = 0; i < executor_count; ++i) {
         exec_ctx->sub_tasks_.at(i).set_exec_ctx(exec_ctx);
@@ -497,9 +488,7 @@ int ObCSDispatcher::do_dispatch_()
       break;
     } else if (tx->commit_version_ > exec_ctx->refresh_scn_ && FALSE_IT(exec_ctx->refresh_scn_ = tx->commit_version_)) {
     } else if (OB_FAIL(add_tx_redo_to_subtasks(*tx, *exec_ctx, added))) {
-      LOG_WARN("add_tx_redo_to_subtasks failed", KR(ret));
     } else if (OB_FAIL(exec_ctx->tx_list_.push_back(tx))) {
-      LOG_WARN("push_back tx ref failed", KR(ret));
     } else {
       exec_ctx->row_count_ += added;
       dispatch_sn_++;
@@ -530,12 +519,10 @@ int ObCSDispatcher::do_dispatch_()
   THIS_WORKER.set_timeout_ts(ObTimeUtil::current_time() + CS_DISPATCH_TRANS_TIMEOUT_US);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(exec_ctx->init_plugins())) {
-    LOG_WARN("init plugins failed", KR(ret));
   } else if (OB_ISNULL(schema_service = share::g_mp->tenant_schema_service()->get_schema_service())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(exec_ctx->trans_.start(GCTX.sql_proxy_))) {
-    LOG_WARN("trans start failed", KR(ret));
   } else {
     trans_started = true;
   }
@@ -642,7 +629,6 @@ int ObCSExecCtx::init_plugins()
         ret = common::OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("ObCSExecCtx: plugin factory returned null", K(ret), K(i));
       } else if (OB_FAIL(plugins_[i]->init())) {
-        LOG_WARN("ObCSExecCtx: plugin init failed", K(ret), K(i));
       } else {
         plugins_[i]->set_plugin_type(static_cast<CS_PLUGIN_TYPE>(i));
       }

@@ -70,12 +70,10 @@ int ObExprArrayOverlaps::calc_result_type2(ObExprResType &type,
   } else if (type1.is_null() || type2.is_null()) {
     // do nothing
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type1))) {
-    LOG_WARN("failed to get array type by subschema id", K(ret), K(type1.get_subschema_id()));
   } else if (coll_type1->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type1->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("invalid collection type", K(ret), K(coll_type1->type_id_));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type2.get_subschema_id(), coll_type2))) {
-    LOG_WARN("failed to get array type by subschema id", K(ret), K(type2.get_subschema_id()));
   } else if (coll_type2->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type2->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("invalid collection type", K(ret), K(coll_type2->type_id_));
@@ -84,7 +82,6 @@ int ObExprArrayOverlaps::calc_result_type2(ObExprResType &type,
   } else {
     ObExprResType coll_calc_type;
     if (OB_FAIL(ObExprResultTypeUtil::get_array_calc_type(exec_ctx, type1, type2, coll_calc_type))) {
-      LOG_WARN("failed to check array compatibilty", K(ret));
     } else {
       if (type1.get_subschema_id() != coll_calc_type.get_subschema_id()) {
         type1.set_calc_meta(coll_calc_type);
@@ -116,15 +113,11 @@ int ObExprArrayOverlaps::eval_array_relations(const ObExpr &expr, ObEvalCtx &ctx
   ObDatum *r_datum = NULL;
   bool bret = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, l_datum))) {
-    LOG_WARN("failed to eval args", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, r_datum))) {
-    LOG_WARN("failed to eval args", K(ret));
   } else if (l_datum->is_null() || r_datum->is_null()) {
     res.set_null();
   } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, l_meta_id, l_datum->get_string(), l_arr_obj))) {
-    LOG_WARN("construct array obj failed", K(ret));
   } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, r_meta_id, r_datum->get_string(), r_arr_obj))) {
-    LOG_WARN("construct array obj failed", K(ret));
   } else if (relation == OVERLAPS && OB_FAIL(l_arr_obj->overlaps(*r_arr_obj, bret))) {
     LOG_WARN("array overlaps failed", K(ret));
   } else if (relation == CONTAINS_ALL && OB_FAIL(l_arr_obj->contains_all(*r_arr_obj, bret))) {
@@ -148,9 +141,7 @@ int ObExprArrayOverlaps::eval_array_relations_batch(const ObExpr &expr, ObEvalCt
   ObIArrayType *l_arr_obj = NULL;
   ObIArrayType *r_arr_obj = NULL;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval date_unit_datum failed", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("failed to eval batch result args0", K(ret));
   } else {
     ObDatumVector l_array = expr.args_[0]->locate_expr_datumvector(ctx);
     ObDatumVector r_array = expr.args_[1]->locate_expr_datumvector(ctx);
@@ -163,9 +154,7 @@ int ObExprArrayOverlaps::eval_array_relations_batch(const ObExpr &expr, ObEvalCt
       if (l_array.at(j)->is_null() || r_array.at(j)->is_null()) {
         res_datum.at(j)->set_null();
       } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, l_meta_id, l_array.at(j)->get_string(), l_arr_obj))) {
-        LOG_WARN("construct array obj failed", K(ret));
       } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, r_meta_id, r_array.at(j)->get_string(), r_arr_obj))) {
-        LOG_WARN("construct array obj failed", K(ret));
       } else if (relation == OVERLAPS && OB_FAIL(l_arr_obj->overlaps(*r_arr_obj, bret))) {
         LOG_WARN("array overlaps failed", K(ret));
       } else if (relation == CONTAINS_ALL && OB_FAIL(l_arr_obj->contains_all(*r_arr_obj, bret))) {
@@ -207,7 +196,6 @@ int ObExprArrayOverlaps::eval_array_relation_vector(const ObExpr &expr, ObEvalCt
       } else {
         ObString left = left_vec->get_string(idx);
         if (OB_FAIL(ObNestedVectorFunc::construct_param(tmp_allocator, ctx, left_meta_id, left, l_arr_obj))) {
-          LOG_WARN("construct array obj failed", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -216,7 +204,6 @@ int ObExprArrayOverlaps::eval_array_relation_vector(const ObExpr &expr, ObEvalCt
       } else {
         ObString right = right_vec->get_string(idx);
         if (OB_FAIL(ObNestedVectorFunc::construct_param(tmp_allocator, ctx, right_meta_id, right, r_arr_obj))) {
-          LOG_WARN("construct array obj failed", K(ret));
         }
       }
       bool bret = false;

@@ -661,7 +661,6 @@ OB_DEF_DESERIALIZE(ObLockTaskBatchRequest<T>, template <typename T>)
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(TxDescHelper::deserialize_tx_desc(buf, data_len, pos, tx_desc_))) {
-    TABLELOCK_LOG(WARN, "acquire tx by deserialize fail", K(data_len), K(pos), K(ret));
   } else {
     need_release_tx_ = true;
     TABLELOCK_LOG(TRACE, "deserialize txDesc", KPC_(tx_desc));

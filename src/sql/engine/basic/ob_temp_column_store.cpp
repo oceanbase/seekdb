@@ -145,7 +145,6 @@ int ObTempColumnStore::ColumnBlock::calc_rows_size(ObEvalCtx &ctx,
   for (int64_t i = 0; OB_SUCC(ret) && i < vectors.count(); ++i) {
     const ObIVector *vec = vectors.at(i);
     if (OB_FAIL(calc_vector_size(vec, selector, lengths[i], size, batch_mem_size))) {
-      LOG_WARN("fail to calc vector size", KR(ret));
     }
   }
   return ret;
@@ -162,7 +161,6 @@ int ObTempColumnStore::ColumnBlock::calc_rows_size(const IVectorPtrs &vectors,
   for (int64_t i = 0; OB_SUCC(ret) && i < vectors.count(); ++i) {
     const ObIVector *vec = vectors.at(i);
     if (OB_FAIL(calc_vector_size(vec, selector, lengths[i], size, batch_mem_size))) {
-      LOG_WARN("fail to calc vector size", KR(ret));
     }
   }
   return ret;
@@ -190,7 +188,6 @@ int ObTempColumnStore::ColumnBlock::add_batch(ObEvalCtx &ctx,
       const ObIVector *vec = vectors.at(i);
       vec_offsets[i] = pos;
       if (OB_FAIL(vector_to_buf(vec, selector, lengths[i], size, head, pos))) {
-        LOG_WARN("vector to buf failed", KR(ret));
       }
     }
     vec_offsets[vectors.count()] = pos; // last offset, the size of vector
@@ -226,7 +223,6 @@ int ObTempColumnStore::ColumnBlock::add_batch(ShrinkBuffer &buf,
       const ObIVector *vec = vectors.at(i);
       vec_offsets[i] = pos;
       if (OB_FAIL(vector_to_buf(vec, selector, lengths[i], size, head, pos))) {
-        LOG_WARN("vector to buf failed", KR(ret));
       }
     }
     vec_offsets[vectors.count()] = pos; // last offset, the size of vector
@@ -259,7 +255,6 @@ int ObTempColumnStore::ColumnBlock::get_next_batch(const ObExprPtrIArray &exprs,
     } else {
       int64_t pos = vec_offsets[i];
       if (OB_FAIL(vector_from_buf(buf, pos ,size, vec))) {
-        LOG_WARN("vector from buf failed", KR(ret));
       }
     }
   }
@@ -283,7 +278,6 @@ int ObTempColumnStore::ColumnBlock::get_next_batch(const IVectorPtrs &vectors,
     ObIVector *vec = vectors.at(i);
     int64_t pos = vec_offsets[i];
     if (OB_FAIL(vector_from_buf(buf, pos ,size, vec))) {
-      LOG_WARN("vector from buf failed", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -321,10 +315,8 @@ int ObTempColumnStore::Iterator::get_next_batch(const ObExprPtrIArray &exprs,
   int32_t batch_pos = 0;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ensure_read_vectors(exprs, ctx, max_rows))) {
-    LOG_WARN("fail to ensure read vectors", K(ret));
   } else if (OB_FAIL(cur_blk_->get_next_batch(exprs, ctx, *vectors_,
                                               read_pos_, batch_rows, batch_pos))) {
-    LOG_WARN("fail to get next batch from column block", K(ret));
   } else if (OB_UNLIKELY(has_rest_row_in_batch())) {
     // current block has remaining unread data
     const int64_t begin = batch_rows - rest_row_cnt_;
@@ -388,7 +380,6 @@ int ObTempColumnStore::Iterator::get_next_batch(const IVectorPtrs &vectors,
   int32_t batch_pos = 0;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(cur_blk_->get_next_batch(vectors, read_pos_, batch_rows, batch_pos))) {
-    LOG_WARN("fail to get next batch from column block", K(ret));
   } else {
     cur_blk_id_ += batch_rows;
     read_pos_ += batch_pos;
@@ -404,7 +395,6 @@ int ObTempColumnStore::Iterator::next_block()
   if (cur_blk_id_ >= get_row_cnt()) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(get_block(cur_blk_id_, read_blk))) {
-    LOG_WARN("fail to get block from store", K(ret), K(cur_blk_id_));
   } else {
     cur_blk_ = static_cast<const ColumnBlock*>(read_blk);
     rest_row_cnt_ = 0;
@@ -442,7 +432,6 @@ int ObTempColumnStore::Iterator::ensure_read_vectors(const ObExprPtrIArray &expr
     if (OB_ISNULL(e) || e->is_const_expr()) {
       vectors_->at(i) = NULL;
     } else if (OB_FAIL(e->init_vector(ctx, e->get_temp_column_store_res_format(), max_rows))) {
-      LOG_WARN("fail to init vector", K(ret));
     } else {
       vectors_->at(i) = e->get_vector(ctx);
     }
@@ -534,9 +523,7 @@ int ObTempColumnStore::init(const common::ObIArray<storage::ObColumnSchemaItem> 
   ObArenaAllocator arena;
   ObArray<ObIVector *> vectors;
   if (OB_FAIL(init_vectors(col_array, arena, vectors))) {
-    LOG_WARN("init vectors failed", K(ret));
   } else if (OB_FAIL(init(vectors, max_batch_size, mem_attr, mem_limit, enable_dump, compressor_type))) {
-    LOG_WARN("init with vectors failed", K(ret), K(col_array));
   }
   return ret;
 }
@@ -551,7 +538,6 @@ int ObTempColumnStore::init_vectors(const ObIArray<ObColumnSchemaItem> &col_arra
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(col_array));
   } else if (OB_FAIL(vectors.prepare_allocate(col_array.count()))) {
-    LOG_WARN("fail to prepare allocate vectors", K(ret), K(col_array.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < col_array.count(); ++i) {
       const ObColumnSchemaItem &column_schema = col_array.at(i);
@@ -658,9 +644,7 @@ int ObTempColumnStore::init_batch_ctx(const ObExprPtrIArray &exprs)
       batch_ctx_->lengths_.set_attr(mem_attr_);
       batch_ctx_->max_batch_size_ = max_batch_size;
       if (OB_FAIL(batch_ctx_->vectors_.prepare_allocate(col_cnt_))) {
-        LOG_WARN("fail to prepare allocate vectors", K(ret), K(col_cnt_));
       } else if (OB_FAIL(batch_ctx_->lengths_.prepare_allocate(col_cnt_))) {
-        LOG_WARN("fail to prepare allocate lengths", K(ret), K(col_cnt_));
       } else {
         for (int64_t i = 0; i < exprs.count(); ++i) {
           ObExpr *expr = exprs.at(i);
@@ -707,7 +691,6 @@ int ObTempColumnStore::init_batch_ctx(const IVectorPtrs &vectors)
       batch_ctx_->lengths_.set_attr(mem_attr_);
       batch_ctx_->max_batch_size_ = max_batch_size;
       if (OB_FAIL(batch_ctx_->lengths_.prepare_allocate(col_cnt_))) {
-        LOG_WARN("fail to prepare allocate lengths", K(ret), K(col_cnt_));
       } else {
         mem += sizeof(*batch_ctx_);
         batch_ctx_->selector_ = reinterpret_cast<typeof(batch_ctx_->selector_)>(mem);
@@ -749,7 +732,6 @@ int ObTempColumnStore::add_batch(const common::ObIArray<ObExpr *> &exprs, ObEval
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("column count mismatch", K(ret), K(exprs.count()), K(get_col_cnt()));
   } else if (OB_FAIL(init_batch_ctx(exprs))) {
-    LOG_WARN("fail to init batch ctx", K(ret));
   } else if (brs.all_rows_active_ || (0 == brs.skip_->accumulate_bit_cnt(brs.size_))) {
     // all skipped, set selector point to null
     size = brs.size_;
@@ -768,7 +750,6 @@ int ObTempColumnStore::add_batch(const common::ObIArray<ObExpr *> &exprs, ObEval
       ObExpr *e = exprs.at(i);
       ObIVector *vec = NULL;
       if (OB_FAIL(e->eval_vector(ctx, brs))) {
-        LOG_WARN("evaluate batch failed", K(ret));
       } else {
         vec = e->get_vector(ctx);
         batch_ctx_->vectors_.at(i) = vec;
@@ -781,12 +762,9 @@ int ObTempColumnStore::add_batch(const common::ObIArray<ObExpr *> &exprs, ObEval
                                                    batch_ctx_->lengths_,
                                                    size,
                                                    batch_mem_size))) {
-      LOG_WARN("fail to calc rows size", K(ret));
     } else if (OB_FAIL(ensure_write_blk(batch_mem_size))) {
-      LOG_WARN("ensure write block failed", K(ret));
     } else if (OB_FAIL(cur_blk_->add_batch(ctx, exprs, blk_buf_, batch_ctx_->vectors_, selector, batch_ctx_->lengths_,
                                            size, batch_mem_size))) {
-      LOG_WARN("fail to add batch to column store", K(ret));
     } else {
       block_id_cnt_ += size;
       inc_mem_used(batch_mem_size);
@@ -830,16 +808,13 @@ int ObTempColumnStore::add_batch(const IVectorPtrs &vectors,
                                                    batch_ctx_->lengths_,
                                                    size,
                                                    batch_mem_size))) {
-      LOG_WARN("fail to calc rows size", K(ret));
     } else if (OB_FAIL(ensure_write_blk(batch_mem_size))) {
-      LOG_WARN("ensure write block failed", K(ret));
     } else if (OB_FAIL(cur_blk_->add_batch(blk_buf_,
                                            vectors,
                                            selector,
                                            batch_ctx_->lengths_,
                                            size,
                                            batch_mem_size))) {
-      LOG_WARN("fail to add batch to column store", K(ret));
     } else {
       block_id_cnt_ += size;
       inc_mem_used(batch_mem_size);

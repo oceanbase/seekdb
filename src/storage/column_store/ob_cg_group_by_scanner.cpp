@@ -57,9 +57,7 @@ int ObCGGroupByScanner::init(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObCGRowScanner::init(iter_param, access_ctx, wrapper))) {
-    LOG_WARN("Failed to init ObCGRowScanner", K(ret));
   } else if (OB_FAIL(index_prefetcher_.init(get_type(), *sstable_, iter_param, access_ctx))) {
-    LOG_WARN("fail to init index prefetcher, ", K(ret));
   } else if (OB_UNLIKELY(nullptr == iter_param.output_exprs_ ||
                          0 == iter_param.output_exprs_->count())) {
     ret = OB_ERR_UNEXPECTED;
@@ -80,13 +78,10 @@ int ObCGGroupByScanner::switch_context(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObCGRowScanner::switch_context(iter_param, access_ctx, wrapper))) {
-    LOG_WARN("Fail to switch context for cg row scanner", K(ret));
   } else if (!index_prefetcher_.is_valid()) {
     if (OB_FAIL(index_prefetcher_.init(get_type(), *sstable_, iter_param, access_ctx))) {
-      LOG_WARN("fail to init prefetcher, ", K(ret));
     }
   } else if (OB_FAIL(index_prefetcher_.switch_context(get_type(), *sstable_, iter_param, access_ctx))) {
-    LOG_WARN("Fail to switch context for prefetcher", K(ret));
   }
   return ret;
 }
@@ -101,9 +96,7 @@ int ObCGGroupByScanner::init_group_by_info()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Unexpected null output expr", K(ret));
     } else if (OB_FAIL(group_by_cell_->assign_agg_cells(output_exprs_->at(i), agg_idxs))) {
-      LOG_WARN("Failed to extact agg cells", K(ret));
     } else if (OB_FAIL(group_by_agg_idxs_.push_back(agg_idxs))) {
-      LOG_WARN("Failed to push back", K(ret));
     }
   }
   return ret;
@@ -122,7 +115,6 @@ int ObCGGroupByScanner::decide_group_size(int64_t &group_size)
     if (end_of_scan()) {
       ret = OB_ITER_END;
     } else if (OB_FAIL(index_prefetcher_.prefetch())) {
-      LOG_WARN("Fail to prefetch micro block", K(ret), K_(index_prefetcher));
     } else if (index_prefetcher_.read_wait()) {
       continue;
     } else {
@@ -151,7 +143,6 @@ int ObCGGroupByScanner::decide_can_group_by(const int32_t group_by_col, bool &ca
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Unexpected end of scan", K(ret), KPC(this));
       } else if (OB_FAIL(prefetcher_.prefetch())) {
-        LOG_WARN("Fail to prefetch micro block", K(ret), K_(prefetcher));
       } else if (prefetcher_.read_wait()) {
         continue;
       } else {
@@ -162,9 +153,7 @@ int ObCGGroupByScanner::decide_can_group_by(const int32_t group_by_col, bool &ca
         int64_t read_cnt = 0;
         int64_t distinct_cnt = 0;
         if (OB_FAIL(open_cur_data_block())) {
-          LOG_WARN("Failed to open data block", K(ret));
         } else if (OB_FAIL(micro_scanner_->check_can_group_by(group_by_col, row_cnt, read_cnt, distinct_cnt, can_group_by))) {
-          LOG_WARN("Failed to check group by", K(ret));
         } else if (can_group_by && OB_FAIL(group_by_cell_->decide_use_group_by(
                     row_cnt, read_cnt, distinct_cnt, filter_bitmap_, can_group_by))) {
           LOG_WARN("Failed to decide use group by", K(ret));
@@ -201,9 +190,7 @@ int ObCGGroupByScanner::read_reference(const int32_t group_by_col)
                                                 filter_bitmap_,
                                                 group_by_cell_->get_batch_size(),
                                                 is_reverse_scan_))) {
-    LOG_WARN("Fail to get row ids", K(ret), K_(current), K_(query_index_range));
   } else if (OB_FAIL(micro_scanner_->read_reference(group_by_col, row_ids_, row_cap, *group_by_cell_))) {
-    LOG_WARN("Failed to read ref", K(ret));
   }
   return ret;
 }
@@ -217,7 +204,6 @@ int ObCGGroupByScanner::fill_group_by_col_lob_locator()
     && nullptr != col_param && col_param->get_meta_type().is_lob_storage()) {
     if (OB_FAIL(fill_datums_lob_locator(*iter_param_, *access_ctx_, *col_param, 
           group_by_cell_->get_distinct_cnt(), group_by_cell_->get_group_by_col_datums_to_fill(), false))) {
-      LOG_WARN("Failed to fill lob locator", K(ret), K(has_lob_out_row), K(col_param), KPC(group_by_cell_), KPC(iter_param_));
     }
   }
   return ret;
@@ -231,7 +217,6 @@ int ObCGGroupByScanner::calc_aggregate(const bool is_group_by_col)
   int64_t ref_offset = 0;
   if (is_group_by_col) {
     if (OB_FAIL(do_group_by_aggregate(remain_row_count, is_group_by_col, ref_offset))) {
-      LOG_WARN("Failed to do group by aggregate", K(ret));
     }
   } else {
     while (OB_SUCC(ret) && 0 < remain_row_count) {
@@ -249,7 +234,6 @@ int ObCGGroupByScanner::calc_aggregate(const bool is_group_by_col)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Unexpected output row count", K(ret), K(read_row_count), K(remain_row_count));
       } else if (OB_FAIL(do_group_by_aggregate(read_row_count, is_group_by_col, ref_offset))) {
-        LOG_WARN("Failed to do group by aggregate", K(ret));
       } else {
         remain_row_count -= read_row_count;
         ref_offset += read_row_count;
@@ -268,7 +252,6 @@ int ObCGGroupByScanner::do_group_by_aggregate(const uint64_t count, const bool i
     for (int64_t i = 0; OB_SUCC(ret) && i < agg_idxs.count(); ++i) {
       const int32_t agg_idx = agg_idxs.at(i);
       if (OB_FAIL(group_by_cell_->eval_batch(col_datums, count, agg_idx, is_group_by_col, false, ref_offset))) {
-        LOG_WARN("Failed to eval batch", K(ret));
       }
     }
   }
@@ -294,9 +277,7 @@ int ObCGGroupByScanner::locate_micro_index(const ObCSRange &range)
 
     if (OB_FAIL(ret) || end_of_scan()) {
     } else if (OB_FAIL(index_prefetcher_.locate(query_index_range_, nullptr))) {
-      LOG_WARN("Fail to locate range", K(ret), K_(query_index_range), K_(current));
     } else if (OB_FAIL(index_prefetcher_.prefetch())) {
-      LOG_WARN("Fail to prefetch", K(ret));
     }
   }
   LOG_TRACE("[COLUMNSTORE] CGGroupByScanner locate micro index", K(ret), "tablet_id", iter_param_->tablet_id_, "cg_idx", iter_param_->cg_idx_,

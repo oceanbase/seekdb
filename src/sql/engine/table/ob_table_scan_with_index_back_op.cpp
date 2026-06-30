@@ -69,10 +69,7 @@ int ObTableScanWithIndexBackOp::inner_rescan()
     ret = OB_NOT_INIT;
     LOG_WARN("index scan tree is null");
   } else if (OB_FAIL(index_scan_tree_->rescan())) {
-    LOG_WARN("rescan index scan tree failed", K(ret));
-
   } else if (OB_FAIL(ObTableScanOp::inner_rescan())) {
-    LOG_WARN("rescan no children physical operator failed", K(ret));
   } else {
     is_index_end_ = false;
     if (OB_ISNULL(result_)) {
@@ -194,7 +191,6 @@ int ObTableScanWithIndexBackOp::do_table_rescan_with_index()
   int ret = OB_SUCCESS;
   storage::ObTableScanIterator *table_iter = NULL;
   if (OB_FAIL(extract_range_from_index())) {
-    LOG_WARN("extract range from index failed", K(ret));
   } else if (scan_param_.key_ranges_.count() <= 0) {
     //do nothing
     read_action_ = READ_ITER_END;
@@ -217,7 +213,6 @@ int ObTableScanWithIndexBackOp::inner_get_next_row()
   ObNewRow *cur_row = NULL;
   bool need_continue = true;
   if (OB_FAIL(try_check_status())) {
-    LOG_WARN("check physical plan status failed", K(ret));
   }
   while (OB_SUCC(ret) && need_continue) {
     switch (read_action_) {
@@ -266,13 +261,10 @@ int ObTableScanWithIndexBackOp::inner_close()
   int tmp_ret = OB_SUCCESS;
   if (index_scan_tree_ != NULL) {
     if (OB_FAIL(index_scan_tree_->close())) {
-      LOG_WARN("close index scan tree failed", K(ret));
     }
   }
   tmp_ret = ret;
   if (OB_FAIL(ObTableScanOp::inner_close())) {
-    // overwrite ret
-    LOG_WARN("inner close ooerator failed", K(ret));
   }
   ret = (OB_SUCCESS == ret) ? tmp_ret : ret;
   return ret;

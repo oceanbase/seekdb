@@ -46,7 +46,6 @@ int to_hex_cstr(
   int64_t pos = 0;
   int64_t cstr_pos = 0;
   if (OB_FAIL(to_hex_cstr(in_data, data_length, buff, buff_size, pos, cstr_pos))) {
-    LOG_WARN("Failed to transform hex to cstr", K(ret));
   }
   return ret;
 }
@@ -59,7 +58,6 @@ int hex_to_cstr(const void *in_data,
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   if (OB_FAIL(hex_to_cstr(in_data, data_length, buff, buff_size, pos))) {
-    LOG_WARN("fail to hex to cstr", K(ret), K(in_data)); 
   }
   return ret;
 }
@@ -424,7 +422,6 @@ int databuff_printf(char *&buf, int64_t &buf_len, int64_t &pos,
       if (OB_SIZE_OVERFLOW == ret) {
         ret = OB_SUCCESS;
         if (OB_FAIL(multiple_extend_buf(buf, buf_len, alloc))) {
-          LOG_WARN("failed to auto extend stmt buf", K(ret));
         } else {
           pos = saved_pos;
         }
@@ -557,7 +554,6 @@ int bit_print(uint64_t bit_val, char *buffer, int64_t buf_len, int64_t &pos)
     LOG_WARN("invalid argument", KP(buffer), K(pos), K(ret));
   } else if (0 == bit_val) {
     if (OB_FAIL(databuff_printf(buffer, buf_len, pos, "0"))) {
-      LOG_WARN("fail to print buffer", K(ret), KCSTRING(buffer), K(buf_len), K(pos));
     }
   } else {
     do {

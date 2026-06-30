@@ -36,7 +36,6 @@ int ObTenantSrs::mtl_init(ObTenantSrs* &tenant_srs)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tenant_srs->init())) {
-    LOG_WARN("fail to init tenant srs", K(ret));
   }
   return ret;
 }
@@ -67,7 +66,6 @@ int ObTenantSrs::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTenantSrs init twice.", K(ret));
   } else if (OB_FAIL(allocator_.init(&alloc_, OB_MALLOC_MIDDLE_BLOCK_SIZE, mem_attr))) {
-    LOG_WARN("ObTenantSrs allocator init failed.", K(ret));
   } else {
     page_allocator_.set_allocator(&allocator_);
     page_allocator_.set_attr(mem_attr);
@@ -179,7 +177,6 @@ int ObTenantSrs::refresh_sys_srs()
     if (last_sys_snapshot_ != NULL) {
       if (last_sys_snapshot_->get_ref_count() > 0) {
         if (OB_FAIL(srs_old_snapshots_.push_back(last_sys_snapshot_))) {
-          LOG_WARN("failed to push last_snapshot to recycle queue", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -239,7 +236,6 @@ int ObTenantSrs::fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot)
   const int TOTAL_SRS_CNT = 5152;
 
   if (OB_FAIL(table::ObSRSImporter::get_srs_cnt(sql_proxy_, srs_cnt))) {
-    LOG_WARN("get srs cnt failed", K(ret));
   } else if (srs_cnt < TOTAL_SRS_CNT) {
     if (srs_cnt > 1) {
       LOG_INFO("srs is importing, retry fetch later", K(srs_cnt));
@@ -253,9 +249,7 @@ int ObTenantSrs::fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot)
       ObMySQLResult *result = NULL;
       if (OB_FAIL(sql.append_fmt("SELECT * FROM %s WHERE (SRS_ID < %d AND SRS_ID != 0) OR SRS_ID > %d",
           OB_ALL_SPATIAL_REFERENCE_SYSTEMS_TNAME, USER_SRID_MIN, USER_SRID_MAX))) {
-        LOG_WARN("append sql failed", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", K(sql), K(ret));
       } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get result. ", K(ret));
@@ -270,7 +264,6 @@ int ObTenantSrs::fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot)
               ret = OB_ALLOCATE_MEMORY_FAILED;
               LOG_WARN("failed to create ObSrsCacheSnapShot", K(ret));
             } else if (OB_FAIL(snapshot->init())) {
-              LOG_WARN("failed to init ObSrsCacheSnapShot", K(ret));
             }
           }
           if (OB_FAIL(ret)) {
@@ -280,7 +273,6 @@ int ObTenantSrs::fetch_all_srs(ObSrsCacheSnapShot *&srs_snapshot)
           } else if (OB_FAIL(snapshot->get_srs_item(srs_item->get_srid(), tmp))) {
             if (ret == OB_HASH_NOT_EXIST) {
               if (OB_FAIL(snapshot->add_srs_item(srs_item->get_srid(), srs_item))) {
-                LOG_WARN("failed to add srs item to snapshot", K(ret), K(srs_item->get_srid()));
               }
             } else {
               LOG_WARN("failed to get srs item from snapshot", K(ret));
@@ -367,15 +359,10 @@ int ObSrsCacheSnapShot::parse_srs_item(ObMySQLResult *result, const ObSrsItem *&
   EXTRACT_VARCHAR_FIELD_MYSQL_SKIP_RET(*result, "proj4text", proj4text);
 
   if (OB_FAIL(extract_bounds_numberic(result, "minX", min_x))) {
-    LOG_WARN("failed to extract minx value", K(ret));
   } else if (OB_FAIL(extract_bounds_numberic(result, "minY", min_y))) {
-    LOG_WARN("failed to extract miny value", K(ret));
   } else if (OB_FAIL(extract_bounds_numberic(result, "maxX", max_x))) {
-    LOG_WARN("failed to extract maxx value", K(ret));
   } else if (OB_FAIL(extract_bounds_numberic(result, "maxY", max_y))) {
-    LOG_WARN("failed to extract maxy value", K(ret));
   } else if (OB_FAIL(ObSrsWktParser::parse_srs_wkt(allocator_, srs_id, definition, srs_info))) {
-    LOG_WARN("failed to parse srs wkt from definition", K(ret), K(definition));
   } else {
     ObSrsItem *new_srs_item = OB_NEWx(ObSrsItem, (&allocator_), srs_info);
     if (OB_ISNULL(new_srs_item)) {
@@ -384,7 +371,6 @@ int ObSrsCacheSnapShot::parse_srs_item(ObMySQLResult *result, const ObSrsItem *&
     } else if (!proj4text.empty()) {
       srs_info->set_bounds(min_x, min_y, max_x, max_y);
       if (OB_FAIL(srs_info->set_proj4text(allocator_, proj4text))) {
-        LOG_WARN("fail to set proj4text for srs item", K(ret), K(srs_id));
       }
     }
     if (OB_SUCC(ret)) {
@@ -402,16 +388,13 @@ int ObSrsCacheSnapShot::add_pg_reserved_srs_item(const ObString &pg_wkt, const u
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("SRSWKTParser"));
 
   if (OB_FAIL(ObSrsWktParser::parse_srs_wkt(allocator_, srs_id, pg_wkt, srs_info))) {
-    LOG_WARN("failed to parse pg reserved srs wkt", K(ret), K(srs_id), K(pg_wkt));
   } else {
     ObSrsItem *new_srs_item = OB_NEWx(ObSrsItem, (&allocator_), srs_info);
     if (OB_ISNULL(new_srs_item)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc memory for srs item", K(ret));
     } else if (OB_FAIL(ObGeoTypeUtil::get_pg_reserved_prj4text(&allocator_, srs_id, proj4text))) {
-      LOG_WARN("fail to generate proj4text for pg srs item", K(ret));
     } else if (OB_FAIL(add_srs_item(new_srs_item->get_srid(), new_srs_item))) {
-      LOG_WARN("failed to add pg srs item to snapshot", K(ret), K(new_srs_item->get_srid()));
     } else {
       srs_info->set_proj4text(proj4text);
     }
@@ -424,13 +407,9 @@ int ObTenantSrs::generate_pg_reserved_srs(ObSrsCacheSnapShot *&srs_snapshot)
   int ret = OB_SUCCESS;
   char wkt_buf[MAX_WKT_LEN] = {0};
   if (OB_FAIL(srs_snapshot->add_pg_reserved_srs_item(NORTH_STEREO_WKT, SRID_NORTH_STEREO_PG))) {
-    LOG_WARN("failed to parse pg reserved srs item", K(ret), K(SRID_NORTH_STEREO_PG));
   } else if (OB_FAIL(srs_snapshot->add_pg_reserved_srs_item(WORLD_MERCATOR_WKT, SRID_WORLD_MERCATOR_PG))) {
-    LOG_WARN("failed to parse pg reserved srs item", K(ret), K(SRID_WORLD_MERCATOR_PG));
   } else if (OB_FAIL(srs_snapshot->add_pg_reserved_srs_item(SOUTH_LAMBERT_WKT, SRID_SOUTH_LAMBERT_PG))) {
-    LOG_WARN("failed to parse pg reserved srs item", K(ret), K(SRID_SOUTH_LAMBERT_PG));
   } else if (OB_FAIL(srs_snapshot->add_pg_reserved_srs_item(NORTH_LAMBERT_WKT, SRID_NORTH_LAMBERT_PG))) {
-    LOG_WARN("failed to parse pg reserved srs item", K(ret), K(SRID_NORTH_LAMBERT_PG));
   }
 
   for (int id = SRID_SOUTH_UTM_START_PG; id <= SRID_SOUTH_UTM_END_PG && OB_SUCC(ret); id++) {
@@ -439,7 +418,6 @@ int ObTenantSrs::generate_pg_reserved_srs(ObSrsCacheSnapShot *&srs_snapshot)
     snprintf(wkt_buf, MAX_WKT_LEN, SOUTH_UTM_WKT, longitude);
     ObString SOUTH_UTM = ObString::make_string(wkt_buf);
     if (OB_FAIL(srs_snapshot->add_pg_reserved_srs_item(SOUTH_UTM, id))) {
-      LOG_WARN("failed to parse pg reserved srs item", K(ret), K(id));
     }
   }
   for (int id = SRID_NORTH_UTM_START_PG; id <= SRID_NORTH_UTM_END_PG && OB_SUCC(ret); id++) {
@@ -448,7 +426,6 @@ int ObTenantSrs::generate_pg_reserved_srs(ObSrsCacheSnapShot *&srs_snapshot)
     snprintf(wkt_buf, MAX_WKT_LEN, NORTH_UTM_WKT, longitude);
     ObString NORTH_UTM = ObString::make_string(wkt_buf);
     if (OB_FAIL(srs_snapshot->add_pg_reserved_srs_item(NORTH_UTM, id))) {
-      LOG_WARN("failed to parse pg reserved srs item", K(ret), K(id));
     }
   }
 
@@ -481,7 +458,6 @@ int ObTenantSrs::generate_pg_reserved_srs(ObSrsCacheSnapShot *&srs_snapshot)
       snprintf(wkt_buf, MAX_WKT_LEN, LAEA_WKT, lat_0, lon_0);
       ObString LAEA = ObString::make_string(wkt_buf);
       if (OB_FAIL(srs_snapshot->add_pg_reserved_srs_item(LAEA, id))) {
-        LOG_WARN("failed to parse pg reserved srs item", K(ret), K(id));
       }
     }
   }

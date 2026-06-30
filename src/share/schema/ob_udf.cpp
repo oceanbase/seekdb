@@ -58,9 +58,7 @@ ObUDF &ObUDF::operator = (const ObUDF &src_schema)
 
     int ret = OB_SUCCESS;
     if (OB_FAIL(deep_copy_str(src_schema.name_, name_))) {
-      LOG_WARN("Fail to deep copy udf name, ", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_schema.dl_, dl_))) {
-      LOG_WARN("Fail to deep copy udf dl, ", K(ret));
     } else {/*do nothing*/}
 
     if (OB_FAIL(ret)) {

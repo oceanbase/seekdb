@@ -68,19 +68,15 @@ int ObIncMinDDLMergeHelper::process_prepare_task(ObIDag *dag,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(dag_merge_param), KPC(dag));
   } else if (OB_FAIL(dag_merge_param.get_tablet_param(ls_id, tablet_id, tablet_param))) {
-    LOG_WARN("failed to get tablet param", K(ret), K(dag_merge_param));
   } else if (OB_FAIL(dag_merge_param.get_merge_ctx(merge_ctx))) {
-    LOG_WARN("failed to get merge ctx", K(ret), K(dag_merge_param));
   } else if (nullptr == tablet_param || nullptr == merge_ctx) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet param & merge ctx should not be null", K(ret));
   } else if (OB_FAIL(ObDirectLoadMgrUtil::get_tablet_handle(ls_id, tablet_id, tablet_handle))) {
-    LOG_WARN("failed to get tablet handle", K(ret), K(ls_id), K(tablet_id));
   } else if (!tablet_handle.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tablet handle should not be invalid", K(ret));
   } else if (OB_FAIL(slice_idxes.create(DDL_SLICE_BUCKET_NUM, ObMemAttr("slice_idx_set")))) {
-    LOG_WARN("create slice index set failed", K(ret));
   } else {
     clog_checkpoint_scn = tablet_handle.get_obj()->get_clog_checkpoint_scn();
   }
@@ -88,7 +84,6 @@ int ObIncMinDDLMergeHelper::process_prepare_task(ObIDag *dag,
   /* check ddl kv valid && prepare ddl kv */
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObDDLMergeTaskUtils::prepare_incremental_direct_load_ddl_kvs(*(tablet_handle.get_obj()), merge_ctx->ddl_kv_handles_))) {
-    LOG_WARN("failed to prepare incremental direct load ddl kvs", K(ret));
   } else if (1 != merge_ctx->ddl_kv_handles_.count()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected frozen ddl kv count", K(ret));
@@ -98,7 +93,6 @@ int ObIncMinDDLMergeHelper::process_prepare_task(ObIDag *dag,
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < merge_ctx->ddl_kv_handles_.count(); ++i) {
     if (OB_FAIL(merge_ctx->ddl_kv_handles_.at(i).get_obj()->close())) {
-      LOG_WARN("close ddl kv failed", K(ret), K(i));
     }
   }
   /* notice !!! in incremental direct load, scn range should be set according to the ddl kv state */
@@ -131,11 +125,8 @@ int ObIncMinDDLMergeHelper::process_prepare_task(ObIDag *dag,
   } else if (OB_FAIL(cg_slices.push_back(ObTuple<int64_t, int64_t, int64_t>(0 /* cg_idx */,
                                                                             0 /* start slice idx */,
                                                                             0 /* end slice idx   */)))) {
-    LOG_WARN("failed to push back cg slice", K(ret));
   } else if (OB_FAIL(slice_idxes.set_refactored(0))) {
-    LOG_WARN("failed to set slice idx", K(ret));
   } else if (OB_FAIL(dag_merge_param.init_cg_sstable_array(slice_idxes))) {
-    LOG_WARN("failed to init cg sstable array", K(ret));
   }
   
   return ret;
@@ -173,14 +164,11 @@ int ObIncMinDDLMergeHelper::merge_cg_slice(ObIDag *dag,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(dag), K(dag_merge_param), K(cg_idx), K(start_slice_idx), K(end_slice_idx));
   } else if (OB_FAIL(dag_merge_param.get_tablet_param(ls_id, tablet_id, tablet_param))) {
-    LOG_WARN("failed to get tablet param", K(ret), K(dag_merge_param));
   } else if (OB_FAIL(dag_merge_param.get_merge_ctx(merge_ctx))) {
-    LOG_WARN("failed to get merge ctx", K(ret));
   } else if (nullptr == merge_ctx || nullptr == tablet_param) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet param should not be null", K(ret), K(dag_merge_param));
   } else if (OB_FAIL(ObDirectLoadMgrUtil::get_tablet_handle(ls_id, tablet_id, tablet_handle))) {
-    LOG_WARN("failed to get tablet handle", K(ret));
   } else if (OB_ISNULL(ddl_kv = merge_ctx->ddl_kv_handles_.at(0).get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ddl kv should not be null", K(ret), K(dag_merge_param));
@@ -205,20 +193,17 @@ int ObIncMinDDLMergeHelper::merge_cg_slice(ObIDag *dag,
                                                            merge_ctx->arena_,
                                                            tablet_param->storage_schema_,
                                                            merge_ctx->ddl_kv_handles_))) {
-      LOG_WARN("failed to update storage schema", K(ret));
     }
   }
   /* merge from ddl sstable & ddl slice sstalbe like row store*/
   SMART_VAR(ObTableStoreIterator, ddl_sstable_iter) {
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(tablet_handle.get_obj()->get_ddl_sstables(ddl_sstable_iter))) {
-      LOG_WARN("failed to get ddl sstable", K(ret));
     } else if (OB_FAIL(ObDDLMergeTaskUtils::get_ddl_tables_from_ddl_kvs(merge_ctx->ddl_kv_handles_, 
                                                    cg_idx,
                                                    start_slice_idx, 
                                                    dag_merge_param.for_major_ ? INT64_MAX : end_slice_idx,
                                                    ddl_sstables))) {
-     LOG_WARN("failed to get ddl tables from  ddl kvs", K(ret));
     } else if (OB_FAIL(ObDDLMergeTaskUtils::get_ddl_tables_from_dump_tables(tablet_param->storage_schema_->is_row_store(), 
                                                        ddl_sstable_iter,
                                                        cg_idx,
@@ -226,7 +211,6 @@ int ObIncMinDDLMergeHelper::merge_cg_slice(ObIDag *dag,
                                                        dag_merge_param.for_major_ ? INT64_MAX : end_slice_idx,
                                                        ddl_sstables,
                                                        meta_handles))) {
-      LOG_WARN("failed to get ddl tables from dump sstables", K(ret), K(dag_merge_param), K(cg_idx), K(start_slice_idx), K(end_slice_idx));
     } else if (OB_FAIL(ObDDLMergeTaskUtils::get_sorted_meta_array(*tablet_handle.get_obj(), 
                                                                   tablet_ddl_param, 
                                                                   tablet_param->storage_schema_,
@@ -234,7 +218,6 @@ int ObIncMinDDLMergeHelper::merge_cg_slice(ObIDag *dag,
                                                                   tablet_handle.get_obj()->get_rowkey_read_info(),
                                                                   arena,
                                                                   sorted_metas))) {
-      LOG_WARN("failed to get sorted meta array", K(ret));
     }
   }
 
@@ -248,9 +231,7 @@ int ObIncMinDDLMergeHelper::merge_cg_slice(ObIDag *dag,
                                                            &merge_ctx->mutex_,
                                                            merge_ctx->arena_,
                                                            sstable_handle))) {
-    LOG_WARN("failed to create sstable", K(ret), K(cg_idx), K(tablet_ddl_param));
   } else if (OB_FAIL(dag_merge_param.set_cg_slice_sstable(start_slice_idx, cg_idx, sstable_handle))) {
-    LOG_WARN("failed to set ddl sstable", K(ret), K(dag_merge_param));
   }
   return ret;
 }
@@ -277,9 +258,7 @@ int ObIncMinDDLMergeHelper::assemble_sstable(ObDDLTabletMergeDagParamV2 &dag_mer
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(dag_merge_param));
   } else if (OB_FAIL(dag_merge_param.get_tablet_param(ls_id, tablet_id, tablet_param))) {
-    LOG_WARN("failed to get tablet ctx", K(ret), K(dag_merge_param));
   } else if (OB_FAIL(ObDirectLoadMgrUtil::get_tablet_handle(ls_id, tablet_id, tablet_handle))) {
-    LOG_WARN("failed to get tablet handle", K(ret), K(ls_id), K(tablet_id));
   } else if (OB_UNLIKELY(!tablet_handle.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tablet handle is invalid", K(ret));
@@ -287,14 +266,11 @@ int ObIncMinDDLMergeHelper::assemble_sstable(ObDDLTabletMergeDagParamV2 &dag_mer
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls service should not be null", K(ret));
   } else if (OB_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::DDL_MOD))) {
-    LOG_WARN("failed to get ls", K(ret), K(dag_merge_param));
   } else if (OB_FAIL(dag_merge_param.get_merge_ctx(merge_ctx))) {
-    LOG_WARN("failed to get merge ctx", K(ret));
   } else if (OB_ISNULL(merge_ctx)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("merge ctx should not be null", K(ret));
   } else if (OB_FAIL(merge_ctx->slice_cg_sstables_.get_refactored(0 /*slice_id*/, sstable_handles))) {
-    LOG_WARN("failed to get refactor", K(ret), K(dag_merge_param));
   } else if (0 == sstable_handles->count()) {
     LOG_INFO("no sstable need to be merge", K(ret));
   } else if (OB_ISNULL(sstable = static_cast<ObSSTable*>(sstable_handles->at(0).get_table()))) {
@@ -317,12 +293,10 @@ int ObIncMinDDLMergeHelper::assemble_sstable(ObDDLTabletMergeDagParamV2 &dag_mer
                                                                                         share::SCN::min_scn(),
                                                                                         false /* not need report */,
                                                                                         false /* has truncate info*/)))) {
-      LOG_WARN("failed to init with compaction info", K(ret));
     } else {
       table_store_param.compaction_info_.clog_checkpoint_scn_ = sstable->get_end_scn();
       ObTabletHandle new_tablet_handle;
       if (OB_FAIL(ls_handle.get_ls()->update_tablet_table_store(tablet_id, table_store_param, new_tablet_handle))) {
-        LOG_WARN("failed to update tablet table store", K(ret), K(dag_merge_param), K(table_store_param));
       } else {
         FLOG_INFO("ddl update table store success", KPC(new_tablet_handle.get_obj()), K(table_store_param));
       }
@@ -337,10 +311,7 @@ int ObIncMinDDLMergeHelper::assemble_sstable(ObDDLTabletMergeDagParamV2 &dag_mer
                                               tablet_id,
                                               new_tablet_handle,
                                               ObMDSGetTabletMode::READ_ALL_COMMITED))) {
-      LOG_WARN("failed to get tablet", K(tmp_ret), K(dag_merge_param));
     } else if (OB_TMP_FAIL(new_tablet_handle.get_obj()->release_memtables(new_tablet_handle.get_obj()->get_tablet_meta().clog_checkpoint_scn_))) {
-      LOG_WARN("failed to release memtable", K(tmp_ret),
-        "clog_checkpoint_scn", new_tablet_handle.get_obj()->get_tablet_meta().clog_checkpoint_scn_);
     }
   }
   return ret;

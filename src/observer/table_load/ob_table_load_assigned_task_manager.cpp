@@ -47,7 +47,6 @@ int ObTableLoadAssignedTaskManager::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTableLoadAssignedTaskManager init twice", KR(ret), KP(this));
   } else if (OB_FAIL(assigned_tasks_map_.create(bucket_num, "TLD_AssignedMgr", "TLD_AssignedMgr"))) {
-    LOG_WARN("fail to create hashmap", KR(ret), K(bucket_num));
   } else {
     is_inited_ = true;
   }
@@ -110,7 +109,6 @@ int ObTableLoadAssignedTaskManager::get_assigned_tasks(ObSArray<ObDirectLoadReso
   } else {
     ObMutexGuard guard(mutex_);
     if (OB_FAIL(assigned_tasks.reserve(assigned_tasks_map_.size()))) {
-      LOG_WARN("fail to reserve assigned_tasks", KR(ret), K(assigned_tasks));
     } else {
       for(ResourceApplyMap::iterator iter = assigned_tasks_map_.begin(); iter != assigned_tasks_map_.end(); iter++) {
         if (OB_FAIL(assigned_tasks.push_back(iter->second))) {

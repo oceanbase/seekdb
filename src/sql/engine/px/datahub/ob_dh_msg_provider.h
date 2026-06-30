@@ -72,7 +72,6 @@ public:
     {
       ObThreadCondGuard guard(sqc_level_sync_cond_);
       if (OB_FAIL(whole_msg_.aggregate_piece(piece))) {
-        SQL_ENG_LOG(WARN, "failed to aggregate_piece");
       } else {
         ++dh_msg_cnt_;
         whole_msg_set_ = (dh_msg_cnt_ == task_cnt);
@@ -103,7 +102,6 @@ public:
     {
       ObThreadCondGuard guard(sqc_level_sync_cond_);
       if (OB_FAIL(sqc_piece_msg_.aggregate_piece(piece))) {
-        SQL_ENG_LOG(WARN, "failed to aggregate_piece");
       } else {
         ++dh_msg_cnt_;
       }
@@ -137,7 +135,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(whole_msg_.assign(msg))) {
-      SQL_ENG_LOG(WARN,"fail assign msg", K(msg), K(ret));
     } else {
       whole_msg_set_ = true;
     }

@@ -40,7 +40,6 @@ int ObDASSPIVMergeIter::get_ob_sparse_drop_ratio_search(uint64_t &drop_ratio)
     drop_ratio = OB_SPARSE_DROP_RATIO_SEARCH_DEFAULT;
     LOG_WARN("session is null", K(ret), KP(exec_ctx_));
   } else if (OB_FAIL(session->get_ob_sparse_drop_ratio_search(drop_ratio))) {
-    LOG_WARN("failed to get ob spiv drop ratio search", K(ret));
   }
 
   return ret;
@@ -60,16 +59,13 @@ int ObDASSPIVMergeIter::init_query_vector(const ObDASVecAuxScanCtDef *ir_ctdef,
   ObString qvec_data;
   uint64_t drop_ratio;
   if (OB_FAIL(get_ob_sparse_drop_ratio_search(drop_ratio))) {
-      LOG_WARN("failed to get sparse drop ratio search", K(ret));  
   } else if (drop_ratio == 100) {
   } else if (OB_FAIL(ObDasVecScanUtils::init_sort(vec_aux_ctdef_, vec_aux_rtdef_, sort_ctdef_, 
                                           sort_rtdef_, limit_param_, qvec_expr_, distance_calc_))) {
-    LOG_WARN("failed to init sort", K(ret));
   } else if (OB_ISNULL(qvec_expr_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("qvec expr is null", K(ret));
   } else if (OB_FAIL(qvec_expr_->eval(*(sort_rtdef_->eval_ctx_), qvec_datum))) {
-    LOG_WARN("eval qvec arg failed", K(ret));
   } else if (qvec_datum->is_null()){
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("qvec datum null", K(ret));
@@ -78,7 +74,6 @@ int ObDASSPIVMergeIter::init_query_vector(const ObDASVecAuxScanCtDef *ir_ctdef,
 
     ObIArrayType *qvec_ptr = nullptr;
     if (OB_FAIL(ObArrayExprUtils::get_array_obj(allocator_, *(sort_rtdef_->eval_ctx_), subschema_id, qvec_datum->get_string(), qvec_ptr))) {
-      LOG_WARN("get qvec failed", K(ret));
     } else if (OB_ISNULL(qvec_ptr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("qvec is null", K(ret));    
@@ -212,7 +207,6 @@ int ObDASSPIVMergeIter::rescan()
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(set_inv_scan_range_key())) {
-    LOG_WARN("failed to set inv scan range key for rescan", K(ret));
   }
   for (int i = 0; i < inv_dim_scan_iters_.count() && OB_SUCC(ret); ++i) {
     if (OB_NOT_NULL(inv_dim_scan_iters_[i]) && OB_FAIL(inv_dim_scan_iters_[i]->rescan())) {
@@ -232,11 +226,8 @@ int ObDASSPIVMergeIter::do_table_scan()
   }
   if(OB_SUCC(ret)) {
     if (OB_FAIL(create_dim_iters())) {
-      LOG_WARN("failed to create dim iters", K(ret));
     } else if (OB_FAIL(create_spiv_merge_iter())) {
-      LOG_WARN("failed to create sr merge iter", K(ret));
     } else if (OB_FAIL(set_inv_scan_range_key())) {
-      LOG_WARN("failed to set inv scan range key", K(ret));
     } else {
       for (int i = 0; i < inv_dim_scan_iters_.count() && OB_SUCC(ret); ++i) {
         if (OB_NOT_NULL(inv_dim_scan_iters_[i]) && OB_FAIL(inv_dim_scan_iters_[i]->do_table_scan())) {
@@ -292,25 +283,20 @@ int ObDASSPIVMergeIter::inner_init(ObDASIterParam &param)
       lib::ContextParam param;
       param.set_mem_attr("SPIV_MERGE", ObCtxIds::DEFAULT_CTX_ID);
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
-        LOG_WARN("failed to create vector spiv_merge memory context", K(ret));
       }
     }
     
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObDasVecScanUtils::init_limit(vec_aux_ctdef_, vec_aux_rtdef_, sort_ctdef_, sort_rtdef_, limit_param_))) {
-      LOG_WARN("failed to init limit", K(ret), KPC(vec_aux_ctdef_), KPC(vec_aux_rtdef_));
     } else if (OB_FAIL(init_query_vector(vec_aux_ctdef_, vec_aux_rtdef_, sort_ctdef_, sort_rtdef_, limit_param_, qvec_expr_, distance_calc_))) {
-      LOG_WARN("failed to init query vector", K(ret)); 
     } else if (OB_ISNULL(qvec_)) {
     } else if (OB_FAIL(ObDasVecScanUtils::get_distance_expr_type(*sort_ctdef_->sort_exprs_[0], *sort_rtdef_->eval_ctx_, dis_type_))) {
-        LOG_WARN("failed to get distance type.", K(ret));
     } else if (dis_type_ != ObExprVectorDistance::ObVecDisType::DOT) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("distance type not support yet", K(ret), K(dis_type_));
     } else if (OB_FALSE_IT(set_algo())) {
     } else if (vec_aux_ctdef_->is_pre_filter()){
       if (OB_FAIL(valid_docid_set_.create(16, ObMemAttr("ValidDocidSet")))) {
-        LOG_WARN("failed to create docid set", K(ret));
       }
     }
 
@@ -363,9 +349,7 @@ int ObDASSPIVMergeIter::set_inv_scan_range_key()
   for (int i = 0; i < size && OB_SUCC(ret); ++i) {
     ObNewRange range;
     if (OB_FAIL(build_inv_scan_range(range, spiv_scan_ctdef_->ref_table_id_, dims[i]))) {
-      LOG_WARN("failed to build inv scan range", K(ret), K(dims[i]));
     } else if (OB_FAIL(inv_scan_params_[i]->key_ranges_.push_back(range))) {
-      LOG_WARN("failed to push inv scan range", K(ret), K(dims[i]));
     } else if (algo_ == BLOCK_MAX_WAND && OB_FAIL(block_max_scan_params_[i]->key_ranges_.push_back(range))) {
       LOG_WARN("failed to push block max scan range", K(ret), K(dims[i]));
     }
@@ -413,7 +397,6 @@ int ObDASSPIVMergeIter::init_dim_iter_param(ObSPIVDimIterParam &dim_param, int64
                  snapshot_,
                  *dim_param.inv_idx_scan_param_,
                  false))) {
-    LOG_WARN("failed to init scan param", K(ret));
   }
   return ret;
 }
@@ -425,23 +408,17 @@ int ObDASSPIVMergeIter::create_dim_iters()
     int size = qvec_->cardinality();
     if (FALSE_IT(inv_scan_params_.set_allocator(&allocator_))) {
     } else if (OB_FAIL(inv_scan_params_.init(size))) {
-      LOG_WARN("failed to init inv scan params array", K(ret));
     } else if (OB_FAIL(inv_scan_params_.prepare_allocate(size))) {
-      LOG_WARN("failed to prepare allocate inv scan params array", K(ret));
     } else if (algo_ != SPIVAlgo::BLOCK_MAX_WAND) {
     } else if (FALSE_IT(block_max_scan_params_.set_allocator(&allocator_))) {
     } else if (OB_FAIL(block_max_scan_params_.init(size))) {
-      LOG_WARN("failed to init inv scan params array", K(ret));
     } else if (OB_FAIL(block_max_scan_params_.prepare_allocate(size))) {
-      LOG_WARN("failed to prepare allocate inv scan params array", K(ret));
     } else if(OB_FAIL(block_max_iter_param_.init(*vec_aux_ctdef_, allocator_))) {
-      LOG_WARN("failed to init block max iter param", K(ret));
     }
     for (int i = 0; i < size && OB_SUCC(ret); i++) {
       ObSPIVDimIterParam dim_param;
       ObISRDaaTDimIter *dim_iter = nullptr;
       if (OB_FAIL(init_dim_iter_param(dim_param, i))) {
-        LOG_WARN("failed to init dim iter param");
       }
       inv_scan_params_[i] = dim_param.inv_idx_scan_param_;
       if (OB_FAIL(ret)){
@@ -458,12 +435,10 @@ int ObDASSPIVMergeIter::create_dim_iters()
                        snapshot_,
                        *block_max_scan_params_[i],
                        false))) {
-          LOG_WARN("failed to init scan param", K(ret));
         } else if (OB_ISNULL(block_max_iter = OB_NEWx(ObSPIVBlockMaxDimIter, &allocator_))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("failed to allocate memory for spiv block max iter", K(ret));
         } else if (OB_FAIL(block_max_iter->init(dim_param, block_max_iter_param_, *block_max_scan_params_[i]))) {
-          LOG_WARN("failed to init spiv block max iter", K(ret));
         } else {
           dim_iter = block_max_iter;
         }
@@ -473,7 +448,6 @@ int ObDASSPIVMergeIter::create_dim_iters()
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("failed to alloc memory for dim iter");
         } else if (OB_FAIL(iter->init(dim_param))) {
-          LOG_WARN("failed to init dim iter");
         } else {
           dim_iter = iter;
         }
@@ -518,7 +492,6 @@ int ObDASSPIVMergeIter::init_spiv_merge_param(ObSPIVDaaTParam &iter_param)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate memory for inner product relevance collector", K(ret));
     } else if (OB_FAIL(inner_product_relevance_collector->init())) {
-      LOG_WARN("failed to init boolean relevance collector", K(ret));
     } else {
       iter_param.relevance_collector_ = inner_product_relevance_collector;
     }
@@ -534,12 +507,10 @@ int ObDASSPIVMergeIter::create_spiv_merge_iter()
     case SPIVAlgo::DAAT_NAIVE:{
       ObSPIVDaaTNaiveIter *iter = nullptr;
       if (OB_FAIL(init_spiv_merge_param(param))) {
-        LOG_WARN("failed to init merge param");
       } else if (OB_ISNULL(iter = OB_NEWx(ObSPIVDaaTNaiveIter, &allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to alloc memory for daat iter");
       } else if (OB_FAIL(iter->init(param))) {
-          LOG_WARN("failed to init daat naive iter");
       } else {
         spiv_iter_ = iter;
       }
@@ -548,12 +519,10 @@ int ObDASSPIVMergeIter::create_spiv_merge_iter()
     case SPIVAlgo::BLOCK_MAX_WAND: {
       ObSPIVBMWIter *iter = nullptr;
       if (OB_FAIL(init_spiv_merge_param(param))) {
-        LOG_WARN("failed to init merge param");
       } else if (OB_ISNULL(iter = OB_NEWx(ObSPIVBMWIter, &allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to alloc memory for daat iter");
       } else if (OB_FAIL(iter->init(param))) {
-          LOG_WARN("failed to init daat naive iter");
       } else {
         spiv_iter_ = iter;
       }
@@ -589,7 +558,6 @@ int ObDASSPIVMergeIter::inner_reuse()
     for (int i = 0; i < inv_dim_scan_iters_.count() && OB_SUCC(ret); ++i) {
       if (OB_FAIL(ObDasVecScanUtils::reuse_iter(
               ls_id_, inv_dim_scan_iters_[i], *inv_scan_params_[i], dim_docid_value_tablet_id_))) {
-        LOG_WARN("failed to reuse inv dim scan iter", K(ret));
       }
     }
     if (OB_ISNULL(spiv_iter_)) {
@@ -738,7 +706,6 @@ int ObDASSPIVMergeIter::inner_get_next_rows(int64_t &count, int64_t capacity)
     ret = OB_ITER_END;
   } else if (vec_aux_ctdef_->is_pre_filter() && !is_pre_processed_) {
     if(OB_FAIL(pre_process(is_vectorized))) {
-      LOG_WARN("failed to pre process", K(ret));
     }
   }
   if(OB_FAIL(ret)) {
@@ -797,7 +764,6 @@ int ObDASSPIVMergeIter::get_rowkey_pre_filter(ObIAllocator &allocator, bool is_v
   const ObDASScanCtDef *ctdef = nullptr;
   ObDASScanRtDef *rtdef = nullptr;
   if (OB_FAIL(get_ctdef_with_rowkey_exprs(ctdef, rtdef))) {
-    LOG_WARN("failed to get ctdef with rowkey exprs", K(ret));
   }
 
   bool is_iter_end = false;
@@ -813,9 +779,7 @@ int ObDASSPIVMergeIter::get_rowkey_pre_filter(ObIAllocator &allocator, bool is_v
           LOG_WARN("failed to get next row", K(ret));
         }
       } else if (OB_FAIL(ObDasVecScanUtils::get_rowkey(allocator, ctdef, rtdef, rowkey))) {
-        LOG_WARN("failed to get rowkey", K(ret));
       } else if (OB_FAIL(saved_rowkeys_.push_back(rowkey))) {
-        LOG_WARN("failed to push rowkey", K(ret));
       }
     } else {
       int64_t scan_row_cnt = 0;
@@ -838,9 +802,7 @@ int ObDASSPIVMergeIter::get_rowkey_pre_filter(ObIAllocator &allocator, bool is_v
           guard.set_batch_idx(i);
           ObRowkey *rowkey;
           if (OB_FAIL(ObDasVecScanUtils::get_rowkey(allocator, ctdef, rtdef, rowkey))) {
-            LOG_WARN("failed to add rowkey", K(ret), K(i));
           } else if (OB_FAIL(saved_rowkeys_.push_back(rowkey))) {
-            LOG_WARN("failed to push rowkeys", K(ret));           
           }
         }
       }
@@ -857,7 +819,6 @@ int ObDASSPIVMergeIter::get_rowkey_and_set_docids(ObIAllocator &allocator, bool 
   const ObDASScanCtDef *ctdef = nullptr;
   ObDASScanRtDef *rtdef = nullptr;
   if (OB_FAIL(get_ctdef_with_rowkey_exprs(ctdef, rtdef))) {
-    LOG_WARN("failed to get ctdef with rowkey exprs", K(ret));
   }
 
   while (OB_SUCC(ret) && !is_iter_end) {
@@ -873,15 +834,12 @@ int ObDASSPIVMergeIter::get_rowkey_and_set_docids(ObIAllocator &allocator, bool 
             LOG_WARN("failed to get next row", K(ret));
           }
         } else if (OB_FAIL(ObDasVecScanUtils::get_rowkey(allocator, ctdef, rtdef, rowkey))) {
-          LOG_WARN("failed to get rowkey", K(ret));
         } else if (is_use_docid() && OB_FAIL(ObDasVecScanUtils::set_lookup_key(*rowkey, rowkey_docid_scan_param_, ctdef->ref_table_id_))) {
           LOG_WARN("failed to set rowkey.", K(ret));
         } else if (!is_use_docid()) {
           ObDocIdExt docid;
           if (OB_FAIL(rowkey2docid(*rowkey, docid))) {
-            LOG_WARN("failed to get docid", K(ret));
           } else if (OB_FAIL(valid_docid_set_.set_refactored(docid))){
-            LOG_WARN("failed to insert valid docid set", K(ret));
           }
         }
       }
@@ -904,15 +862,12 @@ int ObDASSPIVMergeIter::get_rowkey_and_set_docids(ObIAllocator &allocator, bool 
           guard.set_batch_idx(i);
           ObRowkey *rowkey;
           if (OB_FAIL(ObDasVecScanUtils::get_rowkey(allocator, ctdef, rtdef, rowkey))) {
-            LOG_WARN("failed to add rowkey", K(ret), K(i));
           } else if (is_use_docid() && OB_FAIL(ObDasVecScanUtils::set_lookup_key(*rowkey, rowkey_docid_scan_param_, ctdef->ref_table_id_))) {
             LOG_WARN("failed to set rowkey.", K(ret));
           } else if (!is_use_docid()) {
             ObDocIdExt docid;
             if (OB_FAIL(rowkey2docid(*rowkey, docid))) {
-              LOG_WARN("failed to get docid", K(ret));
             } else if (OB_FAIL(valid_docid_set_.set_refactored(docid))){
-              LOG_WARN("failed to insert valid docid set", K(ret));
             }
           }
         }
@@ -923,8 +878,7 @@ int ObDASSPIVMergeIter::get_rowkey_and_set_docids(ObIAllocator &allocator, bool 
     } else if (!is_use_docid()) {
       // do nothing
     } else if (rowkey_docid_scan_param_.key_ranges_.count() != 0) {
-      if (OB_FAIL(do_rowkey_docid_table_scan())) { 
-        LOG_WARN("failed to do rowkey docid table scan", K(ret));
+      if (OB_FAIL(do_rowkey_docid_table_scan())) {
       }
 
       for (int64_t i = 0; OB_SUCC(ret) && i < batch_count; ++i) {
@@ -937,7 +891,6 @@ int ObDASSPIVMergeIter::get_rowkey_and_set_docids(ObIAllocator &allocator, bool 
             break;
           }
         } else if (OB_FAIL(valid_docid_set_.set_refactored(docid))){
-          LOG_WARN("failed to insert valid docid set", K(ret));
         }
       }
       if (OB_SUCC(ret) && OB_FAIL(reuse_rowkey_docid_iter())) {
@@ -963,7 +916,6 @@ int ObDASSPIVMergeIter::rowkey2docid(ObRowkey &rowkey, ObDocIdExt &docid)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid rowkey", K(ret), K(rowkey.length()));  
   } else if (OB_FAIL(docid.from_obj(*rowkey.ptr()))){
-    LOG_WARN("failed to get docid from rowkey", K(ret));
   }
 
   return ret;
@@ -989,13 +941,11 @@ int ObDASSPIVMergeIter::do_brute_force(ObIAllocator &allocator, bool is_vectoriz
     int64_t start_idx = cur_idx;
     for (int64_t i = 0; OB_SUCC(ret) && i < batch_count && cur_idx < saved_rowkey_count; ++i) {
       if (OB_FAIL(ObDasVecScanUtils::set_lookup_key(*saved_rowkeys_[cur_idx++], aux_data_scan_param_, aux_data_ctdef->ref_table_id_))) {
-        LOG_WARN("failed to set lookup key", K(ret));
       } 
     }
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(do_aux_data_table_scan())) {
-      LOG_WARN("failed to do aux data table scan", K(ret));
     } else {
       for (; OB_SUCC(ret) && start_idx < cur_idx; ++start_idx) {
         ObString vector;
@@ -1009,15 +959,12 @@ int ObDASSPIVMergeIter::do_brute_force(ObIAllocator &allocator, bool is_vectoriz
           ObIArrayType *arr = nullptr;
           ObMapType *vec = nullptr;
           if (OB_FAIL(ObArrayTypeObjFactory::construct(allocator, *qvec_->get_array_type(), arr, true))) {
-            LOG_WARN("failed to construct arr", K(ret));
           } else if (OB_FAIL(arr->init(vector))){
-            LOG_WARN("failed to init sparse vector", K(ret));
           } else if (OB_FALSE_IT(vec = dynamic_cast<ObMapType *>(arr))) {
           } else if (OB_ISNULL(vec)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("arr cast failed", K(ret));
           } else if (OB_FAIL(ObExprVectorDistance::SparseVectorDisFunc::spiv_distance_funcs[dis_type_](qvec_, vec, score))) {
-            LOG_WARN("failed to get score", K(ret));
           } else if (score == 0) {
           } else {
             ObRowkey *rowkey = saved_rowkeys_[start_idx];
@@ -1029,7 +976,6 @@ int ObDASSPIVMergeIter::do_brute_force(ObIAllocator &allocator, bool is_vectoriz
       int tmp_ret = ret;
       ret = OB_SUCCESS;
       if (OB_FAIL(reuse_aux_data_iter())) {
-        LOG_WARN("failed to reuse aux data table iter.", K(ret));
       } else {
         ret = tmp_ret;
       }
@@ -1046,12 +992,10 @@ int ObDASSPIVMergeIter::do_brute_force(ObIAllocator &allocator, bool is_vectoriz
       for (int64_t i = 0; OB_SUCC(ret) && i < batch_count && !max_heap.empty(); ++i) {
         ObRowkey *rowkey = max_heap.top().rowkey_;
         if (OB_FAIL(max_heap.pop())) {
-          LOG_WARN("failed to pop rowkey from heap", K(ret));  
         } else if (OB_ISNULL(rowkey)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("failed to get rowkey from max heap.", K(ret));  
         } else if (OB_FAIL(ObDasVecScanUtils::set_lookup_key(*rowkey, rowkey_docid_scan_param_, rowkey_docid_ctdef->ref_table_id_))) {
-          LOG_WARN("failed to set rowkey.", K(ret));
         }      
       }
 
@@ -1069,7 +1013,6 @@ int ObDASSPIVMergeIter::do_brute_force(ObIAllocator &allocator, bool is_vectoriz
             break;
           }
         } else if (OB_FAIL(result_docids_.push_back(cur_docid))) {
-          LOG_WARN("failed to push back docid", K(ret));
         }
       }
       if (OB_SUCC(ret) && OB_FAIL(reuse_rowkey_docid_iter())) {
@@ -1084,16 +1027,13 @@ int ObDASSPIVMergeIter::do_brute_force(ObIAllocator &allocator, bool is_vectoriz
       for (int64_t i = 0; OB_SUCC(ret) && i < batch_count && !max_heap.empty(); ++i) {
         ObRowkey *rowkey = max_heap.top().rowkey_;
         if (OB_FAIL(max_heap.pop())) {
-          LOG_WARN("failed to pop rowkey from heap", K(ret));  
         } else if (OB_ISNULL(rowkey)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("failed to get rowkey from max heap.", K(ret));  
         } else {
           ObDocIdExt cur_docid;
           if (OB_FAIL(rowkey2docid(*rowkey, cur_docid))) {
-            LOG_INFO("failed to get docid from rowkey", K(ret));
           } else if (OB_FAIL(result_docids_.push_back(cur_docid))) {
-            LOG_WARN("failed to push back docid", K(ret));
           }
         }   
       }
@@ -1124,7 +1064,6 @@ int ObDASSPIVMergeIter::set_valid_docids_with_rowkeys(ObIAllocator &allocator, i
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("failed to get rowkey from saved rowkeys.", K(ret));  
         } else if (OB_FAIL(ObDasVecScanUtils::set_lookup_key(*rowkey, rowkey_docid_scan_param_, rowkey_docid_ctdef->ref_table_id_))) {
-          LOG_WARN("failed to set rowkey.", K(ret));
         }
         batch_size++;
       }
@@ -1139,7 +1078,6 @@ int ObDASSPIVMergeIter::set_valid_docids_with_rowkeys(ObIAllocator &allocator, i
             LOG_WARN("failed to get docid from rowkey docid table.", K(ret));
           }
         } else if (OB_FAIL(valid_docid_set_.set_refactored(docid))){
-          LOG_WARN("failed to insert valid docid set", K(ret));
         }
       }
       if (OB_SUCC(ret) && OB_FAIL(reuse_rowkey_docid_iter())) {
@@ -1158,9 +1096,7 @@ int ObDASSPIVMergeIter::set_valid_docids_with_rowkeys(ObIAllocator &allocator, i
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("failed to get rowkey from saved rowkeys.", K(ret));  
         } else if (OB_FAIL(rowkey2docid(*rowkey, docid))) {
-          LOG_WARN("failed to set docid.", K(ret));
         } else if (OB_FAIL(valid_docid_set_.set_refactored(docid))){
-          LOG_WARN("failed to insert valid docid set", K(ret));
         }
       }
     }
@@ -1175,27 +1111,21 @@ int ObDASSPIVMergeIter::pre_process(bool is_vectorized)
   ObArenaAllocator &allocator = mem_context_->get_arena_allocator();
   int64_t batch_count = ObVectorParamData::VI_PARAM_DATA_BATCH_SIZE;
   if (OB_FAIL(get_rowkey_pre_filter(allocator, is_vectorized, batch_count))) {
-    LOG_WARN("failed to get rowkey pre filter", K(ret), K(is_vectorized));
   } else if (saved_rowkeys_.count() < MAX_SPIV_BRUTE_FORCE_SIZE) {
     if (OB_FAIL(do_brute_force(allocator, is_vectorized, batch_count))) {
-      LOG_WARN("failed to do brute force", K(ret));
     } else if (result_docids_.count() != 0) {
       result_docids_curr_iter_ = 0;
     }
   } else if (OB_FAIL(set_valid_docids_with_rowkeys(allocator, batch_count))) {
-    LOG_WARN("failed to set valid docids", K(ret));
   } else if (OB_FAIL(get_rowkey_and_set_docids(allocator, is_vectorized, batch_count))) {
-    LOG_WARN("failed to get rowkeys and set valid docids", K(ret));
   } else {
     if (algo_ == SPIVAlgo::DAAT_NAIVE) {
       ObSPIVDaaTIter *iter = static_cast<ObSPIVDaaTIter *>(spiv_iter_);
       if(OB_FAIL(iter->set_valid_docid_set(valid_docid_set_))) {
-        LOG_WARN("failed to set valid docid set", K(ret));
       }
     } else if (algo_ == SPIVAlgo::BLOCK_MAX_WAND) {
        ObSPIVBMWIter *iter = static_cast<ObSPIVBMWIter *>(spiv_iter_);
       if(OB_FAIL(iter->set_valid_docid_set(valid_docid_set_))) {
-        LOG_WARN("failed to set valid docid set", K(ret));
       }
     } else {
       ret = OB_NOT_SUPPORTED;
@@ -1224,16 +1154,13 @@ int ObDASSPIVMergeIter::do_aux_data_table_scan()
                                                            snapshot_,
                                                            aux_data_scan_param_,
                                                            true/*is_get*/))) {
-      LOG_WARN("failed to init aux data scan param", K(ret));
     } else if (OB_FALSE_IT(aux_data_iter_->set_scan_param(aux_data_scan_param_))) {
     } else if (OB_FAIL(aux_data_iter_->do_table_scan())) {
-      LOG_WARN("failed to do aux data iter scan", K(ret));
     } else {
       aux_data_table_first_scan_ = false;
     }
   } else {
     if (OB_FAIL(aux_data_iter_->rescan())) {
-      LOG_WARN("failed to rescan aux data table scan iterator.", K(ret));
     }
   }
   return ret;
@@ -1255,16 +1182,13 @@ int ObDASSPIVMergeIter::do_rowkey_docid_table_scan()
                                                    tx_desc_,
                                                    snapshot_,
                                                    rowkey_docid_scan_param_))) {
-      LOG_WARN("failed to init rowkey docid scan param", K(ret));
     } else if (OB_FALSE_IT(rowkey_docid_iter_->set_scan_param(rowkey_docid_scan_param_))) {
     } else if (OB_FAIL(rowkey_docid_iter_->do_table_scan())) {
-      LOG_WARN("failed to do rowkey docid iter scan", K(ret));
     } else {
       rowkey_docid_table_first_scan_ = false;
     }
   } else {
     if (OB_FAIL(rowkey_docid_iter_->rescan())) {
-      LOG_WARN("failed to rescan rowkey docid table scan iterator.", K(ret));
     }
   }
   return ret;
@@ -1317,7 +1241,6 @@ int ObDASSPIVMergeIter::get_vector_from_aux_data_table(ObString &vector)
                                                                 CS_TYPE_BINARY, 
                                                                 aux_data_ctdef->result_output_.at(0)->obj_meta_.has_lob_header(), 
                                                                 vector))) {
-    LOG_WARN("failed to get real data.", K(ret));
   }
 
   return ret;
@@ -1339,7 +1262,6 @@ int ObDASSPIVMergeIter::get_docid_from_rowkey_docid_table(ObDocIdExt &docid)
     ObExpr *docid_expr = vec_aux_ctdef_->spiv_scan_docid_col_;
     ObDatum &docid_datum = docid_expr->locate_expr_datum(*rowkey_docid_rtdef->eval_ctx_);
     if (OB_FAIL(docid.from_datum(docid_datum))) {
-      LOG_WARN("invalid docid.", K(ret));
     } 
   }
 

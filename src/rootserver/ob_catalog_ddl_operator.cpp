@@ -47,7 +47,6 @@ int ObCatalogDDLOperator::handle_catalog_function(ObCatalogSchema &schema,
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
-      LOG_WARN("fail to gen new schema_version", K(ret));
     } else {
       schema.set_schema_version(new_schema_version);
     }
@@ -56,7 +55,6 @@ int ObCatalogDDLOperator::handle_catalog_function(ObCatalogSchema &schema,
     if (OB_FAIL(schema_guard.get_catalog_schema_by_name(
                                                         schema.get_catalog_name_str(),
                                                         old_schema))) {
-      LOG_WARN("fail to check schema exist", K(ret));
     } else {
       is_schema_exist = (old_schema != NULL);
     }
@@ -79,7 +77,6 @@ int ObCatalogDDLOperator::handle_catalog_function(ObCatalogSchema &schema,
             LOG_WARN("catalog already exist", K(ret));
           }
         } else if (OB_FAIL(schema_sql_service->fetch_new_catalog_id(catalog_id))) {
-          LOG_WARN("fail to fetch new catalog id", K(ret));
         } else {
           schema.set_catalog_id(catalog_id);
         }
@@ -117,7 +114,6 @@ int ObCatalogDDLOperator::handle_catalog_function(ObCatalogSchema &schema,
   if (OB_SUCC(ret) && need_apply_schema) {
     if (OB_FAIL(schema_sql_service->get_catalog_sql_service()
                       .apply_new_schema(schema, trans, ddl_type, ddl_stmt_str))) {
-      LOG_WARN("apply catalog failed", K(ret));
     }
   }
   // after catalog created, we should grant privilege to creator
@@ -196,10 +192,8 @@ int ObCatalogDDLOperator::grant_revoke_catalog(const ObCatalogPrivSortKey &catal
   } else if (0 == priv_set) {
     //do nothing
   } else if (OB_FAIL(schema_service_.get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("failed to get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_catalog_priv_set(catalog_priv_key,
                                                        catalog_priv_set))) {
-    LOG_WARN("get catalog priv set failed", K(ret));
   } else if (!grant && OB_PRIV_SET_EMPTY == catalog_priv_set) {
     ret = OB_ERR_NO_GRANT;
     LOG_WARN("no such grant to revoke", K(ret));
@@ -212,11 +206,9 @@ int ObCatalogDDLOperator::grant_revoke_catalog(const ObCatalogPrivSortKey &catal
     need_flush = (new_priv != catalog_priv_set);
     if (need_flush) {
       if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
-        LOG_WARN("failed to gen new schema_version", K(ret));
       } else if (OB_FAIL(schema_sql_service->get_catalog_sql_service()
                               .grant_revoke_catalog(catalog_priv_key, new_priv, new_schema_version,
                                                     ddl_stmt_str, trans))) {
-        LOG_WARN("apply catalog failed", K(ret));
       }
     }
   }

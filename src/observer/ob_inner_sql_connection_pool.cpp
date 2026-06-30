@@ -81,7 +81,6 @@ int ObInnerSQLConnectionPool::init(ObMultiVersionSchemaService *schema_service,
     LOG_WARN("invalid argument", K(ret), KP(schema_service), KP(ob_sql),
              KP(vt_iter_creator));
   } else if (OB_FAIL(cond_.init(ObWaitEventIds::INNER_CONNECTION_POOL_COND_WAIT))) {
-    LOG_WARN("fail to init cond, ", K(ret));
   } else {
     schema_service_ = schema_service;
     ob_sql_ = ob_sql;
@@ -102,13 +101,10 @@ int ObInnerSQLConnectionPool::acquire(common::sqlclient::ObISQLConnection *&conn
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
   } else if (OB_FAIL(alloc_conn(inner_sql_conn))) {
-    LOG_WARN("alloc connection from pool failed", K(ret));
   } else if (OB_FAIL(inner_sql_conn->init(this, schema_service_, ob_sql_, vt_iter_creator_,
                                           config_, nullptr /* session_info */, client_addr, nullptr/*sql modifer*/, is_ddl_,
                                           group_id, is_resource_conn_pool_))) {
-    LOG_WARN("init connection failed", K(ret));
   } else if (OB_FAIL(add_to_used_conn_list(inner_sql_conn))) {
-    LOG_WARN("add_to_used_conn_list failed", K(ret));
   } else {
     inner_sql_conn->ref();
     conn = inner_sql_conn;
@@ -118,16 +114,13 @@ int ObInnerSQLConnectionPool::acquire(common::sqlclient::ObISQLConnection *&conn
     if (NULL != inner_sql_conn) {
       int tmp_ret = remove_from_used_conn_list(inner_sql_conn);
       if (OB_SUCCESS != tmp_ret) {
-        LOG_WARN("remove_from_used_conn_list failed", "ret", tmp_ret);
       }
       tmp_ret = inner_sql_conn->destroy();
       if (OB_SUCCESS != tmp_ret) {
-        LOG_WARN("destroy connection failed", "ret", tmp_ret);
       }
       // continue executing while destroy error.
       tmp_ret = free_conn(inner_sql_conn);
       if (OB_SUCCESS != tmp_ret) {
-        LOG_WARN("free connection failed", "ret", tmp_ret);
       }
     }
   }
@@ -158,7 +151,6 @@ int ObInnerSQLConnectionPool::acquire_spi_conn(sql::ObSQLSessionInfo *session_in
                                 nullptr /* client_addr */,
                                 nullptr /* sql_modifier */,
                                 true /* use_static_engine */))) {
-    LOG_WARN("init connection failed", K(ret));
   } else {
     conn->ref();
     conn->set_spi_connection(true);
@@ -176,12 +168,9 @@ int ObInnerSQLConnectionPool::acquire(
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
   } else if (OB_FAIL(alloc_conn(inner_sql_conn))) {
-    LOG_WARN("alloc connection from pool failed", K(ret));
   } else if (OB_FAIL(inner_sql_conn->init(this, schema_service_, ob_sql_, vt_iter_creator_, config_,
                      session_info, NULL, NULL, false, 0/*group_id*/ , is_resource_conn_pool_))) {
-    LOG_WARN("init connection failed", K(ret));
   } else if (OB_FAIL(add_to_used_conn_list(inner_sql_conn))) {
-    LOG_WARN("add_to_used_conn_list failed", K(ret));
   } else {
     if (0 != inner_sql_conn->get_ref()) {
       LOG_WARN("ref is not ZERO after acquire", KP(inner_sql_conn),
@@ -195,16 +184,13 @@ int ObInnerSQLConnectionPool::acquire(
     if (NULL != inner_sql_conn) {
       int tmp_ret = remove_from_used_conn_list(inner_sql_conn);
       if (OB_SUCCESS != tmp_ret) {
-        LOG_WARN("remove_from_used_conn_list failed", "ret", tmp_ret);
       }
       tmp_ret = inner_sql_conn->destroy();
       if (OB_SUCCESS != tmp_ret) {
-        LOG_WARN("destroy connection failed", "ret", tmp_ret);
       }
       // continue executing while destroy error.
       tmp_ret = free_conn(inner_sql_conn);
       if (OB_SUCCESS != tmp_ret) {
-        LOG_WARN("free connection failed", "ret", tmp_ret);
       }
     }
   }
@@ -240,11 +226,8 @@ int ObInnerSQLConnectionPool::revert(ObInnerSQLConnection *conn)
       //spi connection come from ObServerObjectPool, so release it to ObServerObjectPool
       rp_free(conn, ObInnerSQLConnection::LABEL);
     } else if (OB_FAIL(remove_from_used_conn_list(conn))) {
-      LOG_WARN("remove_from_used_conn_list failed", K(ret));
     } else if (OB_FAIL(conn->destroy())) {
-      LOG_WARN("connection destroy failed", K(ret));
     } else if (OB_FAIL(free_conn(conn))) {
-      LOG_WARN("free connection failed", K(ret));
     }
   }
   return ret;

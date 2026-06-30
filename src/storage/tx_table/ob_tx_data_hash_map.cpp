@@ -129,7 +129,6 @@ int ObTxDataHashMap::get(const transaction::ObTransID &key, ObTxDataGuard &guard
   if (OB_ISNULL(value)) {
     ret = OB_ENTRY_NOT_EXIST;
   } else if (OB_FAIL(guard.init(value))) {
-    STORAGE_LOG(WARN, "get tx data from tx data hash map failed", KR(ret), KP(this), KPC(value));
   }
   return ret;
 }

@@ -49,12 +49,10 @@ int ObObjPrivMysqlDDLOperator::grant_object(
   } else if (0 == priv_set) {
     //do nothing
   } else if (OB_FAIL(schema_service_.get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("failed to get schema guard", K(ret));
   } else {
     ObPrivSet new_priv = priv_set;
     ObPrivSet object_priv_set = OB_PRIV_SET_EMPTY;
     if (OB_FAIL(schema_guard.get_obj_mysql_priv_set(object_priv_key, object_priv_set))) {
-      LOG_WARN("get object priv set failed", K(ret));
     } else {
       bool need_flush = true;
       new_priv |= object_priv_set;
@@ -69,7 +67,6 @@ int ObObjPrivMysqlDDLOperator::grant_object(
         need_priv.priv_set_ = (~object_priv_set) & new_priv;
         need_priv.obj_type_ = static_cast<share::schema::ObObjectType>(object_priv_key.object_type_);
         if (OB_FAIL(schema_guard.get_user_info(object_priv_key.user_id_, user_info))) {
-          LOG_WARN("get user info failed", K(object_priv_key), K(ret));
         } else if (OB_ISNULL(user_info)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("user not exist", K(object_priv_key), K(ret));
@@ -82,11 +79,9 @@ int ObObjPrivMysqlDDLOperator::grant_object(
           int64_t new_schema_version = OB_INVALID_VERSION;
           int64_t new_schema_version_ora = OB_INVALID_VERSION;
           if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
-            LOG_WARN("fail to gen new schema_version", K(ret));
           } else if (OB_FAIL(schema_sql_service->get_priv_sql_service().grant_object(
                 object_priv_key, new_priv, new_schema_version, &ddl_sql, trans, option, true,
                 grantor, grantor_host))) {
-            LOG_WARN("priv sql service grant object failed", K(ret));
           }
         }
       }
@@ -117,11 +112,9 @@ int ObObjPrivMysqlDDLOperator::revoke_object(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("db_priv_key is invalid", K(object_priv_key), K(ret));
   } else if (OB_FAIL(schema_service_.get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("failed to get schema guard", K(ret));
   } else {
     ObPrivSet object_priv_set = OB_PRIV_SET_EMPTY;
     if (OB_FAIL(schema_guard.get_obj_mysql_priv_set(object_priv_key, object_priv_set))) {
-      LOG_WARN("get object priv set failed", K(ret));
     } else if (OB_PRIV_SET_EMPTY == object_priv_set) {
       if (report_error) {
         ret = OB_ERR_CANNOT_REVOKE_PRIVILEGES_YOU_DID_NOT_GRANT;
@@ -144,7 +137,6 @@ int ObObjPrivMysqlDDLOperator::revoke_object(
         int64_t new_schema_version = OB_INVALID_VERSION;
         int64_t new_schema_version_ora = OB_INVALID_VERSION;
         if (OB_FAIL(schema_guard.get_user_info(object_priv_key.user_id_, user_info))) {
-          LOG_WARN("get user info failed", K(object_priv_key), K(ret));
         } else if (OB_ISNULL(user_info)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("user not exist", K(object_priv_key), K(ret));
@@ -156,10 +148,8 @@ int ObObjPrivMysqlDDLOperator::revoke_object(
           LOG_WARN("gen_object_priv_sql failed", K(ret), K(need_priv));
         } else if (FALSE_IT(ddl_sql = ddl_stmt_str.string())) {
         } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
-          LOG_WARN("fail to gen new schema_version", K(ret));
         } else if (OB_FAIL(schema_sql_service->get_priv_sql_service().revoke_object(
                    object_priv_key, new_priv, new_schema_version, &ddl_sql, trans, grantor, grantor_host))) {
-          LOG_WARN("Failed to revoke object", K(object_priv_key), K(ret));
         }
       }
     }

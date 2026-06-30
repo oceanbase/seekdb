@@ -37,9 +37,6 @@ ObMySQLTransaction::~ObMySQLTransaction()
   int ret = OB_SUCCESS;
   if (in_trans_) {
     if (OB_FAIL(end(OB_SUCCESS == get_errno()))) {
-      // Although the ret cannot be transmitted here, it still plays WARN, because sometimes it is normal to fail here.
-      // If it is not normal, the transaction module will log ERROR, here it is better to just log WARN
-      LOG_WARN("fail to end", K(ret));
     }
   }
   if (enable_query_stash_) {
@@ -58,7 +55,6 @@ int ObMySQLTransaction::start_transaction(
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("conn_ is NULL", K(ret));
   } else if (OB_FAIL(get_connection()->start_transaction(with_snapshot))) {
-    LOG_WARN("fail to start transaction", K(ret), K(with_snapshot));
   }
   return ret;
 }
@@ -71,7 +67,6 @@ int ObMySQLTransaction::start(
   int ret = OB_SUCCESS;
   start_time_ = ::oceanbase::common::ObTimeUtility::current_time();
   if (OB_FAIL(connect(group_id, sql_client))) {
-    LOG_WARN("failed to init", K(ret));
   } else if (enable_query_stash_ && OB_FAIL(query_stash_desc_.create(1024, "BucketQueryS", "NodeQueryS"))) {
     LOG_WARN("failed to init map", K(ret));
   } else {
@@ -123,7 +118,6 @@ int ObMySQLTransaction::do_stash_query(int min_batch_cnt)
     }
     const uint64_t start_time = ObTimeUtility::current_time();
     if (OB_FAIL(write(it->second->get_stash_query().ptr(), affected_rows))) {
-      LOG_ERROR("query_write",  "query", it->second->get_stash_query(), K(ret));
     } else if (affected_rows != it->second->get_row_cnt()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("query_write", K(ret), K(affected_rows), "row_cnt", it->second->get_row_cnt(), "query", it->second->get_stash_query());
@@ -168,7 +162,6 @@ int ObMySQLTransaction::get_stash_query(const char *table_name, ObSqlTransQueryS
     } else {
       desc = new(ptr) ObSqlTransQueryStashDesc();
       if (OB_FAIL(query_stash_desc_.set_refactored(table_name, desc))) {
-        LOG_WARN("get_stash_query", K(ret), K(table_name));
       }
     }
   }
@@ -196,7 +189,6 @@ int ObMySQLTransaction::end(const bool want_commit)
     }
     ret = end_transaction(commit);
     if (OB_FAIL(ret)) {
-      LOG_WARN("fail to end transation", K(ret));
     } else {
       LOG_DEBUG("end transaction success", K(commit));
     }

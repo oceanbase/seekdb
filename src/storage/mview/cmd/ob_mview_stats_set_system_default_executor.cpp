@@ -54,17 +54,14 @@ int ObMViewStatsSetSystemDefaultExecutor::execute(ObExecContext &ctx,
     ObMySQLTransaction trans;
     ObMViewRefreshStatsParams stats_params;
     if (OB_FAIL(trans.start(ctx.get_sql_proxy()))) {
-      LOG_WARN("fail to start trans", KR(ret));
     } else if (OB_FAIL(ObMViewRefreshStatsParams::fetch_sys_defaults(
                  trans, stats_params, true /*for_update*/))) {
-      LOG_WARN("fail to fetch sys defaults", KR(ret));
     } else if (OpType::SET_COLLECTION_LEVEL == op_type_ &&
                FALSE_IT(stats_params.set_collection_level(collection_level_))) {
     } else if (OpType::SET_RETENTION_PERIOD == op_type_ &&
                FALSE_IT(stats_params.set_retention_period(retention_period_))) {
     } else if (OB_FAIL(
                  ObMViewRefreshStatsParams::set_sys_defaults(trans, stats_params))) {
-      LOG_WARN("fail to set sys defaults", KR(ret), K(stats_params));
     }
     if (trans.is_started()) {
       int tmp_ret = OB_SUCCESS;
@@ -88,7 +85,6 @@ int ObMViewStatsSetSystemDefaultExecutor::resolve_arg(const ObMViewStatsSetSyste
     } else {
       if (OB_FAIL(
             ObMViewExecutorUtil::to_collection_level(arg.collection_level_, collection_level_))) {
-        LOG_WARN("fail to cast collection level", KR(ret), K(arg));
       }
     }
   } else if (0 == arg.parameter_name_.case_compare("RETENTION_PERIOD")) {

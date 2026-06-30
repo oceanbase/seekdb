@@ -73,7 +73,6 @@ int ObLimitVecOp::inner_open()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("limit vector operator has no child", K(ret));
   } else if (OB_FAIL(ObLimitVecOp::get_int_val(MY_SPEC.limit_expr_, eval_ctx_, limit_, is_null_value))) {
-    LOG_WARN("get limit values failed", K(ret));
   } else if (!is_null_value && OB_FAIL(ObLimitVecOp::get_int_val(MY_SPEC.offset_expr_, eval_ctx_,
                                                    offset_, is_null_value))) {
     LOG_WARN("get offset values failed", K(ret));
@@ -122,7 +121,6 @@ int ObLimitVecOp::inner_get_next_batch(const int64_t max_row_cnt)
       batch_cnt = offset_ - input_cnt_;
     }
     if (OB_FAIL(child_->get_next_batch(batch_cnt, child_brs))) {
-      LOG_WARN("child_op failed to get next row", K(input_cnt_), K(offset_), K(ret));
     } else if (is_percent_first_ && OB_FAIL(convert_limit_percent())) {
       LOG_WARN("failed to convert limit percent", K(ret));
     } else {
@@ -201,7 +199,6 @@ int ObLimitVecOp::inner_get_next_batch(const int64_t max_row_cnt)
                 find_last_available_row_cnt(*(brs_.skip_), brs_.size_));
               if (OB_FAIL(
                     pre_sort_columns_.save_store_row(MY_SPEC.sort_columns_, brs_, eval_ctx_))) {
-                LOG_WARN("failed to deep copy limit last rows", K(ret));
               }
             }
           } else if (OB_UNLIKELY(limit_ != -1 /*limit=-1 means no limit in oracle mode*/
@@ -236,10 +233,7 @@ int ObLimitVecOp::inner_get_next_batch(const int64_t max_row_cnt)
         bool keep_iterating = false;
         uint32_t matched_row_count = 0;
         if (OB_FAIL(child_->get_next_batch(batch_cnt, child_brs))) {
-          LOG_WARN("child_op failed to get next row", K(ret), K(limit_), K(batch_cnt),
-                   K(child_brs->size_));
         } else if (OB_FAIL(compare_value_in_batch(keep_iterating, child_brs, matched_row_count))) {
-          LOG_WARN("failed to is row order by item value equal", K(ret));
         }
         brs_.copy(child_brs);
         if (!keep_iterating) {
@@ -259,7 +253,6 @@ int ObLimitVecOp::inner_get_next_batch(const int64_t max_row_cnt)
             }
           }
           if (OB_SUCCESS != ret) {
-            LOG_WARN("fail to get next row from child", K(ret));
           }
         }
       }
@@ -301,9 +294,7 @@ int ObLimitVecOp::compare_value_in_batch(bool &keep_iterating,
     for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.sort_columns_.count(); ++i) {
       ObExpr *expr = MY_SPEC.sort_columns_.at(i);
       if (OB_FAIL(expr->eval_vector(eval_ctx_, *brs))) {
-        LOG_WARN("expression evaluate failed", K(ret));
       } else if (OB_FAIL(compare_vectors_.push_back(expr->get_vector(eval_ctx_)))) {
-        LOG_WARN("compare_vectors_ push back failed", K(ret));
       }
     }
 
@@ -321,7 +312,6 @@ int ObLimitVecOp::compare_value_in_batch(bool &keep_iterating,
                                                   current_waiting_compare_row->get_cell_payload(*pre_sort_columns_.ref_row_meta_, col_idx),
                                                   current_waiting_compare_row->get_length(*pre_sort_columns_.ref_row_meta_, col_idx),
                                                   cmp_ret))) {
-          LOG_WARN("compare failed", K(ret));
         } else {
           keep_iterating = (0 == cmp_ret);
         }
@@ -341,7 +331,6 @@ int ObLimitVecOp::convert_limit_percent()
   int ret = OB_SUCCESS;
   double percent = 0.0;
   if (OB_FAIL(ObLimitVecOp::get_double_val(MY_SPEC.percent_expr_, eval_ctx_, percent))) {
-    LOG_WARN("failed to get double value", K(ret));
   } else if (percent > 0) {
     int64_t tot_count = 0;
     if (OB_UNLIKELY(limit_ != -1) || OB_ISNULL(child_) ||
@@ -391,7 +380,6 @@ int ObLimitVecOp::get_double_val(ObExpr *expr, ObEvalCtx &eval_ctx, double &val)
     int64_t skip_int = 0;
     ObBitVector *skip = to_bit_vector(&skip_int);
     if (OB_FAIL(expr->eval_vector(eval_ctx, *skip, 1, true))) {
-      LOG_WARN("expr evaluate failed", K(ret), K(expr));
     } else if (expr->get_vector(eval_ctx)->is_null(0)) {
       val = 0.0;
     } else {
@@ -409,7 +397,6 @@ int ObLimitVecOp::get_int_val(ObExpr *expr, ObEvalCtx &eval_ctx, int64_t &val, b
     int64_t skip_int = 0;
     ObBitVector *skip = to_bit_vector(&skip_int);
     if (OB_FAIL(expr->eval_vector(eval_ctx, *skip, 1, true))) {
-      LOG_WARN("expr evaluate failed", K(ret), K(expr));
     } else if (expr->get_vector(eval_ctx)->is_null(0)) {
       is_null_value = true;
       val = 0.0;

@@ -41,7 +41,6 @@ int ObMPResetConnection::process()
   
   const ObSysVariableSchema *sys_variable_schema = NULL;
   if (OB_FAIL(get_session(session))) {
-    LOG_ERROR("get session  fail", K(ret));
   } else if (OB_ISNULL(conn = get_conn())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("null conn", K(ret));
@@ -58,31 +57,22 @@ int ObMPResetConnection::process()
     session->set_query_start_time(ObTimeUtility::current_time());
     LOG_TRACE("begin reset connection. ", K(session->get_server_sid()));
     if (OB_FAIL(process_extra_info(*session, pkt, need_response_error))) {
-      LOG_WARN("fail get process extra info", K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(schema_guard))) {
-      OB_LOG(WARN,"fail get schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_sys_variable_schema( sys_variable_schema))) {
-      LOG_WARN("get sys variable schema failed", K(ret));
     } else if (OB_ISNULL(sys_variable_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("sys variable schema is null", K(ret));
     } else if (OB_FAIL(session->load_all_sys_vars(*sys_variable_schema, true))) {
-      LOG_WARN("load system variables failed", K(ret));
     } else if (OB_FAIL(session->update_database_variables(&schema_guard))) {
-      OB_LOG(WARN, "failed to update database variables", K(ret));
     } else if (OB_FAIL(update_proxy_and_client_sys_vars(*session))) {
-      LOG_WARN("update_proxy_and_client_sys_vars failed", K(ret));
     } else if (OB_FAIL(update_charset_sys_vars(*conn, *session))) {
-      LOG_WARN("fail to update charset sys vars", K(ret));
     } else if (OB_FAIL(session->get_query_timeout(query_timeout))) {
-      LOG_WARN("failed to get query timeout", K(ret), K(query_timeout));
     } else if (OB_ISNULL(gctx_.sql_engine_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("invalid sql engine", K(ret), K(gctx_));
     } else if (FALSE_IT(execution_id = gctx_.sql_engine_->get_execution_id())) {
       //nothing to do
     } else if (OB_FAIL(set_session_active("reset connection.", *session, ObTimeUtil::current_time()))) {
-      LOG_WARN("fail to set session active", K(ret));
     } else {
       THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
       session->set_current_execution_id(execution_id);
@@ -111,17 +101,14 @@ int ObMPResetConnection::process()
       // for XA trans, can not rollback it directly, use kill_tx to abort it
       if (session->associated_xa()) {
         if (OB_FAIL(ObSqlTransControl::kill_tx(session, OB_TRANS_ROLLBACKED))) {
-          OB_LOG(WARN, "fail to kill xa trans for reset connection", K(ret));
         }
       } else if (OB_FAIL(ObSqlTransControl::rollback_trans(session, need_disconnect))) {
-        OB_LOG(WARN, "fail to rollback trans for reset connection", K(ret), K(need_disconnect));
       }
     }
 
     // 3. Closes (and drops) all TEMPORARY tables. 
     if (OB_SUCC(ret)) {
       if (OB_UNLIKELY(OB_FAIL(session->drop_temp_tables(false, false, true)))) {
-        LOG_WARN("fail to drop temp tables", K(ret));
       }
       session->refresh_temp_tables_sess_active_time();
     }
@@ -141,13 +128,11 @@ int ObMPResetConnection::process()
     if (OB_SUCC(ret)) {
       // 6.1 ps stmt
       if (OB_FAIL(session->close_all_ps_stmt())) {
-        LOG_WARN("failed to close all stmt", K(ret));
       }
 
       // 6.2 ps cursor
       if (OB_SUCC(ret) && session->get_cursor_cache().is_inited()) {
         if (OB_FAIL(session->get_cursor_cache().close_all(*session))) {
-          LOG_WARN("failed to close all cursor", K(ret));
         } else {
           session->get_cursor_cache().reset();
         }
@@ -158,7 +143,6 @@ int ObMPResetConnection::process()
         observer::ObPieceCache* piece_cache = 
           static_cast<observer::ObPieceCache*>(session->get_piece_cache());
         if (OB_FAIL(piece_cache->close_all(*session))) {
-          LOG_WARN("failed to close all piece", K(ret));
         }
         piece_cache->reset();
         session->get_session_allocator().free(session->get_piece_cache());
@@ -181,9 +165,7 @@ int ObMPResetConnection::process()
       // FIXME @qianfu temporarily written as update_sys_variable function, to be implemented with the ability to pass in ObSysVarClassType and
       // and set system variable statement follow the same logic function, call here
       if (OB_FAIL(session->update_sys_variable(SYS_VAR_LAST_INSERT_ID, last_insert_id))) {
-        LOG_WARN("fail to update last_insert_id", K(ret));
       } else if (OB_FAIL(session->update_sys_variable(SYS_VAR_IDENTITY, last_insert_id))) {
-        LOG_WARN("succ update last_insert_id, but fail to update identity", K(ret));
       } else {
         NG_TRACE_EXT(last_insert_id, OB_ID(last_insert_id), 0);
       }
@@ -194,9 +176,7 @@ int ObMPResetConnection::process()
       ObTableLockOwnerID owner_id;
       if (OB_FAIL(owner_id.convert_from_client_sessid(session->get_sid(),
                                                       session->get_client_create_time()))) {
-        LOG_WARN("failed to convert from client sessid", K(ret));
       } else if (OB_FAIL(ObTableLockDetector::remove_lock_by_owner_id(owner_id))) {
-        LOG_WARN("failed to remove lock by owner id", K(ret));
       }
     }
 
@@ -236,11 +216,9 @@ int ObMPResetConnection::process()
     ok_param.is_partition_hit_ = session->partition_hit().get_bool();
     ok_param.has_more_result_ = false;
     if (OB_FAIL(send_ok_packet(*session, ok_param))) {
-      OB_LOG(WARN, "response ok packet fail", K(ret));
     }
   } else {
     if (OB_FAIL(send_error_packet(ret, NULL))) {
-      OB_LOG(WARN,"response fail packet fail", K(ret));
     }
     force_disconnect();
   }

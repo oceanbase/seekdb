@@ -163,12 +163,10 @@ int ObLockContext::implicit_end_trans_(ObSQLSessionInfo &session_info,
     is_async = !is_rollback && ctx.is_end_trans_async() && can_async;
     if (!is_async) {
       if (OB_FAIL(ObSqlTransControl::implicit_end_trans(ctx, is_rollback))) {
-        LOG_WARN("failed to implicit end trans with sync callback", K(ret));
       }
     } else {
       ObEndTransAsyncCallback &callback = session_info.get_end_trans_cb();
       if (OB_FAIL(ObSqlTransControl::implicit_end_trans(ctx, is_rollback, &callback))) {
-        LOG_WARN("failed implicit end trans with async callback", K(ret));
       }
       ctx.get_trans_state().set_end_trans_executed(OB_SUCCESS == ret);
     }
@@ -203,14 +201,11 @@ void ObLockContext::register_for_deadlock_(ObSQLSessionInfo &session_info,
       parent_tx_id.is_valid() &&
       child_tx_id.is_valid()) {
     if (OB_FAIL(session_info.get_query_timeout(query_timeout))) {
-      LOG_WARN("get query timeout failed", K(parent_tx_id), K(child_tx_id), KR(ret));
     } else {
       if (OB_FAIL(ObTransDeadlockDetectorAdapter::
                   autonomous_register_to_deadlock(parent_tx_id,
                                                   child_tx_id,
                                                   query_timeout))) {
-        LOG_WARN("autonomous register to deadlock failed", K(parent_tx_id),
-                 K(child_tx_id), KR(ret));
       }
     }
   } else {
@@ -238,7 +233,6 @@ int ObLockContext::open_inner_conn_()
   } else if (FALSE_IT(store_inner_conn_ = static_cast<observer::ObInnerSQLConnection *>(session->get_inner_conn()))) {
   } else if (FALSE_IT(session->set_inner_conn(nullptr))) {
   } else if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session, sql_proxy, inner_conn))) {
-    LOG_WARN("create inner connection failed", K(ret), KPC(session));
   } else if (OB_ISNULL(inner_conn)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("inner connection is still null", KPC(session));
@@ -299,7 +293,6 @@ int ObLockContext::execute_write(const ObSqlString &sql,
     ret = OB_NOT_INIT;
     LOG_WARN("inner connection is NULL", K(ret));
   } else if (OB_FAIL(ObInnerConnectionLockUtil::execute_write_sql(inner_conn_, sql, affected_rows))) {
-    LOG_WARN("execute write sql failed", K(ret));
   }
   return ret;
 }
@@ -313,7 +306,6 @@ int ObLockContext::execute_read(const ObSqlString &sql,
     ret = OB_NOT_INIT;
     LOG_WARN("inner connection is NULL", K(ret));
   } else if (OB_FAIL(ObInnerConnectionLockUtil::execute_read_sql(inner_conn_, sql, res))) {
-    LOG_WARN("execute read sql failed", K(ret));
   }
   return ret;
 }
@@ -440,7 +432,6 @@ int ObLockExecutor::unlock_obj_(ObTxDesc *tx_desc,
   int ret = OB_SUCCESS;
   ObTableLockService *lock_service = share::g_mp->table_lock_service();
   if (OB_FAIL(lock_service->unlock(*tx_desc, tx_param, arg))) {
-    LOG_WARN("unlock obj failed", K(ret), KPC(tx_desc), K(arg));
   }
   return ret;
 }
@@ -452,7 +443,6 @@ int ObLockExecutor::unlock_table_(ObTxDesc *tx_desc,
   int ret = OB_SUCCESS;
   ObTableLockService *lock_service = share::g_mp->table_lock_service();
   if (OB_FAIL(lock_service->unlock(*tx_desc, tx_param, arg))) {
-    LOG_WARN("unlock obj failed", K(ret), KPC(tx_desc), K(arg));
   }
   return ret;
 }
@@ -837,9 +827,7 @@ int ObUnLockExecutor::release_all_locks_(ObLockContext &ctx,
             LOG_WARN("do not support batch unlock right now", KPC(real_arg));
           } else if (OB_FAIL(ObTableLockDetector::remove_detect_info_from_inner_table(
                       session, LOCK_OBJECT, *real_arg, tmp_cnt))) {
-            LOG_WARN("remove_detect_info_from_inner_table failed", K(ret), K(real_arg));
           } else if (OB_FAIL(unlock_obj_(session->get_tx_desc(), tx_param, *real_arg))) {
-            LOG_WARN("unlock obj failed", K(ret), K(arg));
           } else if (FALSE_IT(cnt = cnt + tmp_cnt)) {
           }
           break;
@@ -850,9 +838,7 @@ int ObUnLockExecutor::release_all_locks_(ObLockContext &ctx,
                                                                                LOCK_TABLE,
                                                                                *real_arg,
                                                                                tmp_cnt))) {
-            LOG_WARN("remove_detect_info_from_inner_table failed", K(ret), K(real_arg));
           } else if (OB_FAIL(unlock_table_(session->get_tx_desc(), tx_param, *real_arg))) {
-            LOG_WARN("unlock obj failed", K(ret), K(arg));
           } else if (FALSE_IT(cnt = cnt + tmp_cnt)) {
           }
           break;

@@ -232,7 +232,6 @@ public:
     need_check = false;
     if (param.is_unknown()) {
       if (OB_FAIL(param.get_unknown(param_idx))) {
-        SQL_LOG(WARN, "get question mark value failed", K(param), K(ret));
       } else if (param_idx < 0 || param_idx >= params_array.count()) {
         ret = common::OB_ERR_ILLEGAL_INDEX;
         SQL_LOG(WARN, "Wrong index of question mark position", K(ret), K(param_idx));

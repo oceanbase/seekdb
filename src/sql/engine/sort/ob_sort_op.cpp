@@ -145,7 +145,6 @@ int ObSortOp::get_int_value(const ObExpr *in_val, int64_t &out_val)
   ObDatum *datum = NULL;
   if (NULL != in_val) {
     if (OB_FAIL(in_val->eval(eval_ctx_, datum))) {
-      LOG_WARN("Failed to calculate expression", K(ret));
     } else if (OB_ISNULL(datum)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected status: datum is null", K(ret));
@@ -170,7 +169,6 @@ int ObSortOp::get_topn_count(int64_t &topn_cnt)
       K(MY_SPEC.topk_limit_expr_), K(ret));
   } else if (NULL != MY_SPEC.topn_expr_) {
     if (OB_FAIL(get_int_value(MY_SPEC.topn_expr_, topn_cnt))) {
-      LOG_WARN("failed to get int value", K(ret), K(MY_SPEC.topn_expr_));
     } else {
       topn_cnt = std::max(MY_SPEC.minimum_row_count_, topn_cnt);
     }
@@ -222,7 +220,6 @@ int ObSortOp::process_sort()
     while (OB_SUCC(ret)) {
       clear_evaluated_flag();
       if (OB_FAIL(try_check_status())) {
-        LOG_WARN("failed to check status", K(ret));
       } else if (OB_FAIL(child_->get_next_row())) {
         if (OB_ITER_END != ret) {
           LOG_WARN("failed to get next row", K(ret));
@@ -266,9 +263,7 @@ int ObSortOp::process_sort_batch()
       clear_evaluated_flag();
       const ObBatchRows *input_brs = NULL;
       if (OB_FAIL(try_check_status())) {
-        LOG_WARN("failed to check status", K(ret));
       } else if (OB_FAIL(child_->get_next_batch(MY_SPEC.max_batch_size_, input_brs))) {
-        LOG_WARN("get next batch failed", K(ret));
       } else {
         if (input_brs->size_ > 0) {
           sort_row_count_ += input_brs->size_
@@ -311,14 +306,11 @@ int ObSortOp::scan_all_then_sort()
     if (OB_FAIL(cache_store.init(2 * 1024 * 1024,
         ObCtxIds::DEFAULT_CTX_ID, "SORT_CACHE_CTX", true/*enable dump*/, 0, true,
         MY_SPEC.compress_type_, &MY_SPEC.all_exprs_))) {
-      LOG_WARN("init sample chunk store failed", K(ret));
     } else if (OB_FAIL(cache_store.alloc_dir_id())) {
-      LOG_WARN("failed to alloc dir id", K(ret));
     }
     while (OB_SUCC(ret)) {
       clear_evaluated_flag();
       if (OB_FAIL(try_check_status())) {
-        LOG_WARN("failed to check status", K(ret));
       } else if (OB_FAIL(child_->get_next_row())) {
         if (OB_ITER_END != ret) {
           LOG_WARN("failed to get next row", K(ret));
@@ -326,7 +318,6 @@ int ObSortOp::scan_all_then_sort()
       } else {
         sort_row_count_++;
         if (OB_FAIL(cache_store.add_row(MY_SPEC.all_exprs_, eval_ctx_))) {
-          LOG_WARN("failed to add row to cache store", K(ret));
         }
       }
     }
@@ -337,7 +328,6 @@ int ObSortOp::scan_all_then_sort()
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(cache_store.finish_add_row(false))) {
-        LOG_WARN("fail to finish add row", K(ret));
       } else {
         const ObChunkDatumStore::StoredRow *store_row = NULL;
         bool has_next = false;
@@ -366,17 +356,13 @@ int ObSortOp::scan_all_then_sort_batch()
     if (OB_FAIL(cache_store.init(16 * 1024,
         ObCtxIds::DEFAULT_CTX_ID, "SORT_CACHE_CTX", true/*enable dump*/, 0, true,
         MY_SPEC.compress_type_, &MY_SPEC.all_exprs_))) {
-      LOG_WARN("init sample chunk store failed", K(ret));
     } else if (OB_FAIL(cache_store.alloc_dir_id())) {
-      LOG_WARN("failed to alloc dir id", K(ret));
     }
     while (OB_SUCC(ret)) {
       clear_evaluated_flag();
       const ObBatchRows *input_brs = NULL;
       if (OB_FAIL(try_check_status())) {
-        LOG_WARN("failed to check status", K(ret));
       } else if (OB_FAIL(child_->get_next_batch(MY_SPEC.max_batch_size_, input_brs))) {
-        LOG_WARN("get next batch failed", K(ret));
       } else {
         if (input_brs->size_ > 0) {
           sort_row_count_ += input_brs->size_
@@ -384,7 +370,6 @@ int ObSortOp::scan_all_then_sort_batch()
           int64_t stored_row_count = -1;
           if (OB_FAIL(cache_store.add_batch(MY_SPEC.all_exprs_, eval_ctx_,
               *input_brs->skip_, input_brs->size_, stored_row_count))) {
-            LOG_WARN("failed to add row to cache store", K(ret));
           }
         }
         if (input_brs->end_) {
@@ -400,7 +385,6 @@ int ObSortOp::scan_all_then_sort_batch()
     op_monitor_info_.otherstat_7_value_ = sort_row_count_; 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(cache_store.finish_add_row(false))) {
-        LOG_WARN("fail to finish add row", K(ret));
       } else {
         const ObChunkDatumStore::StoredRow *store_row = NULL;
         bool has_next = false;
@@ -453,7 +437,6 @@ int ObSortOp::init_sort(int64_t row_count,
   int64_t est_rows = MY_SPEC.rows_;
   if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
       &ctx_, MY_SPEC.px_est_size_factor_, est_rows, est_rows))) {
-    LOG_WARN("failed to get px size", K(ret));
   }
   OZ(sort_impl_.init(&MY_SPEC.sort_collations_, &MY_SPEC.sort_cmp_funs_, &eval_ctx_,
                      &ctx_, MY_SPEC.enable_encode_sortkey_opt_, MY_SPEC.is_local_merge_sort_,
@@ -490,19 +473,15 @@ int ObSortOp::inner_get_next_row()
     
     if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
         &ctx_, MY_SPEC.px_est_size_factor_, MY_SPEC.rows_, row_count))) {
-      LOG_WARN("failed to get px size", K(ret));
     } else if (OB_FAIL(get_topn_count(topn_cnt))) {
-      LOG_WARN("failed to get topn count", K(ret));
     } else if (topn_cnt <= 0) { 
       iter_end_ = true; 
       ret = OB_ITER_END;
     } else if (MY_SPEC.prefix_pos_ > 0) {
       if (OB_FAIL(init_prefix_sort(row_count, false, topn_cnt))) {
-        LOG_WARN("failed to init prefix sort", K(ret));
       }
     } else {
       if (OB_FAIL(init_sort(row_count, false, topn_cnt))) {
-        LOG_WARN("failed to init sort", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -548,24 +527,19 @@ int ObSortOp::inner_get_next_batch(const int64_t max_row_cnt)
     
     if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
         &ctx_, MY_SPEC.px_est_size_factor_, MY_SPEC.rows_, row_count))) {
-      LOG_WARN("failed to get px size", K(ret));
     } else if (OB_FAIL(get_topn_count(topn_cnt))) {
-      LOG_WARN("failed to get topn count", K(ret));
     } else if (topn_cnt <= 0) { 
       brs_.end_ = true;
       brs_.size_ = 0;
     } else if (MY_SPEC.prefix_pos_ > 0) {
       if (OB_FAIL(init_prefix_sort(row_count, true, topn_cnt))) {
-        LOG_WARN("failed to init batch prefix sort", K(ret));
       }
     } else {
       if (OB_FAIL(init_sort(row_count, true, topn_cnt))) {
-        LOG_WARN("failed to init batch sort", K(ret));
       }
     }
     if (OB_SUCC(ret) && !brs_.end_) {
       if (OB_FAIL(process_sort_batch())) {
-        LOG_WARN("process sort failed", K(ret));
       }
     }
   }
@@ -573,7 +547,6 @@ int ObSortOp::inner_get_next_batch(const int64_t max_row_cnt)
   if (OB_SUCC(ret) && !brs_.end_) {
     clear_evaluated_flag();
     if (OB_FAIL((this->*read_batch_func_)(std::min(max_row_cnt, MY_SPEC.max_batch_size_)))) {
-      LOG_WARN("get next row failed");
     } else {
       ret_row_count_ += brs_.size_;
       if (brs_.end_) {

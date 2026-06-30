@@ -78,13 +78,10 @@ OB_DEF_SERIALIZE(ObTask)
       LOG_WARN("unexpected status: op root is null", K(ret));
     } else if (OB_FAIL(ObPxTreeSerializer::serialize_expr_frame_info<true>(
         buf, buf_len, pos, *exec_ctx_, *const_cast<ObExprFrameInfo *>(frame_info)))) {
-      LOG_WARN("failed to serialize rt expr", K(ret));
     } else if (OB_FAIL(ObPxTreeSerializer::serialize_tree(
                 buf, buf_len, pos, *root_spec_, false /**is full tree*/, runner_svr_))) {
-      LOG_WARN("fail serialize root_op", K(ret), K(buf_len), K(pos));
     } else if (OB_FAIL(ObPxTreeSerializer::serialize_op_input(
         buf, buf_len, pos, *root_spec_, exec_ctx_->get_kit_store()))) {
-      LOG_WARN("failed to deserialize kit store", K(ret));
     }
   }
   LST_DO_CODE(OB_UNIS_ENCODE, ranges_);
@@ -122,15 +119,11 @@ OB_DEF_DESERIALIZE(ObTask)
       const ObExprFrameInfo *frame_info = &des_phy_plan_->get_expr_frame_info();
       if (OB_FAIL(ObPxTreeSerializer::deserialize_expr_frame_info<true>(
           buf, data_len, pos, *exec_ctx_, *const_cast<ObExprFrameInfo *>(frame_info)))) {
-        LOG_WARN("failed to serialize rt expr", K(ret));
       } else if (OB_FAIL(ObPxTreeSerializer::deserialize_tree(
           buf, data_len, pos, *des_phy_plan_, root_spec_))) {
-        LOG_WARN("fail deserialize tree", K(ret));
       } else if (OB_FAIL(root_spec_->create_op_input(*exec_ctx_))) {
-        LOG_WARN("create operator from spec failed", K(ret));
       } else if (OB_FAIL(ObPxTreeSerializer::deserialize_op_input(
                          buf, data_len, pos, exec_ctx_->get_kit_store()))) {
-        LOG_WARN("failed to deserialize kit store", K(ret));
       } else {
         des_phy_plan_->set_root_op_spec(root_spec_);
         exec_ctx_->reference_my_plan(des_phy_plan_);
@@ -195,7 +188,6 @@ int ObTask::assign_ranges(const ObIArray<ObNewRange> &ranges)
   LOG_DEBUG("assign ranges to task", K(ranges));
   FOREACH_CNT_X(it, ranges, OB_SUCC(ret)) {
     if (OB_FAIL(ranges_.push_back(*it))) {
-      LOG_WARN("push back range failed", K(ret));
     }
   }
   return ret;
@@ -213,10 +205,8 @@ OB_DEF_SERIALIZE(ObMiniTask)
     if (OB_SUCC(ret) && has_extend_root_spec) {
       if (OB_FAIL(ObPxTreeSerializer::serialize_tree(
                   buf, buf_len, pos, *extend_root_spec_ , false /**is full tree*/, runner_svr_))) {
-        LOG_WARN("fail serialize root_op", K(ret), K(buf_len), K(pos));
       } else if (OB_FAIL(ObPxTreeSerializer::serialize_op_input(
           buf, buf_len, pos, *extend_root_spec_, exec_ctx_->get_kit_store()))) {
-        LOG_WARN("failed to deserialize kit store", K(ret));
       }
     }
   }
@@ -238,12 +228,9 @@ OB_DEF_DESERIALIZE(ObMiniTask)
         LOG_WARN("invalid argument", K(ret));
       } else if (OB_FAIL(ObPxTreeSerializer::deserialize_tree(
           buf, data_len, pos, *des_phy_plan_, extend_root_spec_))) {
-        LOG_WARN("fail deserialize tree", K(ret));
       } else if (OB_FAIL(extend_root_spec_->create_op_input(*exec_ctx_))) {
-        LOG_WARN("create operator from spec failed", K(ret));
       } else if (OB_FAIL(ObPxTreeSerializer::deserialize_op_input(buf,
                           data_len, pos, exec_ctx_->get_kit_store()))) {
-        LOG_WARN("failed to deserialize kit store", K(ret));
       }
     }
   }
@@ -409,7 +396,6 @@ OB_DEF_DESERIALIZE(ObRemoteTask)
     // Subsequent session creation requires dependency on tenant
     remote_sql_info_->ps_param_cnt_ = static_cast<int32_t>(ps_params->count());
     if (OB_FAIL(exec_ctx_->create_my_session())) {
-      LOG_WARN("create my session failed", K(ret));
     } else {
       session_info_ = exec_ctx_->get_my_session();
       ObSQLSessionInfo::LockGuard query_guard(session_info_->get_query_lock());
@@ -417,10 +403,8 @@ OB_DEF_DESERIALIZE(ObRemoteTask)
       OB_UNIS_DECODE(*session_info_);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(session_info_->set_session_state(QUERY_ACTIVE))) {
-        LOG_WARN("set session state failed", K(ret));
       } else if (OB_FAIL(session_info_->store_query_string(
           ObString::make_string("REMOTE PLAN SCHEDULING")))) {
-        LOG_WARN("store query string failed", K(ret));
       } else {
         session_info_->set_mysql_cmd(obmysql::COM_QUERY);
       }
@@ -429,7 +413,6 @@ OB_DEF_DESERIALIZE(ObRemoteTask)
         if (OB_FAIL(session_info_->set_session_active(
             ObString::make_string("REMOTE/DISTRIBUTE SQL EXECUTING"),
             obmysql::COM_QUERY))) {
-          LOG_WARN("set remote session active failed", K(ret));
         }
         EVENT_INC(ACTIVE_SESSIONS);
       }
@@ -439,7 +422,6 @@ OB_DEF_DESERIALIZE(ObRemoteTask)
     OB_UNIS_DECODE(snapshot_);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(exec_ctx_->get_das_ctx().set_snapshot(snapshot_))) {
-      LOG_WARN("fail to set snapshot", K(ret));
     } else {
       //DESERIALIZE param_meta_count if 0, (1) params->count() ==0 (2) old version -> new version
       //for (2) just set obj.meta as param_meta
@@ -471,7 +453,6 @@ OB_DEF_DESERIALIZE(ObRemoteTask)
 int ObRemoteTask::assign_dependency_tables(const DependenyTableStore &dependency_tables) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dependency_tables_.assign(dependency_tables))) {
-    LOG_WARN("failed to assign file list", K(ret));
   }
   return ret;
 }
@@ -479,7 +460,6 @@ int ObRemoteTask::assign_dependency_tables(const DependenyTableStore &dependency
 int ObRemoteTask::assign_ls_list(const share::ObLSArray ls_ids) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ls_list_.assign(ls_ids))) {
-    LOG_WARN("failed to assign ls list", K(ret));
   }
   return ret;
 }

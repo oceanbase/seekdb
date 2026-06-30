@@ -62,7 +62,6 @@ int ObTenantTimezoneMgr::init()
   int ret = OB_SUCCESS;
   is_inited_ = true;
   if (OB_FAIL(init_timezone())) {
-    LOG_WARN("init timezone info failed", K(ret));
   } else {
     // Register with notifier. Role-change-driven switch_to_leader will
     // trigger the initial refresh after LS promotion; import path triggers
@@ -111,7 +110,6 @@ int ObTenantTimezoneMgr::init_timezone()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("alloc new tenant timezone failed", K(ret));
     } else if (OB_FAIL(tz_info_mgr_->init())) {
-      LOG_WARN("new tenant timezone init failed", K(ret));
     }
     if (OB_FAIL(ret)) {
       ob_delete(tz_info_mgr_);
@@ -127,7 +125,6 @@ int ObTenantTimezoneMgr::refresh_timezone_info()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tenant tz is null", K(ret));
   } else if (OB_FAIL(tz_info_mgr_->fetch_time_zone_info())) {
-    LOG_WARN("fail to update time zone info", K(ret));
   } else {
     LOG_INFO("[TIMEZONE_NOTIFIER] refresh_timezone_info success");
   }
@@ -139,7 +136,6 @@ int ObTenantTimezoneMgr::schedule_retry()
   int ret = OB_SUCCESS;
   if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(),
                           update_task_, 1000000, false))) {
-    LOG_WARN("schedule timezone retry timer failed", K(ret));
   } else {
     LOG_INFO("[TIMEZONE] retry timer scheduled");
   }

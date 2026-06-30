@@ -48,7 +48,6 @@ int ObExprVecIVFFlatDataVector::calc_result_typeN(ObExprResType &type,
     LOG_WARN("exec ctx is null", K(ret));
   } else if (OB_FAIL(exec_ctx->get_subschema_id_by_collection_elem_type(ObNestedType::OB_VECTOR_TYPE,
                                                                         elem_type, subschema_id))) {
-    LOG_WARN("failed to get collection subschema id", K(ret));
   } else {
     type.set_collection(subschema_id);
   } 
@@ -102,7 +101,6 @@ int ObExprVecIVFFlatDataVector::generate_data_vector(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("calc distance algo expr is invalid", K(ret), KPC(calc_distance_algo_expr));
     } else if (OB_FAIL(calc_distance_algo_expr->eval(eval_ctx, res))) {
-      LOG_WARN("calc table id expr failed", K(ret));
     } else if (FALSE_IT(dis_algo = static_cast<ObVectorIndexDistAlgorithm>(res->get_uint64()))) {
     } else if (VIDA_MAX <= dis_algo) {
       ret = OB_ERR_UNEXPECTED;
@@ -116,7 +114,6 @@ int ObExprVecIVFFlatDataVector::generate_data_vector(
         LOG_WARN("calc vector expr is invalid", K(ret), KPC(calc_vector_expr));
       } else if (OB_FAIL(ObArrayExprUtils::get_type_vector(*(calc_vector_expr), eval_ctx, tmp_allocator, arr,
                                                            is_null))) {
-        LOG_WARN("failed to get vector", K(ret), KPC(calc_vector_expr));
       } else if (is_null) {
         expr_datum.set_null();
       } else if (dis_algo == ObVectorIndexDistAlgorithm::VIDA_COS) {
@@ -126,7 +123,6 @@ int ObExprVecIVFFlatDataVector::generate_data_vector(
         } else if (OB_FAIL(ObVectorNormalize::L2_normalize_vector(arr->size(),
                                                                   reinterpret_cast<float *>(arr->get_data()),
                                                                   norm_vector))) {
-          LOG_WARN("failed to normalize vector", K(ret));
         }
       }
       if (OB_FAIL(ret) || is_null) {
@@ -140,7 +136,6 @@ int ObExprVecIVFFlatDataVector::generate_data_vector(
                                           eval_ctx,
                                           res_str,
                                           data_str.ptr()))) {
-          LOG_WARN("fail to set array res", K(ret), K(data_str));
         } else {
           expr_datum.set_string(res_str);
         }

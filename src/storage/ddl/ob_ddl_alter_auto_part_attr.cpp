@@ -81,9 +81,7 @@ int ObAlterAutoPartAttrOp::alter_table_partition_attr(
     LOG_WARN("invalid ddl service", K(ret), KP(ddl_service_));
   } else if (OB_FAIL(ddl_service_->gen_alter_partition_new_table_schema_offline(
       alter_table_arg, alter_table_schema, orig_table_schema, new_table_schema))) {
-    LOG_WARN("fail to gen alter partition new table schema", K(ret));
   } else if (OB_FAIL(new_table_schema.check_validity_for_auto_partition())) {
-    LOG_WARN("fail to check enable auto partitioning", KR(ret), K(new_table_schema));
   }
   return ret;
 }
@@ -104,8 +102,7 @@ int ObAlterAutoPartAttrOp::get_part_key_column_ids(
   part_key_ids.reset();
   // origin table partition is auto partition table, and is not partition table
   if (!table_schema.is_partitioned_table() && table_schema.is_auto_partitioned_table()) {
-    if (OB_FAIL(table_schema.get_presetting_partition_keys(part_key_ids))) { // take part func or rowkey
-      LOG_WARN("fail to get presetting partition keys", K(ret));
+    if (OB_FAIL(table_schema.get_presetting_partition_keys(part_key_ids))) {
     }
   } else { // origin table is partition table or is not auto partition table
     ObString origin_table_part_func_expr = table_schema.get_part_option().get_part_func_expr_str();
@@ -118,7 +115,6 @@ int ObAlterAutoPartAttrOp::get_part_key_column_ids(
           LOG_WARN("the partition key is NULL, ", K(ret), K(part_keys));
         } else if (is_shadow_column(part_key_column->column_id_)) {
         } else if (OB_FAIL(part_key_ids.push_back(part_key_column->column_id_))) {
-          LOG_WARN("failed to push back rowkey column id", K(ret));
         }
       }
     } else {
@@ -149,10 +145,8 @@ int ObAlterAutoPartAttrOp::check_part_key_column_type(
   } else if (alter_part_func_expr.empty()) {
     // if user not define auto part func expr, we will get part ids from old table schema.
     if (OB_FAIL(get_part_key_column_ids(table_schema, part_key_ids))) {
-      LOG_WARN("fail to get part key ids", K(ret));
     }
   } else if (OB_FAIL(table_schema.get_partition_keys_by_part_func_expr(alter_part_func_expr, part_key_ids))) {
-    LOG_WARN("fail to get partition key", K(ret));
   }
   // check part column type is valid
   if (OB_SUCC(ret)) {
@@ -197,20 +191,17 @@ int ObAlterAutoPartAttrOp::lock_for_modify_auto_part_size(
   ObArray<uint64_t> global_index_table_ids;
   ObArray<ObAuxTableMetaInfo> simple_index_infos;
   if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos))) {
-    LOG_WARN("get simple_index_infos failed", KR(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
     const uint64_t index_table_id = simple_index_infos.at(i).table_id_;
     const ObIndexType index_type = simple_index_infos.at(i).index_type_;
     if (!is_index_local_storage(index_type)) {
       if (OB_FAIL(global_index_table_ids.push_back(index_table_id))) {
-        LOG_WARN("failed to push back", K(ret));
       }
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObDDLLock::lock_for_modify_auto_part_size_in_trans(data_table_id, global_index_table_ids, trans))) {
-    LOG_WARN("failed to lock for modify auto part size", K(ret));
   }
   return ret;
 }
@@ -235,7 +226,6 @@ int ObAlterAutoPartAttrOp::alter_table_auto_part_attr_if_need(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("modified auto partition attr, unexpected table status", K(ret), K(table_schema));
   } else if (OB_FAIL(lock_for_modify_auto_part_size(table_schema, schema_guard, trans))) {
-    LOG_WARN("failed to lock for modify auto part size", K(ret));
   } else {
     const AlterTableSchema &alter_table_schema = alter_table_arg.alter_table_schema_;
     const ObPartitionOption &alter_part_option = alter_table_schema.get_part_option();
@@ -244,7 +234,6 @@ int ObAlterAutoPartAttrOp::alter_table_auto_part_attr_if_need(
       ObString alter_part_func_expr = alter_part_option.get_part_func_expr_str(); // no ref
       bool is_valid_column_type = true;
       if (OB_FAIL(check_part_key_column_type(table_schema, alter_part_option, is_valid_column_type))) {
-        LOG_WARN("fail to check part column type", K(ret), K(alter_part_option));
       } else if (!is_valid_column_type) {
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("fail to alter table partition, not support yet", K(ret));
@@ -257,18 +246,14 @@ int ObAlterAutoPartAttrOp::alter_table_auto_part_attr_if_need(
         } else {
           /* case 2: part func is not empty, like : alter table partition by range(c1) size('xxx'); */
           if (OB_FAIL(check_auto_part_table_unique_index(table_schema, alter_part_func_expr, schema_guard))) {
-            LOG_WARN("fail to check auto part table unique index.", K(ret), K(table_schema));
           } else if (OB_FAIL(check_and_set_table_auto_part_func(alter_part_option, table_schema))) {
-            LOG_WARN("fail to check and set table auto part func.", K(ret), K(table_schema));
           }
         }
       }
       // enable auto split
       if (OB_SUCC(ret)) {
         if (OB_FAIL(table_schema.enable_auto_partition(alter_part_option.get_auto_part_size(), alter_part_option.get_part_func_type()))) {
-          LOG_WARN("fail to enable auto partition", K(ret), K(alter_part_option));
-        } else if (OB_FAIL(table_schema.check_enable_split_partition(true))) { // check origin table is satisfied auto partition conditions before enabled
-          LOG_WARN("fail to check validity for auto-partition", K(ret), K(table_schema));
+        } else if (OB_FAIL(table_schema.check_enable_split_partition(true))) {
         }
       }
     } else {
@@ -282,13 +267,9 @@ int ObAlterAutoPartAttrOp::alter_table_auto_part_attr_if_need(
       ObArray<uint64_t> modified_index_type_ids;
       if (OB_FAIL(alter_global_indexes_auto_part_attribute_online(  // update index
           alter_part_option, table_schema, schema_guard, ddl_operator, trans, modified_index_type_ids))) {
-        LOG_WARN("fail to alter global index auto part property.", K(ret), K(table_schema));
-      // for example, enable_auto_partition may change part_func_type if data table is not partitioned,
-      // so need to sync aux tables' partition option
       } else if (!table_schema.is_partitioned_table() && OB_FAIL(sync_aux_tables_partition_option(table_schema, schema_guard, ddl_operator, trans, modified_index_type_ids))) {
         LOG_WARN("failed to sync aux tables partition schema", K(ret));
-      } else if (OB_FAIL(ddl_operator.update_partition_option(trans, table_schema, alter_table_arg.ddl_stmt_str_))) {  // update main table
-        LOG_WARN("fail to update partition option", K(ret), K(table_schema));
+      } else if (OB_FAIL(ddl_operator.update_partition_option(trans, table_schema, alter_table_arg.ddl_stmt_str_))) {
       } 
     }
 
@@ -296,9 +277,7 @@ int ObAlterAutoPartAttrOp::alter_table_auto_part_attr_if_need(
       const int64_t abs_timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_ts() : ObTimeUtility::current_time() + GCONF.rpc_timeout;
       ObArray<ObTabletID> tablet_ids;
       if (OB_FAIL(table_schema.get_tablet_ids(tablet_ids))) {
-        LOG_WARN("failed to get tablet ids", K(ret));
       } else if (OB_FAIL(ObTabletSplitMdsHelper::modify_auto_part_size(tablet_ids, table_schema.get_auto_part_size(), abs_timeout_us, trans))) {
-        LOG_WARN("failed to modify auto part size", K(ret));
       }
     }
   }
@@ -319,7 +298,6 @@ int ObAlterAutoPartAttrOp::check_and_set_table_auto_part_func(
     ObString tmp_part_func_expr = alter_part_option.get_part_func_expr_str();
     ObPartitionFuncType part_func_type;
     if (OB_FAIL(extract_potential_partition_func_type(table_schema, tmp_part_func_expr, part_func_type))) {
-      LOG_WARN("fail to extract partition func type", K(ret), K(table_schema));
     } else {
       table_schema.get_part_option().set_part_func_type(part_func_type);
       /* origin table is none partition table, set alter table partition func expr directly */
@@ -332,9 +310,7 @@ int ObAlterAutoPartAttrOp::check_and_set_table_auto_part_func(
     ObArray<ObString> new_expr_strs;
     // partition by range columns(c1,c2) and partition by range columns(c1,    c2) is the same.
     if (OB_FAIL(split_on(tmp_old_part_func_expr, ',', old_expr_strs))) {
-      LOG_WARN("fail to split func expr", K(ret), K(tmp_old_part_func_expr));
     } else if (OB_FAIL(split_on(tmp_alter_table_part_func_expr, ',', new_expr_strs))) {
-      LOG_WARN("fail to split func expr", K(ret), K(tmp_alter_table_part_func_expr));
     } else if (old_expr_strs.count() != new_expr_strs.count()) {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("fail to alter table partition, ori table func expr is diff from alter partition func expr.", 
@@ -384,12 +360,10 @@ int ObAlterAutoPartAttrOp::alter_global_indexes_auto_part_attribute_online(
   uint64_t index_table_id = OB_INVALID_ID;
 
   if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos))) {
-    LOG_WARN("get simple_index_infos failed", KR(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
     index_table_id = simple_index_infos.at(i).table_id_;
     if (OB_FAIL(schema_guard.get_table_schema( index_table_id, index_schema))) {
-      LOG_WARN("fail to get to_table_schema schema", K(ret));
     } else if (OB_ISNULL(index_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("index_schema is null", K(ret));
@@ -401,11 +375,8 @@ int ObAlterAutoPartAttrOp::alter_global_indexes_auto_part_attribute_online(
       ObString ddl_stmt_str("");  // empty ddl_stmt_str
       HEAP_VAR(ObTableSchema, new_index_schema) {
         if (OB_FAIL(new_index_schema.assign(*index_schema))) {
-          LOG_WARN("assign index_schema failed", K(ret));
         } else if (OB_FAIL(update_global_auto_split_attr(part_option, new_index_schema))) {
-          LOG_WARN("fail to update global auto split attr", K(ret), K(part_option));
         } else if (OB_FAIL(ddl_operator.update_partition_option(trans, new_index_schema, ddl_stmt_str))) {
-          LOG_WARN("fail to update partition option.", K(ret), K(new_index_schema));
         }
 
         if (OB_SUCC(ret)) {
@@ -413,9 +384,7 @@ int ObAlterAutoPartAttrOp::alter_global_indexes_auto_part_attribute_online(
           const int64_t abs_timeout_us = THIS_WORKER.is_timeout_ts_valid() ? THIS_WORKER.get_timeout_ts() : ObTimeUtility::current_time() + GCONF.rpc_timeout;
           ObArray<ObTabletID> tablet_ids;
           if (OB_FAIL(new_index_schema.get_tablet_ids(tablet_ids))) {
-            LOG_WARN("failed to get tablet ids", K(ret));
           } else if (OB_FAIL(ObTabletSplitMdsHelper::modify_auto_part_size(tablet_ids, new_index_schema.get_auto_part_size(), abs_timeout_us, trans))) {
-            LOG_WARN("failed to modify auto part size", K(ret));
           }
         }
       } // end heap var
@@ -425,12 +394,9 @@ int ObAlterAutoPartAttrOp::alter_global_indexes_auto_part_attribute_online(
             && index_schema->is_global_local_index_table()) {
           ObIndexType index_type;
           if (OB_FAIL(switch_global_local_index_type(*index_schema, index_type))) {
-            LOG_WARN("fail to switch index type", K(ret));
           } else if (OB_FAIL(ddl_operator.update_index_type(
               table_schema, index_table_id, index_type, &ddl_stmt_str, trans))) {
-            LOG_WARN("fail to update index type", K(ret), K(index_type));
           } else if (OB_FAIL(modified_index_type_ids.push_back(index_table_id))) {
-            LOG_WARN("fail to push back index table id", K(ret), K(index_table_id));
           }
         }
       }
@@ -453,11 +419,9 @@ int ObAlterAutoPartAttrOp::sync_aux_tables_partition_option(
 
   // 1. gather local aux table schemas, see also ObDDLService::generate_tables_array
   if (OB_FAIL(data_table_schema.get_simple_index_infos(simple_index_infos))) {
-    LOG_WARN("get_simple_index_infos failed", KR(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
     if (OB_FAIL(aux_table_ids.push_back(simple_index_infos.at(i).table_id_))) {
-      LOG_WARN("fail to push back index table id", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -488,7 +452,6 @@ int ObAlterAutoPartAttrOp::sync_aux_tables_partition_option(
     const ObTableSchema *aux_table_schema = nullptr;
     const ObString ddl_stmt_str("");
     if (OB_FAIL(schema_guard.get_table_schema( aux_table_id, aux_table_schema))) {
-      LOG_WARN("fail to get to_table_schema schema", K(ret), K(aux_table_id));
     } else if (OB_ISNULL(aux_table_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table schema is null", K(ret), K(aux_table_id));
@@ -497,13 +460,10 @@ int ObAlterAutoPartAttrOp::sync_aux_tables_partition_option(
         || aux_table_schema->is_mlog_table()) {
       HEAP_VAR(ObTableSchema, new_aux_table_schema) {
         if (OB_FAIL(new_aux_table_schema.assign(*aux_table_schema))) {
-          LOG_WARN("assign index_schema failed", K(ret));
         } else if (OB_FAIL(new_aux_table_schema.assign_partition_schema(data_table_schema))) {
-          LOG_WARN("fail to assign partition schema", K(data_table_schema), KR(ret));
         } else {
           new_aux_table_schema.get_part_option().forbid_auto_partition(true);
           if (OB_FAIL(ddl_operator.update_partition_option(trans, new_aux_table_schema, ddl_stmt_str))) {
-            LOG_WARN("fail to update partition option.", K(ret), K(new_aux_table_schema));
           }
         }
       }
@@ -572,7 +532,6 @@ int ObAlterAutoPartAttrOp::alter_global_indexes_auto_part_attribute_offline(
     LOG_WARN("unexpected alter partition by case here, partition array is empty", 
       K(ret), K(alter_table_schema));
   } else if (OB_FAIL(update_global_auto_split_attr(alter_part_option, new_index_schema))) {
-    LOG_WARN("fail to update global auto split attr", K(ret), K(new_index_schema));
   }
   return ret;
 }
@@ -593,11 +552,9 @@ int ObAlterAutoPartAttrOp::extract_potential_partition_func_type(
     if (table_schema.is_index_table()) {  // index table
       ObArray<ObString> rowkey_columns;
       if (OB_FAIL(table_schema.extract_actual_index_rowkey_columns_name(rowkey_columns))) {
-        LOG_WARN("fail to extract index rowkey column cnt", K(ret));
       } else if (rowkey_columns.count() > 1) {
         part_func_type = PARTITION_FUNC_TYPE_RANGE_COLUMNS;
       } else if (OB_FAIL(table_schema.is_range_col_part_type(is_range_col))) {
-        LOG_WARN("fail to check is first part key range col", K(ret));
       } else if (is_range_col) {
         part_func_type = PARTITION_FUNC_TYPE_RANGE_COLUMNS;
       } else {
@@ -608,7 +565,6 @@ int ObAlterAutoPartAttrOp::extract_potential_partition_func_type(
       if (part_keys.get_size() > 1) {
         part_func_type = PARTITION_FUNC_TYPE_RANGE_COLUMNS;
       } else if (OB_FAIL(table_schema.is_range_col_part_type(is_range_col))) {
-        LOG_WARN("fail to check is first part key range col", K(ret));
       } else if (is_range_col) {
         part_func_type = PARTITION_FUNC_TYPE_RANGE_COLUMNS;
       } else {
@@ -619,11 +575,9 @@ int ObAlterAutoPartAttrOp::extract_potential_partition_func_type(
     ObString tmp_part_func_expr = part_func_expr;
     ObArray<ObString> expr_strs;
     if (OB_FAIL(split_on(tmp_part_func_expr, ',', expr_strs))) {
-      LOG_WARN("fail to split func expr", K(ret), K(tmp_part_func_expr));
     } else if (expr_strs.count() > 1) { // multi partition column
       part_func_type = PARTITION_FUNC_TYPE_RANGE_COLUMNS;
     } else if (OB_FAIL(table_schema.is_range_col_part_type(is_range_col))) {
-      LOG_WARN("fail to check is first part key range col", K(ret));
     } else if (is_range_col) {
       part_func_type = PARTITION_FUNC_TYPE_RANGE_COLUMNS;
     } else {
@@ -657,7 +611,6 @@ int ObAlterAutoPartAttrOp::update_global_auto_split_attr(
       if (new_index_option.get_part_func_expr_str().empty()) {
         ObString empty_part_func_expr;
         if (OB_FAIL(extract_potential_partition_func_type(new_index_schema, empty_part_func_expr, part_func_type))) {
-          LOG_WARN("fail to extract partition func type", K(ret), K(new_index_schema));
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -670,7 +623,6 @@ int ObAlterAutoPartAttrOp::update_global_auto_split_attr(
     // we should check partition key is satisfied prefixed of index rowkey key  
     if (enable_auto_split) {
       if (OB_FAIL(new_index_schema.is_partition_key_match_rowkey_prefix(enable_auto_split))) {
-        LOG_WARN("fail to check partition key match rowkey prefix", K(ret));
       } else if (!new_index_schema.is_range_part()) { 
         // none range part table is not support, here we not set auto split attr
         enable_auto_split = false;
@@ -684,7 +636,6 @@ int ObAlterAutoPartAttrOp::update_global_auto_split_attr(
   if (OB_SUCC(ret)) {
     if (enable_auto_split) {
       if (OB_FAIL(new_index_schema.enable_auto_partition(alter_part_option.get_auto_part_size(), part_func_type))) {
-        LOG_WARN("fail to enable auto partition", K(ret), K(alter_part_option));
       }
     } else {
       new_index_schema.forbid_auto_partition();
@@ -715,14 +666,12 @@ int ObAlterAutoPartAttrOp::check_auto_part_table_unique_index(
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not support none user table do auto part attr modification", K(ret));
   } else if (OB_FAIL(schema_guard.check_has_local_unique_index(table_id, has_unique_local_index))) {
-    LOG_WARN("fail to check has local unique index of main table", K(table_id));
   } else if (!has_unique_local_index) {
     // skip
   } else {
     // get index table id 
     ObSEArray<ObAuxTableMetaInfo, 16> simple_index_infos;
     if (OB_FAIL(table_schema.get_simple_index_infos(simple_index_infos))) {
-      LOG_WARN("get simple_index_infos failed", KR(ret), K(table_id));
     }
     const ObTableSchema *index_schema = nullptr;
     int64_t index_table_id = OB_INVALID_ID;
@@ -730,19 +679,16 @@ int ObAlterAutoPartAttrOp::check_auto_part_table_unique_index(
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       index_table_id = simple_index_infos.at(i).table_id_;
       if (OB_FAIL(schema_guard.get_table_schema( index_table_id, index_schema))) {
-        LOG_WARN("fail to get to_table_schema schema", K(ret));
       } else if (OB_ISNULL(index_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("index_schema is null", K(ret));
       } else if (!index_schema->is_local_unique_index_table()){
         // skip
       } else if (OB_FAIL(index_schema->extract_actual_index_rowkey_columns_name(rowkey_name_columns))) {
-        LOG_WARN("fail to  extract actual index rowkey columns", K(ret), K(*index_schema));
       } else {
         // check main table partition key is included in unique local index key.
         ObArray<ObString> alter_part_column_array;
         if (OB_FAIL(split_on(alter_table_part_func_expr, ',', alter_part_column_array))) {
-          LOG_WARN("fail to split func expr", K(ret), K(alter_table_part_func_expr));
         } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < alter_part_column_array.count(); ++i) {
             if (!has_exist_in_array(rowkey_name_columns, alter_part_column_array.at(i).trim())) {

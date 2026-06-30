@@ -49,6 +49,7 @@ void ObTxCtxMemtable::reset()
   is_frozen_ = false;
   max_end_scn_.set_min();
   is_inited_ = false;
+  reset_trace_id();
 }
 
 int ObTxCtxMemtable::init(const ObITable::TableKey &table_key,
@@ -60,9 +61,7 @@ int ObTxCtxMemtable::init(const ObITable::TableKey &table_key,
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "init tx ctx memtable twice", KR(ret));
   } else if (OB_FAIL(ObITable::init(table_key))) {
-    STORAGE_LOG(WARN, "ObITable::init fail");
   } else if (OB_FAIL(ls_ctx_mgr_guard_.init(ls_id))) {
-    STORAGE_LOG(WARN, "ls ctx mgr guard acquire ref failed", K(ret), K(ls_id));
   } else {
     ls_id_ = ls_id;
     max_end_scn_.set_min();
@@ -100,7 +99,6 @@ int ObTxCtxMemtable::scan(const ObTableIterParam &param,
                 scan_iter_buff, "scan_iter_ptr", scan_iter_ptr, KR(ret));
   } else if (FALSE_IT(scan_iter_ptr = new (scan_iter_buff) ObTxCtxMemtableScanIterator())) {
   } else if (OB_FAIL(scan_iter_ptr->init(this))) {
-    STORAGE_LOG(WARN, "init scan_iter_ptr fail.", KR(ret), K(context));
   } else {
     // tx ctx memtable scan iterator init success
     row_iter = scan_iter_ptr;
@@ -180,7 +178,6 @@ SCN ObTxCtxMemtable::get_rec_scn()
   SCN rec_scn;
 
   if (OB_FAIL(get_ls_tx_ctx_mgr()->get_rec_scn(rec_scn))) {
-    TRANS_LOG(WARN, "get rec scn failed", K(ret));
   } else {
     TRANS_LOG(INFO, "tx ctx memtable get rec scn", KPC(this), K(rec_scn));
   }
@@ -221,7 +218,7 @@ bool ObTxCtxMemtable::is_active_memtable()
   return !ATOMIC_LOAD(&is_frozen_);
 }
 
-int ObTxCtxMemtable::flush(SCN recycle_scn, bool need_freeze)
+int ObTxCtxMemtable::flush(SCN recycle_scn, const int64_t trace_id, bool need_freeze)
 {
   int ret = OB_SUCCESS;
   ObSpinLockGuard guard(flush_lock_);
@@ -235,7 +232,6 @@ int ObTxCtxMemtable::flush(SCN recycle_scn, bool need_freeze)
       share::SCN cur_time_scn;
       ObScnRange scn_range;
       if (OB_FAIL(cur_time_scn.convert_for_tx(cur_time_us))) {
-        TRANS_LOG(WARN, "failed to convert_from_ts", K(ret), K(cur_time_us));
       } else {
         scn_range.start_scn_.set_base();
         scn_range.end_scn_ = MAX(cur_time_scn, share::SCN::scn_inc(max_end_scn_));
@@ -252,6 +248,7 @@ int ObTxCtxMemtable::flush(SCN recycle_scn, bool need_freeze)
     param.tablet_id_ = LS_TX_CTX_TABLET;
     param.merge_type_ = compaction::MINI_MERGE;
     param.merge_version_ = ObVersionRange::MIN_VERSION;
+    set_trace_id(trace_id);
     if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_tx_table_merge_dag(param))) {
       if (OB_EAGAIN != ret && OB_SIZE_OVERFLOW != ret) {
           TRANS_LOG(WARN, "failed to schedule tablet merge dag", K(ret));

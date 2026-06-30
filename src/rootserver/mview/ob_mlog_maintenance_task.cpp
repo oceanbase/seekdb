@@ -112,18 +112,15 @@ void ObMLogMaintenanceTask::runTimerTask()
     switch (status_) {
       case StatusType::PREPARE:
         if (OB_FAIL(prepare())) {
-          LOG_WARN("fail to prepare", KR(ret));
         }
         break;
       case StatusType::GC_MLOG:
         if (OB_FAIL(gc_mlog())) {
-          LOG_WARN("fail to gc mlog", KR(ret));
         }
         break;
       case StatusType::SUCCESS:
       case StatusType::FAIL:
         if (OB_FAIL(finish())) {
-          LOG_WARN("fail to finish", KR(ret));
         }
         break;
       default:
@@ -176,7 +173,6 @@ int ObMLogMaintenanceTask::gc_mlog()
   if (mlog_ids_.empty()) { // fetch next batch
     if (OB_FAIL(ObMLogInfo::batch_fetch_mlog_ids(*GCTX.sql_proxy_, last_fetch_mlog_id_,
                                                  mlog_ids_, MLOG_NUM_FETCH_PER_SCHED))) {
-      LOG_WARN("fail to batch fetch mlog ids", KR(ret), K(last_fetch_mlog_id_));
     } else {
       fetch_mlog_num_ += mlog_ids_.count();
       fetch_finish_ = mlog_ids_.count() < MLOG_NUM_FETCH_PER_SCHED;
@@ -188,9 +184,7 @@ int ObMLogMaintenanceTask::gc_mlog()
     ObSchemaGetterGuard schema_guard;
     int64_t tenant_schema_version = OB_INVALID_VERSION;
     if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("fail to get tenant schema guard", KR(ret));
     } else if (OB_FAIL(schema_guard.get_schema_version(tenant_schema_version))) {
-      LOG_WARN("fail to get schema version", KR(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < mlog_ids_.count(); ++i) {
       const uint64_t mlog_id = mlog_ids_.at(i);
@@ -198,18 +192,15 @@ int ObMLogMaintenanceTask::gc_mlog()
       const ObTableSchema *table_schema = nullptr;
       bool is_exist = false;
       if (OB_FAIL(ObMLogInfo::fetch_mlog_info(*GCTX.sql_proxy_, mlog_id, mlog_info))) {
-        LOG_WARN("fail to fetch mlog info", KR(ret), K(mlog_id));
       } else if (mlog_info.get_schema_version() > tenant_schema_version) {
         is_exist = true; // skip, wait next round
       } else if (OB_FAIL(schema_guard.get_table_schema( mlog_id, table_schema))) {
-        LOG_WARN("fail to get table schema", KR(ret), K(mlog_id));
       } else {
         is_exist = (nullptr != table_schema);
       }
       if (OB_SUCC(ret) && !is_exist) {
         LOG_INFO("gc one mlog", K(mlog_id));
         if (OB_FAIL(drop_mlog(mlog_id))) {
-          LOG_WARN("fail to drop mlog", KR(ret), K(mlog_id));
         } else {
           ++gc_mlog_num_;
         }
@@ -269,7 +260,6 @@ int ObMLogMaintenanceTask::drop_mlog(uint64_t mlog_id)
     ObMySQLTransaction trans;
     ObMLogInfo mlog_info;
     if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-      LOG_WARN("fail to start trans", KR(ret));
     } else if (OB_FAIL(ObMLogInfo::fetch_mlog_info(trans, mlog_id, mlog_info,
                                                    true /*for_update*/, true /*nowait*/))) {
       if (OB_LIKELY(OB_ERR_EXCLUSIVE_LOCK_CONFLICT_NOWAIT == ret)) {
@@ -287,7 +277,6 @@ int ObMLogMaintenanceTask::drop_mlog(uint64_t mlog_id)
       LOG_WARN("fail to remove dbms sched job", KR(ret), "job_name",
                mlog_info.get_purge_job());
     } else if (OB_FAIL(ObMLogInfo::drop_mlog_info(trans, mlog_info))) {
-      LOG_WARN("fail to drop mlog info", KR(ret), K(mlog_info));
     }
     if (trans.is_started()) {
       int tmp_ret = OB_SUCCESS;

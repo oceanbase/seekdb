@@ -80,7 +80,6 @@ int ObGVTxSchedulerStat::inner_get_next_row(common::ObNewRow *&row)
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(tx_scheduler_stat_iter_.set_ready())) {
-      SERVER_LOG(WARN, "ObTransSchedulerIterator set ready error", KR(ret));
     }
   }
 

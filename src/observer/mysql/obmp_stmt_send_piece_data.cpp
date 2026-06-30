@@ -63,7 +63,6 @@ int ObMPStmtSendPieceData::before_process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObMPBase::before_process())) {
-    LOG_WARN("failed to pre processing packet", K(ret));
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     const char* pos = pkt.get_cdata();
@@ -128,12 +127,10 @@ int ObMPStmtSendPieceData::process()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid tenant", K_(stmt_id), K_(param_id), K(conn->tenant_), K(ret));
   } else if (OB_FAIL(get_session(sess))) {
-    LOG_WARN("get session fail", K_(stmt_id), K_(param_id), K(ret));
   } else if (OB_ISNULL(sess)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL or invalid", K_(stmt_id), K_(param_id), K(sess), K(ret));
   } else if (OB_FAIL(update_transmission_checksum_flag(*sess))) {
-    LOG_WARN("update transmisson checksum flag failed", K(ret));
   } else {
     ObSQLSessionInfo &session = *sess;
     THIS_WORKER.set_session(sess);
@@ -152,7 +149,6 @@ int ObMPStmtSendPieceData::process()
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("invalid session", K_(stmt_id), K_(param_id), K(ret));
     } else if (OB_FAIL(process_kill_client_session(session))) {
-      LOG_WARN("client session has been killed", K(ret));
     } else if (OB_UNLIKELY(session.is_zombie())) {
       ret = OB_ERR_SESSION_INTERRUPTED;
       LOG_WARN("session has been killed", K(session.get_session_state()), K_(stmt_id), K_(param_id),
@@ -161,26 +157,20 @@ int ObMPStmtSendPieceData::process()
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
       LOG_WARN("packet too large than allowd for the session", K_(stmt_id), K_(param_id), K(ret));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
-      LOG_WARN("fail to get query timeout", K_(stmt_id), K_(param_id), K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
                 tenant_version))) {
-      LOG_WARN("fail get tenant broadcast version", K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
                 sys_version))) {
-      LOG_WARN("fail get tenant broadcast version", K(ret));
     } else if (pkt.exist_trace_info()
                && OB_FAIL(session.update_sys_variable(SYS_VAR_OB_TRACE_INFO,
                                                       pkt.get_trace_info()))) {
       LOG_WARN("fail to update trace info", K(ret));
     } else if (OB_FAIL(process_extra_info(session, pkt, need_response_error))) {
-      LOG_WARN("fail get process extra info", K(ret));
     } else if (OB_FAIL(session.check_tenant_status())) {
-      LOG_INFO("unit has been migrated, need deny new request", K(ret));
     } else {
       THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
       session.partition_hit().reset();
       if (OB_FAIL(process_send_long_data_stmt(session))) {
-        LOG_WARN("execute sql failed", K_(stmt_id), K_(param_id), K(ret));
       }
     }
 
@@ -246,7 +236,6 @@ int ObMPStmtSendPieceData::do_process(ObSQLSessionInfo &session)
       //nothing to do
     } else if (OB_FAIL(set_session_active(sql, session, ObTimeUtil::current_time(), 
                                           obmysql::ObMySQLCmd::COM_STMT_SEND_PIECE_DATA))) {
-      LOG_WARN("fail to set session active", K(ret));
     } else if (OB_FAIL(store_piece(session))) {
       exec_end_timestamp_ = ObTimeUtility::current_time();
     } else {
@@ -285,8 +274,7 @@ int ObMPStmtSendPieceData::do_process(ObSQLSessionInfo &session)
   if (OB_FAIL(ret)) {
     bool is_partition_hit = session.partition_hit().get_bool();
     int err = send_error_packet(ret, NULL, is_partition_hit);
-    if (OB_SUCCESS != err) {  // send error packet
-      LOG_WARN("send error packet failed", K(ret), K(err));
+    if (OB_SUCCESS != err) {
     }
   }
   clear_wb_content(session);
@@ -303,10 +291,8 @@ int ObMPStmtSendPieceData::store_piece(ObSQLSessionInfo &session)
   } else {
     ObPiece *piece = NULL;
     if (OB_FAIL(piece_cache->get_piece(stmt_id_, param_id_, piece))) {
-      LOG_WARN("get piece fail", K(stmt_id_), K(param_id_), K(ret) );
     } else if (NULL == piece) {
       if (OB_FAIL(piece_cache->make_piece(stmt_id_, param_id_, piece, session))) {
-        LOG_WARN("make piece fail.", K(ret), K(stmt_id_));
       }
     }
     if (OB_SUCC(ret)) {
@@ -316,7 +302,6 @@ int ObMPStmtSendPieceData::store_piece(ObSQLSessionInfo &session)
       } else if (OB_FAIL(piece_cache->add_piece_buffer(piece, 
                                                       piece_cache->get_piece_mode(piece_mode_), 
                                                       &buffer_))) {
-        LOG_WARN("add piece buffer fail.", K(ret), K(stmt_id_));
       } else {
         LOG_INFO("store piece successfully", K(ret), K(session.get_server_sid()),
                                              K(stmt_id_), K(param_id_));
@@ -362,7 +347,6 @@ int ObPiece::piece_init(ObSQLSessionInfo &session,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("piece cache is null", K(ret));
   } else if (OB_FAIL(piece_cache->mem_context_->CREATE_CONTEXT(entity_, param))) {
-    LOG_WARN("failed to create piece memory context", K(ret));
   } else if (OB_ISNULL(entity_)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alloc piece memory context", K(ret));
@@ -392,7 +376,6 @@ int ObPieceCache::init_piece_cache(ObSQLSessionInfo &session)
   int ret = OB_SUCCESS;
   if (!is_inited()) {
     if (OB_FAIL(init())) {
-      LOG_WARN("piece_cache init fail", K(ret));
     }
   }
   LOG_DEBUG("init piece cache. ");
@@ -406,7 +389,6 @@ int ObPieceCache::make_piece(int32_t stmt_id,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_piece_cache(session))) {
-    LOG_WARN("piece_cache init fail", K(ret));
   } else if (NULL == mem_context_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("piece_cache mem_context_ is null", K(ret));
@@ -418,9 +400,7 @@ int ObPieceCache::make_piece(int32_t stmt_id,
     OV (OB_NOT_NULL(piece = new (buf) ObPiece()));
     if (OB_SUCC(ret)) {
       if (OB_FAIL(piece->piece_init(session, stmt_id, param_id))) {
-        LOG_WARN("piece init fail.", K(ret), K(stmt_id), K(param_id));
       } else if (OB_FAIL(add_piece(piece))) {
-        LOG_WARN("add piece fail.", K(ret), K(stmt_id), K(param_id));
       }
       if (OB_SUCCESS != ret) {
         // clean up memory when failed.
@@ -442,7 +422,6 @@ int ObPieceCache::add_piece(ObPiece *piece)
     ret = OB_ERR_PARAM_INVALID;
     LOG_WARN("piece key is invalid.", K(ret), K(key));
   } else if (OB_FAIL(piece_map_.set_refactored(key, piece))) {
-    LOG_WARN("fail insert ps id to hash map", K(key), K(ret));
   }
   LOG_DEBUG("add piece: ", K(ret), K(key),
             K(piece->get_stmt_id()), K(piece->get_param_id()));
@@ -454,7 +433,6 @@ int ObPieceCache::remove_piece(int64_t key, ObSQLSessionInfo &session)
   int ret = OB_SUCCESS;
   ObPiece *piece = NULL;
   if (OB_FAIL(piece_map_.erase_refactored(key, &piece))) {
-    LOG_WARN("piece info not exist", K(key), K(ret));
   } else if (OB_ISNULL(piece)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session_info is null", K(ret));
@@ -493,7 +471,6 @@ int ObPieceCache::close_all(ObSQLSessionInfo &session)
       // only save first error ret
       ret = ret == OB_SUCCESS ? tmp_ret : ret;
       if (OB_SUCCESS != tmp_ret) {
-        LOG_WARN("remove piece fail.", K(key), K(tmp_ret));
       }
     }
   }
@@ -540,7 +517,6 @@ int ObPieceCache::get_piece_buffer(int32_t stmt_id,
   ObPieceBuffer *old_piece_buf = NULL;
   ObPiece *piece = NULL;
   if (OB_FAIL(get_piece(stmt_id, param_id, piece))) {
-    LOG_WARN("get piece fail", K(stmt_id), K(param_id), K(ret) );
   } else if (NULL == piece) {
     ret = OB_ERR_PARAM_INVALID;
     LOG_WARN("piece is null", K(stmt_id), K(ret));
@@ -548,7 +524,6 @@ int ObPieceCache::get_piece_buffer(int32_t stmt_id,
               || 0 == piece->get_buffer_array()->count()) {
     // if piecebuffer is empty, just remove the piece
     if (OB_FAIL(remove_piece(get_piece_key(stmt_id, param_id), session))) {
-      LOG_WARN("remove piece fail", K(stmt_id), K(param_id));
     } else {
       // fetch stage, the previous segment read the last data, but the length is exactly equal to piecesize, so the last flag was not set
       piece_buf.set_piece_mode(ObLastPiece);
@@ -616,7 +591,6 @@ int ObPieceCache::get_oracle_buffer(int32_t stmt_id,
   int ret = OB_SUCCESS;
   ObPiece *piece = NULL;
   if (OB_FAIL(get_piece(stmt_id, param_id, piece))) {
-    LOG_WARN("get piece fail", K(stmt_id), K(param_id), K(ret) );
   } else if (NULL == piece) {
     ret = OB_ERR_PARAM_INVALID;
     LOG_WARN("piece is null", K(stmt_id), K(ret));
@@ -626,7 +600,6 @@ int ObPieceCache::get_oracle_buffer(int32_t stmt_id,
     piece->set_position(0);
     for (int64_t i=0; OB_SUCC(ret) && i < count; i++) {
       if (OB_FAIL(merge_piece_buffer(piece, str_buf.at(i)))) {
-        LOG_WARN("merge piece buffer fail.", K(ret), K(stmt_id));
       } else {
         length = length + get_length_length(str_buf.at(i).length());
         length = length + str_buf.at(i).length();
@@ -650,7 +623,6 @@ int ObPieceCache::get_mysql_buffer(int32_t stmt_id,
   length = 0;
   str_buf.reset();
   if (OB_FAIL(get_piece(stmt_id, param_id, piece))) {
-    LOG_WARN("get piece fail", K(stmt_id), K(param_id), K(ret) );
   } else if (NULL == piece) {
     ret = OB_ERR_PARAM_INVALID;
     LOG_WARN("piece is null", K(stmt_id), K(ret));
@@ -661,7 +633,6 @@ int ObPieceCache::get_mysql_buffer(int32_t stmt_id,
       if (NULL != piece_buffer->get_piece_buffer()) {
         const ObString buffer = *(piece_buffer->get_piece_buffer());
         if (OB_FAIL(str_buf.append(buffer))) {
-          LOG_WARN("append long data fail.", K(ret));
         } else {}
       }
     }
@@ -738,7 +709,6 @@ int ObPieceCache::add_piece_buffer(ObPiece *piece,
   if (OB_SUCC(ret) && OB_NOT_NULL(piece->get_buffer_array())) {
     ObPieceBufferArray *buffer_array = piece->get_buffer_array();
     if (OB_FAIL(buffer_array->push_back(*piece_buffer))) {
-      LOG_WARN("push buffer array fail.", K(ret));
     }
   }
   LOG_DEBUG("add piece buffer.", K(ret), K(piece_mode));

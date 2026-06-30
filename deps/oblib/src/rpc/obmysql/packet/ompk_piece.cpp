@@ -31,14 +31,11 @@ int OMPKPiece::serialize(char* buffer, int64_t length, int64_t& pos) const
     LOG_WARN("size is overflow",  K(length), K(pos), "need_size", get_serialize_size(), K(ret));
   } else {
     if (OB_FAIL(ObMySQLUtil::store_int1(buffer, length, piece_mode_, pos))) {
-      LOG_WARN("store failed", KP(buffer), K(length), K_(piece_mode), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_int1(buffer, 
                                                length, 
                                                is_null_, 
                                                pos))) {
-      LOG_WARN("store is null failed", KP(buffer), K(length), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_int8(buffer, length, data_length_, pos))) {
-      LOG_WARN("store length failed", KP(buffer), K(length), K_(data_length), K(pos));
     } else if (!is_array_) {
       if (length >= pos && data_length_ <= static_cast<uint64_t>(length - pos)) {
         MEMCPY(buffer + pos, data_.ptr(), data_length_);

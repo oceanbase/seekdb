@@ -66,7 +66,6 @@ int ObDASLockOp::open_op()
                                             write_branch_id_,
                                             dml_param.write_flag_,
                                             store_ctx_guard))) {
-    LOG_WARN("fail to get_write_access_tx_ctx_guard", K(ret), K(ls_id_));
   } else if (OB_FAIL(ObDMLService::init_dml_param(
       *lock_ctdef_,
       *lock_rtdef_,
@@ -76,7 +75,6 @@ int ObDASLockOp::open_op()
       store_ctx_guard,
       dml_param,
       das_gts_opt_info_.use_specify_snapshot_))) {
-    LOG_WARN("init dml param failed", K(ret));
   } else if (OB_FAIL(as->lock_rows(ls_id_,
                                    tablet_id_,
                                    *trans_desc_,
@@ -165,7 +163,6 @@ int ObDASLockOp::swizzling_remote_task(ObDASRemoteInfo *remote_info)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIDASTaskOp::swizzling_remote_task(remote_info))) {
-    LOG_WARN("fail to swizzling remote task", K(ret));
   } else if (remote_info != nullptr) {
     //DAS lock is executed remotely
     trans_desc_ = remote_info->trans_desc_;
@@ -182,7 +179,6 @@ int ObDASLockOp::write_row(const ExprFixedArray &row,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("buffer not inited", K(ret));
   } else if (OB_FAIL(lock_buffer_.add_row(row, &eval_ctx, stored_row, true))) {
-    LOG_WARN("add row to lock buffer failed", K(ret), K(row), K(lock_buffer_));
   }
   return ret;
 }

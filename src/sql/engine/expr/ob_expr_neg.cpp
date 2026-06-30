@@ -53,7 +53,6 @@ static int check_expr_and_eval_param(const ObExpr &expr,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(eval_ctx, param_datum))) {
-    LOG_WARN("failed to eval", K(ret));
   } else if (param_datum->is_null()) {
     found_null = true;
   } else {
@@ -80,7 +79,6 @@ DEF_EVAL_NEG_FUNC(ObIntTC) {
   ObDatum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval_param(expr, eval_ctx, param, found_null))) {
-    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else if (param->get_int() == INT64_MIN) {
@@ -101,7 +99,6 @@ DEF_EVAL_NEG_FUNC(ObUIntTC) {
   ObDatum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval_param(expr, eval_ctx, param, found_null))) {
-    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -119,7 +116,6 @@ DEF_EVAL_NEG_FUNC(ObFloatTC) {
   ObDatum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval_param(expr, eval_ctx, param, found_null))) {
-    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -133,7 +129,6 @@ DEF_EVAL_NEG_FUNC(ObDoubleTC) {
   ObDatum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval_param(expr, eval_ctx, param, found_null))) {
-    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -147,7 +142,6 @@ DEF_EVAL_NEG_FUNC(ObNumberTC) {
   ObDatum *param = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval_param(expr, eval_ctx, param, found_null))) {
-    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -169,7 +163,6 @@ DEF_EVAL_NEG_FUNC(ObDecimalIntTC)
   ObDatum *param_datum = NULL;
   bool found_null = false;
   if (OB_FAIL(check_expr_and_eval_param(expr, eval_ctx, param_datum, found_null))) {
-    LOG_WARN("failed to check expr and eval", K(ret));
   } else if (found_null) {
     expr_datum.set_null();
   } else {
@@ -258,7 +251,6 @@ int ObExprNeg::calc_result_type1(ObExprResType &type, ObExprResType &type1, ObEx
           type.set_type(ObDoubleType);
           type1.set_calc_type(ObDoubleType);
       } else if (OB_FAIL(calc_param_type(type1, res_param_type, result_type))) {
-        LOG_WARN("failed to calc param type", K(ret));
       } else {
         LOG_DEBUG("calc reuslt type", K(res_param_type), K(result_type));
         type.set_type(result_type);

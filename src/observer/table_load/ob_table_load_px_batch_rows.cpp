@@ -83,13 +83,9 @@ int ObTableLoadPXBatchRows::init(const ObIArray<ObColDesc> &px_col_descs,
              K(max_batch_size));
   } else {
     if (OB_FAIL(col_types_.prepare_allocate(px_col_descs.count()))) {
-      LOG_WARN("fail to prepare allocate", KR(ret), K(px_col_descs.count()));
     } else if (OB_FAIL(col_accuracys_.prepare_allocate(px_col_descs.count()))) {
-      LOG_WARN("fail to prepare allocate", KR(ret), K(px_col_descs.count()));
     } else if (OB_FAIL(vectors_.prepare_allocate(px_col_descs.count()))) {
-      LOG_WARN("fail to prepare allocate", KR(ret), K(px_col_descs.count()));
     } else if (OB_FAIL(batch_rows_.init(col_descs, col_nullables, max_batch_size, row_flag))) {
-      LOG_WARN("fail to init batch rows", KR(ret));
     } else {
       for (int64_t i = 0; i < px_col_descs.count(); ++i) {
         col_types_.at(i) = px_col_descs.at(i).col_type_;
@@ -148,7 +144,6 @@ int ObTableLoadPXBatchRows::append_selective(const IVectorPtrs &vectors, const u
                                                      reshape_allocator_, vector, batch_selector))) {
           LOG_WARN("fail to reshape vector value", KR(ret));
         } else if (OB_FAIL(vectors_.at(i)->append_selective(batch_idx, vector, selector, size))) {
-          LOG_WARN("fail to append selective", KR(ret));
         } else {
           reshape_allocator_.reuse();
         }
@@ -187,7 +182,6 @@ int ObTableLoadPXBatchRows::append_selective(const ObIArray<ObDatumVector> &datu
           LOG_WARN("fail to reshape datum vector value", KR(ret));
         } else if (OB_FAIL(vectors_.at(i)->append_selective(batch_idx, datum_vectors.at(i),
                                                             selector, size))) {
-          LOG_WARN("fail to append selective", KR(ret));
         } else {
           reshape_allocator_.reuse();
         }
@@ -223,7 +217,6 @@ int ObTableLoadPXBatchRows::append_row(const ObDirectLoadDatumRow &datum_row)
               false /*enable_oracle_empty_char_reshape_to_null*/, reshape_allocator_, datum))) {
           LOG_WARN("fail to reshape datum value", KR(ret));
         } else if (OB_FAIL(vectors_.at(i)->append_datum(batch_idx, datum))) {
-          LOG_WARN("fail to append datum", KR(ret), K(i), K(datum));
         } else {
           reshape_allocator_.reuse();
         }
@@ -256,7 +249,6 @@ int ObTableLoadPXBatchRows::shallow_copy(const IVectorPtrs &vectors, const int64
                                                      reshape_allocator_, vector, batch_selector))) {
           LOG_WARN("fail to reshape vector value", KR(ret));
         } else if (OB_FAIL(vectors_.at(i)->shallow_copy(vector, batch_size))) {
-          LOG_WARN("fail to shallow copy vector", KR(ret), K(i));
         }
       }
     }
@@ -288,7 +280,6 @@ int ObTableLoadPXBatchRows::shallow_copy(const ObIArray<ObDatumVector> &datum_ve
                                datum_vector, batch_selector))) {
           LOG_WARN("fail to reshape datum vector value", KR(ret));
         } else if (OB_FAIL(vectors_.at(i)->shallow_copy(datum_vectors.at(i), batch_size))) {
-          LOG_WARN("fail to shallow copy vector", KR(ret), K(i));
         }
       }
     }

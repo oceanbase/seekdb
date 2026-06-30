@@ -82,7 +82,6 @@ int ObGtsRequestRpc::init(const ObAddr &self,
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(self), KP(ts_mgr), KP(ts_worker));
   } else if (OB_SUCCESS != (ret = gts_request_cb_.init(ts_mgr, ts_worker))) {
-    TRANS_LOG(WARN, "gts request callback inited failed", KR(ret));
   } else {
     self_ = self;
     is_inited_ = true;
@@ -195,7 +194,6 @@ int ObGtsRequestRpc::post(const ObAddr &server,
           rcode.rcode_ = OB_SUCCESS;
           
           if (OB_FAIL(cb.process(gts_rpc_result, server, rcode))) {
-            TRANS_LOG(WARN, "post local gts request failed", KR(ret), K(server), K(m));
           } else {
             TRANS_LOG(DEBUG, "post local gts request success", KR(ret), K(server), K(m));
           }

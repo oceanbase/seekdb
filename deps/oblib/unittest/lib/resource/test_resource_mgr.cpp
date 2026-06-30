@@ -209,7 +209,6 @@ TEST(TestTenantMemoryMgr, sync_wash)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LIB_LOG(WARN, "alloc_chunk failed", K(ret));
     } else if (OB_FAIL(chunks.push_back(ptr))) {
-      LIB_LOG(WARN, "push_back failed", K(ret));
     } else {
       ++alloc_count;
     }
@@ -262,7 +261,6 @@ TEST(TestTenantMemoryMgr, DISABLED_large_sync_wash)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LIB_LOG(WARN, "alloc_chunk failed", K(ret));
     } else if (OB_FAIL(chunks.push_back(ptr))) {
-      LIB_LOG(WARN, "push_back failed", K(ret));
     } else {
       ++alloc_count;
     }

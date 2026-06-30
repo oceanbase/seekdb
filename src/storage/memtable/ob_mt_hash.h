@@ -133,11 +133,9 @@ OB_INLINE static int compare_node(const ObHashNode *n1, const ObHashNode *n2, in
     const Key &mtk1 = (static_cast<const ObMtHashNode*>(n1))->key_;
     const Key &mtk2 = (static_cast<const ObMtHashNode*>(n2))->key_;
     if (OB_FAIL(mtk1.equal(mtk2, is_equal))) {
-      TRANS_LOG(ERROR, "failed to compare", KR(ret), K(mtk1), K(mtk2));
     } else if (is_equal) {
       cmp = 0;
     } else if (OB_FAIL(mtk1.compare(mtk2, cmp))) {
-      TRANS_LOG(ERROR, "failed to compare", KR(ret), K(mtk1), K(mtk2));
     } else {
       // do nothing
     }

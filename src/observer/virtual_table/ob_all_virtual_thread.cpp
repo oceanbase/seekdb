@@ -73,7 +73,6 @@ int ObAllVirtualThread::inner_get_next_row(common::ObNewRow *&row)
   if (!is_inited_) {
     const char *cgroup_path = "cgroup";
     if (OB_FAIL(FileDirectoryUtils::is_exists(cgroup_path, is_config_cgroup_))) {
-      SERVER_LOG(WARN, "fail check file exist", K(cgroup_path), K(ret));
     }
     #if defined(__APPLE__) || defined(__ANDROID__)
     ret = OB_NOT_SUPPORTED;
@@ -212,7 +211,6 @@ int ObAllVirtualThread::inner_get_next_row(common::ObNewRow *&row)
         SERVER_LOG(WARN, "fail to get next row", K(ret));
       }
     } else if (OB_FAIL(read_real_cgroup_path())){
-      SERVER_LOG(WARN, "fail to get cgroup path real path", K(ret));
     } else {
       row = &cur_row_;
     }

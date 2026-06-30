@@ -62,9 +62,7 @@ int ObInsertLobColumnHelper::start_trans(const share::ObLSID &ls_id,
 
   ObTransService *txs = share::g_mp->trans_service();
   if (OB_FAIL(txs->acquire_tx(tx_desc))) {
-    LOG_WARN("fail to acquire tx", K(ret));
   } else if (OB_FAIL(txs->start_tx(*tx_desc, tx_param))) {
-    LOG_WARN("fail to start tx", K(ret));
   }
   return ret;
 }
@@ -129,11 +127,9 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
     ObLobLocatorV2 src(data, set_has_lob_header);
     int64_t byte_len = 0;
     if (OB_FAIL(src.get_lob_data_byte_len(byte_len))) {
-      LOG_WARN("fail to get lob data byte len", K(ret), K(src));
     } else if (src.has_inrow_data() && lob_mngr->can_write_inrow(byte_len, lob_storage_param.inrow_threshold_)) {
       // fast path for inrow data
       if (OB_FAIL(src.get_inrow_data(data))) {
-        LOG_WARN("fail to get inrow data", K(ret), K(src));
       } else {
         void *buf = allocator.alloc(data.length() + sizeof(ObLobCommon));
         if (OB_ISNULL(buf)) {
@@ -147,16 +143,13 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
       }
     } else {
       if (OB_FAIL(start_trans(ls_id, false/*is_for_read*/, timeout_ts, tx_desc))) {
-        LOG_WARN("fail to get tx_desc", K(ret));
       } else if (OB_FAIL(txs->get_ls_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, ls_id, timeout_ts, snapshot))) {
-        LOG_WARN("fail to get snapshot", K(ret));
       } else {
         // 4.0 text tc compatiable
         ObLobAccessParam lob_param;
         
         lob_param.tx_desc_ = tx_desc;
         if (OB_FAIL(lob_param.snapshot_.assign(snapshot))) {
-          LOG_WARN("assign snapshot fail", K(ret));
         } else {
           lob_param.sql_mode_ = SMO_DEFAULT;
           lob_param.ls_id_ = ls_id;
@@ -177,7 +170,6 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("invalid src lob locator.", K(ret));
         } else if (OB_FAIL(lob_mngr->append(lob_param, src))) {
-          LOG_WARN("lob append failed.", K(ret));
         } else {
           datum.set_lob_data(*lob_param.lob_common_, lob_param.handle_size_);
         }
@@ -221,7 +213,6 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
     ObLobLocatorV2 src(data, set_has_lob_header);
     int64_t byte_len = 0;
     if (OB_FAIL(src.get_lob_data_byte_len(byte_len))) {
-      LOG_WARN("fail to get lob data byte len", K(ret), K(src));
     } else if (src.has_inrow_data() && lob_mngr->can_write_inrow(byte_len, lob_storage_param.inrow_threshold_)) {
       // do fast inrow 
       if (src.is_inrow_disk_lob_locator()) {
@@ -236,7 +227,6 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
           iter.set_end();
         }
       } else if (OB_FAIL(src.get_inrow_data(data))) {
-        LOG_WARN("fail to get inrow data", K(ret), K(src));
       } else {
         void *buf = allocator.alloc(data.length() + sizeof(ObLobCommon));
         if (OB_ISNULL(buf)) {
@@ -274,7 +264,6 @@ int ObInsertLobColumnHelper::insert_lob_column(ObIAllocator &allocator,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid src lob locator.", K(ret));
       } else if (OB_FAIL(lob_mngr->append(lob_param, src, iter))) {
-        LOG_WARN("lob append failed.", K(ret));
       } else {
         datum.set_lob_data(*lob_param.lob_common_, lob_param.handle_size_);
       }
@@ -311,9 +300,7 @@ int ObInsertLobColumnHelper::delete_lob_column(ObIAllocator &allocator,
       // delete inrow lob no need to use the lob manager
     } else {
       if (OB_FAIL(start_trans(ls_id, false/*is_for_read*/, timeout_ts, tx_desc))) {
-        LOG_WARN("fail to get tx_desc", K(ret));
       } else if (OB_FAIL(txs->get_ls_read_snapshot(*tx_desc, transaction::ObTxIsolationLevel::RC, ls_id, timeout_ts, snapshot))) {
-        LOG_WARN("fail to get snapshot", K(ret));
       } else {
         // 4.0 text tc compatiable
         ObLobAccessParam lob_param;
@@ -323,9 +310,7 @@ int ObInsertLobColumnHelper::delete_lob_column(ObIAllocator &allocator,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("invalid src lob locator.", K(ret));
         } else if (OB_FAIL(lob_mngr->build_lob_param(lob_param, allocator, collation_type, 0, UINT64_MAX, timeout_ts, lob))) {
-          LOG_WARN("fail to build lob param.", K(ret));
         } else if (OB_FAIL(lob_mngr->erase(lob_param))) {
-          LOG_WARN("lob meta row delete failed.", K(ret));
         } else {
           datum.set_lob_data(*lob_param.lob_common_, lob_param.handle_size_);
         }
@@ -442,19 +427,16 @@ OB_DEF_SERIALIZE(ObLobPartialData)
   OB_UNIS_ENCODE(index_count);
   for (int i = 0; OB_SUCC(ret) && i < index_count; ++i) {
     if (OB_FAIL(index_[i].serialize(buf, buf_len, pos))) {
-      LOG_ERROR("serialize failed", K(ret), K(pos), K(buf_len));
     }
   }
   OB_UNIS_ENCODE(data_count);
   for (int i = 0; OB_SUCC(ret) && i < data_count; ++i) {
     if (OB_FAIL(data_[i].serialize(buf, buf_len, pos))) {
-      LOG_ERROR("serialize failed", K(ret), K(pos), K(buf_len), K(i));
     }
   }
   OB_UNIS_ENCODE(old_data_count);
   for (int i = 0; OB_SUCC(ret) && i < old_data_count; ++i) {
     if (OB_FAIL(old_data_[i].serialize(buf, buf_len, pos))) {
-      LOG_ERROR("serialize failed", K(ret), K(pos), K(buf_len), K(i));
     }
   }
   return ret;
@@ -475,27 +457,21 @@ OB_DEF_DESERIALIZE(ObLobPartialData)
     ObLobChunkIndex idx;
     int32_t data_idx = 0;
     if (OB_FAIL(idx.deserialize(buf, data_len, pos))) {
-      LOG_ERROR("deserialize chunk idx failed", K(ret), K(pos), K(data_len), K(i));
     } else if (OB_FAIL(push_chunk_index(idx))) {
-      LOG_ERROR("deserialize push_back failed", K(ret), K(pos), K(data_len), K(i));
     }
   }
   OB_UNIS_DECODE(data_count);
   for (int32_t i = 0; OB_SUCC(ret) && i < data_count; ++i) {
     ObLobChunkData data;
     if (OB_FAIL(data.deserialize(buf, data_len, pos))) {
-      LOG_ERROR("deserialize failed", K(ret), K(pos), K(data_len), K(i));
     } else if (OB_FAIL(data_.push_back(data))) {
-      LOG_ERROR("deserialize failed", K(ret), K(pos), K(data_len), K(i));
     }
   }
   OB_UNIS_DECODE(old_data_count);
   for (int32_t i = 0; OB_SUCC(ret) && i < old_data_count; ++i) {
     ObLobChunkData data;
     if (OB_FAIL(data.deserialize(buf, data_len, pos))) {
-      LOG_ERROR("deserialize failed", K(ret), K(pos), K(data_len), K(i));
     } else if (OB_FAIL(old_data_.push_back(data))) {
-      LOG_ERROR("deserialize failed", K(ret), K(pos), K(data_len), K(i));
     }
   }
   return ret;
@@ -505,7 +481,6 @@ int ObLobPartialData::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(search_map_.create(10, "LobPartial"))) {
-    LOG_WARN("map create fail", K(ret));
   }
   return ret;
 }
@@ -514,9 +489,7 @@ int ObLobPartialData::push_chunk_index(const ObLobChunkIndex &chunk_index)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(index_.push_back(chunk_index))) {
-    LOG_ERROR("push_back failed", K(ret));
   } else if (OB_FAIL(search_map_.set_refactored(chunk_index.offset_/chunk_size_, index_.count() - 1))) {
-    LOG_ERROR("set_refactored failed", K(ret), K(index_.count()), K(chunk_index));      
   }
   return ret;
 }
@@ -535,7 +508,6 @@ int ObLobPartialData::sort_index()
   for (int i = 0; i < index_.count(); ++i) {
     const ObLobChunkIndex &chunk_index = index_[i];
     if (OB_FAIL(search_map_.set_refactored(chunk_index.offset_/chunk_size_, i))) {
-      LOG_ERROR("set_refactored failed", K(ret), K(index_.count()), K(chunk_index));
     }
   }
   return ret;

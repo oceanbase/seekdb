@@ -60,7 +60,6 @@ int ObMPStmtSendLongData::before_process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObMPBase::before_process())) {
-    LOG_WARN("failed to pre processing packet", K(ret));
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     const char* pos = pkt.get_cdata();
@@ -110,12 +109,10 @@ int ObMPStmtSendLongData::process()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid tenant", K_(stmt_id), K_(param_id), K(conn->tenant_), K(ret));
   } else if (OB_FAIL(get_session(sess))) {
-    LOG_WARN("get session fail", K_(stmt_id), K_(param_id), K(ret));
   } else if (OB_ISNULL(sess)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL or invalid", K_(stmt_id), K_(param_id), K(sess), K(ret));
   } else if (OB_FAIL(update_transmission_checksum_flag(*sess))) {
-    LOG_WARN("update transmisson checksum flag failed", K(ret));
   } else {
     ObSQLSessionInfo &session = *sess;
     THIS_WORKER.set_session(sess);
@@ -134,7 +131,6 @@ int ObMPStmtSendLongData::process()
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("invalid session", K_(stmt_id), K_(param_id), K(ret));
     } else if (OB_FAIL(process_kill_client_session(session))) {
-      LOG_WARN("client session has been killed", K(ret));
     } else if (OB_UNLIKELY(session.is_zombie())) {
       ret = OB_ERR_SESSION_INTERRUPTED;
       LOG_WARN("session has been killed", K(session.get_session_state()), K_(stmt_id), K_(param_id),
@@ -143,13 +139,10 @@ int ObMPStmtSendLongData::process()
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
       LOG_WARN("packet too large than allowd for the session", K_(stmt_id), K_(param_id), K(ret));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
-      LOG_WARN("fail to get query timeout", K_(stmt_id), K_(param_id), K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
                 tenant_version))) {
-      LOG_WARN("fail get tenant broadcast version", K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
                 sys_version))) {
-      LOG_WARN("fail get tenant broadcast version", K(ret));
     } else if (pkt.exist_trace_info()
                && OB_FAIL(session.update_sys_variable(SYS_VAR_OB_TRACE_INFO,
                                                       pkt.get_trace_info()))) {
@@ -164,7 +157,6 @@ int ObMPStmtSendLongData::process()
       THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
       session.partition_hit().reset();
       if (OB_FAIL(process_send_long_data_stmt(session))) {
-        LOG_WARN("execute sql failed", K_(stmt_id), K_(param_id), K(ret));
       }
     }
 
@@ -250,7 +242,6 @@ int ObMPStmtSendLongData::do_process(ObSQLSessionInfo &session)
       //nothing to do
     } else if (OB_FAIL(set_session_active(sql, session, ObTimeUtil::current_time(), 
                                           obmysql::ObMySQLCmd::COM_STMT_SEND_PIECE_DATA))) {
-      LOG_WARN("fail to set session active", K(ret));
     } else if (OB_FAIL(store_piece(session))) {
       exec_start_timestamp_ = ObTimeUtility::current_time();
     } else {
@@ -302,10 +293,8 @@ int ObMPStmtSendLongData::store_piece(ObSQLSessionInfo &session)
   } else {
     ObPiece *piece = NULL;
     if (OB_FAIL(piece_cache->get_piece(stmt_id_, param_id_, piece))) {
-      LOG_WARN("get piece fail", K(stmt_id_), K(param_id_), K(ret) );
     } else if (NULL == piece) {
       if (OB_FAIL(piece_cache->make_piece(stmt_id_, param_id_, piece, session))) {
-        LOG_WARN("make piece fail.", K(ret), K(stmt_id_));
       }
     }
     if (OB_FAIL(ret) || NULL == piece) {
@@ -315,7 +304,6 @@ int ObMPStmtSendLongData::store_piece(ObSQLSessionInfo &session)
     } else if (OB_FAIL(piece_cache->add_piece_buffer(piece, 
                                                       ObPieceMode::ObInvalidPiece, 
                                                       &buffer_))) {
-      LOG_WARN("add piece buffer fail.", K(ret), K(stmt_id_));
     } else {
       // send long data do not response.
       LOG_INFO("store piece successfully", K(ret), K(session.get_server_sid()),

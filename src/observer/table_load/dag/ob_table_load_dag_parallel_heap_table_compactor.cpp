@@ -107,7 +107,6 @@ int ObTableLoadDagParallelHeapTableCompactor::close()
     table_store.clear();
     table_store.set_multiple_heap_table();
     if (OB_FAIL(table_store.add_tables(tables_handle_))) {
-      LOG_WARN("fail to add tables", KR(ret));
     }
   }
   return ret;

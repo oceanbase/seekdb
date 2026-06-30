@@ -49,16 +49,12 @@ int ObSchemaGetterGuard::get_ai_model_schema(
     LOG_WARN("invalid argument",
              K(ai_model_name), KR(ret));
   } else if (OB_FAIL(check_tenant_schema_guard())) {
-    LOG_WARN("fail to check tenant schema guard", KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
-    LOG_WARN("fail to check lazy guard", KR(ret));
   } else if (OB_FAIL(get_tenant_name_case_mode(mode))) {
-    LOG_WARN("fail to get_tenant_name_case_mode", K(ret));
   } else if (OB_NAME_CASE_INVALID == mode) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid case mode", K(ret), K(mode));
   } else if (OB_FAIL(mgr->get_ai_model_schema( ai_model_name, mode, ai_model_schema))){
-    LOG_WARN("fail to get ai model schema", K(ret), K(ai_model_name));
   }
   
   return ret;
@@ -80,11 +76,8 @@ int ObSchemaGetterGuard::get_ai_model_schema(
     LOG_WARN("invalid argument",
              K(ai_model_id), KR(ret));
   } else if (OB_FAIL(check_tenant_schema_guard())) {
-    LOG_WARN("fail to check tenant schema guard", KR(ret));
   } else if (OB_FAIL(check_lazy_guard( mgr))) {
-    LOG_WARN("fail to check lazy guard", KR(ret));
   } else if (OB_FAIL(mgr->get_ai_model_schema( ai_model_id, ai_model_schema))){
-    LOG_WARN("fail to get ai model schema", K(ret), K(ai_model_id));
   }
   
   return ret;

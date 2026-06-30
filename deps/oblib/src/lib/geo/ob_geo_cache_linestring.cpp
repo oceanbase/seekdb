@@ -31,9 +31,7 @@ int ObCachedGeoLinestring::init()
   if (!is_inited()) {
     ObGeoSegmentCollectVisitor seg_visitor(&line_segments_);
     if (OB_FAIL(ObCachedGeomBase::init())) {
-      LOG_WARN("cache geom base init failed", K(ret));
     } else if (OB_FAIL(get_cached_geom()->do_visit(seg_visitor))) {
-      LOG_WARN("do segment visit failed", K(ret));
     } else if (OB_ISNULL(lAnalyzer_)) {
       ObLineIntersectionAnalyzer *buf = static_cast<ObLineIntersectionAnalyzer *>(allocator_->alloc(sizeof(ObLineIntersectionAnalyzer)));
       if (OB_ISNULL(buf)) {
@@ -56,9 +54,7 @@ int ObCachedGeoLinestring::intersects(ObGeometry& geo, ObGeoEvalCtx& gis_context
   if (!is_inited() && OB_FAIL(init())) {
     LOG_WARN("cached polygon init failed", K(ret));
   } else if (OB_FAIL(ObGeoTypeUtil::get_geo_dimension(&geo, dim))) {
-    LOG_WARN("fail to get geo dimension.", K(ret));
-  } else if (OB_FAIL(lAnalyzer_->segment_intersection_query(&geo))) { // check if lines intersect
-    LOG_WARN("calculate segment intersection failed", K(ret));
+  } else if (OB_FAIL(lAnalyzer_->segment_intersection_query(&geo))) {
   } else if (lAnalyzer_->is_intersects()) {
     res = lAnalyzer_->is_intersects();
   } else if (dim == ObGeoDimension::TWO_DIMENSION) {
@@ -66,7 +62,6 @@ int ObCachedGeoLinestring::intersects(ObGeometry& geo, ObGeoEvalCtx& gis_context
     for (uint32_t i = 0; i < get_vertexes().size() && OB_SUCC(ret) && !res; i++) {
       ObGeoPointLocationVisitor point_loc_visitor(get_vertexes()[i]);
       if (OB_FAIL(geo.do_visit(point_loc_visitor))) {
-        LOG_WARN("failed to do point location visitor", K(ret));
       } else if (point_loc_visitor.get_point_location() == ObPointLocation::INTERIOR
                 || point_loc_visitor.get_point_location() == ObPointLocation::BOUNDARY) {
         res = true;
@@ -79,12 +74,10 @@ int ObCachedGeoLinestring::intersects(ObGeometry& geo, ObGeoEvalCtx& gis_context
     input_vertexes_.reset();
     ObGeoVertexCollectVisitor vertex_visitor(input_vertexes_);
     if (OB_FAIL(geo.do_visit(vertex_visitor))) {
-      LOG_WARN("failed to collect geo vertexes", K(ret));
     } else {
       for (uint32_t i = 0; i < input_vertexes_.size() && OB_SUCC(ret) && !res; i++) {
         ObGeoPointLocationVisitor point_loc_visitor(input_vertexes_[i]);
         if (OB_FAIL(get_cached_geom()->do_visit(point_loc_visitor))) {
-          LOG_WARN("failed to do point location visitor", K(ret));
         } else if (point_loc_visitor.get_point_location() == ObPointLocation::INTERIOR
                   || point_loc_visitor.get_point_location() == ObPointLocation::BOUNDARY) {
           res = true;

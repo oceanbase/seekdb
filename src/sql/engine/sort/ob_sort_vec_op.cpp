@@ -106,7 +106,6 @@ int ObSortVecOp::get_int_value(const ObExpr *in_val, int64_t &out_val)
     int64_t skip_mem = 0;
     const ObBitVector *my_skip = to_bit_vector(reinterpret_cast<void *>(&skip_mem));
     if (OB_FAIL(in_val->eval_vector(eval_ctx_, *my_skip, 1, true))) {
-      LOG_WARN("Failed to calculate expression", K(ret));
     } else if (in_val->get_vector(eval_ctx_)->is_null(0)) {
       out_val = 0;
     } else {
@@ -128,7 +127,6 @@ int ObSortVecOp::get_topn_count(int64_t &topn_cnt)
              K(MY_SPEC.topk_limit_expr_), K(ret));
   } else if (NULL != MY_SPEC.topn_expr_) {
     if (OB_FAIL(get_int_value(MY_SPEC.topn_expr_, topn_cnt))) {
-      LOG_WARN("failed to get int value", K(ret), K(MY_SPEC.topn_expr_));
     } else {
       topn_cnt = std::max(MY_SPEC.minimum_row_count_, topn_cnt);
     }
@@ -180,9 +178,7 @@ int ObSortVecOp::process_sort_batch()
       clear_evaluated_flag();
       const ObBatchRows *input_brs = NULL;
       if (OB_FAIL(try_check_status())) {
-        LOG_WARN("failed to check status", K(ret));
       } else if (OB_FAIL(child_->get_next_batch(MY_SPEC.max_batch_size_, input_brs))) {
-        LOG_WARN("get next batch failed", K(ret));
       } else {
         if (input_brs->size_ > 0) {
           sort_row_count_ +=
@@ -225,9 +221,7 @@ int ObSortVecOp::init_temp_row_store(const common::ObIArray<ObExpr *> &exprs,
   } else if (OB_FAIL(row_store.init(exprs, batch_size, mem_attr, 16 * 1024, true,
                              sort_op_provider_.get_extra_size(is_sort_key) /* row_extra_size */,
                              compress_type, reorder_fixed_expr, enable_trunc))) {
-    LOG_WARN("init row store failed", K(ret));
   } else if (OB_FAIL(row_store.alloc_dir_id())) {
-    LOG_WARN("failed to alloc dir id", K(ret));
   }
   return ret;
 }
@@ -241,7 +235,6 @@ int ObSortVecOp::init_prescan_row_store()
                      ObCtxIds::WORK_AREA);
   if (OB_FAIL(init_temp_row_store(MY_SPEC.sk_exprs_, MY_SPEC.max_batch_size_, mem_attr, true,
                                   MY_SPEC.compress_type_, sk_row_store_))) {
-    LOG_WARN("failed to init temp row store", K(ret));
   } else if (MY_SPEC.has_addon_
              && OB_FAIL(init_temp_row_store(MY_SPEC.addon_exprs_, MY_SPEC.max_batch_size_, mem_attr,
                                             false, MY_SPEC.compress_type_, addon_row_store_))) {
@@ -256,11 +249,9 @@ int ObSortVecOp::add_batch_prescan_store(const ObBatchRows &input_brs)
   int64_t sk_row_count = -1;
   int64_t addon_row_count = -1;
   if (OB_FAIL(sk_row_store_.add_batch(MY_SPEC.sk_exprs_, eval_ctx_, input_brs, sk_row_count))) {
-    LOG_WARN("failed to add row to cache store", K(ret));
   } else if (MY_SPEC.has_addon_) {
     if (OB_FAIL(addon_row_store_.add_batch(MY_SPEC.addon_exprs_, eval_ctx_, input_brs,
                                            addon_row_count))) {
-      LOG_WARN("failed to add row to cache store", K(ret));
     } else if (sk_row_count != addon_row_count) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("sort key row count and addon row count not match", K(sk_row_count),
@@ -274,14 +265,10 @@ int ObSortVecOp::finish_add_prescan_store()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(sk_row_store_.finish_add_row(false))) {
-    LOG_WARN("fail to finish add row", K(ret));
   } else if (OB_FAIL(sk_row_store_.begin(sk_row_iter_))) {
-    LOG_WARN("fail to get cache_store iter", K(ret));
   } else if (MY_SPEC.has_addon_) {
     if (OB_FAIL(addon_row_store_.finish_add_row(false))) {
-      LOG_WARN("fail to finish add row", K(ret));
     } else if (OB_FAIL(addon_row_store_.begin(addon_row_iter_))) {
-      LOG_WARN("fail to get cache_store iter", K(ret));
     }
   }
   return ret;
@@ -300,7 +287,6 @@ int ObSortVecOp::get_next_batch_prescan_store(const int64_t max_rows, int64_t &r
   } else if (MY_SPEC.has_addon_) {
     int64_t addon_read_rows = 0;
     if (OB_FAIL(addon_row_iter_.get_next_batch(sk_read_rows, addon_read_rows, addon_stored_rows))) {
-      LOG_WARN("failed to get batch row");
     } else if (sk_read_rows != addon_read_rows) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("The count of sk rows does not match the add-on rows.", K(ret),
@@ -317,21 +303,17 @@ int ObSortVecOp::scan_all_then_sort_batch()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_prescan_row_store())) {
-    LOG_WARN("failed to init prescan row store", K(ret));
   } else {
     while (OB_SUCC(ret)) {
       clear_evaluated_flag();
       const ObBatchRows *input_brs = NULL;
       if (OB_FAIL(try_check_status())) {
-        LOG_WARN("failed to check status", K(ret));
       } else if (OB_FAIL(child_->get_next_batch(MY_SPEC.max_batch_size_, input_brs))) {
-        LOG_WARN("get next batch failed", K(ret));
       } else {
         if (input_brs->size_ > 0) {
           sort_row_count_ +=
             input_brs->size_ - input_brs->skip_->accumulate_bit_cnt(input_brs->size_);
           if (OB_FAIL(add_batch_prescan_store(*input_brs))) {
-            LOG_WARN("failed to add batch prescan store", K(ret));
           }
         }
         if (input_brs->end_) {
@@ -346,7 +328,6 @@ int ObSortVecOp::scan_all_then_sort_batch()
     op_monitor_info_.otherstat_7_value_ = sort_row_count_; 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(finish_add_prescan_store())) {
-        LOG_WARN("failed to finish add prescan store", K(ret));
       } else {
         constexpr int64_t MAX_BATCH_SIZE = 256;
         const ObCompactRow *sk_rows[MAX_BATCH_SIZE];
@@ -362,7 +343,6 @@ int ObSortVecOp::scan_all_then_sort_batch()
             }
           } else if (OB_FAIL(sort_op_provider_.add_batch_stored_row(
                        read_rows, &sk_rows[0], MY_SPEC.has_addon_ ? &addon_rows[0] : nullptr))) {
-            LOG_WARN("failed to add batch stored row", K(ret));
           }
         }
         if (MY_SPEC.has_addon_) {
@@ -421,7 +401,6 @@ int ObSortVecOp::init_sort(int64_t row_count, int64_t topn_cnt)
   int aqs_head =
     MY_SPEC.enable_encode_sortkey_opt_ ? sizeof(oceanbase::sql::ObSortOpImpl::AQSItem) : 0;
   if (OB_FAIL(sort_op_provider_.init(context))) {
-    LOG_WARN("failed to init sort operator provider", K(ret));
   } else {
     sk_row_store_.set_allocator(*sort_op_provider_.get_malloc_allocator());
     addon_row_store_.set_allocator(*sort_op_provider_.get_malloc_allocator());
@@ -444,23 +423,18 @@ int ObSortVecOp::inner_get_next_batch(const int64_t max_row_cnt)
     
     if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(&ctx_, MY_SPEC.px_est_size_factor_, MY_SPEC.rows_,
                                                   row_count))) {
-      LOG_WARN("failed to get px size", K(ret));
     } else if (OB_FAIL(get_topn_count(topn_cnt))) {
-      LOG_WARN("failed to get topn count", K(ret));
     } else if (topn_cnt <= 0) {
       brs_.end_ = true;
       brs_.size_ = 0;
     } else if (OB_FAIL(init_sort(row_count, topn_cnt))) {
-      LOG_WARN("failed to init batch sort", K(ret));
     } else if (OB_FAIL(process_sort_batch())) {
-      LOG_WARN("process sort failed", K(ret));
     }
   }
 
   if (OB_SUCC(ret) && !brs_.end_) {
     clear_evaluated_flag();
     if (OB_FAIL(sort_component_next_batch(std::min(max_row_cnt, MY_SPEC.max_batch_size_)))) {
-      LOG_WARN("get next row failed");
     } else {
       ret_row_count_ += brs_.size_;
       if (brs_.end_) {

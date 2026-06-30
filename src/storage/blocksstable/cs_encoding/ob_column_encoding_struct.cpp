@@ -49,7 +49,6 @@ int ObPreviousCSEncoding::init(const int32_t col_count)
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(previous_encoding_of_columns_.prepare_allocate(col_count))) {
-    LOG_WARN("fail to prepare_allocate", K(ret), K(col_count));
   } else {
     is_inited_ = true;
   }

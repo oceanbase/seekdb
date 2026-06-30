@@ -63,7 +63,6 @@ int ObSequenceDMLProxy::set_pre_op_timeout(common::ObTimeoutCtx &ctx)
   }
 
   if (OB_FAIL(ctx.set_abs_timeout(abs_timeout_us))) {
-    LOG_WARN("set timeout failed", K(ret), K(abs_timeout_us));
   } else  if (ctx.is_timeouted()) {
     ret = OB_TIMEOUT;
     LOG_WARN("is timeout",
@@ -121,7 +120,6 @@ int ObSequenceDMLProxy::next_batch(
     ret = OB_NOT_INIT;
     LOG_WARN("proxy not init", K(ret));
   } else if (OB_FAIL(trans.start(sql_proxy_, with_snap_shot))) {
-    LOG_WARN("fail start trans", K(ret));
   }
   //
   // TODO: xiaochu query and update in one update return operation,
@@ -143,9 +141,7 @@ int ObSequenceDMLProxy::next_batch(
                   "SELECT NEXT_VALUE FROM %s "
                   "WHERE SEQUENCE_ID = %lu FOR UPDATE",
                   tname, sequence_id))) {
-        STORAGE_LOG(WARN, "fail format sql", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ENTRY_NOT_EXIST;
         LOG_WARN("can't find sequence", K(tname), K(sequence_id));
@@ -159,10 +155,7 @@ int ObSequenceDMLProxy::next_batch(
       } else {
         EXTRACT_NUMBER_FIELD_MYSQL(*result, NEXT_VALUE, tmp);
         if (OB_FAIL(ret)) {
-          LOG_WARN("fail get NEXT_VALUE", K(ret));
         } else if (OB_FAIL(next_value.from(tmp, allocator))) {
-          // The above must be copied out because the memory in Res will be released after next()
-          LOG_WARN("fail deep copy next_val", K(tmp), K(ret));
         } else if (OB_ITER_END != (ret = result->next())) {
           // It is expected that only one line of data should meet the condition, if more than one line is found, it is an anomaly
           LOG_WARN("expected OB_ITER_END", K(ret));
@@ -184,14 +177,11 @@ int ObSequenceDMLProxy::next_batch(
       if (OB_FAIL(sql.assign_fmt("SELECT schema_version "
                                  "FROM %s WHERE sequence_id=%lu",
                                  OB_ALL_SEQUENCE_OBJECT_TNAME, sequence_id))) {
-        LOG_WARN("fail to assign sql", KR(ret), K(sequence_id));
       } else if (OB_FAIL(sql_client->read(res, sql.ptr()))) {
-        LOG_WARN("fail to read", KR(ret), K(sql));
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get sql result", K(ret));
       } else if (OB_FAIL((*result).get_int("schema_version", curr_version))) {
-        LOG_WARN("fail to get schema_version", K(ret), K(sql));
       } else if (schema_version != curr_version) {
         ret = OB_AUTOINC_CACHE_NOT_EQUAL;
         LOG_WARN("schema is not up to date, need retry", K(ret));
@@ -208,14 +198,11 @@ int ObSequenceDMLProxy::next_batch(
                                           sequence_id,
                                           option,
                                           next_value))) {
-      LOG_WARN("fail init sequence value table", K(sequence_id), K(ret));
     }
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(tmp_next_value.from(next_value, allocator))) {
-      // Copy out, to determine if the internal table needs to be updated
-      LOG_WARN("fail deep copy next_val", K(next_value), K(ret));
     }
   }
 
@@ -230,7 +217,6 @@ int ObSequenceDMLProxy::next_batch(
     // cache_exclusive_end = next_value + increment_by * cache_size;;
     ObNumberCalc inc(increment_by, allocator);
     if (OB_FAIL(inc.mul(cache_size).add(next_value).get_result(cache_exclusive_end))) {
-      LOG_WARN("fail get cache_exclusive_end", K(ret));
     } else if (OB_UNLIKELY(increment_by > static_cast<int64_t>(0) &&
                            cache_exclusive_end > max_value)) {
 
@@ -247,7 +233,6 @@ int ObSequenceDMLProxy::next_batch(
       //       Used by the caller to cache an available range, if not corrected, the cached range will exceed max_value
       ObNumberCalc mv(max_value, allocator);
       if (OB_FAIL(mv.add(static_cast<int64_t>(1)).get_result(cache_exclusive_end))) {
-        LOG_WARN("fail calc cache_exclusive_end", K(ret));
       } else if (cycle_flag) {
         next_value.shadow_copy(min_value);
       } else if (next_value > max_value) { // no cycle
@@ -272,7 +257,6 @@ int ObSequenceDMLProxy::next_batch(
       //       Used by the caller to cache an available range, if not corrected, the cached range will exceed min_value
       ObNumberCalc mv(min_value, allocator);
       if (OB_FAIL(mv.sub(static_cast<int64_t>(1)).get_result(cache_exclusive_end))) {
-        LOG_WARN("fail calc cache_exclusive_end", K(ret));
       } else if (cycle_flag) {
         next_value.shadow_copy(max_value);
       } else if (next_value < min_value) { // no cycle
@@ -294,9 +278,7 @@ int ObSequenceDMLProxy::next_batch(
                 "UPDATE %s SET next_value = %s "
                 "WHERE SEQUENCE_ID = %lu",
                 tname, next_value.format(), sequence_id))) {
-      LOG_WARN("format update sql fail", K(ret));
     } else if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", K(sql), K(ret));
     } else {
       if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
@@ -344,14 +326,11 @@ int ObSequenceDMLProxy::prefetch_next_batch(const uint64_t sequence_id,
   // set timeout for prefetch
   ObTimeoutCtx ctx;
   if (OB_FAIL(set_pre_op_timeout(ctx))) {
-    LOG_WARN("failed to set timeout", K(ret));
   } else if (OB_FAIL(next_batch(sequence_id,
                                 schema_version,
                                 option,
                                 cache_range,
                                 old_cache))) {
-    LOG_WARN("fail prefetch sequence batch",
-             K(sequence_id), K(option), K(ret));
   }
   return ret;
 }
@@ -378,7 +357,6 @@ int ObSequenceDMLProxy::init_sequence_value_table(
   const char *tname = OB_ALL_SEQUENCE_VALUE_TNAME;
   // First operation on the sequence object, simultaneously initialize the __all_sequence_value table
   if (OB_FAIL(sql.assign_fmt("INSERT INTO %s (", tname))) {
-    STORAGE_LOG(WARN, "append table name failed, ", K(ret));
   } else {
     ObSqlString values;
     SQL_COL_APPEND_VALUE(sql, values, sequence_id, "sequence_id", "%lu");
@@ -389,7 +367,6 @@ int ObSequenceDMLProxy::init_sequence_value_table(
       if (OB_FAIL(sql.append_fmt(") VALUES (%.*s)",
                                  static_cast<int32_t>(values.length()),
                                  values.ptr()))) {
-        LOG_WARN("append sql failed, ", K(ret));
       } else if (OB_FAIL(trans.write(
                                      sql.ptr(),
                                      affected_rows))) {
@@ -421,9 +398,7 @@ int ObSequenceDMLProxy::init_sequence_value_table(
                   "SELECT NEXT_VALUE FROM %s "
                   "WHERE SEQUENCE_ID = %lu FOR UPDATE",
                   tname, sequence_id))) {
-        STORAGE_LOG(WARN, "fail format sql", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ENTRY_NOT_EXIST;
         LOG_WARN("can't find sequence", K(tname), K(sequence_id));
@@ -433,10 +408,7 @@ int ObSequenceDMLProxy::init_sequence_value_table(
       } else {
         EXTRACT_NUMBER_FIELD_MYSQL(*result, NEXT_VALUE, tmp);
         if (OB_FAIL(ret)) {
-          LOG_WARN("fail get NEXT_VALUE", K(ret));
         } else if (OB_FAIL(next_value.from(tmp, allocator))) {
-          // The above must be copied out because the memory in Res will be released after next()
-          LOG_WARN("fail deep copy next_val", K(tmp), K(ret));
         } else if (OB_ITER_END != (ret = result->next())) {
           // It is expected that only one row of data should meet the condition, if more than one row is found, it is an anomaly
           LOG_WARN("expected OB_ITER_END", K(ret));

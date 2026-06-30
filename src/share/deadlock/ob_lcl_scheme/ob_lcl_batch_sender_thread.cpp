@@ -66,9 +66,7 @@ int ObLCLBatchSenderThread::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(share::ObThreadPool::init())) {
-    DETECT_LOG(WARN, "init thread failed", K(ret), KP(this));
   } else if (OB_FAIL(lcl_msg_map_.init("LCLSender"))) {
-    DETECT_LOG(WARN, "init thread failed", K(ret), KP(this));
   } else {
     is_inited_ = true;
   }
@@ -111,7 +109,6 @@ int ObLCLBatchSenderThread::cache_msg(const ObDependencyResource &key, const ObL
     random_drop_percentage = 100;
   }
   if (OB_FAIL(insert_or_merge_(key, lcl_msg, can_insert))) {
-    DETECT_LOG(WARN, "lcl message is droped", PRINT_WRAPPER);
   }
   return ret;
   #undef PRINT_WRAPPER
@@ -128,7 +125,6 @@ int ObLCLBatchSenderThread::insert_or_merge_(const ObDependencyResource &key,
   int64_t msg_count = lcl_msg_map_.count();
   do {// there may be concurrent problem, so need retry until success or meet can't handle failure
     if (OB_SUCCESS != ret) {
-      DETECT_LOG(INFO, "try again", PRINT_WRAPPER);
     }
     if (can_insert) {// try insert first, if exist, try update merge then
       if (OB_SUCC(lcl_msg_map_.insert(key, lcl_message))) {

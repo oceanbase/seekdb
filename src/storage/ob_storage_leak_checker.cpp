@@ -108,7 +108,6 @@ ObStorageLeakChecker::ObStorageLeakChecker()
 {
   INIT_SUCC(ret);
   if (OB_FAIL(checker_info_.create(HANDLE_BT_MAP_BUCKET_NUM, "STRG_CHECKER_M", "STRG_CHECKER_M"))) {
-    COMMON_LOG(WARN, "[STORAGE-CHECKER] Fail to create handle ref info", K(ret));
   }
 }
 
@@ -137,7 +136,6 @@ OB_NOINLINE void ObStorageLeakChecker::inner_handle_hold(
     
     lbt(value.bt_, sizeof(value.bt_));
     if (OB_FAIL(checker_info_.set_refactored(key, value))) {
-      COMMON_LOG(WARN, "[STORAGE-CHECKER] Fail to record backtrace", K(ret), K(key), K(value));
     } else {
       handle->is_traced_ = true;
     }
@@ -180,13 +178,11 @@ int ObStorageLeakChecker::get_aggregate_bt_info(hash::ObHashMap<ObStorageChecker
         if (OB_HASH_NOT_EXIST == ret) {
           bt_count = 1;
           if (OB_FAIL(bt_info.set_refactored(node_iter->second, bt_count))) {
-            COMMON_LOG(WARN, "[STORAGE-CHECKER] Fail to set aggregated info", K(ret));
           }
         } else {
           COMMON_LOG(WARN, "[STORAGE-CHECKER] Fail to get aggregated info", K(ret), K(node_iter->second));
         }
       } else if (OB_FAIL(bt_info.set_refactored(node_iter->second, bt_count+1, 1, 0, 1))) {
-        COMMON_LOG(WARN, "[STORAGE-CHECKER] Fail wo update aggregated info", K(ret), K(node_iter->second), K(bt_count));
       }
     }
   }

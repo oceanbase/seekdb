@@ -63,7 +63,6 @@ int ObExprLastRefreshScn::eval_last_refresh_scn(const ObExpr &expr, ObEvalCtx &c
     ObNumStackOnceAlloc tmp_alloc;
     number::ObNumber num;
     if (OB_FAIL(num.from(scn, tmp_alloc))) {
-      LOG_WARN("copy number fail", K(ret));
     } else {
       expr_datum.set_number(num);
     }
@@ -123,7 +122,6 @@ int ObExprLastRefreshScn::get_last_refresh_scn_sql(const share::SCN &scn,
   } else {
     for (int i = 0; OB_SUCC(ret) && i < mview_ids.count(); ++i) {
       if (OB_FAIL(mview_id_array.append_fmt(0 == i ? "%ld" : ",%ld", mview_ids.at(i)))) {
-        LOG_WARN("fail to append fmt", KR(ret));
       }
     }
   }
@@ -135,7 +133,6 @@ int ObExprLastRefreshScn::get_last_refresh_scn_sql(const share::SCN &scn,
                                 FROM `%s`.`%s` WHERE MVIEW_ID IN (%.*s)",
                               OB_SYS_DATABASE_NAME, OB_ALL_MVIEW_TNAME,
                               (int)mview_id_array.length(), mview_id_array.ptr()))) {
-      LOG_WARN("fail to assign sql", KR(ret));
     }
   } else if (OB_FAIL(sql.assign_fmt("SELECT CAST(MVIEW_ID AS UNSIGNED) AS MVIEW_ID, \
                                      LAST_REFRESH_SCN, \
@@ -143,7 +140,6 @@ int ObExprLastRefreshScn::get_last_refresh_scn_sql(const share::SCN &scn,
                                      FROM `%s`.`%s` AS OF SNAPSHOT %ld WHERE MVIEW_ID IN (%.*s)",
                                     OB_SYS_DATABASE_NAME, OB_ALL_MVIEW_TNAME, scn.get_val_for_sql(),
                                     (int)mview_id_array.length(), mview_id_array.ptr()))) {
-    LOG_WARN("fail to assign sql", KR(ret), K(scn));
   }
   return ret;
 }

@@ -42,9 +42,7 @@ int RowStore::init(const int64_t max_batch_size, const RowMeta &row_meta,
   int ret = OB_SUCCESS;
   void *ptr_buf = nullptr;
   if (OB_FAIL(ra_rs_.init(row_meta, max_batch_size, mem_attr, mem_limit, enable_dump, NONE_COMPRESSOR))) {
-    LOG_WARN("init ra temp row store failed", K(ret));
   } else if (OB_FAIL(ra_reader_.init(&ra_rs_))) {
-    LOG_WARN("init ra reader failed", K(ret));
   } else if (OB_ISNULL(ptr_buf = allocator_->alloc(sizeof(ObCompactRow *) * max_batch_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memory failed", K(ret));
@@ -64,7 +62,6 @@ int RowStore::add_batch_rows(const ObIArray<ObExpr *> &exprs, const RowMeta &row
     int added_cnt = bound.range_size() - skip.accumulate_bit_cnt(bound);
     if (OB_FAIL(ra_rs_.add_batch(exprs, eval_ctx, bound, skip, stored_row_cnt,
                                  (stored_rows == nullptr ? row_ptrs_ : stored_rows)))) {
-      SQL_ENG_LOG(WARN, "add batch rows failed", K(ret));
     } else if (OB_UNLIKELY(stored_row_cnt != added_cnt)) {
       ret = OB_ERR_UNEXPECTED;
       SQL_ENG_LOG(WARN, "unexpected added row count", K(stored_row_cnt), K(added_cnt));
@@ -89,7 +86,6 @@ int RowStore::get_batch_rows(const int64_t start_idx, const int64_t end_idx,
   if (OB_UNLIKELY(end_idx - start_idx == 0)) {
     //do nothing
   } else if (OB_FAIL(ra_reader_.get_batch_rows(start_idx, end_idx, read_rows, stored_rows))) {
-    SQL_ENG_LOG(WARN, "get batch rows failed", K(ret), K(start_idx), K(end_idx));
   } else if (OB_UNLIKELY(read_rows != end_idx - start_idx)) {
     SQL_ENG_LOG(WARN, "unexpected read rows", K(ret), K(read_rows), K(end_idx), K(start_idx));
   }
@@ -107,19 +103,16 @@ int RowStore::attach_rows(const ObIArray<ObExpr *> &exprs, const RowMeta &row_me
   } else {
     const ObCompactRow **stored_rows = const_cast<const ObCompactRow **>(row_ptrs_);
     if (OB_FAIL(get_batch_rows(start_idx, end_idx, stored_rows))) {
-      LOG_WARN("get batch rows failed", K(ret));
     }
     for (int i = 0; OB_SUCC(ret) && i < exprs.count(); i++) {
       if (exprs.at(i)->is_const_expr()) { // do nothing
       } else if (OB_FAIL(exprs.at(i)->init_vector(eval_ctx, exprs.at(i)->get_default_res_format(),
                                            end_idx - start_idx, use_reserve_buf))) {
-        LOG_WARN("init vector for write failed", K(ret));
       } else if (OB_UNLIKELY(!is_valid_format(exprs.at(i)->get_format(eval_ctx)))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid format", K(ret));
       } else if (OB_FAIL(exprs.at(i)->get_vector(eval_ctx)->from_rows(row_meta, stored_rows,
                                                                       end_idx - start_idx, i))) {
-        LOG_WARN("from rows failed", K(ret));
       }
     }
     // set evaluated and projected after attaching rows
@@ -136,10 +129,8 @@ int RowStore::attach_rows(ObExpr *expr, const RowMeta &row_meta, ObEvalCtx &eval
   int ret = OB_SUCCESS;
   ObSEArray<ObExpr *, 1> tmp_exprs;
   if (OB_FAIL(tmp_exprs.push_back(expr))) {
-    LOG_WARN("push back element failed", K(ret));
   } else if (OB_FAIL(
                attach_rows(tmp_exprs, row_meta, eval_ctx, start_idx, end_idx, use_reserve_buf))) {
-    LOG_WARN("attach rows failed", K(ret));
   }
   return ret;
 }
@@ -154,7 +145,6 @@ int RowStore::process_dump(const int64_t target_size, const int64_t g_mem_limit_
   if (ra_rs_.is_empty_save_block_cnt()) {
     LOG_DEBUG("no need dumping"); // CHANGE TO DEBUG
   } else if (OB_FAIL(ra_rs_.dump(false, target_size))) {
-    LOG_WARN("dump store failed", K(ret));
   } else {
     dumped_size = mem_used - ra_rs_.get_mem_used();
     // reset reader after dumping
@@ -214,7 +204,6 @@ int RowStores::process_dump(bool is_input)
     ret = OB_NOT_INIT;
     LOG_WARN("row stores not inited", K(ret));
   } else if (OB_FAIL(op_->update_mem_limit_version_periodically())) {
-    LOG_WARN("update global memory limit version failed", K(ret));
   } else if (need_check_dump(op_->global_mem_limit_version_)) {
     // op_local_mem is needed for winfunc operator to work properly, it wont't change after opening operator.
     int64_t op_local_mem = op_->local_mem_used();

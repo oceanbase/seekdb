@@ -94,7 +94,6 @@ int ObDirectLoadSSTableCompactor::add_table(const ObDirectLoadTableHandle &table
     int cmp_ret = 0;
     ObDirectLoadSSTable *sstable = static_cast<ObDirectLoadSSTable *>(table_handle.get_table());
     if (OB_FAIL(check_table_compactable(sstable))) {
-      LOG_WARN("fail to check table compactable", KR(ret), KPC(sstable));
     } else if (!sstable->is_empty()) {
       const ObDirectLoadSSTableMeta &table_meta = sstable->get_meta();
       index_item_count_ += table_meta.index_item_count_;
@@ -102,7 +101,6 @@ int ObDirectLoadSSTableCompactor::add_table(const ObDirectLoadTableHandle &table
       row_count_ += table_meta.row_count_;
       for (int64_t i = 0; OB_SUCC(ret) && i < sstable->get_fragment_array().count(); ++i) {
         if (OB_FAIL(fragments_.push_back(sstable->get_fragment_array().at(i)))) {
-          LOG_WARN("fail to push back table fragment", KR(ret), K(i));
         }
       }
       if (OB_SUCC(ret)) {
@@ -111,7 +109,6 @@ int ObDirectLoadSSTableCompactor::add_table(const ObDirectLoadTableHandle &table
             OB_FAIL(sstable->get_start_key().deep_copy(start_key_, start_key_allocator_))) {
           LOG_WARN("fail to deep copy start key", KR(ret));
         } else if (OB_FAIL(sstable->get_end_key().deep_copy(end_key_, end_key_allocator_))) {
-          LOG_WARN("fail to deep copy end key", KR(ret));
         }
       }
     }
@@ -138,7 +135,6 @@ int ObDirectLoadSSTableCompactor::check_table_compactable(ObDirectLoadSSTable *s
     } else if (!sstable->is_empty()) {
       int cmp_ret = 0;
       if (OB_FAIL(end_key_.compare(sstable->get_start_key(), *param_.datum_utils_, cmp_ret))) {
-        LOG_WARN("fail to compare rowkey", KR(ret));
       } else if (cmp_ret >= 0) {
         ret = OB_ROWKEY_ORDER_ERROR;
         LOG_WARN("sstable is not contiguous", KR(ret), K(end_key_), K(sstable->get_start_key()));
@@ -182,12 +178,9 @@ int ObDirectLoadSSTableCompactor::get_table(ObDirectLoadTableHandle &table_handl
     create_param.start_key_ = start_key_;
     create_param.end_key_ = end_key_;
     if (OB_FAIL(create_param.fragments_.assign(fragments_))) {
-      LOG_WARN("fail to assign fragments", KR(ret));
     } else if (OB_FAIL(table_manager->alloc_sstable(sstable_handle))) {
-      LOG_WARN("fail to alloc sstable", KR(ret));
     } else if (FALSE_IT(sstable = static_cast<ObDirectLoadSSTable *>(sstable_handle.get_table()))) {
     } else if (OB_FAIL(sstable->init(create_param))) {
-      LOG_WARN("fail to init sstable table", KR(ret));
     } else if (FALSE_IT(table_handle = sstable_handle)) {
     }
   }

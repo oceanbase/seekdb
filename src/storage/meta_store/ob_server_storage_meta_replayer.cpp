@@ -54,21 +54,16 @@ int ObServerStorageMetaReplayer::start_replay()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_->start_replay())) {
-    LOG_WARN("fail to start replay", K(ret));
   } else if (FALSE_IT(ckpt_slog_handler_->get_replay_result(tenant_meta, tenant_meta_valid))) {
   } else if (OB_FAIL(apply_replay_result_(tenant_meta, tenant_meta_valid))) {
-    LOG_WARN("fail to apply repaly result", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_->do_post_replay_work())) {
-    LOG_WARN("fail to do post repaly work", K(ret));
   }
   
 
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(finish_storage_meta_replay_())) {
-    LOG_ERROR("fail to finish storage meta replay", KR(ret));
   } else if(OB_FAIL(online_ls_())) {
-    LOG_WARN("fail to online_ls", K(ret));
   }
   return ret;
 }
@@ -93,19 +88,16 @@ int ObServerStorageMetaReplayer::apply_replay_result_(
     switch (create_status) {
       case ObTenantCreateStatus::CREATING : {
         if (OB_FAIL(handle_tenant_creating_(tenant_meta))) {
-          LOG_ERROR("fail to handle tenant creating", K(ret), K(tenant_meta));
         }
         break;
       }
       case ObTenantCreateStatus::CREATED : {
         if (OB_FAIL(handle_tenant_create_commit_(tenant_meta))) {
-          LOG_ERROR("fail to handle tenant create commit", K(ret), K(tenant_meta));
         }
         break;
       }
       case ObTenantCreateStatus::DELETING : {
         if (OB_FAIL(handle_tenant_deleting_(tenant_meta))) {
-          LOG_ERROR("fail to handle tenant deleting", K(ret), K(tenant_meta));
         }
         break;
       }
@@ -133,9 +125,7 @@ int ObServerStorageMetaReplayer::handle_tenant_creating_(const ObTenantMeta &ten
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(persister_->clear_tenant_log_dir())) {
-    LOG_ERROR("fail to clear persistent data", K(ret));
   } else if (OB_FAIL(persister_->abort_create_tenant( tenant_meta.epoch_))) {
-    LOG_ERROR("fail to ab", K(ret));
   }
   return ret;
 }
@@ -147,7 +137,6 @@ int ObServerStorageMetaReplayer::handle_tenant_create_commit_(const ObTenantMeta
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(GCTX.omt_->create_tenant(tenant_meta, false/* write_slog */))) {
-    LOG_ERROR("fail to replay create tenant", K(ret), K(tenant_meta));
   }
 
 
@@ -158,9 +147,7 @@ int ObServerStorageMetaReplayer::handle_tenant_deleting_(const ObTenantMeta &ten
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(persister_->clear_tenant_log_dir())) {
-    LOG_ERROR("fail to clear tenant log dir", K(ret));
   } else if (OB_FAIL(persister_->commit_delete_tenant( tenant_meta.epoch_))) {
-    LOG_ERROR("fail to commit delete tenant", K(ret));
   }
   return ret;
 }
@@ -180,7 +167,6 @@ int ObServerStorageMetaReplayer::finish_storage_meta_replay_()
       ObLS *ls = nullptr;
       ObLSTabletService *ls_tablet_svr = nullptr;
       if (OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter, ObLSGetMod::STORAGE_MOD))) {
-        LOG_WARN("failed to get ls iter", K(ret));
       } else {
         while (OB_SUCC(ret)) {
           if (OB_FAIL(ls_iter->get_next(ls))) {
@@ -191,12 +177,10 @@ int ObServerStorageMetaReplayer::finish_storage_meta_replay_()
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("ls is null", K(ret));
           } else if (OB_FAIL(ls->finish_storage_meta_replay())) {
-            LOG_WARN("finish replay failed", K(ret), KPC(ls));
           }
         }
         if (OB_ITER_END == ret) {
           if (OB_FAIL(share::g_mp->ls_service()->gc_ls_after_replay_slog())) {
-            LOG_WARN("fail to gc ls after replay slog", K(ret));
           }
         }
       }
@@ -218,7 +202,6 @@ int ObServerStorageMetaReplayer::online_ls_()
   if (OB_SUCC(ret)) {
     MOD_SCOPE {
       if (OB_FAIL(share::g_mp->ls_service()->online_ls())) {
-        LOG_WARN("fail enable replay clog", K(ret));
       }
     }
   }

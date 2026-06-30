@@ -85,7 +85,6 @@ int ObJoinOp::calc_other_conds(bool &is_match)
   ObDatum *cmp_res = NULL;
   ARRAY_FOREACH(conds, i) {
     if (OB_FAIL(conds.at(i)->eval(eval_ctx_, cmp_res))) {
-      LOG_WARN("fail to calc other join condition", K(ret), K(*conds.at(i)));
     } else if (cmp_res->is_null() || 0 == cmp_res->get_int()) {
       is_match = false;
       break;

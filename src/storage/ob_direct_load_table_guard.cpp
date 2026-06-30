@@ -56,7 +56,6 @@ void ObDirectLoadTableGuard::reset()
   ObITabletMemtable *memtable = nullptr;
   if (table_handle_.is_valid()) {
     if (OB_FAIL(table_handle_.get_tablet_memtable(memtable))) {
-      STORAGE_LOG(ERROR, "unexpected fail when get tablet memtable", KPC(this), K(table_handle_));
     } else {
       if (need_print_debug_log) {
         STORAGE_LOG(INFO, "Print Debug Info", KPC(memtable), KPC(this));
@@ -84,7 +83,6 @@ int ObDirectLoadTableGuard::prepare_memtable(ObDDLKV *&res_memtable)
     need_retry = false;
     ObDDLKV *ddl_kv = nullptr;
     if (OB_FAIL(acquire_memtable_once_())) {
-      STORAGE_LOG(WARN, "acquire direct load memtable failed", KR(ret), KPC(this));
     } else if (is_write_filtered_) {
       // TODO : @gengli.wzy change this log to debug level
       STORAGE_LOG(INFO, "filtered one ddl redo write", KPC(this));
@@ -120,7 +118,6 @@ int ObDirectLoadTableGuard::acquire_memtable_once_()
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "direct load table guard cannot be inited twice", KR(ret), KPC(this));
   } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-    STORAGE_LOG(WARN, "failed to get log stream", K(ret), KPC(this));
   } else if (OB_UNLIKELY(!ls_handle.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "unexpected error, invalid ls handle", K(ret), K(ls_handle), KPC(this));
@@ -131,7 +128,6 @@ int ObDirectLoadTableGuard::acquire_memtable_once_()
       if (need_create_new_memtable) {
         need_create_new_memtable = false;
         if (OB_FAIL(do_create_memtable_(ls_handle))) {
-          STORAGE_LOG(WARN, "create direct load memtable failed", KR(ret), KPC(this));
         } else if (is_write_filtered_) {
           break;
         }
@@ -144,7 +140,6 @@ int ObDirectLoadTableGuard::acquire_memtable_once_()
           need_create_new_memtable = true;
         }
       } else if (OB_FAIL(try_get_direct_load_memtable_for_write(ls_handle, need_create_new_memtable))) {
-        STORAGE_LOG(WARN, "get direct load memtable for write failed", KR(ret), K(start_time));
       }
     } while (OB_SUCC(ret) && need_create_new_memtable);
   }
@@ -163,14 +158,12 @@ int ObDirectLoadTableGuard::do_create_memtable_(ObLSHandle &ls_handle)
   arg.for_replay_ = for_replay_;
   if (OB_FAIL(ls_handle.get_ls()->get_tablet_svr()->get_tablet(
           tablet_id_, tablet_handle, 0, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-    STORAGE_LOG(WARN, "fail to get tablet", K(ret), KPC(this));
   } else if (FALSE_IT(clog_checkpoint_scn = tablet_handle.get_obj()->get_tablet_meta().clog_checkpoint_scn_)) {
   } else if (ddl_redo_scn_ <= clog_checkpoint_scn) {
     is_write_filtered_ = true;
     ret = OB_SUCCESS;
   } else if (FALSE_IT(arg.clog_checkpoint_scn_ = clog_checkpoint_scn)) {
   } else if (OB_FAIL(ls_handle.get_ls()->get_tablet_svr()->create_memtable(tablet_id_, arg))) {
-    STORAGE_LOG(WARN, "fail to create a boundary memtable", K(ret), KPC(this));
   }
   return ret;
 }
@@ -184,11 +177,8 @@ int ObDirectLoadTableGuard::try_get_direct_load_memtable_for_write(ObLSHandle &l
   ObProtectedMemtableMgrHandle *protected_handle = nullptr;
   if (OB_FAIL(ls_handle.get_ls()->get_tablet_svr()->get_tablet(
           tablet_id_, tablet_handle, 0, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-    STORAGE_LOG(WARN, "fail to get tablet", K(ret), KPC(this));
   } else if (OB_FAIL(tablet_handle.get_obj()->get_protected_memtable_mgr_handle(protected_handle))) {
-    STORAGE_LOG(WARN, "get memtable mgr failed", KR(ret), KPC(this), K(table_handle_));
   } else if (OB_FAIL(protected_handle->get_direct_load_memtables_for_write(local_table_handles))) {
-    STORAGE_LOG(WARN, "get direct load memtable for write failed", KR(ret), KPC(this));
   } else if (0 == local_table_handles.count()) {
     need_create_new_memtable = true;
     STORAGE_LOG(INFO, "need create new direct load memtable", K(ddl_redo_scn_));
@@ -229,7 +219,6 @@ void ObDirectLoadTableGuard::clear_write_ref(ObIArray<ObTableHandleV2> &table_ha
   for (int64_t i = 0; i < table_handles.count(); i++) {
     ObITabletMemtable *memtable = nullptr;
     if (OB_FAIL(table_handles.at(i).get_tablet_memtable(memtable))) {
-      STORAGE_LOG(ERROR, "unexpected fail when get tablet memtable", KR(ret), KPC(this));
     } else {
       memtable->dec_write_ref();
     }
@@ -242,7 +231,6 @@ void ObDirectLoadTableGuard::async_freeze_()
   ObLS *ls = nullptr;
   ObLSHandle ls_handle;
   if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
-    STORAGE_LOG(WARN, "failed to get ls", K(ret), "ls_id", ls_id_);
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(ERROR, "ls should not be null", K(ret), KPC(this));

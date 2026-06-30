@@ -41,9 +41,7 @@ int ObServerCheckpointWriter::init(ObStorageLogger *server_slogger)
     LOG_WARN("ObServerCheckpointWriter init twice", K(ret));
   } else if (OB_FAIL(allocator_.init(
                common::OB_MALLOC_NORMAL_BLOCK_SIZE, MEM_LABEL, MEM_LIMIT))) {
-    LOG_WARN("fail to init fifo allocator", K(ret));
   } else if (OB_FAIL(tenant_meta_item_writer_.init(false /*whether need addr*/, mem_attr))) {
-    LOG_WARN("fail to init tenant meta item writer", K(ret));
   } else {
     server_slogger_ = server_slogger;
     is_inited_ = true;
@@ -64,11 +62,8 @@ int ObServerCheckpointWriter::write_checkpoint(const ObLogCursor &log_cursor)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(write_tenant_meta_checkpoint(tenant_meta_entry))) {
-    LOG_WARN("fail to write tenant config checkpoint", K(ret));
   } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.update_super_block(log_cursor, tenant_meta_entry))) {
-    LOG_WARN("fail to update server super block", K(ret), K(log_cursor), K(tenant_meta_entry));
   } else if (OB_FAIL(server_slogger_->remove_useless_log_file(log_cursor.file_id_))) {
-    LOG_WARN("fail to remove_useless_log_file", K(ret));
   } else {
     LOG_INFO("succeed to write server checkpoint", K(log_cursor), K(tenant_meta_entry));
   }
@@ -87,7 +82,6 @@ int ObServerCheckpointWriter::write_tenant_meta_checkpoint(MacroBlockId &block_e
   omt::ObTenantMeta meta;
   bool exist = false;
   if (OB_FAIL(GCTX.omt_->get_tenant_meta_for_ckpt(meta, exist))) {
-    LOG_WARN("fail to get_tenant_meta_for_ckpt", K(ret));
   } else if (exist) {
     // Write 0 or 1 item (disk bytes unchanged)
     buf_len = meta.get_serialize_size();
@@ -96,9 +90,7 @@ int ObServerCheckpointWriter::write_tenant_meta_checkpoint(MacroBlockId &block_e
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to allocate memory", K(ret));
     } else if (OB_FAIL(meta.serialize(buf, buf_len, pos))) {
-      LOG_WARN("fail to serialize tenant meta", K(ret));
     } else if (OB_FAIL(tenant_meta_item_writer_.write_item(buf, buf_len, nullptr))) {
-      LOG_WARN("fail to write tenant meta item", K(ret));
     }
     if (OB_LIKELY(nullptr != buf)) {
       allocator_.free(buf);
@@ -107,9 +99,7 @@ int ObServerCheckpointWriter::write_tenant_meta_checkpoint(MacroBlockId &block_e
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(tenant_meta_item_writer_.close())) {
-      LOG_WARN("fail to close tenant_config_item_writer_", K(ret));
     } else if (OB_FAIL(tenant_meta_item_writer_.get_entry_block(block_entry))) {
-      LOG_WARN("fail to get entry block", K(ret));
     }
   }
 

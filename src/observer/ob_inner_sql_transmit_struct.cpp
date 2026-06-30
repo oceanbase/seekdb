@@ -110,7 +110,6 @@ OB_DEF_DESERIALIZE(obcall::ObInnerSQLTransmitResult)
   common::ObSArray<common::ObField> field_columns;
   LST_DO_CODE(OB_UNIS_DECODE, res_code_, conn_id_, affected_rows_, stmt_type_, scanner_, field_columns);
   if (FAILEDx(copy_field_columns(field_columns))) {
-    _OB_LOG(WARN, "copy_field_columns failed. err = %d", ret);
   }
   return ret;
 }
@@ -135,9 +134,7 @@ int ObInnerSQLTransmitResult::copy_field_columns(
   for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
     const ObField &ofield = src_field_columns.at(i);
     if (OB_FAIL(field.deep_copy(ofield, &allocator_))) {
-      _OB_LOG(WARN, "deep copy field failed. err = %d", ret);
     } else if (OB_FAIL(field_columns_.push_back(field))) {
-      _OB_LOG(WARN, "push back field column failed. err = %d", ret);
     }
   }
 

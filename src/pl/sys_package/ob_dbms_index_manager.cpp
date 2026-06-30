@@ -46,7 +46,6 @@ int ObDBMSIndexManager::refresh(
     LOG_WARN("mysql proxy is not inited", KR(ret));
   } else if (OB_FAIL(ObChangeStreamMgr::wait_refresh_scn(
                  *mysql_proxy, timeout_us))) {
-    LOG_WARN("wait change stream refresh failed", KR(ret));
   }
   return ret;
 }

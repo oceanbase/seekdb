@@ -407,14 +407,8 @@ bool LogConfigInfo::is_all_list_unique() const
       OB_FAIL(server_list.add_learner(arbitration_member_))) {
     PALF_LOG(WARN, "add_learner failed", K(server_list), K_(arbitration_member));
   } else if (OB_FAIL(check_list_unique(server_list, log_sync_memberlist_))) {
-    PALF_LOG(WARN, "serverlist should not overlap with log_sync_memberlist",
-        K_(arbitration_member), K_(log_sync_memberlist));
   } else if (OB_FAIL(check_list_unique(server_list, degraded_learnerlist_))) {
-    PALF_LOG(WARN, "serverlist should not overlap with log_sync_memberlist",
-        K_(arbitration_member), K_(log_sync_memberlist), K_(degraded_learnerlist));
   } else if (OB_FAIL(check_list_unique(server_list, learnerlist_))) {
-    PALF_LOG(WARN, "serverlist should not overlap with log_sync_memberlist",
-        K_(arbitration_member), K_(log_sync_memberlist), K_(degraded_learnerlist), K_(learnerlist));
   } else {
     is_all_list_unique = true;
   }
@@ -468,9 +462,7 @@ int LogConfigInfo::get_expected_paxos_memberlist(common::ObMemberList &paxos_mem
     const int64_t degraded_count = degraded_learnerlist_.get_member_number();
     for (int64_t i = 0; i < degraded_count && OB_SUCC(ret); ++i) {
       if (OB_FAIL(degraded_learnerlist_.get_member_by_index(i, tmp_member))) {
-        PALF_LOG(WARN, "get_member_by_index failed", KR(ret), K(i), K(degraded_learnerlist_));
       } else if (OB_FAIL(paxos_memberlist.add_member(tmp_member))) {
-        PALF_LOG(WARN, "add_member failed", KR(ret), K(paxos_memberlist), K(tmp_member));
       } else {
         paxos_replica_num++;
       }
@@ -498,7 +490,6 @@ int LogConfigInfo::convert_to_complete_config(common::ObMemberList &alive_paxos_
   } else if (OB_UNLIKELY(true == arbitration_member_.is_valid())) {
     alive_paxos_memberlist = log_sync_memberlist_;
     if (OB_FAIL(alive_paxos_memberlist.add_member(arbitration_member_))) {
-      PALF_LOG(WARN, "add_member failed", KR(ret), K(alive_paxos_memberlist), K(arbitration_member_));
     } else {
       alive_paxos_replica_num = log_sync_replica_num_ + 1;
     }
@@ -671,13 +662,9 @@ DEFINE_SERIALIZE(LogLockMeta)
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, version_))) {
-    PALF_LOG(WARN, "serialize version_ failed", K(ret), K(new_pos));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, lock_owner_))) {
-    PALF_LOG(WARN, "serialize lock_owner_ failed", K(ret), K(new_pos));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, lock_type_))) {
-    PALF_LOG(WARN, "serialize log_type failed", K(ret), K(new_pos));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, lock_time_))) {
-    PALF_LOG(WARN, "serialize lock_ts_ failed", K(ret), K(new_pos));
   } else {
     pos = new_pos;
   }
@@ -692,13 +679,9 @@ DEFINE_DESERIALIZE(LogLockMeta)
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(ret), KP(buf), K(data_len));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &version_))) {
-    PALF_LOG(WARN, "deserialize failed", K(ret), K(new_pos));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &lock_owner_))) {
-    PALF_LOG(WARN, "deserialize failed", K(ret), K(new_pos));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &lock_type_))) {
-    PALF_LOG(WARN, "deserialize failed", K(ret), K(new_pos));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &lock_time_))) {
-    PALF_LOG(WARN, "deserialize failed", K(ret), K(new_pos));
   } else {
     pos = new_pos;
   }
@@ -812,7 +795,6 @@ int LogConfigInfoV2::generate(const ObMemberList &memberlist,
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", KR(ret), K(lock_meta));
   } else if (OB_FAIL(config_.generate(memberlist, replica_num, learnerlist, config_version))) {
-    PALF_LOG(WARN, "failed to generate config", KR(ret));
   } else {
     version_ = LOG_CONFIG_INFO_VERSION;
     lock_meta_ = lock_meta;
@@ -977,9 +959,7 @@ DEFINE_SERIALIZE(LogConfigMeta)
   } else if (buf_len - new_pos < get_serialize_size()) {
     ret = OB_BUF_NOT_ENOUGH;
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, version_))) {
-      PALF_LOG(ERROR, "LogConfigMeta faild to serialize version_", K(ret), K(new_pos), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, proposal_id_))) {
-      PALF_LOG(ERROR, "LogConfigMeta failed to serialize proposal_id_", K(ret), K(new_pos), K(buf_len), K(pos));
   } else if (LOG_CONFIG_META_VERSION_INC >= version_) {
     if (OB_FAIL(prev_.config_.serialize(buf, buf_len, new_pos))
         || OB_FAIL(curr_.config_.serialize(buf, buf_len, new_pos))) {
@@ -1027,20 +1007,14 @@ DEFINE_DESERIALIZE(LogConfigMeta)
         } else if (data_len - new_pos < get_serialize_size()) {
         ret = OB_BUF_NOT_ENOUGH; */
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &version_))) {
-    PALF_LOG(ERROR, "failed to deserialize version", K(ret));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &proposal_id_))) {
-    PALF_LOG(ERROR, "failed to deserialize version", K(ret));
   } else if (LOG_CONFIG_META_VERSION == version_ || LOG_CONFIG_META_VERSION_INC == version_) {
     LogConfigInfo old_prev;
     LogConfigInfo old_curr;
     if (OB_FAIL(old_prev.deserialize(buf, data_len, new_pos))) {
-      PALF_LOG(ERROR, "LogConfigMeta deserialize failed", K(ret), K(new_pos));
     } else if (OB_FAIL(old_curr.deserialize(buf, data_len, new_pos))) {
-      PALF_LOG(ERROR, "deserialize failed", K(ret), K(new_pos));
     } else if (OB_FAIL(prev_.transform_for_deserialize(old_prev))) {
-      PALF_LOG(ERROR, "failed to generate pre_", K(ret));
     } else if (OB_FAIL(curr_.transform_for_deserialize(old_curr))) {
-      PALF_LOG(ERROR, " failed to generate curr_", K(ret));
     } else if (LOG_CONFIG_META_VERSION_INC == version_) {
       if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &prev_log_proposal_id_)) ||
           OB_FAIL(prev_lsn_.deserialize(buf, data_len, new_pos)) ||
@@ -1050,9 +1024,7 @@ DEFINE_DESERIALIZE(LogConfigMeta)
     } else {/*do nothing*/}
   } else if (LOG_CONFIG_META_VERSION_42 == version_) {
     if (OB_FAIL(prev_.deserialize(buf, data_len, new_pos))) {
-      PALF_LOG(ERROR, "failed to deserialize prev_", K(ret));
     } else if (OB_FAIL(curr_.deserialize(buf, data_len, new_pos))) {
-      PALF_LOG(ERROR, "failed to deserialize curr_", K(ret));
     } else if (OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &prev_log_proposal_id_)) ||
         OB_FAIL(prev_lsn_.deserialize(buf, data_len, new_pos)) ||
         OB_FAIL(serialization::decode_i64(buf, data_len, new_pos, &prev_mode_pid_))) {

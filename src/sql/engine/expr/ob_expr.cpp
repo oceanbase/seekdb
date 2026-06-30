@@ -92,7 +92,6 @@ int ObEvalCtx::init_datum_caster()
       LOG_WARN("alloc memory failed", K(ret));
     } else if (FALSE_IT(datum_caster = new(buf) ObDatumCaster())) {
     } else if (OB_FAIL(datum_caster->init(exec_ctx_))) {
-      LOG_WARN("init datum caster failed", K(ret));
     } else {
       datum_caster_ = datum_caster;
     }
@@ -424,7 +423,6 @@ int ObExpr::eval_enumset(ObEvalCtx &ctx,
       datum = reinterpret_cast<ObDatum *>(frame + datum_off_) + ctx.get_batch_idx();
       if (need_evaluate) {
         if (OB_FAIL(ObDatumCast::get_enumset_cast_function(in_tc, obj_meta_.get_type(), eval_func))) {
-          LOG_WARN("failed to find eval_func", K(ret));
         } else {
           ret = eval_func(*this, str_values, cast_mode, ctx, *datum);
         }
@@ -444,7 +442,6 @@ int ObExpr::eval_enumset(ObEvalCtx &ctx,
         datum->ptr_ = frame + res_buf_off_;
       }
       if (OB_FAIL(ObDatumCast::get_enumset_cast_function(in_tc, obj_meta_.get_type(), eval_func))) {
-        SQL_LOG(WARN, "fail to get_enumset_cast_function", K(ret));
       } else {
         ret = eval_func(*this, str_values, cast_mode, ctx, *datum);
       }
@@ -480,10 +477,8 @@ int ObDatumObjParam::from_objparam(const ObObjParam &objparam, ObIAllocator *all
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("construct array param datum need allocator", K(ret));
     } else if (OB_FAIL(construct_array_param_datum(objparam, *allocator))) {
-      LOG_WARN("construct array param datum", K(ret));
     }
   } else if (OB_FAIL(datum_.from_obj(objparam))) {
-    LOG_WARN("fail to init datum", K(objparam), K(ret));
   }
   if (OB_SUCC(ret)) {
     accuracy_ = objparam.get_accuracy();
@@ -512,10 +507,8 @@ int ObDatumObjParam::to_objparam(common::ObObjParam &obj_param, ObIAllocator *al
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("construct sql array obj need allocator", K(ret));
     } else if (OB_FAIL(construct_sql_array_obj(obj_param, *allocator))) {
-      LOG_WARN("construct sql array obj failed", K(ret));
     }
   } else if (OB_FAIL(datum_.to_obj(obj_param, meta))) {
-    LOG_WARN("failed to transform datum to obj", K(ret));
   }
   if (OB_SUCC(ret)) {
     obj_param.set_accuracy(accuracy_);
@@ -552,7 +545,6 @@ int ObDatumObjParam::construct_array_param_datum(const ObObjParam &obj_param, Ob
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(datum_array->data_[i].from_obj(array_obj->data_[i]))) {
-          LOG_WARN("fail to convert obj param", K(ret), K(array_obj->data_[i]));
         } else {
           LOG_DEBUG("construct datum array", K(array_obj->data_[i]), K(datum_array->data_[i]));
         }
@@ -585,7 +577,6 @@ int ObDatumObjParam::construct_sql_array_obj(ObObjParam &obj_param, ObIAllocator
     for (int64_t i = 0; OB_SUCC(ret) && i < datum_array->count_; ++i) {
       if (OB_FAIL(datum_array->data_[i].to_obj(array_obj->data_[i],
                                                datum_array->element_.get_meta_type()))) {
-        LOG_WARN("fail to convert obj param", K(ret), K(datum_array->data_[i]));
       }
     }
     if (OB_SUCC(ret)) {
@@ -817,7 +808,6 @@ int ObExpr::eval_one_datum_of_batch(ObEvalCtx &ctx, common::ObDatum *&datum) con
       if (enable_rich_format() && eval_vector_func_ != expr_default_eval_vector_func) {
         ObBitVector *tmp_skip = nullptr;
         if (OB_FAIL(ctx.get_pvt_skip_for_eval_row(tmp_skip))) {
-          LOG_WARN("get tmp skip failed", K(ret));
         } else if (OB_ISNULL(tmp_skip)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("invalid null skip", K(ret));
@@ -1208,7 +1198,6 @@ int ObExpr::init_vector(ObEvalCtx &ctx,
       } else {
         attr_format = i == 0 ? attrs_[i]->get_default_res_format() : format;
         if (OB_FAIL(attrs_[i]->init_vector(ctx, attr_format, size, use_reserve_buf))) {
-          SQL_LOG(WARN, "Failed to init vector", K(ret), K(i), K(format), K(size));
         }
       }
     }
@@ -1383,10 +1372,8 @@ int expr_default_eval_batch_func(const ObExpr &expr,
       if (OB_FAIL(ret) && ctx.exec_ctx_.get_my_session()->is_diagnosis_enabled()) {
         // overwrite ret on diagnosis node
         if (OB_FAIL(ctx.exec_ctx_.get_diagnosis_manager().add_warning_info(ret, i))) {
-          LOG_WARN("failed to add warning info", K(ret), K(i));
         } else if (OB_FAIL(ObExprColumnConv::calc_column_name_for_diagnosis(expr, ctx,
                                                           ctx.exec_ctx_.get_diagnosis_manager()))) {
-          LOG_WARN("fail to calculate column name for diagnosis", K(ret), K(expr));
         } else {
           // set null to avoid accessing invalid data before setting skip
           // in ObTableScanOp::do_diagnosis
@@ -1446,7 +1433,6 @@ int eval_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_da
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("obj type miss match", K(ret), K(v), K(expr));
       } else if (OB_FAIL(expr_datum.from_obj(v, expr.obj_datum_map_))) {
-        LOG_WARN("set obj to datum failed", K(ret));
       } else if (is_lob_storage(v.get_type()) &&
                  OB_FAIL(ob_adjust_lob_datum(v, expr.obj_meta_, expr.obj_datum_map_,
                                              ctx.exec_ctx_.get_allocator(), expr_datum))) {
@@ -1472,7 +1458,6 @@ int eval_assign_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       LOG_WARN("invalid param store idx", K(ret), K(expr), K(param_store.count()));
     } else if (OB_FAIL(ObSQLUtils::get_default_cast_mode(
                        session->get_stmt_type(), session, cast_mode))) {
-      LOG_WARN("get default cast mode failed", K(ret));
     } else {
       ObObj dst_obj;
       ObDatumObjParam datum_param;
@@ -1499,12 +1484,9 @@ int eval_assign_question_mark_func(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       }
       cast_ctx.exec_ctx_ = &ctx.exec_ctx_;
       if (OB_FAIL(ObObjCaster::to_type(dst_meta.get_type(), cast_ctx, v, dst_obj))) {
-        LOG_WARN("failed to cast obj to dst type", K(ret), K(v), K(dst_meta));
       } else if (OB_FAIL(datum_param.alloc_datum_reserved_buff(
                           dst_meta, expr.datum_meta_.precision_, allocator))) {
-        LOG_WARN("alloc datum reserved buffer failed", K(ret));
       } else if (OB_FAIL(datum_param.from_objparam(dst_obj, &allocator))) {
-        LOG_WARN("fail to convert obj param", K(ret), K(dst_obj));
       } else {
         expr_datum = datum_param.datum_;
       }

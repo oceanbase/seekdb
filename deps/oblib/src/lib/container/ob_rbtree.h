@@ -301,7 +301,6 @@ public:
       ObRbPath root_path;
       root_path.node_ = root_;
       if (OB_FAIL(path.push_back(root_path))) {
-        OB_LOG(WARN, "fail to add node", K(ret));
       } else {
         pathp = path.begin();
         while (OB_SUCC(ret) && OB_NOT_NULL(pathp->node_)) {
@@ -317,7 +316,6 @@ public:
 
           if (OB_SUCC(ret)) {
             if (OB_FAIL(path.push_back(tmp_path))) {
-              OB_LOG(WARN, "fail to add path", K(ret));
             } else {
               pathp = path.end() - 1;
             }
@@ -403,7 +401,6 @@ public:
       ObRbPath root_path;
       root_path.node_ = root_;
       if (OB_FAIL(path.push_back(root_path))) {
-        OB_LOG(WARN, "fail to add node", K(ret));
       } 
       int64_t nodep_idx = 0;
       for (pathp = path.begin(); OB_SUCC(ret) && OB_NOT_NULL(pathp->node_); pathp++) {
@@ -412,7 +409,6 @@ public:
           ObRbPath tmp_path;
           tmp_path.node_ = get_left(pathp->node_);
           if (OB_FAIL(path.push_back(tmp_path))) {
-             OB_LOG(WARN, "fail to add path node", K(ret));
           } else {
             pathp = path.end() - 2;
           }
@@ -420,7 +416,6 @@ public:
           ObRbPath tmp_path;
           tmp_path.node_ = get_right(pathp->node_);
           if (OB_FAIL(path.push_back(tmp_path))) {
-             OB_LOG(WARN, "fail to add path node", K(ret));
           } else {
             pathp = path.end() - 2;
             if (0 == cmp) {
@@ -431,7 +426,6 @@ public:
                 ObRbPath tmp_path2;
                 tmp_path2.node_ = get_left(pathp->node_);
                 if (OB_FAIL(path.push_back(tmp_path2))) {
-                  OB_LOG(WARN, "fail to add node", K(ret));
                 } else {
                   pathp = path.end() - 1;
                 }
@@ -836,11 +830,9 @@ public:
     int ret = common::OB_SUCCESS;
     if (OB_NOT_NULL(node) && OB_NOT_NULL(cb)) {
       if (OB_FAIL(destroy_recurse(rbtree, get_left(node), cb, arg))) {
-        OB_LOG(ERROR, "red black tree destroy recurse fail", K(ret));
       } else {
         set_left(node, NULL);
         if (OB_FAIL(destroy_recurse(rbtree, get_right(node), cb, arg))) {
-          OB_LOG(ERROR, "red black tree destroy recurse fail", K(ret));
         } else {
           set_right(node, NULL);
         }
@@ -862,7 +854,6 @@ public:
       OB_LOG(ERROR, "rbtree destroy fail", K(ret));
     } else {
       if (OB_FAIL(destroy_recurse(rbtree, rbtree->root_, cb, arg))) {
-        OB_LOG(ERROR, "red black tree destroy recurse fail", K(ret));
       } else {
         rbtree->root_ = NULL;
       }

@@ -47,7 +47,6 @@ int ObSequenceSpec::add_uniq_nextval_sequence_id(uint64_t seq_id)
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(nextval_seq_ids_.push_back(seq_id))) {
-      LOG_WARN("fail add seq id to nextval seq id set", K(seq_id), K(ret));
     }
   }
   return ret;
@@ -86,7 +85,6 @@ int ObLocalSequenceExecutor::init(ObExecContext &ctx)
     LOG_WARN("schema service is null", K(ret));
   } else if (OB_FAIL(schema_service->get_tenant_schema_guard(
                       schema_guard))) {
-    LOG_WARN("get schema guard failed", K(ret));
   } else {
     
     ARRAY_FOREACH_X(seq_ids_, idx, cnt, OB_SUCC(ret)) {
@@ -95,14 +93,10 @@ int ObLocalSequenceExecutor::init(ObExecContext &ctx)
       if (OB_FAIL(schema_guard.get_sequence_schema(
                   seq_id,
                   seq_schema))) {
-        LOG_WARN("fail get sequence schema", K(seq_id), K(ret));
       } else if (OB_ISNULL(seq_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("null unexpected", K(ret));
       } else if (OB_FAIL(seq_schemas_.push_back(*seq_schema))) {
-        // Note: here the schema is cached to the array, it will automatically deep copy sequence name
-        //       Even if schema guard is released, the memory of sequence name remains valid until the request ends
-        LOG_WARN("cache seq_schema fail", K(seq_id), K(ret));
       }
     }
   }
@@ -145,11 +139,9 @@ int ObLocalSequenceExecutor::get_nextval(ObExecContext &ctx)
       if (seq_schemas_.at(idx).get_order_flag()
           && seq_schemas_.at(idx).get_cache_order_mode() == NEW_ACTION) {
         if (OB_FAIL(auto_service.get_handle(seq_schemas_.at(idx), seq_value))) {
-          LOG_WARN("fail get nextval from rpc for seq", K(seq_id), K(ret));
         }
       } else {
         if (OB_FAIL(sequence_cache_->nextval(seq_schemas_.at(idx), allocator, seq_value))) {
-          LOG_WARN("fail get nextval for seq", K(seq_id), K(ret));
         }
       }
       if (OB_SUCC(ret) && OB_FAIL(my_session->set_sequence_value(seq_id, seq_value))) {
@@ -187,7 +179,6 @@ int ObSequenceOp::inner_open()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get my session", K(ret));
   } else if (OB_FAIL(init_op())) {
-    LOG_WARN("initialize operator context failed", K(ret));
   } else if (get_child_cnt() > 1) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("should not have more than 1 child", K(ret));
@@ -200,7 +191,6 @@ int ObSequenceOp::inner_open()
     ObSequenceExecutor *executor = NULL;
     if (NULL != executor) {
       if (OB_FAIL(executor->add_sequence_id(seq_id))) {
-        LOG_WARN("failed to add sequence id", K(ret));
       }
     } else {
       //add local executor
@@ -211,16 +201,13 @@ int ObSequenceOp::inner_open()
       } else {
         executor = new(tmp) ObLocalSequenceExecutor();
         if (OB_FAIL(executor->add_sequence_id(seq_id))) {
-          LOG_WARN("failed to add sequence id", K(ret));
         } else if (OB_FAIL(seq_executors_.push_back(executor))) {
-          LOG_WARN("failed to push back executor", K(ret));
         }
       }
     }
   }
   ARRAY_FOREACH_X(seq_executors_, idx, cnt, OB_SUCC(ret)) {
     if (OB_FAIL(seq_executors_.at(idx)->init(ctx_))) {
-      LOG_WARN("failed to init executor", K(ret));
     }
   }
   return ret;
@@ -248,7 +235,6 @@ int ObSequenceOp::inner_get_next_row()
     ARRAY_FOREACH_X(seq_executors_, idx, cnt, OB_SUCC(ret)) {
       ObSequenceExecutor *executor = seq_executors_.at(idx);
       if (OB_FAIL(executor->get_nextval(ctx_))) {
-        LOG_WARN("fail get nextval for seq", K(ret));
       }
     }
   }

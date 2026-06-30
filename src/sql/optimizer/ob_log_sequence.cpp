@@ -28,9 +28,7 @@ int ObLogSequence::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt is null", K(ret), K(get_stmt()));
   } else if (OB_FAIL(stmt->get_sequence_exprs(all_exprs))) {
-    LOG_WARN("fail get sequence exprs", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
-    LOG_WARN("failed to get exprs", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -95,7 +93,6 @@ int ObLogSequence::do_re_est_cost(EstimateCostInfo &param, double &card, double 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(get_plan()), K(child));
   } else if (OB_FAIL(SMART_CALL(child->re_est_cost(param, child_card, child_cost)))) {
-    LOG_WARN("failed to re est cost", K(ret));
   } else {
     op_cost = ObOptEstCost::cost_sequence(child_card, 
                                           nextval_seq_ids_.count(),
@@ -126,7 +123,6 @@ int ObLogSequence::is_my_fixed_expr(const ObRawExpr *expr, bool &is_fixed)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt is null", K(ret), K(get_stmt()));
   } else if (OB_FAIL(get_stmt()->get_sequence_exprs(sequence_exprs))) {
-    LOG_WARN("fail get sequence exprs", K(ret));
   } else {
     is_fixed = ObOptimizerUtil::find_item(sequence_exprs, expr);
   }

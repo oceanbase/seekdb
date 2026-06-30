@@ -128,7 +128,6 @@ int ObTaskControl::get_all_tasks(common::ObIArray<ObTaskInfo *> &tasks) const
   int ret = OB_SUCCESS;
   tasks.reset();
   if (OB_FAIL(tasks.assign(tasks_))) {
-    LOG_WARN("fail to assign task array", K(ret), K(tasks_.count()));
   }
   return ret;
 }

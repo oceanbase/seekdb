@@ -62,12 +62,10 @@ int ObExprArrayAvg::calc_result_type1(ObExprResType &type,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(type1.get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type))) {
-    LOG_WARN("failed to get array type by subschema id", K(ret), K(type1.get_subschema_id()));
   } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("invalid collection type", K(ret), K(coll_type->type_id_));
   } else if (OB_FAIL(ObArrayExprUtils::get_array_element_type(exec_ctx, type1.get_subschema_id(), src_elem_type, depth, is_vec))) {
-    LOG_WARN("failed to get array element type", K(ret));
   } else if (depth != 1) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "array_avg with multi-dimension array");
@@ -97,11 +95,9 @@ int ObExprArrayAvg::eval_array_avg(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   uint32_t depth = 0;
 
   if (OB_FAIL(expr.args_[0]->eval(ctx, arr_datum))) {
-    LOG_WARN("failed to eval source array arg", K(ret));
   } else if (arr_datum->is_null()) {
     res.set_null();
   } else if (OB_FAIL(ObArrayExprUtils::get_array_type_by_subschema_id(ctx, subschema_id, arr_type))) {
-    LOG_WARN("failed to get array type by subschema id", K(ret), K(subschema_id));
   } else {
     ObString data_str = arr_datum->get_string();
     uint32_t len = 0, data_len = 0;
@@ -113,27 +109,23 @@ int ObExprArrayAvg::eval_array_avg(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
                                         CS_TYPE_BINARY,
                                         true,
                                         data_str))) {
-      LOG_WARN("fail to get real data", K(ret), K(data_str));
     } else if (OB_FAIL(ObArrayExprUtils::get_array_data(data_str, 
                                             arr_type, 
                                             len, 
                                             null_bitmaps,
                                             data, 
                                             data_len))) {
-      LOG_WARN("failed to get array data", K(ret));
     } else if (ob_is_integer_type(arr_type->get_basic_meta(depth).get_obj_type())) {
       depth = 0;
       if (ob_is_unsigned_type(arr_type->get_basic_meta(depth).get_obj_type())) {
         uint64_t res_sum = 0;
         if (OB_FAIL(ObArrayExprUtils::calc_array_sum(len, null_bitmaps, data, data_len, arr_type, res_sum))) {
-          LOG_WARN("failed to calc sum", K(ret));
         } else {
           res.set_double(static_cast<double>(res_sum) / len);
         }
       } else {
         int64_t res_sum = 0;
         if (OB_FAIL(ObArrayExprUtils::calc_array_sum(len, null_bitmaps, data, data_len, arr_type, res_sum))) {
-          LOG_WARN("failed to calc sum", K(ret));
         } else {
           res.set_double(static_cast<double>(res_sum) / len);
         }
@@ -141,7 +133,6 @@ int ObExprArrayAvg::eval_array_avg(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
     } else {
       double res_sum = 0;
       if (OB_FAIL(ObArrayExprUtils::calc_array_sum(len, null_bitmaps, data, data_len, arr_type, res_sum))) {
-        LOG_WARN("failed to calc sum", K(ret));
       } else {
         res.set_double(res_sum / len);
       }
@@ -165,7 +156,6 @@ int ObExprArrayAvg::eval_array_avg_batch(const ObExpr &expr, ObEvalCtx &ctx,
   uint32_t depth = 0;
 
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval source array failed", K(ret));
   } else {
     ObDatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
@@ -177,7 +167,6 @@ int ObExprArrayAvg::eval_array_avg_batch(const ObExpr &expr, ObEvalCtx &ctx,
       if (arr_array.at(j)->is_null()) {
         res_datum.at(j)->set_null();
       } else if (OB_FAIL(ObArrayExprUtils::get_array_type_by_subschema_id(ctx, subschema_id, arr_type))) {
-        LOG_WARN("failed to get array type by subschema id", K(ret), K(subschema_id));
       } else {
         ObString data_str = arr_array.at(j)->get_string();
         uint32_t len = 0, data_len = 0;
@@ -189,27 +178,23 @@ int ObExprArrayAvg::eval_array_avg_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                             CS_TYPE_BINARY, 
                                             true, 
                                             data_str))) {
-          LOG_WARN("fail to get real data.", K(ret), K(data_str));
         } else if (OB_FAIL(ObArrayExprUtils::get_array_data(data_str, 
                                                 arr_type, 
                                                 len, 
                                                 null_bitmaps,
                                                 data, 
                                                 data_len))) {
-          LOG_WARN("failed to get array data", K(ret));
         } else if (ob_is_integer_type(arr_type->get_basic_meta(depth).get_obj_type())) {
           depth = 0;
           if (ob_is_unsigned_type(arr_type->get_basic_meta(depth).get_obj_type())) {
             uint64_t res_sum = 0;
             if (OB_FAIL(ObArrayExprUtils::calc_array_sum(len, null_bitmaps, data, data_len, arr_type, res_sum))) {
-              LOG_WARN("failed to calc sum", K(ret));
             } else {
               res_datum.at(j)->set_double(static_cast<double>(res_sum) / len);
             }
           } else {
             int64_t res_sum = 0;
             if (OB_FAIL(ObArrayExprUtils::calc_array_sum(len, null_bitmaps, data, data_len, arr_type, res_sum))) {
-              LOG_WARN("failed to calc sum", K(ret));
             } else {
               res_datum.at(j)->set_double(static_cast<double>(res_sum) / len);
             }
@@ -222,7 +207,6 @@ int ObExprArrayAvg::eval_array_avg_batch(const ObExpr &expr, ObEvalCtx &ctx,
                                             data_len, 
                                             arr_type, 
                                             res_sum))) {
-            LOG_WARN("failed to calc sum", K(ret));
           } else {
             res_datum.at(j)->set_double(res_sum / len);
           }
@@ -244,7 +228,6 @@ int ObExprArrayAvg::eval_array_avg_vector(const ObExpr &expr, ObEvalCtx &ctx,
   ObIArrayType *src_arr = NULL;
 
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval source array failed", K(ret));
   } else {
     ObIVector *arr_vec = expr.args_[0]->get_vector(ctx);
     ObIVector *res_vec = expr.get_vector(ctx);
@@ -265,7 +248,6 @@ int ObExprArrayAvg::eval_array_avg_vector(const ObExpr &expr, ObEvalCtx &ctx,
       if (arr_vec->is_null(j)) {
         res_vec->set_null(j);
       } else if (OB_FAIL(ObArrayExprUtils::get_array_type_by_subschema_id(ctx, subschema_id, arr_type))) {
-        LOG_WARN("failed to get array type by subschema id", K(ret), K(subschema_id));
       } else if (!ObCollectionExprUtil::is_compact_fmt_cell(data_str.ptr())) {
         ret = OB_ERR_UNEXPECTED;
         SQL_LOG(WARN, "unexpected data format", K(ret));
@@ -274,14 +256,12 @@ int ObExprArrayAvg::eval_array_avg_vector(const ObExpr &expr, ObEvalCtx &ctx,
                                             CS_TYPE_BINARY, 
                                             true, 
                                             data_str))) {
-        LOG_WARN("fail to get real data.", K(ret), K(data_str));
       } else if (OB_FAIL(ObArrayExprUtils::get_array_data(data_str, 
                                               arr_type, 
                                               len, 
                                               null_bitmaps,
                                               data, 
                                               data_len))) {
-        LOG_WARN("failed to get array data", K(ret));
       } else if (ob_is_integer_type(arr_type->get_basic_meta(depth).get_obj_type())) {
         depth = 0;
         if (ob_is_unsigned_type(arr_type->get_basic_meta(depth).get_obj_type())) {
@@ -292,7 +272,6 @@ int ObExprArrayAvg::eval_array_avg_vector(const ObExpr &expr, ObEvalCtx &ctx,
                                             data_len, 
                                             arr_type, 
                                             res_sum))) {
-            LOG_WARN("failed to calc sum", K(ret));
           } else {
             res_vec->set_double(j, static_cast<double>(res_sum) / len);
           }
@@ -304,7 +283,6 @@ int ObExprArrayAvg::eval_array_avg_vector(const ObExpr &expr, ObEvalCtx &ctx,
                                             data_len, 
                                             arr_type, 
                                             res_sum))) {
-            LOG_WARN("failed to calc sum", K(ret));
           } else {
             res_vec->set_double(j, static_cast<double>(res_sum) / len);
           }
@@ -317,7 +295,6 @@ int ObExprArrayAvg::eval_array_avg_vector(const ObExpr &expr, ObEvalCtx &ctx,
                                           data_len, 
                                           arr_type, 
                                           res_sum))) {
-          LOG_WARN("failed to calc sum", K(ret));
         } else {
           res_vec->set_double(j, res_sum / len);
         }

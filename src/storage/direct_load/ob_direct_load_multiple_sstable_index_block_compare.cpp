@@ -55,16 +55,11 @@ bool ObDirectLoadMultipleSSTableIndexBlockEndKeyCompare::operator()(
     // do nothing
   } else if (OB_FAIL(index_block_reader_.open(fragment.index_file_handle_, index_block_offset,
                                               sstable_->get_meta().index_block_size_))) {
-    LOG_WARN("fail to open index file", KR(ret), K(fragment), K(index_block_offset));
   } else if (OB_FAIL(index_block_reader_.get_last_entry(last_index_entry))) {
-    LOG_WARN("fail to get last entry", KR(ret));
   } else if (OB_FAIL(data_block_reader_.open(fragment.data_file_handle_, last_index_entry->offset_,
                                              last_index_entry->size_))) {
-    LOG_WARN("fail to open data file", KR(ret), K(fragment), KPC(last_index_entry));
   } else if (OB_FAIL(data_block_reader_.get_last_row(row))) {
-    LOG_WARN("fail to get last row", KR(ret));
   } else if (OB_FAIL(rowkey.compare(row->rowkey_, *datum_utils_, cmp_ret))) {
-    LOG_WARN("fail to compare rowkey", KR(ret));
   }
   return cmp_ret < 0;
 }

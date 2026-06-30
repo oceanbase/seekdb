@@ -77,11 +77,9 @@ int ObCGAggregatedScanner::init(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected aggregated expr count", K(ret), KPC(iter_param.output_exprs_));
   } else if (OB_FAIL(check_need_access_data(iter_param, access_ctx))) {
-    LOG_WARN("Fail to check need access data", K(ret));
   }
   if (OB_SUCC(ret) && (need_access_data_ || need_get_row_ids_)) {
     if (OB_FAIL(ObCGRowScanner::init(iter_param, access_ctx, wrapper))) {
-      LOG_WARN("Fail to init cg scanner", K(ret));
     } else if (iter_param.enable_skip_index()) {
       prefetcher_.set_agg_group(agg_group_);
     }
@@ -106,7 +104,6 @@ int ObCGAggregatedScanner::locate(
     cur_processed_row_count_ = nullptr == bitmap ? range.get_row_count() : bitmap->popcnt();
     if ((!need_access_data_ && !need_get_row_ids_) || check_agg_finished()) {
     } else if (OB_FAIL(ObCGRowScanner::locate(range, bitmap))) {
-      LOG_WARN("Fail to locate cg scanner", K(ret));
     }
   }
   return ret;
@@ -130,14 +127,12 @@ int ObCGAggregatedScanner::get_next_rows(uint64_t &count, const uint64_t capacit
                                        nullptr/*reader*/,
                                        pd_row_id_ctx,
                                        false/*reserve_memory*/))) {
-      LOG_WARN("Fail to eval batch rows", K(ret));
     } else {
       ret = OB_ITER_END;
     }
   } else {
     while (OB_SUCC(ret)) {
       if (OB_FAIL(THIS_WORKER.check_status())) {
-        LOG_WARN("query interrupt", K(ret));
       } else if (OB_FAIL(ObCGRowScanner::get_next_rows(count, capacity, 0/*datum_offset*/))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           LOG_WARN("Fail to get next rows", K(ret));
@@ -182,7 +177,6 @@ int ObCGAggregatedScanner::inner_fetch_rows(const int64_t batch_size, uint64_t &
       pd_row_id_ctx.bound_row_id_ = is_reverse_scan_ ? lower_bound : upper_bound;
       pd_row_id_ctx.is_reverse_ = is_reverse_scan_;
       if (OB_FAIL(agg_group_vec->agg_pushdown_decoder(micro_scanner_->get_reader(), 0/*col_offset*/, pd_row_id_ctx))) {
-        LOG_WARN("fail to pushdown aggregate to decoder", K(ret), K(pd_row_id_ctx));
       }
     }
     if (OB_FAIL(ret)) {
@@ -201,7 +195,6 @@ int ObCGAggregatedScanner::inner_fetch_rows(const int64_t batch_size, uint64_t &
                                                   filter_bitmap_,
                                                   batch_size - count,
                                                   is_reverse_scan_))) {
-      LOG_WARN("Fail to get row ids", K(ret), K_(current), K_(query_index_range));
     } else if (0 == row_cap) {
     } else {
       pd_row_id_ctx.reuse();
@@ -224,10 +217,8 @@ int ObCGAggregatedScanner::inner_fetch_rows(const int64_t batch_size, uint64_t &
                                                         len_array_,
                                                         is_padding_mode_,
                                                         !access_ctx_->block_row_store_->filter_is_null()))) {
-        LOG_WARN("fail to get next rows", K(ret));
       } else if (OB_FAIL(agg_group_vec->eval_batch(iter_param_, access_ctx_, 0/*col_offset*/,
                                                    micro_scanner_->get_reader(), pd_row_id_ctx, false))) {
-        LOG_WARN("fail to aggregate batch", K(ret));
       } else {
         count += row_cap;
         if (row_cap > 0 && datum_infos_.count() > 0) {
@@ -245,13 +236,11 @@ int ObCGAggregatedScanner::inner_fetch_rows(const int64_t batch_size, uint64_t &
                                                 filter_bitmap_,
                                                 batch_size - count,
                                                 is_reverse_scan_))) {
-    LOG_WARN("Fail to get row ids", K(ret), K_(current), K_(query_index_range));
   } else if (0 == row_cap) {
   } else {
     ObPushdownRowIdCtx pd_row_id_ctx(row_ids_, row_cap);
     if (OB_FAIL(agg_group_->eval_batch(iter_param_, access_ctx_, 0/*col_offset*/, 
                                        micro_scanner_->get_reader(), pd_row_id_ctx, false))) {
-      LOG_WARN("fail to aggregate batch", K(ret));
     } else {
       count += row_cap;
     }
@@ -279,7 +268,6 @@ int ObCGAggregatedScanner::check_need_access_data(const ObTableIterParam &iter_p
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(agg_store_vec->get_agg_group(output_expr, agg_group_vec))) {
-        LOG_WARN("Failed to get aggregate group", K(ret));
       } else {
         need_access_data_ |= agg_group_vec->need_access_data_;
         need_get_row_ids_ |= agg_group_vec->need_get_row_ids_;
@@ -297,9 +285,7 @@ int ObCGAggregatedScanner::check_need_access_data(const ObTableIterParam &iter_p
       for (int64_t i = 0; OB_SUCC(ret) && i < iter_param.aggregate_exprs_->count(); ++i) {
         ObAggCell *cell = nullptr;
         if (OB_FAIL(agg_store->get_agg_cell(iter_param.aggregate_exprs_->at(i), cell))) {
-          LOG_WARN("Fail to get agg cell", K(ret));
         } else if (OB_FAIL(agg_cells->add_agg_cell(cell))) {
-          LOG_WARN("Fail to push back", K(ret));
         } else if (!need_access_data_) {
           need_access_data_ = cell->need_access_data();
         }

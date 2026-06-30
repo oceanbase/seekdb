@@ -135,7 +135,6 @@ public:
             *reinterpret_cast<int64_t *>(agg_cell) = reinterpret_cast<int64_t>(data);
             *reinterpret_cast<int32_t *>(agg_cell + sizeof(char *)) = data_len;
             if (OB_FAIL(set_tmp_var_agg_data(agg_ctx, agg_col_idx, agg_cell))) {
-              SQL_LOG(WARN, "set var aggregate data failed", K(ret));
             }
           }
         }
@@ -143,7 +142,6 @@ public:
         *reinterpret_cast<int64_t *>(agg_cell) = reinterpret_cast<int64_t>(data);
         *reinterpret_cast<int32_t *>(agg_cell + sizeof(char *)) = data_len;
         if (OB_FAIL(set_tmp_var_agg_data(agg_ctx, agg_col_idx, agg_cell))) {
-          SQL_LOG(WARN, "set agg data failed", K(ret));
         }
       } else {
         MEMCPY(agg_cell, data, data_len);
@@ -169,7 +167,6 @@ public:
         ret = VecTCCmpCalc<vec_tc, vec_tc>::cmp(cmp_info.obj_meta_, cmp_info.obj_meta_, agg_cell,
                                                 cmp_info.agg_cell_len_, row_data, row_len, cmp_ret);
         if (OB_FAIL(ret)) {
-          SQL_LOG(WARN, "compare failed", K(ret));
         } else if ((is_min && cmp_ret > 0) || (!is_min && cmp_ret < 0)) {
           MEMCPY(agg_cell, row_data, row_len);
           cmp_info.set_min_max_idx_changed();
@@ -186,7 +183,6 @@ public:
         ret = VecTCCmpCalc<vec_tc, vec_tc>::cmp(cmp_info.obj_meta_, cmp_info.obj_meta_, agg_data,
                                                 agg_cell_len, row_data, row_len, cmp_ret);
         if (OB_FAIL(ret)) {
-          SQL_LOG(WARN, "compare failed", K(ret));
         } else if ((is_min && cmp_ret > 0) || (!is_min && cmp_ret < 0)) {
            *reinterpret_cast<int64_t *>(agg_cell) = reinterpret_cast<int64_t>(row_data);
            *reinterpret_cast<int32_t *>(agg_cell + sizeof(char *)) = row_len;
@@ -211,7 +207,6 @@ public:
       SQL_LOG(DEBUG, "add null row", K(is_min), K(agg_col_id), K(row_num));
     } else if (OB_FAIL(
                  add_row(agg_ctx, columns, row_num, agg_col_id, agg_cell, tmp_res, calc_info))) {
-      SQL_LOG(WARN, "add row failed", K(ret));
     } else {
       NotNullBitVector &not_nulls = agg_ctx.locate_notnulls_bitmap(agg_col_id, agg_cell);
       not_nulls.set(agg_col_id);
@@ -260,7 +255,6 @@ public:
       // do nothing
     } else if (not_nulls.at(agg_col_id) && helper::is_var_len_agg_cell(vec_tc)) {
       if (OB_FAIL(set_tmp_var_agg_data(agg_ctx, agg_col_id, agg_cell))) {
-        SQL_LOG(WARN, "set variable aggregate data failed", K(ret));
       }
     }
     return ret;
@@ -310,7 +304,6 @@ public:
           curr_calc_info.obj_meta_, curr_calc_info.obj_meta_, rollup_agg_cell,
           rollup_calc_info.agg_cell_len_, curr_agg_cell, curr_calc_info.agg_cell_len_, cmp_ret);
         if (OB_FAIL(ret)) {
-          SQL_LOG(WARN, "compare failed", K(ret));
         } else if ((is_min && cmp_ret > 0) || (!is_min && cmp_ret < 0)) {
           MEMCPY(rollup_agg_cell, curr_agg_cell, curr_calc_info.agg_cell_len_);
         }
@@ -325,7 +318,6 @@ public:
           curr_calc_info.obj_meta_, curr_calc_info.obj_meta_, rollup_agg_data, rollup_agg_cell_len,
           cur_agg_data, cur_agg_cell_len, cmp_ret);
         if (OB_FAIL(ret)) {
-          SQL_LOG(WARN, "compare failed", K(ret));
         } else if ((is_min && cmp_ret > 0) || (!is_min && cmp_ret < 0)) {
           *reinterpret_cast<int64_t *>(rollup_agg_cell) = *reinterpret_cast<int64_t *>(curr_agg_cell);
           *reinterpret_cast<int32_t *>(rollup_agg_cell + sizeof(char *)) = cur_agg_cell_len;
@@ -366,7 +358,6 @@ public:
       CmpCalcInfo &cmp_info = reinterpret_cast<CmpCalcInfo &>(calc_info);
       cmp_info.min_max_idx_changed_ = 0;
       if (OB_FAIL(add_row(agg_ctx, columns, row_num, agg_col_id, agg_cell, tmp_res, calc_info))) {
-        SQL_LOG(WARN, "add row failed", K(ret));
       } else if (cmp_info.min_max_idx_changed_) {
         agg_ctx.removal_info_.max_min_index_ = row_num;
         agg_ctx.removal_info_.is_max_min_idx_changed_ = true;
@@ -389,7 +380,6 @@ public:
     if (agg_ctx.win_func_agg_ && helper::is_var_len_agg_cell(vec_tc)) {
       agg_ctx.get_agg_payload(agg_col_id, cur_group_id, agg_cell, agg_cell_len);
       if (OB_FAIL(set_tmp_var_agg_data(agg_ctx, agg_col_id, agg_cell))) {
-        SQL_LOG(WARN, "store tmp result failed", K(ret));
       }
     }
     return ret;

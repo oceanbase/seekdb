@@ -30,7 +30,6 @@ ObSelfBufferWriter::ObSelfBufferWriter(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ensure_space(size))) {
-    STORAGE_LOG(WARN, "cannot allocate memory for data buffer.", K(size), K(ret));
   }
 }
 

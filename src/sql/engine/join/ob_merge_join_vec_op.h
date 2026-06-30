@@ -80,11 +80,9 @@ public:
   {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(merge_directions_.init(merge_directions.count()))) {
-      SQL_ENG_LOG(WARN, "fail to init merge direction", K(ret));
     }
     ARRAY_FOREACH(merge_directions, i) {
       if (OB_FAIL((add_merge_direction(merge_directions.at(i))))) {
-        SQL_ENG_LOG(WARN, "failed to add merge direction", K(ret), K(i));
       }
     }
     return ret;
@@ -93,13 +91,9 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(left_child_fetcher_equal_keys_.init(equal_conds_count))) {
-      LOG_WARN("init left_child_fetcher_equal_keys_ failed", K(ret));
     } else if (OB_FAIL(right_child_fetcher_equal_keys_.init(equal_conds_count))) {
-      LOG_WARN("init right_child_fetcher_equal_keys_ failed", K(ret));
     } else if (OB_FAIL(left_child_fetcher_equal_keys_idx_.init(equal_conds_count))) {
-      LOG_WARN("init left_child_fetcher_equal_keys_idx_ failed", K(ret));
     } else if (OB_FAIL(right_child_fetcher_equal_keys_idx_.init(equal_conds_count))) {
-      LOG_WARN("init right_child_fetcher_equal_keys_idx_ failed", K(ret));
     }
     return ret;
   }

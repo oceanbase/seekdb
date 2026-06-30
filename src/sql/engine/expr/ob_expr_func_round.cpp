@@ -67,9 +67,7 @@ int ObExprFuncRound::se_deduce_type(ObExprResType &type,
   int ret = OB_SUCCESS;
   ObObjType res_type = ObMaxType;
   if (OB_FAIL(set_res_and_calc_type(params, param_num, res_type))) {
-    LOG_WARN("set_calc_type for round expr failed", K(ret), K(res_type), K(param_num));
   } else if (OB_FAIL(set_res_scale_prec(type_ctx, params, param_num, res_type, type))) {
-    LOG_WARN("set_res_scale_prec round expr failed", K(ret), K(res_type), K(param_num));
   } else {
     ObExprOperator::calc_result_flag1(type, params[0]);
     type.set_type(res_type);
@@ -82,7 +80,6 @@ int ObExprFuncRound::set_res_and_calc_type(ObExprResType *params, int64_t param_
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObExprResultTypeUtil::get_round_result_type(res_type, params[0].get_type()))) {
-    LOG_WARN("fail to get_round_result_type", K(ret), K(params[0].get_type()));
   } else if (1 == param_num) {
     params[0].set_calc_type(res_type);
   } else if (2 == param_num) {
@@ -190,7 +187,6 @@ int ObExprFuncRound::do_round_decimalint(
     int32_t expected_int_bytes = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(out_prec);
     if (OB_FAIL(wide::common_scale_decimalint(
                 decint, int_bytes, in_scale, round_scale, scaled_down_val))) {
-      LOG_WARN("scale decimal int failed", K(ret), K(int_bytes), K(in_scale), K(round_scale));
     } else if ((round_scale < out_scale)
                && OB_FAIL(wide::common_scale_decimalint(scaled_down_val.get_decimal_int(),
                    int_bytes, round_scale, out_scale, scaled_up_val))) {
@@ -200,9 +196,6 @@ int ObExprFuncRound::do_round_decimalint(
       round_scale < out_scale ? scaled_up_val.get_decimal_int() : scaled_down_val.get_decimal_int(),
       round_scale < out_scale ? scaled_up_val.get_int_bytes() : scaled_down_val.get_int_bytes(),
       expected_int_bytes, res_val))) {
-      LOG_WARN("align_decint_precision_unsafe failed", K(ret),
-          K(scaled_down_val.get_int_bytes()), K(scaled_up_val.get_int_bytes()),
-          K(expected_int_bytes), K(in_scale), K(out_scale), K(round_scale));
     }
   } else {
     res_val.from(decint, int_bytes);
@@ -221,7 +214,6 @@ int ObExprFuncRound::calc_round_decimalint(
     if (OB_FAIL(do_round_decimalint(
         in_meta.precision_, in_meta.scale_, out_meta.precision_, out_meta.scale_, round_scale,
         in_datum, res_val))) {
-      LOG_WARN("do_round_decimalint failed", K(ret), K(in_meta), K(out_meta), K(round_scale));
     } else {
       res_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
     }
@@ -246,9 +238,7 @@ static int do_round_by_type(
       number::ObNumber res_nmb;
       ObNumStackOnceAlloc tmp_alloc;
       if (OB_FAIL(res_nmb.from(x_nmb, tmp_alloc))) {
-        LOG_WARN("get num from x failed", K(ret), K(x_nmb));
       } else if (OB_FAIL(res_nmb.round(GET_SCALE_FOR_CALC(round_scale)))) {
-        LOG_WARN("eval round of res_nmb failed", K(ret), K(round_scale), K(res_nmb));
       } else {
         res_datum.set_number(res_nmb);
       }
@@ -257,7 +247,6 @@ static int do_round_by_type(
     case ObDecimalIntType: {
       if (OB_FAIL(ObExprFuncRound::calc_round_decimalint(
                   in_meta, out_meta, GET_SCALE_FOR_CALC(round_scale), x_datum, res_datum))) {
-        LOG_WARN("calc_round_decimalint failed", K(ret), K(in_meta), K(out_meta), K(round_scale));
       }
       break;
     }
@@ -387,7 +376,6 @@ static int do_round_by_type_batch_with_check(const int64_t scale, const ObExpr &
             results[i].set_null();
           } else if (OB_FAIL(ObExprFuncRound::calc_round_decimalint(
                              in_meta, out_meta, GET_SCALE_FOR_CALC(scale), x_datum, results[i]))) {
-            LOG_WARN("calc_round_decimalint failed", K(ret), K(in_meta), K(out_meta), K(scale));
           }
         }
       }
@@ -743,9 +731,7 @@ static int do_round_by_type_vector(const int64_t scale, const ObExpr &expr,
         number::ObNumber res_nmb;
         ObNumStackOnceAlloc tmp_alloc;
         if (OB_FAIL(res_nmb.from(x_nmb, tmp_alloc))) {
-          LOG_WARN("get num from x_nmb failed", K(ret), K(x_nmb));
         } else if (OB_FAIL(res_nmb.round(GET_SCALE_FOR_CALC(scale)))) {
-          LOG_WARN("eval round of res_nmb failed", K(ret), K(scale), K(res_nmb));
         } else {
           res_vec->set_number(j, res_nmb);
           eval_flags.set(j);
@@ -763,7 +749,6 @@ static int do_round_by_type_vector(const int64_t scale, const ObExpr &expr,
               skip, bound, eval_flags, in_meta, out_meta,
               GET_SCALE_FOR_CALC(scale));
           if (OB_FAIL(round_func(left_vec, res_vec))) {
-            LOG_WARN("DecimalIntRoundFunctor<int32_t>::operator() failed", K(ret));
           }
           break;
         }
@@ -772,7 +757,6 @@ static int do_round_by_type_vector(const int64_t scale, const ObExpr &expr,
               skip, bound, eval_flags, in_meta, out_meta,
               GET_SCALE_FOR_CALC(scale));
           if (OB_FAIL(round_func(left_vec, res_vec))) {
-            LOG_WARN("DecimalIntRoundFunctor<int64_t>::operator() failed", K(ret));
           }
           break;
         }
@@ -781,7 +765,6 @@ static int do_round_by_type_vector(const int64_t scale, const ObExpr &expr,
               skip, bound, eval_flags, in_meta, out_meta,
               GET_SCALE_FOR_CALC(scale));
           if (OB_FAIL(round_func(left_vec, res_vec))) {
-            LOG_WARN("DecimalIntRoundFunctor<int128_t>::operator() failed", K(ret));
           }
           break;
         }
@@ -790,7 +773,6 @@ static int do_round_by_type_vector(const int64_t scale, const ObExpr &expr,
               skip, bound, eval_flags, in_meta, out_meta,
               GET_SCALE_FOR_CALC(scale));
           if (OB_FAIL(round_func(left_vec, res_vec))) {
-            LOG_WARN("DecimalIntRoundFunctor<int256_t>::operator() failed", K(ret));
           }
           break;
         }
@@ -799,7 +781,6 @@ static int do_round_by_type_vector(const int64_t scale, const ObExpr &expr,
               skip, bound, eval_flags, in_meta, out_meta,
               GET_SCALE_FOR_CALC(scale));
           if (OB_FAIL(round_func(left_vec, res_vec))) {
-            LOG_WARN("DecimalIntRoundFunctor<int512_t>::operator() failed", K(ret));
           }
           break;
         }
@@ -888,9 +869,7 @@ static int do_round_by_type_batch_without_check(const int64_t scale, const ObExp
         number::ObNumber res_nmb;
         ObNumStackOnceAlloc tmp_alloc;
         if (OB_FAIL(res_nmb.from(x_nmb, tmp_alloc))) {
-          LOG_WARN("get num from x failed", K(ret), K(x_nmb));
         } else if (OB_FAIL(res_nmb.round(GET_SCALE_FOR_CALC(scale)))) {
-          LOG_WARN("eval round of res_nmb failed", K(ret), K(scale), K(res_nmb));
         } else {
           results[i].set_number(res_nmb);
         }
@@ -903,7 +882,6 @@ static int do_round_by_type_batch_without_check(const int64_t scale, const ObExp
       for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; ++i) {
         if (OB_FAIL(ObExprFuncRound::calc_round_decimalint(
                     in_meta, out_meta, GET_SCALE_FOR_CALC(scale), x_datums[i], results[i]))) {
-          LOG_WARN("calc_round_decimalint failed", K(ret), K(in_meta), K(out_meta), K(scale));
         }
       }
       break;
@@ -960,13 +938,10 @@ int calc_round_expr_numeric1(const sql::ObExpr &expr, sql::ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   ObDatum *x_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, x_datum))) {
-    LOG_WARN("eval arg failed", K(ret), K(expr));
   } else if (x_datum->is_null()) {
     res_datum.set_null();
   } else if (OB_FAIL(do_round_by_type(
               expr.args_[0]->datum_meta_, expr.datum_meta_, 0, *x_datum, ctx, res_datum))) {
-    LOG_WARN("calc round by type failed",
-        K(ret), K(expr.args_[0]->datum_meta_), K(expr.datum_meta_));
   }
   return ret;
 }
@@ -978,7 +953,6 @@ int ObExprFuncRound::calc_round_expr_numeric1_batch(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval arg failed", K(ret), K(expr));
   } else {
     ObDatum *x_datums = expr.args_[0]->locate_batch_datums(ctx);
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
@@ -1058,7 +1032,6 @@ int ObExprFuncRound::calc_round_expr_numeric1_vector(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval arg failed", K(ret), K(expr));
   } else {
     VectorFormat res_format = expr.get_format(ctx);
     VectorFormat left_format = expr.args_[0]->get_format(ctx);
@@ -1109,7 +1082,6 @@ int calc_round_expr_numeric2(const sql::ObExpr &expr, sql::ObEvalCtx &ctx,
     if (ObNumberType == fmt_type) {
       const number::ObNumber fmt_nmb(fmt_datum->get_number());
       if (OB_FAIL(fmt_nmb.extract_valid_int64_with_trunc(scale))) {
-        LOG_WARN("extract_valid_int64_with_trunc failed", K(ret), K(fmt_nmb));
       }
     } else if (ObIntType == fmt_type) {
       scale = fmt_datum->get_int();
@@ -1131,8 +1103,6 @@ int calc_round_expr_numeric2(const sql::ObExpr &expr, sql::ObEvalCtx &ctx,
       }
       if (OB_FAIL(do_round_by_type(
                   expr.args_[0]->datum_meta_, expr.datum_meta_, scale, *x_datum, ctx, res_datum))) {
-        LOG_WARN("calc round by type failed",
-                 K(ret), K(expr.args_[0]->datum_meta_), K(expr.datum_meta_));
       }
     }
   }
@@ -1158,7 +1128,6 @@ int ObExprFuncRound::calc_round_expr_numeric2_batch(const ObExpr &expr,
     } else if (ObNumberType == fmt_type) {
       const number::ObNumber fmt_nmb(fmt_datum->get_number());
       if (OB_FAIL(fmt_nmb.extract_valid_int64_with_trunc(scale))) {
-        LOG_WARN("extract_valid_int64_with_trunc failed", K(ret), K(fmt_nmb));
       }
     } else if (ObIntType == fmt_type) {
       scale = fmt_datum->get_int();
@@ -1212,7 +1181,6 @@ int ObExprFuncRound::calc_round_expr_numeric2_vector(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval arg failed", K(ret), K(expr));
   } else {
     VectorFormat res_format = expr.get_format(ctx);
     VectorFormat left_format = expr.args_[0]->get_format(ctx);
@@ -1230,7 +1198,6 @@ int ObExprFuncRound::inner_calc_round_expr_numeric2_vector(const ObExpr &expr,
   int ret = OB_SUCCESS;
   ObDatum *fmt_datum = NULL;
   if (OB_FAIL(expr.args_[1]->eval(ctx, fmt_datum))) {
-    LOG_WARN("eval arg failed", K(ret), K(expr));
   } else {
     int64_t scale = 0;
     // get scale
@@ -1240,7 +1207,6 @@ int ObExprFuncRound::inner_calc_round_expr_numeric2_vector(const ObExpr &expr,
     } else if (ObNumberType == fmt_type) {
       const number::ObNumber fmt_nmb(fmt_datum->get_number());
       if (OB_FAIL(fmt_nmb.extract_valid_int64_with_trunc(scale))) {
-        LOG_WARN("extract_valid_int64_with_trunc failed", K(ret), K(fmt_nmb));
       }
     } else if (ObIntType == fmt_type) {
       scale = fmt_datum->get_int();
@@ -1296,11 +1262,9 @@ int calc_round_expr_datetime_inner(const ObDatum &x_datum, const ObString &fmt_s
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
   const common::ObTimeZoneInfo *tz_info = NULL;
   if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
-    LOG_WARN("get tz info failed", K(ret));
   } else if (OB_FAIL(ob_datum_to_ob_time_with_date(x_datum, ObDateTimeType, NUMBER_SCALE_UNKNOWN_YET,
                               tz_info, ob_time,
                               get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()), 0, false))) {
-    LOG_WARN("ob_datum_to_ob_time_with_date failed", K(ret));
   } else {
     ObTimeConvertCtx cvrt_ctx(TZ_INFO(ctx.exec_ctx_.get_my_session()), false);
     if (expr.arg_cnt_ > 1 && !!(expr.args_[1]->is_static_const_)) {
@@ -1309,10 +1273,8 @@ int calc_round_expr_datetime_inner(const ObDatum &x_datum, const ObString &fmt_s
       if (NULL == (single_fmt_ctx = static_cast<ObExprSingleFormatCtx *>
                    (ctx.exec_ctx_.get_expr_op_ctx(rt_ctx_id)))) {
         if (OB_FAIL(ctx.exec_ctx_.create_expr_op_ctx(rt_ctx_id, single_fmt_ctx))) {
-          LOG_WARN("failed to create operator ctx", K(ret));
         } else if (OB_FAIL(ObExprTRDateFormat::get_format_id_by_format_string(
                              fmt_str, single_fmt_ctx->fmt_id_))) {
-          LOG_WARN("fail to get format id by format string", K(ret));
         }
       }
       OZ (ObExprTRDateFormat::round_new_obtime_by_fmt_id(ob_time, single_fmt_ctx->fmt_id_));
@@ -1321,7 +1283,6 @@ int calc_round_expr_datetime_inner(const ObDatum &x_datum, const ObString &fmt_s
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ob_time, cvrt_ctx, dt))) {
-        LOG_WARN("fail to cast ob_time to datetime", K(ret), K(fmt_str));
       }
     }
   }
@@ -1336,11 +1297,9 @@ int calc_round_expr_datetime1(const sql::ObExpr &expr, sql::ObEvalCtx &ctx,
   ObDatum *x_datum = NULL;
   ObString fmt_str("DD");
   if (OB_FAIL(expr.args_[0]->eval(ctx, x_datum))) {
-    LOG_WARN("eval arg failed", K(ret), K(expr));
   } else if (x_datum->is_null()) {
     res_datum.set_null();
   } else if (OB_FAIL(calc_round_expr_datetime_inner(*x_datum, fmt_str, ctx, dt, expr))) {
-    LOG_WARN("calc_round_expr_datetime_inner failed", K(ret));
   } else {
     res_datum.set_datetime(dt);
   }
@@ -1356,7 +1315,6 @@ int ObExprFuncRound::calc_round_expr_datetime1_batch(const ObExpr &expr,
   ObString fmt_str("DD");
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-      LOG_WARN("eval arg failed", K(ret), K(expr));
   } else {
     ObDatum *results = expr.locate_batch_datums(ctx);
     for (int64_t i = 0; OB_SUCC(ret) && i < batch_size; ++i) {
@@ -1369,7 +1327,6 @@ int ObExprFuncRound::calc_round_expr_datetime1_batch(const ObExpr &expr,
       if (x_datum.is_null()) {
         results[i].set_null();
       } else if (OB_FAIL(calc_round_expr_datetime_inner(x_datum, fmt_str, ctx, dt, expr))) {
-        LOG_WARN("calc_round_expr_datetime_inner failed", K(ret));
       } else {
         results[i].set_datetime(dt);
       }
@@ -1385,7 +1342,6 @@ int ObExprFuncRound::calc_round_expr_datetime1_vector(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval arg0 failed", K(ret), K(expr));
   } else {
     VectorFormat res_format = expr.get_format(ctx);
     VectorFormat left_format = expr.args_[0]->get_format(ctx);
@@ -1415,7 +1371,6 @@ int ObExprFuncRound::inner_calc_round_expr_datetime1_vector(const ObExpr &expr,
     } else {
       ObDatum left_datum(left_vec->get_payload(j), left_vec->get_length(j), false);
       if (OB_FAIL(calc_round_expr_datetime_inner(left_datum, fmt_str, ctx, dt, expr))) {
-        LOG_WARN("calc_round_expr_datetime_inner failed", K(ret));
       } else {
         res_vec->set_datetime(j, dt);
       }

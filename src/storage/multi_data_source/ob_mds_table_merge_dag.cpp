@@ -63,9 +63,7 @@ int ObMdsTableMergeDag::init_by_param(const share::ObIDagInitParam *param)
       ret = OB_ERR_SYS;
       LOG_WARN("flush scn is invalid", K(ret), KPC(mds_param));
     } else if (OB_FAIL(ObTabletMergeDag::inner_init(mds_param))) {
-      LOG_WARN("failed to init ObTabletMergeDag", K(ret), KPC(mds_param));
     } else if (OB_FAIL(fill_compat_mode_())) {
-      LOG_WARN("failed to fill compat mode", K(ret), KPC(mds_param));
     } else {
       flush_scn_ = mds_param->flush_scn_;
       generate_ts_ = mds_param->generate_ts_;
@@ -87,10 +85,8 @@ int ObMdsTableMergeDag::fill_compat_mode_()
   ObLSHandle tmp_ls_handle;
   ObTabletHandle tmp_tablet_handle;
   if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, tmp_ls_handle, ObLSGetMod::COMPACT_MODE))) {
-    LOG_WARN("failed to get log stream", K(ret), K(ls_id_));
   } else if (OB_FAIL(tmp_ls_handle.get_ls()->get_tablet_svr()->get_tablet(
       tablet_id_, tmp_tablet_handle, 0/*timeout_us*/, storage::ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-    LOG_WARN("failed to get tablet", K(ret), K(ls_id_), K(tablet_id_));
   } else {
     compat_mode_ = tmp_tablet_handle.get_obj()->get_tablet_meta().compat_mode_;
   }
@@ -114,7 +110,6 @@ int ObMdsTableMergeDag::create_first_task()
   if (!need_create_task) { 
     FLOG_INFO("skip create mds table merge dag first task");
   } else if (OB_FAIL(create_task(nullptr/*parent*/, task))) {
-    STORAGE_LOG(WARN, "fail to alloc mds merge task", K(ret));
   }
   return ret;
 }
@@ -130,7 +125,6 @@ int ObMdsTableMergeDag::fill_info_param(compaction::ObIBasicInfoParam *&out_para
         ls_id_.id(),
         static_cast<int64_t>(tablet_id_.id()),
         static_cast<int64_t>(flush_scn_.get_val_for_inner_table_field())))) {
-      LOG_WARN("failed to fill info param", K(ret));
     }
   }
   return ret;
@@ -142,7 +136,6 @@ int ObMdsTableMergeDag::fill_dag_key(char *buf, const int64_t buf_len) const
 
   if (OB_FAIL(databuff_printf(buf, buf_len, "mds table merge task, ls_id=%ld, tablet_id=%ld, flush_scn=%ld",
       ls_id_.id(), tablet_id_.id(), flush_scn_.get_val_for_inner_table_field()))) {
-    LOG_WARN("failed to fill dag key", K(ret), K_(ls_id), K_(tablet_id), K_(flush_scn));
   }
 
   return ret;

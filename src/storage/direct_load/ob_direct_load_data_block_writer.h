@@ -140,7 +140,6 @@ int ObDirectLoadDataBlockWriter<Header, T, align>::init(
     STORAGE_LOG(WARN, "invalid args", KR(ret), K(data_block_size), K(compressor_type));
   } else {
     if (OB_FAIL(data_block_writer_.init(data_block_size, compressor_type))) {
-      STORAGE_LOG(WARN, "fail to init data block writer", KR(ret));
     } else {
       data_block_size_ = data_block_size;
       extra_buf_ = extra_buf;
@@ -170,7 +169,6 @@ int ObDirectLoadDataBlockWriter<Header, T, align>::open(
   } else {
     reuse();
     if (OB_FAIL(file_io_handle_.open(file_handle))) {
-      STORAGE_LOG(WARN, "fail to assign file handle", KR(ret));
     } else {
       is_opened_ = true;
     }
@@ -190,15 +188,11 @@ int ObDirectLoadDataBlockWriter<Header, T, align>::write_item(const T &item)
     STORAGE_LOG(WARN, "external block writer not open", KR(ret));
   } else {
     if (OB_FAIL(pre_write_item())) {
-      STORAGE_LOG(WARN, "fail to pre write item", KR(ret));
     } else if (OB_FAIL(data_block_writer_.write_item(item))) {
       if (OB_LIKELY(common::OB_BUF_NOT_ENOUGH == ret)) {
         if (OB_FAIL(flush_buffer())) {
-          STORAGE_LOG(WARN, "fail to flush buffer", KR(ret));
         } else if (OB_FAIL(pre_write_item())) {
-          STORAGE_LOG(WARN, "fail to pre write item", KR(ret));
         } else if (OB_FAIL(data_block_writer_.write_item(item))) {
-          STORAGE_LOG(WARN, "fail to write item", KR(ret));
         }
       } else {
         STORAGE_LOG(WARN, "fail to write item", KR(ret));
@@ -217,16 +211,13 @@ int ObDirectLoadDataBlockWriter<Header, T, align>::flush_buffer()
   OB_TABLE_LOAD_STATISTICS_TIME_COST(INFO, external_flush_buffer_time_us);
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(pre_flush_buffer())) {
-    STORAGE_LOG(WARN, "fail to pre flush buffer", KR(ret));
   } else {
     char *buf = nullptr;
     int64_t buf_size = 0;
     int64_t occupy_size = 0;
     if (OB_FAIL(data_block_writer_.build_data_block(buf, buf_size))) {
-      STORAGE_LOG(WARN, "fail to build data block", KR(ret));
     } else if (FALSE_IT(occupy_size = align ? ALIGN_UP(buf_size, DIO_ALIGN_SIZE) : buf_size)) {
     } else if (OB_FAIL(file_io_handle_.write(buf, occupy_size))) {
-      STORAGE_LOG(WARN, "fail to do write tmp file", KR(ret));
     } else if (nullptr != callback_ && OB_FAIL(callback_->write(buf, occupy_size, offset_))) {
       STORAGE_LOG(WARN, "fail to callback write", KR(ret));
     } else {
@@ -254,9 +245,7 @@ int ObDirectLoadDataBlockWriter<Header, T, align>::close()
     if (data_block_writer_.has_item() && OB_FAIL(flush_buffer())) {
       STORAGE_LOG(WARN, "fail to flush buffer", KR(ret));
     } else if (OB_FAIL(file_io_handle_.wait())) {
-      STORAGE_LOG(WARN, "fail to wait io finish", KR(ret));
     } else if (OB_FAIL(file_io_handle_.seal())) {
-      STORAGE_LOG(WARN, "failed to seal tmp file", KR(ret));
     } else {
       max_block_size_ = ALIGN_UP(max_block_size_, DIO_ALIGN_SIZE); // this value is currently not used, here it is just to pass the parameter check
       is_opened_ = false;

@@ -79,7 +79,6 @@ int compare_mds_serialized_buffer(const char *lhs_buffer,
                                                                     binary_meta.get_collation_type());
   common::ObDatumCmpFuncType cmp_func = is_null_last ? basic_funcs->null_last_cmp_ : basic_funcs->null_first_cmp_;
   if (OB_FAIL(cmp_func(lhs_datum, rhs_datum, compare_result))) {
-    MDS_LOG(WARN, "Failed to compare datum", K(ret), K(lhs_datum), K(rhs_datum), K(binary_meta));
   } else {
     MDS_LOG(DEBUG, "comapre mds serialized buffer", K(ret), K(compare_result), K(lhs_datum), K(rhs_datum),
             K(binary_meta), KP(lhs_buffer), K(lhs_buffer_len), KP(rhs_buffer), K(rhs_buffer_len));

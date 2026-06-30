@@ -476,7 +476,6 @@ int ObTabletPersister::fill_write_info(
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
       STORAGE_LOG(WARN, "fail to allocate memory for serialize", K(ret), K(size));
     } else if (OB_FAIL(t->serialize(buf, size, pos))) {
-      STORAGE_LOG(WARN, "fail to serialize member", K(ret), KP(buf), K(size), K(pos));
     } else {
       ObSharedObjectWriteInfo write_info;
       write_info.buffer_ = buf;
@@ -490,7 +489,6 @@ int ObTabletPersister::fill_write_info(
       }
 
       if (OB_FAIL(write_infos.push_back(write_info))) {
-        STORAGE_LOG(WARN, "fail to push back write info", K(ret));
       }
     }
   }

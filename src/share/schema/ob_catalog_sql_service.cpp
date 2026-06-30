@@ -56,7 +56,6 @@ int ObCatalogSqlService::apply_new_schema(const ObCatalogSchema &schema,
   }
 
   if (OB_FAIL(ret)) {
-    LOG_WARN("fail to exec ddl sql", K(ret), K(schema));
   } else {
     ObSchemaOperation operation;
 
@@ -67,7 +66,6 @@ int ObCatalogSqlService::apply_new_schema(const ObCatalogSchema &schema,
     operation.ddl_stmt_str_ = ddl_stmt_str;
 
     if (OB_FAIL(log_operation(operation, sql_client))) {
-      SHARE_SCHEMA_LOG(WARN, "Failed to log operation", K(ret));
     }
   }
 
@@ -109,9 +107,7 @@ int ObCatalogSqlService::add_schema(ObISQLClient &sql_client,
        OB_SUCC(ret) && i < ARRAYSIZEOF(tname);
        ++i) {
     if (OB_FAIL(sql.assign_fmt("INSERT INTO %s(", tname[i]))) {
-      STORAGE_LOG(WARN, "append table name failed", K(ret));
     } else if (OB_FAIL(gen_sql(sql, values, schema))) {
-      LOG_WARN("fail to gen sql", K(ret));
     } else if (i == THE_HISTORY_TABLE_IDX) {
       SQL_COL_APPEND_VALUE(sql, values, "false", "is_deleted", "%s");
       SQL_COL_APPEND_VALUE(sql, values, schema.get_schema_version(), "schema_version", "%ld");
@@ -120,9 +116,7 @@ int ObCatalogSqlService::add_schema(ObISQLClient &sql_client,
       if (OB_FAIL(sql.append_fmt(", gmt_modified) VALUES (%.*s, now(6))",
                                  static_cast<int32_t>(values.length()),
                                  values.ptr()))) {
-        LOG_WARN("append sql failed, ", K(ret));
       } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-        LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected value", K(affected_rows), K(sql), K(ret));
@@ -154,9 +148,7 @@ int ObCatalogSqlService::alter_schema(ObISQLClient &sql_client,
     if (OB_FAIL(sql.assign_fmt("%s INTO %s(",
                                (i != THE_HISTORY_TABLE_IDX) ? "REPLACE" : "INSERT",
                                tname[i]))) {
-      STORAGE_LOG(WARN, "append table name failed", K(ret));
     } else if (OB_FAIL(gen_sql(sql, values, schema))) {
-      LOG_WARN("fail to gen sql", K(ret));
     } else if (i == THE_HISTORY_TABLE_IDX) {
       SQL_COL_APPEND_VALUE(sql, values, "false", "is_deleted", "%s");
       SQL_COL_APPEND_VALUE(sql, values, schema.get_schema_version(), "schema_version", "%ld");
@@ -165,9 +157,7 @@ int ObCatalogSqlService::alter_schema(ObISQLClient &sql_client,
       if (OB_FAIL(sql.append_fmt(", gmt_modified) VALUES (%.*s, now(6))",
                                  static_cast<int32_t>(values.length()),
                                  values.ptr()))) {
-        LOG_WARN("append sql failed, ", K(ret));
       } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-        LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else if (!is_single_row(affected_rows) && !is_double_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected value", K(affected_rows), K(sql), K(ret));
@@ -197,9 +187,7 @@ int ObCatalogSqlService::drop_schema(ObISQLClient &sql_client,
     if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE catalog_id = %lu",
                               tname[THE_SYS_TABLE_IDX],
                               ObSchemaUtils::get_extract_schema_id(schema.get_catalog_id())))) {
-      LOG_WARN("fail to assign sql format", K(ret));
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", K(sql), K(ret));
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected value", K(affected_rows), K(sql), K(ret));
@@ -207,9 +195,7 @@ int ObCatalogSqlService::drop_schema(ObISQLClient &sql_client,
   }
   for (int64_t i = THE_HISTORY_TABLE_IDX; OB_SUCC(ret) && i < ARRAYSIZEOF(tname); ++i) {
     if (OB_FAIL(sql.assign_fmt("INSERT INTO %s(", tname[THE_HISTORY_TABLE_IDX]))) {
-      STORAGE_LOG(WARN, "append table name failed", K(ret));
     } else if (OB_FAIL(gen_sql(sql, values, schema))) {
-      LOG_WARN("fail to gen sql", K(ret));
     } else if (i == THE_HISTORY_TABLE_IDX) {
       SQL_COL_APPEND_VALUE(sql, values, "true", "is_deleted", "%s");
       SQL_COL_APPEND_VALUE(sql, values, schema.get_schema_version(), "schema_version", "%ld");
@@ -218,9 +204,7 @@ int ObCatalogSqlService::drop_schema(ObISQLClient &sql_client,
       if (OB_FAIL(sql.append_fmt(", gmt_modified) VALUES (%.*s, now(6))",
                                 static_cast<int32_t>(values.length()),
                                 values.ptr()))) {
-        LOG_WARN("append sql failed, ", K(ret));
       } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-        LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected value", K(affected_rows), K(sql), K(ret));
@@ -264,17 +248,14 @@ int ObCatalogSqlService::grant_revoke_catalog(const ObCatalogPrivSortKey &catalo
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(catalog_priv_key), K(ret));
   } else if (OB_FAIL(gen_catalog_priv_dml(catalog_priv_key, priv_set, dml))) {
-    LOG_WARN("gen_catalog_priv_dml failed", K(catalog_priv_key), K(priv_set), K(ret));
   }
   // insert into __all_catalog_privilege
   if (OB_SUCC(ret)) {
     if (is_deleted) {
       if (OB_FAIL(exec.exec_delete(OB_ALL_CATALOG_PRIVILEGE_TNAME, dml, affected_rows))) {
-        LOG_WARN("exec_delete failed", K(ret));
       }
     } else {
       if (OB_FAIL(exec.exec_replace(OB_ALL_CATALOG_PRIVILEGE_TNAME, dml, affected_rows))) {
-        LOG_WARN("exec_replace failed", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -289,7 +270,6 @@ int ObCatalogSqlService::grant_revoke_catalog(const ObCatalogPrivSortKey &catalo
         || OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
       LOG_WARN("add column failed", K(ret));
     } else if (OB_FAIL(exec.exec_replace(OB_ALL_CATALOG_PRIVILEGE_HISTORY_TNAME, dml, affected_rows))) {
-      LOG_WARN("exec_replace failed", K(ret));
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("affected_rows expeccted to be one", K(affected_rows), K(ret));
@@ -305,7 +285,6 @@ int ObCatalogSqlService::grant_revoke_catalog(const ObCatalogPrivSortKey &catalo
     priv_operation.schema_version_ = new_schema_version;
     priv_operation.ddl_stmt_str_ = ddl_stmt_str;
     if (OB_FAIL(log_operation(priv_operation, sql_client))) {
-      LOG_WARN("failed to log operation", K(ret));
     }
   }
   return ret;

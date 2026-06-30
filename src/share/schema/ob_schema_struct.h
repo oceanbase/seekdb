@@ -1811,8 +1811,6 @@ int ObSchema::set_charset_and_collation_options(common::ObCharsetType src_charse
     common::ObCharsetType charset_type = dst.get_charset_type();
     common::ObCollationType collation_type = dst.get_collation_type();
     if (OB_FAIL(common::ObCharset::check_and_fill_info(charset_type, collation_type))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to check charset collation",
-                       K(charset_type), K(collation_type), K(ret));
     } else {
       dst.set_charset_type(charset_type);
       dst.set_collation_type(collation_type);
@@ -3599,7 +3597,6 @@ int ObPartitionUtils::get_end_(
       rrow.projector_size_ = end_part.projector_size_;
       int cmp = 0;
       if (common::OB_SUCCESS != common::ObRowUtil::compare_row(lrow, rrow, cmp)) {
-        SHARE_SCHEMA_LOG(ERROR, "lhs or rhs is invalid");
       }
       if (0 == cmp) {
         if (pos == partition_num - 1) {
@@ -3629,8 +3626,6 @@ int ObPartitionUtils::get_end_(
     rrow.projector_size_ = partition_array[end_pos]->projector_size_;
     int cmp = 0;
     if (OB_SUCCESS != ObRowUtil::compare_row(lrow, rrow, cmp)) {
-      SHARE_SCHEMA_LOG(ERROR, "lhs or rhs is invalid", K(lrow), K(rrow), K(end_part),
-                       KPC(partition_array[end_pos]));
     } else if (cmp < 0) {
       end_pos--;
     }
@@ -4755,7 +4750,6 @@ struct ObOriginalDBKey
     
     user_id_ = src.user_id_;
     if (OB_FAIL(common::ob_write_string(allocator, src.db_, db_))) {
-      SHARE_SCHEMA_LOG(WARN,"failed to deep copy db", KR(ret), K(src.db_));
     }
     return ret;
   }
@@ -4946,9 +4940,7 @@ struct ObTablePrivSortKey
     
     user_id_ = src.user_id_;
     if (OB_FAIL(common::ob_write_string(allocator, src.db_, db_))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to deep copy db", KR(ret), K(src.db_));
     } else if (OB_FAIL(common::ob_write_string(allocator, src.table_, table_))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to deep copy table", KR(ret), K(src.table_));
     }
     return ret;
   }
@@ -5058,9 +5050,7 @@ struct ObRoutinePrivSortKey
     user_id_ = src.user_id_;
     routine_type_ = src.routine_type_;
     if (OB_FAIL(common::ob_write_string(allocator, src.db_, db_))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to deep copy db", KR(ret), K(src.db_));
     } else if (OB_FAIL(common::ob_write_string(allocator, src.routine_, routine_))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to deep copy routine", KR(ret), K(src.routine_));
     }
     return ret;
   }
@@ -5158,11 +5148,8 @@ struct ObColumnPrivSortKey
     int ret = OB_SUCCESS;
     user_id_ = src.user_id_;
     if (OB_FAIL(common::ob_write_string(allocator, src.db_, db_))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to deep copy db", KR(ret), K(src.db_));
     } else if (OB_FAIL(common::ob_write_string(allocator, src.table_, table_))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to deep copy table", KR(ret), K(src.table_));
     } else if (OB_FAIL(common::ob_write_string(allocator, src.column_, column_))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to deep copy table", KR(ret), K(src.column_));
     }
     return ret;
   }

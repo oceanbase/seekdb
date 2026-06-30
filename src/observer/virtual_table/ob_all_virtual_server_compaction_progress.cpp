@@ -43,7 +43,6 @@ int ObAllVirtualServerCompactionProgress::init()
     ret = OB_INIT_TWICE;
     SERVER_LOG(WARN, "ObAllVirtualServerCompactionProgress has been inited", K(ret));
   } else if (OB_FAIL(progress_iter_.open())) {
-    SERVER_LOG(WARN, "Fail to open suggestion iter", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -62,7 +61,6 @@ int ObAllVirtualServerCompactionProgress::inner_get_next_row(common::ObNewRow *&
       STORAGE_LOG(WARN, "Fail to get next suggestion info", K(ret));
     }
   } else if (OB_FAIL(fill_cells())) {
-    STORAGE_LOG(WARN, "Fail to fill cells", K(ret), K(progress_));
   } else {
     row = &cur_row_;
   }
@@ -126,7 +124,6 @@ int ObAllVirtualServerCompactionProgress::fill_cells()
         update_estimated_finish_time = 0;
         MOD_SCOPE {
           if (OB_TMP_FAIL(share::g_mp->tenant_dag_scheduler()->get_max_major_finish_time(progress_.merge_version_, update_estimated_finish_time))) {
-            SERVER_LOG(WARN, "failed to get max major_finish_time", K(tmp_ret));
           }
         }
         progress_.estimated_finish_time_ = MAX(progress_.estimated_finish_time_, update_estimated_finish_time);
@@ -146,7 +143,6 @@ int ObAllVirtualServerCompactionProgress::fill_cells()
           share::g_mp->server_compaction_event_history()->get_last_event(tmp_event);
           if (tmp_event.compaction_scn_ == progress_.merge_version_) {
             if (OB_FAIL(tmp_event.generate_event_str(event_buf_, sizeof(event_buf_)))) {
-              SERVER_LOG(WARN, "failed to generate event str", K(ret), K(tmp_event));
             }
           }
         }

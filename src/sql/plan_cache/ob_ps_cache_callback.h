@@ -58,12 +58,10 @@ public:
         // use cas, because auto cache evict and flush ps cache may concurrent processing
         if (ATOMIC_BCAS(entry.second->get_is_expired_evicted_ptr(), false, true)) {
           if (OB_SUCCESS != (callback_ret_ = expired_ps_->push_back(id_time))) {
-            SQL_PC_LOG(WARN, "fail to push back key", K_(callback_ret));
           }
         }
       } else {
         if (OB_SUCCESS != (callback_ret_ = closed_ps_->push_back(id_time))) {
-          SQL_PC_LOG(WARN, "fail to push back key", K_(callback_ret));
         } else {
           used_size_ += entry.second->get_item_and_info_size();
         }

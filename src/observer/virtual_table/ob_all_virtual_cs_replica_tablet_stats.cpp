@@ -95,10 +95,8 @@ int ObAllVirtualTableLSTabletIter::get_next_ls(ObLS *&ls)
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(ERROR, "ls is null", K(ret));
     } else if (OB_FAIL(check_need_iterate_ls(*ls, need_iterate))) {
-      SERVER_LOG(WARN, "fail to check if ls need iterate", K(ret), KPC(ls));
     } else if (need_iterate) {
       if (OB_FAIL(inner_get_ls_infos(*ls))) {
-        SERVER_LOG(WARN, "fail to get ls infos", K(ret), KPC(ls));
       }
       break;
     }
@@ -117,7 +115,6 @@ int ObAllVirtualTableLSTabletIter::get_next_tablet(ObTabletHandle &tablet_handle
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "ls service is null", K(ret));
     } else if (OB_FAIL(ls_service->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
-      SERVER_LOG(WARN, "failed to get ls iter", K(ret));
     }
   }
 
@@ -129,7 +126,6 @@ int ObAllVirtualTableLSTabletIter::get_next_tablet(ObTabletHandle &tablet_handle
           SERVER_LOG(WARN, "fail to get next ls", K(ret));
         }
       } else if (OB_FAIL(ls->build_tablet_iter(ls_tablet_iter_))) {
-        SERVER_LOG(WARN, "fail to build tablet iter", K(ret));
       }
     }
 
@@ -171,7 +167,6 @@ int ObAllVirtualCSReplicaTabletStats::inner_get_ls_infos(const ObLS &ls)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ls.get_ls_meta().get_migration_status(migration_status_))) {
-    SERVER_LOG(WARN, "failed to get migration status", K(ret), K(ls));
   }
   return ret;
 }

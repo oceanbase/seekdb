@@ -69,7 +69,6 @@ int ObTabletMergeInfo::prepare_sstable_builder(const ObITableReadInfo *index_rea
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
   } else if (OB_FAIL(sstable_builder_.set_index_read_info(index_read_info))) {
-    LOG_WARN("failed to init sstable builder", K(ret), KPC(index_read_info));
   }
   return ret;
 }
@@ -81,7 +80,6 @@ int ObTabletMergeInfo::prepare_index_builder()
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
   } else if (OB_FAIL(sstable_builder_.prepare_index_builder())) {
-    LOG_WARN("failed to init index builder", K(ret));
   }
   return ret;
 }
@@ -100,8 +98,6 @@ int ObTabletMergeInfo::build_create_sstable_param(const ObBasicTabletMergeCtx &c
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table column cnt is unexpected mismatched!", K(ret), KPC(cg_schema), K(res));
   } else if (OB_FAIL(param.init_for_merge(ctx, res, cg_schema, column_group_idx))) {
-    LOG_WARN("fail to init create sstable param for merge",
-        K(ret), K(ctx), K(res), KPC(cg_schema), K(column_group_idx));
   } else if (ctx.get_tablet_id().is_ls_tx_data_tablet()) {
       ret = record_start_tx_scn_for_tx_data(ctx, param);
   }
@@ -135,7 +131,6 @@ int ObTabletMergeInfo::record_start_tx_scn_for_tx_data(const ObBasicTabletMergeC
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("tx data sstable is unexpected nullptr", KR(ret));
     } else if (OB_FAIL(oldest_tx_data_sstable->get_meta(sstable_meta_hdl))) {
-      LOG_WARN("fail to get sstable meta handle", K(ret));
     } else {
       param.set_filled_tx_scn(sstable_meta_hdl.get_sstable_meta().get_filled_tx_scn());
 
@@ -180,7 +175,6 @@ int ObTabletMergeInfo::create_sstable(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid merge ctx", K(ret), K(ctx), KPC(cg_schema), K(column_group_idx));
   } else if (OB_FAIL(ctx.get_macro_seq_by_stage(BUILD_INDEX_TREE, macro_start_seq))) {
-    LOG_WARN("failed to get macro seq", KR(ret), K(macro_start_seq), K(ctx));
   } else if (NULL == cg_schema) {
     // row store mode, do nothing
   } else {
@@ -207,10 +201,8 @@ int ObTabletMergeInfo::create_sstable(
                         sstable->get_macro_offset(), res))) {
         LOG_WARN("fail to close index builder for reused small sstable", K(ret), KPC(sstable));
       } else if (OB_FAIL(ctx.get_macro_seq_by_stage(GET_NEW_ROOT_MACRO_SEQ, new_root_macro_seq))) {
-        LOG_WARN("failed to get macro seq", KR(ret), K(new_root_macro_seq), K(ctx));
       } else if (FALSE_IT(res.root_macro_seq_ = new_root_macro_seq)) {
       } else if (OB_FAIL(build_create_sstable_param(ctx, res, param, cg_schema, column_group_idx))) {
-        LOG_WARN("fail to build create sstable param", K(ret));
       } else if (is_main_table) { // should build co sstable
         if (OB_FAIL(ObTabletCreateDeleteHelper::create_sstable<ObCOSSTableV2>(param, 
                                                                               ctx.mem_ctx_.get_allocator(), 
@@ -239,13 +231,9 @@ int ObTabletMergeInfo::create_sstable(
           LOG_WARN("fail to create sstable", K(ret), K(param));
           CTX_SET_DIAGNOSE_LOCATION(ctx);
         } else if (OB_FAIL(tmp_handle.get_sstable(sstable))) {
-          STORAGE_LOG(WARN, "Failed to get sstable", K(ret));
         } else if (OB_FAIL(sstable->deep_copy(ctx.mem_ctx_.get_safe_arena(), new_sstable, true/*transfer macro ref*/))) {
-          STORAGE_LOG(WARN, "Failed to deep copy sstable", K(ret));
         } else if (OB_FAIL(ctx.try_set_upper_trans_version(*sstable))) {
-          LOG_WARN("failed to set upper trans version", K(ret), K(param));
         } else if (OB_FAIL(merge_table_handle.set_sstable(new_sstable, &ctx.mem_ctx_.get_safe_arena()))) {
-          STORAGE_LOG(WARN, "Failed to set sstable", K(ret));
         }
       }
 

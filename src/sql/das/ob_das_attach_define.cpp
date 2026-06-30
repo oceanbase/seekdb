@@ -132,7 +132,6 @@ OB_DEF_DESERIALIZE(ObDASAttachSpec)
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("allocate table location meta failed", K(ret));
       } else if (OB_FAIL(attach_loc_metas_.push_back(loc_meta))) {
-        LOG_WARN("store attach loc meta failed", K(ret));
       } else {
         OB_UNIS_DECODE(*loc_meta);
       }
@@ -215,7 +214,6 @@ int ObDASAttachSpec::deserialize_ctdef_tree(const char *buf,
     OB_UNIS_DECODE(op_type);
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObDASTaskFactory::alloc_das_ctdef(op_type, allocator_, root))) {
-        LOG_WARN("allooc das ctde failed", K(ret), K(op_type));
       }
     }
     OB_UNIS_DECODE(*root);
@@ -278,7 +276,6 @@ int ObDASAttachSpec::set_calc_exprs_tree(ObDASAttachCtDef *root,
       OZ(set_calc_exprs_tree(attach_child, calc_exprs, max_batch_size));
     } else if (child->op_type_ == DAS_OP_TABLE_SCAN) {
       if (OB_FAIL(static_cast<ObDASScanCtDef *>(child)->pd_expr_spec_.set_calc_exprs(calc_exprs, max_batch_size))) {
-        LOG_WARN("failed to set scan calc exprs", K(ret), KPC(child));
       }
     }
   }

@@ -68,8 +68,6 @@ int ObDirectLoadMultipleSSTableScanMergeLoserTreeCompare::cmp(
   } else {
     int tmp_cmp_ret = 0;
     if (OB_FAIL(lhs.row_->rowkey_.compare(rhs.row_->rowkey_, *datum_utils_, tmp_cmp_ret))) {
-      LOG_WARN("fail to compare rowkey", K(ret), K(lhs.row_->rowkey_), K(rhs.row_->rowkey_),
-               KPC(datum_utils_));
     } else {
       cmp_ret = tmp_cmp_ret;
     }

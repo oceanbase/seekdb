@@ -71,14 +71,12 @@ public:
     if (inner_op_ctx_.table_store_.is_inited()) {
       // 如果一个TableOp有输入数据通道, 则可能被prepare多次
     } else if (OB_FAIL(inner_op_ctx_.table_store_.init())) {
-      SERVER_LOG(WARN, "fail to init table store", KR(ret));
     } else {
       // 这里只设置table_data_desc
       // table类型由第一个推数据的对象设置, 后续推数据的对象都要校验table类型
       ObDirectLoadTableDataDesc table_data_desc;
       if (OB_FAIL(inner_op_ctx_.store_table_ctx_->get_table_data_desc(input_data_type,
                                                                       table_data_desc))) {
-        SERVER_LOG(WARN, "fail to get table data desc", KR(ret));
       } else {
         inner_op_ctx_.table_store_.set_table_data_desc(table_data_desc);
       }
@@ -91,7 +89,6 @@ public:
     int ret = OB_SUCCESS;
     ObTableLoadStoreCtx *store_ctx = plan_->get_store_ctx();
     if (OB_FAIL(prepare())) {
-      SERVER_LOG(WARN, "fail to prepare", KR(ret));
     }
     // 1. insert_table_ctx_
     if (OB_SUCC(ret)) {
@@ -106,7 +103,6 @@ public:
         SERVER_LOG(WARN, "fail to init trans param", KR(ret));
       } else if (OB_FAIL(inner_op_ctx_.store_table_ctx_->open_insert_table_ctx(
                    param, inner_op_ctx_.allocator_, inner_op_ctx_.insert_table_ctx_))) {
-        SERVER_LOG(WARN, "fail to open insert table ctx", KR(ret));
       }
     }
     // 2. dml_row_handler_
@@ -117,7 +113,6 @@ public:
         ret = OB_ALLOCATE_MEMORY_FAILED;
         SERVER_LOG(WARN, "fail to new dml row handler", KR(ret));
       } else if (OB_FAIL(dml_row_handler->init())) {
-        SERVER_LOG(WARN, "fail to init dml row handler", KR(ret));
       }
     }
     // 3. merge_mode_
@@ -127,7 +122,6 @@ public:
     for (int64_t i = 0; OB_SUCC(ret) && i < output_channels_.count(); ++i) {
       ObTableLoadTableChannel *table_channel = output_channels_.at(i);
       if (OB_FAIL(table_channel->open())) {
-        SERVER_LOG(WARN, "fail to open table channel", KR(ret), KPC(table_channel));
       }
     }
     return ret;
@@ -140,7 +134,6 @@ public:
     for (int64_t i = 0; OB_SUCC(ret) && i < output_channels_.count(); ++i) {
       ObTableLoadTableChannel *table_channel = output_channels_.at(i);
       if (OB_FAIL(table_channel->close())) {
-        SERVER_LOG(WARN, "fail to close table channel", KR(ret), KPC(table_channel));
       }
     }
 
@@ -148,13 +141,11 @@ public:
     if (OB_SUCC(ret) && ObTableLoadTableOpOpenFlag::need_online_opt_stat_gather(open_flag)) {
       if (OB_FAIL(inner_op_ctx_.insert_table_ctx_->collect_sql_stats(
             plan_->get_store_ctx()->dml_stats_, plan_->get_store_ctx()->sql_stats_))) {
-        SERVER_LOG(WARN, "fail to collect sql stats", KR(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(inner_op_ctx_.insert_table_ctx_->close())) {
-        SERVER_LOG(WARN, "fail to close insert table ctx", KR(ret));
       } else {
         reset();
       }

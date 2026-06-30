@@ -203,7 +203,6 @@ int ObLobSeqId::get_next_seq_id(ObString& seq_id, ObLobSeqId &end)
         seq_id.assign_ptr(buf_, len_);
       }
     } else if (OB_FAIL(replace_seq_buf_last_node(static_cast<uint32_t>(cur)))) {
-      LOG_WARN("failed replace seq node.", K(ret), K(len_), K(cap_), K(dig_len_), K(dig_cap_));
     } else {
       seq_id.assign_ptr(buf_, len_);
     }
@@ -233,7 +232,6 @@ int ObLobSeqId::get_next_seq_id(ObString& seq_id)
         seq_id.assign_ptr(buf_, len_);
       }
     } else if (OB_FAIL(replace_seq_buf_last_node(static_cast<uint32_t>(cur)))) {
-      LOG_WARN("failed replace seq node.", K(ret), K(len_), K(cap_), K(dig_len_), K(dig_cap_));
     } else {
       seq_id.assign_ptr(buf_, len_);
     }
@@ -290,7 +288,6 @@ int ObLobSeqId::add_digits(uint32_t val)
     digits_[dig_len_] = val;
     ++dig_len_;
   } else if (OB_FAIL(extend_digits())) {
-    LOG_WARN("failed add digits, extend buf null.", K(ret));
   } else {
     ret = add_digits(val);
   }
@@ -308,7 +305,6 @@ int ObLobSeqId::append_seq_buf(uint32_t val)
     (void)store32be(buf_ + len_, val);
     len_ += sizeof(val);
   } else if (OB_FAIL(extend_seq_buf())) {
-    LOG_WARN("failed extend seq buf, extend buf null.", K(ret), K(len_), K(cap_));
   } else {
     ret = append_seq_buf(val);
   }
@@ -329,7 +325,6 @@ int ObLobSeqId::replace_seq_buf_last_node(uint32_t val)
       len_ = last_seq_buf_pos_ + sizeof(val);
     }
   } else if (OB_FAIL(extend_seq_buf())) {
-    LOG_WARN("failed extend seq buf, extend buf null.", K(ret), K(len_), K(cap_));
   } else {
     ret = replace_seq_buf_last_node(val);
   }
@@ -402,9 +397,7 @@ int ObLobSeqId::parse()
       while (OB_SUCC(ret) && cur_pos < ori_len) {
         uint32_t val = load32be(tmp_seq.ptr() + sizeof(uint32_t) * cur_pos);
         if (OB_FAIL(add_digits(val))) {
-          LOG_WARN("add_digits failed.", K(ret), K(val));
         } else if (OB_FAIL(append_seq_buf(val))) {
-          LOG_WARN("append_seq_buf failed.", K(ret), K(val));
         } else {
           cur_pos++;
         }

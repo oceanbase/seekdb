@@ -98,7 +98,6 @@ int ObAllVirtualLSInfo::inner_get_next_row(ObNewRow *&row)
           if (OB_FAIL(role_to_string(ls_info.ls_state_,
                                      state_name_,
                                      sizeof(state_name_)))) {
-            SERVER_LOG(WARN, "get state role name failed", K(ret), K(role));
           } else {
             state_name_[MAX_LS_STATE_LENGTH - 1] = '\0';
             cur_row_.cells_[i].set_varchar(state_name_);

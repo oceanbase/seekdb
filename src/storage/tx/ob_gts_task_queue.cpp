@@ -142,7 +142,6 @@ int ObGTSTaskQueue::push(ObTsCbTask *task)
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), KP(task));
   } else if (OB_FAIL(queue_.push(task))) {
-    TRANS_LOG(ERROR, "push gts task failed", K(ret), KP(task));
   } else {
     TRANS_LOG(DEBUG, "push gts task success", KP(task));
   }
@@ -180,8 +179,6 @@ int ObGTSTaskQueue::gts_callback_interrupted(const int errcode, const share::ObL
               // case 2, errcode is OB_LS_OFFLINE and task is an object of ObTsSyncGetTsCbTask
               // return OB_EAGAIN
               if (OB_FAIL(queue_.push(task))) {
-                // since task is not null, this failure is impossible
-                TRANS_LOG(ERROR, "push gts task failed", KR(ret), KP(task));
               } else {
                 TRANS_LOG(DEBUG, "push back gts task", KP(task));
               }

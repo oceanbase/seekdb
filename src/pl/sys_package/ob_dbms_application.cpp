@@ -77,9 +77,7 @@ int ObDBMSAppInfo::set_action(sql::ObExecContext &ctx, sql::ParamStore &params, 
     if (OB_FAIL(ret)) {
 
     } else if (OB_FAIL(mgr.init())) {
-      LOG_WARN("failed to init full link trace info manager", K(ret));
     } else if (OB_FAIL(mgr.find_appropriate_con_info(*sess))) {
-      LOG_WARN("failed to get control info for client info", K(ret));
     } else {
       // do nothing
     }
@@ -114,9 +112,7 @@ int ObDBMSAppInfo::set_client_info(sql::ObExecContext &ctx, sql::ParamStore &par
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(mgr.init())) {
-      LOG_WARN("failed to init full link trace info manager", K(ret));
     } else if (OB_FAIL(mgr.find_appropriate_con_info(*sess))) {
-      LOG_WARN("failed to get control info for client info", K(ret), K(client_info));
     } else {
       // do nothing
     }
@@ -159,9 +155,7 @@ int ObDBMSAppInfo::set_module(sql::ObExecContext &ctx, sql::ParamStore &params, 
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(mgr.init())) {
-      LOG_WARN("failed to init full link trace info manager", K(ret));
     } else if (OB_FAIL(mgr.find_appropriate_con_info(*sess))) {
-      LOG_WARN("failed to get control info for client info", K(ret));
     } else {
       // do nothing
     }

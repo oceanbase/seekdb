@@ -179,12 +179,10 @@ int LogGroupBuffer::get_log_buf(const LSN &lsn, const int64_t total_len, LogWrit
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "lsn is less than start_lsn", K(ret), K(lsn), K_(start_lsn));
   } else if (OB_FAIL(get_buffer_pos_(lsn, start_pos))) {
-    PALF_LOG(WARN, "get_buffer_pos_ failed", K(ret), K(lsn));
   } else {
     const int64_t group_buf_tail_len = get_reserved_buffer_size() - start_pos;
     const int64_t first_part_len = min(group_buf_tail_len, total_len);
     if (OB_FAIL(log_buf.push_back(data_buf_ + start_pos, first_part_len))) {
-      PALF_LOG(WARN, "log_buf push_back failed", K(ret), K(lsn));
     } else if (total_len > first_part_len
                && OB_FAIL(log_buf.push_back(data_buf_, total_len - first_part_len))) {
       PALF_LOG(WARN, "log_buf push_back failed", K(ret), K(lsn));
@@ -225,13 +223,10 @@ int LogGroupBuffer::fill(const LSN &lsn,
     ret = OB_EAGAIN;
     PALF_LOG(WARN, "end_lsn is greater than reuse end pos", K(ret), K(lsn), K(end_lsn), K(reuse_lsn), K(available_buf_size));
   } else if (OB_FAIL(get_buffer_pos_(lsn, start_pos))) {
-    PALF_LOG(WARN, "get_buffer_pos_ failed", K(ret), K(lsn));
-  // update readable_begin_lsn_ before filling buffer
   } else if (FALSE_IT(gen_readable_begin_lsn_for_filling_(end_lsn, new_readable_begin_lsn))) {
   } else if (FALSE_IT(inc_update_readable_begin_lsn_(new_readable_begin_lsn))) {
     PALF_LOG(WARN, "inc_update_readable_begin_lsn_ failed", K(ret), K(lsn), K(end_lsn), K(new_readable_begin_lsn));
   } else if (OB_FAIL(fill_(lsn, start_pos, data, data_len))) {
-    PALF_LOG(WARN, "fill data failed", K(lsn), K(data_len), KP(data_buf_));
   } else {
     PALF_LOG(TRACE, "fill group buffer success", K(ret), K(lsn), K(data_len), KP(data_buf_));
   }
@@ -269,8 +264,6 @@ int LogGroupBuffer::fill_padding_body(const LSN &lsn,
     ret = OB_EAGAIN;
     PALF_LOG(WARN, "end_lsn is greater than reuse end pos", K(ret), K(lsn), K(end_lsn), K(reuse_lsn), K(available_buf_size));
   } else if (OB_FAIL(get_buffer_pos_(lsn, start_pos))) {
-    PALF_LOG(WARN, "get_buffer_pos_ failed", K(ret), K(lsn));
-  // update readable_begin_lsn_ before filling buffer
   } else if (FALSE_IT(gen_readable_begin_lsn_for_filling_(end_lsn, new_readable_begin_lsn))) {
   } else if (FALSE_IT(inc_update_readable_begin_lsn_(new_readable_begin_lsn))) {
     PALF_LOG(WARN, "inc_update_readable_begin_lsn_ failed", K(ret), K(lsn), K(end_lsn), K(new_readable_begin_lsn));
@@ -285,8 +278,6 @@ int LogGroupBuffer::fill_padding_body(const LSN &lsn,
     }
     // fill valid padding data.
     if (OB_FAIL(fill_(lsn, start_pos, data, data_len))) {
-      PALF_LOG(WARN, "fill padding data filled", K(ret), K(lsn), K(log_body_size), K(start_pos), K(data_len),
-          K(group_buf_tail_len), K(first_part_len), "second_part_len", data_len - first_part_len);
     } else {
       PALF_LOG(INFO, "fill padding log success", K(ret), K(lsn), K(log_body_size), K(start_pos), K(data_len),
           K(group_buf_tail_len), K(first_part_len), "second_part_len", data_len - first_part_len);
@@ -331,7 +322,6 @@ int LogGroupBuffer::check_log_buf_wrapped(const LSN &lsn, const int64_t log_len,
   } else if (lsn < start_lsn) {
     PALF_LOG(WARN, "lsn is less than start_lsn", K(ret), K(lsn), K_(start_lsn));
   } else if (OB_FAIL(get_buffer_pos_(lsn, start_pos))) {
-    PALF_LOG(WARN, "get_buffer_pos_ failed", K(ret), K(lsn));
   } else if (start_pos + log_len > get_reserved_buffer_size()) {
     is_buf_wrapped = true;
     PALF_LOG(INFO, "this log buf is wrapped", K(ret), K(lsn), K(log_len), K(start_pos), K_(reserved_buffer_size));
@@ -485,7 +475,6 @@ int LogGroupBuffer::read_data(const LSN &read_begin_lsn,
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "invalid argumetns", K(read_begin_lsn), K(in_read_size), KP(buf));
   } else if (OB_FAIL(get_buffer_pos_(read_begin_lsn, start_pos))) {
-    PALF_LOG(WARN, "get_buffer_pos_ failed", K(ret), K(read_begin_lsn));
   } else {
     LSN curr_reuse_lsn;
     get_reuse_lsn_(curr_reuse_lsn);

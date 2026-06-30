@@ -128,7 +128,6 @@ public :
     if (OB_ISNULL(root_)) {
       r_node = NULL;
     } else if (OB_FAIL(merge_aux())) {
-      OB_LOG(ERROR, "paring heap merge aux fail", K(ret));
     } else {
       r_node = root_;
     }
@@ -189,7 +188,6 @@ public :
     int ret = OB_SUCCESS;
 
     if (OB_FAIL(merge_aux())) {
-      OB_LOG(ERROR, "paring heap merge aux fail", K(ret));
     } else {
       r_node = root_;
       ret = merge_children(root_, root_);
@@ -243,7 +241,6 @@ public :
         }
       } else {
         if (OB_FAIL(merge_aux())) {
-          OB_LOG(ERROR, "paring heap merge aux fail", K(ret));
         } else {
           if (root_ == phn) {
             ret = merge_children(root_, root_);
@@ -258,7 +255,6 @@ public :
         }
       }
       if (OB_FAIL(merge_children(phn, replace))) {
-        OB_LOG(ERROR, "paring heap merge children fail", K(ret));
       } else {
         if (OB_NOT_NULL(replace)) {
           if (OB_NOT_NULL(parent)) {
@@ -334,12 +330,10 @@ public :
       r_phn = phn_first;
     } else if (compare_.compare(phn_first, phn_second) < 0) {
       if (OB_FAIL(merge_ordered(phn_first, phn_second))) {
-        OB_LOG(ERROR, "paring heap merge ordered fail", K(ret));
       } else {
         r_phn = phn_first;
       }
     } else if (OB_FAIL(merge_ordered(phn_second, phn_first))) {
-      OB_LOG(ERROR, "paring heap merge ordered fail", K(ret));
     } else {
       r_phn = phn_second;
     }
@@ -376,7 +370,6 @@ public :
       set_prev(phn_second, NULL);
       set_next(phn_second, NULL);
       if (OB_FAIL(merge(phn_first, phn_second, phn_first))) {
-        OB_LOG(ERROR, "paring heap merge fail", K(ret));
       } else {
         head = tail = phn_first;
         phn_first = phnrest;
@@ -392,7 +385,6 @@ public :
             set_prev(phn_second, NULL);
             set_next(phn_second, NULL);
             if (OB_FAIL(merge(phn_first, phn_second, phn_first))) {
-              OB_LOG(ERROR, "paring heap merge fail", K(ret));
             } else {
               set_next(tail, phn_first);
               tail = phn_first;
@@ -422,7 +414,6 @@ public :
                 } else {
                   set_next(phn_second, NULL);
                   if (OB_FAIL(merge(phn_first, phn_second, phn_first))) {
-                    OB_LOG(ERROR, "paring heap merge fail", K(ret));
                   } else if (OB_NOT_NULL(head)) {
                     set_next(tail, phn_first);
                     tail = phn_first;
@@ -450,7 +441,6 @@ public :
       set_next(root_, NULL);
       set_prev(phn, NULL);
       if (OB_FAIL(merge_siblings(phn, phn))) {
-        OB_LOG(ERROR, "paring heap merge siblings fail", K(ret));
       } else if (OB_NOT_NULL(get_next(phn))) {
         ret = OB_ERROR;
         OB_LOG(ERROR, "paring heap next should  be NULL", K(ret));

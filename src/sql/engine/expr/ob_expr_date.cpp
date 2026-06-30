@@ -51,7 +51,6 @@ int ObExprDate::eval_date(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum
   int ret = OB_SUCCESS;
   ObDatum *param = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param))) {
-    LOG_WARN("fail to eval conv", K(ret), K(expr));
   } else if (param->is_null()) {
     res_datum.set_null();
   } else {
@@ -120,7 +119,6 @@ int ObExprDate::eval_date_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBit
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval date param", K(ret));
   } else {
     VectorFormat arg_format = expr.args_[0]->get_format(ctx);
     VectorFormat res_format = expr.get_format(ctx);
@@ -147,7 +145,6 @@ int ObExprDate::eval_date_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBit
     }
 
     if (OB_FAIL(ret)) {
-      LOG_WARN("expr calculation failed", K(ret));
     }
   }
   return ret;

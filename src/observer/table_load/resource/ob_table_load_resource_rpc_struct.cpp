@@ -48,7 +48,6 @@ OB_DEF_DESERIALIZE(ObDirectLoadResourceOpResult)
                 tmp_res_content);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ob_write_string(*allocator_, tmp_res_content, res_content_))) {
-      LOG_WARN("fail to copy string", K(ret));
     }
   }
 

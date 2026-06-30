@@ -65,7 +65,6 @@ int ObExprLastTraceId::eval_last_trace_id(const ObExpr &expr, ObEvalCtx &ctx,
         SERVER_LOG(WARN, "buff is null", K(ret));
       } else {
         if (OB_FAIL(databuff_printf(buf, MAX_BUF_LEN, pos, trace_id))) {
-          SQL_ENG_LOG(WARN, "fail to databuff_printf", K(ret));
         } else {
           expr_datum.set_string(buf, pos);
         }

@@ -85,9 +85,7 @@ int ObMViewUpdateDepsTask::need_schedule(bool &need_sche)
                                "SELECT 1 FROM `%s`.`%s` t1, `%s`.`%s` t2"
                                " WHERE t1.mview_id = t2.p_obj) as exist_nested",
                                OB_SYS_DATABASE_NAME, OB_ALL_MVIEW_DEP_TNAME, OB_SYS_DATABASE_NAME, OB_ALL_MVIEW_DEP_TNAME))) {
-      LOG_WARN("failed to assign sql", KR(ret));
     } else if (OB_FAIL(GCTX.sql_proxy_->read(res, sql.ptr()))) {
-      LOG_WARN("fail to execute sql", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("result is null", KR(ret));
@@ -113,12 +111,10 @@ void ObMViewUpdateDepsTask::runTimerTask()
   int64_t curr_ts = ObTimeUtil::current_time();
   if (curr_ts - last_sched_ts_ > 20 * 1000 * 1000) {
     if (OB_FAIL(need_schedule(need_sched))) {
-      LOG_WARN("fail to check need schedule", K(ret), K(need_sched));
     }
   }
   if (OB_FAIL(ret) || !need_sched) {
   } else if (OB_FAIL(share::g_mp->m_view_maintenance_service()->get_all_mview_deps())) {
-    LOG_WARN("update_mview_mds_op failed", KR(ret));
   } else {
     last_sched_ts_ = curr_ts;
   }

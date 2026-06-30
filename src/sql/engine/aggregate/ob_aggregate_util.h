@@ -94,7 +94,6 @@ int number_accumulator(
         // copy result to ori_result to fall back
         MEMSET(buf_ori_result, 0, sizeof(char) * ObNumber::MAX_CALC_BYTE_LEN);
         if (OB_FAIL(ori_result.deep_copy_v3(result, allocator_ori_result))) {
-          LOG_WARN("deep copy number failed", K(ret));
         } else {
           ori_result_copied = true;
         }
@@ -217,7 +216,6 @@ int number_accumulator(
       ObDataBuffer &allocator = (normal_sum_path_counter % 2 == 0) ? allocator1 : allocator2;
       allocator.free();
       if (OB_FAIL(result.add_v3(sum, res, allocator, true, true))) {
-        LOG_WARN("number_accumulator sum error", K(ret), K(sum), K(result));
       } else {
         result.assign(res.d_.desc_, res.get_digits());
       }

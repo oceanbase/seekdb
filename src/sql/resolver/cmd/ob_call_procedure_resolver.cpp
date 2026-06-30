@@ -76,13 +76,11 @@ int ObCallProcedureResolver::resolve_cparams(const ParseNode *params_node,
       } else if (T_SP_CPARAM == params_node->children_[i]->type_) {
         has_assign_param = true;
         if (OB_FAIL(resolve_cparam_with_assign(params_node->children_[i], routine_info, params, deps))) {
-          LOG_WARN("failed to resolve cparam with assign", K(ret));
         }
       } else if (has_assign_param) {
         ret = OB_ERR_SP_WRONG_ARG_NUM;
         LOG_WARN("can not set param without assign after param with assign", K(ret));
       } else if (OB_FAIL(resolve_cparam_without_assign(params_node->children_[i], i, params, deps))) {
-        LOG_WARN("failed to resolve cparam without assign", K(ret), K(i));
       }
     }
   }
@@ -142,12 +140,10 @@ int ObCallProcedureResolver::resolve_cparam_without_assign(const ParseNode *para
     ret = OB_ERR_SP_DUP_PARAM;
     LOG_WARN("dup params", K(ret), K(position));
   } else if (OB_FAIL(pl::ObPLResolver::resolve_raw_expr(*param_node, params_, param, false, nullptr, &deps))) {
-    LOG_WARN("failed to resolve const expr", K(ret));
   } else if (OB_ISNULL(param)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("param expr is null", K(ret), K(param));
   } else if (OB_FAIL(check_param_expr_legal(param))) {
-    LOG_WARN("failed to check param expr legal", K(ret), KPC(param));
   } else if (T_OP_ROW == param->get_expr_type() && 1 != param->get_param_count()) {
     ret = OB_ERR_INVALID_COLUMN_NUM;
     LOG_USER_ERROR(OB_ERR_INVALID_COLUMN_NUM, static_cast<int64_t>(1));
@@ -197,12 +193,10 @@ int ObCallProcedureResolver::resolve_cparam_with_assign(const ParseNode *param_n
       ObString name = ObString(static_cast<int32_t>(name_node->str_len_), name_node->str_value_);
       int64_t position = -1;
       if (OB_FAIL(routine_info->find_param_by_name(name, position))) {
-        LOG_WARN("failed to find param name in proc info", K(ret), K(name), K(*routine_info));
       } else if (OB_UNLIKELY(-1 == position)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid postition value", K(ret), K(position));
       } else if (OB_FAIL(resolve_cparam_without_assign(param_node->children_[1], position, params, deps))) {
-        LOG_WARN("failed to resolve cparam without assign", K(ret));
       }
     }
   }
@@ -264,7 +258,6 @@ int ObCallProcedureResolver::add_call_proc_info(ObCallProcedureInfo *call_info)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("argument is NULL", K(ret));
   } else if (OB_FAIL(generate_pl_cache_ctx(pc_ctx))) {
-    LOG_WARN("generate pl cache ctx failed", K(ret));
   } else if (OB_FAIL(pl::ObPLCacheMgr::add_pl_cache(plan_cache, call_info, pc_ctx))) {
     if (OB_SQL_PC_PLAN_DUPLICATE == ret) {
       ret = OB_SUCCESS;
@@ -302,7 +295,6 @@ int ObCallProcedureResolver::find_call_proc_info(ObCallProcedureStmt &stmt)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("argument is NULL", K(ret));
   } else if (OB_FAIL(generate_pl_cache_ctx(pc_ctx))) {
-    LOG_WARN("generate pl cache ctx failed", K(ret));
   } else if (OB_FAIL(pl::ObPLCacheMgr::get_pl_cache(plan_cache, stmt.get_cacheobj_guard(), pc_ctx))) {
       LOG_INFO("get pl function by sql failed, will ignore this error",
               K(ret), K(pc_ctx.key_));
@@ -369,7 +361,6 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
                                                             *name_node,
                                                             db_name, package_name, sp_name,
                                                             dblink_name))) {
-          LOG_WARN("resolve sp name failed", K(ret));
         } else if (db_name.empty() && session_info_->get_database_name().empty()) {
           ret = OB_ERR_NO_DB_SELECTED;
           LOG_WARN("no database selected", K(ret), K(db_name));
@@ -401,7 +392,6 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
                                                       proc_info,
                                                       dblink_name,
                                                       &(call_proc_info->get_allocator())))) {
-        LOG_WARN("failed to get routine info", K(ret), K(db_name), K(package_name), K(sp_name));
       } else if (OB_ISNULL(proc_info)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("proc info is null", K(ret), K(db_name), K(package_name), K(sp_name), K(proc_info));

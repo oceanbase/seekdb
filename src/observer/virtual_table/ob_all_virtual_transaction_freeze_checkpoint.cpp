@@ -77,12 +77,10 @@ int ObAllVirtualFreezeCheckpointInfo::prepare_to_read_()
     SERVER_LOG(WARN, "ls shouldn't NULL here", K(ret), K(ls));
   } else if (FALSE_IT(infos.reset())) {
   } else if (OB_FAIL(ls->get_freezecheckpoint_info(infos))) {
-    SERVER_LOG(WARN, "get freezecheckpoint info failed", K(ret), KPC(ls));
   } else {
     int64_t idx = 0;
     for (; idx < infos.count() && OB_SUCC(ret); ++idx) {
       if (OB_FAIL(ob_freeze_checkpoint_iter_.push(infos.at(idx)))) {
-        SERVER_LOG(ERROR, "ob_freeze_checkpoint_iter push failed", K(ret), KPC(ls));
       }
     }
   }
@@ -153,7 +151,6 @@ int ObAllVirtualFreezeCheckpointInfo::inner_get_next_row(ObNewRow *&row)
           if (OB_FAIL(freeze_checkpoint_location_to_string(ObFreezeCheckpointLocation(freeze_checkpoint.location),
                                                            freeze_checkpoint_location_buf_,
                                                            sizeof(freeze_checkpoint_location_buf_)))) {
-            SERVER_LOG(WARN, "get freeze_checkpoint location buf failed", K(ret), K(freeze_checkpoint));
           } else {
             freeze_checkpoint_location_buf_[MAX_FREEZE_CHECKPOINT_LOCATION_BUF_LENGTH - 1] = '\0';
             cur_row_.cells_[i].set_varchar(freeze_checkpoint_location_buf_);

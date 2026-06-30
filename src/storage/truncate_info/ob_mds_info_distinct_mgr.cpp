@@ -51,11 +51,8 @@ int ObMdsInfoDistinctMgr::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(read_version_range));
   } else if (OB_FAIL(tablet.read_truncate_info_array(allocator, read_version_range, for_access, array_))) {
-    LOG_WARN("failed to read truncate info array", KR(ret), K(read_version_range));
   } else if (OB_FAIL(read_split_truncate_info_array(split_extra_tablet_handles, read_version_range, for_access))) {
-    LOG_WARN("failed to read split extra truncate infos", K(ret), K(split_extra_tablet_handles));
   } else if (OB_FAIL(build_distinct_array(read_version_range, for_access))) {
-    LOG_WARN("failed to build distinct array", KR(ret));
   } else {
     if (!distinct_array_.empty()
         && read_version_range.base_version_ <= tablet.get_last_major_snapshot_version()
@@ -98,12 +95,10 @@ int ObMdsInfoDistinctMgr::read_split_truncate_info_array(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid tablet handle", KR(ret));
       } else if (OB_FAIL(tablet->read_truncate_info_array(tmp_allocator, read_version_range, for_access, tmp_array))) {
-        LOG_WARN("failed to read truncate info array", KR(ret), K(tablet->get_tablet_id()), K(read_version_range));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < tmp_array.count(); i++) {
           const ObTruncateInfo &info = *tmp_array.at(i);
           if (OB_FAIL(array_.append_with_deep_copy(info))) {
-            LOG_WARN("failed to append", K(ret), K(info));
           }
         }
       }
@@ -139,8 +134,6 @@ int ObMdsInfoDistinctMgr::build_distinct_array(
           bool equal = false;
           const ObTruncateInfo &exist_info = *distinct_array_.at(j);
           if (OB_FAIL(exist_info.compare_truncate_part_info(*input_info, equal))) {
-            LOG_WARN("failed to compare two truncate partition", KR(ret), K(j), K(exist_info),
-              K(idx), KPC(input_info));
           } else if (equal) {
             if (exist_info.commit_version_ < input_info->commit_version_) {
               if (OB_UNLIKELY(exist_info.schema_version_ >= input_info->schema_version_)) {
@@ -159,7 +152,6 @@ int ObMdsInfoDistinctMgr::build_distinct_array(
       } // for
       if (OB_SUCC(ret) && !exist) {
         if (OB_FAIL(distinct_array_.push_back(input_array.at(idx)))) {
-          LOG_WARN("failed to push into distinct_array", KR(ret), K(idx), K(input_array.at(idx)));
         }
       }
     }
@@ -187,11 +179,9 @@ int ObMdsInfoDistinctMgr::fill_mds_filter_info(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected nullptr in distinct_array", KR(ret), K(j), K_(distinct_array));
       } else if (OB_FAIL(truncate_info_keys.push_back(distinct_array_.at(j)->key_))) {
-        LOG_WARN("failed to push truncate info keys", KR(ret), K(j), K_(distinct_array));
       }
     } // for
     if (FAILEDx(mds_filter_info.init_truncate_keys(allocator, truncate_info_keys))) {
-      LOG_WARN("failed to init truncate info keys", KR(ret), K(truncate_info_keys));
     } else {
       LOG_INFO("[TRUNCATE INFO] success to init mds filter info", KR(ret), K(mds_filter_info));
     }
@@ -247,7 +237,6 @@ int ObMdsInfoDistinctMgr::get_distinct_truncate_info_array(
         ret = OB_INVALID_DATA;
         LOG_WARN("invalid ptr in distinct array", KR(ret), K(idx), KPC(distinct_array_.at(idx)));
       } else if (OB_FAIL(input_distinct_array.append_with_deep_copy(*distinct_array_.at(idx)))) {
-        LOG_WARN("failed to append truncate info", KR(ret), K(idx), KPC(distinct_array_.at(idx)));
       }
     } // for
   }

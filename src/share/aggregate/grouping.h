@@ -161,7 +161,6 @@ public:
       // grouping/grouping_id do not use payload/len to caluclate results
       // just pass nullptr
       if (OB_FAIL(add_one_row(agg_ctx, row_idx, batch_size, true, nullptr, 0, agg_col_id, agg_cell))) {
-        SQL_LOG(WARN, "add_one_row failed", K(ret));
       }
     }
     return ret;
@@ -185,7 +184,6 @@ public:
         sql::ObNumStackOnceAlloc tmp_alloc;
         number::ObNumber tmp_nmb;
         if (OB_FAIL(tmp_nmb.from(*reinterpret_cast<const int64_t *>(data), tmp_alloc))) {
-          SQL_LOG(WARN, "number::from failed", K(ret));
         } else {
           out_vec->set_number(output_idx, tmp_nmb);
         }

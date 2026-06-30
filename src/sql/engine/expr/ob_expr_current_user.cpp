@@ -68,10 +68,8 @@ int ObExprCurrentUser::eval_current_user(const ObExpr &expr, ObEvalCtx &ctx,
       LOG_WARN("unexpected NULL GCTX.schema_service_", K(ret));
     } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
                    schema_guard))) {
-      LOG_WARN("failed to get tenant schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_user_info(priv_user_id,
                                                   user_info))) {
-      LOG_WARN("failed to get user info", K(ret), K(priv_user_id));
     } else if (OB_ISNULL(user_info)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected NULL user_info", K(ret), K(priv_user_id));

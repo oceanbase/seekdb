@@ -79,7 +79,6 @@ int ObTableLoadParallelCompactTabletCtx::set_parallel_merge_param(int64_t merge_
     range_sstable_count_ = 0;
     range_sstables_.reset();
     if (OB_FAIL(range_sstables_.prepare_allocate(range_count))) {
-      LOG_WARN("fail to prepare allocate array", KR(ret));
     }
   }
   return ret;
@@ -120,23 +119,19 @@ int ObTableLoadParallelCompactTabletCtx::apply_merged_sstable(
     ObDirectLoadTableHandleArray result_sstables;
     LOG_INFO("parallel merge apply merged", K(merge_sstable_count_), K(sstables_.count()));
     if (OB_FAIL(result_sstables.add(merged_sstable))) {
-      LOG_WARN("fail to push back sstable", KR(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < sstables_.count(); ++i) {
       ObDirectLoadTableHandle sstable_handle;
       if (OB_FAIL(sstables_.get_table(i, sstable_handle))) {
-        LOG_WARN("fail to get table", KR(ret), K(i));
       } else {
         if (i >= merge_sstable_count_) {
           if (OB_FAIL(result_sstables.add(sstable_handle))) {
-            LOG_WARN("fail to push back sstable", KR(ret));
           }
         }
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sstables_.assign(result_sstables))) {
-        LOG_WARN("fail to assign sstables", KR(ret));
       } else {
         // clear merge ctx
         merge_sstable_count_ = 0;
@@ -220,9 +215,7 @@ public:
       for (int64_t i = 0; OB_SUCC(ret) && i < merge_sstable_count; ++i) {
         ObDirectLoadTableHandle sstable;
         if (OB_FAIL(tablet_ctx_->sstables_.get_table(i, sstable))) {
-          LOG_WARN("fail to get table", KR(ret), K(i));
         } else if (OB_FAIL(sstable_array.add(sstable))) {
-          LOG_WARN("fail to push back sstable", KR(ret));
         }
       }
       // split range
@@ -230,11 +223,9 @@ public:
         ObDirectLoadMultipleSSTableRangeSplitter range_splitter;
         if (OB_FAIL(range_splitter.init(sstable_array, parallel_table_compactor_->table_data_desc_,
                                         &parallel_table_compactor_->op_->merge_table_ctx_->store_table_ctx_->schema_->datum_utils_))) {
-          LOG_WARN("fail to init range splitter", KR(ret));
         } else if (OB_FAIL(range_splitter.split_range(tablet_ctx_->ranges_,
                                                       parallel_table_compactor_->thread_count_,
                                                       tablet_ctx_->range_allocator_))) {
-          LOG_WARN("fail to split range", KR(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -244,10 +235,8 @@ public:
       if (OB_SUCC(ret)) {
         if (OB_FAIL(tablet_ctx_->set_parallel_merge_param(merge_sstable_count,
                                                           tablet_ctx_->ranges_.count()))) {
-          LOG_WARN("fail to set parallel merge param", KR(ret));
         } else if (OB_FAIL(
                      parallel_table_compactor_->handle_tablet_split_range_finish(tablet_ctx_))) {
-          LOG_WARN("fail to handle tablet split range finish", KR(ret));
         }
       }
     }
@@ -287,9 +276,7 @@ public:
     ObDirectLoadTableHandleArray table_array;
     bool all_range_finish = false;
     if (OB_FAIL(init_scan_merge())) {
-      LOG_WARN("fail to init scan merge", KR(ret));
     } else if (OB_FAIL(init_sstable_builder())) {
-      LOG_WARN("fail to init sstable builder", KR(ret));
     }
     while (OB_SUCC(ret)) {
       if (OB_FAIL(scan_merge_.get_next_row(datum_row))) {
@@ -300,20 +287,17 @@ public:
           break;
         }
       } else if (OB_FAIL(sstable_builder_.append_row(*datum_row))) {
-        LOG_WARN("fail to append row", KR(ret));
       } else {
         ATOMIC_AAF(&ctx_->job_stat_->store_.compact_stage_merge_write_rows_, 1);
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sstable_builder_.close())) {
-        LOG_WARN("fail to close sstable builder", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
       ObMutexGuard guard(tablet_ctx_->mutex_);
       if (OB_FAIL(sstable_builder_.get_tables(table_array, ctx_->store_ctx_->table_mgr_))) {
-        LOG_WARN("fail to get tables", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -323,10 +307,8 @@ public:
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected table array count", KR(ret), K(table_array));
       } else if (OB_FAIL(table_array.get_table(0, sstable_handle))) {
-        LOG_WARN("fail to get table", KR(ret));
       } else if (OB_FAIL(
                    tablet_ctx_->finish_range_merge(range_idx_, sstable_handle, all_range_finish))) {
-        LOG_WARN("fail to finish range merge", KR(ret));
       }
       if (OB_FAIL(ret)) {
         table_array.reset();
@@ -334,7 +316,6 @@ public:
     }
     if (OB_SUCC(ret) && all_range_finish) {
       if (OB_FAIL(parallel_table_compactor_->handle_tablet_range_merge_finish(tablet_ctx_))) {
-        LOG_WARN("fail to handle tablet range merge finish", KR(ret));
       }
     }
     return ret;
@@ -351,15 +332,12 @@ public:
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ctx_->merge_sstable_count_; ++i) {
       ObDirectLoadTableHandle sstable;
       if (OB_FAIL(tablet_ctx_->sstables_.get_table(i, sstable))) {
-        LOG_WARN("fail to get table", KR(ret), K(i));
       } else if (OB_FAIL(sstable_array_.add(sstable))) {
-        LOG_WARN("fail to push back sstable", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(scan_merge_.init(scan_merge_param, sstable_array_,
                                    tablet_ctx_->ranges_.at(range_idx_)))) {
-        LOG_WARN("fail to init sstable scan merge", KR(ret));
       }
     }
     return ret;
@@ -376,7 +354,6 @@ public:
     build_param.extra_buf_ = reinterpret_cast<char *>(1); // unuse, delete in future
     build_param.extra_buf_size_ = 4096;
     if (OB_FAIL(sstable_builder_.init(build_param))) {
-      LOG_WARN("fail to init sstable builder", KR(ret));
     }
     return ret;
   }
@@ -412,12 +389,9 @@ public:
     int ret = OB_SUCCESS;
     ObDirectLoadTableHandle sstable_handle;
     if (OB_FAIL(compact_sstable(sstable_handle))) {
-      LOG_WARN("fail to compact sstable", KR(ret));
     } else if (OB_FAIL(tablet_ctx_->apply_merged_sstable(sstable_handle))) {
-      LOG_WARN("fail to apply merged sstable", KR(ret));
     } else if (OB_FAIL(
                  parallel_table_compactor_->handle_tablet_compact_sstable_finish(tablet_ctx_))) {
-      LOG_WARN("fail to handle compact sstable finish", KR(ret));
     }
     return ret;
   }
@@ -429,22 +403,18 @@ public:
     compact_param.table_data_desc_ = parallel_table_compactor_->table_data_desc_;
     compact_param.datum_utils_ = &parallel_table_compactor_->op_->merge_table_ctx_->store_table_ctx_->schema_->datum_utils_;
     if (OB_FAIL(compactor_.init(compact_param))) {
-      LOG_WARN("fail to init sstable compactor", KR(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ctx_->range_sstables_.count(); ++i) {
       ObDirectLoadTableHandle sstable_handle = tablet_ctx_->range_sstables_.at(i);
       if (OB_FAIL(compactor_.add_table(sstable_handle))) {
-        LOG_WARN("fail to add table", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(compactor_.compact())) {
-        LOG_WARN("fail to do compact", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(compactor_.get_table(result_sstable, ctx_->store_ctx_->table_mgr_))) {
-        LOG_WARN("fail to get table", KR(ret));
       }
     }
     return ret;
@@ -476,7 +446,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(parallel_table_compactor_->handle_task_finish(thread_idx_, ret_code))) {
-      LOG_WARN("fail to handle task finish", KR(ret));
     }
     if (OB_FAIL(ret)) {
       ctx_->store_ctx_->set_status_error(ret);
@@ -547,7 +516,6 @@ int ObTableLoadParallelTableCompactor::init(ObTableLoadMergeCompactTableOp *op)
     thread_count_ = op_->store_ctx_->thread_cnt_;
     table_data_desc_ = op->merge_table_ctx_->table_store_->get_table_data_desc();
     if (OB_FAIL(tablet_ctx_map_.create(1024, "TLD_CptCtxMap", "TLD_CptCtxMap"))) {
-      LOG_WARN("fail to create ctx map", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -562,7 +530,6 @@ int ObTableLoadParallelTableCompactor::start()
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadParallelTableCompactor not init", KR(ret), KP(this));
   } else if (OB_FAIL(construct_compactors())) {
-    LOG_WARN("fail to construct compactors", KR(ret));
   } else {
     FOREACH_X(it, tablet_ctx_map_, OB_SUCC(ret))
     {
@@ -570,7 +537,6 @@ int ObTableLoadParallelTableCompactor::start()
       if (tablet_ctx->sstables_.count() > store_ctx_->merge_count_per_round_) {
         // need merge
         if (OB_FAIL(construct_split_range_task(tablet_ctx))) {
-          LOG_WARN("fail to construct split range task", KR(ret));
         }
       } else {
         ATOMIC_AAF(&store_ctx_->ctx_->job_stat_->store_.compact_stage_consume_tmp_files_,
@@ -580,12 +546,10 @@ int ObTableLoadParallelTableCompactor::start()
     if (OB_SUCC(ret)) {
       if (get_task_count() > 0) {
         if (OB_FAIL(start_merge())) {
-          LOG_WARN("fail to start merge", KR(ret));
         }
       } else {
         // no need to merge
         if (OB_FAIL(handle_parallel_compact_success())) {
-          LOG_WARN("fail to handle parallel compact success", KR(ret));
         }
       }
     }
@@ -611,10 +575,8 @@ int ObTableLoadParallelTableCompactor::construct_compactors()
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to new ObTableLoadParallelCompactTabletCtx", KR(ret));
       } else if (OB_FAIL(tablet_ctx->sstables_.assign(*table_handle_array))) {
-        LOG_WARN("fail to assign table handle array", KR(ret));
       } else if (FALSE_IT(tablet_ctx->tablet_id_ = tablet_id)) {
       } else if (OB_FAIL(tablet_ctx_map_.set_refactored(tablet_id, tablet_ctx))) {
-        LOG_WARN("fail to set refactored", KR(ret));
       }
       if (OB_FAIL(ret)) {
         if (nullptr != tablet_ctx) {
@@ -637,7 +599,6 @@ int ObTableLoadParallelTableCompactor::add_light_task(ObTableLoadTask *task)
   int ret = OB_SUCCESS;
   ObMutexGuard guard(mutex_);
   if (OB_FAIL(light_task_list_.push_back(task))) {
-    LOG_WARN("fail to push back task", KR(ret));
   }
   return ret;
 }
@@ -647,7 +608,6 @@ int ObTableLoadParallelTableCompactor::add_heavy_task(ObTableLoadTask *task)
   int ret = OB_SUCCESS;
   ObMutexGuard guard(mutex_);
   if (OB_FAIL(heavy_task_list_.push_back(task))) {
-    LOG_WARN("fail to push back task", KR(ret));
   }
   return ret;
 }
@@ -668,12 +628,10 @@ int ObTableLoadParallelTableCompactor::start_merge()
   ObMutexGuard guard(mutex_);
   for (int64_t thread_idx = 0; OB_SUCC(ret) && thread_idx < thread_count_; ++thread_idx) {
     if (OB_FAIL(idle_thread_list_.push_back(thread_idx))) {
-      LOG_WARN("fail to push back idle thread", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(schedule_merge_unlock())) {
-      LOG_WARN("fail to schedule merge", KR(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -695,18 +653,14 @@ int ObTableLoadParallelTableCompactor::schedule_merge_unlock()
     ObTableLoadTask *task = nullptr;
     int64_t thread_idx = -1;
     if (OB_FAIL(task_list->pop_back(task))) {
-      LOG_WARN("fail to pop back task", KR(ret));
     } else if (OB_FAIL(idle_thread_list_.pop_back(thread_idx))) {
-      LOG_WARN("fail to pop back thread idx", KR(ret));
     }
     // Set the callback for task
     else if (OB_FAIL(
                task->set_callback<ParallelMergeTaskCallback>(store_ctx_->ctx_, this, thread_idx))) {
-      LOG_WARN("fail to set task callback", KR(ret));
     }
     // put task into scheduler
     else if (OB_FAIL(store_ctx_->task_scheduler_->add_task(thread_idx, task))) {
-      LOG_WARN("fail to add task", KR(ret), K(thread_idx), KPC(task));
     }
     if (OB_FAIL(ret)) {
       if (nullptr != task) {
@@ -724,16 +678,13 @@ int ObTableLoadParallelTableCompactor::construct_split_range_task(
   ObTableLoadTask *task = nullptr;
   // 1. assign task
   if (OB_FAIL(store_ctx_->ctx_->alloc_task(task))) {
-    LOG_WARN("fail to alloc task", KR(ret));
   }
   // 2. Set processor
   else if (OB_FAIL(
              task->set_processor<SplitRangeTaskProcessor>(store_ctx_->ctx_, this, tablet_ctx))) {
-    LOG_WARN("fail to set split range task processor", KR(ret));
   }
   // 3. Add to task queue
   else if (OB_FAIL(add_light_task(task))) {
-    LOG_WARN("fail to add light task", KR(ret));
   }
   if (OB_FAIL(ret)) {
     if (nullptr != task) {
@@ -750,16 +701,13 @@ int ObTableLoadParallelTableCompactor::construct_merge_range_task(
   ObTableLoadTask *task = nullptr;
   // 1. assign task
   if (OB_FAIL(store_ctx_->ctx_->alloc_task(task))) {
-    LOG_WARN("fail to alloc task", KR(ret));
   }
   // 2. Set processor
   else if (OB_FAIL(task->set_processor<MergeRangeTaskProcessor>(store_ctx_->ctx_, this, tablet_ctx,
                                                                 range_idx))) {
-    LOG_WARN("fail to set merge range task processor", KR(ret));
   }
   // 3. Add to task queue
   else if (OB_FAIL(add_heavy_task(task))) {
-    LOG_WARN("fail to add heavy task", KR(ret));
   }
   if (OB_FAIL(ret)) {
     if (nullptr != task) {
@@ -776,16 +724,13 @@ int ObTableLoadParallelTableCompactor::construct_compact_sstable_task(
   ObTableLoadTask *task = nullptr;
   // 1. assign task
   if (OB_FAIL(store_ctx_->ctx_->alloc_task(task))) {
-    LOG_WARN("fail to alloc task", KR(ret));
   }
   // 2. Set processor
   else if (OB_FAIL(task->set_processor<CompactSSTableTaskProcessor>(store_ctx_->ctx_, this,
                                                                     tablet_ctx))) {
-    LOG_WARN("fail to set compact sstable task processor", KR(ret));
   }
   // 3. Add to task queue
   else if (OB_FAIL(add_light_task(task))) {
-    LOG_WARN("fail to add light task", KR(ret));
   }
   if (OB_FAIL(ret)) {
     if (nullptr != task) {
@@ -805,7 +750,6 @@ int ObTableLoadParallelTableCompactor::handle_tablet_split_range_finish(
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ctx->range_count_; ++i) {
       if (OB_FAIL(construct_merge_range_task(tablet_ctx, i))) {
-        LOG_WARN("fail to construct merge range task", KR(ret));
       }
     }
   }
@@ -821,7 +765,6 @@ int ObTableLoadParallelTableCompactor::handle_tablet_range_merge_finish(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KPC(tablet_ctx));
   } else if (OB_FAIL(construct_compact_sstable_task(tablet_ctx))) {
-    LOG_WARN("fail to construct compact sstable task", KR(ret));
   }
   return ret;
 }
@@ -838,7 +781,6 @@ int ObTableLoadParallelTableCompactor::handle_tablet_compact_sstable_finish(
     ATOMIC_AAF(&store_ctx_->ctx_->job_stat_->store_.compact_stage_consume_tmp_files_,
                tablet_ctx->merge_sstable_count_ - 1);
     if (OB_FAIL(construct_split_range_task(tablet_ctx))) {
-      LOG_WARN("fail to construct split range task", KR(ret));
     }
   } else {
     ATOMIC_AAF(&store_ctx_->ctx_->job_stat_->store_.compact_stage_consume_tmp_files_,
@@ -859,9 +801,7 @@ int ObTableLoadParallelTableCompactor::handle_task_finish(int64_t thread_idx, in
     if (OB_UNLIKELY(is_stop_ || has_error_)) {
     } else {
       if (OB_FAIL(idle_thread_list_.push_back(thread_idx))) {
-        LOG_WARN("fail to push back idle thread", KR(ret));
       } else if (OB_FAIL(schedule_merge_unlock())) {
-        LOG_WARN("fail to schedule merge", KR(ret));
       } else {
         is_merge_completed = (idle_thread_list_.count() == thread_count_);
       }
@@ -872,7 +812,6 @@ int ObTableLoadParallelTableCompactor::handle_task_finish(int64_t thread_idx, in
   }
   if (is_merge_completed) {
     if (OB_FAIL(handle_parallel_compact_success())) {
-      LOG_WARN("fail to handle parallel compact success", KR(ret));
     }
   }
   return ret;
@@ -892,12 +831,10 @@ int ObTableLoadParallelTableCompactor::handle_parallel_compact_success()
     const ObTabletID &tablet_id = it->first;
     ObTableLoadParallelCompactTabletCtx *tablet_ctx = it->second;
     if (OB_FAIL(table_store->add_tablet_tables(tablet_id, tablet_ctx->sstables_))) {
-      LOG_WARN("fail to add tables", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(op_->on_success())) {
-      LOG_WARN("fail to handle success", KR(ret));
     }
   }
   return ret;

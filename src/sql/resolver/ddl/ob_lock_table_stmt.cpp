@@ -28,7 +28,6 @@ int ObLockTableStmt::add_mysql_lock_node(const ObMySQLLockNode &node)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lock node invalid", K(ret), K(node));
   } else if (OB_FAIL(mysql_lock_list_.push_back(node))) {
-    LOG_WARN("add mysql lock node failed", K(ret), K(node));
   }
   return ret;
 }

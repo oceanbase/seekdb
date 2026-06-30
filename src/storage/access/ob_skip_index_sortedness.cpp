@@ -44,19 +44,14 @@ int ObSkipIndexSortedness::init(const ObSSTable &sstable,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", KR(ret), K(sstable), K(schema), K(sample_count));
   } else if (OB_FAIL(sstable.get_meta(sstable_meta_handle))) {
-    LOG_WARN("Fail to get sstable meta handle", KR(ret));
   } else if (OB_FALSE_IT(micro_block_count_
                          = sstable_meta_handle.get_sstable_meta().get_data_micro_block_count())) {
   } else if (micro_block_count_ > 0 && OB_FAIL(tree_cursor_.init(sstable, allocator_, read_info))) {
     LOG_WARN("Fail to init tree cursor", KR(ret));
   } else if (OB_FAIL(init_col_idx_in_storage(sstable, schema, column_id))) {
-    LOG_WARN("Fail to to init col_idx_in_storage", KR(ret), K(schema), K(column_id));
   } else if (OB_FAIL(init_compare_func(schema, column_id))) {
-    LOG_WARN("Fail to init compare function", KR(ret), K(schema), K(column_id));
   } else if (OB_FAIL(init_sample_count(micro_block_count_, sample_count))) {
-    LOG_WARN("Fail to init sample_count");
   } else if (OB_FAIL(res_sample_counts.push_back(sample_count_))) {
-    LOG_WARN("Fail to push back", K(ret));
   } else {
     is_inited_ = true;
 
@@ -80,9 +75,7 @@ int ObSkipIndexSortedness::sample_and_calc(double &sortedness)
     // micro_block_count is 0, skip data sampling and set sortedness to 0
     sortedness = 0;
   } else if (OB_FAIL(sample_data(min_max_datums, null_count))) {
-    LOG_WARN("Fail to sample data", KR(ret));
   } else if (OB_FAIL(calc_sortedness(min_max_datums, null_count, sortedness))) {
-    LOG_WARN("Fail to calc sortedness", KR(ret));
   }
 
   return ret;
@@ -111,7 +104,6 @@ int ObSkipIndexSortedness::init_col_idx_in_storage(const ObSSTable &sstable,
   if (sstable.is_cg_sstable()) {
     col_idx_in_storage_ = 0;
   } else if (OB_FAIL(schema.get_multi_version_column_descs(cols_desc))) {
-    LOG_WARN("Fail to to get cols_desc", KR(ret));
   } else {
     col_idx_in_storage_ = -1;
     for (int i = 0; i < cols_desc.count(); i++) {
@@ -195,19 +187,12 @@ int ObSkipIndexSortedness::sample_min_max_datum(ObMinMaxDatum &min_max_datum)
   ObAggRowReader reader;
 
   if (OB_FAIL(tree_cursor_.get_idx_parser(idx_row_parser))) {
-    LOG_WARN("Fail to get index row parser", KR(ret));
   } else if (OB_FAIL(idx_row_parser->get_agg_row(agg_row_buf, agg_row_size))) {
-    LOG_WARN("Fail to get agg row", KR(ret));
   } else if (OB_FAIL(reader.init(agg_row_buf, agg_row_size))) {
-    LOG_WARN("Fail to init agg row reader", KR(ret));
   } else if (OB_FAIL(reader.read(min_meta, tmp_datum))) {
-    LOG_WARN("Fail to read skip index min datum", KR(ret));
   } else if (OB_FAIL(min_max_datum.min_.deep_copy(tmp_datum, allocator_))) {
-    LOG_WARN("Fail to deep copy min datum", KR(ret), K(tmp_datum));
   } else if (OB_FAIL(reader.read(max_meta, tmp_datum))) {
-    LOG_WARN("Fail to read skip index max datum", KR(ret));
   } else if (OB_FAIL(min_max_datum.max_.deep_copy(tmp_datum, allocator_))) {
-    LOG_WARN("Fail to deep copy max datum", KR(ret), K(tmp_datum));
   }
 
   return ret;
@@ -224,12 +209,10 @@ int ObSkipIndexSortedness::sample_data(ObArray<ObMinMaxDatum> &datums, int64_t &
   if (OB_FAIL(tree_cursor_.drill_down(ObDatumRowkey::MIN_ROWKEY,
                                       ObIndexBlockTreeCursor::LEAF,
                                       is_beyond_range))) {
-    LOG_WARN("Fail to drill down to leaf level", KR(ret));
   } else if (OB_UNLIKELY(is_beyond_range)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Fail to drill down to leaf level", KR(ret));
   } else if (OB_FAIL(datums.reserve(sample_count_))) {
-    LOG_WARN("Fail to reserve sample data array", KR(ret), K(sample_count_));
   } else {
     // Step 2. Sample data
     const double sample_step = max(1.0, 1.0 * micro_block_count_ / sample_count_);
@@ -238,11 +221,9 @@ int ObSkipIndexSortedness::sample_data(ObArray<ObMinMaxDatum> &datums, int64_t &
 
     while (OB_SUCC(ret) && datums.count() + null_count < sample_count_) {
       if (OB_FAIL(sample_min_max_datum(tmp_min_max_datum))) {
-        LOG_WARN("Fail to sample skip index min/max datum", KR(ret), K(curr_index));
       } else if (tmp_min_max_datum.min_.is_null() || tmp_min_max_datum.max_.is_null()) {
         null_count++;
       } else if (OB_FAIL(datums.push_back(tmp_min_max_datum))) {
-        LOG_WARN("Fail to push back to sample datums");
       } else {
         LOG_DEBUG("Sample skip index min max data", K(curr_index), K(tmp_min_max_datum));
       }
@@ -276,7 +257,6 @@ int ObSkipIndexSortedness::calc_sortedness(ObArray<ObMinMaxDatum> &datums,
   } else {
     double ascending = 0, descending = 0;
     if (OB_FAIL(merge_sort_count_inversion(datums, ascending, descending))) {
-      LOG_WARN("Fail to count inversion", KR(ret));
     } else {
       int64_t non_null_count = datums.count();
       int64_t all_count = non_null_count + null_count;
@@ -305,7 +285,6 @@ int ObSkipIndexSortedness::discrete_datum(ObArray<ObMinMaxDatum> &origin_datums,
   ObArray<DatumWithIdx> datum_to_sort;
   max_discrete_idx = 1;
   if (OB_FAIL(datum_to_sort.prepare_allocate(origin_datums.count() * 2))) {
-    LOG_WARN("Fail to reserve datum discrete array", KR(ret), K(origin_datums.count()));
   } else {
     for (int i = 0; i < origin_datums.count(); i++) {
       datum_to_sort[i * 2].datum_ = origin_datums[i].min_;
@@ -322,7 +301,6 @@ int ObSkipIndexSortedness::discrete_datum(ObArray<ObMinMaxDatum> &origin_datums,
                  cmp);
 
     if (OB_FAIL(sort_ret)) {
-      LOG_WARN("Fail to sort datum", KR(ret));
     } else if (OB_ISNULL(discrete_datums = static_cast<ObMinMaxDatumDiscrete *>(allocator_.alloc(
                              sizeof(ObMinMaxDatumDiscrete) * origin_datums.count())))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -341,10 +319,6 @@ int ObSkipIndexSortedness::discrete_datum(ObArray<ObMinMaxDatum> &origin_datums,
         } else if (OB_FAIL(cmp_func_.compare(datum_to_sort[i - 1].datum_,
                                              datum_to_sort[i].datum_,
                                              cmp_ret))) {
-          LOG_WARN("Fail to compare datum",
-                   KR(ret),
-                   K(datum_to_sort[i - 1].datum_),
-                   K(datum_to_sort[i].datum_));
         } else if (cmp_ret != 0) {
           max_discrete_idx++;
         }
@@ -382,20 +356,17 @@ int ObSkipIndexSortedness::merge_sort_count_inversion(ObArray<ObMinMaxDatum> &da
   //    the discrete idx: [2, 1, 3]
   // then, we always use the discrete idx to do fast compare between datums
   if (OB_FAIL(discrete_datum(datums, discrete_datums, max_discrete_idx))) {
-    LOG_WARN("Fail to discrete datum", KR(ret));
   } else if (OB_ISNULL(tmp_buffer = static_cast<ObMinMaxDatumDiscrete *>(
                            allocator_.alloc(sizeof(ObMinMaxDatumDiscrete) * datums.count())))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Fail to allocate memory", KR(ret));
   } else if (OB_FAIL(bitree.init(max_discrete_idx))) {
-    LOG_WARN("Fail to init binary index tree", KR(ret));
   } else if (OB_FAIL(merge_sort_count_inversion_impl(discrete_datums,
                                                      datums.count(),
                                                      tmp_buffer,
                                                      bitree,
                                                      ascending,
                                                      descending))) {
-    LOG_WARN("Fail to count inversion use mergesort", KR(ret));
   }
 
   return ret;
@@ -426,14 +397,12 @@ int ObSkipIndexSortedness::merge_sort_count_inversion_impl(ObMinMaxDatumDiscrete
                                                 bitree,
                                                 left_ascending,
                                                 left_descending))) {
-      LOG_WARN("Fail to count inversion for left range", KR(ret), K(mid));
     } else if (OB_FAIL(merge_sort_count_inversion_impl(datums + mid,
                                                        len - mid,
                                                        tmp_buffer,
                                                        bitree,
                                                        right_ascending,
                                                        right_descending))) {
-      LOG_WARN("Fail to count inversion for right range", KR(ret), K(mid), K(len));
     } else {
       // count inversions
       ascending = left_ascending + right_ascending;
@@ -444,7 +413,6 @@ int ObSkipIndexSortedness::merge_sort_count_inversion_impl(ObMinMaxDatumDiscrete
       while (OB_SUCC(ret) && (i < mid || j < len)) {
         if (i < mid && (j >= len || datums[i].min_ < datums[j].min_)) {
           if (OB_FAIL(bitree.add(datums[i].max_, 1))) {
-            LOG_WARN("Fail to add val in binary index tree", KR(ret));
           } else {
             tmp_buffer[write_idx++] = datums[i++];
           }
@@ -452,9 +420,7 @@ int ObSkipIndexSortedness::merge_sort_count_inversion_impl(ObMinMaxDatumDiscrete
           int64_t j_max_large_than_i_max_sum = 0;
           int64_t j_min_large_than_i_max_sum = 0;
           if (OB_FAIL(bitree.get_sum(datums[j].max_, j_max_large_than_i_max_sum))) {
-            LOG_WARN("Fail to get sum in binary index tree", KR(ret));
           } else if (OB_FAIL(bitree.get_sum(datums[j].min_, j_min_large_than_i_max_sum))) {
-            LOG_WARN("Fail to get sum in binary index tree", KR(ret));
           } else {
             ObMinMaxDatumDiscrete tmp_datum;
             tmp_datum.min_ = datums[j].max_;
@@ -484,7 +450,6 @@ int ObSkipIndexSortedness::merge_sort_count_inversion_impl(ObMinMaxDatumDiscrete
         // revert binary index tree
         for (int i = 0; OB_SUCC(ret) && i < mid; i++) {
           if (OB_FAIL(bitree.add(datums[i].max_, -1))) {
-            LOG_WARN("Fail to add val in binary index tree", KR(ret));
           }
         }
 
@@ -511,7 +476,6 @@ int ObSkipIndexSortedness::ObBinaryIndexTree::init(const int64_t size)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", KR(ret), K(size));
   } else if (OB_FAIL(counts_.prepare_allocate(size + 1, 0))) {
-    LOG_WARN("Fail to reserve binary index tree array", KR(ret), K(size));
   } else {
     is_inited_ = true;
   }

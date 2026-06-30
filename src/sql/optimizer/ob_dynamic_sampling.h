@@ -143,9 +143,7 @@ struct ObDSResultItem
       COMMON_LOG(WARN, "failed to assign stat_handle");
       this->reset();
     } else if (OB_FAIL(exprs_.assign(other.exprs_))) {
-      COMMON_LOG(WARN, "failed to assign exprs", K(ret));
     } else if (OB_FAIL(non_ds_exprs_.assign(other.non_ds_exprs_))) {
-      COMMON_LOG(WARN, "failed to assign exprs", K(ret));
     } else {
       this->type_ = other.type_;
       this->index_id_ = other.index_id_;

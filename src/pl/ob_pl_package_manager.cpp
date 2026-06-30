@@ -26,7 +26,7 @@
 
 #include "ob_pl_package_manager.h"
 #include "pl/ob_pl_package.h"
-#include "pl/ob_pl_build.h"
+#include "pl/ob_pl_compile.h"
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "sql/session/ob_session_val_map.h"
 #include "pl/ob_pl_dependency_util.h"
@@ -306,7 +306,6 @@ int ObPLPackageManager::read_and_exec_package_sql(ObMySQLProxy &sql_proxy,
   } else {
     int64_t affected_rows = 0;
     if (OB_FAIL(stream.open())) {
-      LOG_WARN("failed to open package file data stream", K(ret), K(stream));
     } else {
       // system tenant will run with mysql compatibility mode
       // but we need to create system packages with oralce compatibility
@@ -318,7 +317,6 @@ int ObPLPackageManager::read_and_exec_package_sql(ObMySQLProxy &sql_proxy,
       HEAP_VAR(char[OB_MAX_SQL_LENGTH], sql_buf) {
         while (OB_SUCC(ret) && !eof) {
           if (FAILEDx(read_package_sql(stream, sql_buf, OB_MAX_SQL_LENGTH, eof))) {
-            LOG_WARN("fail to read package sql data", K(ret));
           } else if (strlen(sql_buf) != 0
                      && OB_FAIL(sql_proxy.write(sql_buf,
                                                 affected_rows,
@@ -475,7 +473,6 @@ int ObPLPackageManager::load_sys_package_list(ObMySQLProxy &sql_proxy,
     OZ (load_sys_package(sql_proxy, sys_package_list[i], compa_mode, from_file));
   }
   if (OB_FAIL(ret)) {
-    LOG_WARN("load sys package list failed", K(ret), K(compa_mode));
   } else {
     LOG_INFO("load sys package list success", K(ret), K(compa_mode));
   }
@@ -528,13 +525,11 @@ int ObPLPackageManager::get_package_var(const ObPLResolveCtx &resolve_ctx, uint6
   } else {
     ObPLPackage *package_spec = NULL;
     if (OB_FAIL(get_cached_package_spec(resolve_ctx, package_id, package_spec))) {
-      LOG_WARN("get cached package spec failed", K(package_id), K(ret));
     } else if (OB_ISNULL(package_spec)){
       ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
       LOG_WARN("package not exist", K(package_id), K(ret));
     } else {
       if (OB_FAIL(package_spec->get_var(var_name, var, var_idx))) {
-        LOG_WARN("package get var failed", K(package_id), K(var_name), K(ret));
       }
     }
   }
@@ -553,7 +548,6 @@ int ObPLPackageManager::get_package_var(const ObPLResolveCtx &resolve_ctx, uint6
     ObPLPackage *package_spec = NULL;
     ObPLPackage *package_body = NULL;
     if (OB_FAIL(get_cached_package(resolve_ctx, package_id, package_spec, package_body, true))) {
-      LOG_WARN("get cached package failed", K(package_id), K(ret));
     } else if (OB_ISNULL(package_spec)){
       ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
       LOG_WARN("package spec not exist", K(package_id), K(ret));
@@ -572,7 +566,6 @@ int ObPLPackageManager::get_package_var(const ObPLResolveCtx &resolve_ctx, uint6
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(tmp_package->get_var(var_idx, var))) {
-          LOG_WARN("package get var failed", K(ret));
         } else if (OB_ISNULL(var)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("package var not found", K(package_id), K(var_idx), K(ret));
@@ -600,13 +593,11 @@ int ObPLPackageManager::get_package_type(const ObPLResolveCtx &resolve_ctx,
     observer::ObReqTimeGuard req_timeinfo_guard;
     ObPLPackage *package_spec = NULL;
     if (OB_FAIL(get_cached_package_spec(resolve_ctx, package_id, package_spec))) {
-      LOG_WARN("get cached package failed", K(ret));
     } else if (OB_ISNULL(package_spec)){
       ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
       LOG_WARN("package spec not exist", K(package_id), K(ret));
     } else {
       if (OB_FAIL(package_spec->get_type(type_name, user_type))) {
-        LOG_WARN("package get type failed", K(package_id), K(type_name), K(ret));
       } else if (OB_ISNULL(user_type)) {
         ret = OB_ERR_SP_UNDECLARED_TYPE;
         LOG_WARN("package type not found", K(package_id), K(type_name), K(ret));
@@ -631,7 +622,6 @@ int ObPLPackageManager::get_package_type(const ObPLResolveCtx &resolve_ctx, uint
     ObPLPackage *package_spec = NULL;
     ObPLPackage *package_body = NULL;
     if (OB_FAIL(get_cached_package(resolve_ctx, package_id, package_spec, package_body, true))) {
-      LOG_WARN("get cached package failed", K(ret));
     } else if (OB_ISNULL(package_spec)){
       ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
       LOG_WARN("package spec not exist", K(package_id), K(ret));
@@ -650,7 +640,6 @@ int ObPLPackageManager::get_package_type(const ObPLResolveCtx &resolve_ctx, uint
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(tmp_package->get_type(type_id, user_type))) {
-          LOG_WARN("get package type failed", K(ret));
         } else if (OB_ISNULL(user_type)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("package type not found", K(ret));
@@ -674,7 +663,6 @@ int ObPLPackageManager::get_package_expr(const ObPLResolveCtx &resolve_ctx,
     observer::ObReqTimeGuard req_timeinfo_guard;
     ObPLPackage *package_spec = NULL;
     if (OB_FAIL(get_cached_package_spec(resolve_ctx, package_id, package_spec))) {
-      LOG_WARN("get cached package failed", K(ret));
     } else if (OB_ISNULL(package_spec)){
       ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
       LOG_WARN("package spec not exist", K(package_id), K(ret));
@@ -702,7 +690,7 @@ int ObPLPackageManager::get_package_expr(const ObPLResolveCtx &resolve_ctx,
   CK (OB_NOT_NULL(package_spec_info));
   CK (package_spec_info->get_package_id() == package_id);
   if (OB_SUCC(ret)) {
-    ObPLBuilder builder(resolve_ctx.allocator_,
+    ObPLCompiler compiler(resolve_ctx.allocator_,
                           resolve_ctx.session_info_,
                           resolve_ctx.schema_guard_,
                           resolve_ctx.package_guard_,
@@ -735,9 +723,9 @@ int ObPLPackageManager::get_package_expr(const ObPLResolveCtx &resolve_ctx,
                                 package_spec_info->get_schema_version(),
                                 NULL));
       {
-        ObPLBuilderEnvGuard guard(
+        ObPLCompilerEnvGuard guard(
           *package_spec_info, resolve_ctx.session_info_, resolve_ctx.schema_guard_, package_spec_ast, ret);
-        OZ (builder.analyze_package(source, null_parent_ns,
+        OZ (compiler.analyze_package(source, null_parent_ns,
                                      package_spec_ast, package_spec_info->is_for_trigger()));
       }
       CK (expr_idx >= 0 && package_spec_ast.get_exprs().count() > expr_idx);
@@ -764,13 +752,11 @@ int ObPLPackageManager::get_package_spec_cursor(const ObPLResolveCtx &resolve_ct
   } else {
     ObPLPackage *package_spec = NULL;
     if (OB_FAIL(get_cached_package_spec(resolve_ctx, package_id, package_spec))) {
-      LOG_WARN("get cached package spec failed", K(package_id), K(ret));
     } else if (OB_ISNULL(package_spec)){
       ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
       LOG_WARN("package not exist", K(package_id), K(ret));
     } else {
       if (OB_FAIL(package_spec->get_cursor(cursor_name, cursor, cursor_idx))) {
-        LOG_WARN("package get var failed", K(package_id), K(cursor_name), K(ret));
       }
     }
   }
@@ -850,7 +836,6 @@ int ObPLPackageManager::get_package_routine(const ObPLResolveCtx &ctx,
   routine = NULL;
   bool is_overflow = false;
   if (OB_FAIL(check_stack_overflow(is_overflow))) {
-    LOG_WARN("failed to check stack overflow", K(ret));
   } else if (is_overflow) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recusive", K(ret));
@@ -1069,7 +1054,7 @@ int ObPLPackageManager::load_package_spec(const ObPLResolveCtx &resolve_ctx,
     if (OB_SUCC(ret)) {
       common::ObIAllocator &pkg_alloc = package_spec->get_allocator();
       ObPLPackageAST *package_spec_ast = OB_NEWx(ObPLPackageAST, (&pkg_alloc), pkg_alloc);
-      ObPLBuilder builder(pkg_alloc,
+      ObPLCompiler compiler(pkg_alloc,
                             resolve_ctx.session_info_,
                             resolve_ctx.schema_guard_,
                             resolve_ctx.package_guard_,
@@ -1085,10 +1070,10 @@ int ObPLPackageManager::load_package_spec(const ObPLResolveCtx &resolve_ctx,
       OZ (package_spec->init(*package_spec_ast));
       // Use SMART_CALL_LARGE for PL package compilation
       // Package resolving can consume a lot of stack space when SQL in the package is complex
-      OZ (SMART_CALL_LARGE(builder.build_package(package_spec_info,
-                                null_parent_ns,
-                                *package_spec_ast,
-                                *package_spec)));
+      OZ (SMART_CALL_LARGE(compiler.compile_package(package_spec_info,
+                                  null_parent_ns,
+                                  *package_spec_ast,
+                                  *package_spec)));
       if (OB_SUCC(ret)) {
         if (package_spec->get_can_cached() && resolve_ctx.need_add_pl_cache_
             && OB_FAIL(add_package_to_plan_cache(resolve_ctx, package_spec))) {
@@ -1142,7 +1127,7 @@ int ObPLPackageManager::load_package_body(const ObPLResolveCtx &resolve_ctx,
     CK (OB_NOT_NULL(package_body));
     if (OB_SUCC(ret)) {
       common::ObIAllocator &pkg_alloc = package_body->get_allocator();
-      ObPLBuilder builder(pkg_alloc,
+      ObPLCompiler compiler(pkg_alloc,
                             resolve_ctx.session_info_,
                             resolve_ctx.schema_guard_,
                             resolve_ctx.package_guard_,
@@ -1174,9 +1159,9 @@ int ObPLPackageManager::load_package_body(const ObPLResolveCtx &resolve_ctx,
       OZ (ObSQLUtils::convert_sql_text_from_schema_for_resolve(
             pkg_alloc, resolve_ctx.session_info_.get_dtc_params(), source));
       if (OB_SUCC(ret)) {
-        ObPLBuilderEnvGuard guard(
+        ObPLCompilerEnvGuard guard(
           package_spec_info, resolve_ctx.session_info_, resolve_ctx.schema_guard_, *package_spec_ast, ret);
-        OZ (builder.analyze_package(source, null_parent_ns,
+        OZ (compiler.analyze_package(source, null_parent_ns,
                                      *package_spec_ast, package_spec_info.is_for_trigger()));
       }
       OZ (package_body_ast->init(db_schema->get_database_name_str(),
@@ -1190,10 +1175,10 @@ int ObPLPackageManager::load_package_body(const ObPLResolveCtx &resolve_ctx,
       OZ (ObPLDependencyUtil::add_dependency_objects(&package_body_ast->get_dependency_table(), package_spec_ast->get_dependency_table()));
       // Use SMART_CALL_LARGE for PL package body compilation
       // Package resolving can consume a lot of stack space when SQL in the package is complex
-      OZ (SMART_CALL_LARGE(builder.build_package(package_body_info,
-                                &(package_spec_ast->get_body()->get_namespace()),
-                                *package_body_ast,
-                                *package_body)));
+      OZ (SMART_CALL_LARGE(compiler.compile_package(package_body_info,
+                                  &(package_spec_ast->get_body()->get_namespace()),
+                                  *package_body_ast,
+                                  *package_body)));
       if (OB_SUCC(ret)
           && package_body->get_can_cached() && resolve_ctx.need_add_pl_cache_
           && OB_FAIL(add_package_to_plan_cache(resolve_ctx, package_body))) {
@@ -1227,7 +1212,6 @@ int ObPLPackageManager::check_version(const ObPLResolveCtx &resolve_ctx,
     ObPLPackage *package_spec = NULL;
     ObPLPackage *package_body = NULL;
     if (OB_FAIL(get_cached_package(resolve_ctx, package_id, package_spec, package_body))) {
-      LOG_WARN("failed to get cached package", K(ret), K(package_id));
     } else if (OB_ISNULL(package_spec)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("package spec is null", K(ret));
@@ -1248,7 +1232,6 @@ int ObPLPackageManager::check_version(const ObPLResolveCtx &resolve_ctx,
                                                   *package_spec,
                                                   package_body,
                                                   match))) {
-        LOG_WARN("fail to check version", K(ret));
       }
     }
   }
@@ -1268,7 +1251,6 @@ int ObPLPackageManager::get_package_schema_info(ObSchemaGetterGuard &schema_guar
     
     const ObPackageInfo *tmp_package_info = NULL;
     if (OB_FAIL(schema_guard.get_package_info( package_id, tmp_package_info))) {
-      LOG_WARN("failed to get package info", K(package_id), K(ret));
     } else if (OB_ISNULL(tmp_package_info)) {
       ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
       LOG_WARN("package info is NULL", K(package_id), K(ret));
@@ -1281,7 +1263,6 @@ int ObPLPackageManager::get_package_schema_info(ObSchemaGetterGuard &schema_guar
                                                   share::schema::PACKAGE_BODY_TYPE,
                                                   compatible_mode,
                                                   package_body_info))) {
-          LOG_WARN("failed to get package body info", "package name", package_spec_info->get_package_name(), K(ret));
         }
       } else {
         package_body_info = tmp_package_info;
@@ -1291,7 +1272,6 @@ int ObPLPackageManager::get_package_schema_info(ObSchemaGetterGuard &schema_guar
                                                   share::schema::PACKAGE_TYPE,
                                                   compatible_mode,
                                                   package_spec_info))) {
-          LOG_WARN("failed to get package info", "package name", package_body_info->get_package_name(), K(ret));
         } else if (OB_ISNULL(package_spec_info)) {
           ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
           LOG_WARN("package body info is NULL", K(ret));
@@ -1316,7 +1296,6 @@ int ObPLPackageManager::get_package_schema_info(ObSchemaGetterGuard &schema_guar
     if (OB_FAIL(schema_guard.get_package_info_from_trigger(package_id,
                                                            package_spec_info,
                                                            package_body_info))) {
-      LOG_WARN("failed to get package info from trigger", K(ret), K(package_id));
     }
   }
   return ret;
@@ -1330,7 +1309,6 @@ int ObPLPackageManager::get_cached_package_spec(const ObPLResolveCtx &resolve_ct
   package_spec = NULL;
   bool is_overflow = false;
   if (OB_FAIL(check_stack_overflow(is_overflow))) {
-    LOG_WARN("failed to check stack overflow", K(ret));
   } else if (is_overflow) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recusive", K(ret));
@@ -1361,7 +1339,6 @@ int ObPLPackageManager::get_cached_package_spec(const ObPLResolveCtx &resolve_ct
       }
     }
   } else if (OB_FAIL(ret)) {
-    LOG_WARN("failed to get package from local cache", K(ret), K(package_id));
   }
   return ret;
 }
@@ -1377,7 +1354,6 @@ int ObPLPackageManager::get_cached_package(const ObPLResolveCtx &resolve_ctx,
   package_body = NULL;
   bool is_overflow = false;
   if (OB_FAIL(check_stack_overflow(is_overflow))) {
-    LOG_WARN("failed to check stack overflow", K(ret));
   } else if (is_overflow) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recusive", K(ret));
@@ -1454,15 +1430,12 @@ int ObPLPackageManager::get_package_item_state(const ObPLResolveCtx &resolve_ctx
                                                   *spec,
                                                   body,
                                                   valid))) {
-    LOG_WARN("fail to check version", K(ret));
   } else if (!valid) {
     OZ (resolve_ctx.session_info_.del_package_state(package_id));
     if (OB_SUCC(ret) && !resolve_ctx.is_sync_package_var_) {
       ObString key;
       if (OB_FAIL(package_state->encode_pkg_var_key(resolve_ctx.allocator_, key))) {
-        LOG_WARN("fail to encode pkg var key", K(ret));
       } else if (OB_FAIL(ObPLPackageState::disable_expired_user_variables(resolve_ctx.session_info_, key))) {
-        LOG_WARN("fail to disable expired usr var", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -1570,7 +1543,6 @@ int ObPLPackageManager::get_package_state(const ObPLResolveCtx &resolve_ctx,
     ObPLPackage* package_body = NULL;
     if (OB_FAIL(get_cached_package(
       resolve_ctx, package_id, package_spec, package_body, for_static_member))) {
-      LOG_WARN("get package failed", K(package_id), K(ret));
     } else if (OB_ISNULL(package_spec)) {
       ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
       LOG_WARN("package spec not exist", K(package_id), K(ret));
@@ -1580,7 +1552,6 @@ int ObPLPackageManager::get_package_state(const ObPLResolveCtx &resolve_ctx,
       ObPLPackageState *package_body_state = NULL;
       state_version.set_merge_version_and_public_syn_cnt(*package_spec, package_body);
       if (OB_FAIL(get_package_item_state(resolve_ctx, exec_ctx, *package_spec, state_version, package_spec_state, package_body))) {
-        LOG_WARN("get pacakge spec state failed", K(ret));
       } else if (OB_ISNULL(package_spec_state)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get package state", K(ret));
@@ -1635,9 +1606,7 @@ int ObPLPackageManager::add_package_to_plan_cache(const ObPLResolveCtx &resolve_
                           ? ObPLObjectKey::ObjectMode::PROFILE : ObPLObjectKey::ObjectMode::NORMAL;
       ObString sql;
       if (OB_FAIL(ObPLCacheCtx::assemble_format_routine_name (sql, package))) {
-        LOG_WARN("Failed to asseble format routine name!", K(ret));
       } else if (OB_FAIL(ObSQLUtils::md5(sql, pc_ctx.sql_id_, (int32_t)sizeof(pc_ctx.sql_id_)))){
-        LOG_WARN("Failed to get sql_id for pl obj!", K(ret));
       } else if (OB_FAIL(ObPLCacheMgr::add_pl_cache(resolve_ctx.session_info_.get_plan_cache(), package, pc_ctx))) {
         if (OB_SQL_PC_PLAN_DUPLICATE == ret) {
           LOG_INFO("package has been added by others, need not add again", K(package_id), K(ret));
@@ -1671,7 +1640,6 @@ int ObPLPackageManager::get_package_from_plan_cache(const ObPLResolveCtx &resolv
   package = NULL;
   bool is_overflow = false;
   if (OB_FAIL(check_stack_overflow(is_overflow))) {
-    LOG_WARN("failed to check stack overflow", K(ret));
   } else if (is_overflow) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recusive", K(ret));
@@ -1739,7 +1707,6 @@ int ObPLPackageManager::destory_package_state(sql::ObSQLSessionInfo &session_inf
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("package state is null", K(ret));
   } else if (OB_FAIL(session_info.del_package_state(package_id))) {
-    LOG_WARN("delete package state failed", K(package_state), K(ret));
   } else {
     package_state->reset(&session_info);
     package_state->~ObPLPackageState();

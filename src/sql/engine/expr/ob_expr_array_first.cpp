@@ -79,7 +79,6 @@ int ObExprArrayFirst::calc_result_typeN(ObExprResType& type,
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
       LOG_WARN("invalid data type", K(ret), K(types_stack[i].get_type()));
     } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, types_stack[i].get_subschema_id(), coll_type))) {
-      LOG_WARN("failed to get array type by subschema id", K(ret), K(types_stack[i].get_subschema_id()));
     } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
       LOG_WARN("invalid collection type", K(ret), K(coll_type->type_id_));
@@ -93,7 +92,6 @@ int ObExprArrayFirst::calc_result_typeN(ObExprResType& type,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("invalid data type", K(ret), K(lambda_type));
   } else if (OB_FAIL(exec_ctx->get_sqludt_meta_by_subschema_id(types_stack[1].get_subschema_id(), arr_meta))) {
-    LOG_WARN("failed to get elem meta.", K(ret), K(types_stack[1].get_subschema_id()));
   } else if (OB_ISNULL(coll_info = reinterpret_cast<const ObSqlCollectionInfo *>(arr_meta.value_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("array collection info is null", K(ret));
@@ -109,9 +107,7 @@ int ObExprArrayFirst::calc_result_typeN(ObExprResType& type,
     ObString child_def;
     uint16_t child_subschema_id = 0;
     if (OB_FAIL(coll_info->get_child_def_string(child_def))) {
-      LOG_WARN("failed to get child define", K(ret), K(*coll_info));
     } else if (OB_FAIL(session->get_cur_exec_ctx()->get_subschema_id_by_type_string(child_def, child_subschema_id))) {
-      LOG_WARN("failed to get child subschema id", K(ret), K(*coll_info), K(child_def));
     } else {
       type.set_collection(child_subschema_id);
     }
@@ -140,7 +136,6 @@ int ObExprArrayFirst::eval_array_first(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expr extra info is null", K(ret));
   } else if (OB_FAIL(eval_src_arrays(expr, ctx, tmp_allocator, src_arrs, arr_dim, is_null_res))) {
-    LOG_WARN("failed to eval src arrays", K(ret));
   } else if (is_null_res) {
     res.set_null();
   } else {
@@ -149,10 +144,8 @@ int ObExprArrayFirst::eval_array_first(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     bool found_res = false;
     for (uint32_t i = 0; i < arr_dim && !found_res && is_set_lambda_para && OB_SUCC(ret); i++) {
       if (OB_FAIL(set_lambda_para(tmp_allocator, ctx, info, src_arrs, expr.arg_cnt_ - 1, i, is_set_lambda_para))) {
-        LOG_WARN("failed to set lambda para", K(ret), K(i));
       } else if (is_set_lambda_para && OB_FALSE_IT(ObSQLUtils::clear_expr_eval_flags(*expr.args_[0], ctx))) {
       } else if (OB_FAIL(expr.args_[0]->eval(ctx, datum_val))) {
-        LOG_WARN("failed to eval args", K(ret));
       } else if (datum_val->is_null()) {
         ret = OB_ERR_INVALID_TYPE_FOR_OP;
         LOG_WARN("invalid data type", K(ret));
@@ -164,18 +157,14 @@ int ObExprArrayFirst::eval_array_first(const ObExpr &expr, ObEvalCtx &ctx, ObDat
           ObIArrayType* child_arr = NULL;
           ObString child_arr_str;
           if (OB_FAIL(ObArrayTypeObjFactory::construct(tmp_allocator, *dynamic_cast<const ObCollectionArrayType*>(src_arrs[0]->get_array_type())->element_type_, child_arr))) {
-            LOG_WARN("failed to add null to array", K(ret));
           } else if (OB_FAIL(static_cast<ObArrayNested*>(src_arrs[0])->at(i, *child_arr))) {
-            LOG_WARN("failed to get elem", K(ret), K(i));
           } else if (OB_FAIL(ObArrayExprUtils::set_array_res(child_arr, child_arr->get_raw_binary_len(), expr, ctx, child_arr_str))) {
-            LOG_WARN("get array binary string failed", K(ret));
           } else {
             res.set_string(child_arr_str);
           }
         } else {
           ObObj elem_obj;
           if (OB_FAIL(src_arrs[0]->elem_at(i, elem_obj))) {
-            LOG_WARN("failed to get element", K(ret), K(i));
           } else {
             res.from_obj(elem_obj);
             ObExprStrResAlloc res_alloc(expr, ctx);
@@ -201,7 +190,6 @@ int ObExprArrayFirst::cg_expr(ObExprCGCtx &expr_cg_ctx,
   ObIExprExtraInfo *extra_info = nullptr;
 
   if (OB_FAIL(construct_extra_info(expr_cg_ctx, raw_expr, rt_expr, extra_info))) {
-    LOG_WARN("failed to construct extra info", K(ret));
   } else {
     rt_expr.extra_info_ = extra_info;
     rt_expr.eval_func_ = eval_array_first;

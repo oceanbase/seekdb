@@ -32,7 +32,6 @@ int ObTableLoadMergeDataOp2::build(ObTableLoadTableOp *table_op,
   merge_data_op = nullptr;
   ObTableLoadPlan *plan = table_op->get_plan();
   if (OB_FAIL(table_op->alloc_op(merge_data_op))) {
-    LOG_WARN("fail to alloc op", KR(ret));
   } else {
     // 创建下级op
     ObTableLoadMemSortOp *mem_sort_op = nullptr;
@@ -40,15 +39,12 @@ int ObTableLoadMergeDataOp2::build(ObTableLoadTableOp *table_op,
     ObTableLoadInsertSSTableOp *insert_sstable_op = nullptr;
     // 1. mem_sort_op
     if (OB_FAIL(merge_data_op->alloc_op(mem_sort_op))) {
-      LOG_WARN("fail to alloc op", KR(ret));
     }
     // 2. compact_data_op
     else if (OB_FAIL(merge_data_op->alloc_op(compact_data_op))) {
-      LOG_WARN("fail to alloc op", KR(ret));
     }
     // 3. insert_sstable_op
     else if (OB_FAIL(merge_data_op->alloc_op(insert_sstable_op))) {
-      LOG_WARN("fail to alloc op", KR(ret));
     }
   }
   return ret;

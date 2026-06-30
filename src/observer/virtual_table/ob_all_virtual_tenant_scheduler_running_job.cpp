@@ -53,9 +53,7 @@ int ObAllVirtualTenantSchedulerRunningJob::inner_get_next_row(ObNewRow *&row)
       if (OB_FAIL(fill_scanner_.init(&scanner_,
                                      &cur_row_,
                                      output_column_ids_))) {
-        SERVER_LOG(WARN, "init fill_scanner fail", K(ret));
       } else if (OB_FAIL(session_mgr_->for_each_hold_session(fill_scanner_))) {
-        SERVER_LOG(WARN, "fill scanner fail", K(ret));
       } else {
         scanner_it_ = scanner_.begin();
         start_to_read_ = true;
@@ -211,7 +209,6 @@ int ObAllVirtualTenantSchedulerRunningJob::FillScanner::operator()(
     } // for
     // The scanner supports up to 64M, so the overflow situation is not considered for the time being
     if (FAILEDx(scanner_->add_row(*cur_row_))) {
-      SERVER_LOG(WARN, "fail to add row", K(ret), K(*cur_row_));
     }
   }
   return ret;
@@ -238,7 +235,6 @@ int ObAllVirtualTenantSchedulerRunningJob::FillScanner::init(common::ObScanner *
     SERVER_LOG(WARN,
                "some parameter is NULL", K(ret), K(scanner), K(cur_row));
   } else if (OB_FAIL(output_column_ids_.assign(column_ids))) {
-    SQL_ENG_LOG(WARN, "fail to assign output column ids", K(ret), K(column_ids));
   } else if (!ObServerConfig::get_instance().self_addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "ip_to_string failed", K(ret));

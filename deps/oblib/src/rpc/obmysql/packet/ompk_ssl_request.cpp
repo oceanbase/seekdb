@@ -85,13 +85,9 @@ int OMPKSSLRequest::serialize(char *buffer, const int64_t length, int64_t &pos) 
   } else {
     char reserved[HANDSHAKE_RESPONSE_RESERVED_SIZE] = {};
     if (OB_FAIL(ObMySQLUtil::store_int4(buffer, length, capability_ .capability_, pos))) {
-      LOG_WARN("store fail", K(ret), KP(buffer), K(length), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_int4(buffer, length, max_packet_size_, pos))) {
-      LOG_WARN("store fail", K(ret), KP(buffer), K(length), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_int1(buffer, length, character_set_, pos))) {
-      LOG_WARN("store fail", K(ret), KP(buffer), K(length), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_str_vnzt(buffer, length, reserved, HANDSHAKE_RESPONSE_RESERVED_SIZE, pos))) {
-      LOG_WARN("store fail", K(ret), KP(buffer), K(length), K(pos));
     }
   }
   return ret;

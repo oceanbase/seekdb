@@ -30,7 +30,6 @@ int ObVariableSetStmt::get_variable_node(int64_t index,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid index", K(index), K(ret));
   } else if (OB_FAIL(variable_nodes_.at(index, var_node))) {
-    LOG_WARN("fail to get variable_nodes", K(index), K(ret));
   } else {}
   return ret;
 }

@@ -41,9 +41,7 @@ namespace sql
     if (last_trace_id[0] == '\0') {
       // do nothing
     } else if (OB_FAIL(session.set_last_flt_trace_id(ObString(OB_MAX_UUID_STR_LENGTH + 1, last_trace_id)))) {
-      LOG_WARN("failed  to set last flt trace id", K(ret), K(ObString(OB_MAX_UUID_STR_LENGTH + 1, last_trace_id)));
     } else if (OB_FAIL(session.set_last_flt_span_id(ObString(OB_MAX_UUID_STR_LENGTH + 1, last_span_id_buf)))) {
-      LOG_WARN("failed  to set last flt span id", K(ret), K(ObString(OB_MAX_UUID_STR_LENGTH + 1, last_span_id_buf)));
     } else {
       // do nothing
     }
@@ -67,7 +65,6 @@ namespace sql
     if (OBTRACE->is_query_trace()) {
       // record current trace id
       if (OB_FAIL(record_flt_last_trace_id(session))) {
-        LOG_WARN("failed to record last flt trace id", K(ret));
       } else {
         // do nothing
       }
@@ -78,7 +75,6 @@ namespace sql
       } else {
         // record current trace id
         if (OB_FAIL(record_flt_last_trace_id(session))) {
-          LOG_WARN("failed to record last flt trace id", K(ret));
         } else {
           // do nothing
         }
@@ -163,7 +159,6 @@ namespace sql
         sess.set_flt_control_info(con);
   
         if (OB_FAIL(con.serialize(buf, size, pos))) {
-          LOG_WARN("failed to serialize control info", K(pos), K(size));
         } else {
           sess.set_send_control_info(true);
         }
@@ -174,7 +169,6 @@ namespace sql
         // do nothing
       } else if (sess.is_trace_enable()) {
         if (OB_FAIL(query_info.serialize(buf, size, pos))) {
-          LOG_WARN("failed to serialize query info", K(pos), K(size));
         } else {
           sess.set_trace_enable(false);
         }
@@ -196,7 +190,6 @@ namespace sql
         full_trc_ecd = new(ecd_buf)Obp20FullTrcEncoder();
         full_trc_ecd->full_trc_.assign(buf, size);
         if (OB_FAIL(extra_info_ecds->push_back(full_trc_ecd))) {
-          LOG_WARN("failed to add extra info kv", K(full_trc_ecd), K(ret));
         }
       }
     } else {
@@ -209,7 +202,6 @@ namespace sql
       kv.key_ = key;
       kv.value_ = value;
       if (OB_FAIL(extra_info->push_back(kv))) {
-        LOG_WARN("failed to add extra info kv", K(kv), K(ret));
       }
     }
     return ret;
@@ -226,7 +218,6 @@ namespace sql
       int32_t v_len = 0;
       LOG_TRACE("process single flt extra info", KP(buf), K(pos), K(len), KPHEX(buf+pos, len-pos));
       if (OB_FAIL(FLTExtraInfo::resolve_type_and_len(buf, len, pos, extra_type, v_len))) {
-        LOG_WARN("failed to resolve type and len", K(len), K(pos));
       } else if (pos+v_len > len) {
         ret = OB_SIZE_OVERFLOW;
         LOG_WARN("buf size overflow", K(ret), K(pos), K(v_len), K(len));
@@ -236,8 +227,6 @@ namespace sql
           case FLT_TYPE_DRV_LOG: {
             FLTDrvSpan drv_span;
             if (OB_FAIL(drv_span.deserialize(buf, pos+v_len, pos))) {
-              LOG_WARN("failed to deserialize full link trace extra info",
-                                        KP(buf), K(ret), K(pos), K(v_len));
             } else {
               _FLT_LOG(INFO, "%s", drv_span.span_info_.ptr());
             }
@@ -253,24 +242,18 @@ namespace sql
             FLTControlInfo con;
             ObFLTControlInfoManager mgr;
             if (OB_FAIL(app_info.deserialize(buf, pos+v_len, pos))) {
-              LOG_WARN("failed to deserialize full link trace extra info",
-                                        KP(buf), K(ret), K(pos), K(v_len));
             } else if (OB_FAIL(mgr.init())) {
-              LOG_WARN("failed to init full link trace info manager", K(ret));
             } else {
               if (app_info.trace_client_info_.empty()) {
                 // do nothing
               } else if (OB_FAIL(sess.get_app_info_encoder()
                             .set_client_info(&sess, app_info.trace_client_info_))) {
-                LOG_WARN("failed to set client info name", K(ret));
               }
   
               if (OB_FAIL(ret)) {
                 // do nothing
               } else if (OB_FAIL(init_app_info(sess, app_info))) {
-                LOG_WARN("failed  to init app info from session", K(ret));
               } else if (OB_FAIL(mgr.find_appropriate_con_info(sess))) {
-                LOG_WARN("failed to find appropriate control info", K(ret));
               } else {
                 // do nothing
               }
@@ -290,13 +273,9 @@ namespace sql
           case FLT_TYPE_SPAN_INFO: {
             FLTSpanInfo span_info;
             if (OB_FAIL(span_info.deserialize(buf, pos+v_len, pos))) {
-              LOG_WARN("failed to deserialize full link trace extra info",
-                                        KP(buf), K(ret), K(pos), K(v_len));
             } else if (span_info.trace_enable_) {
               if (OB_FAIL(sess.set_flt_trace_id(span_info.trace_id_))) {
-                LOG_WARN("failed to set trace id", K(ret));
               } else if (OB_FAIL(sess.set_flt_span_id(span_info.span_id_))) {
-                LOG_WARN("failed to set span id", K(ret));
               } else {
                 sess.set_trace_enable(span_info.trace_enable_);
                 sess.set_auto_flush_trace(span_info.force_print_);
@@ -307,7 +286,6 @@ namespace sql
           case FLT_TYPE_SHOW_TRACE_SPAN: {
             FLTShowTrace trace;
             if (OB_FAIL(trace.deserialize(buf, pos+v_len, pos))) {
-              LOG_WARN("failed to deserialize full link trace extra info", KP(buf), K(ret), K(pos), K(v_len));
             } else {
               // add to span
               if (!trace.show_trace_span_.empty() || !trace.show_trace_drv_span_.empty()) {
@@ -322,10 +300,8 @@ namespace sql
 
                 if (OB_FAIL(process_flt_span_rec(trace.show_trace_span_.ptr(),
                                     trace.show_trace_span_.length()))) {
-                  LOG_WARN("failed to generate flt span record from string", K(ret));
                 } else if (OB_FAIL(process_flt_span_rec(trace.show_trace_drv_span_.ptr(),
                                     trace.show_trace_drv_span_.length()))) {
-                  LOG_WARN("failed to generate flt span record from string", K(ret));
                 } else {
                   // do nothing
                 }
@@ -516,7 +492,6 @@ namespace sql
         //ObString key = "str";
         for (int64_t i = 0; OB_SUCC(ret) && i < j_tree->element_count(); i++) {
           if (OB_FAIL(j_tree->get_array_element(i, jobject_ptr))) {
-            LOG_WARN("failed to get array element", K(ret), K(i));
           } else if (OB_ISNULL(jobject_ptr)) {
             ret = OB_ERR_NULL_VALUE;
             LOG_WARN("fail to get array child dom", K(ret), K(i));
@@ -524,7 +499,6 @@ namespace sql
             ret = OB_INVALID_ARGUMENT;
             LOG_WARN("invalid json type", K(ret), K(jobject_ptr->json_type()));
           } else if (OB_FAIL(resolve_flt_span_rec(jobject_ptr, allocator))) {
-            LOG_WARN("fail to resolve array child dom", K(ret));
           } else {
             // do nothing
           }
@@ -546,23 +520,14 @@ namespace sql
                             "parent_id", "is_follow", "tags", "logs"};
       
       if (OB_FAIL(set_json_str_val(keys[0], j_tree, data.trace_id_))) {
-        LOG_WARN("failed to set str val", K(keys[0]), K(ret));
       } else if (OB_FAIL(set_json_str_val(keys[1], j_tree, data.span_name_))) {
-        LOG_WARN("failed to set str val", K(keys[1]), K(ret));
       } else if (OB_FAIL(set_json_str_val(keys[2], j_tree, data.span_id_))) {
-        LOG_WARN("failed to set str val", K(keys[2]), K(ret));
       } else if (OB_FAIL(set_json_num_val(keys[3], j_tree, data.start_ts_))) {
-        LOG_WARN("failed to set int val", K(keys[3]), K(ret));
       } else if (OB_FAIL(set_json_num_val(keys[4], j_tree, data.end_ts_))) {
-        LOG_WARN("failed to set int val", K(keys[4]), K(ret));
       } else if (OB_FAIL(set_json_str_val(keys[5], j_tree, data.parent_span_id_))) {
-        LOG_WARN("failed to set str val", K(keys[5]), K(ret));
       } else if (OB_FAIL(set_json_bool_val(keys[6], j_tree, data.ref_type_))) {
-        LOG_WARN("failed to set bool val", K(keys[6]), K(ret));
       } else if (OB_FAIL(set_json_obj_val(keys[7], j_tree, data.tags_, alloc))) {
-        LOG_WARN("failed to set str val", K(keys[7]), K(ret));
       } else if (OB_FAIL(set_json_obj_val(keys[8], j_tree, data.logs_, alloc))) {
-        LOG_WARN("failed to set str val", K(keys[8]), K(ret));
       } else {
         // do nothing
       }
@@ -698,7 +663,6 @@ namespace sql
         // trace id
         org_pos = pos;
         if (OB_FAIL(OBTRACE->get_trace_id().tostring(buf, len, pos))) {
-          LOG_WARN ("failed to deserialize uuid", K(ret), K(buf), K(pos));
         } else {
           data.trace_id_.assign(buf+org_pos, pos - org_pos);
         }
@@ -707,7 +671,6 @@ namespace sql
         org_pos = pos;
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(span->span_id_.tostring(buf, len, pos))) {
-          LOG_WARN ("failed to deserialize uuid", K(ret), K(buf), K(pos));
         } else {
           data.span_id_.assign(buf+org_pos, pos - org_pos);
         }

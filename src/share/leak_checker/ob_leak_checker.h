@@ -74,7 +74,6 @@ int ObBaseLeakChecker<Key, Value>::init()
   ObMemAttr attr("leakChecker", ObCtxIds::DEFAULT_CTX_ID);
   int ret = checker_info_.init(attr);
   if (OB_FAIL(ret)) {
-    COMMON_LOG(ERROR, "failed to create hashmap", K(ret));
   } else {
     COMMON_LOG(INFO, "leak checker init succ");
   }
@@ -94,7 +93,6 @@ void ObBaseLeakChecker<Key, Value>::record(const Key &k, const Value &v, const i
   INIT_SUCC(ret);
   if (total_size_ < OB_MIN(MAP_SIZE_LIMIT, max_cnt)) {
     if (OB_FAIL(checker_info_.insert(k, v))) {
-      COMMON_LOG(WARN, "Fail to register leak info", K(ret), K(k), K(v));
     } else {
       ATOMIC_INC(&total_size_);
     }
@@ -106,7 +104,6 @@ void ObBaseLeakChecker<Key, Value>::release(const Key &k, Value &value)
 {
   INIT_SUCC(ret);
   if (OB_FAIL(checker_info_.erase(k, value))) {
-    COMMON_LOG(WARN, "Fail to unregister leak info", K(ret), K(k));
   } else {
     ATOMIC_DEC(&total_size_);
   }

@@ -51,7 +51,6 @@ int ObExprDesEncrypt::calc_result_typeN(ObExprResType& type,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("param num is not correct", K(param_num));
   } else if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(types_stack[0].get_collation_type(), len))) {
-    LOG_WARN("fail to get mbmaxlen of the first param", K(ret));
   } else {
     len = len * types_stack[0].get_length();
     types_stack[0].set_calc_type(common::ObVarcharType);
@@ -80,7 +79,6 @@ int ObExprDesEncrypt::calc_result_typeN(ObExprResType& type,
 int ObExprDesEncrypt::eval_des_encrypt_with_default(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else {
     ObDatum &src = expr.locate_param_datum(ctx, 0);
     bool is_null = false;
@@ -114,7 +112,6 @@ int ObExprDesEncrypt::eval_des_encrypt_with_default(const ObExpr &expr, ObEvalCt
         size_t res_length = src_str.length() + (8 - src_str.length() % 8);
         char *res_buf = expr.get_str_res_mem(ctx, res_length + 1);
         if (OB_FAIL(ob_des_encrypt(ctx, src_str, keyschedule, key_number, res_buf))) {
-          LOG_WARN("fail to do encrypt", K(ret));
         } else {
           res.set_string(res_buf, res_length + 1);
         }
@@ -134,10 +131,8 @@ int ObExprDesEncrypt::eval_des_encrypt_batch_with_default(const ObExpr &expr, Ob
   //des-key-file is not supported, use default key
   MEMSET(&keyschedule, 0, sizeof(keyschedule));
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval args_[0] failed", K(ret));
   } else if (has_key) {
     if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
-      LOG_WARN("eval args_[1] failed", K(ret));
     }
   } else {
   }
@@ -175,7 +170,6 @@ int ObExprDesEncrypt::eval_des_encrypt_batch_with_default(const ObExpr &expr, Ob
           size_t res_length = src_str.length() + (8 - src_str.length() % 8);
           char *res_buf = expr.get_str_res_mem(ctx, res_length + 1, j);
           if (OB_FAIL(ob_des_encrypt(ctx, src_str, keyschedule, key_number, res_buf))) {
-            LOG_WARN("fail to do encrypt", K(ret));
           } else {
             res_datum.at(j)->set_string(res_buf, res_length + 1);
           }
@@ -190,7 +184,6 @@ int ObExprDesEncrypt::eval_des_encrypt_with_key(const ObExpr &expr, ObEvalCtx &c
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else {
     ObDatum &src = expr.locate_param_datum(ctx, 0);
     ObDatum &key = expr.locate_param_datum(ctx, 1);
@@ -219,7 +212,6 @@ int ObExprDesEncrypt::eval_des_encrypt_with_key(const ObExpr &expr, ObEvalCtx &c
       DES_set_key_unchecked(&keyblock.key2,&keyschedule.ks2);
       DES_set_key_unchecked(&keyblock.key3,&keyschedule.ks3);
       if (OB_FAIL(ob_des_encrypt(ctx, src_str, keyschedule, 127, res_buf))) {
-        LOG_WARN("fail to do encrypt", K(ret));
       } else {
         res.set_string(res_buf, res_length + 1);
       }
@@ -236,9 +228,7 @@ int ObExprDesEncrypt::eval_des_encrypt_batch_with_key(const ObExpr &expr, ObEval
   ObDatumVector res_datum = expr.locate_expr_datumvector(ctx);
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval args_[0] failed", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval args_[1] failed", K(ret));
   } else {
     ObDatumVector src_array = expr.args_[0]->locate_expr_datumvector(ctx);
     ObDatumVector key_array = expr.args_[1]->locate_expr_datumvector(ctx);
@@ -272,7 +262,6 @@ int ObExprDesEncrypt::eval_des_encrypt_batch_with_key(const ObExpr &expr, ObEval
         DES_set_key_unchecked(&keyblock.key2,&keyschedule.ks2);
         DES_set_key_unchecked(&keyblock.key3,&keyschedule.ks3);
         if (OB_FAIL(ob_des_encrypt(ctx, src_str, keyschedule, 127, res_buf))) {
-          LOG_WARN("fail to do encrypt", K(ret));
         } else {
           res_datum.at(j)->set_string(res_buf, res_length + 1);
         }
@@ -352,7 +341,6 @@ int ObExprDesDecrypt::calc_result_typeN(ObExprResType& type,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("param num is not correct", K(ret), K(param_num));
   } else if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(types_stack[0].get_collation_type(), len))) {
-    LOG_WARN("fail to get mbmaxlen of the first param", K(ret));
   } else {
     types_stack[0].set_calc_type(common::ObVarcharType);
     types_stack[0].set_calc_collation_type(CS_TYPE_BINARY);
@@ -379,7 +367,6 @@ int ObExprDesDecrypt::eval_des_decrypt(const ObExpr &expr, ObEvalCtx &ctx,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else {
     bool need_decrypt = false;
     ObDatum &src = expr.locate_param_datum(ctx, 0);
@@ -468,12 +455,10 @@ int ObExprDesDecrypt::eval_des_decrypt_batch(const ObExpr &expr, ObEvalCtx &ctx,
   MEMSET(&keyschedule, 0, sizeof(keyschedule));
 
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval args_[0] failed", K(ret));
   } else {
     src_array = expr.args_[0]->locate_expr_datumvector(ctx);
     if (2 == expr.arg_cnt_) {
       if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
-        LOG_WARN("eval args_[1] failed", K(ret));
       } else {
         key_array = expr.args_[1]->locate_expr_datumvector(ctx);
       }
@@ -599,7 +584,6 @@ int ObExprEncrypt::calc_result_typeN(ObExprResType& type,
 int ObExprEncrypt::eval_encrypt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else {
     char salt[3];
     ObDatum &src = expr.locate_param_datum(ctx, 0);
@@ -673,12 +657,10 @@ int ObExprEncrypt::eval_encrypt_batch(const ObExpr &expr, ObEvalCtx &ctx, const 
   char salt[3];
   
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval args_[0] failed", K(ret));
   } else {
     src_array = expr.args_[0]->locate_expr_datumvector(ctx);
     if (2 == expr.arg_cnt_) {
       if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
-        LOG_WARN("eval args_[1] failed", K(ret));
       } else {
         key_array = expr.args_[1]->locate_expr_datumvector(ctx);
       }
@@ -788,7 +770,6 @@ int ObExprEncode::calc_result_type2(ObExprResType &type,
   int ret = OB_SUCCESS;
   int64_t mbmaxlen = 0;
   if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(type1.get_collation_type(), mbmaxlen))) {
-    LOG_WARN("fail to get mbmaxlen of the first param", K(ret));
   } else {
     type1.set_calc_type(common::ObVarcharType);
     type1.set_calc_collation_type(type1.get_collation_type());
@@ -806,7 +787,6 @@ int ObExprEncode::calc_result_type2(ObExprResType &type,
 int ObExprEncode::eval_encode(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else {
     ObDatum &src = expr.locate_param_datum(ctx, 0);
     ObDatum &key = expr.locate_param_datum(ctx, 1);
@@ -823,7 +803,6 @@ int ObExprEncode::eval_encode(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res) 
         char * res_buf = expr.get_str_res_mem(ctx, src_str.length());
         crypt.init(key_str);
         if (OB_FAIL(crypt.encode(src_str, res_buf))) {
-          LOG_WARN("fail to encode string", K(ret));
         } else {
           res.set_string(res_buf, src_str.length());
         }
@@ -841,9 +820,7 @@ int ObExprEncode::eval_encode_batch(const ObExpr &expr, ObEvalCtx &ctx, const Ob
   uint32_t password[2];
   ObCrypt crypt;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval args_[0] failed", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval args_[1] failed", K(ret));
   } else if (!expr.args_[1]->is_batch_result()) {
     ObDatumVector src_array = expr.args_[0]->locate_expr_datumvector(ctx);
     ObDatum &key = expr.locate_param_datum(ctx, 1);
@@ -864,7 +841,6 @@ int ObExprEncode::eval_encode_batch(const ObExpr &expr, ObEvalCtx &ctx, const Ob
         ObString src_str = src_array.at(j)->get_string();
         char * res_buf = expr.get_str_res_mem(ctx, src_str.length(), j);
         if (OB_FAIL(crypt.encode(src_str, res_buf))) {
-          LOG_WARN("fail to encode string", K(ret));
         } else {
           res_datum.at(j)->set_string(res_buf, src_str.length());
         }
@@ -890,7 +866,6 @@ int ObExprEncode::eval_encode_batch(const ObExpr &expr, ObEvalCtx &ctx, const Ob
         char * res_buf = expr.get_str_res_mem(ctx, src_str.length(), j);
         crypt.init(key_str);
         if (OB_FAIL(crypt.encode(src_str, res_buf))) {
-          LOG_WARN("fail to encode string", K(ret));
         } else {
           res_datum.at(j)->set_string(res_buf, src_str.length());
         }
@@ -930,7 +905,6 @@ int ObExprDecode::calc_result_type2(ObExprResType &type,
   int ret = OB_SUCCESS;
   int64_t mbmaxlen = 0;
   if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(type1.get_collation_type(), mbmaxlen))) {
-    LOG_WARN("fail to get mbmaxlen of the first param", K(ret));
   } else {
     type1.set_calc_type(common::ObVarcharType);
     type1.set_calc_collation_type(type1.get_collation_type());
@@ -948,7 +922,6 @@ int ObExprDecode::calc_result_type2(ObExprResType &type,
 int ObExprDecode::eval_decode(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else {
     ObDatum &src = expr.locate_param_datum(ctx, 0);
     ObDatum &key = expr.locate_param_datum(ctx, 1);
@@ -965,7 +938,6 @@ int ObExprDecode::eval_decode(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res) 
         char * res_buf = expr.get_str_res_mem(ctx, src_str.length());
         crypt.init(key_str);
         if (OB_FAIL(crypt.decode(src_str, res_buf))) {
-          LOG_WARN("fail to decode string", K(ret));
         } else {
           res.set_string(res_buf, src_str.length());
         }
@@ -983,9 +955,7 @@ int ObExprDecode::eval_decode_batch(const ObExpr &expr, ObEvalCtx &ctx, const Ob
   uint32_t password[2];
   ObCrypt crypt;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval args_[0] failed", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval args_[1] failed", K(ret));
   } else if (!expr.args_[1]->is_batch_result()) {
     ObDatumVector src_array = expr.args_[0]->locate_expr_datumvector(ctx);
     ObDatum &key = expr.locate_param_datum(ctx, 1);
@@ -1006,7 +976,6 @@ int ObExprDecode::eval_decode_batch(const ObExpr &expr, ObEvalCtx &ctx, const Ob
         ObString src_str = src_array.at(j)->get_string();
         char * res_buf = expr.get_str_res_mem(ctx, src_str.length(), j);
         if (OB_FAIL(crypt.decode(src_str, res_buf))) {
-          LOG_WARN("fail to decode string", K(ret));
         } else {
           res_datum.at(j)->set_string(res_buf, src_str.length());
         }
@@ -1031,7 +1000,6 @@ int ObExprDecode::eval_decode_batch(const ObExpr &expr, ObEvalCtx &ctx, const Ob
         char * res_buf = expr.get_str_res_mem(ctx, src_str.length(), j);
         crypt.init(key_str);
         if (OB_FAIL(crypt.decode(src_str, res_buf))) {
-          LOG_WARN("fail to decode string", K(ret));
         } else {
           res_datum.at(j)->set_string(res_buf, src_str.length());
         }

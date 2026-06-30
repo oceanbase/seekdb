@@ -284,13 +284,11 @@ public:
         // skip
       } else if (ExistNullBitmap && result_bitmap.test(i)) {
         if (OB_FAIL(result_bitmap.set(i, false))) {
-          STORAGE_LOG(WARN, "fail to set", KR(ret), K(i), K(row_start));
         }
       } else {
         ValDataType cur_val = *start_pos;
         if (Op::apply(cur_val, cast_datum_val)) {
           if (OB_FAIL(result_bitmap.set(i))) {
-            STORAGE_LOG(WARN, "fail to set bitmap", KR(ret), K(i), K(row_start));
           }
         }
       }
@@ -313,13 +311,11 @@ public:
         // skip
       } else if (ExistNullBitmap && result_bitmap.test(i)) {
         if (OB_FAIL(result_bitmap.set(i, false))) {
-          STORAGE_LOG(WARN, "fail to set", KR(ret), K(i), K(row_start));
         }
       } else {
         ValDataType cur_val = *start_pos;
         if ((cur_val >= left_boundary) && (cur_val <= right_boundary)) {
           if (OB_FAIL(result_bitmap.set(i))) {
-            STORAGE_LOG(WARN, "fail to set bitmap", KR(ret), K(i), K(row_start));
           }
         }
       }
@@ -346,7 +342,6 @@ public:
         ValDataType cur_val = *start_pos;
         if ((cur_val != cast_null_val) && (cur_val >= left_boundary) && (cur_val <= right_boundary)) {
           if (OB_FAIL(result_bitmap.set(i))) {
-            STORAGE_LOG(WARN, "fail to set bitmap", KR(ret), K(i), K(row_start));
           }
         }
       }
@@ -375,7 +370,6 @@ public:
       if (filter->is_filter_dynamic_node()) {
         sql::ObWhiteFilterSmallHashSet datums_val;
         if (OB_FAIL(datums_val.create(filter_val_cnt, static_cast<const sql::ObDynamicFilterExecutor *>(filter)->hash_func_))) {
-          STORAGE_LOG(WARN, "fail to create small hash set", KR(ret), K(filter_val_cnt));
         }
 
         ObStorageDatum cast_datum_val;
@@ -384,7 +378,6 @@ public:
             const uint64_t datum_val = filter_vals[i] - base_val;
             cast_datum_val.set_uint(datum_val);
             if (OB_FAIL(datums_val.insert_datum(cast_datum_val))) {
-              STORAGE_LOG(WARN, "fail to insert datum", KR(ret), K(cast_datum_val), K(filter_val_cnt));
             }
           }
         }
@@ -394,14 +387,12 @@ public:
             // skip
           } else if (ExistNullBitmap && result_bitmap.test(i)) {
             if (OB_FAIL(result_bitmap.set(i, false))) {
-              STORAGE_LOG(WARN, "fail to set", KR(ret), K(i), K(row_start));
             }
           } else {
             ValDataType cur_val = *start_pos;
             cast_cur_val.set_uint(cur_val);
             bool is_exist;
             if (OB_FAIL(datums_val.exist_datum(cast_cur_val, is_exist))) {
-              STORAGE_LOG(WARN, "fail to search datum in small set", KR(ret), K(i), K(cast_cur_val));
             } else if (is_exist && OB_FAIL(result_bitmap.set(i))) {
               STORAGE_LOG(WARN, "fail to set bitmap", KR(ret), K(i), K(row_start));
             }
@@ -411,7 +402,6 @@ public:
       } else {
         common::hash::ObHashSet<ValDataType, common::hash::NoPthreadDefendMode> datums_val;
         if (OB_FAIL(datums_val.create(filter_val_cnt))) {
-          STORAGE_LOG(WARN, "fail to create hashset", KR(ret), K(filter_val_cnt));
         }
 
         for (int64_t i = 0; OB_SUCC(ret) && (i < filter_val_cnt); ++i) {
@@ -419,7 +409,6 @@ public:
             const uint64_t datum_val = filter_vals[i] - base_val;
             const ValDataType cast_datum_val = *reinterpret_cast<const ValDataType *>(&datum_val);
             if (OB_FAIL(datums_val.set_refactored(cast_datum_val))) {
-              STORAGE_LOG(WARN, "fail to set refactored", KR(ret), K(cast_datum_val), K(filter_val_cnt));
             }
           }
         }
@@ -429,13 +418,11 @@ public:
             // skip
           } else if (ExistNullBitmap && result_bitmap.test(i)) {
             if (OB_FAIL(result_bitmap.set(i, false))) {
-              STORAGE_LOG(WARN, "fail to set", KR(ret), K(i), K(row_start));
             }
           } else {
             ValDataType cur_val = *start_pos;
             if (datums_val.exist_refactored(cur_val) == OB_HASH_EXIST) {
               if (OB_FAIL(result_bitmap.set(i))) {
-                STORAGE_LOG(WARN, "fail to set bitmap", KR(ret), K(i), K(row_start));
               }
             }
           }
@@ -448,7 +435,6 @@ public:
           // skip
         } else if (ExistNullBitmap && result_bitmap.test(i)) {
           if (OB_FAIL(result_bitmap.set(i, false))) {
-            STORAGE_LOG(WARN, "fail to set", KR(ret), K(i), K(row_start));
           }
         } else {
           ValDataType cur_val = *start_pos;
@@ -458,7 +444,6 @@ public:
               const ValDataType cast_datum_val = *reinterpret_cast<const ValDataType *>(&datum_val);
               if (cur_val == cast_datum_val) {
                 if (OB_FAIL(result_bitmap.set(i))) {
-                  STORAGE_LOG(WARN, "fail to set bitmap", KR(ret), K(i), K(row_start));
                 }
                 break;
               }
@@ -487,7 +472,6 @@ public:
       if (filter->is_filter_dynamic_node()) {
         sql::ObWhiteFilterSmallHashSet datums_val;
         if (OB_FAIL(datums_val.create(filter_val_cnt, static_cast<const sql::ObDynamicFilterExecutor *>(filter)->hash_func_))) {
-          STORAGE_LOG(WARN, "fail to create small hash set", KR(ret), K(filter_val_cnt));
         }
 
         ObStorageDatum cast_datum_val;
@@ -496,7 +480,6 @@ public:
             const uint64_t datum_val = filter_vals[i] - base_val;
             cast_datum_val.set_uint(datum_val);
             if (OB_FAIL(datums_val.insert_datum(cast_datum_val))) {
-              STORAGE_LOG(WARN, "fail to insert datum", KR(ret), K(cast_datum_val), K(filter_val_cnt));
             }
           }
         }
@@ -511,7 +494,6 @@ public:
             cast_cur_val.set_uint(cur_val);
             bool is_exist;
             if (OB_FAIL(datums_val.exist_datum(cast_cur_val, is_exist))) {
-              STORAGE_LOG(WARN, "fail to search datum in small set", KR(ret), K(i), K(cast_cur_val));
             } else if (is_exist && OB_FAIL(result_bitmap.set(i))) {
               STORAGE_LOG(WARN, "fail to set bitmap", KR(ret), K(i), K(row_start));
             }
@@ -521,7 +503,6 @@ public:
       } else {
         common::hash::ObHashSet<uint64_t, common::hash::NoPthreadDefendMode> datums_val;
         if (OB_FAIL(datums_val.create(filter_val_cnt))) {
-          STORAGE_LOG(WARN, "fail to create hash set", KR(ret), K(filter_val_cnt));
         }
 
         for (int64_t i = 0; OB_SUCC(ret) && (i < filter_val_cnt); ++i) {
@@ -529,7 +510,6 @@ public:
             const uint64_t datum_val = filter_vals[i] - base_val;
             const ValDataType cast_datum_val = *reinterpret_cast<const ValDataType *>(&datum_val);
             if (OB_FAIL(datums_val.set_refactored(cast_datum_val))) {
-              STORAGE_LOG(WARN, "fail to set refactored", KR(ret), K(cast_datum_val), K(filter_val_cnt));
             }
           }
         }
@@ -542,7 +522,6 @@ public:
             // skip null
           } else if (datums_val.exist_refactored(cur_val) == OB_HASH_EXIST) {
             if (OB_FAIL(result_bitmap.set(i))) {
-              STORAGE_LOG(WARN, "fail to set bitmap", KR(ret), K(i), K(row_start));
             }
           }
           ++start_pos;
@@ -562,7 +541,6 @@ public:
               const ValDataType cast_datum_val = *reinterpret_cast<const ValDataType *>(&datum_val);
               if (cur_val == cast_datum_val) {
                 if (OB_FAIL(result_bitmap.set(i))) {
-                  STORAGE_LOG(WARN, "fail to set bitmap", KR(ret), K(i), K(row_start));
                 }
                 break;
               }
@@ -631,7 +609,6 @@ public:
         ValDataType cur_val = *start_pos;
         if ((cur_val >= cast_left_inclusive) && (cur_val <= cast_right_inclusive) && (cur_val < dict_val_cnt)) {
           if (OB_FAIL(result_bitmap.set(i))) {
-            STORAGE_LOG(WARN, "fail to set bitmap", KR(ret), K(i), K(row_start));
           }
         }
       }

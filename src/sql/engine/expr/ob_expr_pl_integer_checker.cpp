@@ -37,7 +37,6 @@ int ObExprPLIntegerChecker::ExtraInfo::deep_copy(common::ObIAllocator &allocator
   int ret = OB_SUCCESS;
   ExtraInfo *copied_cursor_info = NULL;
   if (OB_FAIL(ObExprExtraInfoFactory::alloc(allocator, type, copied_info))) {
-    LOG_WARN("failed to alloc expr extra info", K(ret));
   } else if (OB_ISNULL(copied_cursor_info = static_cast<ExtraInfo *>(copied_info))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret));
@@ -75,7 +74,6 @@ int ObExprPLIntegerChecker::assign(const ObExprOperator &other)
     LOG_WARN("invalid argument. wrong type for other", K(other), K(ret));
   } else if (OB_LIKELY(this != tmp)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
-      LOG_WARN("copy in Base class ObExprOperator failed", K(other), K(ret));
     } else {
       OZ (info_.assign(tmp->info_));
     }
@@ -92,7 +90,6 @@ int ObExprPLIntegerChecker::calc_result_type1(ObExprResType &type,
   // ExprPLIntegerChecker is used to check the validity of the result of integer data type in pl, without changing the data type of the result
   type.reset();
   if (OB_FAIL(type.assign(type1))) {
-    LOG_WARN("fail to assign ObExprResType", K(type1), K(ret));
   }
   return ret;
 }
@@ -280,7 +277,6 @@ int ObExprPLIntegerChecker::calc_pl_integer_checker(const ObExpr &expr,
   CK(OB_NOT_NULL(info));
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param))) {
-    LOG_WARN("eval arg failed", K(ret), K(expr));
   } else if (param->is_null()) {
     expr_datum.set_null();
   } else if (PL_PLS_INTEGER != info->pl_integer_type_

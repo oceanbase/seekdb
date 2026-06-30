@@ -43,7 +43,6 @@ int ObExprInterval::assign(const ObExprOperator &other)
     LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (this != tmp_other) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
-      LOG_WARN("copy in Base class ObExprOperator failed", K(ret));
     } else {
       this->use_binary_search_ = tmp_other->use_binary_search_;
     }
@@ -98,7 +97,6 @@ int ObExprInterval::calc_interval_expr(const ObExpr &expr, ObEvalCtx &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid arg cnt", K(ret), K(expr.arg_cnt_));
   } else if (OB_FAIL(expr.eval_param_value(ctx, arg0))) {
-    LOG_WARN("eval param failed", K(ret));
   } else if (arg0->is_null()) {
     res.set_int(-1);
   } else {
@@ -113,7 +111,6 @@ int ObExprInterval::calc_interval_expr(const ObExpr &expr, ObEvalCtx &ctx,
         if (arg_i.is_null()) {
           continue;
         } else if (OB_FAIL(cmp_func(arg_i, *arg0, cmp_ret))) {
-          LOG_WARN("faile to compare", K(ret));
         } else if (cmp_ret > 0) {
           // if arg_i > *arg0 break
           break;
@@ -129,7 +126,6 @@ int ObExprInterval::calc_interval_expr(const ObExpr &expr, ObEvalCtx &ctx,
         int64_t mid = (low + high) / 2;
         const ObDatum &arg_i = expr.locate_param_datum(ctx, static_cast<int>(mid));
         if (OB_FAIL(cmp_func(arg_i, *arg0, cmp_ret))) {
-          LOG_WARN("faile to compare", K(ret));
         } else if (cmp_ret <= 0) {
           low = mid + 1;
         } else if (low == high) {

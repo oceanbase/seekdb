@@ -43,7 +43,6 @@ int ObDASIDCache::init(const common::ObAddr &server)
   if (OB_SUCC(ret)) {
     id_request_rpc_ = new(request_buf) ObDASIDRequestRpc();
     if (OB_FAIL(id_request_rpc_->init(server, this))) {
-      LOG_WARN("init response rpc failed", KR(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -140,9 +139,7 @@ int ObDASIDCache::get_das_id(int64_t &das_id, const bool force_renew)
       obcall::ObDASIDRpcResult res;
       retry_request_cnt_++;
       if (OB_FAIL(req.init(get_preallocate_count_()))) {
-        LOG_WARN("ObDASIDRequest init fail", KR(ret));
       } else if (OB_FAIL(id_request_rpc_->fetch_new_range(req, res, retry_timeout, force_renew))) {
-        LOG_WARN("fetch new range failed", KR(ret));
       } else if (OB_UNLIKELY(!res.is_valid())) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("das id rpc result is invalid", KR(ret), K(res));
@@ -155,7 +152,6 @@ int ObDASIDCache::get_das_id(int64_t &das_id, const bool force_renew)
           LOG_WARN("das id rpc failed", KR(ret), K(res));
         }
       } else if (OB_FAIL(update_das_id(res.get_start_id(), res.get_end_id()))) {
-        LOG_WARN("update das id failed", KR(ret));
       }
       ATOMIC_STORE(&is_requesting_, false);
       if (OB_SUCC(ret)) {

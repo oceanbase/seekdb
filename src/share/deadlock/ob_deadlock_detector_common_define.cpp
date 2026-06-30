@@ -344,13 +344,9 @@ int ObDetectorUserReportInfo::assign(const ObDetectorUserReportInfo &rhs)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(extra_columns_names_.assign(rhs.extra_columns_names_))) {
-    DETECT_LOG(WARN, "fail to copy array", K(rhs));
   } else if (OB_FAIL(extra_columns_values_.assign(rhs.extra_columns_values_))) {
-    DETECT_LOG(WARN, "fail to copy array", K(rhs));
   } else if (OB_FAIL(extra_columns_names_guard_.assign(rhs.extra_columns_names_guard_))) {
-    DETECT_LOG(WARN, "fail to copy array", K(rhs));
   } else if (OB_FAIL(extra_columns_values_guard_.assign(rhs.extra_columns_values_guard_))) {
-    DETECT_LOG(WARN, "fail to copy array", K(rhs));
   } else {
     module_name_ = rhs.module_name_;
     resource_visitor_ = rhs.resource_visitor_;
@@ -384,9 +380,7 @@ int ObDetectorInnerReportInfo::set_args(const UserBinaryKey &binary_key,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_and_assign_ptr_(role, 0, "ObDetectorInnerReportInfo::set_args", &role_))) {
-    DETECT_LOG(ERROR, "assign event field failed");
   } else if (OB_FAIL(user_report_info_.assign(user_report_info))) {
-    DETECT_LOG(WARN, "assign user_report_info field failed");
   } else {
     start_delay_ = start_delay;
     priority_ = priority;
@@ -455,7 +449,6 @@ int ObDetectorInnerReportInfo::assign(const ObDetectorInnerReportInfo &rhs)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(user_report_info_.assign(rhs.user_report_info_))) {
-    DETECT_LOG(WARN, "fail to assign user report info", K(rhs));
   } else {
     binary_key_ = rhs.binary_key_;
     addr_ = rhs.addr_;

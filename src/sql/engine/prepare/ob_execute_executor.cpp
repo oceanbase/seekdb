@@ -41,18 +41,15 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
     ObObjParam result;
     ParamStore params_array( (ObWrapperAllocator(ctx.get_allocator())) );
     if (OB_FAIL(params_array.reserve(stmt.get_params().count()))) {
-      LOG_WARN("failed to reserve params array", K(ret), "count", stmt.get_params().count());
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < stmt.get_params().count(); ++i) {
       if (OB_FAIL(ObSQLUtils::calc_const_expr(ctx, stmt.get_params().at(i), result, ctx.get_allocator(), params_array))) {
-        LOG_WARN("failed to calc const expr", K(stmt.get_params().at(i)), K(ret));
       } else {
         result.set_param_meta();
         result.set_accuracy(stmt.get_params().at(i)->get_accuracy());
         result.set_result_flag(stmt.get_params().at(i)->get_result_flag());
         result.set_collation_level(CS_LEVEL_COERCIBLE);
         if (OB_FAIL(params_array.push_back(result))) {
-          LOG_WARN("push_back error", K(result), K(ret));
         }
       }
     }
@@ -69,10 +66,8 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
           LOG_ERROR("task executor ctx can not be NULL", K(task_ctx), K(ret));
         } else if (OB_FAIL(GCTX.schema_service_->get_tenant_received_broadcast_version(
                     tenant_version))) {
-          LOG_WARN("fail get tenant schema version", K(ret));
         } else if (OB_FAIL(GCTX.schema_service_->get_tenant_received_broadcast_version(
                     sys_version))) {
-          LOG_WARN("fail get sys schema version", K(ret));
         } else {
           sql_ctx.retry_times_ = 0;
           sql_ctx.session_info_ = ctx.get_my_session();
@@ -86,25 +81,20 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
           task_ctx->set_query_sys_begin_schema_version(sys_version);
           task_ctx->set_min_cluster_version(GET_MIN_CLUSTER_VERSION());
           if(OB_FAIL(ctx.get_my_session()->add_ps_stmt_id_in_use(stmt.get_prepare_id()))) {
-            LOG_WARN("fail add ps stmt id to hash set", K(ret), K(stmt.get_prepare_id()));
           } else {
             if (OB_FAIL(result_set.init())) {
-              LOG_WARN("result set init failed", K(ret));
             } else if (OB_FAIL(GCTX.sql_engine_->stmt_execute(stmt.get_prepare_id(),
                                                               stmt.get_prepare_type(),
                                                               params_array,
                                                               sql_ctx,
                                                               result_set,
                                                               false/* is_inner_sql */))) {
-              LOG_WARN("failed to prepare stmt", K(stmt.get_prepare_id()), K(stmt.get_prepare_type()), K(ret));
             } else {
               if (OB_ISNULL(ctx.get_sql_ctx()->schema_guard_)) {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("schema guard is null");
               } else if (OB_FAIL(ctx.get_my_session()->update_query_sensitive_system_variable(*(ctx.get_sql_ctx()->schema_guard_)))) {
-                LOG_WARN("update query affacted system variable failed", K(ret));
               } else if (OB_FAIL(result_set.open())) {
-                LOG_WARN("result set open failed", K(result_set.get_statement_id()), K(ret));
               }
               if (OB_SUCC(ret)) {
                 ObPsStmtInfoGuard guard;
@@ -119,9 +109,7 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
                   ret = OB_ERR_UNEXPECTED;
                   LOG_WARN("ps cache is null", K(ret));
                 } else if (OB_FAIL(ctx.get_my_session()->get_inner_ps_stmt_id(stmt.get_prepare_id(), inner_stmt_id))) {
-                  LOG_WARN("get_inner_ps_stmt_id failed", K(ret), K(stmt.get_prepare_id()), K(inner_stmt_id));
                 } else if (OB_FAIL(ctx.get_my_session()->get_ps_cache()->get_stmt_info_guard(inner_stmt_id, guard))) {
-                  LOG_WARN("get stmt info guard failed", K(ret), K(inner_stmt_id));
                 } else if (OB_ISNULL(ps_info = guard.get_stmt_info())) {
                   ret = OB_ERR_UNEXPECTED;
                   LOG_WARN("get stmt info is null", K(ret));
@@ -163,12 +151,10 @@ int ObExecuteExecutor::execute(ObExecContext &ctx, ObExecuteStmt &stmt)
                                 ret = OB_ERR_UNEXPECTED;
                                 LOG_WARN("invalid user var", K(*expr->get_param_expr(0)), K(ret));
                               } else if (OB_FAIL(ObSQLUtils::wrap_expr_ctx(stmt::T_CALL_PROCEDURE, ctx, ctx.get_allocator(), expr_ctx))) {
-                                LOG_WARN("Failed to wrap expr ctx", K(ret));
                               } else {
                                 const ObString var_name = static_cast<const ObConstRawExpr*>(expr->get_param_expr(0))->get_value().get_varchar();
                                 if (OB_FAIL(ObVariableSetExecutor::set_user_variable(result_set.get_exec_context().get_physical_plan_ctx()->get_param_store_for_update().at(idx),
                                                                                       var_name, expr_ctx))) {
-                                  LOG_WARN("set user variable failed", K(ret));
                                 }
                               }
                             }

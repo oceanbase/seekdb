@@ -91,13 +91,11 @@ int ObExprSTOverlaps::process_input_geometry(omt::ObSrsCacheGuard &srs_guard, co
             gis_arg1->datum_meta_,
             gis_arg1->obj_meta_.has_lob_header(),
             wkb1))) {
-      LOG_WARN("fail to get real string data", K(ret), K(wkb1));
     } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(allocator,
                    *gis_datum2,
                    gis_arg2->datum_meta_,
                    gis_arg2->obj_meta_.has_lob_header(),
                    wkb2))) {
-      LOG_WARN("fail to get real string data", K(ret), K(wkb2));
     } else if (FALSE_IT(allocator.set_baseline_size(wkb1.length() + wkb2.length()))) {
     } else if (OB_FAIL(ObGeoTypeUtil::get_type_srid_from_wkb(wkb1, type1, srid1))) {
       if (ret == OB_ERR_GIS_INVALID_DATA) {
@@ -115,13 +113,10 @@ int ObExprSTOverlaps::process_input_geometry(omt::ObSrsCacheGuard &srs_guard, co
       LOG_USER_ERROR(OB_ERR_GIS_DIFFERENT_SRIDS, N_ST_OVERLAPS, srid1, srid2);
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(
                    ctx, srs_guard, wkb1, srs, true, N_ST_OVERLAPS))) {
-      LOG_WARN("fail to get srs item", K(ret), K(wkb1));
     } else if (OB_FAIL(
                    ObGeoExprUtils::build_geometry(allocator, wkb1, geo1, srs, N_ST_OVERLAPS, ObGeoBuildFlag::GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {
-      LOG_WARN("get first geo by wkb failed", K(ret));
     } else if (OB_FAIL(
                    ObGeoExprUtils::build_geometry(allocator, wkb2, geo2, srs, N_ST_OVERLAPS, ObGeoBuildFlag::GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {
-      LOG_WARN("get second geo by wkb failed", K(ret));
     }
   }
   return ret;
@@ -142,7 +137,6 @@ int ObExprSTOverlaps::eval_st_overlaps(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret, N_ST_OVERLAPS);
   if (OB_FAIL(process_input_geometry(srs_guard, expr, ctx, temp_allocator, geo1, geo2, is_null_res, srs))) {
-    LOG_WARN("fail to process input geometry", K(ret));
   } 
   ObGeoBoostAllocGuard guard{};
   lib::MemoryContext *mem_ctx = nullptr;
@@ -154,9 +148,7 @@ int ObExprSTOverlaps::eval_st_overlaps(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   } else if (is_geo1_empty || is_geo2_empty) {
     is_null_res = true;
   } else if (OB_FAIL(ObGeoExprUtils::zoom_in_geos_for_relation(srs, *geo1, *geo2))) {
-    LOG_WARN("zoom in geos failed", K(ret));
   } else if (OB_FAIL(guard.init())) {
-    LOG_WARN("fail to init geo allocator guard", K(ret));
   } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("fail to get mem ctx", K(ret));

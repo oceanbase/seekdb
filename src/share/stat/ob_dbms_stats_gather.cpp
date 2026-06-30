@@ -40,19 +40,15 @@ int ObDbmsStatsGather::gather_stats(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(param.allocator_));
   } else if (OB_FAIL(init_opt_stats(*param.allocator_, param, opt_stats))) {
-    LOG_WARN("failed to init opt stats", K(ret));
   } else if (OB_FAIL(adjust_sample_param(opt_stats, const_cast<ObOptStatGatherParam&>(param)))) {
-    LOG_WARN("failed to refine sample block for async gather", K(ret));
   } else if (!opt_stats.empty()) {
     //1.firstly esimate basic stat
     ObBasicStatsEstimator basic_est(ctx, *param.allocator_);
     int64_t start_time = ObTimeUtility::current_time();
     int64_t basic_duration_time = 0;
     if (OB_FAIL(basic_est.estimate(param, opt_stats))) {
-      LOG_WARN("failed to estimate basic statistics", K(ret));
     } else if (OB_FALSE_IT(basic_duration_time = ObTimeUtility::current_time() - start_time)) {
     } else if (OB_FAIL(audit.add_basic_estimate_audit(param.partition_infos_, false, basic_duration_time))) {
-      LOG_WARN("failed to add basic estimate audit", K(ret));
     } else if (param.need_histogram_) {
       for (int64_t i = 0; OB_SUCC(ret) && i < opt_stats.count(); ++i) {
         ObOptStatGatherParam new_param;
@@ -64,29 +60,23 @@ int ObDbmsStatsGather::gather_stats(ObExecContext &ctx,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected error", K(ret), K(opt_stats.at(i).table_stat_));
         } else if (OB_FAIL(THIS_WORKER.check_status())) {
-          LOG_WARN("check status failed", KR(ret));
         } else if (opt_stats.at(i).table_stat_->get_row_count() <= 0) {
           //empty table or empty partition, no need gather histogram, just skip.
         } else if (OB_FAIL(new_param.assign(param))) {
-          LOG_WARN("failed to assign", K(ret));
         } else if (new_param.stat_level_ != TABLE_LEVEL &&
                    OB_FAIL(ObDbmsStatsUtils::remove_stat_gather_param_partition_info(opt_stats.at(i).table_stat_->get_partition_id(),
                                                                                      new_param))) {
           LOG_WARN("failed to remove stat gather param partition info", K(ret));
         } else if (OB_FAIL(classfy_column_histogram(new_param, opt_stats.at(i)))) {
-          LOG_WARN("failed to classfy column histogram", K(ret));
         } else if (OB_FALSE_IT(start_time = ObTimeUtility::current_time())) {
         } else if (OB_FAIL(topk_est.estimate(new_param, opt_stats.at(i)))) {
-          LOG_WARN("failed to estimate topk histogram", K(ret));
         } else if (OB_FALSE_IT(topk_duration_time = ObTimeUtility::current_time() - start_time)) {
         } else if (OB_FALSE_IT(start_time = ObTimeUtility::current_time())) {
         } else if (OB_FAIL(hybrid_est.estimate(new_param, opt_stats.at(i)))) {
-          LOG_WARN("failed to estimate hybrid histogram", K(ret));
         } else if (OB_FALSE_IT(hybrid_duration_time = ObTimeUtility::current_time() - start_time)) {
         } else if (OB_FAIL(audit.add_histogram_estimate_audit(new_param.stat_level_ != TABLE_LEVEL ? 
                                     opt_stats.at(i).table_stat_->get_partition_id() : new_param.table_id_, 
                                     topk_duration_time, hybrid_duration_time))) {
-          LOG_WARN("failed to add histogram estimate audit", K(ret));
         }
       }
     } else {/*do nothing*/}
@@ -100,22 +90,18 @@ int ObDbmsStatsGather::gather_stats(ObExecContext &ctx,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected error", K(ret), K(opt_stats.at(i).table_stat_));
         } else if (OB_FAIL(THIS_WORKER.check_status())) {
-          LOG_WARN("check status failed", KR(ret));
         } else if (opt_stats.at(i).table_stat_->get_row_count() <= 0) {
           //empty table or empty partition, no need gather histogram, just skip.
         } else if (OB_FAIL(new_param.assign(param))) {
-          LOG_WARN("failed to assign", K(ret));
         } else if (new_param.stat_level_ != TABLE_LEVEL &&
                    OB_FAIL(ObDbmsStatsUtils::remove_stat_gather_param_partition_info(opt_stats.at(i).table_stat_->get_partition_id(),
                                                                                      new_param))) {
           LOG_WARN("failed to remove stat gather param partition info", K(ret));
         } else if (OB_FALSE_IT(start_time = ObTimeUtility::current_time())) {
         } else if (OB_FAIL(min_max_est.estimate(new_param, opt_stats.at(i)))) {
-          LOG_WARN("failed to estimate hybrid histogram", K(ret));
         } else if (OB_FAIL(audit.add_refine_estimate_audit(false, new_param.stat_level_ != TABLE_LEVEL ? 
                                     opt_stats.at(i).table_stat_->get_partition_id() : new_param.table_id_,
                                     ObTimeUtility::current_time() - start_time))) {
-          LOG_WARN("failed to add refine estimate audit", K(ret));
         }
       }
     }
@@ -127,7 +113,6 @@ int ObDbmsStatsGather::gather_stats(ObExecContext &ctx,
       if (OB_FAIL(ObDbmsStatsUtils::get_valid_duration_time(param.gather_start_time_,
                                                             param.max_duration_time_,
                                                             max_duration_time))) {
-        LOG_WARN("failed to get valid duration time", K(ret));
       } else if (max_duration_time <= 0) {
         max_duration_time = basic_duration_time;
       } else {
@@ -140,11 +125,9 @@ int ObDbmsStatsGather::gather_stats(ObExecContext &ctx,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected error", K(ret), K(opt_stats.at(i).table_stat_));
         } else if (OB_FAIL(THIS_WORKER.check_status())) {
-          LOG_WARN("check status failed", KR(ret));
         } else if (opt_stats.at(i).table_stat_->get_row_count() <= 0) {
           //empty table or empty partition, no need gather histogram, just skip.
         } else if (OB_FAIL(new_param.assign(param))) {
-          LOG_WARN("failed to assign", K(ret));
         } else if (new_param.stat_level_ != TABLE_LEVEL &&
                    OB_FAIL(ObDbmsStatsUtils::remove_stat_gather_param_partition_info(opt_stats.at(i).table_stat_->get_partition_id(),
                                                                                      new_param))) {
@@ -158,10 +141,8 @@ int ObDbmsStatsGather::gather_stats(ObExecContext &ctx,
             ret = OB_SUCCESS;
             if (new_param.partition_infos_.empty()) {
               if (OB_FAIL(audit.add_failed_refine_parts(new_param.table_id_))) {
-                LOG_WARN("failed to push back failed refine parts", K(ret));
               }
             } else if (OB_FAIL(audit.add_failed_refine_parts(new_param.partition_infos_.at(0).part_id_))) {
-              LOG_WARN("failed to push back failed refine parts", K(ret));
             }
             break;
           } else {
@@ -172,7 +153,6 @@ int ObDbmsStatsGather::gather_stats(ObExecContext &ctx,
           if (OB_FAIL(audit.add_refine_estimate_audit(true, new_param.stat_level_ != TABLE_LEVEL ? 
                                       opt_stats.at(i).table_stat_->get_partition_id() : new_param.table_id_,
                                       ObTimeUtility::current_time() - start_time))) {
-            LOG_WARN("failed to add refine estimate audit", K(ret));
           }
         }
       }
@@ -227,9 +207,7 @@ int ObDbmsStatsGather::init_opt_stats(ObIAllocator &allocator,
   if (TABLE_LEVEL == param.stat_level_) {
     ObOptStat stat;
     if (OB_FAIL(init_opt_stat(allocator, param, param.global_part_id_, param.stattype_, stat))) {
-      LOG_WARN("failed to init opt stat", K(ret));
     } else if (OB_FAIL(opt_stats.push_back(stat))) {
-      LOG_WARN("failed to push back stat", K(ret));
     } else {/*do nothing*/}
   } else if (PARTITION_LEVEL == param.stat_level_ ||
              SUBPARTITION_LEVEL == param.stat_level_) {
@@ -237,9 +215,7 @@ int ObDbmsStatsGather::init_opt_stats(ObIAllocator &allocator,
       ObOptStat stat;
       if (OB_FAIL(init_opt_stat(allocator, param, param.partition_infos_.at(i).part_id_,
                                 param.partition_infos_.at(i).part_stattype_, stat))) {
-        LOG_WARN("failed to init opt stat");
       } else if (OB_FAIL(opt_stats.push_back(stat))) {
-        LOG_WARN("failed to push back stat");
       } else {/*do nothing*/}
     }
   } else {
@@ -261,7 +237,6 @@ int ObDbmsStatsGather::init_opt_stat(ObIAllocator &allocator,
   SkipRateStat *skip_rate_stat = NULL;
   ObOptTableStat *&tab_stat = stat.table_stat_;
   if (OB_FAIL(stat.column_stats_.prepare_allocate(param.column_params_.count())))  {
-    LOG_WARN("failed to prepare allocate column stat", K(ret));
   } else if (OB_ISNULL(ptr = allocator.alloc(sizeof(ObOptTableStat)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("memory is not enough", K(ret), K(ptr));
@@ -367,17 +342,14 @@ int ObDbmsStatsGather::gather_index_stats(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(param.allocator_));
   } else if (OB_FAIL(init_opt_stats(*param.allocator_, param, opt_stats))) {
-    LOG_WARN("failed to init opt stats", K(ret));
   } else if (opt_stats.empty()) {
     /*do nothing*/
   } else {
     ObIndexStatsEstimator index_est(ctx, *param.allocator_);
     if (OB_FAIL(index_est.estimate(param, opt_stats))) {
-      LOG_WARN("failed to estimate basic statistics", K(ret));
     } else if (OB_FAIL(ObDbmsStatsUtils::calssify_opt_stat(opt_stats,
                                                            all_index_stats,
                                                            all_column_stats))) {
-      LOG_WARN("failed to classify opt stat", K(ret));
     }
   }
   return ret;

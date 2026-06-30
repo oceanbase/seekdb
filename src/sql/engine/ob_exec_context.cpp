@@ -64,9 +64,7 @@ void ObOpKitStore::destroy()
 int ObDiagnosisManager::add_warning_info(int err_ret, int line_idx) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(rets_.push_back(err_ret))) {
-    LOG_WARN("failed to push back error code into array", K(ret), K(err_ret));
   } else if (OB_FAIL(idxs_.push_back(line_idx))) {
-    LOG_WARN("failed to push back line number into array", K(ret), K(line_idx));
   }
   return ret;
 }
@@ -102,14 +100,12 @@ int ObDiagnosisManager::do_diagnosis(ObBitVector &skip, int64_t limit_num) {
                                                         idx + cur_line_number_,
                                                         cur_col_name.length(), cur_col_name.ptr(),
                                                         common::ob_strerror(err_ret)))) {
-            LOG_WARN("failed to append error message", K(err_ret));
           }
         } else {
           if (OB_FAIL(err_msg.append_fmt("fail to scan file %.*s at line %ld, error: %s",
                                         cur_file_url_.length(), cur_file_url_.ptr(),
                                         idx + cur_line_number_,
                                         common::ob_strerror(err_ret)))) {
-            LOG_WARN("failed to append error message", K(err_ret));
           }
         }
 
@@ -374,7 +370,6 @@ int ObExecContext::init_phy_op(const uint64_t phy_op_size)
   } else {
     phy_op_size_ = phy_op_size;
     if (OB_FAIL(op_kit_store_.init(allocator_, phy_op_size))) {
-      LOG_WARN("init operator kit store failed", K(ret));
     }
   }
   return ret;
@@ -589,7 +584,6 @@ int ObExecContext::check_status()
   } else if (lib::Worker::WS_OUT_OF_THROTTLE == THIS_WORKER.check_wait()) {
     ret = OB_KILLED_BY_THROTTLING;
   } else if (OB_UNLIKELY((OB_SUCCESS != (ret = CHECK_MEM_STATUS())))) {
-    LOG_WARN("Exceeded memory usage limit", K(ret));
   }
   int tmp_ret = OB_SUCCESS;
   if (OB_SUCCESS != (tmp_ret = check_extra_status())) {
@@ -629,7 +623,6 @@ int ObExecContext::check_status_ignore_interrupt()
   }
   int tmp_ret = OB_SUCCESS;
   if (OB_SUCCESS != (tmp_ret = check_extra_status())) {
-    LOG_WARN("check extra status failed", K(tmp_ret));
   } else if (OB_SUCC(ret)) {
     ret = tmp_ret;
   }
@@ -683,7 +676,6 @@ int ObExecContext::get_gi_task_map(GIPrepareTaskMap *&gi_task_map)
     } else if (FALSE_IT(gi_task_map_ = new(buf) GIPrepareTaskMap())) {
     } else if (OB_FAIL(gi_task_map_->create(PARTITION_WISE_JOIN_TSC_HASH_BUCKET_NUM, /* assume no more than 8 table scan in a plan */
                                             ObModIds::OB_SQL_PX))) {
-      LOG_WARN("Failed to create gi task map", K(ret));
     } else {
       gi_task_map = gi_task_map_;
     }
@@ -707,7 +699,6 @@ int ObExecContext::get_convert_charset_allocator(ObArenaAllocator *&allocator)
            .set_mem_attr(common::ObModIds::OB_SQL_EXPR_CALC,
                          common::ObCtxIds::DEFAULT_CTX_ID);
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(convert_allocator_, param))) {
-        SQL_ENG_LOG(WARN, "create entity failed", K(ret));
       }
     }
   }
@@ -732,7 +723,6 @@ int ObExecContext::get_malloc_allocator(ObIAllocator *&allocator)
            .set_mem_attr(common::ObModIds::OB_SQL_EXPR_CALC,
                          common::ObCtxIds::DEFAULT_CTX_ID);
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
-        SQL_ENG_LOG(WARN, "create entity failed", K(ret));
       }
     }
   }
@@ -764,9 +754,7 @@ int ObExecContext::add_temp_table_interm_result_ids(uint64_t temp_table_id,
       ObTempTableResultInfo info;
       info.addr_ = sqc_addr;
       if (OB_FAIL(info.interm_result_ids_.assign(ids))) {
-        LOG_WARN("failed to assign to interm result ids.", K(ret));
       } else if (OB_FAIL(ctx.interm_result_infos_.push_back(info))) {
-        LOG_WARN("failed to push back result info", K(ret));
       } else {
         is_existed = true;
       }
@@ -779,11 +767,8 @@ int ObExecContext::add_temp_table_interm_result_ids(uint64_t temp_table_id,
     ObTempTableResultInfo info;
     info.addr_ = sqc_addr;
     if (OB_FAIL(info.interm_result_ids_.assign(ids))) {
-      LOG_WARN("failed to assign to interm result ids.", K(ret));
     } else if (OB_FAIL(ctx.interm_result_infos_.push_back(info))) {
-      LOG_WARN("failed to push back result info", K(ret));
     } else if (OB_FAIL(temp_ctx.push_back(ctx))) {
-      LOG_WARN("failed to push back temp table context", K(ret));
     }
   }
   return ret;
@@ -819,7 +804,6 @@ int ObExecContext::init_physical_plan_ctx(const ObPhysicalPlan &plan)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K_(phy_plan_ctx), K_(my_session), K(ret));
   } else if (OB_FAIL(my_session_->get_foreign_key_checks(foreign_key_checks))) {
-    LOG_WARN("failed to get foreign_key_checks", K(ret));
   } else {
     int64_t start_time = my_session_->get_query_start_time();
     int64_t plan_timeout = 0;
@@ -832,13 +816,11 @@ int ObExecContext::init_physical_plan_ctx(const ObPhysicalPlan &plan)
       plan_timeout = phy_plan_hint.query_timeout_;
     } else {
       if (OB_FAIL(my_session_->get_query_timeout(plan_timeout))) {
-        LOG_WARN("fail to get query timeout", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (!plan.is_remote_plan()) {
         if (OB_FAIL(phy_plan_ctx_->reserve_param_space(plan.get_param_count()))) {
-          LOG_WARN("reserve param space failed", K(ret), K(plan.get_param_count()));
         }
       }
     }
@@ -907,7 +889,6 @@ int ObExecContext::set_partition_ranges(const Ob2DArray<ObPxTabletRange> &part_r
       } else if (0 != size && OB_FAIL(tmp_range.deep_copy_from<false>(cur_range, get_allocator(), buf, size, pos))) {
         LOG_WARN("deep copy partition range failed", K(ret), K(cur_range));
       } else if (OB_FAIL(part_ranges_.push_back(tmp_range))) {
-        LOG_WARN("push back partition range failed", K(ret), K(tmp_range));
       }
     }
   }
@@ -941,7 +922,6 @@ int ObExecContext::get_group_pwj_map(GroupPWJTabletIdMap *&group_pwj_map)
       group_pwj_map_ = new (buf) GroupPWJTabletIdMap();
       /* assume no more than 8table scan in a plan */
       if (OB_FAIL(group_pwj_map_->create(PARTITION_WISE_JOIN_TSC_HASH_BUCKET_NUM, ObModIds::OB_SQL_PX))) {
-        LOG_WARN("Failed to create group_pwj_map_", K(ret));
       } else {
         group_pwj_map = group_pwj_map_;
       }
@@ -960,7 +940,6 @@ int ObExecContext::deep_copy_group_pwj_map(const GroupPWJTabletIdMap *src)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null");
   } else if (OB_FAIL(get_group_pwj_map(des))) {
-    LOG_WARN("failed to get_group_pwj_map");
   } else if (des->size() > 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("size should be 0", K(des->size()), K(src->size()));
@@ -969,7 +948,6 @@ int ObExecContext::deep_copy_group_pwj_map(const GroupPWJTabletIdMap *src)
       const uint64_t table_id = iter->first;
       const GroupPWJTabletIdInfo &group_pwj_tablet_id_info = iter->second;
       if (OB_FAIL(des->set_refactored(table_id, group_pwj_tablet_id_info))) {
-        LOG_WARN("failed to set refactored", K(table_id));
       }
     }
   }
@@ -1013,7 +991,6 @@ int ObExecContext::fill_px_batch_info(ObBatchRescanParams &params,
             ObDynamicParamSetter::clear_parent_evaluated_flag(eval_ctx, *expr);
             ObDatum &param_datum = expr->locate_datum_for_write(eval_ctx);
             if (OB_FAIL(param_datum.from_obj(one_params.at(i), expr->obj_datum_map_))) {
-              LOG_WARN("fail to cast datum", K(ret));
             } else if (is_lob_storage(one_params.at(i).get_type()) &&
                        OB_FAIL(ob_adjust_lob_datum(one_params.at(i), expr->obj_meta_,
                                                    expr->obj_datum_map_, get_allocator(), param_datum))) {
@@ -1067,7 +1044,6 @@ pl::ObPLPackageGuard* ObExecContext::get_package_guard()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to construct exec context`s package guard!", K(ret), K(package_guard_));
       } else if (OB_FAIL(package_guard_->init())) {
-        LOG_WARN("failed to initialize exec context`s package guard!", K(ret));
       }
     }
   }
@@ -1095,7 +1071,6 @@ DEFINE_SERIALIZE(ObExecContext)
     LOG_WARN("exec context is invalid", K_(phy_op_size), K_(phy_op_ctx_store),
              K_(phy_op_input_store), K_(phy_plan_ctx), K_(my_session), K(ret));
   } else if (OB_FAIL(my_session_->add_changed_package_info(*const_cast<ObExecContext *>(this)))) {
-    LOG_WARN("add changed package info failed", K(ret));
   } else {
     my_session_->reset_all_package_changed_info();
     phy_plan_ctx_->set_expr_op_size(ori_expr_op_size_ > 0 ? ori_expr_op_size_ : expr_op_size_);
@@ -1191,15 +1166,12 @@ int ObExecContext::deserialize_group_pwj_map(const char *buf, const int64_t data
     uint64_t table_id;
     GroupPWJTabletIdInfo group_pwj_tablet_id_info;
     if (OB_FAIL(get_group_pwj_map(group_pwj_map))) {
-      LOG_WARN("failed to get_group_pwj_map");
     } else {
       for (int64_t i = 0; i < pwj_map_element_count && OB_SUCC(ret); ++i) {
         OB_UNIS_DECODE(table_id);
         OB_UNIS_DECODE(group_pwj_tablet_id_info);
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(group_pwj_map->set_refactored(table_id, group_pwj_tablet_id_info))) {
-          LOG_WARN("failed to set refactored", K(table_id), K(pwj_map_element_count),
-                   K(group_pwj_map->size()));
         }
       }
     }

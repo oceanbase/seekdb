@@ -98,12 +98,10 @@ int ObMicroBlockWriter::init(const ObDataStoreDesc *data_store_desc)
     }
     if (OB_NOT_NULL(col_desc_array_ = &data_store_desc->get_rowkey_col_descs())) {
       if (FAILEDx(checksum_helper_.init(col_desc_array_, data_store_desc->contain_full_col_descs()))) {
-        STORAGE_LOG(WARN, "fail to init checksum_helper", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(init_hash_index_builder(data_store_desc))) {
-        STORAGE_LOG(WARN, "Fail to init hash index builder", KR(ret));
       } else {
         is_inited_ = true;
       }
@@ -123,17 +121,12 @@ int ObMicroBlockWriter::inner_init()
   } else  {
     if (!data_buffer_.is_inited()) {
       if (OB_FAIL(data_buffer_.init(DEFAULT_DATA_BUFFER_SIZE))) {
-        STORAGE_LOG(WARN, "fail to init data buffer", K(ret), K(data_buffer_));
          } else if (OB_FAIL(index_buffer_.init(DEFAULT_DATA_BUFFER_SIZE, DEFAULT_INDEX_BUFFER_SIZE))) {
-        STORAGE_LOG(WARN, "fail to init index buffer", K(ret), K(index_buffer_));
       }
     }
 
     if (FAILEDx(reserve_header(column_count_, rowkey_column_count_, is_major_))) {
-      STORAGE_LOG(WARN, "micro block writer fail to reserve header",
-          K(ret), K_(column_count));
     } else if (OB_FAIL(index_buffer_.write(static_cast<int32_t>(0)))) {
-      STORAGE_LOG(WARN, "index buffer fail to write first offset", K(ret));
     } else if (OB_UNLIKELY(data_buffer_.length() != get_data_base_offset()
           || index_buffer_.length() != get_index_base_offset())) {
       ret = OB_ERR_UNEXPECTED;
@@ -198,9 +191,7 @@ int ObMicroBlockWriter::append_row(const ObDatumRow &row)
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "row was invalid", K(row), K(ret));
   } else if (OB_FAIL(inner_init())) {
-    STORAGE_LOG(WARN, "failed to inner init", K(ret));
   } else if (OB_FAIL(process_out_row_columns(row))) {
-    STORAGE_LOG(WARN, "Failed to process out row columns", K(ret), K(row));
   } else {
     if (OB_UNLIKELY(row.get_column_count() != get_header(data_buffer_)->column_count_)) {
       ret = OB_INVALID_ARGUMENT;
@@ -223,9 +214,7 @@ int ObMicroBlockWriter::append_row(const ObDatumRow &row)
         data_buffer_.pop_back(pos);
       }
     } else if (OB_FAIL(finish_row())) {
-      STORAGE_LOG(WARN, "micro block writer fail to finish row.", K(ret), K(pos));
     } else if (OB_FAIL(append_row_to_hash_index(row))) {
-      STORAGE_LOG(WARN, "Fail to append row into hash index", KR(ret), K(row));
     } else if (get_header(data_buffer_)->has_column_checksum_ && OB_FAIL(checksum_helper_.cal_column_checksum(
         row, get_header(data_buffer_)->column_checksums_))) {
       STORAGE_LOG(WARN, "fail to cal column chksum", K(ret), K(row), KPC(get_header(data_buffer_)));
@@ -250,7 +239,6 @@ int ObMicroBlockWriter::build_block(char *&buf, int64_t &size)
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "unexpected empty block", K(ret));
   } else if (OB_FAIL(build_hash_index_block())) {
-    STORAGE_LOG(WARN, "Fail to build hash index block", KR(ret));
   } else {
     ObMicroBlockHeader *header = get_header(data_buffer_);
     if (last_rows_count_ == header->row_count_) {
@@ -274,8 +262,6 @@ int ObMicroBlockWriter::build_block(char *&buf, int64_t &size)
           K(data_buffer_.remain()), K(get_index_size()), K(ret));
     } else if (OB_FAIL(data_buffer_.write(
             index_buffer_.data(), get_index_size()))) {
-      STORAGE_LOG(WARN, "data buffer fail to write index.",
-          K(ret), K(OB_P(index_buffer_.data())), K(get_index_size()));
     } else {
       calc_column_checksums_ptr(data_buffer_);
       buf = data_buffer_.data();
@@ -345,7 +331,6 @@ int ObMicroBlockWriter::finish_row()
     ObMicroBlockHeader *header = get_header(data_buffer_);
     int32_t row_offset = static_cast<int32_t>(data_buffer_.length() - header->header_size_);
     if (OB_FAIL(index_buffer_.write(row_offset))) {
-      STORAGE_LOG(WARN, "index buffer fail to write row offset.", K(row_offset), K(ret));
     } else {
       header->row_count_++;
       row_count_++;
@@ -367,7 +352,6 @@ int ObMicroBlockWriter::reserve_header(
   } else {
     const int32_t header_size = ObMicroBlockHeader::get_serialize_size(column_count, need_calc_column_chksum);
     if (OB_FAIL(data_buffer_.write_nop(header_size, true))) {
-      STORAGE_LOG(WARN, "data buffer fail to advance header size.", K(ret), K(header_size));
     } else {
       ObMicroBlockHeader *header = get_header(data_buffer_);
       header->magic_ = MICRO_BLOCK_HEADER_MAGIC;
@@ -401,7 +385,6 @@ int ObMicroBlockWriter::init_hash_index_builder(const ObDataStoreDesc *data_stor
       && !data_store_desc->is_for_index_or_meta()) {
     // only build hash index for data block in minor
     if (OB_FAIL(hash_index_builder_.init_if_needed(data_store_desc))) {
-      STORAGE_LOG(WARN, "Fail to build hash_index builder", KR(ret));
     }
   }
   return ret;

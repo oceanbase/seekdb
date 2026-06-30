@@ -47,12 +47,10 @@ int ObSemiStructColumnEncodeCtx::scan()
 
   if (! is_enable_) {
   } else if (OB_FAIL(check_has_outrow(has_outrow))) {
-    LOG_WARN("check has outrow fail", K(ret));
   } else if (has_outrow) {
     ++encounter_outrow_block_cnt_;
     disable_encoding();
   } else if (OB_FAIL(do_scan())) {
-    LOG_WARN("scan fail", K(ret));
   }
 
   if (OB_SEMISTRUCT_SCHEMA_NOT_MATCH == ret) {
@@ -61,7 +59,6 @@ int ObSemiStructColumnEncodeCtx::scan()
     previous_cs_encoding_.reset();
     reuse();
     if (OB_FAIL(do_scan())) {
-      LOG_WARN("do scan fail", K(ret));
     }
   }
 
@@ -89,15 +86,10 @@ int ObSemiStructColumnEncodeCtx::do_scan()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_sub_schema())) {
-    LOG_WARN("init sub schema fail", K(ret));
   } else if (OB_FAIL(init_sub_column_datums())) {
-    LOG_WARN("init sub column datums fail", K(ret));
   } else if (OB_FAIL(fill_sub_column_datums())) {
-    LOG_WARN("fill sub column datums fail", K(ret));
   } else if (OB_FAIL(init_sub_column_encode_ctxs())) {
-    LOG_WARN("init_sub_column_encode_ctxs fail", K(ret));
   } else if (OB_FAIL(scan_sub_column_datums())) {
-    LOG_WARN("scan sub column datums fail", K(ret));
   }
   return ret;
 }
@@ -138,13 +130,9 @@ int ObSemiStructColumnEncodeCtx::init_sub_schema()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("datums is null", K(ret));
   } else if (OB_FAIL(json_schema_flatter.init())) {
-    LOG_WARN("init schema flatter fail", K(ret));
   } else if (OB_FAIL(json_schema_flatter.flat_datums(*datums_))) {
-    LOG_WARN("flat json fail", K(ret), K(json_schema_flatter));
   } else if (OB_FAIL(json_schema_flatter.build_sub_schema(sub_schema_))) {
-    LOG_WARN("build_sub_schema fail", K(ret), K(json_schema_flatter));
   } else if (OB_FAIL(previous_cs_encoding_.init(get_store_column_count()))) {
-    LOG_WARN("fail to init previous_cs_encoding_info", K(ret));
   }
   return ret;
 }
@@ -155,7 +143,6 @@ int ObSemiStructColumnEncodeCtx::init_sub_column_datums()
   const int64_t sub_col_count = get_store_column_count();
   const int64_t row_count = datums_->count();
   if (OB_FAIL(sub_col_datums_.reserve(sub_col_count))) {
-    LOG_WARN("reserve array fail", K(ret), "size", sub_col_count);
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < sub_col_count; ++i) {
     ObColDatums *c = nullptr;
@@ -163,9 +150,7 @@ int ObSemiStructColumnEncodeCtx::init_sub_column_datums()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("alloc memory failed", K(ret));
     } else if (OB_FAIL(c->reserve(row_count))) {
-      LOG_WARN("reserve array fail", K(ret), "size", row_count);
     } else if (OB_FAIL(sub_col_datums_.push_back(c))) {
-      LOG_WARN("push back sub column datum fail", K(ret), "size", sub_col_datums_.count());
     }
     if (OB_FAIL(ret) && OB_NOT_NULL(c)) {
       c->~ObColDatums();
@@ -182,9 +167,7 @@ int ObSemiStructColumnEncodeCtx::fill_sub_column_datums()
   ObJsonDataFlatter json_data_flatter(&allocator_);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(json_data_flatter.init(sub_schema_, sub_col_datums_))) {
-    LOG_WARN("init data flatter fail", K(ret), K(sub_schema_));
   } else if (OB_FAIL(json_data_flatter.flat_datums(*datums_))) {
-    LOG_WARN("flat json fail", K(ret), K(json_data_flatter));
   } else {
     for (int i = 0; OB_SUCC(ret) && i < sub_col_datums_.count(); ++i) {
       if (sub_col_datums_.at(i)->count() != datums_->count()) {
@@ -200,7 +183,6 @@ int ObSemiStructColumnEncodeCtx::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(encoder_allocator_.init())) {
-    LOG_WARN("init encoder_allocator_ fail", K(ret));
   }
   return ret;
 }
@@ -276,7 +258,6 @@ int ObSemiStructColumnEncodeCtx::get_sub_column_type(const int64_t column_idx, O
   int ret = OB_SUCCESS;
   const ObSemiStructSubColumn *sub_column = nullptr;
   if (OB_FAIL(sub_schema_.get_store_column(column_idx, sub_column))) {
-    LOG_WARN("get sub column fail", K(ret), K(column_idx), K(sub_schema_));
   } else {
     type = sub_column->get_obj_type();
   }
@@ -288,7 +269,6 @@ int ObSemiStructColumnEncodeCtx::get_sub_column_type(const int64_t column_idx, O
   int ret = OB_SUCCESS;
   ObObjType obj_type;
   if (OB_FAIL(get_sub_column_type(column_idx, obj_type))) {
-    LOG_WARN("get obj type fail", K(ret), K(column_idx));
   } else {
     type.set_type(obj_type);
     if (ob_is_string_type(obj_type))type.set_collation_type(CS_TYPE_UTF8MB4_BIN);
@@ -313,9 +293,7 @@ int ObSemiStructColumnEncodeCtx::serialize_sub_schema(ObMicroBufferWriter &buf_w
   char *buf = buf_writer.current();
   int64_t pos = 0;
   if (OB_FAIL(buf_writer.advance(schema_serialize_size))) {
-    LOG_WARN("buffer advance failed", K(ret), K(schema_serialize_size), K(sub_schema_));
   } else if (OB_FAIL(sub_schema_.encode(buf, schema_serialize_size, pos))) {
-    LOG_WARN("encode sub schema fail", K(ret), K(schema_serialize_size), K(pos), K(sub_schema_));
   } else if (schema_serialize_size != pos) {
     LOG_WARN("serialize sub schema incorrect", K(ret), K(schema_serialize_size), K(pos), K(sub_schema_));
   }
@@ -328,7 +306,6 @@ int ObSemiStructColumnEncodeCtx::init_sub_column_encode_ctxs()
   int64_t sub_col_count = get_store_column_count();
   sub_col_ctxs_.reuse();
   if (OB_FAIL(sub_col_ctxs_.reserve(sub_col_count))) {
-    LOG_WARN("reserve fail", K(ret), K(sub_col_count));
   }
   for (int i = 0; OB_SUCC(ret) && i < sub_col_count; ++i) {
     ObColumnCSEncodingCtx cc;
@@ -339,7 +316,6 @@ int ObSemiStructColumnEncodeCtx::init_sub_column_encode_ctxs()
     cc.is_semistruct_sub_col_ = true;
     cc.col_datums_ = sub_col_datums_.at(i);
     if (OB_FAIL(sub_col_ctxs_.push_back(cc))) {
-      LOG_WARN("push back fail", K(ret), K(i), K(cc));
     }
   }
   return ret;
@@ -357,9 +333,7 @@ int ObSemiStructColumnEncodeCtx::scan_sub_column_datums()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("sub dataum is null", K(ret), K(i), K(sub_col_datums_));
     } else if (OB_FAIL(get_sub_column_type(i, obj_type))) {
-      LOG_WARN("get sub column type fail", K(ret), K(i));
     } else if (OB_FAIL(scan_sub_column_datums(i, obj_type, *datums, sub_col_ctx))) {
-      LOG_WARN("scan sub column data fail", K(ret), K(i));
     }
   }
   return ret;
@@ -403,17 +377,14 @@ int ObSemiStructColumnEncodeCtx::scan_sub_column_datums(const int64_t column_ind
     uint64_t bucket_num = calc_hash_bucket_num(row_count);
     const int64_t node_num = row_count;
     if (OB_FAIL(hashtable_factory_.create(bucket_num, node_num, ht))) {
-      LOG_WARN("create hashtable failed", K(ret), K(bucket_num), K(node_num));
     } else if (FALSE_IT(builder = static_cast<ObDictEncodingHashTableBuilder *>(ht))) {
     } else if (OB_FAIL(builder->build(col_datums, sub_col_desc))) {
-      LOG_WARN("build hash table failed", K(ret), K(sub_col_desc));
     }
   }
 
   if (OB_SUCC(ret)) {
     sub_col_ctx.ht_ = ht;
     if (OB_FAIL(ObCSEncodingUtil::build_cs_column_encoding_ctx(store_class, -1/*precision_bytes*/, sub_col_ctx))) {
-      LOG_WARN("build_column_encoding_ctx failed", K(ret), K(obj_type), K(sub_col_desc), KP(ht), K(store_class));
     } else if (ht != nullptr && OB_FAIL(hashtables_.push_back(ht))) {
       LOG_WARN("failed to push back", K(ret));
     }
@@ -423,7 +394,6 @@ int ObSemiStructColumnEncodeCtx::scan_sub_column_datums(const int64_t column_ind
     // avoid overwirte ret
     int temp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (temp_ret = hashtable_factory_.recycle(true, ht))) {
-      LOG_WARN("recycle hashtable failed", K(temp_ret));
     }
   }
   return ret;
@@ -437,19 +407,15 @@ int ObSemiStructColumnEncodeCtx::init_sub_column_encoders()
     ObObjType obj_type = ObNullType;
     ObIColumnCSEncoder *e = nullptr;
     if (OB_FAIL(get_sub_column_type(i, obj_type))) {
-      LOG_WARN("get sub column type fail", K(ret), K(i));
     } else {
       const ObObjTypeStoreClass store_class = get_store_class_map()[ob_obj_type_class(obj_type)];
       if (OB_FAIL(try_use_previous_encoder(i, store_class, e))) {
-        LOG_WARN("try_use_previous_encoder fail", K(ret), K(obj_type), K(store_class), K(i));
       } else if (nullptr != e) { // use previose, no need detect
       } else if (ObCSEncodingUtil::is_integer_store_class(store_class)) {
         if (OB_FAIL(choose_encoder_for_integer(i, e))) {
-          LOG_WARN("fail to choose encoder for integer", K(ret));
         }
       } else if (ObCSEncodingUtil::is_string_store_class(store_class)) {
         if (OB_FAIL(choose_encoder_for_string(i, e))) {
-          LOG_WARN("fail to choose encoder for variable length type", K(ret));
         }
       } else {
         ret = OB_NOT_SUPPORTED;
@@ -458,9 +424,7 @@ int ObSemiStructColumnEncodeCtx::init_sub_column_encoders()
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(update_previous_info_before_encoding(i, *e))) {
-        LOG_WARN("fail to update previous info before encoding", K(ret), K(i));
       } else if (OB_FAIL(sub_encoders_.push_back(e))) {
-        LOG_WARN("push back encoder failed");
       }
     }
     if (OB_FAIL(ret)) {
@@ -519,19 +483,15 @@ int ObSemiStructColumnEncodeCtx::try_use_previous_encoder(const int64_t column_i
     if (OB_SUCC(ret)) {
       if (ObCSColumnHeader::Type::INTEGER == curr_type) {
         if (OB_FAIL(alloc_and_init_encoder<ObIntegerColumnEncoder>(column_idx, e))) {
-          LOG_WARN("fail to alloc encoder", K(ret), K(column_idx), K(store_class));
         }
       } else if (ObCSColumnHeader::Type::INT_DICT == curr_type) {
         if (OB_FAIL(alloc_and_init_encoder<ObIntDictColumnEncoder>(column_idx, e))) {
-          LOG_WARN("fail to alloc encoder", K(ret), K(column_idx), K(store_class));
         }
       } else if (ObCSColumnHeader::Type::STRING == curr_type) {
         if (OB_FAIL(alloc_and_init_encoder<ObStringColumnEncoder>(column_idx, e))) {
-          LOG_WARN("fail to alloc encoder", K(ret), K(column_idx), K(store_class));
         }
       } else if (ObCSColumnHeader::Type::STR_DICT == curr_type) {
         if (OB_FAIL(alloc_and_init_encoder<ObStrDictColumnEncoder>(column_idx, e))) {
-          LOG_WARN("fail to alloc encoder", K(ret), K(column_idx), K(store_class));
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -551,10 +511,8 @@ int ObSemiStructColumnEncodeCtx::update_previous_info_before_encoding(const int3
   const ObIntegerStream::EncodingType *types = nullptr;
   ObColumnEncodingIdentifier identifier;
   if (OB_FAIL(e.get_identifier_and_stream_types(identifier, types))) {
-    LOG_WARN("fail to get_identifier_and_stream_types", K(ret));
   } else if (OB_FAIL(previous_cs_encoding_.update_column_detect_info(col_idx, identifier,
       encoding_ctx_->micro_block_cnt_, encoding_ctx_->major_working_cluster_version_))) {
-    LOG_WARN("fail to check_and_set_valid", K(ret), K(col_idx), K(identifier), K(encoding_ctx_->micro_block_cnt_));
   }
   return ret;
 }
@@ -565,9 +523,7 @@ int ObSemiStructColumnEncodeCtx::choose_encoder_for_integer(const int64_t column
   ObIColumnCSEncoder *integer_encoder = nullptr;
   ObIColumnCSEncoder *dict_encoder = nullptr;
   if (OB_FAIL(alloc_and_init_encoder<ObIntegerColumnEncoder>(column_idx, integer_encoder))) {
-    LOG_WARN("fail to alloc encoder", K(ret), K(column_idx));
   } else if (OB_FAIL(alloc_and_init_encoder<ObIntDictColumnEncoder>(column_idx, dict_encoder))) {
-    LOG_WARN("fail to alloc encoder", K(ret), K(column_idx));
   } else {
     int64_t integer_estimate_size = integer_encoder->estimate_store_size();
     int64_t dict_estimate_size = dict_encoder->estimate_store_size();
@@ -609,9 +565,7 @@ int ObSemiStructColumnEncodeCtx::choose_encoder_for_string(const int64_t column_
   ObIColumnCSEncoder *string_encoder = nullptr;
   ObIColumnCSEncoder *dict_encoder = nullptr;
   if (OB_FAIL(alloc_and_init_encoder<ObStringColumnEncoder>(column_idx, string_encoder))) {
-    LOG_WARN("fail to alloc encoder", K(ret), K(column_idx));
   } else if (OB_FAIL(alloc_and_init_encoder<ObStrDictColumnEncoder>(column_idx, dict_encoder))) {
-    LOG_WARN("fail to alloc encoder", K(ret), K(column_idx));
   } else {
     int64_t string_estimate_size = string_encoder->estimate_store_size();
     int64_t dict_estimate_size = dict_encoder->estimate_store_size();
@@ -655,14 +609,11 @@ int ObSemiStructColumnEncodeCtx::alloc_and_init_encoder(const int64_t column_ind
   encoder = nullptr;
   T *e = nullptr;
   if (OB_FAIL(encoder_allocator_.alloc(e))) {
-    LOG_WARN("alloc encoder failed", K(ret));
   } else if (OB_FAIL(get_sub_column_type(column_index, obj_type))) {
-    LOG_WARN("get sub column type fail", K(ret), K(column_index));
   } else {
     sub_col_ctxs_.at(column_index).try_set_need_sort(e->get_type(), ob_obj_type_class(obj_type),
         false/*has_outrow_lob*/, encoding_ctx_->major_working_cluster_version_);
     if (OB_FAIL(e->init(sub_col_ctxs_.at(column_index), column_index, datums_->count()))) {
-      LOG_WARN("init column encoder failed", K(ret), K(column_index));
     }
     if (OB_FAIL(ret)) {
       free_encoder(e);
@@ -692,7 +643,6 @@ void ObSemiStructColumnEncodeCtx::free_encoders()
   {
     // should continue even fail
     if (OB_FAIL(hashtable_factory_.recycle(true, *ht))) {
-      LOG_WARN("recycle hashtable failed", K(ret));
     }
   }
   sub_encoders_.reuse();
@@ -716,9 +666,7 @@ int ObSemiStructEncodeCtx::get_col_ctx(const int64_t column_index, ObSemiStructC
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("aloc semistruct_ctx fail", K(ret), "size", sizeof(ObSemiStructColumnEncodeCtx));
     } else if (OB_FAIL(res->init())) {
-      LOG_WARN("init semistruct_ctx fail", K(ret));
     } else if (OB_FAIL(col_ctxs_.push_back(wrapper))) {
-      LOG_WARN("push back new encoder fail", K(ret), K(col_ctxs_));
     } else {
       col_ctxs_.at(cur_cnt).col_idx_ = column_index;
       col_ctxs_.at(cur_cnt).col_ctx_ = res;
@@ -764,7 +712,6 @@ int ObSemiStructDecodeHandler::init(ObIAllocator &allocator, const char* sub_sch
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc sub schema fail", K(ret), "size", sizeof(ObSemiStructSubSchema));
   } else if (OB_FAIL(sub_schema_->decode(sub_schema_data_ptr, sub_schema_data_len, pos))) {
-    LOG_WARN("decode sub schema fail", K(ret), K(sub_schema_data_len), KP(sub_schema_data_ptr));
   } else if (pos != sub_schema_data_len) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sub schema decode incorrect", K(ret), K(pos), K(sub_schema_data_len));
@@ -772,7 +719,6 @@ int ObSemiStructDecodeHandler::init(ObIAllocator &allocator, const char* sub_sch
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc reassembler fail", K(ret), "size", sizeof(ObJsonReassembler));
   } else if (OB_FAIL(reassembler_->init())) {
-    LOG_WARN("init reassembler fail", K(ret));
   }
   return ret;
 }

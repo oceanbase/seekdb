@@ -52,7 +52,6 @@ struct ObDecintMySQLDivDatumFunc
       quo = numerator / denominator;
       ObScale round_scale = MIN(round_up_scale, decint_res_scale);
       if (OB_FAIL(wide::to_number(quo, decint_res_scale, tmp_alloc, res_nmb))) {
-        LOG_WARN("wide::to_number failed", K(ret));
       } else if (round_scale < decint_res_scale && OB_FAIL(res_nmb.trunc(round_scale))) {
         LOG_WARN("truncate number failed", K(ret));
       } else {
@@ -88,7 +87,6 @@ struct ObDecintMySQLDivVecFunc
       quo = lhs / rhs;
       ObScale round_scale = MIN(round_up_scale, decint_res_scale);
       if (OB_FAIL(wide::to_number(quo, decint_res_scale, tmp_alloc, res_nmb))) {
-        LOG_WARN("wide::to_number failed", K(ret));
       } else if (round_scale < decint_res_scale && OB_FAIL(res_nmb.trunc(round_scale))) {
         LOG_WARN("truncate number failed", K(ret));
       } else {
@@ -113,7 +111,6 @@ static int inner_decint_div_mysql_vec_fn(VECTOR_EVAL_FUNC_ARG_DECL)
   ObDecintMySQLDivVecFunc<ltype, rtype> div_fn;
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_div_precision_increment(div_inc))) {
-    LOG_WARN("get_div_precision_increment failed", K(ret));
   } else {
     ObScale round_up_scale = ObExprDiv::decint_res_round_up_scale(expr, div_inc);
     if (OB_LIKELY(!l_vec->has_null() && !r_vec->has_null() && bound.get_all_rows_active())) {
@@ -145,7 +142,6 @@ int ObExprDiv::decint_div_mysql_fn(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   int ret = OB_SUCCESS;
   int64_t div_inc = 0;
   if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_div_precision_increment(div_inc))) {
-    LOG_WARN("get_div_precision_increment failed", K(ret));
   } else {
     ObScale round_up_scale = decint_res_round_up_scale(expr, div_inc);
     ret = def_arith_eval_func<ObDecintMySQLDivDatumFunc<ltype, rtype>>(
@@ -159,10 +155,8 @@ int ObExprDiv::decint_div_mysql_batch_fn(BATCH_EVAL_FUNC_ARG_DECL)
 {
   int ret = OB_SUCCESS;
   int64_t div_inc = 0;
-  if (OB_FAIL(binary_operand_batch_eval(expr, ctx, skip, size, false))) { // mysql mode
-    LOG_WARN("eval operands failed", K(ret));
+  if (OB_FAIL(binary_operand_batch_eval(expr, ctx, skip, size, false))) {
   } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_div_precision_increment(div_inc))) {
-    LOG_WARN("get_div_precision_increment failed", K(ret));
   } else {
     ObDatumVector l_vec = expr.args_[0]->locate_expr_datumvector(ctx);
     ObDatumVector r_vec = expr.args_[1]->locate_expr_datumvector(ctx);
@@ -200,9 +194,7 @@ int ObExprDiv::decint_div_mysql_vec_fn(VECTOR_EVAL_FUNC_ARG_DECL)
   int ret = OB_SUCCESS;
   // mysql mode, just eval operands is fine
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval left operands failed", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval right operands failed", K(ret));
   } else {
     VectorFormat l_fmt = expr.args_[0]->get_format(ctx);
     VectorFormat r_fmt = expr.args_[1]->get_format(ctx);

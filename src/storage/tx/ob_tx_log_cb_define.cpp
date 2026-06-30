@@ -60,12 +60,10 @@ int ObTxLogCbGroup::occupy_by_tx(ObPartTransCtx *tx_ctx)
     ret = OB_NEED_WAIT;
     TRANS_LOG(ERROR, "the log cb group is occupied now", K(ret), KPC(tx_ctx), KPC(this));
   } else if (OB_FAIL(check_and_reset_log_cbs(false /*skip_check*/))) {
-    TRANS_LOG(ERROR, "reset log cbs failed", K(ret), KPC(tx_ctx), KPC(this));
   } else {
     for (int i = 0; OB_SUCC(ret) && i < MAX_LOG_CB_COUNT_IN_GROUP; i++) {
       // log_cbs_[i].reset();
       if (OB_FAIL(log_cbs_[i].init(this))) {
-        TRANS_LOG(WARN, "log cb init failed", KR(ret), K(log_cbs_[i]), KPC(this));
       }
     }
     if (OB_SUCC(ret)) {
@@ -112,7 +110,6 @@ int ObTxLogCbPool::init()
   } else {
     for (int i = 0; OB_SUCC(ret) && i < MAX_LOG_CB_GROUP_COUNT_IN_POOL; i++) {
       if (OB_FAIL(group_pool_[i].init(i))) {
-        TRANS_LOG(WARN, "init group pool failed", K(ret), K(i), K(group_pool_[i]));
       }
     }
 
@@ -203,7 +200,6 @@ int ObTxLogCbPool::free_log_cb_group(ObTxLogCbGroup *group_ptr)
   } else if (OB_FALSE_IT(occupy_tx_id = group_ptr->get_trans_id())) {
     // do nothing
   } else if (OB_FAIL(group_ptr->check_and_reset_log_cbs(false))) {
-    TRANS_LOG(WARN, "There are some busy log cbs in the group", K(ret), KPC(group_ptr), KPC(this));
   } else {
     stat_.revert_group(ObTimeUtility::fast_current_time() - start_occupy_ts, start_occupy_ts);
 
@@ -355,7 +351,6 @@ int ObTxLogCbPool::free_target_group(ObTxLogCbGroup *group_ptr)
       TRANS_LOG(WARN, "infer a pool's addr failed", K(ret), KP(group_ptr), KPC(group_ptr));
     }
   } else if (OB_FAIL(log_pool_ptr->free_log_cb_group(group_ptr))) {
-    TRANS_LOG(WARN, "free log cb group failed", K(ret), KPC(group_ptr), KPC(log_pool_ptr));
   }
 
   return ret;

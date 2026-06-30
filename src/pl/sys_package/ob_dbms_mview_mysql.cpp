@@ -50,7 +50,6 @@ int ObDBMSMViewMysql::purge_log(ObExecContext &ctx, ParamStore &params, ObObj &r
     purge_params.master_ = params.at(0).get_varchar();
     purge_params.purge_log_parallel_ = params.at(1).get_int() >= 0 ? params.at(1).get_int() : 1;
     if (OB_FAIL(purge_executor.execute(ctx, purge_params))) {
-      LOG_WARN("fail to execute mlog purge", KR(ret), K(purge_params));
     }
   }
   return ret;
@@ -130,7 +129,6 @@ int ObDBMSMViewMysql::refresh(ObExecContext &ctx, ParamStore &params, ObObj &res
     refresh_params.nested_ = nested.get_bool();
     refresh_params.nested_consistent_refresh_ = nested_consistent_refresh; 
     if (OB_FAIL(refresh_executor.execute(ctx, refresh_params))) {
-      LOG_WARN("fail to execute mview refresh", KR(ret), K(refresh_params));
     }
   }
   return ret;

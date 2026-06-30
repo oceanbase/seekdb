@@ -102,7 +102,6 @@ int IteratorStorage::pread(
     ret = OB_ITER_END;
     PALF_LOG(WARN, "IteratorStorage has iterate end", K(ret), KPC(this));
   } else if (OB_FAIL(read_data_from_storage_(real_pos, real_in_read_size, buf, out_read_size, io_ctx))) {
-    PALF_LOG(WARN, "read_data_from_storage_ failed", K(ret), K(pos), K(in_read_size), KP(buf), KPC(this));
   } else {
     start_lsn_ = start_lsn_ + real_pos;
     end_lsn_ = start_lsn_ + out_read_size;
@@ -122,7 +121,6 @@ int IteratorStorage::read_data_from_storage_(
   int ret = OB_SUCCESS;
   int64_t remain_valid_data_size = 0;
   if (OB_FAIL(ensure_memory_layout_correct_(pos, in_read_size, remain_valid_data_size))) {
-    PALF_LOG(WARN, "ensure_memory_layout_correct_ failed", K(ret), K(pos), K(in_read_size), KPC(this));
   } else {
     // avoid read repeated data from disk
     const LSN curr_round_read_lsn = start_lsn_ + pos + remain_valid_data_size;
@@ -134,7 +132,6 @@ int IteratorStorage::read_data_from_storage_(
     } else if (OB_FAIL(log_storage_->pread(curr_round_read_lsn,
             real_in_read_size,
             read_buf_, out_read_size, io_ctx))) {
-      PALF_LOG(WARN, "ILogStorage pread failed", K(ret), K(pos), K(in_read_size), KPC(this));
     }
     read_buf_.buf_ -= remain_valid_data_size;
     if (OB_SUCC(ret)) {

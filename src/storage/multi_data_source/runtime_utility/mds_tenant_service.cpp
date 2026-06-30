@@ -477,7 +477,6 @@ void ObTenantMdsService::dump_map_holding_item(int64_t check_alive_time_threshol
     return true;
   };
   if (OB_FAIL(memory_leak_debug_map_.for_each(op))) {
-    MDS_LOG(WARN, "fail to do for_each", KR(ret));
   } else {
     MDS_LOG(INFO, "finish scan map holding items", K(scan_cnt));
   }

@@ -49,10 +49,8 @@ int ObTransIDService::handle_request(const ObGtiRequest &request, obcall::ObGtiR
     int64_t start_id = 0;
     int64_t end_id = 0;
     if (OB_FAIL(get_number(range, 0, start_id, end_id))) {
-      TRANS_LOG(WARN, "get trans id failed", KR(ret));
     }
     if (OB_FAIL(result.init(ret, start_id, end_id))) {
-      TRANS_LOG(WARN, "gti result init failed", KR(ret), K(request));
     }
   }
   //todo zhaoxing:ObTransStatistic

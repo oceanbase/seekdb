@@ -37,7 +37,6 @@ int ObVectorIndexSchedJobUtils::add_scheduler_job(
   int ret = OB_SUCCESS;
   ObSqlString interval_str;
   if (OB_FAIL(interval_str.append_fmt("FREQ=SECONDLY; INTERVAL=%ld", repeat_interval_ts / 1000000L))) {
-    LOG_WARN("fail to append interval string", K(ret));
   } else {
     int64_t start_date_us = start_date.is_null() ? ObTimeUtility::current_time() + repeat_interval_ts
                                                  : start_date.get_timestamp();
@@ -65,7 +64,6 @@ int ObVectorIndexSchedJobUtils::add_scheduler_job(
       job_info.func_type_ = dbms_scheduler::ObDBMSSchedFuncType::VECTOR_INDEX_REFRESH_JOB;
       if (OB_FAIL(ObDBMSSchedJobUtils::create_dbms_sched_job(
               sql_client, job_id, job_info))) {
-        LOG_WARN("failed to create dbms scheduler job", KR(ret));
       }
     }
   }
@@ -81,7 +79,6 @@ int ObVectorIndexSchedJobUtils::add_vector_index_refresh_job(
   common::ObObj start_date;
   start_date.set_null();
   if (OB_FAIL(ObMViewSchedJobUtils::generate_job_id(job_id))) {
-    LOG_WARN("failed to generate vector index refresh job id", K(ret));
   } else {
     ObSqlString job_action;
     ObSqlString refresh_job_name;
@@ -89,16 +86,12 @@ int ObVectorIndexSchedJobUtils::add_vector_index_refresh_job(
             "DBMS_VECTOR.refresh_index_inner(%lu, %lu)",
             vidx_table_id,
             ObVectorIndexSchedJobUtils::DEFAULT_REFRESH_TRIGGER_THRESHOLD))) {
-      LOG_WARN("failed to generate refresh index job id", K(ret));
     } else if (OB_FAIL(refresh_job_name.assign_fmt("%lu_refresh", vidx_table_id))) {
-      LOG_WARN("failed to generate refresh job name", K(ret));
     } else if (OB_FAIL(ObVectorIndexSchedJobUtils::add_scheduler_job(
                    sql_client, job_id, refresh_job_name.string(),
                    job_action.string(), start_date,
                    ObVectorIndexSchedJobUtils::DEFAULT_REFRESH_INTERVAL_TS,
                    exec_env))) {
-      LOG_WARN("failed to add refresh index job", K(ret), K(vidx_table_id),
-               K(job_action), K(exec_env));
     } else {
       LOG_INFO("succeed to add refresh index job", K(ret), K(vidx_table_id),
                K(job_action), K(exec_env));
@@ -114,11 +107,8 @@ int ObVectorIndexSchedJobUtils::remove_vector_index_refresh_job(
   int ret = OB_SUCCESS;
   ObSqlString refresh_job_name;
   if (OB_FAIL(refresh_job_name.assign_fmt("%lu_refresh", vidx_table_id))) {
-    LOG_WARN("failed to generate refresh job name", K(ret));
   } else if (OB_FAIL(ObDBMSSchedJobUtils::remove_dbms_sched_job(
         sql_client, refresh_job_name.string(), true))) {
-    LOG_WARN("failed to remove vector index refresh job",
-        KR(ret), K(vidx_table_id));
   }
   return ret;
 }
@@ -133,7 +123,6 @@ int ObVectorIndexSchedJobUtils::add_vector_index_rebuild_job(common::ObISQLClien
   common::ObObj start_date;
   start_date.set_null();
   if (OB_FAIL(ObMViewSchedJobUtils::generate_job_id(job_id))) {
-    LOG_WARN("failed to generate vector index refresh job id", K(ret));
   } else {
     ObSqlString job_action;
     ObSqlString rebuild_job_name;
@@ -141,16 +130,12 @@ int ObVectorIndexSchedJobUtils::add_vector_index_rebuild_job(common::ObISQLClien
             "DBMS_VECTOR.rebuild_index_inner(%lu, %lf)",
             vidx_table_id,
             ObVectorIndexSchedJobUtils::DEFAULT_REBUILD_TRIGGER_THRESHOLD))) {
-      LOG_WARN("failed to generate rebuild index job id", K(ret));
     } else if (OB_FAIL(rebuild_job_name.assign_fmt("%lu_rebuild", vidx_table_id))) {
-      LOG_WARN("failed to generate rebuild job name", K(ret));
     } else if (OB_FAIL(ObVectorIndexSchedJobUtils::add_scheduler_job(
                    sql_client, job_id, rebuild_job_name.string(),
                    job_action.string(), start_date,
                    ObVectorIndexSchedJobUtils::DEFAULT_REBUILD_INTERVAL_TS,
                    exec_env))) {
-      LOG_WARN("failed to add rebuild index job", K(ret), K(vidx_table_id),
-               K(job_action), K(exec_env));
     } else {
       LOG_INFO("succeed to add rebuild index job", K(ret), K(vidx_table_id),
                K(job_action), K(exec_env));
@@ -166,11 +151,8 @@ int ObVectorIndexSchedJobUtils::remove_vector_index_rebuild_job(common::ObISQLCl
   int ret = OB_SUCCESS;
   ObSqlString rebuild_job_name;
   if (OB_FAIL(rebuild_job_name.assign_fmt("%lu_rebuild", vidx_table_id))) {
-    LOG_WARN("failed to generate refresh job name", K(ret));
   } else if (OB_FAIL(ObDBMSSchedJobUtils::remove_dbms_sched_job(
         sql_client, rebuild_job_name.string(), true))) {
-    LOG_WARN("failed to remove vector index rebuild job",
-        KR(ret), K(vidx_table_id));
   }
   return ret;
 }
@@ -185,18 +167,15 @@ int ObVectorIndexSchedJobUtils::get_vector_index_job_info(common::ObISQLClient &
   const share::schema::ObTenantSchema *tenant_schema = NULL;
   ObSqlString refresh_job_name;
   if (OB_FAIL(schema_guard.get_tenant_info(tenant_schema))) {
-    LOG_WARN("fail to get tenant info", KR(ret));
   } else if (OB_ISNULL(tenant_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("tenant schema is null"); // skip
   } else if (OB_FAIL(refresh_job_name.assign_fmt("%lu_refresh", vidx_table_id))) {
-    LOG_WARN("failed to generate refresh job name", K(ret));
   } else if (OB_FAIL(ObDBMSSchedJobUtils::get_dbms_sched_job_info(sql_client,
                                                                   false /*is_oracle_tenant*/,
                                                                   refresh_job_name.string(), 
                                                                   allocator,
                                                                   job_info))) {
-    LOG_WARN("fail to get dbms schedule info", K(ret), K(refresh_job_name));
   }
   return ret;
 }

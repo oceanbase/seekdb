@@ -112,7 +112,6 @@ int ObTabletMeta::init(
     LOG_WARN("invalid args", K(ret), K(ls_id), K(tablet_id), K(data_tablet_id),
         K(create_scn), K(snapshot_version), K(clog_checkpoint_scn), K(compat_mode));
   } else if (OB_FAIL(ha_status_.init_status())) {
-    LOG_WARN("failed to init ha status", K(ret));
   } else {
     version_ = TABLET_META_VERSION;
     ls_id_ = ls_id;
@@ -180,7 +179,6 @@ int ObTabletMeta::init(
       // because MDS data will not be forked.
       share::SCN fork_snapshot_scn;
       if (OB_FAIL(fork_snapshot_scn.convert_for_tx(fork_info.get_fork_snapshot_version()))) {
-        LOG_WARN("failed to convert fork_snapshot_version to SCN", K(ret), K(fork_info));
       } else {
         start_scn_ = fork_snapshot_scn;
         clog_checkpoint_scn_ = fork_snapshot_scn;
@@ -250,8 +248,6 @@ int ObTabletMeta::init(
     }
     fork_info_ = old_tablet_meta.fork_info_;
     if (OB_FAIL(last_persisted_committed_tablet_status_.assign(old_tablet_meta.last_persisted_committed_tablet_status_))) {
-      LOG_WARN("fail to init last_persisted_committed_tablet_status from old tablet meta", K(ret),
-          "last_persisted_committed_tablet_status", old_tablet_meta.last_persisted_committed_tablet_status_);
     }
   }
 
@@ -320,8 +316,6 @@ int ObTabletMeta::init(
     has_truncate_info_ = old_tablet_meta.has_truncate_info_;
     fork_info_ = fork_info;
     if (OB_FAIL(last_persisted_committed_tablet_status_.assign(old_tablet_meta.last_persisted_committed_tablet_status_))) {
-      LOG_WARN("fail to init last_persisted_committed_tablet_status from old tablet meta", K(ret),
-          "last_persisted_committed_tablet_status", old_tablet_meta.last_persisted_committed_tablet_status_);
     }
   }
 
@@ -382,8 +376,6 @@ int ObTabletMeta::init(
     has_truncate_info_ = old_tablet_meta.has_truncate_info_;
     fork_info_ = old_tablet_meta.fork_info_;
     if (OB_FAIL(last_persisted_committed_tablet_status_.assign(old_tablet_meta.last_persisted_committed_tablet_status_))) {
-      LOG_WARN("fail to init last_persisted_committed_tablet_status from old tablet meta", K(ret),
-          "last_persisted_committed_tablet_status", old_tablet_meta.last_persisted_committed_tablet_status_);
     }
   }
 
@@ -448,14 +440,10 @@ int ObTabletMeta::init(
       if (user_data.empty()) {
         last_persisted_committed_tablet_status_.reset();
       } else if (OB_FAIL(last_persisted_committed_tablet_status_.deserialize(user_data.ptr(), user_data.length(), tmp_pos))) {
-        LOG_WARN("failed to deserialize user data", K(ret), K(tmp_pos), K(user_data));
       }
     } else if (is_transfer) {
       last_persisted_committed_tablet_status_.reset();
     } else if (OB_FAIL(last_persisted_committed_tablet_status_.assign(param.last_persisted_committed_tablet_status_))) {
-      LOG_WARN("fail to init last_persisted_committed_tablet_status from mig param", K(ret),
-          "last_persisted_committed_tablet_status",
-          param.last_persisted_committed_tablet_status_);
     }
     if (OB_SUCC(ret)) {
       is_inited_ = true;
@@ -514,8 +502,6 @@ int ObTabletMeta::assign(const ObTabletMeta &other)
     has_truncate_info_ = other.has_truncate_info_;
     fork_info_ = other.fork_info_;
     if (OB_FAIL(last_persisted_committed_tablet_status_.assign(other.last_persisted_committed_tablet_status_))) {
-      LOG_WARN("fail to init last_persisted_committed_tablet_status from old tablet meta", K(ret),
-          "last_persisted_committed_tablet_status", other.last_persisted_committed_tablet_status_);
     }
   }
 
@@ -542,7 +528,6 @@ int ObTabletMeta::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(old_tablet_meta));
   } else if (OB_FAIL(inner_check_(old_tablet_meta, tablet_meta))) {
-    LOG_WARN("failed to do inner check", K(ret), K(old_tablet_meta), KP(tablet_meta));
   } else {
     const int64_t snapshot_version = OB_ISNULL(tablet_meta) ?
         old_tablet_meta.snapshot_version_ : MAX(old_tablet_meta.snapshot_version_, tablet_meta->snapshot_version_);
@@ -578,9 +563,7 @@ int ObTabletMeta::init(
     if (!old_tablet_meta.ha_status_.is_data_status_complete() && OB_NOT_NULL(tablet_meta)) {
       ObTabletRestoreStatus::STATUS src_restore_status;
       if (OB_FAIL(tablet_meta->ha_status_.get_restore_status(src_restore_status))) {
-        LOG_WARN("failed to get restore status", K(ret), KPC(tablet_meta));
       } else if (OB_FAIL(new_ha_status.set_restore_status(src_restore_status))) {
-        LOG_WARN("failed to set new restore status", K(ret), K(new_ha_status), K(src_restore_status));
       }
     }
 
@@ -621,8 +604,6 @@ int ObTabletMeta::init(
         has_truncate_info_ = true;
       }
       if (OB_FAIL(last_persisted_committed_tablet_status_.assign(old_tablet_meta.last_persisted_committed_tablet_status_))) {
-        LOG_WARN("fail to init last_persisted_committed_tablet_status from old tablet meta", K(ret),
-            "last_persisted_committed_tablet_status", old_tablet_meta.last_persisted_committed_tablet_status_);
       }
     }
   }
@@ -726,7 +707,6 @@ int ObTabletMeta::serialize(char *buf, const int64_t len, int64_t &pos) const
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("buffer's length is not enough", K(ret), K(length), K(len - new_pos));
   } else if (OB_FAIL(serialization::encode_i32(buf, len, new_pos, version_))) {
-    LOG_WARN("failed to serialize tablet meta's version", K(ret), K(len), K(new_pos), K_(version));
   } else if (new_pos - pos < length && OB_FAIL(serialization::encode_i32(buf, len, new_pos, length))) {
     LOG_WARN("failed to serialize tablet meta's length", K(ret), K(len), K(new_pos), K(length));
   } else if (new_pos - pos < length && OB_FAIL(ls_id_.serialize(buf, len, new_pos))) {
@@ -824,9 +804,7 @@ int ObTabletMeta::deserialize(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(buf), K(len), K(pos));
   } else if (OB_FAIL(serialization::decode_i32(buf, len, new_pos, &version_))) {
-    LOG_WARN("failed to deserialize tablet meta's version", K(ret), K(len), K(new_pos));
   } else if (OB_FAIL(serialization::decode_i32(buf, len, new_pos, &length_))) {
-    LOG_WARN("failed to deserialize tablet meta's length", K(ret), K(len), K(new_pos));
   } else if (TABLET_META_VERSION == version_) {
     int8_t compat_mode = -1;
     ddl_execution_id_ = 0;
@@ -969,14 +947,10 @@ int ObTabletMeta::deserialize_id(
   int32_t version = 0;
   int32_t length = 0;
   if (OB_FAIL(serialization::decode_i32(buf, len, pos, &version))) {
-    LOG_WARN("fail to deserialize tablet meta's version", K(ret), K(len), K(pos));
   } else if (OB_FAIL(serialization::decode_i32(buf, len, pos, &length))) {
-    LOG_WARN("fail to deserialize tablet meta's length", K(ret), K(len), K(pos));
   } else if (TABLET_META_VERSION == version) {
     if (OB_FAIL(ls_id.deserialize(buf, len, pos))) {
-      LOG_WARN("fail to deserialize ls id", K(ret), K(len), K(pos));
     } else if (OB_FAIL(tablet_id.deserialize(buf, len, pos))) {
-      LOG_WARN("fail to deserialize tablet id", K(ret), K(len), K(pos));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -1125,7 +1099,6 @@ int ObTabletMeta::update_meta_last_persisted_committed_tablet_status(
       //user_data.delete_commit_version_ = tx_data.tx_scn_;
     }
     if (OB_FAIL(last_persisted_committed_tablet_status.assign(user_data))) {
-      LOG_WARN("failed to set last_persisted_committed_tablet_status", K(ret), K(user_data));
     }
   }
   return ret;
@@ -1266,11 +1239,9 @@ int ObMigrationTabletParam::get_tablet_status_for_transfer(ObTabletCreateDeleteM
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("user data is empty", K(ret), K_(ls_id), K_(tablet_id), "tablet_status_uncommitted_kv", mds_data_.tablet_status_uncommitted_kv_);
     } else if (OB_FAIL(user_data.deserialize(str.ptr(), str.length(), pos))) {
-      LOG_WARN("failed to deserialize user data", K(ret), K_(ls_id), K_(tablet_id));
     }
   } else if (version_ >= PARAM_VERSION_V3) {
     if (OB_FAIL(user_data.assign(last_persisted_committed_tablet_status_))) {
-      LOG_WARN("fail to assign tablet status", K(ret), K_(ls_id), K_(tablet_id), K_(last_persisted_committed_tablet_status));
     }
   }
 
@@ -1396,7 +1367,6 @@ int ObMigrationTabletParam::deserialize_v2_v3(const char *buf, const int64_t len
   int64_t length = 0; // total serialize size expect for the first 2 fields.
 
   if (OB_FAIL(serialization::decode_i64(buf, len, new_pos, &total_length))) {
-    LOG_WARN("failed to deserialize length", K(ret), K(len), K(new_pos));
   } else if (OB_UNLIKELY(total_length - 24 > len - new_pos)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("buffer's length is not enough", K(ret), K(total_length), K(len - new_pos));
@@ -1484,7 +1454,6 @@ int ObMigrationTabletParam::deserialize_v2_v3(const char *buf, const int64_t len
       if (user_data.empty()) {
         last_persisted_committed_tablet_status_.reset();
       } else if (OB_FAIL(last_persisted_committed_tablet_status_.deserialize(user_data.ptr(), user_data.length(), tmp_pos))) {
-        LOG_WARN("failed to deserialize user data", K(ret), K(tmp_pos), K(user_data));
       }
     }
     compat_mode_ = static_cast<lib::Worker::CompatMode>(compat_mode);
@@ -1510,7 +1479,6 @@ int ObMigrationTabletParam::deserialize_v1(const char *buf, const int64_t len, i
   ObTabletMdsData mds_data;
 
   if (OB_FAIL(serialization::decode_i64(buf, len, new_pos, &total_length))) {
-    LOG_WARN("failed to deserialize length", K(ret), K(len), K(new_pos));
   } else if (OB_UNLIKELY(total_length - 24 > len - new_pos)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("buffer's length is not enough", K(ret), K(total_length), K(len - new_pos));
@@ -1572,14 +1540,9 @@ int ObMigrationTabletParam::deserialize_v1(const char *buf, const int64_t len, i
     LOG_WARN("tablet's length doesn't match standard length", K(ret), K(new_pos), K(pos), K(length), KPC(this));
   } else if (OB_FAIL(ObTabletMdsData::build_mds_data(allocator, auto_inc_seq, tx_data, create_scn_, ddl_data,
                                                      clog_checkpoint_scn_, medium_info_list_, mds_data))) {
-    LOG_WARN("failed to build mds data with version 1", K(ret), K(auto_inc_seq), K(tx_data), K_(create_scn),
-             K(ddl_data), K_(clog_checkpoint_scn), K_(medium_info_list));
   } else if (OB_FAIL(mds_data_.init(allocator_, mds_data))) {
-    LOG_WARN("failed to assign mds data", K(ret), K_(mds_data));
   } else if (OB_FAIL(ObTabletMeta::update_meta_last_persisted_committed_tablet_status(
         tx_data, create_scn_, last_persisted_committed_tablet_status_))) {
-    LOG_WARN("fail to init last_persisted_committed_tablet_status from tx data", K(ret),
-        K(tx_data), K(create_scn_));
   } else {
     // no need to fill split_info, use default.
     extra_medium_info_ = medium_info_list_.get_extra_medium_info();
@@ -1607,10 +1570,8 @@ int ObMigrationTabletParam::deserialize(const char *buf, const int64_t len, int6
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(buf), K(len), K(pos));
   } else if (OB_FAIL(serialization::decode_i64(buf, len, new_pos, &magic_number_))) {
-    LOG_WARN("failed to deserialize magic_number", K(ret), K(len), K(new_pos));
   } else if (MAGIC_NUM == magic_number_) {
     if (OB_FAIL(serialization::decode_i64(buf, len, new_pos, &version_))) {
-      LOG_WARN("failed to deserialize version", K(ret), K(len), K(new_pos));
     } else if (OB_UNLIKELY(PARAM_VERSION != version_ && PARAM_VERSION_V2 != version_ && PARAM_VERSION_V3 != version_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid param version", K(ret), K(version_));
@@ -1769,21 +1730,16 @@ int ObMigrationTabletParam::assign(const ObMigrationTabletParam &param)
     has_truncate_info_ = param.has_truncate_info_;
     fork_info_ = param.fork_info_;
     if (OB_FAIL(mds_data_.assign(param.mds_data_, allocator_))) {
-      LOG_WARN("failed to assign mds data", K(ret), K(param));
     } else if (OB_FAIL(last_persisted_committed_tablet_status_.assign(
           param.last_persisted_committed_tablet_status_))) {
-      LOG_WARN("fail to init last_persisted_committed_tablet_status from mig param", K(ret));
     } else if (OB_FAIL(major_ckm_info_.assign(param.major_ckm_info_, &allocator_))) {
-      LOG_WARN("failed to assign major ckm info", KR(ret), K(param.major_ckm_info_));
     }
 
     if (OB_FAIL(ret)) {
     } else if (is_empty_shell()) {
       // do nothing
     } else if (OB_FAIL(storage_schema_.init(allocator_, param.storage_schema_))) {
-      LOG_WARN("failed to assign storage schema", K(ret), K(param));
     } else if (OB_FAIL(medium_info_list_.init(allocator_, &param.medium_info_list_))) {
-      LOG_WARN("failed to assign medium info list", K(ret), K(param));
     }
   }
   return ret;
@@ -1813,17 +1769,13 @@ int ObMigrationTabletParam::build_deleted_tablet_info(const share::ObLSID &ls_id
     last_persisted_committed_tablet_status_.on_init();
     // no need to fill split_info, use default.
     if (OB_FAIL(ha_status_.set_restore_status(restore_status))) {
-      LOG_WARN("failed to set restore status", K(ret), K(restore_status));
     } else if (OB_FAIL(ha_status_.set_data_status(data_status))) {
-      LOG_WARN("failed to set data status", K(ret), K(data_status));
     } else if (OB_FAIL(ha_status_.set_expected_status(expected_status))) {
-      LOG_WARN("failed to set expected status", K(ret), K(expected_status));
     } else if (OB_FAIL(ObMigrationTabletParam::construct_placeholder_storage_schema_and_medium(
         allocator_,
         storage_schema_,
         medium_info_list_,
         mds_data_))) {
-      LOG_WARN("failed to construct placeholder storage schema");
     }
   }
   return ret;
@@ -1873,23 +1825,17 @@ int ObMigrationTabletParam::construct_placeholder_storage_schema_and_medium(
   col_schema.default_checksum_ = 0;
 
   if (OB_FAIL(storage_schema.rowkey_array_.reserve(storage_schema.column_cnt_))) {
-    STORAGE_LOG(WARN, "Fail to reserve rowkey column array", K(ret));
   } else if (OB_FAIL(storage_schema.column_array_.reserve(storage_schema.column_cnt_))) {
-    STORAGE_LOG(WARN, "Fail to reserve column array", K(ret));
   } else if (OB_FAIL(storage_schema.rowkey_array_.push_back(rowkey_schema))) {
-    STORAGE_LOG(WARN, "Fail to add rowkey column id to rowkey array", K(ret));
   } else if (OB_FAIL(storage_schema.column_array_.push_back(col_schema))) {
-    STORAGE_LOG(WARN, "Fail to push into column array", K(ret), K(col_schema));
   } else {
     storage_schema.is_inited_ = true;
   }
 
   if (FAILEDx(medium_info_list.init(allocator))) {
-    LOG_WARN("failed to init medium info list", K(ret));
   }
 
   if (FAILEDx(full_memory_mds_data.init(allocator))) {
-    LOG_WARN("failed to init full memory mds data", K(ret));
   }
 
   if (OB_SUCC(ret) && OB_UNLIKELY(!storage_schema.is_valid() || !medium_info_list.is_valid())) {

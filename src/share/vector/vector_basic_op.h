@@ -191,9 +191,7 @@ struct VecTCHashCalc<VEC_TC_LOB, HashMethod, hash_v2>
       } else {
         ObTextStringIter text_iter(ObLongTextType, CS_TYPE_BINARY, raw_data, true);
         if (OB_FAIL(text_iter.init(0, NULL, &allocator))) {
-          COMMON_LOG(WARN, "Lob: str iter init failed ", K(ret), K(text_iter));
         } else if (OB_FAIL(text_iter.get_full_data(in_data))) {
-          COMMON_LOG(WARN, "Lob: str iter get full data failed ", K(ret), K(text_iter));
         }
       }
     } else { // not v1 or v2 lob
@@ -227,7 +225,6 @@ struct VecTCHashCalc<VEC_TC_LOB, HashMethod, hash_v2>
         // all lob tc can use longtext type for lob iter
         if (OB_FAIL(
               lob_locator_get_string(reinterpret_cast<const char *>(data), len, allocator, in_data))) {
-          COMMON_LOG(WARN, "Lob: get string failed", K(ret));
         } else {
           res = ObCharset::hash(meta.get_collation_type(), in_data.ptr(), in_data.length(), seed,
                                 meta.is_calc_end_space(),
@@ -240,7 +237,6 @@ struct VecTCHashCalc<VEC_TC_LOB, HashMethod, hash_v2>
       // all lob tc can use longtext type for lob iter
       if (OB_FAIL(
             lob_locator_get_string(reinterpret_cast<const char *>(data), len, allocator, in_data))) {
-        COMMON_LOG(WARN, "Lob: get string failed", K(ret));
       } else {
         res = ObCharset::hash(meta.get_collation_type(), in_data.ptr(), in_data.length(), seed,
                               meta.is_calc_end_space(),
@@ -266,7 +262,6 @@ struct VecTCHashCalc<VEC_TC_GEO, HashMethod, hash_v2>
     } else if (!loc.has_inrow_data()) {
       COMMON_LOG(WARN, "meet outrow lob do calc hash value", K(loc));
     } else if (OB_FAIL(loc.get_inrow_data(wkb))) {
-      COMMON_LOG(WARN, "fail to get inrow data", K(ret), K(loc));
     } else {
       res = seed;
       if (wkb.length() > 0) {
@@ -291,9 +286,7 @@ struct VecTCHashCalc<VEC_TC_JSON, HashMethod, hash_v2>
                               ObString(len, reinterpret_cast<const char *>(data)),
                               meta.has_lob_header());
     if (OB_FAIL(str_iter.init(0, NULL, &allocator))) {
-      COMMON_LOG(WARN, "Lob: str iter init failed", K(ret));
     } else if (OB_FAIL(str_iter.get_full_data(j_bin_str))) {
-      COMMON_LOG(WARN, "Lob: str iter get full data failed", K(ret));
     } else {
       ObJsonBinCtx ctx;
       ObJsonBin j_bin(j_bin_str.ptr(), j_bin_str.length(), &ctx);
@@ -301,9 +294,7 @@ struct VecTCHashCalc<VEC_TC_JSON, HashMethod, hash_v2>
       if (j_bin_str.length() == 0) {
         res = seed;
       } else if (OB_FAIL(j_bin.reset_iter())) {
-        COMMON_LOG(WARN, "Lob: fail to reset json bin iter", K(ret), K(j_bin_str));
       } else if (OB_FAIL(j_base->calc_json_hash_value(seed, HashMethod::hash, res))) {
-        COMMON_LOG(WARN, "Lob: fail to calc hash", K(ret), K(*j_base));
       }
     }
     return ret;
@@ -322,7 +313,6 @@ struct VecTCHashCalc<VEC_TC_COLLECTION, HashMethod, hash_v2>
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(calc_collection_hash_val(meta, data, len, HashMethod::is_varchar_hash ? HashMethod::hash : NULL, seed, res))) {
-      COMMON_LOG(WARN, "Lob: str iter init failed", K(ret));
     }
     return ret;
   }
@@ -343,7 +333,6 @@ struct VecTCHashCalc<VEC_TC_ROARINGBITMAP, HashMethod, hash_v2>
     } else if (!loc.has_inrow_data()) {
       COMMON_LOG(WARN, "meet outrow lob do calc hash value", K(loc));
     } else if (OB_FAIL(loc.get_inrow_data(bin_str))) {
-      COMMON_LOG(WARN, "fail to get inrow data", K(ret), K(loc));
     } else {
       res = seed;
       if (bin_str.length() > 0) {
@@ -727,13 +716,9 @@ struct VecTCCmpCalc<VEC_TC_JSON, VEC_TC_JSON>
                                           ObString(r_len, reinterpret_cast<const char *>(r_v)),
                                           r_meta.has_lob_header());
     if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
-       COMMON_LOG(WARN, "Lob: init left lob str iter failed", K(ret));
     } else if (OB_FAIL(l_instr_iter.get_full_data(l_data))) {
-      COMMON_LOG(WARN, "Lob: get left lob str iter full data failed ", K(ret), K(l_instr_iter));
     } else if (OB_FAIL(r_instr_iter.init(0, NULL, &allocator))) {
-      COMMON_LOG(WARN, "Lob: init right lob str iter failed", K(ret));
     } else if (OB_FAIL(r_instr_iter.get_full_data(r_data))) {
-      COMMON_LOG(WARN, "Lob: get right lob str iter full data failed ", K(ret), K(r_instr_iter));
     } else {
       ObJsonBinCtx ctx_l;
       ObJsonBinCtx ctx_r;
@@ -743,11 +728,8 @@ struct VecTCCmpCalc<VEC_TC_JSON, VEC_TC_JSON>
       ObIJsonBase *j_base_r = &j_bin_r;
 
       if (OB_FAIL(j_bin_l.reset_iter())) {
-        COMMON_LOG(WARN, "fail to reset left json bin iter", K(ret), K(l_len));
       } else if (OB_FAIL(j_bin_r.reset_iter())) {
-        COMMON_LOG(WARN, "fail to reset right json bin iter", K(ret), K(r_len));
       } else if (OB_FAIL(j_base_l->compare(*j_base_r, cmp_ret))) {
-        COMMON_LOG(WARN, "fail to compare json", K(ret), K(*j_base_l), K(*j_base_r));
       }
     }
     return ret;
@@ -771,13 +753,9 @@ struct VecTCCmpCalc<VEC_TC_GEO, VEC_TC_GEO>
                                   ObString(r_len, reinterpret_cast<const char *>(r_v)),
                                   r_meta.has_lob_header());
     if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
-      COMMON_LOG(WARN, "Lob: init left lob str iter failed", K(ret));
     } else if (OB_FAIL(l_instr_iter.get_full_data(l_data))) {
-      COMMON_LOG(WARN, "Lob: get left lob str iter full data failed ", K(ret), K(l_instr_iter));
     } else if (OB_FAIL(r_instr_iter.init(0, NULL, &allocator))) {
-      COMMON_LOG(WARN, "Lob: init right lob str iter failed", K(ret));
     } else if (OB_FAIL(r_instr_iter.get_full_data(r_data))) {
-      COMMON_LOG(WARN, "Lob: get right lob str iter full data failed ", K(ret), K(r_instr_iter));
     } else {
       cmp_ret = ObCharset::strcmpsp(CS_TYPE_BINARY, l_data.ptr(), l_data.length(), r_data.ptr(),
                                     r_data.length(), false);
@@ -795,7 +773,6 @@ struct VecTCCmpCalc<VEC_TC_COLLECTION, VEC_TC_COLLECTION>
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(collection_compare(l_meta, r_meta, l_v, l_len, r_v, r_len, cmp_ret))) {
-      COMMON_LOG(WARN, "collection compare failed ", K(ret));
     }
     return ret;
   }
@@ -994,15 +971,9 @@ struct VecTCCmpCalc<VEC_TC_LOB, VEC_TC_LOB>
         ObTextStringIter r_instr_iter(ObLongTextType, l_meta.get_collation_type(),
                                       ObString(r_len, reinterpret_cast<const char *>(r_v)), true);
         if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
-          COMMON_LOG(WARN, "Lob: init left lob str iter failed", K(ret), K(l_meta), K(r_meta));
         } else if (OB_FAIL(l_instr_iter.get_full_data(l_data))) {
-          COMMON_LOG(WARN, "Lob: get left lob str iter full data failed ", K(ret), K(l_meta),
-                     K(r_meta), K(l_instr_iter));
         } else if (OB_FAIL(r_instr_iter.init(0, NULL, &allocator))) {
-          COMMON_LOG(WARN, "Lob: init right lob str iter failed", K(ret));
         } else if (OB_FAIL(r_instr_iter.get_full_data(r_data))) {
-          COMMON_LOG(WARN, "Lob: get right lob str iter full data failed ", K(ret), K(l_meta),
-                     K(r_meta), K(r_instr_iter));
         } else {
           cmp_ret = ObCharset::strcmpsp(l_meta.get_collation_type(), l_data.ptr(), l_data.length(),
                                         r_data.ptr(), r_data.length(), false);
@@ -1035,10 +1006,7 @@ struct VecTCCmpCalc<VEC_TC_STRING, VEC_TC_LOB>
       ObTextStringIter r_instr_iter(ObLongTextType, r_meta.get_collation_type(),
                                     ObString(r_len, reinterpret_cast<const char *>(r_v)), true);
       if (OB_FAIL(r_instr_iter.init(0, NULL, &allocator))) {
-        COMMON_LOG(WARN, "Lob: init right lob str iter failed", K(ret), K(r_meta));
       } else if (OB_FAIL(r_instr_iter.get_full_data(r_data))) {
-        COMMON_LOG(WARN, "Lob: get right lob str iter full data failed", K(ret), K(r_meta),
-                   K(r_instr_iter));
       } else {
         cmp_ret =
           ObCharset::strcmpsp(l_meta.get_collation_type(), reinterpret_cast<const char *>(l_v),

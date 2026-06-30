@@ -50,7 +50,6 @@ int ObConfigStorage::init(share::ObSQLiteConnectionPool *pool)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid pool", K(ret));
   } else if (OB_FAIL(create_table_if_not_exists())) {
-    LOG_WARN("failed to create table", K(ret));
   }
   if (OB_FAIL(ret)) {
     pool_ = NULL;
@@ -70,7 +69,6 @@ int ObConfigStorage::create_table_if_not_exists()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_SYS_PARAMETER, nullptr))) {
-      LOG_WARN("failed to create table", K(ret));
     }
   }
   return ret;
@@ -84,7 +82,6 @@ int ObConfigStorage::load_all_configs(ObSystemConfig &system_config)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ob_make_unique(config_value))) {
-    LOG_WARN("failed to allocate config value");
   } else {
     const char *select_sql =
       "SELECT name, data_type, value, info, section, scope, source, edit_level "
@@ -139,7 +136,6 @@ int ObConfigStorage::load_all_configs(ObSystemConfig &system_config)
       }
 
       if (OB_FAIL(system_config.update_value(key, value))) {
-        LOG_WARN("failed to update system config", K(ret));
       }
       return ret;
     };
@@ -177,9 +173,7 @@ int ObConfigStorage::get_config_value(const char *name, ObString &value, common:
     // Use load_all_configs interface to load configs from table
     ObSystemConfig system_config;
     if (OB_FAIL(system_config.init())) {
-      LOG_WARN("failed to init system_config", K(ret));
     } else if (OB_FAIL(load_all_configs(system_config))) {
-      LOG_WARN("failed to load all configs", K(ret));
     } else {
       // Find config value from system_config
       ObSystemConfigKey key;
@@ -260,7 +254,6 @@ int ObConfigStorage::upsert_config(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(upsert_sql, binder))) {
-      LOG_WARN("failed to execute upsert", K(ret));
     } else {
       LOG_INFO("upsert config to sqlite success", K(name));
     }

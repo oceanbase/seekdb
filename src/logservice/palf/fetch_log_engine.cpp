@@ -122,9 +122,7 @@ int FetchLogEngine::init(IPalfEnvImpl *palf_env_impl,
     PALF_LOG(WARN, "invalid argument", KP(palf_env_impl), K(alloc_mgr));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::LSFetchLogEngine, tg_id_))) {
-    PALF_LOG(WARN, "ObSimpleThreadPool::init failed", K(ret));
   } else if (OB_FAIL(MTL_REGISTER_THREAD_DYNAMIC(0.5, tg_id_))) {
-    PALF_LOG(WARN, "MTL_REGISTER_THREAD_DYNAMIC failed", K(ret), K(tg_id_));
   } else {
     palf_env_impl_ = palf_env_impl;
     allocator_ = alloc_mgr;
@@ -145,7 +143,6 @@ int FetchLogEngine::start()
     ret = OB_NOT_INIT;
     PALF_LOG(ERROR, "FetchLogEngine not inited!!!", K(ret));
   } else if (OB_FAIL(TG_SET_HANDLER_AND_START(tg_id_, *this))) {
-    PALF_LOG(ERROR, "start FetchLogEngine failed", K(ret));
   } else {
     PALF_LOG(INFO, "start FetchLogEngine success", K(ret), K(tg_id_));
   }
@@ -205,9 +202,7 @@ int FetchLogEngine::submit_fetch_log_task(FetchLogTask *fetch_log_task)
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "invalid argument", K(ret), KP(fetch_log_task));
   } else if (OB_FAIL(push_task_into_cache_(fetch_log_task))) {
-    PALF_LOG(WARN, "push_task_into_cache_ failed", K(ret), KPC(fetch_log_task));
   } else if (OB_FAIL(TG_PUSH_TASK(tg_id_, fetch_log_task))) {
-    PALF_LOG(WARN, "push failed", K(ret), KPC(fetch_log_task));
   } else {
     //do nothing
   }
@@ -253,7 +248,6 @@ int FetchLogEngine::try_remove_task_from_cache_(FetchLogTask *fetch_log_task)
         && fetch_task_cache_[i].get_server() == fetch_log_task->get_server()) {
       // found existed task for this <server, id>
       if (OB_FAIL(fetch_task_cache_.remove(i))) {
-        PALF_LOG(WARN, "fetch_task_cache_.remove failed", K(ret), K(i));
       }
       break;
     }
@@ -301,7 +295,6 @@ void FetchLogEngine::handle(common::LinkTask *task)
                                                                   fetch_log_task->get_accepted_mode_pid(),
                                                                   replayable_point_.atomic_load(),
                                                                   fetch_stat))) {
-        PALF_LOG(WARN, "fetch_log_from_storage failed", K(ret), K(palf_id), KPC(fetch_log_task));
       } else {
         // do nothing
       }

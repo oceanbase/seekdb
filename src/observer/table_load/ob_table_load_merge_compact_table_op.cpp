@@ -67,9 +67,7 @@ int ObTableLoadMergeCompactTableOp::switch_next_op(bool is_parent_called)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObTableLoadParallelTableCompactor", KR(ret));
     } else if (OB_FAIL(parallel_table_compactor_->init(this))) {
-      LOG_WARN("fail to init parallel table compactor", KR(ret));
     } else if (OB_FAIL(parallel_table_compactor_->start())) {
-      LOG_WARN("fail to start parallel table compactor", KR(ret));
     }
   }
   return ret;
@@ -79,7 +77,6 @@ int ObTableLoadMergeCompactTableOp::on_success()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(switch_parent_op())) {
-    LOG_WARN("fail to switch parent op", KR(ret));
   }
   return ret;
 }

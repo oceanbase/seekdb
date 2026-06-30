@@ -128,7 +128,6 @@ struct ObSysVarInPC
     }
     for (int64_t i = 0; common::OB_SUCCESS == ret && i < system_variables_.count(); i ++) {
       if OB_FAIL(obj.deep_copy(system_variables_.at(i), buf_, buf_size_, pos)) {
-        SQL_PC_LOG(WARN, "fail to deep copy obj", K(buf_size_), K(pos), K(ret));
       } else {
         system_variables_.at(i) = obj;
       }
@@ -147,9 +146,7 @@ struct ObSysVarInPC
     }
     for (int64_t i = 0; common::OB_SUCCESS == ret && i < other.system_variables_.count(); i ++) {
       if (OB_FAIL(obj.deep_copy(other.system_variables_.at(i), buf_, buf_size_, pos))) {
-        SQL_PC_LOG(WARN, "fail to deep copy obj", K(buf_size_), K(pos), K(ret));
       } else if (OB_FAIL(system_variables_.push_back(obj))) {
-        SQL_PC_LOG(WARN, "fail to push sys value", K(ret));
       }
     }
     return ret;
@@ -198,7 +195,6 @@ struct ObSysVarInPC
     for (int32_t i = 0; OB_SUCC(ret) && i < sys_var_cnt; ++i) {
       size = 0;
       if (OB_FAIL(system_variables_.at(i).print_plain_str_literal(buf + pos, buf_len - pos, size))) {
-        SQL_PC_LOG(WARN, "fail to encode obj", K(i), K(buf + pos), K(buf_len), K(pos), K(system_variables_.at(i)), K(ret));
       } else {
         pos += size;
         if (i != sys_var_cnt - 1) { // output separator
@@ -645,6 +641,7 @@ struct ObPlanStat
   char plan_tmp_tbl_name_str_[STMT_MAX_LEN];
   int32_t plan_tmp_tbl_name_str_len_;
   // Does plan use jit compiled expression
+  bool is_use_jit_;
   // The following fields are used for storing the self-selection of layer cache access policy
   bool enable_bf_cache_; // indicates whether the bloomfilter cache access is enabled
   bool enable_fuse_row_cache_; // indicates whether the fuse row cache access is enabled
@@ -728,6 +725,7 @@ struct ObPlanStat
       sample_exec_usec_(0),
       sessid_(0),
       plan_tmp_tbl_name_str_len_(0),
+      is_use_jit_(false),
       enable_bf_cache_(true),
       enable_fuse_row_cache_(true),
       enable_row_cache_(true),
@@ -804,6 +802,7 @@ struct ObPlanStat
       sample_exec_usec_(rhs.sample_exec_usec_),
       sessid_(rhs.sessid_),
       plan_tmp_tbl_name_str_len_(rhs.plan_tmp_tbl_name_str_len_),
+      is_use_jit_(rhs.is_use_jit_),
       enable_bf_cache_(rhs.enable_bf_cache_),
       enable_fuse_row_cache_(rhs.enable_fuse_row_cache_),
       enable_row_cache_(rhs.enable_row_cache_),

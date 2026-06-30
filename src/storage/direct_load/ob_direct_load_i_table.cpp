@@ -89,7 +89,6 @@ int ObDirectLoadTableHandleArray::assign(const ObDirectLoadTableHandleArray &oth
   int ret = OB_SUCCESS;
   reset();
   if (OB_FAIL(tables_.assign(other.tables_))) {
-    LOG_WARN("fail to assign tables", KR(ret));
   }
   return ret;
 }
@@ -101,7 +100,6 @@ int ObDirectLoadTableHandleArray::add(const ObDirectLoadTableHandle &table_handl
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(table_handle));
   } else if (OB_FAIL(tables_.push_back(table_handle))) {
-    LOG_WARN("fail to add table", KR(ret));
   }
   return ret;
 }
@@ -111,7 +109,6 @@ int ObDirectLoadTableHandleArray::add(const ObDirectLoadTableHandleArray &tables
   int ret = OB_SUCCESS;
   if (tables_handle.empty()) {
   } else if (OB_FAIL(tables_.push_back(tables_handle.tables_))) {
-    LOG_WARN("fail to add tables", KR(ret));
   }
   return ret;
 }

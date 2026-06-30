@@ -44,7 +44,6 @@ int ObTxBigSegmentBuf::init_for_serialize(int64_t segment_len)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(basic_init_(segment_len, true))) {
-    TRANS_LOG(WARN, "init big segment buf failed", K(ret), KPC(this));
   }
 
   return ret;
@@ -118,8 +117,6 @@ int ObTxBigSegmentBuf::split_one_part(char *part_buf,
     tmp_pos = part_buf_pos;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(part_header.serialize(part_buf, part_buf_len, tmp_pos))) {
-      TRANS_LOG(WARN, "serialize part header failed", K(ret), KP(part_buf), K(part_buf_len),
-                K(tmp_pos), KPC(this));
     } else if (tmp_pos + part_header.part_length_ > part_buf_len
                || segment_pos_ + part_header.part_length_ > segment_data_len_) {
       ret = OB_ERR_UNEXPECTED;
@@ -161,12 +158,6 @@ int ObTxBigSegmentBuf::collect_one_part(const char *part_buf,
   } else if (is_active() && is_completed()) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(part_header.deserialize(part_buf, part_buf_len, tmp_pos))) {
-    TRANS_LOG(WARN, "deserialize part_header failed", K(ret), K(part_buf_len), K(tmp_pos),
-              K(part_header));
-  // } else if (INVALID_SEGMENT_PART_ID != prev_part_id_
-  //            && prev_part_id_ != part_header.prev_part_id_) {
-  //   ret = OB_ERR_UNEXPECTED;
-  //   TRANS_LOG(WARN, "collect a discontiguous part", K(ret), K(part_header), KPC(this));
   } else {
     if (OB_ISNULL(segment_buf_) || segment_data_len_ <= 0) {
       // is not inited
@@ -174,7 +165,6 @@ int ObTxBigSegmentBuf::collect_one_part(const char *part_buf,
         ret = OB_START_LOG_CURSOR_INVALID;
         TRANS_LOG(WARN, "We need merge from the first part", K(ret), K(part_header), KPC(this));
       } else if (OB_FAIL(basic_init_(part_header.remain_length_, false))) {
-        TRANS_LOG(WARN, "init for replay failed", K(ret), K(part_header), KPC(this));
       }
     } else {
       // is inited

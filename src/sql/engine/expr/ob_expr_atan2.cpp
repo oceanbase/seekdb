@@ -60,7 +60,6 @@ int calc_atan2_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
     // only mysql mode
     ObDatum *radian = NULL;
     if (OB_FAIL(expr.args_[0]->eval(ctx, radian))) {
-      LOG_WARN("eval radian arg failed", K(ret), K(expr));
     } else if (radian->is_null()) {
       res_datum.set_null();
     } else if (ObDoubleType == expr.args_[0]->datum_meta_.type_) {
@@ -74,12 +73,10 @@ int calc_atan2_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
     ObDatum *y = NULL;
     ObDatum *x = NULL;
     if (OB_FAIL(arg0->eval(ctx, y))) {
-      LOG_WARN("eval arg failed", K(ret), K(expr), KP(y));
     } else if (y->is_null()) {
       /* arg is already be cast to number type, no need to is_null_oracle */
       res_datum.set_null();
     } else if (OB_FAIL(arg1->eval(ctx, x))) {
-      LOG_WARN("eval arg failed", K(ret), K(expr), KP(x));
     } else if (x->is_null()) {
       res_datum.set_null();
     } else if (ObNumberType == arg0->datum_meta_.type_
@@ -93,7 +90,6 @@ int calc_atan2_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
         number::ObNumber res_nmb;
         ObEvalCtx::TempAllocGuard alloc_guard(ctx);
         if (OB_FAIL(y_nmb.atan2(x_nmb, res_nmb, alloc_guard.get_allocator()))) {
-          LOG_WARN("calc atan2 failed", K(ret), K(y_nmb), K(x_nmb), K(expr));
         } else {
           res_datum.set_number(res_nmb);
         }

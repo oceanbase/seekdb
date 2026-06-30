@@ -54,7 +54,6 @@ int ObExprVecIVFSQ8DataVector::calc_result_typeN(ObExprResType &type,
     LOG_WARN("exec ctx is null", K(ret));
   } else if (OB_FAIL(exec_ctx->get_subschema_id_by_collection_elem_type(ObNestedType::OB_VECTOR_TYPE,
                                                                         elem_type, subschema_id))) {
-    LOG_WARN("failed to get collection subschema id", K(ret));
   } else {
     type.set_collection(subschema_id);
   } 
@@ -142,11 +141,9 @@ int ObExprVecIVFSQ8DataVector::generate_data_vector(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("calc vector expr is invalid", K(ret), KPC(calc_vector_expr));
     } else if (OB_FAIL(ObArrayExprUtils::get_type_vector(*(calc_vector_expr), eval_ctx, tmp_allocator, arr, contain_null))) {
-      LOG_WARN("failed to get vector", K(ret), KPC(calc_vector_expr));
     } else if (contain_null) {
       expr_datum.set_null();
     } else if (OB_FAIL(ObVectorIndexUtil::calc_location_ids(eval_ctx, calc_table_id_expr, calc_part_id_expr, table_id, tablet_id))) {
-      LOG_WARN("fail to calc location ids", K(ret), K(table_id), K(tablet_id), KP(calc_table_id_expr), KP(calc_part_id_expr));
     } else {
       ObFixedArray<float*, ObIAllocator> meta_vectors(tmp_allocator);
       share::ObPluginVectorIndexService *service = share::g_mp->plugin_vector_index_service();
@@ -160,9 +157,7 @@ int ObExprVecIVFSQ8DataVector::generate_data_vector(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("service is nullptr", K(ret));
       } else if (OB_FAIL(meta_vectors.init(SQ_META_SIZE))) {
-        LOG_WARN("fail to init meta vectors", K(ret));
       } else if (OB_FAIL(ObVectorIndexUtil::get_ivf_aux_info(service, cache, table_id, tablet_id, tablet_id, false /* is_pq_cache */, tmp_allocator, meta_vectors, center_prefix, 0))) {
-        LOG_WARN("failed to get centers", K(ret), K(table_id), K(tablet_id));
       } else if (meta_vectors.empty()) {
         // special case 1: empty meta table, set res_vec to {0}
         if (OB_ISNULL(res_vec = reinterpret_cast<uint8_t *>(tmp_allocator.alloc(sizeof(uint8_t) * arr->size())))) {
@@ -174,11 +169,8 @@ int ObExprVecIVFSQ8DataVector::generate_data_vector(
           }
         }
       } else if (OB_FAIL(meta_vectors.at(ObIvfConstant::SQ8_META_MIN_IDX, min_vec))) {
-        LOG_WARN("fail to get min vector from meta", K(ret));
       } else if (OB_FAIL(meta_vectors.at(ObIvfConstant::SQ8_META_STEP_IDX, step_vec))) {
-        LOG_WARN("fail to get min vector from meta", K(ret));
       } else if (OB_FAIL(cal_u8_data_vector(tmp_allocator, arr->size(), min_vec, step_vec, data_vec, res_vec))) {
-        LOG_WARN("fail to cal u8 data vector", K(ret), K(arr->size()));
       } 
 
 
@@ -191,7 +183,6 @@ int ObExprVecIVFSQ8DataVector::generate_data_vector(
                                           eval_ctx,
                                           res_str,
                                           data_str.ptr()))) {
-          LOG_WARN("fail to set array res", K(ret), K(data_str));
         } else {
           expr_datum.set_string(res_str);
         }

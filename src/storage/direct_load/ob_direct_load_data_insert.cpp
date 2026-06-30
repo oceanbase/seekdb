@@ -91,11 +91,9 @@ int ObDirectLoadDataInsert::get_next_row(const ObDirectLoadDatumRow *&datum_row)
   } else {
     if (datum_row->is_delete_) {
       if (OB_FAIL(param_.dml_row_handler_->handle_delete_row(param_.tablet_id_, *datum_row))) {
-        LOG_WARN("fail to handle insert row", KR(ret), KPC(datum_row));
       }
     } else {
       if (OB_FAIL(param_.dml_row_handler_->handle_insert_row(param_.tablet_id_, *datum_row))) {
-        LOG_WARN("fail to handle insert row", KR(ret), KPC(datum_row));
       }
     }
   }
@@ -161,11 +159,8 @@ int ObDirectLoadMultipleSSTableDataInsert::init(
     scan_merge_param.datum_utils_ = param.datum_utils_;
     scan_merge_param.dml_row_handler_ = param.dml_row_handler_;
     if (OB_FAIL(range_.assign(param.tablet_id_, range))) {
-      LOG_WARN("fail to assign range", KR(ret));
     } else if (OB_FAIL(scan_merge_.init(scan_merge_param, sstable_array, range_))) {
-      LOG_WARN("fail to init scan merge", KR(ret));
     } else if (OB_FAIL(data_insert_.init(param, &scan_merge_))) {
-      LOG_WARN("fail to init data insert", KR(ret));
     } else {
       // set parent params
       row_flag_ = param.table_data_desc_.row_flag_;

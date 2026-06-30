@@ -258,14 +258,12 @@ int ObTabletMacroInfo::ObBlockInfoArray<T>::serialize(char *buf, const int64_t b
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid arguments", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, cnt_))) {
-    STORAGE_LOG(WARN, "fail to encode count", K(ret), K_(cnt));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; i++) {
     if (OB_UNLIKELY(!arr_[i].is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "macro block id is invalid", K(ret), K(i), K(arr_[i]));
     } else if (OB_FAIL(arr_[i].serialize(buf, buf_len, pos))) {
-      STORAGE_LOG(WARN, "fail to serialize macro block id", K(ret), K(i), KP(buf), K(buf_len), K(pos));
     }
   }
   return ret;
@@ -279,7 +277,6 @@ int ObTabletMacroInfo::ObBlockInfoArray<T>::deserialize(ObArenaAllocator &alloca
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid arguments", K(ret), KP(buf), K(data_len), K(pos));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &cnt_))) {
-    STORAGE_LOG(WARN, "fail to decode count", K(ret), K(data_len), K(pos));
   } else if (0 == cnt_) {
     // no macro id
     arr_ = nullptr;
@@ -293,7 +290,6 @@ int ObTabletMacroInfo::ObBlockInfoArray<T>::deserialize(ObArenaAllocator &alloca
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; i++) {
       if (OB_FAIL(arr_[i].deserialize(buf, data_len, pos))) {
-        STORAGE_LOG(WARN, "fail to deserialize macro block id", K(ret), K(data_len), K(pos));
       } else if (OB_UNLIKELY(!arr_[i].is_valid())) {
         STORAGE_LOG(WARN, "deserialized macro id is invalid", K(ret), K(arr_[i]));
       }

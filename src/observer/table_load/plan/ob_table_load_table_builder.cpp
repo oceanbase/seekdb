@@ -50,11 +50,8 @@ int ObTableLoadTableBuilder::init(const ObTableLoadTableBuildParam &param)
     builder_param.extra_buf_ = reinterpret_cast<char *>(1);
     builder_param.extra_buf_size_ = 4096;
     if (OB_FAIL(table_builder_.init(builder_param))) {
-      LOG_WARN("fail to init new_builder", KR(ret));
     } else if (OB_FAIL(insert_datum_row_.init(param.table_data_desc_.column_count_))) {
-      LOG_WARN("fail to init datum row", KR(ret));
     } else if (OB_FAIL(delete_datum_row_.init(param.table_data_desc_.column_count_))) {
-      LOG_WARN("fail to init datum row", KR(ret));
     } else {
       delete_datum_row_.is_delete_ = true;
       is_inited_ = true;
@@ -71,7 +68,6 @@ int ObTableLoadTableBuilder::append_row(const ObTabletID &tablet_id,
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadDataTableBuilder not init", KR(ret), KP(this));
   } else if (OB_FAIL(table_builder_.append_row(tablet_id, datum_row))) {
-    LOG_WARN("fail to append row", KR(ret));
   }
   return ret;
 }
@@ -84,7 +80,6 @@ int ObTableLoadTableBuilder::close()
     LOG_WARN("ObTableLoadDataTableBuilder not init", KR(ret), KP(this));
   } else {
     if (OB_FAIL(table_builder_.close())) {
-      LOG_WARN("fail to close table builder", KR(ret));
     }
   }
   return ret;
@@ -98,7 +93,6 @@ int ObTableLoadTableBuilder::get_tables(storage::ObDirectLoadTableHandleArray &t
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadDataTableBuilder not init", KR(ret), KP(this));
   } else if (OB_FAIL(table_builder_.get_tables(table_array, table_mgr))) {
-    LOG_WARN("fail to get tables", KR(ret));
   }
   return ret;
 }
@@ -130,7 +124,6 @@ int ObTableLoadTableBuilderMgr::init(ObDirectLoadTableStore *table_store,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KPC(table_store), KP(file_mgr), KP(table_mgr));
   } else if (OB_FAIL(table_builder_map_.create(1024, "TLD_TBMap", "TLD_TBMap"))) {
-    LOG_WARN("fail to create hashmap", KR(ret));
   } else {
     table_store_ = table_store;
     file_mgr_ = file_mgr;
@@ -152,7 +145,6 @@ int ObTableLoadTableBuilderMgr::acquire_table_builder(ObTableLoadTableBuilder *&
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new ObTableLoadDataTableBuilder", KR(ret));
   } else if (OB_FAIL(new_builder->init(builder_param))) {
-    LOG_WARN("fail to init new_builder", KR(ret));
   } else {
     table_builder = new_builder;
   }
@@ -179,12 +171,10 @@ int ObTableLoadTableBuilderMgr::get_table_builder(ObTableLoadTableBuilder *&tabl
       } else {
         ret = OB_SUCCESS;
         if (OB_FAIL(acquire_table_builder(table_builder))) {
-          LOG_WARN("fail to acquire table builder", KR(ret));
         } else if (OB_ISNULL(table_builder)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected table builder is null", KR(ret));
         } else if (OB_FAIL(table_builder_map_.set_refactored(part_id, table_builder))) {
-          LOG_WARN("fail to set hashmap", KR(ret), K(part_id));
         }
         if (OB_FAIL(ret) && OB_NOT_NULL(table_builder)) {
           table_builder->~ObTableLoadTableBuilder();
@@ -209,11 +199,8 @@ int ObTableLoadTableBuilderMgr::close()
       ObTableLoadTableBuilder *table_builder = it->second;
       ObDirectLoadTableHandleArray table_handle_array;
       if (OB_FAIL(table_builder->close())) {
-        LOG_WARN("fail to close table builder", KR(ret));
       } else if (OB_FAIL(table_builder->get_tables(table_handle_array, table_mgr_))) {
-        LOG_WARN("fail to get tables", KR(ret));
       } else if (OB_FAIL(table_store_->add_tables(table_handle_array))) {
-        LOG_WARN("fail to add table", KR(ret));
       }
     }
   }

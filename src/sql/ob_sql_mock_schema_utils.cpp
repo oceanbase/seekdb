@@ -46,7 +46,6 @@ int ObSQLMockSchemaUtils::add_mock_table(const uint64_t table_id)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("no memory for mocked_tables", K(ret));
   } else if (OB_FAIL(mocked_tables->add_table(table_id))) {
-    LOG_WARN("failed to mock rowid column", K(ret));
   }
   return ret;
 }
@@ -106,17 +105,11 @@ int ObSQLMockSchemaUtils::mock_pseudo_columns_schema(share::schema::ObTableSchem
     ObString subpart_index_column_name(OB_SUBPART_INDEX_PSEUDO_COLUMN_NAME);
 
     if (OB_FAIL(mock_partid_column(table_schema, part_id_column_name))) {
-      LOG_WARN("mock partid column failed", K(ret), K(part_id_column_name));
     } else if ( OB_FAIL(mock_partid_column(table_schema, subpart_id_column_name))) {
-      LOG_WARN("mock partid column failed", K(ret), K(subpart_id_column_name));
     } else if ( OB_FAIL(mock_partid_column(table_schema, part_name_column_name))) {
-      LOG_WARN("mock partid column failed", K(ret), K(part_name_column_name));
     } else if ( OB_FAIL(mock_partid_column(table_schema, subpart_name_column_name))) {
-      LOG_WARN("mock partid column failed", K(ret), K(subpart_name_column_name));
     } else if ( OB_FAIL(mock_partid_column(table_schema, part_index_column_name))) {
-      LOG_WARN("mock partid column failed", K(ret), K(part_index_column_name));
     } else if ( OB_FAIL(mock_partid_column(table_schema, subpart_index_column_name))) {
-      LOG_WARN("mock partid column failed", K(ret), K(subpart_index_column_name));
     }
   }
   return ret;
@@ -173,7 +166,6 @@ int ObSQLMockSchemaUtils::mock_partid_column(share::schema::ObTableSchema &table
     partid_schema.set_column_flags(MOCK_COLUMN_FLAG); // mark it is mocked column
 
     if (OB_FAIL(table_schema.add_column(partid_schema))) {
-      LOG_ERROR("failed to add rowid column", K(ret));
     } else {
       LOG_TRACE("mocked rowid column",
                  K(table_schema.get_column_schema(column_name)),
@@ -198,9 +190,7 @@ int ObSQLMockSchemaUtils::try_mock_partid(const share::schema::ObTableSchema *or
     ObIAllocator &allocator = THIS_WORKER.get_sql_arena_allocator();
     ObTableSchema *tmp_table = NULL;
     if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator, *org_table, tmp_table))) {
-      LOG_WARN("failed to alloc schema", K(ret));
     } else if (OB_FAIL(sql::ObSQLMockSchemaUtils::mock_pseudo_columns_schema(*tmp_table))) {
-      LOG_WARN("failed to mock rowid column", K(ret));
     } else {
       final_table = tmp_table;
       LOG_TRACE("mocked rowid column", K(*final_table));

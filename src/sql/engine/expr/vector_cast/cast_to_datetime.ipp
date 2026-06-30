@@ -38,7 +38,6 @@ struct ToDatetimeCastImpl
         ret = OB_ERR_UNEXPECTED;
         SQL_LOG(WARN, "session is NULL", K(ret));
       } else if (OB_FAIL(helper.get_time_zone_info(tz_info_local))) {
-        SQL_LOG(WARN, "get time zone info failed", K(ret));
       } else {
         class FloatDoubleToDatetimeFn : public CastFnBase {
         public:
@@ -77,7 +76,6 @@ struct ToDatetimeCastImpl
               ret = ObDataTypeCastUtil::common_number_datetime_wrap(number, cvrt_ctx_,
                   res_val, expr.extra_, expr.datum_meta_.type_ == ObMySQLDateTimeType);
               if (CAST_FAIL(ret)) {
-                SQL_LOG(WARN, "str_to_datetime failed", K(ret));
               } else {
                 SET_RES_DATETIME(idx, res_val);
               }
@@ -94,7 +92,6 @@ struct ToDatetimeCastImpl
         FloatDoubleToDatetimeFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec, cvrt_ctx);
         if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-          SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
         }
       }
     }
@@ -113,7 +110,6 @@ struct ToDatetimeCastImpl
         ret = OB_ERR_UNEXPECTED;
         SQL_LOG(WARN, "session is NULL", K(ret));
       } else if (OB_FAIL(helper.get_time_zone_info(tz_info_local))) {
-        SQL_LOG(WARN, "get time zone info failed", K(ret));
       } else {
         class IntToDatetimeFn : public CastFnBase {
         public:
@@ -131,10 +127,8 @@ struct ToDatetimeCastImpl
               ret = OB_INVALID_DATE_FORMAT;
               SQL_LOG(WARN, "should cast positive int to datetime", K(ret));
             } else if (OB_FAIL(ObTimeConverter::int_to_datetime(in_val, 0, cvrt_ctx_, res_val, date_sql_mode_))) {
-              SQL_LOG(WARN, "int_datetime failed", K(ret), K(in_val));
             }
             if (CAST_FAIL(ret)) {
-              SQL_LOG(WARN, "int_datetime failed", K(ret));
             } else {
               SET_RES_DATETIME(idx, res_val);
             }
@@ -156,7 +150,6 @@ struct ToDatetimeCastImpl
         IntToDatetimeFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec, cvrt_ctx, date_sql_mode);
         if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-          SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
         }
       }
     }
@@ -175,7 +168,6 @@ struct ToDatetimeCastImpl
         ret = OB_ERR_UNEXPECTED;
         SQL_LOG(WARN, "session is NULL", K(ret));
       } else if (OB_FAIL(helper.get_time_zone_info(tz_info_local))) {
-        SQL_LOG(WARN, "get time zone info failed", K(ret));
       } else {
         class UIntToDatetimeFn : public CastFnBase {
         public:
@@ -190,15 +182,12 @@ struct ToDatetimeCastImpl
             uint64_t in_val = arg_vec_->get_uint(idx);
             int64_t res_val = 0;
             if (OB_FAIL(ObDataTypeCastUtil::common_uint_int_wrap(expr, ObIntType, in_val, ctx_, res_val))) {
-              SQL_LOG(WARN, "common_uint_int failed", K(ret));
             } else if (0 > res_val) {
               ret = OB_INVALID_DATE_FORMAT;
               SQL_LOG(WARN, "should cast positive int to datetime", K(ret));
             } else if (OB_FAIL(ObTimeConverter::int_to_datetime(in_val, 0, cvrt_ctx_, res_val, date_sql_mode_))) {
-              SQL_LOG(WARN, "int_datetime failed", K(ret), K(res_val));
             }
             if (CAST_FAIL(ret)) {
-              SQL_LOG(WARN, "int_datetime failed", K(ret));
             } else {
               SET_RES_DATETIME(idx, res_val);
             }
@@ -220,7 +209,6 @@ struct ToDatetimeCastImpl
         UIntToDatetimeFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec, cvrt_ctx, date_sql_mode);
         if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-          SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
         }
       }
     }
@@ -242,9 +230,7 @@ struct ToDatetimeCastImpl
         ret = OB_ERR_UNEXPECTED;
         SQL_LOG(WARN, "session is NULL", K(ret));
       } else if (OB_FAIL(helper.get_time_zone_info(tz_info_local))) {
-        SQL_LOG(WARN, "get time zone info failed", K(ret));
       } else if (OB_FAIL(get_tz_offset(tz_info_local, tz_offset))) {
-        SQL_LOG(WARN, "failed to get offset between utc and local", K(ret));
       } else {
           class DateToDatetimeFn : public CastFnBase {
           public:
@@ -285,7 +271,6 @@ struct ToDatetimeCastImpl
           DateToDatetimeFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec, tz_offset);
           if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-            SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
           }
       }
     }
@@ -351,7 +336,6 @@ struct ToDatetimeCastImpl
         ret = OB_ERR_UNEXPECTED;
         SQL_LOG(WARN, "session is NULL", K(ret));
       } else if (OB_FAIL(helper.get_time_zone_info(tz_info_local))) {
-        SQL_LOG(WARN, "get time zone info failed", K(ret));
       } else {
         if (ObDateTimeType == in_type && ObDateTimeType == out_type) {
           DEF_DATETIME_CAST_FUNC(ObDateTimeType, ObDateTimeType)
@@ -384,7 +368,6 @@ struct ToDatetimeCastImpl
         ret = OB_ERR_UNEXPECTED;
         SQL_LOG(WARN, "session is NULL", K(ret));
       } else if (OB_FAIL(helper.get_time_zone_info(tz_info_local))) {
-        SQL_LOG(WARN, "get time zone info failed", K(ret));
       } else {
         class DecimalintToDatetimeFn : public CastFnBase {
         public:
@@ -407,17 +390,15 @@ struct ToDatetimeCastImpl
               if (OB_FAIL(CastHelperImpl::parse_decimalint_to_datetime(lhs, sf_, in_scale_,
                                                                        expr.extra_, cvrt_ctx_,
                                                                        int_part, dec_part))) {
-                SQL_LOG(WARN, "failed to get int and dec part", K(ret));
               } else if (OB_FAIL(ObTimeConverter::int_to_datetime(int_part, dec_part,
                                                         cvrt_ctx_, out_val, date_sql_mode_))) {
-                SQL_LOG(WARN, "int to datetime failed", K(ret), K(int_part), K(dec_part));
               }
             }
             int warning = OB_SUCCESS;
             if (CAST_FAIL(ret)) {
             } else {
               SET_RES_DATETIME(idx, out_val);
-              if (warning != OB_SUCCESS) { SQL_LOG(DEBUG, "cast decimalint to datetime", K(warning)); }
+              if (warning != OB_SUCCESS) {}
             }
             return ret;
           }
@@ -443,7 +424,6 @@ struct ToDatetimeCastImpl
           DecimalintToDatetimeFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec, cvrt_ctx, date_sql_mode, sf);
           if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-            SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
           }
         }
       }
@@ -462,7 +442,6 @@ struct ToDatetimeCastImpl
         ret = OB_ERR_UNEXPECTED;
         SQL_LOG(WARN, "session is NULL", K(ret));
       } else if (OB_FAIL(helper.get_time_zone_info(tz_info_local))) {
-        SQL_LOG(WARN, "get time zone info failed", K(ret));
       } else {
         class NumberToDatetimeFn : public CastFnBase {
         public:
@@ -495,7 +474,6 @@ struct ToDatetimeCastImpl
         NumberToDatetimeFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec, cvrt_ctx);
         if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-          SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
         }
       }
     }
@@ -513,7 +491,6 @@ struct ToDatetimeCastImpl
         ret = OB_ERR_UNEXPECTED;
         SQL_LOG(WARN, "session is NULL", K(ret));
       } else if (OB_FAIL(helper.get_time_zone_info(tz_info_local))) {
-        SQL_LOG(WARN, "get time zone info failed", K(ret));
       } else {
         class StringToDatetimeFn : public CastFnBase {
         public:
@@ -530,7 +507,6 @@ struct ToDatetimeCastImpl
             ObString in_str(arg_vec_->get_string(idx));
             if (CAST_FAIL(ObTimeConverter::str_to_datetime(
                               in_str, cvrt_ctx_, out_val, NULL, date_sql_mode_))) {
-              SQL_LOG(WARN, "str_to_datetime failed", K(ret), K(in_str));
             } else if (CM_IS_ERROR_ON_SCALE_OVER(expr.extra_)
                       &&  (out_val == ObTimeConverter::ZERO_DATE
                             || out_val == ObTimeConverter::ZERO_DATETIME)) {
@@ -560,7 +536,6 @@ struct ToDatetimeCastImpl
           StringToDatetimeFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec, date_sql_mode, cvrt_ctx);
           if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-            SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
           }
         }
       }

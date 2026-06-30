@@ -81,14 +81,12 @@ int ObExprRbToVarbinary::eval_rb_to_varbinary(const ObExpr &expr,
   ObString res_bin;
 
   if (OB_FAIL(ObRbExprHelper::get_input_roaringbitmap_bin(ctx, tmp_allocator, rb_arg, rb_bin, is_rb_null))) {
-    LOG_WARN("fail to get input roaringbitmap", K(ret));
   } else if (expr.arg_cnt_ == 1) {
     res_bin.assign(rb_bin.ptr(), rb_bin.length());
   } else {
     ObExpr *format_arg = expr.args_[1];
     ObDatum *format_datum = nullptr;
     if (OB_FAIL(format_arg->eval(ctx, format_datum))) {
-      LOG_WARN("eval roaringbitmap args failed", K(ret));
     } else if (format_datum->is_null()) {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("not supported expected format", K(ret), K(expected_format));
@@ -100,13 +98,11 @@ int ObExprRbToVarbinary::eval_rb_to_varbinary(const ObExpr &expr,
                            format_arg->datum_meta_,
                            format_arg->obj_meta_.has_lob_header(),
                            expected_format))) {
-      LOG_WARN("fail to get real string data", K(ret), K(expected_format));
     } else if (expected_format.trim().case_compare("roaring") != 0) {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("not supported expected format", K(ret), K(expected_format));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "expected format except 'roaring' is");
     } else if (OB_FAIL(ObRbUtils::binary_format_convert(tmp_allocator, rb_bin, res_bin))) {
-      LOG_WARN("failed to convert binary to roaring format", K(ret), K(rb_bin));
     }
   }
 
@@ -116,9 +112,7 @@ int ObExprRbToVarbinary::eval_rb_to_varbinary(const ObExpr &expr,
   } else {
     ObTextStringDatumResult str_result(expr.datum_meta_.type_, &expr, &ctx, &res);
     if (OB_FAIL(str_result.init(res_bin.length()))) {
-      LOG_WARN("fail to init result", K(ret), K(res_bin.length()));
     } else if (OB_FAIL(str_result.append(res_bin.ptr(), res_bin.length()))) {
-      LOG_WARN("failed to append realdata", K(ret), K(res_bin));
     } else {
       str_result.set_result();
     }

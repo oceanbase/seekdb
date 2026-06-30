@@ -45,7 +45,6 @@ int ObExprJsonDepth::calc_result_type1(ObExprResType &type,
   type.set_precision(common::ObAccuracy::DDL_DEFAULT_ACCURACY[common::ObIntType].precision_);
 
   if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(type1, 1, N_JSON_DEPTH))) {
-    LOG_WARN("wrong type for json doc.", K(ret), K(type1.get_type()));
   }
   
   return ret;
@@ -65,19 +64,16 @@ int ObExprJsonDepth::eval_json_depth(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   
   MultimodeAlloctor temp_allocator(tmp_alloc_g.get_allocator(), expr.type_, ret);
   if (OB_FAIL(temp_allocator.eval_arg(json_arg, ctx, json_datum))) {
-    LOG_WARN("eval json arg failed", K(ret));
   } else if (val_type == ObNullType || json_datum->is_null()) {
     is_null_result = true;
   } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0,
                                                     json_doc, is_null_result, false))) {
-    LOG_WARN("get_json_doc failed", K(ret));
   } else {
     // do nothing
   }
 
   // set result
   if (OB_FAIL(ret)) {
-    LOG_WARN("json_depth failed", K(ret));
   } else if (is_null_result) {
     res.set_null();
   } else {

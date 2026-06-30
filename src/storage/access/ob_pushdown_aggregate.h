@@ -733,7 +733,6 @@ OB_INLINE int ObSumAggCell::eval_int_inner<number::ObNumber>(const common::ObDat
         result_nmb.assign(cnum.desc_.desc_, cnum.digits_ + 0);
       }
       if (OB_FAIL(result_nmb.add(datum_int, new_int, result_nmb, alloc))) {
-        LOG_WARN("number add failed", K(ret));
       } else {
         result_datum.set_number(result_nmb);
         datum_int = 0;
@@ -803,7 +802,6 @@ OB_INLINE int ObSumAggCell::eval_uint_inner<number::ObNumber>(const common::ObDa
         result_nmb.assign(cnum.desc_.desc_, cnum.digits_ + 0);
       }
       if (OB_FAIL(result_nmb.add(datum_uint, new_uint, result_nmb, alloc))) {
-        LOG_WARN("number add failed", K(ret));
       } else {
         result_datum.set_number(result_nmb);
         datum_uint = 0;

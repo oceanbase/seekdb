@@ -50,7 +50,6 @@ int ObExprFuncLnnvl::eval_lnnvl(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
-    LOG_WARN("evaluate parameters failed", K(ret));
   } else if (arg->is_null()) {
     expr_datum.set_bool(true);
   } else {

@@ -83,12 +83,10 @@ int ObPartitionSplitQuery::get_tablet_split_range(
       const int64_t rowkey_cnt = tablet.get_rowkey_read_info().get_schema_rowkey_count();
       // ObDatumRowkey
       if (OB_FAIL(split_start_key.compare(split_end_key, datum_utils, compare_ret))) {
-        LOG_WARN("fail to split range, compare error.", K(ret), K(split_info));
       } else if (compare_ret >= 0) { // invalid split key range
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to split range, left key should smaller than right key", K(ret), K(split_info));
       } else if (OB_FAIL(src_start_key.compare(src_end_key, datum_utils, compare_ret))) {
-        LOG_WARN("fail to split range, compare error.", K(ret), K(src_range));
       } else if (compare_ret > 0 ||
            (compare_ret == 0 && (src_range.is_left_open() || src_range.is_right_open()))) {
         /* src range left/right bounder not all closed but left key equal to right,
@@ -96,7 +94,6 @@ int ObPartitionSplitQuery::get_tablet_split_range(
         is_empty_range = true;
       } else {
         if (OB_FAIL(split_start_key.compare(src_end_key, datum_utils, compare_ret))) {
-          LOG_WARN("fail to split range, compare error.", K(ret), K(split_info));
         } else if (compare_ret >= 0) {
           is_empty_range = true;
           if (compare_ret == 0) {
@@ -110,7 +107,6 @@ int ObPartitionSplitQuery::get_tablet_split_range(
             }
           }
         } else if (OB_FAIL(split_end_key.compare(src_start_key, datum_utils, compare_ret))) {
-          LOG_WARN("fail to split range, compare error.", K(ret), K(split_info));
         } else if (compare_ret <= 0) {
           /* split end key <= src start key, no need change src range, 
            * the result should be empty because split range is right bounder open.
@@ -118,14 +114,12 @@ int ObPartitionSplitQuery::get_tablet_split_range(
           is_empty_range = true; 
         } else {
           if (OB_FAIL(split_start_key.compare(src_start_key, datum_utils, compare_ret))) {
-            LOG_WARN("fail to compare start key to src start key", K(ret), K(split_start_key), K(src_range));
           } else if (compare_ret > 0) { 
             // split start key > src start key, set src start key to split start key
             ObDatumRowkey new_key;
             const int64_t fill_cnt = std::max(rowkey_cnt, static_cast<int64_t>(src_start_key.get_datum_cnt()));
             if (split_start_key.get_datum_cnt() < fill_cnt) {
               if (OB_FAIL(copy_split_key(split_start_key, fill_cnt, new_key, allocator))) {
-                LOG_WARN("fail to copy split key.", K(ret));
               } else {
                 src_range.set_start_key(new_key);
                 src_range.set_left_open();
@@ -137,7 +131,6 @@ int ObPartitionSplitQuery::get_tablet_split_range(
           }
           if (OB_SUCC(ret)) {
             if (OB_FAIL(split_end_key.compare(src_end_key, datum_utils, compare_ret))) {
-              LOG_WARN("fail to compare end key to src start key", K(ret), K(split_end_key), K(src_range));
             } else if (compare_ret <= 0) {
               /* split end key <= src end key, set end key of split end key and right bounder open
                * like: src=[1,5], split=[2,5), result=[2,5) */
@@ -145,7 +138,6 @@ int ObPartitionSplitQuery::get_tablet_split_range(
               const int64_t fill_cnt = std::max(rowkey_cnt, static_cast<int64_t>(src_end_key.get_datum_cnt()));
               if (split_end_key.get_datum_cnt() < fill_cnt) {
                 if (OB_FAIL(copy_split_key(split_end_key, fill_cnt, new_key, allocator))) {
-                  LOG_WARN("fail to copy split key.", K(ret));
                 } else {
                   src_range.set_end_key(new_key);
                 }
@@ -165,7 +157,6 @@ int ObPartitionSplitQuery::get_tablet_split_range(
         } else {
           const ObColDescIArray &col_descs = tablet.get_rowkey_read_info().get_columns_desc();
           if (OB_FAIL(src_range.prepare_memtable_readable(col_descs, allocator))) {
-            STORAGE_LOG(WARN, "Fail to transfer store rowkey", K(ret), K(src_range), K(col_descs));
           }
         }
       }
@@ -229,18 +220,13 @@ int ObPartitionSplitQuery::get_tablet_split_ranges(
       for (int64_t i = 0; OB_SUCC(ret) && i < ori_ranges.count(); i++) {
         tmp_range.reset();
         if (OB_FAIL(ori_ranges.at(i).deep_copy(allocator, tmp_range))) {
-          LOG_WARN("Fail to deep copy src range", K(ret), K(ori_ranges.at(i)));
         } else if (OB_FAIL(datum_range.from_range(tmp_range, allocator))) {
-          LOG_WARN("Failed to transfer store range", K(ret), K(tmp_range));
         } else if (OB_FAIL(get_tablet_split_range(tablet, datum_utils, split_info_, allocator, datum_range, is_empty_range))) {
-          LOG_WARN("Fail to get tabelt split range", K(ret), K(split_info_));
         } else if (is_empty_range) {
           LOG_INFO("Range after split is empty", K(ori_ranges.count()), K(i), "tablet_id", tablet.get_tablet_meta().tablet_id_, K(ori_ranges.at(i)));
         } else if (OB_FAIL(datum_range.to_store_range(col_descs, allocator, tmp_range))) {
-          LOG_WARN("fail to transfer to store range", K(ret), K(datum_range));
         } else if (OB_FALSE_IT(tmp_range.set_table_id(ori_ranges.at(i).get_table_id()))) {
         } else if (OB_FAIL(new_ranges.push_back(tmp_range))) {
-          LOG_WARN("Fail to push back to new ranges", K(ret), K(tmp_range));
         }
       }
     }
@@ -262,7 +248,6 @@ int ObPartitionSplitQuery::get_split_datum_range(
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(get_tablet_split_range(tablet, *datum_utils, split_info_, allocator, datum_range, is_empty_range))) {
-      STORAGE_LOG(WARN, "Failed to split range", K(ret), K(split_info_));
     }
   }
   return ret;
@@ -274,7 +259,6 @@ int ObPartitionSplitQuery::get_tablet_split_info(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTabletSplitMdsHelper::get_split_info_with_cache(tablet, allocator, split_info_))) {
-    LOG_WARN("fail to get tablet split info.", K(ret));
   } else if (!split_info_.is_split_dst_with_partkey() && !split_info_.is_split_dst_without_partkey()) {
     ret = OB_SCHEMA_EAGAIN;
     LOG_WARN("maybe split dst finished, retry", K(ret), K(tablet.get_tablet_meta().tablet_id_),
@@ -311,20 +295,15 @@ int ObPartitionSplitQuery::split_multi_ranges_if_need(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_handle));
   } else if (OB_FAIL(ObTabletSplitMdsHelper::get_is_spliting(*tablet_handle.get_obj(), is_tablet_spliting))) {
-    STORAGE_LOG(WARN, "fail to get tablet split status", K(ret));
   } else if (!is_tablet_spliting) {
     // do nothing
   } else if (OB_FAIL(ObTabletSplitMdsHelper::get_split_info_with_cache(*tablet_handle.get_obj(), allocator, split_info))) {
-    LOG_WARN("fail to get split info", K(ret));
   } else if (split_info.is_split_dst_with_partkey()) {
     /* No matter local index or main table, we have to get current and origin tablet to calculate
       dividing a large range to smaller range in the function. Specifically for local index,
       it's no need to multiple a split partition ratio to estimate size of tablet */
-    if (OB_FAIL(set_split_info(split_info))) { // shadow copy
-      LOG_WARN("fail to set split info", K(ret));
+    if (OB_FAIL(set_split_info(split_info))) {
     } else if (OB_FAIL(get_tablet_split_ranges(*tablet_handle.get_obj(), src_ranges, new_ranges, allocator))) {
-      LOG_INFO("get tablet split new ranges err, maybe no spilitng is happening", 
-        K(ret), K(src_ranges), K(new_ranges));
     } else {
       is_splited_range = true;
     }
@@ -351,20 +330,15 @@ int ObPartitionSplitQuery::check_rowkey_is_included(
       const ObDatumRowkey &split_end_key = split_info_.end_partkey_;
       int compare_ret = 0;
       if (OB_FAIL(split_start_key.compare(split_end_key, *datum_utils, compare_ret))) {
-        LOG_WARN("fail to check rowkey included, compare error.", K(ret), K(split_info_));
       } else if (compare_ret >= 0) { // invalid split key range
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("split left key should smaller than split right key", K(ret), K(split_info_));
       } else if (OB_FAIL(target_rowkey.compare(split_start_key, *datum_utils, compare_ret))) {
-        LOG_WARN("fail to check rowkey included, compare error.", 
-          K(ret), K(target_rowkey), K(split_start_key));
       } else if (compare_ret < 0) { // target rowkey less than split start key
         is_included = false;
         LOG_DEBUG("target rowkey is less than split range start key, not include in split range", 
           K(ret), K(target_rowkey), K(split_start_key));
       } else if (OB_FAIL(target_rowkey.compare(split_end_key, *datum_utils, compare_ret))) {
-        LOG_WARN("fail to check rowkey included, compare error.",
-          K(ret), K(target_rowkey), K(split_end_key));
       } else if (compare_ret >= 0) { // target rowkey large than split end key, Attention: end key should not included in split range.
         is_included = false;
       } else {
@@ -402,7 +376,6 @@ int ObPartitionSplitQuery::fill_auto_split_params(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("auto split filter params is zero", K(ret));
   } else if (OB_FAIL(ObTabletSplitMdsHelper::get_split_info_with_cache(tablet, allocator, split_info))) {
-    LOG_WARN("fail to get tablet split info", K(ret));
   } else {
     sql::ObEvalCtx &eval_ctx = op->get_eval_ctx();
     sql::ObExpr *expr = nullptr;
@@ -410,7 +383,6 @@ int ObPartitionSplitQuery::fill_auto_split_params(
     } else if (split_info.is_split_dst_with_partkey()) {
       if (filter_type == static_cast<uint64_t>(ObTabletSplitType::RANGE)) {
         if (OB_FAIL(fill_range_filter_param(split_info, eval_ctx, filter_params))) {
-          LOG_WARN("fail to fill range filter param", K(ret));
         }
       } else if (filter_type == static_cast<uint64_t>(ObTabletSplitType::MAX_TYPE)) {
         ret = OB_ERR_UNEXPECTED;
@@ -504,7 +476,6 @@ int ObPartitionSplitQuery::fill_range_filter_param(
             } else if (OB_FAIL(expr_datum.from_storage_datum(lower_datum,
                 expr->obj_datum_map_,
                 need_copy))) {
-              LOG_WARN("fail to from storage datum", K(ret), K(lower_datum));
             }
           }
         } else if (i <= part_column_cnt * 2) { // 3. upper bound param expr.
@@ -529,7 +500,6 @@ int ObPartitionSplitQuery::fill_range_filter_param(
                 upper_datum,
                 expr->obj_datum_map_,
                 need_copy))) {
-              LOG_WARN("fail to from storage datum", K(ret), K(upper_datum));
             }
           }
         }

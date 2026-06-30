@@ -183,7 +183,6 @@ struct VectorRangeUtil
                        other, other_len, other_null,
                        value_, len_, is_null_,
                        cmp_ret))) {
-        COMMON_LOG(WARN, "compare failed", K(ret));
       } else {
         cmp_ret *= (is_ascending_ ? 1 : -1);
       }
@@ -231,7 +230,6 @@ int VectorRangeUtil::common_bound(sql::ObExpr *expr, sql::ObEvalCtx &ctx,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr->eval_vector(ctx, skip, bound))) {
-    COMMON_LOG(WARN, "eval vector failed", K(ret));
   } else {
     iter = -1;
     VectorFormat fmt = expr->get_format(ctx);
@@ -269,7 +267,6 @@ int VectorRangeUtil::common_bound(sql::ObExpr *expr, sql::ObEvalCtx &ctx,
     }
     }
     if (OB_FAIL(ret)) {
-      COMMON_LOG(WARN, "find bound failed", K(ret));
     }
   }
   return ret;
@@ -298,7 +295,6 @@ int VectorRangeUtil::find_bound(const ObObjMeta &obj_meta, ObIVector *ivector, s
       is_null = data->is_null(0);
       data->get_payload(0, payload, len);
       if(OB_FAIL(cmp_op(obj_meta, payload,len, is_null, cmp_ret))) {
-        COMMON_LOG(WARN, "compare failed", K(ret));
       } else if (is_lower && cmp_ret >= 0) {
         iter = 0;
       } else if (!is_lower && cmp_ret > 0) {
@@ -310,7 +306,6 @@ int VectorRangeUtil::find_bound(const ObObjMeta &obj_meta, ObIVector *ivector, s
       is_null = data->is_null(i);
       data->get_payload(i, payload, len);
       if (OB_FAIL(cmp_op(obj_meta, payload, len, is_null, cmp_ret))) {
-        COMMON_LOG(WARN, "compare failed", K(ret));
       } else if (is_lower && cmp_ret >= 0) {
         iter = i;
         break;
@@ -326,7 +321,6 @@ int VectorRangeUtil::find_bound(const ObObjMeta &obj_meta, ObIVector *ivector, s
         is_null = data->is_null(i);
         data->get_payload(i, payload, len);
         if (OB_FAIL(cmp_op(obj_meta, payload, len, is_null, cmp_ret))) {
-          COMMON_LOG(WARN, "compare failed", K(ret));
         } else if (is_lower && cmp_ret >= 0) {
           iter = i;
           break;

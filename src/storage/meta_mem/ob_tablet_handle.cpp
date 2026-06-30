@@ -59,7 +59,6 @@ ObTabletHandle &ObTabletHandle::operator=(const ObTabletHandle &other)
     reset();
     Base::operator=(other);
     if (OB_FAIL(inc_ref_in_leak_checker(this->t3m_))) {
-      LOG_WARN("failed to inc ref in leak checker", K(ret), K(index_), KP(this->t3m_));
     }
     wash_priority_ = other.wash_priority_;
     allow_copy_and_assign_ = other.allow_copy_and_assign_;
@@ -73,7 +72,6 @@ void ObTabletHandle::set_obj(ObMetaObj<ObTablet> &obj)
   // tablet leak checker related
   int ret = OB_SUCCESS;
   if (OB_FAIL(inc_ref_in_leak_checker(obj.t3m_))) {
-    LOG_WARN("failed to inc ref in leak checker", K(ret), K(index_), KP(this->t3m_));
   }
 }
 
@@ -83,7 +81,6 @@ void ObTabletHandle::set_obj(ObTablet *obj, common::ObIAllocator *allocator, ObT
   // tablet leak checker related
   int ret = OB_SUCCESS;
   if (OB_FAIL(inc_ref_in_leak_checker(t3m))) {
-    LOG_WARN("failed to inc ref in leak checker", K(ret), K(index_), KP(this->t3m_));
   }
 }
 
@@ -112,7 +109,6 @@ void ObTabletHandle::reset()
             tmp_ret = OB_ERR_UNEXPECTED;
             LOG_ERROR("allow_copy_and_assign_ of external_tablet must be false", K(tmp_ret), KPC(this), KPC(obj_), K(lbt()));
           } else if (OB_TMP_FAIL(t3m_->dec_external_tablet_cnt(obj_->get_tablet_id().id(), obj_->get_transfer_seq()))) {
-            LOG_ERROR("fail to dec external tablet_cnt", K(tmp_ret), KP(obj_), KPC(obj_));
           }
         }
         if (OB_FAIL(ret)) {
@@ -126,14 +122,12 @@ void ObTabletHandle::reset()
           obj_->~ObTablet();
           allocator_->free(obj_);
         } else if (OB_FAIL(t3m_->push_tablet_into_gc_queue(obj_))) {
-          STORAGE_LOG(ERROR, "fail to gc tablet", K(ret), KPC_(obj), K_(obj_pool), K_(allocator));
         }
       }
       obj_ = nullptr;
       // tablet leak checker related
       int ret = OB_SUCCESS;
       if (OB_FAIL(dec_ref_in_leak_checker(t3m_))) {
-        LOG_WARN("failed to dec ref in leak checker", K(ret), K(index_), KP(this->t3m_));
       }
     }
   }
@@ -148,7 +142,6 @@ int ObTabletHandle::register_into_leak_checker(const char *file, const int line,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTenantMetaMemMgr::register_into_tb_map(file, line, func, index_))) {
-    LOG_WARN("fail to ObTabletHandle register into tb map", K(ret), K(file), K(func), K(index_));
   }
   return ret;
 }
@@ -160,7 +153,6 @@ int ObTabletHandle::inc_ref_in_leak_checker(ObTenantMetaMemMgr *t3m)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get t3m pointer", K(ret), KP(t3m));
   } else if (OB_FAIL(t3m->inc_ref_in_leak_checker(index_))) {
-    LOG_WARN("fail to inc ref in tb ref map", K(ret), K(index_), KP(t3m));
   }
   return ret;
 }
@@ -172,7 +164,6 @@ int ObTabletHandle::dec_ref_in_leak_checker(ObTenantMetaMemMgr *t3m)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get t3m pointer", K(ret), KP(t3m));
   } else if (OB_FAIL(t3m->dec_ref_in_leak_checker(index_))) {
-    LOG_WARN("fail to dec ref in tb ref map", K(ret), K(index_), KP(t3m));
   }
   return ret;
 }
@@ -219,7 +210,6 @@ int ObTabletTableIterator::assign(const ObTabletTableIterator& other)
     if (OB_FAIL(ret)) {
     } else if (other.table_store_iter_.is_valid()) {
       if (OB_FAIL(table_store_iter_.assign(other.table_store_iter_))) {
-        LOG_WARN("assign table store iter fail", K(ret));
       }
     } else if (table_store_iter_.is_valid()) {
       table_store_iter_.reset();
@@ -245,15 +235,11 @@ int ObTabletTableIterator::assign(const ObTabletTableIterator& other)
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(split_extra_tablet_handles_.assign(other.split_extra_tablet_handles_))) {
-      LOG_WARN("failed to assign", K(ret));
     } else if (nullptr == other.fork_ctx_) {
       destroy_fork_ctx_();
     } else if (OB_FAIL(build_fork_ctx_())) {
-      LOG_WARN("failed to build fork ctx", K(ret));
     } else if (OB_FAIL(fork_ctx_->fork_infos_.assign(other.fork_ctx_->fork_infos_))) {
-      LOG_WARN("failed to assign fork infos", K(ret));
     } else if (OB_FAIL(fork_ctx_->fork_tablet_handles_.assign(other.fork_ctx_->fork_tablet_handles_))) {
-      LOG_WARN("failed to assign fork tablet handles", K(ret));
     }
   }
   return ret;
@@ -303,7 +289,6 @@ int ObTabletTableIterator::add_split_extra_tablet_handle(const ObTabletHandle &t
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(split_extra_tablet_handles_.push_back(tablet_handle))) {
-    LOG_WARN("failed to push back", K(ret));
   }
   return ret;
 }
@@ -313,11 +298,8 @@ int ObTabletTableIterator::add_fork_tablet_handle(const ObTabletHandle &tablet_h
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(build_fork_ctx_())) {
-    LOG_WARN("failed to build fork tablet ctx", K(ret));
   } else if (OB_FAIL(fork_ctx_->fork_infos_.push_back(fork_info))) {
-    LOG_WARN("failed to push back", K(ret));
   } else if (OB_FAIL(fork_ctx_->fork_tablet_handles_.push_back(tablet_handle))) {
-    LOG_WARN("failed to push back fork tablet handle", K(ret));
   }
   return ret;
 }
@@ -336,13 +318,10 @@ int ObTabletTableIterator::refresh_read_tables_from_tablet(
   } else if (major_sstable_only) {
     if (OB_FAIL(tablet_handle_.get_obj()->get_read_major_sstable(
         snapshot_version, *this, need_split_src_table))) {
-      LOG_WARN("failed to get read major sstable from tablet",
-        K(ret), K(snapshot_version), K_(tablet_handle));
     }
   } else {
     if (OB_FAIL(tablet_handle_.get_obj()->get_read_tables(
         snapshot_version, *this, allow_no_ready_read, need_split_src_table, need_split_dst_table))) {
-      LOG_WARN("failed to get read tables from tablet", K(ret), K_(tablet_handle));
     }
   }
   return ret;
@@ -357,8 +336,6 @@ int ObTabletTableIterator::get_mds_sstables_from_tablet(const int64_t snapshot_v
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("try to refresh tables in tablet table iter with invalid tablet handle", K(ret));
   } else if (OB_FAIL(tablet_handle_.get_obj()->inner_get_mds_sstables(table_store_iter_))) {
-    // here we should call `inner_get_mds_sstables` rather than `get_mds_sstables` because tablet may have not been initialized
-    LOG_WARN("fail to get mds sstables", K(ret), K(snapshot_version));
   }
 
   return ret;
@@ -374,7 +351,6 @@ int ObTabletTableIterator::get_read_tables_from_tablet(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(refresh_read_tables_from_tablet(snapshot_version, allow_no_ready_read, major_sstable_only, need_split_src_table, need_split_dst_table))) {
-    LOG_WARN("failed to refresh read tables", K(ret), K(snapshot_version), K(allow_no_ready_read), K(major_sstable_only), KPC(this));
   } else {
     while(OB_SUCC(ret)) {
       ObITable *table = nullptr;
@@ -389,7 +365,6 @@ int ObTabletTableIterator::get_read_tables_from_tablet(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get nullptr table", K(ret), KP(table), KPC(this));
       } else if (OB_FAIL(tables.push_back(table))) {
-        LOG_WARN("failed to push back table", K(ret), K(tables), KPC(table));
       }
     }
   }

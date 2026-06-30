@@ -262,7 +262,6 @@ private:
         }
       }
     } else if (OB_FAIL(actual_entry.deserialize(buf_, curr_read_buf_end_pos_, pos))) {
-      PALF_LOG(TRACE, "deserialize entry failed", K(ret), KPC(this));
     } else if (OB_FAIL(handle_each_log_group_entry_(actual_entry, replayable_point_scn, info))) {
       if (OB_ITER_END != ret) {
         PALF_LOG(WARN, "handle_each_log_group_entry_ failed", KPC(this), K(actual_entry), K(info), K(replayable_point_scn));
@@ -317,35 +316,10 @@ private:
     int64_t new_accumulate_checksum = -1;
     PALF_LOG(TRACE, "T is LogGroupEntry", K(entry));
     if (OB_FAIL(verify_accum_checksum_(entry, new_accumulate_checksum))) {
-      PALF_LOG(WARN, "verify_accum_checksum_ failed", K(ret), KPC(this), K(entry));
-    // NB: when current entry is raw write, and the log scn of current entry is greater than
-    //     replayable_point_scn, this log may be clean up, therefore we can not update several fields of
-    //     LogIteratorImpl, return OB_ITER_END directly, otherwise, we may not parse new LogGroupEntryHeader
-    //     after flashback position, this will cause one log which is append, but control by replayable_point_scn.
-    //
-    // NB: we need check the min scn of LogGroupEntry whether has been greater than
-    //     replayable_point_scn:
-    //     - if LogGroupEntry has two LogEntry, the scn of them are 10, 15 respectively,
-    //       replayable_point_scn is 12. in this case, we can read first LogEntry, and
-    //       we can update several fields like 'curr_entry_is_raw_write_', 'accum_checksum_'
-    //       and the others('curr_read_pos_'...). when the flashback scn is 12, the LogEntry
-    //       after 10 will be truncated, the new LogGroupEntry will be generated, meanwhile,
-    //       we will advanced 'curr_read_pos_' to the end of first LogEntry and read new LogGroupEntry
-    //       correctly.
-    //     - if LogGroupEntry has one LogEntry, the scn of it is 13, the several fields are
-    //       not been updated because of it's controlled by replayable_point_scn, when the flashback
-    //       scn is 12, we don't need rollback these fields.
-    //
-    // NB: for PalfGroupBufferIterator, we should use max scn to control replay and use min scn
-    //     as the log_scn_ of info. consider that, replayable_point_scn is 12, the min scn of group log
-    //     is 7 and max scn of group 15, we should not return this log. meanwhile, we should use
-    //     scn 7 to update next_min_scn.
     } else if (true == curr_entry_is_raw_write) {
       SCN min_scn;
       bool is_group_iterator = std::is_same<ENTRY, LogGroupEntry>::value;
       if (OB_FAIL(entry.get_log_min_scn(min_scn))) {
-        PALF_LOG(ERROR, "get_log_min_scn failed", K(ret), KPC(this), K(min_scn), 
-            K(entry), K(replayable_point_scn));
       } else if ((is_group_iterator && entry.get_scn() > replayable_point_scn)
                  || (!is_group_iterator && min_scn > replayable_point_scn)) {
         info.log_scn_ = min_scn;
@@ -787,7 +761,6 @@ int LogIteratorImpl<ENTRY>::verify_accum_checksum_(const LogGroupEntry &entry,
   } else if (OB_FAIL(LogChecksum::verify_accum_checksum(
                 accumulate_checksum_, data_checksum, 
                 expected_verify_checksum, new_accumulate_checksum))) {
-    PALF_LOG(WARN, "verify accumlate checksum failed", K(ret), KPC(this), K(entry));
   } else {
     PALF_LOG(TRACE, "verify_accum_checksum_ success", K(ret), KPC(this), K(entry));
   }
@@ -825,8 +798,6 @@ int LogIteratorImpl<ENTRY>::construct_padding_log_entry_(const int64_t memset_st
                                                          padding_entry_scn_,
                                                          buf_+serialize_log_entry_header_pos,
                                                          LogEntryHeader::PADDING_LOG_ENTRY_SIZE))) {
-      PALF_LOG(ERROR, "generate_padding_log_buf failed", KPC(this), K(padding_log_entry_data_len),
-          K(header_size), K(padding_log_entry_len), K(serialize_log_entry_header_pos));
     } else {
       PALF_LOG(INFO, "generate padding log entry successfully", KPC(this));
       reset_padding_info_();

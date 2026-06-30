@@ -71,7 +71,6 @@ int ObDatabaseResolver<T>::resolve_database_options(T *stmt, ParseNode *node, Ob
     for (int32_t i = 0; ret == common::OB_SUCCESS && i < num; i++) {
       option_node = node->children_[i];
       if (OB_FAIL(resolve_database_option(stmt, option_node, session_info))) {
-        OB_LOG(WARN, "resolve database option failed", K(ret));
       }
     }
   }
@@ -107,7 +106,6 @@ int ObDatabaseResolver<T>::resolve_database_option(T *stmt, ParseNode *node, ObS
           if (stmt::T_ALTER_DATABASE == stmt->get_stmt_type()) {
             if (OB_FAIL(alter_option_bitset_.add_member(
                     obcall::ObAlterDatabaseArg::REPLICA_NUM))) {
-              OB_LOG(WARN, "failed to add member to bitset!", K(ret));
             }
           }
         }
@@ -166,7 +164,6 @@ int ObDatabaseResolver<T>::resolve_database_option(T *stmt, ParseNode *node, ObS
           if (stmt::T_ALTER_DATABASE == stmt->get_stmt_type()) {
             if (OB_FAIL(alter_option_bitset_.add_member(
                     obcall::ObAlterDatabaseArg::COLLATION_TYPE))) {
-              OB_LOG(WARN, "failed to add member to bitset!", K(ret));
             }
           }
         }
@@ -188,7 +185,6 @@ int ObDatabaseResolver<T>::resolve_database_option(T *stmt, ParseNode *node, ObS
         if (common::OB_SUCCESS == ret && stmt->get_stmt_type() == stmt::T_ALTER_DATABASE) {
           if (OB_FAIL(alter_option_bitset_.add_member(
                   obcall::ObAlterDatabaseArg::READ_ONLY))) {
-            OB_LOG(WARN, "failed to add member to bitset!", K(ret));
           }
         }
         break;
@@ -196,13 +192,11 @@ int ObDatabaseResolver<T>::resolve_database_option(T *stmt, ParseNode *node, ObS
       case T_DEFAULT_TABLEGROUP: {
         common::ObString tablegroup_name(option_node->str_len_, option_node->str_value_);
         if (OB_FAIL(stmt->set_default_tablegroup_name(tablegroup_name))) {
-          OB_LOG(WARN, "failed to set default tablegroup name", K(ret));
         }
 
         if (common::OB_SUCCESS == ret && stmt->get_stmt_type() == stmt::T_ALTER_DATABASE) {
           if (OB_FAIL(alter_option_bitset_.add_member(
                   obcall::ObAlterDatabaseArg::DEFAULT_TABLEGROUP))) {
-            OB_LOG(WARN, "failed to add member to bitset!", K(ret));
           }
         }
         break;
@@ -248,7 +242,6 @@ int ObDatabaseResolver<T>::resolve_zone_list(T *stmt, ParseNode *node) const
         if (OB_LIKELY(T_VARCHAR == elem->type_)) {
           common::ObSqlString buf;
           if (OB_FAIL(buf.append(elem->str_value_, elem->str_len_))) {
-            OB_LOG(WARN, "fail to assign str value to buf", K(ret));
           } else {
             ret = stmt->add_zone(buf.ptr());
           }

@@ -144,7 +144,6 @@ int ObServerSchemaUpdater::init(const common::ObAddr &host, ObMultiVersionSchema
                                       MAX_THREAD_CNT,
                                       MAX_TENANT_CNT + 2,
                                       "SerScheQueue"))) {
-    LOG_WARN("init task queue failed", KR(ret), LITERAL_K(MAX_THREAD_CNT), K(MAX_TENANT_CNT));
   } else {
     host_ = host;
     schema_mgr_ = schema_mgr;
@@ -204,7 +203,6 @@ int ObServerSchemaUpdater::batch_process_tasks(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("batch_tasks cnt is 0", KR(ret));
   } else if (OB_FAIL(tasks.assign(batch_tasks))) {
-    LOG_WARN("fail to assign task", KR(ret), "task_cnt", batch_tasks.count());
   } else {
     DEBUG_SYNC(BEFORE_SET_NEW_SCHEMA_VERSION);
     lib::ob_sort(tasks.begin(), tasks.end(), ObServerSchemaTask::greator_than);
@@ -216,15 +214,12 @@ int ObServerSchemaUpdater::batch_process_tasks(
                KR(ret), "task_cnt", tasks.count());
     } else if (ObServerSchemaTask::REFRESH == type) {
       if (OB_FAIL(process_refresh_task(tasks.at(0)))) {
-        LOG_WARN("fail to process refresh task", KR(ret), K(tasks.at(0)));
       }
     } else if (ObServerSchemaTask::RELEASE == type) {
       if (OB_FAIL(process_release_task())) {
-        LOG_WARN("fail to process release task", KR(ret), K(tasks.at(0)));
       }
     } else if (ObServerSchemaTask::ASYNC_REFRESH == type) {
       if (OB_FAIL(process_async_refresh_tasks(tasks))) {
-        LOG_WARN("fail to process async refresh tasks", KR(ret));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -269,7 +264,6 @@ int ObServerSchemaUpdater::construct_tenants_to_refresh_schema_(
     case ObDDLSequenceID::ONE_OVER: {
       // refresh specified schema
       if (OB_FAIL(refresh_ids.push_back(1UL))) {
-        LOG_WARN("fail to push back id", KR(ret));
       } else {
         skip_refresh = false;
         LOG_INFO("[REFRESH_SCHEMA] refresh specified schema",
@@ -311,9 +305,7 @@ int ObServerSchemaUpdater::process_refresh_task(const ObServerSchemaTask &task)
     LOG_WARN("rootservice is not in full service, try again", KR(ret),
              K(GCTX.root_service_->in_service()), K(GCTX.root_service_->is_full_service()));
   } else if (OB_FAIL(schema_mgr_->get_last_refreshed_schema_info(local_schema_info))) {
-    LOG_WARN("fail to get local schema info", KR(ret));
   } else if (OB_FAIL(construct_tenants_to_refresh_schema_(local_schema_info, schema_info, refresh_ids, skip_refresh))) {
-    LOG_WARN("fail to construct tenants to refresh schema", KR(ret), K(schema_info), K(local_schema_info), K(skip_refresh));
   } else if (skip_refresh) {
     // skip
     LOG_INFO("[REFRESH_SCHEMA] local schema info is newer, no need to refresh schema",
@@ -326,9 +318,7 @@ int ObServerSchemaUpdater::process_refresh_task(const ObServerSchemaTask &task)
     // check bootstrap to avoid refreshing schema too early
     // empty tenants means refresh all tenants' schema.
     if (FAILEDx(schema_mgr_->refresh_and_add_schema(check_bootstrap))) {
-      LOG_WARN("fail to refresh and add schema", KR(ret), K(check_bootstrap));
     } else if (OB_FAIL(schema_mgr_->set_last_refreshed_schema_info(schema_info))) {
-      LOG_WARN("fail to set last_refreshed_schema_info", KR(ret), K(schema_info));
     }
     LOG_INFO("[REFRESH_SCHEMA] end refresh schema with new mode, ",
              KR(ret), K(refresh_ids), "used time", ObTimeUtility::current_time() - begin_time,
@@ -336,8 +326,7 @@ int ObServerSchemaUpdater::process_refresh_task(const ObServerSchemaTask &task)
   }
 
   int tmp_ret = OB_SUCCESS;
-  if (OB_TMP_FAIL(try_load_baseline_schema_version_())) { // ignore ret
-    LOG_WARN("fail to load tenant baseline schema version", KR(tmp_ret));
+  if (OB_TMP_FAIL(try_load_baseline_schema_version_())) {
   }
 
   // For performance, schema_guard will be cached in one session instead of each SQL statement constructs its own new schema_guard,
@@ -367,7 +356,6 @@ int ObServerSchemaUpdater::process_release_task()
   } else if (!schema_mgr_->is_sys_full_schema()) {
     // auto release unused memory of schema after schema split
   } else if (OB_FAIL(schema_mgr_->try_eliminate_schema_mgr())) {
-    LOG_WARN("fail to eliminate schema mgr", KR(ret));
   }
   LOG_INFO("try to release schema", KR(ret));
   return ret;
@@ -419,7 +407,6 @@ int ObServerSchemaUpdater::process_async_refresh_tasks(
     }
     if (OB_SUCC(ret) && need_refresh) {
       if (OB_FAIL(schema_mgr_->refresh_and_add_schema())) {
-        LOG_WARN("fail to refresh schema", KR(ret));
       }
     }
   }
@@ -513,7 +500,6 @@ int ObServerSchemaUpdater::try_load_baseline_schema_version_()
   {
     ObSchemaGetterGuard guard;
     if (FAILEDx(schema_mgr_->get_tenant_schema_guard(guard))) {
-      LOG_WARN("fail to get schema guard", KR(ret));
     }
   }
 
@@ -523,10 +509,8 @@ int ObServerSchemaUpdater::try_load_baseline_schema_version_()
     int tmp_ret = OB_SUCCESS;
     ObTimeoutCtx ctx;
     if (OB_TMP_FAIL(ctx.set_timeout(timeout))) {
-      LOG_WARN("fail to set timeout", KR(tmp_ret), K(timeout));
     } else if (OB_TMP_FAIL(schema_mgr_->get_baseline_schema_version(
       true/*auto_update*/, baseline_schema_version))) {
-      LOG_WARN("fail to update baseline schema version", KR(tmp_ret));
     }
   }
   return ret;

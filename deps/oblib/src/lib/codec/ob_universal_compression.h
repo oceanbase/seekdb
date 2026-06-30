@@ -75,9 +75,7 @@ public:
     int64_t max_overflow_size = 0;
 
     if (OB_FAIL(ObCompressorPool::get_instance().get_compressor(compressor_type_, compressor))) {
-      LIB_LOG(WARN, "fail to get compressor", K(ret), K(compressor_type_));
     } else if (OB_FAIL(compressor->get_max_overflow_size(in_len, max_overflow_size))) {
-      LIB_LOG(WARN, "fail to get_max_overflow_size", K(ret), K(in_len), K(compressor_type_));
     } else {
       char *compress_buf = dest_buf;
       const int64_t compress_buf_size = in_len + max_overflow_size;
@@ -86,7 +84,6 @@ public:
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LIB_LOG(WARN, "fail to malloc", K(ret), K(max_overflow_size), K(in_len), K(dest_buf_size));
       } else if (OB_FAIL(compressor->compress(in, in_len, compress_buf, compress_buf_size, dst_data_size))) {
-        LIB_LOG(WARN, "fail to compress", K(ret), K(compressor_type_), K(in_len), K(compress_buf_size), K(dest_buf_size));
       } else if (dst_data_size > dest_buf_size) {
         ret = OB_BUF_NOT_ENOUGH;
         LIB_LOG(WARN, "fail to compress", K(ret), K(compressor_type_), K(in_len), K(dest_buf_size), K(compress_buf_size), K(dst_data_size));
@@ -114,9 +111,7 @@ public:
     int64_t dst_data_size = 0;
     ObCompressor *compressor = nullptr;
     if (OB_FAIL(ObCompressorPool::get_instance().get_compressor(compressor_type_, compressor))) {
-      LIB_LOG(WARN, "fail to get compressor, ", K(ret), K(compressor_type_));
     } else if (OB_FAIL(compressor->decompress(src_buf, src_data_size, dest_buf, dest_buf_size, dst_data_size))) {
-      LIB_LOG(WARN, "fail to decompress, ", K(ret), K(compressor_type_), K(src_data_size), K(dest_buf_size));
     } else {
       in_pos = in_len;
       out_pos += dst_data_size;

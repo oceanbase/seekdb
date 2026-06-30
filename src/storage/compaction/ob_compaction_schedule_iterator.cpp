@@ -73,7 +73,6 @@ int ObBasicMergeScheduleIterator::init(const int64_t schedule_batch_size)
   } else if (!is_valid()) {
     ls_ids_.reuse();
     if (OB_FAIL(share::g_mp->ls_service()->get_ls_ids(ls_ids_))) {
-      LOG_WARN("failed to get all ls id", K(ret));
     } else {
       ls_idx_ = -1;
       tablet_ids_.reset();
@@ -152,7 +151,6 @@ int ObBasicMergeScheduleIterator::get_next_tablet(ObTabletHandle &tablet_handle)
     LOG_WARN("ls is unexpected null", K(ret), KPC(this));
   } else if (!tablet_ids_.is_inited_) {
     if (OB_FAIL(get_tablet_ids())) {
-      LOG_WARN("failed to get tablet ids", K(ret));
     } else {
       tablet_ids_.mark_inited();
       LOG_TRACE("build iter in get_next_tablet", K(ret), K_(ls_idx), "ls_id", ls_ids_[ls_idx_], K(tablet_ids_));
@@ -236,7 +234,6 @@ int ObCompactionScheduleIterator::build_iter(const int64_t schedule_batch_size)
   bool need_reset_report_scn = !is_valid();
 
   if (OB_FAIL(init(schedule_batch_size))) {
-    LOG_WARN("failed to inner build iter", K(ret));
   } else if (need_reset_report_scn) {
     report_scn_flag_ = false;
     if (REACH_THREAD_TIME_INTERVAL(CHECK_REPORT_SCN_INTERVAL)) {

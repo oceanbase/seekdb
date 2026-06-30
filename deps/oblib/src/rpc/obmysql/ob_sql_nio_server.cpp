@@ -27,10 +27,8 @@ int ObSqlNioServer::start(int port, rpc::frame::ObReqDeliver* deliver, int n_thr
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(io_handler_.init(deliver))) {
-    LOG_WARN("handler init fail", K(ret));
   } else if(FALSE_IT(nio_.set_numa_info(enable_numa_aware, INT32_MAX))) {
   } else if (OB_FAIL(nio_.start(port, &io_handler_, n_thread, disable_tcp))) {
-    LOG_WARN("sql nio start fail", K(ret));
   }
   return ret;
 }

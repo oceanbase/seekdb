@@ -255,7 +255,6 @@ int ObStoreRange::get_common_store_rowkey(ObStoreRowkey &store_rowkey) const
   int ret = OB_SUCCESS;
   int64_t prefix_len = 0;
   if (OB_FAIL(ObStoreRowkey::get_common_prefix_length(start_key_, end_key_, prefix_len))) {
-    COMMON_LOG(WARN, "fail to get common prefix length", K(ret));
   } else if (prefix_len > 0) {
     ret = store_rowkey.assign(const_cast<ObObj *>(start_key_.get_obj_ptr()), prefix_len);
   }
@@ -274,9 +273,7 @@ inline int deep_copy_range(ObIAllocator &allocator, const ObStoreRange &src, ObS
   } else {
     dst = new(ptr) ObStoreRange();
     if (OB_FAIL(src.start_key_.deep_copy(dst->start_key_, allocator))) {
-      COMMON_LOG(WARN, "deep copy start key failed.", K(src.start_key_), K(ret));
     } else if (OB_FAIL(src.end_key_.deep_copy(dst->end_key_, allocator))) {
-      COMMON_LOG(WARN, "deep copy end key failed.", K(src.end_key_), K(ret));
     } else {
       dst->table_id_ = src.table_id_;
       dst->border_flag_ = src.border_flag_;

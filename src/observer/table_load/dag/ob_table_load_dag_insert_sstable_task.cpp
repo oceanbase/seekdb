@@ -60,31 +60,21 @@ int ObTableLoadDagInsertSSTableOpTask::process()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new ObTableLoadDagParallelMerger", KR(ret));
   } else if (OB_FAIL(op->parallel_merger_->init_merge_task(store_ctx_, op->op_ctx_))) {
-    LOG_WARN("fail to init merge task", KR(ret));
   }
   // alloc task
   else if (OB_FAIL(dag_->alloc_task(insert_task, dag_, op->parallel_merger_))) {
-    LOG_WARN("failed to alloc task", KR(ret));
   } else if (OB_FAIL(dag_->alloc_task(clear_task, dag_, op->parallel_merger_, 0 /*thread_idx*/))) {
-    LOG_WARN("failed to alloc task", KR(ret));
   } else if (OB_FAIL(dag_->alloc_task(op_finish_task, dag_, op_))) {
-    LOG_WARN("failed to alloc task", KR(ret));
   }
   // 依赖关系
   else if (OB_FAIL(insert_task->add_child(*clear_task))) {
-    LOG_WARN("failed to add child", KR(ret));
   } else if (OB_FAIL(clear_task->add_child(*op_finish_task))) {
-    LOG_WARN("failed to add child", KR(ret));
   } else if (OB_FAIL(op_finish_task->deep_copy_children(get_child_nodes()))) {
-    LOG_WARN("fail to deep copy children", KR(ret));
   }
   // 添加task
   else if (OB_FAIL(dag_->add_task(*insert_task))) {
-    LOG_WARN("failed to add task", KR(ret));
   } else if (OB_FAIL(dag_->add_task(*clear_task))) {
-    LOG_WARN("failed to add task", KR(ret));
   } else if (OB_FAIL(dag_->add_task(*op_finish_task))) {
-    LOG_WARN("fail to add task", KR(ret));
   }
   return ret;
 }
@@ -134,7 +124,6 @@ int ObTableLoadDagInsertSSTableTaskBase::handle_merge_task_finish(
     ObDirectLoadTabletMergeCtx *tablet_merge_ctx = merge_task->get_merge_ctx();
     bool is_ready = false;
     if (OB_FAIL(tablet_merge_ctx->inc_finish_count(ret, is_ready))) {
-      LOG_WARN("fail to inc finish count", K(ret));
     } else if (is_ready) {
       const ObTabletID &tablet_id = tablet_merge_ctx->get_insert_tablet_ctx()->get_tablet_id();
       LOG_INFO("tablet merge task all finished", K(tablet_merge_ctx->get_tablet_id()),
@@ -143,16 +132,11 @@ int ObTableLoadDagInsertSSTableTaskBase::handle_merge_task_finish(
       ObArray<ObITask *> write_macro_block_tasks;
       ObTableLoadInsertSSTableFinishTask *finish_task = nullptr;
       if (OB_FAIL(dag_->alloc_task(finish_task, this))) {
-        LOG_WARN("fail to alloc task", K(ret));
       } else if (OB_FAIL(finish_task->deep_copy_children(parent_task->get_child_nodes()))) {
-        LOG_WARN("fail to deep copy children", K(ret));
       } else if (OB_FAIL(dag_->generate_tablet_write_macro_block_tasks(
                    tablet_id, write_macro_block_tasks, finish_task))) {
-        LOG_WARN("fail to generate tablet write macro block tasks", K(ret));
       } else if (OB_FAIL(dag_->add_task(*finish_task))) {
-        LOG_WARN("fail to add task", K(ret));
       } else if (OB_FAIL(dag_->batch_add_task(write_macro_block_tasks))) {
-        LOG_WARN("fail to batch add task", K(ret));
       }
     }
   }
@@ -186,23 +170,19 @@ int ObTableLoadInsertSSTableTask::process()
         !(is_incremental_minor_direct_load(dag_->get_direct_load_type()))) {
       ObTableLoadMemoryFriendWriteMacroBlockTask *write_task = nullptr;
       if (OB_FAIL(dag_->alloc_task(write_task, this, merge_task))) {
-        LOG_WARN("fail to alloc task", K(ret));
       } else {
         task = write_task;
       }
     } else {
       ObTableLoadMacroBlockWriteTask *write_task = nullptr;
       if (OB_FAIL(dag_->alloc_task(write_task, this, merge_task))) {
-        LOG_WARN("fail to alloc task", K(ret));
       } else {
         task = write_task;
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(task->deep_copy_children(get_child_nodes()))) {
-        LOG_WARN("fail to deep copy children", K(ret));
       } else if (OB_FAIL(dag_->add_task(*task))) {
-        LOG_WARN("fail to add task", K(ret));
       }
     }
   }
@@ -239,7 +219,6 @@ int ObTableLoadDagInsertSSTableClearTask::generate_next_task(share::ObITask *&ne
   } else {
     ObTableLoadDagInsertSSTableClearTask *clear_task = nullptr;
     if (OB_FAIL(dag_->alloc_task(clear_task, this, next_thread_idx))) {
-      LOG_WARN("fail to alloc task", K(ret));
     } else {
       next_task = clear_task;
     }
@@ -251,9 +230,7 @@ int ObTableLoadDagInsertSSTableClearTask::process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(parallel_merger_->prepare_clear_table())) {
-    LOG_WARN("fail to prepare clear table", K(ret));
   } else if (OB_FAIL(parallel_merger_->clear_table(store_ctx_->thread_cnt_, thread_idx_))) {
-    LOG_WARN("fail to clear table", K(ret));
   }
   return ret;
 }
@@ -305,25 +282,18 @@ int ObTableLoadMemoryFriendWriteMacroBlockPipeline::init()
     ObDDLTabletContext *tablet_context = nullptr;
     bool is_slice_created = false;
     if (OB_FAIL(ddl_dag->get_tablet_context(tablet_id, tablet_context))) {
-      LOG_WARN("fail to get tablet context", K(ret), K(tablet_id));
     } else if (OB_UNLIKELY(nullptr == tablet_context)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tablet context is null", K(ret), K(tablet_id));
     } else if (OB_FAIL(
                  tablet_context->get_or_create_slice(slice_idx, ddl_slice, is_slice_created))) {
-      LOG_WARN("fail to get or create slice", K(ret), K(tablet_id), K(slice_idx));
     }
     if (FAILEDx(batch_datum_rows_write_op_.init(tablet_id, slice_idx))) {
-      LOG_WARN("fail to initialize batch datum rows write op", K(ret), K(tablet_id), K(slice_idx));
     } else if (OB_FAIL(add_op(&batch_datum_rows_write_op_))) {
-      LOG_WARN("fail to add batch datum rows write op", K(ret));
     } else if (OB_FAIL(cg_row_file_writer_op_.init(tablet_id, slice_idx,
                                                    ObBatchDatumRowsWriteOp::MAX_BATCH_SIZE))) {
-      LOG_WARN("fail to initialize cg row file writer op", K(ret), K(tablet_id), K(slice_idx));
     } else if (OB_FAIL(add_op(&cg_row_file_writer_op_))) {
-      LOG_WARN("fail to add cg row file writer op", K(ret));
     } else if (OB_FAIL(ObDDLMemoryFriendWriteMacroBlockPipeline::init(ddl_slice))) {
-      LOG_WARN("fail to initialize ddl memory friend write macro block pipeline", K(ret));
     } else {
       is_inited_ = true;
     }
@@ -366,7 +336,6 @@ void ObTableLoadMemoryFriendWriteMacroBlockPipeline::postprocess(int &ret)
   } else {
     ret = OB_SUCCESS;
     if (OB_FAIL(set_remain_block())) {
-      LOG_WARN("fail to set remain block", K(ret));
     } else {
       LOG_INFO("the ObTableLoadMemoryFriendWriteMacroBlockPipeline has ret code iter end", K(ret));
     }
@@ -399,7 +368,6 @@ int ObTableLoadMemoryFriendWriteMacroBlockTask::init()
   if (nullptr == row_iterator_ && OB_FAIL(merge_task_->init_iterator(row_iterator_))) {
     LOG_WARN("fail to init iterator", KR(ret));
   } else if (OB_FAIL(ObTableLoadMemoryFriendWriteMacroBlockPipeline::init())) {
-    LOG_WARN("fail to init", KR(ret));
   }
   return ret;
 }
@@ -416,7 +384,6 @@ int ObTableLoadMemoryFriendWriteMacroBlockTask::generate_next_task(share::ObITas
   } else {
     ObTableLoadMemoryFriendWriteMacroBlockTask *write_task = nullptr;
     if (OB_FAIL(dag_->alloc_task(write_task, this, merge_task))) {
-      LOG_WARN("fail to alloc task", K(ret));
     } else {
       next_task = write_task;
     }
@@ -429,7 +396,6 @@ void ObTableLoadMemoryFriendWriteMacroBlockTask::postprocess(int &ret)
   ObTableLoadMemoryFriendWriteMacroBlockPipeline::postprocess(ret);
   if (OB_SUCC(ret)) {
     if (OB_FAIL(handle_merge_task_finish(this, merge_task_))) {
-      LOG_WARN("fail to handle merge task finish", K(ret));
     }
   }
 }
@@ -453,7 +419,6 @@ int ObTableLoadMacroBlockWriteTask::process()
   ObITabletSliceWriter *storage_writer = nullptr;
   ObArenaAllocator allocator(ObMemAttr("TLMBWTask"));
   if (OB_FAIL(merge_task_->init_iterator(row_iter))) {
-    LOG_WARN("fail to init iterator", KR(ret));
   } else {
     const ObTabletID tablet_id = row_iter->get_tablet_id();
     const int64_t slice_idx = row_iter->get_slice_idx();
@@ -462,17 +427,14 @@ int ObTableLoadMacroBlockWriteTask::process()
     if (OB_FAIL(ObDDLUtil::fill_writer_param(tablet_id, slice_idx, -1 /*cg_idx*/, dag_,
                                              ObTabletSliceBufferTempFileWriter::ObDDLRowBuffer::DEFAULT_MAX_BATCH_SIZE,
                                              writer_param))) {
-      LOG_WARN("fail to fill writer param", K(ret), K(tablet_id), K(slice_idx), K(dag_));
     } else if (OB_FAIL(ObDDLUtil::alloc_storage_macro_block_writer(writer_param, allocator,
                                                                    storage_writer))) {
-      LOG_WARN("fail to alloc storage macro block writer", K(ret), K(writer_param));
     }
   }
   if (OB_SUCC(ret)) {
     const ObDatumRow *datum_row = nullptr;
     while (OB_SUCC(ret)) {
       if (OB_FAIL(dag_->check_status())) {
-        LOG_WARN("fail to check status", K(ret));
       } else if (OB_FAIL(row_iter->get_next_row(datum_row))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           LOG_WARN("fail to get next row", KR(ret));
@@ -481,11 +443,9 @@ int ObTableLoadMacroBlockWriteTask::process()
           break;
         }
       } else if (OB_FAIL(storage_writer->append_row(*datum_row))) {
-        LOG_WARN("fail to append row", K(ret), KPC(datum_row));
       }
     }
     if (FAILEDx(storage_writer->close())) {
-      LOG_WARN("fail to close storage writer", K(ret));
     }
   }
   if (OB_LIKELY(nullptr != row_iter)) {
@@ -498,7 +458,6 @@ int ObTableLoadMacroBlockWriteTask::process()
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(handle_merge_task_finish(this, merge_task_))) {
-      LOG_WARN("fail to handle merge task finish", K(ret));
     }
   }
   return ret;
@@ -517,7 +476,6 @@ int ObTableLoadMacroBlockWriteTask::generate_next_task(ObITask *&next_task)
   } else {
     ObTableLoadMacroBlockWriteTask *write_task = nullptr;
     if (OB_FAIL(dag_->alloc_task(write_task, this, merge_task))) {
-      LOG_WARN("fail to alloc task", K(ret));
     } else {
       next_task = write_task;
     }

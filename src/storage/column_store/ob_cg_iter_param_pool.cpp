@@ -52,7 +52,6 @@ int ObCGIterParamPool::get_iter_param(
     if (nullptr != expr && OB_FAIL(exprs.push_back(expr))) {
       LOG_WARN("Fail to push back", K(ret));
     } else if (OB_FAIL(get_iter_param(cg_idx, row_param, exprs, iter_param))) {
-      LOG_WARN("Fail to get cg iter param", K(ret));
     }
   }
   return ret;
@@ -87,7 +86,6 @@ int ObCGIterParamPool::get_iter_param(
   }
   if (OB_FAIL(ret) || OB_NOT_NULL(iter_param)) {
   } else if (OB_FAIL(new_iter_param(cg_idx, row_param, output_exprs, iter_param, agg_exprs))) {
-    LOG_WARN("Fail to new cg iter param", K(ret));
   }
   return ret;
 }
@@ -99,7 +97,6 @@ int ObCGIterParamPool::put_iter_param(ObTableIterParam *iter_param)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret));
   } else if (OB_FAIL(iter_params_.push_back(iter_param))) {
-    LOG_WARN("Fail to push new iter param", K(ret), KPC(iter_param));
   }
   return ret;
 }
@@ -121,14 +118,11 @@ int ObCGIterParamPool::new_iter_param(
     LOG_WARN("Fail to alloc new iter param", K(ret), K(cg_idx));
   } else if (is_virtual_cg(cg_idx)) {
     if (OB_FAIL(fill_virtual_cg_iter_param(row_param, cg_idx, output_exprs, *iter_param, agg_exprs))) {
-      LOG_WARN("Fail to fill dummy cg iter param", K(ret), K(row_param), K(cg_idx), K(output_exprs), KPC(agg_exprs));
     }
   } else if (OB_FAIL(fill_cg_iter_param(row_param, cg_idx, output_exprs, *iter_param, agg_exprs))) {
-    LOG_WARN("Failed to mock cg iter param", K(ret), K(row_param), K(cg_idx), K(output_exprs), KPC(agg_exprs));
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(put_iter_param(iter_param))) {
-      LOG_WARN("Fail to put iter param", K(ret));
     } else if (nullptr == agg_exprs) {
       iter_param->disable_pd_aggregate();
     }
@@ -151,16 +145,13 @@ int ObCGIterParamPool::fill_cg_iter_param(
   sql::ExprFixedArray *param_agg_exprs = nullptr;
   ColumnsIndex *out_cols_project = nullptr;
   if (OB_FAIL(copy_param_exprs(output_exprs, param_output_exprs))) {
-    LOG_WARN("Failed to copy output exprs", K(ret), K(output_exprs));
   } else if (nullptr != agg_exprs && OB_FAIL(copy_param_exprs(*agg_exprs, param_agg_exprs))) {
     LOG_WARN("Failed to copy aggregate exprs", K(ret), KPC(agg_exprs));
   } else if (OB_ISNULL(out_cols_project = OB_NEWx(ColumnsIndex, (&alloc_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Fail to alloc out cols projector", K(ret));
   } else if (OB_FAIL(out_cols_project->init(1, alloc_))) {
-    LOG_WARN("Fail to init out cols projector", K(ret));
   } else if (OB_FAIL(out_cols_project->push_back(0))) {
-    LOG_WARN("Fail to push back out cols project", K(ret));
   }
   if (OB_FAIL(ret)) {
     if (nullptr != out_cols_project) {
@@ -169,7 +160,6 @@ int ObCGIterParamPool::fill_cg_iter_param(
       out_cols_project = nullptr;
     }
   } else if (OB_FAIL(generate_for_column_store(row_param, param_output_exprs, param_agg_exprs, out_cols_project, cg_idx, cg_param))) {
-    LOG_WARN("Fail to generate cg iter param", K(ret));
   }
   return ret;
 }
@@ -183,9 +173,7 @@ int ObCGIterParamPool::copy_param_exprs(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Fail to alloc output exprs", K(ret));
   } else if (OB_FAIL(param_exprs->init(exprs.count()))) {
-    LOG_WARN("Fail to init output exprs", K(ret));
   } else if (OB_FAIL(param_exprs->assign(exprs))) {
-    LOG_WARN("Fail to assign exprs", K(ret));
   }
   if (OB_FAIL(ret)) {
     if (nullptr != param_exprs) {
@@ -208,7 +196,6 @@ int ObCGIterParamPool::fill_virtual_cg_iter_param(
   sql::ExprFixedArray *param_output_exprs = nullptr;
   sql::ExprFixedArray *param_agg_exprs = nullptr;
   if (OB_FAIL(copy_param_exprs(output_exprs, param_output_exprs))) {
-    LOG_WARN("Failed to copy output exprs", K(ret), K(output_exprs));
   } else if (nullptr != agg_exprs && OB_FAIL(copy_param_exprs(*agg_exprs, param_agg_exprs))) {
     LOG_WARN("Failed to copy aggregate exprs", K(ret), KPC(agg_exprs));
   } else {
@@ -295,7 +282,6 @@ int ObCGIterParamPool::generate_for_column_store(const ObTableIterParam &row_par
           cg_param.read_info_ = row_param.cg_read_infos_->at(cg_pos);
         }
       } else if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_cg_read_info(col_descs.at(cg_pos), column_params->at(cg_pos), row_param.tablet_id_, cg_param.cg_read_info_handle_))) {
-        LOG_WARN("Fail to get cg read info",  K(ret), K(cg_idx), K(row_param));
       } else if (OB_UNLIKELY(!cg_param.cg_read_info_handle_.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Unexpect null cg read info", K(ret), KPC(cg_param.cg_read_info_handle_.get_read_info()));

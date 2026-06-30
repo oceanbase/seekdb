@@ -124,7 +124,6 @@ OB_INLINE int init_fixed_array_param(common::ObFixedArray<T, common::ObIAllocato
     } else {
       param.reset();
       if (OB_FAIL(param.init(size))) {
-        STORAGE_LOG(WARN, "Failed to init params", K(ret), K(size));
       }
     }
   }

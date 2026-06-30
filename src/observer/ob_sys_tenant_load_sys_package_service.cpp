@@ -39,7 +39,6 @@ int ObSysTenantLoadSysPackageService::mtl_init(ObSysTenantLoadSysPackageService 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("service is null", KR(ret), KP(service));
   } else if (OB_FAIL(service->init())) {
-    LOG_WARN("failed to init ObSysTenantLoadSysPackageService", KR(ret));
   }
   return ret;
 }
@@ -51,7 +50,6 @@ int ObSysTenantLoadSysPackageService::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
   } else if (OB_FAIL(task_.init())) {
-    LOG_WARN("failed to init ObSysTenantLoadSysPackageTask", KR(ret));
   } else {
     inited_ = true;
   }
@@ -65,11 +63,8 @@ int ObSysTenantLoadSysPackageService::start()
     ret = OB_NOT_INIT;
     LOG_WARN("service not inited", KR(ret), K_(inited));
   } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::SysTntLoadSysPacTimer, tg_id_))) {
-    LOG_WARN("fail to create timer thread", KR(ret));
   } else if (OB_FAIL(TG_START(tg_id_))) {
-    LOG_WARN("fail to start timer thread", KR(ret), K_(tg_id));
   } else if (OB_FAIL(task_.start(tg_id_))) {
-    LOG_WARN("failed to start sys tenant load sys package task", KR(ret), K_(tg_id));
   }
   return ret;
 }
@@ -124,7 +119,6 @@ int ObSysTenantLoadSysPackageService::switch_to_leader()
     ret = OB_NOT_INIT;
     LOG_WARN("service not inited", KR(ret), K_(inited));
   } else if (OB_FAIL(start())) {
-    LOG_WARN("failed to switch to leader for sys tenant load sys package service", KR(ret));
   }
   return ret;
 }
@@ -133,7 +127,6 @@ void ObSysTenantLoadSysPackageService::switch_to_follower_forcedly()
 {
   int ret = switch_to_follower_gracefully();
   if (OB_FAIL(switch_to_follower_gracefully())) {
-    LOG_WARN("failed to switch to follower gracefully", KR(ret));
   }
 }
 

@@ -83,12 +83,10 @@ int calc_convert_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   int ret = OB_SUCCESS;
   ObDatum *child_res = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, child_res))) {
-    LOG_WARN("eval arg 0 failed", K(ret));
   } else {
     ObCollationType cs_type = expr.args_[0]->datum_meta_.cs_type_;
     int64_t mbmaxlen = 1;
     if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(cs_type, mbmaxlen))) {
-      LOG_WARN("fail to get mbmaxlen", K(cs_type), K(ret));
     } else if (mbmaxlen > 1 && !child_res->is_null()) {
       ObString checked_res;
       bool is_null = false;
@@ -99,16 +97,12 @@ int calc_convert_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("session is null", K(ret));
       } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
-        LOG_WARN("get sql mode failed", K(ret));
       } else if (OB_FAIL(ObSQLUtils::check_well_formed_str(child_res->get_string(),
                                                            cs_type,
                                                            checked_res,
                                                            is_null,
                                                            is_strict_mode(sql_mode),
                                                            false))) {
-        LOG_WARN("check_well_formed_str failed", K(ret),
-                                                 K(child_res->get_string()),
-                                                 K(expr.datum_meta_));
       } else if (is_null) {
         res_datum.set_null();
       } else {

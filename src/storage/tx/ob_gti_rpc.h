@@ -118,7 +118,6 @@ private:
           if (OB_NOT_MASTER == status
               || OB_TENANT_NOT_IN_SERVER == status) {
             if (OB_FAIL(gti_source_->refresh_gti_location())) {
-              TRANS_LOG(WARN, "refresh gti location fail", K(ret));
             }
           }
         } else {
@@ -126,11 +125,9 @@ private:
           if (OB_SUCCESS == status) {
             if (OB_FAIL(gti_source_->update_trans_id(result.get_start_id(),
                                                             result.get_end_id()))) {
-              TRANS_LOG(WARN, "update trans id fail", K(ret));
             }
           } else if (OB_NOT_MASTER == status) {
             if (OB_FAIL(gti_source_->refresh_gti_location())) {
-              TRANS_LOG(WARN, "refresh gti location fail", K(ret));
             }
           }
           TRANS_LOG(INFO, "gti request callback", KR(ret), K(result), K(rcode));

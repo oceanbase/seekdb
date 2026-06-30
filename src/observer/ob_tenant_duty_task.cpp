@@ -132,7 +132,6 @@ int ObTenantDutyTask::update_tenant_ctx_memory_throttle()
         auto ta = alloc->get_tenant_ctx_allocator(i);
         if (OB_NOT_NULL(ta)) {
           if (OB_FAIL(ta->set_limit(ctx_id == i ? limit : INT64_MAX))) {
-            LOG_ERROR("set_limit failed", K(ret), K(ctx_id), K(limit));
           }
         }
       }
@@ -151,16 +150,12 @@ int ObTenantDutyTask::read_tenant_wa_percentage(int64_t &pctg)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null");
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("get schema guard failed", K(ret));
   } else if (OB_FAIL(schema_guard.get_tenant_system_variable(SYS_VAR_OB_SQL_WORK_AREA_PERCENTAGE, var_schema))) {
-    LOG_WARN("get tenant system variable failed", K(ret));
   } else if (OB_ISNULL(var_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("var_schema is null");
   } else if (OB_FAIL(var_schema->get_value(&allocator_, NULL, value))) {
-    LOG_WARN("get value from var_schema failed", K(ret), K(*var_schema));
   } else if (OB_FAIL(value.get_int(pctg))) {
-    LOG_WARN("get int from value failed", K(ret), K(value));
   }
   return ret;
 }
@@ -181,7 +176,6 @@ void ObTenantSqlMemoryTimerTask::runTimerTask()
       if (OB_UNLIKELY(nullptr == sql_mem_mgr)) {
         LOG_WARN("sql memory manager is null");
       } else if (OB_FAIL(sql_mem_mgr->calculate_global_bound_size())) {
-        LOG_WARN("failed to calculate global bound size", K(ret));
       }
     }
   }
@@ -192,7 +186,6 @@ int ObTenantDutyTask::update_tenant_wa_percentage()
   int ret = OB_SUCCESS;
   int64_t wa_pctg = 0;
   if (OB_FAIL(read_tenant_wa_percentage(wa_pctg))) {
-    LOG_WARN("read variable tenant work area percentage fail", K(ret));
   } else if (wa_pctg < 0 || wa_pctg > 100) {
     LOG_WARN("work area memroy percentage "
              "shouldn't greater than 100 or be negative",
@@ -202,8 +195,6 @@ int ObTenantDutyTask::update_tenant_wa_percentage()
         common::ObCtxIds::WORK_AREA);
     if (ta != nullptr) {
       if (OB_FAIL(lib::set_wa_limit(wa_pctg))) {
-        LOG_WARN("set tenant work area memory",
-                 K(wa_pctg), K(ret));
       } else {
         LOG_INFO("set tenant work area memory",
                  K(wa_pctg),
@@ -225,15 +216,12 @@ int ObTenantDutyTask::read_obj(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null");
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("get schema guard failed", K(ret));
   } else if (OB_FAIL(schema_guard.get_tenant_system_variable(
                          sys_var, var_schema))) {
-    LOG_WARN("get tenant system variable failed", K(ret));
   } else if (OB_ISNULL(var_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("var_schema is null");
   } else if (OB_FAIL(var_schema->get_value(&allocator_, NULL, obj))) {
-    LOG_WARN("get value from var_schema failed", K(ret), K(*var_schema));
   }
   return ret;
 }
@@ -244,9 +232,7 @@ int ObTenantDutyTask::read_int64(
   int ret = OB_SUCCESS;
   ObObj obj;
   if (OB_FAIL(read_obj(sys_var, obj))) {
-    LOG_WARN("get object from tenant system variable fail", K(ret));
   } else if (OB_FAIL(obj.get_int(val))) {
-    LOG_WARN("get int value from object fail", K(ret), K(obj));
   }
   return ret;
 }
@@ -258,9 +244,7 @@ int ObTenantDutyTask::read_double(
   ObObj obj;
   number::ObNumber num;
   if (OB_FAIL(read_obj(sys_var, obj))) {
-    LOG_WARN("get object from tenant system variable fail", K(ret));
   } else if (OB_FAIL(obj.get_number(num))) {
-    LOG_WARN("get number value from object fail", K(ret), K(obj));
   } else {
     char buf[32] = {};
     int64_t pos = 0;

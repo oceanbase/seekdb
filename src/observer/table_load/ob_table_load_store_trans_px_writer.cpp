@@ -125,7 +125,6 @@ int ObTableLoadStoreTransPXWriter::init(ObTableLoadStoreCtx *store_ctx,
       } else if (OB_FAIL(pre_sort_writer_->init(store_ctx_->write_ctx_.pre_sorter_,
                                                 writer_,
                                                 store_ctx_->error_row_handler_))) {
-        LOG_WARN("fail to init pre sort wirter", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -154,9 +153,7 @@ int ObTableLoadStoreTransPXWriter::prepare_write(const ObIArray<uint64_t> &colum
     LOG_WARN("already can write", KR(ret), KPC(this));
   } else {
     if (OB_FAIL(check_columns(column_ids))) {
-      LOG_WARN("fail to check columns", KR(ret));
     } else if (OB_FAIL(init_batch_ctx(is_vectorized, use_rich_format))) {
-      LOG_WARN("fail to init batch ctx", KR(ret), K(is_vectorized), K(use_rich_format));
     } else {
       is_vectorized_ = is_vectorized;
       use_rich_format_ = use_rich_format;
@@ -214,7 +211,6 @@ int ObTableLoadStoreTransPXWriter::init_batch_ctx(const bool is_vectorized,
                                                   max_batch_size,
                                                   allocator_,
                                                   batch_ctx_->tablet_id_vector_))) {
-      LOG_WARN("fail to create tablet id fixed vector", KR(ret));
    } else if (OB_FAIL(batch_ctx_->batch_rows_.init(store_ctx_->write_ctx_.px_column_descs_,
                                                    store_ctx_->write_ctx_.px_column_accuracys_,
                                                    store_ctx_->write_ctx_.px_column_project_idxs_,
@@ -223,7 +219,6 @@ int ObTableLoadStoreTransPXWriter::init_batch_ctx(const bool is_vectorized,
                                                    row_flag,
                                                    max_batch_size,
                                                    store_ctx_->enable_dag_))) {
-      LOG_WARN("fail to init batch rows", KR(ret));
     } else if (OB_ISNULL(batch_ctx_->selector_ = static_cast<uint16_t *>(
                            allocator_.alloc(sizeof(uint16_t) * max_batch_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -249,9 +244,7 @@ int ObTableLoadStoreTransPXWriter::check_status()
       ret = OB_TRANS_TIMEOUT;
       LOG_WARN("trans timeout", KR(ret), KPC(tx_desc));
     } else if (OB_FAIL(store_ctx_->check_status(ObTableLoadStatusType::LOADING))) {
-      LOG_WARN("fail to check status", KR(ret));
     } else if (OB_FAIL(trans_->check_trans_status(ObTableLoadTransStatusType::RUNNING))) {
-      LOG_WARN("fail to check trans status", KR(ret));
     }
   }
   return ret;
@@ -312,9 +305,7 @@ int ObTableLoadStoreTransPXWriter::write_vector(ObIVector *tablet_id_vector,
                OB_FAIL(batch_ctx_->tablet_id_vector_->shallow_copy(tablet_id_vector, brs.size_))) {
         LOG_WARN("fail to shallow copy", KR(ret));
       } else if (OB_FAIL(batch_ctx_->batch_rows_.shallow_copy(vectors, brs.size_))) {
-        LOG_WARN("fail to shallow copy vectors", KR(ret));
       } else if (OB_FAIL(flush_buffer())) {
-        LOG_WARN("fail to flush buffer", KR(ret));
       } else {
         affected_rows = brs.size_;
       }
@@ -339,12 +330,10 @@ int ObTableLoadStoreTransPXWriter::write_vector(ObIVector *tablet_id_vector,
                                                                     append_size))) {
           LOG_WARN("fail to append selective", KR(ret));
         } else if (OB_FAIL(batch_ctx_->batch_rows_.append_selective(vectors, selector, append_size))) {
-          LOG_WARN("fail to append selective", KR(ret));
         } else {
           size -= append_size;
           selector += append_size;
           if (OB_FAIL(flush_buffer_if_need())) {
-            LOG_WARN("fail to flush buffer", KR(ret));
           }
         }
       }
@@ -397,9 +386,7 @@ int ObTableLoadStoreTransPXWriter::write_batch(const ObDatumVector &tablet_id_da
                OB_FAIL(batch_ctx_->tablet_id_vector_->shallow_copy(tablet_id_datum_vector, brs.size_))) {
         LOG_WARN("fail to shallow copy", KR(ret));
       } else if (OB_FAIL(batch_ctx_->batch_rows_.shallow_copy(datum_vectors, brs.size_))) {
-        LOG_WARN("fail to shallow copy datum vectors", KR(ret));
       } else if (OB_FAIL(flush_buffer())) {
-        LOG_WARN("fail to flush buffer", KR(ret));
       } else {
         affected_rows = brs.size_;
       }
@@ -424,12 +411,10 @@ int ObTableLoadStoreTransPXWriter::write_batch(const ObDatumVector &tablet_id_da
                                                                     append_size))) {
           LOG_WARN("fail to append selective", KR(ret));
         } else if (OB_FAIL(batch_ctx_->batch_rows_.append_selective(datum_vectors, selector, append_size))) {
-          LOG_WARN("fail to append selective", KR(ret));
         } else {
           size -= append_size;
           selector += append_size;
           if (OB_FAIL(flush_buffer_if_need())) {
-            LOG_WARN("fail to flush buffer", KR(ret));
           }
         }
       }
@@ -465,11 +450,8 @@ int ObTableLoadStoreTransPXWriter::write_row(const ObTabletID &tablet_id, const 
       ret = OB_TABLET_NOT_EXIST;
       LOG_WARN("unexpected tablet id not same", KR(ret), K(single_tablet_id_), K(tablet_id));
     } else if (OB_FAIL(batch_ctx_->tablet_id_vector_->append_datum(batch_idx, tablet_id_datum))) {
-      LOG_WARN("fail to append datum", KR(ret));
     } else if (OB_FAIL(batch_ctx_->batch_rows_.append_row(batch_ctx_->datum_row_))) {
-      LOG_WARN("fail to append row", KR(ret));
     } else if (OB_FAIL(flush_buffer_if_need())) {
-      LOG_WARN("fail to flush buffer", KR(ret));
     }
   }
   return ret;
@@ -481,7 +463,6 @@ int ObTableLoadStoreTransPXWriter::flush_buffer_if_need()
   if (batch_ctx_->batch_rows_.full() ||
       batch_ctx_->batch_rows_.bytes_usage() >= batch_ctx_->max_bytes_size_) {
     if (OB_FAIL(flush_buffer())) {
-      LOG_WARN("fail to flush buffer", KR(ret));
     }
   }
   return ret;
@@ -522,7 +503,6 @@ int ObTableLoadStoreTransPXWriter::flush_buffer()
         OB_FAIL(check_tablets(batch_ctx_->tablet_id_vector_, batch_rows.size()))) {
       LOG_WARN("fail to check tablets", KR(ret));
     } else if (OB_FAIL(writer_->px_write(tablet_id_vector, batch_rows))) {
-      LOG_WARN("fail to px write", KR(ret));
     }
   } else if (store_ctx_->write_ctx_.enable_pre_sort_) { // pre_sort
     ObIVector *tablet_id_vector =
@@ -531,11 +511,9 @@ int ObTableLoadStoreTransPXWriter::flush_buffer()
         OB_FAIL(check_tablets(batch_ctx_->tablet_id_vector_, batch_rows.size()))) {
       LOG_WARN("fail to check tablets", KR(ret));
     } else if (OB_FAIL(pre_sort_writer_->px_write(tablet_id_vector, batch_rows))) {
-      LOG_WARN("fail to px write", KR(ret));
     }
   } else if (is_single_part_) { // single partition scenario
     if (OB_FAIL(writer_->px_write(single_tablet_id_, batch_rows))) {
-      LOG_WARN("fail to px write", KR(ret));
     }
   } else { // multi-partition scenario
     const ObTableLoadStoreWriteCtx::TabletIdxMap &tablet_idx_map =
@@ -552,7 +530,6 @@ int ObTableLoadStoreTransPXWriter::flush_buffer()
         ret = OB_TABLET_NOT_EXIST;
         LOG_WARN("unexpected tablet id not found", KR(ret), K(tablet_id));
       } else if (OB_FAIL(writer_->px_write(ObTabletID(tablet_id), batch_rows))) {
-        LOG_WARN("fail to px write", KR(ret));
       }
     } else { // Data belongs to multiple partitions
       const int64_t tablet_cnt = tablet_idx_map.size();
@@ -588,7 +565,6 @@ int ObTableLoadStoreTransPXWriter::flush_buffer()
                                         batch_rows,
                                         selector + start,
                                         size))) {
-            LOG_WARN("fail to px write", KR(ret));
           }
         }
       }
@@ -598,7 +574,6 @@ int ObTableLoadStoreTransPXWriter::flush_buffer()
     row_count_ += batch_rows.size();
     batch_ctx_->batch_rows_.reuse();
     if (OB_FAIL(check_status())) {
-      LOG_WARN("fail to check status", KR(ret));
     }
   }
   return ret;

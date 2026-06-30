@@ -44,7 +44,6 @@ int ObExprInstr::calc_mysql_instr_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     LOG_WARN("invalid expr", K(ret), K(expr));
   } else if (OB_FAIL(ObLocationExprOperator::calc_(expr, *expr.args_[1], *expr.args_[0],
                                                    ctx, res_datum))) {
-    LOG_WARN("ObLocationExprOperator::calc_ faied", K(ret));
   }
   return ret;
 }

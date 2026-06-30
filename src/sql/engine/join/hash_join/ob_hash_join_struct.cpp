@@ -37,7 +37,6 @@ int ObHJStoredRow::convert_one_row_to_exprs(const ExprFixedArray &exprs,
     } else {
       ObIVector *vec = expr->get_vector(eval_ctx);
       if (OB_FAIL(vec->from_row(row_meta, row, batch_idx, i))) {
-        LOG_WARN("fail to set row to vector", K(ret), K(batch_idx), K(i), K(*expr));
       }
       exprs.at(i)->set_evaluated_projected(eval_ctx);
     }
@@ -58,7 +57,6 @@ int ObHJStoredRow::convert_rows_to_exprs(const ExprFixedArray &exprs, ObEvalCtx 
       ObIVector *vec = expr->get_vector(eval_ctx);
       if (OB_FAIL(vec->from_rows(
               row_meta, reinterpret_cast<const ObCompactRow **>(rows), sel, sel_cnt, i))) {
-        LOG_WARN("fail to set rows to vector", K(ret), K(i), K(*expr));
       }
       exprs.at(i)->set_evaluated_projected(eval_ctx);
     }
@@ -79,7 +77,6 @@ int ObHJStoredRow::attach_rows(const ObExprPtrIArray &exprs,
     for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < exprs.count(); col_idx++) {
       ObExpr *expr = exprs.at(col_idx);
       if (OB_FAIL(expr->init_vector_default(ctx, selector[size - 1] + 1))) {
-        LOG_WARN("fail to init vector", K(ret));
       } else {
         ObIVector *vec = expr->get_vector(ctx);
         if (VEC_UNIFORM_CONST != vec->get_format()) {
@@ -107,7 +104,6 @@ int ObHJStoredRow::attach_rows(const ObExprPtrIArray &exprs,
     for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < exprs.count(); col_idx++) {
       ObExpr *expr = exprs.at(col_idx);
       if (OB_FAIL(expr->init_vector_default(ctx, size))) {
-        LOG_WARN("fail to init vector", K(ret));
       } else {
         ObIVector *vec = expr->get_vector(ctx);
         if (VEC_UNIFORM_CONST != vec->get_format()) {

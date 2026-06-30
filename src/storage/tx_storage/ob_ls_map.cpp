@@ -87,7 +87,6 @@ int ObLSIterator::get_next(ObLS *&ls)
 
             while (OB_NOT_NULL(ls) && OB_SUCC(ret)) {
               if (OB_FAIL(ls->get_ref_mgr().inc(mod_))) {
-                LOG_WARN("ls inc ref fail", K(ret));
               } else if (OB_FAIL(lss_.push_back(ls))) {
                 LOG_WARN("Fail to push ls to array, ", K(ret));
                 ls->get_ref_mgr().dec(mod_);
@@ -316,7 +315,6 @@ int ObLSMap::get_ls(const share::ObLSID &ls_id,
     if (OB_ISNULL(ls)) {
       ret = OB_LS_NOT_EXIST;
     } else if (OB_FAIL(handle.set_ls(*this, *ls, mod))) {
-      LOG_WARN("get_ls fail", K(ret), K(ls_id));
     }
   }
   return ret;
@@ -336,7 +334,6 @@ int ObLSMap::get_all_ls_id(ObIArray<ObLSID> &ls_id_array)
       ls = ls_buckets_[bucket_idx];
       while (OB_SUCC(ret) && OB_NOT_NULL(ls)) {
         if (OB_FAIL(ls_id_array.push_back(ls->get_ls_id()))) {
-          LOG_WARN("failed to push back ls id", K(ret), KP(ls));
         } else {
           ls = static_cast<ObLS *>(ls->next_);
         }

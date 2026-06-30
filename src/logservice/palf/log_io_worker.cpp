@@ -65,12 +65,10 @@ int LogIOWorker::init(const LogIOWorkerConfig &config,
     PALF_LOG(ERROR, "invalid argument!!!", K(ret), K(config), K(cb_thread_pool_tg_id), KP(allocator),
         KP(throttle), KP(palf_env_impl));
   } else if (OB_FAIL(queue_.init(config.io_queue_capcity_, "IOWorkerLQ"))) {
-    PALF_LOG(ERROR, "io task queue init failed", K(ret), K(config));
   } else if (OB_FAIL(batch_io_task_mgr_.init(config.batch_width_,
                                              config.batch_depth_,
                                              allocator,
                                              &wait_cost_stat_))) {
-    PALF_LOG(ERROR, "BatchLogIOFlushLogTaskMgr init failed", K(ret), K(config));
   } else {
     share::ObThreadPool::set_run_wrapper(MTL_CTX());
     log_io_worker_num_ = config.io_worker_num_;
@@ -148,7 +146,6 @@ int LogIOWorker::submit_io_task(LogIOTask *io_task)
       }
     } else {
       if (OB_FAIL(queue_.push(io_task))) {
-        PALF_LOG(WARN, "fail to push io task into queue", K(ret), KP(io_task));
       }
     }
     PALF_LOG(TRACE, "after submit_io_task", KP(io_task));
@@ -185,7 +182,6 @@ int LogIOWorker::handle_io_task_with_throttling_(LogIOTask *io_task)
   }
   const int64_t submit_seq = io_task->get_submit_seq();
   if (OB_FAIL(io_task->do_task(cb_thread_pool_tg_id_, palf_env_impl_))) {
-    PALF_LOG(WARN, "LogIOTask do_task falied");
   } else if (!need_ignoring_throttling_) {
     const int64_t handled_seq = ATOMIC_LOAD(&purge_throttling_task_handled_seq_);
     const int64_t submitted_seq = ATOMIC_LOAD(&purge_throttling_task_submitted_seq_);
@@ -318,7 +314,6 @@ int LogIOWorker::reduce_io_task_(ObLink *task)
   }
 
   if (OB_FAIL(batch_io_task_mgr_.handle(cb_thread_pool_tg_id_, palf_env_impl_))) {
-    PALF_LOG(WARN, "batch_io_task_mgr_ handle failed", K(ret), K(batch_io_task_mgr_));
   }
 
   if (false == last_io_task_has_been_reduced && OB_NOT_NULL(io_task)) {
@@ -356,7 +351,6 @@ int LogIOWorker::BatchLogIOFlushLogTaskMgr::init(int64_t batch_width,
   int ret = OB_SUCCESS;
   batch_io_task_array_.set_allocator(allocator);
   if (OB_FAIL(batch_io_task_array_.init(batch_width))) {
-    PALF_LOG(ERROR, "batch_io_task_array_ init failed", K(ret));
   } else {
     for (int i = 0; i < batch_width  && OB_SUCC(ret); i++) {
       bool last_io_task_push_success = false;
@@ -367,10 +361,7 @@ int LogIOWorker::BatchLogIOFlushLogTaskMgr::init(int64_t batch_width,
         PALF_LOG(ERROR, "allocate memory failed", K(ret));
       } else if (FALSE_IT(io_task = new(ptr)(BatchLogIOFlushLogTask))) {
       } else if (OB_FAIL(io_task->init(batch_depth, allocator))) {
-        PALF_LOG(ERROR, "BatchLogIOFlushLogTask init failed", K(ret));
-        // NB: push batch will not failed becaue batch_io_task_array_ has reserved.
       } else if (OB_FAIL(batch_io_task_array_.push_back(io_task))) {
-        PALF_LOG(ERROR, "batch_io_task_array_ push_back failed", K(ret), KP(io_task));
       } else {
         last_io_task_push_success = true;
         PALF_LOG(INFO, "BatchLogIOFlushLogTask init success", K(ret), K(i),
@@ -412,9 +403,7 @@ int LogIOWorker::BatchLogIOFlushLogTaskMgr::insert(LogIOFlushLogTask *io_task)
   BatchLogIOFlushLogTask *batch_io_task = NULL;
   const int64_t palf_id = io_task->get_palf_id();
   if (OB_FAIL(find_usable_batch_io_task_(palf_id, batch_io_task))) {
-    PALF_LOG(WARN, "find_usable_batch_io_task_ failed", K(ret), K(palf_id));
   } else if (OB_FAIL(batch_io_task->push_back(io_task))) {
-    PALF_LOG(TRACE, "push_back failed", K(ret), K(palf_id), KPC(io_task));
   } else {
   }
   return ret;
@@ -435,9 +424,7 @@ int LogIOWorker::BatchLogIOFlushLogTaskMgr::handle(const int64_t tg_id, IPalfEnv
       PALF_LOG(ERROR, "BatchLogIOFlushLogTask in batch_io_task_array_ is nullptr, unexpected error!!!",
                K(ret), KP(io_task), K(i));
     } else if (OB_FAIL(statistics_wait_cost_(first_handle_ts, io_task))) {
-      PALF_LOG(WARN, "do statistics failed", K(ret));
     } else if (OB_FAIL(io_task->do_task(tg_id, palf_env_impl))) {
-      PALF_LOG(WARN, "do_task failed", K(ret), KP(io_task));
     } else {
       if (OB_NOT_NULL(wait_cost_stat_)) {
         wait_cost_stat_->stat(io_task->get_count(), io_task->get_accum_in_queue_time());

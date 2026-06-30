@@ -46,7 +46,6 @@ int ObThrottleUnit<ALLOCATOR>::init()
     ret = OB_INIT_TWICE;
     SHARE_LOG(WARN, "init throttle unit failed", KR(ret));
   } else if (OB_FAIL(throttle_info_map_.init(attr))) {
-    SHARE_LOG(WARN, "init throttle unit failed", KR(ret));
   } else {
     (void)ALLOCATOR::init_throttle_config(resource_limit_, throttle_trigger_percentage_, throttle_max_duration_);
     (void)update_decay_factor_();
@@ -165,7 +164,6 @@ void ObThrottleUnit<ALLOCATOR>::set_throttle_info_(const int64_t queue_sequence,
   ObThrottleInfo *throttle_info = nullptr;
 
   if (OB_FAIL(inner_get_throttle_info_(throttle_info, abs_expire_time))) {
-    SHARE_LOG(WARN, "get throttle info failed", KR(ret), THROTTLE_UNIT_INFO);
   } else if (OB_ISNULL(throttle_info)) {
     SHARE_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "throttle_info should not be nullptr");
   } else {
@@ -356,7 +354,6 @@ void ObThrottleUnit<ALLOCATOR>::reset_thread_throttle_()
   int ret = OB_SUCCESS;
   ObThrottleInfoGuard ti_guard;
   if (OB_FAIL(get_throttle_info_(common::get_itid(), ti_guard))) {
-    SHARE_LOG(WARN, "get throttle info from map failed", KR(ret), THROTTLE_UNIT_INFO);
   } else if (ti_guard.is_valid()) {
     ti_guard.throttle_info()->need_throttle_ = false;
     ti_guard.throttle_info()->sequence_ = 0;

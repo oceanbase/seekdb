@@ -807,10 +807,8 @@ public:
     } else {
       timer_ = new (buf_) common::ObTimer();
       if (OB_FAIL(timer_->set_run_wrapper_with_ret(tg_helper_))) {
-        OB_LOG(WARN, "timer set run wrapper failed", K(ret));
       } else if (OB_FAIL(timer_->init(attr_.name_,
                                ObMemAttr("TGTimer")))) {
-        OB_LOG(WARN, "init failed", K(ret));
       }
     }
     return ret;

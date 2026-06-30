@@ -91,25 +91,21 @@ int ObExprSysPrivilegeCheck::check_show_priv(bool &allow_show,
     //and use statis_cast<uint64_t> for retrieving(same with schema_service)
     // After schema split, the tenant of the normal tenant schema table is 0, at this time, authorization takes session_priv.tenant_
     if (OB_FAIL(exec_ctx.get_my_session()->get_session_priv_info(session_priv))) {
-      LOG_WARN("fail to get session priv info", K(ret));
     } else if (false
         && true) {
       //not current tenant's row
     } else if (0 == level_str.case_compare("db_acc")) {
       if (OB_FAIL(const_cast<share::schema::ObSchemaGetterGuard *>(schema_guard)->check_db_show(
                   session_priv, enable_role_id_array, db_name, allow_show))) {
-        LOG_WARN("Check db show failed", K(ret));
       }
     } else if (0 == level_str.case_compare("table_acc")) {
       //if (OB_FAIL(priv_mgr.check_table_show(session_priv,
       if (OB_FAIL(const_cast<share::schema::ObSchemaGetterGuard *>(schema_guard)->check_table_show(
                   session_priv, enable_role_id_array, db_name, obj_name, allow_show))) {
-        LOG_WARN("Check table show failed", K(ret));
       }
     } else if (0 == level_str.case_compare("routine_acc")) {
       if (OB_FAIL(const_cast<share::schema::ObSchemaGetterGuard *>(schema_guard)->check_routine_show(
                   session_priv, enable_role_id_array, db_name, obj_name, allow_show, routine_type))) {
-        LOG_WARN("Check routine show failed", K(ret));
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
@@ -138,7 +134,6 @@ int ObExprSysPrivilegeCheck::eval_sys_privilege_check(
   ObDatum *routine_type = NULL;
   bool allow_show = true;
   if (OB_FAIL(expr.eval_param_value(ctx, level, tenant, db, obj, routine_type))) {
-    LOG_WARN("evaluate parameters failed", K(ret));
   } else if (tenant->is_null()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tenant is null", K(ret));
@@ -147,7 +142,6 @@ int ObExprSysPrivilegeCheck::eval_sys_privilege_check(
                                      (NULL == db || db->is_null()) ? ObString() : db->get_string(),
                                      (NULL == obj || obj->is_null()) ? ObString() : obj->get_string(),
                                      (NULL == routine_type || routine_type->is_null()) ? 0 : routine_type->get_int()))) {
-    LOG_WARN("check show privilege failed", K(ret));
   } else {
     expr_datum.set_int(allow_show ? 0 : -1);
   }

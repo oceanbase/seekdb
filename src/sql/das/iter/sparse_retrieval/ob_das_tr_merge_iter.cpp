@@ -78,13 +78,11 @@ int ObDASTRMergeIter::inner_init(ObDASIterParam &param)
     flags_ = merge_param.flags_;
     for (int64_t i = 0; OB_SUCC(ret) && i < merge_param.query_tokens_.count(); ++i) {
       if (OB_FAIL(query_tokens_.push_back(merge_param.query_tokens_.at(i)))) {
-        LOG_WARN("failed to push back query token", K(ret));
       }
     }
     if (merge_param.dim_weights_.count() >= 1) {
       for (int64_t i = 0; OB_SUCC(ret) && i < merge_param.dim_weights_.count(); ++i) {
         if (OB_FAIL(dim_weights_.push_back(merge_param.dim_weights_.at(i)))) {
-          LOG_WARN("failed to push back dim weight", K(ret));
         }
       }
     }
@@ -101,7 +99,6 @@ int ObDASTRMergeIter::inner_init(ObDASIterParam &param)
       lib::ContextParam mem_param;
       mem_param.set_mem_attr("TextMergeIter", ObCtxIds::DEFAULT_CTX_ID);
       if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, mem_param))) {
-        LOG_WARN("failed to create text retrieval iterator memory context", K(ret));
       }
     }
     sr_iter_param_.max_batch_size_ = merge_param.max_batch_size_; // may be greater than ir_rtdef_->eval_ctx_->max_batch_size_
@@ -131,7 +128,6 @@ int ObDASTRMergeIter::init_das_iter_scan_params()
         ir_rtdef_->get_doc_agg_rtdef(),
         tx_desc_, snapshot_, mem_context_->get_arena_allocator(),
         *total_doc_cnt_scan_param_))) {
-      LOG_WARN("failed to init total doc cnt scan param", K(ret));
     } else {
       static_cast<ObDASScanIter*>(children_[children_cnt_ - 1])->set_scan_param(*total_doc_cnt_scan_param_);
     }
@@ -140,17 +136,13 @@ int ObDASTRMergeIter::init_das_iter_scan_params()
   if (OB_SUCC(ret) && 0 != dim_iter_cnt) {
     if (FALSE_IT(inv_scan_params_.set_allocator(&myself_allocator_))) {
     } else if (OB_FAIL(inv_scan_params_.init(dim_iter_cnt))) {
-      LOG_WARN("failed to init inv scan params array", K(ret));
     } else if (OB_FAIL(inv_scan_params_.prepare_allocate(dim_iter_cnt))) {
-      LOG_WARN("failed to prepare allocate inv scan params array", K(ret));
     }
 
     if (OB_FAIL(ret) || !ir_ctdef_->need_inv_idx_agg()) {
     } else if (FALSE_IT(inv_agg_params_.set_allocator(&myself_allocator_))) {
     } else if (OB_FAIL(inv_agg_params_.init(dim_iter_cnt))) {
-      LOG_WARN("failed to init inv agg params array", K(ret));
     } else if (OB_FAIL(inv_agg_params_.prepare_allocate(dim_iter_cnt))) {
-      LOG_WARN("failed to prepare allocate inv agg params array", K(ret));
     }
 
     if (OB_FAIL(ret)) {
@@ -160,9 +152,7 @@ int ObDASTRMergeIter::init_das_iter_scan_params()
       LOG_ERROR("fwd idx agg with max batch size not implemented", K(ret));
     } else if (FALSE_IT(fwd_scan_params_.set_allocator(&myself_allocator_))) {
     } else if (OB_FAIL(fwd_scan_params_.init(dim_iter_cnt))) {
-      LOG_WARN("failed to init fwd scan params array", K(ret));
     } else if (OB_FAIL(fwd_scan_params_.prepare_allocate(dim_iter_cnt))) {
-      LOG_WARN("failed to prepare allocate fwd scan params array", K(ret));
     }
 
     if (OB_SUCC(ret)) {
@@ -179,7 +169,6 @@ int ObDASTRMergeIter::init_das_iter_scan_params()
               ir_ctdef_->get_inv_idx_scan_ctdef(), ir_rtdef_->get_inv_idx_scan_rtdef(),
               tx_desc_, snapshot_, mem_context_->get_arena_allocator(),
               *inv_scan_params_[i]))) {
-            LOG_WARN("failed to init inv scan param", K(ret));
           } else {
             static_cast<ObDASScanIter*>(children_[i])->set_scan_param(*inv_scan_params_[i]);
           }
@@ -201,7 +190,6 @@ int ObDASTRMergeIter::init_das_iter_scan_params()
                 ir_rtdef_->get_inv_idx_agg_rtdef(),
                 tx_desc_, snapshot_, mem_context_->get_arena_allocator(),
                 *inv_agg_params_[i]))) {
-              LOG_WARN("failed to init inv agg param", K(ret));
             } else {
               static_cast<ObDASScanIter*>(children_[i + dim_iter_cnt])->set_scan_param(*inv_agg_params_[i]);
             }
@@ -225,7 +213,6 @@ int ObDASTRMergeIter::init_das_iter_scan_params()
                 ir_rtdef_->get_fwd_idx_agg_rtdef(),
                 tx_desc_, snapshot_, mem_context_->get_arena_allocator(),
                 *fwd_scan_params_[i]))) {
-              LOG_WARN("failed to init fwd scan param", K(ret));
             } else {
               static_cast<ObDASScanIter*>(children_[i + dim_iter_cnt * 2])->set_scan_param(*fwd_scan_params_[i]);
             }
@@ -245,11 +232,8 @@ int ObDASTRMergeIter::init_block_max_iter_param()
   if (0 == token_cnt) {
     // do nothing
   } else if (OB_FAIL(block_max_iter_param_.init(*ir_ctdef_, myself_allocator_))) {
-    LOG_WARN("failed to init block max iter param", K(ret));
   } else if (OB_FAIL(block_max_scan_params_.init(token_cnt))) {
-    LOG_WARN("failed to init block max scan params", K(ret));
   } else if (OB_FAIL(block_max_scan_params_.prepare_allocate(token_cnt))) {
-    LOG_WARN("failed to prepare allocate block max scan params", K(ret));
   } else {
     ObTableScanParam *scan_params = nullptr;
     if (OB_ISNULL(scan_params = static_cast<ObTableScanParam *>(myself_allocator_.alloc(sizeof(ObTableScanParam) * token_cnt)))) {
@@ -264,7 +248,6 @@ int ObDASTRMergeIter::init_block_max_iter_param()
           ir_rtdef_->get_block_max_scan_rtdef(),
           tx_desc_, snapshot_, mem_context_->get_arena_allocator(),
           *block_max_scan_params_[i]))) {
-        LOG_WARN("failed to init block max scan param", K(ret));
       }
     }
   }
@@ -282,10 +265,8 @@ int ObDASTRMergeIter::init_doc_length_est_param()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid doc length est spec", K(ret), K(doc_len_est_spec));
   } else if (OB_FAIL(doc_length_est_stat_cols_.init(doc_len_est_spec.col_types_.count()))) {
-    LOG_WARN("failed to init doc length est stat cols", K(ret));
   } else if (OB_FAIL(doc_length_est_stat_cols_.push_back(
       ObSkipIndexColMeta(doc_len_est_spec.col_store_idxes_.at(0), doc_len_est_spec.col_types_.at(0))))) {
-    LOG_WARN("failed to append skip index col meta", K(ret));
   } else if (OB_FAIL(doc_length_est_param_.init(
       doc_length_est_stat_cols_,
       doc_len_est_spec.scan_col_proj_,
@@ -293,7 +274,6 @@ int ObDASTRMergeIter::init_doc_length_est_param()
       true,
       true,
       true))) {
-    LOG_WARN("failed to init doc length est param", K(ret));
   }
   return ret;
 }
@@ -355,7 +335,6 @@ int ObDASTRMergeIter::init_das_iter_scan_param(const ObLSID &ls_id,
 
     if (OB_NOT_NULL(snapshot)) {
       if (OB_FAIL(scan_param.snapshot_.assign(*snapshot))) {
-        LOG_WARN("assign snapshot fail", K(ret));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -363,7 +342,6 @@ int ObDASTRMergeIter::init_das_iter_scan_param(const ObLSID &ls_id,
     }
 
     if (FAILEDx(scan_param.column_ids_.assign(ctdef->access_column_ids_))) {
-      LOG_WARN("failed to init column ids", K(ret));
     }
   }
   return ret;
@@ -374,20 +352,16 @@ int ObDASTRMergeIter::create_dim_iters()
   int ret = OB_SUCCESS;
   if (topk_mode_) {
     if (OB_FAIL(init_block_max_iter_param())) {
-      LOG_WARN("failed to init block max iter param", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < query_tokens_.count(); ++i) {
       ObTextRetrievalScanIterParam iter_param;
       ObTextRetrievalBlockMaxIter *dim_iter = nullptr;
       if (OB_FAIL(init_dim_iter_param(iter_param, i))) {
-        LOG_WARN("failed to init create tr iter param", K(ret));
       } else if (OB_ISNULL(dim_iter = OB_NEWx(ObTextRetrievalBlockMaxIter, &myself_allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to allocate memory for block max iter", K(ret));
       } else if (OB_FAIL(dim_iter->init(iter_param, block_max_iter_param_, *block_max_scan_params_[i]))) {
-        LOG_WARN("failed to init text retrieval block max iter", K(ret));
       } else if (OB_FAIL(dim_iters_.push_back(dim_iter))) {
-        LOG_WARN("failed to push back dim iter", K(ret));
       }
     }
   } else if (daat_mode_) {
@@ -395,26 +369,21 @@ int ObDASTRMergeIter::create_dim_iters()
       ObTextRetrievalScanIterParam iter_param;
       ObTextRetrievalDaaTTokenIter *dim_iter = nullptr;
       if (OB_FAIL(init_dim_iter_param(iter_param, i))) {
-        LOG_WARN("failed to init create tr iter param", K(ret));
       } else if (OB_ISNULL(dim_iter = OB_NEWx(ObTextRetrievalDaaTTokenIter, &myself_allocator_))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to allocate memory for text retrieval daat token iter", K(ret));
       } else if (OB_FAIL(dim_iter->init(iter_param))) {
-          LOG_WARN("failed to init text retrieval daat token iter", K(ret));
       } else if (OB_FAIL(dim_iters_.push_back(dim_iter))) {
-        LOG_WARN("failed to push back dim iter", K(ret));
       }
     }
   } else if (taat_mode_) {
     ObTextRetrievalScanIterParam iter_param;
     ObTextRetrievalTokenIter *dim_iter = nullptr;
     if (OB_FAIL(init_dim_iter_param(iter_param, 0))) {
-      LOG_WARN("failed to init create tr iter param", K(ret));
     } else if (OB_ISNULL(dim_iter = OB_NEWx(ObTextRetrievalTokenIter, &myself_allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate memory for text retrieval token iter", K(ret));
     } else if (OB_FAIL(dim_iter->init(iter_param))) {
-      LOG_WARN("failed to init text retrieval token iter", K(ret));
     } else {
       dim_iter_ = dim_iter;
     }
@@ -484,7 +453,6 @@ int ObDASTRMergeIter::create_sparse_retrieval_iter()
   if (OB_NOT_NULL(ir_ctdef_->field_boost_expr_)) {
     ObDatum *boost_datum = nullptr;
     if (OB_FAIL(ir_ctdef_->field_boost_expr_->eval(*ir_rtdef_->eval_ctx_, boost_datum))) {
-      LOG_WARN("failed to eval field boost expr", K(ret));
     } else if (OB_ISNULL(boost_datum) || OB_UNLIKELY(boost_datum->is_null())) {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("not supported field boost", K(ret));
@@ -516,12 +484,10 @@ int ObDASTRMergeIter::create_sparse_retrieval_iter()
     ObTextDaaTParam iter_param;
     ObTextBMWIter *bmw_iter = nullptr;
     if (OB_FAIL(init_daat_iter_param(iter_param))) {
-      LOG_WARN("failed to init sr iter param", K(ret));
     } else if (OB_ISNULL(bmw_iter = OB_NEWx(ObTextBMWIter, &myself_allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate memory for text retrieval bm25 iter", K(ret));
     } else if (OB_FAIL(bmw_iter->init(iter_param))) {
-      LOG_WARN("failed to init text retrieval bm25 iter", K(ret));
     } else {
       sparse_retrieval_iter_ = bmw_iter;
     }
@@ -529,12 +495,10 @@ int ObDASTRMergeIter::create_sparse_retrieval_iter()
     ObTextDaaTParam iter_param;
     ObTextDaaTIter *daat_iter = nullptr;
     if (OB_FAIL(init_daat_iter_param(iter_param))) {
-      LOG_WARN("failed to init sr iter param", K(ret));
     } else if (OB_ISNULL(daat_iter = OB_NEWx(ObTextDaaTIter, &myself_allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate memory for text retrieval daat iter", K(ret));
     } else if (OB_FAIL(daat_iter->init(iter_param))) {
-      LOG_WARN("failed to init text retrieval daat iter", K(ret));
     } else {
       sparse_retrieval_iter_ = daat_iter;
     }
@@ -542,12 +506,10 @@ int ObDASTRMergeIter::create_sparse_retrieval_iter()
     ObTextTaaTParam iter_param;
     ObTextTaaTIter *taat_iter = nullptr;
     if (OB_FAIL(init_taat_iter_param(iter_param))) {
-      LOG_WARN("failed to init sr iter param", K(ret));
     } else if (OB_ISNULL(taat_iter = OB_NEWx(ObTextTaaTIter, &myself_allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate memory for text retrieval taat iter", K(ret));
     } else if (OB_FAIL(taat_iter->init(iter_param))) {
-      LOG_WARN("failed to init text retrieval taat iter", K(ret));
     } else {
       sparse_retrieval_iter_ = taat_iter;
     }
@@ -576,7 +538,6 @@ int ObDASTRMergeIter::create_sparse_retrieval_iter()
     }
     if (FAILEDx(lookup_iter->init(sr_iter_param_, *sparse_retrieval_iter_,
                                   myself_allocator_, sr_iter_param_.max_batch_size_))) {
-      LOG_WARN("failed to init lookup iter", K(ret));
     } else {
       sparse_retrieval_iter_ = lookup_iter;
     }
@@ -605,7 +566,6 @@ int ObDASTRMergeIter::init_daat_iter_param(ObTextDaaTParam &iter_param)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null total doc cnt expr", K(ret));
   } else if (OB_FAIL(init_doc_length_est_param())) {
-    LOG_WARN("failed to init doc length est param", K(ret));
   } else if (!ir_ctdef_->need_estimate_total_doc_cnt()) {
     if (OB_UNLIKELY(!static_cast<sql::ObStoragePushdownFlag>(total_doc_cnt_scan_param_->pd_storage_flag_).is_aggregate_pushdown())) {
       ret = OB_NOT_IMPLEMENT;
@@ -621,7 +581,6 @@ int ObDASTRMergeIter::init_daat_iter_param(ObTextDaaTParam &iter_param)
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to allocate memory for boolean relevance collector", K(ret));
       } else if (OB_FAIL(boolean_relevance_collector->init(&myself_allocator_, dim_iters_.count(), boolean_compute_node_))) {
-        LOG_WARN("failed to init boolean relevance collector", K(ret));
       } else {
         iter_param.relevance_collector_ = boolean_relevance_collector;
       }
@@ -632,7 +591,6 @@ int ObDASTRMergeIter::init_daat_iter_param(ObTextDaaTParam &iter_param)
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to allocate memory for inner product relevance collector", K(ret));
       } else if (OB_FAIL(inner_product_relevance_collector->init(should_match))) {
-        LOG_WARN("failed to init boolean relevance collector", K(ret));
       } else {
         iter_param.relevance_collector_ = inner_product_relevance_collector;
       }
@@ -663,7 +621,6 @@ int ObDASTRMergeIter::init_taat_iter_param(ObTextTaaTParam &iter_param)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null total doc cnt expr", K(ret));
   } else if (OB_FAIL(init_doc_length_est_param())) {
-    LOG_WARN("failed to init doc length est param", K(ret));
   } else if (!ir_ctdef_->need_estimate_total_doc_cnt()) {
     if (OB_UNLIKELY(!static_cast<sql::ObStoragePushdownFlag>(total_doc_cnt_scan_param_->pd_storage_flag_).is_aggregate_pushdown())) {
       ret = OB_NOT_IMPLEMENT;
@@ -704,13 +661,11 @@ int ObDASTRMergeIter::set_children_iter_rangekey()
     const int64_t dim_iter_cnt = taat_mode_ ? 1 : query_tokens_.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < dim_iter_cnt; ++i) {
       if (OB_FAIL(gen_inv_idx_scan_default_range(query_tokens_[i], inv_idx_scan_range))) {
-        LOG_WARN("failed to generate inverted index scan range", K(ret), K(query_tokens_[i]));
       } else if (ir_ctdef_->need_inv_idx_agg()
           && OB_FAIL(inv_agg_params_[i]->key_ranges_.push_back(inv_idx_scan_range))) {
         LOG_WARN("failed to push back lookup range", K(ret));
       } else if (FALSE_IT(inv_idx_scan_range.group_idx_ = group_idx)) {
       } else if (OB_FAIL(inv_scan_params_[i]->key_ranges_.push_back(inv_idx_scan_range))) {
-        LOG_WARN("failed to push back lookup range", K(ret));
       } else if (ir_ctdef_->need_fwd_idx_agg()
           && OB_FAIL(fwd_scan_params_[i]->key_ranges_.push_back(fwd_idx_agg_range))) {
         LOG_WARN("failed to push back lookup range", K(ret));
@@ -732,11 +687,8 @@ int ObDASTRMergeIter::set_children_iter_rangekey(const common::ObIArray<std::pai
     LOG_WARN("unexpected non-function lookup mode", K(ret), K_(flags));
   } else if (nullptr == sparse_retrieval_iter_) {
     if (OB_FAIL(init_das_iter_scan_params())) {
-      LOG_WARN("failed to init das iter scan params", K(ret));
     } else if (OB_FAIL(create_dim_iters())) {
-      LOG_WARN("failed to create dim iters", K(ret));
     } else if (OB_FAIL(create_sparse_retrieval_iter())) {
-      LOG_WARN("failed to create sparse retrieval iter", K(ret));
     }
   }
   if (OB_FAIL(ret) || 0 == query_tokens_.count()) {
@@ -761,19 +713,14 @@ int ObDASTRMergeIter::set_children_iter_rangekey(const common::ObIArray<std::pai
         if (OB_FAIL(gen_inv_idx_scan_one_range(query_tokens_[i],
                                                virtual_rangekeys.at(j).first,
                                                inv_idx_scan_range))) {
-          LOG_WARN("failed to generate inverted index scan range", K(ret),
-                   K(query_tokens_[i]), K(virtual_rangekeys.at(j).first));
         } else if (FALSE_IT(inv_idx_scan_range.group_idx_ = group_idx)) {
         } else if (OB_FAIL(inv_scan_params_[i]->key_ranges_.push_back(inv_idx_scan_range))) {
-          LOG_WARN("failed to push back lookup range", K(ret));
         }
       }
 
       if (!ir_ctdef_->need_inv_idx_agg()) {
       } else if (OB_FAIL(gen_inv_idx_scan_default_range(query_tokens_[i], inv_idx_scan_range))) {
-        LOG_WARN("failed to generate inverted index scan range", K(ret), K(query_tokens_[i]));
       } else if (OB_FAIL(inv_agg_params_[i]->key_ranges_.push_back(inv_idx_scan_range))) {
-        LOG_WARN("failed to push back lookup range", K(ret));
       }
     }
   }
@@ -783,7 +730,6 @@ int ObDASTRMergeIter::set_children_iter_rangekey(const common::ObIArray<std::pai
     LOG_WARN("unexpected null sparse retrieval iter", K(ret));
   } else if (OB_FAIL(static_cast<ObSRLookupIter *>(sparse_retrieval_iter_)
       ->set_hints(virtual_rangekeys, batch_size))) {
-    LOG_WARN("failed to set hints", K(ret), K(batch_size));
   }
   return ret;
 }
@@ -807,9 +753,7 @@ int ObDASTRMergeIter::gen_inv_idx_scan_default_range(const ObString &query_token
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(ret));
   } else if (OB_FAIL(ob_write_obj(ctx_alloc, tmp_obj, obj_ptr[0]))) {
-    LOG_WARN("failed to write obj", K(ret));
   } else if (OB_FAIL(ob_write_obj(ctx_alloc, tmp_obj, obj_ptr[2]))) {
-    LOG_WARN("failed to write obj", K(ret));
   } else {
     obj_ptr[1].set_min_value();
     obj_ptr[3].set_max_value();
@@ -844,14 +788,11 @@ int ObDASTRMergeIter::gen_inv_idx_scan_one_range(const ObString &query_token, co
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected nullptr", K(ret));
   } else if (OB_FAIL(ob_write_obj(ctx_alloc, tmp_obj, obj_ptr[0]))) {
-    LOG_WARN("failed to write obj", K(ret));
   } else if (OB_FAIL(doc_id.get_datum().to_obj(obj_ptr[1], ir_ctdef_->inv_scan_domain_id_col_->obj_meta_))) {
-    LOG_WARN("failed to set obj", K(ret));
   } else {
     ObRowkey row_key(obj_ptr, obj_cnt);
     common::ObTableID inv_table_id = ir_ctdef_->get_inv_idx_scan_ctdef()->ref_table_id_;
     if (OB_FAIL(scan_range.build_range(inv_table_id, row_key))) {
-      LOG_WARN("failed to build lookup range", K(ret), K(inv_table_id), K(row_key));
     }
   }
   return ret;
@@ -874,13 +815,9 @@ int ObDASTRMergeIter::do_table_scan()
     if (function_lookup_mode_) {
       // skip the following, which should have been done
     } else if (OB_FAIL(init_das_iter_scan_params())) {
-      LOG_WARN("failed to init das iter scan params", K(ret));
     } else if (OB_FAIL(create_dim_iters())) {
-      LOG_WARN("failed to create dim iters", K(ret));
     } else if (OB_FAIL(create_sparse_retrieval_iter())) {
-      LOG_WARN("failed to create sparse retrieval iter", K(ret));
     } else if (OB_FAIL(set_children_iter_rangekey())) {
-      LOG_WARN("failed to set children iter rangekey", K(ret));
     }
     if (OB_FAIL(ret)) {
     } else if (OB_UNLIKELY(!check_rangekey_inited_)) {
@@ -889,7 +826,6 @@ int ObDASTRMergeIter::do_table_scan()
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < children_cnt_; ++i) {
       if (OB_FAIL(children_[i]->do_table_scan())) {
-        LOG_WARN("failed to do table scan", K(ret));
       }
     }
   }
@@ -924,32 +860,26 @@ int ObDASTRMergeIter::inner_reuse()
   } else if (query_tokens_.count() > 0) {
     if (OB_NOT_NULL(total_doc_cnt_scan_param_)) {
       if (OB_FAIL(reuse_das_iter_scan_param(ls_id_, total_doc_cnt_tablet_id_, *total_doc_cnt_scan_param_))) {
-        LOG_WARN("failed to reuse total doc cnt scan param", K(ret));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < inv_scan_params_.count(); ++i) {
       if (OB_FAIL(reuse_das_iter_scan_param(ls_id_, inv_idx_tablet_id_, *inv_scan_params_[i]))) {
-        LOG_WARN("failed to reuse inv scan param", K(ret), K(i));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < inv_agg_params_.count(); ++i) {
       if (OB_FAIL(reuse_das_iter_scan_param(ls_id_, inv_idx_tablet_id_, *inv_agg_params_[i]))) {
-        LOG_WARN("failed to reuse inv agg param", K(ret), K(i));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < block_max_scan_params_.count(); ++i) {
       if (OB_FAIL(reuse_das_iter_scan_param(ls_id_, inv_idx_tablet_id_, *block_max_scan_params_[i]))) {
-        LOG_WARN("failed to reuse block max scan param", K(ret), K(i));
       }
     }
     for (int64_t i = 0; i < OB_SUCC(ret) && fwd_scan_params_.count(); ++i) {
       if (OB_FAIL(reuse_das_iter_scan_param(ls_id_, fwd_idx_tablet_id_, *fwd_scan_params_[i]))) {
-        LOG_WARN("failed to reuse fwd scan param", K(ret), K(i));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < children_cnt_; ++i) {
       if (OB_FAIL(children_[i]->reuse())) {
-        LOG_WARN("failed to reuse child", K(ret));
       }
     }
   }
@@ -984,7 +914,6 @@ int ObDASTRMergeIter::rescan()
     for (int64_t i = 0; OB_SUCC(ret) && i < children_cnt_; ++i) {
       // TODO: update scan param
       if (OB_FAIL(children_[i]->rescan())) {
-        LOG_WARN("failed to do table scan", K(ret));
       }
     }
   }
@@ -1110,7 +1039,6 @@ static int get_query_tokens_by_compacting_repeated_token(ObString &query_str,
   hash::ObHashMap<ObString, double> token_map;
   const int64_t ft_word_bkt_cnt = MAX(query_str.length() / 10, 2);
   if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
-    LOG_WARN("failed to create token map", K(ret));
   }
   while (!query_str.empty() && OB_SUCC(ret)) {
     ObString token_str = query_str.split_on(split_token_tag);
@@ -1147,17 +1075,13 @@ static int get_query_tokens_by_compacting_repeated_token(ObString &query_str,
       if (OB_HASH_NOT_EXIST != ret) {
         LOG_WARN("fail to get relevance", K(ret),K(token_key), K(cur_boost));
       } else if (OB_FAIL(token_map.set_refactored(token_key, boost_value, 1/*overwrite*/))) {
-        LOG_WARN("failed to push data", K(ret));
       }
     } else if (OB_FAIL(token_map.set_refactored(token_key, boost_value + cur_boost, 1/*overwrite*/))) {
-      LOG_WARN("failed to push data", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(query_tokens.reserve(token_map.size()))) {
-    LOG_WARN("failed to reserve query tokens", K(ret));
   } else if (OB_FAIL(boost_values.reserve(token_map.size()))) {
-    LOG_WARN("failed to reserve boost values", K(ret));
   }
   for (hash::ObHashMap<ObString, double>::const_iterator iter = token_map.begin();
       OB_SUCC(ret) && iter != token_map.end();
@@ -1165,11 +1089,8 @@ static int get_query_tokens_by_compacting_repeated_token(ObString &query_str,
     const ObString &token = iter->first;
     ObString token_string;
     if (OB_FAIL(common::ObCharset::charset_convert(alloc, token, ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI, cs_type, token_string, common::ObCharset::CONVERT_FLAG::COPY_STRING_ON_SAME_CHARSET))) {
-      LOG_WARN("failed to convert string", K(ret), K(token_string));
     } else if (OB_FAIL(query_tokens.push_back(token_string))) {
-      LOG_WARN("failed to append query token", K(ret));
     } else if (OB_FAIL(boost_values.push_back(iter->second))) {
-      LOG_WARN("failed to append boost value", K(ret));
     }
   }
   return ret;
@@ -1218,11 +1139,8 @@ static int get_query_tokens_directly(ObString &query_str,
     } else {
       ObString token_string;
       if (OB_FAIL(common::ObCharset::charset_convert(alloc, token_key, ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI, cs_type, token_string, common::ObCharset::CONVERT_FLAG::COPY_STRING_ON_SAME_CHARSET))) {
-        LOG_WARN("failed to convert string", K(ret), K(token_string));
       } else if (OB_FAIL(query_tokens.push_back(token_string))) {
-        LOG_WARN("failed to push token", K(ret));
       } else if (OB_FAIL(boost_values.push_back(boost_value))) {
-        LOG_WARN("failed to push boost", K(ret));
       }
     }
   }  
@@ -1249,7 +1167,6 @@ int ObDASTRMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_ctdef,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("query tokens or boost values is not empty", K(ret));
   } else if (OB_FAIL(search_text->eval(*eval_ctx, search_text_datum))) {
-    LOG_WARN("expr evaluation failed", K(ret));
   } else if (0 == search_text_datum->len_) {
     // empty query text
   } else if (OB_NOT_NULL(ir_ctdef->field_boost_expr_)) {
@@ -1261,12 +1178,9 @@ int ObDASTRMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_ctdef,
     if (cs_type != dst_type) {
       ObString tmp_out;
       if (OB_FAIL(ObCharset::tolower(cs_type, search_text_string, tmp_out, alloc))) {
-        LOG_WARN("failed to casedown string", K(ret), K(cs_type), K(search_text_string));
       } else if (OB_FAIL(common::ObCharset::charset_convert(alloc, tmp_out, cs_type, dst_type, str_dest))) {
-        LOG_WARN("failed to convert string", K(ret), K(cs_type), K(search_text_string));
       }
     } else if (OB_FAIL(ObCharset::tolower(cs_type, search_text_string, str_dest, alloc))){
-      LOG_WARN("failed to casedown string", K(ret), K(cs_type), K(search_text_string));
     }
     if (OB_FAIL(ret)) {
     } else {
@@ -1287,12 +1201,9 @@ int ObDASTRMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_ctdef,
     if (cs_type != dst_type) {
       ObString tmp_out;
       if (OB_FAIL(ObCharset::tolower(cs_type, search_text_string, tmp_out, alloc))) {
-        LOG_WARN("failed to casedown string", K(ret), K(cs_type), K(search_text_string));
       } else if (OB_FAIL(common::ObCharset::charset_convert(alloc, tmp_out, cs_type, dst_type, str_dest))) {
-        LOG_WARN("failed to convert string", K(ret), K(cs_type), K(search_text_string));
       }
     } else if (OB_FAIL(ObCharset::tolower(cs_type, search_text_string, str_dest, alloc))){
-      LOG_WARN("failed to casedown string", K(ret), K(cs_type), K(search_text_string));
     }
 
     void *buf = nullptr;
@@ -1333,9 +1244,7 @@ int ObDASTRMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_ctdef,
       hash::ObHashMap<ObString, int32_t> tokens_map;
       const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 10, 2);
       if (OB_FAIL(tokens_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
-        LOG_WARN("failed to create token map", K(ret));
       } else if (OB_FAIL(ObFtsEvalNode::fts_boolean_node_create(parant_node, node, cs_type, alloc, query_tokens, tokens_map, has_duplicate_boolean_tokens))) {
-        LOG_WARN("failed to get query tokens", K(ret));
       } else {
         root_node = parant_node;
       }
@@ -1355,16 +1264,13 @@ int ObDASTRMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_ctdef,
     hash::ObHashMap<ObFTWord, int64_t> token_map;
     const int64_t ft_word_bkt_cnt = MAX(search_text_string.length() / 10, 2);
     if (OB_FAIL(tokenize_helper.init(&alloc, parser_name, parser_properties))) {
-      LOG_WARN("failed to init tokenize helper", K(ret));
     } else if (OB_FAIL(token_map.create(ft_word_bkt_cnt, common::ObMemAttr("FTWordMap")))) {
-      LOG_WARN("failed to create token map", K(ret));
     } else if (OB_FAIL(tokenize_helper.segment(
                            meta,
                            search_text_string.ptr(),
                            search_text_string.length(),
                            doc_length,
                            token_map))) {
-      LOG_WARN("failed to segment", K(ret), K(search_text_string), K(meta), K(doc_length));
     } else {
       for (hash::ObHashMap<ObFTWord, int64_t>::const_iterator iter = token_map.begin();
           OB_SUCC(ret) && iter != token_map.end();
@@ -1372,9 +1278,7 @@ int ObDASTRMergeIter::build_query_tokens(const ObDASIRScanCtDef *ir_ctdef,
         const ObFTWord &token = iter->first;
         ObString token_string;
         if (OB_FAIL(ob_write_string(alloc, token.get_word().get_string(), token_string))) {
-          LOG_WARN("failed to deep copy query token", K(ret));
         } else if (OB_FAIL(query_tokens.push_back(token_string))) {
-          LOG_WARN("failed to append query token", K(ret));
         }
       }
     }
@@ -1398,7 +1302,6 @@ int ObDASTRMergeIter::init_topk_limit()
     ObDatum *topk_limit_datum = nullptr;
     ObDatum *topk_offset_datum = nullptr;
     if (OB_FAIL(topk_limit_expr->eval(*ir_rtdef_->eval_ctx_, topk_limit_datum))) {
-      LOG_WARN("failed to eval topk limit expr", K(ret));
     } else if (nullptr != topk_offset_expr && OB_FAIL(topk_offset_expr->eval(*ir_rtdef_->eval_ctx_, topk_offset_datum))) {
       LOG_WARN("failed to eval topk offset expr", K(ret));
     } else {

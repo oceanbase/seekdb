@@ -33,7 +33,6 @@ int ObCreateFuncExecutor::execute(ObExecContext &ctx, ObCreateFuncStmt &stmt)
   ObString first_stmt;
   UNUSED(ctx);
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
-    LOG_WARN("fail to get first stmt" , K(ret));
   } else {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("create_udf not supported in seekdb", K(ret));
@@ -47,7 +46,6 @@ int ObDropFuncExecutor::execute(ObExecContext &ctx, ObDropFuncStmt &stmt)
   ObString first_stmt;
   UNUSED(ctx);
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
-    LOG_WARN("fail to get first stmt" , K(ret));
   } else {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("drop_udf not supported in seekdb", K(ret));

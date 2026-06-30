@@ -180,14 +180,11 @@ int ObCatalogResolver::resolve_catalog_name(const ParseNode &name_node, obcall::
   } else if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(*allocator_,
                                                                         session_info_->get_dtc_params(),
                                                                         catalog_name))) {
-    LOG_WARN("failed to convert sql text", K(ret), K(catalog_name));
   } else if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
-    LOG_WARN("failed to get name case mode", K(ret));
   } else if (OB_LOWERCASE_AND_INSENSITIVE == case_mode
              && OB_FAIL(ObCharset::tolower(cs_type, catalog_name, catalog_name, *allocator_))) {
     LOG_WARN("failed to lower string", K(ret));
   } else if (OB_FAIL(arg.schema_.set_catalog_name(catalog_name))) {
-    LOG_WARN("failed to set catalog name", K(ret));
   }
   if (OB_SUCC(ret) && ObCatalogUtils::is_internal_catalog_name(catalog_name, case_mode)) {
     if (stmt_->stmt_type_ == stmt::T_CREATE_CATALOG || stmt_->stmt_type_ == stmt::T_DROP_CATALOG) {
@@ -209,7 +206,6 @@ int ObCatalogResolver::resolve_catalog_properties(const ParseNode &properties_no
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ObCatalogProperties::resolve_catalog_type(properties_node, type))) {
-    LOG_WARN("failed to resolve catalog type", K(ret));
   } else {
     switch (type)
     {

@@ -106,14 +106,12 @@ void ObMViewCleanSnapshotTask::runTimerTask()
   } else if (OB_UNLIKELY(is_stop_)) {
 
   } else if (OB_FAIL(need_schedule_major_refresh_mv_task( need_schedule))) {
-    LOG_WARN("fail to check need schedule major refresh mv task", KR(ret));
   } else if (!need_schedule) {
 
   } else if (OB_UNLIKELY(OB_ISNULL(sql_proxy) || OB_ISNULL(mgr))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql_proxy or mgr is null", KR(ret), K(sql_proxy), K(mgr));
   } else if (OB_FAIL(trans.start(sql_proxy))) {
-    LOG_WARN("fail to start trans", KR(ret));
   } else {
     share::ObGlobalStatProxy stat_proxy(trans);
     share::SCN major_refresh_mv_merge_scn;
@@ -123,17 +121,14 @@ void ObMViewCleanSnapshotTask::runTimerTask()
     bool mview_in_creation = false;
     if (OB_FAIL(stat_proxy.get_major_refresh_mv_merge_scn(select_for_update,
                                                           major_refresh_mv_merge_scn))) {
-      LOG_WARN("fail to get major_refresh_mv_merge_scn", KR(ret));
     } else if (OB_UNLIKELY(!major_refresh_mv_merge_scn.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("major_refresh_mv_merge_scn is invalid", KR(ret),
                K(major_refresh_mv_merge_scn));
     } else if (OB_FAIL(snapshot_proxy.get_all_snapshots(
                    trans, share::SNAPSHOT_FOR_MAJOR_REFRESH_MV, snapshots))) {
-      LOG_WARN("fail to get snapshots", KR(ret));
     } else if (OB_FAIL(ObMViewInfo::contains_major_refresh_mview_in_creation(
                    trans, mview_in_creation))) {
-      LOG_WARN("fail to check if mv is in creation", KR(ret));
     } else if (mview_in_creation) {
       // when a mview is being created, its snapshot may be added but the dependency is not
       // added yet, which can cause cleaning the snapshot by mistake. so we just skip this round.
@@ -166,12 +161,10 @@ void ObMViewCleanSnapshotTask::runTimerTask()
             LOG_WARN("fail to get table id", KR(ret), K(snapshot));
           }
         } else if (OB_FAIL(is_mv_container_table_(table_id, is_container_table))) {
-          LOG_WARN("fail to check is mv container table", KR(ret), K(table_id));
         } else if (is_container_table) {
           // do nothing
         } else if (OB_FAIL(sql::ObMVDepUtils::get_referring_mv_of_base_table(
                        trans, table_id, relevent_mv_tables))) {
-          LOG_WARN("fail to get referring mv of base table", KR(ret), K(table_id));
         } else if (relevent_mv_tables.empty()) {
           need_remove_snapshot = true;
           LOG_INFO("no relevant mv, remove snapshot", KR(ret), K(snapshot));
@@ -179,7 +172,6 @@ void ObMViewCleanSnapshotTask::runTimerTask()
         if (OB_FAIL(ret) || !need_remove_snapshot) {
           // do nothing
         } else if (OB_FAIL(snapshot_proxy.remove_snapshot(trans, snapshot))) {
-          LOG_WARN("fail to remove snapshot", KR(ret), K(snapshot));
         } else {
           LOG_INFO("[MAJ_REF_MV] successfully remove snapshot", KR(ret), K(snapshot));
         }
@@ -206,14 +198,11 @@ int ObMViewCleanSnapshotTask::get_table_id_(ObISQLClient &sql_client, const uint
     common::sqlclient::ObMySQLResult *result = nullptr;
     if (OB_FAIL(sql.assign_fmt("SELECT table_id FROM %s WHERE tablet_id = %ld",
                                share::OB_ALL_TABLET_TO_LS_TNAME, tablet_id))) {
-      LOG_WARN("fail to assign sql", KR(ret));
     } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-      LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("result is null", KR(ret));
     } else if (OB_FAIL(result->next())) {
-      LOG_WARN("fail to get next", KR(ret));
     } else {
       EXTRACT_INT_FIELD_MYSQL(*result, "table_id", table_id, uint64_t);
     }
@@ -231,9 +220,7 @@ int ObMViewCleanSnapshotTask::is_mv_container_table_(const uint64_t table_id, bo
   is_container = false;
 
   if (OB_FAIL(schema_service->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("get tenant schema guard failed", K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
-    LOG_WARN("failed to get table schema", KR(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("table schema is null", KR(ret), K(table_id));

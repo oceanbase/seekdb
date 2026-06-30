@@ -1287,7 +1287,6 @@ inline int ObHashJoinOp::init_mem_context()
       .set_mem_attr(common::ObModIds::OB_ARENA_HASH_JOIN,
                      common::ObCtxIds::WORK_AREA);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
-      SQL_ENG_LOG(WARN, "create entity failed", K(ret));
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
       SQL_ENG_LOG(WARN, "mem entity is null", K(ret));

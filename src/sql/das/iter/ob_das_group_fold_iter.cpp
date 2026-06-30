@@ -204,7 +204,6 @@ int ObDASGroupFoldIter::inner_init(ObDASIterParam &param)
                                              group_id_idx,
                                              need_check_output_datum_,
                                              *iter_alloc_))) {
-      LOG_WARN("failed to init group save rows", K(ret));
     }
   }
 
@@ -284,7 +283,6 @@ int ObDASGroupFoldIter::inner_get_next_rows(int64_t &count, int64_t capacity)
         group_idx = ObNewRange::get_group_idx(group_idx_batch[i].get_int());
         if (group_idx >= cur_group_idx_) {
           if (OB_FAIL(group_save_rows_.save(true, i, storage_count - i))) {
-            LOG_WARN("das group fold iter failed to save batch result", K(ret));
           } else {
             available_group_idx_ = group_idx;
           }
@@ -347,7 +345,6 @@ int ObDASGroupFoldIter::inner_get_next_row()
           available_group_idx_ = INT64_MAX;
         }
       } else if (OB_FAIL(group_id_expr_->eval(*group_save_rows_.eval_ctx_, group_idx))) {
-        LOG_WARN("failed to eval group id", K(ret));
       } else {
         available_group_idx_ = ObNewRange::get_group_idx(group_idx->get_int());
       }
@@ -359,7 +356,6 @@ int ObDASGroupFoldIter::inner_get_next_row()
         available_group_idx_ = MIN_GROUP_INDEX;
       } else {
         if (OB_FAIL(group_save_rows_.save(false, 0, 1))) {
-          LOG_WARN("failed to save last row", K(ret));
         } else {
           ret = OB_ITER_END;
         }

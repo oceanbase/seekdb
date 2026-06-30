@@ -73,7 +73,6 @@ int ObStatArray<T, N>::add(const ObStatArray<T, N> &other)
   int ret = common::OB_SUCCESS;
   for (int64_t i = 0; i < N && common::OB_SUCCESS == ret; ++i) {
     if (OB_FAIL(items_[i].add(other.items_[i]))) {
-      COMMON_LOG(WARN, "Fail to add other, ", K(ret));
     }
   }
   return ret;

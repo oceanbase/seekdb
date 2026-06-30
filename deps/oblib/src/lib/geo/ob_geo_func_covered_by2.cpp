@@ -49,14 +49,12 @@ OB_GEO_GEOG_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeogPoint, ObWkbGeogC
         ObGeometry *sub_g2 = NULL;
         common::ObIAllocator *allocator = context.get_allocator();
         if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(*allocator, sub_type, true, true, sub_g2))) {
-          LOG_WARN("failed to create wkb", K(ret), K(sub_type));
         } else {
           // Length is not used, cannot get real length until iter move to the next
           ObString wkb_nosrid(WKB_COMMON_WKB_HEADER_LEN, reinterpret_cast<const char *>(sub_ptr));
           sub_g2->set_data(wkb_nosrid);
           sub_g2->set_srid(g2->get_srid());
           if (OB_FAIL(eval_wkb_binary_geog(g1, sub_g2, context, result))) {
-            LOG_WARN("failed to eval sub geo", K(ret), K(sub_type));
           }
         }
         break;
@@ -68,7 +66,6 @@ OB_GEO_GEOG_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeogPoint, ObWkbGeogC
         ObString tmp(polygon->length(), reinterpret_cast<const char*>(sub_ptr));
         ObString pol_data;
         if (OB_FAIL(ob_write_string(tmp_alloc, tmp, pol_data))) {
-          LOG_WARN("failed to copy polygon geo", K(ret));
         } else {
           ObWkbGeogPolygon *poly_copy = reinterpret_cast<ObWkbGeogPolygon*>(pol_data.ptr());
           boost::geometry::strategy::area::geographic<> area_strategy(geog_sphere);
@@ -88,7 +85,6 @@ OB_GEO_GEOG_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeogPoint, ObWkbGeogC
         ObString tmp(multi_poly->length(), reinterpret_cast<const char*>(sub_ptr));
         ObString multipol_data;
         if (OB_FAIL(ob_write_string(tmp_alloc, tmp, multipol_data))) {
-          LOG_WARN("failed to copy multi_poly geo", K(ret));
         } else {
           ObWkbGeogMultiPolygon *multipoly_copy = reinterpret_cast<ObWkbGeogMultiPolygon*>(multipol_data.ptr());
           boost::geometry::strategy::area::geographic<> area_strategy(geog_sphere);
@@ -215,7 +211,6 @@ OB_GEO_GEOG_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeogLineString, ObWkb
     LOG_WARN("srs is null", K(ret));
   } else if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObGeographGeometrycollection>(context, geo2, multi_point,
                                                                                  multi_line, multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else {
     ObIAllocator *allocator = context.get_allocator();
     uint32_t srid = srs->get_srid();
@@ -263,7 +258,6 @@ OB_GEO_GEOG_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeogPolygon, ObWkbGeo
     LOG_WARN("srs is null", K(ret));
   } else if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObGeographGeometrycollection>(context, geo2, multi_point,
                                                                                  multi_line, multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else {
     ObIAllocator *allocator = context.get_allocator();
     uint32_t srid = srs->get_srid();
@@ -317,7 +311,6 @@ OB_GEO_GEOG_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeogMultiLineString, 
     LOG_WARN("srs is null", K(ret));
   } else if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObGeographGeometrycollection>(context, geo2, multi_point,
                                                                                  multi_line, multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else {
     ObIAllocator *allocator = context.get_allocator();
     uint32_t srid = srs->get_srid();
@@ -363,7 +356,6 @@ OB_GEO_GEOG_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeogMultiPolygon, ObW
     LOG_WARN("srs is null", K(ret));
   } else if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObGeographGeometrycollection>(context, geo2, multi_point,
                                                                                  multi_line, multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else {
     ObIAllocator *allocator = context.get_allocator();
     uint32_t srid = srs->get_srid();
@@ -390,7 +382,6 @@ OB_GEO_GEOG_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeogCollection, ObWkb
     LOG_WARN("srs is null", K(ret));
   } else if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObGeographGeometrycollection>(context, geo1, multi_point,
                                                                                  multi_line, multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else if (!multi_poly->empty() || !multi_line->empty()) {
     result = false;
   } else if (multi_point->empty()) {
@@ -418,7 +409,6 @@ OB_GEO_GEOG_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeogCollection, ObWkb
     LOG_WARN("srs is null", K(ret));
   } else if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObGeographGeometrycollection>(context, geo1, multi_point,
                                                                                  multi_line, multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else if (!multi_poly->empty()) {
     result = false;
   } else if (multi_point->empty() && multi_line->empty()) {
@@ -460,7 +450,6 @@ OB_GEO_GEOG_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeogCollection, ObWkb
     LOG_WARN("srs is null", K(ret));
   } else if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObGeographGeometrycollection>(context, geo1, multi_point,
                                                                                  multi_line, multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else {
     result = true;
     boost::geometry::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
@@ -505,7 +494,6 @@ OB_GEO_GEOG_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeogCollection, ObWkb
     LOG_WARN("srs is null", K(ret));
   } else if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObGeographGeometrycollection>(context, geo1, multi_point,
                                                                                  multi_line, multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else if (!multi_poly->empty() || !multi_line->empty()) {
     result = false;
   } else if (multi_point->empty()) {
@@ -537,7 +525,6 @@ OB_GEO_GEOG_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeogCollection, ObWkb
     LOG_WARN("srs is null", K(ret));
   } else if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObGeographGeometrycollection>(context, geo1, multi_point,
                                                                                  multi_line, multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else if (!multi_poly->empty()) {
     result = false;
   } else if (multi_point->empty() && multi_line->empty()) {
@@ -579,7 +566,6 @@ OB_GEO_GEOG_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeogCollection, ObWkb
     LOG_WARN("srs is null", K(ret));
   } else if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObGeographGeometrycollection>(context, geo1, multi_point,
                                                                                  multi_line, multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else {
     result = true;
     boost::geometry::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
@@ -628,10 +614,8 @@ OB_GEO_GEOG_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeogCollection, ObWkb
     LOG_WARN("srs is null", K(ret));
   } else if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObGeographGeometrycollection>(context, geo1, multi_point1,
                                                                                  multi_line1, multi_poly1))) {
-    LOG_WARN("failed to do gc1 prepare", K(ret));
   } else if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObGeographGeometrycollection>(context, geo2, multi_point2,
                                                                                  multi_line2, multi_poly2))) {
-    LOG_WARN("failed to do gc2 prepare", K(ret));
   } else {
     result = true;
     ObIAllocator *allocator = context.get_allocator();

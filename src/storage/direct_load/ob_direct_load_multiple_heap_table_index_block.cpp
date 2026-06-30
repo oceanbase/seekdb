@@ -47,11 +47,8 @@ OB_DEF_SERIALIZE_SIMPLE(ObDirectLoadMultipleHeapTableIndexBlock::Header)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDirectLoadDataBlock::Header::serialize(buf, buf_len, pos))) {
-    LOG_WARN("fail to encode header", KR(ret), K(buf_len), K(pos));
   } else if (OB_FAIL(NS_::encode_i32(buf, buf_len, pos, count_))) {
-    LOG_WARN("fail to encode i32", KR(ret), K(buf_len), K(pos), K(count_));
   } else if (OB_FAIL(NS_::encode_i32(buf, buf_len, pos, last_entry_pos_))) {
-    LOG_WARN("fail to encode i32", KR(ret), K(buf_len), K(pos), K(last_entry_pos_));
   }
   return ret;
 }
@@ -60,11 +57,8 @@ OB_DEF_DESERIALIZE_SIMPLE(ObDirectLoadMultipleHeapTableIndexBlock::Header)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDirectLoadDataBlock::Header::deserialize(buf, data_len, pos))) {
-    LOG_WARN("fail to decode header", KR(ret), K(data_len), K(pos));
   } else if (OB_FAIL(NS_::decode_i32(buf, data_len, pos, &count_))) {
-    LOG_WARN("fail to decode i32", KR(ret), K(data_len), K(pos), K(count_));
   } else if (OB_FAIL(NS_::decode_i32(buf, data_len, pos, &last_entry_pos_))) {
-    LOG_WARN("fail to decode i32", KR(ret), K(data_len), K(pos), K(last_entry_pos_));
   }
   return ret;
 }
@@ -107,11 +101,8 @@ OB_DEF_SERIALIZE_SIMPLE(ObDirectLoadMultipleHeapTableIndexBlock::Entry)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(NS_::encode_i64(buf, buf_len, pos, static_cast<int64_t>(tablet_id_)))) {
-    LOG_WARN("fail to encode i64", KR(ret), K(buf_len), K(pos), K(tablet_id_));
   } else if (OB_FAIL(NS_::encode_i64(buf, buf_len, pos, row_count_))) {
-    LOG_WARN("fail to encode i64", KR(ret), K(buf_len), K(pos), K(row_count_));
   } else if (OB_FAIL(NS_::encode_i64(buf, buf_len, pos, offset_val_))) {
-    LOG_WARN("fail to encode i64", KR(ret), K(buf_len), K(pos), K(offset_val_));
   }
   return ret;
 }
@@ -120,11 +111,8 @@ OB_DEF_DESERIALIZE_SIMPLE(ObDirectLoadMultipleHeapTableIndexBlock::Entry)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(NS_::decode_i64(buf, data_len, pos, reinterpret_cast<int64_t *>(&tablet_id_)))) {
-    LOG_WARN("fail to decode i64", KR(ret), K(data_len), K(pos), K(tablet_id_));
   } else if (OB_FAIL(NS_::decode_i64(buf, data_len, pos, &row_count_))) {
-    LOG_WARN("fail to decode i64", KR(ret), K(data_len), K(pos), K(row_count_));
   } else if (OB_FAIL(NS_::decode_i64(buf, data_len, pos, &offset_val_))) {
-    LOG_WARN("fail to decode i64", KR(ret), K(data_len), K(pos), K(offset_val_));
   }
   return ret;
 }

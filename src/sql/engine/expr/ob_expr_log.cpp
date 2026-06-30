@@ -48,7 +48,6 @@ int ObExprLog::calc_result_type2(ObExprResType &type,
       ObExprOperator::calc_result_flag2(type, type1, type2);
     }
   } else if (OB_FAIL(calc_trig_function_result_type2(type, type1, type2, type_ctx))) {
-    LOG_WARN("failed to calc_trig_function_result_type2", K(ret));
   } else {/*do nothing*/}
   return ret;
 }
@@ -97,7 +96,6 @@ int calc_log_expr_number(const ObExpr &expr, ObEvalCtx &ctx,
     number::ObNumber res_nmb;
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
     if (OB_FAIL(x_nmb.log(base_nmb, res_nmb, alloc_guard.get_allocator()))) {
-      LOG_WARN("calc log failed", K(ret), K(base_nmb), K(x_nmb), K(res_nmb));
     } else {
       res_datum.set_number(res_nmb);
     }

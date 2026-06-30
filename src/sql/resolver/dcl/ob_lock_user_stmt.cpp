@@ -39,9 +39,7 @@ int ObLockUserStmt::add_user(const ObString &user_name, const common::ObString &
     ret = OB_ERR_NO_PRIVILEGE;
     SQL_RESV_LOG(WARN, "Can not lock root user", K(ret));
   } else if (OB_FAIL(user_.add_string(user_name))) {
-    SQL_RESV_LOG(WARN, "Add user failed", K(user_name), K(ret));
   } else if (OB_FAIL(user_.add_string(host_name))) {
-    SQL_RESV_LOG(WARN, "Add host failed", K(user_name), K(host_name), K(ret));
   } else {
     //do nothing
   }

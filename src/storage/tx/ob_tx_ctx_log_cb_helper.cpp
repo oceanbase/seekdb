@@ -28,14 +28,8 @@ int ObPartTransCtx::init_log_cbs_(const share::ObLSID &ls_id, const ObTransID &t
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(reserve_log_cb_group_.check_and_reset_log_cbs(false))) {
-    TRANS_LOG(ERROR, "reset reserve_log_cb_group failed in the init function", K(ret), K(tx_id),
-              K(ls_id_), K(reserve_log_cb_group_));
   } else if (OB_FAIL(reserve_log_cb_group_.init(ObTxLogCbGroup::RESERVED_LOG_CB_GROUP_NO))) {
-    TRANS_LOG(WARN, "init a log cb group failed", K(ret), K(ls_id), K(tx_id),
-              K(reserve_log_cb_group_));
   } else if (OB_FAIL(reserve_log_cb_group_.occupy_by_tx(this))) {
-    TRANS_LOG(WARN, "set tx id in log cb group failed", K(ret), K(ls_id), K(tx_id),
-              K(reserve_log_cb_group_));
   } else {
     ATOMIC_STORE(&has_extra_log_cb_group_, false);
     ObSpinLockGuard guard(log_cb_lock_);
@@ -59,8 +53,6 @@ int ObPartTransCtx::extend_log_cb_group_()
   ObTxLogCbGroup *group_ptr = nullptr;
   if (OB_FAIL(
           get_ls_tx_ctx_mgr()->get_log_cb_pool_mgr().acquire_idle_log_cb_group(group_ptr, this))) {
-    TRANS_LOG(WARN, "acquire a idle log cb group failed", K(ret), KPC(group_ptr), K(trans_id_),
-              K(ls_id_));
   } else if (false == (extra_cb_group_list_.add_last(group_ptr))) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "insert into extra_cb_group_list_ failed", K(ret), KPC(group_ptr),
@@ -148,8 +140,6 @@ int ObPartTransCtx::get_log_cb_(const bool need_freeze_cb, ObTxLogCb *&log_cb)
             true ? GCONF._trx_max_log_cb_limit : 16;
         if (busy_cbs_cnt < trx_max_log_cb_limit || trx_max_log_cb_limit <= 0) {
           if (OB_TMP_FAIL(extend_log_cb_group_())) {
-            TRANS_LOG(WARN, "extend a log cb group  failed", K(ret), K(tmp_ret), K(trans_id_),
-                      K(ls_id_));
           } else {
             TRANS_LOG(INFO, "extend log cb group success", K(ret), K(tmp_ret), K(trans_id_),
                       K(ls_id_), K(busy_cbs_cnt), K(busy_cbs_.get_size()), K(free_cbs_.get_size()));

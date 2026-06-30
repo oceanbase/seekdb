@@ -89,7 +89,6 @@ public:
         if (OB_FAIL(ret) && is_diagnosis) {
           // overwrite ret on diagnosis node
           if (OB_FAIL(diagnosis_manager.add_warning_info(ret, idx))) {
-            SQL_LOG(WARN, "failed to add warning info", K(ret), K(idx));
           } else {
             // set null to avoid accessing invalid data before setting skip
             // in ObTableScanOp::do_diagnosis
@@ -448,7 +447,6 @@ public:
       }
     } else {
       if (OB_FAIL(vector_copy_string(expr, ctx, idx, in_len, in_ptr, out_len, out_ptr, align_offset))) {
-        SQL_LOG(WARN, "common_copy_string failed", K(ret), K(in_ptr), K(expr), K(ctx));
       }
     }
     return ret;

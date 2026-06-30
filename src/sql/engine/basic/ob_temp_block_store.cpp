@@ -102,7 +102,6 @@ void ObTempBlockStore::reset()
   if (is_file_open()) {
     write_io_handle_.reset();
     if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.remove(io_.fd_))) {
-      LOG_WARN("remove file failed", K(ret), K_(io_.fd));
     } else {
       LOG_INFO("close file success", K(ret), K_(io_.fd), K_(file_size));
     }
@@ -125,7 +124,6 @@ void ObTempBlockStore::reuse()
   if (is_file_open()) {
     write_io_handle_.reset();
     if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.remove(io_.fd_))) {
-      LOG_WARN("remove file failed", K(ret), K_(io_.fd));
     } else {
       LOG_INFO("close file success", K(ret), K_(io_.fd), K_(file_size));
     }
@@ -148,7 +146,6 @@ void ObTempBlockStore::reuse()
   set_mem_used(0);
   if (NULL != blk_) {
     if (OB_FAIL(setup_block(blk_buf_, blk_))) {
-      LOG_WARN("setup block failed", K(ret));
     }
     block_cnt_ = 1;
     set_mem_hold(blk_buf_.capacity() + sizeof(LinkNode));
@@ -177,7 +174,6 @@ int ObTempBlockStore::alloc_dir_id()
   if (-1 == io_.dir_id_) {
     io_.dir_id_ = 0;
     if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.alloc_dir(io_.dir_id_))) {
-      LOG_WARN("allocate file directory failed", K(ret));
     }
   }
   return ret;
@@ -191,7 +187,6 @@ int ObTempBlockStore::finish_add_row(bool need_dump /*true*/)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(finish_write())) {
-    LOG_WARN("fail to flush write buffer", K(ret));
   } else if (OB_ISNULL(blk_)) {
     // do nothing if store is empty or has called finish_add_row already
   } else if (is_file_open()) {
@@ -201,11 +196,9 @@ int ObTempBlockStore::finish_add_row(bool need_dump /*true*/)
       int64_t timeout_ms = 0;
       const uint64_t begin_io_dump_time = rdtsc();
       if (OB_FAIL(get_timeout(timeout_ms))) {
-        LOG_WARN("get timeout failed", K(ret));
       } else if (write_io_handle_.is_valid() && OB_FAIL(write_io_handle_.wait())) {
         LOG_WARN("fail to wait write", K(ret), K(write_io_handle_));
       } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.seal(io_.fd_))) {
-        LOG_WARN("fail to seal file", K(ret), K_(io));
       }
       if (OB_LIKELY(nullptr != io_observer_)) {
         io_observer_->on_write_io(rdtsc() - begin_io_dump_time);
@@ -229,13 +222,10 @@ int ObTempBlockStore::init_dtl_block_buffer(void* mem, const int64_t size, Block
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc buffer failed", K(ret));
   } else if (OB_FAIL(buf->init(static_cast<char *>(mem), size))) {
-    LOG_WARN("init shrink buffer failed", K(ret));
   } else {
     block = new (buf->head()) Block;
     if (OB_FAIL(buf->fill_head(sizeof(Block)))) {
-      LOG_WARN("fill buffer head failed", K(ret), K(buf), K(sizeof(Block)));
     } else if (OB_FAIL(buf->fill_tail(sizeof(ShrinkBuffer)))) {
-      LOG_WARN("fill buffer tail failed", K(ret), K(buf), K(sizeof(ShrinkBuffer)));
     } else {
       block->block_id_ = 0; // unused
       block->cnt_ = 0;
@@ -262,7 +252,6 @@ int ObTempBlockStore::append_block(const char *buf, const int64_t size)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("block magic is mismatch", K(ret), K(block_magic(buf)));
   } else if (OB_FAIL(append_block_payload(src_block->payload_, payload_size, src_block->cnt_))) {
-    LOG_WARN("fail to append block payload", K(ret));
   }
   return ret;
 }
@@ -278,7 +267,6 @@ int ObTempBlockStore::append_block_payload(const char *buf, const int64_t size, 
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("buf is null", K(ret), KP(buf), K(size), K(cnt));
   } else if (OB_FAIL(new_block(size, blk_, true))) {
-    LOG_WARN("fail to new block", K(ret));
   } else if (OB_UNLIKELY(size > blk_buf_.remain())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("blk size is not enough", K(ret), K(size), K(blk_buf_.remain()));
@@ -293,7 +281,6 @@ int ObTempBlockStore::append_block_payload(const char *buf, const int64_t size, 
   const int64_t dump_threshold = 1 << 24;
   if (OB_SUCC(ret) && mem_used_ > dump_threshold) {
     if (OB_FAIL(dump(true /* all_dump */))) {
-      LOG_WARN("dump failed", K(ret));
     }
   }
   return ret;
@@ -315,12 +302,9 @@ int ObTempBlockStore::new_block(const int64_t mem_size,
       blk_buf_.reset();
     }
     if (OB_FAIL(alloc_block(blk_, min_blk_size, strict_mem_size))) {
-      LOG_WARN("alloc block failed", K(ret), KPC(this));
     }
   } else if (OB_FAIL(dump_block_if_need(min_blk_size))) {
-    LOG_WARN("fail to dump block if need", K(ret), K(min_blk_size));
   } else if (OB_FAIL(switch_block(min_blk_size, strict_mem_size))) {
-    LOG_WARN("switch block failed", K(ret), K(mem_size), K(min_blk_size));
   }
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(blk_)) {
@@ -356,14 +340,12 @@ int ObTempBlockStore::get_block(BlockReader &reader, const int64_t block_id, con
       blk = NULL;
       bool blk_on_disk = true;
       if (OB_FAIL(inner_get_block(reader, block_id, blk, blk_on_disk))) {
-        LOG_WARN("fail to get next block", K(ret));
       } else if (blk_on_disk) {
         if (need_compress() && OB_FAIL(decompr_block(reader, blk))) {
           LOG_WARN("fail to decompress block", K(ret), K(last_block_on_disk_));
         } else {
           Block *tmp_blk = const_cast<Block *>(blk);
           if (OB_FAIL(prepare_blk_for_read(tmp_blk))) {
-            LOG_WARN("fail to prepare blk", K(ret));
           }
         }
       }
@@ -376,7 +358,6 @@ int ObTempBlockStore::get_block(BlockReader &reader, const int64_t block_id, con
           reader.aio_buf_idx_ = (reader.aio_buf_idx_ + 1) % BlockReader::AIO_BUF_CNT;
           last_block_on_disk_ = true;
           if (OB_FAIL(load_block(reader, next_block_id, reader.aio_blk_, last_block_on_disk_))) {
-            LOG_WARN("fail to prefetch next block", K(ret));
           }
         }
       }
@@ -391,7 +372,6 @@ int ObTempBlockStore::get_block(BlockReader &reader, const int64_t block_id, con
     // truncate file, if enable_trunc_
     if (enable_trunc_ && (last_trunc_offset_ + TRUNCATE_THRESHOLD < cur_file_offset_)) {
       if (OB_FAIL(truncate_file(cur_file_offset_))) {
-        LOG_WARN("fail to truncate file", K(ret));
       } else {
         last_trunc_offset_ = cur_file_offset_;
       }
@@ -424,23 +404,19 @@ int ObTempBlockStore::decompr_block(BlockReader &reader, const Block *&blk)
     int64_t decomp_size = blk->raw_size_ - sizeof(Block);
     int64_t actual_uncomp_size = 0;
     if (OB_FAIL(ensure_reader_buffer(reader, reader.decompr_buf_, blk->raw_size_))) {
-      LOG_WARN("fail to alloc decomp_buf", K(ret));
     } else if (FALSE_IT(MEMCPY(reader.decompr_buf_.data(), blk, sizeof(Block)))) {
     } else {
       if (OB_FAIL(compressor_.decompress(blk->payload_,  comp_size,
                                          decomp_size, reader.decompr_buf_.data() + sizeof(Block),
                                          actual_uncomp_size))) {
-        LOG_WARN("fail to decompress block", K(ret), KPC(this), K(blk->block_id_), K(blk->cnt_));
       } else if (reader.is_async()) {
         if (OB_FAIL(reader.buf_.init(reader.decompr_buf_.data(), reader.decompr_buf_.capacity()))) {
-          LOG_WARN("fail to init reader buf ", K(ret), K(reader.buf_), K(reader.decompr_buf_));
         } else {
           blk = reinterpret_cast<const Block*>(reader.buf_.data());
         }
       } else {
         free_blk_mem(reader.buf_.data(), reader.buf_.capacity());
         if (OB_FAIL(reader.buf_.init(reader.decompr_buf_.data(), reader.decompr_buf_.capacity()))) {
-          LOG_WARN("fail to init reader buf ", K(ret), K(reader.buf_), K(reader.decompr_buf_));
         } else {
           blk = reinterpret_cast<const Block*>(reader.buf_.data());
           reader.decompr_buf_.reset();
@@ -478,14 +454,12 @@ int ObTempBlockStore::inner_get_block(BlockReader &reader, const int64_t block_i
         // no prefetch
         need_sync_read = true;
       } else if (OB_FAIL(reader.aio_wait())) {
-        LOG_WARN("fail to wait read", K(ret), K(reader));
       } else {
         const Block *tmp_blk = reinterpret_cast<const Block*>(reader.aio_buf_[aio_buf_idx].data());
         if (tmp_blk->magic_ == Block::MAGIC && tmp_blk->contain(block_id)) {
           // using the prefetch blk
           if (OB_FAIL(reader.buf_.init(reader.aio_buf_[aio_buf_idx].data(),
                                        reader.aio_buf_[aio_buf_idx].capacity()))) {
-            LOG_WARN("fail to init buf with aio_buf", K(ret));
           } else {
             blk = reinterpret_cast<Block*>(reader.buf_.data());
           }
@@ -499,18 +473,15 @@ int ObTempBlockStore::inner_get_block(BlockReader &reader, const int64_t block_i
     if (OB_SUCC(ret) && need_sync_read) {
       // fail to prefetch, read using block_id
       if (OB_FAIL(load_block(reader, block_id, reader.aio_blk_, blk_on_disk))) {
-        LOG_WARN("fail to load block", K(ret));
       } else if (OB_NOT_NULL(reader.aio_blk_)) {
         // the blk is in memory, do not need wait.
         blk_on_disk = false;
         blk = reader.aio_blk_;
         reader.aio_blk_ = nullptr;
       } else if (OB_FAIL(reader.aio_wait())) {
-        LOG_WARN("fail to wait read", K(ret), K(reader));
       } else {
         if (OB_FAIL(reader.buf_.init(reader.aio_buf_[aio_buf_idx].data(),
                     reader.aio_buf_[aio_buf_idx].capacity()))) {
-          LOG_WARN("fail to init buf with aio_buf", K(ret));
         } else {
           blk = reinterpret_cast<Block*>(reader.buf_.data());
         }
@@ -521,7 +492,6 @@ int ObTempBlockStore::inner_get_block(BlockReader &reader, const int64_t block_i
     }
   } else {
     if(OB_FAIL(load_block(reader, block_id, blk, blk_on_disk))) {
-      LOG_WARN("fail to load block", K(ret));
     }
   }
   return ret;
@@ -555,9 +525,7 @@ int ObTempBlockStore::alloc_block(Block *&blk, const int64_t min_size, const boo
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc memory failed", K(ret), K(size));
   } else if (OB_FAIL(blk_buf_.init(static_cast<char *>(mem), size))) {
-    LOG_WARN("init shrink buffer failed", K(ret));
   } else if (OB_FAIL(setup_block(blk_buf_, blk))) {
-    LOG_WARN("setup block buffer fail", K(ret));
   } else {
     ++block_cnt_;
     LOG_TRACE("succ to alloc new block", KP(this), KP(mem), K_(blk_buf), K(*blk));
@@ -612,7 +580,6 @@ int ObTempBlockStore::setup_block(ShrinkBuffer &buf, Block *&blk)
     blk->block_id_ = block_id_cnt_;
     blk->raw_size_ = buf.capacity();
     if (OB_FAIL(buf.fill_head(sizeof(Block)))) {
-      LOG_WARN("fill buffer head failed", K(ret), K(buf), K(sizeof(Block)));
     } else {
       inc_mem_used(sizeof(Block));
     }
@@ -632,7 +599,6 @@ int ObTempBlockStore::switch_block(const int64_t min_size, const bool strict_mem
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(min_size));
   } else if (OB_FAIL(prepare_blk_for_switch(blk_))) {
-    LOG_WARN("block compact failed", K(ret));
   } else {
     const bool finish_add = (0 == min_size);
     Block *new_blk = NULL;
@@ -646,7 +612,6 @@ int ObTempBlockStore::switch_block(const int64_t min_size, const bool strict_mem
     blk_->raw_size_ = bi.length_;
     blk_buf_.reset();
     if (OB_FAIL(add_block_idx(bi))) {
-      LOG_WARN("add block index failed", K(ret));
     } else if (!finish_add && OB_FAIL(alloc_block(new_blk, min_size, strict_mem_size))) {
       LOG_WARN("alloc block failed", K(ret), K(min_size));
     } else {
@@ -669,24 +634,20 @@ int ObTempBlockStore::add_block_idx(const BlockIndex &bi)
     // index block has been dumped to the disk. In this case, a new index block needs to be
     // allocated to ensure the structure of the store.
     if (OB_FAIL(alloc_idx_block(idx_blk_))) {
-      LOG_WARN("fail to alloc index block", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (NULL == idx_blk_) {
     if (OB_FAIL(blocks_.push_back(bi))) {
-      LOG_WARN("add block index to array failed", K(ret));
     } else {
       if (blocks_.count() >= DEFAULT_BLOCK_CNT) {
         if (OB_FAIL(build_idx_block())) {
-          LOG_WARN("build index block failed", K(ret));
         }
       }
     }
   } else {
     if (idx_blk_->is_full()) {
       if (OB_FAIL(switch_idx_block())) {
-        LOG_WARN("switch index block failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -718,14 +679,12 @@ int ObTempBlockStore::build_idx_block()
       "DEFAULT_BLOCK_CNT block indexes must fit in one index block");
   int ret = OB_SUCCESS;
   if (OB_FAIL(alloc_idx_block(idx_blk_))) {
-    LOG_WARN("alloc idx block failed", K(ret));
   } else if (OB_UNLIKELY(NULL == idx_blk_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("alloc null index block", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < blocks_.count(); ++i) {
       if (OB_FAIL(add_block_idx(blocks_.at(i)))) {
-        LOG_WARN("add block idx failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -742,7 +701,6 @@ int ObTempBlockStore::switch_idx_block(bool finish_add)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("index block should not be null");
   } else if (OB_FAIL(link_idx_block(idx_blk_))) {
-    LOG_WARN("fail to link index block", K(ret));
   } else {
     IndexBlock *ib = NULL;
     BlockIndex bi;
@@ -754,7 +712,6 @@ int ObTempBlockStore::switch_idx_block(bool finish_add)
     bi.capacity_ = static_cast<int32_t>(IndexBlock::INDEX_BLOCK_SIZE);
     if (!finish_add) {
       if (OB_FAIL(alloc_idx_block(ib))) {
-        LOG_WARN("alloc index block failed", K(ret));
       } else if (OB_ISNULL(ib)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("alloc null block", K(ret));
@@ -762,7 +719,6 @@ int ObTempBlockStore::switch_idx_block(bool finish_add)
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(blocks_.push_back(bi))) {
-      LOG_WARN("add block index to array failed", K(ret));
     } else {
       idx_blk_ = NULL;
       if (NULL != ib) {
@@ -837,7 +793,6 @@ int ObTempBlockStore::load_block(BlockReader &reader, const int64_t block_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("row should be saved", K(ret), K(block_id), K_(saved_block_id_cnt));
   } else if (OB_FAIL(find_block_idx(reader, block_id, bi))) {
-    LOG_WARN("find block index failed", K(ret), K(block_id));
   } else {
     if (!bi->on_disk_) {
       blk = bi->blk_;
@@ -848,21 +803,15 @@ int ObTempBlockStore::load_block(BlockReader &reader, const int64_t block_id,
         int aio_buf_idx = reader.aio_buf_idx_ % BlockReader::AIO_BUF_CNT;
         if (OB_FAIL(ensure_reader_buffer(reader, reader.aio_buf_[aio_buf_idx],
                                          bi->length_))) {
-          LOG_WARN("ensure reader buffer failed", K(ret));
         } else if (OB_FAIL(reader.get_read_io_handler(read_io_handler_ptr))) {
-          LOG_WARN("get read io handler failed", K(ret));
         } else if (OB_FAIL(read_file(reader.aio_buf_[aio_buf_idx].data(), bi->length_, bi->offset_,
                             *read_io_handler_ptr, reader.is_async(), sequential_read_))) {
-          LOG_WARN("read block from file failed", K(ret), K(bi));
         }
       } else {
         if (OB_FAIL(ensure_reader_buffer(reader, reader.buf_, bi->length_))) {
-          LOG_WARN("ensure reader buffer failed", K(ret));
         } else if (OB_FAIL(reader.get_read_io_handler(read_io_handler_ptr))) {
-          LOG_WARN("get read io handler failed", K(ret));
         } else if (OB_FAIL(read_file(reader.buf_.data(), bi->length_, bi->offset_,
                             *read_io_handler_ptr, reader.is_async(), sequential_read_))) {
-          LOG_WARN("read block from file failed", K(ret), K(bi));
         }
       }
     }
@@ -931,7 +880,6 @@ int ObTempBlockStore::find_block_idx(BlockReader &reader, const int64_t block_id
           found = true;
         } else {
           if (OB_FAIL(load_idx_block(reader, ib, *bi))) {
-            LOG_WARN("load index block failed", K(ret), K(bi));
           }
         }
       }
@@ -971,12 +919,9 @@ int ObTempBlockStore::load_idx_block(BlockReader &reader, IndexBlock *&ib, const
         LOG_WARN("invalid argument", K(ret), K(bi));
       } else if (OB_FAIL(ensure_reader_buffer(
           reader, reader.idx_buf_, IndexBlock::INDEX_BLOCK_SIZE))) {
-        LOG_WARN("ensure reader buffer failed", K(ret));
       } else if (OB_FAIL(reader.get_read_io_handler(read_io_handler_ptr))) {
-          LOG_WARN("get read io handler failed", K(ret));
       } else if (OB_FAIL(read_file(
           reader.idx_buf_.data(), bi.length_, bi.offset_, *read_io_handler_ptr, false, false/*prefetch*/))) {
-        LOG_WARN("read block index from file failed", K(ret), K(bi));
       } else {
         ib = reinterpret_cast<IndexBlock *>(reader.idx_buf_.data());
       }
@@ -1075,7 +1020,6 @@ int ObTempBlockStore::BlockReader::aio_wait()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected value read_io_handle_", K(ret), K(read_io_handle_));
     } else if (OB_FAIL(read_io_handle_->wait())) {
-      LOG_WARN("aio wait failed", K(ret), K(timeout_ms));
     }
   }
   return ret;
@@ -1094,13 +1038,10 @@ int ObTempBlockStore::write_file(BlockIndex &bi, void *buf, int64_t size)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(size), KP(buf));
   } else if (OB_FAIL(get_timeout(timeout_ms))) {
-    LOG_WARN("get timeout failed", K(ret));
   } else {
     if (!is_file_open()) {
       if (OB_FAIL(alloc_dir_id())) {
-        LOG_WARN("alloc file directory failed", K(ret));
       } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.open(io_.fd_, io_.dir_id_))) {
-        LOG_WARN("open file failed", K(ret));
       } else {
         file_size_ = 0;
         io_.io_desc_.set_wait_event(ObWaitEventIds::ROW_STORE_DISK_WRITE);
@@ -1117,7 +1058,6 @@ int ObTempBlockStore::write_file(BlockIndex &bi, void *buf, int64_t size)
     if (write_io_handle_.is_valid() && OB_FAIL(write_io_handle_.wait())) {
       LOG_WARN("fail to wait write", K(ret), K(write_io_handle_));
     } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.aio_write(io_, write_io_handle_))) {
-      LOG_WARN("write to file failed", K(ret), K_(io), K(timeout_ms));
     }
     if (NULL != io_observer_) {
       io_observer_->on_write_io(rdtsc() - start);
@@ -1143,7 +1083,6 @@ int ObTempBlockStore::read_file(void *buf, const int64_t size, const int64_t off
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(size), K(offset), KP(buf));
   } else if (OB_FAIL(get_timeout(timeout_ms))) {
-    LOG_WARN("get timeout failed", K(ret));
   } else if (!handle.is_valid() && write_io_handle_.is_valid() && OB_FAIL(write_io_handle_.wait())) {
     LOG_WARN("fail to wait write", K(ret));
   }
@@ -1158,11 +1097,9 @@ int ObTempBlockStore::read_file(void *buf, const int64_t size, const int64_t off
     const uint64_t start = rdtsc();
     if (is_async) {
       if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.aio_pread(tmp_read_id, offset, handle))) {
-        LOG_WARN("read form file failed", K(ret), K(tmp_read_id), K(offset), K(timeout_ms));
       }
     } else {
       if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.pread(tmp_read_id, offset, handle))) {
-        LOG_WARN("read form file failed", K(ret), K(tmp_read_id), K(offset), K(timeout_ms));
       } else if (OB_UNLIKELY(handle.get_done_size() != size)) {
         ret = OB_INNER_STAT_ERROR;
         LOG_WARN("read data less than expected", K(ret), K(tmp_read_id),
@@ -1188,7 +1125,6 @@ int ObTempBlockStore::dump_block_if_need(const int64_t extra_size)
       target_dump_size += IndexBlock::INDEX_BLOCK_SIZE;
     }
     if (OB_FAIL(dump(false, std::max(target_dump_size, BIG_BLOCK_SIZE)))) {
-      LOG_WARN("fail to dump block", K(ret), K(mem_hold_), K(mem_limit_));
     }
   }
   return ret;
@@ -1223,7 +1159,6 @@ int ObTempBlockStore::dump(const bool all_dump, const int64_t target_dump_size /
       // If need to dump all, first switch block and index block to ensure
       // that all block indexes are established.
       if (OB_FAIL(switch_block(0 /*finish_add */, false))) {
-        LOG_WARN("fail to dump last block", K(ret));
       } else if (NULL != idx_blk_ && OB_FAIL(switch_idx_block(true /* finish_add */))) {
         LOG_WARN("fail to dump last index block", K(ret));
       }
@@ -1245,11 +1180,9 @@ int ObTempBlockStore::dump(const bool all_dump, const int64_t target_dump_size /
           // skip the last block or index block
         } else if (is_block(mem)) {
           if (OB_FAIL(dump_block(static_cast<Block *>(mem), dumped_size))) {
-            LOG_WARN("fail to dump block", K(ret), KP(mem));
           }
         } else if (is_index_block(mem)) {
           if (OB_FAIL(dump_index_block(static_cast<IndexBlock *>(mem), dumped_size))) {
-            LOG_WARN("fail to dump index block", K(ret), KP(this), KP(mem));
           }
         } else {
           ret = OB_ERR_UNEXPECTED;
@@ -1304,15 +1237,12 @@ int ObTempBlockStore::write_compressed_block(Block *blk, BlockIndex *bi)
     char *comp_buf = nullptr;
     int64_t comp_size = 0;
     if (OB_FAIL(compressor_.calc_need_size(data_size, need_size))) {
-      LOG_WARN("fail to calc need size", K(ret));
     } else if (OB_ISNULL(comp_buf = (char *)allocator_->alloc(need_size + sizeof(Block)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc memory", K(ret), KP(comp_buf));
     } else if (FALSE_IT(MEMCPY(comp_buf, blk, sizeof(Block)))) { // copy the head
     } else if (OB_FAIL(compressor_.compress(blk->payload_, data_size, need_size, comp_buf + sizeof(Block), comp_size))) {
-      LOG_WARN("fail to compress block", K(ret));
     } else if (OB_FAIL(write_file(*bi, static_cast<void *>(comp_buf), comp_size + sizeof(Block)))) {
-      LOG_WARN("fail to write compressed block to file", K(ret));
     } else {
       bi->length_ = comp_size + sizeof(Block);
     }
@@ -1329,20 +1259,16 @@ int ObTempBlockStore::dump_block(Block *blk, int64_t &dumped_size)
   int ret = OB_SUCCESS;
   BlockIndex *bi;
   if (OB_FAIL(find_block_idx(inner_reader_, blk->block_id_, bi))) {
-    LOG_WARN("fail to find_block_index", K(ret), K(blk));
   } else if (OB_UNLIKELY(bi->on_disk_ || bi->is_idx_block_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("block on disk is unexpected", K(ret), K(bi), K(*bi), K(*blk));
   } else if (FALSE_IT(dumped_size = bi->length_)) {
   } else if (OB_FAIL(prepare_blk_for_write(blk))) {
-    LOG_WARN("fail to prepare blk for write", K(ret));
   } else if (need_compress()) {
     if (OB_FAIL(write_compressed_block(blk, bi))) {
-      LOG_WARN("fail to write compressed block", K(ret), K(bi));
     }
   } else {
     if (OB_FAIL(write_file(*bi, static_cast<void *>(blk), bi->length_))) {
-      LOG_WARN("write block to file failed", K(ret), K(bi));
     }
   }
   
@@ -1381,8 +1307,7 @@ int ObTempBlockStore::dump_index_block(IndexBlock *idx_blk, int64_t &dumped_size
     } else if (OB_UNLIKELY(!bi->is_idx_block_ || bi->on_disk_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("block index is not idx block or memory index", K(ret), KP(bi), K(*bi));
-    } else if (OB_FAIL(write_file(*bi, static_cast<void *>(idx_blk), bi->length_))) { // write file and update bi
-      LOG_WARN("write index block to file failed", K(ret), K(bi));
+    } else if (OB_FAIL(write_file(*bi, static_cast<void *>(idx_blk), bi->length_))) {
     } else {
       dumped_size = bi->length_;
       inc_mem_hold(-(bi->capacity_ + sizeof(LinkNode)));
@@ -1563,7 +1488,6 @@ OB_DEF_DESERIALIZE(ObTempBlockStore)
   if (!is_inited()) {
     if (OB_FAIL(init(mem_limit_, false, ctx_id_, label,
                      NONE_COMPRESSOR))) {
-      LOG_WARN("fail to init Block row store", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -1618,7 +1542,6 @@ int ObTempBlockStore::truncate_file(int64_t offset)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.truncate(get_file_fd(), offset))) {
-    LOG_WARN("truncate failed", K(ret), K(get_file_fd()), K(offset));
   }
   return ret;
 }

@@ -85,7 +85,6 @@ int ObTxSerCompatByte::set_object_flag(int64_t object_index, bool is_valid)
   uint8_t bit_index = 0;
 
   if (OB_FAIL(cal_object_location_(object_index, byte_index, bit_index))) {
-    TRANS_LOG(WARN, "cal object location failed", K(ret));
   } else if (OB_FALSE_IT(set_object_flag_(byte_index, bit_index, is_valid))) {
   }
 
@@ -205,7 +204,6 @@ int ObTxSerCompatByte::serialize(char *buf, const int64_t buf_len, int64_t &pos)
 
   for (int64_t i = 0; i < total_byte_cnt_; i++) {
     if (OB_FAIL(serialization::encode_i8(buf, buf_len, pos, compat_bytes_[i]))) {
-      TRANS_LOG(WARN, "encode compat byte", K(ret));
     }
   }
 
@@ -223,8 +221,6 @@ int ObTxSerCompatByte::deserialize(const char *buf, const int64_t data_len, int6
   reset();
   do {
     if (OB_FAIL(serialization::decode_i8(buf, data_len, pos, (int8_t *)(&compat_byte)))) {
-      TRANS_LOG(WARN, "decode compat_byte failed", K(ret), K(data_len), K(pos), K(compat_byte),
-                K(loop_cnt));
     } else if (OB_FALSE_IT(compat_bytes_[loop_cnt] = compat_byte)) {
       // do nothing
     }

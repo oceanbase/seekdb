@@ -53,7 +53,6 @@ int ObAllVirtualIDService::prepare_start_to_read_()
   int ret = OB_SUCCESS;
   const int64_t execute_timeout = 10 * 1000 * 1000; // 10s
   if (OB_FAIL(fill_ids_())) {
-    SERVER_LOG(WARN, "fail to fill ids", K(ret));
   } else {
     int64_t request_ts = ObTimeUtility::current_time();
     expire_time_ = request_ts + execute_timeout;
@@ -76,13 +75,11 @@ int ObAllVirtualIDService::get_next_info_()
     MOD_SCOPE {
       bool exist = false;
       if (OB_FAIL(share::g_mp->ls_service()->check_ls_exist(IDS_LS, exist))) {
-        SERVER_LOG(WARN, "check ls exist fail", K(ret));
       } else if (!exist) {
         ret = OB_LS_NOT_EXIST;
       } else {
         transaction::ObIDService *id_service = NULL;
         if (OB_FAIL(transaction::ObIDService::get_id_service(service_type_[service_types_index_], id_service))) {
-           SERVER_LOG(WARN, "get id service fail", K(ret), K(service_type_), K(service_types_index_));
         } else if (OB_ISNULL(id_service)) {
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "id service is null", K(ret), K(service_type_[service_types_index_]));

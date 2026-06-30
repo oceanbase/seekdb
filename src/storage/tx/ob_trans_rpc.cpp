@@ -157,7 +157,6 @@ void dispatch_rollback_sp_async_(const transaction::ObTxRollbackSPMsg &msg)
         if (!m.is_valid()) {
           ret = OB_INVALID_ARGUMENT; TRANS_LOG(ERROR, "msg is invalid", K(ret), K(m));
         } else if (OB_FAIL(txs->handle_sp_rollback_request(m, result))) {
-          TRANS_LOG(WARN, "handle txn message fail", K(ret), "msg", m);
         }
         (void)obcall::handle_sp_rollback_resp(m.get_receiver(), m.get_epoch(),
                 m.get_trans_id(), result.get_status(), m.get_request_id(), result);
@@ -197,7 +196,6 @@ void dispatch_tx_2pc_async_(const transaction::ObTxMsg &msg)
         if (OB_ISNULL(txs)) {
           ret = OB_ERR_UNEXPECTED; TRANS_LOG(WARN, "get tx service fail", K(ret));
         } else if (OB_FAIL(txs->handle_tx_batch_req(msg_type, buf, data_size))) {
-          TRANS_LOG(WARN, "handle 2pc msg fail", K(ret), K(msg_type));
         }
       }
       ob_free(buf);
@@ -402,7 +400,6 @@ int ObTransRpc::post_msg(const ObAddr &server, ObTxMsg &msg)
   } else if (ObTxMsgTypeChecker::is_2pc_msg_type(msg.get_msg_type())) {
     dispatch_tx_2pc_async_(msg);
   } else if (OB_FAIL(post_(server, msg))) {
-    TRANS_LOG(WARN, "post msg error", K(ret), K(server), K(msg));
   } else {
     // do nothing
   }
@@ -459,7 +456,6 @@ int ObTransRpc::post_msg(const ObLSID &ls_id, ObTxMsg &msg)
     // 2pc msg: in-process async dispatch (single-replica leader is local)
     dispatch_tx_2pc_async_(msg);
   } else if (OB_FAIL(post_(server, msg))) {
-    TRANS_LOG(WARN, "post msg error", K(ret), K(server), K(msg));
   } else {
     // do nothing
   }
@@ -555,7 +551,6 @@ int ObTransRpc::ask_tx_state_for_4377(const ObAskTxStateFor4377Msg &msg,
   } else if (OB_FAIL(trans_service_->get_location_adapter()->nonblock_get_leader(cluster_id,
                                                                                  msg.ls_id_,
                                                                                  server))) {
-    TRANS_LOG(WARN, "get leader failed", KR(ret), K(msg), K(cluster_id));
   } else {
     // single-replica: the target LS leader is local, dispatch in-process
     // (mirrors ObAskTxStateFor4377P::process: the handler status is carried back
@@ -564,7 +559,6 @@ int ObTransRpc::ask_tx_state_for_4377(const ObAskTxStateFor4377Msg &msg,
       int ret = OB_SUCCESS;
       bool is_alive = false;
       if (OB_FAIL(trans_service_->handle_ask_tx_state_for_4377(msg, is_alive))) {
-        TRANS_LOG(WARN, "handle ask tx state for 4377 failed", K(ret), K(msg));
       }
       resp.is_alive_ = is_alive;
       resp.ret_ = ret;

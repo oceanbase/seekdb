@@ -2567,7 +2567,6 @@ int ObDDLService::fill_part_name(const SCHEMA &orig_schema,
     ret = OB_ERR_UNEXPECTED;
     RS_LOG(WARN, "part_array is null", K(ret), K(part_array));
   } else if (OB_FAIL(orig_schema.get_max_part_idx(max_part_id, orig_schema.is_external_table()))) {
-    RS_LOG(WARN, "fail to get max part id", KR(ret), K(max_part_id));
   }
   // Supplement the default partition name p+OB_MAX_PARTITION_NUM_MYSQL, accumulate after judging duplicates
   // Only Oracle mode will go to this logic
@@ -2584,17 +2583,14 @@ int ObDDLService::fill_part_name(const SCHEMA &orig_schema,
       char part_name[OB_MAX_PARTITION_NAME_LENGTH];
       int64_t pos = 0;
       if (OB_FAIL(databuff_printf(part_name, OB_MAX_PARTITION_NAME_LENGTH, pos, "P%ld", max_part_id))) {
-        RS_LOG(WARN, "failed to constrate partition name", K(ret), K(max_part_id));
       } else {
         part_name_str.assign(part_name, static_cast<int32_t>(pos));
         bool is_valid = false;
         if (OB_FAIL(check_partition_name_valid(orig_schema, alter_schema, part_name_str, is_valid))) {
-          RS_LOG(WARN, "failed to check partition name valid", K(ret), K(part_name_str));
         } else if (is_valid) {
           // If the partition name is reasonable, can add it to the partition, prepare to process
           // the next empty partition name
           if (OB_FAIL(part_array[i]->set_part_name(part_name_str))) {
-            RS_LOG(WARN, "failed to set partition name", K(ret), K(part_name_str));
           }
           max_part_id++;
           break;
@@ -2668,16 +2664,12 @@ int ObDDLService::set_default_tablegroup_id(SCHEMA &schema)
   uint64_t tablegroup_id = OB_INVALID_ID;
   
   if (OB_FAIL(check_inner_stat())) {
-    RS_LOG(WARN, "variable is not init");
   } else if (OB_FAIL(get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
-    RS_LOG(WARN, "fail to get schema guard with version in inner table", K(ret));
   } else {
     const ObString &tablegroup_name = schema.get_default_tablegroup_name();
     if (tablegroup_name.empty()) {
       schema.set_default_tablegroup_id(OB_INVALID_ID);
     } else if (OB_FAIL(schema_guard.get_tablegroup_id(tablegroup_name, tablegroup_id))) {
-      RS_LOG(WARN, "get_tablegroup_id failed",
-          K(tablegroup_name), K(ret));
     } else if (OB_INVALID_ID == tablegroup_id) {
       ret = OB_TABLEGROUP_NOT_EXIST;
       RS_LOG(WARN, "tablegroup not exist", K(ret), K(tablegroup_name));

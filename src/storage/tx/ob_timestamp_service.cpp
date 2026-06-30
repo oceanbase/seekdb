@@ -137,11 +137,9 @@ int ObTimestampService::handle_request(const ObGtsRequest &request, ObGtsRpcResu
       }
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = result.init(ret, srr, 0, 0))) {
-        TRANS_LOG(WARN, "gts result init failed", K(tmp_ret), K(request));
       }
     } else {
       if (OB_FAIL(result.init(ret, srr, gts, gts))) {
-        TRANS_LOG(WARN, "gts result init failed", KR(ret), K(request));
       }
     }
   }
@@ -185,7 +183,6 @@ int ObTimestampService::handle_local_request_(const ObGtsRequest &request, obcal
     TRANS_LOG(WARN, "errsim for gts handle local request", KR(ret));
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = result.init(ret, srr, 0, 0))) {
-      TRANS_LOG(WARN, "gts result init failed", K(tmp_ret), K(request));
     }
   } else if (OB_FAIL(get_timestamp(gts))) {
     if (EXECUTE_COUNT_PER_SEC(10)) {
@@ -193,11 +190,9 @@ int ObTimestampService::handle_local_request_(const ObGtsRequest &request, obcal
     }
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = result.init(ret, srr, 0, 0))) {
-      TRANS_LOG(WARN, "gts result init failed", K(tmp_ret), K(request));
     }
   } else {
     if (OB_FAIL(result.init(ret, srr, gts, gts))) {
-      TRANS_LOG(WARN, "local gts result init failed", KR(ret), K(request));
     }
   }
   return ret;
@@ -236,11 +231,9 @@ int ObTimestampService::switch_to_leader()
   TRANS_LOG(INFO, "ObTimestampService switch_to_leader called", K(ret));
 
   if (OB_FAIL(check_and_fill_ls())) {
-    TRANS_LOG(WARN, "ls set fail", K(ret));
   } else {
     SCN version;
     if (OB_FAIL(ls_->get_log_handler()->get_max_scn(version))) {
-      TRANS_LOG(WARN, "get max ts fail", K(ret));
     } else {
       int64_t version_val = version.is_valid() ? version.get_val_for_gts() : -1;
       if (version_val >= ATOMIC_LOAD(&limited_id_)) {
@@ -258,8 +251,6 @@ int ObTimestampService::switch_to_leader()
   }
 
   if (OB_FAIL(ret)) {
-    TRANS_LOG(WARN, "ObTimestampService switch_to_leader failed", K(ret), 
-              "service_type", share::g_mp->timestamp_access()->get_service_type());
   }
 
   return ret;
@@ -270,9 +261,7 @@ void ObTimestampService::get_virtual_info(int64_t &ts_value, common::ObRole &rol
   int ret = OB_SUCCESS;
   ts_value = last_id_;
   if (OB_FAIL(check_and_fill_ls())) {
-    TRANS_LOG(WARN, "ls set fail", K(ret));
   } else if (OB_FAIL(ls_->get_log_handler()->get_role(role, proposal_id))) {
-    TRANS_LOG(WARN, "get ls role fail", K(ret));
   }
   TRANS_LOG(INFO, "gts get virtual info", K(ret), K_(last_id), K(ts_value), K(role), K(proposal_id));
 }

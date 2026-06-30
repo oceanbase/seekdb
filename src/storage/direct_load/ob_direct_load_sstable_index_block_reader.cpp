@@ -65,7 +65,6 @@ int ObDirectLoadSSTableIndexBlockReader::get_last_entry(const ObDirectLoadSSTabl
     ObDirectLoadSSTableIndexBlock::Entry item;
     const int64_t pos = header.last_entry_pos_ - ObDirectLoadSSTableIndexBlock::get_entry_size();
     if (OB_FAIL(this->data_block_reader_.read_item(pos, item))) {
-      STORAGE_LOG(WARN, "fail to read item", KR(ret));
     } else {
       entry_.offset_ = item.offset_;
     }
@@ -74,7 +73,6 @@ int ObDirectLoadSSTableIndexBlockReader::get_last_entry(const ObDirectLoadSSTabl
     // get last entry
     ObDirectLoadSSTableIndexBlock::Entry item;
     if (OB_FAIL(this->data_block_reader_.read_item(header.last_entry_pos_, item))) {
-      STORAGE_LOG(WARN, "fail to read item", KR(ret));
     } else {
       entry_.size_ = item.offset_ - entry_.offset_;
       entry = &entry_;
@@ -101,7 +99,6 @@ int ObDirectLoadSSTableIndexBlockReader::get_entry(int64_t idx,
       ObDirectLoadSSTableIndexBlock::Entry item;
       const int64_t prev_pos = pos - ObDirectLoadSSTableIndexBlock::get_entry_size();
       if (OB_FAIL(this->data_block_reader_.read_item(prev_pos, item))) {
-        STORAGE_LOG(WARN, "fail to read item", KR(ret));
       } else {
         entry_.offset_ = item.offset_;
       }
@@ -110,7 +107,6 @@ int ObDirectLoadSSTableIndexBlockReader::get_entry(int64_t idx,
       // get current entry
       ObDirectLoadSSTableIndexBlock::Entry item;
       if (OB_FAIL(this->data_block_reader_.read_item(pos, item))) {
-        STORAGE_LOG(WARN, "fail to read item", KR(ret));
       } else {
         entry_.size_ = item.offset_ - entry_.offset_;
         entry = &entry_;

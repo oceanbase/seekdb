@@ -71,10 +71,8 @@ int ObSequenceNamespaceChecker::check_sequence_namespace(const ObQualifiedName &
     uint64_t database_id = OB_INVALID_ID;
     bool exist = false;
     if (OB_FAIL(schema_checker->get_database_id(database_name, database_id))) {
-      LOG_WARN("failed to get database id", K(ret), K(database_name));
     } else if (OB_FAIL(check_sequence_with_synonym_recursively( database_id, sequence_name,
                                                                schema_checker, exist, sequence_id))) {
-      LOG_WARN("fail recursively check sequence with name", K(q_name), K(database_name), K(ret));
     } else if (!exist) {
       ret = OB_ERR_BAD_FIELD_ERROR;
     }
@@ -97,7 +95,6 @@ int ObSequenceNamespaceChecker::check_sequence_with_synonym_recursively(const ui
                                                                       sequence_name,
                                                                       exists,
                                                                       sequence_id))) {
-    LOG_WARN("failed to check sequence with name", K(ret), K(sequence_name), K(database_id));
   } else if (!exists) { // check synonym
   }
   return ret;

@@ -33,9 +33,7 @@ int ObFTDictHub::init()
   static constexpr int K_MAX_DICT_BUCKET = 128; // for now, only built-in dicts.
   int ret = OB_SUCCESS;
   if (OB_FAIL(dict_map_.create(K_MAX_DICT_BUCKET, "dict_map"))) {
-    LOG_WARN("init dict map failed", K(ret));
   } else if (OB_FAIL(rw_dict_lock_.init(K_MAX_DICT_BUCKET))) {
-    LOG_WARN("init dict lock failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -79,10 +77,8 @@ int ObFTDictHub::build_cache(const ObFTDictDesc &desc, ObFTCacheRangeContainer &
     if (OB_FAIL(ret)) {
       if (OB_ENTRY_NOT_EXIST == ret) {
         if (OB_FAIL(ObFTRangeDict::build_cache_from_ik_dict(desc, container))) {
-          LOG_WARN("Failed to build cache", K(ret));
         } else if (FALSE_IT(info.range_count_ = container.get_handles().size())) {
         } else if (OB_FAIL(put_dict_info(key, info))) {
-          LOG_WARN("Failed to put dict info", K(ret));
         }
       }
     }
@@ -143,7 +139,6 @@ int ObFTDictHub::put_dict_info(const ObFTDictInfoKey &key, const ObFTDictInfo &i
   int ret = OB_SUCCESS;
   const int cover_exist_flag = 1;
   if (OB_FAIL(dict_map_.set_refactored(key, info, cover_exist_flag))) {
-    LOG_WARN("put dict info failed", K(ret));
   }
 
   return ret;

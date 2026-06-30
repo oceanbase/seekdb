@@ -68,6 +68,12 @@ const char *ObSysVarObRoutePolicy::OB_ROUTE_POLICY_NAMES[] = {
   "FORCE_READONLY_ZONE",
   0
 };
+const char *ObSysVarObEnableJit::OB_ENABLE_JIT_NAMES[] = {
+  "OFF",
+  "AUTO",
+  "FORCE",
+  0
+};
 const char *ObSysVarBlockEncryptionMode::BLOCK_ENCRYPTION_MODE_NAMES[] = {
   "aes-128-ecb",
   "aes-192-ecb",
@@ -1085,6 +1091,7 @@ const char *ObSysVarFactory::SYS_VAR_NAMES_SORTED_BY_NAME[] = {
   "ob_early_lock_release",
   "ob_enable_aggregation_pushdown",
   "ob_enable_index_direct_select",
+  "ob_enable_jit",
   "ob_enable_parameter_anonymous_block",
   "ob_enable_pl_cache",
   "ob_enable_plan_cache",
@@ -1922,6 +1929,7 @@ const ObSysVarClassType ObSysVarFactory::SYS_VAR_IDS_SORTED_BY_NAME[] = {
   SYS_VAR_OB_EARLY_LOCK_RELEASE,
   SYS_VAR_OB_ENABLE_AGGREGATION_PUSHDOWN,
   SYS_VAR_OB_ENABLE_INDEX_DIRECT_SELECT,
+  SYS_VAR_OB_ENABLE_JIT,
   SYS_VAR_OB_ENABLE_PARAMETER_ANONYMOUS_BLOCK,
   SYS_VAR_OB_ENABLE_PL_CACHE,
   SYS_VAR_OB_ENABLE_PLAN_CACHE,
@@ -2365,6 +2373,7 @@ const char *ObSysVarFactory::SYS_VAR_NAMES_SORTED_BY_ID[] = {
   "sql_throttle_network",
   "sql_throttle_logical_reads",
   "auto_increment_cache_size",
+  "ob_enable_jit",
   "ob_temp_tablespace_size_percentage",
   "plugin_dir",
   "optimizer_use_sql_plan_baselines",
@@ -3139,7 +3148,6 @@ int ObSysVarFactory::calc_sys_var_store_idx_by_name(const common::ObString &sys_
   int ret = OB_SUCCESS;
   ObSysVarClassType sys_var_id = find_sys_var_id_by_name(sys_var_name);
   if (OB_FAIL(calc_sys_var_store_idx(sys_var_id, store_idx))) {
-    LOG_WARN("fail to calc sys var store idx", K(ret), K(sys_var_name), K(lbt()));
   }
   return ret;
 }
@@ -3154,7 +3162,6 @@ int ObSysVarFactory::get_sys_var_name_by_id(ObSysVarClassType sys_var_id, ObStri
   int ret = OB_SUCCESS;
   int64_t store_idx = -1;
   if (OB_FAIL(calc_sys_var_store_idx(sys_var_id, store_idx))) {
-    LOG_WARN("fail to calc sys var store idx", K(ret), K(sys_var_id));
   } else {
     sys_var_name = ObString::make_string(ObSysVarFactory::SYS_VAR_NAMES_SORTED_BY_ID[store_idx]);
   }
@@ -3262,7 +3269,6 @@ int ObSysVarFactory::create_all_sys_vars_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(try_init_store_mem())) {
-    LOG_WARN("Fail to init", K(ret));
   } else if (!all_sys_vars_created_) {
     int64_t store_idx = -1;
     ObBasicSysVar *sys_var_ptr = NULL;
@@ -3408,6 +3414,7 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarSqlThrottleNetwork)
         + sizeof(ObSysVarSqlThrottleLogicalReads)
         + sizeof(ObSysVarAutoIncrementCacheSize)
+        + sizeof(ObSysVarObEnableJit)
         + sizeof(ObSysVarObTempTablespaceSizePercentage)
         + sizeof(ObSysVarPluginDir)
         + sizeof(ObSysVarOptimizerUseSqlPlanBaselines)
@@ -5376,6 +5383,15 @@ int ObSysVarFactory::create_all_sys_vars_()
       } else {
         store_buf_[ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(SYS_VAR_AUTO_INCREMENT_CACHE_SIZE))] = sys_var_ptr;
         ptr = (void *)((char *)ptr + sizeof(ObSysVarAutoIncrementCacheSize));
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarObEnableJit())) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to new ObSysVarObEnableJit", K(ret));
+      } else {
+        store_buf_[ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(SYS_VAR_OB_ENABLE_JIT))] = sys_var_ptr;
+        ptr = (void *)((char *)ptr + sizeof(ObSysVarObEnableJit));
       }
     }
     if (OB_SUCC(ret)) {
@@ -13176,6 +13192,17 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, ObSysVarClassType 
       }
       break;
     }
+    case SYS_VAR_OB_ENABLE_JIT: {
+      void *ptr = NULL;
+      if (OB_ISNULL(ptr = allocator_.alloc(sizeof(ObSysVarObEnableJit)))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to alloc memory", K(ret), K(sizeof(ObSysVarObEnableJit)));
+      } else if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarObEnableJit())) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to new ObSysVarObEnableJit", K(ret));
+      }
+      break;
+    }
     case SYS_VAR_OB_TEMP_TABLESPACE_SIZE_PERCENTAGE: {
       void *ptr = NULL;
       if (OB_ISNULL(ptr = allocator_.alloc(sizeof(ObSysVarObTempTablespaceSizePercentage)))) {
@@ -20814,7 +20841,6 @@ int ObSysVarFactory::create_sys_var(ObSysVarClassType sys_var_id, ObBasicSysVar 
   int ret = OB_SUCCESS;
   ObBasicSysVar *sys_var_ptr = NULL;
   if (OB_FAIL(try_init_store_mem())) {
-    LOG_WARN("fail to init", K(ret));
   } else if (-1 == store_idx && OB_FAIL(calc_sys_var_store_idx(sys_var_id, store_idx))) {
     LOG_WARN("fail to calc sys var store idx", K(ret), K(sys_var_id));
   } else if (store_idx < 0 || store_idx >= ALL_SYS_VARS_COUNT) {
@@ -20831,7 +20857,6 @@ int ObSysVarFactory::create_sys_var(ObSysVarClassType sys_var_id, ObBasicSysVar 
   }
   if (OB_SUCC(ret) && OB_ISNULL(sys_var_ptr)) {
     if (OB_FAIL(create_sys_var(allocator_, sys_var_id, sys_var_ptr))) {
-      LOG_WARN("fail to calc sys var", K(ret), K(sys_var_id));
     }
   }
   if (OB_SUCC(ret)) {

@@ -95,9 +95,7 @@ int ObExprInnerRowCmpVal::eval_inner_row_cmp_val(const ObExpr &expr, ObEvalCtx &
   ObDatum* right_datum = NULL;
   ObDatum* real_val_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, left_datum))) {
-    LOG_WARN("fail to eval eq expr", K(ret), K(expr));
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, right_datum))) {
-    LOG_WARN("fail to eval eq expr", K(ret), K(expr));
   } else if ((left_datum->is_null() != right_datum->is_null()) ||
       left_datum->len_ != right_datum->len_) {
     ret = OB_ERR_UNEXPECTED;
@@ -106,7 +104,6 @@ int ObExprInnerRowCmpVal::eval_inner_row_cmp_val(const ObExpr &expr, ObEvalCtx &
       (0 != MEMCMP(left_datum->ptr_, right_datum->ptr_, left_datum->len_))) {
     ret = -static_cast<int>(expr.extra_);
   } else if (OB_FAIL(expr.args_[2]->eval(ctx, real_val_datum))) {
-    LOG_WARN("fail to eval real res datum fail.", K(ret), K(expr));
   } else {
     res.set_datum(*real_val_datum);
   }

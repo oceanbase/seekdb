@@ -54,7 +54,6 @@ int ObPlanMatchHelper::match_plan(const ObPlanCacheCtx &pc_ctx,
     is_dup_ls_modified = GET_MY_SESSION(pc_ctx.exec_ctx_)->is_dup_ls_modified();
     if (OB_NOT_NULL(plan_set_) && plan_set_->has_duplicate_table()) {
       if (OB_FAIL(pc_ctx.is_retry(is_retrying))) {
-        LOG_WARN("failed to test if retrying", K(ret));
       } else if (is_retrying || is_dup_ls_modified) {
         has_duplicate_table = false;
       } else {
@@ -66,26 +65,21 @@ int ObPlanMatchHelper::match_plan(const ObPlanCacheCtx &pc_ctx,
       // check base table constraints
       if (OB_FAIL(calc_table_locations(base_cons, plan_tbl_locs, pc_ctx,
                                       out_tbl_locations, phy_tbl_infos))) {
-        LOG_WARN("failed to calculate table locations", K(ret), K(base_cons));
       } else if (has_duplicate_table &&
                 OB_FAIL(ObLogPlan::adjust_dup_table_replica_by_cons(dup_rep_cons, phy_tbl_infos))) {
         LOG_WARN("failed to reselect duplicate table replica", K(ret));
       } else if (OB_FAIL(cmp_table_types(base_cons, server, out_tbl_locations,
                                         phy_tbl_infos, is_matched))) {
-        LOG_WARN("failed to compare table types", K(ret), K(base_cons));
       } else if (!is_matched) {
         LOG_DEBUG("table types not match", K(base_cons));
       } else if (OB_FAIL(check_partition_constraint(pc_ctx, base_cons, phy_tbl_infos, is_matched))) {
-        LOG_WARN("failed to check partition constraint", K(ret));
       } else if (!is_matched) {
         LOG_DEBUG("partition constraint not match", K(base_cons));
       } else if (strict_cons.count() <= 0 && non_strict_cons.count() <= 0) {
         // do nothing
       } else if (OB_FAIL(pwj_map.create(8, ObModIds::OB_PLAN_EXECUTE))) {
-        LOG_WARN("create pwj map failed", K(ret));
       } else if (OB_FAIL(check_inner_constraints(strict_cons, non_strict_cons, phy_tbl_infos,
                                                 pc_ctx, pwj_map, is_matched))) {
-        LOG_WARN("failed to check inner constraints", K(ret));
       } else {
         use_pwj_map = true;
       }
@@ -93,9 +87,7 @@ int ObPlanMatchHelper::match_plan(const ObPlanCacheCtx &pc_ctx,
       if (OB_SUCC(ret) && is_matched && use_pwj_map) {
         GroupPWJTabletIdMap *exec_group_pwj_map = nullptr;
         if (OB_FAIL(pc_ctx.exec_ctx_.get_group_pwj_map(exec_group_pwj_map))) {
-          LOG_WARN("failed to get exec group pwj map", K(ret));
         } else if (OB_FAIL(exec_group_pwj_map->reuse())) {
-          LOG_WARN("failed to reuse pwj map", K(ret));
         }
         GroupPWJTabletIdInfo group_pwj_tablet_id_info;
         TabletIdArray &tablet_id_array = group_pwj_tablet_id_info.tablet_id_array_;
@@ -115,7 +107,6 @@ int ObPlanMatchHelper::match_plan(const ObPlanCacheCtx &pc_ctx,
                   LOG_WARN("failed to get refactored", K(ret));
                 }
               } else if (OB_FAIL(exec_group_pwj_map->set_refactored(table_id, group_pwj_tablet_id_info))) {
-                LOG_WARN("failed to set refactored", K(ret));
               }
             }
           }
@@ -129,7 +120,6 @@ int ObPlanMatchHelper::match_plan(const ObPlanCacheCtx &pc_ctx,
   if (pwj_map.created()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_UNLIKELY(OB_SUCCESS != (tmp_ret = pwj_map.destroy()))) {
-      LOG_WARN("failed to destroy pwj map", K(tmp_ret));
     }
   }
   return ret;
@@ -174,12 +164,10 @@ int ObPlanMatchHelper::calc_table_locations(
       if (OB_FAIL(get_tbl_loc_with_key(loc_cons.at(i).key_,
                                        in_tbl_locations,
                                        tmp_tbl_loc_ptr))) {
-        LOG_WARN("failed to get table location with key", K(ret), K(loc_cons.at(i).key_), K(i));
       } else if (OB_ISNULL(tmp_tbl_loc_ptr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("got an unexpected null tbl_loc_ptr", K(ret), K(tmp_tbl_loc_ptr));
       } else if (OB_FAIL(out_tbl_locations.push_back(*tmp_tbl_loc_ptr))) {
-        LOG_WARN("failed to add table location", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -188,7 +176,6 @@ int ObPlanMatchHelper::calc_table_locations(
                                                          pc_ctx,
                                                          phy_tbl_infos,
                                                          need_check_on_same_server))) {
-        LOG_WARN("failed to get phy locations", K(ret));
       } else {
         LOG_DEBUG("calculated phy locations", K(loc_cons), K(phy_tbl_infos));
       }
@@ -224,10 +211,6 @@ int ObPlanMatchHelper::cmp_table_types(
       if (OB_FAIL(tbl_loc.get_location_type(server,
                                             phy_part_loc_info_list,
                                             loc_type))) {
-        LOG_WARN("failed to get table location type",
-                 K(ret),
-                 K(server),
-                 K(phy_part_loc_info_list));
       } else {
         is_same = (loc_type == loc_cons.at(i).phy_loc_type_);
       }
@@ -266,7 +249,6 @@ int ObPlanMatchHelper::check_partition_constraint(
       if (!loc_cons.at(i).is_partition_single() && !loc_cons.at(i).is_subpartition_single()) {
         // do nothing
       } else if (OB_FAIL(schema_guard->get_table_schema( phy_tbl_infos.at(i).get_ref_table_id(), table_schema))) {
-        LOG_WARN("failed to get table schema", K(ret), K(phy_tbl_infos.at(i).get_ref_table_id()));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get null table schema", K(ret), K(phy_tbl_infos.at(i).get_ref_table_id()));
@@ -280,7 +262,6 @@ int ObPlanMatchHelper::check_partition_constraint(
           int64_t cur_part_id = OB_INVALID_ID;
           int64_t cur_subpart_id = OB_INVALID_ID;
           if (OB_FAIL(table_schema->get_part_id_by_tablet(cur_tablet_id, cur_part_id, cur_subpart_id))) {
-            LOG_WARN("failed to get part id by tablet", K(ret));
           } else if (OB_INVALID_PARTITION_ID == first_part_id) {
             first_part_id = cur_part_id;
           } else if (cur_part_id != first_part_id) {
@@ -297,7 +278,6 @@ int ObPlanMatchHelper::check_partition_constraint(
           int64_t cur_part_id = OB_INVALID_ID;
           int64_t cur_subpart_id = OB_INVALID_ID;
           if (OB_FAIL(table_schema->get_part_id_by_tablet(cur_tablet_id, cur_part_id, cur_subpart_id))) {
-            LOG_WARN("failed to get part id by tablet", K(ret));
           } else {
             for (int64_t k = 0; OB_SUCC(ret) && is_match && k < part_ids.count(); ++k) {
               if (part_ids.at(k) == cur_part_id) {
@@ -310,7 +290,6 @@ int ObPlanMatchHelper::check_partition_constraint(
             } else if (!is_match) {
               // do nothing
             } else if (OB_FAIL(part_ids.push_back(cur_part_id))) {
-              LOG_WARN("failed to add member", K(ret));
             } else {
               // do nothing
             }
@@ -341,7 +320,6 @@ int ObPlanMatchHelper::check_inner_constraints(
     SMART_VARS_2((ObStrictPwjComparer, strict_pwj_comparer),
                  (ObNonStrictPwjComparer, non_strict_pwj_comparer)) {
       if (OB_FAIL(pwj_tables.prepare_allocate(tbl_count))) {
-        LOG_WARN("failed to prepare allocate pwj tables", K(ret));
       }
 
       for (int64_t i = 0; OB_SUCC(ret) && is_same && i < strict_cons.count(); ++i) {
@@ -351,7 +329,6 @@ int ObPlanMatchHelper::check_inner_constraints(
           LOG_WARN("get unexpected pwj constraint", K(ret), K(pwj_cons));
         } else if (OB_FAIL(check_strict_pwj_cons(pc_ctx, pwj_cons, phy_tbl_infos,
                                                  strict_pwj_comparer, pwj_map, is_same))) {
-          LOG_WARN("failed to check strict pwj cons", K(ret));
         } else {
           LOG_DEBUG("succ to check strict pwj cons", K(is_same));
         }
@@ -364,7 +341,6 @@ int ObPlanMatchHelper::check_inner_constraints(
           LOG_WARN("get unexpected pwj constraint", K(ret), K(pwj_cons));
         } else if (OB_FAIL(check_non_strict_pwj_cons(pwj_cons, phy_tbl_infos,
                                                      non_strict_pwj_comparer, is_same))) {
-          LOG_WARN("failed to check non strict pwj cons", K(ret));
         } else {
           LOG_DEBUG("succ to check non strict pwj cons", K(is_same));
         }
@@ -400,8 +376,6 @@ int ObPlanMatchHelper::check_strict_pwj_cons(
       const ObCandiTableLoc &l_phy_tbl_info = phy_tbl_infos.at(pwj_cons.at(i));
       const ObCandiTableLoc &r_phy_tbl_info = phy_tbl_infos.at(pwj_cons.at(i+1));
       if (OB_FAIL(match_tbl_partition_locs(l_phy_tbl_info, r_phy_tbl_info, is_same))) {
-        LOG_WARN("failed tp compare table partition locations",
-                K(ret), K(l_phy_tbl_info), K(r_phy_tbl_info));
       }
     }
   } else if (OB_ISNULL(GET_MY_SESSION(pc_ctx.exec_ctx_))) {
@@ -421,14 +395,11 @@ int ObPlanMatchHelper::check_strict_pwj_cons(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(schema_guard->get_table_schema( phy_tbl_info.get_ref_table_id(), table_schema))) {
-        LOG_WARN("failed to get table schema", K(ret), K(phy_tbl_info.get_ref_table_id()));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(pwj_table.init(*table_schema, phy_tbl_info))) {
-        LOG_WARN("failed to init pwj table with table schema", K(ret));
       } else if (OB_FAIL(pwj_comparer.add_table(pwj_table, is_same))) {
-        LOG_WARN("failed to add table", K(ret));
       } else if (is_same &&
                  OB_FAIL(pwj_map.set_refactored(table_idx, pwj_comparer.get_tablet_id_group().at(i)))) {
         LOG_WARN("failed to set refactored", K(ret));
@@ -454,11 +425,8 @@ int ObPlanMatchHelper::check_non_strict_pwj_cons(const ObPlanPwjConstraint &pwj_
     server_list.reuse();
     const ObCandiTableLoc &table_loc = phy_tbl_infos.at(table_idx);
     if (OB_FAIL(table_loc.get_all_servers(server_list))) {
-      LOG_WARN("failed to get all servers", K(ret));
     } else if (OB_FAIL(pwj_table.init(server_list))) {
-      LOG_WARN("failed to init pwj table with table schema", K(ret));
     } else if (OB_FAIL(pwj_comparer.add_table(pwj_table, is_same))) {
-      LOG_WARN("failed to add table", K(ret));
     }
   }
   return ret;

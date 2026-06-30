@@ -57,7 +57,6 @@ int BloomFilterIndex::assign(const BloomFilterIndex &other)
     begin_idx_ = other.begin_idx_;
     end_idx_ = other.end_idx_;
     if (OB_FAIL(channel_ids_.assign(other.channel_ids_))) {
-      LOG_WARN("failed to assign channel_ids_");
     }
   }
   return ret;
@@ -384,7 +383,6 @@ OB_DEF_SERIALIZE(ObPxBloomFilter)
               end_idx_);
   for (int i = begin_idx_; OB_SUCC(ret) && i <= end_idx_; ++i) {
     if (OB_FAIL(serialization::encode(buf, buf_len, pos, bits_array_[i]))) {
-      LOG_WARN("fail to encode bits data", K(ret), K(bits_array_[i]));
     }
   }
   OB_UNIS_ENCODE(max_bit_count_);
@@ -417,7 +415,6 @@ OB_DEF_DESERIALIZE(ObPxBloomFilter)
     int64_t *bits_array = reinterpret_cast<int64_t *>(align_addr);
     for (int i = 0; OB_SUCC(ret) && i < real_len; ++i) {
       if (OB_FAIL(serialization::decode(buf, data_len, pos, bits_array[i]))) {
-        LOG_WARN("fail to decode bits data", K(ret));
       }
     }
     if (OB_SUCC(ret)) {

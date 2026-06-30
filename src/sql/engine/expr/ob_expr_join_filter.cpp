@@ -64,7 +64,6 @@ int proc_by_pass<IntegerUniVec>(IntegerUniVec *res_vec, const ObBitVector &skip,
               res_vec->set_int(idx, 1);
               return OB_SUCCESS;
             }))) {
-      LOG_WARN("fail to do for each operation", K(ret));
     } else {
     }
   } else {
@@ -73,7 +72,6 @@ int proc_by_pass<IntegerUniVec>(IntegerUniVec *res_vec, const ObBitVector &skip,
               res_vec->set_int(idx, 1);
               return OB_SUCCESS;
             }))) {
-      LOG_WARN("fail to do for each operation", K(ret));
     }
   }
   return ret;
@@ -248,12 +246,10 @@ int ObExprJoinFilter::prepare_storage_white_filter_data(const ObExpr &expr,
     dynamic_filter.set_filter_action(DynamicFilterAction::PASS_ALL);
   } else {
     if (OB_FAIL(check_rf_ready(exec_ctx, join_filter_ctx))) {
-       LOG_WARN("fail to check bf ready", K(ret));
     } else if (OB_ISNULL(join_filter_ctx->rf_msg_)) {
     } else if (!join_filter_ctx->is_ready_ || join_filter_ctx->dynamic_disable()) {
     } else if (OB_FAIL(join_filter_ctx->rf_msg_->prepare_storage_white_filter_data(
         dynamic_filter, eval_ctx, params, is_data_prepared))) {
-      LOG_WARN("fail to prepare_storage_white_filter_data", K(ret));
     } else {
       dynamic_filter.hash_func_ =
           join_filter_ctx->hash_funcs_.at(dynamic_filter.get_col_idx()).hash_func_;
@@ -293,7 +289,6 @@ int ObExprJoinFilter::eval_filter_internal(const ObExpr &expr, ObEvalCtx &ctx, O
     res.set_int(1);
   } else {
     if (OB_FAIL(check_rf_ready(exec_ctx, join_filter_ctx))) {
-       LOG_WARN("fail to check bf ready", K(ret));
     } else if (OB_ISNULL(join_filter_ctx->rf_msg_) || !join_filter_ctx->is_ready_
                || join_filter_ctx->dynamic_disable()) {
       res.set_int(1);
@@ -307,7 +302,6 @@ int ObExprJoinFilter::eval_filter_internal(const ObExpr &expr, ObEvalCtx &ctx, O
         (void)join_filter_ctx->collect_sample_info(0, 1);
       }
     } else if (OB_FAIL(join_filter_ctx->rf_msg_->might_contain(expr, ctx, *join_filter_ctx, res))) {
-      LOG_WARN("fail to check contain row", K(ret));
     }
     if (OB_SUCC(ret)) {
       join_filter_ctx->total_count_++;
@@ -365,7 +359,6 @@ int ObExprJoinFilter::eval_filter_batch_internal(
       }))) { /* do nothing*/ }
   } else {
     if (OB_FAIL(check_rf_ready(exec_ctx, join_filter_ctx))) {
-       LOG_WARN("fail to check bf ready", K(ret));
     } else if (OB_ISNULL(join_filter_ctx->rf_msg_) || !join_filter_ctx->is_ready_) {
       FILL_BATCH_RESULT();
       if ((join_filter_ctx->n_times_) > CHECK_TIMES) {
@@ -376,7 +369,6 @@ int ObExprJoinFilter::eval_filter_batch_internal(
       FILL_BATCH_RESULT();
     } else if (OB_FAIL(join_filter_ctx->rf_msg_->might_contain_batch(
           expr, ctx, skip, batch_size, *join_filter_ctx))) {
-      LOG_WARN("fail to might contain batch");
     }
   }
   return ret;
@@ -430,7 +422,6 @@ int ObExprJoinFilter::eval_filter_vector_internal(
     eval_flags.set_all(true);
   } else {
     if (OB_FAIL(check_rf_ready(exec_ctx, join_filter_ctx))) {
-      LOG_WARN("fail to check bf ready", K(ret));
     } else if (OB_ISNULL(join_filter_ctx->rf_msg_) || !join_filter_ctx->is_ready_
                || join_filter_ctx->dynamic_disable()) {
       // rf_msg_ is null: no msg arrived yet
@@ -444,7 +435,6 @@ int ObExprJoinFilter::eval_filter_vector_internal(
         ret = proc_by_pass(res_vec, skip, bound, valid_cnt, true /* calc_valid_cnt */);
       }
       if (OB_FAIL(ret)) {
-        LOG_WARN("failed to proc_by_pass", K(res_format), K(ret));
       } else {
         join_filter_ctx->total_count_ += valid_cnt;
         // if msg not ready, add n_times_ and check ready every CHECK_TIMES
@@ -461,7 +451,6 @@ int ObExprJoinFilter::eval_filter_vector_internal(
       }
     } else if (OB_FAIL(join_filter_ctx->rf_msg_->might_contain_vector(expr, ctx, skip, bound,
                                                                       *join_filter_ctx))) {
-      LOG_WARN("fail to might contain batch");
     }
   }
   return ret;

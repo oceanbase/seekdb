@@ -79,18 +79,14 @@ int ObTableLoadMergeMemSortOp::switch_next_op(bool is_parent_called)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObTableLoadMultipleHeapTableCompactor", KR(ret));
     } else if (OB_FAIL(multiple_heap_table_compactor_->init(this))) {
-      LOG_WARN("fail to init multiple heap table compactor", KR(ret));
     } else if (OB_FAIL(multiple_heap_table_compactor_->start())) {
-      LOG_WARN("fail to start multiple heap table compactor", KR(ret));
     }
   } else {
     if (OB_ISNULL(mem_compactor_ = OB_NEWx(ObTableLoadMemCompactor, allocator_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObTableLoadMemCompactor", KR(ret));
     } else if (OB_FAIL(mem_compactor_->init(this))) {
-      LOG_WARN("fail to init mem compactor", KR(ret));
     } else if (OB_FAIL(mem_compactor_->start())) {
-      LOG_WARN("fail to start mem compactor", KR(ret));
     }
   }
   return ret;
@@ -100,7 +96,6 @@ int ObTableLoadMergeMemSortOp::on_success()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(switch_parent_op())) {
-    LOG_WARN("fail to switch parent op", KR(ret));
   }
   return ret;
 }

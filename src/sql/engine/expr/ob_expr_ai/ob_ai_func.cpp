@@ -32,7 +32,6 @@ int ObAIFuncExprInfo::deep_copy(common::ObIAllocator &allocator,
   int ret = OB_SUCCESS;
   ObAIFuncExprInfo *other = NULL;
   if (OB_FAIL(ObExprExtraInfoFactory::alloc(allocator, type, copied_info))) {
-    LOG_WARN("failed to alloc ai func expr info", K(ret), K(type));
   } else if (OB_ISNULL(other = static_cast<ObAIFuncExprInfo *>(copied_info))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected ai func expr info ptr", K(ret));
@@ -53,7 +52,6 @@ int ObAIFuncExprInfo::init(ObIAllocator &allocator, const ObString &model_id, sh
     LOG_WARN("model id is empty", KR(ret), K(model_id));
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "model id is empty");
   } else if (OB_FAIL(schema_guard.get_ai_model_schema( model_id, ai_model_schema))) {
-    LOG_WARN("fail to get ai model schema", KR(ret), K(model_id));
   } else if (OB_ISNULL(ai_model_schema)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("ai model schema is null", KR(ret), K(model_id));

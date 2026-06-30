@@ -83,7 +83,6 @@ int ObExprPrivSTTouches::get_input_geometry(omt::ObSrsCacheGuard &srs_guard, Mul
           gis_arg->datum_meta_,
           gis_arg->obj_meta_.has_lob_header(),
           wkb))) {
-    LOG_WARN("fail to get real string data", K(ret), K(wkb));
   } else if (FALSE_IT(temp_allocator.add_baseline_size(wkb.length()))) {
   } else if (OB_FAIL(ObGeoTypeUtil::get_type_srid_from_wkb(wkb, type, srid))) {
     if (ret == OB_ERR_GIS_INVALID_DATA) {
@@ -92,16 +91,13 @@ int ObExprPrivSTTouches::get_input_geometry(omt::ObSrsCacheGuard &srs_guard, Mul
     LOG_WARN("get type and srid from wkb failed", K(wkb), K(ret));
   } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(
                   ctx, srs_guard, wkb, srs, true, N_PRIV_ST_TOUCHES))) {
-    LOG_WARN("fail to get srs item", K(ret), K(wkb));
   } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator,
                   wkb,
                   geo,
                   srs,
                   N_PRIV_ST_TOUCHES,
                   GEO_ALLOW_3D_DEFAULT | GEO_NOT_COPY_WKB))) {
-    LOG_WARN("get first geo by wkb failed", K(ret));
   } else if (OB_FAIL(ObGeoExprUtils::check_empty(geo, is_geo_empty))) {
-    LOG_WARN("check geo empty failed", K(ret));
   }
   return ret;
 }
@@ -131,7 +127,6 @@ int ObExprPrivSTTouches::eval_priv_st_touches(const ObExpr &expr, ObEvalCtx &ctx
     res.set_null();
   } else if (OB_FAIL(get_input_geometry(
                  srs_guard, temp_allocator, ctx, gis_arg1, gis_datum1, srs1, geo1, is_geo1_empty))) {
-    LOG_WARN("fail to get input geometry", K(ret));
   } else if (!is_geo1_null && OB_FAIL(get_input_geometry(
                  srs_guard, temp_allocator, ctx, gis_arg2, gis_datum2, srs2, geo2, is_geo2_empty))) {
     LOG_WARN("fail to get input geometry", K(ret));
@@ -149,9 +144,7 @@ int ObExprPrivSTTouches::eval_priv_st_touches(const ObExpr &expr, ObEvalCtx &ctx
     } else if (is_geo1_empty || is_geo2_empty) {
       res.set_bool(false);
     } else if (OB_FAIL(ObGeoExprUtils::zoom_in_geos_for_relation(srs1, *geo1, *geo2))) {
-      LOG_WARN("zoom in geos failed", K(ret));
     } else if (OB_FAIL(guard.init())) {
-      LOG_WARN("fail to init geo allocator guard", K(ret));
     } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
       ret = OB_ERR_NULL_VALUE;
       LOG_WARN("fail to get mem ctx", K(ret));

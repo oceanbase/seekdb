@@ -60,7 +60,6 @@ int ObColumnEqualDecoder::decode(const ObColumnDecoderCtx &ctx, ObDatum &datum, 
               ctx.is_bit_packing(), row_id,
               ctx.col_header_->length_ - sizeof(ObColumnEqualMetaHeader),
               ref, datum, store_type))) {
-            LOG_WARN("meta_reader_ read failed", K(ret), K(row_id), K(ctx));
           }
           break;
         }
@@ -70,7 +69,6 @@ int ObColumnEqualDecoder::decode(const ObColumnDecoderCtx &ctx, ObDatum &datum, 
               ctx.is_bit_packing(), row_id,
               ctx.col_header_->length_ - sizeof(ObColumnEqualMetaHeader),
               ref, datum, store_type))) {
-            LOG_WARN("meta_reader_ read failed", K(ret), K(row_id), K(ctx));
           }
           break;
         }
@@ -80,7 +78,6 @@ int ObColumnEqualDecoder::decode(const ObColumnDecoderCtx &ctx, ObDatum &datum, 
               ctx.is_bit_packing(), row_id,
               ctx.col_header_->length_ - sizeof(ObColumnEqualMetaHeader),
               ref, datum, store_type))) {
-            LOG_WARN("meta_reader_ read failed", K(ret), K(row_id), K(ctx));
           }
           break;
         }
@@ -94,7 +91,6 @@ int ObColumnEqualDecoder::decode(const ObColumnDecoderCtx &ctx, ObDatum &datum, 
               ctx.is_bit_packing(), row_id,
               ctx.col_header_->length_ - sizeof(ObColumnEqualMetaHeader),
               ref, datum, store_type))) {
-            LOG_WARN("meta_reader_ read failed", K(ret), K(row_id), K(ctx));
           }
           break;
         }
@@ -104,7 +100,6 @@ int ObColumnEqualDecoder::decode(const ObColumnDecoderCtx &ctx, ObDatum &datum, 
               ctx.is_bit_packing(), row_id,
               ctx.col_header_->length_ - sizeof(ObColumnEqualMetaHeader),
               ref, datum, store_type))) {
-            LOG_WARN("meta_reader_ read failed", K(ret), K(row_id), K(ctx));
           }
           break;
         }
@@ -114,7 +109,6 @@ int ObColumnEqualDecoder::decode(const ObColumnDecoderCtx &ctx, ObDatum &datum, 
               ctx.is_bit_packing(), row_id,
               ctx.col_header_->length_ - sizeof(ObColumnEqualMetaHeader),
               ref, datum, store_type))) {
-            LOG_WARN("meta_reader_ read failed", K(ret), K(row_id), K(ctx));
           }
           break;
         }
@@ -127,8 +121,6 @@ int ObColumnEqualDecoder::decode(const ObColumnDecoderCtx &ctx, ObDatum &datum, 
     // not an exception, get from reffed column
     if (OB_SUCC(ret) && -1 == ref) {
       if (OB_FAIL(ctx.ref_decoder_->decode(*ctx.ref_ctx_, datum, row_id, bs, data, len))) {
-        LOG_WARN("ref_decoder_ decode failed", K(ret),
-            K(row_id), KP(data), K(len));
       }
     }
   }
@@ -161,7 +153,6 @@ int ObColumnEqualDecoder::decode_vector(
 
     if (!has_exc_value) {
       if (OB_FAIL(decoder_ctx.ref_decoder_->decode_vector(*decoder_ctx.ref_ctx_, row_index, vector_ctx))) {
-        LOG_WARN("Failed to decode all from referenced vector", K(ret));
       }
     } else {
       // read by continuous non-exception batch
@@ -177,7 +168,6 @@ int ObColumnEqualDecoder::decode_vector(
           if (col_ref_end_idx >= col_ref_start_idx) {
             // decode previous referenced range
             if (OB_FAIL(decode_refed_range(decoder_ctx, row_index, col_ref_start_idx, col_ref_end_idx, vector_ctx))) {
-              LOG_WARN("Failed to decode contunious referenced range", K(ret));
             }
           }
           if (OB_SUCC(ret)) {
@@ -186,7 +176,6 @@ int ObColumnEqualDecoder::decode_vector(
             const int64_t exc_buf_len = decoder_ctx.col_header_->length_ - sizeof(ObColumnEqualMetaHeader);
             if (OB_FAIL(decode_exception_vector(
                 decoder_ctx, ref, exc_buf, exc_buf_len, vector_ctx.vec_offset_ + i, vector_ctx.vec_header_))) {
-              LOG_WARN("Failed to decode exception to vector", K(ret), K(i), K(decoder_ctx), K(vector_ctx));
             }
           }
         }
@@ -194,7 +183,6 @@ int ObColumnEqualDecoder::decode_vector(
       if (OB_SUCC(ret) && col_ref_end_idx >= col_ref_start_idx) {
         // decode last referenced range
         if (OB_FAIL(decode_refed_range(decoder_ctx, row_index, col_ref_start_idx, col_ref_end_idx, vector_ctx))) {
-          LOG_WARN("Failed to decode contunious referenced range", K(ret));
         }
       }
     }

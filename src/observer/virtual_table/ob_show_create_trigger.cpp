@@ -51,21 +51,16 @@ int ObShowCreateTrigger::inner_get_next_row(common::ObNewRow *&row)
     const ObTriggerInfo *tg_info = NULL;
     uint64_t tg_id = OB_INVALID_ID;
     if (OB_FAIL(calc_show_trigger_id(tg_id))) {
-      SERVER_LOG(WARN, "fail to calc show trigger id", K(ret), K(tg_id));
     } else if (OB_UNLIKELY(OB_INVALID_ID == tg_id)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_USER_ERROR(OB_ERR_UNEXPECTED, "this trigger is used for show clause, can't be selected");
     } else if (OB_FAIL(schema_guard_->get_trigger_info( tg_id, tg_info))) {
-      SERVER_LOG(WARN, "fail to get trigger schema", K(ret), K(tg_id));
     } else if (OB_UNLIKELY(NULL == tg_info)) {
       ret = OB_ERR_TRIGGER_NOT_EXIST;
       SERVER_LOG(WARN, "fail to get trigger info", K(ret), K(tg_id));
     } else {
       if (OB_FAIL(fill_row_cells(tg_id, *tg_info))) {
-        SERVER_LOG(WARN, "fail to fill row cells", K(ret), 
-                   K(tg_id), K(tg_info->get_trigger_name()));
       } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
-        SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
       } else {
         scanner_it_ = scanner_.begin();
         start_to_read_ = true;
@@ -136,7 +131,6 @@ int ObShowCreateTrigger::fill_row_cells(uint64_t tg_id, const ObTriggerInfo &tg_
     ret = OB_ALLOCATE_MEMORY_FAILED;
     SERVER_LOG(ERROR, "fail to alloc table_def_buf", K(ret));
   } else if (OB_FAIL(exec_env.init(tg_info.get_package_exec_env()))) {
-    SERVER_LOG(ERROR, "fail to load exec env", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
       uint64_t col_id = output_column_ids_.at(i);
@@ -149,8 +143,6 @@ int ObShowCreateTrigger::fill_row_cells(uint64_t tg_id, const ObTriggerInfo &tg_
           ObObj int_value;
           int_value.set_int(exec_env.get_sql_mode());
           if (OB_FAIL(ob_sql_mode_to_str(int_value,  cur_row_.cells_[cell_idx], allocator_))) {
-            SERVER_LOG(ERROR, "fail to convert sqlmode to string", K(int_value),
-                       K(ret));
           } else {
             cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_default_collation(
                                           ObCharset::get_default_charset()));

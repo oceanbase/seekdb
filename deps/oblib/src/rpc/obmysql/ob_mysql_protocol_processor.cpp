@@ -49,7 +49,6 @@ int ObMysqlProtocolProcessor::do_decode(ObSMConnection& conn, ObICSMemPool& pool
     // received packet length, exclude packet header
     uint32_t rpktlen = static_cast<uint32_t>(end - start);
     if (OB_FAIL(check_mysql_packet_len(pktlen))) {
-      LOG_ERROR("fail to check mysql packet len", K(sessid), K(pktseq), K(pktlen), K(ret));
     } else if (pktlen > rpktlen) { // one packet was not received complete
       int64_t delta_len = pktlen - rpktlen;
       // valid packet, but not sufficient data received by easy, tell easy read more.
@@ -58,7 +57,6 @@ int ObMysqlProtocolProcessor::do_decode(ObSMConnection& conn, ObICSMemPool& pool
       next_read_bytes = delta_len;
     } else if (conn.is_in_authed_phase() || conn.is_in_auth_switch_phase()) {
       if (OB_FAIL(decode_body(pool, start, pktlen, pktseq, pkt))) {
-        LOG_ERROR("fail to decode_body", K(sessid), K(pktseq), K(ret));
       }
     } else {
       if (OB_UNLIKELY(pktlen < ObMySQLPacket::MIN_CAPABILITY_SIZE)) {
@@ -83,13 +81,11 @@ int ObMysqlProtocolProcessor::do_decode(ObSMConnection& conn, ObICSMemPool& pool
         if (conn.is_in_connected_phase()) {
           if (1 == capability.cap_flags_.OB_CLIENT_SSL) {
             if (OB_FAIL(decode_sslr_body(pool, start, pktlen, pktseq, pkt))) {
-              LOG_WARN("fail to decode_sslr_body", K(sessid), K(pktseq), K(ret));
             } else {
               conn.set_ssl_connect_phase();
             }
           } else {
             if (OB_FAIL(decode_hsr_body(pool, start, pktlen, pktseq, pkt))) {
-              LOG_WARN("fail to decode_hsr_body", K(sessid), K(pktseq), K(ret));
             } else {
               conn.set_connect_phase();
             }
@@ -99,7 +95,6 @@ int ObMysqlProtocolProcessor::do_decode(ObSMConnection& conn, ObICSMemPool& pool
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("error capability from ssl request packet", K(ret));
           } else if (OB_FAIL(decode_hsr_body(pool, start, pktlen, pktseq, pkt))) {
-            LOG_WARN("fail to decode_hsr_body", K(sessid), K(pktseq), K(ret));
           } else {
             conn.set_connect_phase();
           }
@@ -121,7 +116,6 @@ int ObMysqlProtocolProcessor::do_splice(ObSMConnection& conn, ObICSMemPool& pool
                                               % ObPacketRecordWrapper::REC_BUF_SIZE]);
   if (OB_FAIL(process_mysql_packet(conn.mysql_pkt_context_, &conn.pkt_rec_wrapper_,
                                                 pool, pkt, need_decode_more))) {
-    LOG_ERROR("fail to process_mysql_packet", K(ret));
   }
   return ret;
 }
@@ -168,8 +162,6 @@ inline int ObMysqlProtocolProcessor::decode_sslr_body(ObICSMemPool& pool, const 
     buf += pktlen;
 
     if (OB_FAIL(sslrpkt->decode())) {
-      LOG_WARN("failed to decode OMPKSSLRequest and the socket connection that this session belongs"
-                "to could be an illegal connection", KPC(sslrpkt), K(ret));
     }
   }
   return ret;
@@ -247,7 +239,6 @@ int ObMysqlProtocolProcessor::read_header(
       char *header_buf = context.header_buf_;
       uint32_t head_buf_size = static_cast<uint32_t>(OB_MYSQL_HEADER_LENGTH);
       if (OB_FAIL(decode_header(header_buf, head_buf_size, pktlen, pktseq))) {
-        LOG_ERROR("fail to decode header", K(ret));
       } else {
         context.payload_len_ = pktlen;
         context.curr_pkt_seq_ = pktseq;
@@ -286,7 +277,6 @@ int ObMysqlProtocolProcessor::read_body(
       void *tmp_ipacket = reinterpret_cast<void *>(&context.raw_pkt_);
       if (OB_FAIL(process_one_mysql_packet(context, NULL, pool, actual_data_len, 
                                                     tmp_ipacket, need_decode_more))) {
-        LOG_ERROR("fail to process one mysql packet", K(context), K(ret));
       } else {
         if (need_decode_more) { // mysql packet not received complete
           if (OB_MYSQL_MAX_PAYLOAD_LENGTH != context.payload_len_) {
@@ -294,8 +284,6 @@ int ObMysqlProtocolProcessor::read_body(
             LOG_ERROR("payload len must be equal to 2^24-1", K(OB_MYSQL_MAX_PAYLOAD_LENGTH),
                       K_(context.payload_len), K(ret));
           } else if (OB_FAIL(context.save_fragment_mysql_packet(start + pos, handle_len))) {
-            LOG_ERROR("fail to save fragment mysql packet", K(pos),
-                      K(handle_len), KP(start), K(ret));
           }
         } else {
           ipacket = NULL;
@@ -315,8 +303,6 @@ int ObMysqlProtocolProcessor::read_body(
     } else if (received_len < context.payload_len_) {
       // save and continue to receive
       if (OB_FAIL(context.save_fragment_mysql_packet(start + pos, handle_len))) {
-         LOG_ERROR("fail to save fragment mysql packet", K(pos),
-                   K(handle_len), KP(start), K(ret));
       }
     } else {
       // received_len > context.payload_len_,
@@ -374,7 +360,6 @@ int ObMysqlProtocolProcessor::process_fragment_mysql_packet(
       switch (context.next_read_step_) {
         case ObMysqlPktContext::READ_HEADER: {
           if (OB_FAIL(read_header(context, start, len, pos))) {
-            LOG_ERROR("fail to read header", K(context), K(ret));
           } else {
             // A special case:
             // when the mysql packet's payload is 16MB-1, then one extra empty
@@ -385,7 +370,6 @@ int ObMysqlProtocolProcessor::process_fragment_mysql_packet(
                 && (0 == context.payload_len_)
                 && (ObMysqlPktContext::READ_BODY == context.next_read_step_)) {
               if (OB_FAIL(read_body(context, pool, start, len, ipacket, need_decode_more, pos))) {
-                LOG_ERROR("fail to read body", K(context), K(ret));
               }
             }
           }
@@ -393,7 +377,6 @@ int ObMysqlProtocolProcessor::process_fragment_mysql_packet(
         }
         case ObMysqlPktContext::READ_BODY: {
           if (OB_FAIL(read_body(context, pool, start, len, ipacket, need_decode_more, pos))) {
-            LOG_ERROR("fail to read body", K(context), K(ret));
           }
           break;
         }
@@ -526,7 +509,6 @@ int ObMysqlProtocolProcessor::process_mysql_packet(
       // impossible
     } else if (OB_FAIL(process_one_mysql_packet(context, pkt_rec_wrapper,
                                   pool, data_len, ipacket, need_decode_more))) {
-      LOG_ERROR("fail to process one mysql packet", K(context), K(need_decode_more), K(ret));
     } else {
       if (need_decode_more) {
         if (OB_MYSQL_MAX_PAYLOAD_LENGTH != context.payload_len_) {
@@ -534,9 +516,6 @@ int ObMysqlProtocolProcessor::process_mysql_packet(
           LOG_ERROR("payload len must be equal to 2^24-1", K(OB_MYSQL_MAX_PAYLOAD_LENGTH),
                     K_(context.payload_len), K(ret));
         } else if (OB_FAIL(context.save_fragment_mysql_packet(payload, data_len))) {
-           // not received complete, continue
-          LOG_ERROR("fail to save fragment mysql packet", KP(payload), K(data_len),
-                    K(context), K(ret));
         } else {
           context.payload_buffered_len_ = 0;
           context.payload_len_ = 0;

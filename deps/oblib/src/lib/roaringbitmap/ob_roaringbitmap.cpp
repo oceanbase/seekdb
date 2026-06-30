@@ -81,11 +81,8 @@ int ObRoaringBitmap::value_add(uint64_t value)
         //do nothing
       } else {
         if (OB_FAIL(set_.create(MAX_BITMAP_SET_VALUES))) {
-          LOG_WARN("failed to create set", K(ret));
         } else if (OB_FAIL(set_.set_refactored(single_value_))) {
-          LOG_WARN("failed to set value to the set", K(ret), K(single_value_));
         } else if (OB_FAIL(set_.set_refactored(value))) {
-          LOG_WARN("failed to set value to the set", K(ret), K(value));
         } else {
           type_ = ObRbType::SET;
         }
@@ -95,13 +92,10 @@ int ObRoaringBitmap::value_add(uint64_t value)
     case ObRbType::SET: {
       if (set_.size() < MAX_BITMAP_SET_VALUES) {
         if (OB_FAIL(set_.set_refactored(value))) {
-          LOG_WARN("failed to set value to the set", K(ret), K(value));
         }
       } else if (set_.exist_refactored(value) != OB_HASH_EXIST) { // convert bitmap
         if (OB_FAIL(convert_to_bitmap())) {
-          LOG_WARN("failed to convert roaringbitmap to bitmap type", K(ret));
         } else if (OB_FAIL(value_add(value))) {
-          LOG_WARN("failed to add value");
         }
       }
       break;
@@ -184,7 +178,6 @@ int ObRoaringBitmap::value_and(ObRoaringBitmap *rb)
       }
     } else if (rb->is_set_type()) {
       if (OB_FAIL(set_.create(MAX_BITMAP_SET_VALUES))) {
-          LOG_WARN("failed to create set", K(ret));
       } else {
         hash::ObHashSet<uint64_t>::const_iterator iter;
         for (iter = rb->set_.begin(); OB_SUCC(ret) && iter != rb->set_.end(); iter++) {
@@ -214,18 +207,15 @@ int ObRoaringBitmap::value_or(ObRoaringBitmap *rb)
       // do nothing
     } else if (rb->is_single_type()) {
       if (OB_FAIL(value_add(rb->single_value_))) {
-        LOG_WARN("failed to add value", K(ret), K(rb->single_value_));
       }
     } else if (rb->is_set_type()) {
       hash::ObHashSet<uint64_t>::const_iterator iter;
       for (iter = rb->set_.begin(); OB_SUCC(ret) && iter != rb->set_.end(); iter++) {
         if (OB_FAIL(value_add(iter->first))) {
-          LOG_WARN("failed to add value", K(ret), K(iter->first));
         }
       }
     } else if (rb->is_bitmap_type()) {
       if (OB_FAIL(convert_to_bitmap())) {
-        LOG_WARN("failed to convert roaringbitmap to bitmap type", K(ret));
       } else {
         ROARING_TRY_CATCH(roaring::api::roaring64_bitmap_or_inplace(bitmap_, rb->bitmap_));
       }
@@ -241,11 +231,9 @@ int ObRoaringBitmap::value_xor(ObRoaringBitmap *rb)
     } else if (rb->is_single_type()) {
       if (is_contains(rb->single_value_)) {
         if (OB_FAIL(value_remove(rb->single_value_))) {
-          LOG_WARN("failed to remove value", K(ret), K(rb->single_value_));
         }
       } else {
         if (OB_FAIL(value_add(rb->single_value_))) {
-          LOG_WARN("failed to add value", K(ret), K(rb->single_value_));
         }
       }
     } else if (rb->is_set_type()) {
@@ -253,17 +241,14 @@ int ObRoaringBitmap::value_xor(ObRoaringBitmap *rb)
       for (iter = rb->set_.begin(); OB_SUCC(ret) && iter != rb->set_.end(); iter++) {
         if (is_contains(iter->first)) {
           if (OB_FAIL(value_remove(iter->first))) {
-            LOG_WARN("failed to remove value", K(ret), K(iter->first));
           }
         } else {
           if (OB_FAIL(value_add(iter->first))) {
-            LOG_WARN("failed to add value", K(ret), K(iter->first));
           }
         }
       }
     } else if (rb->is_bitmap_type()) {
       if (OB_FAIL(convert_to_bitmap())) {
-        LOG_WARN("failed to convert roaringbitmap to bitmap type", K(ret));
       } else {
         ROARING_TRY_CATCH(roaring::api::roaring64_bitmap_xor_inplace(bitmap_, rb->bitmap_));
       }
@@ -322,7 +307,6 @@ int ObRoaringBitmap::value_and(ObRoaringBin *roaring_bin)
     if (get_single_value() > UINT32_MAX) {
       set_empty();
     } else if (OB_FAIL(roaring_bin->contains(static_cast<uint32_t>(get_single_value()), is_contains))) {
-      LOG_WARN("failed to get roaring bin contains", K(ret));
     } else if (!is_contains) {
       set_empty();
     }
@@ -336,10 +320,8 @@ int ObRoaringBitmap::value_and(ObRoaringBin *roaring_bin)
       }
       if (iter->first > UINT32_MAX) {
         if (OB_FAIL(value_remove(iter->first))) {
-          LOG_WARN("failed to remove value", K(ret), K(iter->first));
         }
       } else if (OB_FAIL(roaring_bin->contains(static_cast<uint32_t>(iter->first), is_contains))) {
-        LOG_WARN("failed to get roaring bin contains", K(ret));
       } else if (!is_contains && OB_FAIL(value_remove(iter->first))) {
         LOG_WARN("failed to remove value", K(ret), K(iter->first));
       }
@@ -359,7 +341,6 @@ int ObRoaringBitmap::value_and(ObRoaring64Bin *roaring_bin)
     // do nothing
   } else if (is_single_type()) {
     if (OB_FAIL(roaring_bin->contains(get_single_value(), is_contains))) {
-      LOG_WARN("failed to get roaring bin contains", K(ret));
     } else if (!is_contains) {
       set_empty();
     }
@@ -372,7 +353,6 @@ int ObRoaringBitmap::value_and(ObRoaring64Bin *roaring_bin)
         iter++;
       }
       if (OB_FAIL(roaring_bin->contains(iter->first, is_contains))) {
-        LOG_WARN("failed to get roaring bin contains", K(ret));
       } else if (!is_contains && OB_FAIL(value_remove(iter->first))) {
         LOG_WARN("failed to remove value", K(ret), K(iter->first));
       }
@@ -406,9 +386,7 @@ int ObRoaringBitmap::subset(ObRoaringBitmap *res_rb,
     }
   } else if (is_set_type()) {
     if (OB_FAIL(convert_to_bitmap())) {
-      LOG_WARN("failed to convert roaringbitmap to bitmap type", K(ret));
     } else if (OB_FAIL(subset(res_rb, limit, offset, reverse, range_start, range_end))) {
-      LOG_WARN("failed to select subset", K(ret));
     }
   } else if (is_bitmap_type()) {
     roaring::api::roaring64_iterator_t* iter = nullptr;
@@ -429,7 +407,6 @@ int ObRoaringBitmap::subset(ObRoaringBitmap *res_rb,
         // add values
         while (OB_SUCC(ret) && roaring::api::roaring64_iterator_value(iter) <= range_end && count < limit) {
           if (OB_FAIL(res_rb->value_add(roaring::api::roaring64_iterator_value(iter)))) {
-            LOG_WARN("failed to add value", K(ret), K(roaring::api::roaring64_iterator_value(iter)));
           } else if (OB_FALSE_IT(count++)) {
           } else if (!roaring::api::roaring64_iterator_advance(iter)) {
             ret = OB_ITER_END;
@@ -455,7 +432,6 @@ int ObRoaringBitmap::subset(ObRoaringBitmap *res_rb,
           // add values
           while (OB_SUCC(ret) && roaring::api::roaring64_iterator_value(iter) >= range_start && count < limit) {
             if (OB_FAIL(res_rb->value_add(roaring::api::roaring64_iterator_value(iter)))) {
-              LOG_WARN("failed to add value", K(ret), K(roaring::api::roaring64_iterator_value(iter)));
             } else if (OB_FALSE_IT(count++)) {
             } else if (!roaring::api::roaring64_iterator_previous(iter)) {
               ret = OB_ITER_END;
@@ -493,12 +469,10 @@ int ObRoaringBitmap::optimize()
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to create bitmap iterator", K(ret));
       } else if (OB_FAIL(set_.create(MAX_BITMAP_SET_VALUES))) {
-        LOG_WARN("failed to create set", K(ret));
       } else if (OB_FALSE_IT(type_ = ObRbType::SET)) {
       } else {
         do {
           if (OB_FAIL(set_.set_refactored(roaring::api::roaring64_iterator_value(it)))) {
-            LOG_WARN("failed to set value to the set", K(ret), K(roaring::api::roaring64_iterator_value(it)));
           }
         } while (roaring::api::roaring64_iterator_advance(it) && OB_SUCC(ret));
       }
@@ -554,7 +528,6 @@ int ObRoaringBitmap::deserialize(const ObString &rb_bin, bool need_validate)
           ret = OB_INVALID_DATA;
           LOG_WARN("invalid roaringbitmap value_count", K(ret), K(bin_type), K(value_count));
         } else if (OB_FAIL(set_.create(MAX_BITMAP_SET_VALUES))) {
-          LOG_WARN("failed to create set", K(ret));
         } else if (OB_FALSE_IT(type_ = ObRbType::SET)) {
         } else {
           for (int i = 0; OB_SUCC(ret) && i < value_count; i++) {
@@ -564,7 +537,6 @@ int ObRoaringBitmap::deserialize(const ObString &rb_bin, bool need_validate)
               ret = OB_INVALID_DATA;
               LOG_WARN("invalid roaringbitmap set binary", K(ret), K(i), K(value_32));
             } else if (OB_FAIL(set_.set_refactored(static_cast<uint64_t>(value_32)))) {
-              LOG_WARN("failed to set value to the set", K(ret), K(value_32));
             }
           }
         }
@@ -578,7 +550,6 @@ int ObRoaringBitmap::deserialize(const ObString &rb_bin, bool need_validate)
           ret = OB_INVALID_DATA;
           LOG_WARN("invalid roaringbitmap value_count", K(ret), K(bin_type), K(value_count));
         } else if (OB_FAIL(set_.create(MAX_BITMAP_SET_VALUES))) {
-          LOG_WARN("failed to create set", K(ret));
         } else if (OB_FALSE_IT(type_ = ObRbType::SET)) {
         } else {
           for (int i = 0; OB_SUCC(ret) && i < value_count; i++) {
@@ -588,7 +559,6 @@ int ObRoaringBitmap::deserialize(const ObString &rb_bin, bool need_validate)
               ret = OB_INVALID_DATA;
               LOG_WARN("invalid roaringbitmap set binary", K(ret), K(i), K(value_64));
             } else if (OB_FAIL(set_.set_refactored(value_64))) {
-              LOG_WARN("failed to set value to the set", K(ret), K(value_64));
             }
           }
         }
@@ -600,11 +570,8 @@ int ObRoaringBitmap::deserialize(const ObString &rb_bin, bool need_validate)
         uint32_t map_prefix = 0;
         ObStringBuffer tmp_buf(allocator_);
         if (OB_FAIL(tmp_buf.append(reinterpret_cast<const char*>(&map_size), sizeof(uint64_t)))) {
-          LOG_WARN("failed to append map size", K(ret));
         } else if (OB_FAIL(tmp_buf.append(reinterpret_cast<const char*>(&map_prefix), sizeof(uint32_t)))) {
-          LOG_WARN("failed to append map prefix", K(ret));
         } else if (OB_FAIL(tmp_buf.append(rb_bin.ptr() + offset, rb_bin.length() - offset))) {
-          LOG_WARN("failed to append serialized string", K(ret), K(rb_bin));
         } else {
           ROARING_TRY_CATCH(bitmap_ = roaring::api::roaring64_bitmap_portable_deserialize_safe(tmp_buf.ptr(),tmp_buf.length()));
         }
@@ -653,13 +620,11 @@ int ObRoaringBitmap::serialize(ObStringBuffer &res_buf)
   ObRbBinType bin_type;
 
   if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&version_), RB_VERSION_SIZE))) {
-    LOG_WARN("failed to append version", K(ret));
   } else {
     switch (type_) {
       case ObRbType::EMPTY: {
         bin_type = ObRbBinType::EMPTY;
         if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&bin_type), RB_BIN_TYPE_SIZE))) {
-          LOG_WARN("failed to append bin_type", K(ret));
         }
         break;
       }
@@ -668,16 +633,12 @@ int ObRoaringBitmap::serialize(ObStringBuffer &res_buf)
           bin_type = ObRbBinType::SINGLE_32;
           uint32_t single_value_32 = static_cast<uint32_t>(single_value_);
           if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&bin_type), RB_BIN_TYPE_SIZE))) {
-            LOG_WARN("failed to append bin_type", K(ret));
           } else if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&single_value_32), sizeof(uint32_t)))) {
-            LOG_WARN("failed to append single_value", K(ret));
           }
         } else {
           bin_type = ObRbBinType::SINGLE_64;
           if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&bin_type), RB_BIN_TYPE_SIZE))) {
-            LOG_WARN("failed to append bin_type", K(ret));
           } else if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&single_value_), sizeof(uint64_t)))) {
-          LOG_WARN("failed to append single_value", K(ret));
           }
         }
         break;
@@ -687,30 +648,24 @@ int ObRoaringBitmap::serialize(ObStringBuffer &res_buf)
         if (get_max() <= UINT32_MAX) {
           bin_type = ObRbBinType::SET_32;
           if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&bin_type), RB_BIN_TYPE_SIZE))) {
-            LOG_WARN("failed to append bin_type", K(ret));
           } else if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&set_size), RB_VALUE_COUNT_SIZE))) {
-            LOG_WARN("failed to append single_value", K(ret));
           } else {
             uint32_t value_32 = 0;
             hash::ObHashSet<uint64_t>::const_iterator iter;
             for (iter = set_.begin(); OB_SUCC(ret) && iter != set_.end(); iter++) {
               value_32 = static_cast<uint32_t>(iter->first);
               if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&value_32), sizeof(uint32_t)))) {
-                LOG_WARN("failed to append value", K(ret));
               }
             }
           }
         } else {
           bin_type = ObRbBinType::SET_64;
           if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&bin_type), RB_BIN_TYPE_SIZE))) {
-            LOG_WARN("failed to append bin_type", K(ret));
           } else if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&set_size), RB_VALUE_COUNT_SIZE))) {
-            LOG_WARN("failed to append single_value", K(ret));
           } else {
             hash::ObHashSet<uint64_t>::const_iterator iter;
             for (iter = set_.begin(); OB_SUCC(ret) && iter != set_.end(); iter++) {
               if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&(iter->first)), sizeof(uint64_t)))) {
-                LOG_WARN("failed to append value", K(ret));
               }
             }
           }
@@ -724,9 +679,7 @@ int ObRoaringBitmap::serialize(ObStringBuffer &res_buf)
         ROARING_TRY_CATCH(serial_size = static_cast<uint64_t>(roaring::api::roaring64_bitmap_portable_size_in_bytes(bitmap_)));
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(res_buf.reserve(RB_BIN_TYPE_SIZE + serial_size))) {
-            LOG_WARN("failed to reserve buffer", K(ret), K(serial_size));
         } else if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&bin_type), RB_BIN_TYPE_SIZE))) {
-          LOG_WARN("failed to append bin_type", K(ret));
         } else {
           ROARING_TRY_CATCH(real_serial_size = roaring::api::roaring64_bitmap_portable_serialize(bitmap_, res_buf.ptr() + res_buf.length()));
           if (OB_FAIL(ret)) {
@@ -737,7 +690,6 @@ int ObRoaringBitmap::serialize(ObStringBuffer &res_buf)
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(res_buf.set_length(res_buf.length() + serial_size))) {
-          LOG_WARN("failed to set buffer length", K(ret));
         }
         break;
       }
@@ -790,7 +742,6 @@ int ObRoaringBitmapIter::init()
   } else if (rb_->get_cardinality() == 0) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(rb_->convert_to_bitmap())) {
-    LOG_WARN("failed to convert roaringbitmap to bitmap type", K(ret));
   } else {
     ROARING_TRY_CATCH(iter_ = roaring::api::roaring64_iterator_create(rb_->get_bitmap()));
     if (OB_FAIL(ret)) {

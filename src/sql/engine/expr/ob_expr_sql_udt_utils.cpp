@@ -88,7 +88,6 @@ int ObSqlUdtNullBitMap::assign(ObSqlUdtNullBitMap &src, uint32_t pos, uint32_t b
   for (int i = 0; i < bit_len && OB_SUCC(ret); i++) {
     bool is_set = false;
     if (OB_FAIL(src.check_bitmap_pos(pos + i, is_set))) {
-      LOG_WARN("failed to check nested udt bitmap", K(ret));
     } else if (is_set && OB_FAIL(set_current_bitmap_pos())) {
       LOG_WARN("failed to set nested udt bitmap", K(ret));
     } else {
@@ -203,14 +202,10 @@ int ObSqlUdtUtils::convert_collection_to_string(ObObj &coll_obj, const ObSqlColl
                                                         ObLongTextType,
                                                         CS_TYPE_BINARY,
                                                         true, coll_data))) {
-    LOG_WARN("fail to get real string data", K(ret), K(coll_data));
   } else if (OB_FAIL(ObArrayTypeObjFactory::construct(*allocator, *arr_type, arr_obj, true))) {
-    LOG_WARN("construct array obj failed", K(ret),  K(coll_meta));
   } else {
     if (OB_FAIL(arr_obj->init(coll_data))) {
-      LOG_WARN("failed to init array", K(ret));
     } else if (OB_FAIL(arr_obj->print(buf))) {
-      LOG_WARN("failed to format array", K(ret));
     } else {
       res_str.assign_ptr(buf.ptr(), buf.length());
     }

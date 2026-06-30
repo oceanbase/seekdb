@@ -46,14 +46,12 @@ int ObContextDDLProxy::create_context(
   if (or_replace) {
     if (OB_FAIL(create_or_replace_context(ctx_schema, trans, schema_guard, obj_exist,
                                           old_schema, need_clean, ddl_stmt_str))) {
-      LOG_WARN("failed to create or replace context", K(ret), K(ctx_schema), K(obj_exist));
     }
   } else if (obj_exist) {
     ret = OB_ERR_EXIST_OBJECT;
     LOG_WARN("Name is already used by an existing object", K(ret), K(ctx_schema));
   } else if (OB_FAIL(inner_create_context(ctx_schema, trans, schema_guard,
                                           ddl_stmt_str))) {
-    LOG_WARN("fail inner create context", K(ctx_schema), K(ret));
   }
   return ret;
 }
@@ -73,15 +71,12 @@ int ObContextDDLProxy::inner_create_context(
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("schema_service must not null", K(ret));
   } else if (OB_FAIL(schema_service->fetch_new_context_id(new_context_id))) {
-    LOG_WARN("failed to fetch new_context_id", K(ret));
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
-    LOG_WARN("fail to gen new schema_version", K(ret));
   } else {
     ctx_schema.set_schema_version(new_schema_version);
     ctx_schema.set_context_id(new_context_id);
     if (OB_FAIL(schema_service->get_context_sql_service().insert_context(
                 ctx_schema, &trans, ddl_stmt_str))) {
-      LOG_WARN("insert context info failed", K(ctx_schema.get_namespace()), K(ret));
     }
   }
   return ret;
@@ -116,10 +111,8 @@ int ObContextDDLProxy::drop_context(
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
-    LOG_WARN("fail to gen new schema_version", K(ret));
   } else if (OB_FAIL(schema_service->get_context_sql_service().drop_context(
               ctx_schema, new_schema_version, &trans, need_clean, ddl_stmt_str))) {
-    LOG_WARN("drop context info failed", K(ctx_schema.get_namespace()), K(ret));
   }
   return ret;
 }
@@ -148,21 +141,16 @@ int ObContextDDLProxy::create_or_replace_context(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get context id", K(ret));
     } else if (OB_FAIL(tmp_schema.assign(*old_schema))) {
-      LOG_WARN("failed to assign old schema", K(ret));
     } else if (old_schema->get_context_type() != ctx_schema.get_context_type()) {
       if (OB_FAIL(drop_context(tmp_schema, trans, schema_guard, old_schema,
                                need_clean, nullptr))) {
-        LOG_WARN("failed to drop old context", K(ret), K(*old_schema));
       } else if (OB_FAIL(inner_create_context(ctx_schema, trans, schema_guard, ddl_stmt_str))) {
-        LOG_WARN("failed to create new context", K(ret), K(ctx_schema));
       }
     } else if (FALSE_IT(ctx_schema.set_context_id(old_schema->get_context_id()))) {
     } else if (OB_FAIL(inner_alter_context(ctx_schema, trans, schema_guard, ddl_stmt_str))) {
-      LOG_WARN("failed to inner alter context", K(ctx_schema), K(ret));
     }
   } else if (OB_FAIL(inner_create_context(ctx_schema, trans, schema_guard,
                                           ddl_stmt_str))) {
-    LOG_WARN("fail inner create context", K(ctx_schema), K(ret));
   }
   return ret;
 }
@@ -182,12 +170,10 @@ int ObContextDDLProxy::inner_alter_context(
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("schema_service must not null", K(ret));
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
-    LOG_WARN("fail to gen new schema_version", K(ret));
   } else {
     ctx_schema.set_schema_version(new_schema_version);
     if (OB_FAIL(schema_service->get_context_sql_service().alter_context(
                 ctx_schema, &trans, ddl_stmt_str))) {
-      LOG_WARN("alter context failed", K(ctx_schema.get_namespace()), K(ret));
     }
   }
   return ret;

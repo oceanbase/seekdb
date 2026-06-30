@@ -82,15 +82,13 @@ int ObLobMacroBlockWriter::init(const ObWriteMacroParam &param,
         LOG_WARN("invalid slice idx", K(ret), K(slice_idx_), K(param));
       } else if (OB_FAIL(lob_id_generator_.init(slice_idx_ * ObTabletSliceParam::LOB_ID_SEQ_INTERVAL, // start
                                                 ObTabletSliceParam::LOB_ID_SEQ_INTERVAL, // interval
-                                                param.slice_count_ * ObTabletSliceParam::LOB_ID_SEQ_INTERVAL))) { // step
-        LOG_WARN("init lob id generator failed", K(param));
+                                                param.slice_count_ * ObTabletSliceParam::LOB_ID_SEQ_INTERVAL))) {
       }
     }
 
     // init lob meta row
     if (OB_SUCC(ret)) {
       if (OB_FAIL(lob_meta_row_.init(ObLobMetaUtil::LOB_META_COLUMN_CNT + ObLobMetaUtil::SKIP_INVALID_COLUMN))) {
-        LOG_WARN("init lob meta row failed", K(ret));
       } else {
         lob_meta_row_.storage_datums_[ObLobMetaUtil::SEQ_ID_COL_ID + 1].set_int(-param.snapshot_version_);
         lob_meta_row_.storage_datums_[ObLobMetaUtil::SEQ_ID_COL_ID + 2].set_int(-param_.tx_info_.seq_no_);
@@ -141,14 +139,12 @@ int ObLobMacroBlockWriter::write(const ObColumnSchemaItem &column_schema, ObIAll
                                                                   timeout_ts,
                                                                   true/*has_lob_header*/,
                                                                   meta_write_iter_))) {
-      LOG_WARN("insert lob column failed", K(ret));
     }
     ObLobMetaWriteResult lob_meta_write_result;
     bool first_get_next = true;
     ++total_lob_cell_count_;
     while (OB_SUCC(ret)) {
       if (OB_FAIL(THIS_WORKER.check_status())) {
-        LOG_WARN("check status failed", K(ret));
       } else if (OB_FAIL(meta_write_iter_.get_next_row(lob_meta_write_result))) {
         if (OB_ITER_END != ret) {
           LOG_WARN("get next lob meta write resutl failed", K(ret));
@@ -161,18 +157,14 @@ int ObLobMacroBlockWriter::write(const ObColumnSchemaItem &column_schema, ObIAll
         }
       } else if (FALSE_IT(first_get_next = false)) {
       } else if (OB_FAIL(transform_lob_meta_row(lob_meta_write_result))) {
-        LOG_WARN("transform lob meta row failed", K(ret), K(lob_meta_write_result));
       } else if (OB_FAIL(prepare_macro_block_writer())) {
-        LOG_WARN("prepare macro bock writer failed", K(ret));
       } else if (OB_FAIL(macro_block_writer_->append_row(lob_meta_row_))) {
-        LOG_WARN("macro block writer append row failed", K(ret), K(lob_meta_row_));
       } else {
         LOG_DEBUG("lob writer append row", K(lob_meta_row_));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(meta_write_iter_.check_write_length())) {
-        LOG_WARN("check_write_length fail", K(ret), K(meta_write_iter_));
       }
     }
   }
@@ -187,7 +179,6 @@ int ObLobMacroBlockWriter::transform_lob_meta_row(ObLobMetaWriteResult &lob_meta
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ObLobMetaUtil::transform_from_info_to_row(lob_meta_write_result.info_, &lob_meta_row_, true/*with_extra_rowkey*/))) {
-    LOG_WARN("transform lob meta row failed", K(ret), K(lob_meta_write_result.info_));
   } else if (is_incremental_direct_load(param_.direct_load_type_)) {
     lob_meta_row_.storage_datums_[ObLobMetaUtil::SEQ_ID_COL_ID + 2].set_int(-lob_meta_write_result.seq_no_);
   }
@@ -199,7 +190,6 @@ int ObLobMacroBlockWriter::transform_lob_meta_row(ObLobMetaWriteResult &lob_meta
                                                         false/*has_lob_rowkey*/,
                                                         ObLobMetaUtil::LOB_META_SCHEMA_ROWKEY_COL_CNT,
                                                         lob_meta_row_))) {
-      LOG_WARN("fail to check rowkey null value and length in row", KR(ret), K(lob_meta_row_));
     }
   }
 
@@ -242,9 +232,7 @@ int ObLobMacroBlockWriter::prepare_macro_block_writer()
     }
     uint64_t lob_start_seq = 0;
     if (OB_FAIL(lob_id_cache_.get_value(lob_start_seq))) {
-      LOG_WARN("get lob start seq failed", K(ret), K(lob_id_cache_));
     } else if (OB_FAIL(macro_block_writer_->init(param_, lob_table_key, macro_seq_, 0 /*row_offset*/, lob_start_seq))) {
-      LOG_WARN("init macro block writer failed", K(ret), K(lob_table_key));
     }
   }
   return ret;
@@ -257,7 +245,6 @@ int ObLobMacroBlockWriter::switch_lob_id_cache()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(close_macro_block_writer())) {
-    LOG_WARN("close macro block writer failed", K(ret));
   } else {
     uint64_t old_value = 0;
     (void) lob_id_cache_.get_value(old_value);
@@ -265,7 +252,6 @@ int ObLobMacroBlockWriter::switch_lob_id_cache()
       int64_t lob_id_start = -1;
       int64_t lob_id_end = -1;
       if (OB_FAIL(lob_id_generator_.get_next_interval(lob_id_start, lob_id_end))) {
-        LOG_WARN("get lob id cache from ddl sequence generator fail", K(ret), K(lob_id_generator_));
       } else {
         lob_id_cache_.cache_size_ = lob_id_generator_.get_interval_size();
         lob_id_cache_.set(max(lob_id_start, 1), lob_id_end);
@@ -275,7 +261,6 @@ int ObLobMacroBlockWriter::switch_lob_id_cache()
       ObTabletAutoincrementService &auto_inc = ObTabletAutoincrementService::get_instance();
       lob_id_cache_.cache_size_ = AUTO_INC_CACHE_INTERVAL;
       if (OB_FAIL(auto_inc.get_tablet_cache_interval(lob_id_cache_))) {
-        LOG_WARN("autoinc service get tablet cache failed", K(ret));
       }
     }
     FLOG_INFO("switch lob id cache", K(ret), K(tablet_id_), K(slice_idx_), "is_idem", lob_id_generator_.is_inited(), K(old_value), K(total_lob_cell_count_), K(inrow_lob_cell_count_), "new_cache", lob_id_cache_);
@@ -292,13 +277,10 @@ int ObLobMacroBlockWriter::close()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(close_macro_block_writer())) {
-    LOG_WARN("close macro block writer failed", K(ret));
   } else {
     uint64_t last_lob_id = 0;
     if (OB_FAIL(lob_id_cache_.get_value(last_lob_id))) {
-      LOG_WARN("get last lob id failed", K(ret));
     } else if (OB_FAIL(ObDDLUtil::set_tablet_autoinc_seq(ls_id_, lob_meta_tablet_id_, last_lob_id))) {
-      LOG_WARN("update max lob id failed", K(ret), K(last_lob_id));
     }
   }
   return ret;
@@ -312,7 +294,6 @@ int ObLobMacroBlockWriter::close_macro_block_writer()
     LOG_WARN("not init", K(ret));
   } else if (OB_NOT_NULL(macro_block_writer_)) {
     if (OB_FAIL(macro_block_writer_->close())) {
-      LOG_WARN("macro block writer close failed", K(ret));
     } else {
       macro_seq_ = macro_block_writer_->get_last_macro_seq();
       macro_block_writer_->reset(); // TODO@wenqu: just flush macro block for better performance

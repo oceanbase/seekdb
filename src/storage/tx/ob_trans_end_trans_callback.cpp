@@ -95,7 +95,6 @@ int ObTxCommitCallbackTask::make(const int64_t task_type,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTransTask::make(task_type))) {
-    TRANS_LOG(WARN, "ObTransTask make error", KR(ret), K(task_type));
   } else {
     cb_ = cb;
     trans_need_wait_wrap_.set_trans_need_wait_wrap(receive_gts_ts,
@@ -112,7 +111,6 @@ int ObTxCommitCallbackTask::callback(bool &has_cb)
     has_cb = false;
   } else {
     if (OB_FAIL(cb_.callback())) {
-      TRANS_LOG(WARN, "callback error", KR(ret), K_(cb));
     }
     has_cb = true;
   }

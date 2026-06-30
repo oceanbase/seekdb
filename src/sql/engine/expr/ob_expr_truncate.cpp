@@ -257,7 +257,6 @@ int ObExprTruncate::do_trunc_decimalint(
   int16_t expected_int_bytes = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(out_prec);
   if (trunc_scale < in_scale) {
     if (OB_FAIL(wide::common_scale_decimalint(decint, int_bytes, in_scale, trunc_scale, res_val, true))) {
-      LOG_WARN("failed to scale decimal int", K(ret));
     } else {
       calc_scale = trunc_scale;
     }
@@ -269,7 +268,6 @@ int ObExprTruncate::do_trunc_decimalint(
   } else if (calc_scale != out_scale) {
     if (OB_FAIL(wide::common_scale_decimalint(res_val.get_decimal_int(), res_val.get_int_bytes(),
                                               calc_scale, out_scale, res_val))) {
-      LOG_WARN("failed to scale decimal int", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -278,7 +276,6 @@ int ObExprTruncate::do_trunc_decimalint(
     ObDecimalIntBuilder tmp_val;
     if (OB_FAIL(ObDatumCast::align_decint_precision_unsafe(
         res_val.get_decimal_int(), res_val.get_int_bytes(), expected_int_bytes, tmp_val))) {
-      LOG_WARN("align decimal int length failed", K(ret));
     } else {
       res_val.from(tmp_val);
     }
@@ -295,8 +292,6 @@ int ObExprTruncate::calc_trunc_decimalint(
   ObDecimalIntBuilder res_val;
   if (OB_FAIL(do_trunc_decimalint(
       in_prec, in_scale, out_prec, trunc_scale, out_scale, in_datum, res_val))) {
-    LOG_WARN("do_round_decimalint failed",
-        K(ret), K(in_prec), K(in_scale), K(out_prec), K(trunc_scale), K(out_scale));
   } else {
     res_datum.set_decimal_int(res_val.get_decimal_int(), res_val.get_int_bytes());
   }
@@ -341,9 +336,7 @@ int calc_truncate_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
         number::ObNumber arg_nmb(x_datum->get_number());
         number::ObNumber res_nmb;
         if (OB_FAIL(res_nmb.from(arg_nmb, tmp_alloc))) {
-          LOG_WARN("get nmb from arg failed", K(ret), K(arg_nmb));
         } else if (OB_FAIL(res_nmb.trunc(GET_SCALE_FOR_CALC(scale)))) {
-          LOG_WARN("trunc number failed", K(ret), K(res_nmb), K(scale));
         } else {
           res_datum.set_number(res_nmb);
         }
@@ -357,8 +350,6 @@ int calc_truncate_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
                                                           out_meta.precision_,
                                                           GET_SCALE_FOR_CALC(scale),
                                                           out_meta.scale_, *x_datum, res_datum))) {
-          LOG_WARN("calc_trunc_decimalint failed", K(ret), K(in_meta.precision_), K(in_meta.scale_),
-                   K(out_meta.precision_), K(scale));
         }
 
         break;

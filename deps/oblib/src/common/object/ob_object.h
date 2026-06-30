@@ -1702,7 +1702,6 @@ public:
       } else if (!loc.has_inrow_data()) {
         inrow_data.assign_ptr("outrow", 6);
       } else if (OB_FAIL(loc.get_inrow_data(inrow_data))) {
-        COMMON_LOG(WARN, "Lob: get inrow data failed in obobj", K(*this));
       } else {
         inrow_data.assign_ptr(inrow_data.ptr(), MIN(inrow_data.length(), max_len));
       }
@@ -1727,11 +1726,9 @@ public:
         COMMON_LOG(WARN, "Lob: invalid json lob", K(ret), K(json_data));
       } else if (!loc.has_inrow_data()) {
         if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%s", "'outrow json'"))) {
-          COMMON_LOG(WARN, "Lob: fail to print \"\'outrow json\'\"", K(ret), K(buf_len), K(pos));
         }
         ret = OB_INVALID_ARGUMENT;
       } else if (OB_FAIL(loc.get_inrow_data(json_data))) {
-        COMMON_LOG(WARN, "Lob: get inrow data failed in obobj", K(*this));
       }
     }
     return ret;
@@ -1747,11 +1744,9 @@ public:
         COMMON_LOG(WARN, "Lob: invalid udt lob", K(ret), K(udt_data));
       } else if (!loc.is_inrow()) {
         if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%s", "'outrow udt'"))) {
-          COMMON_LOG(WARN, "Lob: fail to print \"\'outrow json\'\"", K(ret), K(buf_len), K(pos));
         }
         ret = OB_INVALID_ARGUMENT;
       } else if (OB_FAIL(loc.get_inrow_data(udt_data))) {
-        COMMON_LOG(WARN, "Lob: get inrow data failed in obobj", K(*this));
       }
     }
     return ret;
@@ -3140,7 +3135,6 @@ inline int ObObj::get_string(ObString &v) const
           ret = OB_ERR_UNEXPECTED;
           OB_LOG(WARN, "Unexpected invalid lob locator", K(*this), K(loc));
         } else if (OB_FAIL(loc.get_inrow_data(v))) {
-          OB_LOG(WARN, "Lob: get inrow data failed", K(*this), K(loc));
         }
       }
     } else {
@@ -3606,7 +3600,6 @@ template <typename AllocatorT>
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LIB_LOG(WARN, "allocate memory failed", K(ret), K(deep_copy_size));
     } else if (OB_FAIL(dst.deep_copy(src, buf, deep_copy_size, pos))) {
-      LIB_LOG(WARN, "deep copy src obj failed", K(ret), K(deep_copy_size), K(pos));
     }
   } else {
     dst = src;

@@ -163,7 +163,6 @@ public:
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to copy stat item", K(ret));
     } else if (OB_FAIL(stat_items_.push_back(cpy))) {
-      LOG_WARN("failed to push back stat item", K(ret));
     }
     return ret;
   }

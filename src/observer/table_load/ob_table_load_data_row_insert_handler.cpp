@@ -74,9 +74,7 @@ int ObTableLoadDataRowInsertHandler::handle_insert_row(const ObTabletID &tablet_
         ObTableLoadStoreIndexTableCtx *index_table_ctx = store_ctx_->index_store_table_ctxs_.at(i);
         ObTableLoadIndexTableBuilder *index_builder = nullptr;
         if (OB_FAIL(index_table_ctx->get_insert_table_builder(index_builder))) {
-          LOG_WARN("fail to get index table builder", KR(ret));
         } else if (OB_FAIL(index_builder->append_insert_row(tablet_id, datum_row))) {
-          LOG_WARN("fail to append insert row", KR(ret), K(tablet_id), K(datum_row));
         }
       }
     }
@@ -99,9 +97,7 @@ int ObTableLoadDataRowInsertHandler::handle_insert_row(const ObTabletID &tablet_
         ObTableLoadStoreIndexTableCtx *index_table_ctx = store_ctx_->index_store_table_ctxs_.at(i);
         ObTableLoadIndexTableBuilder *index_builder = nullptr;
         if (OB_FAIL(index_table_ctx->get_insert_table_builder(index_builder))) {
-          LOG_WARN("fail to get index table builder", KR(ret));
         } else if (OB_FAIL(index_builder->append_insert_row(tablet_id, datum_row))) {
-          LOG_WARN("fail to append insert row", KR(ret), K(tablet_id), K(datum_row));
         }
       }
     }
@@ -126,9 +122,7 @@ int ObTableLoadDataRowInsertHandler::handle_insert_batch(const ObTabletID &table
         ObTableLoadStoreIndexTableCtx *index_table_ctx = store_ctx_->index_store_table_ctxs_.at(i);
         ObTableLoadIndexTableBuilder *index_builder = nullptr;
         if (OB_FAIL(index_table_ctx->get_insert_table_builder(index_builder))) {
-          LOG_WARN("fail to get index table builder", KR(ret));
         } else if (OB_FAIL(index_builder->append_insert_batch(tablet_id, datum_rows))) {
-          LOG_WARN("fail to append insert batch", KR(ret), K(tablet_id), K(datum_rows));
         }
       }
     }
@@ -150,7 +144,6 @@ int ObTableLoadDataRowInsertHandler::handle_update_row(const ObTabletID &tablet_
     if (sql::ObLoadDupActionType::LOAD_STOP_ON_DUP == dup_action_) {
       LOG_INFO("duplicate row", K(tablet_id), K(datum_row));
       if (OB_FAIL(error_row_handler_->handle_error_row(OB_ERR_PRIMARY_KEY_DUPLICATE))) {
-        LOG_WARN("fail to handle error row", KR(ret));
       }
     } else if (sql::ObLoadDupActionType::LOAD_REPLACE == dup_action_) {
       ATOMIC_AAF(&result_info_->rows_affected_, 2);
@@ -192,7 +185,6 @@ int ObTableLoadDataRowInsertHandler::handle_update_row(
     if (sql::ObLoadDupActionType::LOAD_STOP_ON_DUP == dup_action_) {
       if (OB_FAIL(error_row_handler_->handle_error_row(OB_ERR_PRIMARY_KEY_DUPLICATE,
                                                        duplicate_row_count))) {
-        LOG_WARN("fail to handle error row", KR(ret));
       } else {
         row = rows.at(0);
       }
@@ -235,7 +227,6 @@ int ObTableLoadDataRowInsertHandler::handle_update_row(
     if (sql::ObLoadDupActionType::LOAD_STOP_ON_DUP == dup_action_) {
       if (OB_FAIL(error_row_handler_->handle_error_row(OB_ERR_PRIMARY_KEY_DUPLICATE,
                                                        duplicate_row_count))) {
-        LOG_WARN("fail to handle error row", KR(ret));
       } else {
         row = rows.at(0);
       }
@@ -267,7 +258,6 @@ int ObTableLoadDataRowInsertHandler::handle_update_row(const ObTabletID &tablet_
     if (sql::ObLoadDupActionType::LOAD_STOP_ON_DUP == dup_action_) {
       LOG_INFO("duplicate row", K(tablet_id), K(old_row), K(new_row));
       if (OB_FAIL(error_row_handler_->handle_error_row(OB_ERR_PRIMARY_KEY_DUPLICATE))) {
-        LOG_WARN("fail to handle error row", KR(ret));
       } else {
         result_row = &old_row;
       }
@@ -291,9 +281,7 @@ int ObTableLoadDataRowInsertHandler::handle_update_row(const ObTabletID &tablet_
             store_ctx_->data_store_table_ctx_->lob_table_ctx_;
           ObTableLoadLobTableBuilder *lob_builder = nullptr;
           if (OB_FAIL(lob_table_ctx->get_delete_table_builder(lob_builder))) {
-            LOG_WARN("fail to get lob table builder", KR(ret));
           } else if (OB_FAIL(lob_builder->append_delete_row(tablet_id, old_row))) {
-            LOG_WARN("fail to append delete row", KR(ret), K(tablet_id), K(old_row));
           }
         }
         // Delete the index of the old row, insert the index of the new row
@@ -302,9 +290,7 @@ int ObTableLoadDataRowInsertHandler::handle_update_row(const ObTabletID &tablet_
             store_ctx_->index_store_table_ctxs_.at(i);
           ObTableLoadIndexTableBuilder *index_builder = nullptr;
           if (OB_FAIL(index_table_ctx->get_insert_table_builder(index_builder))) {
-            LOG_WARN("fail to get index table builder", KR(ret));
           } else if (OB_FAIL(index_builder->append_replace_row(tablet_id, old_row, new_row))) {
-            LOG_WARN("fail to append replace row", KR(ret), K(tablet_id), K(old_row), K(new_row));
           }
         }
       }

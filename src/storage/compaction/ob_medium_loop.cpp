@@ -55,7 +55,6 @@ int ObMediumLoop::init(const int64_t batch_size)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid merge_version", KR(ret), K_(merge_version));
   } else if (OB_FAIL(ls_tablet_iter_.build_iter(batch_size))) {
-    LOG_WARN("failed to init ls iterator", K(ret));
   }
   return ret;
 }
@@ -192,7 +191,6 @@ void ObMediumLoop::add_event_and_diagnose(const ObScheduleTabletFunc &func)
 
     DEL_SUSPECT_INFO(MEDIUM_MERGE, UNKNOW_LS_ID, UNKNOW_TABLET_ID, share::ObDiagnoseTabletType::TYPE_MEDIUM_MERGE);
     if (OB_TMP_FAIL(share::g_mp->tenant_compaction_progress_mgr()->finish_progress(merge_version_))) {
-      LOG_WARN("failed to finish progress", K(tmp_ret), K_(merge_version));
     }
 
     const int64_t current_time = ObTimeUtility::fast_current_time();
@@ -221,7 +219,6 @@ int ObMediumLoop::update_report_scn_as_ls_leader(ObLS &ls, const ObScheduleTable
   if (ls_status.can_merge() && ls_status.is_leader_) {
     ObSEArray<ObTabletID, 200> tablet_id_array;
     if (OB_FAIL(ls.get_tablet_svr()->get_all_tablet_ids(true/*except_ls_inner_tablet*/, tablet_id_array))) {
-      LOG_WARN("failed to get tablet id", K(ret), K(ls_id));
     } else if (inner_table_merged_scn > ObBasicMergeScheduler::INIT_COMPACTION_SCN
         && OB_FAIL(ObTabletMetaTableCompactionOperator::batch_update_unequal_report_scn_tablet(ls_id, inner_table_merged_scn, tablet_id_array))) {
       LOG_WARN("failed to get unequal report scn", K(ret), K(ls_id), K(inner_table_merged_scn));
@@ -241,7 +238,6 @@ int ObScheduleNewMediumLoop::loop()
   ObScheduleTabletFunc func(frozen_version);
   // sort tablet ls info
   if (OB_FAIL(sort_tablet_ls_info())) {
-    LOG_WARN("failed to sort", KR(ret));
   }
   for (int64_t i = 0, idx = 0; i < tablet_ls_infos_.count(); ++i) { // ignore OB_FAIL
     const ObLSID &ls_id = tablet_ls_infos_.at(i).get_ls_id();
@@ -250,7 +246,6 @@ int ObScheduleNewMediumLoop::loop()
     if (func.get_ls_status().ls_id_ == ls_id) {
       // do nothing, use old ls_handle
     } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::COMPACT_MODE))) {
-      LOG_WARN("failed to get ls", K(ret), K(ls_id));
     } else if (OB_FAIL(func.switch_ls(ls_handle))) {
       if (OB_STATE_NOT_MATCH != ret) {
         LOG_WARN("failed to switch ls", KR(ret), K(ls_id), K(ls_id));
@@ -264,9 +259,7 @@ int ObScheduleNewMediumLoop::loop()
       LOG_TRACE("not ls leader, can't schedule medium", K(ret), K(ls_id), K(tablet_id), K(func));
     } else if (OB_FAIL(ls_handle.get_ls()->get_tablet_svr()->get_tablet(
                  tablet_id, tablet_handle, 0 /*timeout_us*/))) {
-      LOG_WARN("get tablet failed", K(ret), K(ls_id), K(tablet_id));
     } else if (OB_FAIL(func.request_schedule_new_round(tablet_handle, false/*user_request*/))) {
-      LOG_WARN("get tablet failed", K(ret), K(ls_id), K(tablet_id));
     }
   } // end of for
   ret = OB_SUCCESS;

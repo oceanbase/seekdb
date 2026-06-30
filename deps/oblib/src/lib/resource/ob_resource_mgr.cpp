@@ -65,7 +65,6 @@ AChunk *ObTenantMemoryMgr::alloc_chunk(const int64_t size, const ObMemAttr &attr
       int64_t wash_size = hold_size + LARGE_REQUEST_EXTRA_MB_COUNT * INTACT_ACHUNK_SIZE;
       while (!reach_ctx_limit && OB_SUCC(ret) && NULL == chunk && wash_size < cache_hold_) {
         if (OB_FAIL(cache_washer_->sync_wash_mbs(wash_size, washed_blocks))) {
-          LOG_WARN("sync_wash_mbs failed", K(ret), K(wash_size));
         } else {
           // should return back to os, then realloc again
           ObMemAttr cache_attr;
@@ -91,8 +90,6 @@ AChunk *ObTenantMemoryMgr::alloc_chunk(const int64_t size, const ObMemAttr &attr
       }
 
       if (OB_FAIL(ret)) {
-        LOG_WARN("after wash from cache, still can't alloc chunk from chunk_mgr, "
-                "maybe alloc by other thread", K(size), K(wash_size), K(ret));
       }
       BASIC_TIME_GUARD_CLICK("WASH_KVCACHE_END");
     }
@@ -406,7 +403,6 @@ ObResourceMgr &ObResourceMgr::get_instance()
     if (!resource_mgr.inited_) {
       int ret = OB_SUCCESS;
       if (OB_FAIL(resource_mgr.init())) {
-        LOG_WARN("resource_mgr init failed", K(ret));
       }
     }
   }
@@ -449,7 +445,6 @@ int ObResourceMgr::get_tenant_resource_mgr(ObTenantResourceMgrHandle &handle)
           ret = OB_SUCCESS;
         }
       } else if (OB_FAIL(handle.init(this, tenant_resource_mgr))) {
-        LOG_WARN("init handle failed", K(ret), KP(tenant_resource_mgr));
       }
     }
 
@@ -462,13 +457,11 @@ int ObResourceMgr::get_tenant_resource_mgr(ObTenantResourceMgrHandle &handle)
         } else {
           ret = OB_SUCCESS;
           if (OB_FAIL(create_tenant_resource_mgr_unsafe(tenant_resource_mgr))) {
-            LOG_WARN("create_tenant_resource_mgr_unsafe failed", K(ret));
           }
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(handle.init(this, tenant_resource_mgr))) {
-          LOG_WARN("init handle failed", K(ret), KP(tenant_resource_mgr));
         }
       }
     }
@@ -493,7 +486,6 @@ void ObResourceMgr::dec_ref(ObTenantResourceMgr *tenant_resource_mgr)
       if (0 == ATOMIC_LOAD(&tenant_resource_mgr->ref_cnt_)) {
         int ret = OB_SUCCESS;
         if (OB_FAIL(remove_tenant_resource_mgr_unsafe())) {
-          LOG_WARN("remove_tenant_resource_mgr_unsafe failed", K(ret));
         }
       }
     } else if (ref_cnt < 0) {

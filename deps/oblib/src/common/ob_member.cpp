@@ -143,7 +143,6 @@ int ObReplicaMember::init(
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid argument", K(ret), K(member), K(replica_type));
   } else if (OB_FAIL(ObMember::assign(member))) {
-    COMMON_LOG(WARN, "failed to assign member", K(ret), K(member));
   } else if (OB_FALSE_IT(replica_type_ = replica_type)) {
     // should never be here
   } else if (OB_UNLIKELY(! is_valid())) { // check flag_ and replica_type_ correct

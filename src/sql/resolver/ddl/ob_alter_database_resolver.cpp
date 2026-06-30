@@ -78,15 +78,12 @@ int ObAlterDatabaseResolver::resolve(const ParseNode &parse_tree)
                                    static_cast<int32_t>(dbname_node->str_len_));
           ObNameCaseMode mode = OB_NAME_CASE_INVALID;
           if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
-              LOG_WARN("fail to get name case mode", K(mode), K(ret));
           } else {
             bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
             ObCollationType cs_type = CS_TYPE_INVALID;
             if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-              LOG_WARN("fail to get collation_connection", K(ret));
             } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
                         cs_type, perserve_lettercase, database_name))) {
-              LOG_WARN("fail to check and convert database name", K(database_name), K(ret));
             } else {
               CK (OB_NOT_NULL(schema_checker_));
               CK (OB_NOT_NULL(schema_checker_->get_schema_guard()));
@@ -100,7 +97,6 @@ int ObAlterDatabaseResolver::resolve(const ParseNode &parse_tree)
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(alter_database_stmt->set_database_name(database_name))) {
-          LOG_WARN("set database name failed", K(database_name), K(ret));
         }
       }
     }
@@ -115,12 +111,10 @@ int ObAlterDatabaseResolver::resolve(const ParseNode &parse_tree)
         if (OB_FAIL(resolver.resolve_database_options(alter_database_stmt,
                                                       dboption_node,
                                                       session_info_))) {
-          LOG_WARN("resolve database option failed", K(ret));
         } else {
           if(resolver.get_alter_option_bitset().has_member(obcall::ObAlterDatabaseArg::PRIMARY_ZONE)) {
             bool is_sync_ddl_user = false;
             if (OB_FAIL(ObResolverUtils::check_sync_ddl_user(session_info_, is_sync_ddl_user))) {
-              LOG_WARN("Failed to check sync_ddl_user", K(ret));
             } else if (is_sync_ddl_user) {
               ret = OB_IGNORE_SQL_IN_RESTORE;
               LOG_WARN("Cannot support for sync ddl user to alter primary zone", K(ret), K(session_info_->get_user_name()));

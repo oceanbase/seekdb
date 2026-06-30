@@ -77,7 +77,6 @@ int MultimodeAlloctor::add_baseline_size(ObDatum *datum, bool has_lob_header, ui
   if (has_lob_header) {
     ObLobLocatorV2 locator(datum->get_string());
     if (OB_FAIL(locator.get_lob_data_byte_len(byte_len))) {
-      LOG_WARN("get lob data byte length failed", K(ret));
     } else {
       add_baseline_size(byte_len * multiple);
     }
@@ -97,9 +96,7 @@ int MultimodeAlloctor::add_baseline_size(const ObExpr *expr, ObEvalCtx &ctx, uin
   if (OB_ISNULL(expr)) {
   } else if (OB_FALSE_IT(val_type = expr->datum_meta_.type_)) {
   } else if (OB_FAIL(eval_arg(expr, ctx, datum))) {
-    LOG_WARN("eval json arg failed", K(ret), K(val_type));
   } else if (OB_FAIL(add_baseline_size(datum, expr->obj_meta_.has_lob_header(), multiple))) {
-    LOG_WARN("failed to add base line size.", K(ret), K(val_type), KPC(datum));
   }
 
   return ret;
@@ -343,7 +340,6 @@ int MultimodeAlloctor::eval_arg(const ObExpr *arg, ObEvalCtx &ctx, common::ObDat
   } else {
     int64_t last_used = used();
     if (OB_FAIL(arg->eval(ctx, datum))) {
-      LOG_WARN("eval geo arg failed", K(ret));
     } else {
       children_used_ += used() - last_used;
     }

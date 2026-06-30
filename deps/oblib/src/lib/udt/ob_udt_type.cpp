@@ -29,7 +29,6 @@ int ObSqlUDT::init_null_bitmap()
   MEMSET(udt_data_.ptr(), 0, data_offset);
   udt_data_.set_length(data_offset);
   if (OB_FAIL(set_attribute_offset(0, data_offset))) {
-    LOG_WARN("update attribute offset failed", K(ret), K(udt_meta_.attribute_cnt_), K(offset));
   }
   return ret;
 }
@@ -101,7 +100,6 @@ int ObSqlUDT::append_attribute(uint32_t index, const ObString &attr_value)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("udt data is null", K(ret), K(index), K(udt_meta_.attribute_cnt_));
   } else if (OB_FAIL(set_null_bitmap(index, attr_value.empty()))) {
-    LOG_WARN("set null bitmap failed", K(ret), K(index));
   } else {
     uint32_t null_bitmap_offset = get_null_bitmap_len(udt_meta_.attribute_cnt_);
     int32_t offset = get_attr_offset(index, null_bitmap_offset);

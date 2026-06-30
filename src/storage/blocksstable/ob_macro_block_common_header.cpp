@@ -55,7 +55,6 @@ int ObMacroBlockCommonHeader::build_serialized_header(char *buf, const int64_t l
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   if (OB_FAIL(serialize(buf, len, pos))) {
-    LOG_ERROR("fail to serialize record header, ", K(ret), KP(buf), K(len), K(pos), K(*this));
   } else if (get_serialize_size() != pos) {
     ret = OB_SERIALIZE_ERROR;
     LOG_ERROR("serialize size mismatch, ", K(ret), K(pos), K(*this));

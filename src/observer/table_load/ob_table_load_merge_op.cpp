@@ -60,7 +60,6 @@ int ObTableLoadMergeOp::switch_parent_op()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected parent is null", KR(ret));
   } else if (OB_FAIL(parent_->switch_next_op(false /*is_parent_called*/))) {
-    LOG_WARN("fail to switch next op", KR(ret));
   }
   return ret;
 }
@@ -70,13 +69,11 @@ int ObTableLoadMergeOp::switch_child_op(ObTableLoadMergeOpType::Type child_op_ty
   int ret = OB_SUCCESS;
   ObTableLoadMergeOp *child = nullptr;
   if (OB_FAIL(acquire_child_op(child_op_type, *allocator_, child))) {
-    LOG_WARN("fail to acquire child op", K(ret), K(child_op_type));
   } else if (OB_FAIL(childs_.push_back(child))) {
     LOG_WARN("fail to push back", K(ret));
     child->~ObTableLoadMergeOp();
     child = nullptr;
   } else if (OB_FAIL(child->switch_next_op(true /*is_parent_called*/))) {
-    LOG_WARN("fail to switch next op", K(ret));
   }
   return ret;
 }
@@ -141,7 +138,6 @@ int ObTableLoadMergeRootOp::switch_next_op(bool is_parent_called)
       FLOG_INFO("LOAD MERGE COMPLETED");
       store_ctx_->set_status_merged();
     } else if (OB_FAIL(switch_child_op(child_op_type))) {
-      LOG_WARN("fail to switch child op", KR(ret));
     }
   }
   return ret;

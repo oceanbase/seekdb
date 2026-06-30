@@ -147,7 +147,6 @@ int TimeWheelBase::schedule_(ObTimeWheelTask *task, const int64_t run_ticket)
       if (ATOMIC_LOAD(&scan_ticket_) < tmp_run_ticket) {
         need_retry = false;
         if (OB_SUCCESS != (ret = task->schedule(idx, tmp_run_ticket))) {
-          TRANS_LOG(WARN, "schedule error", KR(ret), "task", *task);
         } else {
           bucket->list_.add_last(task);
           if (OB_ISNULL(task->get_next())) {
@@ -186,7 +185,6 @@ int TimeWheelBase::schedule(ObTimeWheelTask *task, const int64_t delay)
   } else {
     run_ticket = (ObClockGenerator::getRealClock() + delay + precision_ - 1) / precision_;
     if (OB_SUCCESS != (ret = schedule_(task, run_ticket))) {
-      TRANS_LOG(WARN, "schedule error", KR(ret), "task", *task, K(delay));
     }
   }
 
@@ -349,7 +347,6 @@ int ObTimeWheel::init(const int64_t precision, const int64_t real_thread_num, co
         ret = OB_ALLOCATE_MEMORY_FAILED;
         TRANS_LOG(WARN, "TimeWheelBase alloc failed", K(ret));
       } else if (OB_SUCCESS != (ret = tw_base_[i]->init(precision, name))) {
-        TRANS_LOG(WARN, "TimeWheelBase init error", KR(ret));
       } else {
         tw_base_[i]->set_run_wrapper(MTL_CTX());
       }
@@ -400,7 +397,6 @@ int ObTimeWheel::start()
   } else {
     for (int64_t i = 0; i < real_thread_num_ && OB_SUCCESS == ret; ++i) {
       if (OB_SUCCESS != (ret = tw_base_[i]->start())) {
-        TRANS_LOG(WARN, "TimeWheelBase start error", KR(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -507,7 +503,6 @@ int ObTimeWheel::schedule(ObTimeWheelTask *task, const int64_t delay)
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_SUCCESS !=
       (ret = tw_base_[task->hash() % real_thread_num_]->schedule(task, delay))) {
-    TRANS_LOG(WARN, "TimeWheelBase schedule error", KR(ret), "task", *task, K(delay));
   } else {
     //do nothing
   }
@@ -527,7 +522,6 @@ int ObTimeWheel::cancel(ObTimeWheelTask *task)
     TRANS_LOG(WARN, "invalid argument", KP(task));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_SUCCESS != (ret = tw_base_[task->hash() % real_thread_num_]->cancel(task))) {
-    TRANS_LOG(DEBUG, "TimeWheelBase cancel error", KR(ret), "task", *task);
   } else {
     //do nothing
   }

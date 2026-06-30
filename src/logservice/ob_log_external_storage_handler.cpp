@@ -87,7 +87,6 @@ int ObLogExternalStorageHandler::start(const int64_t concurrency)
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", K(concurrency), KPC(this));
   } else if (OB_FAIL(resize_(concurrency))) {
-    CLOG_LOG(WARN, "resize_ failed", K(concurrency), KPC(this));
   } else {
     is_running_ = true;
   }
@@ -136,7 +135,6 @@ int ObLogExternalStorageHandler::resize(const int64_t new_concurrency,
     WLockGuardTimeout guard(resize_rw_lock_, timeout_us, ret);
     // hold lock failed
     if (OB_FAIL(ret)) {
-      CLOG_LOG(WARN, "hold lock failed", KPC(this), K(new_concurrency), K(timeout_us));
     } else if (!is_running_) {
       ret = OB_NOT_RUNNING;
       CLOG_LOG(WARN, "ObLogExternalStorageHandler not running", KPC(this), K(new_concurrency), K(timeout_us));
@@ -185,7 +183,6 @@ int ObLogExternalStorageHandler::pread(const common::ObString &uri,
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "ObLogExternalStorageHandler invalid argument", K(uri), K(offset), KP(buf), K(read_buf_size));
   } else if (OB_FAIL(handle_adapter_->get_file_size(uri, storage_info, file_size))) {
-    CLOG_LOG(WARN, "get_file_size failed", K(uri), K(offset), KP(buf), K(read_buf_size));
   } else if (offset > file_size) {
     ret = OB_FILE_LENGTH_INVALID;
     CLOG_LOG(WARN, "read position lager than file size, invalid argument", K(file_size), K(offset), K(uri));
@@ -197,12 +194,8 @@ int ObLogExternalStorageHandler::pread(const common::ObString &uri,
   } else if (FALSE_IT(real_read_buf_size = std::min(file_size - offset, read_buf_size))) {
   } else if (OB_FAIL(construct_async_pread_tasks_(
       uri, storage_info, storage_id, offset, buf, real_read_buf_size, run_ctx))) {
-    CLOG_LOG(WARN, "construct_async_pread+task_ failed", K(uri),
-             K(offset), KP(buf), K(read_buf_size));
   } else if (FALSE_IT(time_guard.click("after construct async tasks"))) {
   } else if (OB_FAIL(run_ctx.wait(real_read_size))) {
-    CLOG_LOG(WARN, "wait async tasks finished failed", K(uri),
-             K(offset), KP(buf), K(read_buf_size), K(run_ctx));
   } else if (FALSE_IT(time_guard.click("after wait async tasks"))) {
   } else {
     read_size_.stat(real_read_size);
@@ -245,7 +238,6 @@ int ObLogExternalStorageHandler::construct_async_pread_tasks_(
   int64_t remained_task_count = async_task_count;
   int64_t remained_total_size = read_buf_size;
   if (OB_FAIL(run_ctx.init(uri, storage_info, storage_id, async_task_count, OPEN_FLAG::READ_FLAG))) {
-    CLOG_LOG(WARN, "init ObLogExternalStorageIOTaskCtx failed", K(run_ctx), K(async_task_count));
   } else {
     CLOG_LOG(TRACE, "begin construct async tasks", K(async_task_count), K(async_task_size),
              K(remained_task_count), K(remained_total_size));
@@ -256,11 +248,8 @@ int ObLogExternalStorageHandler::construct_async_pread_tasks_(
       ObLogExternalStorageCtxItem *item = NULL;
       int64_t async_task_read_buf_size = std::min(remained_total_size, async_task_size);
       if (OB_FAIL(run_ctx.get_item(curr_task_idx, item))) {
-        CLOG_LOG(WARN, "get_item failed", KR(ret), K(curr_task_idx));
       } else if (OB_FAIL(handle_adapter_->async_pread(curr_read_offset, read_buf + curr_read_buf_pos, async_task_read_buf_size, *item))) {
-        CLOG_LOG(WARN, "async_pread failed", KR(ret), K(curr_task_idx));
       } else if (OB_FAIL(run_ctx.inc_count())) {
-        CLOG_LOG(WARN, "inc count failed", KR(ret), K(curr_task_idx));
       } else {
         ++curr_task_idx;
         curr_read_offset += async_task_read_buf_size;

@@ -829,12 +829,9 @@ public:
     if (popular_values_hash && popular_values_hash->count() > 3) {
       // popular value is not ususally not large. 2x the hash bucket size for better performance
       if (OB_FAIL(popular_values_map_.create(popular_values_hash->count() * 2, "PopValBkt", "PopValNode"))) {
-        SQL_LOG(WARN, "fail create popular values map", K(ret), K(popular_values_hash->count()));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < popular_values_hash_->count(); ++i) {
           if (OB_FAIL(popular_values_map_.set_refactored(popular_values_hash_->at(i), 0))) {
-            SQL_LOG(WARN, "fail init popular values map",
-                    K(ret), K(i), K(popular_values_hash->count()));
           }
         }
       }

@@ -264,7 +264,6 @@ bool check_rename_success(const char *src_name,
   bool dest_exist = false;
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_file_exist(src_name, src_exist))) {
-    PALF_LOG(WARN, "check_file_exist failed", KR(ret), K(src_name), K(dest_name));
   } else if (!src_exist && OB_FAIL(check_file_exist(dest_name, dest_exist))) {
     PALF_LOG(WARN, "check_file_exist failed", KR(ret), K(src_name), K(dest_name));
   } else if (!src_exist && dest_exist) {
@@ -289,7 +288,6 @@ bool check_renameat_success(const int src_dir_fd,
   bool dest_exist = false;
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_file_exist(src_dir_fd, src_name, src_exist))) {
-    PALF_LOG(WARN, "check_file_exist failed", KR(ret), K(src_name), K(dest_name));
   } else if (!src_exist && OB_FAIL(check_file_exist(dest_dir_fd, dest_name, dest_exist))) {
     PALF_LOG(WARN, "check_file_exist failed", KR(ret), K(src_name), K(dest_name));
   } else if (!src_exist && dest_exist) {
@@ -475,9 +473,7 @@ int TrimLogDirectoryFunctor::rename_flashback_to_normal_(const char *file_name)
   if (-1 == (dir_fd = open_directory(dir_))) {
     ret = convert_sys_errno();
   } else if (OB_FAIL(try_to_remove_block_(dir_fd, normal_file_name))) {
-    PALF_LOG(ERROR, "try_to_remove_block_ failed", K(file_name), K(normal_file_name));
   } else if (OB_FAIL(renameat_with_retry(dir_fd, file_name, dir_fd, normal_file_name))) {
-    PALF_LOG(ERROR, "renameat_with_retry failed", K(file_name), K(normal_file_name));
   } else {}
   if (-1 != dir_fd) {
     ::close(dir_fd);
@@ -502,7 +498,6 @@ int TrimLogDirectoryFunctor::try_to_remove_block_(const int dir_fd, const char *
       PALF_LOG(ERROR, "open file failed", K(file_name)); 
     }
   } else if (OB_FAIL(log_block_pool_->remove_block_at(dir_fd, file_name))) {
-    PALF_LOG(ERROR, "remove_block_at failed", K(dir_fd), K(file_name));
   }
   if (-1 != fd && -1 == ::close(fd)) {
     ret = convert_sys_errno();

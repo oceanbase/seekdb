@@ -272,9 +272,7 @@ int ObMySQLConnection::set_timeout_variable(const int64_t query_timeout, const i
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fill sql string error", K(ret));
       } else if (OB_FAIL(create_statement(stmt, sql))) {
-        LOG_WARN("create statement failed", K(ret));
       } else if (OB_FAIL(stmt.execute_update(affect_rows))) {
-        LOG_WARN("execute sql failed", K(get_server()), K(sql), K(ret));
       }
     }
   }
@@ -292,11 +290,8 @@ int ObMySQLConnection::init_oceanbase_connection()
     ObMySQLStatement stmt;
     const char *sql = "set @@session.autocommit = ON;";
     if (OB_FAIL(rollback())) {
-      LOG_WARN("fail to rollback", K(ret));
     } else if (OB_FAIL(stmt.init(*this, sql))) {
-      LOG_WARN("create statement failed", K(ret));
     } else if (OB_FAIL(stmt.execute_update())) {
-      LOG_WARN("execute sql failed", K(sql), K(ret));
     }
   }
   return ret;
@@ -321,9 +316,7 @@ int ObMySQLConnection::execute_write(const ObString &sql,
   } else {
     ObMySQLStatement stmt;
     if (OB_FAIL(create_statement(stmt, sql))) {
-      LOG_WARN("create statement failed", K(sql), K(ret));
     } else if (OB_FAIL(stmt.execute_update(affected_rows))) {
-      LOG_WARN("statement execute update failed", K(sql), K(ret));
     }
   }
   return ret;
@@ -352,14 +345,10 @@ int ObMySQLConnection::execute_proc(ObIAllocator &allocator,
                                                                      out_param_start_pos,
                                                                      basic_param_start_pos,
                                                                      basic_return_value_pos))) {
-    LOG_WARN("get real param count failed", K(ret));
   } else if (OB_FAIL(prepare_proc_stmt(sql.ptr(), real_param_cnt, &allocator))) {
-    LOG_WARN("create statement failed", K(sql), K(ret));
   } else if (OB_FAIL(proc_stmt_.execute_proc(allocator, params, routine_info, udts, tz_info, result, is_sql,
                                              out_param_start_pos, basic_param_start_pos, basic_return_value_pos))) {
-    LOG_WARN("statement execute update failed", K(sql), K(ret));
   } else if (OB_FAIL(proc_stmt_.close())) {
-    LOG_WARN("fail to close stmt", K(ret));
   }
   return ret;
 }
@@ -383,9 +372,7 @@ int ObMySQLConnection::execute_read(const ObString &sql,
     ret = OB_NOT_INIT;
     LOG_WARN("connection not established. call connect first", K(ret));
   } else if (OB_FAIL(res.create_handler(read_ctx))) {
-    LOG_ERROR("create result handler failed", K(ret));
   } else if (OB_FAIL(create_statement(read_ctx->stmt_, sql))) {
-    LOG_WARN("create statement failed", K(sql), K(ret));
   } else if (OB_ISNULL(read_ctx->result_ = read_ctx->stmt_.execute_query(res.is_enable_use_result()))) {
     ret = get_last_error();
     //const int ER_LOCK_WAIT_TIMEOUT = -1205;
@@ -411,9 +398,7 @@ int ObMySQLConnection::get_session_variable(const ObString &name, int64_t &val)
     ObSqlString sql;
     ObMySQLResult *result = NULL;
     if (OB_FAIL(sql.append_fmt("select %.*s from dual", name.length(), name.ptr()))) {
-      LOG_WARN("assign sql failed", K(ret));
     } else if (OB_FAIL(create_statement(read_ctx.stmt_, sql.string()))) {
-      LOG_WARN("create statement failed", K(sql), K(ret));
     } else if (OB_ISNULL(read_ctx.result_ = read_ctx.stmt_.execute_query())) {
       ret = get_last_error();
       LOG_WARN("query failed", K(get_server()), K(sql), K(ret));
@@ -421,7 +406,6 @@ int ObMySQLConnection::get_session_variable(const ObString &name, int64_t &val)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("execute sql failed", K(sql), K(ret));
     } else if (OB_FAIL(result->get_single_int(0, 0, val))) {
-      LOG_WARN("failed to query session value", K(ret), K(sql));
     }
   }
   return ret;
@@ -437,11 +421,8 @@ int ObMySQLConnection::set_session_variable(const ObString &name, int64_t val)
     ObMySQLStatement stmt;
     ObSqlString sql;
     if (OB_FAIL(sql.append_fmt("set %.*s = %ld", name.length(), name.ptr(), val))) {
-      LOG_WARN("assign sql failed", K(ret));
     } else if (OB_FAIL(stmt.init(*this, sql.string()))) {
-      LOG_WARN("create statement failed", K(ret));
     } else if (OB_FAIL(stmt.execute_update())) {
-      LOG_WARN("execute sql failed", K(sql), K(ret));
     } else {
       LOG_DEBUG("set session variable", K(name), K(val));
       if (0 == name.case_compare("ob_read_consistency")) {
@@ -467,14 +448,11 @@ int ObMySQLConnection::set_session_variable(const ObString &name, const ObString
     ObMySQLStatement stmt;
     ObSqlString sql;
     if (OB_FAIL(sql.append_fmt("set \"%.*s\" = '%.*s'", name.length(), name.ptr(), val.length(), val.ptr()))) {
-      LOG_WARN("assign sql failed", K(ret), K(name), K(val), K(sql));
     }
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(stmt.init(*this, sql.string()))) {
-      LOG_WARN("create statement failed", K(ret), K(sql));
     } else if (OB_FAIL(stmt.execute_update())) {
-      LOG_WARN("execute sql failed", K(sql), K(ret));
     } else {
       LOG_DEBUG("set session variable", K(name), K(val), K(sql));
     }
@@ -495,7 +473,6 @@ int ObMySQLConnection::reset_read_consistency()
     ObString ob_read_consistency = ObString::make_string("ob_read_consistency");
     int64_t val = READ_CONSISTENCY_STRONG; // strong
     if (OB_FAIL(set_session_variable(ob_read_consistency, val))) {
-      LOG_WARN("fail to set session variable", K(ob_read_consistency), K(val));
     }
   }
   return ret;
@@ -505,7 +482,6 @@ int ObMySQLConnection::prepare(const ObString &sql, int64_t param_count, ObIAllo
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(prepare_proc_stmt(sql, param_count, allocator))) {
-    LOG_WARN("prepare proc stmt failed", K(ret), K(ObString(sql)));
   }
   return ret;
 }
@@ -521,7 +497,6 @@ int ObMySQLConnection::prepare_proc_stmt(const ObString &sql, int64_t param_coun
     ret = OB_NOT_INIT;
     LOG_WARN("connection not established. call connect first", K(ret));
   } else if (OB_FAIL(create_statement(proc_stmt_, sql, param_count))) {
-    LOG_WARN("create statement failed", K(ret), K(ObString(sql)));
   }
   return ret;
 }
@@ -535,7 +510,6 @@ int ObMySQLConnection::bind_basic_type_by_pos(uint64_t position,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(proc_stmt_.bind_basic_type_by_pos(position - 1, param, param_size, datatype, indicator, is_out_param))) {
-    LOG_WARN("bind basic type failed", K(ret), K(position), K(param_size), K(datatype));
   }
   return ret;
 }
@@ -551,7 +525,6 @@ int ObMySQLConnection::bind_array_type_by_pos(uint64_t position,
   int ret = OB_SUCCESS;
   if (OB_FAIL(proc_stmt_.bind_array_type_by_pos(position - 1, array, indicators, ele_size,
                                                 ele_datatype, array_size, out_valid_array_size))) {
-    LOG_WARN("bind array type failed", K(ret), K(position), K(ele_size), K(ele_datatype), K(array_size));
   }
   return ret;
 }
@@ -560,7 +533,6 @@ int ObMySQLConnection::execute_proc()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(proc_stmt_.execute_proc())) {
-    LOG_WARN("failed to execute proc", K(ret));
   }
   return ret;
 }

@@ -45,9 +45,7 @@ int ObPCVSet::init(ObILibCacheCtx &ctx, const ObILibCacheObject *obj)
     LOG_WARN("invalid plan cache allocator", K_(pc_alloc), K(ret));
   } else {
     if (OB_FAIL(pc_key_.deep_copy(allocator_, pc_ctx.fp_result_.pc_key_))) {
-      LOG_WARN("fail to init plan cache key in pcv set", K(ret));
     } else if (OB_FAIL(deep_copy_sql(pc_ctx.raw_sql_))) {
-      LOG_WARN("fail to deep_copy_sql", K(ret), K(pc_ctx.raw_sql_));
     } else {
       is_inited_ = true;
       min_cluster_version_ = pc_ctx.exec_ctx_.get_min_cluster_version();
@@ -126,7 +124,6 @@ int ObPCVSet::inner_get_cache_obj(ObILibCacheCtx &ctx,
     // Check for the possibility of generated table projection column name conflicts
     bool contain_dup_col = false;
     if (OB_FAIL(check_raw_param_for_dup_col(pc_ctx, contain_dup_col))) {
-      LOG_WARN("failed to check raw param for dup col", K(ret));
     } else if (contain_dup_col) {
       ret = OB_SQL_PC_NOT_EXIST;
     }
@@ -161,14 +158,12 @@ int ObPCVSet::inner_get_cache_obj(ObILibCacheCtx &ctx,
           LOG_WARN("failed to get all table schema", K(ret));
         }
       } else if (OB_FAIL(pcv->match(pc_ctx, schema_array, is_same))) {
-        LOG_WARN("fail to match pcv when get plan", K(ret));
       } else if (false == is_same) {
         LOG_TRACE("failed to match param");
         /*do nothing*/
       } else {
         matched_pcv = pcv;
         if (OB_FAIL(pcv->choose_plan(pc_ctx, schema_array, plan))) {
-          LOG_TRACE("failed to get plan in plan cache value", K(ret));
         }
         break;
       }
@@ -179,7 +174,6 @@ int ObPCVSet::inner_get_cache_obj(ObILibCacheCtx &ctx,
     // bug link：
     if (OB_SUCC(ret) && NULL != matched_pcv && NULL != plan) {
       if (OB_FAIL(matched_pcv->lift_tenant_schema_version(new_tenant_schema_version))) {
-        LOG_WARN("failed to lift pcv's tenant schema version", K(ret));
       } else if (new_tenant_schema_version != OB_INVALID_VERSION
                  && OB_NOT_NULL(pc_ctx.exec_ctx_.get_physical_plan_ctx())) {
         pc_ctx.exec_ctx_.get_physical_plan_ctx()->set_tenant_schema_version(
@@ -223,13 +217,11 @@ int ObPCVSet::inner_add_cache_obj(ObILibCacheCtx &ctx,
   } else if (OB_FAIL(ObPlanCacheValue::get_all_dep_schema(*pc_ctx.sql_ctx_.schema_guard_,
                                                           plan->get_dependency_table(),
                                                           schema_array))) {
-    LOG_WARN("failed to get all dep schema", K(ret));
   } else {
     DLIST_FOREACH(pcv, pcv_list_) {
       bool is_same = false;
       LOG_DEBUG("add plan, pcv", K(pcv));
       if (OB_FAIL(pcv->match(pc_ctx, schema_array, is_same))) {
-        LOG_WARN("fail to match pcv in pcv_set", K(ret));
       } else if (is_same) {
         is_new = false;
         LOG_INFO("has identical pcv", K(is_same), K(pcv));
@@ -268,7 +260,6 @@ int ObPCVSet::inner_add_cache_obj(ObILibCacheCtx &ctx,
   // Maintain a minimum merged version when adding a plan, used by the background for checking during eviction;
   if (OB_SUCC(ret)) {
     if (OB_FAIL(set_raw_param_info_if_needed(plan))) {
-      LOG_WARN("failed to set raw param info", K(ret));
     } else {
       // inc plan num if succeeds
       plan_num_ += 1;
@@ -292,16 +283,12 @@ int ObPCVSet::create_pcv_and_add_plan(ObPlanCacheObject *cache_obj,
     ret = OB_INVALID_ARGUMENT;
     SQL_PC_LOG(WARN, "invalid argument", K(ret));
   } else if (OB_FAIL(create_new_pcv(new_pcv))) {
-    SQL_PC_LOG(WARN, "failed to create new plan cache value", K(ret));
   } else if (OB_UNLIKELY(nullptr == new_pcv)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null for new_pcv", K(new_pcv));
   } else if (OB_FAIL(new_pcv->init(this, cache_obj, pc_ctx))) {
-    SQL_PC_LOG(WARN, "failed to init plan cache value");
   } else if (OB_FAIL(ob_write_string(allocator_, sql_id_org, sql_id))) {
-    SQL_PC_LOG(WARN, "failed to deep copy sql_id_", K(sql_id_org), K(ret));
   } else if (OB_FAIL(push_sql_id(sql_id))) {
-    SQL_PC_LOG(WARN, "failed to push sql_id_", K(ret));
   } else {
     // do nothing
   }
@@ -328,7 +315,6 @@ int ObPCVSet::deep_copy_sql(const ObString &sql)
   if (OB_ISNULL(sql.ptr())) {
     SQL_PC_LOG(TRACE, "sql is empty, ignore copy sql", K(ret), K(lbt()));
   } else if (OB_FAIL(ob_write_string(allocator_, sql, sql_))) {
-    SQL_PC_LOG(WARN, "deep copy sql into pcv_set failed", K(ret), K(sql));
   }
   return ret;
 }
@@ -391,8 +377,6 @@ int ObPCVSet::set_raw_param_info_if_needed(ObPlanCacheObject *cache_obj)
   } else if (!plan->contain_paramed_column_field()) {
     // do nothing
   } else if (OB_FAIL(col_field_arr_.reserve(plan->get_field_columns().count()))) {
-    LOG_WARN("failed to init fixed array",
-             K(ret), K(plan->get_field_columns().count()));
   } else {
     for (int64_t i = 0; i < plan->get_field_columns().count(); i++) {
       const ObField &cur_field = plan->get_field_columns().at(i);
@@ -403,11 +387,8 @@ int ObPCVSet::set_raw_param_info_if_needed(ObPlanCacheObject *cache_obj)
         // do nothing
       } else {
         if (OB_FAIL(visited_idx.add_member(i))) {
-          LOG_WARN("failed to add member", K(ret), K(i));
         } else if (OB_FAIL(col_item.param_idxs_.assign(cur_field.paramed_ctx_->param_idxs_))) {
-          LOG_WARN("failed to assign array", K(ret));
         } else if (OB_FAIL(col_field_arr_.push_back(col_item))) {
-          LOG_WARN("failed to push back element", K(ret));
         } else {
           // do nothing
         }
@@ -422,11 +403,8 @@ int ObPCVSet::set_raw_param_info_if_needed(ObPlanCacheObject *cache_obj)
           } else if (ObCharset::case_compat_mode_equal(cur_field.paramed_ctx_->paramed_cname_,
                                                        next_field.paramed_ctx_->paramed_cname_)) {
             if (OB_FAIL(visited_idx.add_member(j))) {
-              LOG_WARN("failed to add member", K(ret));
             } else if (OB_FAIL(col_item.param_idxs_.assign(next_field.paramed_ctx_->param_idxs_))) {
-              LOG_WARN("failed to assign array", K(ret));
             } else if (OB_FAIL(col_field_arr_.push_back(col_item))) {
-              LOG_WARN("failed to push back element");
             } else {
               col_item.reset();
             }
@@ -497,7 +475,6 @@ int ObPCVSet::check_contains_table(uint64_t db_id, common::ObString tab_name, bo
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(pcv), K(ret)); 
     } else if (OB_FAIL(pcv->check_contains_table(db_id, tab_name, contains))) {
-      LOG_WARN("fail to check table name", K(ret), K(db_id), K(tab_name));
     } else if (!contains) {
       // continue find
     } else {

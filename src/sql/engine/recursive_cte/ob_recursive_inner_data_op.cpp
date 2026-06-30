@@ -31,7 +31,6 @@ int ObRecursiveInnerDataOp::init()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql session info is null", K(ret));
   } else if (OB_FAIL(ctx_.get_my_session()->get_sys_variable(share::SYS_VAR_CTE_MAX_RECURSION_DEPTH, max_recursion_depth_))) {
-    LOG_WARN("Get sys variable error", K(ret));
   } else {
     
     
@@ -57,11 +56,9 @@ int ObRecursiveInnerDataOp::get_all_data_from_left_child()
         ++left_rows_count;
         if (SearchStrategyType::BREADTH_FIRST_BULK == search_type_) {
           if (OB_FAIL(bfs_bulk_pump_.add_row(left_op_->get_spec().output_, eval_ctx_))) {
-            LOG_WARN("Failed to add row", K(ret));
           }
         } else if (SearchStrategyType::BREADTH_FRIST == search_type_) {
           if (OB_FAIL(bfs_pump_.add_row(left_op_->get_spec().output_, eval_ctx_))) {
-            LOG_WARN("Failed to add row", K(ret));
           }
         } else {
           ret = OB_ERR_UNEXPECTED;
@@ -91,7 +88,6 @@ int ObRecursiveInnerDataOp::get_all_data_from_left_batch()
     ObSearchMethodOp *pump = get_search_method_bump();
     while (OB_SUCC(ret)) {
       if (OB_FAIL(left_op_->get_next_batch(batch_size_, child_brs))) {
-        LOG_WARN("Failed to get next batch", K(ret));
       } else {
         // child_brs should NEVER be null. generate core if child return nullptr
         all_skiped &= child_brs->skip_->is_all_true(child_brs->size_);
@@ -104,7 +100,6 @@ int ObRecursiveInnerDataOp::get_all_data_from_left_batch()
           }
           guard.set_batch_idx(i);
           if (OB_FAIL(pump->add_row(left_op_->get_spec().output_, eval_ctx_))) {
-            LOG_WARN("Failed to add row", K(ret));
           }
         }
       }
@@ -130,12 +125,10 @@ int ObRecursiveInnerDataOp::get_all_data_from_right_child()
     while (OB_SUCC(ret) && OB_SUCC(right_op_->get_next_row())) {
       if (OB_ITER_END == ret) {
       } else if (OB_SUCC(ret) && SearchStrategyType::BREADTH_FIRST_BULK == search_type_) {
-        if (OB_FAIL(bfs_bulk_pump_.add_row(right_op_->get_spec().output_, eval_ctx_))) { //add stored row
-          LOG_WARN("Failed to add row", K(ret));
+        if (OB_FAIL(bfs_bulk_pump_.add_row(right_op_->get_spec().output_, eval_ctx_))) {
         }
       } else if (OB_SUCC(ret) && SearchStrategyType::BREADTH_FRIST == search_type_) {
-        if (OB_FAIL(bfs_pump_.add_row(right_op_->get_spec().output_, eval_ctx_))) { //add stored row
-          LOG_WARN("Failed to add row", K(ret));
+        if (OB_FAIL(bfs_pump_.add_row(right_op_->get_spec().output_, eval_ctx_))) {
         }
       } else { }
     }
@@ -168,7 +161,6 @@ int ObRecursiveInnerDataOp::get_all_data_from_right_batch()
         }
         guard.set_batch_idx(i);
         if (OB_FAIL(pump->add_row(right_op_->get_spec().output_, eval_ctx_))) {
-          LOG_WARN("Failed to add row", K(ret));
         }
       }
 
@@ -188,7 +180,6 @@ int ObRecursiveInnerDataOp::try_format_output_row(int64_t &read_rows)
   // try to get row again
   if (!result_output_.empty()) {
     if (OB_FAIL(result_output_.pop_front(result_node))) {
-      LOG_WARN("Get result output failed", K(ret));
     } else if (OB_ISNULL(result_node.stored_row_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Get a null result output", K(ret));
@@ -199,7 +190,6 @@ int ObRecursiveInnerDataOp::try_format_output_row(int64_t &read_rows)
   // try format row
   if (OB_SUCC(ret)) {
     if (OB_FAIL(assign_to_cur_row(result_node.stored_row_))) {
-      LOG_WARN("Failed to assign input row to cur row", K(ret));
     } else {
       read_rows = 1;
     }
@@ -218,7 +208,6 @@ int ObRecursiveInnerDataOp::try_format_output_batch(int64_t batch_size, int64_t 
     // try to get row again
     if (!result_output_.empty()) {
       if (OB_FAIL(result_output_.pop_front(result_node))) {
-        LOG_WARN("Get result output failed", K(ret));
       } else if (OB_ISNULL(result_node.stored_row_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Get a null result output", K(ret));
@@ -229,8 +218,7 @@ int ObRecursiveInnerDataOp::try_format_output_batch(int64_t batch_size, int64_t 
     // try format row
     if (OB_SUCC(ret)) {
       guard.set_batch_idx(i);
-      if (OB_FAIL(assign_to_cur_row(result_node.stored_row_))) { 
-        LOG_WARN("Failed to assign input row to cur row", K(ret));
+      if (OB_FAIL(assign_to_cur_row(result_node.stored_row_))) {
       } else {
         read_rows++;
       }
@@ -259,7 +247,6 @@ int ObRecursiveInnerDataOp::fake_cte_table_add_row(ObTreeNode &node)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Fake cte table op can not be nullptr", K(ret));
   } else if (OB_FAIL(pump_operator_->add_single_row(node.stored_row_))) {
-    LOG_WARN("Fake cte table add row failed", K(ret));
   } else if (SearchStrategyType::BREADTH_FRIST == search_type_
               && OB_FAIL(bfs_pump_.update_parent_node(node))) {
     LOG_WARN("Failed to update last bst node stask", K(ret), K(node));
@@ -272,21 +259,17 @@ int ObRecursiveInnerDataOp::breadth_first_union(bool left_branch, bool &continue
   int ret = OB_SUCCESS;
   ObTreeNode node;
   if (OB_FAIL(set_fake_cte_table_empty())) {
-    LOG_WARN("Set fake cte table to empty failed", K(ret));
   } else if (OB_FAIL(bfs_pump_.add_result_rows())) {
-    LOG_WARN("Failed to finish add row", K(ret));
   } else if (OB_FAIL(bfs_pump_.get_next_nocycle_node(result_output_, node))) {
     if (OB_ITER_END == ret) {
       ret = OB_SUCCESS;
       continue_search = false;
       if (OB_FAIL(start_new_level(left_branch))) {
-        LOG_WARN("Failed to start new level", K(ret));
       }
     } else {
       LOG_WARN("Failed to get next non cycle node", K(ret));
     }
   } else if (OB_FAIL(fake_cte_table_add_row(node))) {
-    LOG_WARN("Fake cte table add row failed", K(ret));
   } else {
     continue_search = false;
   }
@@ -298,7 +281,6 @@ int ObRecursiveInnerDataOp::start_new_level(bool left_branch)
   int ret = OB_SUCCESS;
   ObTreeNode node;
   if (OB_FAIL(bfs_pump_.finish_add_row(!left_branch))) {
-    LOG_WARN("Failed to finish add row", K(ret));
   } else if (OB_FAIL(bfs_pump_.get_next_nocycle_node(result_output_, node))) {
     if (OB_ITER_END == ret) {
       ret = OB_SUCCESS;
@@ -307,7 +289,6 @@ int ObRecursiveInnerDataOp::start_new_level(bool left_branch)
       LOG_WARN("Failed to get next non cycle node", K(ret));
     }
   } else if (OB_FAIL(fake_cte_table_add_row(node))) {
-    LOG_WARN("Fake cte table add row failed", K(ret));
   }
   return ret;
 }
@@ -321,7 +302,6 @@ int ObRecursiveInnerDataOp::fake_cte_table_add_bulk_rows(bool left_branch)
     LOG_WARN("Fake cte table op can not be nullptr", K(ret));
   } else if (FALSE_IT(pump_operator_->update_status())) {
   } else if (OB_FAIL(bfs_bulk_pump_.update_search_depth(max_recursion_depth_))) {
-    LOG_WARN("Failed to update last bst node stask", K(ret));
   }
   return ret;
 }
@@ -333,9 +313,7 @@ int ObRecursiveInnerDataOp::breadth_first_bulk_union(bool left_branch)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("The fake cte table is null", K(ret));
   } else if (OB_FAIL(set_fake_cte_table_empty())) {
-    LOG_WARN("Set fake cte table to empty failed", K(ret));
   } else if (OB_FAIL(bfs_bulk_pump_.add_result_rows(left_branch))) {
-    LOG_WARN("Failed to finish add row", K(ret));
   } else if (OB_FAIL(bfs_bulk_pump_.get_next_nocycle_bulk(
         result_output_, pump_operator_->get_bulk_rows()))) {
     if (OB_ITER_END == ret) {
@@ -345,7 +323,6 @@ int ObRecursiveInnerDataOp::breadth_first_bulk_union(bool left_branch)
       LOG_WARN("Failed to get next non cycle node", K(ret));
     }
   } else if (OB_FAIL(fake_cte_table_add_bulk_rows(left_branch))) {
-    LOG_WARN("Fake cte table add row failed", K(ret));
   } else { /* do nothing */ }
   return ret;
 }
@@ -371,12 +348,10 @@ int ObRecursiveInnerDataOp::try_get_left_rows(
   } else {
     if (SearchStrategyType::BREADTH_FIRST_BULK == search_type_) {
       if (OB_FAIL(breadth_first_bulk_union(true))) {
-        LOG_WARN("Breadth first union failed", K(ret));
       }
     } else if (SearchStrategyType::BREADTH_FRIST == search_type_) {
       bool continue_search = false;
       if (OB_FAIL(breadth_first_union(true, continue_search))) {
-        LOG_WARN("Breadth first union failed", K(ret));
       }
     } else {
       // never get there
@@ -384,11 +359,9 @@ int ObRecursiveInnerDataOp::try_get_left_rows(
     if (OB_SUCC(ret)) {
       if (batch_mode && is_bulk_search()) {
         if (OB_FAIL(try_format_output_batch(batch_size, read_rows))) {
-          LOG_WARN("failed to get next batch", K(ret));
         }
       } else {
         if (OB_FAIL(try_format_output_row(read_rows))) {
-          LOG_WARN("Failed to get next row", K(ret));
         }
       }
     }
@@ -410,11 +383,9 @@ int ObRecursiveInnerDataOp::try_get_right_rows(
       } else if (!batch_mode && OB_FAIL(get_all_data_from_right_child())) {
         LOG_WARN("Get row from right child failed", K(ret));
       } else if (OB_FAIL(right_op_->rescan())) {
-        LOG_WARN("Recursive union right children rescan failed", K(ret));
       } else if (bfs_pump_.empty()) {
         break;
       } else if (OB_FAIL(breadth_first_union(false, continue_search))) {
-        LOG_WARN("Breadth first union failed", K(ret));
       }
     }
   } else if (SearchStrategyType::BREADTH_FIRST_BULK == search_type_) {
@@ -423,11 +394,9 @@ int ObRecursiveInnerDataOp::try_get_right_rows(
     } else if (!batch_mode && OB_FAIL(get_all_data_from_right_child())) {
       LOG_WARN("Get row from right child failed", K(ret));
     } else if (OB_FAIL(right_op_->rescan())) {
-      LOG_WARN("Recursive union right children rescan failed", K(ret));
     } else if (bfs_bulk_pump_.empty()) {
       // do nothing
     } else if (OB_FAIL(breadth_first_bulk_union(false))) {
-      LOG_WARN("Breadth first union failed", K(ret));
     }
   }
   // try to get row again
@@ -460,11 +429,9 @@ int ObRecursiveInnerDataOp::get_next_row()
   int64_t read_rows = 0;
   if (!result_output_.empty()) {
     if (OB_FAIL(try_format_output_row(read_rows))) {
-      LOG_WARN("Format output row failed", K(ret));
     } else { }
   } else if (RecursiveUnionState::R_UNION_READ_LEFT == state_) {
     if (OB_FAIL(check_recursive_depth())) {
-      LOG_WARN("Recursive query abort", K(ret));
     } else if (OB_FAIL(try_get_left_rows(false, 1, read_rows))) {
       if (ret != OB_ITER_END) {
         LOG_WARN("Get left rows failed", K(ret));
@@ -476,7 +443,6 @@ int ObRecursiveInnerDataOp::get_next_row()
     }
   } else if (RecursiveUnionState::R_UNION_READ_RIGHT == state_) {
     if (OB_FAIL(check_recursive_depth())) {
-      LOG_WARN("Recursive query abort", K(ret));
     } else if (OB_FAIL(try_get_right_rows(false, 1, read_rows))) {
       if (ret != OB_ITER_END) {
         LOG_WARN("Get right rows failed", K(ret));
@@ -509,16 +475,13 @@ int ObRecursiveInnerDataOp::get_next_batch(const int64_t batch_size,
   if (!result_output_.empty()) {
     if (is_bulk_search()) {
       if (OB_FAIL(try_format_output_batch(batch_size, read_rows))) {
-        LOG_WARN("Format output bacth failed", K(ret));
       }
     } else {
       if (OB_FAIL(try_format_output_row(read_rows))) {
-        LOG_WARN("Format output row failed", K(ret));
       }
     }
   } else if (RecursiveUnionState::R_UNION_READ_LEFT == state_) {
     if (OB_FAIL(check_recursive_depth())) {
-      LOG_WARN("Recursive query abort", K(ret));
     } else if (OB_FAIL(try_get_left_rows(true, batch_size, read_rows))) {
       if (ret != OB_ITER_END) {
         LOG_WARN("Get left rows failed", K(ret));
@@ -530,7 +493,6 @@ int ObRecursiveInnerDataOp::get_next_batch(const int64_t batch_size,
     }
   } else if (RecursiveUnionState::R_UNION_READ_RIGHT == state_) {
     if (OB_FAIL(check_recursive_depth())) {
-      LOG_WARN("Recursive query abort", K(ret));
     } else if (OB_FAIL(try_get_right_rows(true, batch_size, read_rows))) {
       if (ret != OB_ITER_END) {
         LOG_WARN("Get right rows failed", K(ret));
@@ -613,7 +575,6 @@ int ObRecursiveInnerDataOp::assign_to_cur_row(ObChunkDatumStore::StoredRow *stor
     LOG_WARN("stored row is null", K(stored_row));
   } else if (OB_FAIL(stored_row->to_expr(
         output_union_exprs_, eval_ctx_, output_union_exprs_.count()))) {
-    LOG_WARN("stored row to exprs failed", K(ret));
   }
   return ret;
 }

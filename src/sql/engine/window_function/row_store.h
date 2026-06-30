@@ -147,17 +147,13 @@ struct RowStores
       ret = OB_ERR_UNEXPECTED;
       SQL_LOG(WARN, "unexpected null store", K(processed_), K(cur_));
     } else if (OB_FAIL(processed_->init(max_batch_size, row_meta, mem_attr, mem_limit, enable_dump))) {
-      SQL_LOG(WARN, "init store failed", K(ret));
     } else if (OB_FAIL(cur_->init(max_batch_size, row_meta, mem_attr, mem_limit, enable_dump))) {
-      SQL_LOG(WARN, "init store failed", K(ret));
     } else if (OB_NOT_NULL(first_) || OB_NOT_NULL(last_)) {
       if (OB_ISNULL(first_) || OB_ISNULL(last_)) {
         ret = OB_ERR_UNEXPECTED;
         SQL_LOG(WARN, "invalid null store", K(first_), K(last_));
       } else if (OB_FAIL(first_->init(max_batch_size, row_meta, mem_attr, mem_limit, enable_dump))) {
-        SQL_LOG(WARN, "init store failed", K(ret));
       } else if (OB_FAIL(last_->init(max_batch_size, row_meta, mem_attr, mem_limit, enable_dump))) {
-        SQL_LOG(WARN, "init store failed", K(ret));
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(setup_mem_mgr())) {

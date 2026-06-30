@@ -57,7 +57,6 @@ int ObExprCollPred::assign(const ObExprOperator &other)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expr operator is mismatch", K(other.get_type()));
   } else if (OB_FAIL(ObExprOperator::assign(other))) {
-    LOG_WARN("assign parent expr failed", K(ret));
   } else {
     const ObExprCollPred &other_expr = static_cast<const ObExprCollPred &>(other);
     ms_type_ = other_expr.ms_type_;
@@ -197,7 +196,6 @@ int ObExprCollPred::cg_expr(ObExprCGCtx &expr_cg_ctx,
       const ObTimeZoneInfo *tz_info = get_timezone_info(expr_cg_ctx.session_);
       int64_t tz_offset = 0;
       if (OB_FAIL(get_tz_offset(tz_info, tz_offset))) {
-        LOG_WARN("failed to get tz offset", K(ret));
       } else {
         info->tz_offset_ = tz_offset;
         info->result_type_ = result_type_;
@@ -219,7 +217,6 @@ int ObExprCollPred::eval_coll_pred(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
   ObObj obj2;
   const ObExprCollPredInfo *info = static_cast<ObExprCollPredInfo *>(expr.extra_info_);
   if (OB_FAIL(expr.eval_param_value(ctx, datum1, datum2))) {
-    LOG_WARN("failed to eval params", K(ret));
   }
   ret = OB_NOT_SUPPORTED;
   LOG_WARN("not supported expr coll_pred", KR(ret));

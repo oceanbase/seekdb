@@ -125,9 +125,7 @@ int OptSystemIoBenchmark::run_benchmark(ObIAllocator &allocator)
       obj_opt.set_private_object_opt();
       blocksstable::ObStorageObjectHandle block_handle;
       if (OB_FAIL(OB_STORAGE_OBJECT_MGR.alloc_object(obj_opt, block_handle))) {
-        LOG_WARN("alloc macro block failed", K(ret), K(i));
       } else if (OB_FAIL(block_handles.push_back(block_handle))) {
-        LOG_WARN("push back block handle failed", K(ret), K(block_handle));
       }
     }
   }
@@ -142,7 +140,6 @@ int OptSystemIoBenchmark::run_benchmark(ObIAllocator &allocator)
     io_info.size_ = load_size;
     const int64_t begin_ts = ObTimeUtility::fast_current_time();
     if (OB_FAIL(OB_IO_MANAGER.read(io_info, io_handle))) {
-      LOG_WARN("io benchmark read failed", K(ret), K(io_info));
     } else {
       ++io_count;
       rt_us += ObTimeUtility::fast_current_time() - begin_ts;
@@ -169,7 +166,6 @@ int OptSystemIoBenchmark::run_benchmark(ObIAllocator &allocator)
     io_info.size_ = OB_DEFAULT_MACRO_BLOCK_SIZE;
     const int64_t begin_ts = ObTimeUtility::fast_current_time();
     if (OB_FAIL(OB_IO_MANAGER.read(io_info, io_handle))) {
-      LOG_WARN("io benchmark read failed", K(ret), K(io_info));
     } else {
       ++io_count;
       rt_us += ObTimeUtility::fast_current_time() - begin_ts;

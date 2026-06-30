@@ -72,7 +72,6 @@ int ObExprRbFromString::eval_rb_from_string(const ObExpr &expr,
   ObRoaringBitmap *rb = NULL;
 
   if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) {
-    LOG_WARN("failed to eval argument", K(ret));
   } else if (datum->is_null()) {
     is_null_result = true;
   } else {
@@ -82,11 +81,8 @@ int ObExprRbFromString::eval_rb_from_string(const ObExpr &expr,
                                                           expr.args_[0]->datum_meta_,
                                                           expr.args_[0]->obj_meta_.has_lob_header(),
                                                           rb_str))) {
-      LOG_WARN("failed to get real string data", K(ret), K(rb_str));
     } else if (OB_FAIL(ObRbUtils::rb_from_string(tmp_allocator, rb_str, rb))) {
-      LOG_WARN("failed to build roaringbitmap from string", K(ret), K(rb_str));
     } else if (OB_FAIL(ObRbUtils::rb_serialize(tmp_allocator, rb_bin, rb))) {
-      LOG_WARN("failed to serialize roaringbitmap", K(ret));
     }
     ObRbUtils::rb_destroy(rb);
   }
@@ -94,7 +90,6 @@ int ObExprRbFromString::eval_rb_from_string(const ObExpr &expr,
   } else if (is_null_result) {
     res.set_null();
   } else if (OB_FAIL(ObRbExprHelper::pack_rb_res(expr, ctx, res, rb_bin))) {
-    LOG_WARN("fail to pack roaringbitmap res", K(ret));
   }
 
   return ret;

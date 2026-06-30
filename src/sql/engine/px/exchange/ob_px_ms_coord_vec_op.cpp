@@ -48,7 +48,6 @@ int ObPxMSCoordVecOp::ObPxMSCoordVecOpEventListener::on_root_data_channel_setup(
   // But px coord inner_get_next_row logic must start to run, i.e., must receive control msg etc.,
   // So data channel is lagged a bit
   if (OB_FAIL(px_coord_op_.init_row_heap(cnt))) {
-    LOG_WARN("failed to init row heap", K(ret), K(cnt));
   } else {
     LOG_TRACE("px coord setup", K(cnt), K(px_coord_op_.msg_loop_.get_channel_count()));
   }
@@ -130,9 +129,7 @@ int ObPxMSCoordVecOp::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObPxCoordOp::inner_open())) {
-    LOG_WARN("fail close op", K(MY_SPEC.id_), K(ret));
   } else if (OB_FAIL(setup_loop_proc())) {
-    LOG_WARN("fail setup loop proc", K(ret));
   } else if (!MY_SPEC.use_rich_format_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get invalid state", K(ret));
@@ -150,7 +147,6 @@ int ObPxMSCoordVecOp::inner_open()
     if (OB_FAIL(output_store_.init(MY_SPEC.all_exprs_, get_spec().max_batch_size_,
                                     attr, 0 /*mem_limit*/, false/*enable_dump*/,
                                     0 /*row_extra_size*/, NONE_COMPRESSOR))) {
-      LOG_WARN("init output store failed", K(ret));
     } else if (OB_ISNULL(mem = ctx_.get_allocator().alloc(
             ObBitVector::memory_size(1)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -221,7 +217,6 @@ int ObPxMSCoordVecOp::init_store_rows(int64_t n_ways)
       LastCompactRow *store_row = new(buf)LastCompactRow(alloc_);
       store_row->reuse_ = true;
       if (OB_FAIL(store_rows_.push_back(store_row))) {
-        LOG_WARN("failed to push back", K(ret));
       }
     }
   }
@@ -232,11 +227,9 @@ int ObPxMSCoordVecOp::init_row_heap(int64_t n_ways)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_store_rows(n_ways))) {
-    LOG_WARN("failed to init store rows", K(ret));
   } else if (OB_FAIL(row_heap_.init(n_ways,
       &MY_SPEC.sort_collations_,
       &MY_SPEC.sort_cmp_funs_))) {
-    LOG_WARN("fail init row heap for root dfo", "heap", row_heap_, K(ret));
   }
   return ret;
 }
@@ -327,7 +320,6 @@ int ObPxMSCoordVecOp::inner_close()
   output_iter_.reset();
   output_store_.reset();
   if (OB_FAIL(ObPxCoordOp::inner_close())) {
-    LOG_WARN("fail close op", K(MY_SPEC.id_), K(ret));
   }
   destroy_readers();
   int tmp_ret = OB_SUCCESS;
@@ -392,7 +384,6 @@ int ObPxMSCoordVecOp::next_row(const bool need_store_output)
   } else if (OB_UNLIKELY(!first_row_fetched_)) {
     // Drive initial DFO distribution
     if (OB_FAIL(msg_proc_.startup_msg_loop(ctx_))) {
-      LOG_WARN("initial dfos NOT dispatched successfully", K(ret));
     }
     first_row_fetched_ = true; // control no longer actively calling startup_msg_loop, subsequent loops are message triggered
   }
@@ -412,7 +403,6 @@ int ObPxMSCoordVecOp::next_row(const bool need_store_output)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("reader or channel is NULL");
       } else if (OB_FAIL(ctx_.fast_check_status())) {
-        LOG_WARN("failed to check status", K(ret));
       } else {
         if (reader->has_more() || ch->is_eof()) {
           ret = next_row_from_heap(*reader, wait_next_msg, need_store_output);
@@ -446,7 +436,6 @@ int ObPxMSCoordVecOp::next_row(const bool need_store_output)
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ctx_.fast_check_status())) {
-      LOG_WARN("fail check status, maybe px query timeout", K(ret));
     } else if (OB_FAIL(msg_loop_.process_one_if(&receive_order_, nth_channel))) {
       if (OB_DTL_WAIT_EAGAIN == ret) {
         LOG_TRACE("no message, try again", K(ret));
@@ -456,7 +445,6 @@ int ObPxMSCoordVecOp::next_row(const bool need_store_output)
         if (0 < row_heap_.capacity() && first_row_sent_) {
           if (OB_FAIL(msg_loop_.unblock_channel(receive_order_.get_data_channel_start_idx(),
                                                 row_heap_.writable_channel_idx()))) {
-            LOG_WARN("failed to unblock channels", K(ret));
           } else {
             LOG_DEBUG("debug old unblock_channel", K(ret));
           }
@@ -553,18 +541,13 @@ int ObPxMSCoordVecOp::next_row_from_heap(ObReceiveRowReader &reader, bool &wait_
   } else if (OB_SUCCESS == ret) {
     if (nullptr != last_pop_row_) {
       if (OB_FAIL(last_pop_row_->save_store_row(MY_SPEC.all_exprs_, single_row_brs_, eval_ctx_))) {
-        LOG_WARN("failed to save store row", K(ret));
       } else if (OB_FAIL(row_heap_.push(last_pop_row_))) {
-        LOG_WARN("fail push row to heap", K(ret));
       }
     } else {
       LastCompactRow *cur_row = nullptr;
       if (OB_FAIL(store_rows_.at(row_heap_.writable_channel_idx(), cur_row))) {
-        LOG_WARN("failed to get store row", K(ret), K(row_heap_.writable_channel_idx()));
       } else if (OB_FAIL(cur_row->save_store_row(MY_SPEC.all_exprs_, single_row_brs_, eval_ctx_))) {
-        LOG_WARN("failed to save store row", K(ret));
       } else if (OB_FAIL(row_heap_.push(cur_row))) {
-        LOG_WARN("fail push row to heap", K(ret));
       }
     }
   } else {
@@ -583,8 +566,6 @@ int ObPxMSCoordVecOp::next_row_from_heap(ObReceiveRowReader &reader, bool &wait_
       const LastCompactRow *pop_row = nullptr;
       ObCompactRow *out_row = NULL;
       if (OB_FAIL(row_heap_.pop(pop_row))) {
-        LOG_WARN("failed to pop row", K(ret));
-      // TODO: shanting2.0 opt. Is there optimization space for this pure single-line approach?
       } else if (need_store_output && OB_FAIL(output_store_.add_row(pop_row->compact_row_, out_row))) {
         LOG_WARN("add row failed", K(ret));
       } else if (!need_store_output && OB_FAIL(pop_row->to_expr(MY_SPEC.all_exprs_, eval_ctx_))) {

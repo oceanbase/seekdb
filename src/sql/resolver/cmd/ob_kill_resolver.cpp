@@ -39,7 +39,6 @@ int ObKillResolver::resolve(const ParseNode &parse_tree)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to create kill stmt");
   } else if (OB_FAIL(ObResolverUtils::resolve_const_expr(params_, *(parse_tree.children_[1]), tmp_expr, NULL))) {
-    LOG_WARN("resolve const expr failed", K(ret));
   } else if (parse_tree.type_ == T_KILL) {
     kill_stmt->set_is_query(1 == parse_tree.children_[0]->value_);
     kill_stmt->set_value_expr(tmp_expr);

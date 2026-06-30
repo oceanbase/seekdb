@@ -69,7 +69,6 @@ int ObDagTempMacroBlockWriter::open(
       nullptr,
       nullptr,
       nullptr))) {
-    LOG_WARN("failed to inner init macro block writer", K(ret));
   } else {
     dag_temp_macro_flusher_.set_temp_file_writer(*cg_block_writer);
     custom_macro_flusher_ = static_cast<ObIMacroBlockFlusher *>(&dag_temp_macro_flusher_);
@@ -113,7 +112,6 @@ int ObDagMacroBlockWriter::open(
     STORAGE_LOG(WARN, "invalid callback", K(ret), KP(callback));
   } else if (OB_FAIL(ObMacroBlockWriter::open(
       data_store_desc, parallel_idx, macro_seq_param, pre_warm_param, object_cleaner, callback))) {
-    STORAGE_LOG(WARN, "Fail to open macro block writer", K(ret));
   } else {
     set_dag_stage(ObDagMacroWriterStage::WAITTING_APPEND_CG_BLOCK);
   }
@@ -145,7 +143,6 @@ int ObDagMacroBlockWriter::open_for_ss_ddl(
       callback,
       nullptr, /* validator */
       nullptr /* device handle */))) {
-    LOG_WARN("failed to inner init macro block writer", K(ret));
   } else {
     set_dag_stage(ObDagMacroWriterStage::WAITTING_APPEND_CG_BLOCK);
   }
@@ -190,14 +187,12 @@ int ObDagMacroBlockWriter::append_cg_block(ObCGBlock &cg_block, const int64_t ma
     STORAGE_LOG(WARN, "Append_cg_block is only supported during DAG_WRITE_MACRO_BLOCK stage. ", K(ret), K(get_dag_stage()));
   } else if (is_reuse_macro_block(cg_block, macro_block_fill_threshold)) {
     if (OB_FAIL(append_macro_block(cg_block))) {
-      STORAGE_LOG(WARN, "fail to reuse macro block", K(ret), K(cg_block));
     }
   } else {
     // have to iterate and reuse the micro block
     ObDagMicroBlockIterator micro_block_iter;
     compaction::ObLocalArena iter_allocator_temp("DagMaBlkWriter");
     if (OB_FAIL(micro_block_iter.open_cg_block(&cg_block))) {
-      STORAGE_LOG(WARN, "fail to open cg block", K(ret), K(cg_block), K(micro_block_iter));
     } else if (OB_FAIL(reuse_micro_blocks(micro_block_iter, iter_allocator_temp))) {
       if (ret == OB_BUF_NOT_ENOUGH) {
         STORAGE_LOG(INFO, "The macro block is full and cannot accommodate more micro blocks.", K(ret));
@@ -233,9 +228,7 @@ int ObDagMacroBlockWriter::reuse_micro_blocks(ObDagMicroBlockIterator &micro_blo
       // append_micro_block in the second stage. Therefore, it needs to be reset and regenerated 
       // as a unique micro block logic id in the second stage.
     } else if (OB_FAIL(ObMacroBlockWriter::append_micro_block(micro_block_desc, micro_index_data))) {
-      STORAGE_LOG(WARN, "fail to append micro", K(ret), K(micro_block_desc), K(micro_index_data));
     } else if (OB_FAIL(micro_block_iter.update_cg_block_offset_and_micro_idx())) {
-      STORAGE_LOG(WARN, "fail to update offset and micro block idx", K(ret));
     }
   }
 

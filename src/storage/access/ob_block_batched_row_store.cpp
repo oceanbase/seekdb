@@ -55,7 +55,6 @@ int ObBlockBatchedRowStore::init(const ObTableAccessParam &param, common::hash::
   void *buf = nullptr;
   void *len_array_buf = nullptr;
   if (OB_FAIL(ObBlockRowStore::init(param))) {
-    LOG_WARN("fail to init block row store", K(ret));
   } else if (OB_ISNULL(buf = context_.stmt_allocator_->alloc(sizeof(char *) * batch_size_))) {
     ret = common::OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc cell data ptr", K(ret), K(batch_size_));
@@ -145,7 +144,6 @@ int ObBlockBatchedRowStore::get_row_ids(
     } else {
       if (1 == step && 0 == res.filter_start_) {
         if (OB_FAIL(res.bitmap_->get_row_ids(row_ids_, row_count, begin_index, end_index, capacity))) {
-          LOG_WARN("Failed to get row ids", K(ret), K(begin_index), K(end_index), K(capacity));
         }
       } else {
         for (current_row = begin_index;

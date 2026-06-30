@@ -84,13 +84,10 @@ int ObTableLoadPKMemSorter::init(ObTableLoadDag *dag, ObTableLoadMemSortOp *op)
     mem_compact_ctx_.compact_chunk_cnt_ = MAX(store_ctx_->max_mem_chunk_count_ / 2, 1);
     mem_compact_ctx_.range_cnt_ = store_ctx_->thread_cnt_;
     if (OB_FAIL(mem_compact_ctx_.init())) {
-      LOG_WARN("fail to init mem compact ctx", KR(ret));
     }
     // init loaders
     else if (OB_FAIL(loader_allocator_.init("TLD_MSLoader"))) {
-      LOG_WARN("fail to init loader allocator", KR(ret));
     } else if (OB_FAIL(construct_loaders())) {
-      LOG_WARN("fail to construct loaders", KR(ret));
     } else {
       // 清空table_store, 以便在排序过程中能释放磁盘空间
       op_->op_ctx_->table_store_.clear();
@@ -118,7 +115,6 @@ int ObTableLoadPKMemSorter::construct_loaders()
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to alloc loader", KR(ret));
         } else if (OB_FAIL(loader->init(this, fragment))) {
-          LOG_WARN("fail to init loader", KR(ret));
         } else {
           // 加入idle_loader_list_
           abort_unless(idle_loader_list_.add_last(loader));
@@ -207,7 +203,6 @@ int ObTableLoadPKMemSorter::close()
     table_store.clear();
     table_store.set_multiple_sstable();
     if (OB_FAIL(table_store.add_tables(mem_compact_ctx_.get_result_tables_handle()))) {
-      LOG_WARN("fail to add tables", KR(ret));
     } else {
       mem_compact_ctx_.reset();
       is_closed_ = true;
@@ -236,7 +231,6 @@ int ObTableLoadPKMemSortLoader::init(ObTableLoadPKMemSorter *mem_sorter,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KP(mem_sorter), K(fragment));
   } else if (OB_FAIL(fragment_.assign(fragment))) {
-    LOG_WARN("fail to assign fragment", KR(ret));
   } else {
     mem_sorter_ = mem_sorter;
     is_inited_ = true;
@@ -261,15 +255,12 @@ int ObTableLoadPKMemSortLoader::process(ChunkType &chunk)
         mem_sorter_->mem_compact_ctx_.table_data_desc_;
       if (OB_FAIL(reader_.init(table_data_desc.external_data_block_size_,
                                table_data_desc.compressor_type_))) {
-        LOG_WARN("fail to init reader", KR(ret));
       } else if (OB_FAIL(reader_.open(fragment_.file_handle_, 0, fragment_.file_size_))) {
-        LOG_WARN("fail to open file", KR(ret));
       }
     }
     // read rows
     while (OB_SUCC(ret)) {
       if (OB_FAIL(dag->check_status())) {
-        LOG_WARN("fail to check status", KR(ret));
       } else if (nullptr == row_ && OB_FAIL(reader_.get_next_item(row_))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           LOG_WARN("fail to get next item", KR(ret));
@@ -350,7 +341,6 @@ int ObTableLoadPKMemSortLoadTask::generate_next_task(ObITask *&next_task)
   } else {
     ObTableLoadPKMemSortLoadTask *task = nullptr;
     if (OB_FAIL(dag_->alloc_task(task, this, next_chunk_idx))) {
-      LOG_WARN("failed to alloc task", KR(ret));
     } else {
       next_task = task;
     }
@@ -368,7 +358,6 @@ int ObTableLoadPKMemSortLoadTask::process()
   while (OB_SUCC(ret) && !is_finish) {
     ObTableLoadPKMemSortLoader *loader = nullptr;
     if (OB_FAIL(dag_->check_status())) {
-      LOG_WARN("fail to check status", KR(ret));
     } else if (OB_FAIL(mem_sorter_->pop_loader(loader))) {
       if (OB_LIKELY(OB_ITER_END == ret)) {
         // 没有数据可以读了, 结束
@@ -411,11 +400,8 @@ int ObTableLoadPKMemSortLoadTask::process()
       // 将chunk加入round_ctx
       CompareType compare;
       if (OB_FAIL(compare.init(*ctx_->datum_utils_, store_ctx_->ctx_->param_.dup_action_))) {
-        LOG_WARN("fail to init compare", KR(ret));
       } else if (OB_FAIL(chunk_->sort(compare, ctx_->enc_params_))) {
-        LOG_WARN("fail to sort chunk", KR(ret));
       } else if (OB_FAIL(round_ctx_->add_chunk(chunk_))) {
-        LOG_WARN("fail to add chunk", KR(ret));
       } else {
         chunk_ = nullptr;
       }
@@ -457,7 +443,6 @@ int ObTableLoadPKMemSortTask::process()
   int ret = OB_SUCCESS;
   if (mem_sorter_->is_finish()) {
   } else if (OB_FAIL(ctx_->make_round_ctx(round_ctx_))) {
-    LOG_WARN("fail to make round ctx", KR(ret));
   } else {
     ObTableLoadPKMemSortLoadTask *load_task = nullptr;
     ObTableLoadMemCompactSampleTask *sample_task = nullptr;
@@ -466,43 +451,27 @@ int ObTableLoadPKMemSortTask::process()
     ObTableLoadPKMemSortTask *next_task = nullptr;
     // alloc task
     if (OB_FAIL(dag_->alloc_task(load_task, this, 0 /*chunk_idx*/))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     } else if (OB_FAIL(dag_->alloc_task(sample_task, this))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     } else if (OB_FAIL(dag_->alloc_task(dump_task, this, 0 /*range_idx*/))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     } else if (OB_FAIL(dag_->alloc_task(compact_task, this))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     } else if (OB_FAIL(dag_->alloc_task(next_task, this))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     }
     // 建立依赖关系: load_task -> sample_task -> dump_task -> compact_task -> [next_op_task]
     //                 |
     //                 +-> next_task -> [next_op_task]
     else if (OB_FAIL(load_task->add_child(*sample_task))) {
-      LOG_WARN("fail to add child", KR(ret));
     } else if (OB_FAIL(sample_task->add_child(*dump_task))) {
-      LOG_WARN("fail to add child", KR(ret));
     } else if (OB_FAIL(dump_task->add_child(*compact_task))) {
-      LOG_WARN("fail to add child", KR(ret));
     } else if (OB_FAIL(compact_task->deep_copy_children(get_child_nodes()))) {
-      LOG_WARN("fail to deep copy children", KR(ret));
     } else if (OB_FAIL(load_task->add_child(*next_task))) {
-      LOG_WARN("fail to add child", KR(ret));
     } else if (OB_FAIL(next_task->deep_copy_children(get_child_nodes()))) {
-      LOG_WARN("fail to deep copy children", KR(ret));
     }
     // 添加task
     else if (OB_FAIL(dag_->add_task(*next_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     } else if (OB_FAIL(dag_->add_task(*compact_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     } else if (OB_FAIL(dag_->add_task(*dump_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     } else if (OB_FAIL(dag_->add_task(*sample_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     } else if (OB_FAIL(dag_->add_task(*load_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     }
   }
   return ret;

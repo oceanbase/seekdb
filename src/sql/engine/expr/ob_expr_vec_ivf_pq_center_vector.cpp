@@ -52,7 +52,6 @@ int ObExprVecIVFPQCenterVector::calc_result_typeN(ObExprResType &type,
     LOG_WARN("exec ctx is null", K(ret));
   } else if (OB_FAIL(exec_ctx->get_subschema_id_by_collection_elem_type(ObNestedType::OB_VECTOR_TYPE,
                                                                         elem_type, subschema_id))) {
-    LOG_WARN("failed to get collection subschema id", K(ret));
   } else {
     type.set_collection(subschema_id);
   } 
@@ -110,7 +109,6 @@ int ObExprVecIVFPQCenterVector::generate_pq_center_vector(
     uint64_t center_prefix = 0;
     if (OB_FAIL(ObVectorIndexUtil::eval_ivf_centers_common(
         tmp_allocator, expr, eval_ctx, centers, table_id, tablet_id, dis_algo, contain_null, arr, center_prefix))) {
-      LOG_WARN("failed to eval ivf centers", K(ret), K(expr), K(eval_ctx));
     } else if (contain_null) {
       // do nothing
       expr_datum.set_null();
@@ -127,7 +125,6 @@ int ObExprVecIVFPQCenterVector::generate_pq_center_vector(
           reinterpret_cast<float*>(arr->get_data()),
           VIDA_COS != dis_algo ? nullptr: &norm_info, // cos need norm
           residual_vec))) {
-        LOG_WARN("failed to get nearest center", K(ret));
       }
       if (OB_FAIL(ret)) {
       } else {
@@ -139,7 +136,6 @@ int ObExprVecIVFPQCenterVector::generate_pq_center_vector(
                                           eval_ctx,
                                           res_str,
                                           data_str.ptr()))) {
-          LOG_WARN("fail to set array res", K(ret), K(data_str));
         } else {
           expr_datum.set_string(res_str);
         }

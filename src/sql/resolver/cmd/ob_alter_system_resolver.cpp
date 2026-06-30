@@ -67,13 +67,11 @@ int ObAlterSystemResolverUtil::resolve_server_or_zone(const ParseNode *parse_tre
     switch (parse_tree->type_) {
       case T_IP_PORT: {
         if (OB_FAIL(resolve_server(parse_tree, arg.server_))) {
-          LOG_WARN("resolve server address failed", K(ret));
         }
         break;
       }
       case T_ZONE: {
         if (OB_FAIL(resolve_zone(parse_tree, arg.zone_))) {
-          LOG_WARN("resolve zone failed", K(ret));
         }
         break;
       }
@@ -100,7 +98,6 @@ int ObAlterSystemResolverUtil::resolve_server_value(const ParseNode *parse_tree,
     char ip_port[128] = {0};
     snprintf(ip_port, 128, "%.*s", static_cast<int32_t>(parse_tree->str_len_), parse_tree->str_value_);
     if (OB_FAIL(server.parse_from_cstring(ip_port))) {
-      LOG_WARN("string not in server address format", K(ip_port), K(ret));
     }
   }
   return ret;
@@ -157,14 +154,12 @@ int ObAlterSystemResolverUtil::resolve_server(const ParseNode *parse_tree, ObAdd
   if (NULL == parse_tree) {
     server.reset();
   } else if (OB_FAIL(sanity_check(parse_tree, T_IP_PORT))) {
-    LOG_WARN("sanity check failed");
   } else {
     const ParseNode *node = parse_tree->children_[0];
     if (OB_UNLIKELY(NULL == node)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("node should not be null");
     } else if (OB_FAIL(resolve_server_value(node, server))) {
-      LOG_WARN("resolve server value failed", K(ret));
     }
   }
   return ret;
@@ -176,7 +171,6 @@ int ObAlterSystemResolverUtil::resolve_zone(const ParseNode *parse_tree, ObZone 
   if (NULL == parse_tree) {
     zone.reset();
   } else if (OB_FAIL(sanity_check(parse_tree, T_ZONE))) {
-    LOG_WARN("sanity check failed");
   } else {
     const ParseNode *node = parse_tree->children_[0];
     if (OB_UNLIKELY(NULL == node)) {
@@ -188,7 +182,6 @@ int ObAlterSystemResolverUtil::resolve_zone(const ParseNode *parse_tree, ObZone 
     } else {
       ObString zone_name(static_cast<int32_t>(node->str_len_), node->str_value_);
       if (OB_FAIL(zone.assign(zone_name))) {
-        LOG_WARN("assign zone string failed", K(zone_name), K(ret));
       }
     }
   }
@@ -202,7 +195,6 @@ int ObAlterSystemResolverUtil::resolve_tenant(const ParseNode *parse_tree,
   if (NULL == parse_tree) {
     tenant_name.reset();
   } else if (OB_FAIL(sanity_check(parse_tree, T_TENANT_NAME))) {
-    LOG_WARN("sanity check failed");
   } else {
     const ParseNode *node = parse_tree->children_[0];
     if (OB_UNLIKELY(NULL == node)) {
@@ -214,7 +206,6 @@ int ObAlterSystemResolverUtil::resolve_tenant(const ParseNode *parse_tree,
     } else {
       ObString tenant(static_cast<int32_t>(node->str_len_), node->str_value_);
       if (OB_FAIL(tenant_name.assign(tenant))) {
-        LOG_WARN("assign tenant string failed", K(tenant), K(ret));
       }
     }
   }
@@ -228,7 +219,6 @@ int ObAlterSystemResolverUtil::resolve_ls_id(const ParseNode *parse_tree, int64_
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("node should not be null");
   } else if (OB_FAIL(sanity_check(parse_tree, T_LS))) {
-    LOG_WARN("sanity check failed");
   } else {
     ls_id = parse_tree->children_[0]->value_;
     FLOG_INFO("resolve ls id", K(ls_id));
@@ -244,7 +234,6 @@ int ObAlterSystemResolverUtil::resolve_tablet_id(const ParseNode *opt_tablet_id,
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("opt_tablet_id should not be null");
   } else if (OB_FAIL(sanity_check(opt_tablet_id, T_TABLET_ID))) {
-    LOG_WARN("sanity check failed");
   } else {
     tablet_id = opt_tablet_id->children_[0]->value_;
     FLOG_INFO("resolve tablet_id", K(tablet_id));
@@ -312,7 +301,6 @@ int ObAlterSystemResolverUtil::resolve_tenant(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is empty", KR(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("get_schema_guard failed", KR(ret));
   } else {
     ObString tenant_name;
 
@@ -345,7 +333,6 @@ int ObAlterSystemResolverUtil::resolve_tenant(
             LOG_WARN("duplicate tanant name", K(tenant_name), KR(ret));
             if (OB_SUCCESS != (tmp_ret = databuff_printf(error_msg, ERROR_MSG_LENGTH,
                 pos, "duplicate tenant %s is", tenant_name.ptr()))) {
-              LOG_WARN("failed to set error msg", K(ret), K(tmp_ret), K(error_msg), K(pos));
             } else {
               LOG_USER_ERROR(OB_NOT_SUPPORTED, error_msg);
             }
@@ -406,7 +393,6 @@ int ObFreezeResolver::resolve(const ParseNode &parse_tree)
         ParseNode *opt_tenant_list_or_tablet_id = parse_tree.children_[1];
         const ParseNode *opt_rebuild_column_group = parse_tree.children_[2];
         if (OB_FAIL(resolve_major_freeze_(freeze_stmt, opt_tenant_list_or_tablet_id, opt_rebuild_column_group))) {
-          LOG_WARN("resolve major freeze failed", KR(ret), KP(opt_tenant_list_or_tablet_id));
         }
       }
     } else if (2 == parse_tree.children_[0]->value_) {  // MINOR FREEZE
@@ -417,7 +403,6 @@ int ObFreezeResolver::resolve(const ParseNode &parse_tree)
       } else {
         ParseNode *opt_tenant_list_or_ls_or_tablet_id = parse_tree.children_[1];
         if (OB_FAIL(resolve_minor_freeze_(freeze_stmt, opt_tenant_list_or_ls_or_tablet_id))) {
-          LOG_WARN("resolve minor freeze failed", KR(ret), KP(opt_tenant_list_or_ls_or_tablet_id));
         }
       }
     } else {
@@ -441,7 +426,6 @@ int ObFreezeResolver::resolve_major_freeze_(ObFreezeStmt *freeze_stmt, ParseNode
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("children of tenant should not be null", KR(ret), KP(opt_tenant_list_or_tablet_id));
   } else if (OB_FAIL(resolve_tenant_ls_tablet_(freeze_stmt, opt_tenant_list_or_tablet_id))) {
-    LOG_WARN("fail to resolve tenant or tablet", KR(ret));
   } else if (OB_UNLIKELY(share::ObLSID::INVALID_LS_ID != freeze_stmt->get_ls_id())) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not support to specify ls to major freeze", K(ret), "ls_id", freeze_stmt->get_ls_id());
@@ -489,7 +473,6 @@ int ObFreezeResolver::resolve_minor_freeze_(ObFreezeStmt *freeze_stmt,
 
   if (OB_NOT_NULL(opt_tenant_list_or_ls_or_tablet_id)) {
     if (OB_FAIL(resolve_tenant_ls_tablet_(freeze_stmt, opt_tenant_list_or_ls_or_tablet_id))) {
-      LOG_WARN("resolve tenant ls table failed", KR(ret));
     } else if (T_TABLET_ID == opt_tenant_list_or_ls_or_tablet_id->type_) {
       freeze_stmt->reset_tenant_count();
       freeze_stmt->get_ls_id() = share::ObLSID::INVALID_LS_ID;
@@ -746,7 +729,6 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
       LOG_WARN("session info should not be null", K(ret));
     } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
                 schema_guard))) {
-      SERVER_LOG(WARN, "get_schema_guard failed", K(ret));
     } else {
       // do nothing
     }
@@ -784,7 +766,6 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
         }
         if(!db_name.empty()) {
           if (OB_FAIL(db_name_list.push_back(db_name))) {
-            SERVER_LOG(WARN, "failed to add database name", K(ret));
           }
         }
       } // for database name end
@@ -824,7 +805,6 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
           SERVER_LOG(WARN, "invalid argument, fine-grained plan evict must specify tenant_list", K(ret));
         } else { // normal tenant
           if (OB_FAIL(stmt->flush_cache_arg_.push_tenant())) {
-            LOG_WARN("failed  to adds tenant for normal tenant", K(ret));
           } else {
             // normal tenant will use it's tenant when t_node is empty
             for (uint64_t j=0; OB_SUCC(ret) && j<db_name_list.count(); j++) {
@@ -834,7 +814,6 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
                 ret = OB_ERR_BAD_DATABASE;
                 SERVER_LOG(WARN, "database not exist", K(db_name_list.at(j)), K(ret));
               } else if (OB_FAIL(stmt->flush_cache_arg_.push_database(db_id))) {
-                SERVER_LOG(WARN, "fail to push database id ",K(db_name_list.at(j)), K(db_id), K(ret));
               }
             } // for get db_id ends
             LOG_INFO("normal tenant flush plan cache ends", K(t_id), K(db_name_list));
@@ -861,21 +840,17 @@ int ObFlushCacheResolver::resolve(const ParseNode &parse_tree)
           tenant_name.assign_ptr(t_node->children_[i]->str_value_,
                                  static_cast<ObString::obstr_size_t>(t_node->children_[i]->str_len_));
           if (OB_FAIL(stmt->flush_cache_arg_.push_tenant())) {
-            SERVER_LOG(WARN, "fail to push tenant id ",K(tenant_name), K(ret));
           } else {
             ObSchemaGetterGuard schema_guard_db;
             if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard_db))) {
-              SERVER_LOG(WARN, "get_schema_guard failed", K(ret));
             } else {
               for (uint64_t j = 0; OB_SUCC(ret) && j < db_name_list.count(); j++) {
                 uint64_t db_id = 0;
                 if (OB_FAIL(schema_guard_db.get_database_id(db_name_list.at(j), db_id))) {
-                  SERVER_LOG(WARN, "database not exist", K(db_name_list.at(j)), K(ret));
                 } else if ((int64_t)db_id == OB_INVALID_ID) {
                   ret = OB_ERR_BAD_DATABASE;
                   SERVER_LOG(WARN, "database not exist", K(db_name_list.at(j)), K(ret));
                 } else if (OB_FAIL(stmt->flush_cache_arg_.push_database(db_id))) {
-                  SERVER_LOG(WARN, "fail to push database id ",K(db_name_list.at(j)), K(db_id), K(ret));
                 }
               } // for get db_id ends
             }
@@ -928,7 +903,6 @@ int ObFlushKVCacheResolver::resolve(const ParseNode &parse_tree)
               } else {
                 ObString tenant_name(node->str_len_, node->str_value_);
                 if (OB_FAIL(stmt->tenant_name_.assign(tenant_name))) {
-                  LOG_WARN("assign tenant name failed", K(tenant_name), K(ret));
                 }
               }
             }
@@ -954,7 +928,6 @@ int ObFlushKVCacheResolver::resolve(const ParseNode &parse_tree)
                 } else {
                   ObString cache_name(node->str_len_, node->str_value_);
                   if (OB_FAIL(stmt->cache_name_.assign(cache_name))) {
-                    LOG_WARN("assign cache name failed", K(cache_name), K(ret));
                   }
                 }
               }
@@ -1092,7 +1065,6 @@ int ObAdminMergeResolver::resolve(const ParseNode &parse_tree)
             } else if (OB_FAIL(Util::resolve_tenant(*tenants_node,
                                                     ignored_count, affect_all,
                                                     affect_all_user, affect_all_meta))) {
-              LOG_WARN("fail to resolve tenant", KR(ret));
             } else if (affect_all || affect_all_user || affect_all_meta) {
               if ((true == affect_all && true == affect_all_user) ||
                   (true == affect_all && true == affect_all_meta) ||
@@ -1191,7 +1163,6 @@ int ObRefreshIOCalibrationResolver::resolve(const ParseNode &parse_tree)
     if (OB_ISNULL(storage_name_node) || storage_name_node->num_child_ <= 0) {
       // allow null, do nothing
     } else if (OB_FAIL(Util::resolve_string(storage_name_node->children_[0], arg->storage_name_))) {
-      LOG_WARN("resolve storage name failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -1220,9 +1191,7 @@ int ObRefreshIOCalibrationResolver::resolve(const ParseNode &parse_tree)
             break;
           }
         } else if (OB_FAIL(ObIOCalibration::parse_calibration_string(calibration_string, item))) {
-          LOG_WARN("parse calibration info failed", K(ret), K(calibration_string), K(i));
         } else if (OB_FAIL(arg->calibration_list_.push_back(item))) {
-          LOG_WARN("push back calibration item failed", K(ret), K(i), K(item));
         }
       }
     }
@@ -1238,7 +1207,6 @@ static int alter_system_set_reset_constraint_check_and_add_item_mysql_mode(obcal
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session_info is NULL", KP(session_info), K(ret));
   } else if (OB_FAIL(rpc_arg.items_.push_back(item))) {
-    LOG_WARN("add config item failed", K(ret), K(item));
   } else if (0 == STRCMP(item.name_.ptr(), CLUSTER_ID)) {
     ret = OB_OP_NOT_ALLOW;
     LOG_WARN("cluster_id is not allowed to modify");
@@ -1258,7 +1226,6 @@ static int alter_system_set_reset_constraint_check_and_add_item_oracle_mode(obca
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(rpc_arg.items_.push_back(item))) {
-    LOG_WARN("add config item failed", K(ret), K(item));
   }
   return ret;
 }
@@ -1368,7 +1335,6 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                   LOG_WARN("assign config value failed", K(ret), K(str_val));
                   break;
                 } else if (OB_FAIL(convert_param_value(item))) {
-                  LOG_WARN("convert config value failed", K(ret));
                 } else if (NULL != action_node->children_[2]) {
                   ObString comment(action_node->children_[2]->str_len_,
                                    action_node->children_[2]->str_value_);
@@ -1411,7 +1377,6 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                                                                               affect_all,
                                                                               affect_all_user,
                                                                               affect_all_meta))) {
-                          LOG_WARN("fail to get reslove tenant", K(ret), "exec_tid", 1UL);
                         } else if (affect_all_meta) {
                           ret = OB_NOT_SUPPORTED;
                           LOG_WARN("all_meta is not supported by ALTER SYSTEM SET DEFAULT_TABLE_ORGANIZATION",
@@ -1428,14 +1393,12 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
                           bool valid = true;
                           ObSchemaGetterGuard schema_guard;
                           if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-                            LOG_WARN("get_schema_guard failed", K(ret));
                           }
                           for (int64_t i = 0; OB_SUCC(ret) && i < cfg_count && valid; i++) {
 
                             lib::Worker::CompatMode compat_mode;
                             valid = valid && ObConfigDefaultTableOrganizationChecker::check(item);
                             if (OB_FAIL(schema_guard.get_tenant_compat_mode(compat_mode))) {
-                              LOG_WARN("fail to get compat mode", K(ret));
                             } else if (!valid) {
                               ret = OB_OP_NOT_ALLOW;
                               LOG_WARN("can not set default_table_organization", "item", item, K(ret));
@@ -1459,7 +1422,6 @@ int ObSetConfigResolver::resolve(const ParseNode &parse_tree)
 
                 if (OB_SUCC(ret)) {
                   if (OB_FAIL(alter_system_set_reset_constraint_check_and_add_item_mysql_mode(stmt->get_rpc_arg(), item, session_info_))) {
-                    LOG_WARN("constraint check failed", K(ret));
                   }
                 }
               }
@@ -1487,9 +1449,7 @@ int ObSetConfigResolver::convert_param_value(ObAdminSetConfigItem &item)
         ret = OB_SUCCESS;
       }
     } else if (OB_FAIL(dest.get_backup_dest_str(path.ptr(), path.capacity()))) {
-      LOG_WARN("failed to get backup dest", K(ret));
     } else if (OB_FAIL(item.value_.assign(path.str()))) {
-      LOG_WARN("failed to assign config value", K(ret));
     }
   }
   return ret;
@@ -1645,7 +1605,6 @@ int ObClearMergeErrorResolver::resolve(const ParseNode &parse_tree)
             } else if (OB_FAIL(Util::resolve_tenant(*tenants_node,
                                                     ignored_count, affect_all,
                                                     affect_all_user, affect_all_meta))) {
-              LOG_WARN("fail to resolve tenant", KR(ret));
             } else if (affect_all || affect_all_user || affect_all_meta) {
               if ((true == affect_all && true == affect_all_user) ||
                   (true == affect_all && true == affect_all_meta) ||
@@ -1690,11 +1649,9 @@ int ObAlterSystemResolverUtil::get_and_verify_tenant_name(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("GCTX.schema_service_ is null", KR(ret), KP(GCTX.schema_service_));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("failed to get_tenant_schema_guard", KR(ret));
   } else if (NULL == tenant_name_node) {
     out_tgt_id = 1UL;
   } else if (OB_FAIL(resolve_tenant_name(tenant_name_node, tenant_name))) {
-    LOG_WARN("fail to resolve target tenant id", KR(ret));
   } else if (FALSE_IT(out_tgt_id = 1UL)) {
     LOG_WARN("failed to get tenant id from schema guard", KR(ret), K(tenant_name));
     if (OB_TENANT_NOT_EXIST == ret || OB_ERR_INVALID_TENANT_NAME == ret) {
@@ -1705,7 +1662,6 @@ int ObAlterSystemResolverUtil::get_and_verify_tenant_name(
   // check tenant status
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_schema))) {
-    LOG_WARN("fail to get tenant schema", KR(ret));
   } else if (OB_ISNULL(tenant_schema)) {
     ret = OB_TENANT_NOT_EXIST;
     LOG_USER_ERROR(OB_TENANT_NOT_EXIST, tenant_name.length(), tenant_name.ptr());
@@ -1863,7 +1819,6 @@ int ObCancelTaskResolver::resolve(const ParseNode &parse_tree)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("task_id node is null", K(ret));
       } else if (OB_FAIL(Util::resolve_string(task_id, task_id_str))) {
-        LOG_WARN("resolve string failed", K(ret));
       } else if (NULL == cancel_type_node) {
         task_type = MAX_SYS_TASK_TYPE;
       } else {
@@ -1882,7 +1837,6 @@ int ObCancelTaskResolver::resolve(const ParseNode &parse_tree)
 
       if (OB_SUCC(ret)) {
         if (OB_FAIL(cancel_task->set_param(task_type, task_id_str))) {
-          LOG_WARN("failed to set cancel task param", K(ret), K(task_type), K(task_id_str));
         }
       }
     }
@@ -1908,14 +1862,11 @@ int ObAlterDiskgroupAddDiskResolver::resolve(const ParseNode &parse_tree)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("children should not be null");
       } else if (OB_FAIL(Util::resolve_relation_name(parse_tree.children_[0], arg.diskgroup_name_))) {
-        LOG_WARN("failed to resolve diskgroup_name", K(ret));
       } else if (OB_FAIL(Util::resolve_string(parse_tree.children_[1], arg.disk_path_))) {
-        LOG_WARN("failed to resolve disk_path", K(ret));
       } else if (NULL != parse_tree.children_[2]
                     && OB_FAIL(Util::resolve_string(parse_tree.children_[2], arg.alias_name_))) {
         LOG_WARN("failed to resolve alias name", K(ret));
       } else if (OB_FAIL(Util::resolve_server(parse_tree.children_[3], arg.server_))) {
-        LOG_WARN("failed to resolve server", K(ret));
       } else if (NULL != parse_tree.children_[4]
                     && OB_FAIL(Util::resolve_zone(parse_tree.children_[4], arg.zone_))) {
         LOG_WARN("failed to resolve zone", K(ret));
@@ -1945,11 +1896,8 @@ int ObAlterDiskgroupDropDiskResolver::resolve(const ParseNode &parse_tree)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("children should not be null");
       } else if (OB_FAIL(Util::resolve_relation_name(parse_tree.children_[0], arg.diskgroup_name_))) {
-        LOG_WARN("failed to resolve diskgroup_name", K(ret));
       } else if (OB_FAIL(Util::resolve_string(parse_tree.children_[1], arg.alias_name_))) {
-        LOG_WARN("failed to resolve alias name", K(ret));
       } else if (OB_FAIL(Util::resolve_server(parse_tree.children_[2], arg.server_))) {
-        LOG_WARN("failed to resolve server", K(ret));
       } else if (NULL != parse_tree.children_[3]
                     && OB_FAIL(Util::resolve_zone(parse_tree.children_[3], arg.zone_))) {
         LOG_WARN("failed to resolve zone", K(ret));
@@ -2055,7 +2003,6 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
                   ObString name(name_node->str_len_, name_node->str_value_);
                   ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, name);
                   if (OB_FAIL(item.name_.assign(name))) {
-                    LOG_WARN("assign config name failed", K(name), K(ret));
                   }
                 }
                 if (OB_FAIL(ret)) {
@@ -2103,7 +2050,6 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
                 if (OB_SUCC(ret)) {
                   if (OB_FAIL(alter_system_set_reset_constraint_check_and_add_item_oracle_mode(
                       setconfig_stmt->get_rpc_arg(), item, schema_checker_))) {
-                    LOG_WARN("constraint check failed", K(ret));
                   } else if (OB_SUCC(ret) && (0 == STRCASECMP(item.name_.ptr(), DEFAULT_TABLE_ORGANIZATION))) {
                     LOG_WARN("can not set default_table_organization", "item", item);
                     LOG_USER_NOTE(OB_NOT_SUPPORTED, "'ALTER SYSTEM SET DEFAULT_TABLE_ORGANIZATION' syntax in the oracle tenant is");
@@ -2158,7 +2104,6 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
               if (OB_SUCC(ret)) {
                 if (OB_FAIL(ob_write_string(*allocator_, var_name,
                                             var_node.variable_name_))) {
-                  LOG_WARN("Can not malloc space for variable name", K(ret));
                 } else {
                   ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI,
                                     var_node.variable_name_);
@@ -2173,7 +2118,6 @@ int ObAlterSystemSetResolver::resolve(const ParseNode &parse_tree)
                   ParseNode value_node;
                   MEMCPY(&value_node, set_param_node->children_[1], sizeof(ParseNode));
                   if (OB_FAIL(ObResolverUtils::resolve_const_expr(params_, value_node, var_node.value_expr_, NULL))) {
-                    LOG_WARN("resolve variable value failed", K(ret));
                   }
                 }
               }
@@ -2240,7 +2184,6 @@ int ObResetConfigResolver::resolve(const ParseNode &parse_tree)
                                 action_node->children_[0]->str_value_);
                   ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, name);
                   if (OB_FAIL(item.name_.assign(name))) {
-                    LOG_WARN("assign config name failed", K(name), K(ret));
                   } else {
                     ObConfigItem *ci = NULL;
                     ObConfigItem * const *sys_ci_ptr = NULL;
@@ -2262,11 +2205,9 @@ int ObResetConfigResolver::resolve(const ParseNode &parse_tree)
                       }
                     }
                     if (OB_FAIL(ret)) {
-                      LOG_WARN("error ret", KR(ret));
                     } else {
                       if (OB_NOT_NULL(ci)) {
                         if (OB_FAIL(item.value_.assign(ci->default_str()))) {
-                          LOG_WARN("assign config value failed", K(ret));
                         } else {
                           //ignore config scope
                           //tenant
@@ -2278,7 +2219,6 @@ int ObResetConfigResolver::resolve(const ParseNode &parse_tree)
                                 ObString tenant_name(n->children_[0]->str_len_,
                                                       n->children_[0]->str_value_);
                                 if (OB_FAIL(item.tenant_name_.assign(tenant_name))) {
-                                  LOG_WARN("assign tenant name failed", K(tenant_name), K(ret));
                                 }
                               }
                             } else {
@@ -2288,7 +2228,6 @@ int ObResetConfigResolver::resolve(const ParseNode &parse_tree)
                           }
                           if (OB_SUCC(ret)) {
                             if (OB_FAIL(alter_system_set_reset_constraint_check_and_add_item_mysql_mode(stmt->get_rpc_arg(), item, session_info_))) {
-                              LOG_WARN("constraint check failed", K(ret));
                             }
                           }
                         }
@@ -2398,7 +2337,6 @@ int ObAlterSystemResetResolver::resolve(const ParseNode &parse_tree)
                 ObString name(name_node->str_len_, name_node->str_value_);
                 ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, name);
                 if (OB_FAIL(item.name_.assign(name))) {
-                  LOG_WARN("assign config name failed", K(name), K(ret));
                 }
               }
               if (OB_FAIL(ret)) {
@@ -2421,11 +2359,9 @@ int ObAlterSystemResetResolver::resolve(const ParseNode &parse_tree)
                 }
               }
               if (OB_FAIL(ret)) {
-                LOG_WARN("error ret", KR(ret));
               } else {
                 if (OB_NOT_NULL(ci)) {
                   if (OB_FAIL(item.value_.assign(ci->default_str()))) {
-                    LOG_WARN("assign config value failed", K(ret));
                   }
                 } else {
                   ret = OB_ERR_SYS_CONFIG_UNKNOWN;
@@ -2434,7 +2370,6 @@ int ObAlterSystemResetResolver::resolve(const ParseNode &parse_tree)
               if (OB_SUCC(ret)) {
                 if (OB_FAIL(alter_system_set_reset_constraint_check_and_add_item_oracle_mode(
                     setconfig_stmt->get_rpc_arg(), item, schema_checker_))) {
-                  LOG_WARN("constraint check failed", KR(ret));
                 }
               }
             }
@@ -2471,18 +2406,15 @@ int get_and_verify_tenant_name(
       LOG_WARN("no specified tenant in the sys tenant's session", KR(ret));
       if (OB_TMP_FAIL(databuff_printf(comment, COMMENT_LENGTH, pos,
               "%s of SYS tenant is", op_str))) {
-        LOG_WARN("failed to printf to comment", KR(ret), KR(tmp_ret), K(op_str));
       } else {
         LOG_USER_ERROR(OB_NOT_SUPPORTED, comment);
       }
     }
   } else if (OB_FAIL(resolve_tenant_name(parse_node, tenant_name))) {
-    LOG_WARN("fail to resolve target tenant id", KR(ret));
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("GCTX.schema_service_ is null", KR(ret), KP(GCTX.schema_service_));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("failed to get_tenant_schema_guard", KR(ret));
   } else if (FALSE_IT(out_tgt_id = 1UL)) {
     LOG_WARN("failed to get tenant id from schema guard", KR(ret), K(tenant_name));
     if (OB_TENANT_NOT_EXIST == ret || OB_ERR_INVALID_TENANT_NAME == ret) {
@@ -2494,7 +2426,6 @@ int get_and_verify_tenant_name(
     LOG_WARN("only support user tenant", KR(ret));
     if (OB_TMP_FAIL(databuff_printf(comment, COMMENT_LENGTH, pos,
             "%s of META or SYS tenant is", op_str))) {
-      LOG_WARN("failed to printf to comment", KR(ret), KR(tmp_ret), K(op_str));
     } else {
       LOG_USER_ERROR(OB_NOT_SUPPORTED, comment);
     }

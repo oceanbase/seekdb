@@ -27,7 +27,6 @@ int ObNetQueueTraver::traverse_one_tenant(oceanbase::omt::ObTenant *tenant_ptr, 
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("tenant_ptr is nullptr", K(ret));
   } else if (OB_FAIL(traverse_one_tenant_queue(tenant_ptr->get_req_queue(), group_id, process))) {
-    LOG_ERROR("traverse tenant's req queue failed", K(ret));
   }
   return ret;
 }
@@ -42,7 +41,6 @@ int ObNetQueueTraver::traverse_one_tenant_queue(oceanbase::omt::ReqQueue &tenant
         ret = OB_NULL_CHECK_ERROR;
         LOG_ERROR("link_queue is nullptr", K(ret));
       } else if (OB_FAIL(traverse_one_tenant_one_link_queue(link_queue, group_id, process))) {
-        LOG_ERROR("traverse one tenant one queue failed", K(ret));
       }
     }
   }
@@ -74,9 +72,7 @@ int ObNetQueueTraver::traverse_one_tenant_one_link_queue(ObLinkQueue *link_queue
         } else if (req_cur->get_traverse_index() >= current_time) {
           is_end = true;
         } else if (OB_FAIL(req_cur->set_traverse_index(current_time))) {
-          LOG_ERROR("req_cur set_traverse_index failed", K(ret));
         } else if (OB_FAIL(process.process_request(req_cur, group_id))) {
-          LOG_ERROR("process request failed", K(ret));
         }
         // push req
         if (OB_NOT_NULL(cur) && OB_FAIL(link_queue->push(cur))) {
@@ -93,7 +89,6 @@ int ObNetTraverProcessAutoDiag::process_request(ObRequest *req_cur, int32_t grou
   int ret = OB_SUCCESS;
   ObNetQueueTraRes tmp_info;
   if (OB_FAIL(get_trav_req_info(req_cur, tmp_info, group_id))) {
-    LOG_ERROR("get_trav_req_info failed", K(ret));
   } else {
     net_recorder_(tmp_info);
   }

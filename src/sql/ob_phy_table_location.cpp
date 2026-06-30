@@ -57,7 +57,6 @@ OB_DEF_DESERIALIZE(ObPhyTableLocation)
   // build local index cache
   if (OB_SUCC(ret)) {
     if (OB_FAIL(try_build_location_idx_map())) {
-      LOG_WARN("fail build location idx map", K(ret));
     }
   }
   return ret;
@@ -99,7 +98,6 @@ int ObPhyTableLocation::assign(const ObPhyTableLocation &other)
   ref_table_id_ = other.ref_table_id_;
   duplicate_type_ = other.duplicate_type_;
   if (OB_FAIL(partition_location_list_.assign(other.partition_location_list_))) {
-    LOG_WARN("Failed to assign partition location list", K(ret));
   }
   return ret;
 }
@@ -212,7 +210,6 @@ int ObPhyTableLocation::add_partition_location(
   }
   if (!duplicated) {
     if (OB_FAIL(partition_location_list_.push_back(partition_location))) {
-      LOG_WARN("Fail to add partition location to list", K(ret), K(partition_location));
     }
   }
   return ret;
@@ -237,13 +234,11 @@ int ObPhyTableLocation::try_build_location_idx_map()
   if (OB_UNLIKELY(partition_location_list_.count() > FAST_LOOKUP_LOC_IDX_SIZE_THRES)) {
     if (OB_FAIL(location_idx_map_.create(
                 partition_location_list_.count(), "LocIdxPerfMap", "LocIdxPerfMap"))) {
-      LOG_WARN("fail init location idx map", K(ret));
     } else {
       ARRAY_FOREACH(partition_location_list_, idx) {
         // ObPartitionReplicaLocation
         auto &item = partition_location_list_.at(idx);
         if (OB_FAIL(location_idx_map_.set_refactored(item.get_partition_id(), idx))) {
-          LOG_WARN("fail set value to map", K(ret), K(item));
         }
       }
     }

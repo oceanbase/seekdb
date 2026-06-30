@@ -99,56 +99,40 @@ int ObErrLogService::gen_insert_sql_str(ObIAllocator &alloc,
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(databuff_printf(default_column_name_buf, DEFAULT_COL_NAME_LENGTH,
                                      default_column_name_pos, "%s",ora_err_number))) {
-    LOG_WARN("fail to append column_buf for ora_err_number", K(ret));
   } else if (OB_FAIL(databuff_printf(default_column_name_buf, DEFAULT_COL_NAME_LENGTH,
                                      default_column_name_pos, "%s", DELIMITER))) {
-    LOG_WARN("fail to append column_buf for DELIMITER", K(ret));
   } else if (OB_FAIL(databuff_printf(default_column_value_buf, DEFAULT_COL_VALUE_LENGTH,
                                      default_column_value_pos, "%s", ESCAPE_CHARACTER))) {
-    LOG_WARN("fail to append column_buf for ESCAPE_CHARACTER", K(ret));
   } else if (OB_FAIL(databuff_printf(default_column_value_buf, DEFAULT_COL_VALUE_LENGTH,
                                      default_column_value_pos, "%d", static_cast<int32_t>(err_no)))) {
-    LOG_WARN("fail to append values_buf for ora_err_number", K(ret));
   } else if (OB_FAIL(databuff_printf(default_column_value_buf, DEFAULT_COL_VALUE_LENGTH,
                                      default_column_value_pos, "%s", ESCAPE_CHARACTER))) {
-    LOG_WARN("fail to append column_buf for ESCAPE_CHARACTER", K(ret));
   } else if (OB_FAIL(databuff_printf(default_column_value_buf, DEFAULT_COL_VALUE_LENGTH,
                                      default_column_value_pos, "%s", DELIMITER))) {
-    LOG_WARN("fail to append values_buf for DELIMITER", K(ret));
   }
   // ---------------------
     else if (OB_FAIL(databuff_printf(default_column_name_buf, DEFAULT_COL_NAME_LENGTH,
                                      default_column_name_pos, "%s", ora_err_mesg))) {
-    LOG_WARN("fail to append column_buf for ora_err_mesg", K(ret));
   } else if (OB_FAIL(databuff_printf(default_column_name_buf, DEFAULT_COL_NAME_LENGTH,
                                      default_column_name_pos, "%s", DELIMITER))) {
-    LOG_WARN("fail to append column_buf for DELIMITER", K(ret));
   } else if (OB_FAIL(databuff_printf(default_column_value_buf, DEFAULT_COL_VALUE_LENGTH,
                                      default_column_value_pos, "%s", ESCAPE_CHARACTER))) {
-    LOG_WARN("fail to append column_buf for ESCAPE_CHARACTER", K(ret));
   } else if (OB_FAIL(databuff_printf(default_column_value_buf, DEFAULT_COL_VALUE_LENGTH,
                                      default_column_value_pos, msg))) {
-    LOG_WARN("fail to append values_buf for error_msg", K(ret));
   } else if (OB_FAIL(databuff_printf(default_column_value_buf, DEFAULT_COL_VALUE_LENGTH,
                                      default_column_value_pos, "%s", ESCAPE_CHARACTER))) {
-    LOG_WARN("fail to append column_buf for ESCAPE_CHARACTER", K(ret));
   } else if (OB_FAIL(databuff_printf(default_column_value_buf, DEFAULT_COL_VALUE_LENGTH,
                                      default_column_value_pos, "%s", DELIMITER))) {
-    LOG_WARN("fail to append values_buf for DELIMITER", K(ret));
   }
   // -----------------
   else if (OB_FAIL(databuff_printf(default_column_name_buf, DEFAULT_COL_NAME_LENGTH,
                                    default_column_name_pos, "%s", ora_err_optyp))) {
-    LOG_WARN("fail to execute databuff_printf for ora_err_mesg", K(ret));
   } else if (OB_FAIL(databuff_printf(default_column_value_buf, DEFAULT_COL_VALUE_LENGTH,
                                      default_column_value_pos, "%s", ESCAPE_CHARACTER))) {
-    LOG_WARN("fail to append column_buf for ESCAPE_CHARACTER", K(ret));
   } else if (OB_FAIL(databuff_printf(default_column_value_buf, DEFAULT_COL_VALUE_LENGTH,
                                      default_column_value_pos, "%s", err_type))) {
-    LOG_WARN("fail to append values_buf for error_msg", K(ret));
   } else if (OB_FAIL(databuff_printf(default_column_value_buf, DEFAULT_COL_VALUE_LENGTH,
                                      default_column_value_pos, "%s", ESCAPE_CHARACTER))) {
-    LOG_WARN("fail to append column_buf for ESCAPE_CHARACTER", K(ret));
   }  // last not need DELIMITER because of INSERT_FMT add ' , '
 
   // generate all stmt sql
@@ -162,7 +146,6 @@ int ObErrLogService::gen_insert_sql_str(ObIAllocator &alloc,
                                 err_log_ct_def.err_log_table_name_.ptr(),
                                 default_column_name_pos, default_column_name_buf,
                                 default_column_value_pos, default_column_value_buf))) {
-      LOG_WARN("failed to print insert buf only default column", K(ret));
     }
   } else if (OB_FAIL(databuff_printf(insert_buf, insert_buf_len, insert_pos, INSERT_FMT,
                                      err_log_ct_def.err_log_database_name_.length(),
@@ -173,7 +156,6 @@ int ObErrLogService::gen_insert_sql_str(ObIAllocator &alloc,
                                      dynamic_column_name.length(), dynamic_column_name.ptr(),
                                      default_column_value_pos, default_column_value_buf,
                                      dynamic_column_value.length(), dynamic_column_value.ptr()))) {
-    LOG_WARN("failed to print insert buf", K(ret));
   }
 
   sql_str = insert_buf;
@@ -228,28 +210,21 @@ int ObErrLogService::catch_err_and_gen_sql(ObIAllocator &alloc, const ObSQLSessi
         // do nothing
       } else if (OB_FAIL(databuff_printf(column_name_buf, column_name_size,
                                          column_name_pos, "%s", DELIMITER))) {
-        LOG_WARN("failed to print delimiter", K(ret), K(DELIMITER));
       }  else if (OB_FAIL(databuff_printf(column_name_buf, column_name_size,
                                           column_name_pos, "%s", QUOTATION_MARK))) {
-        LOG_WARN("failed to print QUOTATION_MARK", K(ret), K(QUOTATION_MARK));
       } else if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(alloc,
                                                                              col_name,
                                                                              dst_column_name))) {
 
       } else if (OB_FAIL(databuff_printf(column_name_buf, column_name_size,
                                          column_name_pos, dst_column_name))) {
-        LOG_WARN("fail to append column_buf for dst_column_name", K(ret), K(col_name));
       } else if (OB_FAIL(databuff_printf(column_name_buf, column_name_size,
                                          column_name_pos, "%s", QUOTATION_MARK))) {
-        LOG_WARN("failed to print QUOTATION_MARK", K(ret), K(QUOTATION_MARK));
       } else if (OB_FAIL(databuff_printf(column_value_buf, column_value_size,
                                          column_value_pos, "%s", DELIMITER))) {
-        LOG_WARN("failed to print delimiter", K(ret), K(DELIMITER));
       } else if (OB_FAIL(col_datum->to_obj(col_obj, col_obj_meta))) {
-        LOG_WARN("to_obj failed", K(ret), K(*col_datum), K(col_obj_meta));
       } else if (OB_FAIL(col_obj.print_sql_literal(column_value_buf, column_value_size,
                                                    column_value_pos, get_obj_print_params(session)))) {
-        LOG_WARN("failed to print column value", K(ret), K(*col_datum), K(col_obj));
       }
     }
     dynamic_column_name.assign(column_name_buf, column_name_pos);
@@ -269,9 +244,7 @@ int ObErrLogService::execute_write(char *sql_str)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql_proxy or sql_str should not be null");
   } else if (OB_FAIL(inner_sql_proxy.init(sql_proxy->get_pool()))) {
-    LOG_WARN("init inner sql proxy failed", K(ret));
   } else if (OB_FAIL(inner_sql_proxy.write(sql_str, affected_rows))) {
-    LOG_WARN("execute sql failed", K(ret), K(sql_str));
   }
   return ret;
 }
@@ -307,7 +280,6 @@ int ObErrLogService::insert_err_log_record(const ObSQLSessionInfo *session,
                                         dynamic_name_str,
                                         dynamic_value_str,
                                         err_log_ct_def))) {
-        LOG_WARN("fail to execute catch_err_and_gen_sql", K(ret));
       } else if (OB_FAIL(gen_insert_sql_str(CURRENT_CONTEXT->get_arena_allocator(),
                                             err_log_rt_def.first_err_ret_,
                                             err_log_ct_def,
@@ -315,9 +287,7 @@ int ObErrLogService::insert_err_log_record(const ObSQLSessionInfo *session,
                                             dynamic_value_str,
                                             sql_str,
                                             type))) {
-        LOG_WARN("fail to execute gen_insert_sql_str", K(ret));
       } else if (OB_FAIL(execute_write(sql_str))) {
-        LOG_WARN("fail to execute execute_write", K(ret), K(sql_str));
       }
     }
   }

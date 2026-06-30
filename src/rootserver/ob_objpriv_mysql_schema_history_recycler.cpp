@@ -175,7 +175,6 @@ int ObObjectPrivMysqlRecycleSchemaExecutor::gen_fill_schema_history_sql(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", KR(ret));
   } else if (OB_FAIL(sql.assign_fmt(
     "select user_id, obj_name, obj_type, all_priv, grantor, grantor_host, schema_version, is_deleted "
     "from %s where schema_version <= %ld "
@@ -183,7 +182,6 @@ int ObObjectPrivMysqlRecycleSchemaExecutor::gen_fill_schema_history_sql(
     "limit %ld, %ld",
     table_name_,  schema_version_,
     start_idx, SCHEMA_HISTORY_BATCH_FETCH_NUM))) {
-    LOG_WARN("fail to assign sql", KR(ret), K_(schema_version));
   }
   return ret;
 }
@@ -195,7 +193,6 @@ int ObObjectPrivMysqlRecycleSchemaExecutor::retrieve_schema_history(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", KR(ret));
   } else {
     ObString obj_name;
     ObString grantor;
@@ -226,7 +223,6 @@ int ObObjectPrivMysqlRecycleSchemaExecutor::gen_batch_recycle_schema_history_sql
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", KR(ret));
   } else if (dropped_schema_keys.count() <= 0) {
     // skip
   } else {
@@ -234,12 +230,10 @@ int ObObjectPrivMysqlRecycleSchemaExecutor::gen_batch_recycle_schema_history_sql
         " delete from %s where schema_version <= %ld"
         " and (user_id, obj_name, obj_type, all_priv, grantor, grantor_host) in ( ",
          table_name_, schema_version_))) {
-      LOG_WARN("fail to assign sql", KR(ret), K_(schema_version));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < dropped_schema_keys.count(); i++) {
       const ObObjectPrivMysqlSchemaKey &key = dropped_schema_keys.at(i);
       if (OB_FAIL(check_stop())) {
-        LOG_WARN("schema history recycler is stopped", KR(ret));
       } else if (OB_FAIL(sql.append_fmt("%s (%ld, '%.*s', %ld, %ld, '%.*s', '%.*s')", 0 == i ? "" : ",",
                                         key.user_id_,
                                         key.obj_name_.length(), key.obj_name_.ptr(),
@@ -247,12 +241,10 @@ int ObObjectPrivMysqlRecycleSchemaExecutor::gen_batch_recycle_schema_history_sql
                                         key.all_priv_,
                                         key.grantor_.length(), key.grantor_.ptr(),
                                         key.grantor_host_.length(), key.grantor_host_.ptr()))) {
-        LOG_WARN("fail to append fmt", KR(ret), K(key));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(sql.append_fmt(")"))) {
-      LOG_WARN("fail to append fmt", KR(ret), K_(schema_version));
     }
   }
   return ret;
@@ -264,17 +256,14 @@ int ObObjectPrivMysqlRecycleSchemaExecutor::gen_batch_compress_schema_history_sq
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", KR(ret));
   } else if (compress_schema_infos.count() <= 0) {
     // skip
   } else {
     if (OB_FAIL(sql.assign_fmt("delete from %s where ( ",
                                 table_name_))) {
-      LOG_WARN("fail to assign sql", KR(ret), K_(schema_version));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < compress_schema_infos.count(); i++) {
       if (OB_FAIL(check_stop())) {
-        LOG_WARN("schema history recycler is stopped", KR(ret));
       } else if (OB_FAIL(sql.append_fmt("%s (user_id  = %ld "
                                         "and obj_name = '%.*s' "
                                         "and obj_type  = %ld "
@@ -290,12 +279,10 @@ int ObObjectPrivMysqlRecycleSchemaExecutor::gen_batch_compress_schema_history_sq
                                         compress_schema_infos.at(i).key_.grantor_.length(), compress_schema_infos.at(i).key_.grantor_.ptr(),
                                         compress_schema_infos.at(i).key_.grantor_host_.length(), compress_schema_infos.at(i).key_.grantor_host_.ptr(),
                                         compress_schema_infos.at(i).max_schema_version_))) {
-        LOG_WARN("fail to append fmt", KR(ret), "schema_info", compress_schema_infos.at(i));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(sql.append_fmt(")"))) {
-      LOG_WARN("fail to append fmt", KR(ret), K_(schema_version));
     }
   }
   return ret;

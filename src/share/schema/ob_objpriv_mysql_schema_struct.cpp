@@ -29,9 +29,7 @@ ObObjMysqlPriv& ObObjMysqlPriv::operator=(const ObObjMysqlPriv &other)
     reset();
     int ret = OB_SUCCESS;
     if (OB_FAIL(ObPriv::assign(other))) {
-      LOG_WARN("assign failed", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.obj_name_, obj_name_))) {
-      LOG_WARN("Fail to deep copy db", K(ret));
     } else {
       error_ret_ = other.error_ret_;
       obj_type_ = other.obj_type_;
@@ -49,9 +47,7 @@ int ObObjMysqlPriv::assign(const ObObjMysqlPriv &other)
   if (this != &other) {
     reset();
     if (OB_FAIL(ObPriv::assign(other))) {
-      LOG_WARN("assign failed", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.obj_name_, obj_name_))) {
-      LOG_WARN("Fail to deep copy db", K(ret));
     } else {
       obj_type_ = other.obj_type_;
       error_ret_ = other.error_ret_;
@@ -104,9 +100,7 @@ OB_DEF_DESERIALIZE(ObObjMysqlPriv)
   BASE_DESER((, ObPriv));
   LST_DO_CODE(OB_UNIS_DECODE, obj_name, obj_type);
   if (OB_FAIL(ret)) {
-    LOG_WARN("Fail to deserialize data", K(ret));
   } else if (OB_FAIL(deep_copy_str(obj_name, obj_name_))) {
-    LOG_WARN("Fail to deep copy user_name", K(obj_name), K(ret));
   } else {
     obj_type_ = obj_type;
   }

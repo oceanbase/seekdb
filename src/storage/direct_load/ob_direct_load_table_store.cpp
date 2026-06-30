@@ -66,7 +66,6 @@ int ObDirectLoadTableStore::init()
   int ret = OB_SUCCESS;
   const int64_t bucket_num = 1024;
   if (OB_FAIL(tablet_table_map_.create(bucket_num, "TLD_TableMap", "TLD_TableMap"))) {
-    LOG_WARN("fail to init hash map", KR(ret));
   }
   return ret;
 }
@@ -106,7 +105,6 @@ int ObDirectLoadTableStore::get_or_create_tablet_tables(
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to new ObDirectLoadTableHandleArray", KR(ret));
       } else if (OB_FAIL(tablet_table_map_.set_refactored(tablet_id, table_handle_array))) {
-        LOG_WARN("fail to create", KR(ret));
       }
       if (OB_FAIL(ret)) {
         if (nullptr != table_handle_array) {
@@ -134,9 +132,7 @@ int ObDirectLoadTableStore::add_table(const ObDirectLoadTableHandle &table_handl
     const ObTabletID &tablet_id = table_handle.get_table()->get_tablet_id();
     ObDirectLoadTableHandleArray *tablet_table_array = nullptr;
     if (OB_FAIL(get_or_create_tablet_tables(tablet_id, tablet_table_array))) {
-      LOG_WARN("fail to get or create tablet tables", KR(ret), K(tablet_id));
     } else if (OB_FAIL(tablet_table_array->add(table_handle))) {
-      LOG_WARN("fail to add table", KR(ret));
     }
   }
   return ret;
@@ -147,7 +143,6 @@ int ObDirectLoadTableStore::add_tables(const ObDirectLoadTableHandleArray &table
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < table_handle_array.count(); ++i) {
     if (OB_FAIL(add_table(table_handle_array.at(i)))) {
-      LOG_WARN("fail to add table", KR(ret), K(i));
     }
   }
   return ret;
@@ -176,9 +171,7 @@ int ObDirectLoadTableStore::add_tablet_tables(
     if (OB_SUCC(ret)) {
       ObDirectLoadTableHandleArray *tablet_table_array = nullptr;
       if (OB_FAIL(get_or_create_tablet_tables(tablet_id, tablet_table_array))) {
-        LOG_WARN("fail to get or create tablet tables", KR(ret), K(tablet_id));
       } else if (OB_FAIL(tablet_table_array->add(table_handle_array))) {
-        LOG_WARN("fail to add tables", KR(ret));
       }
     }
   }

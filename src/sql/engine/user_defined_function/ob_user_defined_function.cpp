@@ -45,7 +45,6 @@ int ObUdfFunction::init(const share::schema::ObUDFMeta &udf_meta)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("the udf meta is invalid", K(ret));
   } else if (OB_FAIL(ObUdfUtil::load_so(udf_meta.dl_, dlhandle_))) {
-    LOG_WARN("load so error", K(ret));
   } else if (OB_FAIL(ObUdfUtil::load_function(udf_meta.name_,
                                               dlhandle_,
                                               ObString::make_string(""),
@@ -60,13 +59,11 @@ int ObUdfFunction::init(const share::schema::ObUDFMeta &udf_meta)
                                               ObString::make_string("_init"),
                                               false, /* can't ignore error */
                                               func_init_))) {
-    LOG_WARN("load init function failed", K(ret));
   } else if (OB_FAIL(ObUdfUtil::load_function(udf_meta.name_,
                                               dlhandle_,
                                               ObString::make_string("_deinit"),
                                               true, /* ignore error */
                                               func_deinit_))) {
-    LOG_WARN("load deinit function failed", K(ret));
   } else if (udf_meta.type_ == share::schema::ObUDF::UDFType::FUNCTION) {
     // do nothing
   } else if (OB_FAIL(ObUdfUtil::load_function(udf_meta.name_,
@@ -74,13 +71,11 @@ int ObUdfFunction::init(const share::schema::ObUDFMeta &udf_meta)
                                               ObString::make_string("_clear"),
                                               false, /* ignore error */
                                               func_clear_))) {
-    LOG_WARN("load clear function error", K(ret));
   } else if (OB_FAIL(ObUdfUtil::load_function(udf_meta.name_,
                                               dlhandle_,
                                               ObString::make_string("_add"),
                                               false, /* ignore error */
                                               func_add_))) {
-    LOG_WARN("load add function error", K(ret));
   }
   if (OB_SUCC(ret)) {
     IGNORE_RETURN udf_meta_.assign(udf_meta);
@@ -132,7 +127,6 @@ int ObAggUdfFunction::process_origin_func(ObIAllocator &allocator,
                                           tmp_ctx->udf_args_,
                                           func_origin_,
                                           agg_result))) {
-    LOG_WARN("failed to process udf function", K(ret));
   }
   return ret;
 }
@@ -157,7 +151,6 @@ int ObAggUdfFunction::process_clear_func(ObUdfCtx &udf_ctx) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObUdfUtil::process_clear_func(udf_ctx.udf_init_, func_clear_))) {
-    LOG_WARN("failed to process add row", K(ret));
   }
   return ret;
 }

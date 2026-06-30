@@ -54,7 +54,6 @@ int ObCreateCCLRuleExecutor::execute(ObExecContext &ctx, ObCreateCCLRuleStmt &st
   ObString first_stmt;
   obcall::UInt64 database_id(0);
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
-     SQL_ENG_LOG(WARN, "fail to get first stmt" , K(ret));
   } else {
     tmp_arg.ddl_stmt_str_ = first_stmt;
     tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
@@ -68,7 +67,6 @@ int ObCreateCCLRuleExecutor::execute(ObExecContext &ctx, ObCreateCCLRuleStmt &st
     SQL_ENG_LOG(WARN, "fail to get physical plan ctx", K(ret), K(ctx));
   } else {
     if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_ccl_rule_ddl(create_ccl_rule_arg); }))) {
-      SQL_ENG_LOG(WARN, "rpc proxy create table failed", K(ret));
     }
   }
   SERVER_EVENT_ADD("ddl", "create ccl rule execute finish",
@@ -98,7 +96,6 @@ int ObDropCCLRuleExecutor::execute(ObExecContext &ctx, ObDropCCLRuleStmt &stmt)
   ObString first_stmt;
   uint64_t database_id = 0;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
-     SQL_ENG_LOG(WARN, "fail to get first stmt" , K(ret));
   } else {
     tmp_arg.ddl_stmt_str_ = first_stmt;
     tmp_arg.consumer_group_id_ = THIS_WORKER.get_group_id();
@@ -112,7 +109,6 @@ int ObDropCCLRuleExecutor::execute(ObExecContext &ctx, ObDropCCLRuleStmt &stmt)
     SQL_ENG_LOG(WARN, "fail to get my session", K(ctx));
   } else {
     if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_ccl_rule_ddl(drop_ccl_rule_arg); }))) {
-      SQL_ENG_LOG(WARN, "rpc proxy drop ccl rule failed", K(ret));
     }
   }
   SERVER_EVENT_ADD("ddl", "drop ccl rule execute finish",

@@ -61,7 +61,6 @@ int ObExprChar::calc_result_typeN(ObExprResType &type, ObExprResType *types, int
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument number, param should not less than 2", K(param_num), K(ret));
   } else if (OB_FAIL(calc_result_type(type, types[param_num-1]))) {
-    LOG_WARN("failed to calc result type", K(ret));
   } else {
     //set calc type
     //i starts from 1 rather than 0 since the first param is obvarchar always.
@@ -126,7 +125,6 @@ int calc_char_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_-1; ++i) {
     if (OB_FAIL(expr.args_[i]->eval(ctx, child_res))) {
-      LOG_WARN("eval arg failed", K(ret), K(i));
     } else if (child_res->is_null()) {
       continue;
     } else {
@@ -151,7 +149,6 @@ int calc_char_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
           && OB_FAIL(str_buf.append(align_buf, mb_minlen - append_len % mb_minlen))) {
         LOG_WARN("fail to append align character", K(ret));
       } else if (OB_FAIL(str_buf.append(buf, append_len))) {
-        LOG_WARN("fail to append convert result", K(ret));
       }
     }
   }
@@ -173,8 +170,6 @@ int calc_char_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
                                                     expr.datum_meta_.cs_type_,
                                                     checked_res_str, is_null,
                                                     true, false))) {
-        LOG_WARN("check_well_formed_str failed", K(ret), K(res_str),
-                  K(expr.datum_meta_));
       } else if (is_null) {
         res_datum.set_null();
       } else {

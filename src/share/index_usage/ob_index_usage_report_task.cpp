@@ -67,17 +67,14 @@ int ObIndexUsageReportTask::GetIndexUsageItemsFn::operator()(common::hash::HashM
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(ret), KP(schema_guard_));
   } else if (OB_FAIL(schema_guard_->check_table_exist(index_table_id, exist))) {
-    LOG_WARN("fail to check table exists", K(ret), K(index_table_id));
   } else if (!exist) {
     if (OB_FAIL(remove_items_.push_back(entry.first))) {
-      LOG_WARN("fail to push back remove key", K(ret), K(entry.first));
     } 
   } else {
     if (entry.second.has_data()) { // has new data
       ObIndexUsagePair pair;
       pair.init(entry.first, entry.second);  // clear data
       if (OB_FAIL(dump_items_.push_back(pair))) {
-        LOG_WARN("fail to push back to list", K(ret));
       } else if (++total_dump_count_ >= MAX_DUMP_ITEM_COUNT) {
         ret = OB_ITER_END;
         LOG_INFO("Reach index usage info dump limit", K(ret), K(total_dump_count_));
@@ -107,7 +104,6 @@ int ObIndexUsageReportTask::init(ObIndexUsageInfoMgr *mgr)
     
     const ObMemAttr attr(OB_INDEX_USAGE_REPORT_TASK);
     if (OB_FAIL(deleted_map_.create(MAX_DELETE_HASHMAP_SIZE, attr))) {
-      LOG_WARN("fail to create deleted map", K(ret));
     } else {
       set_sql_proxy(GCTX.sql_proxy_);
       set_mgr(mgr);
@@ -130,7 +126,6 @@ void ObIndexUsageReportTask::runTimerTask()
   int ret = OB_SUCCESS;
   if (!is_inited_) {
   } else if (OB_FAIL(dump())) {
-    LOG_WARN("dump index usage info failed", K(ret));
   }
 }
 
@@ -146,7 +141,6 @@ int ObIndexUsageReportTask::storage_index_usage(const ObIndexUsagePairList &info
   } else if (!info_list.empty()) {
     ObSqlString insert_update_sql;
     if (OB_FAIL(insert_update_sql.append_fmt(INSERT_INDEX_USAGE_HEAD_SQL, OB_ALL_INDEX_USAGE_INFO_TNAME))) {
-      LOG_WARN("fail to append sql string", K(ret));
     }
     // append sql string
     for (ObIndexUsagePairList::const_iterator it = info_list.begin(); OB_SUCC(ret) && it != info_list.end(); it++) {
@@ -167,16 +161,13 @@ int ObIndexUsageReportTask::storage_index_usage(const ObIndexUsagePairList &info
           it->second.bucket_1000_plus_access_count_,
           it->second.bucket_1000_plus_rows_returned_,
           it->second.last_used_time_))) {
-        LOG_WARN("fail to append sql string", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       int64_t affected_rows = 0;
       insert_update_sql.set_length(insert_update_sql.length() - 1);
       if (OB_FAIL(insert_update_sql.append(INSERT_INDEX_USAGE_ON_DUPLICATE_END_SQL))) {
-        LOG_WARN("fail to append sql string", K(ret));
       } else if (OB_FAIL(sql_proxy_->write(insert_update_sql.ptr(), affected_rows))) {
-        LOG_WARN("insert update sql error", K(ret), K(insert_update_sql));
       } else if (affected_rows < 0) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected affected rows", K(ret), K(affected_rows));
@@ -199,9 +190,7 @@ int ObIndexUsageReportTask::del_index_usage(const ObIndexUsageKey &key)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql_proxy is null", K(ret));
   } else if (OB_FAIL(dml.add_pk_column("object_id", key.index_table_id_))) {
-    LOG_WARN("dml add column failed", K(ret));
   } else if (OB_FAIL(exec.exec_delete(OB_ALL_INDEX_USAGE_INFO_TNAME, dml, affected_rows))) {
-    LOG_WARN("del sql exec error", K(ret), K(key));
   }
   return ret;
 }
@@ -223,14 +212,12 @@ int ObIndexUsageReportTask::check_and_delete(const ObIArray<ObIndexUsageKey> &ca
           LOG_INFO("reach max deleted map upper limited", K(deleted_map_.size()));
           break;
         } else if (OB_FAIL(deleted_map_.set_refactored(key, 1, true /* overwrite */))) {
-          LOG_WARN("fail to set delete map", K(ret), K(key));
         }
       } else {
         LOG_WARN("fail to get from deleted map", K(ret));
       }
     } else if (++value <= MAX_CHECK_NOT_EXIST_CNT) { // update
-      if (OB_FAIL(deleted_map_.set_refactored(key, value, true /* overwrite */))) { 
-        LOG_WARN("fail to set deleted map", K(ret), K(key), K(value));
+      if (OB_FAIL(deleted_map_.set_refactored(key, value, true /* overwrite */))) {
       }
     } else { // delete
       if (OB_FAIL(deleted_map_.erase_refactored(key))) {
@@ -242,7 +229,6 @@ int ObIndexUsageReportTask::check_and_delete(const ObIArray<ObIndexUsageKey> &ca
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(del_index_usage(key))) {
-          LOG_WARN("fail to del inner table record", K(ret));
         } else if (OB_FAIL(hashmap->erase_refactored(key))) {
           if (OB_HASH_NOT_EXIST == ret) {
             ret = OB_SUCCESS;
@@ -281,9 +267,7 @@ int ObIndexUsageReportTask::dump()
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("schema service null pointer", K(ret));
         } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-          LOG_WARN("failed to get schema_guard", K(ret));
         } else if (OB_FAIL(schema_guard.get_schema_version(schema_version))) {
-          LOG_WARN("failed to get schema version", K(ret));
         } else if (!ObSchemaService::is_formal_version(schema_version)) {
           ret = OB_EAGAIN;
           LOG_INFO("is not a formal_schema_version", K(ret), K(schema_version));
@@ -306,11 +290,9 @@ int ObIndexUsageReportTask::dump()
           ObIndexUsagePair tmp_pair;
           tmp_pair.init(it->first, it->second);  // clear data
           if (OB_FAIL(tmp_list.push_back(tmp_pair))) {
-            LOG_WARN("fail to push back to list", K(ret));
           } else if (tmp_list.size() < DUMP_BATCH_SIZE && index < dump_item_count - 1) {
             // continue
           } else if (OB_FAIL(storage_index_usage(tmp_list))) {
-            LOG_WARN("flush index usage batch failed", K(ret));
           } else {
             tmp_list.reset();
           }
@@ -318,7 +300,6 @@ int ObIndexUsageReportTask::dump()
         if (OB_SUCC(ret)) {
           index_usage_items_fn.dump_items_.reset();
           if (OB_FAIL(check_and_delete(index_usage_items_fn.remove_items_, hashmap))) {
-            LOG_WARN("fail to check and delete index usage record", K(ret));
           } else {
             index_usage_items_fn.remove_items_.reuse();
           }
@@ -372,7 +353,6 @@ void ObIndexUsageRefreshConfTask::runTimerTask()
     // get data version
     uint64_t data_version = 0;
     if (OB_FAIL(oceanbase::common::ObClusterVersion::get_instance().get_tenant_data_version(data_version))) {
-      LOG_WARN("failed to GET_MIN_DATA_VERSION", K(ret));
     } else {
       mgr_->set_min_tenant_data_version(data_version);
     }

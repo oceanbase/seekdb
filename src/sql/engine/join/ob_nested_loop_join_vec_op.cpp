@@ -60,14 +60,12 @@ int ObNestedLoopJoinVecOp::inner_open()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("nlp_op child is null", KP(left_), KP(right_), K(ret));
   } else if (OB_FAIL(ObJoinVecOp::inner_open())) {
-    LOG_WARN("failed to open in base class", K(ret));
   } else if (OB_FAIL(drive_iter_.init(this,
                                       MY_SPEC.group_size_,
                                       &MY_SPEC.rescan_params_,
                                       MY_SPEC.group_rescan_,
                                       true
                                       ))) {
-    LOG_WARN("failed to init drive iterator for NLJ", KR(ret));
   }
   return ret;
 }
@@ -79,9 +77,7 @@ int ObNestedLoopJoinVecOp::rescan()
   //the right child's rescan is defer to rescan_right_operator() driven by get_next_row();
   defered_right_rescan_ = true;
   if (OB_FAIL(drive_iter_.rescan_left())) {
-    LOG_WARN("rescan left child operator failed", KR(ret), "child op_type", left_->op_name());
   } else if (OB_FAIL(inner_rescan())) {
-    LOG_WARN("failed to inner rescan", KR(ret));
   }
 #ifndef NDEBUG
   OX(OB_ASSERT(false == brs_.end_));
@@ -94,11 +90,9 @@ int ObNestedLoopJoinVecOp::do_drain_exch()
   int ret = OB_SUCCESS;
   if (!MY_SPEC.group_rescan_) {
     if (OB_FAIL( ObOperator::do_drain_exch())) {
-      LOG_WARN("failed to drain NLJ operator", K(ret));
     }
   } else if (!drive_iter_.is_multi_level_group_rescan()) {
     if (OB_FAIL( ObOperator::do_drain_exch())) {
-      LOG_WARN("failed to drain NLJ operator", K(ret));
     }
   } else {
     if (!is_operator_end()) {
@@ -106,10 +100,8 @@ int ObNestedLoopJoinVecOp::do_drain_exch()
       // NLJ needs to pass the drain request to it's child operator
       LOG_TRACE("The drain request is passed by parent operator");
       if (OB_FAIL( ObOperator::do_drain_exch())) {
-        LOG_WARN("failed to drain normal NLJ operator", K(ret));
       }
     } else if (OB_FAIL(do_drain_exch_multi_lvel_bnlj())) {
-      LOG_WARN("failed to drain multi level NLJ operator", K(ret));
     }
   }
   return ret;
@@ -119,7 +111,6 @@ int ObNestedLoopJoinVecOp::do_drain_exch_multi_lvel_bnlj()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(try_open())) {
-    LOG_WARN("fail to open operator", K(ret));
   } else if (!exch_drained_) {
     // the drain request is triggered by current NLJ operator, and current NLJ is a multi level Batch NLJ
     // It will block rescan request for it's child operator, if the drain request is passed to it's child operator
@@ -153,7 +144,6 @@ int ObNestedLoopJoinVecOp::inner_rescan()
   reset_buf_state();
   set_param_null();
   if (OB_FAIL(ObJoinVecOp::inner_rescan())) {
-    LOG_WARN("failed to rescan", K(ret));
   }
   return ret;
 }
@@ -183,7 +173,6 @@ int ObNestedLoopJoinVecOp::perform_gi_partition_prunig()
   if (OB_SUCC(ret) && !get_spec().enable_px_batch_rescan_ && !get_spec().group_rescan_ && get_spec().enable_gi_partition_pruning_) {
     ObDatum *datum = nullptr;
     if (OB_FAIL(get_spec().gi_partition_id_expr_->eval(eval_ctx_, datum))) {
-      LOG_WARN("fail eval value", K(ret));
     } else {
       // NOTE: If the right side corresponds to multiple tables, the logic here is also correct
       // Like A REPART TO NLJ (B JOIN C) scenario
@@ -243,13 +232,9 @@ int ObNestedLoopJoinVecOp::rescan_right_op()
   batch_info_guard.set_batch_size(drive_iter_.get_left_batch_size());
   batch_info_guard.set_batch_idx(drive_iter_.get_left_batch_idx());
   if (OB_FAIL(drive_iter_.restore_drive_row(drive_iter_.get_left_batch_idx(), drive_iter_.get_left_batch_idx()))) {
-    LOG_WARN("failed to restore single row", K(ret), K(drive_iter_.get_left_batch_idx()));
   } else if (OB_FAIL(drive_iter_.fill_cur_row_group_param())) {
-    LOG_WARN("failed to prepare rescan params for NLJ", K(ret));
   } else if (OB_FAIL(perform_gi_partition_prunig())) {
-    LOG_WARN("failed perform gi partition pruning", K(ret));
   } else if (OB_FAIL(rescan_right_operator())) {
-    LOG_WARN("failed to rescan right operator", K(ret));
   }
   return ret;
 }
@@ -276,12 +261,10 @@ int ObNestedLoopJoinVecOp::process_right_batch()
   clear_evaluated_flag();
   DASGroupScanMarkGuard mark_guard(ctx_.get_das_ctx(), MY_SPEC.group_rescan_);
   if (OB_FAIL(get_next_batch_from_right(right_brs))) {
-    LOG_WARN("fail to get next right batch", K(ret), K(MY_SPEC));
   } else if (0 == right_brs->size_ && right_brs->end_) {
     match_right_batch_end_ = true;
     LOG_DEBUG("right rows iter end");
   } else if (OB_FAIL(drive_iter_.drive_row_extend(right_brs->size_))) {
-    LOG_WARN("failed to extend drive row", K(ret));
   } else {
     if (0 == conds.count()) {
       brs_.skip_->deep_copy(*right_brs->skip_, right_brs->size_);
@@ -293,8 +276,6 @@ int ObNestedLoopJoinVecOp::process_right_batch()
         if (right_brs->skip_->exist(r_idx)) {
           brs_.skip_->set(r_idx);
         } else if (OB_FAIL(calc_other_conds(*right_brs->skip_, is_match))) {
-          LOG_WARN("calc_other_conds failed", K(ret), K(r_idx),
-                   K(right_brs->size_));
         } else if (!is_match) {
           brs_.skip_->set(r_idx);
         } else { /*do nothing*/
@@ -397,7 +378,6 @@ int ObNestedLoopJoinVecOp::inner_get_next_batch(const int64_t max_row_cnt)
     if (OB_SUCC(ret) && JS_RESCAN_RIGHT_OP == batch_state_) {
       LOG_DEBUG("start rescan right op", K(spec_.id_), K(drive_iter_.get_left_batch_idx()));
       if (OB_FAIL(rescan_right_op())) {
-        LOG_WARN("failed to rescan right", K(ret));
       } else {
         batch_state_ = JS_PROCESS_RIGHT_BATCH;
       }
@@ -406,7 +386,6 @@ int ObNestedLoopJoinVecOp::inner_get_next_batch(const int64_t max_row_cnt)
     if (OB_SUCC(ret) && JS_PROCESS_RIGHT_BATCH == batch_state_) {
       LOG_DEBUG("start process right batch", K(spec_.id_),K(drive_iter_.get_left_batch_idx()));
       if (OB_FAIL(process_right_batch())) {
-        LOG_WARN("fail to process right batch", K(ret));
       } else {
         if (need_output_row_) {
           batch_state_ = JS_OUTPUT;
@@ -426,7 +405,6 @@ int ObNestedLoopJoinVecOp::inner_get_next_batch(const int64_t max_row_cnt)
     if (OB_SUCC(ret) && JS_OUTPUT == batch_state_) {
       LOG_DEBUG("start output", K(spec_.id_), K(drive_iter_.get_left_batch_idx()));
       if (OB_FAIL(output())) {
-        LOG_WARN("fail to output", K(ret));
       } else {
         if (match_right_batch_end_) {
           batch_state_ = JS_GET_LEFT_ROW;

@@ -71,7 +71,6 @@ int ObMdsMinorFilter::filter(
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(kv_adapter.convert_from_mds_multi_version_row(row))) {
-    LOG_WARN("fail to convert from mds multi version row", K(ret), K(row));
   } else if (medium_info_mds_unit_id == kv_adapter.get_type()) {
     ret = filter_medium_info(row, kv_adapter, filter_ret);
   } else if (truncateinfo_mds_unit_id == kv_adapter.get_type()) {
@@ -97,7 +96,6 @@ int ObMdsMinorFilter::filter_medium_info(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("uncommitted row or uncompacted row in mds table", K(ret), K(row));
   } else if (OB_FAIL(medium_info_key.mds_deserialize(kv_adapter.get_key().ptr(), kv_adapter.get_key().length(), pos))) {
-    LOG_WARN("fail to deserialize medium_info_key", K(ret), K(kv_adapter));
   } else if (medium_info_key.get_medium_snapshot() <= last_major_snapshot_) {
     filter_ret = FILTER_RET_REMOVE;
     LOG_DEBUG("medium info is filtered", K(ret), K(row), K(last_major_snapshot_), K(medium_info_key), K(kv_adapter));
@@ -122,7 +120,6 @@ int ObMdsMinorFilter::filter_truncate_info(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("uncommitted row or uncompacted row in mds table", K(ret), K(row));
   } else if (OB_FAIL(truncate_info.deserialize(allocator_, kv_adapter.get_user_data().ptr(), kv_adapter.get_user_data().length(), pos))) {
-    LOG_WARN("fail to deserialize truncate info", K(ret), K(kv_adapter));
   } else if (truncate_info.commit_version_ < truncate_filter_snapshot_) {
     filter_ret = FILTER_RET_REMOVE;
     // TODO change into debug log later
@@ -148,7 +145,6 @@ int ObCrossLSMdsMinorFilter::filter(
   constexpr uint8_t tablet_status_mds_unit_id = mds::TupleTypeIdx<mds::NormalMdsTable, mds::MdsUnit<mds::DummyKey, ObTabletCreateDeleteMdsUserData>>::value;
 
   if (OB_FAIL(kv_adapter.convert_from_mds_multi_version_row(row))) {
-    LOG_WARN("fail to convert from mds multi version row", K(ret), K(row));
   } else if (tablet_status_mds_unit_id == kv_adapter.get_type()) {
     if (OB_UNLIKELY(row.is_uncommitted_row()
         || !row.is_compacted_multi_version_row())) { // not filter uncommitted row

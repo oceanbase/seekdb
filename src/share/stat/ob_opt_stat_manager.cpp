@@ -78,9 +78,7 @@ int ObOptStatManager::init(ObMySQLProxy *proxy,
     ret = OB_INIT_TWICE;
     LOG_WARN("optimizer statistics manager has already been initialized.", K(ret));
   } else if (OB_FAIL(stat_service_.init(proxy, config))) {
-    LOG_WARN("failed to init stat service", K(ret));
   } else if (OB_FAIL(refresh_stat_task_queue_.init(1, "OptRefTask", REFRESH_STAT_TASK_NUM, REFRESH_STAT_TASK_NUM))) {
-    LOG_WARN("initialize timer failed. ", K(ret));
   } else {
     inited_ = true;
   }
@@ -107,10 +105,8 @@ int ObOptStatManager::add_refresh_stat_task(const obcall::ObUpdateStatCacheArg &
   int ret = OB_SUCCESS;
   if (analyze_arg.update_system_stats_only_) {
     if (OB_FAIL(handle_refresh_system_stat_task(analyze_arg))) {
-      LOG_WARN("failed to handle refresh system stat cache", K(ret));
     }
   } else if (OB_FAIL(handle_refresh_stat_task(analyze_arg))) {
-    LOG_WARN("failed to handld refresh stat task", K(ret));
   }
   return ret;
 }
@@ -140,12 +136,9 @@ int ObOptStatManager::get_column_stat(const uint64_t table_id,
                                                                      part_ids.at(i),
                                                                      column_ids.at(j));
           if (OB_FAIL(keys.push_back(key))) {
-            LOG_WARN("failed to push back", K(ret));
           } else if (MAX_BATCH_SIZE == keys.count()) {
             if (OB_FAIL(stat_service_.get_column_stat(keys, tmp_handles))) {
-              LOG_WARN("get column stat failed.", K(ret));
             } else if (OB_FAIL(append(handles, tmp_handles))) {
-              LOG_WARN("failed to append", K(ret));
             } else {
               arena.reuse();
               keys.reuse();
@@ -157,9 +150,7 @@ int ObOptStatManager::get_column_stat(const uint64_t table_id,
     }
     if (OB_SUCC(ret) && !keys.empty()) {
       if (OB_FAIL(stat_service_.get_column_stat(keys, tmp_handles))) {
-        LOG_WARN("get column stat failed.", K(ret));
       } else if (OB_FAIL(append(handles, tmp_handles))) {
-        LOG_WARN("failed to append", K(ret));
       } else {
         arena.reuse();
       }
@@ -188,7 +179,6 @@ int ObOptStatManager::get_column_stat(const ObOptColumnStat::Key &key,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid column stat key.", K(key), K(ret));
   } else if (OB_FAIL(stat_service_.get_column_stat(key, handle))) {
-    LOG_WARN("get_column_stat failed.", K(ret));
   }
   return ret;
 }
@@ -200,7 +190,6 @@ int ObOptStatManager::get_table_stat(const uint64_t table_id,
   int ret = OB_SUCCESS;
   ObSEArray<ObOptTableStatHandle, 4> handles;
   if (OB_FAIL(get_table_stat(table_id, part_ids, handles))) {
-    LOG_WARN("failed to get table stat", K(ret));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < handles.count(); ++i) {
@@ -236,7 +225,6 @@ int ObOptStatManager::get_table_stat(const uint64_t table_id,
       } else {
         ObOptTableStat::Key *key = new (ptr) ObOptTableStat::Key(table_id, part_ids.at(i));
         if (OB_FAIL(keys.push_back(key))) {
-          LOG_WARN("push back error", K(ret));
         }
       }
     }
@@ -256,7 +244,6 @@ int ObOptStatManager::get_table_stat(const ObOptTableStat::Key &key,
     ret = OB_NOT_INIT;
     LOG_WARN("optimizer statistics manager has not been initialized.", K(ret), K(inited_));
   } else if (OB_FAIL(stat_service_.get_table_stat(key, tstat))) {
-    LOG_WARN("get table stat failed", K(ret));
   }
   return ret;
 }
@@ -280,7 +267,6 @@ int ObOptStatManager::update_column_stat(share::schema::ObSchemaGetterGuard *sch
                                                                         current_time,
                                                                         only_update_col_stat,
                                                                         print_params))) {
-    LOG_WARN("failed to update column stat.", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -296,7 +282,6 @@ int ObOptStatManager::update_table_stat(sqlclient::ObISQLConnection *conn,
   } else if (OB_FAIL(stat_service_.get_sql_service().update_table_stat(conn,
                                                                        table_stats,
                                                                        is_index_stat))) {
-    LOG_WARN("failed to update table stats", K(ret));
   }
   return ret;
 }
@@ -314,7 +299,6 @@ int ObOptStatManager::update_table_stat(sqlclient::ObISQLConnection *conn,
                                                                        table_stats,
                                                                        current_time,
                                                                        is_index_stat))) {
-    LOG_WARN("failed to update table stats", K(ret));
   }
   return ret;
 }
@@ -335,7 +319,6 @@ int ObOptStatManager::delete_table_stat(const uint64_t ref_id,
                                                                        cascade_column,
                                                                        degree,
                                                                        affected_rows))) {
-    LOG_WARN("failed to delete table stat", K(ret));
   }
   return ret;
 }
@@ -352,7 +335,6 @@ int ObOptStatManager::delete_column_stat(const uint64_t ref_id,
     LOG_WARN("not inited", K(ret));
   } else if (OB_FAIL(stat_service_.get_sql_service().delete_column_stat(
                        ref_id, column_ids, part_ids, only_histogram, degree))) {
-    LOG_WARN("failed to delete column stat", K(ret));
   }
   return ret;
 }
@@ -426,20 +408,17 @@ int ObOptStatManager::handle_refresh_stat_task(const obcall::ObUpdateStatCacheAr
     ObOptTableStat::Key table_key(table_id,
                                   arg.partition_ids_.at(i));
     if (OB_FAIL(erase_table_stat(table_key))) {
-      LOG_WARN("update table statistics failed", K(ret));
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < arg.column_ids_.count(); ++j) {
       ObOptColumnStat::Key key(table_id,
                                arg.partition_ids_.at(i),
                                arg.column_ids_.at(j));
       if (OB_FAIL(erase_column_stat(key))) {
-        LOG_WARN("update column statistics failed", K(ret));
       }
     }
   }
   if (OB_SUCC(ret) && !arg.no_invalidate_) {
     if (OB_FAIL(invalidate_plan( table_id))) {
-      LOG_WARN("failed to invalidate plan", K(ret));
     }
   }
   return ret;
@@ -492,7 +471,6 @@ int ObOptStatManager::erase_table_stat(const uint64_t table_id,
   for (int64_t i = 0; OB_SUCC(ret) && i < part_ids.count(); ++i) {
     ObOptTableStat::Key key(table_id, part_ids.at(i));
     if (OB_FAIL(erase_table_stat(key))) {
-      LOG_WARN("failed to erase table stat", K(ret));
     } else {/*do nothing*/}
   }
   return ret;
@@ -507,7 +485,6 @@ int ObOptStatManager::erase_column_stat(const uint64_t table_id,
     for (int64_t j = 0; OB_SUCC(ret) && j < column_ids.count(); ++j) {
       ObOptColumnStat::Key key(table_id, part_ids.at(i), column_ids.at(j));
       if (OB_FAIL(erase_column_stat(key))) {
-        LOG_WARN("failed to erase column stat", K(ret));
       }
     }
   }
@@ -541,18 +518,15 @@ int ObOptStatManager::check_opt_stat_validity(sql::ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(ctx.get_virtual_table_ctx().schema_guard_));
   } else if (OB_FAIL(check_stat_tables_ready(*ctx.get_virtual_table_ctx().schema_guard_, is_valid))) {
-    LOG_WARN("failed to check stat tables ready", K(ret));
   } else if (!is_valid) {
     //do nothing
   } else if (OB_FAIL(ObDbmsStatsUtils::check_is_stat_table(*ctx.get_virtual_table_ctx().schema_guard_, table_ref_id, true, is_valid))) {
-    LOG_WARN("failed to check is stat table", K(ret));
   } else if (!is_valid) {
     //do nothing
   } else if (!part_ids.empty()) {
     is_opt_stat_valid = true;
     ObSEArray<ObOptTableStat, 4> stats;
     if (OB_FAIL(get_table_stat(table_ref_id, part_ids, stats))) {
-      LOG_WARN("failed to get table stats", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && is_opt_stat_valid && i < stats.count(); ++i) {
         ObOptTableStat &opt_stat = stats.at(i);
@@ -576,9 +550,7 @@ int ObOptStatManager::check_opt_stat_validity(sql::ObExecContext &ctx,
   is_opt_stat_valid = false;
   ObSEArray<int64_t, 1> part_ids;
   if (OB_FAIL(part_ids.push_back(global_part_id))) {
-    LOG_WARN("failed to push back", K(ret));
   } else if (OB_FAIL(check_opt_stat_validity(ctx, tab_ref_id, part_ids, is_opt_stat_valid))) {
-    LOG_WARN("failed to check opt stat validity", K(ret));
   }
   return ret;
 }
@@ -596,7 +568,6 @@ int ObOptStatManager::check_system_stat_validity(sql::ObExecContext *ctx,
   } else if (OB_FAIL(ctx->get_virtual_table_ctx().schema_guard_->get_table_schema(
                                             share::OB_ALL_AUX_STAT_TID,
                                             table_schema))) {
-    LOG_WARN("failed to get table schema", K(ret), K(table_schema));
   } else if (OB_ISNULL(table_schema)) {
     //do nothing
   } else {
@@ -614,7 +585,6 @@ int ObOptStatManager::get_table_stat(const uint64_t table_ref_id,
   ObOptTableStat::Key key(table_ref_id, part_id);
   ObOptTableStat opt_stat;
   if (OB_FAIL(get_table_stat(key, opt_stat))) {
-    LOG_WARN("failed to get table stat", K(ret));
   } else if (opt_stat.get_last_analyzed() > 0) {
     stat.add(opt_stat.get_row_count() * scale_ratio,
              opt_stat.get_avg_row_size(),
@@ -636,7 +606,6 @@ int ObOptStatManager::get_table_stat(const uint64_t tab_ref_id,
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < part_ids.count(); ++i) {
     if (OB_FAIL(get_table_stat(tab_ref_id, part_ids.at(i), scale_ratio, stat))) {
-      LOG_WARN("failed to get table stat", K(ret));
     }
   }
   LOG_TRACE("succeed to get table stat", K(tab_ref_id), K(part_ids),
@@ -656,9 +625,7 @@ int ObOptStatManager::get_column_stat(const uint64_t tab_ref_id,
   ObSEArray<uint64_t, 1> cids;
   ObSEArray<ObGlobalColumnStat, 1> col_stats;
   if (OB_FAIL(cids.push_back(column_id))) {
-    LOG_WARN("failed to push_back column stats", K(ret));
   } else if (OB_FAIL(batch_get_column_stats(tab_ref_id, part_ids, cids, row_cnt, scale_ratio, col_stats, alloc))) {
-    LOG_WARN("failed to get column stat", K(ret));
   } else if (col_stats.count() != 1) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get column stat", K(ret), K(cids.count()), K(col_stats.count()));
@@ -712,7 +679,6 @@ int ObOptStatManager::batch_get_column_stats(const uint64_t table_id,
       } else {
         ObGlobalAllColEvals *all_col_evals = new (eval_ptr) ObGlobalAllColEvals();
         if (OB_FAIL(column_id_col_evals.set_refactored(column_ids.at(j), all_col_evals, true))) {
-          LOG_WARN("column_id_col_evals set fail", K(ret), K(column_ids.at(j)));
         }
       }
     }
@@ -731,15 +697,11 @@ int ObOptStatManager::batch_get_column_stats(const uint64_t table_id,
             start_pos = j;
           }
           if (OB_FAIL(keys.push_back(key))) {
-            LOG_WARN("failed to push back", K(ret));
           } else if (MAX_BATCH_SIZE == keys.count() ||
                      (j == column_ids.count() - 1 && i == part_ids.count() - 1 && !keys.empty())) {
             if (OB_FAIL(stat_service_.get_column_stat(keys, new_handles))) {
-              LOG_WARN("get column stat failed.", K(ret));
             } else if (OB_FAIL(trans_col_handle_to_evals(new_handles, column_id_col_evals))) {
-              LOG_WARN("failed to gen opt column stats according to handles", K(ret));
             } else if (OB_FAIL(flush_evals(&temp_allocator, start_pos, j, column_ids, column_id_col_evals))) {
-              LOG_WARN("failed to flush column all_evals", K(ret));
             } else {
               arena.reuse();
               keys.reuse();
@@ -784,7 +746,6 @@ int ObOptStatManager::trans_col_handle_to_evals(
       uint64_t column_id = opt_col_stat->get_column_id();
       ObGlobalAllColEvals *col_all_evals = NULL;
       if (OB_FAIL(column_id_col_evals.get_refactored(column_id, col_all_evals))) {
-        LOG_WARN("get col all_evals failed", K(ret));
       } else if (OB_ISNULL(col_all_evals)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("col all_evals cache value is null", K(ret));
@@ -815,7 +776,6 @@ int ObOptStatManager::update_all_eval_to_stats(
     ObGlobalColumnStat opt_stats;
     uint64_t column_id = column_ids.at(i);
     if (OB_FAIL(column_id_col_evals.get_refactored(column_id, col_all_evals))) {
-      LOG_WARN("get col all_evals  failed", K(ret));
     } else if (OB_ISNULL(col_all_evals)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("col all_evals cache value is null", K(ret));
@@ -868,12 +828,10 @@ int ObOptStatManager::flush_evals(ObIAllocator *alloc,
   for (int64_t i = start_pos; OB_SUCC(ret) && i <= end_pos; ++i) {
     uint64_t column_id = column_ids.at(i);
     if (OB_FAIL(column_id_col_evals.get_refactored(column_id, col_all_evals))) {
-      LOG_WARN("get col all_evals  failed", K(ret));
     } else if (OB_ISNULL(col_all_evals)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("col all_evals cache value is null", K(ret));
     } else if (OB_FAIL(col_all_evals->flush(alloc))) {
-      LOG_WARN("flush col all_evals failed", K(ret));
     }
   }
   return ret;
@@ -899,19 +857,16 @@ int ObOptStatManager::check_stat_tables_ready(share::schema::ObSchemaGetterGuard
   if (OB_FAIL(schema_guard.get_table_schema(
                                             share::OB_ALL_TABLE_STAT_TID,
                                             table_schema))) {
-    LOG_WARN("failed to get table schema", K(ret), K(table_schema));
   } else if (OB_ISNULL(table_schema)) {
     //do nothing
   } else if (OB_FAIL(schema_guard.get_table_schema(
                                                    share::OB_ALL_COLUMN_STAT_TID,
                                                    table_schema))) {
-    LOG_WARN("failed to get table schema", K(ret), K(table_schema));
   } else if (OB_ISNULL(table_schema)) {
     //do nothing
   } else if (OB_FAIL(schema_guard.get_table_schema(
                                                    share::OB_ALL_HISTOGRAM_STAT_TID,
                                                    table_schema))) {
-    LOG_WARN("failed to get table schema", K(ret), K(table_schema));
   } else if (OB_ISNULL(table_schema)) {
     //do nothing
   } else {
@@ -949,7 +904,6 @@ int ObOptStatManager::add_ds_stat_cache(const ObOptDSStat::Key &key,
     ret = OB_NOT_INIT;
     LOG_WARN("optimizer statistics manager has not been initialized.", K(ret));
   } else if (OB_FAIL(stat_service_.add_ds_stat_cache(key, value, ds_stat_handle))) {
-    LOG_WARN("failed to add ds stat cache", K(ret));
   }
   return ret;
 }
@@ -980,7 +934,6 @@ int ObOptStatManager::get_system_stat(ObOptSystemStat &stat)
     ret = OB_NOT_INIT;
     LOG_WARN("optimizer statistics manager has not been initialized.", K(ret), K(inited_));
   } else if (OB_FAIL(stat_service_.get_system_stat(key, stat))) {
-    LOG_WARN("get system stat failed", K(ret));
   }
   return ret;
 }
@@ -992,7 +945,6 @@ int ObOptStatManager::update_system_stats(const ObOptSystemStat *system_stats)
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", K(ret));
   } else if (OB_FAIL(stat_service_.get_sql_service().update_system_stats(system_stats))) {
-    LOG_WARN("failed to update system stats", K(ret));
   }
   return ret;
 }
@@ -1004,7 +956,6 @@ int ObOptStatManager::delete_system_stats()
     ret = OB_NOT_INIT;
     LOG_WARN("optimizer statistics manager has not been initialized.", K(ret), K(inited_));
   } else if (OB_FAIL(stat_service_.get_sql_service().delete_system_stats())) {
-    LOG_WARN("delete system stat failed", K(ret));
   }
   return ret;
 }

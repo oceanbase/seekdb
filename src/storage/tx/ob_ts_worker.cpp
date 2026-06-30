@@ -38,9 +38,7 @@ int ObTsWorker::init(ObTsMgr *ts_mgr, const bool use_local_worker)
     TRANS_LOG(WARN, "invalid argument", KR(ret), KP(ts_mgr));
   } else if (use_local_worker) {
     if (OB_FAIL(TG_CREATE(lib::TGDefIDs::TSWorker, tg_id_))) {
-      TRANS_LOG(WARN, "ObTsWorker tg create failed", K(ret));
     } else if (OB_FAIL(TG_SET_HANDLER_AND_START(tg_id_, *this))) {
-      TRANS_LOG(WARN, "simple thread pool init failed", K(ret));
     } else {
       TRANS_LOG(INFO, "ts worker thread pool init success");
     }
@@ -86,7 +84,6 @@ int ObTsWorker::push_task(ObTsResponseTask *task)
     TRANS_LOG(WARN, "invalid argument", KR(ret), KP(task));
   } else if (use_local_worker_) {
     if (OB_FAIL(TG_PUSH_TASK(tg_id_, task))) {
-      TRANS_LOG(WARN, "push task to local worker failed", K(ret), KP(task));
     }
   } else {
     ObMultiTenant *omt = GCTX.omt_;
@@ -96,12 +93,10 @@ int ObTsWorker::push_task(ObTsResponseTask *task)
     } else {
       ObTenant *tenant = nullptr;
       if (OB_FAIL(omt->get_tenant(tenant))) {
-        TRANS_LOG(WARN, "get tenant failed", KR(ret));
       } else if (OB_ISNULL(tenant)) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "tenant is null", KR(ret));
       } else if (OB_FAIL(tenant->recv_request(*task))) {
-        TRANS_LOG(WARN, "recv request failed", KR(ret), KP(task));
       }
     }
   }
@@ -117,7 +112,6 @@ void ObTsWorker::handle(void *task)
       TRANS_LOG(WARN, "ts mgr is NULL", KP_(ts_mgr));
     } else if (OB_FAIL(ts_mgr_->handle_gts_result(ts_task->get_arg1(),
                                                   ts_task->get_ts_type()))) {
-      TRANS_LOG(WARN, "handle gts result failed", KR(ret), K(*ts_task));
     } else {
       TRANS_LOG(DEBUG, "handle gts result success", K(*ts_task));
     }

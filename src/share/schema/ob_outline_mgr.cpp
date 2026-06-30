@@ -63,13 +63,9 @@ ObSimpleOutlineSchema &ObSimpleOutlineSchema::operator =(const ObSimpleOutlineSc
     database_id_ = other.database_id_;
     format_outline_ = other.format_outline_;
     if (OB_FAIL(deep_copy_str(other.name_, name_))) {
-      LOG_WARN("Fail to deep copy outline name", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.signature_, signature_))) {
-      LOG_WARN("Fail to deep copy signature", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.sql_id_, sql_id_))) {
-      LOG_WARN("Fail to deep copy sql_id", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.format_sql_id_, format_sql_id_))) {
-      LOG_WARN("Fail to deep copy sql_id", K(ret));
     }
 
     if (OB_FAIL(ret)) {
@@ -153,13 +149,9 @@ int ObOutlineMgr::init()
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(outline_id_map_.init())) {
-    LOG_WARN("init outline id map failed", K(ret));
   } else if (OB_FAIL(outline_name_map_.init())) {
-    LOG_WARN("init outline name map failed", K(ret));
   } else if (OB_FAIL(signature_map_.init())) {
-    LOG_WARN("init signature map failed", K(ret));
   } else if (OB_FAIL(sql_id_map_.init())) {
-    LOG_WARN("init signature map failed", K(ret));
   }
 
 
@@ -227,7 +219,6 @@ int ObOutlineMgr::deep_copy(const ObOutlineMgr &other)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", K(outline), K(ret));
       } else if (OB_FAIL(add_outline(*outline))) {
-        LOG_WARN("add outline failed", K(*outline), K(ret));
       }
     }
   }
@@ -274,8 +265,6 @@ int ObOutlineMgr::add_outlines(const ObIArray<ObSimpleOutlineSchema> &outline_sc
   } else {
     FOREACH_CNT_X(outline_schema, outline_schemas, OB_SUCC(ret)) {
       if (OB_FAIL(add_outline(*outline_schema))) {
-        LOG_WARN("add outline failed", K(ret),
-                 "outline_schema", *outline_schema);
       }
     }
   }
@@ -298,7 +287,6 @@ int ObOutlineMgr::add_outline(const ObSimpleOutlineSchema &outline_schema)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(outline_schema));
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_, outline_schema, new_outline_schema))) {
-    LOG_WARN("alloc schema failed", K(ret));
   } else if (OB_ISNULL(new_outline_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret), K(new_outline_schema));
@@ -307,7 +295,6 @@ int ObOutlineMgr::add_outline(const ObSimpleOutlineSchema &outline_schema)
                                            compare_outline,
                                            equal_outline,
                                            replaced_outline))) {
-    LOG_WARN("failed to add outline schema", K(ret));
   } else {
     int over_write = 1;
     int hash_ret = outline_id_map_.set_refactored(new_outline_schema->get_outline_id(),
@@ -383,7 +370,6 @@ int ObOutlineMgr::add_outline(const ObSimpleOutlineSchema &outline_schema)
              outline_schema.get_name());
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = rebuild_outline_hashmap())){
-      LOG_WARN("rebuild outline hashmap failed", K(tmp_ret));
     }
   }
 
@@ -405,10 +391,6 @@ int ObOutlineMgr::del_outline(const ObTenantOutlineId &outline)
                                               compare_with_tenant_outline_id,
                                               equal_with_tenant_outline_id,
                                               schema_to_del))) {
-    LOG_WARN("failed to remove outline schema, ",
-             "outline_id",
-             outline.outline_id_,
-             K(ret));
   } else if (OB_ISNULL(schema_to_del)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("removed outline schema return NULL, ",
@@ -491,7 +473,6 @@ int ObOutlineMgr::del_outline(const ObTenantOutlineId &outline)
              outline.outline_id_);
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = rebuild_outline_hashmap())){
-      LOG_WARN("rebuild outline hashmap failed", K(tmp_ret));
     }
   }
 
@@ -642,7 +623,6 @@ int ObOutlineMgr::get_outline_schemas_in_tenant(ObIArray<const ObSimpleOutlineSc
     } else if (false) {
       is_stop = true;
     } else if (OB_FAIL(outline_schemas.push_back(outline))) {
-      LOG_WARN("push back outline failed", K(ret));
     }
   }
 
@@ -669,7 +649,6 @@ int ObOutlineMgr::get_outline_schemas_in_database(const uint64_t database_id, Ob
     } else if (outline->get_database_id() != database_id) {
       // do-nothing
     } else if (OB_FAIL(outline_schemas.push_back(outline))) {
-      LOG_WARN("push back outline failed", K(ret));
     }
   }
 

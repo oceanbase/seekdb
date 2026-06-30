@@ -64,11 +64,8 @@ int ObBloomFilterMacroBlockReader::read_macro_block(
    ret = OB_INVALID_ARGUMENT;
    STORAGE_LOG(WARN, "Invalid macro block id to read bloomfilter", K(ret), K(macro_id));
  } else if (OB_FAIL(read_macro_block(macro_id))) {
-   STORAGE_LOG(WARN, "Failed to read bloomfilter macro block", K(ret));
  } else if (OB_FAIL(decompress_micro_block(block_buf, block_size))) {
-   STORAGE_LOG(WARN, "Failed to decompress micro block", K(ret));
  } else if (OB_FAIL(read_micro_block(block_buf, block_size, bf_buf, bf_size))) {
-   STORAGE_LOG(WARN, "Failed to read micro block to bloom filter", K(ret));
  }
 
  return ret;
@@ -102,7 +99,6 @@ int ObBloomFilterMacroBlockReader::read_macro_block(const MacroBlockId &macro_id
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObObjectManager::read_object(macro_read_info, macro_handle_))) {
-      STORAGE_LOG(WARN, "Failed to read bloom filter macro block", K(ret));
     }
   }
 
@@ -121,9 +117,7 @@ int ObBloomFilterMacroBlockReader::decompress_micro_block(
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "Unexpected null macro block data", K(ret), K_(macro_handle));
   } else if (OB_FAIL(common_header_.deserialize(data_buf, macro_handle_.get_data_size(), pos))) {
-    STORAGE_LOG(WARN, "Fail to deserialize common header", K(ret), K_(macro_handle));
   } else if (OB_FAIL(common_header_.check_integrity())) {
-    STORAGE_LOG(ERROR, "macro block common header corrupted", K(ret));
   } else if (FALSE_IT(bf_macro_header_ = reinterpret_cast<const ObBloomFilterMacroBlockHeader *>(
       data_buf + pos))) {
   } else if (OB_UNLIKELY(!bf_macro_header_->is_valid()
@@ -137,7 +131,6 @@ int ObBloomFilterMacroBlockReader::decompress_micro_block(
     bool is_compressed = false;
     if (OB_FAIL(ObRecordHeaderV3::deserialize_and_check_record(
         micro_data_buf, micro_data_size, BF_MICRO_BLOCK_HEADER_MAGIC))) {
-      STORAGE_LOG(WARN, "Fail to check record header", K(ret));
     } else if (OB_FAIL(macro_reader_.decompress_data(
         bf_macro_header_->compressor_type_,
         micro_data_buf,
@@ -145,7 +138,6 @@ int ObBloomFilterMacroBlockReader::decompress_micro_block(
         block_buf,
         block_size,
         is_compressed))) {
-      STORAGE_LOG(WARN, "Fail to decompress micro block data", K(ret));
     }
   }
   return ret;

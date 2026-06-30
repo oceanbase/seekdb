@@ -48,7 +48,6 @@ int ObTableLoadTableOpBuilder<TableOpType>::build(ObTableLoadPlan *plan,
   int ret = OB_SUCCESS;
   table_op = nullptr;
   if (OB_FAIL(plan->alloc_table_op(table_op, store_table_ctx))) {
-    SERVER_LOG(WARN, "fail to alloc table op", KR(ret));
   } else {
     // 构建TableOp内部成员
     ObTableLoadTableOpOpenOp *open_op = nullptr;
@@ -57,19 +56,15 @@ int ObTableLoadTableOpBuilder<TableOpType>::build(ObTableLoadPlan *plan,
     ObTableLoadTableOpCloseOp *close_op = nullptr;
     // 1. open_op
     if (OB_FAIL(table_op->alloc_op(open_op, table_op))) {
-      SERVER_LOG(WARN, "fail to alloc open op", KR(ret));
     }
     // 2. write_op
     else if (OB_FAIL(ObTableLoadWriteOp::build(table_op, write_type, write_op))) {
-      SERVER_LOG(WARN, "fail to build write op", KR(ret));
     }
     // 3. merge_data_op
     else if (OB_FAIL(ObTableLoadMergeDataOp2::build(table_op, merge_data_op))) {
-      SERVER_LOG(WARN, "fail to build write op", KR(ret));
     }
     // 4. close_op
     else if (OB_FAIL(table_op->alloc_op(close_op, table_op))) {
-      SERVER_LOG(WARN, "fail to alloc close op", KR(ret));
     }
   }
   return ret;
@@ -83,7 +78,6 @@ int ObTableLoadTableOpBuilder<TableOpType>::build(ObTableLoadPlan *plan,
   int ret = OB_SUCCESS;
   table_op = nullptr;
   if (OB_FAIL(plan->alloc_table_op(table_op, store_table_ctx))) {
-    SERVER_LOG(WARN, "fail to alloc table op", KR(ret));
   } else {
     // 构建TableOp内部成员
     ObTableLoadTableOpOpenOp *open_op = nullptr;
@@ -91,15 +85,12 @@ int ObTableLoadTableOpBuilder<TableOpType>::build(ObTableLoadPlan *plan,
     ObTableLoadTableOpCloseOp *close_op = nullptr;
     // 1. open_op
     if (OB_FAIL(table_op->alloc_op(open_op, table_op))) {
-      SERVER_LOG(WARN, "fail to alloc open op", KR(ret));
     }
     // 2. merge_data_op
     else if (OB_FAIL(ObTableLoadMergeDataOp2::build(table_op, merge_data_op))) {
-      SERVER_LOG(WARN, "fail to build write op", KR(ret));
     }
     // 3. close_op
     else if (OB_FAIL(table_op->alloc_op(close_op, table_op))) {
-      SERVER_LOG(WARN, "fail to alloc close op", KR(ret));
     }
   }
   return ret;

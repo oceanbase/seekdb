@@ -178,7 +178,6 @@ public:
       Item *item = buckets_->at(i);
       while (NULL != item && OB_SUCC(ret)) {
         if (OB_FAIL(cb(*item))) {
-          SQL_ENG_LOG(WARN, "call back failed", K(ret));
         } else {
           item = item->next();
         }
@@ -654,7 +653,6 @@ public:
     int ret = OB_SUCCESS;
     if (distinct_map_.is_inited()) {
     } else if (OB_FAIL(distinct_map_.init("HashPartInfra", batch_size))) {
-      SQL_ENG_LOG(WARN,"failed to init distinct map", K(ret), K(batch_size));
     }
     return ret;
   }
@@ -855,7 +853,6 @@ inline int ObHashPartInfrastructure<HashCol, HashRowStore>::init_mem_context()
                     common::ObCtxIds::WORK_AREA)
       .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
-      SQL_ENG_LOG(WARN, "create entity failed", K(ret));
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
       SQL_ENG_LOG(WARN, "mem entity is null", K(ret));
@@ -878,7 +875,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::init(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_mem_context())) {
-    SQL_ENG_LOG(WARN, "failed to init mem_context", K(ret));
   } else if (need_rewind && 2 == ways) {
     ret = OB_NOT_SUPPORTED;
     SQL_ENG_LOG(WARN, "Two-way input does not support rewind", K(ret), K(need_rewind), K(ways));
@@ -1174,7 +1170,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::init_set_part(
     if (OB_FAIL(part->store_.init(limit, ObCtxIds::WORK_AREA,
                           ObModIds::OB_SQL_HASH_SET, true /* enable dump */,
                           sizeof(uint64_t)))) {
-      SQL_ENG_LOG(WARN, "failed to init row store", K(ret));
     } else if (OB_ISNULL(sql_mem_processor_)) {
       ret = OB_ERR_UNEXPECTED;
       SQL_ENG_LOG(WARN, "sql_mem_processor_ is null", K(ret));
@@ -1205,7 +1200,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::init_default_part(
     if (OB_FAIL(part->store_.init(limit, ObCtxIds::WORK_AREA,
                           "HashInfraOp", true /* enable dump */,
                           sizeof(uint64_t)))) {
-      SQL_ENG_LOG(WARN, "failed to init row store", K(ret));
     } else if (OB_ISNULL(sql_mem_processor_)) {
       ret = OB_ERR_UNEXPECTED;
       SQL_ENG_LOG(WARN, "sql_mem_processor_ is null", K(ret));
@@ -1230,7 +1224,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::init_hash_table(
   } else if (OB_FAIL(hash_table_.init(alloc_, bucket_cnt,
     [this] () { return get_each_slice_avg_size(sql_mem_processor_->get_mem_bound()); },
     min_bucket, max_bucket, is_push_down_, is_slice_ht()))) {
-    SQL_ENG_LOG(WARN, "failed to init hash table", K(ret), K(bucket_cnt));
   }
   return ret;
 }
@@ -1244,7 +1237,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::resize(int64_t bucket_cnt)
     SQL_ENG_LOG(WARN, "allocator is null or it don'e start to round", K(ret), K(start_round_));
   } else if (OB_FAIL(hash_table_.resize(alloc_, max(2, bucket_cnt),
     [this] () { return get_each_slice_avg_size(sql_mem_processor_->get_mem_bound()); }))) {
-    SQL_ENG_LOG(WARN, "failed to init hash table", K(ret), K(bucket_cnt));
   }
   return ret;
 }
@@ -1259,7 +1251,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::start_round()
   } else {
     if (need_pre_part_ && !is_inited_pre_part_) {
       if (OB_FAIL((this->*init_part_func_)(&preprocess_part_, 0, INT64_MAX, 0))) {
-        SQL_ENG_LOG(WARN, "failed to init preprocess part", K(ret));
       }
     }
     cur_left_part_ = nullptr;
@@ -1291,8 +1282,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::append_dumped_parts(
       if (dumped_parts[i]->store_.has_dumped()) {
         if (InputSide::LEFT == input_side) {
           if (OB_FAIL(left_part_map_.set_refactored(dumped_parts[i]->part_key_, dumped_parts[i]))) {
-            SQL_ENG_LOG(WARN, "failed to push into hash table", K(ret), K(i),
-              K(dumped_parts[i]->part_key_));
           } else {
             left_part_list_.add_last(dumped_parts[i]);
             dumped_parts[i] = nullptr;
@@ -1300,8 +1289,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::append_dumped_parts(
         } else {
           if (OB_FAIL(right_part_map_.set_refactored(
               dumped_parts[i]->part_key_, dumped_parts[i]))) {
-            SQL_ENG_LOG(WARN, "failed to push into hash table", K(ret), K(i),
-              K(dumped_parts[i]->part_key_));
           } else {
             right_part_list_.add_last(dumped_parts[i]);
             dumped_parts[i] = nullptr;
@@ -1345,9 +1332,7 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::append_all_dump_parts()
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(append_dumped_parts(InputSide::LEFT))) {
-    SQL_ENG_LOG(WARN, "failed to append dumped parts", K(ret));
   } else if (OB_FAIL(append_dumped_parts(InputSide::RIGHT))) {
-    SQL_ENG_LOG(WARN, "failed to append dumped parts", K(ret));
   } else {
     left_dumped_parts_ = nullptr;
     right_dumped_parts_ = nullptr;
@@ -1364,7 +1349,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::end_round()
     SQL_ENG_LOG(WARN, "cur left or right part is not null", K(ret),
       K(cur_left_part_), K(cur_right_part_));
   } else if (OB_FAIL(append_all_dump_parts())) {
-    SQL_ENG_LOG(WARN, "failed to append all dumped parts", K(ret));
   } else {
     left_row_store_iter_.reset();
     right_row_store_iter_.reset();
@@ -1488,12 +1472,10 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::insert_row_on_partitions(
   } else {
     uint64_t hash_value = 0;
     if (OB_FAIL(calc_hash_value(exprs, hash_value))) {
-      SQL_ENG_LOG(WARN, "failed to calc hash value", K(ret));
     } else {
       ObChunkDatumStore::StoredRow *sr = nullptr;
       int64_t part_idx = get_part_idx(hash_value);
       if (OB_FAIL(cur_dumped_parts_[part_idx]->store_.add_row(exprs, eval_ctx_, &sr))) {
-        SQL_ENG_LOG(WARN, "failed to add row", K(ret));
       } else {
         HashRowStore *store_row = static_cast<HashRowStore*>(sr);
         store_row->set_hash_value(hash_value);
@@ -1527,7 +1509,6 @@ insert_batch_on_partitions(const common::ObIArray<ObExpr *> &exprs,
       ObChunkDatumStore::StoredRow *sr = nullptr;
       int64_t part_idx = get_part_idx(hash_values[i]);
       if (OB_FAIL(cur_dumped_parts_[part_idx]->store_.add_row(exprs, eval_ctx_, &sr))) {
-        SQL_ENG_LOG(WARN, "failed to add row", K(ret));
       } else {
         HashRowStore *store_row = static_cast<HashRowStore *>(sr);
         uint64_t hash_value = 0;
@@ -1664,7 +1645,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::
     if (OB_FAIL(hash_table_.get(hash_values_for_batch[i],
                                       part_cols,
                                       exists_part_cols))) {
-      SQL_ENG_LOG(WARN, "failed to get item", K(ret));
     } else if (OB_NOT_NULL(exists_part_cols)) {
       my_skip.set(i);
     }
@@ -1696,7 +1676,6 @@ set_item_ptrs(const ObIArray<ObExpr *> &exprs,
   } else if (OB_FAIL(preprocess_part_.store_.add_batch(exprs, *eval_ctx_,
                                                         my_skip, batch_size,
                                                         selector, selector_size, store_row_buffer_))) {
-    SQL_ENG_LOG(WARN, "failed to add batch in store", K(ret));
   } else {
     for (int64_t i = 0; i < selector_size; ++i) {
       ObHashPartCols *new_part_cols = items_[selector[i]];
@@ -1724,10 +1703,8 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::create_dumped_partitions(
     has_create_part_map_ = true;
     if (OB_FAIL(left_part_map_.create(
         512, "HashInfraOp", "HashInfraOp"))) {
-      SQL_ENG_LOG(WARN, "failed to create hash map", K(ret));
     } else if (OB_FAIL(right_part_map_.create(
         512, "HashInfraOp", "HashInfraOp"))) {
-      SQL_ENG_LOG(WARN, "failed to create hash map", K(ret));
     }
   }
   has_cur_part_dumped_ = true;
@@ -1749,7 +1726,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::create_dumped_partitions(
         cur_dumped_parts_[i] = new (mem) ObIntraPartition();
         ObIntraPartition *part = cur_dumped_parts_[i];
         if (OB_FAIL((this->*init_part_func_)(part, cur_part_start_id_ + i, 1, delta_shift))) {
-          SQL_ENG_LOG(WARN, "failed to create part", K(ret));
         }
       }
     }
@@ -1801,9 +1777,7 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::exists_row(
   uint64_t hash_value = 0;
   exists_part_cols = nullptr;
   if (OB_FAIL(calc_hash_value(exprs, hash_value))) {
-    SQL_ENG_LOG(WARN, "failed to calc hash value", K(ret));
   } else if (OB_FAIL(hash_table_.get(hash_value, part_cols, exists_part_cols))) {
-    SQL_ENG_LOG(WARN, "failed to get item", K(ret));
   }
   return ret;
 }
@@ -1826,7 +1800,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::exists_batch(
     SQL_ENG_LOG(WARN, "skip vector is null", K(ret));
   } else if (OB_FAIL(calc_hash_value_for_batch(exprs, batch_size,
                                               child_skip, hash_values_for_batch))) {
-    SQL_ENG_LOG(WARN, "failed to calc hash values", K(ret));
   } else {
     const ObHashPartCols part_cols;
     hash_table_.exprs_ = &exprs;
@@ -1853,7 +1826,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::exists_batch(
         }
         guard.set_batch_idx(i);
         if (OB_FAIL(hash_table_.get(hash_values_for_batch[i], part_cols, exists_part_cols))) {
-          SQL_ENG_LOG(WARN, "failed to get item", K(ret));
         } else if (OB_ISNULL(exists_part_cols)) {
           skip->set(i);
         } else if (exists_part_cols->store_row_->is_match()) {
@@ -1874,7 +1846,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::exists_batch(
         SQL_ENG_LOG(WARN, "failed to create dump partitions", K(ret));
       } else if (OB_FAIL(insert_batch_on_partitions(exprs, skip_for_dump,
                                                     batch_size, hash_values_for_batch))) {
-        SQL_ENG_LOG(WARN, "failed to insert row into partitions", K(ret));
       }
     }
     my_skip_->reset(batch_size);
@@ -1897,9 +1868,7 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::calc_hash_value(
     for (int64_t i = 0; i < sort_collations_->count() && OB_SUCC(ret); ++i) {
       const int64_t idx = sort_collations_->at(i).field_idx_;
       if (OB_FAIL(exprs.at(idx)->eval(*eval_ctx_, datum))) {
-        SQL_ENG_LOG(WARN, "failed to eval expr", K(ret));
       } else if (OB_FAIL(hash_funcs_->at(i).hash_func_(*datum, hash_value, hash_value))) {
-        SQL_ENG_LOG(WARN, "failed to do hash", K(ret));
       }
     }
   }
@@ -1932,7 +1901,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::calc_hash_value_for_batch(
     for (int64_t j = start_idx; OB_SUCC(ret) && j < sort_collations_->count(); ++j) {
       const int64_t idx = sort_collations_->at(j).field_idx_;
       if (OB_FAIL(exprs.at(idx)->eval_batch(*eval_ctx_, *skip, batch_size))) {
-        SQL_ENG_LOG(WARN, "failed to eval batch", K(ret), K(j));
       }
     }
     if (OB_SUCC(ret)) {
@@ -1974,7 +1942,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::update_mem_status_periodica
                     alloc_,
                     [&](int64_t cur_cnt){ return period_row_cnt_ > cur_cnt; },
                     updated))) {
-    SQL_ENG_LOG(WARN, "failed to update usable memory size periodically", K(ret));
   } else if (updated) {
     int64_t total_mem_used = get_mem_used();
     if (total_mem_used_func_) {
@@ -1998,7 +1965,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::insert_row_with_unique_hash
   int ret = OB_SUCCESS;
   uint64_t hash_value = 0;
   if (OB_FAIL(calc_hash_value(exprs, hash_value))) {
-    SQL_ENG_LOG(WARN, "failed to calc hash value", K(ret));
   } else if (OB_FAIL(do_insert_row_with_unique_hash_table(exprs, hash_value, exists, inserted))) {
     dump_hp_infras_group_info();
     SQL_ENG_LOG(WARN, "failed to insert row into hash table", K(ret));
@@ -2018,7 +1984,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::do_insert_row_with_unique_h
   if (!has_cur_part_dumped_ && OB_FAIL(update_mem_status_periodically())) {
     SQL_ENG_LOG(WARN, "failed to update memory status periodically", K(ret));
   } else if (OB_FAIL(hash_table_.get(hash_value, part_cols, exists_part_cols))) {
-    SQL_ENG_LOG(WARN, "failed to get item", K(ret));
   } else {
     ObChunkDatumStore::StoredRow *sr = nullptr;
     bool dumped = false;
@@ -2031,14 +1996,11 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::do_insert_row_with_unique_h
       // not exists, need create and add
       if (!has_cur_part_dumped_) {
         if (OB_FAIL(process_dump(dummy_is_block, dummy_full_by_pass))) {
-          SQL_ENG_LOG(WARN, "failed to process dump", K(ret));
         } else if (has_cur_part_dumped_) {
           // dumped
           if (OB_FAIL(insert_row_on_partitions(exprs))) {
-            SQL_ENG_LOG(WARN, "failed to insert row on partitions", K(ret));
           }
         } else if (OB_FAIL(preprocess_part_.store_.add_row(exprs, eval_ctx_, &sr))) {
-          SQL_ENG_LOG(WARN, "failed to add row into row store", K(ret));
         } else if (OB_ISNULL(buf = arena_alloc_->alloc(sizeof(HashCol)))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           SQL_ENG_LOG(WARN, "failed to allocate memory", K(ret));
@@ -2049,7 +2011,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::do_insert_row_with_unique_h
           new_part_cols->set_hash_value(hash_value);
           new_part_cols->store_row_->set_is_match(false);
           if (OB_FAIL(hash_table_.set(*new_part_cols))) {
-            SQL_ENG_LOG(WARN, "failed to set part cols", K(ret));
           } else {
             inserted = true;
             SQL_ENG_LOG(DEBUG, "insert exprs", K(hash_value), K(ROWEXPR2STR(*eval_ctx_, exprs)));
@@ -2058,7 +2019,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::do_insert_row_with_unique_h
       } else {
         // dumped
         if (OB_FAIL(insert_row_on_partitions(exprs))) {
-          SQL_ENG_LOG(WARN, "failed to insert row on partitions", K(ret));
         }
       }
     } else {
@@ -2083,7 +2043,6 @@ do_insert_row_with_unique_hash_table_by_pass(const common::ObIArray<ObExpr*> &ex
   ++period_row_cnt_;
   uint64_t hash_value = 0;
   if (OB_FAIL(calc_hash_value(exprs, hash_value))) {
-    SQL_ENG_LOG(WARN, "failed to calc hash value", K(ret));
   } else {
     const ObHashPartCols part_cols;
     hash_table_.exprs_ = &exprs;
@@ -2092,7 +2051,6 @@ do_insert_row_with_unique_hash_table_by_pass(const common::ObIArray<ObExpr*> &ex
     if (!has_cur_part_dumped_ && OB_FAIL(update_mem_status_periodically())) {
       SQL_ENG_LOG(WARN, "failed to update memory status periodically", K(ret));
     } else if (OB_FAIL(hash_table_.get(hash_value, part_cols, exists_part_cols))) {
-      SQL_ENG_LOG(WARN, "failed to get item", K(ret));
     } else {
       ObChunkDatumStore::StoredRow *sr = nullptr;
       bool dumped = false;
@@ -2103,17 +2061,14 @@ do_insert_row_with_unique_hash_table_by_pass(const common::ObIArray<ObExpr*> &ex
         // not exists, need create and add
         if (!has_cur_part_dumped_) {
           if (OB_FAIL(process_dump(is_block, full_by_pass))) {
-            SQL_ENG_LOG(WARN, "failed to process dump", K(ret));
           } else if (has_cur_part_dumped_) {
             // dumped
             if (OB_FAIL(insert_row_on_partitions(exprs))) {
-              SQL_ENG_LOG(WARN, "failed to insert row on partitions", K(ret));
             }
           } else if (!can_insert) {
             inserted = true; //by pass for unblock disitnct
           } else {
             if (OB_FAIL(preprocess_part_.store_.add_row(exprs, eval_ctx_, &sr))) {
-              SQL_ENG_LOG(WARN, "failed to add row into row store", K(ret));
             } else if (can_insert) { // for block && !can_insert, do not store in hash table
               if (OB_ISNULL(buf = arena_alloc_->alloc(sizeof(HashCol)))) {
                 ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -2125,7 +2080,6 @@ do_insert_row_with_unique_hash_table_by_pass(const common::ObIArray<ObExpr*> &ex
                 new_part_cols->set_hash_value(hash_value);
                 new_part_cols->store_row_->set_is_match(false);
                 if (OB_FAIL(hash_table_.set(*new_part_cols))) {
-                  SQL_ENG_LOG(WARN, "failed to set part cols", K(ret));
                 } else {
                   inserted = true;
                   SQL_ENG_LOG(DEBUG, "insert exprs", K(hash_value), K(ROWEXPR2STR(*eval_ctx_, exprs)));
@@ -2136,7 +2090,6 @@ do_insert_row_with_unique_hash_table_by_pass(const common::ObIArray<ObExpr*> &ex
         } else {
           // dumped
           if (OB_FAIL(insert_row_on_partitions(exprs))) {
-            SQL_ENG_LOG(WARN, "failed to insert row on partitions", K(ret));
           }
         }
       } else {
@@ -2174,21 +2127,15 @@ do_insert_batch_with_unique_hash_table(const common::ObIArray<ObExpr *> &exprs,
       bool dummy_full_by_pass = false; // unused
       if (OB_FAIL(set_distinct_batch(exprs, hash_values_for_batch, batch_size,
                                            skip, selector, selector_size, *my_skip_))) {
-        SQL_ENG_LOG(WARN, "failed to set distinct values into hash table", K(ret));
       } else if (OB_FAIL(set_item_ptrs(exprs, batch_size, hash_values_for_batch,
                                        selector, selector_size, *my_skip_))) {
-        SQL_ENG_LOG(WARN, "failed to add datum store and set item ptr", K(ret));
       } else if (OB_FAIL(update_mem_status_periodically())) {
-        SQL_ENG_LOG(WARN, "failed to update memory status periodically", K(ret));
       } else if (OB_FAIL(process_dump(dummy_is_block, dummy_full_by_pass))) {
-        SQL_ENG_LOG(WARN, "failed to process dump", K(ret));
       }
     } else if (OB_FAIL(probe_batch(exprs, hash_values_for_batch, batch_size,
                                    skip, *my_skip_))) {
-      SQL_ENG_LOG(WARN, "failed to probe distinct values for batch", K(ret));
     } else if (OB_FAIL(insert_batch_on_partitions(exprs, *my_skip_,
                                             batch_size, hash_values_for_batch))) {
-      SQL_ENG_LOG(WARN, "failed to insert batch on partitions", K(ret));
     } else if (FALSE_IT(my_skip_->set_all(batch_size))) {
     }
   }
@@ -2224,7 +2171,6 @@ do_insert_batch_with_unique_hash_table_by_pass(const common::ObIArray<ObExpr *> 
       int64_t selector_size = 0;
       if (!can_insert) {
        if (OB_FAIL(probe_batch(exprs, hash_values_for_batch, batch_size,skip, *my_skip_))) {
-         SQL_ENG_LOG(WARN, "failed to probe batch for pass by", K(ret));
        } else {
          int64_t init_skip_cnt = nullptr == skip ? 0 : skip->accumulate_bit_cnt(batch_size);
          exists = (batch_size - init_skip_cnt)
@@ -2233,22 +2179,16 @@ do_insert_batch_with_unique_hash_table_by_pass(const common::ObIArray<ObExpr *> 
       } else {
         if (OB_FAIL(set_distinct_batch(exprs, hash_values_for_batch, batch_size,
                                             skip, selector, selector_size, *my_skip_))) {
-          SQL_ENG_LOG(WARN, "failed to set distinct values into hash table", K(ret));
         } else if (OB_FAIL(set_item_ptrs(exprs, batch_size, hash_values_for_batch,
                                         selector, selector_size, *my_skip_))) {
-          SQL_ENG_LOG(WARN, "failed to add datum store and set item ptr", K(ret));
         } else if (OB_FAIL(update_mem_status_periodically())) {
-          SQL_ENG_LOG(WARN, "failed to update memory status periodically", K(ret));
         } else if (OB_FAIL(process_dump(is_block, full_by_pass))) {
-          SQL_ENG_LOG(WARN, "failed to process dump", K(ret));
         }
       }
     } else if (OB_FAIL(probe_batch(exprs, hash_values_for_batch, batch_size,
                                    skip, *my_skip_))) {
-      SQL_ENG_LOG(WARN, "failed to probe distinct values for batch", K(ret));
     } else if (OB_FAIL(insert_batch_on_partitions(exprs, *my_skip_,
                                             batch_size, hash_values_for_batch))) {
-      SQL_ENG_LOG(WARN, "failed to insert batch on partitions", K(ret));
     } else if (FALSE_IT(my_skip_->set_all(batch_size))) {
     }
   }
@@ -2295,7 +2235,6 @@ insert_row_for_batch(const common::ObIArray<ObExpr *> &batch_exprs,
                                                   batch_size,
                                                   skip,
                                                   output_vec))) {
-    SQL_ENG_LOG(WARN, "failed to insert batch", K(ret));
   }
   return ret;
 }
@@ -2315,9 +2254,7 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::finish_insert_row()
         K(cur_dumped_parts_[i]->store_.get_row_cnt_on_disk()),
         K(i), K(est_part_cnt_), K(cur_dumped_parts_[i]->part_key_));
       if (OB_FAIL(cur_dumped_parts_[i]->store_.dump(false, true))) {
-        SQL_ENG_LOG(WARN, "failed to dump row store", K(ret));
       } else if (OB_FAIL(cur_dumped_parts_[i]->store_.finish_add_row(true))) {
-        SQL_ENG_LOG(WARN, "failed to finish add row", K(ret));
       }
     }
     cur_dumped_parts_ = nullptr;
@@ -2334,7 +2271,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::get_next_left_partition()
   if (OB_NOT_NULL(cur_left_part_)) {
     ObIntraPartition *tmp_part = nullptr;
     if (OB_FAIL(left_part_map_.erase_refactored(cur_left_part_->part_key_, &tmp_part))) {
-      SQL_ENG_LOG(WARN, "failed to remove part from map", K(ret), K(cur_left_part_->part_key_));
     } else if (cur_left_part_ != tmp_part) {
       ret = OB_ERR_UNEXPECTED;
       SQL_ENG_LOG(WARN, "unexepcted status: part is not match", K(ret),
@@ -2355,7 +2291,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::get_next_right_partition()
   if (OB_NOT_NULL(cur_right_part_)) {
     ObIntraPartition *tmp_part = nullptr;
     if (OB_FAIL(right_part_map_.erase_refactored(cur_right_part_->part_key_, &tmp_part))) {
-      SQL_ENG_LOG(WARN, "failed to remove part from map", K(ret), K(cur_right_part_->part_key_));
     } else if (cur_right_part_ != tmp_part) {
       ret = OB_ERR_UNEXPECTED;
       SQL_ENG_LOG(WARN, "unexepcted status: part is not match",
@@ -2418,7 +2353,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::open_hash_table_part()
   if (has_dump_preprocess_part_) {
     // do nothing
   } else if (OB_FAIL(hash_table_row_store_iter_.init(&preprocess_part_.store_))) {
-    SQL_ENG_LOG(WARN, "failed to init row store iterator", K(ret));
   }
   return ret;
 }
@@ -2443,7 +2377,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::open_cur_part(InputSide inp
     SQL_ENG_LOG(WARN, "cur part is null", K(ret), K(input_side));
   } else if (InputSide::LEFT == input_side) {
     if (OB_FAIL(left_row_store_iter_.init(&cur_left_part_->store_))) {
-      SQL_ENG_LOG(WARN, "failed to init row store iterator", K(ret));
     } else {
       cur_side_ = input_side;
       cur_level_ = cur_left_part_->part_key_.level_;
@@ -2454,7 +2387,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::open_cur_part(InputSide inp
     }
   } else if (InputSide::RIGHT == input_side) {
     if (OB_FAIL(right_row_store_iter_.init(&cur_right_part_->store_))) {
-      SQL_ENG_LOG(WARN, "failed to init row store iterator", K(ret));
     } else {
       cur_side_ = input_side;
       cur_level_ = cur_right_part_->part_key_.level_;
@@ -2733,7 +2665,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::get_right_next_row(
       SQL_ENG_LOG(WARN, "failed to get next row", K(ret));
     }
   } else if (OB_FAIL(right_row_store_iter_.convert_to_row(store_row, exprs, *eval_ctx_))) {
-    SQL_ENG_LOG(WARN, "failed to convert row to store row", K(ret));
   }
   return ret;
 }
@@ -2752,7 +2683,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::get_left_next_row(
       SQL_ENG_LOG(WARN, "failed to get next row", K(ret));
     }
   } else if (OB_FAIL(left_row_store_iter_.convert_to_row(store_row, exprs, *eval_ctx_))) {
-    SQL_ENG_LOG(WARN, "failed to convert row to store row", K(ret));
   }
   return ret;
 }
@@ -2768,14 +2698,12 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::process_dump(bool is_block,
         [&](int64_t max_memory_size)
         { UNUSED(max_memory_size); return need_dump(); },
         dumped, get_each_slice_avg_size(sql_mem_processor_->get_data_size())))) {
-      SQL_ENG_LOG(WARN, "failed to extend max memory size", K(ret));
     } else if (dumped) {
       full_by_pass = true;
       if (!is_push_down_ || is_block) {
         if (enable_sql_dumped_) {
           has_cur_part_dumped_ = true;
           if (OB_FAIL(create_dumped_partitions(cur_side_))) {
-            SQL_ENG_LOG(WARN, "failed to create dumped partitions", K(ret), K(est_part_cnt_));
           }
         } else {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -2818,7 +2746,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::rewind()
         ret = OB_ERR_UNEXPECTED;
         SQL_ENG_LOG(ERROR, "unexpected status: part it not match", K(ret), K(part), K(tmp_part));
       } else if (OB_FAIL(left_part_map_.set_refactored(tmp_part->part_key_, tmp_part))) {
-        SQL_ENG_LOG(WARN, "failed to push into hash table", K(ret), K(tmp_part->part_key_));
       } else {
         left_part_list_.add_last(tmp_part);
       }
@@ -2842,7 +2769,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::dump_preprocess_part()
       int64_t part_idx = get_part_idx(hash_value);
       if (OB_FAIL(cur_dumped_parts_[part_idx]->store_.add_row(
           static_cast<ObChunkDatumStore::StoredRow&>(*part_cols.store_row_), &sr))) {
-        SQL_ENG_LOG(WARN, "failed to add row", K(ret));
       } else {
         HashRowStore *store_row = static_cast<HashRowStore*>(sr);
         store_row->set_hash_value(hash_value);
@@ -2852,7 +2778,6 @@ int ObHashPartInfrastructure<HashCol, HashRowStore>::dump_preprocess_part()
     return ret;
   };
   if (OB_FAIL(hash_table_.foreach(func))) {
-    SQL_ENG_LOG(WARN, "failed to do foreach", K(ret));
   } else {
     has_dump_preprocess_part_ = true;
   }
@@ -2892,7 +2817,6 @@ int ObHashPartitionExtendHashTable<Item>::init(
     } else if (FALSE_IT(allocator_->set_allocator(allocator))) {
     } else if (OB_FAIL(create_bucket_array(is_push_down
                                          ? INIT_BKT_NUM_PUSH_DOWM : est_bucket_num, buckets_))) {
-      SQL_ENG_LOG(WARN, "failed to create bucket array", K(ret), K(est_bucket_num));
     } else {
       SQL_ENG_LOG(DEBUG, "debug init hash part table", K(ret),
         K(est_bucket_num), K(initial_size), K(mem_bound_func()));
@@ -2973,7 +2897,6 @@ int ObHashPartitionExtendHashTable<Item>::resize(
   } else {
     destroy();
     if (OB_FAIL(init(allocator, bucket_num, mem_bound_func, min_bucket_num_, max_bucket_num_))) {
-      SQL_ENG_LOG(WARN, "failed to reuse with bucket", K(bucket_num), K(ret));
     }
   }
   return ret;
@@ -2995,11 +2918,9 @@ int ObHashPartitionExtendHashTable<Item>::get(
     ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx_);
     while (OB_SUCC(ret) && NULL != bucket) {
       if (OB_FAIL(hf(*bucket, bucket_hash_val))) {
-        SQL_ENG_LOG(WARN, "fail to get bucket hash val", K(ret));
       } else if (hash_value == bucket_hash_val) {
         if (OB_FAIL(bucket->equal_distinct(exprs_, part_cols, sort_collations_,
                                            cmp_funcs_, eval_ctx_, equal_res, guard))) {
-          SQL_ENG_LOG(WARN, "compare info is null", K(ret));
         } else if (equal_res) {
           item = bucket;
           break;
@@ -3023,7 +2944,6 @@ int ObHashPartitionExtendHashTable<Item>::set(Item &item)
         min_bucket_num_, is_slice_ht_);
     if (extend_bucket_num <= get_bucket_num()) {
     } else if (OB_FAIL(extend(get_bucket_num() * 2))) {
-      SQL_ENG_LOG(WARN, "extend failed", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -3034,7 +2954,6 @@ int ObHashPartitionExtendHashTable<Item>::set(Item &item)
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "unexpected status: store_row is null", K(ret));
   } else if (OB_FAIL(hf(item, hash_val))) {
-    SQL_ENG_LOG(WARN, "hash failed", K(ret));
   } else {
     Item *&bucket = buckets_->at(hash_val & (get_bucket_num() - 1));
     item.next() = bucket;
@@ -3058,7 +2977,6 @@ int ObHashPartitionExtendHashTable<Item>::set_distinct(Item &item, uint64_t hash
   if (OB_NOT_NULL(bucket)) {
     while(OB_SUCC(ret) && OB_NOT_NULL(bucket)) {
       if (OB_FAIL(hf(*bucket, bucket_hash_val))) {
-        SQL_ENG_LOG(WARN, "failed to do bucket hash", K(ret));
       } else {
         bool equal_res = (hash_value == bucket_hash_val);
         if (equal_res &&
@@ -3092,7 +3010,6 @@ int ObHashPartitionExtendHashTable<Item>::check_and_extend()
         min_bucket_num_, is_slice_ht_);
     if (extend_bucket_num <= get_bucket_num()) {
     } else if (OB_FAIL(extend(get_bucket_num() * 2))) {
-      SQL_ENG_LOG(WARN, "extend failed", K(ret));
     } else {
       SQL_ENG_LOG(DEBUG, "trace hash part extend", K(ret),
         K(size_), K(get_bucket_num()), K(mem_bound_calc_func_()));
@@ -3117,7 +3034,6 @@ int ObHashPartitionExtendHashTable<Item>::extend(const int64_t new_bucket_num)
     ret = OB_INVALID_ARGUMENT;
     SQL_ENG_LOG(WARN, "invalid argument", K(ret), K(buckets_));
   } else if (OB_FAIL(create_bucket_array(new_bucket_num, new_buckets))) {
-    SQL_ENG_LOG(WARN, "failed to create bucket array", K(ret));
   } else {
     // rehash
     const int64_t tmp_new_bucket_num = new_buckets->count();
@@ -3142,7 +3058,6 @@ int ObHashPartitionExtendHashTable<Item>::extend(const int64_t new_bucket_num)
             Item *item = bucket;
             bucket = bucket->next();
             if (OB_FAIL(hf(*item, hash_val))) {
-              SQL_ENG_LOG(WARN, "fail to get item hash val", K(ret));
             } else {
               Item *&new_bucket = new_buckets->at(hash_val & (tmp_new_bucket_num - 1));
               item->next() = new_bucket;

@@ -60,12 +60,10 @@ int ObMPStmtClose::process()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("stmt_id is invalid", K(ret));
   } else if (OB_FAIL(get_session(session))) {
-    LOG_WARN("get session failed");
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL or invalid", K(ret), K(session));
   } else if (OB_FAIL(update_transmission_checksum_flag(*session))) {
-    LOG_WARN("update transmisson checksum flag failed", K(ret));
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     ObSQLSessionInfo::LockGuard lock_guard(session->get_query_lock());
@@ -73,18 +71,15 @@ int ObMPStmtClose::process()
     const bool enable_flt = session->get_control_info().is_valid();
     LOG_TRACE("close ps stmt or cursor", K_(stmt_id), K(session->get_server_sid()));
     if (OB_FAIL(session->check_tenant_status())) {
-      LOG_INFO("unit has been migrated, need deny new request", K(ret));
     } else if (OB_FAIL(sql::ObFLTUtils::init_flt_info(
                  pkt.get_extra_info(), *session,
                  get_conn()->proxy_cap_flags_.is_full_link_trace_support(),
                  enable_flt))) {
-      LOG_WARN("failed to init flt extra info", K(ret));
     }
     FLTSpanGuardIfEnable(ps_close, enable_flt);
     if (OB_FAIL(ret)) {
     } else if (is_cursor_close()) {
       if (OB_FAIL(session->close_cursor(stmt_id_))) {
-        LOG_WARN("fail to close cursor", K(ret), K_(stmt_id), K(session->get_server_sid()));
       }
     } else {
       int tmp_ret = OB_SUCCESS;
@@ -95,8 +90,6 @@ int ObMPStmtClose::process()
         }
       }
       if (OB_FAIL(session->close_ps_stmt(stmt_id_))) {
-        // overwrite ret, low priority, will be overridden
-        LOG_WARN("fail to close ps stmt", K(ret), K_(stmt_id), K(session->get_server_sid()));
       }
       if (OB_SUCCESS != tmp_ret) {
         // close_cursor failure error code priority is higher than close_ps_stmt, here we override

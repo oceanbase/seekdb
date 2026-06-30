@@ -50,7 +50,6 @@ int ObAlterIncPartPolicyHelper::alter_partition_policy()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("inc table part_array is null", KR(ret), KP(inc_table_));
     } else if (OB_FAIL(exist_part_ids.create(BUCKET_NUM))) {
-      LOG_WARN("fail to create exist_part_ids", KR(ret), KPC(inc_table_), KPC(ori_table_));
     } else {
       ObDMLSqlSplicer dml;
       ObSqlString part_sql;
@@ -76,7 +75,6 @@ int ObAlterIncPartPolicyHelper::alter_partition_policy()
           storage::ObStorageCachePolicyType part_storage_cache_policy_type = inc_part->get_part_storage_cache_policy_type();
           const char *part_storage_cache_policy_str = nullptr;
           if (OB_FAIL(storage::ObStorageCacheGlobalPolicy::safely_get_str(part_storage_cache_policy_type, part_storage_cache_policy_str))) {
-            LOG_WARN("get part policy failed", K(ret), K(part_storage_cache_policy_type));
           } else if (OB_ISNULL(part_storage_cache_policy_str)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("part_storage_cache_policy_str is null", KR(ret));
@@ -86,35 +84,25 @@ int ObAlterIncPartPolicyHelper::alter_partition_policy()
               || OB_FAIL(dml.add_column("storage_cache_policy", part_storage_cache_policy_str))) {
             LOG_WARN("dml add column failed", KR(ret));
           } else if (FAILEDx(dml.finish_row())) {
-            LOG_WARN("finish row failed", KR(ret));
           } else {
             HEAP_VAR(ObAddIncPartDMLGenerator, part_dml_gen, ori_table_, *inc_part, inc_part_num,
                 inc_part->get_part_idx(), schema_version_)
             {
               if (OB_FAIL(part_dml_gen.gen_dml(history_dml))) {
-                LOG_WARN("gen dml failed", KR(ret));
               } else if (OB_FAIL(history_dml.add_column("is_deleted", false))) {
-                LOG_WARN("add column failed", KR(ret));
               } else if (FAILEDx(history_dml.finish_row())) {
-                LOG_WARN("finish row failed", KR(ret));
               }
             }
           }
         }
       }
       if (FAILEDx(dml.splice_batch_insert_update_sql(OB_ALL_PART_TNAME, part_sql))) {
-        LOG_WARN("fail to splice batch insert update sql", KR(ret), K(part_sql));
       } else if (OB_FAIL(sql_client_.write(part_sql.ptr(), affected_rows))) {
-        LOG_WARN("fail to write sql", KR(ret), K(part_sql),
-            K(affected_rows));
       } else if (OB_UNLIKELY(2 * exist_part_ids.size() != affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected affected rows", KR(ret), K(inc_part_num), K(affected_rows), K(part_sql));
       } else if (FAILEDx(history_dml.splice_batch_insert_sql(OB_ALL_PART_HISTORY_TNAME, part_history_sql))) {
-        LOG_WARN("fail to splice batch insert update sql", KR(ret), K(part_history_sql));
       } else if (OB_FAIL(sql_client_.write(part_history_sql.ptr(), affected_rows))) {
-        LOG_WARN("fail to write sql", KR(ret), K(part_history_sql),
-            K(affected_rows));
       } else if (OB_UNLIKELY(exist_part_ids.size() != affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected affected rows", KR(ret), K(exist_part_ids.size()), K(affected_rows), K(part_history_sql));
@@ -150,7 +138,6 @@ int ObAlterIncSubpartPolicyHelper::alter_subpartition_policy()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("partition array is null", KR(ret), KP(inc_table_));
     } else if (OB_FAIL(exist_subpart_ids.create(BUCKET_NUM))) {
-      LOG_WARN("fail to create exist_subpart_ids", KR(ret), KPC(inc_table_), KPC(ori_table_));
     } else {
       ObDMLSqlSplicer dml;
       ObSqlString subpart_sql;
@@ -191,7 +178,6 @@ int ObAlterIncSubpartPolicyHelper::alter_subpartition_policy()
                 storage::ObStorageCachePolicyType subpart_storage_cache_policy_type = inc_subpart->get_part_storage_cache_policy_type();
                 const char *subpart_storage_cache_policy_str = nullptr;
                 if (OB_FAIL(storage::ObStorageCacheGlobalPolicy::safely_get_str(subpart_storage_cache_policy_type, subpart_storage_cache_policy_str))) {
-                  LOG_WARN("get part policy failed", K(ret), K(subpart_storage_cache_policy_type));
                 } else if (OB_ISNULL(subpart_storage_cache_policy_str)) {
                   ret = OB_ERR_UNEXPECTED;
                   LOG_WARN("subpart_storage_cache_policy_str is null", KR(ret));
@@ -202,17 +188,13 @@ int ObAlterIncSubpartPolicyHelper::alter_subpartition_policy()
                       ||OB_FAIL(dml.add_column("storage_cache_policy", subpart_storage_cache_policy_str))) {
                   LOG_WARN("dml add column failed", KR(ret));
                 } else if (FAILEDx(dml.finish_row())) {
-                    LOG_WARN("finish row failed", KR(ret));
                 } else {
                   HEAP_VAR(ObAddIncSubPartDMLGenerator, sub_part_dml_gen,
                           ori_table_, *inc_part, *inc_subpart, inc_part_num, inc_part->get_part_idx(),
                           inc_subpart->get_sub_part_idx(), schema_version_) {
                     if (OB_FAIL(sub_part_dml_gen.gen_dml(history_sub_dml))) {
-                      LOG_WARN("gen dml history failed", KR(ret));
                     } else if (OB_FAIL(history_sub_dml.add_column("is_deleted", false))) {
-                      LOG_WARN("add column failed", KR(ret));
                     } else if (OB_FAIL(history_sub_dml.finish_row())) {
-                      LOG_WARN("fail to finish row", KR(ret));
                     }
                   }
                 }
@@ -222,16 +204,12 @@ int ObAlterIncSubpartPolicyHelper::alter_subpartition_policy()
         }
       }
       if (FAILEDx(dml.splice_batch_insert_update_sql(OB_ALL_SUB_PART_TNAME, subpart_sql))) {
-        LOG_WARN("fail to splice batch insert update sql", KR(ret), K(subpart_sql));
       } else if (OB_FAIL(sql_client_.write(subpart_sql.ptr(), affected_rows))) {
-        LOG_WARN("fail to write sql", KR(ret), K(subpart_sql), K(affected_rows));
       } else if (OB_UNLIKELY(2 * exist_subpart_ids.size() != affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected affected rows", KR(ret), K(exist_subpart_ids.size()), K(affected_rows), K(subpart_sql));
       } else if (FAILEDx(history_sub_dml.splice_batch_insert_sql(OB_ALL_SUB_PART_HISTORY_TNAME, subpart_history_sql))) {
-        LOG_WARN("fail to splice batch insert update sql", KR(ret), K(subpart_history_sql));
       } else if (OB_FAIL(sql_client_.write(subpart_history_sql.ptr(), affected_rows))) {
-        LOG_WARN("fail to write sql", KR(ret), K(subpart_history_sql), K(affected_rows));
       } else if (OB_UNLIKELY(exist_subpart_ids.size() != affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected affected rows", KR(ret), K(exist_subpart_ids.size()), K(affected_rows), K(subpart_history_sql));

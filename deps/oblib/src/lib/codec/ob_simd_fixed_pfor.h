@@ -210,7 +210,6 @@ public:
       out += out_pos;
       find_most_fit_bx<UIntT>(in, length, b, bx);
       if (OB_FAIL(store_bx_and_b<UIntT>(out, b, bx))) {
-        LIB_LOG(WARN, "fail to store bx", K(ret), K(b), K(bx), K(length), K(out_buf_len), K(out_pos));
       } else {
         uint32_t len = 0;
         uint64_t remain_out_buf_len = out_buf_len - (out - orig_out);
@@ -233,7 +232,6 @@ public:
       const UIntT *next_in = t_in + i;
       if (OB_FAIL(__encode_array<UIntT>(
           get_pfor_packing_type(), next_in, BlockSize, out, out_len, out_pos))) {
-        LIB_LOG(WARN, "fail to encode array", K(ret), K(BlockSize), K(out_len), K(out_pos));
       }
     }
 
@@ -269,7 +267,6 @@ public:
         break;
       }
       if (OB_FAIL(ret)) {
-        LIB_LOG(WARN, "fail to do_encode", K(ret), KPC(this), K(get_uint_bytes()));
       }
     }
     return ret;

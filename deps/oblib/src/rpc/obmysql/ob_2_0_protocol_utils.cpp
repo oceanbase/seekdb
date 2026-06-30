@@ -68,7 +68,6 @@ int ObProto20Utils::fill_proto20_header_and_tailer(ObProtoEncodeParam &param)
   if (FILL_PAYLOAD_STEP == proto20_context.next_step_) {
     proto20_context.next_step_ = FILL_TAILER_STEP; // fill ob20 protocol header and tailer
     if (OB_FAIL(do_packet_encode(param))) {
-      LOG_ERROR("fail to do packet encode", K(param), K(ret));
     } else {
       int64_t seri_size = param.seri_size_;
       EVENT_ADD(MYSQL_PACKET_OUT_BYTES, seri_size);
@@ -90,7 +89,6 @@ int ObProto20Utils::do_packet_encode(ObProtoEncodeParam &param) {
   } else {
     if (param.proto20_context_->is_proto20_used()) {
       if (OB_FAIL(do_proto20_packet_encode(param))) {
-        LOG_ERROR("fail to do proto20 packet encode", K(param), K(ret));
       }
     } else {
       ObEasyBuffer easy_buffer(*param.ez_buf_);
@@ -163,19 +161,16 @@ inline int ObProto20Utils::do_proto20_packet_encode(ObProtoEncodeParam &param)
       }
       case FILL_PAYLOAD_STEP: {
         if (OB_FAIL(fill_proto20_payload(param, need_break))) {
-          LOG_ERROR("fail to fill payload", K(param), K(need_break), K(ret));
         }
         break;
       }
       case FILL_TAILER_STEP: {
         if (OB_FAIL(fill_proto20_tailer(param))) {
-          LOG_ERROR("fail to fill tailer", K(param), K(ret));
         }
         break;
       }
       case FILL_HEADER_STEP: {
         if (OB_FAIL(fill_proto20_header(param))) {
-          LOG_ERROR("fail to fill header", K(param), K(ret));
         }
         break;
       }
@@ -257,14 +252,11 @@ int ObProto20Utils::encode_extra_info(char *buffer, int64_t length, int64_t &pos
                                           length,
                                           static_cast<int32_t>(extro_info_len),
                                           pos))) {
-        LOG_WARN("fail to store extro_info_len", K(extro_info_len), K(ret));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < extra_info->count(); i++) {
           const ObObjKV &ob_obj_kv = extra_info->at(i);
           if (OB_FAIL(ob_obj_kv.key_.serialize(buffer, length, pos))) {
-            LOG_WARN("fail to serialize key", K(i), "key", ob_obj_kv.key_, K(ret));
           } else if (OB_FAIL(ob_obj_kv.value_.serialize(buffer, length,pos))) {
-            LOG_WARN("fail to serialize value", K(i), "value", ob_obj_kv.value_, K(ret));
           } else {
             LOG_TRACE("encode extra_info val", KPHEX(buffer+orig_pos, pos-orig_pos));
           }
@@ -311,7 +303,6 @@ int ObProto20Utils::encode_new_extra_info(char *buffer, int64_t length, int64_t 
           ret = OB_ERR_UNEXPECTED;
           LOG_ERROR("invalid encoder", K(ecd), K(i), K(ret));
         } else if (OB_FAIL(ecd->serialize(buffer, length, pos))) {
-          LOG_WARN("fail to serialize key", K(ret));
         } else if (FALSE_IT(ecd->is_serial_ = true)) {
         } else {
           LOG_TRACE("encode extra_info val", KPHEX(buffer+org_pos, pos-org_pos),
@@ -331,7 +322,6 @@ int ObProto20Utils::encode_new_extra_info(char *buffer, int64_t length, int64_t 
                                             length,
                                             static_cast<int32_t>(extro_info_len),
                                             o_pos))) {
-          LOG_WARN("fail to store extro_info_len", K(extro_info_len), K(ret));
         } else {
           // do nothing
         }
@@ -378,7 +368,6 @@ inline int ObProto20Utils::fill_proto20_payload(ObProtoEncodeParam &param, bool 
     } else {
       MEMCPY(easy_buffer.last(), param.get_start(), handle_len);
       if (OB_FAIL(param.add_pos(handle_len))) {
-        LOG_ERROR("fail to add_pos", K(handle_len), K(ret));
       } else {
         easy_buffer.write(handle_len);
         if (!param.is_large_packet_cached_avail()) {
@@ -466,14 +455,12 @@ inline int ObProto20Utils::fill_proto20_payload(ObProtoEncodeParam &param, bool 
         need_break = true;
       } else if (split_count > 1) {
         if (OB_FAIL(param.save_large_packet(easy_buffer.last(), seri_size))) {
-          LOG_ERROR("fail to save large packet data", K(seri_size), K(ret));
         } else {
           if (easy_buffer.read_avail_size() > proto20_context.header_len_) {
             // this means some data already in buff, make it to be a proto20 packet
           } else {
             easy_buffer.write(ObProtoEncodeParam::PROTO20_SPLIT_LEN);
             if (OB_FAIL(param.add_pos(ObProtoEncodeParam::PROTO20_SPLIT_LEN))) {
-              LOG_ERROR("fail to add pos", K(ObProtoEncodeParam::PROTO20_SPLIT_LEN), K(ret));
             }
             if (param.conn_->pkt_rec_wrapper_.enable_proto_dia()) {
               param.conn_->pkt_rec_wrapper_.record_send_mysql_pkt(*param.pkt_,
@@ -528,7 +515,6 @@ inline int ObProto20Utils::fill_proto20_tailer(ObProtoEncodeParam &param) {
       crc64 = ob_crc64(start, len);
     }
     if (OB_FAIL(ObMySQLUtil::store_int4(easy_buffer.last(), proto20_context.tailer_len_, (int32_t)(crc64), pos))) {
-      LOG_ERROR("fail to store int4", K(ret));
     } else {
       easy_buffer.write(proto20_context.tailer_len_);
       proto20_context.next_step_ = FILL_HEADER_STEP;
@@ -591,21 +577,13 @@ inline int ObProto20Utils::fill_proto20_header(ObProtoEncodeParam &param) {
       && OB_FAIL(ObMySQLUtil::store_int3(start, proto20_context.header_len_, uncompress_len, pos))) {
     LOG_ERROR("fail to store int3", K(ret));
   } else if (OB_FAIL(ObMySQLUtil::store_int2(start, proto20_context.header_len_, magic_num, pos))) {
-    LOG_ERROR("fail to store int2", K(ret));
   } else if (OB_FAIL(ObMySQLUtil::store_int2(start, proto20_context.header_len_, version, pos))) {
-    LOG_ERROR("fail to store int2", K(ret));
   } else if (OB_FAIL(ObMySQLUtil::store_int4(start, proto20_context.header_len_, connid, pos))) {
-    LOG_ERROR("fail to store int4", K(ret));
   } else if (OB_FAIL(ObMySQLUtil::store_int3(start, proto20_context.header_len_, request_id, pos))) {
-    LOG_ERROR("fail to store int4", K(ret));
   } else if (OB_FAIL(ObMySQLUtil::store_int1(start, proto20_context.header_len_, packet_seq, pos))) {
-    LOG_ERROR("fail to store int4", K(ret));
   } else if (OB_FAIL(ObMySQLUtil::store_int4(start, proto20_context.header_len_, (uint32_t)(payload_len), pos))) {
-    LOG_ERROR("fail to store int4", K(ret));
   } else if (OB_FAIL(ObMySQLUtil::store_int4(start, proto20_context.header_len_, flag.flags_, pos))) {
-    LOG_ERROR("fail to store int4", K(ret));
   } else if (OB_FAIL(ObMySQLUtil::store_int2(start, proto20_context.header_len_, reserved, pos))) {
-    LOG_ERROR("fail to store int2", K(ret));
   } else {
     ++param.conn_->proto20_pkt_context_.proto20_last_pkt_seq_;
     // calc header checksum
@@ -617,7 +595,6 @@ inline int ObProto20Utils::fill_proto20_header(ObProtoEncodeParam &param) {
       header_checksum = ob_crc16(0, reinterpret_cast<uint8_t *>(start), pos);
     }
     if (OB_FAIL(ObMySQLUtil::store_int2(start, proto20_context.header_len_, header_checksum, pos))) {
-      LOG_ERROR("fail to store int2", K(ret));
     } else {
       proto20_context.next_step_ = FILL_DONE_STEP;
       LOG_TRACE("fill proto20 header succ", K(compress_len), K(compress_seq), K(uncompress_len),
@@ -692,7 +669,6 @@ int ObProto20Utils::reset_extra_info(ObProtoEncodeParam &param) {
         param.extra_info_ecds_->reset();
         for (int64_t i = 0; OB_SUCC(ret) && i < tmp_ecds.count(); i++) {
           if (OB_FAIL(param.extra_info_ecds_->push_back(tmp_ecds.at(i)))) {
-            LOG_WARN("failed to push back encoders", K(ret), K(i));
           }
         }
         if (0 == param.extra_info_ecds_->count()) {

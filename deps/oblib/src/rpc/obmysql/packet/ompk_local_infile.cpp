@@ -42,9 +42,7 @@ int OMPKLocalInfile::serialize(char *buffer, int64_t len, int64_t &pos) const
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("invalid argument", K(len), K(pos), "need_size", get_serialize_size());
   } else if (OB_FAIL(ObMySQLUtil::store_int1(buffer, len, packet_type_, pos))) {
-    LOG_WARN("store fail", KP(buffer), K(len), K(pos), K(ret));
   } else if (OB_FAIL(ObMySQLUtil::store_obstr_nzt(buffer, len, filename_, pos))) {
-    LOG_WARN("store fail", KP(buffer), K(len), K(pos), K(ret));
   }
 
   return ret;

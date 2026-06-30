@@ -62,7 +62,6 @@ int ObInfoSchemaDiskStatTable::set_ip(common::ObAddr *addr)
   } else {
     ipstr_ = ObString::make_string(ipbuf);
     if (OB_FAIL(ob_write_string(*allocator_, ipstr_, ipstr_))) {
-      SERVER_LOG(WARN, "failed to write string", K(ret));
     }
     port_ = addr_->get_port();
   }
@@ -80,7 +79,6 @@ int ObInfoSchemaDiskStatTable::inner_get_next_row(ObNewRow *&row)
     const int64_t col_count = output_column_ids_.count();
 
     if (OB_SUCCESS != (ret = set_ip(addr_))){
-      SERVER_LOG(WARN, "can't get ip", K(ret));
     } else if (is_end_) {
       ret = OB_ITER_END;
     }
@@ -90,7 +88,6 @@ int ObInfoSchemaDiskStatTable::inner_get_next_row(ObNewRow *&row)
     int64_t data_disk_abnormal_time = 0;
     if (OB_SUCCESS != (temp_ret = ObIOManager::get_instance().get_device_health_status(dhs,
         data_disk_abnormal_time))) {
-      SERVER_LOG(WARN, "get device health status failed", KR(temp_ret));
     }
 
     if (OB_SUCC(ret)) {
@@ -100,7 +97,6 @@ int ObInfoSchemaDiskStatTable::inner_get_next_row(ObNewRow *&row)
           case TOTAL_SIZE:{
             int64_t reserved_size = 0;
             if (OB_FAIL(SERVER_STORAGE_META_SERVICE.get_reserved_size(reserved_size))) {
-              SERVER_LOG(WARN, "fail to get slog reserved size", K(ret), K(reserved_size));
             } else {
               cells[cell_idx].set_int(OB_STORAGE_OBJECT_MGR.get_max_macro_block_count(reserved_size) *OB_STORAGE_OBJECT_MGR.get_macro_block_size());
             }

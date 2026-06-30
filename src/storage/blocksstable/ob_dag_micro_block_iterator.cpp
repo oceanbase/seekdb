@@ -45,9 +45,7 @@ int ObDagMicroBlockIterator::open_cg_block(ObCGBlock *cg_block)
   int ret = OB_SUCCESS;
   ObMicroBlockBareIterator::reset();
   if (OB_FAIL(open(cg_block->get_macro_block_buffer(), cg_block->get_macro_buffer_size(), false))) {
-    STORAGE_LOG(WARN, "fail to open macro block", K(ret));
   } else if (OB_FAIL(fast_locate_micro_block(cg_block->get_cg_block_offset(), cg_block->get_micro_block_idx()))) {
-    STORAGE_LOG(WARN, "fail to move to the target micro block", K(ret), K(cg_block->get_cg_block_offset()), K(cg_block->get_micro_block_idx()));
   } else {
     cg_block_ = cg_block;
   }
@@ -66,8 +64,6 @@ int ObDagMicroBlockIterator::open(const char *macro_block_buf,
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid macro block buf", KP(macro_block_buf), K(macro_block_buf_size));
   } else if (OB_FAIL(simplified_macro_header_.deserialize(macro_block_buf, macro_block_buf_size, read_pos_))) {
-    STORAGE_LOG(WARN, "fail to deserialize simplified macro header", K(ret), K(simplified_macro_header_),
-                                                                     K(macro_block_buf_size), K(read_pos_));
   } else if (OB_UNLIKELY(!simplified_macro_header_.is_valid())) {
     STORAGE_LOG(WARN, "invalid simplified macro header", K(ret), K(simplified_macro_header_));
   } else if (FALSE_IT(index_rowkey_cnt_ = simplified_macro_header_.rowkey_column_count_ == 0 ?
@@ -85,15 +81,12 @@ int ObDagMicroBlockIterator::open(const char *macro_block_buf,
   } else {
     ObMicroBlockData index_block;
     if (OB_FAIL(get_index_block(index_block, true))) {
-      STORAGE_LOG(WARN, "Fail to get index block", K(ret), K(index_block));
     } else if (OB_FAIL(set_reader(static_cast<ObRowStoreType>(
         simplified_macro_header_.row_store_type_)))) {
-      STORAGE_LOG(WARN, "Fail to set reader for index block", K(ret));
     } else if (OB_ISNULL(reader_)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpected null micro reader", K(ret));
     } else if (OB_FAIL(reader_->init(index_block, nullptr))) {
-      STORAGE_LOG(WARN, "Fail to init reader for index block", K(ret), K(index_block));
     } else {
       is_inited_ = true;
     }
@@ -118,12 +111,8 @@ int ObDagMicroBlockIterator::get_index_block(ObMicroBlockData &micro_block, cons
     int64_t pos = 0;
     bool is_compressed = false;
     if (OB_FAIL(header.deserialize(micro_buf, macro_block_buf_size_ - index_block_offset, pos))) {
-      STORAGE_LOG(WARN, "Fail to deserialize record header", K(ret),
-               K(simplified_macro_header_), K(macro_block_buf_size_),
-               K(index_block_offset));
     } else if (FALSE_IT(micro_buf_size = header.header_size_ + header.data_zlength_)) {
     } else if (OB_FAIL(header.check_record(micro_buf, micro_buf_size, MICRO_BLOCK_HEADER_MAGIC))) {
-      STORAGE_LOG(WARN, "Fail to check record header", K(ret), K(header));
     } else if (!need_deserialize_ && !force_deserialize) {
       micro_block.get_buf() = micro_buf;
       micro_block.get_buf_size() = micro_buf_size;
@@ -135,7 +124,6 @@ int ObDagMicroBlockIterator::get_index_block(ObMicroBlockData &micro_block, cons
         micro_block.get_buf(),
         micro_block.get_buf_size(),
         is_compressed))) {
-      STORAGE_LOG(WARN, "Fail to decrypt and decompress micro block data", K(ret), K_(simplified_macro_header));
     }
   }
   return ret;

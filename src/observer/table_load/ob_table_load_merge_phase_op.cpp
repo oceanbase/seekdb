@@ -97,7 +97,6 @@ int ObTableLoadMergeInsertPhaseOp::inner_init()
     if (store_ctx_->write_ctx_.is_fast_heap_table_) {
       inner_phase_ctx_.trans_param_ = store_ctx_->write_ctx_.trans_param_;
     } else if (OB_FAIL(store_ctx_->init_trans_param(inner_phase_ctx_.trans_param_))) {
-      LOG_WARN("fail to init trans param", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -148,12 +147,9 @@ int ObTableLoadMergeInsertPhaseOp::switch_next_op(bool is_parent_called)
     if (OB_SUCC(ret)) {
       if (Status::COMPLETED == status_) {
         if (OB_FAIL(inner_close())) {
-          LOG_WARN("fail to close", KR(ret));
         } else if (OB_FAIL(switch_parent_op())) {
-          LOG_WARN("fail to switch parent op", KR(ret));
         }
       } else if (OB_FAIL(switch_child_op(child_op_type))) {
-        LOG_WARN("fail to switch child op", KR(ret));
       }
     }
   }
@@ -176,7 +172,6 @@ int ObTableLoadMergeDeletePhaseOp::inner_init()
   FLOG_INFO("DELETE PHASE START");
   inner_phase_ctx_.phase_ = ObTableLoadMergerPhaseType::DELETE;
   if (OB_FAIL(store_ctx_->init_trans_param(inner_phase_ctx_.trans_param_))) {
-    LOG_WARN("fail to init trans param", KR(ret));
   } else {
     merge_phase_ctx_ = &inner_phase_ctx_;
   }
@@ -225,12 +220,9 @@ int ObTableLoadMergeDeletePhaseOp::switch_next_op(bool is_parent_called)
     if (OB_SUCC(ret)) {
       if (Status::COMPLETED == status_) {
         if (OB_FAIL(inner_close())) {
-          LOG_WARN("fail to close", KR(ret));
         } else if (OB_FAIL(switch_parent_op())) {
-          LOG_WARN("fail to switch parent op", KR(ret));
         }
       } else if (OB_FAIL(switch_child_op(child_op_type))) {
-        LOG_WARN("fail to switch child op", KR(ret));
       }
     }
   }
@@ -254,7 +246,6 @@ int ObTableLoadMergeAckPhaseOp::inner_init()
   FLOG_INFO("ACK PHASE START");
   inner_phase_ctx_.phase_ = ObTableLoadMergerPhaseType::ACK;
   if (OB_FAIL(store_ctx_->init_trans_param(inner_phase_ctx_.trans_param_))) {
-    LOG_WARN("fail to init trans param", KR(ret));
   } else {
     merge_phase_ctx_ = &inner_phase_ctx_;
   }
@@ -294,12 +285,9 @@ int ObTableLoadMergeAckPhaseOp::switch_next_op(bool is_parent_called)
     if (OB_SUCC(ret)) {
       if (Status::COMPLETED == status_) {
         if (OB_FAIL(inner_close())) {
-          LOG_WARN("fail to close", KR(ret));
         } else if (OB_FAIL(switch_parent_op())) {
-          LOG_WARN("fail to switch parent op", KR(ret));
         }
       } else if (OB_FAIL(switch_child_op(child_op_type))) {
-        LOG_WARN("fail to switch child op", KR(ret));
       }
     }
   }

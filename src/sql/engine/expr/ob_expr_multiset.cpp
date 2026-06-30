@@ -54,7 +54,6 @@ int ObExprMultiSet::assign(const ObExprOperator &other)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expr operator is mismatch", K(other.get_type()));
   } else if (OB_FAIL(ObExprOperator::assign(other))) {
-    LOG_WARN("assign parent expr failed", K(ret));
   } else {
     const ObExprMultiSet &other_expr = static_cast<const ObExprMultiSet &>(other);
     ms_type_ = other_expr.ms_type_;
@@ -159,12 +158,10 @@ int ObExprMultiSet::calc_ms_impl(common::ObIAllocator *coll_allocator,
   if (MULTISET_MODIFIER_ALL == ms_modifier) {
     if (OB_FAIL(calc_ms_all_impl(coll_allocator, c1, c2, data_arr,
                                  elem_count, true, ms_type, ms_modifier))) {
-      LOG_WARN("failed to calc except all", K(ret));
     }
   } else if (MULTISET_MODIFIER_DISTINCT == ms_modifier) {
     if (OB_FAIL(calc_ms_distinct_impl(coll_allocator, c1, c2, data_arr,
                                       elem_count, ms_type, ms_modifier))) {
-      LOG_WARN("failed to calc except distinct", K(ret));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -198,7 +195,6 @@ int ObExprMultiSet::calc_ms_one_distinct(common::ObIAllocator *coll_allocator,
     LOG_WARN("objs array is null", K(count), K(real_count));
   } else {
     if (OB_FAIL(dmap_c.create(real_count, ObModIds::OB_SQL_HASH_SET))) {
-      LOG_WARN("fail create hash map", K(real_count), K(ret));
     } else {
       const ObObj *elem = NULL;
       for (int64_t i = 0; OB_SUCC(ret) && i < real_count; ++i) {
@@ -229,10 +225,8 @@ int ObExprMultiSet::calc_ms_one_distinct(common::ObIAllocator *coll_allocator,
           if (objs[i].is_pl_extend() &&
               objs[i].get_meta().get_extend_type() != pl::PL_REF_CURSOR_TYPE) {
             if (OB_FAIL(pl::ObUserDefinedType::deep_copy_obj(*coll_allocator, objs[i], data_arr[i], true))) {
-              LOG_WARN("copy obobj failed.", K(ret));
             }
           } else if (OB_FAIL(deep_copy_obj(*coll_allocator, objs[i], data_arr[i]))) {
-            LOG_WARN("copy obobj failed.", K(ret));
           }
         }
       }
@@ -255,13 +249,11 @@ int ObExprMultiSet::calc_ms_distinct_impl(common::ObIAllocator *coll_allocator,
   ObObj *tmp_res = NULL;
   if (OB_FAIL(calc_ms_all_impl(&tmp_alloc, c1, c2, tmp_res,
                                elem_count, false, ms_type, ms_modifier))) {
-    LOG_WARN("calc intersect or except failed.", K(ret));
   } else if (OB_FAIL(calc_ms_one_distinct(coll_allocator,
                                           tmp_res,
                                           elem_count,
                                           data_arr,
                                           elem_count))) {
-    LOG_WARN("calc distinct failed.", K(ret));
   }
   for (int64_t i = 0; i < elem_count; ++i) {
     if (tmp_res[i].is_pl_extend() &&
@@ -299,7 +291,6 @@ int ObExprMultiSet::calc_ms_all_impl(common::ObIAllocator *coll_allocator,
     }
   } else {
     if (OB_FAIL(dmap_c2.create(c2->get_actual_count(), ObModIds::OB_SQL_HASH_SET))) {
-      LOG_WARN("fail create hash map", K(c2->get_actual_count()), K(ret));
     } else {
       FILL_ELEM_DISTICT(c2, dmap_c2, allow_dup);
     }
@@ -315,7 +306,6 @@ int ObExprMultiSet::calc_ms_all_impl(common::ObIAllocator *coll_allocator,
         bool is_del = false;
         for (i = 0; OB_SUCC(ret) && i < c1->get_count(); ++i) {
           if (OB_FAIL(c1->is_elem_deleted(i, is_del))) {
-            LOG_WARN("failed to check collection elem deleted", K(ret));
           } else if (!is_del) {
             elem = static_cast<ObObj *>(c1->get_data()) + i;
         #define COPY_ELEM(iscopy) \
@@ -415,10 +405,8 @@ int ObExprMultiSet::append_collection(ObObj *buffer, int64_t buffer_size, int64_
         } else {
           if (curr->is_pl_extend() && pl::PL_REF_CURSOR_TYPE != curr->get_meta().get_extend_type()) {
             if (OB_FAIL(pl::ObUserDefinedType::deep_copy_obj(coll_alloc, *curr, buffer[pos], true))) {
-              LOG_WARN("failed to deep_copy_obj", K(ret), K(i), KPC(c));
             }
           } else if (OB_FAIL(deep_copy_obj(coll_alloc, *curr, buffer[pos]))) {
-            LOG_WARN("failed to deep_copy_obj", K(ret), K(i), KPC(c));
           }
 
           if (OB_SUCC(ret)) {
@@ -497,8 +485,6 @@ int ObExprMultiSet::eval_composite_relative_anonymous_block(ObExecContext &exec_
                                           OB_INVALID_ID,
                                           pl,
                                           out_args))) {
-        LOG_WARN("failed to execute PS anonymous bolck",
-                 K(ret), K(pl), K(params), K(out_args));
       }
       MEMCPY(exec_ctx.get_sql_ctx()->sql_id_, old_sql_id, (int32_t)sizeof(old_sql_id));
     }

@@ -54,7 +54,6 @@ int PalfFSCbWrapper::update_end_lsn(int64_t id, const LSN &end_lsn, const share:
         ret = OB_ERR_UNEXPECTED;
         PALF_LOG(ERROR, "PalfFSCb is NULL, unexpect error", KPC(node));
       } else if (OB_SUCCESS != (tmp_ret = cb->update_end_lsn(id, end_lsn, end_scn, proposal_id))) {
-        PALF_LOG(ERROR, "update_end_lsn failed", K(tmp_ret), K(id), K(end_lsn), K(end_scn), K(proposal_id), KPC(node));
       }
     }
   }
@@ -98,7 +97,6 @@ int PalfRoleChangeCbWrapper::on_role_change(int64_t id)
         ret = OB_ERR_UNEXPECTED;
         PALF_LOG(ERROR, "PalfRoleChangeCb is NULL, unexpect error", K(ret), KPC(node));
       } else if (OB_FAIL(rc_cb->on_role_change(id))) {
-        PALF_LOG(INFO, "on_role_change failed", K(ret), K(id), KPC(node));
       }
     }
   }
@@ -118,7 +116,6 @@ int PalfRoleChangeCbWrapper::on_need_change_leader(const int64_t id, const ObAdd
         ret = OB_ERR_UNEXPECTED;
         PALF_LOG(ERROR, "PalfRoleChangeCb is NULL, unexpect error", K(ret), KPC(node), K(id), K(dest_addr));
       } else if (OB_FAIL(rc_cb->on_need_change_leader(id, dest_addr))) {
-        PALF_LOG(WARN, "on_need_change_leader failed", K(ret), K(id), KPC(node), K(dest_addr));
       }
     }
   }
@@ -162,7 +159,6 @@ int PalfRebuildCbWrapper::on_rebuild(const int64_t id, const LSN &lsn)
         ret = OB_ERR_UNEXPECTED;
         PALF_LOG(ERROR, "PalfRebuildCb is NULL, unexpect error", K(ret), KPC(node));
       } else if (OB_FAIL(rebuild_cb->on_rebuild(id, lsn))) {
-        PALF_LOG(INFO, "on_rebuild failed", K(ret), K(id), K(lsn), KPC(node));
       }
     }
   }

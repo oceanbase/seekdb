@@ -52,12 +52,10 @@ OB_DEF_SERIALIZE(ObPxNewRow)
   int ret = OB_SUCCESS;
   OB_UNIS_ENCODE(row_cell_count_);
   if (OB_FAIL(ret)) {
-    LOG_WARN("failed to serialize row_cell_count", K_(row_cell_count), K(ret));
   } else if (OB_LIKELY(NULL != row_)) {
     for (int64_t idx = 0; OB_SUCC(ret) && idx < row_->get_count(); ++idx) {
       const ObObj &cell = row_->get_cell(idx);
       if (OB_FAIL(serialization::encode(buf, buf_len, pos, cell))) {
-        LOG_WARN("fail append cell to buf", K(ret));
       }
     }
   }
@@ -85,7 +83,6 @@ OB_DEF_DESERIALIZE(ObPxNewRow)
   des_row_buf_size_ = 0;
   OB_UNIS_DECODE(row_cell_count_);
   if (OB_FAIL(ret)) {
-    LOG_WARN("failed to deserialize row_cell_count", KP(buf), K(data_len), K(pos), K(ret));
   } else if (OB_LIKELY(row_cell_count_ > 0)) {
     if (OB_UNLIKELY(pos >= data_len)) {
       ret = OB_SERIALIZE_ERROR;
@@ -240,7 +237,6 @@ int ObReceiveRowReader::check_and_switch_buffer(dtl::ObDtlLinkedBuffer *&curr)
         if (!curr_vector_.is_inited()) {
           curr_vector_.set_buf(curr->buf(), curr->size());
           if (OB_FAIL(curr_vector_.decode())) {
-            LOG_WARN("failed to decode vector", K(ret), K(curr->msg_type()));
           }
         }
         if (OB_SUCC(ret)) {
@@ -270,7 +266,6 @@ int ObReceiveRowReader::check_and_switch_buffer(dtl::ObDtlLinkedBuffer *&curr)
         if (dtl::PX_VECTOR_FIXED == msg_type || dtl::PX_VECTOR == msg_type) {
           curr_vector_.set_buf(recv_head_->buf(), recv_head_->size());
           if (OB_FAIL(curr_vector_.decode())) {
-            LOG_WARN("failed to decode vecotr", K(ret));
           }
         }
       } else {
@@ -302,7 +297,6 @@ const ROW *ObReceiveRowReader::next_store_row()
     if (NULL != b) {
       int ret = b->get_store_row(cur_iter_pos_, srow);
       if (OB_FAIL(ret)) {
-        LOG_WARN("fetch store row failed", K(ret));
       } else {
         cur_iter_rows_ += 1;
       }
@@ -324,7 +318,6 @@ int ObReceiveRowReader::get_next_compact_rows(ObTempRowStore::RowBlock *blk,
     for (int64_t i = 0; OB_SUCC(ret) && cur_iter_rows_ < blk->rows() && i < max_rows; ++i) {
       const ObCompactRow *srow = NULL;
       if (OB_FAIL(blk->get_store_row(cur_iter_pos_, srow))) {
-        LOG_WARN("failed to get store row", K(ret));
       } else {
         srows[read_rows++] = srow;
         ++cur_iter_rows_;
@@ -362,7 +355,6 @@ int ObReceiveRowReader::to_expr(const ObChunkDatumStore::StoredRow *srow,
         if (0 == expr->res_buf_off_) {
           // for compat 4.0, do nothing
         } else if (OB_FAIL(expr->deep_copy_self_datum(eval_ctx))) {
-          LOG_WARN("fail to deep copy datum", K(ret), K(eval_ctx), K(*expr));
         }
       }
     }
@@ -442,7 +434,6 @@ int ObReceiveRowReader::attach_rows(const common::ObIArray<ObExpr*> &exprs,
         if (0 == expr->res_buf_off_) {
           // for compat 4.0, do nothing
         } else if (OB_FAIL(expr->deep_copy_self_datum(eval_ctx))) {
-          LOG_WARN("fail to deep copy datum", K(ret), K(eval_ctx), K(*expr));
         }
       }
     }
@@ -471,7 +462,6 @@ int ObReceiveRowReader::attach_vectors(const common::ObIArray<ObExpr*> &exprs,
         ObExpr *e = exprs.at(col_idx);
         ObIVector *vec = e->get_vector(eval_ctx);
         if (OB_FAIL(vec->from_rows(meta, srows, read_rows, col_idx))) {
-          LOG_WARN("failed to fill vector", K(ret));
         }
         e->set_evaluated_projected(eval_ctx);
         ObEvalInfo &info = e->get_eval_info(eval_ctx);
@@ -490,7 +480,6 @@ int ObReceiveRowReader::attach_vectors(const common::ObIArray<ObExpr*> &exprs,
         if (0 == expr->res_buf_off_) {
           // for compat 4.0, do nothing
         } else if (OB_FAIL(expr->deep_copy_self_datum(eval_ctx))) {
-          LOG_WARN("fail to deep copy datum", K(ret), K(eval_ctx), K(*expr));
         }
       }
     }
@@ -572,7 +561,6 @@ int ObReceiveRowReader::attach_vectors(const common::ObIArray<ObExpr*> &exprs,
       if (0 == expr->res_buf_off_) {
         // for compat 4.0, do nothing
       } else if (OB_FAIL(expr->deep_copy_self_datum(eval_ctx))) {
-        LOG_WARN("fail to deep copy datum", K(ret), K(eval_ctx), K(*expr));
       }
     }
   }
@@ -634,7 +622,6 @@ int ObReceiveRowReader::init_row_meta()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("child exprs is null", K(ret));
   } else if (OB_FAIL(row_meta_.init(*child_exprs_, 0, reorder_fixed_expr_, allocator_))) {
-    LOG_WARN("failed to init row meta", K(reorder_fixed_expr_), K(child_exprs_->count()), KP(allocator_), K(ret));
   }
   return ret;
 }
@@ -650,7 +637,6 @@ int ObReceiveRowReader::get_next_batch_vec(const ObIArray<ObExpr*> &exprs,
   int ret = OB_SUCCESS;
   if (!row_meta_init_) {
     if (OB_FAIL(init_row_meta())) {
-      LOG_WARN("failed to init row meta", K(ret));
     } else {
       row_meta_init_ = true;
     }
@@ -686,12 +672,10 @@ int ObReceiveRowReader::get_next_batch_vec(const ObIArray<ObExpr*> &exprs,
         if (OB_FAIL(exprs.at(i)->init_vector_default(
               eval_ctx,
               max_rows))) {
-          LOG_WARN("failed to init vector", K(ret));
         }
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < dynamic_const_exprs.count(); ++i) {
         if (OB_FAIL(dynamic_const_exprs.at(i)->init_vector_default(eval_ctx, max_rows))) {
-          LOG_WARN("failed to init vector", K(ret));
         }
       }
       OZ(attach_vectors(exprs, dynamic_const_exprs, row_meta_, eval_ctx, srows, read_rows));
@@ -701,7 +685,6 @@ int ObReceiveRowReader::get_next_batch_vec(const ObIArray<ObExpr*> &exprs,
     read_rows = 0;
     dtl::ObDtlLinkedBuffer *curr_buffer = nullptr;
     if (OB_FAIL(check_and_switch_buffer(curr_buffer))) {
-      LOG_WARN("failed to switch buffer", K(ret));
     } else if (nullptr == curr_buffer) {
       ret = OB_ITER_END;
     } else {
@@ -709,18 +692,15 @@ int ObReceiveRowReader::get_next_batch_vec(const ObIArray<ObExpr*> &exprs,
         case dtl::PX_VECTOR_ROW : {
           ObTempRowStore::RowBlock *blk = reinterpret_cast<ObTempRowStore::RowBlock *> (curr_buffer->buf());
           if (OB_FAIL(get_next_compact_rows(blk, max_rows, read_rows, srows))) {
-            LOG_WARN("failed to get next compact rows", K(ret));
           } else {
             for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
               if (OB_FAIL(exprs.at(i)->init_vector_default(
                     eval_ctx,
                     max_rows))) {
-                LOG_WARN("failed to init vector", K(ret));
               }
             }
             for (int64_t i = 0; OB_SUCC(ret) && i < dynamic_const_exprs.count(); ++i) {
               if (OB_FAIL(dynamic_const_exprs.at(i)->init_vector_default(eval_ctx, max_rows))) {
-                LOG_WARN("failed to init vector", K(ret));
               }
             }
             OZ(attach_vectors(exprs, dynamic_const_exprs, row_meta_, eval_ctx, srows, read_rows));
@@ -736,12 +716,10 @@ int ObReceiveRowReader::get_next_batch_vec(const ObIArray<ObExpr*> &exprs,
                                                         : (exprs.at(i)->is_fixed_length_data_
                                                             ? VEC_FIXED : VEC_CONTINUOUS),
                                                  max_rows))) {
-              LOG_WARN("failed to init vector", K(ret));
             }
           }
           for (int64_t i = 0; OB_SUCC(ret) && i < dynamic_const_exprs.count(); ++i) {
             if (OB_FAIL(dynamic_const_exprs.at(i)->init_vector_default(eval_ctx, max_rows))) {
-              LOG_WARN("failed to init vector", K(ret));
             }
           }
           OZ (attach_vectors(exprs, dynamic_const_exprs, eval_ctx, max_rows, read_rows, curr_vector_));

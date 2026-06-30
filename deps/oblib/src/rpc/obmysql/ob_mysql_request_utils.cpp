@@ -96,7 +96,6 @@ static int build_compressed_packet(ObEasyBuffer &src_buf,
       if (OB_FAIL(compressor.compress(src_buf.read_pos(), next_compress_size,
                                       dst_buf.last() + OB_MYSQL_COMPRESSED_HEADER_SIZE,
                                       comp_buf_size, dst_data_size))) {
-        SERVER_LOG(WARN, "compress packet failed", K(ret));
       } else if (OB_UNLIKELY(dst_data_size > comp_buf_size)) {
         ret = OB_SIZE_OVERFLOW;
         SERVER_LOG(WARN, "dst_data_size is overflow, it should not happened",
@@ -117,13 +116,10 @@ static int build_compressed_packet(ObEasyBuffer &src_buf,
 
     if (FAILEDx(ObMySQLUtil::store_int3(dst_buf.last(), OB_MYSQL_COMPRESSED_HEADER_SIZE,
                                                static_cast<int32_t>(dst_data_size), pos))) {
-      SERVER_LOG(WARN, "failed to store_int3", K(ret));
     } else if (OB_FAIL(ObMySQLUtil::store_int1(dst_buf.last(), OB_MYSQL_COMPRESSED_HEADER_SIZE,
                                                context.seq_, pos))) {
-      SERVER_LOG(WARN, "failed to store_int1", K(ret));
     } else if (OB_FAIL(ObMySQLUtil::store_int3(dst_buf.last(), OB_MYSQL_COMPRESSED_HEADER_SIZE,
                                                static_cast<int32_t>(len_before_compress), pos))) {
-      SERVER_LOG(WARN, "failed to store_int3", K(ret));
     } else {
       if (context.conn_->pkt_rec_wrapper_.enable_proto_dia()) {
         context.conn_->pkt_rec_wrapper_.end_seal_comp_pkt(
@@ -172,7 +168,6 @@ static int build_compressed_buffer(ObEasyBuffer &orig_send_buf,
         }
 
         if (OB_FAIL(build_compressed_packet(orig_send_buf, next_read_size, context))) {
-          SERVER_LOG(WARN, "fail to build_compressed_packet", K(ret));
         } else {
           //optimize for multi packet
           last_read_size = next_read_size;
@@ -249,18 +244,15 @@ static int send_compressed_buffer(bool pkt_has_completed, ObCompressionContext &
   if (read_avail_size > 0) {
     if (is_last_flush) {
         if (OB_FAIL(SQL_REQ_OP.async_write_response(&req, comp_context.send_buf_->pos, read_avail_size))) {
-          SERVER_LOG(WARN, "failed to flush buffer", K(ret));
         }
     } else {
       if (OB_FAIL(SQL_REQ_OP.write_response(&req, comp_context.send_buf_->pos, read_avail_size))) {
-        SERVER_LOG(WARN, "failed to flush buffer", K(ret));
       }
     }
   }
 
   if (OB_SUCC(ret) && !is_last_flush) {
     if (OB_FAIL(reuse_compress_buffer(comp_context, orig_send_buf, buf_size, req))) {
-      SERVER_LOG(WARN, "faild to reuse_compressed_buffer_sql_nio", K(ret));
     }
   }
 

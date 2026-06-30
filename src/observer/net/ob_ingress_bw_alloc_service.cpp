@@ -32,7 +32,6 @@ int ObNetEndpointIngressManager::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("endpoint ingress manager should not init multiple times", K(ret));
   } else if (OB_FAIL(ingress_plan_map_.create(7, "INGRESS_MAP"))) {
-    LOG_WARN("fail create ingress_plan_map", K(ret));
   } else {
     total_bw_limit_ = 0;
     LOG_INFO("endpoint ingress manager init ok");
@@ -98,13 +97,11 @@ int ObNetEndpointIngressManager::collect_predict_bw(ObNetEndpointKVArray &update
       if (endpoint_value->expire_time_ < current_time) {
         LOG_INFO("endpoint expired", K(endpoint_key), K(endpoint_value->expire_time_), K(current_time));
         if (OB_FAIL(delete_keys.push_back(endpoint_key))) {
-          LOG_WARN("fail to push back arrays", K(ret), K(endpoint_key));
         } else {
           ob_free(endpoint_value);
         }
       } else {
         if (OB_FAIL(update_kvs.push_back(ObNetEndpointKeyValue(endpoint_key, endpoint_value)))) {
-          LOG_WARN("fail to push back arrays", K(ret), K(endpoint_key));
         } else {
           endpoint_value->predicted_bw_ = -1;
         }
@@ -114,7 +111,6 @@ int ObNetEndpointIngressManager::collect_predict_bw(ObNetEndpointKVArray &update
     for (int64_t i = 0; OB_SUCC(ret) && i < delete_keys.count(); i++) {
       const ObNetEndpointKey &endpoint_key = delete_keys[i];
       if (OB_FAIL(ingress_plan_map_.erase_refactored(endpoint_key))) {
-        LOG_ERROR("failed to erase endpoint", K(ret), K(endpoint_key));
       }
     }
   }
@@ -133,13 +129,11 @@ int ObNetEndpointIngressManager::collect_predict_bw(ObNetEndpointKVArray &update
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to dispatch predict ingress", K(ret), K(endpoint_key));
       } else if (OB_FAIL(handles.push_back(handle))) {
-        LOG_WARN("fail to push handle", K(ret), K(endpoint_key));
       }
     }
     for (int64_t i = 0; i < handles.count(); i++) {
       int tmp_ret = handles.at(i)->wait();
       if (OB_TMP_FAIL(tmp_ret)) {
-        LOG_WARN("fail to predict ingress bw", KR(tmp_ret), K(update_kvs[i].key_));  // ignore error
       } else {
         update_kvs[i].value_->predicted_bw_ = handles.at(i)->result();
       }
@@ -239,13 +233,11 @@ int ObNetEndpointIngressManager::commit_bw_limit_plan(ObNetEndpointKVArray &upda
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to dispatch set ingress", K(ret), K(endpoint_key));
       } else if (OB_FAIL(handles.push_back(handle))) {
-        LOG_WARN("fail to push handle", K(ret), K(endpoint_key));
       }
     }
     for (int64_t i = 0; i < handles.count(); i++) {
       int tmp_ret = handles.at(i)->wait();
       if (OB_TMP_FAIL(tmp_ret)) {
-        LOG_WARN("fail to set ingress bw", KR(tmp_ret), K(update_kvs[i].key_));  // ignore error
       }
     }
   }
@@ -305,7 +297,6 @@ int ObIngressBWAllocService::register_endpoint(const obcall::ObNetEndpointKey &e
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("[INGRESS_SERVICE] ObIngressBWAllocService thread is stopped", KR(ret), KP(this));
   } else if (OB_FAIL(ingress_manager_.register_endpoint(endpoint_key, expire_time))) {
-    LOG_WARN("[INGRESS_SERVICE] ObIngressBWAllocService register endpoint failed", KR(ret), KP(this));
   }
   return ret;
 }
@@ -328,11 +319,8 @@ void ObIngressBWAllocService::leader_task()
   } else if (ingress_manager_.get_map_size() > 0) {
     ObNetEndpointKVArray update_kvs;
     if (OB_FAIL(ingress_manager_.collect_predict_bw(update_kvs))) {
-      LOG_ERROR("update observer predicted bandwidth failed", K(ret));
     } else if (OB_FAIL(ingress_manager_.update_ingress_plan(update_kvs))) {
-      LOG_ERROR("update ingress plan failed", K(ret));
     } else if (OB_FAIL(ingress_manager_.commit_bw_limit_plan(update_kvs))) {
-      LOG_ERROR("assign ingress bandwidth failed", K(ret));
     }
   }
 }

@@ -154,7 +154,6 @@ int OMPKHandshakeResponse::decode()
                       if (end - pos >= value_len) {
                           pos += value_len;
                           if (OB_FAIL(connect_attrs_.push_back(str_kv))) {
-                            LOG_WARN("fail to push back str_kv", K(str_kv), K(ret));
                           }
                       } else {
                         // skip error
@@ -229,56 +228,45 @@ int OMPKHandshakeResponse::serialize(char *buffer, const int64_t length, int64_t
     LOG_WARN("size is overflow",  K(length), K(pos), "need_size", get_serialize_size(), K(ret));
   } else {
     if (OB_FAIL(ObMySQLUtil::store_int4(buffer, length, capability_ .capability_, pos))) {
-      LOG_WARN("store fail", K(ret), KP(buffer), K(length), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_int4(buffer, length, max_packet_size_, pos))) {
-      LOG_WARN("store fail", K(ret), KP(buffer), K(length), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_int1(buffer, length, character_set_, pos))) {
-      LOG_WARN("store fail", K(ret), KP(buffer), K(length), K(pos));
     } else {
       char reserved[HANDSHAKE_RESPONSE_RESERVED_SIZE];
       memset(reserved, 0, sizeof (reserved));
       if (OB_FAIL(ObMySQLUtil::store_str_vnzt(buffer, length, reserved, sizeof (reserved), pos))) {
-        LOG_WARN("store fail", K(ret), KP(buffer), K(length), K(pos));
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(ObMySQLUtil::store_obstr_zt(buffer, length, username_, pos))) {
-          LOG_WARN("store fail", K(ret), KP(buffer), K(length), K(pos));
         }
       }
       if (capability_.cap_flags_.OB_CLIENT_PLUGIN_AUTH_LENENC_CLIENT_DATA) {
         if (OB_SUCC(ret)) {
           if (OB_FAIL(ObMySQLUtil::store_obstr(buffer, length, auth_response_, pos))) {
-            LOG_WARN("store fail", K(ret), KP(buffer), K(length), K(pos));
           }
         }
       } else if (capability_.cap_flags_.OB_CLIENT_SECURE_CONNECTION ) {
         if (OB_SUCC(ret)) {
           if (OB_FAIL(ObMySQLUtil::store_int1(buffer, length,
               static_cast<uint8_t>(auth_response_.length()), pos))) {
-            LOG_WARN("store fail", K(ret), KP(buffer), K(length), K(pos));
           } else if (OB_FAIL(ObMySQLUtil::store_str_vnzt(buffer, length,
               auth_response_.ptr(), auth_response_.length(), pos))) {
-            LOG_WARN("store fail", K(ret), KP(buffer), K(length), K(pos));
           }
         }
       } else {
         if (OB_SUCC(ret)) {
           if (OB_FAIL(ObMySQLUtil::store_obstr_zt(buffer, length, auth_response_, pos))) {
-            LOG_WARN("store fail", K(ret), KP(buffer), K(length), K(pos));
           }
         }
       }
       if (capability_.cap_flags_.OB_CLIENT_CONNECT_WITH_DB) {
         if (OB_SUCC(ret)) {
           if (OB_FAIL(ObMySQLUtil::store_obstr_zt(buffer, length, database_, pos))) {
-            LOG_WARN("store fail", K(ret), KP(buffer), K(length), K(pos));
           }
         }
       }
       if (capability_.cap_flags_.OB_CLIENT_PLUGIN_AUTH) {
         if (OB_SUCC(ret)) {
           if (OB_FAIL(ObMySQLUtil::store_obstr_zt(buffer, length, auth_plugin_name_, pos)))  {
-            LOG_WARN("store fail", K(ret), KP(buffer), K(length), K(pos));
           }
         }
       }
@@ -286,7 +274,6 @@ int OMPKHandshakeResponse::serialize(char *buffer, const int64_t length, int64_t
         uint64_t all_attr_len = get_connect_attrs_len();
         if (OB_SUCC(ret)) {
           if (OB_FAIL(ObMySQLUtil::store_length(buffer, length, all_attr_len, pos))) {
-            LOG_WARN("store fail", K(ret), KP(buffer), K(length), K(pos));
           }
         }
 
@@ -294,9 +281,7 @@ int OMPKHandshakeResponse::serialize(char *buffer, const int64_t length, int64_t
         for (int64_t i = 0; OB_SUCC(ret) && i <  connect_attrs_.count(); ++i) {
           string_kv = connect_attrs_.at(i);
           if (OB_FAIL(ObMySQLUtil::store_obstr(buffer, length, string_kv.key_, pos))) {
-            LOG_WARN("store fail", K(ret), KP(buffer), K(length), K(pos));
           } else if (OB_FAIL(ObMySQLUtil::store_obstr(buffer, length, string_kv.value_, pos))) {
-            LOG_WARN("store fail", K(ret), KP(buffer), K(length), K(pos));
           }
         }
       }
@@ -313,7 +298,6 @@ int OMPKHandshakeResponse::add_connect_attr(const ObStringKV &string_kv)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid input value", K(string_kv), K(ret));
   } else if (OB_FAIL(connect_attrs_.push_back(string_kv))) {
-    LOG_WARN("fail to push back string kv", K(string_kv), K(ret));
   }
   return ret;
 }

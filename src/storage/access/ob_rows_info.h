@@ -296,7 +296,6 @@ private:
       const blocksstable::ObDatumRowkey &right_rowkey = right.marked_rowkey_.get_rowkey();;
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(left_rowkey.compare(right_rowkey, datum_utils_, cmp_ret))) {
-        STORAGE_LOG(WARN, "Failed to compare datum rowkey", K(ret), K_(left.marked_rowkey), K_(right.marked_rowkey));
       } else if (OB_UNLIKELY(check_dup_ && 0 == cmp_ret)) {
         ret_ = common::OB_ERR_PRIMARY_KEY_DUPLICATE;
         dup_key_ = left_rowkey;

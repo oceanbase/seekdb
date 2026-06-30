@@ -115,7 +115,6 @@ struct ObLoadArgument
     file_iter_.copy(other.file_iter_);
     compression_format_ = other.compression_format_;
     if (OB_FAIL(access_info_.assign(other.access_info_))) {
-      OB_LOG(WARN, "fail to assign access info", K(ret), K_(other.access_info));
     }
     return ret;
   }

@@ -57,25 +57,21 @@ int ObSqlSockProcessor::decode_sql_packet(ObICSMemPool& mem_pool,
     bool need_read_more = false;
     int64_t consume_sz = 0;
     if (OB_FAIL(sess.peek_data(read_handle, limit, start, read_sz))) {
-      LOG_WARN("peed data fail", K(ret));
     } else if (read_sz < limit) {
       break;
     } else if (OB_FAIL(processor_do_decode(*processor, conn, mem_pool, start, read_sz, pkt, limit, consume_sz))) {
-      LOG_WARN("do_decode fail", K(ret));
     } else if (NULL == pkt) {
       // try read more
     } else if (conn.is_in_ssl_connect_phase()) {
       ret_pkt = NULL;
       sess.set_last_pkt_sz(consume_sz);
       if (OB_FAIL(sess.set_ssl_enabled())) {
-        LOG_WARN("sql nio enable ssl for server failed", K(ret));
       }
       break;
     } else if (!conn.is_in_authed_phase() && !conn.is_in_auth_switch_phase()) {
       ret_pkt = pkt;
       sess.set_last_pkt_sz(consume_sz);
     } else if (OB_FAIL(processor->do_splice(conn, mem_pool, (void*&)pkt, need_read_more))) {
-      LOG_WARN("do_splice fail");
     } else if (!need_read_more) {
       ret_pkt = pkt;
       if (NULL == read_handle) {

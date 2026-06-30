@@ -54,9 +54,7 @@ int ObAsyncPlanDriver::response_result(ObMySQLResultSet &result)
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("current trace id is NULL", K(ret));
   } else if (OB_FAIL(result.open())) {
-    LOG_WARN("failed to do result set open", K(ret));
   } else if (OB_FAIL(result.update_last_insert_id_to_client())) {
-    LOG_WARN("failed to update last insert id after open", K(ret));
   } else {
     // open success, allow asynchronous response
     result.set_end_trans_async(true);
@@ -98,14 +96,12 @@ int ObAsyncPlanDriver::response_result(ObMySQLResultSet &result)
     // need close result set
     int close_ret = OB_SUCCESS;
     if (OB_SUCCESS != (close_ret = result.close())) {
-      LOG_WARN("close result failed", K(close_ret));
     }
     LOG_WARN("prexecute response query head fail. ", K(ret));
   } else if (result.is_with_rows()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("SELECT should not use async method. wrong code!!!", K(ret));
   } else if (OB_FAIL(result.close())) {
-    LOG_WARN("result close failed, let's leave process(). EndTransCb will clean this mess", K(ret));
   } else {
     // async did not call ObSqlEndTransCb to reply OK package
     // So the OK packet of the combined protocol should also be handled here
@@ -121,7 +117,6 @@ int ObAsyncPlanDriver::response_result(ObMySQLResultSet &result)
         ok_param.has_more_result_ = result.has_more_result();
         ok_param.send_last_row_ = true;
         if (OB_FAIL(sender_.send_ok_packet(session_, ok_param))) {
-          LOG_WARN("fail to send ok packt", K(ok_param), K(ret));
         }
       }
     }
@@ -145,7 +140,6 @@ int ObAsyncPlanDriver::response_result(ObMySQLResultSet &result)
     int sret = OB_SUCCESS;
     bool is_partition_hit = session_.get_err_final_partition_hit(ret);
     if (OB_SUCCESS != (sret = sender_.send_error_packet(ret, NULL, is_partition_hit))) {
-      LOG_WARN("send error packet fail", K(sret), K(ret));
     }
     //According to the agreement with the transaction layer, regardless of whether end_participant and end_stmt succeed or not,
     //Determine whether the transaction commit or rollback is successful by only checking if the final end_trans is successful,

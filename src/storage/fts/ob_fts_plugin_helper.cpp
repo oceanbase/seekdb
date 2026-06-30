@@ -64,12 +64,10 @@ int ObFTParser::parse_from_str(const char *plugin_name, const int64_t buf_len)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected error, plugin name is illegal", K(ret), KCSTRING(name));
     } else if (OB_FAIL(parser_name_.set_name(token))) {
-      LOG_WARN("fail to set parser name", K(ret), KCSTRING(token));
     } else if (OB_ISNULL(token = STRTOK_R(nullptr, ".", &saveptr))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected error, plugin name is illegal", K(ret), KCSTRING(name));
     } else if (OB_FAIL(ob_strtoll(token, end_ptr, parser_version_))) {
-      LOG_WARN("failed to convert str to ll", KCSTRING(token));
     } else if (OB_NOT_NULL(token = STRTOK_R(nullptr, ".", &saveptr))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected error, plugin name is illegal", K(ret), KCSTRING(name));
@@ -95,7 +93,6 @@ int ObFTParser::serialize_to_str(char *buf, const int64_t buf_len)
     LOG_WARN("invalid fulltext parser doesn't support to serialize_to_str", K(ret), KPC(this));
   } else if (OB_FAIL(common::databuff_printf(buf, buf_len, pos, "%.*s.%ld", parser_name_.len(), parser_name_.str(),
           parser_version_))) {
-    LOG_WARN("fail to printf", K(ret), K(buf_len), K(parser_name_), K(parser_version_));
   }
   return ret;
 }
@@ -115,7 +112,6 @@ int ObFTParsePluginData::init_global()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory", K(ret), K(sizeof(ObFTParsePluginData)));
   } else if (OB_FAIL(g_ftparse_plugin_data->init())) {
-    LOG_WARN("failed to init global ftparse plugin data object", K(ret));
   }
   return ret;
 }
@@ -147,11 +143,8 @@ int ObFTParsePluginData::init()
   if (OB_FAIL(handler_allocator_.init(lib::ObMallocAllocator::get_instance(),
                                       OB_MALLOC_NORMAL_BLOCK_SIZE,
                                       mem_attr))) {
-    LOG_WARN("fail to init tenant plugin handler allocator", K(ret));
   } else if (OB_FAIL(init_and_set_stopword_list())) {
-    LOG_WARN("fail to init and set stopword list", K(ret));
   } else if (OB_FAIL(init_dict_hub())) {
-    LOG_WARN("fail to init dict hub", K(ret));
   } else {
     is_inited_ = true;
     FLOG_INFO("succeed to initialize ObTenantFTPluginMgr", KP(this));
@@ -170,7 +163,6 @@ int ObFTParsePluginData::init_and_set_stopword_list()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to create stop word checker", K(ret));
   } else if (OB_FAIL(stop_word_checker_->init())) {
-    LOG_WARN("failed to init stop word checker", K(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -189,7 +181,6 @@ int ObFTParsePluginData::init_dict_hub()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Failed to alloc memory for dict hub.", K(ret));
   } else if (OB_FAIL(dict_hub_->init())) {
-    LOG_WARN("Failed to init dict hub.", K(ret));
   }
   return ret;
 }
@@ -258,7 +249,6 @@ int ObFTParseHelper::segment(
     param.max_ngram_size_ = property.max_ngram_token_size_;
 
     if (OB_FAIL(parser_desc->segment(&param, iter))) {
-      LOG_WARN("fail to segment", K(ret), K(param));
     } else if (OB_ISNULL(iter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected error, token iterator is nullptr", K(ret), KP(iter));
@@ -273,7 +263,6 @@ int ObFTParseHelper::segment(
             LOG_WARN("fail to get next token", K(ret), KPC(iter));
           }
         } else if (OB_FAIL(add_word.process_word(word, word_len, char_cnt, word_freq))) {
-          LOG_WARN("fail to process one word", K(ret), KP(word), K(word_len), K(char_cnt), K(word_freq));
         }
       }
       if (OB_ITER_END == ret) {
@@ -317,9 +306,7 @@ int ObFTParseHelper::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(allocator), K(plugin_name));
   } else if (OB_FAIL(parser_name_.parse_from_str(plugin_name.ptr(), plugin_name.length()))) {
-    LOG_WARN("fail to parse name from cstring", K(ret), K(plugin_name));
   } else if (OB_FAIL(parser_property_.parse_for_parser_helper(parser_name_, plugin_properties))) {
-    LOG_WARN("fail to parse parser property from cstring", K(ret), K(plugin_properties), K(parser_name_));
   } else if (OB_FAIL(ObPluginHelper::find_ftparser(parser_name_.get_parser_name().str(),
                                                    parser_desc_, plugin_param_))) {
     if (OB_FUNCTION_NOT_DEFINED == ret) {
@@ -331,7 +318,6 @@ int ObFTParseHelper::init(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, parse desc is nullptr", K(ret), KP(parser_desc_));
   } else if (OB_FAIL(set_add_word_flag(*parser_desc_))) {
-    LOG_WARN("fail to set add word flag", K(ret), K(parser_name_));
   } else {
     allocator_ = allocator;
     is_inited_ = true;
@@ -387,8 +373,6 @@ int ObFTParseHelper::segment(
                     fulltext_len,
                     *allocator_,
                     add_word))) {
-      LOG_WARN("fail to segment fulltext", K(ret), K(parser_name_), KP(parser_desc_), KP(cs), KP(fulltext),
-          K(fulltext_len), KP(allocator_), K(parser_property_));
     } else {
       doc_length = add_word.get_add_word_count();
     }
@@ -412,9 +396,7 @@ int ObFTParseHelper::check_is_the_same(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), K(plugin_name));
     } else if (OB_FAIL(parser_name.parse_from_str(plugin_name.ptr(), plugin_name.length()))) {
-      LOG_WARN("fail to parse name from cstring", K(ret), K(plugin_name));
     } else if (OB_FAIL(parser_property.parse_for_parser_helper(parser_name, plugin_properties))) {
-      LOG_WARN("fail to parse parser property from cstring", K(ret), K(plugin_properties), K(parser_name_));
     } else if (parser_name == parser_name_ && parser_property.is_equal(parser_property_)) {
       is_same = true;
     }
@@ -458,9 +440,7 @@ int ObFTParseHelper::make_detail_json(
        ret = OB_ALLOCATE_MEMORY_FAILED;
        LOG_WARN("Fail to alloc memory for json", K(ret));
      } else if (OB_FAIL(node->add(key, token_cnt_node))) {
-       LOG_WARN("Fail to add token count to json", K(ret));
      } else if (OB_FAIL(token_array->append(node))) {
-       LOG_WARN("Fail to append json object", K(ret));
      } else {
        // pass
      }
@@ -473,9 +453,7 @@ int ObFTParseHelper::make_detail_json(
 
    if (OB_SUCC(ret)) {
      if (OB_FAIL(root_obj->add(ENTRY_NAME_TOKENS, token_array))) {
-       LOG_WARN("Fail to add token array to json", K(ret));
      } else if (OB_FAIL(root_obj->add(ENTRY_NAME_DOC_LEN, cnt))) {
-       LOG_WARN("Fail to add doc len to json", K(ret));
      }
    }
  }
@@ -527,7 +505,6 @@ int ObFTParseHelper::set_add_word_flag(const ObIFTParserDesc &ftparser_desc)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ftparser_desc.get_add_word_flag(add_word_flag_))) {
-    LOG_WARN("failed to set add_word_flag", K(ret));
   }
   return ret;
 }

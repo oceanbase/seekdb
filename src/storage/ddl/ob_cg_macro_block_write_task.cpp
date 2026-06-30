@@ -80,9 +80,7 @@ int ObCgMacroBlockWriteTask::init(
     const int64_t slice_idx = row_iter_->get_slice_idx();
     ObWriteMacroParam param;
     if (OB_FAIL(ObDDLUtil::fill_writer_param(tablet_id, slice_idx, -1/*cg_idx*/, ddl_dag, 0/*max_batch_size*/, param))) {
-      LOG_WARN("fill writer param common failed", K(ret), K(tablet_id), K(param));
     } else if (OB_FAIL(ObDDLUtil::init_cg_macro_block_writers(param, allocator_, storage_schema_, cg_macro_block_writers_))) {
-      LOG_WARN("init cg macro block writer failed", K(ret), K(tablet_id_), K(slice_idx), KPC(ddl_dag));
     } else {
       is_inited_ = true;
     }
@@ -117,9 +115,7 @@ int ObCgMacroBlockWriteTask::process()
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("cg macro block writer is null", K(ret), K(cg_idx));
           } else if (OB_FAIL(project_cg_row(cg_schema, *row, cg_row))) {
-            LOG_WARN("fail to project cg row", K(ret), K(row), K(cg_schema));
           } else if (OB_FAIL(cg_macro_block_writer->append_row(cg_row))) {
-            LOG_WARN("fail to append row", K(ret), K(cg_row), KPC(cg_macro_block_writer));
           }
         }
       }
@@ -129,7 +125,6 @@ int ObCgMacroBlockWriteTask::process()
     for (int64_t i = 0; OB_SUCC(ret) && i < cg_macro_block_writers_.count(); ++i) {
       ObCgMacroBlockWriter *cg_macro_block_writer = cg_macro_block_writers_.at(i);
       if (OB_FAIL(cg_macro_block_writer->close())) {
-        LOG_WARN("fail to close macro block writer", K(ret), KPC(cg_macro_block_writer));
       }
     }
   }
@@ -219,7 +214,6 @@ int ObWriteMacroBaseOperator::init(const ObWriteMacroParam &param)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(param));
   } else if (OB_FAIL(slice_writer_.init(param))) {
-    LOG_WARN("init slice writer failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -246,10 +240,8 @@ int ObDDLWriteMacroBlockOperator::execute(
     LOG_WARN("there are invalid arguments", K(ret), K(input_chunk));
   } else if (input_chunk.is_end_chunk()) {
     if (OB_FAIL(slice_writer_.close())) {
-      LOG_WARN("fail to close slice writer", K(ret));
     }
   } else if (OB_FAIL(slice_writer_.append_batch(input_chunk.direct_load_batch_rows_->datum_rows_))) {
-    LOG_WARN("fail to append batch into slice writer", K(ret), K(input_chunk));
   }
   return ret;
 }
@@ -282,7 +274,6 @@ int ObCGRowFileWriterOp::init(const ObTabletID &tablet_id,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ddl dag is null", K(ret));
     } else if (OB_FAIL(ddl_dag->get_tablet_context(tablet_id_, tablet_context))) {
-      LOG_WARN("fail to get tablet context", K(ret), K(tablet_id_));
     } else if (OB_UNLIKELY(nullptr == tablet_context)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tablet context is null", K(ret));
@@ -301,8 +292,6 @@ int ObCGRowFileWriterOp::init(const ObTabletID &tablet_id,
                                                       ddl_dag->get_ddl_table_schema().column_items_,
                                                       true/*is_generation_sync_output*/,
                                                       false/*is_sorted_table_load_with_column_store_replica*/))) {
-        LOG_WARN("fail to initialize cg row files generater",
-            K(ret), K(tablet_id_), K(slice_idx_),KP(storage_schema), K(max_batch_size));
       } else {
         is_inited_ = true;
       }
@@ -329,7 +318,6 @@ int ObCGRowFileWriterOp::execute(const ObChunk &input_chunk,
     ObDDLChunk ddl_output_chunk;
     const ObBatchDatumRows &bdrs = input_chunk.is_end_chunk() ? ObBatchDatumRows() : *input_chunk.bdrs_;
     if (OB_FAIL(cg_row_files_generater_.append_batch(bdrs, input_chunk.is_end_chunk(), ddl_output_chunk))) {
-      LOG_WARN("fail to append batch into cg row files generater", K(ret), K(bdrs));
     } else if (ddl_output_chunk.is_valid()) {
       if (OB_LIKELY(ddl_output_chunk.has_chunk_data())) {
         output_chunk = *ddl_output_chunk.chunk_data_;
@@ -396,7 +384,6 @@ int ObDDLWriteMacroBlockBasePipeline::fill_writer_param(ObWriteMacroParam &param
                                                   dag,
                                                   0/*max_batch_size*/,
                                                   param))) {
-    LOG_WARN("fill writer param common failed", K(ret));
   }
   return ret;
 }
@@ -415,9 +402,7 @@ void ObDDLWriteMacroBlockBasePipeline::postprocess(int &ret_code)
       ret = OB_ERR_SYS;
       LOG_WARN("get dag failed", K(ret), KPC(get_dag()), KPC(ddl_slice_));
     } else if (OB_FAIL(dag->get_tablet_context(ddl_slice_->get_tablet_id(), tablet_context))) {
-      LOG_WARN("get tablet context failed", K(ret), KPC(ddl_slice_));
     } else if (OB_FAIL(set_remain_block())) {
-      LOG_WARN("set remain block failed", K(ret));
     } else {
       LOG_INFO("not data any more, change ret to be success", K(ret), K(dag->get_ddl_task_param()));
       ret_code = OB_SUCCESS;
@@ -443,17 +428,12 @@ int ObDDLMemoryFriendWriteMacroBlockPipeline::init(ObDDLSlice *ddl_slice)
   } else {
     ddl_slice_ = ddl_slice;
     if (OB_FAIL(fill_writer_param(write_param_))) {
-      LOG_WARN("fill writer param failed", K(ret));
     } else if (OB_FAIL(micro_write_op_.init(ddl_slice_->get_tablet_id(),
                                             ddl_slice_->get_slice_idx()))) {
-      LOG_WARN("fail to initialize micro write operator", K(ret));
     } else if (OB_FAIL(add_op(&micro_write_op_))) {
-      LOG_WARN("fail to add micro write op", K(ret));
     } else if (OB_FAIL(macro_write_op_.init(ddl_slice_->get_tablet_id(),
                                             ddl_slice_->get_slice_idx()))) {
-      LOG_WARN("fail to initialize macro write operator", K(ret));
     } else if (OB_FAIL(add_op(&macro_write_op_))) {
-      LOG_WARN("fail to add macro write op", K(ret));
     }
   }
   return ret;
@@ -466,7 +446,6 @@ int ObDDLMemoryFriendWriteMacroBlockPipeline::set_remain_block()
     ret = OB_ERR_SYS;
     LOG_WARN("ddl slice is null", K(ret));
   } else if (OB_FAIL(macro_write_op_.set_remain_block(ddl_slice_))) {
-    LOG_WARN("set remain block failed", K(ret));
   }
   return ret;
 }
@@ -495,12 +474,10 @@ int ObBatchDatumRowsWriteOp::init(const ObTabletID &tablet_id, const int64_t sli
     } else if (OB_FAIL(buffer_.init(ddl_dag->get_ddl_table_schema().column_items_,
                                     MAX_BATCH_SIZE,
                                     row_flag))) {
-      LOG_WARN("fail to initialize buffer", K(ret));
     } else {
       const ObIArray<ObDirectLoadVector *> &vectors = buffer_.get_vectors();
       for (int64_t i = 0; OB_SUCC(ret) && i < vectors.count(); ++i) {
         if (OB_FAIL(bdrs_.vectors_.push_back(vectors.at(i)->get_vector()))) {
-          LOG_WARN("fail to push back vector", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -533,11 +510,9 @@ int ObBatchDatumRowsWriteOp::execute(
     }
     if (input_chunk.is_end_chunk()) {
       if (OB_FAIL(generate_data_chunk(output_chunk))) {
-        LOG_WARN("fail to generate output chunk when receive end chunk", K(ret));
       }
     } else {
       if (OB_FAIL(buffer_.append_row(*input_chunk.datum_row_))) {
-        LOG_WARN("fail to append row", K(ret));
       } else if (buffer_.full() && OB_FAIL(generate_data_chunk(output_chunk))) {
         LOG_WARN("fail to generate output chunk", K(ret));
       }

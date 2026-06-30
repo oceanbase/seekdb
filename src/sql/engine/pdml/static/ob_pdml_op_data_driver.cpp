@@ -71,7 +71,6 @@ int ObPDMLOpDataDriver::init(const ObTableModifySpec &spec,
     // TODO: The actual number of partitions processed by the current operator is temporarily set to 1, determine the number of hashmap buckets
     //       Need CG to actually calculate and pass in
     if (OB_FAIL(cache_.init(1, with_barrier_, spec))) {
-      LOG_WARN("failed to init batch row cache", K(ret));
     } else {
       LOG_TRACE("init pdml data driver", KPC(dml_rtdef_));
     }
@@ -119,15 +118,11 @@ int ObPDMLOpDataDriver::get_next_row(ObExecContext &ctx, const ObExprPtrIArray &
   do {
     // STEP1. Each time get_next_row is called, attempt to drive fetching the next batch of data and flush it into the storage layer
     if (FILL_CACHE == state_) {
-      if (OB_FAIL(cache_.reuse_after_rows_processed())) { // reuse cache, will only clean up the state; will not release memory, convenient for memory reuse
-        LOG_WARN("fail reuse cache", K(ret));
-      } else if (OB_FAIL(fill_cache_unitl_cache_full_or_child_iter_end(ctx))) { // fill cache
-        LOG_WARN("failed to fill the cache", K(ret));
+      if (OB_FAIL(cache_.reuse_after_rows_processed())) {
+      } else if (OB_FAIL(fill_cache_unitl_cache_full_or_child_iter_end(ctx))) {
       } else if (!cache_.empty()) {
-        if (OB_FAIL(write_partitions(ctx))) { // Perform DML operations on data in cache
-          LOG_WARN("fail write partitions", K(ret));
+        if (OB_FAIL(write_partitions(ctx))) {
         } else if (OB_FAIL(switch_to_returning_state(ctx))) {
-          LOG_WARN("fail init returning state, fail transfer state to ROW_RETURNING", K(ret));
         } else {
           state_ = ROW_RETURNING;
         }
@@ -183,7 +178,6 @@ int ObPDMLOpDataDriver::fill_cache_unitl_cache_full_or_child_iter_end(ObExecCont
   } else if (OB_FALSE_IT(is_direct_load = plan_ctx->get_is_direct_insert_plan())) {
     // Try to append the row data read from child last time, but not added to cache
   } else if (OB_FAIL(try_write_last_pending_row())) {
-    LOG_WARN("fail write last pending row into cache", K(ret));
   } else {
     do {
       const ObExprPtrIArray *row = nullptr;
@@ -210,7 +204,6 @@ int ObPDMLOpDataDriver::fill_cache_unitl_cache_full_or_child_iter_end(ObExecCont
           // Temporarily retain the current row in last_row, waiting for the next round to fill the cache when,
           // Through the `try_write_last_pending_row` function write the last row data into the cache
           if (OB_FAIL(last_row_.save_store_row(*row, *eval_ctx_))) {
-            LOG_WARN("fail cache last row", K(*row), K(ret));
           } else {
             last_row_tablet_id_ = tablet_id;
             last_row_expr_ = row;
@@ -242,7 +235,6 @@ int ObPDMLOpDataDriver::write_partitions(ObExecContext &ctx)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("the writer is null", K(ret));
   } else if (OB_FAIL(cache_.get_part_id_array(tablet_id_array))) {
-    LOG_WARN("fail get part index iterator", K(ret));
   } else {
     // Total time consumed in the storage layer
     TimingGuard g(op_monitor_info_.otherstat_1_value_);
@@ -252,11 +244,8 @@ int ObPDMLOpDataDriver::write_partitions(ObExecContext &ctx)
       ObDASTabletLoc *tablet_loc = nullptr;
       ObDASTableLoc *table_loc = dml_rtdef_->das_base_rtdef_.table_loc_;
       if (OB_FAIL(cache_.get_row_iterator(tablet_id, row_iter))) {
-        LOG_WARN("fail get row iterator", K(tablet_id), K(ret));
       } else if (OB_FAIL(DAS_CTX(ctx).extended_tablet_loc(*table_loc, tablet_id, tablet_loc))) {
-        LOG_WARN("extended tablet location failed", K(ret));
       } else if (OB_FAIL(writer_->write_rows(ctx, tablet_loc, *row_iter))) {
-        LOG_WARN("fail write rows", K(tablet_id), K(ret));
       }
       if (NULL != row_iter) {
         row_iter->close();
@@ -278,9 +267,7 @@ inline int ObPDMLOpDataDriver::try_write_last_pending_row()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("error unexpected", KP(store_row), KP_(last_row_expr), K(ret));
     } else if (OB_FAIL(store_row->to_expr(*last_row_expr_, *eval_ctx_))) {
-      LOG_WARN("fail store row to expr", K(ret));
     } else if (OB_FAIL(cache_.add_row(*last_row_expr_, last_row_tablet_id_))) {
-      LOG_WARN("fail add cached last row", K(ret), K(last_row_tablet_id_));
     } else {
       // After adding the leftover row from last time to the cache, clean up the last row pointer and last row part id values
       // However, for memory reuse, the memory of last_row_ is not cleaned up
@@ -303,7 +290,6 @@ int ObPDMLOpDataDriver::switch_to_returning_state(ObExecContext &ctx)
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(cache_.get_part_id_array(returning_ctx_.tablet_id_array_))) {
-      LOG_WARN("failed to get part id array for init returning state", K(ret));
     } else if (0 == returning_ctx_.tablet_id_array_.count()) { // TODO: redundant check
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("part id array is empty for init returning state", K(ret));
@@ -336,7 +322,6 @@ int ObPDMLOpDataDriver::barrier(ObExecContext &ctx)
                                       piece,
                                       whole,
                                       ctx.get_physical_plan_ctx()->get_timeout_timestamp()))) {
-      LOG_WARN("fail get barrier msg", K(ret));
     }
   }
   return ret;
@@ -414,7 +399,6 @@ int ObPDMLOpDataDriver::set_heap_table_hidden_pk(
     
     if (OB_FAIL(ObDMLService::get_heap_table_hidden_pk(tablet_id,
                                                        autoinc_seq))) {
-      LOG_WARN("fail to get hidden pk", KR(ret), K(tablet_id), K(1UL));
     } else {
       pk_value = autoinc_seq;
     }
@@ -425,7 +409,6 @@ int ObPDMLOpDataDriver::set_heap_table_hidden_pk(
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(set_heap_table_hidden_pk_value(row, tablet_id, pk_value))) {
-      LOG_WARN("fail to set heap table hidden pk value", KR(ret), K(tablet_id), K(pk_value));
     }
   }
   return ret;

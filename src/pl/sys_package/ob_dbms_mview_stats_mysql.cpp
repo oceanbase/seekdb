@@ -53,7 +53,6 @@ int ObDBMSMViewStatsMysql::set_system_default(ObExecContext &ctx, ParamStore &pa
     } else if (!params.at(2).is_null() &&
                FALSE_IT(set_arg.retention_period_ = params.at(2).get_int())) {
     } else if (OB_FAIL(set_executor.execute(ctx, set_arg))) {
-      LOG_WARN("fail to execute mview stats set system default", KR(ret), K(set_arg));
     }
   }
   return ret;
@@ -83,7 +82,6 @@ int ObDBMSMViewStatsMysql::set_mvref_stats_params(ObExecContext &ctx, ParamStore
     } else if (!params.at(2).is_null() &&
                FALSE_IT(set_arg.retention_period_ = params.at(2).get_int())) {
     } else if (OB_FAIL(set_executor.execute(ctx, set_arg))) {
-      LOG_WARN("fail to execute mview stats set mvref stats params", KR(ret), K(set_arg));
     }
   }
   return ret;
@@ -109,7 +107,6 @@ int ObDBMSMViewStatsMysql::purge_refresh_stats(ObExecContext &ctx, ParamStore &p
     } else if (!params.at(1).is_null() &&
                FALSE_IT(purge_arg.retention_period_ = params.at(1).get_int())) {
     } else if (OB_FAIL(purge_executor.execute(ctx, purge_arg))) {
-      LOG_WARN("fail to execute mview purge refresh stats", KR(ret), K(purge_arg));
     }
   }
   return ret;

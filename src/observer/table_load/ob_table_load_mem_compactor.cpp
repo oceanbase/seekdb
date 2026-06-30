@@ -56,7 +56,6 @@ public:
     int ret = OB_SUCCESS;
     storage::ObDirectLoadMemSample sample(ctx_, mem_ctx_);
     if (OB_FAIL(sample.do_sample())) {
-      LOG_WARN("fail to do sample", KR(ret));
     }
     return ret;
   }
@@ -87,7 +86,6 @@ public:
         break;
       }
       if (OB_FAIL(loader->work())) {
-        LOG_WARN("fail to compact", KR(ret));
       }
       loader->~ObDirectLoadMemWorker();
       loader = nullptr;
@@ -117,18 +115,15 @@ public:
     void *tmp = nullptr;
     while (OB_SUCC(ret) && OB_LIKELY(!mem_ctx_->has_error_)) {
       if (OB_FAIL(mem_ctx_->mem_dump_queue_.pop(tmp))) {
-        LOG_WARN("fail to pop", KR(ret));
       } else {
         if (tmp != nullptr) {
           ObDirectLoadMemDump *mem_dump = (ObDirectLoadMemDump *)tmp;
           if (OB_FAIL(mem_dump->do_dump())) {
-            LOG_WARN("fail to dump mem", KR(ret));
           }
           mem_dump->~ObDirectLoadMemDump();
           ob_free(mem_dump);
         } else {
           if (OB_FAIL(mem_ctx_->mem_dump_queue_.push(nullptr))) {
-            LOG_WARN("fail to push", KR(ret));
           } else {
             break;
           }
@@ -157,7 +152,6 @@ public:
     int ret = ret_code;
     if (OB_SUCC(ret)) {
       if (OB_FAIL(compactor_->handle_compact_thread_finish())) {
-        LOG_WARN("fail to handle compact thread finish", KR(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -288,11 +282,8 @@ int ObTableLoadMemCompactor::init(ObTableLoadMergeMemSortOp *op)
         LOG_WARN("mem load thread cannot be zero", KR(ret), K(mem_ctx_.total_thread_cnt_),
                  K(mem_ctx_.dump_thread_cnt_), K(mem_ctx_.load_thread_cnt_));
       } else if (OB_FAIL(mem_ctx_.init())) {
-        LOG_WARN("fail to init compactor ctx", KR(ret));
       } else if (OB_FAIL(mem_ctx_.init_enc_params(store_ctx_->ctx_->param_.dup_action_, store_table_ctx_->schema_->column_descs_))) {
-        LOG_WARN("fail to init enc params", KR(ret));
       } else if (OB_FAIL(init_scheduler())) {
-        LOG_WARN("fail to init_scheduler", KR(ret));
       } else {
         is_inited_ = true;
       }
@@ -311,9 +302,7 @@ int ObTableLoadMemCompactor::init_scheduler()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new ObTableLoadTaskThreadPoolScheduler", KR(ret));
   } else if (OB_FAIL(task_scheduler_->init())) {
-    LOG_WARN("fail to init task scheduler", KR(ret));
   } else if (OB_FAIL(task_scheduler_->start())) {
-    LOG_WARN("fail to start task scheduler", KR(ret));
   }
   return ret;
 }
@@ -326,9 +315,7 @@ int ObTableLoadMemCompactor::start()
     LOG_WARN("ObTableLoadMemCompactor not init", KR(ret), KP(this));
   } else {
     if (OB_FAIL(construct_compactors())) {
-      LOG_WARN("fail to construct compactors", KR(ret));
     } else if (OB_FAIL(start_compact())) {
-      LOG_WARN("fail to start compact", KR(ret));
     }
   }
   return ret;
@@ -348,7 +335,6 @@ int ObTableLoadMemCompactor::construct_compactors()
       ObDirectLoadTableHandleArray *table_handle_array = it->second;
       for (int64_t i = 0; OB_SUCC(ret) && i < table_handle_array->count(); ++i) {
         if (OB_FAIL(add_tablet_table(table_handle_array->at(i)))) {
-          LOG_WARN("fail to add tablet table", KR(ret));
         }
       }
     }
@@ -373,9 +359,7 @@ int ObTableLoadMemCompactor::add_tablet_table(const ObDirectLoadTableHandle &tab
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadMemLoader", KR(ret));
     } else if (OB_FAIL(loader->add_table(table_handle))) {
-      LOG_WARN("fail to add table", KR(ret));
     } else if (OB_FAIL(mem_ctx_.mem_loader_queue_.push(loader))) {
-      LOG_WARN("fail to push", KR(ret));
     }
     if (OB_FAIL(ret)) {
       if (nullptr != loader) {
@@ -396,19 +380,15 @@ int ObTableLoadMemCompactor::start_load()
     ObTableLoadTask *task = nullptr;
     // 1. assign task
     if (OB_FAIL(ctx->alloc_task(task))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     }
     // 2. Set processor
     else if (OB_FAIL(task->set_processor<LoadTaskProcessor>(ctx, &mem_ctx_))) {
-      LOG_WARN("fail to set load task processor", KR(ret));
     }
     // 3. Set callback
     else if (OB_FAIL(task->set_callback<CompactTaskCallback>(ctx, this))) {
-      LOG_WARN("fail to set compact task callback", KR(ret));
     }
     // 4. put task into scheduler
     else if (OB_FAIL(store_ctx_->task_scheduler_->add_task(i, task))) {
-      LOG_WARN("fail to add task", KR(ret), KPC(task));
     }
     if (OB_FAIL(ret)) {
       if (nullptr != task) {
@@ -428,19 +408,15 @@ int ObTableLoadMemCompactor::start_dump()
     ObTableLoadTask *task = nullptr;
     // 1. assign task
     if (OB_FAIL(ctx->alloc_task(task))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     }
     // 2. Set processor
     else if (OB_FAIL(task->set_processor<DumpTaskProcessor>(ctx, &mem_ctx_))) {
-      LOG_WARN("fail to set dump task processor", KR(ret));
     }
     // 3. Set callback
     else if (OB_FAIL(task->set_callback<CompactTaskCallback>(ctx, this))) {
-      LOG_WARN("fail to set compactor task callback", KR(ret));
     }
     // 4. put task into scheduler
     else if (OB_FAIL(store_ctx_->task_scheduler_->add_task(dump_thread_start_idx + i, task))) {
-      LOG_WARN("fail to add task", KR(ret), KPC(task));
     }
     if (OB_FAIL(ret)) {
       if (nullptr != task) {
@@ -458,19 +434,15 @@ int ObTableLoadMemCompactor::start_sample()
   ObTableLoadTask *task = nullptr;
   // 1. assign task
   if (OB_FAIL(ctx->alloc_task(task))) {
-    LOG_WARN("fail to alloc task", KR(ret));
   }
   // 2. Set processor
   else if (OB_FAIL(task->set_processor<SampleTaskProcessor>(ctx, &mem_ctx_))) {
-    LOG_WARN("fail to set sample task processor", KR(ret));
   }
   // 3. Set callback
   else if (OB_FAIL(task->set_callback<CompactTaskCallback>(ctx, this))) {
-    LOG_WARN("fail to set compactor task callback", KR(ret));
   }
   // 4. Put task into scheduler
   else if (OB_FAIL(task_scheduler_->add_task(0, task))) {
-    LOG_WARN("fail to add task", KR(ret), KPC(task));
   }
   if (OB_FAIL(ret)) {
     if (nullptr != task) {
@@ -487,19 +459,15 @@ int ObTableLoadMemCompactor::start_finish()
   ObTableLoadTask *task = nullptr;
   // 1. assign task
   if (OB_FAIL(ctx->alloc_task(task))) {
-    LOG_WARN("fail to alloc task", KR(ret));
   }
   // 2. Set processor
   else if (OB_FAIL(task->set_processor<FinishTaskProcessor>(ctx, this))) {
-    LOG_WARN("fail to set finish task processor", KR(ret));
   }
   // 3. Set callback
   else if (OB_FAIL(task->set_callback<FinishTaskCallback>(ctx))) {
-    LOG_WARN("fail to set finish task callback", KR(ret));
   }
   // 4. Put task into scheduler
   else if (OB_FAIL(store_ctx_->task_scheduler_->add_task(0, task))) {
-    LOG_WARN("fail to add task", KR(ret), KPC(task));
   }
   if (OB_FAIL(ret)) {
     if (nullptr != task) {
@@ -513,11 +481,8 @@ int ObTableLoadMemCompactor::start_compact()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(start_load())) {
-    LOG_WARN("fail to start load", KR(ret));
   } else if (OB_FAIL(start_sample())) {
-    LOG_WARN("fail to start sample", KR(ret));
   } else if (OB_FAIL(start_dump())) {
-    LOG_WARN("fail to start dump", KR(ret));
   }
   if (OB_FAIL(ret)) {
     set_has_error();
@@ -553,12 +518,10 @@ int ObTableLoadMemCompactor::finish()
   table_store->set_table_data_desc(mem_ctx_.table_data_desc_);
   table_store->set_multiple_sstable();
   if (OB_FAIL(table_store->add_tables(mem_ctx_.tables_handle_))) {
-    LOG_WARN("fail to add tables", KR(ret));
   } else {
     mem_ctx_.reset();
     task_scheduler_->stop();
     if (OB_FAIL(op_->on_success())) {
-      LOG_WARN("fail to handle success", KR(ret));
     }
   }
   return ret;

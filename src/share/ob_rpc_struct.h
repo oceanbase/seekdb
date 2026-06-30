@@ -741,7 +741,6 @@ public:
   int assign(const ObIndexArg &other) {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(ObDDLArg::assign(other))) {
-      SHARE_LOG(WARN, "assign ddl arg failed", K(ret));
     } else {
       
       session_id_ = other.session_id_;
@@ -786,11 +785,8 @@ public:
     no_invalidate_ = other.no_invalidate_;
     update_system_stats_only_ = other.update_system_stats_only_;
     if (OB_FAIL(ObDDLArg::assign(other))) {
-      SHARE_LOG(WARN, "fail to assign ddl arg", KR(ret));
     } else if (OB_FAIL(partition_ids_.assign(other.partition_ids_))) {
-      SHARE_LOG(WARN, "fail to assign partition ids", KR(ret));
     } else if (OB_FAIL(column_ids_.assign(other.column_ids_))) {
-      SHARE_LOG(WARN, "fail to assign column ids", KR(ret));
     } else { /*do nothing*/ }
     return ret;
   }
@@ -833,7 +829,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(ObDDLArg::assign(other))) {
-      SHARE_LOG(WARN, "fail to assign ddl arg", KR(ret));
     } else {
       
       session_id_ = other.session_id_;
@@ -946,9 +941,7 @@ public:
   int assign(const ObRebuildIndexArg &other) {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(ObIndexArg::assign(other))) {
-      SHARE_LOG(WARN, "fail to assign base", K(ret));
     } else if (OB_FAIL(create_mlog_arg_.assign(other.create_mlog_arg_))) {
-      SHARE_LOG(WARN, "fail to assign create mlog arg", K(ret));
     } else {
       index_table_id_ = other.index_table_id_;
       vidx_refresh_info_ = other.vidx_refresh_info_;
@@ -1508,13 +1501,10 @@ public:
   int assign(const ObCreateForeignKeyArg &other) {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(ObIndexArg::assign(other))) {
-      SHARE_LOG(WARN, "assign index arg failed", K(ret), K(other));
     } else if (FALSE_IT(parent_database_ = other.parent_database_)) {
     } else if (FALSE_IT(parent_table_ = other.parent_table_)) {
     } else if (OB_FAIL(child_columns_.assign(other.child_columns_))) {
-      SHARE_LOG(WARN, "assign child columns failed", K(ret), K(other.child_columns_));
     } else if (OB_FAIL(parent_columns_.assign(other.parent_columns_))) {
-      SHARE_LOG(WARN, "assign parent columns failed", K(ret), K(other.parent_columns_));
     } else {
       update_action_ = other.update_action_;
       delete_action_ = other.delete_action_;
@@ -2349,21 +2339,13 @@ public:
   int assign(const ObCreateIndexArg &other) {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(ObIndexArg::assign(other))) {
-      SHARE_LOG(WARN, "fail to assign base", K(ret));
     } else if (OB_FAIL(index_columns_.assign(other.index_columns_))) {
-      SHARE_LOG(WARN, "fail to assign index columns", K(ret));
     } else if (OB_FAIL(store_columns_.assign(other.store_columns_))) {
-      SHARE_LOG(WARN, "fail to assign store columns", K(ret));
     } else if (OB_FAIL(hidden_store_columns_.assign(other.hidden_store_columns_))) {
-      SHARE_LOG(WARN, "fail to assign hidden store columns", K(ret));
     } else if (OB_FAIL(fulltext_columns_.assign(other.fulltext_columns_))) {
-      SHARE_LOG(WARN, "fail to assign fulltext columns", K(ret));
     } else if (OB_FAIL(index_cgs_.assign(other.index_cgs_))) {
-      SHARE_LOG(WARN, "fail to assign index cgs", K(ret));
     } else if (OB_FAIL(index_schema_.assign(other.index_schema_))) {
-      SHARE_LOG(WARN, "fail to assign index schema", K(ret));
     } else if (OB_FAIL(local_session_var_.deep_copy(other.local_session_var_))){
-      SHARE_LOG(WARN, "fail to copy local session vars", K(ret));
     } else {
       index_type_ = other.index_type_;
       index_option_ = other.index_option_;
@@ -4689,6 +4671,37 @@ public:
   common::ObSArray<oceanbase::share::schema::ObDependencyInfo> dependency_infos_;
 };
 
+struct ObAlterPackageArg : public ObDDLArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObAlterPackageArg()
+    : db_name_(),
+      package_name_(),
+      package_type_(share::schema::INVALID_PACKAGE_TYPE),
+      compatible_mode_(-1),
+      public_routine_infos_(),
+      error_info_(),
+      exec_env_(),
+      dependency_infos_()
+      {}
+  virtual ~ObAlterPackageArg() {}
+  bool is_valid() const;
+  TO_STRING_KV(K_(db_name), K_(package_name), K_(package_type),
+               K_(compatible_mode), K_(public_routine_infos), K_(error_info),
+               K_(exec_env), K_(dependency_infos));
+
+  
+  common::ObString db_name_;
+  common::ObString package_name_;
+  share::schema::ObPackageType package_type_;
+  int64_t compatible_mode_;
+  common::ObSArray<share::schema::ObRoutineInfo> public_routine_infos_;
+  share::schema::ObErrorInfo error_info_;
+  common::ObString exec_env_;
+  common::ObSArray<oceanbase::share::schema::ObDependencyInfo> dependency_infos_;
+};
+
 struct ObDropPackageArg : public ObDDLArg
 {
   OB_UNIS_VERSION(1);
@@ -4818,7 +4831,7 @@ public:
   ObAlterTriggerArg()
       :
       ObDDLArg(), trigger_database_(), trigger_info_(), trigger_infos_(),
-      is_set_status_(false)
+      is_set_status_(false),is_alter_compile_(false)
   {}
   virtual ~ObAlterTriggerArg()
   {}
@@ -4826,13 +4839,15 @@ public:
   TO_STRING_KV(K(trigger_database_),
       K(trigger_info_),
       K(trigger_infos_),
-      K(is_set_status_))
+      K(is_set_status_),
+      K(is_alter_compile_))
   ;
 public:
   common::ObString trigger_database_;           // deprecated
   share::schema::ObTriggerInfo trigger_info_;   // deprecated
   common::ObSArray<share::schema::ObTriggerInfo> trigger_infos_;
   bool is_set_status_;
+  bool is_alter_compile_;
 };
 
 
@@ -5149,7 +5164,6 @@ public:
   {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(tenant_schema_versions_.assign(arg.tenant_schema_versions_))) {
-      SHARE_LOG(WARN, "failed to assign tenant schema version", KR(ret), K(arg));
     }
     return ret;
   }
@@ -5354,9 +5368,7 @@ public:
     constriant_id_ = other.constriant_id_;
     schema_version_ = other.schema_version_;
     if (OB_FAIL(res_arg_array_.assign(other.res_arg_array_))) {
-      SHARE_LOG(WARN, "assign res_arg_array failed", K(ret), K(other.res_arg_array_));
     } else if (OB_FAIL(ddl_res_array_.assign(other.ddl_res_array_))) {
-      SHARE_LOG(WARN, "assign ddl res array failed", K(ret));
     } else {
       ddl_type_ = other.ddl_type_;
       task_id_ = other.task_id_;

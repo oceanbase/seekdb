@@ -139,14 +139,12 @@ int ObTableUpdateOp::inner_open()
   NG_TRACE(update_open);
   //execute update with das
   if (OB_FAIL(ObTableModifyOp::inner_open())) {
-    LOG_WARN("open child operator failed", K(ret));
   } else if (OB_UNLIKELY(MY_SPEC.upd_ctdefs_.empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("del ctdef is invalid", K(ret), KP(this));
   } else if (OB_UNLIKELY(iter_end_)) {
     //do nothing
   } else if (OB_FAIL(inner_open_with_das())) {
-    LOG_WARN("inner open with das failed", K(ret));
   }
   NG_TRACE(update_end);
   return ret;
@@ -156,7 +154,6 @@ int ObTableUpdateOp::inner_close()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(close_table_for_each())) {
-    LOG_WARN("close table for each", K(ret));
   }
   int  close_ret = ObTableModifyOp::inner_close();
   return (OB_SUCCESS == ret) ? close_ret : ret;
@@ -170,13 +167,10 @@ int ObTableUpdateOp::inner_rescan()
     LOG_WARN("table update rescan not supported", K(ret));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "table update rescan");
   } else if (OB_FAIL(ObTableModifyOp::inner_rescan())) {
-    LOG_WARN("rescan child operator failed", K(ret));
   } else if (OB_UNLIKELY(iter_end_)) {
     //do nothing
   } else if (OB_FAIL(close_table_for_each())) {
-    LOG_WARN("close table for each failed", K(ret));
   } else if (OB_FAIL(open_table_for_each())) {
-    LOG_WARN("open table for each failed", K(ret));
   }
   return ret;
 }
@@ -185,7 +179,6 @@ int ObTableUpdateOp::inner_switch_iterator()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableModifyOp::inner_switch_iterator())) {
-    LOG_WARN("switch single child operator iterator failed", K(ret));
   }
   return ret;
 }
@@ -201,7 +194,6 @@ OB_INLINE int ObTableUpdateOp::inner_open_with_das()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(open_table_for_each())) {
-    LOG_WARN("init update rtdef failed", K(ret), K(MY_SPEC.upd_ctdefs_.count()));
   } else {
     dml_rtctx_.set_pick_del_task_first();
   }
@@ -212,7 +204,6 @@ OB_INLINE int ObTableUpdateOp::open_table_for_each()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(upd_rtdefs_.allocate_array(ctx_.get_allocator(), MY_SPEC.upd_ctdefs_.count()))) {
-    LOG_WARN("allocate update rtdef failed", K(ret), K(MY_SPEC.upd_ctdefs_.count()));
   }
   trigger_clear_exprs_.reset();
   fk_checkers_.reset();
@@ -220,7 +211,6 @@ OB_INLINE int ObTableUpdateOp::open_table_for_each()
     UpdRtDefArray &rtdefs = upd_rtdefs_.at(i);
     const ObTableUpdateSpec::UpdCtDefArray &ctdefs = MY_SPEC.upd_ctdefs_.at(i);
     if (OB_FAIL(rtdefs.allocate_array(ctx_.get_allocator(), ctdefs.count()))) {
-      LOG_WARN("allocate update rtdefs failed", K(ret), K(ctdefs.count()));
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < rtdefs.count(); ++j) {
       const ObUpdCtDef &upd_ctdef = *ctdefs.at(j);
@@ -231,7 +221,6 @@ OB_INLINE int ObTableUpdateOp::open_table_for_each()
                                                upd_ctdef,
                                                trigger_clear_exprs_,
                                                fk_checkers_))) {
-        LOG_WARN("init upd rtdef failed", K(ret));
       }
     }
     if (OB_SUCC(ret) && !rtdefs.empty()) {
@@ -244,7 +233,6 @@ OB_INLINE int ObTableUpdateOp::open_table_for_each()
                                                             primary_upd_rtdef,
                                                             dml_rtctx_,
                                                             ObDmlEventType::DE_UPDATING))) {
-        LOG_WARN("process before stmt trigger failed", K(ret));
       } else {
         //this table is being accessed by dml operator, mark its table location as writing
         primary_upd_rtdef.dupd_rtdef_.table_loc_->is_writing_ = true;
@@ -269,7 +257,6 @@ OB_INLINE int ObTableUpdateOp::close_table_for_each()
                                                              primary_upd_rtdef,
                                                              dml_rtctx_,
                                                              ObDmlEventType::DE_UPDATING))) {
-          LOG_WARN("process after stmt trigger failed", K(ret));
         } else if (!primary_upd_rtdef.has_table_cycle_ && primary_upd_ctdef.need_check_table_cycle_ && OB_FAIL(ObDMLService::delete_table_id_from_parent_table_set(dml_rtctx_, primary_upd_ctdef))) {
           LOG_WARN("delete from parent table set failed", K(ret), K(primary_upd_ctdef.das_base_ctdef_.index_tid_));
         }
@@ -294,7 +281,6 @@ OB_INLINE int ObTableUpdateOp::calc_multi_tablet_id(const ObUpdCtDef &upd_ctdef,
                                                                eval_ctx_,
                                                                partition_id,
                                                                tablet_id))) {
-    LOG_WARN("extract part and tablet id failed", K(ret));
   } else if (check_exist && (!upd_ctdef.multi_ctdef_->hint_part_ids_.empty()
                              && !has_exist_in_array(
                                upd_ctdef.multi_ctdef_->hint_part_ids_, partition_id))) {
@@ -319,9 +305,7 @@ OB_INLINE int ObTableUpdateOp::calc_tablet_loc(const ObUpdCtDef &upd_ctdef,
       ObExpr *calc_part_id_new = upd_ctdef.multi_ctdef_->calc_part_id_new_;
       if (calc_part_id_old != nullptr) {
         if (OB_FAIL(calc_multi_tablet_id(upd_ctdef, *calc_part_id_old, old_tablet_id))) {
-          LOG_WARN("calc multi old part key failed", K(ret));
         } else if (OB_FAIL(calc_multi_tablet_id(upd_ctdef, *calc_part_id_new, new_tablet_id, true))) {
-          LOG_WARN("calc multi new part key failed", K(ret));
         }
       }
     }
@@ -329,14 +313,11 @@ OB_INLINE int ObTableUpdateOp::calc_tablet_loc(const ObUpdCtDef &upd_ctdef,
       ObDASTableLoc &table_loc = *upd_rtdef.dupd_rtdef_.table_loc_;
       if (old_tablet_id == new_tablet_id) {
         if (OB_FAIL(DAS_CTX(ctx_).extended_tablet_loc(table_loc, old_tablet_id, old_tablet_loc))) {
-          LOG_WARN("extended old row tablet loc failed", K(ret), K(old_tablet_id));
         } else {
           new_tablet_loc = old_tablet_loc;
         }
       } else if (OB_FAIL(DAS_CTX(ctx_).extended_tablet_loc(table_loc, old_tablet_id, old_tablet_loc))) {
-        LOG_WARN("extended old tablet location failed", K(ret), K(old_tablet_id));
       } else if (OB_FAIL(DAS_CTX(ctx_).extended_tablet_loc(table_loc, new_tablet_id, new_tablet_loc))) {
-        LOG_WARN("extended new tablet location failed", K(ret), K(new_tablet_id));
       }
     }
   } else {
@@ -365,16 +346,13 @@ OB_INLINE int ObTableUpdateOp::update_row_to_das()
         ++upd_rtdef.cur_row_num_;
       }
       if (OB_FAIL(ObDMLService::process_update_row(upd_ctdef, upd_rtdef, is_skipped, *this))) {
-        LOG_WARN("process update row failed", K(ret));
       } else if (OB_UNLIKELY(is_skipped)) {
         //this row has been skipped, so can not write to DAS buffer(include its global index)
         //so need to break this loop
         break;
       } else if (OB_FAIL(calc_tablet_loc(upd_ctdef, upd_rtdef, old_tablet_loc, new_tablet_loc))) {
-        LOG_WARN("calc partition key failed", K(ret));
       } else if (OB_FAIL(ObDMLService::update_row(upd_ctdef, upd_rtdef, old_tablet_loc, new_tablet_loc, dml_rtctx_,
                                                  modify_row.old_row_, modify_row.new_row_, modify_row.full_row_))) {
-        LOG_WARN("insert row with das failed", K(ret));
       } else if (need_after_row_process(upd_ctdef) && OB_FAIL(dml_modify_rows_.push_back(modify_row))) {
         LOG_WARN("failed to push dml modify row to modified row list", K(ret));
       } else {
@@ -387,7 +365,6 @@ OB_INLINE int ObTableUpdateOp::update_row_to_das()
       bool client_found_rows = session->get_capability().cap_flags_.OB_CLIENT_FOUND_ROWS;
       int64_t affected_rows = client_found_rows ? 1 /*found_rows*/ : update_rows;
       if (OB_FAIL(merge_implict_cursor(affected_rows, 1 /*found_rows*/, 1 /*match_rows*/, update_rows /*duplicated_rows*/))) {
-        LOG_WARN("merge implict cursor failed", K(ret));
       }
     }
   } // end for table ctdef loop
@@ -399,7 +376,6 @@ OB_INLINE int ObTableUpdateOp::update_row_to_das()
                                                        MY_SPEC.upd_ctdefs_.at(0).at(0)->error_logging_ctdef_,
                                                        err_log_rt_def_,
                                                        ObDASOpType::DAS_OP_TABLE_UPDATE))) {
-      LOG_WARN("fail to insert_err_log_record", K(ret));
     }
   }
   return ret;
@@ -491,7 +467,6 @@ int ObTableUpdateOp::write_rows_post_proc(int last_errno)
     }
     if (OB_SUCC(ret) && GCONF.enable_defensive_check()) {
       if (OB_FAIL(check_update_affected_row())) {
-        LOG_WARN("check index upd consistency failed", K(ret));
       }
     }
   }

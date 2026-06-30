@@ -86,7 +86,6 @@ int ObDirectLoadDagTabletSliceRowIterator::init(
     dml_row_handler_ = dml_row_handler;
     is_delete_full_row_ = is_delete_full_row;
     if (OB_FAIL(merge_task->construct_row_iters(row_iters_, allocator_))) {
-      LOG_WARN("fail to construct row iters", KR(ret));
     }
     // check row iters
     for (int64_t i = 0; OB_SUCC(ret) && i < row_iters_.count(); ++i) {
@@ -103,11 +102,8 @@ int ObDirectLoadDagTabletSliceRowIterator::init(
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(row_handler_.init(insert_tablet_ctx_))) {
-      LOG_WARN("fail to init row handler", KR(ret));
     } else if (OB_FAIL(row_handler_.switch_slice(slice_idx))) {
-      LOG_WARN("fail to switch slice", KR(ret));
     } else if (OB_FAIL(do_init())) {
-      LOG_WARN("fail to do init", KR(ret));
     } else {
       is_inited_ = true;
       FLOG_INFO("add sstable slice begin", K(tablet_id_), K(slice_idx_));
@@ -120,7 +116,6 @@ int ObDirectLoadDagTabletSliceRowIterator::close()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(row_handler_.close())) {
-    LOG_WARN("fail to close row handler", KR(ret));
   } else {
     insert_tablet_ctx_->inc_row_count(row_count_);
     FLOG_INFO("add sstable slice end", K(tablet_id_), K(slice_idx_), K(row_count_));
@@ -141,9 +136,7 @@ int ObDirectLoadDagInsertTableRowIterator::do_init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(insert_tablet_ctx_->init_datum_row(insert_datum_row_))) {
-    LOG_WARN("fail to init datum row", KR(ret));
   } else if (OB_FAIL(insert_tablet_ctx_->init_datum_row(delete_datum_row_, true /*is_delete*/))) {
-    LOG_WARN("fail to init datum row", KR(ret));
   } else {
     rowkey_column_count_ = insert_tablet_ctx_->get_rowkey_column_count();
     column_count_ = insert_tablet_ctx_->get_column_count();
@@ -177,7 +170,6 @@ int ObDirectLoadDagInsertTableRowIterator::inner_get_next_row(ObDatumRow *&resul
         if (row_iter->get_row_flag().uncontain_hidden_pk_) {
           uint64_t pk_seq = OB_INVALID_ID;
           if (OB_FAIL(row_iter->get_hide_pk_interval()->next_value(pk_seq))) {
-            LOG_WARN("fail to get next pk seq", KR(ret));
           } else {
             datum_row2->storage_datums_[0].set_int(pk_seq);
           }
@@ -224,7 +216,6 @@ int ObDirectLoadDagInsertTableRowIterator::get_next_row(const ObDatumRow *&row)
         }
       }
     } else if (OB_FAIL(row_handler_.handle_row(*datum_row))) {
-      LOG_WARN("fail to handle row", KR(ret));
     } else {
       row = datum_row;
       ++row_count_;
@@ -235,7 +226,6 @@ int ObDirectLoadDagInsertTableRowIterator::get_next_row(const ObDatumRow *&row)
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected delete row", KR(ret), KPC(datum_row));
         } else if (OB_FAIL(dml_row_handler_->handle_insert_row(tablet_id_, *datum_row))) {
-          LOG_WARN("fail to handle insert row", KR(ret), KPC(datum_row));
         }
       }
     }
@@ -262,11 +252,8 @@ int ObDirectLoadDagInsertTableBatchRowIterator::do_init()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected column count", KR(ret), KPC(col_descs), K(column_count));
   } else if (OB_FAIL(insert_tablet_ctx_->get_row_info(row_info))) {
-    LOG_WARN("fail to get row info", KR(ret));
   } else if (OB_FAIL(batch_rows_.init(*col_descs, col_nullables, max_batch_size, row_flag))) {
-    LOG_WARN("fail to init batch rows", KR(ret));
   } else if (OB_FAIL(datum_rows_.vectors_.prepare_allocate(column_count + multi_version_col_cnt))) {
-    LOG_WARN("fail to prepare allocate", KR(ret));
   } else {
     // init datum_rows_
     const ObIArray<ObDirectLoadVector *> &vectors = batch_rows_.get_vectors();
@@ -320,7 +307,6 @@ int ObDirectLoadDagInsertTableBatchRowIterator::inner_get_next_batch(ObBatchDatu
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected delete row", KR(ret), KPC(datum_row));
         } else if (OB_FAIL(batch_rows_.append_row(*datum_row))) {
-          LOG_WARN("fail to append row", KR(ret));
         }
       }
 
@@ -328,7 +314,6 @@ int ObDirectLoadDagInsertTableBatchRowIterator::inner_get_next_batch(ObBatchDatu
         if (OB_FAIL(ObDirectLoadVectorUtils::batch_fill_hidden_pk(
               datum_rows_.vectors_.at(0), start_pos, batch_rows_.size() - start_pos,
               *hide_pk_interval))) {
-          LOG_WARN("fail to batch fill hidden pk", KR(ret));
         }
       }
     }
@@ -363,14 +348,12 @@ int ObDirectLoadDagInsertTableBatchRowIterator::get_next_batch(const ObBatchDatu
         }
       }
     } else if (OB_FAIL(row_handler_.handle_batch(*datum_rows))) {
-      LOG_WARN("fail to handle row", KR(ret));
     } else {
       result_rows = datum_rows;
       row_count_ += datum_rows->row_count_;
 
       if (nullptr != dml_row_handler_) {
         if (OB_FAIL(dml_row_handler_->handle_insert_batch(tablet_id_, *datum_rows))) {
-          LOG_WARN("fail to handle insert batch", KR(ret), KPC(datum_rows));
         }
       }
     }

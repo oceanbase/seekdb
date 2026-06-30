@@ -127,8 +127,7 @@ int ObRowWriter::write(
     int64_t &pos)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(init_common(buf, buf_size, pos))) { // check argument in init_common
-    LOG_WARN("row writer fail to init common", K(ret), K(OB_P(buf)), K(buf_size), K(pos));
+  if (OB_FAIL(init_common(buf, buf_size, pos))) {
   } else if (OB_FAIL(append_row_header(
       row.row_flag_.get_serialize_flag(),
       row.mvcc_row_flag_.flag_,
@@ -159,7 +158,6 @@ int ObRowWriter::alloc_buf_and_init(const bool retry)
   if (retry && OB_FAIL(row_buffer_.extend_buf())) {
     STORAGE_LOG(WARN, "Failed to extend buffer", K(ret), K(row_buffer_));
   } else if (OB_FAIL(init_common(row_buffer_.get_buf(), row_buffer_.get_buf_size(), 0))) {
-    LOG_WARN("row writer fail to init common", K(ret), K(row_buffer_));
   }
   return ret;
 }
@@ -170,9 +168,7 @@ int ObRowWriter::write_lock_rowkey(const common::ObStoreRowkey &rowkey, char *&b
   len = 0;
   do {
     if (OB_FAIL(alloc_buf_and_init(OB_BUF_NOT_ENOUGH == ret))) {
-      LOG_WARN("row writer fail to alloc and init", K(ret));
     } else if (OB_FAIL(append_row_header(ObDmlFlag::DF_LOCK, 0, 0, rowkey.get_obj_cnt(), rowkey.get_obj_cnt()))) {
-      LOG_WARN("row writer fail to append row header", K(ret));
     } else {
       update_idx_array_ = nullptr;
       rowkey_column_cnt_ = rowkey.get_obj_cnt();
@@ -200,7 +196,6 @@ int ObRowWriter::write(const int64_t rowkey_column_cnt, const ObDatumRow &datum_
   len = 0;
   do {
     if (OB_FAIL(alloc_buf_and_init(OB_BUF_NOT_ENOUGH == ret))) {
-      LOG_WARN("row writer fail to alloc and init", K(ret));
     } else if (OB_FAIL(append_row_header(
             datum_row.row_flag_.get_serialize_flag(),
             datum_row.mvcc_row_flag_.flag_,
@@ -247,7 +242,6 @@ int ObRowWriter::write(
   } else {
     do {
       if (OB_FAIL(alloc_buf_and_init(OB_BUF_NOT_ENOUGH == ret))) {
-        LOG_WARN("row writer fail to alloc and init", K(ret));
       } else if (OB_FAIL(inner_write_row(rowkey_column_count, datum_row, update_idx))) {
         if (OB_BUF_NOT_ENOUGH != ret) {
           LOG_WARN("row writer fail to append row header", K(ret), K(row_buffer_), K(pos_));
@@ -295,7 +289,6 @@ int ObRowWriter::inner_write_row(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_row_valid(datum_row, rowkey_column_count))) {
-    LOG_WARN("row writer fail to init store row", K(ret), K(rowkey_column_count));
   } else if (nullptr != update_idx && OB_FAIL(check_update_idx_array_valid(rowkey_column_count, update_idx))) {
     LOG_WARN("invalid update idx array", K(ret));
   } else if (OB_FAIL(append_row_header(
@@ -370,7 +363,6 @@ int ObRowWriter::append_row_and_index(
         LOG_WARN("failed to append column idx array", K(ret));
       }
     } else if (OB_FAIL(bytes_info.set_column_idx_type(col_idx_type))) {
-      LOG_WARN("failed to set column idx bytes", K(ret), K(col_idx_type), K(column_index_count_));
     }
   } else if (OB_FAIL(append_flat_cell_array(cells, offset_start_pos, start_idx, end_idx))) {
     if (OB_BUF_NOT_ENOUGH != ret) {
@@ -384,7 +376,6 @@ int ObRowWriter::append_row_and_index(
       LOG_WARN("row writer fail to append column index", K(ret));
     }
   } else if (OB_FAIL(bytes_info.set_offset_type(offset_type))) {
-    LOG_WARN("failed to set offset bytes", K(ret));
   } else if (OB_FAIL(append_special_val_array(column_index_count_))) {
     if (OB_BUF_NOT_ENOUGH != ret) {
       LOG_WARN("failed to append special val array", K(ret), K(column_index_count_));
@@ -526,7 +517,6 @@ int ObRowWriter::build_cluster(const int64_t col_cnt, const T *cells)
       LOG_WARN("row writer fail to append cluster offset array", K(ret));
     }
   } else if(OB_FAIL(row_header_->set_offset_type(cluster_offset_type))) {
-    LOG_WARN("failed to set offset bytes", K(ret));
   }
   return ret;
 }
@@ -708,7 +698,6 @@ int ObRowWriter::append_array(
   } else {
     uint32_t largest_val = bit_array.get_val(count - 1);
     if (OB_FAIL(ObRowWriter::get_uint_byte(largest_val, bytes))) {
-      LOG_WARN("fail to get column_index_bytes", K(ret), K(largest_val));
     } else {
       const int64_t copy_size = bytes * count;
       if (pos_ + copy_size > buf_size_) {
@@ -743,7 +732,6 @@ int ObRowWriter::append_8_bytes_column(const ObStorageDatum &datum)
   int64_t bytes = 0;
   uint64_t value = datum.get_uint64();
   if (OB_FAIL(get_uint_byte(value, bytes))) {
-    LOG_WARN("failed to get byte size", K(value), K(ret));
   } else if (OB_UNLIKELY(bytes <= 0 || bytes > sizeof(uint64_t))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected byte size", K(ret), K(bytes));
@@ -752,7 +740,6 @@ int ObRowWriter::append_8_bytes_column(const ObStorageDatum &datum)
       MEMCPY(buf_ + pos_, datum.ptr_, datum.len_);
       pos_ += datum.len_;
     } else if (OB_FAIL(write_uint(value, bytes))) {
-      LOG_WARN("failed to write variable length 8 bytes column", K(ret), K(value), K(bytes));
     } else {
       if (OB_UNLIKELY(ObRowHeader::VAL_NORMAL != special_vals_[column_index_count_])) {
         ret = OB_ERR_UNEXPECTED;
@@ -772,7 +759,6 @@ int ObRowWriter::append_column(const ObObj &obj)
   int ret = OB_SUCCESS;
   ObStorageDatum datum;
   if (OB_FAIL(datum.from_obj_enhance(obj))) {
-    STORAGE_LOG(WARN, "Failed to transfer obj to datum", K(ret), K(obj));
   } else if (OB_FAIL(append_column(datum))) {
     if (OB_BUF_NOT_ENOUGH != ret) {
       STORAGE_LOG(WARN, "Failed to append datum column", K(ret), K(datum));

@@ -40,7 +40,6 @@ int ObDAGCGMacroBlockWriter::open(const ObWriteMacroParam &param)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("there are invalid argument", K(ret), K(param));
   } else if (OB_FAIL(writer_args_.init(param, ObWriterType::DAG_CG_MACRO_BLOCK_WRITER_TYPE))) {
-    LOG_WARN("fail to initialize writer args", K(ret), K(param));
   } else if (OB_UNLIKELY(nullptr == writer_args_.object_cleaner_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("object cleaner is null", K(ret));
@@ -49,7 +48,6 @@ int ObDAGCGMacroBlockWriter::open(const ObWriteMacroParam &param)
                                                   writer_args_.macro_seq_param_,
                                                   *writer_args_.object_cleaner_,
                                                   writer_args_.ddl_redo_callback_))) {
-    LOG_WARN("fail to open macro block writer", K(ret), K(writer_args_));
   }
   if (OB_SUCC(ret)) {
     is_inited_ = true;
@@ -64,7 +62,6 @@ int ObDAGCGMacroBlockWriter::close()
     ret = OB_NOT_INIT;
     LOG_WARN("the ObDAGCGMacroBlockWriter has been not inilialized", K(ret));
   } else if (OB_FAIL(cg_macro_block_writer_.close())) {
-    LOG_WARN("fail to close cg macro block writer", K(ret));
   }
   return ret;
 }
@@ -83,7 +80,6 @@ int ObDAGCGMacroBlockWriter::append_cg_block(ObCGBlock &cg_block)
     ret = OB_NOT_INIT;
     LOG_WARN("the ObDAGCGMacroBlockWriter has been not inilialized", K(ret));
   } else if (OB_FAIL(cg_macro_block_writer_.append_cg_block(cg_block, MACRO_BLOCK_REUSE_THRESHOLD))) {
-    LOG_WARN("fail to append cg block", K(ret), K(cg_block));
   }
   return ret;
 }
@@ -114,7 +110,6 @@ int ObDAGCGMacroBlockWriteOp::init(const ObTabletID &tablet_id, const int64_t sl
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ddl dag is null", K(ret));
     } else if (OB_FAIL(ddl_dag->get_tablet_context(tablet_id_, tablet_context))) {
-      LOG_WARN("fail to get tablet context", K(ret), K(tablet_id_));
     } else if (OB_UNLIKELY(nullptr == tablet_context)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tablet context is null", K(ret), K(tablet_id_));
@@ -128,13 +123,9 @@ int ObDAGCGMacroBlockWriteOp::init(const ObTabletID &tablet_id, const int64_t sl
       } else {
         const int64_t cg_count = storage_schema->get_column_group_count();
         if (OB_FAIL(flushed_bitmap_.init(cg_count, false))) {
-          LOG_WARN("init flush bitmap failed", K(ret));
         } else if (OB_FAIL(cg_block_files_iter_arr_.prepare_allocate(cg_count))) {
-          LOG_WARN("fail to prepare allocate cg block files iterator array", K(ret), K(cg_count));
         } else if (OB_FAIL(start_seqences_.prepare_allocate(cg_count))) {
-          LOG_WARN("fail to prepare allocate start seqences", K(ret), K(cg_count));
         } else if (OB_FAIL(row_offsets_.prepare_allocate(cg_count))) {
-          LOG_WARN("fail to prepare allocate row offsets", K(ret), K(cg_count));
         } else {
           for (int64_t cg_idx = 0; OB_SUCC(ret) && cg_idx < cg_count; ++cg_idx) {
             ObCGBlockFilesIterator *cg_block_files_iter = OB_NEWx(ObCGBlockFilesIterator, &allocator_);
@@ -147,8 +138,6 @@ int ObDAGCGMacroBlockWriteOp::init(const ObTabletID &tablet_id, const int64_t sl
             }
             if (FAILEDx(ObDDLUtil::init_macro_block_seq(slice_idx_,
                                                         start_seqences_.at(cg_idx)))) {
-              LOG_WARN("fail to initialize start seqence", K(ret), K(ddl_dag->get_direct_load_type()),
-                                                           K(tablet_id), K(slice_idx_));
             }
           }
           if (OB_SUCC(ret)) {
@@ -214,7 +203,6 @@ int ObDAGCGMacroBlockWriteOp::execute(const ObChunk &input_chunk,
             LOG_WARN("cg idx is invalid",
                 K(ret), K(cg_idx), K(cg_block_files_iter_arr_.count()));
           } else if (OB_FAIL(cg_block_files_iter_arr_.at(cg_idx)->push_back_cg_block_file(cg_block_file))) {
-            LOG_WARN("fail to push back cg block files", K(ret), KPC(cg_block_file), K(cg_idx));
           } else {
             cg_block_file = nullptr;
           }
@@ -239,19 +227,13 @@ int ObDAGCGMacroBlockWriteOp::execute(const ObChunk &input_chunk,
                                                  ddl_dag,
                                                  0/*max_batch_size*/,
                                                  write_macro_param))) {
-          LOG_WARN("fail to fill write macro param",
-              K(ret), KPC(ddl_dag), K(tablet_id_), K(slice_idx_), K(cg_idx));
         } else if (OB_FAIL(cg_macro_block_writer_.open(write_macro_param))) {
-          LOG_WARN("fail to open cg macro block writer", K(ret), K(write_macro_param));
         } else if (OB_FAIL(append_cg_block_files_to_writer(cg_block_files_iter))) {
-          LOG_WARN("fail to append cg block files into writer", K(ret));
         } else {
           row_offsets_.at(cg_idx) += cg_macro_block_writer_.get_written_row_count();
           if (OB_SUCC(ret)) {
             if (OB_FAIL(cg_macro_block_writer_.close())) {
-              LOG_WARN("fail to close cg macro block writer", K(ret));
             } else if (OB_FAIL(flushed_bitmap_.set(cg_idx))) {
-              LOG_WARN("flush bitmap set failed", K(ret));
             } else {
               start_seqences_.at(cg_idx) = cg_macro_block_writer_.get_last_macro_seq();
               cg_macro_block_writer_.reset();
@@ -291,7 +273,6 @@ int ObDAGCGMacroBlockWriteOp::append_cg_block_files_to_writer(ObCGBlockFilesIter
       if (OB_BUF_NOT_ENOUGH == ret) {
         ret = OB_SUCCESS;
         if (OB_FAIL(cg_block_files_iter->put_cg_block_back(cg_block))) {
-          LOG_WARN("fail to put cg block back", K(ret), K(cg_block), KPC(cg_block_files_iter));
         }
         break;
       } else {
@@ -323,7 +304,6 @@ int ObDAGCGMacroBlockWriteOp::set_remain_block(ObDDLSlice *ddl_slice)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("cg block file iterator remain unexpected data", K(ret), K(cg_idx), KPC(cg_block_files_iter));
       } else if (OB_FAIL(ddl_slice->set_block_flushed(cg_idx))) {
-        LOG_WARN("set block flushed failed", K(ret));
       }
     } else {
       // move ownership of cg block file to ddl slice
@@ -331,15 +311,12 @@ int ObDAGCGMacroBlockWriteOp::set_remain_block(ObDDLSlice *ddl_slice)
       if (OB_UNLIKELY(cg_block_files_iter->get_total_data_size() <= 0)) {
         LOG_INFO("the slice does not include the data", K(ret), K(cg_idx), KPC(cg_block_files_iter));
         if (OB_FAIL(ddl_slice->set_block_flushed(cg_idx))) {
-          LOG_WARN("set block flushed failed", K(ret));
         }
       } else if (OB_FAIL(cg_block_files_iter->get_remain_block_files(remain_block_files))) {
-        LOG_WARN("get remain block files", K(ret));
       } else if (OB_UNLIKELY(remain_block_files.count() != 1)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("should only remain one block file", K(ret), K(remain_block_files.count()));
       } else if (OB_FAIL(ddl_slice->set_remain_block(cg_idx, remain_block_files.at(0)))) {
-        LOG_WARN("set remain block file into ddl slice failed", K(ret), K(cg_idx), K(remain_block_files));
       }
       if (OB_FAIL(ret) && remain_block_files.count() > 0) {
         for (int64_t i = 0; i < remain_block_files.count(); ++i) {

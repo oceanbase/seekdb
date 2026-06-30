@@ -32,9 +32,7 @@ int ObRawExprSetUtils::to_expr_set(common::ObIAllocator *allocator,
   } else {
     expr_set.set_allocator(allocator);
     if (OB_FAIL(expr_set.init(exprs.count()))) {
-      LOG_WARN("failed to init expr set", K(ret));
     } else if (OB_FAIL(common::append(expr_set, exprs))) {
-      LOG_WARN("faield to append expr", K(ret));
     }
   }
   return ret;
@@ -58,9 +56,7 @@ int ObRawExprSetUtils::add_expr_set(common::ObIAllocator *allocator,
   } else {
     expr_set = new(ptr) ObRawExprSet();
     if (OB_FAIL(to_expr_set(allocator, exprs, *expr_set))) {
-      LOG_WARN("failed to convert array to expr set", K(ret));
     } else if (OB_FAIL(expr_sets.push_back(expr_set))) {
-      LOG_WARN("failed to push back expr set", K(ret));
     }
   }
   if (OB_FAIL(ret) && expr_set != NULL) {

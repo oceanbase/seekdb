@@ -58,12 +58,10 @@ int ObTableLoadSqlStatistics::create(const int64_t column_count, const int64_t m
     ObOptTableStat *table_stat = nullptr;
     ObOptOSGColumnStat *osg_col_stat = nullptr;
     if (OB_FAIL(allocate_table_stat(table_stat))) {
-      LOG_WARN("fail to allocate table stat", KR(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < column_count; ++i) {
       ObOptOSGColumnStat *osg_col_stat = nullptr;
       if (OB_FAIL(allocate_col_stat(osg_col_stat))) {
-        LOG_WARN("fail to allocate col stat", KR(ret));
       }
     }
     if (OB_SUCC(ret) && max_batch_size > 0) {
@@ -87,7 +85,6 @@ int ObTableLoadSqlStatistics::allocate_table_stat(ObOptTableStat *&table_stat)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     OB_LOG(WARN, "fail to allocate buffer", KR(ret));
   } else if (OB_FAIL(table_stat_array_.push_back(new_table_stat))) {
-    OB_LOG(WARN, "fail to push back", KR(ret));
   } else {
     table_stat = new_table_stat;
   }
@@ -109,7 +106,6 @@ int ObTableLoadSqlStatistics::allocate_col_stat(ObOptOSGColumnStat *&col_stat)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     OB_LOG(WARN, "fail to allocate buffer", KR(ret));
   } else if (OB_FAIL(col_stat_array_.push_back(new_osg_col_stat))) {
-    OB_LOG(WARN, "fail to push back", KR(ret));
   } else {
     col_stat = new_osg_col_stat;
   }
@@ -140,9 +136,7 @@ int ObTableLoadSqlStatistics::merge(const ObTableLoadSqlStatistics &other)
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to allocate buffer", KR(ret), K(size));
         } else if (OB_FAIL(table_stat->deep_copy(buf, size, copied_table_stat))) {
-          LOG_WARN("fail to copy table stat", KR(ret));
         } else if (OB_FAIL(table_stat_array_.push_back(copied_table_stat))) {
-          LOG_WARN("fail to add table stat", KR(ret));
         }
         if (OB_FAIL(ret)) {
           if (copied_table_stat != nullptr) {
@@ -163,9 +157,7 @@ int ObTableLoadSqlStatistics::merge(const ObTableLoadSqlStatistics &other)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected col stat is null", KR(ret), K(i), K(other.col_stat_array_));
       } else if (OB_FAIL(allocate_col_stat(copied_col_stat))) {
-        LOG_WARN("fail to allocate col stat", KR(ret));
       } else if (OB_FAIL(copied_col_stat->deep_copy(*col_stat))) {
-        LOG_WARN("fail to copy col stat", KR(ret));
       }
     }
   } else {
@@ -180,7 +172,6 @@ int ObTableLoadSqlStatistics::merge(const ObTableLoadSqlStatistics &other)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected table stat is null", KR(ret), K(i), K(other.table_stat_array_));
       } else if (OB_FAIL(table_stat_array_.at(i)->merge_table_stat(*table_stat))) {
-        LOG_WARN("fail to merge table stat", KR(ret));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < other.col_stat_array_.count(); ++i) {
@@ -193,7 +184,6 @@ int ObTableLoadSqlStatistics::merge(const ObTableLoadSqlStatistics &other)
       // Need to call the merge function of ObOptColumnStat
       else if (OB_FAIL(
                  col_stat_array_.at(i)->col_stat_->merge_column_stat(*osg_col_stat->col_stat_))) {
-        LOG_WARN("fail to merge col stat", KR(ret));
       }
     }
   }
@@ -235,7 +225,6 @@ int ObTableLoadSqlStatistics::get_table_stat_array(ObIArray<ObOptTableStat *> &t
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected table stat is null", KR(ret), K(i), K(table_stat_array_));
     } else if (OB_FAIL(table_stat_array.push_back(table_stat))) {
-      LOG_WARN("fail to push back table stat", KR(ret));
     }
   }
   return ret;
@@ -250,9 +239,7 @@ int ObTableLoadSqlStatistics::get_col_stat_array(ObIArray<ObOptColumnStat *> &co
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected col stat is null", KR(ret), K(i), K(col_stat_array_));
     } else if (OB_FAIL(osg_col_stat->set_min_max_datum_to_obj())) {
-      LOG_WARN("fail to persistence min max", KR(ret));
     } else if (OB_FAIL(col_stat_array.push_back(osg_col_stat->col_stat_))) {
-      LOG_WARN("fail to push back col stat", KR(ret));
     }
   }
   return ret;
@@ -324,7 +311,6 @@ int ObTableLoadSqlStatistics::sample_batch(int64_t &size, const uint16_t *&selec
     int64_t sample_size = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < size; ++i) {
       if (OB_FAIL(sample_helper_.sample_row(ignore))) {
-        LOG_WARN("failed to sample row", KR(ret));
       } else if (!ignore) {
         selector_[sample_size] = i;
         ++sample_size;
@@ -352,7 +338,6 @@ int ObTableLoadSqlStatistics::sample_selective(const uint16_t *&selector, int64_
     int64_t sample_size = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < size; ++i) {
       if (OB_FAIL(sample_helper_.sample_row(ignore))) {
-        LOG_WARN("failed to sample row", KR(ret));
       } else if (!ignore) {
         selector_[sample_size] = selector[i];
         ++sample_size;
@@ -403,7 +388,6 @@ OB_DEF_DESERIALIZE(ObTableLoadSqlStatistics)
     ObOptTableStat table_stat;
     ObOptTableStat *copied_table_stat = nullptr;
     if (OB_FAIL(table_stat.deserialize(buf, data_len, pos))) {
-      LOG_WARN("deserialize datum store failed", K(ret), K(i));
     } else {
       int64_t size = table_stat.size();
       char *new_buf = nullptr;
@@ -411,9 +395,7 @@ OB_DEF_DESERIALIZE(ObTableLoadSqlStatistics)
         ret = OB_ALLOCATE_MEMORY_FAILED;
         OB_LOG(WARN, "fail to allocate buffer", KR(ret), K(size));
       } else if (OB_FAIL(table_stat.deep_copy(new_buf, size, copied_table_stat))) {
-        OB_LOG(WARN, "fail to copy table stat", KR(ret));
       } else if (OB_FAIL(table_stat_array_.push_back(copied_table_stat))) {
-        OB_LOG(WARN, "fail to add table stat", KR(ret));
       }
       if (OB_FAIL(ret)) {
         if (copied_table_stat != nullptr) {
@@ -436,11 +418,8 @@ OB_DEF_DESERIALIZE(ObTableLoadSqlStatistics)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       OB_LOG(WARN, "failed to create col stat");
     } else if (OB_FAIL(osg_col_stat->deserialize(buf, data_len, pos))) {
-      OB_LOG(WARN, "deserialize datum store failed", K(ret), K(i));
     } else if (OB_FAIL(osg_col_stat->deep_copy(*osg_col_stat))) {
-      OB_LOG(WARN, "fail to deep copy", K(ret));
     } else if (OB_FAIL(col_stat_array_.push_back(osg_col_stat))) {
-      OB_LOG(WARN, "fail to add table stat", KR(ret));
     }
     if (OB_FAIL(ret)) {
       if (osg_col_stat != nullptr) {

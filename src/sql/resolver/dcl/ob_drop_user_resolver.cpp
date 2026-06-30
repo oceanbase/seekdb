@@ -77,9 +77,7 @@ int ObDropUserResolver::resolve(const ParseNode &parse_tree)
         ObString host_name;
         if (OB_FAIL(resolve_user_list_node(user_list_node->children_[i], top_node,
                                            user_name, host_name))) {
-          LOG_WARN("fail to resolve user list node", K(ret));
         } else if (OB_FAIL(drop_user_stmt->add_user(user_name, host_name))) {
-          LOG_WARN("Add user error", K(user_name), K(ret));
         }
       }
       if (OB_SUCC(ret)) {

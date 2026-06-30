@@ -57,12 +57,9 @@ int ObReportingWFWholeMsg::assign(const ObReportingWFWholeMsg &other)
  {
   int ret = OB_SUCCESS;
   if (OB_FAIL(pby_hash_value_array_.reserve(other.pby_hash_value_array_.count()))) {
-    LOG_WARN("reserve pby_hash_value_array failed", K(ret), K(other.pby_hash_value_array_.count()));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < other.pby_hash_value_array_.count(); ++i) {
     if (OB_FAIL(pby_hash_value_array_.push_back(other.pby_hash_value_array_.at(i)))) {
-      LOG_WARN("push back partition range failed", K(ret), K(other.pby_hash_value_array_.count()),
-               K(i), K(other.pby_hash_value_array_.at(i)));
     }
   }
   return ret;
@@ -130,9 +127,7 @@ int ObReportingWFPieceMsgCtx::send_whole_msg(common::ObIArray<ObPxSqcMeta> &sqcs
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null expected", K(ret));
     } else if (OB_FAIL(ch->send(whole_msg_, timeout_ts_))) {
-      LOG_WARN("fail push data to channel", K(ret));
     } else if (OB_FAIL(ch->flush(true /* wait */, false /* wait response */))) {
-      LOG_WARN("fail flush dtl data", K(ret));
     } else {
       LOG_DEBUG("dispatched winbuf whole msg", K(idx), K(cnt), K(whole_msg_), K(*ch));
     }
@@ -166,8 +161,6 @@ int ObReportingWFPieceMsgListener::on_message(
     for (int64_t i = 0; OB_SUCC(ret) && i < pkt.pby_hash_value_array_.count(); ++i) {
       if (OB_FAIL(ctx.whole_msg_.pby_hash_value_array_.push_back(
                   pkt.pby_hash_value_array_.at(i)))) {
-        LOG_WARN("push back pby_hash_value_array_ failed", K(ret),
-                 K(pkt.pby_hash_value_array_.count()), K(i), K(pkt.pby_hash_value_array_.at(i)));
       }
     }
   }
@@ -177,7 +170,6 @@ int ObReportingWFPieceMsgListener::on_message(
   }
   if (OB_SUCC(ret) && ctx.received_ == ctx.task_cnt_) {
     if (OB_FAIL(ctx.send_whole_msg(sqcs))) {
-      LOG_WARN("fail to send whole msg", K(ret));
     }
     IGNORE_RETURN ctx.reset_resource();
   }

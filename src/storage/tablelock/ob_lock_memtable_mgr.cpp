@@ -37,7 +37,6 @@ ObLockMemtableMgr::ObLockMemtableMgr()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(lock_def_.init(lib::ObMemAttr("LockMemtableMgr")))) {
-    LOG_WARN("lock memtable mgr lock init error", K(ret));
   }
   lock_.lock_type_ = LockType::OB_QSYNC_LOCK;
   lock_.lock_ = &lock_def_;
@@ -113,7 +112,6 @@ int ObLockMemtableMgr::create_memtable(const CreateMemtableArg &arg)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lock memtable already exists, should not create again", K(ret), K_(ls_id));
   } else if (OB_FAIL(t3m_->acquire_lock_memtable(handle))) {
-    LOG_WARN("failed to create memtable", K(ret));
   } else if (OB_ISNULL(table = handle.get_table())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("table is nullptr", K(ret));
@@ -121,9 +119,7 @@ int ObLockMemtableMgr::create_memtable(const CreateMemtableArg &arg)
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("this is not lock memtable", K(ret), KPC(table));
   } else if (OB_FAIL(memtable->init(table_key, ls_id_, freezer_))) {
-    LOG_WARN("memtable init fail.", K(ret));
   } else if (OB_FAIL(add_memtable_(handle))) {
-    LOG_WARN("add memtable fail.", K(ret));
   } else if (OB_ISNULL(ls_tx_svr = freezer_->get_ls_tx_svr())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls_tx_svr is null", K(ret));

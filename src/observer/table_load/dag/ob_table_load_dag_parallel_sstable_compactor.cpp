@@ -74,7 +74,6 @@ int ObTableLoadDagParallelCompactTabletCtx::set_parallel_merge_param(int64_t mer
     range_sstable_count_ = 0;
     range_sstables_.reset();
     if (OB_FAIL(range_sstables_.prepare_allocate(range_count))) {
-      LOG_WARN("fail to prepare allocate array", KR(ret));
     }
   }
   return ret;
@@ -147,7 +146,6 @@ int ObTableLoadDagParallelSSTableCompactor::init(ObTableLoadStoreCtx *store_ctx,
     store_ctx_ = store_ctx;
     op_ctx_ = op_ctx;
     if (OB_FAIL(tablet_ctx_map_.create(1024, "TLD_CptCtxMap", "TLD_CptCtxMap"))) {
-      LOG_WARN("fail to create ctx map", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -173,10 +171,8 @@ int ObTableLoadDagParallelSSTableCompactor::prepare_compact()
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to new ObTableLoadDagParallelCompactTabletCtx", KR(ret));
       } else if (OB_FAIL(tablet_ctx->sstables_.assign(*table_handle_array))) {
-        LOG_WARN("fail to assign table handle array", KR(ret));
       } else if (FALSE_IT(tablet_ctx->tablet_id_ = tablet_id)) {
       } else if (OB_FAIL(tablet_ctx_map_.set_refactored(tablet_id, tablet_ctx))) {
-        LOG_WARN("fail to set refactored", KR(ret));
       }
       if (OB_FAIL(ret)) {
         if (nullptr != tablet_ctx) {
@@ -208,7 +204,6 @@ int ObTableLoadDagParallelSSTableCompactor::close()
       const ObTabletID &tablet_id = it->first;
       ObTableLoadDagParallelCompactTabletCtx *tablet_ctx = it->second;
       if (OB_FAIL(table_store.add_tablet_tables(tablet_id, tablet_ctx->sstables_))) {
-        LOG_WARN("fail to add tables", KR(ret));
       }
     }
   }

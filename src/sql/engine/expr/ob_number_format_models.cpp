@@ -191,7 +191,6 @@ int ObNFMDescPrepare::check_elem_comma_is_valid(const ObNFMElem *elem_item,
   // can't appear at the same time as element 'EEEE'
   // can't appear after the element 'V'
   if (OB_FAIL(check_conflict_group(elem_item, fmt_desc))) {
-    LOG_WARN("check conflict group failed", K(ret));
   } else if (-1 == fmt_desc.digital_start_
             || elem_item->offset_ >= fmt_desc.decimal_pos_
             || ObNFMElem::has_type(NFM_EEEE_FLAG, fmt_desc.elem_flag_)
@@ -209,7 +208,6 @@ int ObNFMDescPrepare::check_elem_period_is_valid(const ObNFMElem *elem_item,
   // can appear only once
   // can't appear at the same time as element 'V'
   if (OB_FAIL(check_conflict_group(elem_item, fmt_desc))) {
-    LOG_WARN("check conflict group failed", K(ret));
   } else if (fmt_desc.decimal_pos_ != INT32_MAX
             || ObNFMElem::has_type(NFM_MULTI_FLAG, fmt_desc.elem_flag_)
             || ObNFMElem::has_type(NFM_HEX_FLAG, fmt_desc.elem_flag_)) {
@@ -226,7 +224,6 @@ int ObNFMDescPrepare::check_elem_dollar_is_valid(const ObNFMElem *elem_item,
   // can appear only once
   // can't appear after the element 'EEEE'
   if (OB_FAIL(check_conflict_group(elem_item, fmt_desc))) {
-    LOG_WARN("check conflict group failed", K(ret));
   } else if (ObNFMElem::has_type(NFM_DOLLAR_FLAG, fmt_desc.elem_flag_)
             || ObNFMElem::has_type(NFM_EEEE_FLAG, fmt_desc.elem_flag_)) {
     ret = OB_ERR_INVALID_NUMBER_FORMAT_MODEL;
@@ -241,7 +238,6 @@ int ObNFMDescPrepare::check_elem_zero_is_valid(const ObNFMElem *elem_item,
   int ret = OB_SUCCESS;
   // can't appear after element 'EEEE' or element 'X'
   if (OB_FAIL(check_conflict_group(elem_item, fmt_desc))) {
-    LOG_WARN("check conflict group failed", K(ret));
   } else if (ObNFMElem::has_type(NFM_EEEE_FLAG, fmt_desc.elem_flag_)
             || ObNFMElem::has_type(NFM_HEX_FLAG, fmt_desc.elem_flag_)) {
     ret = OB_ERR_INVALID_NUMBER_FORMAT_MODEL;
@@ -256,7 +252,6 @@ int ObNFMDescPrepare::check_elem_nine_is_valid(const ObNFMElem *elem_item,
   int ret = OB_SUCCESS;
   // can't appear after element 'EEEE' or element 'X'
   if (OB_FAIL(check_conflict_group(elem_item, fmt_desc))) {
-    LOG_WARN("check conflict group failed", K(ret));
   } else if (ObNFMElem::has_type(NFM_EEEE_FLAG, fmt_desc.elem_flag_)
             || ObNFMElem::has_type(NFM_HEX_FLAG, fmt_desc.elem_flag_)) {
     ret = OB_ERR_INVALID_NUMBER_FORMAT_MODEL;
@@ -272,7 +267,6 @@ int ObNFMDescPrepare::check_elem_b_is_valid(const ObNFMElem *elem_item,
   // can appear only once
   // can't appear after the element 'EEEE'
   if (OB_FAIL(check_conflict_group(elem_item, fmt_desc))) {
-    LOG_WARN("check conflict group failed", K(ret));
   } else if (ObNFMElem::has_type(NFM_BLANK_FLAG, fmt_desc.elem_flag_)
             || ObNFMElem::has_type(NFM_EEEE_FLAG, fmt_desc.elem_flag_)) {
     ret = OB_ERR_INVALID_NUMBER_FORMAT_MODEL;
@@ -288,7 +282,6 @@ int ObNFMDescPrepare::check_elem_c_is_valid(const ObNFMElem *elem_item,
   // can appear only once
   // can't appear after the element 'EEEE'
   if (OB_FAIL(check_conflict_group(elem_item, fmt_desc))) {
-    LOG_WARN("check conflict group failed", K(ret));
   } else if (ObNFMElem::has_currency_group(fmt_desc.elem_flag_)
             || ObNFMElem::has_type(NFM_EEEE_FLAG, fmt_desc.elem_flag_)) {
     ret = OB_ERR_INVALID_NUMBER_FORMAT_MODEL;
@@ -303,7 +296,6 @@ int ObNFMDescPrepare::check_elem_d_is_valid(const ObNFMElem *elem_item,
   int ret = OB_SUCCESS;
   // can't appear at the same time as element 'V'
   if (OB_FAIL(check_conflict_group(elem_item, fmt_desc))) {
-    LOG_WARN("check conflict group failed", K(ret));
   } else if (fmt_desc.decimal_pos_ != INT32_MAX
             || ObNFMElem::has_type(NFM_MULTI_FLAG, fmt_desc.elem_flag_)
             || ObNFMElem::has_type(NFM_HEX_FLAG, fmt_desc.elem_flag_)) {
@@ -320,7 +312,6 @@ int ObNFMDescPrepare::check_elem_eeee_is_valid(const ObNFMElem *elem_item,
   // can't appear at the same time as thousands separator
   // when element 'V' appears in front of all numbers, element 'EEEE' can't appear behind
   if (OB_FAIL(check_conflict_group(elem_item, fmt_desc))) {
-    LOG_WARN("check conflict group failed", K(ret));
   } else if (ObNFMElem::has_type(NFM_EEEE_FLAG, fmt_desc.elem_flag_)
             || (ObNFMElem::has_type(NFM_MULTI_FLAG, fmt_desc.elem_flag_)
             && fmt_desc.multi_ == fmt_desc.pre_num_count_)
@@ -339,7 +330,6 @@ int ObNFMDescPrepare::check_elem_g_is_valid(const ObNFMElem *elem_item,
   // can't appear before the number
   // can't appear after the element 'V'
   if (OB_FAIL(check_conflict_group(elem_item, fmt_desc))) {
-    LOG_WARN("check conflict group failed", K(ret));
   } else if (-1 == fmt_desc.digital_start_
             || elem_item->offset_ >= fmt_desc.decimal_pos_
             || ObNFMElem::has_type(NFM_MULTI_FLAG, fmt_desc.elem_flag_)) {
@@ -355,7 +345,6 @@ int ObNFMDescPrepare::check_elem_l_is_valid(const ObNFMElem *elem_item,
   int ret = OB_SUCCESS;
   // can't appear after the element 'EEEE'
   if (OB_FAIL(check_conflict_group(elem_item, fmt_desc))) {
-    LOG_WARN("check conflict group failed", K(ret));
   } else if (ObNFMElem::has_type(NFM_C_FLAG, fmt_desc.elem_flag_)
             || ObNFMElem::has_type(NFM_EEEE_FLAG, fmt_desc.elem_flag_)) {
     ret = OB_ERR_INVALID_NUMBER_FORMAT_MODEL;
@@ -370,7 +359,6 @@ int ObNFMDescPrepare::check_elem_mi_is_valid(const ObNFMElem *elem_item,
   int ret = OB_SUCCESS;
   // can only appear at the end of the fmt string
   if (OB_FAIL(check_conflict_group(elem_item, fmt_desc))) {
-    LOG_WARN("check conflict group failed", K(ret));
   } else if (ObNFMElem::has_type(NFM_MI_FLAG, fmt_desc.elem_flag_)
             || !elem_item->is_last_elem_) {
     ret = OB_ERR_INVALID_NUMBER_FORMAT_MODEL;
@@ -385,7 +373,6 @@ int ObNFMDescPrepare::check_elem_pr_is_valid(const ObNFMElem *elem_item,
   int ret = OB_SUCCESS;
   // can only appear at the end of the fmt string
   if (OB_FAIL(check_conflict_group(elem_item, fmt_desc))) {
-    LOG_WARN("check conflict group failed", K(ret));
   } else if (ObNFMElem::has_type(NFM_PR_FLAG, fmt_desc.elem_flag_)
             || !elem_item->is_last_elem_) {
     ret = OB_ERR_INVALID_NUMBER_FORMAT_MODEL;
@@ -399,7 +386,6 @@ int ObNFMDescPrepare::check_elem_rn_is_valid(const ObNFMElem *elem_item,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_conflict_group(elem_item, fmt_desc))) {
-    LOG_WARN("check conflict group failed", K(ret));
   } else if (ObNFMElem::has_type(NFM_RN_FLAG, fmt_desc.elem_flag_)) {
     ret = OB_ERR_INVALID_NUMBER_FORMAT_MODEL;
     LOG_WARN("check elem rn is invalid", K(ret));
@@ -414,7 +400,6 @@ int ObNFMDescPrepare::check_elem_s_is_valid(const ObNFMElem *elem_item,
   // can only appear at the front or the end of the fmt string
   // but 'FM' + 'S' is an exception
   if (OB_FAIL(check_conflict_group(elem_item, fmt_desc))) {
-    LOG_WARN("check conflict group failed", K(ret));
   } else if (ObNFMElem::has_type(NFM_S_FLAG, fmt_desc.elem_flag_)
             || (0 !=elem_item->offset_
             && (!elem_item->is_last_elem_
@@ -430,7 +415,6 @@ int ObNFMDescPrepare::check_elem_tm_is_valid(const ObNFMElem *elem_item,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_conflict_group(elem_item, fmt_desc))) {
-    LOG_WARN("check conflict group failed", K(ret));
   } else if (ObNFMElem::has_type(NFM_TM_FLAG, fmt_desc.elem_flag_)) {
     ret = OB_ERR_INVALID_NUMBER_FORMAT_MODEL;
     LOG_WARN("check elem tm is invalid", K(ret));
@@ -444,7 +428,6 @@ int ObNFMDescPrepare::check_elem_u_is_valid(const ObNFMElem *elem_item,
   int ret = OB_SUCCESS;
   // can't appear after the element 'EEEE'
   if (OB_FAIL(check_conflict_group(elem_item, fmt_desc))) {
-    LOG_WARN("check conflict group failed", K(ret));
   } else if (ObNFMElem::has_type(NFM_U_FLAG, fmt_desc.elem_flag_)
             || ObNFMElem::has_type(NFM_EEEE_FLAG, fmt_desc.elem_flag_)) {
     ret = OB_ERR_INVALID_NUMBER_FORMAT_MODEL;
@@ -460,7 +443,6 @@ int ObNFMDescPrepare::check_elem_v_is_valid(const ObNFMElem *elem_item,
   // can't appear at the same time as element '.' or element 'D'
   // can't appear after the element 'EEEE'
   if (OB_FAIL(check_conflict_group(elem_item, fmt_desc))) {
-    LOG_WARN("check conflict group failed", K(ret));
   } else if (ObNFMElem::has_type(NFM_MULTI_FLAG, fmt_desc.elem_flag_)
             || fmt_desc.decimal_pos_ != INT32_MAX
             || ObNFMElem::has_type(NFM_EEEE_FLAG, fmt_desc.elem_flag_)) {
@@ -475,7 +457,6 @@ int ObNFMDescPrepare::check_elem_x_is_valid(const ObNFMElem *elem_item,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_conflict_group(elem_item, fmt_desc))) {
-    LOG_WARN("check conflict group failed", K(ret));
   } else if (ObNFMElem::NFM_NINE == elem_item->prefix_type_) {
     ret = OB_ERR_INVALID_NUMBER_FORMAT_MODEL;
     LOG_WARN("check elem multi is invalid", K(ret));
@@ -489,7 +470,6 @@ int ObNFMDescPrepare::check_elem_fm_is_valid(const ObNFMElem *elem_item,
   int ret = OB_SUCCESS;
   // can only appear at the front of the fmt string
   if (OB_FAIL(check_conflict_group(elem_item, fmt_desc))) {
-    LOG_WARN("check conflict group failed", K(ret));
   } else if (ObNFMElem::has_type(NFM_FILLMODE_FLAG, fmt_desc.elem_flag_)
             || elem_item->offset_ != 0) {
     ret = OB_ERR_INVALID_NUMBER_FORMAT_MODEL;
@@ -890,7 +870,6 @@ int ObNFMBase::parse_fmt(const char* fmt_str, const int32_t fmt_len, bool need_c
       const ObNFMKeyWord *match_keyword = NULL;
       ObNFMElem::ElemCaseMode case_mode = ObNFMElem::IGNORE_CASE;
       if (OB_FAIL(search_keyword(cur_ch, remain_len, match_keyword, case_mode))) {
-        LOG_WARN("fail to search match keyword", K(ret), K(fmt_str_), K(remain_len));
       } else if (OB_ISNULL(elem_buf = static_cast<char*>(allocator_.alloc(sizeof(ObNFMElem))))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to alloc memory");
@@ -911,7 +890,6 @@ int ObNFMBase::parse_fmt(const char* fmt_str, const int32_t fmt_len, bool need_c
           cur_elem->is_last_elem_ = true;
         }
         if (OB_FAIL(fmt_elem_list_.push_back(cur_elem))) {
-          LOG_WARN("fail to push back elem to fmt_elem_list", K(ret));
         }
       }
     }
@@ -968,7 +946,6 @@ int ObNFMBase::decimal_to_hex(const ObString &origin_str, char *buf,
     // if is negative, fill it with '#'
     if ('-' == ptr[num_pos] && !is_zero(origin_str)) {
       if (OB_FAIL(fill_str(buf, buf_len, 0, '#', fmt_desc_.output_len_))) {
-        LOG_WARN("fail to fill str", K(ret));
       }
       pos = fmt_desc_.output_len_;
     } else if (ObNFMElem::has_type((~NFM_HEX_FLAG) & (~NFM_ZERO_FLAG)
@@ -990,11 +967,9 @@ int ObNFMBase::decimal_to_hex(const ObString &origin_str, char *buf,
         uint32_t last_digit = num.at(num.count() - 1);
         if (fmt_desc_.upper_case_flag_ & NFM_HEX_FLAG) {
           if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%X", last_digit))) {
-            LOG_WARN("fail to print hex", K(ret));
           }
         } else {
           if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%x", last_digit))) {
-            LOG_WARN("fail to print hex", K(ret));
           }
         }
         for (ssize_t i = num.count() - 2; OB_SUCC(ret) && i >= 0; --i) {
@@ -1010,7 +985,6 @@ int ObNFMBase::decimal_to_hex(const ObString &origin_str, char *buf,
         int32_t valid_len = fmt_desc_.elem_x_count_ + fmt_desc_.pre_num_count_;
         if (pos > valid_len) {
           if (OB_FAIL(fill_str(buf, buf_len, 0, '#', fmt_desc_.output_len_))) {
-            LOG_WARN("fail to fill str", K(ret));
           }
           pos = fmt_desc_.output_len_;
         } else {
@@ -1025,7 +999,6 @@ int ObNFMBase::decimal_to_hex(const ObString &origin_str, char *buf,
             int64_t fill_zero_count = valid_len - pos;
             MEMMOVE(buf + fill_zero_count, buf, pos);
             if (OB_FAIL(fill_str(buf, buf_len, 0, '0', fill_zero_count))) {
-              LOG_WARN("fail to fill str", K(ret));
             } else {
               pos += fill_zero_count;
             }
@@ -1080,7 +1053,6 @@ int ObNFMBase::build_hex_number(const char *str, const int32_t str_len,
   for (int32_t i = str_len - 1; OB_SUCC(ret) && i >= offset; i--) {
     ++index;
     if (OB_FAIL(hex_to_num(str[i], digit))) {
-      LOG_WARN("invalid hex character", K(ret));
     } else {
       uint64_t power_val = pow(16, index - 1);
       num = digit * power_val + num;
@@ -1103,7 +1075,6 @@ int ObNFMBase::int_to_roman_str(const int64_t num, char *buf,
   int ret = OB_SUCCESS;
   if ((num < 1 || num > 3999)) {
     if (OB_FAIL(fill_str(buf, buf_len, 0, '#', fmt_desc_.output_len_))) {
-      LOG_WARN("fail to fill str", K(ret));
     }
     pos = fmt_desc_.output_len_;
   } else {
@@ -1241,12 +1212,10 @@ int ObNFMBase::get_nls_currency(const ObSQLSessionInfo &session)
   } else if (ObNFMElem::has_type(NFM_L_FLAG, fmt_desc_.elem_flag_)) {
     if (OB_FAIL(session.get_sys_variable(share::SYS_VAR_NLS_CURRENCY,
                 fmt_desc_.nls_currency_))) {
-      LOG_WARN("fail to get sys variable", K(ret));
     }
   } else if (ObNFMElem::has_type(NFM_U_FLAG, fmt_desc_.elem_flag_)) {
     if (OB_FAIL(session.get_sys_variable(share::SYS_VAR_NLS_DUAL_CURRENCY,
                 fmt_desc_.nls_currency_))) {
-      LOG_WARN("fail to get sys variable", K(ret));
     }
   }
   return ret;
@@ -1257,7 +1226,6 @@ int ObNFMBase::get_iso_grouping(const ObSQLSessionInfo &session)
   int ret = OB_SUCCESS;
   if (OB_FAIL(session.get_sys_variable(share::SYS_VAR_NLS_NUMERIC_CHARACTERS,
                      fmt_desc_.iso_grouping_))) {
-    LOG_WARN("fail to get sys variable", K(ret));
   }
   return ret;
 }
@@ -1284,7 +1252,6 @@ int ObNFMBase::conv_num_to_nfm_obj(const common::ObObj &obj,
     } else {
       EXPR_GET_NUMBER_V2(obj, num);
       if (OB_FAIL(ret)) {
-        LOG_WARN("failed to cast obj as number", K(ret));
       } else {
         nfm_obj.set_obj_type(ObNumberType);
         nfm_obj.set_number(num);
@@ -1321,7 +1288,6 @@ int ObNFMBase::conv_num_to_nfm_obj(const common::ObObjMeta &obj_meta,
     number::ObNumber num;
     if (is_int_tc) { // int tc, to support PLS_INTERGER type
       if (OB_FAIL(num.from(obj.get_int(), alloc))) {
-        LOG_WARN("fail to int_number", K(ret));
       }
     } else { // number
       num.assign(obj.get_number().desc_.desc_,
@@ -1354,12 +1320,8 @@ int ObNFMBase::cast_obj_to_int(
                 in_meta.precision_, in_meta.scale_,
                 in_meta.precision_ - in_meta.scale_ + 1, scale, scale,
                 tmp_datum, builder))) {
-      LOG_WARN("do_round_decimalint failed",
-               K(ret), K(in_meta.precision_), K(in_meta.scale_),
-               K(in_meta.precision_ - in_meta.scale_ + 1), K(scale));
     } else if (OB_FAIL(wide::check_range_valid_int64(
                builder.get_decimal_int(), builder.get_int_bytes(), is_valid_int64, res_val))) {
-      LOG_WARN("check_range_valid_int64 failed", K(ret), K(builder.get_int_bytes()));
     } else if (!is_valid_int64) {
       if (wide::str_helper::is_negative(builder.get_decimal_int(), builder.get_int_bytes())) {
         res_val = INT64_MIN;
@@ -1372,9 +1334,7 @@ int ObNFMBase::cast_obj_to_int(
     number::ObNumber nmb;
     ObNumStackOnceAlloc tmp_alloc;
     if (OB_FAIL(nmb.from(num, tmp_alloc))) {
-      LOG_WARN("copy number failed.", K(ret), K(num));
     } else if (OB_FAIL(nmb.round(scale))) {
-      LOG_WARN("round failed.", K(ret), K(num.format()), K(scale));
     } else if (!nmb.is_valid_int64(res_val)) {
       // if it is not a valid int64, negative number returns INT64_MIN
       // positive number returns INT64_MAX
@@ -1448,10 +1408,8 @@ int ObNFMBase::cast_obj_to_num_str(
       const int64_t scale = out_scale < 0 ? in_scale : out_scale;
       if (OB_FAIL(ObExprFuncRound::do_round_decimalint(
           in_precision, in_scale, in_precision, scale, scale, tmp_datum, builder))) {
-        LOG_WARN("do_round_decimalint failed", K(ret), K(in_precision), K(in_scale), K(out_scale));
       } else if (OB_FAIL(wide::to_string(builder.get_decimal_int(), builder.get_int_bytes(), scale,
                                          num_str_buf, alloc_size, num_str_len, false))) {
-        LOG_WARN("to_string failed", K(ret));
       } else {
         is_negative = wide::str_helper::is_negative(
                       nfm_obj.get_decimal_int(), nfm_obj.get_int_bytes());
@@ -1466,18 +1424,15 @@ int ObNFMBase::cast_obj_to_num_str(
                                       num_str_buf, NULL, TRUE, FALSE);
         }
         if (OB_FAIL(nmb.from(num_str_buf, num_str_len, allocator_))) {
-          LOG_WARN("number from str failed", K(ret));
         }
         num_str_len = 0;
       } else {
         number::ObNumber num = nfm_obj.get_number();
         if (OB_FAIL(nmb.from(num, allocator_))) {
-          LOG_WARN("copy number failed.", K(ret), K(num));
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(nmb.format_v2(num_str_buf, alloc_size, num_str_len, out_scale, false))) {
-          LOG_WARN("fail to convert number to string", K(ret));
         } else {
           is_negative = nmb.is_negative();
         }
@@ -1503,7 +1458,6 @@ int ObNFMBase::cast_obj_to_num_str(
       }
       num_str.assign_ptr(num_str_buf, pos);
     } else if (OB_FAIL(remove_leading_zero(num_str_buf, num_str_len))) {
-      LOG_WARN("fail to remove leading zero", K(ret));
     } else {
       num_str.assign_ptr(num_str_buf, static_cast<int32_t>(num_str_len));
     }
@@ -1526,9 +1480,7 @@ int ObNFMBase::num_str_to_sci(const common::ObString &num_str, const int32_t sca
   } else if (is_zero(num_str)) {
     if (OB_FAIL(databuff_printf(buf, len, pos, "%.*s", num_str.length(),
                 num_str.ptr()))) {
-      LOG_WARN("fail to fill num str", K(ret), K(len), K(num_str));
     } else if (OB_FAIL(databuff_printf(buf, len, pos, "%s", "E+00"))) {
-      LOG_WARN("fail to fill num str", K(ret));
     }
   } else {
     int64_t raw_pos = 0;
@@ -1689,7 +1641,6 @@ int ObNFMBase::num_str_to_sci(const common::ObString &num_str, const int32_t sca
     // print exponent
     if (OB_SUCC(ret)) {
       if (OB_FAIL(databuff_printf(pow_str, sizeof(pow_str), pow_index, "%02ld", pow_size))) {
-        LOG_WARN("fail to generate pow str", K(ret));
       } else {
         for (int i = 0; i < pow_index; ++i) {
           buf[pos++] = pow_str[i];
@@ -1733,16 +1684,11 @@ int ObNFMToChar::process_mul_format(
       number::ObNumber origin_num;
       num_val = nfm_obj.get_number();
       if (OB_FAIL(base_num.from(base_val, allocator_))) {
-        LOG_WARN("fail to cast int to number", K(ret));
       } else if (OB_FAIL(base_num.power(exponent, power_num, allocator_))) {
-        LOG_WARN("power calc failed", K(ret));
       } else if (OB_FAIL(num_val.mul_v2(power_num, origin_num, allocator_))) {
-        LOG_WARN("fail to mul number", K(ret));
       } else if (OB_FAIL(origin_num.round(scale))) {
-        LOG_WARN("round failed", K(ret), K(origin_num), K(scale));
       } else if (OB_FAIL(origin_num.format_v2(origin_str_buf, alloc_size,
                  origin_str_len, scale, false))) {
-        LOG_WARN("fail to convert number to string", K(ret));
       }
     } else if (ObDecimalIntType == obj_type) {
       const int16_t in_prec = in_meta.precision_;
@@ -1752,7 +1698,6 @@ int ObNFMToChar::process_mul_format(
           || in_scale == exponent) { // needn't multiplication
         if (OB_FAIL(wide::to_string(nfm_obj.get_decimal_int(), nfm_obj.get_int_bytes(),
             new_scale, origin_str_buf, alloc_size, origin_str_len, false))) {
-          LOG_WARN("to_string failed", K(ret));
         }
       } else if (in_scale > exponent) {
         new_scale = in_scale - exponent; // => input * power_val, calc round with new_scale directly
@@ -1763,19 +1708,14 @@ int ObNFMToChar::process_mul_format(
                     in_meta.precision_, new_scale,
                     in_meta.precision_, scale, scale,
                     tmp_datum, builder))) {
-          LOG_WARN("do_round_decimalint failed",
-                   K(ret), K(in_meta.precision_), K(in_meta.scale_),
-                   K(in_meta.precision_ - in_meta.scale_ + 1), K(scale));
         } else if (OB_FAIL(wide::to_string(builder.get_decimal_int(), builder.get_int_bytes(),
                            scale, origin_str_buf, alloc_size, origin_str_len, false))) {
-          LOG_WARN("to_string failed", K(ret));
         }
       } else { // in_scale < exponent
         // result has no decimal place, needn't to round, need to print extra zeros instead
         extra_zeros_count = exponent - in_scale;
         if (OB_FAIL(wide::to_string(nfm_obj.get_decimal_int(), nfm_obj.get_int_bytes(),
                     scale, origin_str_buf, alloc_size, origin_str_len, false))) {
-          LOG_WARN("to_string failed", K(ret));
         } else {
           MEMSET(origin_str_buf + origin_str_len, '0', extra_zeros_count);
         }
@@ -1799,9 +1739,7 @@ int ObNFMToChar::process_roman_format(
   int ret = OB_SUCCESS;
   int64_t val;
   if (OB_FAIL(cast_obj_to_int(in_meta, nfm_obj, val))) {
-    LOG_WARN("fail to cast obj to int", K(ret));
   } else if (OB_FAIL(int_to_roman_str(val, buf, buf_len, pos))) {
-    LOG_WARN("fail to convert int to roman str", K(ret));
   }
   return ret;
 }
@@ -1813,9 +1751,7 @@ int ObNFMToChar::process_hex_format(const ObNFMObj &nfm_obj, const int64_t in_sc
   int64_t out_scale = 0;
   ObString origin_str;
   if (OB_FAIL(cast_obj_to_num_str(nfm_obj, in_scale, out_scale, origin_str))) {
-    LOG_WARN("fail to cast obj to num str", K(ret));
   } else if (OB_FAIL(decimal_to_hex(origin_str, buf, buf_len, pos))) {
-    LOG_WARN("fail to convert decimal to hex str", K(ret));
   }
   return ret;
 }
@@ -1845,14 +1781,11 @@ int ObNFMToChar::process_tm_format(const ObNFMObj &nfm_obj, const int64_t in_sca
       number::ObNumber num = nfm_obj.get_number();
       number::ObNumber nmb;
       if (OB_FAIL(nmb.from(num, allocator_))) {
-        LOG_WARN("copy number failed.", K(ret), K(num));
       } else if (OB_FAIL(nmb.format_v2(num_str_buf, alloc_size, num_str_len, out_scale, false))) {
-        LOG_WARN("fail to format", K(ret), K(nmb));
       }
     } else if (ObDecimalIntType == obj_type) {
       if (OB_FAIL(wide::to_string(nfm_obj.get_decimal_int(), nfm_obj.get_int_bytes(), in_scale,
                                   num_str_buf, alloc_size, num_str_len, false))) {
-        LOG_WARN("to_string failed", K(ret));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -1876,7 +1809,6 @@ int ObNFMToChar::process_tm_format(const ObNFMObj &nfm_obj, const int64_t in_sca
           }
         }
         if (OB_FAIL(num_str_to_sci(num_str, out_scale, buf, buf_len, pos, true))) {
-          LOG_WARN("failed to convert num to sci str", K(ret));
         }
       }
     }
@@ -1912,14 +1844,11 @@ int ObNFMToChar::process_tme_format(const ObNFMObj &nfm_obj, const int64_t in_sc
       number::ObNumber num = nfm_obj.get_number();
       number::ObNumber nmb;
       if (OB_FAIL(nmb.from(num, allocator_))) {
-        LOG_WARN("copy number failed.", K(ret), K(num));
       } else if (OB_FAIL(nmb.format_v2(num_str_buf, alloc_size, num_str_len, out_scale, false))) {
-        LOG_WARN("fail to format", K(ret), K(nmb));
       }
     } else if (ObDecimalIntType == obj_type) {
       if (OB_FAIL(wide::to_string(nfm_obj.get_decimal_int(), nfm_obj.get_int_bytes(), in_scale,
                                   num_str_buf, alloc_size, num_str_len, false))) {
-        LOG_WARN("to_string failed", K(ret));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -1939,9 +1868,7 @@ int ObNFMToChar::process_tme_format(const ObNFMObj &nfm_obj, const int64_t in_sc
       num_str.assign_ptr(num_str_buf, static_cast<int32_t>(num_str_len));
       LOG_DEBUG("process_tme_format", K(ret), K(num_str_buf), K(num_str_len));
       if (OB_FAIL(num_str_to_sci(num_str, out_scale, buf, buf_len, pos, true))) {
-        LOG_WARN("failed to convert num to sci str", K(ret));
       } else if (OB_FAIL(process_fillmode(buf, buf_len, pos))) {
-        LOG_WARN("fail to process fillmode", K(ret));
       }
     }
   }
@@ -1964,7 +1891,6 @@ int ObNFMToChar::process_sci_format(const common::ObString &origin_str, const in
     LOG_WARN("fail to alloc memory", K(ret));
   } else {
     if (OB_FAIL(num_str_to_sci(origin_str, scale, sci_str_buf, alloc_size, sci_str_len, false))) {
-      LOG_WARN("failed to convert num to sci str", K(ret));
     } else {
       num_str.assign_ptr(sci_str_buf, sci_str_len);
     }
@@ -2202,7 +2128,6 @@ int ObNFMToChar::process_output_fmt(const common::ObString &str,
       fmt_desc_.output_len_ = 0;
     } else {
       if (OB_FAIL(fill_str(buf, buf_len, 0, ' ', fmt_desc_.output_len_))) {
-        LOG_WARN("fail to fill str", K(ret));
       }
     }
     pos = fmt_desc_.output_len_;
@@ -2228,24 +2153,19 @@ int ObNFMToChar::process_fmt_conv(const ObSQLSessionInfo &session,
   bool is_overflow = false;
   int32_t integer_part_len = 0;
   if (OB_FAIL(parse_fmt(fmt_str, fmt_len))) {
-    LOG_WARN("fail to parse fmt model", K(ret), K(fmt_len));
   } else {
     // processing calculation conversion element
     if (ObNFMElem::has_type(NFM_RN_FLAG, fmt_desc_.elem_flag_)) {
       if (OB_FAIL(process_roman_format(in_meta, nfm_obj, res_buf, res_buf_len, offset))) {
-        LOG_WARN("fail to process roman fmt", K(ret));
       }
     } else if (ObNFMElem::has_type(NFM_HEX_FLAG, fmt_desc_.elem_flag_)) {
       if (OB_FAIL(process_hex_format(nfm_obj, in_meta.scale_, res_buf, res_buf_len, offset))) {
-        LOG_WARN("fail to process hex fmt", K(ret));
       }
     } else if (ObNFMElem::has_type(NFM_TM_FLAG, fmt_desc_.elem_flag_)) {
       if (OB_FAIL(process_tm_format(nfm_obj, in_meta.scale_, res_buf, res_buf_len, offset))) {
-        LOG_WARN("fail to process tm fmt", K(ret));
       }
     } else if (ObNFMElem::has_type(NFM_TME_FLAG, fmt_desc_.elem_flag_)) {
       if (OB_FAIL(process_tme_format(nfm_obj, in_meta.scale_, res_buf, res_buf_len, offset))) {
-        LOG_WARN("fail to process tme fmt", K(ret));
       }
     } else {
       // the number of digits after the decimal point means how many decimal places are reserved
@@ -2254,23 +2174,19 @@ int ObNFMToChar::process_fmt_conv(const ObSQLSessionInfo &session,
       const int32_t out_scale = fmt_desc_.post_num_count_;
       if (ObNFMElem::has_type(NFM_MULTI_FLAG, fmt_desc_.elem_flag_)) {
         if (OB_FAIL(process_mul_format(nfm_obj, in_meta, num_str))) {
-          LOG_WARN("fail to process mul format", K(ret));
         }
       } else {
         if (ObNFMElem::has_type(NFM_EEEE_FLAG, fmt_desc_.elem_flag_)) {
           if (OB_FAIL(cast_obj_to_num_str(nfm_obj, in_meta.scale_, -1, num_str))) {
-            LOG_WARN("fail to cast obj to num str", K(ret));
           }
         } else {
           if (OB_FAIL(cast_obj_to_num_str(nfm_obj, in_meta.scale_, out_scale, num_str))) {
-            LOG_WARN("fail to cast obj to num str", K(ret));
           }
         }
       }
       if (OB_SUCC(ret)) {
         if (ObNFMElem::has_type(NFM_EEEE_FLAG, fmt_desc_.elem_flag_)) {
           if (OB_FAIL(process_sci_format(num_str, out_scale, num_str))) {
-            LOG_WARN("fail to process sci fmt", K(ret));
           }
         }
         if (OB_SUCC(ret)) {
@@ -2278,11 +2194,9 @@ int ObNFMToChar::process_fmt_conv(const ObSQLSessionInfo &session,
           // fill with '#'
           // eg: to_char(123.12, '99.99') --> ######
           if (OB_FAIL(get_integer_part_len(num_str, integer_part_len))) {
-            LOG_WARN("fail to get num str pre num count", K(ret));
           } else if (!is_zero(num_str) && integer_part_len > fmt_desc_.pre_num_count_) {
             is_overflow = true;
             if (OB_FAIL(fill_str(res_buf, res_buf_len, 0, '#', fmt_desc_.output_len_))) {
-              LOG_WARN("fail to fill str", K(ret));
             } else {
               offset = fmt_desc_.output_len_;
             }
@@ -2322,7 +2236,6 @@ int ObNFMToChar::calc_result_length(const common::ObObj &obj, int32_t &length)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid input format. need varchar.", K(ret), K(obj));
   } else if (OB_FAIL(parse_fmt(fmt_str.ptr(), fmt_str.length(), need_check))) {
-    LOG_WARN("fail to parse fmt model", K(ret), K(fmt_str));
   } else {
     length = fmt_desc_.output_len_;
   }
@@ -2353,10 +2266,8 @@ int ObNFMToChar::convert_num_to_fmt_str(const common::ObObjMeta &obj_meta,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc memory", K(ret));
   } else if (OB_FAIL(conv_num_to_nfm_obj(obj_meta, obj, nfm_obj, alloc))) {
-    LOG_WARN("fail to conv obj to nfm obj", K(ret));
   } else if (OB_FAIL(process_fmt_conv(*session, fmt_str, fmt_len, in_meta, nfm_obj,
                                       res_buf, res_buf_len, offset))) {
-    LOG_WARN("fail to process fmt conversion", K(ret), K(fmt_len));
   } else {
     res_str.assign_ptr(res_buf, offset);
   }
@@ -2399,14 +2310,11 @@ int ObNFMToNumber::process_hex_format(const common::ObString &in_str,
     ret = OB_ERR_CAST_VARCHAR_TO_NUMBER;
     LOG_WARN("incompatible with other formats", K(ret), K(in_str));
   } else if (OB_FAIL(check_hex_str_valid(str, str_len, str_pos))) {
-    LOG_WARN("invalid hex character", K(ret), K(in_str));
   } else if (OB_FAIL(build_hex_number(str, str_len, str_pos, nums))) {
-    LOG_WARN("fail to build hex number", K(ret), K(in_str));
   } else {
     int32_t hex_num_size = nums.count();
     if (1 == hex_num_size) {
       if (OB_FAIL(res_num.from(nums.at(0), allocator))) {
-        LOG_WARN("failed to cast obj as number", K(ret));
       }
     } else {
       const uint64_t base = 16;
@@ -2415,19 +2323,15 @@ int ObNFMToNumber::process_hex_format(const common::ObString &in_str,
       number::ObNumber power_num;
       number::ObNumber res;
       if (OB_FAIL(base_num.from(base, allocator))) {
-        LOG_WARN("fail to cast uint64 to number", K(ret), K(base));
       } else if (OB_FAIL(base_num.power(exponent, power_num, allocator))) {
-        LOG_WARN("power calc failed", K(ret));
       } else {
         for (int32_t i = 0; OB_SUCC(ret) && i < hex_num_size; i++) {
           uint64_t val = nums.at(i);
           number::ObNumber num;
           if (OB_FAIL(num.from(val, allocator))) {
-            LOG_WARN("fail to cast uint64 to number", K(ret), K(val));
           } else {
             for (int32_t j = i; OB_SUCC(ret) && j > 0; j--) {
               if (OB_FAIL(num.mul_v2(power_num, num, allocator))) {
-                LOG_WARN("fail to mul number", K(ret));
               }
             }
             if (OB_SUCC(ret) && OB_FAIL(res.add(num, res, allocator))) {
@@ -2825,7 +2729,6 @@ int ObNFMToNumber::process_fmt_conv(const ObSQLSessionInfo &session,
   ObScale res_scale = -1;
   ObString num_str;
   if (OB_FAIL(parse_fmt(in_fmt_str.ptr(), in_fmt_str.length()))) {
-    LOG_WARN("fail to parse format model", K(ret), K(in_fmt_str));
   } else if (ObNFMElem::has_type(NFM_RN_FLAG, fmt_desc_.elem_flag_)
         || ObNFMElem::has_type(NFM_TM_FLAG, fmt_desc_.elem_flag_)
         || ObNFMElem::has_type(NFM_TME_FLAG, fmt_desc_.elem_flag_)
@@ -2833,10 +2736,8 @@ int ObNFMToNumber::process_fmt_conv(const ObSQLSessionInfo &session,
       ret = OB_ERR_CAST_VARCHAR_TO_NUMBER;
       LOG_WARN("not support elem type", K(ret));
   } else if (OB_FAIL(get_integer_part_len(in_str, integer_part_len))) {
-    LOG_WARN("fail to get integer part len", K(ret));
   } else if (ObNFMElem::has_type(NFM_HEX_FLAG, fmt_desc_.elem_flag_)) {
     if (OB_FAIL(process_hex_format(in_str, res_num, alloc))) {
-      LOG_WARN("fail to process hex format", K(ret));
     }
   } else {
     // here are two cases, return invalid number
@@ -2862,17 +2763,14 @@ int ObNFMToNumber::process_fmt_conv(const ObSQLSessionInfo &session,
                && OB_FAIL(get_iso_grouping(session))) {
       LOG_WARN("fail to get iso grouping", K(ret));
     } else if (OB_FAIL(process_output_fmt(in_str, integer_part_len, num_str))) {
-      LOG_WARN("fail to process output fmt", K(ret));
     } else {
       if (ObNFMElem::has_type(NFM_EEEE_FLAG, fmt_desc_.elem_flag_)) {
         if (OB_FAIL(res_num.from_sci_opt(num_str.ptr(), num_str.length(), alloc,
                                          &res_precision, &res_scale))) {
-          LOG_WARN("fail to calc function to_number with", K(ret), K(num_str));
         }
       } else {
         if (OB_FAIL(res_num.from(num_str.ptr(), num_str.length(), alloc, NULL,
                                  &res_precision, &res_scale))) {
-          LOG_WARN("fail to calc function to_number with", K(ret), K(num_str));
         }
       }
     }

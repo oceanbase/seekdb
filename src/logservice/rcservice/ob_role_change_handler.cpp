@@ -109,8 +109,6 @@ int ObRoleChangeHandler::switch_to_leader(RCDiagnoseInfo &diagnose_info)
         CLOG_LOG(WARN, "TIMESTAMP_LOG_BASE_TYPE handler is NULL", K(i));
       }
     } else if (OB_FAIL(handler->switch_to_leader())) {
-      CLOG_LOG(WARN, "switch_to_leader failed", K(ret), KP(handler), K(i),
-          "cursor", i, "name", has_defined_to_string ? sub_role_change_handler_str : "hasn't define to string");
     } else {
       CLOG_LOG(INFO, "follower to leader, current role change handler is",
           "cursor", i, "name", has_defined_to_string ? sub_role_change_handler_str : "hasn't define to string");
@@ -171,7 +169,6 @@ int ObRoleChangeHandler::resume_to_leader()
   int ret = OB_SUCCESS;
   int cursor = ObLogBaseType::MAX_LOG_BASE_TYPE;
   if (OB_FAIL(resume_leader_when_switch_failure_(cursor))) {
-    CLOG_LOG(WARN, "resume_leader_when_switch_failure_ failed");
   } else {
     CLOG_LOG(INFO, "resume_to_leader success");
   }
@@ -193,8 +190,6 @@ int ObRoleChangeHandler::resume_leader_when_switch_failure_(const int64_t cursor
     if (NULL == handler){
       CLOG_LOG(INFO, "not register into role change service", K(ret), K(i));
     } else if (OB_FAIL(handler->resume_leader())) {
-      CLOG_LOG(WARN, "resume_leader failed", K(ret), K(i), KP(handler),
-          "cursor", i, "name", has_defined_to_string ? sub_role_change_handler_str : "hasn't define to string");
     } else {
       CLOG_LOG(INFO, "resume_leader success", K(ret), K(i), KP(handler),
           "cursor", i, "name", has_defined_to_string ? sub_role_change_handler_str : "hasn't define to string");

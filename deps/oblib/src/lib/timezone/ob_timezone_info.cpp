@@ -39041,7 +39041,6 @@ void ObTZNameKey::operator=(const ObTZNameKey &key)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(assign(key))) {
-    LOG_ERROR("fail to assign ObTZNameKey", K(key), K(ret));
   }
 }
 
@@ -39049,7 +39048,6 @@ ObTZNameKey::ObTZNameKey(const ObTZNameKey &key)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(assign(key))) {
-    LOG_ERROR("fail to assign ObTZNameKey", K(key), K(ret));
   }
 }
 
@@ -39078,7 +39076,6 @@ int ObTimeZoneInfo::set_timezone(const ObString &str)
   int ret = OB_SUCCESS;
   int ret_more = OB_SUCCESS;
   if (OB_FAIL(ObTimeConverter::str_to_offset(str, offset_, ret_more, true))) {
-    LOG_WARN("invalid time zone offset", K(ret), K(str));
   } else {
     tz_id_ = 0;
   }
@@ -39245,9 +39242,7 @@ int ObTZRevertTypeInfo::assign(const ObTZRevertTypeInfo &src)
   if (OB_LIKELY(this != &src)) {
     this->reset();
     if (OB_FAIL(ObTZTransitionTypeInfo::assign(src))) {
-      LOG_WARN("fail to assign tran type info", K(ret));
     } else if (OB_FAIL(extra_info_.assign(src.extra_info_))) {
-      LOG_WARN("fail to assign tran extra info", K(ret));
     } else {
       type_class_ = src.type_class_;
     }
@@ -39324,11 +39319,8 @@ int ObTimeZoneInfoPos::assign(const ObTimeZoneInfoPos &src)
     tz_id_ = src.tz_id_;
     curr_idx_ = src.get_curr_idx();
     if (OB_FAIL(default_type_.assign(src.default_type_))) {
-      LOG_WARN("fail to assign default type", K(ret));
     } else if (OB_FAIL(tz_tran_types_[get_curr_idx() % 2].assign(src.get_tz_tran_types()))) {
-      LOG_WARN("fail to assign tz_tran_types", K(ret));
     } else if (OB_FAIL(tz_revt_types_[get_curr_idx() % 2].assign(src.get_tz_revt_types()))) {
-      LOG_WARN("fail to assign tz_revt_types", K(ret));
     } else {
       MEMCPY(tz_name_, src.tz_name_, OB_MAX_TZ_NAME_LEN);
     }
@@ -39340,7 +39332,6 @@ int ObTimeZoneInfoPos::add_tran_type_info(const ObTZTransitionTypeInfo &type_inf
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tz_tran_types_[get_curr_idx() % 2].push_back(type_info))) {
-    LOG_WARN("fail to push back type info", K(type_info), K(ret));
   }
   return ret;
 }
@@ -39349,7 +39340,6 @@ int ObTimeZoneInfoPos::set_default_tran_type(const ObTZTransitionTypeInfo &tran_
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(default_type_.assign(tran_type))) {
-    LOG_WARN("fail to assign tran type", K(tran_type), K(ret));
   }
   return ret;
 }
@@ -39468,7 +39458,6 @@ int ObTimeZoneInfoPos::get_timezone_offset(int64_t value, int32_t &offset_sec,
     tz_abbr_str.assign_ptr(default_type_.info_.abbr_, static_cast<int32_t>(strlen(default_type_.info_.abbr_)));
     tran_type_id = default_type_.info_.tran_type_id_;
   } else if (OB_FAIL(find_time_range(value, tz_tran_types, type_idx))) {
-    LOG_WARN("fail to find time range", K(ret));
   } else if (OB_UNLIKELY(type_idx < 0 || type_idx >= tz_tran_types.count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected type idx", K(type_idx), K(tz_tran_types), K(ret));
@@ -39518,7 +39507,6 @@ int ObTimeZoneInfoPos::get_timezone_offset(const int32_t tran_type_id,
     offset_sec = default_type_.info_.offset_sec_;
     tz_abbr_str.assign_ptr(default_type_.info_.abbr_, static_cast<int32_t>(strlen(default_type_.info_.abbr_)));
   } else if (OB_FAIL(find_offset_range(tran_type_id, tz_tran_types, type_idx))) {
-    LOG_WARN("fail to find time range", K(ret));
   } else if (OB_UNLIKELY(type_idx < 0 || type_idx >= tz_tran_types.count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected type idx", K(type_idx), K(tz_tran_types), K(ret));
@@ -39542,7 +39530,6 @@ int ObTimeZoneInfoPos::get_timezone_sub_offset(int64_t value, const ObString &tz
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tz info is invalid", K(ret));
   } else if (OB_FAIL(find_revt_time_range(value, tz_revt_types, type_idx))) {
-    LOG_WARN("fail to find time range", K(ret));
   } else if (OB_UNLIKELY(type_idx < 0 || type_idx >= tz_revt_types.count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected type idx", K(type_idx), K(tz_revt_types), K(ret));
@@ -39598,9 +39585,7 @@ int ObTimeZoneInfoPos::calc_revt_types()
     revt_type_info.type_class_ = ObTZRevertTypeInfo::NORMAL;
     revt_type_info.lower_time_ = DATETIME_MIN_VAL;
     if (OB_FAIL(revt_type_info.assign_normal(default_type_))) {
-      LOG_WARN("fail to assign transition type info", K(ret));
     } else if (OB_FAIL(tz_revt_types.push_back(revt_type_info))) {
-      LOG_WARN("fail to push back revert type info", K(revt_type_info), K(ret));
     }
 
     for (int64_t i = 0; OB_SUCC(ret) && i < tz_tran_types.count(); ++i) {
@@ -39611,16 +39596,13 @@ int ObTimeZoneInfoPos::calc_revt_types()
         revt_type_info.type_class_ = ObTZRevertTypeInfo::OVERLAP;//no need reset revt_type_info, reuse the normal_type_info
         revt_type_info.lower_time_ = cur_lower_time;
         if (OB_FAIL(revt_type_info.assign_extra(cur_tran_type_info))) {
-          LOG_WARN("fail to assign extra type info", K(cur_tran_type_info), K(ret));
         } else if (OB_FAIL(tz_revt_types.push_back(revt_type_info))) {
-          LOG_WARN("fail to push back revert type info", K(revt_type_info), K(ret));
         }
       } else if (last_high_time + 1 < cur_lower_time) {//add gap revert_type_info
         revt_type_info.reset();// type_info should be empty
         revt_type_info.type_class_ = ObTZRevertTypeInfo::GAP;
         revt_type_info.lower_time_ = last_high_time + 1;
         if (OB_FAIL(tz_revt_types.push_back(revt_type_info))) {
-          LOG_WARN("fail to push back revert type info", K(revt_type_info), K(ret));
         }
       } else {/*do nothing*/}
 
@@ -39631,9 +39613,7 @@ int ObTimeZoneInfoPos::calc_revt_types()
         revt_type_info.type_class_ = ObTZRevertTypeInfo::NORMAL;
         revt_type_info.lower_time_ = is_overlap ? last_high_time + 1 : cur_lower_time;
         if (OB_FAIL(revt_type_info.assign_normal(cur_tran_type_info))) {
-          LOG_WARN("fail to assign normal type info", K(ret));
         } else if (OB_FAIL(tz_revt_types.push_back(revt_type_info))) {
-          LOG_WARN("fail to push back revert type info", K(revt_type_info), K(ret));
         }
       }
     }//for
@@ -39780,9 +39760,7 @@ int ObTZInfoMap::init(const lib::ObMemAttr &attr)
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(id_map_buf_.init(attr))) {
-    LOG_WARN("fail to init id map", K(ret));
   } else if (OB_FAIL(name_map_buf_.init(attr))) {
-    LOG_WARN("fail to init name map", K(ret));
   } else {
     inited_ = true;
   }
@@ -39806,9 +39784,7 @@ int ObTZInfoMap::get_tz_info_by_id(const int64_t tz_id, ObTimeZoneInfoPos &tz_in
   int ret = OB_SUCCESS;
   ObTimeZoneInfoPos *tmp_tz_info = NULL;
   if (OB_FAIL(id_map_->get(tz_id, tmp_tz_info))) {
-    LOG_WARN("fail to get tz_info_by_id, should not happened", K(tz_id), K(ret));
   } else if (OB_FAIL(tz_info_by_id.assign(*tmp_tz_info))) {
-    LOG_WARN("assign time zone info pos failed", K(ret));
   } else {
     LOG_DEBUG("succ to get tz_info_by_id", K(tz_id), KPC(tmp_tz_info), K(ret));
   }
@@ -39823,9 +39799,7 @@ int ObTZInfoMap::get_tz_info_by_name(const ObString &tz_name, ObTimeZoneInfoPos 
   int ret = OB_SUCCESS;
   ObTZNameIDInfo *name_id_info = NULL;
   if (OB_FAIL(name_map_->get(ObTZNameKey(tz_name), name_id_info))) {
-    LOG_WARN("fail to get get_tz_info_by_name", K(tz_name), K(ret));
   } else if (OB_FAIL(get_tz_info_by_id(name_id_info->tz_id_, tz_info_by_name))) {
-    LOG_WARN("fail to get get_tz_info_by_name", KPC(name_id_info), K(ret));
   } else {
     LOG_DEBUG("succ to get get_tz_info_by_name", K(tz_name), KPC(name_id_info), K(tz_info_by_name), K(ret));
   }
@@ -39850,7 +39824,6 @@ int ObTZInfoMap::get_tz_info_by_id(const int64_t tz_id, ObTimeZoneInfoPos *&tz_i
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tz_info_by_id should be null here", K(ret));
   } else if (OB_FAIL(id_map_->get(tz_id, tz_info_by_id))) {
-    LOG_WARN("fail to get tz_info_by_id, should not happened", K(tz_id), K(ret));
   }
   return ret;
 }
@@ -39863,9 +39836,7 @@ int ObTZInfoMap::get_tz_info_by_name(const ObString &tz_name, ObTimeZoneInfoPos 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tz_info_by_name should be null here", K(ret));
   } else if (OB_FAIL(name_map_->get(ObTZNameKey(tz_name), name_id_info))) {
-    LOG_WARN("fail to get get_tz_info_by_name", K(tz_name), K(ret));
   } else if (OB_FAIL(get_tz_info_by_id(name_id_info->tz_id_, tz_info_by_name))) {
-    LOG_WARN("fail to get get_tz_info_by_name", KPC(name_id_info), K(ret));
   }
   if (OB_ENTRY_NOT_EXIST == ret) {
     ret = OB_ERR_UNKNOWN_TIME_ZONE;
@@ -39888,11 +39859,8 @@ int ObTZInfoMap::get_offset_by_couple_tz_name(int64_t timestamp_data, const comm
     ret = OB_HASH_NOT_EXIST;
     LOG_DEBUG("offset map is empty", K(ret),K(offset_map_->size()), K(offset_map_), K(&offset_map_buf_), K(tz_str_s), K(tz_str_d), K(offset_info));
   } else if (OB_FAIL(name_map_->get(ObTZNameKey(tz_str_s), name_id_info_s))) {
-    LOG_WARN("fail to get get_tz_info_by_name", K(tz_str_s), K(ret));
   } else if (OB_FAIL(name_map_->get(ObTZNameKey(tz_str_d), name_id_info_d))) {
-    LOG_WARN("fail to get get_tz_info_by_name", K(tz_str_s), K(ret));
   } else if (OB_FAIL(offset_map_->get_refactored(ObTZOffsetKey(name_id_info_s->tz_id_, name_id_info_d->tz_id_), offset_info))) {
-    LOG_DEBUG("fail to get offset", KPC(name_id_info_s), KPC(name_id_info_d), K(ret));
   } else {
     offset = offset_info.offset_;
   }
@@ -39964,7 +39932,6 @@ int ObTimeZoneInfoWrap::init_time_zone(const ObString &str_val, const int64_t cu
     tz_name = tz_name.trim();
 
     if (OB_FAIL(tz_info_map.get_tz_info_by_name(tz_name, tz_info_pos_))) {
-      LOG_WARN("fail to get time zone info", K(tz_name), K(ret));
     }
 
     if (OB_ENTRY_NOT_EXIST == ret) {
@@ -40040,9 +40007,7 @@ int ObTimeZoneInfoWrap::deep_copy(const ObTimeZoneInfoWrap &tz_inf_wrap)
   if (this != &tz_inf_wrap) {
     reset();
     if (OB_FAIL(tz_info_pos_.assign(tz_inf_wrap.tz_info_pos_))) {
-      LOG_WARN("fail to assign tz_info_pos_", K(tz_inf_wrap.tz_info_pos_), K(ret));
     } else if (OB_FAIL(tz_info_offset_.assign(tz_inf_wrap.tz_info_offset_))) {
-      LOG_WARN("fail to assign tz_info_", K(tz_inf_wrap.tz_info_offset_), K(ret));
     } else {
       set_tz_info_map(tz_inf_wrap.tz_info_offset_.get_tz_info_map());
       class_ = tz_inf_wrap.class_;

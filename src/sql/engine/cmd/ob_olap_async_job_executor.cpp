@@ -35,9 +35,7 @@ int ObOLAPAsyncCancelJobExecutor::execute(ObExecContext &ctx, ObOLAPAsyncCancelJ
   dbms_scheduler::ObDBMSSchedJobInfo job_info;
   schema::ObSchemaGetterGuard schema_guard;
   if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get schema guard", K(ret));
   } else if(OB_FAIL(schema_guard.get_user_info(user_id, user_info))) {
-    LOG_WARN("fail to get user id", KR(ret), K(user_id));
   } else if (OB_ISNULL(user_info)) {
     ret = OB_USER_NOT_EXIST;
     LOG_WARN("user not exist", KR(ret), K(user_id));
@@ -47,12 +45,10 @@ int ObOLAPAsyncCancelJobExecutor::execute(ObExecContext &ctx, ObOLAPAsyncCancelJ
         stmt.get_job_name(),
         allocator,
         job_info))) {
-    LOG_WARN("get job info failed", KR(ret), K(1UL), K(stmt.get_job_name()));
   } else if (!job_info.is_olap_async_job()) { 
     ret = OB_ENTRY_NOT_EXIST;
     LOG_WARN("cancel not olap async job", KR(ret), K(1UL), K(job_info));
   } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::check_dbms_sched_job_priv(user_info, job_info))) {
-    LOG_WARN("check user priv failed", KR(ret), K(1UL), K(job_info));
   } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::stop_dbms_sched_job(*GCTX.sql_proxy_, job_info, true /* delete after stop */))) {
     if (OB_ENTRY_NOT_EXIST == ret) {//current job is not running, no need to report an error}
       ret = OB_SUCCESS;

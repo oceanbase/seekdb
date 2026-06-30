@@ -168,7 +168,6 @@ int Row<ObDatum>::compare_with_null(const Row<ObDatum> &other,
       } else {
         int cmp_ret = 0;
         if (OB_FAIL(((DatumCmpFunc)cmp_funcs[i])(elems_[i], other.elems_[i], cmp_ret))) {
-          LOG_WARN("failed to compare", K(ret));
         } else if (0 != cmp_ret) {
           exist_ret = ObExprInHashMap<ObDatum>::HASH_CMP_FALSE;
         } else {
@@ -207,7 +206,6 @@ int RowKey<T>::hash(uint64_t &hash_val, uint64_t seed) const
     hash_val = hash_val_;
   } else {
     if (OB_FAIL(row_.hash_key(meta_->hash_funcs_, meta_->idx_, seed, hash_val))) {
-      LOG_WARN("failed to hash key", K(ret));
     }
   }
  return ret;
@@ -230,7 +228,6 @@ int ObExprInHashMap<T>::set_refactored(const Row<T> &row)
       if (OB_SUCC(ret)) {
         
         if (OB_FAIL(arr_ptr->push_back(row))) {
-          LOG_WARN("failed to push row", K(ret));
         }
       }
     }
@@ -244,7 +241,6 @@ int ObExprInHashMap<T>::set_refactored(const Row<T> &row)
                                                   meta_.cmp_funcs_,
                                                   meta_.row_dimension_,
                                                   exist))) {
-        LOG_WARN("compare with null failed", K(ret));
       }
     }
     if (OB_SUCC(ret) && ObExprInHashMap<T>::HASH_CMP_TRUE != exist) {
@@ -271,7 +267,6 @@ int ObExprInHashMap<T>::exist_refactored(const Row<T> &row, int &exist_ret)
                                                   meta_.cmp_funcs_,
                                                   meta_.row_dimension_,
                                                   exist))) {
-        LOG_WARN("compare with null failed", K(ret));
       } else if (ObExprInHashMap<T>::HASH_CMP_UNKNOWN == exist
                  || ObExprInHashMap<T>::HASH_CMP_TRUE == exist) {
         exist_ret = exist;
@@ -405,7 +400,6 @@ int ObExprInOrNotIn::ObExprInCtx::init_static_engine_hashset_vecs(int64_t param_
       static_engine_hashset_vecs_[i].set_meta_idx(i);
       static_engine_hashset_vecs_[i].set_meta_dimension(row_dimension);
       if (OB_FAIL(static_engine_hashset_vecs_[i].create(param_num))) {
-        LOG_WARN("create static_engine_hashset_vecs failed", K(ret), K(i));
       }
     }
   }
@@ -417,7 +411,6 @@ int ObExprInOrNotIn::ObExprInCtx::add_to_static_engine_hashset(const Row<common:
 {
   int ret = static_engine_hashset_.set_refactored(row);
   if (OB_FAIL(ret)) {
-    LOG_WARN("failed to add to hashset", K(ret));
   }
   return ret;
 }
@@ -432,7 +425,6 @@ add_to_static_engine_hashset_vecs(const Row<common::ObDatum> &row, const int idx
     ret = static_engine_hashset_vecs_[idx].set_refactored(row);
   }
   if (OB_FAIL(ret)) {
-    LOG_WARN("failed to add to hashset_vecs", K(ret), K(idx));
   }
   return ret;
 }
@@ -458,7 +450,6 @@ exist_in_static_engine_hashset_vecs(const Row<ObDatum> &row,
   if (idx >= (1 << row_dimension_)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(static_engine_hashset_vecs_[idx].exist_refactored(row, exist_ret))) {
-    LOG_WARN("failed to find in hash map", K(ret));
   }
   return ret;
 }
@@ -485,7 +476,6 @@ init_hashset_vecs_all_null(const int64_t row_dimension, ObExecContext *exec_ctx)
   int ret = OB_SUCCESS;
   hashset_vecs_all_null_.set_allocator(&(exec_ctx->get_allocator()));
   if (OB_FAIL(hashset_vecs_all_null_.init(1 << row_dimension))) {
-    LOG_WARN("failed to init fixed array", K(ret));
   } else {
     for (int i = 0; OB_SUCC(ret) && i < (1 << row_dimension); ++i) {
       ret = hashset_vecs_all_null_.push_back(false);
@@ -664,13 +654,10 @@ int ObExprInOrNotIn::eval_pl_udt_in(const ObExpr &expr,
       params.reuse();
 
       if (OB_FAIL(list->args_[i]->eval(ctx, curr))) {
-        LOG_WARN("failed to eval IN list expr", K(ret), K(i), KPC(list));
       } else if (OB_ISNULL(curr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected NULL datum", K(ret), K(i), KPC(list));
       } else if (OB_FAIL(curr->to_obj(rhs, list->args_[i]->obj_meta_))) {
-        LOG_WARN("failed to convert IN list datum to obj",
-                 K(ret), K(i), KPC(list), KPC(curr), K(rhs));
       } else if (OB_ISNULL(right = reinterpret_cast<pl::ObPLComposite*>(rhs.get_ext()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected NULL udt", K(ret), K(i), KPC(list), K(rhs));
@@ -681,11 +668,8 @@ int ObExprInOrNotIn::eval_pl_udt_in(const ObExpr &expr,
         LOG_USER_ERROR(OB_ERR_CALL_WRONG_ARG, err_arg.length(), err_arg.ptr());
         LOG_WARN("failed to eval_pl_udt_in", K(ret), KPC(left), KPC(right));
       } else if (OB_FAIL(params.push_back(lhs))) {
-        LOG_WARN("failed to push back lhs", K(ret), K(lhs), K(params));
       } else if (OB_FAIL(params.push_back(rhs))) {
-        LOG_WARN("failed to push back rhs", K(ret), K(rhs), K(params));
       } else if (OB_FAIL(params.push_back(result))) {
-        LOG_WARN("failed to push back result", K(ret), K(result), K(params));
       } else {
         params.at(0).set_udt_id(left->get_id());
         params.at(0).set_param_meta();
@@ -704,8 +688,6 @@ int ObExprInOrNotIn::eval_pl_udt_in(const ObExpr &expr,
                                                                             CMP_PL,
                                                                             params,
                                                                             out_args))) {
-          LOG_WARN("failed to execute PS anonymous bolck",
-                   K(ret), K(i), K(lhs), K(rhs), K(params));
         } else if (out_args.num_members() != 1 || !out_args.has_member(2)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected out args",
@@ -713,7 +695,6 @@ int ObExprInOrNotIn::eval_pl_udt_in(const ObExpr &expr,
         } else if (params.at(2).is_null()) {
           has_null = true;
         } else if (OB_FAIL(params.at(2).get_bool(is_equal))) {
-          LOG_WARN("failed to get bool result from out arg", K(ret), K(i), K(params));
         } else if (is_equal) {
           break;
         } else {
@@ -872,27 +853,19 @@ int ObExprInOrNotIn::cg_expr_with_row(ObExprCGCtx &expr_cg_ctx,
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid null args", K(ret));
       } else if (OB_FAIL(left_types.push_back(LEFT_ROW_ELE(i)->datum_meta_.type_))) {
-        LOG_WARN("failed to push back element", K(ret));
       } else if (OB_FAIL(left_cs_arr.push_back(
                            LEFT_ROW_ELE(i)->datum_meta_.cs_type_))) {
-        LOG_WARN("failed to push back element", K(ret));
       } else if (OB_FAIL(has_lob_headers.push_back(
                          LEFT_ROW_ELE(i)->obj_meta_.has_lob_header()))) {
-        LOG_WARN("failed to push back element", K(ret));
       } else if (OB_FAIL(left_scales.push_back(LEFT_ROW_ELE(i)->datum_meta_.scale_))) {
-        LOG_WARN("failed to push back element", K(ret));
       } else if (OB_FAIL(left_precs.push_back(LEFT_ROW_ELE(i)->datum_meta_.precision_))) {
-        LOG_WARN("failed to push back element", K(ret));
       } else { /* do nothing */ }
     } // end for
 
     for (int i = 0; OB_SUCC(ret) && i < RIGHT_ROW(0)->arg_cnt_; i++) {
       if (OB_FAIL(right_types.push_back(RIGHT_ROW_ELE(0, i)->datum_meta_.type_))) {
-        LOG_WARN("failed to push back element", K(ret));
       } else if (OB_FAIL(right_scales.push_back(RIGHT_ROW_ELE(0, i)->datum_meta_.scale_))) {
-        LOG_WARN("failed to push back element", K(ret));
       } else if (OB_FAIL(rigth_precs.push_back(RIGHT_ROW_ELE(0, i)->datum_meta_.precision_))) {
-        LOG_WARN("failed to push back element", K(ret));
       } else {
         has_lob_headers.at(i) = has_lob_headers.at(i) || (RIGHT_ROW_ELE(0, i)->obj_meta_.has_lob_header());
       }
@@ -1018,7 +991,6 @@ int ObExprInOrNotIn::eval_in_without_row_fallback(const ObExpr &expr,
   bool cnt_null = false;
   bool is_equal = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, left))) {
-    LOG_WARN("failed to eval left", K(ret));
   } else if (left->is_null()) {
     cnt_null = true;
   } else {
@@ -1029,12 +1001,10 @@ int ObExprInOrNotIn::eval_in_without_row_fallback(const ObExpr &expr,
         LOG_WARN("invalid null arg", K(ret), K(expr.args_[1]->args_[i]), K(i));
       }
       else if (OB_FAIL(expr.args_[1]->args_[i]->eval(ctx, right))) {
-        LOG_WARN("failed to eval right datum", K(ret));
       } else if (right->is_null()) {
         cnt_null = true;
       } else {
         if (OB_FAIL(((DatumCmpFunc)expr.inner_functions_[0])(*right, *left, cmp_ret))) {
-          LOG_WARN("failed to compare", K(ret));
         } else if (0 == cmp_ret) {
           is_equal = true;
         } else {
@@ -1064,7 +1034,6 @@ int ObExprInOrNotIn::eval_batch_in_without_row_fallback(const ObExpr &expr,
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     ObDatum* input_left;
     if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-      LOG_WARN("failed to eval batch param values", K(ret));
     } else {
       input_left = expr.args_[0]->locate_batch_datums(ctx);
       ObDatum *right = nullptr;
@@ -1085,7 +1054,6 @@ int ObExprInOrNotIn::eval_batch_in_without_row_fallback(const ObExpr &expr,
       //eval all right params
       for (int64_t j = 0; OB_SUCC(ret) && j < expr.inner_func_cnt_; ++j) {
         if (OB_FAIL(expr.args_[1]->args_[j]->eval(ctx, right_store[j]))) {
-          LOG_WARN("failed to eval right datum", K(ret), K(j));
         } else {
           check_right_can_cmp_mem(*right_store[j], expr.args_[1]->args_[j]->obj_meta_, 
                                   can_cmp_mem, cnt_null);
@@ -1135,7 +1103,6 @@ int ObExprInOrNotIn::eval_batch_in_without_row_fallback(const ObExpr &expr,
               right = right_store[j];
               if (!left->is_null() && !right->is_null()) {
                 if (OB_FAIL(((DatumCmpFunc)expr.inner_functions_[0])(*right, *left, cmp_ret))) {
-                  LOG_WARN("failed to compare", K(ret));
                 } else {
                   is_equal |= !(cmp_ret);
                 }
@@ -1207,7 +1174,6 @@ int ObExprInOrNotIn::eval_vector_in_without_row_fallback(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("failed to eval vector param values", K(ret));
   } else {
     VectorFormat res_format = expr.get_format(ctx);
     VectorFormat left_format = expr.args_[0]->get_format(ctx);
@@ -1266,7 +1232,6 @@ int ObExprInOrNotIn::inner_eval_vector_in_without_row_fallback(const ObExpr &exp
       // meaning they are single-line data,
       // so we use the eval interface.
       if (OB_FAIL(expr.args_[1]->args_[i]->eval(ctx, right_store[i]))) {
-        LOG_WARN("failed to eval right datum", K(ret), K(i));
       } else {
         check_right_can_cmp_mem(*right_store[i], expr.args_[1]->args_[i]->obj_meta_, 
                                 can_cmp_mem, right_has_null);
@@ -1344,8 +1309,6 @@ int ObExprInOrNotIn::inner_eval_vector_in_without_row_fallback(const ObExpr &exp
                                       expr.args_[1]->args_[i]->obj_meta_,
                                       (const void *)l_payload, l_len,
                                       (const void *)right->ptr_, right->len_, cmp_ret))) {
-                  LOG_WARN("row_cmp_func failed!", K(ret), K(expr.args_[0]->obj_meta_),
-                                              K(expr.args_[1]->args_[i]->obj_meta_));
                 } else if (cmp_ret == 0) {
                   left_hit = true;
                   break;
@@ -1358,8 +1321,6 @@ int ObExprInOrNotIn::inner_eval_vector_in_without_row_fallback(const ObExpr &exp
                                       expr.args_[1]->args_[i]->obj_meta_,
                                       (const void *)l_payload, l_len,
                                       (const void *)right->ptr_, right->len_, cmp_ret))) {
-                  LOG_WARN("row_cmp_func failed!", K(ret), K(expr.args_[0]->obj_meta_),
-                                              K(expr.args_[1]->args_[i]->obj_meta_));
                 } else if (cmp_ret == 0) {
                   left_hit = true;
                   break;
@@ -1409,17 +1370,12 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
       OB_SUCC(ret) &&
       NULL == (in_ctx = static_cast<ObExprInCtx *> (exec_ctx->get_expr_op_ctx(in_id)))) {
     if (OB_FAIL(exec_ctx->create_expr_op_ctx(in_id, in_ctx))) {
-      LOG_WARN("failed to create operator ctx", K(ret));
     } else if (OB_FAIL(in_ctx->init_static_engine_hashset_vecs(right_param_num,
                                                                row_dimension,
-                                                               exec_ctx))) { //hashset set
-      LOG_WARN("failed to init hashset", K(ret));
+                                                               exec_ctx))) {
     } else if (OB_FAIL(in_ctx->init_hashset_vecs_all_null(row_dimension, exec_ctx))) {
-      LOG_WARN("failed to init hashset_vecs_all_null", K(ret));
     } else if (OB_FAIL(in_ctx->init_right_datums(right_param_num, row_dimension, exec_ctx))) {
-      LOG_WARN("failed to init right datums", K(ret));
     } else if (OB_FAIL(in_ctx->init_cmp_funcs(expr.inner_func_cnt_, exec_ctx))) {
-      LOG_WARN("failed to init cmp funcs", K(ret));
     } else {
       for (int i = 0; OB_SUCC(ret) && i < right_param_num; ++i) {
         if (OB_ISNULL(RIGHT_ROW(i))) {
@@ -1448,7 +1404,6 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
                 //do nothing
               }
               if (OB_FAIL(in_ctx->set_right_datum(i, j, right_param_num, *right))) {
-                LOG_WARN("failed to load right", K(ret), K(i), K(j));
               } else {
                 if (OB_ISNULL(in_ctx->hash_func_buff_)) {
                   int func_buf_size = sizeof(void *) * row_dimension;
@@ -1489,19 +1444,16 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
             int hash_idx = k;
             if (0 == (k & null_idx)) {// k represents the selected columns, these columns cannot contain null}
               if (OB_FAIL(tmp_row.set_elem(in_ctx->get_datum_row(i)))) {
-                LOG_WARN("failed to set elem", K(ret));
               }
               // This arrangement enters the hash table at the corresponding position
               if (OB_SUCC(ret)) {
                 if (OB_FAIL(in_ctx->add_to_static_engine_hashset_vecs(tmp_row, hash_idx))) {
-                  LOG_WARN("failed to add hashset", K(ret));
                 } else {
                   //do nothing
                 }
               }
             } else if (null_idx == (k | null_idx)) {// k selected columns are a subset of null, set all null here to true
               if (OB_FAIL(in_ctx->set_hashset_vecs_all_null_true(k))) {
-                LOG_WARN("failed to set hashset vecs all null true", K(ret));
               }
             } else {
               // This arrangement is not entered into the hash table
@@ -1525,7 +1477,6 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("invalid null arg", K(LEFT_ROW_ELE(j)), K(j));
         } else if (OB_FAIL(LEFT_ROW_ELE(j)->eval(ctx, left))) {
-          LOG_WARN("failed to eval", K(ret));
         } else {
           // Detect the position of null elements and record
           if (left->is_null()) {
@@ -1573,7 +1524,6 @@ int ObExprInOrNotIn::eval_in_with_row(const ObExpr &expr,
              k = static_cast<int64_t>(last(k, (1 << row_dimension) -1))) { // k represents the selected column, i.e., idx
           if (0 == (k & null_idx)) {//k does not contain null column}
            if (OB_FAIL(in_ctx->exist_in_static_engine_hashset_vecs(tmp_row, k, exist_ret))) {
-              LOG_WARN("failed to search in hashset", K(ret));
             } else {
               if (ObExprInHashMap<ObDatum>::HASH_CMP_TRUE == exist_ret) {
                 is_completely_cmp = true;
@@ -1631,7 +1581,6 @@ int ObExprInOrNotIn::eval_in_without_row(const ObExpr &expr,
 
   if (!fallback && OB_SUCC(ret)) {
     if (OB_FAIL(expr.args_[0]->eval(ctx, left))) {
-      LOG_WARN("failed to eval left", K(ret));
     } else if (left->is_null()) {
       is_exist = false;
       cnt_null = true;
@@ -1640,7 +1589,6 @@ int ObExprInOrNotIn::eval_in_without_row(const ObExpr &expr,
       //first build hash table for right params
       if (OB_FAIL(build_right_hash_without_row(in_id, right_param_num,
                                                expr, ctx, exec_ctx, in_ctx, cnt_null))) {
-        LOG_WARN("failed to build hash table for right params", K(ret));
       } else {
         // refresh inctx hash fun to left hash func
         if (!in_ctx->is_hash_calc_disabled() && OB_NOT_NULL(in_ctx->hash_func_buff_)) {
@@ -1674,7 +1622,6 @@ int ObExprInOrNotIn::eval_in_without_row(const ObExpr &expr,
           if (OB_FAIL(ret)) {
 
           } else if (OB_FAIL(tmp_row.set_elem(datum_ptr))) {
-            LOG_WARN("failed to load left", K(ret));
           } else if (0 != in_ctx->get_static_engine_hashset_size()
                      && OB_FAIL(in_ctx->exist_in_static_engine_hashset(tmp_row, is_exist))) {
             LOG_WARN("failed to search in hashset", K(ret));
@@ -1730,7 +1677,6 @@ int ObExprInOrNotIn::eval_batch_in_without_row(const ObExpr &expr,
     ObExecContext *exec_ctx = &ctx.exec_ctx_;
     uint64_t in_id = expr.expr_ctx_id_;
     if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-      LOG_WARN("failed to eval batch param values", K(ret));
     } else {
       ObDatum *input_left = expr.args_[0]->locate_batch_datums(ctx);
       ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
@@ -1741,7 +1687,6 @@ int ObExprInOrNotIn::eval_batch_in_without_row(const ObExpr &expr,
       bool right_has_null = false;
       if (OB_FAIL(build_right_hash_without_row(in_id, right_param_num, expr,
                                                ctx, exec_ctx, in_ctx, right_has_null))) {
-         LOG_WARN("failed to build hash table for right params", K(ret));
       } else {
         fallback = in_ctx->is_hash_calc_disabled();
         // refresh inctx hash fun to left hash func
@@ -1778,7 +1723,6 @@ int ObExprInOrNotIn::eval_batch_in_without_row(const ObExpr &expr,
           //second we search in hashset.
           if (OB_SUCC(ret) && OB_NOT_NULL(in_ctx) && !fallback) {
             if (OB_FAIL(tmp_row.set_elem(left))) {
-              LOG_WARN("failed to load left", K(ret));
             } else if (0 != in_ctx->get_static_engine_hashset_size()
                       && OB_FAIL(in_ctx->exist_in_static_engine_hashset(tmp_row, is_exist))) {
               LOG_WARN("failed to search in hashset", K(ret));
@@ -1813,7 +1757,6 @@ int ObExprInOrNotIn::eval_vector_in_without_row(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("failed to eval vector param values", K(ret));
   } else {
     VectorFormat res_format = expr.get_format(ctx);
     VectorFormat left_format = expr.args_[0]->get_format(ctx);
@@ -1867,7 +1810,6 @@ int ObExprInOrNotIn::inner_eval_vector_in_without_row(const ObExpr &expr,
     if (OB_FAIL(build_right_hash_without_row(in_id, right_param_num,
                                              expr, ctx, exec_ctx,
                                              in_ctx, right_has_null, use_colht))) {
-      LOG_WARN("failed to build hash table for right params", K(ret));
     } else {
       fallback = in_ctx->is_hash_calc_disabled();
       if (!fallback) {
@@ -1920,7 +1862,6 @@ int ObExprInOrNotIn::inner_eval_vector_in_without_row(const ObExpr &expr,
                         expr, ctx, skip, bound,
                         input_left_vec, in_ctx, res_vec);
       if (OB_FAIL(ret)) {
-        LOG_WARN("failed to probe_col", K(ret));
       }
     } else {
       ret = eval_vector_in_without_row_fallback(expr, ctx, skip, bound);
@@ -1961,7 +1902,6 @@ int ObExprInOrNotIn::probe_fixed_col(const ObBitVector &skip, const EvalBound &b
     ret = probe_item<ResVec, normal_inkey_t>(
         is_op_in, in_ctx, in_ctx->int_ht_, idx, key, res_vec, eval_flags);
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to process item", K(ret));
     }
   }
   return ret;
@@ -1988,12 +1928,10 @@ inline int ObExprInOrNotIn::probe_col(const ObExpr &expr,
   common::ObCollationType cs_type = expr.args_[0]->datum_meta_.cs_type_;
 
   if (OB_FAIL(in_ctx->init_hash_vals(ctx.max_batch_size_))) {
-    LOG_WARN("failed to init hash values", K(ret), K(ctx.max_batch_size_));
   } else if (OB_FAIL(input_left_vec->murmur_hash_v3(*expr.args_[0],
                                                  in_ctx->hash_vals,
                                                  skip, bound, &seed,
                                                  is_batch_seed))) {
-        LOG_WARN("failed to murmur hash", K(ret));
   } else {
     const uint64_t *l_payload = nullptr;
     const char *fixed_base_l_payload = nullptr;
@@ -2012,7 +1950,6 @@ inline int ObExprInOrNotIn::probe_col(const ObExpr &expr,
         if (OB_FAIL(in_ctx->colht_probe_batch<ResVec>(begin, end, in_ctx->hash_vals,
                                                         l_payload, !is_op_in,
                                                         res_vec))) {
-          LOG_WARN("failed to search in hashset", K(ret));
         }
         eval_flags.set_all(begin, end);
       } else if (ItemKT::KT_INT8B == get_key_type(vec_tc)) {
@@ -2020,20 +1957,17 @@ inline int ObExprInOrNotIn::probe_col(const ObExpr &expr,
                                                                eval_flags, input_left_vec,
                                                                res_vec, in_ctx, is_op_in);
         if (OB_FAIL(ret)) {
-          LOG_WARN("failed to probe fixed_8B col", K(ret));
         }
       } else if (ItemKT::KT_INT4B == get_key_type(vec_tc)) {
         ret = probe_fixed_col<LeftVec, ResVec, uint32_t>(skip, bound, 
                                                          eval_flags, input_left_vec,
                                                          res_vec, in_ctx, is_op_in);
         if (OB_FAIL(ret)) {
-          LOG_WARN("failed to probe fixed_4B col", K(ret));
         }
       } else if (ItemKT::KT_INT1B == get_key_type(vec_tc)) {
         ret = probe_fixed_col<LeftVec, ResVec, uint8_t>(skip, bound, eval_flags, input_left_vec,
                                                         res_vec, in_ctx, is_op_in);
         if (OB_FAIL(ret)) {
-          LOG_WARN("failed to probe fixed_1B col", K(ret));
         }
       } else if (ItemKT::KT_STRING == get_key_type(vec_tc)) {
         StrKey key;
@@ -2048,7 +1982,6 @@ inline int ObExprInOrNotIn::probe_col(const ObExpr &expr,
             ret = probe_item<ResVec, StrKey>(is_op_in, in_ctx, in_ctx->str_ht_,
                                              idx, key, res_vec, eval_flags);
             if (OB_FAIL(ret)) {
-              LOG_WARN("failed to process item", K(ret));
             }
           }
         }
@@ -2069,10 +2002,8 @@ inline int ObExprInOrNotIn::probe_col(const ObExpr &expr,
             left_datum.len_ = type_len;
           }
           if (OB_FAIL(tmp_row.set_elem(&left_datum))) {
-            LOG_WARN("failed to load left", K(ret));
           } else {
             if (OB_FAIL(in_ctx->exist_in_static_engine_hashset(in_ctx->hash_vals[left_idx], tmp_row, is_exist))) {
-              LOG_WARN("failed to search in hashset", K(ret));
             } else {
               set_vector_result(is_op_in,
                                 is_exist,
@@ -2098,7 +2029,6 @@ int ObExprInOrNotIn::eval_in_with_subquery(const ObExpr &expr,
   ObSubQueryIterator *l_iter = NULL;
   ObExpr **l_row = NULL;
   if (OB_FAIL(setup_row(expr.args_, ctx, true, expr.inner_func_cnt_, l_iter, l_row))) {
-    LOG_WARN("setup left row failed", K(ret));
   } else if (OB_ISNULL(l_row)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null row", K(ret));
@@ -2121,7 +2051,6 @@ int ObExprInOrNotIn::eval_in_with_subquery(const ObExpr &expr,
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(calc_for_row_static_engine(expr, ctx, expr_datum, l_row))) {
-      LOG_WARN("calc for row failed", K(ret), K(l_row));
     }
     if (OB_SUCC(ret) && NULL != l_iter && !l_end) {
       if (OB_FAIL(l_iter->get_next_row())) {
@@ -2171,20 +2100,17 @@ int ObExprInOrNotIn::calc_for_row_static_engine(const ObExpr &expr,
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("invalid null arg", K(ret));
         } else if (OB_FAIL(left_expr->eval(ctx, left))) {
-          LOG_WARN("failed to eval", K(ret));
         } else if (left->is_null()) {
           row_cnt_null = true;
         } else if (OB_ISNULL(RIGHT_ROW_ELE(i, j))) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("invalid null arg", K(ret), K(RIGHT_ROW_ELE(i, j)), K(i), K(j));
         } else if (OB_FAIL(RIGHT_ROW_ELE(i, j)->eval(ctx, right))) {
-          LOG_WARN("failed to eval", K(ret));
         } else if (right->is_null()) {
           row_cnt_null = true;
         } else {
           int cmp_ret = 0;
           if (OB_FAIL(((DatumCmpFunc)expr.inner_functions_[j])(*right, *left, cmp_ret))) {
-            LOG_WARN("failed to compare", K(ret));
           } else if (0 != cmp_ret) {
             // If there is a clear false in the vector comparison, it indicates that this vector does not hold, so has_null should be set to false
             row_is_equal = false;
@@ -2249,12 +2175,10 @@ int ObExprInOrNotIn::setup_row(ObExpr **expr,
       const ObExprSubQueryRef::Extra &extra = ObExprSubQueryRef::Extra::get_info(*expr[0]);
       if (OB_FAIL(ObExprSubQueryRef::get_subquery_iter(
                   ctx, extra, iter))) {
-        LOG_WARN("get subquery iterator failed", K(ret));
       } else if (OB_ISNULL(iter) || cmp_func_cnt != iter->get_output().count()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL subquery iterator", K(ret), KP(iter), K(cmp_func_cnt));
       } else if (OB_FAIL(iter->rewind())) {
-        LOG_WARN("start iterate failed", K(ret));
       } else {
         row = &const_cast<ExprFixedArray &>(iter->get_output()).at(0);
       }
@@ -2311,24 +2235,17 @@ int ObExprInOrNotIn::build_right_hash_without_row(const int64_t in_id,
 
   if (OB_ISNULL(in_ctx = static_cast<ObExprInCtx *> (exec_ctx->get_expr_op_ctx(in_id)))) {
     if (OB_FAIL(exec_ctx->create_expr_op_ctx(in_id, in_ctx))) {
-      LOG_WARN("failed to create operator ctx", K(ret));
     } else if (OB_FAIL(in_ctx->init_hashset(vec_tc, right_param_num, use_colht, cs_type, cmp_end_space))) {
-      LOG_WARN("failed to init hashset", K(ret));
     } else if (OB_FAIL(in_ctx->init_right_datums(right_param_num, row_dimension, exec_ctx))) {
-      LOG_WARN("failed to init right datums", K(ret));
     } else if (OB_FAIL(in_ctx->init_cmp_funcs(expr.inner_func_cnt_, exec_ctx))) {
-      LOG_WARN("failed to init cmp funcs", K(ret));
     } else if (OB_FAIL(build_hash_set(right_param_num, expr, ctx, exec_ctx, in_ctx, cnt_null))) {
-      LOG_WARN("failed to build hash set", K(ret), K(in_ctx->use_colht_));
     }
   } else if (in_ctx->need_rebuild_hashset(use_colht)) {
     // Rebuild the hashset as needed when different operators in the plan contain
     // the same 'in' expr but use different interfaces (row, batch, vector) for evaluation.
     // Both eval_row() and eval_batch() for 'in' always use static_engine_hashset(ObHashSet).
     if (OB_FAIL(in_ctx->init_hashset(vec_tc, right_param_num, use_colht, cs_type, cmp_end_space))) {
-      LOG_WARN("failed to reinit hashset", K(ret));
     } else if (OB_FAIL(build_hash_set(right_param_num, expr, ctx, exec_ctx, in_ctx, cnt_null))) {
-      LOG_WARN("failed to rebuild hash set", K(ret), K(in_ctx->use_colht_));
     }
   }
   return ret;
@@ -2362,7 +2279,6 @@ int ObExprInOrNotIn::build_hash_set(
       in_ctx->cmp_functions_[i] = (void *)(expr.args_[1]->args_[i]->basic_funcs_->null_first_cmp_);
     } else {
       if (OB_FAIL(in_ctx->set_right_datum(i, 0, right_param_num, *right))) {
-        LOG_WARN("failed to load right", K(ret), K(i));
       } else {
         if (OB_ISNULL(in_ctx->hash_func_buff_)) {
           int64_t func_buf_size = sizeof(void *) * 1;
@@ -2391,9 +2307,7 @@ int ObExprInOrNotIn::build_hash_set(
             key = right->get_uint();
           }
           if (OB_FAIL(((ObExprHashFuncType)in_ctx->hash_func_buff_[0])(*right, 0, hash_val))) {
-            LOG_WARN("failed to calculate the hash value", K(ret));
           } else if (OB_FAIL(in_ctx->int_ht_.insert(hash_val, key))) {
-            LOG_WARN("failed to add int to hashset", K(ret));
           }
         } else if (ItemKT::KT_STRING == get_key_type(vec_tc)) {
           StrKey key(right->get_string());
@@ -2401,7 +2315,6 @@ int ObExprInOrNotIn::build_hash_set(
                                      0, cmp_end_space, ObMurmurHash::hash);
           key.hash_ = hash_val;
           if (OB_FAIL(in_ctx->str_ht_.insert(hash_val, key))) {
-            LOG_WARN("failed to add int to hashset", K(ret));
           }
         }
       } else {
@@ -2409,7 +2322,6 @@ int ObExprInOrNotIn::build_hash_set(
         // Here all hash functions and cmp functions have been loaded, set the function pointers of tmp_row
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(tmp_row.set_elem(in_ctx->get_datum_row(i)))) {
-          LOG_WARN("failed to load datum", K(ret), K(i));
         } else {
           in_ctx->set_hash_funcs_ptr_for_set(in_ctx->hash_func_buff_);
           in_ctx->set_cmp_funcs_ptr_for_set(in_ctx->cmp_functions_);

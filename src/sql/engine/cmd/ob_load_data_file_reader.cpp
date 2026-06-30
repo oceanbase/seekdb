@@ -191,7 +191,6 @@ int ObRandomFileReader::open(const ObString &filename)
     ret = OB_INIT_TWICE;
     LOG_WARN("ObRandomFileReader init twice", KR(ret), KP(this));
   } else if (OB_FAIL(file_reader_.open(filename.ptr(), false))) {
-    LOG_WARN("fail to open file", KR(ret), K(filename));
   } else {
     filename_ = filename;
     offset_ = 0;
@@ -208,7 +207,6 @@ int ObRandomFileReader::read(char *buf, int64_t count, int64_t &read_size)
     ret = OB_NOT_INIT;
     LOG_WARN("ObRandomFileReader not init", KR(ret), KP(this));
   } else if (OB_FAIL(file_reader_.pread(buf, count, offset_, read_size))) {
-    LOG_WARN("fail to pread file buf", KR(ret), K(count), K_(offset), K(read_size));
   } else if (0 == read_size) {
     eof_ = true;
   } else {
@@ -274,9 +272,7 @@ int ObRandomOSSReader::open(const share::ObBackupStorageInfo &storage_info, cons
     LOG_WARN("ObRandomOSSReader init twice", KR(ret), KP(this));
   } else if (OB_FAIL(
         util.get_and_init_device(device_handle_, &storage_info, filename, ObStorageIdMod(table::OB_STORAGE_ID_DDL, ObStorageUsedMod::STORAGE_USED_DDL)))) {
-    LOG_WARN("fail to get device manager", KR(ret), K(filename));
   } else if (OB_FAIL(util.set_access_type(&iod_opts, false, 1))) {
-    LOG_WARN("fail to set access type", KR(ret));
   } else {
     ObCStringHelper helper;
     const char *filename_str = helper.convert(filename);
@@ -284,7 +280,6 @@ int ObRandomOSSReader::open(const share::ObBackupStorageInfo &storage_info, cons
       ret = OB_ERR_NULL_VALUE;
       LOG_WARN("fail to convert filename", K(ret), K(filename));
     } else if (OB_FAIL(device_handle_->open(filename_str, -1, 0, fd_, &iod_opts))) {
-      LOG_WARN("fail to open oss file", KR(ret), K(filename));
     } else {
       offset_ = 0;
       eof_ = false;
@@ -304,9 +299,7 @@ int ObRandomOSSReader::read(char *buf, int64_t count, int64_t &read_size)
     ret = OB_NOT_INIT;
     LOG_WARN("ObRandomOSSReader not init", KR(ret), KP(this));
   } else if (OB_FAIL(io_adapter.async_pread(*device_handle_, fd_, buf, offset_, count, io_handle))) {
-    LOG_WARN("fail to async read oss buf", KR(ret), K_(offset), K(count), K(read_size));
   } else if (OB_FAIL(io_handle.wait())) {
-    LOG_WARN("fail to wait", KR(ret));
   } 
   
   if (OB_SUCC(ret)) {
@@ -334,7 +327,6 @@ int ObRandomOSSReader::get_file_size(int64_t &file_size)
     ret = OB_NOT_INIT;
     LOG_WARN("ObRandomOSSReader not init", KR(ret), KP(this));
   } else if (OB_FAIL(util.get_file_size(device_handle_, fd_, file_size))) {
-    LOG_WARN("fail to get oss file size", KR(ret), K(file_size));
   }
   return ret;
 }
@@ -419,9 +411,7 @@ int ObPacketStreamFileReader::open(const ObString &filename,
     obmysql::OMPKLocalInfile filename_packet;
     filename_packet.set_filename(filename);
     if (OB_FAIL(packet_handle.response_packet(filename_packet, session))) {
-      LOG_INFO("failed to send local infile packet to client", K(ret), K(filename));
     } else if (OB_FAIL(packet_handle.flush_buffer(false/*is_last*/))) {
-      LOG_INFO("failed to flush socket buffer while send local infile packet", K(ret), K(filename));
     } else {
       LOG_INFO("[load data local]send filename to client success", K(filename));
 
@@ -643,7 +633,6 @@ int ObDecompressFileReader::open(const ObFileReadParam &param, ObFileReader *sou
   if (param.compression_format_ == ObCSVGeneralFormat::ObCSVCompression::NONE) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ObDecompressor::create(param.compression_format_, allocator_, decompressor_))) {
-    LOG_WARN("failed to create decompressor", K(param.compression_format_), K(ret));
   } else if (OB_ISNULL(compressed_data_ = (char *)allocator_.alloc(COMPRESSED_DATA_BUFFER_SIZE))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate buffer.", K(COMPRESSED_DATA_BUFFER_SIZE));
@@ -681,7 +670,6 @@ int ObDecompressFileReader::read(char *buf, int64_t capacity, int64_t &read_size
                                     capacity,
                                     read_size);
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to decompress", K(ret));
     } else {
       consumed_data_size_ += consumed_size;
       uncompressed_size_  += read_size;
@@ -866,7 +854,6 @@ int ObZstdDecompressor::init()
 
     ret = ObZstdWrapper::create_stream_dctx(allocator, zstd_stream_context_);
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to create zstd stream context", K(ret));
     }
   }
 

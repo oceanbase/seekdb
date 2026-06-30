@@ -92,13 +92,11 @@ int ObDirectLoadSSTableScanner::init(ObDirectLoadSSTable *sstable,
     if (OB_SUCC(ret)) {
       if (!sstable_->is_empty()) {
         if (OB_FAIL(inner_open())) {
-          LOG_WARN("fail to inner open", KR(ret));
         }
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(datum_row_.init(column_count_))) {
-        LOG_WARN("fail to init datum row", KR(ret));
       } else {
         is_inited_ = true;
       }
@@ -119,9 +117,7 @@ int ObDirectLoadSSTableScanner::locate_lower_bound(const ObDatumRowkey &rowkey, 
   while (OB_SUCC(ret) && (left <= right)) {
     int64_t mid = left + (right - left) / 2;
     if (OB_FAIL(get_start_key(mid, start_key))) {
-      LOG_WARN("fail to get start key", KR(ret));
     } else if (OB_FAIL(start_key.compare(rowkey, *datum_utils_, cmp_ret))) {
-      LOG_WARN("fail to compare", KR(ret));
     }
     if (OB_SUCC(ret)) {
       if (cmp_ret >= 0) {
@@ -150,9 +146,7 @@ int ObDirectLoadSSTableScanner::locate_upper_bound(const ObDatumRowkey &rowkey, 
   while (OB_SUCC(ret) && (left <= right)) {
     int64_t mid = left + (right - left) / 2;
     if (OB_FAIL(get_start_key(mid, start_key))) {
-      LOG_WARN("fail to get start key", KR(ret));
     } else if (OB_FAIL(start_key.compare(rowkey, *datum_utils_, cmp_ret))) {
-      LOG_WARN("fail to compare", KR(ret));
     }
     if (OB_SUCC(ret)) {
       if (cmp_ret > 0) {
@@ -179,37 +173,27 @@ int ObDirectLoadSSTableScanner::get_start_key(int64_t idx, ObDatumRowkey &startk
   data_block_reader_.reset();
   ObDirectLoadSSTableFragment fragment;
   if (OB_FAIL(fragment_operator_.get_fragment_item_idx(idx, locate_fragment_idx, new_idx))) {
-    LOG_WARN("fail to get fragment idx", KR(ret));
   } else if (OB_FAIL(fragment_operator_.get_fragment(locate_fragment_idx, fragment))) {
-    LOG_WARN("fail to get fragment ", KR(ret));
   } else if (OB_FAIL(index_block_reader_.change_fragment(fragment.index_file_handle_))) {
-    LOG_WARN("fail to change index file handle ", KR(ret));
   } else if (OB_FAIL(file_io_handle_.open(fragment.data_file_handle_))) {
-    LOG_WARN("Fail to open file handle", K(ret));
   } else if (OB_FAIL(index_block_reader_.get_index_info(new_idx, info))) {
-    LOG_WARN("fail to get index info", KR(ret));
   } else if (OB_FAIL(read_buffer(info.offset_, info.size_))) {
-    LOG_WARN("fail to read buffer", KR(ret));
   } else {
     if (info.size_ > sstable_data_block_size_) {
       if (OB_FAIL(data_block_reader_.init(info.size_, large_buf_, column_count_))) {
-        LOG_WARN("fail to init data block reader", KR(ret));
       }
     } else {
       if (OB_FAIL(data_block_reader_.init(info.size_, buf_, column_count_))) {
-        LOG_WARN("fail to init data block reader", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(data_block_reader_.get_next_item(item))) {
-        LOG_WARN("fail to read item", KR(ret));
       }
     }
   }
   if (OB_SUCC(ret)) {
     ObDatumRowkey key(item->rowkey_datum_array_.datums_, rowkey_column_num_);
     if (OB_FAIL(key.deep_copy(startkey, allocator_))) {
-      LOG_WARN("fail to deep copy", KR(ret));
     }
   }
   return ret;
@@ -225,14 +209,10 @@ int ObDirectLoadSSTableScanner::inner_open()
   int64_t index_size = sstable_->get_meta().index_block_size_;
   data_block_reader_.reset();
   if (OB_FAIL(fragment_operator_.init(sstable_))) {
-    LOG_WARN("Fail to init fragment opeartor", K(ret));
   } else if (OB_FAIL(index_block_reader_.init(
                index_size, sstable_->get_fragment_array().at(0).index_file_handle_))) {
-    LOG_WARN("Fail to init index_block_reader", K(ret));
   } else if (OB_FAIL(locate_lower_bound(query_range_->start_key_, start_idx))) {
-    LOG_WARN("fail to local lower bound", KR(ret));
   } else if (OB_FAIL(locate_upper_bound(query_range_->end_key_, end_idx))) {
-    LOG_WARN("fail to local upper bound", KR(ret));
   } else {
     if (start_idx == 0) {
       start_idx_ = 0;
@@ -263,27 +243,18 @@ int ObDirectLoadSSTableScanner::inner_open()
     ObDirectLoadSSTableFragment end_fragment;
     if (OB_FAIL(fragment_operator_.get_fragment_item_idx(start_idx_, start_fragment_idx,
                                                          new_start_idx))) {
-      LOG_WARN("fail to get start fragment idx", KR(ret));
     } else if (OB_FAIL(fragment_operator_.get_fragment(start_fragment_idx, start_fragment))) {
-      LOG_WARN("fail to get start fragment ", KR(ret));
     } else if (OB_FAIL(fragment_operator_.get_fragment_item_idx(end_idx_, end_fragment_idx,
                                                                 new_end_idx))) {
-      LOG_WARN("fail to get end fragment idx", KR(ret));
     } else if (OB_FAIL(fragment_operator_.get_fragment(end_fragment_idx, end_fragment))) {
-      LOG_WARN("fail to get end fragment ", KR(ret));
     } else {
       ObDirectLoadIndexInfo start_info;
       ObDirectLoadIndexInfo end_info;
       if (OB_FAIL(index_block_reader_.change_fragment(start_fragment.index_file_handle_))) {
-        LOG_WARN("fail to change start fragment", KR(ret));
       } else if (OB_FAIL(index_block_reader_.get_index_info(new_start_idx, start_info))) {
-        LOG_WARN("fail to get index start info", KR(ret));
       } else if (OB_FAIL(index_block_reader_.change_fragment(end_fragment.index_file_handle_))) {
-        LOG_WARN("fail to change end fragment", KR(ret));
       } else if (OB_FAIL(index_block_reader_.get_index_info(new_end_idx, end_info))) {
-        LOG_WARN("fail to get index end info", KR(ret));
       } else if (OB_FAIL(file_io_handle_.open(start_fragment.data_file_handle_))) {
-        LOG_WARN("Fail to open file handle", K(ret));
       } else {
         start_fragment_idx_ = start_fragment_idx;
         end_fragment_idx_ = end_fragment_idx;
@@ -297,14 +268,12 @@ int ObDirectLoadSSTableScanner::inner_open()
   // read buffer
   if (OB_SUCC(ret)) {
     if (OB_FAIL(get_next_buffer())) {
-      LOG_WARN("fail to read buffer", KR(ret));
     } else if (OB_FAIL(data_block_reader_.init(data_buf_size, buf_, column_count_))) {
       if (OB_UNLIKELY(OB_BUF_NOT_ENOUGH != ret)) {
         LOG_WARN("fail to init data block reader", KR(ret));
       } else {
         int64_t data_block_size = data_block_reader_.get_header()->occupy_size_;
         if (OB_FAIL(get_large_buffer(data_block_size))) {
-          LOG_WARN("fail to get large buffer", KR(ret));
         }
       }
     }
@@ -336,7 +305,6 @@ int ObDirectLoadSSTableScanner::locate_next_buffer()
           } else {
             int64_t data_block_size = data_block_reader_.get_header()->occupy_size_;
             if (OB_FAIL(get_large_buffer(data_block_size))) {
-              LOG_WARN("fail to get large buffer", KR(ret));
             }
           }
         }
@@ -366,7 +334,6 @@ int ObDirectLoadSSTableScanner::change_buffer()
       ret = OB_BUF_NOT_ENOUGH;
     } else {
       if (OB_FAIL(data_block_reader_.init(buf_size, buf, column_count_))) {
-        LOG_WARN("fail to init data block reader", KR(ret));
       }
     }
   }
@@ -379,7 +346,6 @@ int ObDirectLoadSSTableScanner::read_buffer(uint64_t offset, uint64_t size)
   int64_t read_size = size;
   if (size <= sstable_data_block_size_) {
     if (OB_FAIL(file_io_handle_.pread(buf_, read_size, offset))) {
-      LOG_WARN("fail to do pread from data file", KR(ret));
     }
   } else {
     int64_t read_size = size;
@@ -393,7 +359,6 @@ int ObDirectLoadSSTableScanner::read_buffer(uint64_t offset, uint64_t size)
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(file_io_handle_.pread(large_buf_, read_size, offset))) {
-        LOG_WARN("fail to do pread from data file", KR(ret));
       }
     }
   }
@@ -411,9 +376,7 @@ int ObDirectLoadSSTableScanner::get_large_buffer(int64_t buf_size)
     int64_t read_size = buf_size;
     data_block_reader_.reset();
     if (OB_FAIL(file_io_handle_.pread(large_buf_, read_size, offset_))) {
-      LOG_WARN("fail to do pread from data file", KR(ret));
     } else if (OB_FAIL(data_block_reader_.init(buf_size, large_buf_, column_count_))) {
-      LOG_WARN("fail to init data block reader", KR(ret));
     } else {
       buf_pos_ = 0;
       buf_size_ = buf_size;
@@ -440,9 +403,7 @@ int ObDirectLoadSSTableScanner::get_next_buffer()
       sstable_->get_fragment_array().at(curr_fragment_idx_).meta_.occupy_size_;
     if (curr_fragment_end_offset == offset_) {
       if (OB_FAIL(fragment_operator_.get_next_fragment(curr_fragment_idx_, fragment))) {
-        LOG_WARN("fail to get next fragment", KR(ret));
       } else if (OB_FAIL(file_io_handle_.open(fragment.data_file_handle_))) {
-        LOG_WARN("Fail to open file handle", K(ret));
       } else {
         if (curr_fragment_idx_ == end_fragment_idx_) {
           curr_fragment_end_offset = locate_end_offset_;
@@ -458,7 +419,6 @@ int ObDirectLoadSSTableScanner::get_next_buffer()
     buf_size_ = sstable_data_block_size_;
     int64_t size = MIN(buf_size_, curr_fragment_end_offset - offset_);
     if (OB_FAIL(read_buffer(offset_, size))) {
-      LOG_WARN("fail to read buffer", KR(ret));
     }
     buf_size_ = size;
   }
@@ -477,7 +437,6 @@ int ObDirectLoadSSTableScanner::inner_get_next_row(const ObDirectLoadExternalRow
           LOG_WARN("fail to locate next buffer", KR(ret));
         }
       } else if (OB_FAIL(data_block_reader_.get_next_item(external_row))) {
-        LOG_WARN("fail to read item", KR(ret));
       }
     }
   }
@@ -495,7 +454,6 @@ int ObDirectLoadSSTableScanner::compare(ObDatumRowkey cmp_key,
   } else {
     ObDatumRowkey key(external_row.rowkey_datum_array_.datums_, rowkey_column_num_);
     if (OB_FAIL(key.compare(cmp_key, *datum_utils_, cmp_ret))) {
-      LOG_WARN("fail to compare key", KR(ret));
     }
   }
   return ret;
@@ -522,7 +480,6 @@ int ObDirectLoadSSTableScanner::get_next_row(const ObDirectLoadExternalRow *&ext
       }
       if (OB_SUCC(ret) && !found_start_) {
         if (OB_FAIL(compare(query_range_->start_key_, *external_row, cmp_ret))) {
-          LOG_WARN("fail to compare start key", KR(ret));
         } else if (cmp_ret < 0 || (!query_range_->border_flag_.inclusive_start() && cmp_ret == 0)) {
           external_row = nullptr;
         } else {
@@ -531,7 +488,6 @@ int ObDirectLoadSSTableScanner::get_next_row(const ObDirectLoadExternalRow *&ext
       }
       if (OB_SUCC(ret) && nullptr != external_row && curr_idx_ == end_idx_) {
         if (OB_FAIL(compare(query_range_->end_key_, *external_row, cmp_ret))) {
-          LOG_WARN("fail to compare start key", KR(ret));
         } else if (cmp_ret > 0 || (!query_range_->border_flag_.inclusive_end() && cmp_ret == 0)) {
           external_row = nullptr;
           found_end_ = true;
@@ -557,7 +513,6 @@ int ObDirectLoadSSTableScanner::get_next_row(const ObDirectLoadDatumRow *&datum_
         LOG_WARN("fail to get next row", KR(ret));
       }
     } else if (OB_FAIL(external_row->to_datum_row(datum_row_))) {
-      LOG_WARN("fail to transfer datum row", KR(ret));
     } else {
       datum_row = &datum_row_;
     }
@@ -608,14 +563,11 @@ int ObDirectLoadIndexBlockMetaIterator::init(ObDirectLoadSSTable *sstable)
     int64_t index_size = sstable_->get_meta().index_block_size_;
     if (!sstable_->is_empty()) {
       if (OB_FAIL(fragment_operator_.init(sstable_))) {
-        LOG_WARN("Failed to init fragment operator", K(ret));
       } else if (OB_FAIL(index_block_reader_.init(
                    index_size,
                    sstable_->get_fragment_array().at(0).index_file_handle_))) {
-        LOG_WARN("Fail to init index_block_reader", K(ret));
       } else if (OB_FAIL(
                    file_io_handle_.open(sstable_->get_fragment_array().at(0).data_file_handle_))) {
-        LOG_WARN("Fail to assign file handle", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -648,7 +600,6 @@ int ObDirectLoadIndexBlockMetaIterator::get_end_key(ObDirectLoadExternalRow &row
     int64_t count = sstable_->get_meta().rowkey_column_count_;
     ObDatumRowkey key(row.rowkey_datum_array_.datums_, count);
     if (OB_FAIL(key.deep_copy(index_block_meta.end_key_, allocator_))) {
-      LOG_WARN("fail to deep copy", KR(ret));
     }
   }
   return ret;
@@ -671,19 +622,13 @@ int ObDirectLoadIndexBlockMetaIterator::get_next(ObDirectLoadIndexBlockMeta &ind
     if (OB_SUCC(ret) && curr_block_idx_ < total_index_block_count_) {
       if (OB_FAIL(fragment_operator_.get_fragment_block_idx(curr_block_idx_, locate_fragment_idx,
                                                             new_idx))) {
-        LOG_WARN("fail to get start fragment idx", KR(ret));
       } else if (OB_FAIL(fragment_operator_.get_fragment(locate_fragment_idx, fragment))) {
-        LOG_WARN("fail to get start fragment ", KR(ret));
       } else {
         curr_fragment_idx_ = locate_fragment_idx;
         if (OB_FAIL(index_block_reader_.change_fragment(fragment.index_file_handle_))) {
-          LOG_WARN("fail to change start fragment", KR(ret));
         } else if (OB_FAIL(file_io_handle_.open(fragment.data_file_handle_))) {
-          LOG_WARN("Fail to open file handle", K(ret));
         } else if (OB_FAIL(get_row(new_idx, index_block_meta))) {
-          LOG_WARN("Fail to get secondary meta row from block", K(ret));
         } else if (OB_FAIL(get_end_key(row_, index_block_meta))) {
-          LOG_WARN("Fail to parse macro meta", K(ret));
         } else {
           curr_block_idx_++;
         }
@@ -708,17 +653,13 @@ int ObDirectLoadIndexBlockMetaIterator::get_row(int64_t idx, ObDirectLoadIndexBl
     ObDirectLoadIndexInfo info;
     ObDirectLoadDataBlockHeader header;
     if (OB_FAIL(index_block_reader_.get_index_info(index_item_idx, info))) {
-      LOG_WARN("fail to get index info", KR(ret));
     } else if (OB_FAIL(read_buffer(info.offset_, info.size_))) {
-      LOG_WARN("fail to read buffer", KR(ret));
     } else if (OB_FAIL(header.deserialize(buf_, buf_size_, buf_pos_))) {
-      LOG_WARN("fail to deserialize header", KR(ret), K(buf_size_), K(buf_pos_));
     } else {
       meta.row_count_ = index_block_reader_.get_header()->row_count_;
       meta.rowkey_column_count_ = rowkey_column_count_;
       buf_pos_ = header.last_row_offset_;
       if (OB_FAIL(row_.deserialize(buf_, buf_size_, buf_pos_))) {
-        LOG_WARN("fail to deserialize buffer", KR(ret), K(buf_size_), K(buf_pos_));
       }
     }
   }
@@ -730,7 +671,6 @@ int ObDirectLoadIndexBlockMetaIterator::read_buffer(uint64_t offset, uint64_t si
   int ret = OB_SUCCESS;
   int64_t read_size = size;
   if (OB_FAIL(file_io_handle_.pread(buf_, read_size, offset))) {
-    LOG_WARN("fail to do pread from data file", KR(ret));
   } else {
     buf_pos_ = 0;
     buf_size_ = size;
@@ -766,7 +706,6 @@ int ObDirectLoadIndexBlockEndKeyIterator::get_next_rowkey(const ObDatumRowkey *&
       }
     } else if (OB_FAIL(rowkey_.assign(index_block_meta.end_key_.datums_,
                                       index_block_meta.rowkey_column_count_))) {
-      LOG_WARN("fail to get datum rowkey", KR(ret));
     } else {
       rowkey = &rowkey_;
     }

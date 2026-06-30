@@ -191,7 +191,6 @@ int create_simple_estimator(ObSelEstimatorFactory &factory,
   if (!ObTemplateEstimator::check_expr_valid(expr)) {
     // do nothing
   } else if (OB_FAIL(factory.create_estimator_inner(temp_estimator))) {
-    LOG_WARN("failed to create estimator ", K(ret));
   } else {
     temp_estimator->set_expr(&expr);
     temp_estimator->extract_default_eigen_expr(&expr);

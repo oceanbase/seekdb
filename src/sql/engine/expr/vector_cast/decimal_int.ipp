@@ -491,9 +491,7 @@ struct __decint_cast_impl
           int warning = ret;
           int64_t input = *reinterpret_cast<const in_type *>(input_vector->get_payload(idx));
           if (OB_FAIL(wide::to_number(input, in_scale, (uint32_t *)digits, 3, out_nmb))) {
-            SQL_LOG(WARN, "to_number failed", K(ret));
           } else if (CAST_FAIL(numeric_negative_check(out_nmb))) {
-            SQL_LOG(WARN, "numeric negative check failed", K(ret));
           } else {
             output_vector->set_number(idx, out_nmb);
           }
@@ -505,7 +503,6 @@ struct __decint_cast_impl
           int ret = OB_SUCCESS;
           int64_t input = *reinterpret_cast<const in_type *>(input_vector->get_payload(idx));
           if (OB_FAIL(wide::to_number(input, in_scale, (uint32_t *)digits, 3, out_nmb))) {
-            SQL_LOG(WARN, "to_number failed", K(ret));
           } else {
             output_vector->set_number(idx, out_nmb);
           }
@@ -583,11 +580,9 @@ struct __decint_cast_impl
           } else {
             const in_type *in_val = reinterpret_cast<const in_type *>(input_vector->get_payload(i));
             if (OB_FAIL(wide::to_number(*in_val, in_scale, tmp_alloc, out_nmb))) {
-              SQL_LOG(WARN, "to number failed", K(ret));
             } else if (ObUNumberType == expr.datum_meta_.type_) {
               int warning = OB_SUCCESS;
               if (CAST_FAIL(numeric_negative_check(out_nmb))) {
-                SQL_LOG(WARN, "numeric negative check failed", K(ret));
               } else {
                 output_vector->set_number(i, out_nmb);
               }

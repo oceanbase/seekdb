@@ -30,7 +30,6 @@ int ObAllServerEventHistoryTableOperator::init(ObSQLiteConnectionPool *pool, con
   const bool is_server_event = true;
   set_addr(self_addr, is_rs_event, is_server_event);
   if (OB_FAIL(ObEventHistoryTableOperator::init(pool, ObEventHistoryType::SERVER))) {
-    SHARE_LOG(WARN, "failed to init with SQLite", K(ret));
   }
   return ret;
 }
@@ -47,7 +46,6 @@ int ObAllServerEventHistoryTableOperator::async_delete()
     ret = OB_NOT_INIT;
     SHARE_LOG(WARN, "not init", KR(ret));
   } else if (OB_FAIL(default_async_delete())) {
-    SHARE_LOG(WARN, "failed to default async delete", KR(ret));
   }
   return ret;
 }

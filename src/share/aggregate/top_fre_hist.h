@@ -49,7 +49,6 @@ public:
     TopFreHistVecExtraResult *extra = reinterpret_cast<TopFreHistVecExtraResult *>(tmp_res);
     columns.get_payload(row_num, payload, len);
     if (OB_FAIL(add_top_k_frequency_item(agg_ctx, extra, hash_func, agg_col_id, payload, len))) {
-      SQL_LOG(WARN, "failed to add top k frequency item", K(ret));
     }
     return ret;
   }
@@ -70,9 +69,7 @@ public:
       tmp_datum.ptr_ = payload;
       tmp_datum.pack_ = len;
       if (OB_FAIL(tmp_datum.to_obj(obj, param_expr->obj_meta_))) {
-        SQL_LOG(WARN, "failed to obj", K(ret));
       } else if (OB_FAIL(extra->get_topk_hist().merge_distribute_top_k_fre_items(obj))) {
-        SQL_LOG(WARN, "failed to process row", K(ret));
       }
     } else if (extra->get_topk_hist().is_by_pass()) {
       extra->inc_disuse_cnt();
@@ -85,11 +82,8 @@ public:
                                                                      obj_meta,
                                                                      tmp_datum,
                                                                      new_prev_datum))) {
-       SQL_LOG(WARN, "failed to build prefix str datum for lob", K(ret));
       } else if (OB_FAIL(hash_func(param_expr->obj_meta_, new_prev_datum.ptr_, new_prev_datum.pack_, hash_val, hash_val))) {
-        SQL_LOG(WARN, "hash func failed", K(ret));
       } else if (OB_FAIL(extra->add_one_batch_item(new_prev_datum.ptr_, new_prev_datum.pack_, hash_val))) {
-        SQL_LOG(WARN, "failed to add one batch item", K(ret));
       } 
     } else if (in_tc == VEC_TC_STRING) {
       int64_t truncated_str_len = 0;
@@ -104,15 +98,11 @@ public:
         }
       }
       if (OB_FAIL(hash_func(param_expr->obj_meta_, payload, truncated_str_len, hash_val, hash_val))) {
-        SQL_LOG(WARN, "hash func failed", K(ret));
       } else if (OB_FAIL(extra->add_one_batch_item(payload, truncated_str_len, hash_val))) {
-        SQL_LOG(WARN, "failed to add one batch item", K(ret));
       }
     } else {
       if (OB_FAIL(hash_func(param_expr->obj_meta_, payload, len, hash_val, hash_val))) {
-        SQL_LOG(WARN, "hash func failed", K(ret));
       } else if (OB_FAIL(extra->add_one_batch_item(payload, len, hash_val))) {
-        SQL_LOG(WARN, "failed to add one batch item", K(ret));
       }
     }
     return ret;
@@ -127,7 +117,6 @@ public:
       SQL_LOG(DEBUG, "add null row", K(ret), K(row_num));
     } else if (OB_FAIL(
                  add_row(agg_ctx, columns, row_num, agg_col_id, agg_cell, tmp_res, calc_info))) {
-      SQL_LOG(WARN, "add row failed", K(ret));
     } else {
       NotNullBitVector &not_nulls = agg_ctx.locate_notnulls_bitmap(agg_col_id, agg_cell);
       not_nulls.set(agg_col_id);
@@ -142,7 +131,6 @@ public:
     if (is_merge || extra->get_topk_hist().is_by_pass()) {
       // do nothing
     } else if (OB_FAIL(extra->flush_batch_rows())) {
-      SQL_LOG(WARN, "failed to flush batch rows", K(ret));
     } else if (is_lob_vec_tc()) {
       extra->get_lob_prefix_allocator().reuse();
     }
@@ -169,7 +157,6 @@ public:
         bool has_lob_header = agg_expr.obj_meta_.has_lob_header();
         const ObObjMeta &obj_meta = agg_ctx.aggr_infos_.at(agg_col_id).param_exprs_.at(0)->obj_meta_;
         if (OB_FAIL(top_k_fre_hist.create_topk_fre_items(&obj_meta))) {
-          SQL_LOG(WARN, "failed to adjust frequency sort", K(ret));
         } else {
           char *buf = NULL;
           int64_t buf_size = top_k_fre_hist.get_serialize_size();
@@ -177,13 +164,9 @@ public:
           ObExprStrResAlloc expr_res_alloc(agg_expr, agg_ctx.eval_ctx_);
           ObTextStringResult new_tmp_lob(ObLongTextType, has_lob_header, &expr_res_alloc);
           if (OB_FAIL(new_tmp_lob.init(buf_size))) {
-            SQL_LOG(WARN, "init tmp lob failed", K(ret), K(buf_size));
           } else if (OB_FAIL(new_tmp_lob.get_reserved_buffer(buf, buf_size))) {
-            SQL_LOG(WARN, "tmp lob append failed", K(ret), K(new_tmp_lob));
           } else if (OB_FAIL(top_k_fre_hist.serialize(buf, buf_size, buf_pos))) {
-            SQL_LOG(WARN, "fail serialize init task arg", KP(buf), K(buf_size), K(buf_pos), K(ret));
           } else if (OB_FAIL(new_tmp_lob.lseek(buf_pos, 0))) {
-            SQL_LOG(WARN, "temp lob lseek failed", K(ret), K(new_tmp_lob), K(buf_pos));
           } else {
             ObString lob_loc_str;
             new_tmp_lob.get_result_buffer(lob_loc_str);
@@ -215,7 +198,6 @@ public:
                                              agg_col_idx, 
                                              data, 
                                              data_len))) {
-          SQL_LOG(WARN, "failed to add top k frequency item", K(ret));
         } else if (!is_merge && 
                    OB_FAIL(extra->flush_batch_rows())) {
           SQL_LOG(WARN, "failed to flush batch rows", K(ret));

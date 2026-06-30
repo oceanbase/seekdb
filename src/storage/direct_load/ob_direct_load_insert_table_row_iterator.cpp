@@ -76,11 +76,8 @@ int ObDirectLoadInsertTableRowIterator::init(
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(row_handler_.init(insert_tablet_ctx))) {
-      LOG_WARN("fail to init row handler", KR(ret));
     } else if (OB_FAIL(insert_tablet_ctx->init_datum_row(insert_datum_row_))) {
-      LOG_WARN("fail to init datum row", KR(ret));
     } else if (OB_FAIL(insert_tablet_ctx->init_datum_row(delete_datum_row_, true /*is_delete*/))) {
-      LOG_WARN("fail to init datum row", KR(ret));
     } else {
       insert_tablet_ctx_ = insert_tablet_ctx;
       dml_row_handler_ = dml_row_handler;
@@ -119,7 +116,6 @@ int ObDirectLoadInsertTableRowIterator::get_next_row(const bool skip_lob,
         LOG_WARN("fail to get next row", KR(ret));
       }
     } else if (OB_FAIL(row_handler_.handle_row(*datum_row, skip_lob))) {
-      LOG_WARN("fail to handle row", KR(ret));
     } else {
       result_row = datum_row;
       ++row_count_;
@@ -156,7 +152,6 @@ int ObDirectLoadInsertTableRowIterator::inner_get_next_row(ObDatumRow *&result_r
         if (row_iter->get_row_flag().uncontain_hidden_pk_) {
           uint64_t pk_seq = OB_INVALID_ID;
           if (OB_FAIL(row_iter->get_hide_pk_interval()->next_value(pk_seq))) {
-            LOG_WARN("fail to get next pk seq", KR(ret));
           } else {
             datum_row2->storage_datums_[0].set_int(pk_seq);
           }
@@ -180,7 +175,6 @@ int ObDirectLoadInsertTableRowIterator::inner_get_next_row(ObDatumRow *&result_r
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected delete row", KR(ret), KPC(datum_row));
           } else if (OB_FAIL(dml_row_handler_->handle_insert_row(insert_tablet_ctx_->get_tablet_id(), *datum_row2))) {
-            LOG_WARN("fail to handle insert row", KR(ret), KPC(datum_row2));
           }
         }
         if (OB_SUCC(ret)) {
@@ -199,7 +193,6 @@ int ObDirectLoadInsertTableRowIterator::close()
     ret = OB_NOT_INIT;
     LOG_WARN("ObDirectLoadInsertTableRowIterator not init", KR(ret), KP(this));
   } else if (OB_FAIL(row_handler_.close())) {
-    LOG_WARN("fail to close row handler", KR(ret));
   } else {
     insert_tablet_ctx_->inc_row_count(row_count_);
   }

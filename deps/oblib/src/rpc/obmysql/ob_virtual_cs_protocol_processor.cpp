@@ -40,7 +40,6 @@ int ObVirtualCSProtocolProcessor::easy_decode(easy_message_t *m, rpc::ObPacket *
   ObCSEasyMemPool pool(m->pool);
   int64_t next_read_bytes = 0;
   if (OB_FAIL(do_decode(*conn, pool, (const char*&)m->input->pos, m->input->last, pkt, next_read_bytes))) {
-    LOG_ERROR("fail do_decode", K(ret));
   } else {
     if (next_read_bytes > 0 ) {
       m->next_read_len = next_read_bytes;
@@ -58,7 +57,6 @@ int ObVirtualCSProtocolProcessor::easy_process(easy_request_t *r, bool &need_rea
   if (!conn->is_in_authed_phase() && !conn->is_in_auth_switch_phase()) {
     need_read_more = false;
   } else if (OB_FAIL(do_splice(*conn, pool, r->ipacket, need_read_more))) {
-    LOG_ERROR("fail to splice mysql packet", K(ret));
   }
   return ret;
 }

@@ -45,7 +45,6 @@ bool ObQuestionmarkEqualCtx::compare_const(const ObConstRawExpr &left,
       equal_info.second_param_idx_ = right.get_value().get_unknown();
       if (equal_info.first_param_idx_ != equal_info.second_param_idx_) {
         if (OB_FAIL(equal_pairs_.push_back(equal_info))) {
-          LOG_WARN("failed to push back equal_info", K(ret));
         }
       }
     }
@@ -127,13 +126,11 @@ int ObSharedExprResolver::add_new_instance(ObRawExprEntry &entry)
       shared_exprs = new (ptr) SharedExprs();
       if (OB_FAIL(shared_expr_map_.set_refactored(entry.hash_code_,
                                                   shared_exprs))) {
-        LOG_WARN("failed to add shared expr into map", K(ret));
       }
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(shared_exprs->push_back(entry))) {
-      LOG_WARN("failed to push back entry", K(ret));
     }
   }
   return ret;
@@ -180,7 +177,6 @@ int ObSharedExprResolver::get_shared_instance(ObRawExpr *expr,
                                                         new_param_expr,
                                                         is_param_new,
                                                         disable_share_child)))) {
-        LOG_WARN("failed to get shared instance", K(ret));
       } else {
         expr->get_param_expr(i) = new_param_expr;
         has_new_param = has_new_param || is_param_new;
@@ -200,7 +196,6 @@ int ObSharedExprResolver::get_shared_instance(ObRawExpr *expr,
       } else if (NULL != new_expr) {
         shared_expr = new_expr;
       } else if (OB_FAIL(add_new_instance(entry))) {
-        LOG_WARN("failed to add new instance", K(ret));
       } else {
         shared_expr = entry.expr_;
         is_new = true;
@@ -250,7 +245,6 @@ int ObSharedExprResolver::inner_get_shared_expr(ObRawExprEntry &entry,
         LOG_WARN("query ctx is not provide", K(ret));
       } else if (OB_FAIL(append(query_ctx_->all_equal_param_constraints_,
                                 cmp_ctx.equal_pairs_))) {
-        LOG_WARN("failed to add equal constraint", K(ret));
       }
     }
   }

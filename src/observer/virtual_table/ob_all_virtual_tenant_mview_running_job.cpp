@@ -50,14 +50,12 @@ int ObAllVirtualTenantMviewRunningJob::inner_get_next_row(ObNewRow *&row)
 
   if (!start_to_read_) {
     if (OB_FAIL(fill_scanner_.init(&scanner_, &cur_row_, output_column_ids_))) {
-      SERVER_LOG(WARN, "init fill_scanner fail", K(ret));
     } else {
       MOD_SCOPE
       {
         ObMViewMaintenanceService::MViewMdsOpMap &mview_mds_map =
             share::g_mp->m_view_maintenance_service()->get_mview_mds_op();
         if (OB_FAIL(mview_mds_map.foreach_refactored(fill_scanner_))) {
-          SERVER_LOG(WARN, "fill scanner fail", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -142,7 +140,6 @@ int ObAllVirtualTenantMviewRunningJob::FillScanner::operator()(
     }
     // The scanner supports up to 64M, so the overflow situation is not considered for the time being
     if (FAILEDx(scanner_->add_row(*cur_row_))) {
-      SERVER_LOG(WARN, "fail to add row", K(ret), K(*cur_row_));
     }
   }
 
@@ -169,7 +166,6 @@ int ObAllVirtualTenantMviewRunningJob::FillScanner::init(common::ObScanner *scan
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "some parameter is NULL", K(ret), K(scanner), K(cur_row));
   } else if (OB_FAIL(output_column_ids_.assign(column_ids))) {
-    SQL_ENG_LOG(WARN, "fail to assign output column ids", K(ret), K(column_ids));
   } else if (!ObServerConfig::get_instance().self_addr_.ip_to_string(ip_buf_, sizeof(ip_buf_))) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "ip_to_string failed", K(ret));

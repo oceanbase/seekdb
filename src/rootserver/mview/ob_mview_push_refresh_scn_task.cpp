@@ -106,26 +106,22 @@ void ObMViewPushRefreshScnTask::runTimerTask()
   } else if (OB_UNLIKELY(is_stop_)) {
     // do nothing
   } else if (OB_FAIL(need_schedule_major_refresh_mv_task( need_schedule))) {
-    LOG_WARN("fail to check need schedule major refresh mv task", KR(ret));
   } else if (!need_schedule) {
   } else if (REACH_TIME_INTERVAL(300 * 1000 * 1000) && FALSE_IT(void(check_major_mv_refresh_scn_safety()))) {
   } else if (OB_UNLIKELY(OB_ISNULL(sql_proxy))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", KR(ret));
   } else if (OB_FAIL(trans.start(sql_proxy))) {
-    LOG_WARN("fail to start trans", KR(ret));
   } else {
     share::ObGlobalStatProxy stat_proxy(trans);
     share::SCN major_refresh_mv_merge_scn;
     if (OB_FAIL(stat_proxy.get_major_refresh_mv_merge_scn(true /*select for update*/,
                                                           major_refresh_mv_merge_scn))) {
-      LOG_WARN("fail to get major_refresh_mv_merge_scn", KR(ret));
     } else if (OB_UNLIKELY(!major_refresh_mv_merge_scn.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("major_refresh_mv_merge_scn is invalid", KR(ret),
                 K(major_refresh_mv_merge_scn));
     } else if (OB_FAIL(update_major_refresh_mview_scn_(major_refresh_mv_merge_scn, trans))) {
-      LOG_WARN("fail to update major_refresh_mview_scn", KR(ret), K(major_refresh_mv_merge_scn));
     } else {
       LOG_INFO("[MAJ_REF_MV] successfully push major refresh mview refresh scn",
                 K(major_refresh_mv_merge_scn));
@@ -147,16 +143,13 @@ int ObMViewPushRefreshScnTask::check_major_mv_refresh_scn_safety()
   common::ObISQLClient *sql_proxy = GCTX.sql_proxy_;
   ObArray<ObMajorMVMergeInfo> merge_info_array;
   if (OB_FAIL(trans.start(sql_proxy))) {
-    LOG_WARN("fail to start trans", KR(ret));
   } else {
     share::ObGlobalStatProxy stat_proxy(trans);
     share::SCN major_refresh_mv_merge_scn;
     const bool select_for_update = true;
     if (OB_FAIL(stat_proxy.get_major_refresh_mv_merge_scn(select_for_update,
                                                           major_refresh_mv_merge_scn))) {
-      LOG_WARN("fail to get major_refresh_mv_merge_scn", KR(ret));
     } else if (OB_FAIL(get_major_mv_merge_info_( trans, merge_info_array))) {
-      LOG_WARN("fail to get major_mv merge_info", KR(ret));
     }
   }
   if (trans.is_started()) {
@@ -207,7 +200,6 @@ int ObMViewPushRefreshScnTask::update_major_refresh_mview_scn_(const share::SCN 
   int ret = OB_SUCCESS;
   share::SCN min_major_refresh_mview_scn;
   if (OB_FAIL(OB_FAIL(ObMViewInfo::get_min_major_refresh_mview_scn(trans, INT64_MAX, min_major_refresh_mview_scn)))) {
-    LOG_WARN("fail to get_min_major_refresh_mview_scn", KR(ret), K(major_refresh_mview_scn));
   } else if (!min_major_refresh_mview_scn.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to min_major_refresh_mview_scn is invalid", KR(ret), K(major_refresh_mview_scn));
@@ -226,12 +218,9 @@ int ObMViewPushRefreshScnTask::update_major_refresh_mview_scn_(const share::SCN 
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("conn is NULL", KR(ret));
     } else if (OB_FAIL(arg.serialize(buf, buf_len, pos))) {
-      LOG_WARN("fail to serialize", KR(ret), K(arg));
     } else if (OB_FAIL(conn->register_multi_data_source(share::SYS_LS,
             transaction::ObTxDataSourceType::MV_UPDATE_SCN, buf, buf_len))) {
-      LOG_WARN("fail to register_tx_data", KR(ret), K(arg), K(buf_len));
     } else if (OB_FAIL(ObMViewInfo::update_major_refresh_mview_scn(trans, major_refresh_mview_scn))) {
-      LOG_WARN("fail to update major_refresh_mview_scn", KR(ret), K(major_refresh_mview_scn), K(min_major_refresh_mview_scn));
     }
   }
   return ret;
@@ -249,14 +238,12 @@ int ObMViewPushRefreshScnTask::get_major_mv_merge_info_(ObISQLClient &sql_client
           share::OB_ALL_VIRTUAL_TABLE_MGR_TNAME,
           share::OB_ALL_VIRTUAL_LOG_STAT_TNAME,
           (int64_t)ObMVRefreshMode::MAJOR_COMPACTION))) {
-    LOG_WARN("assign sql failed", KR(ret));
   } else {
     common::sqlclient::ObMySQLResult *result = nullptr;
     SMART_VAR(ObMySQLProxy::MySQLResult, res)
     {
       common::sqlclient::ObMySQLResult *result = nullptr;
       if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("result is null", KR(ret));
@@ -273,11 +260,9 @@ int ObMViewPushRefreshScnTask::get_major_mv_merge_info_(ObISQLClient &sql_client
           EXTRACT_INT_FIELD_MYSQL(*result, "is_member", merge_info.is_member_, int64_t);
           EXTRACT_INT_FIELD_MYSQL(*result, "is_leaner", merge_info.is_learner_, int64_t);
           if (OB_FAIL(ret)) {
-            LOG_WARN("fail to extract field from result", KR(ret));
           } else {
             merge_info.svr_addr_ = GCTX.self_addr();
             if (OB_FAIL(merge_info_array.push_back(merge_info))) {
-              LOG_WARN("fail to push merge_info to array", KR(ret));
             }
           }
           if (OB_FAIL(ret)) {

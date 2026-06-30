@@ -45,9 +45,7 @@ int ObTabletReorganizeHistoryTableOperator::check_tablet_has_reorganized(
       if (OB_FAIL(sql.assign_fmt(
         "select * from %s where src_tablet_id = %ld", 
         OB_ALL_TABLET_REORGANIZE_HISTORY_TNAME, tablet_id.id()))) {
-        LOG_WARN("failed to assign sql", K(ret), K(sql), K(tablet_id));  
       } else if (OB_FAIL(proxy.read(res, sql.ptr()))) {
-        LOG_WARN("failed to exec sql", K(ret), K(sql)); 
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("result is null", K(ret), K(sql));
@@ -86,9 +84,7 @@ int ObTabletReorganizeHistoryTableOperator::get_all_split_tablet_pairs(
       
       if (OB_FAIL(sql_string.assign_fmt("SELECT src_tablet_id, dest_tablet_id FROM %s",
               OB_ALL_TABLET_REORGANIZE_HISTORY_TNAME))) {
-        LOG_WARN("assign sql string failed", K(ret));
       } else if (OB_FAIL(sql_proxy.read(res, sql_string.ptr()))) {
-        LOG_WARN("read tablet ids from all tablet reorganize history table failed", K(ret), K(sql_string));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get sql result", K(ret), KP(result));
@@ -109,7 +105,6 @@ int ObTabletReorganizeHistoryTableOperator::get_all_split_tablet_pairs(
             ReorganizeTabletPair tablet_pair(src_tablet_id, dest_tablet_id);
             if (OB_FAIL(ret)) {
             } else if (OB_FAIL(tablet_pairs.push_back(tablet_pair))) {
-              LOG_WARN("failed to push back tablet pair", K(ret), K(src_tablet_id), K(dest_tablet_id));
             }
           }
         } // while
@@ -138,9 +133,7 @@ int ObTabletReorganizeHistoryTableOperator::get_split_tablet_pairs_by_src(
        
       if (OB_FAIL(sql_string.assign_fmt("SELECT src_tablet_id, dest_tablet_id FROM %s WHERE "
               " src_tablet_id = %ld", OB_ALL_TABLET_REORGANIZE_HISTORY_TNAME, tablet_id.id()))) {
-        LOG_WARN("assign sql string failed", K(ret));
       } else if (OB_FAIL(sql_proxy.read(res, sql_string.ptr()))) {
-        LOG_WARN("read tablet ids from all tablet reorganize history table failed", K(ret), K(sql_string));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get sql result", K(ret), KP(result));
@@ -161,7 +154,6 @@ int ObTabletReorganizeHistoryTableOperator::get_split_tablet_pairs_by_src(
             ReorganizeTabletPair tablet_pair(src_tablet_id, dest_tablet_id);
             if (OB_FAIL(ret)) {
             } else if (OB_FAIL(tablet_pairs.push_back(tablet_pair))) {
-              LOG_WARN("failed to push back tablet pair", K(ret), K(src_tablet_id), K(dest_tablet_id));
             }
           }
         } // while
@@ -189,9 +181,7 @@ int ObTabletReorganizeHistoryTableOperator::get_split_tablet_pairs_by_dest(
       if (OB_FAIL(sql.assign_fmt(
         "select * from %s where dest_tablet_id = %ld", 
         OB_ALL_TABLET_REORGANIZE_HISTORY_TNAME, tablet_id.id()))) {
-        LOG_WARN("failed to assign sql", K(ret), K(sql), K(tablet_id));  
       } else if (OB_FAIL(sql_proxy.read(res, sql.ptr()))) {
-        LOG_WARN("failed to exec sql", K(ret), K(sql)); 
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("result is null", K(ret), K(sql));
@@ -232,7 +222,6 @@ int ObTabletReorganizeHistoryTableOperator::insert_(
                                              incomplete_record.finish_time_);
     if (OB_FAIL(insert_sql.assign_fmt("INSERT INTO %s (src_tablet_id, dest_tablet_id, "
         "type, create_time, finish_time) VALUES ", OB_ALL_TABLET_REORGANIZE_HISTORY_TNAME))) {
-      LOG_WARN("failed to assign fmt", K(ret));
     } 
     int64_t affected_rows = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < dest_tablet_ids.count(); ++i) {
@@ -240,22 +229,17 @@ int ObTabletReorganizeHistoryTableOperator::insert_(
       if (OB_FAIL(insert_sql.append_fmt("(%ld, %ld, %ld, usec_to_time(%lu), usec_to_time(%lu))",
           complete_record.src_tablet_id_.id(),
           complete_record.dest_tablet_id_.id(), int64_t(complete_record.type_), complete_record.create_time_, complete_record.finish_time_))) {
-        LOG_WARN("failed to append fmt", K(ret), K(complete_record));
       } else if ((i%ObDDLUtil::MAX_BATCH_COUNT) == ObDDLUtil::MAX_BATCH_COUNT - 1 || i == dest_tablet_ids.count() - 1) {
         if (OB_FAIL(insert_sql.append_fmt("ON DUPLICATE KEY UPDATE finish_time = usec_to_time(VALUES(finish_time));"))) {
-          LOG_WARN("failed to append insert_sql", K(ret), K(insert_sql));
         } else if (OB_FAIL(sql_proxy.write(insert_sql.ptr(), affected_rows))) {
-          LOG_WARN("failed to write sql", K(ret), K(insert_sql));
         } else {
           LOG_INFO("insert tablet reorganize history table success", K(ret), K(affected_rows));
           insert_sql.reuse();
           if (OB_FAIL(insert_sql.assign_fmt("INSERT INTO %s (src_tablet_id, dest_tablet_id, "
               "type, create_time, finish_time) VALUES ", OB_ALL_TABLET_REORGANIZE_HISTORY_TNAME))) {
-            LOG_WARN("failed to assign fmt", K(ret));
           } 
         }
       } else if (OB_FAIL(insert_sql.append(", "))) {
-        LOG_WARN("failed to append insert_sql", K(ret), K(insert_sql));
       }
     }
   }
@@ -273,10 +257,8 @@ int ObTabletReorganizeHistoryTableOperator::batch_insert(
   int tmp_ret = OB_SUCCESS;
   ObMySQLTransaction trans;
   if (OB_FAIL(trans.start(&sql_proxy))) {
-    LOG_WARN("failed to start trans", K(ret));
   } else {
     if (OB_FAIL(inner_batch_insert_(trans, split_arg.src_ls_id_, split_arg.src_tablet_id_, split_arg.dest_tablet_ids_, start_time, finish_time))) {
-      LOG_WARN("failed to inner batch insert", K(ret));
     } else if (split_arg.src_local_index_tablet_ids_.count() != split_arg.dest_local_index_tablet_ids_.count()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("split arg src local index count not equal to dest", K(ret), K(split_arg));
@@ -285,7 +267,6 @@ int ObTabletReorganizeHistoryTableOperator::batch_insert(
         const ObTabletID &src_tablet_id = split_arg.src_local_index_tablet_ids_.at(idx);
         const ObSArray<ObTabletID> &dest_tablet_ids = split_arg.dest_local_index_tablet_ids_.at(idx);
         if (OB_FAIL(inner_batch_insert_(trans, split_arg.src_ls_id_, src_tablet_id, dest_tablet_ids, start_time, finish_time))) {
-          LOG_WARN("failed to inner batch insert", K(ret));
         }
       }
     }
@@ -298,7 +279,6 @@ int ObTabletReorganizeHistoryTableOperator::batch_insert(
         const ObTabletID &src_tablet_id = split_arg.src_lob_tablet_ids_.at(idx);
         const ObSArray<ObTabletID> &dest_tablet_ids = split_arg.dest_lob_tablet_ids_.at(idx);
         if (OB_FAIL(inner_batch_insert_(trans, split_arg.src_ls_id_, src_tablet_id, dest_tablet_ids, start_time, finish_time))) {
-          LOG_WARN("failed to inner batch insert", K(ret));
         }
       }
     }
@@ -344,7 +324,6 @@ int ObTabletReorganizeHistoryTableOperator::inner_batch_insert_(
   
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(insert_(sql_proxy, incomplete_record, dest_tablet_ids))) {
-    LOG_WARN("failed to insert record", K(ret), K(records));
   }
   return ret;
 }

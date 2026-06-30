@@ -46,11 +46,9 @@ int CalcPartitionBaseInfo::deep_copy(common::ObIAllocator &allocator,
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObExprExtraInfoFactory::alloc(allocator, type,
                                             copied_info))) {
-    LOG_WARN("failed to alloc extra info", K(ret));
   } else {
     CalcPartitionBaseInfo *base_info = static_cast<CalcPartitionBaseInfo*>(copied_info);
     if (OB_FAIL(base_info->related_table_ids_.assign(related_table_ids_))) {
-      LOG_WARN("assign related table ids failed", K(ret));
     } else {
       base_info->ref_table_id_ = ref_table_id_;
       base_info->part_level_ = part_level_;
@@ -132,7 +130,6 @@ int ObExprCalcPartitionBase::cg_expr(ObExprCGCtx &expr_cg_ctx,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid ref table id", K(ref_table_id), K(ret));
   } else if (OB_FAIL(expr_cg_ctx.schema_guard_->get_table_schema( ref_table_id, table_schema))) {
-    LOG_WARN("fail to get table schema", K(ref_table_id), K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("Table not exist", K(ref_table_id), K(ret));
@@ -141,7 +138,6 @@ int ObExprCalcPartitionBase::cg_expr(ObExprCGCtx &expr_cg_ctx,
                                          raw_expr.get_partition_id_calc_type(),
                                          raw_expr.get_may_add_interval_part(),
                                          calc_part_info))) {
-    LOG_WARN("fail to init tl expr info", K(ret));
   } else if (OB_ISNULL(calc_part_info)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to init tl expr info", K(ret), K(calc_part_info));
@@ -172,7 +168,6 @@ int ObExprCalcPartitionBase::cg_expr(ObExprCGCtx &expr_cg_ctx,
                     get_das_ctx().get_das_tablet_mapper(calc_part_info->ref_table_id_,
                                                         tablet_mapper,
                                                         &calc_part_info->related_table_ids_))) {
-          LOG_WARN("get das tablet mapper failed", K(ret), K(calc_part_info));
         } else {
           share::schema::RelatedTableInfo *related_info_ptr = nullptr;
           if (tablet_mapper.get_related_table_info().related_tids_ != nullptr &&
@@ -332,9 +327,7 @@ int ObExprCalcPartitionBase::calc_no_partition_location(const ObExpr &expr,
   if (OB_FAIL(ctx.exec_ctx_.get_das_ctx().get_das_tablet_mapper(calc_part_info->ref_table_id_,
                                                                 tablet_mapper,
                                                                 &calc_part_info->related_table_ids_))) {
-    LOG_WARN("get das tablet mapper failed", K(ret), K(calc_part_info));
   } else if (OB_FAIL(tablet_mapper.get_non_partition_tablet_id(tablet_ids, partition_ids))) {
-    LOG_WARN("fail to get non partition tablet id", K(ret));
   } else {
     if (CALC_TABLET_ID == calc_part_info->calc_id_type_) {
       if (0 == tablet_ids.count()) {
@@ -352,7 +345,6 @@ int ObExprCalcPartitionBase::calc_no_partition_location(const ObExpr &expr,
       if (OB_FAIL(concat_part_and_tablet_id(expr, ctx, res_datum,
                     (0 == partition_ids.count()) ? OB_INVALID_ID : partition_ids.at(0),
                     (0 == tablet_ids.count()) ? OB_INVALID_ID : tablet_ids.at(0).id()))) {
-        LOG_WARN("fail to concat partition id and tablet id", K(ret));
       }
     }
   }
@@ -381,7 +373,6 @@ int ObExprCalcPartitionBase::calc_partition_level_one(const ObExpr &expr,
       res_datum.set_int(partition_id);
     } else if (CALC_PARTITION_TABLET_ID == calc_part_info->calc_id_type_) {
       if (OB_FAIL(concat_part_and_tablet_id(expr, ctx, res_datum, partition_id, tablet_id.id()))) {
-        LOG_WARN("fail to concat partition id and tablet id", K(ret));
       }
     }
   }
@@ -493,7 +484,6 @@ static int inner_fast_calc_range_partition_level_one_vector(ArgVec *vec,
                         datum,
                         calc_part_ctx->part_cmp_);
   if (OB_FAIL(calc_part_ctx->part_cmp_.ret_)) {
-    LOG_WARN("partition_cmp failed", K(calc_part_ctx->part_cmp_.ret_));
   } else {
     int64_t part_idx = upper_res - calc_part_ctx->range_partitions_.begin();
     if (OB_UNLIKELY(part_idx < 0 || part_idx >= part_num)) {
@@ -589,14 +579,12 @@ static int inner_fast_calc_partition_level_one_vector(const ObExpr &expr,
     } else if (Type == ObExprCalcPartitionBase::PartType::RANGE) {
       if (OB_FAIL(calc_part_ctx->init_calc_range_partition_base_info(*table_schema, 
                   *part_expr, ctx.exec_ctx_.get_allocator()))) {
-        LOG_WARN("Fail to init range partition base info", K(ret));
       } else {
         calc_part_ctx->inited_ = true;
       }
     } else { // LIST
       if (OB_FAIL(calc_part_ctx->init_calc_list_partition_base_info(*table_schema, 
                   *part_expr, ctx.exec_ctx_.get_allocator()))) {
-        LOG_WARN("Fail to init list partition base info", K(ret));
       } else {
         calc_part_ctx->inited_ = true;
       }
@@ -718,7 +706,6 @@ int ObExprCalcPartitionBase::fast_calc_partition_level_one_vector(const ObExpr &
   // Revert to using the non-fast path directly.
   if (expr.expr_ctx_id_ == ObExpr::INVALID_EXP_CTX_ID) {
     if (OB_FAIL(calc_partition_level_one_vector(expr, ctx, skip, bound))) {
-      LOG_WARN("Fail to calc partition level one vector", K(ret));
     }
   } else {
     CalcPartitionBaseInfo *calc_part_info = reinterpret_cast<CalcPartitionBaseInfo *>(expr.extra_info_);
@@ -728,12 +715,10 @@ int ObExprCalcPartitionBase::fast_calc_partition_level_one_vector(const ObExpr &
     if (OB_FAIL(ctx.exec_ctx_.get_das_ctx().get_das_tablet_mapper(calc_part_info->ref_table_id_,
                                                                   tablet_mapper,
                                                                   &calc_part_info->related_table_ids_))) {
-      LOG_WARN("get das tablet mapper failed", K(ret), K(calc_part_info));
     } else if (OB_ISNULL(table_schema = tablet_mapper.get_table_schema())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table_schema is null.", K(ret));
     } else if (OB_FAIL(part_expr->eval_vector(ctx, skip, bound))) {
-      LOG_WARN("calc part expr failed", K(ret));
     } else {
       VectorFormat res_format = expr.get_format(ctx);
       VectorFormat arg_format = expr.args_[0]->get_format(ctx);
@@ -757,11 +742,9 @@ int ObExprCalcPartitionBase::calc_partition_level_one_vector(const ObExpr &expr,
   if (OB_FAIL(ctx.exec_ctx_.get_das_ctx().get_das_tablet_mapper(calc_part_info->ref_table_id_,
                                                                 tablet_mapper,
                                                                 &calc_part_info->related_table_ids_))) {
-    LOG_WARN("get das tablet mapper failed", K(ret), K(calc_part_info));
   } else if (T_OP_ROW == part_expr->type_) {
     for (int64_t i = 0; OB_SUCC(ret) && i < part_expr->arg_cnt_; i++) {
       if (OB_FAIL(part_expr->args_[i]->eval_vector(ctx, skip, bound))) {
-        LOG_WARN("fail to eval child of part expr", K(ret), K(i), KPC(part_expr));
       }
     }
     ObNewRow row;
@@ -781,7 +764,6 @@ int ObExprCalcPartitionBase::calc_partition_level_one_vector(const ObExpr &expr,
     for (int64_t i = 0; i < part_expr->arg_cnt_ && OB_SUCC(ret); i++) {
       ObIVector *vec = part_expr->args_[i]->get_vector(ctx);
       if (OB_FAIL(part_child_vecs.push_back(vec))) {
-        LOG_WARN("push back failed", K(ret));
       }
     }
     ObIVector *res_vec = expr.get_vector(ctx);
@@ -803,13 +785,11 @@ int ObExprCalcPartitionBase::calc_partition_level_one_vector(const ObExpr &expr,
         ObDatum datum(payload, len, is_null);
         if (OB_FAIL(datum.to_obj(row.cells_[i], part_expr->args_[i]->obj_meta_,
                     part_expr->args_[i]->obj_datum_map_))) {
-          LOG_WARN("to obj failed", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(tablet_mapper.get_tablet_and_object_id(part_level, OB_INVALID_ID, row,
                                                                 tablet_id, partition_id))) {
-        LOG_WARN("Failed to get part id", K(ret), K(row));
       } else {
         res_vec->unset_null(row_idx);
         eval_flags.set(row_idx);
@@ -827,7 +807,6 @@ int ObExprCalcPartitionBase::calc_partition_level_one_vector(const ObExpr &expr,
     }
   } else {
     if (OB_FAIL(part_expr->eval_vector(ctx, skip, bound))) {
-      LOG_WARN("calc part expr failed", K(ret));
     } else {
       ObIVector *vec = part_expr->get_vector(ctx);
       ObIVector *res_vec = expr.get_vector(ctx);
@@ -846,7 +825,6 @@ int ObExprCalcPartitionBase::calc_partition_level_one_vector(const ObExpr &expr,
         if (OB_FAIL(datum.to_obj(func_value,
                                  part_expr->obj_meta_,
                                  part_expr->obj_datum_map_))) {
-          LOG_WARN("convert datum to obj failed", K(ret));
         } else if (func_value.is_outrow_lob()) {
           ret = OB_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_NOT_SUPPORTED, "outrow lob as partition key");
@@ -856,7 +834,6 @@ int ObExprCalcPartitionBase::calc_partition_level_one_vector(const ObExpr &expr,
           if (PARTITION_FUNC_TYPE_HASH == part_type) {
             if (OB_FAIL(ObExprFuncPartHash::calc_value_for_mysql(func_value, result,
                         func_value.get_type()))) {
-              LOG_WARN("Failed to calc hash value mysql mode", K(ret));
             }
           }
           if (OB_SUCC(ret)) {
@@ -867,14 +844,12 @@ int ObExprCalcPartitionBase::calc_partition_level_one_vector(const ObExpr &expr,
             ObRowkey rowkey(const_cast<ObObj*>(&result), 1);
             ObNewRange range;
             if (OB_FAIL(range.build_range(calc_part_info->ref_table_id_, rowkey))) {
-              LOG_WARN("Failed to build range", K(ret));
             } else if (OB_FAIL(tablet_mapper.get_tablet_and_object_id(
                                               part_level,
                                               OB_INVALID_ID,
                                               range,
                                               tablet_ids,
                                               partition_ids))) {
-              LOG_WARN("Failed to get part id", K(ret));
             } else if (partition_ids.count() != 0 && partition_ids.count() != 1) {
               ret = OB_INVALID_ARGUMENT;
               LOG_WARN("invalid partition cnt", K(ret), K(part_expr), K(partition_ids), K(range), K(rowkey));
@@ -925,14 +900,12 @@ int ObExprCalcPartitionBase::calc_partition_level_two(const ObExpr &expr,
   if (CALC_IGNORE_FIRST_PART == calc_type) {
     int64_t first_part_id = OB_INVALID_ID;
     if (OB_FAIL(get_first_part_id(ctx.exec_ctx_, expr, first_part_id))) {
-      LOG_WARN("get first part id failed", K(ret));
     } else if (OB_FAIL(calc_partition_id(*expr.args_[1],
                                         ctx,
                                         *calc_part_info,
                                         first_part_id,
                                         tablet_id,
                                         partition_id))) {
-      LOG_WARN("fail to calc partitoin id", K(ret));
     }
   } else if (CALC_IGNORE_SUB_PART == calc_type) {
     if (OB_FAIL(calc_partition_id(*expr.args_[0],
@@ -941,7 +914,6 @@ int ObExprCalcPartitionBase::calc_partition_level_two(const ObExpr &expr,
                                   OB_INVALID_ID, /*first_part_id*/
                                   tablet_id,
                                   partition_id))) {
-      LOG_WARN("fail to calc partitoin id", K(ret));
     } else {
       // FIXME @YISHEN
       tablet_id = ObTabletID(partition_id);
@@ -952,7 +924,6 @@ int ObExprCalcPartitionBase::calc_partition_level_two(const ObExpr &expr,
                                        OB_INVALID_ID, /*first_part_id*/
                                        tablet_id,
                                        first_part_id))) {
-    LOG_WARN("fail to calc partitoin id", K(ret));
   } else {
     if (OB_INVALID_ID == first_part_id) {
       // do nothing
@@ -963,7 +934,6 @@ int ObExprCalcPartitionBase::calc_partition_level_two(const ObExpr &expr,
                                     first_part_id,
                                     tablet_id,
                                     partition_id))) {
-        LOG_WARN("fail to calc partitoin id", K(ret));
       }
     }
   }
@@ -974,7 +944,6 @@ int ObExprCalcPartitionBase::calc_partition_level_two(const ObExpr &expr,
       res_datum.set_int(partition_id);
     } else if (CALC_PARTITION_TABLET_ID == calc_part_info->calc_id_type_) {
       if (OB_FAIL(concat_part_and_tablet_id(expr, ctx, res_datum, partition_id, tablet_id.id()))) {
-        LOG_WARN("fail to concat partition id and tablet id", K(ret));
       }
     }
   }
@@ -1030,9 +999,7 @@ int ObExprCalcPartitionBase::calc_part_and_tablet_id(const ObExpr *calc_part_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("calc part id is invalid", K(ret), KPC(calc_part_id));
   } else if (OB_FAIL(calc_part_id->eval(eval_ctx, partition_id_datum))) {
-    LOG_WARN("calc part id expr failed", K(ret));
   } else if (OB_FAIL(extract_part_and_tablet_id(*partition_id_datum, partition_id, tablet_id))) {
-    LOG_WARN("extract part and tablet id failed", K(ret));
   } else if (ObExprCalcPartitionId::NONE_PARTITION_ID == partition_id) {
     ret = OB_NO_PARTITION_FOR_GIVEN_VALUE;
     LOG_DEBUG("no partition matched", K(ret), KPC(calc_part_id), KPC(partition_id_datum));
@@ -1049,7 +1016,6 @@ int ObExprCalcPartitionBase::calc_part_and_subpart_and_tablet_id(const ObExpr *c
   int ret = OB_SUCCESS;
   ObDatum *partition_id_datum = NULL;
   if (OB_FAIL(calc_part_and_tablet_id(calc_part_id, eval_ctx, partition_id, tablet_id))) {
-    LOG_WARN("failed to calc_part_and_tablet_id", K(ret));
   } else {
     // get first partition_id from table schema by partition_id
     CalcPartitionBaseInfo *calc_part_info = NULL;
@@ -1067,12 +1033,10 @@ int ObExprCalcPartitionBase::calc_part_and_subpart_and_tablet_id(const ObExpr *c
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null sql_ctx", K(ret));
       } else if (OB_FAIL(eval_ctx.exec_ctx_.get_sql_ctx()->schema_guard_->get_table_schema( calc_part_info->ref_table_id_, table_schema))) {
-        LOG_WARN("get table schema failed", K(ret));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null table_schema", K(ret));
       } else if (OB_FAIL(table_schema->get_subpartition_by_sub_part_id(partition_id, part, subpart))) {
-        LOG_WARN("fail to get partition", K(ret), K(partition_id));
       } else if (OB_ISNULL(part)) {
         ret = OB_ENTRY_NOT_EXIST;
         LOG_WARN("fail to get partition", K(ret), K(partition_id));
@@ -1113,7 +1077,6 @@ int ObExprCalcPartitionBase::build_row(ObEvalCtx &ctx,
       if (OB_FAIL(col_datum.to_obj(row.cells_[i],
                                    col_expr->obj_meta_,
                                    col_expr->obj_datum_map_))) {
-        LOG_WARN("convert datum to obj failed", K(ret));
       }
     }
   }
@@ -1185,7 +1148,6 @@ int ObExprCalcPartitionBase::calc_partition_id(const ObExpr &part_expr,
   if (OB_FAIL(ctx.exec_ctx_.get_das_ctx().get_das_tablet_mapper(calc_part_info.ref_table_id_,
                                                                 tablet_mapper,
                                                                 &calc_part_info.related_table_ids_))) {
-    LOG_WARN("get das tablet mapper failed", K(ret), K(calc_part_info));
   } else if (T_OP_ROW == part_expr.type_) {
     ObDatum *tmp_datum = NULL;
     // Here we pre-calculate the expr child value, rather than calling eval directly in build row,
@@ -1193,7 +1155,6 @@ int ObExprCalcPartitionBase::calc_partition_id(const ObExpr &part_expr,
     // cell memory usage for reset tmp alloc
     for (int64_t i = 0; OB_SUCC(ret) && i < part_expr.arg_cnt_; i++) {
       if (OB_FAIL(part_expr.args_[i]->eval(ctx, tmp_datum))) {
-        LOG_WARN("fail to eval part expr", K(ret), K(part_expr));
       }
     }
     if (OB_SUCC(ret)) {
@@ -1201,14 +1162,12 @@ int ObExprCalcPartitionBase::calc_partition_id(const ObExpr &part_expr,
       ObEvalCtx::TempAllocGuard alloc_guard(ctx);
       ObIAllocator &allocator = alloc_guard.get_allocator();
       if (OB_FAIL(build_row(ctx, allocator, part_expr, row))) {
-        LOG_WARN("fail to build row", K(ret));
       } else if (OB_FAIL(tablet_mapper.get_tablet_and_object_id(
                                                part_level,
                                                first_part_id,
                                                row,
                                                tablet_id,
                                                partition_id))) {
-        LOG_WARN("Failed to get part id", K(ret), K(row));
       } else {
         // interval partition only in oracle mode (dead code removed)
       }
@@ -1218,11 +1177,9 @@ int ObExprCalcPartitionBase::calc_partition_id(const ObExpr &part_expr,
     ObObj result;
     ObDatum *datum = NULL;
     if (OB_FAIL(part_expr.eval(ctx, datum))) {
-      LOG_WARN("part expr evaluate failed", K(ret));
     } else if (OB_FAIL(datum->to_obj(func_value,
                                      part_expr.obj_meta_,
                                      part_expr.obj_datum_map_))) {
-      LOG_WARN("convert datum to obj failed", K(ret));
     } else if (func_value.is_outrow_lob()) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "outrow lob as partition key");
@@ -1232,7 +1189,6 @@ int ObExprCalcPartitionBase::calc_partition_id(const ObExpr &part_expr,
       if (PARTITION_FUNC_TYPE_HASH == part_type) {
         if (OB_FAIL(ObExprFuncPartHash::calc_value_for_mysql(func_value, result,
                     func_value.get_type()))) {
-          LOG_WARN("Failed to calc hash value mysql mode", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -1243,14 +1199,12 @@ int ObExprCalcPartitionBase::calc_partition_id(const ObExpr &part_expr,
         ObRowkey rowkey(const_cast<ObObj*>(&result), 1);
         ObNewRange range;
         if (OB_FAIL(range.build_range(calc_part_info.ref_table_id_, rowkey))) {
-          LOG_WARN("Failed to build range", K(ret));
         } else if (OB_FAIL(tablet_mapper.get_tablet_and_object_id(
                                           part_level,
                                           first_part_id,
                                           range,
                                           tablet_ids,
                                           partition_ids))) {
-          LOG_WARN("Failed to get part id", K(ret));
         } else if (partition_ids.count() != 0 && partition_ids.count() != 1) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("invalid partition cnt", K(ret), K(part_expr), K(partition_ids), K(range), K(rowkey));
@@ -1354,7 +1308,6 @@ int ObExprCalcPartitionBase::ObExprCalcPartCtx::init_calc_range_partition_base_i
   ObPartition * const* part_array = table_schema.get_part_array();
   range_partitions_.set_allocator(&allocator);
   if (OB_FAIL(range_partitions_.prepare_allocate(part_num))) {
-    LOG_WARN("Fail to prepare_allocate", K(ret), K(part_num));
   }
   ObDatum tmp_datum;
   char buf[OBJ_DATUM_MAX_RES_SIZE];
@@ -1364,10 +1317,8 @@ int ObExprCalcPartitionBase::ObExprCalcPartCtx::init_calc_range_partition_base_i
       range_partitions_.at(i).set_max_range_part();
     } else if (OB_FAIL(tmp_datum.from_obj(
             *(part_array[i]->get_high_bound_val().get_obj_ptr())))) {
-      LOG_WARN("Fail to from obj", K(ret), K(i));
     } else if (OB_FAIL(range_partitions_.at(i).datum_.deep_copy(tmp_datum,
                                         allocator))) {
-      LOG_WARN("failed to deep copy datum");
     }
   }
   if (OB_SUCC(ret)) {
@@ -1409,7 +1360,6 @@ int ObExprCalcPartitionBase::ObExprCalcPartCtx::init_calc_list_partition_base_in
     ObMemAttr list_part_map_attr("LISTPART");
     if (OB_FAIL(list_part_map_.create(list_val_cnt * 2,
                                   list_part_map_attr, list_part_map_attr))) {
-      LOG_WARN("create interm_res hash table failed", K(ret));
     } else {
       ObDatum list_part_datum;
       char buf[OBJ_DATUM_MAX_RES_SIZE];
@@ -1423,17 +1373,14 @@ int ObExprCalcPartitionBase::ObExprCalcPartCtx::init_calc_list_partition_base_in
         for (int64_t j = 0; OB_SUCC(ret) && j < list_row_values.count(); ++j) {
           ObObj *list_part_obj = list_row_values.at(j).cells_;
           if (OB_FAIL(list_part_datum.from_obj(*list_part_obj))) {
-            LOG_WARN("Fail to from obj", K(ret), K(i));
           } else {
             PartValKey list_part_row;
             if (OB_FAIL(list_part_row.datum_.deep_copy(list_part_datum,
                                         allocator))) {
-              LOG_WARN("failed to deep copy datum");
             } else {
               list_part_row.hash_func_ = part_expr.basic_funcs_->murmur_hash_v2_;
               list_part_row.cmp_func_ = part_expr.basic_funcs_->null_first_cmp_;
               if (OB_FAIL(list_part_map_.set_refactored(list_part_row, i))) {
-                LOG_WARN("Fail to set_refactored", K(ret), K(i), K(j));
               }
             }
           }

@@ -56,9 +56,7 @@ int ObPxFifoCoordOp::inner_open()
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = GET_MY_SESSION(ctx_);
   if (OB_FAIL(ObPxCoordOp::inner_open())) {
-    LOG_WARN("fail open op", K(MY_SPEC.id_), K(ret));
   } else if (OB_FAIL(setup_loop_proc())) {
-    LOG_WARN("fail setup loop proc", K(ret));
   } else {
     if (OB_UNLIKELY(session->get_ddl_info().is_ddl())) {
       // use parallel scheduler for ddl to avoid large memory usage because
@@ -78,7 +76,6 @@ int ObPxFifoCoordOp::inner_close()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObPxCoordOp::inner_close())) {
-    LOG_WARN("fail close op", K(MY_SPEC.id_), K(ret));
   }
   return ret;
 }
@@ -132,7 +129,6 @@ int ObPxFifoCoordOp::fetch_rows(const int64_t row_cnt)
   } else if (OB_UNLIKELY(!first_row_fetched_)) {
     // Drive initial DFO distribution
     if (OB_FAIL(msg_proc_.startup_msg_loop(ctx_))) {
-      LOG_WARN("initial dfos NOT dispatched successfully", K(ret));
     }
     
     first_row_fetched_ = true; // control no longer actively calling startup_msg_loop, subsequent loops are message triggered
@@ -174,7 +170,6 @@ int ObPxFifoCoordOp::fetch_rows(const int64_t row_cnt)
       }
       metric_.mark_interval_end(&time_recorder_);
       if (OB_FAIL(ret)) {
-        LOG_WARN("get row failed", K(ret));
       } else {
         if (!first_row_sent_) {
           // used to make sure logging the following message once.
@@ -207,7 +202,6 @@ int ObPxFifoCoordOp::fetch_rows(const int64_t row_cnt)
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ctx_.fast_check_status())) {
-      LOG_WARN("fail check status, maybe px query timeout", K(ret));
     } else if (OB_FAIL(msg_loop_.process_any())) {
       LOG_DEBUG("process one failed error", K(ret));
       if (OB_DTL_WAIT_EAGAIN == ret) {

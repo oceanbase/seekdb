@@ -566,7 +566,6 @@ int ObIntegerStreamVecDecoder::decode_vector(
 #undef DECODE_VECTOR_
 
   if (OB_FAIL(ret)) {
-    LOG_ERROR("unexpected vec value type for integer stream", K(ret), K(vec_tc), K(base_col_ctx), K(ctx));
   }
   return ret;
 }

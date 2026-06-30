@@ -210,13 +210,11 @@ int ObCompactRow::calc_row_size(const RowMeta &row_meta, const common::ObIArray<
     ObExpr *expr = exprs.at(col_idx);
     // ensure the vector is evaluated
     if (OB_FAIL(expr->eval_vector(ctx, brs))) {
-      SQL_ENG_LOG(WARN, "fail to evel vector", K(ret), K(expr));
     } else if (reordered && row_meta.project_idx(col_idx) < row_meta.fixed_cnt_) {
       // continue, the size is computed in `fixed_size`
     } else if (expr->is_nested_expr()) {
       int64_t len = 0;
       if (OB_FAIL(ObArrayExprUtils::calc_nested_expr_data_size(*expr, ctx, row_idx, len))) {
-        SQL_ENG_LOG(WARN, "fail to calc nested expr data size", K(ret));
       } else {
         size += len;
       }

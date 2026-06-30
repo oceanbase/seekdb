@@ -58,7 +58,6 @@ int ObTaskExecutor::build_task_op_input(ObExecContext &query_ctx,
         if (OB_ISNULL(child_op = root_spec.get_child(i))) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(OB_I(t2) build_task_op_input(query_ctx, task_info, *child_op))) {
-          LOG_WARN("fail to build child op input", K(ret), K(i), K(child_op->get_id()));
         }
       }
     } else {
@@ -80,7 +79,6 @@ int ObTaskExecutor::should_skip_failed_tasks(ObTaskInfo &task_info, bool &skip_f
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("root_spec is NULL", K(ret));
   } else if (OB_FAIL(ObTaskSpliter::find_scan_ops(scan_specs, *root_spec))) {
-    LOG_WARN("fail to find scan specs", K(ret), K(*root_spec), K(task_info));
   } else if (scan_specs.count() > 0) {
     skip_failed_tasks = true;
     for (int64_t i = 0;

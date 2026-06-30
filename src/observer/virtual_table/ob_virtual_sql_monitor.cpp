@@ -93,7 +93,6 @@ int ObVirtualSqlMonitor::inner_open()
           } else {
             start_request_id = (req_id_range.get_start_key().get_obj_ptr()[0]).get_int();
             if (OB_FAIL(monitor_manager_->get_by_request_id(start_request_id, index, plan_info, &ref))) {
-              SERVER_LOG(WARN, "fail to get by request id", K(ret), K(start_request_id));
             } else {
               start_id_ = index;
             }
@@ -107,7 +106,6 @@ int ObVirtualSqlMonitor::inner_open()
             } else {
               end_request_id = (req_id_range.get_end_key().get_obj_ptr()[0]).get_int();
               if (OB_FAIL(monitor_manager_->get_by_request_id(end_request_id, index, plan_info, &ref))) {
-                SERVER_LOG(WARN, "fail to get by request id", K(ret), K(end_request_id));
               } else {
                 end_id_ = index;
               }
@@ -128,7 +126,6 @@ int ObVirtualSqlMonitor::get_next_monitor_info()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(monitor_manager_->revert(&ref_))) {
-    SERVER_LOG(WARN, "fail to revert ref", K(ret));
   }
   if (OB_SUCC(ret)) {
     if (start_id_ > end_id_) {
@@ -182,7 +179,6 @@ int ObVirtualSqlMonitor::inner_get_next_row(common::ObNewRow *&row)
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "fail to get plan info");
     } else if (OB_FAIL(plan_info_->get_plan_info(plan_info))) {
-      SERVER_LOG(WARN, "fail to get operator by index", K(ret));
     } else if (OB_ISNULL(plan_info)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "fail to get plan info", K(ret), K(plan_info));
@@ -227,7 +223,6 @@ int ObVirtualSqlMonitor::inner_get_next_row(common::ObNewRow *&row)
           case EXTEND_INFO: {
             int64_t pos = 0;
             if (OB_FAIL(databuff_printf(extend_info_buf_, sizeof(extend_info_buf_), pos, plan_info_->get_trace()))) {
-              SERVER_LOG(WARN, "fail to format extend_info", K(ret), K(pos));
             } else {
               cells[cell_idx].set_varchar(ObString::make_string(extend_info_buf_));
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(

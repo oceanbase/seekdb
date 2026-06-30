@@ -170,14 +170,10 @@ int ObSimplifiedSSTableMacroBlockHeader::simplify_macro_block(
   ObSSTableMacroBlockHeader macro_header;
   ObSimplifiedSSTableMacroBlockHeader simplified_macro_header;
   if (OB_FAIL(common_header.deserialize(macro_block_buf, macro_block_buf_size, read_pos))) {
-    LOG_WARN("Failed to deserialize macro header", K(ret), KP(macro_block_buf), K(macro_block_buf_size));
   } else if (OB_FAIL(common_header.check_integrity())) {
-    LOG_ERROR("Invalid common header", K(ret), K(common_header));
   } else if (FALSE_IT(macro_header_pos = read_pos)) {
   } else if (OB_FAIL(macro_header.deserialize(macro_block_buf, macro_block_buf_size, read_pos))) {
-    LOG_WARN("Fail to deserialize macro block header", K(ret), K(macro_header), K(macro_block_buf_size), K(read_pos));
   } else if (OB_FAIL(simplified_macro_header.init(macro_header, macro_header_pos))) {
-    LOG_WARN("Fail to init simplified_macro_header", K(ret), K(macro_header), K(macro_header_pos));
   } else if (OB_UNLIKELY(!simplified_macro_header.is_valid())) {
     LOG_WARN("Invalid simplified macro header", K(ret), K(simplified_macro_header));
   } else if (macro_header.get_serialize_size() < simplified_macro_header.get_serialize_size()) {
@@ -190,7 +186,6 @@ int ObSimplifiedSSTableMacroBlockHeader::simplify_macro_block(
             macro_header_pos + macro_header.get_serialize_size() - simplified_macro_header.get_serialize_size();
     int64_t pos = simplified_macro_header_pos;
     if (OB_FAIL(simplified_macro_header.serialize(macro_block_buf, macro_block_buf_size, pos))) {
-      LOG_WARN("Fail to serialize simplified macro header", K(ret), K(simplified_macro_header));
     } else {
       simplified_buffer = macro_block_buf + simplified_macro_header_pos;
       simplified_buffer_size = macro_header.fixed_header_.idx_block_offset_ + macro_header.fixed_header_.idx_block_size_ - simplified_macro_header_pos;

@@ -88,7 +88,6 @@ int ObGVTxLockStat::get_next_tx_ctx_(transaction::ObPartTransCtx *&tx_ctx)
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "ls is null", K(ret), K(ls_id_));
       } else if (OB_FAIL(ls_->iterate_tx_ctx(ls_tx_ctx_iter_))) {
-        SERVER_LOG(WARN, "fail to get ls_tx_ctx_iter", K(ret), K(ls_id_));
       }
     } else if (OB_FAIL(ls_tx_ctx_iter_.get_next_tx_ctx(tx_ctx))) {
       if (OB_ITER_END != ret) {
@@ -100,7 +99,6 @@ int ObGVTxLockStat::get_next_tx_ctx_(transaction::ObPartTransCtx *&tx_ctx)
         ls_tx_ctx_iter_.reset();
         SERVER_LOG(DEBUG, "iterate this ls finished, iterate next ls then", K(ret), K(ls_id_));
         if (OB_FAIL(get_next_ls_(ls_))) {
-          SERVER_LOG(WARN, "get next ls failed", K(ret));
         }
       }
     } else {
@@ -125,9 +123,7 @@ int ObGVTxLockStat::get_next_tx_lock_stat_iter_(transaction::ObTxLockStatIterato
   } else {
     tx_lock_stat_iter.reset();
     if (OB_FAIL(tx_ctx->iterate_tx_lock_stat(tx_lock_stat_iter))) {
-      SERVER_LOG(WARN, "fail to get lock op iter", K(ret), K(ls_id_));
     } else if (OB_FAIL(tx_lock_stat_iter.set_ready())) {
-      SERVER_LOG(WARN, "set lock_op_iter_ ready failed", K(ret), K(ls_id_));
     }
   }
   if (OB_NOT_NULL(tx_ctx)) {
@@ -168,9 +164,7 @@ int ObGVTxLockStat::prepare_start_to_read_()
              && OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard_, ObLSGetMod::OBSERVER_MOD))) {
     SERVER_LOG(WARN, "init ls_iter_guard_ failed", K(ret));
   } else if (OB_FAIL(get_next_ls_(ls_))) {
-    SERVER_LOG(WARN, "init ls_ failed", K(ret));
   } else if (OB_FAIL(get_next_tx_lock_stat_iter_(tx_lock_stat_iter_))) {
-    SERVER_LOG(WARN, "init tx_lock_stat_iter_ failed", K(ret));
   } else {
     start_to_read_ = true;
   }

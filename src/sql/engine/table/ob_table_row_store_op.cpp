@@ -39,7 +39,6 @@ int ObTableRowStoreOpInput::init(ObTaskInfo &task_info)
   ObIArray<ObTaskInfo::ObPartLoc> &part_locs = task_info.get_range_location().part_locs_;
   multi_row_store_.set_allocator(&exec_ctx_.get_allocator());
   if (OB_FAIL(multi_row_store_.init(part_locs.count()))) {
-    LOG_WARN("allocate multi row store failed", K(ret));
   }
   LOG_DEBUG("init table row store input", K(part_locs.count()));
   for (int64_t i = 0; OB_SUCC(ret) && i < part_locs.count(); ++i) {
@@ -47,7 +46,6 @@ int ObTableRowStoreOpInput::init(ObTaskInfo &task_info)
     if (value_ref_id == MY_SPEC.id_) {
        LOG_DEBUG("push table row store input", K(value_ref_id));
       if (OB_FAIL(multi_row_store_.push_back(part_locs.at(i).datum_store_))) {
-        LOG_WARN("store partition row store failed", K(ret));
       }
     }
   }
@@ -90,7 +88,6 @@ OB_DEF_DESERIALIZE(ObTableRowStoreOpInput)
   set_deserialize_allocator(&exec_ctx_.get_allocator());
   if (OB_SUCC(ret)) {
     if (OB_FAIL(multi_row_store_.init(row_store_cnt))) {
-      LOG_WARN("allocate multi row store failed", K(ret));
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < row_store_cnt; ++i) {
@@ -104,12 +101,10 @@ OB_DEF_DESERIALIZE(ObTableRowStoreOpInput)
                                     ObCtxIds::DEFAULT_CTX_ID,
                                     "TableRowStoreOp",
                                     false/*enable_dump*/))) {
-        LOG_WARN("fail to init datum store", K(ret));
       }
       OB_UNIS_DECODE(*datum_store);
       if (OB_SUCC(ret)) {
         if (OB_FAIL(multi_row_store_.push_back(datum_store))) {
-          LOG_WARN("store row_store failed", K(ret));
         }
       }
       if (OB_FAIL(ret) && datum_store != NULL) {
@@ -130,7 +125,6 @@ int ObTableRowStoreOp::inner_open()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("multi row store is invalid", K(ret), K_(MY_INPUT.multi_row_store));
   } else if (OB_FAIL(MY_INPUT.multi_row_store_.at(0)->begin(row_store_it_))) {
-    LOG_WARN("failed to begin iterator for chunk datum store", K(ret));
   } else {
     row_store_idx_ = 0;
   }
@@ -142,13 +136,11 @@ int ObTableRowStoreOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOperator::inner_rescan())) {
-    LOG_WARN("rescan ObNoChildrenPhyOperator failed", K(ret));
   } else if (OB_UNLIKELY(MY_INPUT.multi_row_store_.empty())
       || OB_ISNULL(MY_INPUT.multi_row_store_.at(0))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("multi row store is invalid", K(ret), K_(MY_INPUT.multi_row_store));
   } else if (OB_FAIL(MY_INPUT.multi_row_store_.at(0)->begin(row_store_it_))) {
-    LOG_WARN("failed to begin iterator for chunk datum store", K(ret));
   } else {
     row_store_idx_ = 0;
   }
@@ -164,7 +156,6 @@ int ObTableRowStoreOp::inner_get_next_row()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(try_check_status())) {
-    LOG_WARN("check physical plan status failed", K(ret));
   } else if (OB_FAIL(fetch_stored_row())) {
     if (OB_UNLIKELY(OB_ITER_END != ret)) {
       LOG_WARN("fail to get next row", K(ret));
@@ -177,7 +168,6 @@ int ObTableRowStoreOp::inner_get_next_row()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("row store is null", K(multi_row_store), K(row_store_idx_));
       } else if (OB_FAIL(multi_row_store.at(row_store_idx_)->begin(row_store_it_))) {
-        LOG_WARN("failed to begin iterator for chunk datum store", K(ret));
       } else if (OB_FAIL(fetch_stored_row())) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           LOG_WARN("fail to get next row", K(ret));

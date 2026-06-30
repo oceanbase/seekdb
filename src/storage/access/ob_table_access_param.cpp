@@ -188,7 +188,6 @@ int ObTableIterParam::build_index_filter_for_row_store(common::ObIAllocator *all
                   *pushdown_filter_,
                   allocator,
                   sstable_index_filter_))) {
-      STORAGE_LOG(WARN, "Failed to build sstable index filter", K(ret), KPC(this));
     }
   }
   return ret;
@@ -376,7 +375,6 @@ int ObTableAccessParam::init(
     }
 
     if (OB_FAIL(iter_param_.refresh_lob_column_out_status())) {
-      STORAGE_LOG(WARN, "Failed to refresh lob column out status", K(ret), K(iter_param_));
     } else if (scan_param.use_index_skip_scan() &&
                OB_FAIL(get_prefix_cnt_for_skip_scan(scan_param, iter_param_))) {
       STORAGE_LOG(WARN, "Failed to get prefix for skip scan", K(ret));
@@ -491,7 +489,6 @@ int ObTableAccessParam::init_dml_access_param(
       }
     }
     if (OB_FAIL(iter_param_.refresh_lob_column_out_status())) {
-      STORAGE_LOG(WARN, "Failed to refresh lob column out status", K(ret), K(iter_param_));
     } else {
       is_inited_ = true;
     }

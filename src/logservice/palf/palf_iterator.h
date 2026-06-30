@@ -46,7 +46,6 @@ public:
     if (IS_INIT) {
       ret = OB_INIT_TWICE;
     } else if (OB_FAIL(do_init_(start_offset, get_file_end_lsn, get_mode_version, log_storage))) {
-      PALF_LOG(WARN, "PalfIterator init failed", K(ret));
     } else {
       PALF_LOG(TRACE, "PalfIterator init success", K(ret), K(start_offset), KPC(this));
       is_inited_ = true;
@@ -62,7 +61,6 @@ public:
     if (IS_INIT) {
       ret = OB_INIT_TWICE;
     } else if (OB_FAIL(do_init_(start_offset, get_file_end_lsn, get_mode_version, log_storage))) {
-      PALF_LOG(WARN, "PalfIterator init failed", K(ret));
     } else {
       PALF_LOG(TRACE, "PalfIterator init success", K(ret), K(start_offset), KPC(this));
       is_inited_ = true;
@@ -298,9 +296,7 @@ private:
       PALF_LOG(WARN, "invalid argument", K(ret), K(start_offset), K(get_file_end_lsn), K(get_mode_version),
                K(log_storage));
     } else if (OB_FAIL(iterator_storage_.init(start_offset, LogEntryType::BLOCK_SIZE, get_file_end_lsn, log_storage))) {
-      PALF_LOG(WARN, "IteratorStorage init failed", K(ret));
     } else if (OB_FAIL(iterator_impl_.init(get_mode_version, &iterator_storage_))) {
-      PALF_LOG(WARN, "PalfIterator init failed", K(ret));
     } else {
       io_ctx_.set_start_lsn(start_offset);
       PALF_LOG(TRACE, "PalfIterator init success", K(ret), K(start_offset), KPC(this));

@@ -111,7 +111,6 @@ int ObTabletSplitCacheValue::init(const ObTabletSplitTscInfo &split_info)
   } else if (!split_info.start_partkey_.is_valid()) {
     start_partkey_.reset();
   } else if (OB_FAIL(start_partkey_.assign(split_info.start_partkey_.datums_, split_info.start_partkey_.get_datum_cnt()))) {
-    LOG_WARN("failed to assign", K(ret), K(split_info.start_partkey_));
   } else {
     deep_copy_size_ += split_info.start_partkey_.get_deep_copy_size();
   }
@@ -120,7 +119,6 @@ int ObTabletSplitCacheValue::init(const ObTabletSplitTscInfo &split_info)
   } else if (!split_info.end_partkey_.is_valid()) {
     end_partkey_.reset();
   } else if (OB_FAIL(end_partkey_.assign(split_info.end_partkey_.datums_, split_info.end_partkey_.get_datum_cnt()))) {
-    LOG_WARN("failed to assign", K(ret), K(split_info.end_partkey_));
   } else {
     deep_copy_size_ += split_info.end_partkey_.get_deep_copy_size();
   }
@@ -137,14 +135,12 @@ int ObTabletSplitCacheValue::deep_copy(ObTabletSplitTscInfo &split_info, ObIAllo
   if (!start_partkey_.is_valid()) {
     split_info.start_partkey_.reset();
   } else if (OB_FAIL(start_partkey_.deep_copy(split_info.start_partkey_, allocator))) {
-    LOG_WARN("failed to deep copy", K(ret), K(start_partkey_));
   }
 
   if (OB_FAIL(ret)) {
   } else if (!end_partkey_.is_valid()) {
     split_info.end_partkey_.reset();
   } else if (OB_FAIL(end_partkey_.deep_copy(split_info.end_partkey_, allocator))) {
-    LOG_WARN("failed to deep copy", K(ret), K(end_partkey_));
   }
   return ret;
 }
@@ -176,7 +172,6 @@ int ObTabletSplitCacheValue::deep_copy(char *buf, const int64_t buf_len, ObIKVCa
       LOG_WARN("buffer overflow", K(ret), K(buf_len), KPC(this));
     } else if (start_partkey_.is_valid()) {
       if (OB_FAIL(start_partkey_.deep_copy(pvalue->start_partkey_, buf + pos, buf_len - pos))) {
-        LOG_WARN("failed to deep copy", K(ret), K(start_partkey_));
       } else {
         pos += start_partkey_.get_deep_copy_size();
       }
@@ -188,7 +183,6 @@ int ObTabletSplitCacheValue::deep_copy(char *buf, const int64_t buf_len, ObIKVCa
       LOG_WARN("buffer overflow", K(ret), K(buf_len), KPC(this));
     } else if (end_partkey_.is_valid()) {
       if (OB_FAIL(end_partkey_.deep_copy(pvalue->end_partkey_, buf + pos, buf_len - pos))) {
-        LOG_WARN("failed to deep copy", K(ret), K(end_partkey_));
       } else {
         pos += end_partkey_.get_deep_copy_size();
       }
@@ -248,7 +242,6 @@ int ObTabletSplitCache::put_split_cache(const ObTabletSplitCacheKey &key, const 
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid row cache input param.", K(key), K(value), K(ret));
   } else if (OB_FAIL(put(key, value, overwrite))) {
-    STORAGE_LOG(WARN, "Fail to put row to row cache, ", K(ret));
   }
   return ret;
 }

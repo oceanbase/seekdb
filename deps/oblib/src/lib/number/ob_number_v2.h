@@ -1730,13 +1730,9 @@ int ObNumber::add(const IntegerT param1, const IntegerT param2, ObNumber &result
   ObNumber param1_nmb;
   ObNumber param2_nmb;
   if (OB_FAIL(param1_nmb.from(param1, local_allocator))) {
-    LIB_LOG(WARN, "number add failed", K(ret), K(param1));
   } else if (OB_FAIL(param2_nmb.from(param2, local_allocator))) {
-    LIB_LOG(WARN, "number add failed", K(ret), K(param2));
   } else if (OB_FAIL(param1_nmb.add_v3(param2_nmb, param_result_nmb, local_allocator))) {
-    LIB_LOG(WARN, "number add failed", K(ret), K(param1_nmb), K(param2_nmb));
   } else if (OB_FAIL(add_v3(param_result_nmb, result, allocator))) {
-    LIB_LOG(WARN, "number add failed", K(ret), KPC(this), K(param_result_nmb));
   } else {
     LIB_LOG(DEBUG, "succ add", K(param1), K(param2), KPC(this), K(param_result_nmb), K(result));
   }
@@ -2314,7 +2310,6 @@ inline int ObNumber::round_v2(const int64_t scale, const bool for_oracle_to_char
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid param", K(scale), K(ret));
   } else if (OB_FAIL(round_scale_v2_(scale, false, for_oracle_to_char))) {
-    LIB_LOG(WARN, "fail to round_scale_oracle_", KPC(this), K(ret));
   }
   return ret;
 }
@@ -2330,7 +2325,6 @@ inline int ObNumber::round_v3(const int64_t scale, const bool for_oracle_to_char
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid param", K(scale), K(ret));
   } else if (OB_FAIL(round_scale_v3_(scale, false, for_oracle_to_char))) {
-    LIB_LOG(WARN, "fail to round_scale_oracle_", KPC(this), K(ret));
   }
   return ret;
 }
@@ -3005,12 +2999,10 @@ int knuth_probe_quotient(
   bool negative = false;
   bool truevalue = false;
   if (OB_FAIL(qq_mul_v.ensure(v.size() + 1))) {
-    _OB_LOG(WARN, "ensure qq_mul_v fail, ret=%d size=%ld", ret, v.size() + 1);
   } else if (OB_FAIL(poly_mono_mul(v, qq, qq_mul_v))) {
     ObCStringHelper helper;
     _OB_LOG(WARN, "%lu mul %s u=%s fail, ret=%d", qq, helper.convert(v), helper.convert(u), ret);
   } else if (OB_FAIL(u_sub.ensure(n + 1))) {
-    _OB_LOG(WARN, "ensure u_sub fail, ret=%d size=%ld", ret, n + 1);
   } else if (OB_FAIL(poly_poly_sub(u.ref(j, j + n), qq_mul_v.ref(1, n + 1), u_sub,
                                                 negative, truevalue))) {
     ObCStringHelper helper;
@@ -3035,7 +3027,6 @@ int knuth_probe_quotient(
     T u_add;
     u_add.set_base(base);
     if (OB_FAIL(u_add.ensure(n + 2))) {
-      _OB_LOG(WARN, "ensure u_add fail, ret=%d size=%ld", ret, n + 2);
     } else if (OB_FAIL(poly_poly_add(u_sub, v, u_add))) {
       ObCStringHelper helper;
       _OB_LOG(WARN, "%s add %s fail, ret=%d", helper.convert(u_sub), helper.convert(v), ret);

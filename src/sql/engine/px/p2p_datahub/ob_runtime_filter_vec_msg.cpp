@@ -108,7 +108,6 @@ OB_DEF_DESERIALIZE(ObRFRangeFilterVecMsg)
               probe_row_cmp_info_,
               query_range_info_);
   if (OB_FAIL(adjust_cell_size())) {
-    LOG_WARN("fail do adjust cell size", K(ret));
   }
   return ret;
 }
@@ -160,7 +159,6 @@ OB_DEF_DESERIALIZE(ObRFInFilterVecMsg::ObRFInFilterRowStore)
   ObCompactRow *row = nullptr;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(serial_rows_.reserve(row_cnt))) {
-    LOG_WARN("failed to prepare_allocate serial_rows_");
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < row_cnt; ++i) {
     const int64_t row_size = row_sizes_.at(i);
@@ -172,7 +170,6 @@ OB_DEF_DESERIALIZE(ObRFInFilterVecMsg::ObRFInFilterRowStore)
       pos += row_size;
       row = reinterpret_cast<ObCompactRow *>(alloc_buf);
       if (OB_FAIL(serial_rows_.push_back(row))) {
-        LOG_WARN("failed to push_back");
       }
     }
   }
@@ -229,12 +226,10 @@ OB_DEF_DESERIALIZE(ObRFInFilterVecMsg)
     if (OB_FAIL(rows_set_.create(buckets_cnt * 2,
         "RFDEInFilter",
         "RFDEInFilter"))) {
-      LOG_WARN("fail to init in hash set", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < row_cnt; ++i) {
       ObRFInFilterNode node(&build_row_cmp_info_, &build_row_meta_, row_store_.get_row(i), nullptr);
       if (OB_FAIL(rows_set_.set_refactored(node))) {
-        LOG_WARN("failed to insert in filter node", K(ret));
       }
     }
   }
@@ -249,11 +244,9 @@ OB_DEF_DESERIALIZE(ObRFInFilterVecMsg)
     } else {
       // old fashion, insert from row store
       if (OB_FAIL(sm_hash_set_.init(max_in_num_))) {
-        LOG_WARN("failed to init small hash set", K(max_in_num_));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < row_store_.get_row_cnt(); ++i) {
         if (OB_FAIL(sm_hash_set_.insert_hash(row_store_.get_hash_value(i, build_row_meta_)))) {
-          LOG_WARN("failed to insert hash value into sm_hash_set_", K(ret));
         }
       }
     }
@@ -304,11 +297,8 @@ int ObRFRangeFilterVecMsg::reuse()
   upper_bounds_.reset();
   cells_size_.reset();
   if (OB_FAIL(lower_bounds_.prepare_allocate(col_cnt))) {
-    LOG_WARN("fail to prepare allocate col cnt", K(ret));
   } else if (OB_FAIL(upper_bounds_.prepare_allocate(col_cnt))) {
-    LOG_WARN("fail to prepare allocate col cnt", K(ret));
   } else if (OB_FAIL(cells_size_.prepare_allocate(col_cnt))) {
-    LOG_WARN("fail to prepare allocate col cnt", K(ret));
   }
   (void)reuse_query_range();
   return ret;
@@ -319,23 +309,14 @@ int ObRFRangeFilterVecMsg::assign(const ObP2PDatahubMsgBase &msg)
   int ret = OB_SUCCESS;
   const ObRFRangeFilterVecMsg &other_msg = static_cast<const ObRFRangeFilterVecMsg &>(msg);
   if (OB_FAIL(ObP2PDatahubMsgBase::assign(msg))) {
-    LOG_WARN("failed to assign base data", K(ret));
   } else if (OB_FAIL(lower_bounds_.assign(other_msg.lower_bounds_))) {
-    LOG_WARN("fail to assign lower bounds", K(ret));
   } else if (OB_FAIL(upper_bounds_.assign(other_msg.upper_bounds_))) {
-    LOG_WARN("fail to assign upper bounds", K(ret));
   } else if (OB_FAIL(need_null_cmp_flags_.assign(other_msg.need_null_cmp_flags_))) {
-    LOG_WARN("failed to assign cmp flags", K(ret));
   } else if (OB_FAIL(cells_size_.assign(other_msg.cells_size_))) {
-    LOG_WARN("failed to assign cell size", K(ret));
   } else if (OB_FAIL(adjust_cell_size())) {
-    LOG_WARN("fail to adjust cell size", K(ret));
   } else if (OB_FAIL(build_row_cmp_info_.assign(other_msg.build_row_cmp_info_))) {
-    LOG_WARN("fail to assign build_row_cmp_info_", K(ret));
   } else if (OB_FAIL(probe_row_cmp_info_.assign(other_msg.probe_row_cmp_info_))) {
-    LOG_WARN("fail to assign probe_row_cmp_info_", K(ret));
   } else if (OB_FAIL(query_range_info_.assign(other_msg.query_range_info_))) {
-    LOG_WARN("fail to assign query_range_info_", K(ret));
   }
   return ret;
 }
@@ -346,24 +327,18 @@ int ObRFRangeFilterVecMsg::deep_copy_msg(ObP2PDatahubMsgBase *&new_msg_ptr)
   ObRFRangeFilterVecMsg *rf_msg = nullptr;
   ObMemAttr attr("RANGEVECMSG");
   if (OB_FAIL(PX_P2P_DH.alloc_msg<ObRFRangeFilterVecMsg>(attr, rf_msg))) {
-    LOG_WARN("fail to alloc rf msg", K(ret));
   } else if (OB_FAIL(rf_msg->assign(*this))) {
-    LOG_WARN("fail to assign rf msg", K(ret));
   } else {
     for (int i = 0; i < rf_msg->lower_bounds_.count() && OB_SUCC(ret); ++i) {
       if (OB_FAIL(rf_msg->lower_bounds_.at(i).deep_copy(lower_bounds_.at(i),
           rf_msg->get_allocator()))) {
-        LOG_WARN("fail to deep copy rf msg", K(ret));
       } else if (OB_FAIL(rf_msg->upper_bounds_.at(i).deep_copy(upper_bounds_.at(i),
           rf_msg->get_allocator()))) {
-        LOG_WARN("fail to deep copy rf msg", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(rf_msg->build_row_cmp_info_.assign(build_row_cmp_info_))) {
-      LOG_WARN("fail to assign build_row_cmp_info_", K(ret));
     } else if (OB_FAIL(rf_msg->probe_row_cmp_info_.assign(probe_row_cmp_info_))) {
-      LOG_WARN("fail to assign probe_row_cmp_info_", K(ret));
     }
     if (OB_SUCC(ret)) {
       new_msg_ptr = rf_msg;
@@ -379,16 +354,12 @@ int ObRFRangeFilterVecMsg::merge(ObP2PDatahubMsgBase &msg)
   CK(range_msg.lower_bounds_.count() == lower_bounds_.count() &&
      range_msg.upper_bounds_.count() == upper_bounds_.count());
   if (OB_FAIL(ret)) {
-    LOG_WARN("unexpected bounds count", K(lower_bounds_.count()),
-             K(range_msg.lower_bounds_.count()));
   } else if (range_msg.is_empty_) {
     /*do nothing*/
   } else {
     ObSpinLockGuard guard(lock_);
     if (OB_FAIL(merge_min(range_msg.lower_bounds_))) {
-      LOG_WARN("fail to get min lower bounds", K(ret));
     } else if (OB_FAIL(merge_max(range_msg.upper_bounds_))) {
-      LOG_WARN("fail to get max lower bounds", K(ret));
     } else if (is_empty_) {
       is_empty_ = false;
     }
@@ -445,7 +416,6 @@ int ObRFRangeFilterVecMsg::merge_min(ObIArray<ObDatum> &vals)
     // null value is also suitable
     if (OB_FAIL(update_min(build_row_cmp_info_.at(i), lower_bounds_.at(i),
         vals.at(i), cells_size_.at(i).min_datum_buf_size_))) {
-      LOG_WARN("fail to compare value", K(ret));
     }
   }
   return ret;
@@ -458,7 +428,6 @@ int ObRFRangeFilterVecMsg::merge_max(ObIArray<ObDatum> &vals)
     // null value is also suitable
     if (OB_FAIL(update_max(build_row_cmp_info_.at(i), upper_bounds_.at(i),
         vals.at(i), cells_size_.at(i).max_datum_buf_size_))) {
-      LOG_WARN("fail to compare value", K(ret));
     }
   }
   return ret;
@@ -476,16 +445,13 @@ int ObRFRangeFilterVecMsg::update_min(ObRFCmpInfo &cmp_info, ObDatum &l, ObDatum
   // l.ptr=0x0 and l.len=0 and null_=false, it should not be corver by r directly
   if (is_empty_) {
     if (OB_FAIL(dynamic_copy_cell(r, l, cell_size))) {
-      LOG_WARN("fail to deep copy datum");
     }
   } else if (OB_FAIL(cmp_info.cmp_func_(cmp_info.obj_meta_, cmp_info.obj_meta_,
       l.ptr_, l.len_, l.is_null(),
       r.ptr_, r.len_, r.is_null(),
       cmp))) {
-    LOG_WARN("fail to cmp", K(ret));
   } else if (cmp > 0) {
     if (OB_FAIL(dynamic_copy_cell(r, l, cell_size))) {
-      LOG_WARN("fail to deep copy datum");
     }
   }
   return ret;
@@ -498,16 +464,13 @@ int ObRFRangeFilterVecMsg::update_max(ObRFCmpInfo &cmp_info, ObDatum &l, ObDatum
   int cmp = 0;
   if (is_empty_) {
     if (OB_FAIL(dynamic_copy_cell(r, l, cell_size))) {
-      LOG_WARN("fail to deep copy datum");
     }
   } else if (OB_FAIL(cmp_info.cmp_func_(cmp_info.obj_meta_, cmp_info.obj_meta_,
       l.ptr_, l.len_, l.is_null(),
       r.ptr_, r.len_, r.is_null(),
       cmp))) {
-    LOG_WARN("fail to cmp value", K(ret));
   } else if (cmp < 0) {
     if (OB_FAIL(dynamic_copy_cell(r, l, cell_size))) {
-      LOG_WARN("fail to deep copy datum");
     }
   }
   return ret;
@@ -522,7 +485,6 @@ int ObRFRangeFilterVecMsg::probe_with_lower(int64_t col_idx, ObDatum &prob_datum
   if (OB_FAIL(probe_meta.cmp_func_(probe_meta.obj_meta_, build_meta.obj_meta_,
       prob_datum.ptr_, prob_datum.len_, prob_datum.is_null(),
       build_datum.ptr_, build_datum.len_, build_datum.is_null(), cmp_min))) {
-    LOG_WARN("fail to compare value", K(ret));
   }
   return ret;
 }
@@ -536,7 +498,6 @@ int ObRFRangeFilterVecMsg::probe_with_upper(int64_t col_idx, ObDatum &prob_datum
   if (OB_FAIL(probe_meta.cmp_func_(probe_meta.obj_meta_, build_meta.obj_meta_,
       prob_datum.ptr_, prob_datum.len_, prob_datum.is_null(),
       build_datum.ptr_, build_datum.len_, build_datum.is_null(), cmp_max))) {
-    LOG_WARN("fail to compare value", K(ret));
   }
   return ret;
 }
@@ -557,7 +518,6 @@ int ObRFRangeFilterVecMsg::insert_by_row_vector(
     for (int64_t i = 0; OB_SUCC(ret) && i < expr_array.count(); ++i) {
       ObExpr *expr = expr_array.at(i); // expr ptr check in cg, not check here
       if (OB_FAIL(expr->eval_vector(eval_ctx, *(child_brs->skip_), bound))) {
-        LOG_WARN("eval_vector failed", K(ret));
       }
     }
     ObDatum datum;
@@ -582,10 +542,8 @@ int ObRFRangeFilterVecMsg::insert_by_row_vector(
             datum.null_ = arg_vec->is_null(batch_i) ? 1 : 0;
             if (OB_FAIL(dynamic_copy_cell(datum, lower_bounds_.at(arg_i),
                                           cells_size_.at(arg_i).min_datum_buf_size_))) {
-              LOG_WARN("fail to deep copy datum", K(ret));
             } else if (OB_FAIL(dynamic_copy_cell(datum, upper_bounds_.at(arg_i),
                                                  cells_size_.at(arg_i).max_datum_buf_size_))) {
-              LOG_WARN("fail to deep copy datum", K(ret));
             }
           }
         }
@@ -605,10 +563,8 @@ int ObRFRangeFilterVecMsg::insert_by_row_vector(
             datum.null_ = arg_vec->is_null(batch_i) ? 1 : 0;
             if (OB_FAIL(update_min(build_row_cmp_info_.at(arg_i),
                 lower_bounds_.at(arg_i), datum, cells_size_.at(arg_i).min_datum_buf_size_))) {
-              LOG_WARN("failed to update_min", K(ret));
             } else if (OB_FAIL(update_max(build_row_cmp_info_.at(arg_i),
                 upper_bounds_.at(arg_i), datum, cells_size_.at(arg_i).max_datum_buf_size_))) {
-              LOG_WARN("failed to update_max", K(ret));
             }
           }
         }
@@ -635,17 +591,14 @@ int ObRFRangeFilterVecMsg::might_contain(const ObExpr &expr,
   } else {
     for (int i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
       if (OB_FAIL(expr.args_[i]->eval(ctx, datum))) {
-        LOG_WARN("failed to eval datum", K(ret));
       } else {
         cmp_min = 0;
         cmp_max = 0;
         if (OB_FAIL(probe_with_lower(i, *datum, cmp_min))) {
-          LOG_WARN("fail to probe_with_lower", K(ret));
         } else if (cmp_min < 0) {
           is_match = false;
           break;
         } else if (OB_FAIL(probe_with_upper(i, *datum, cmp_max))) {
-          LOG_WARN("fail to probe_with_upper", K(ret));
         } else if (cmp_max > 0) {
           is_match = false;
           break;
@@ -677,7 +630,6 @@ int ObRFRangeFilterVecMsg::do_might_contain_batch(const ObExpr &expr,
   batch_info_guard.set_batch_size(batch_size);
   for (int idx = 0; OB_SUCC(ret) && idx < expr.arg_cnt_; ++idx) {
     if (OB_FAIL(expr.args_[idx]->eval_batch(ctx, skip, batch_size))) {
-      LOG_WARN("eval failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -697,13 +649,11 @@ int ObRFRangeFilterVecMsg::do_might_contain_batch(const ObExpr &expr,
       for (int arg_i = 0; OB_SUCC(ret) && arg_i < expr.arg_cnt_; ++arg_i) {
         datum = &expr.args_[arg_i]->locate_expr_datum(ctx, batch_i);
         if (OB_FAIL(probe_with_lower(arg_i, *datum, cmp_min))) {
-          LOG_WARN("fail to probe_with_lower", K(ret));
         } else if (cmp_min < 0) {
           filter_count++;
           is_match = false;
           break;
         } else if (OB_FAIL(probe_with_upper(arg_i, *datum, cmp_max))) {
-          LOG_WARN("fail to probe_with_upper", K(ret));
         } else if (cmp_max > 0) {
           filter_count++;
           is_match = false;
@@ -737,7 +687,6 @@ int ObRFRangeFilterVecMsg::might_contain_batch(
       results[i].set_int(0);
     }
   } else if (OB_FAIL(do_might_contain_batch(expr, ctx, skip, batch_size, filter_ctx))) {
-    LOG_WARN("failed to do_might_contain_batch");
   }
   if (OB_SUCC(ret)) {
     eval_flags.set_all(batch_size);
@@ -762,14 +711,12 @@ int ObRFRangeFilterVecMsg::do_might_contain_vector(
   if (VEC_FIXED == res_format) {
     IntegerFixedVec *res_vec = static_cast<IntegerFixedVec *>(expr.get_vector(ctx));
     if (OB_FAIL(preset_not_match(res_vec, bound))) {
-      LOG_WARN("failed to preset_not_match", K(ret));
     }
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
     ObExpr *e = expr.args_[i];
     if (OB_FAIL(e->eval_vector(ctx, skip, bound))) {
-      LOG_WARN("evaluate vector failed", K(ret), K(*e));
     }
   }
   if (OB_FAIL(ret)) {
@@ -797,13 +744,11 @@ int ObRFRangeFilterVecMsg::do_might_contain_vector(
           datum.len_ = arg_vec->get_length(batch_i);
           datum.null_ = arg_vec->is_null(batch_i) ? 1 : 0;
           if (OB_FAIL(probe_with_lower(arg_i, datum, cmp_min))) {
-            LOG_WARN("fail to probe_with_lower", K(ret));
           } else if (cmp_min < 0) {
             is_match = false;
             filter_count++;
             break;
           } else if (OB_FAIL(probe_with_upper(arg_i, datum, cmp_max))) {
-            LOG_WARN("fail to probe_with_upper", K(ret));
           } else if (cmp_max > 0) {
             is_match = false;
             filter_count++;
@@ -862,7 +807,6 @@ int ObRFRangeFilterVecMsg::might_contain_vector(
       filter_ctx.total_count_ += total_count;
     }
   } else if (OB_FAIL(do_might_contain_vector(expr, ctx, skip, bound, filter_ctx))) {
-    LOG_WARN("fail to do might contain vector");
   }
   return ret;
 }
@@ -876,7 +820,6 @@ int ObRFRangeFilterVecMsg::prepare_query_range()
   } else if (is_empty_) {
     // make empty range
     if (OB_FAIL(fill_empty_query_range(query_range_info_, query_range_allocator_, query_range_))) {
-      LOG_WARN("failed to fill_empty_query_range");
     } else {
       is_query_range_ready_ = true;
     }
@@ -945,13 +888,10 @@ int ObRFRangeFilterVecMsg::try_extract_query_range(bool &has_extract, ObIArray<O
     ranges.reset();
     if (need_deep_copy) {
       if (OB_FAIL(ranges.prepare_allocate(1))) {
-        LOG_WARN("failed to prepare_allocate");
       } else if (OB_FAIL(deep_copy_range(*allocator, query_range_, ranges.at(0)))) {
-        LOG_WARN("failed to deep_copy_range");
       }
     } else {
       if (OB_FAIL(ranges.push_back(query_range_))) {
-        LOG_WARN("failed to push_back range");
       }
     }
     if (OB_SUCC(ret)) {
@@ -970,9 +910,7 @@ int ObRFRangeFilterVecMsg::prepare_storage_white_filter_data(
     dynamic_filter.set_filter_action(DynamicFilterAction::FILTER_ALL);
     is_data_prepared = true;
   } else if (OB_FAIL(params.push_back(lower_bounds_.at(col_idx)))) {
-    LOG_WARN("failed to push back lower_bound");
   } else if (OB_FAIL(params.push_back(upper_bounds_.at(col_idx)))) {
-    LOG_WARN("failed to push back upper_bound");
   } else {
     dynamic_filter.set_filter_val_meta(build_row_cmp_info_.at(col_idx).obj_meta_);
     is_data_prepared = true;
@@ -1007,9 +945,7 @@ int ObRFInFilterVecMsg::ObRFInFilterRowStore::add_row(ObCompactRow *new_row, int
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serial_rows_.push_back(new_row))) {
-    LOG_WARN("failed to push back new row");
   } else if (OB_FAIL(row_sizes_.push_back(row_size))) {
-    LOG_WARN("failed to push back row_size");
   }
   return ret;
 }
@@ -1040,9 +976,7 @@ int ObRFInFilterVecMsg::ObRFInFilterRowStore::create_and_add_row(
   if (OB_FAIL(ret)) {
   } else if (FALSE_IT(row->extra_payload<uint64_t>(row_meta) = hash_val)) {
   } else if (OB_FAIL(serial_rows_.push_back(row))) {
-    LOG_WARN("failed to push back row");
   } else if (OB_FAIL(row_sizes_.push_back(row_size))) {
-    LOG_WARN("failed to push back row_size");
   } else {
     new_row = row;
   }
@@ -1057,9 +991,7 @@ int ObRFInFilterVecMsg::ObRFInFilterRowStore::assign(const ObRFInFilterRowStore 
   ObCompactRow *row = nullptr;
   int64_t row_cnt = other.get_row_cnt();
   if (OB_FAIL(serial_rows_.reserve(row_cnt))) {
-    LOG_WARN("failed to reserve serial_rows_");
   } else if (OB_FAIL(row_sizes_.assign(other.row_sizes_))) {
-    LOG_WARN("failed to assign row_sizes_");
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < row_cnt; ++i) {
     row_size = other.row_sizes_.at(i);
@@ -1071,7 +1003,6 @@ int ObRFInFilterVecMsg::ObRFInFilterRowStore::assign(const ObRFInFilterRowStore 
       MEMCPY(alloc_buf, buf, row_size);
       row = reinterpret_cast<ObCompactRow *>(alloc_buf);
       if (OB_FAIL(serial_rows_.push_back(row))) {
-        LOG_WARN("failed to push_back");
       }
     }
   }
@@ -1090,25 +1021,15 @@ int ObRFInFilterVecMsg::assign(const ObP2PDatahubMsgBase &msg)
   const ObRFInFilterVecMsg &other_msg = static_cast<const ObRFInFilterVecMsg &>(msg);
   int64_t bucket_cnt = max(other_msg.row_store_.get_row_cnt(), 1);
   if (OB_FAIL(ObP2PDatahubMsgBase::assign(msg))) {
-    LOG_WARN("failed to assign base data", K(ret));
   } else if (OB_FAIL(need_null_cmp_flags_.assign(other_msg.need_null_cmp_flags_))) {
-    LOG_WARN("failed to assign filter indexes", K(ret));
   } else if (OB_FAIL(build_row_cmp_info_.assign(other_msg.build_row_cmp_info_))) {
-    LOG_WARN("fail to assign build_row_cmp_info_", K(ret));
   } else if (OB_FAIL(probe_row_cmp_info_.assign(other_msg.probe_row_cmp_info_))) {
-    LOG_WARN("fail to assign probe_row_cmp_info_", K(ret));
   } else if (OB_FAIL(build_row_meta_.deep_copy(other_msg.build_row_meta_, build_row_meta_.allocator_))) {
-    LOG_WARN("fail to deep copy row meta", K(ret));
   } else if (OB_FAIL(row_store_.assign(other_msg.row_store_))) {
-    LOG_WARN("fail to assign row_store_", K(ret));
   } else if (OB_FAIL(rows_set_.create(bucket_cnt * 2, "RFCPInFilter", "RFCPInFilter"))) {
-    LOG_WARN("fail to init in hash set", K(ret));
   } else if (OB_FAIL(sm_hash_set_.init(bucket_cnt))) {
-    LOG_WARN("failed to init sm_hash_set_", K(other_msg.row_store_.get_row_cnt()));
   } else if (OB_FAIL(hash_funcs_for_insert_.assign(other_msg.hash_funcs_for_insert_))) {
-    LOG_WARN("fail to assign hash_funcs_for_insert_", K(ret));
   } else if (OB_FAIL(query_range_info_.assign(other_msg.query_range_info_))) {
-    LOG_WARN("fail to assign query_range_info_", K(ret));
   } else {
     max_in_num_ = other_msg.max_in_num_;
     use_hash_join_seed_ = other_msg.use_hash_join_seed_;
@@ -1120,14 +1041,12 @@ int ObRFInFilterVecMsg::assign(const ObP2PDatahubMsgBase &msg)
         ObRFInFilterNode node(&build_row_cmp_info_, &build_row_meta_, row_store_.get_row(i),
                               nullptr);
         if (OB_FAIL(rows_set_.set_refactored(node))) {
-          LOG_WARN("fail to insert in filter node", K(ret));
         }
       }
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(sm_hash_set_.merge(other_msg.sm_hash_set_))) {
-      LOG_WARN("failed to merge sm_hash_set_");
     }
   }
   return ret;
@@ -1139,9 +1058,7 @@ int ObRFInFilterVecMsg::deep_copy_msg(ObP2PDatahubMsgBase *&new_msg_ptr)
   ObRFInFilterVecMsg *in_msg = nullptr;
   ObMemAttr attr("INVECMSG");
   if (OB_FAIL(PX_P2P_DH.alloc_msg<ObRFInFilterVecMsg>(attr, in_msg))) {
-    LOG_WARN("fail to alloc rf msg", K(ret));
   } else if (OB_FAIL(in_msg->assign(*this))) {
-    LOG_WARN("fail to assign rf msg", K(ret));
   }
   if (OB_SUCC(ret)) {
     new_msg_ptr = in_msg;
@@ -1189,7 +1106,6 @@ int ObRFInFilterVecMsg::do_insert_by_row_vector(const ObBatchRows *child_brs,
       for (int64_t i = 0; OB_SUCC(ret) && i < expr_array.count(); ++i) {
         ObExpr *expr = expr_array.at(i); // expr ptr check in cg, not check here
         if (OB_FAIL(expr->eval_vector(eval_ctx, *(child_brs->skip_), bound))) {
-          LOG_WARN("eval_vector failed", K(ret));
         } else {
           const bool is_batch_seed = (i > 0);
           ObIVector *arg_vec = expr->get_vector(eval_ctx);
@@ -1203,7 +1119,6 @@ int ObRFInFilterVecMsg::do_insert_by_row_vector(const ObBatchRows *child_brs,
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(
                    ObBitVector::flip_foreach(*child_brs->skip_, bound, sm_hash_set_batch_ins_op))) {
-      LOG_WARN("failed insert batch_hash_values into sm_hash_set_");
     } else if (sm_hash_set_.size() > max_in_num_) {
       is_active_ = false;
     } else if (is_empty_ && sm_hash_set_.size() > 0) {
@@ -1246,7 +1161,6 @@ int ObRFInFilterVecMsg::do_insert_by_row_vector(const ObBatchRows *child_brs,
             ObRFInFilterNode node(&build_row_cmp_info_, &build_row_meta_, nullptr /*compact_row*/,
                                   &cur_row);
             if (OB_FAIL(try_insert_node(node, expr_array, eval_ctx))) {
-              LOG_WARN("fail to insert node", K(ret));
             }
           }
         }
@@ -1267,7 +1181,6 @@ int ObRFInFilterVecMsg::try_insert_node(ObRFInFilterNode &node,
       if (row_store_.get_row_cnt() > max_in_num_) {
         is_active_ = false;
       } else if (OB_FAIL(append_node(node, exprs, ctx))) {
-        LOG_WARN("fail to append node");
       } else if (is_empty_) {
         is_empty_ = false;
       }
@@ -1289,7 +1202,6 @@ int ObRFInFilterVecMsg::try_merge_node(ObRFInFilterNode &node, int64_t row_size)
       if (row_store_.get_row_cnt() > max_in_num_) {
         is_active_ = false;
       } else if (OB_FAIL(append_node(node, row_size))) {
-        LOG_WARN("fail to append node");
       } else if (is_empty_) {
         is_empty_ = false;
       }
@@ -1310,13 +1222,10 @@ int ObRFInFilterVecMsg::append_node(ObRFInFilterNode &node,
   ObCompactRow *new_row = nullptr;
   int64_t row_size = 0;
   if (OB_FAIL(ObTempRowStore::RowBlock::calc_row_size(exprs, build_row_meta_, ctx, row_size))) {
-    LOG_WARN("fail calc_row_size");
   } else if (OB_FAIL(row_store_.create_and_add_row(exprs, build_row_meta_, row_size, ctx,
                                                    new_row, node.row_with_hash_->hash_val_))) {
-    LOG_WARN("fail to deep copy one row");
   } else if (FALSE_IT(node.switch_compact_row(new_row))) {
   } else if (OB_FAIL(rows_set_.set_refactored(node))) {
-    LOG_WARN("fail to insert in filter node", K(ret));
   }
   return ret;
 }
@@ -1327,12 +1236,9 @@ int ObRFInFilterVecMsg::append_node(ObRFInFilterNode &node, int64_t row_size)
   ObCompactRow *new_row = nullptr;
   if (OB_FAIL(ObRFInFilterRowStore::deep_copy_one_row(node.compact_row_, new_row, allocator_,
                                                       row_size))) {
-    LOG_WARN("fail to deep copy one row");
   } else if (FALSE_IT(node.switch_compact_row(new_row))) {
   } else if (OB_FAIL(row_store_.add_row(new_row, row_size))) {
-    LOG_WARN("failed to add row to row_store_");
   } else if (OB_FAIL(rows_set_.set_refactored(node))) {
-    LOG_WARN("fail to insert in filter node", K(ret));
   }
   return ret;
 }
@@ -1436,7 +1342,6 @@ int ObRFInFilterVecMsg::merge(ObP2PDatahubMsgBase &msg)
   } else if (!msg.is_empty() && is_active_) {
     ObSpinLockGuard guard(lock_);
     if (OB_FAIL(sm_hash_set_.merge(other_msg.sm_hash_set_))) {
-      LOG_WARN("failed to merge");
     } else if (sm_hash_set_.size() > max_in_num_) {
       is_active_ = false;
     } else if (is_empty_ && sm_hash_set_.size() > 0) {
@@ -1454,7 +1359,6 @@ int ObRFInFilterVecMsg::merge(ObP2PDatahubMsgBase &msg)
         ObRFInFilterNode node(&build_row_cmp_info_, &build_row_meta_, cur_row,
                               nullptr /*row_with_hash*/);
         if (OB_FAIL(try_merge_node(node, row_size))) {
-          LOG_WARN("fail to insert node", K(ret));
         }
       }
     } else if (build_send_opt_) {
@@ -1469,7 +1373,6 @@ int ObRFInFilterVecMsg::merge(ObP2PDatahubMsgBase &msg)
           ObRFInFilterNode node(&build_row_cmp_info_, &build_row_meta_, cur_row,
                                 nullptr /*row_with_hash*/);
           if (OB_FAIL(try_merge_node(node, row_size))) {
-            LOG_WARN("fail to insert node", K(ret));
           }
         }
       }
@@ -1524,7 +1427,6 @@ int ObRFInFilterVecMsg::might_contain(const ObExpr &expr,
     EvalBound eval_bound(batch_size, batch_idx, batch_idx + 1, all_rows_active);
     for (int i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
       if (OB_FAIL(expr.args_[i]->eval_vector(ctx, *filter_ctx.skip_vector_, eval_bound))) {
-        LOG_WARN("failed to eval_vector", K(ret));
       } else {
         ObIVector *arg_vec = expr.args_[i]->get_vector(ctx);
         datum.ptr_ = arg_vec->get_payload(batch_idx);
@@ -1533,7 +1435,6 @@ int ObRFInFilterVecMsg::might_contain(const ObExpr &expr,
         cur_row.row_.at(i) = datum;
         if (OB_FAIL(arg_vec->murmur_hash_v3_for_one_row(*expr.args_[i], hash_val, batch_idx,
             batch_size, hash_val))) {
-          LOG_WARN("failed to cal hash");
         }
       }
     }
@@ -1587,7 +1488,6 @@ int ObRFInFilterVecMsg::do_might_contain_batch(const ObExpr &expr,
   uint64_t seed = ObExprJoinFilter::JOIN_FILTER_SEED;
   for (int idx = 0; OB_SUCC(ret) && idx < expr.arg_cnt_; ++idx) {
     if (OB_FAIL(expr.args_[idx]->eval_batch(ctx, skip, batch_size))) {
-      LOG_WARN("eval failed", K(ret));
     } else {
       const bool is_batch_seed = (idx > 0);
       ObBatchDatumHashFunc hash_func = filter_ctx.hash_funcs_.at(idx).batch_hash_func_;
@@ -1657,7 +1557,6 @@ int ObRFInFilterVecMsg::might_contain_batch(
       results[i].set_int(0);
     }
   } else if (OB_FAIL(do_might_contain_batch(expr, ctx, skip, batch_size, filter_ctx))) {
-    LOG_WARN("failed to do_might_contain_batch");
   }
   if (OB_SUCC(ret)) {
     eval_flags.set_all(batch_size);
@@ -1695,20 +1594,17 @@ int ObRFInFilterVecMsg::do_might_contain_vector_impl(
   if (std::is_same<ResVec, IntegerFixedVec>::value) {
     IntegerFixedVec *res_vec = static_cast<IntegerFixedVec *>(expr.get_vector(ctx));
     if (OB_FAIL(preset_not_match(res_vec, bound))) {
-      LOG_WARN("failed to preset_not_match", K(ret));
     }
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
     ObExpr *e = expr.args_[i];
     if (OB_FAIL(e->eval_vector(ctx, skip, bound))) {
-      LOG_WARN("evaluate vector failed", K(ret), K(*e));
     } else {
       const bool is_batch_seed = (i > 0);
       ObIVector *arg_vec = e->get_vector(ctx);
       if (OB_FAIL(arg_vec->murmur_hash_v3(*e, right_hash_vals, skip,
           bound, is_batch_seed ? right_hash_vals : &seed, is_batch_seed))) {
-        LOG_WARN("failed to cal hash");
       }
     }
   }
@@ -1825,7 +1721,6 @@ int ObRFInFilterVecMsg::prepare_storage_white_filter_data(ObDynamicFilterExecuto
   } else {
     for (int64_t i = 0; i < row_store_.get_row_cnt() && OB_SUCC(ret); ++i) {
       if (OB_FAIL(params.push_back(row_store_.get_row(i)->get_datum(build_row_meta_, col_idx)))) {
-        LOG_WARN("failed to push back");
       }
     }
   }
@@ -1865,9 +1760,7 @@ int ObRFInFilterVecMsg::prepare_query_ranges()
     // make empty range
     ObNewRange query_range;
     if (OB_FAIL(fill_empty_query_range(query_range_info_, query_range_allocator_, query_range))) {
-      LOG_WARN("failed to fill_empty_query_range");
     } else if (OB_FAIL(query_range_.push_back(query_range))) {
-      LOG_WARN("failed to push back query_range");
     } else {
       is_query_range_ready_ = true;
     }
@@ -1918,7 +1811,6 @@ struct TempHashNode
         int tmp_ret = cmp_func(obj_meta, obj_meta, l.ptr_, l.len_, l.is_null(), r.ptr_, r.len_,
                                r.is_null(), cmp_ret);
         if (OB_SUCCESS != tmp_ret) {
-          LOG_WARN("failed to do cmp_func", K(tmp_ret));
         }
         if (cmp_ret != 0) {
           bret = false;
@@ -1953,24 +1845,19 @@ int ObRFInFilterVecMsg::process_query_ranges_with_deduplicate()
 
   if (OB_FAIL(
           tmp_rows_set.create(rows_set_.size() * 2, "RFInVecTmpHashSet", "RFInVecTmpHashSet"))) {
-    LOG_WARN("fail to init in hash set", K(ret));
   } else if (OB_FAIL(cmp_infos.init(prefix_col_idxs.count()))) {
-    LOG_WARN("failed to init compare func");
   }
   // reorder compare function
   for (int64_t j = 0; j < prefix_col_idxs.count() && OB_SUCC(ret); ++j) {
     int64_t col_idx = prefix_col_idxs.at(j);
     if (OB_FAIL(cmp_infos.push_back(build_row_cmp_info_.at(col_idx)))) {
-      LOG_WARN("failed to pushback compare func");
     }
   }
   ObTMArray<ObTMArray<ObDatum>> tmp_rows;
   ObTMArray<int64_t> effective_row_idxs;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(tmp_rows.prepare_allocate(row_store_.get_row_cnt()))) {
-    LOG_WARN("failed to prepare_allocate query_range_", K(row_store_.get_row_cnt()));
   } else if (OB_FAIL(effective_row_idxs.reserve(row_store_.get_row_cnt()))) {
-    LOG_WARN("failed to reserve query_range_", K(row_store_.get_row_cnt()));
   }
   for (int64_t row_idx = 0; row_idx < row_store_.get_row_cnt() && OB_SUCC(ret); ++row_idx) {
     if (OB_ISNULL(row_store_.get_row(row_idx))) {
@@ -1980,14 +1867,12 @@ int ObRFInFilterVecMsg::process_query_ranges_with_deduplicate()
       uint64_t hash_value = ObExprJoinFilter::JOIN_FILTER_SEED;
       ObTMArray<ObDatum> &tmp_row = tmp_rows.at(row_idx);
       if (OB_FAIL(tmp_row.prepare_allocate(prefix_col_idxs.count()))) {
-        LOG_WARN("failed to prepare_allocate tmp_row");
       }
       for (int64_t j = 0; j < prefix_col_idxs.count() && OB_SUCC(ret); ++j) {
         int64_t col_idx = prefix_col_idxs.at(j);
         tmp_row.at(j) = row_store_.get_row(row_idx)->get_datum(build_row_meta_, col_idx);
         if (OB_FAIL(hash_funcs_for_insert_.at(col_idx).hash_func_(tmp_row.at(j), hash_value,
                                                                   hash_value))) {
-          LOG_WARN("fail to calc hash value", K(ret), K(hash_value));
         }
       }
       bool is_duplicate = true;
@@ -2021,7 +1906,6 @@ int ObRFInFilterVecMsg::process_query_ranges_with_deduplicate()
       is_query_range_ready_ = false;
     } else {
       if (OB_FAIL(query_range_.reserve(effective_row_idxs.count()))) {
-        LOG_WARN("failed to reserve query_range_", K(effective_row_idxs.count()));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < effective_row_idxs.count(); ++i) {
         OZ(generate_one_range(effective_row_idxs.at(i)));
@@ -2052,7 +1936,6 @@ int ObRFInFilterVecMsg::process_query_ranges_without_deduplicate()
     is_query_range_ready_ = false;
   } else {
     if (OB_FAIL(query_range_.reserve(row_store_.get_row_cnt()))) {
-      LOG_WARN("failed to reserve query_range_", K(row_store_.get_row_cnt()));
     }
     for (int64_t row_idx = 0; row_idx < row_store_.get_row_cnt() && OB_SUCC(ret); ++row_idx) {
       if (OB_ISNULL(row_store_.get_row(row_idx))) {
@@ -2115,7 +1998,6 @@ int ObRFInFilterVecMsg::generate_one_range(int row_idx)
     query_range.start_key_ = start_key;
     query_range.end_key_ = end_key;
     if (OB_FAIL(query_range_.push_back(query_range))) {
-      LOG_WARN("failed to push range");
     }
   }
   return ret;
@@ -2148,17 +2030,14 @@ int ObRFInFilterVecMsg::try_extract_query_range(bool &has_extract, ObIArray<ObNe
     ranges.reset();
     if (need_deep_copy) {
       if (OB_FAIL(ranges.prepare_allocate(query_range_.count()))) {
-        LOG_WARN("failed to prepare_allocate");
       } else if (need_deep_copy) {
         for (int64_t i = 0; i < ranges.count() && OB_SUCC(ret); ++i) {
           if (OB_FAIL(deep_copy_range(*allocator, query_range_.at(i), ranges.at(i)))) {
-            LOG_WARN("failed to deep_copy_range");
           }
         }
       }
     } else {
       if (OB_FAIL(ranges.assign(query_range_))) {
-        LOG_WARN("failed to assign");
       }
     }
     if (OB_SUCC(ret)) {

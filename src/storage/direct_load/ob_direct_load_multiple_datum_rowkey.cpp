@@ -63,7 +63,6 @@ int ObDirectLoadMultipleDatumRowkey::deep_copy(const ObDirectLoadMultipleDatumRo
     reuse();
     tablet_id_ = src.tablet_id_;
     if (OB_FAIL(datum_array_.deep_copy(src.datum_array_, buf, len, pos))) {
-      LOG_WARN("fail to deep copy datum array", KR(ret));
     }
   }
   return ret;
@@ -85,7 +84,6 @@ int ObDirectLoadMultipleDatumRowkey::deep_copy(const ObDirectLoadMultipleDatumRo
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc memory", KR(ret), K(deep_copy_size));
     } else if (OB_FAIL(deep_copy(src, buf, deep_copy_size, pos))) {
-      LOG_WARN("fail to deep copy", KR(ret));
     }
   }
 
@@ -103,7 +101,6 @@ int ObDirectLoadMultipleDatumRowkey::assign(const ObTabletID &tablet_id, ObStora
     reset();
     tablet_id_ = tablet_id;
     if (OB_FAIL(datum_array_.assign(datums, count))) {
-      LOG_WARN("fail to assign datum array", KR(ret));
     }
   }
   return ret;
@@ -120,7 +117,6 @@ int ObDirectLoadMultipleDatumRowkey::get_rowkey(ObDatumRowkey &rowkey) const
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected invalid rowkey", KR(ret), KPC(this));
   } else if (OB_FAIL(rowkey.assign(datum_array_.datums_, datum_array_.count_))) {
-    LOG_WARN("fail to assign rowkey", KR(ret));
   }
   return ret;
 }
@@ -139,11 +135,8 @@ int ObDirectLoadMultipleDatumRowkey::compare(const ObDirectLoadMultipleDatumRowk
       ObDatumRowkey lhs_rowkey;
       ObDatumRowkey rhs_rowkey;
       if (OB_FAIL(get_rowkey(lhs_rowkey))) {
-        LOG_WARN("fail to assign rowkey", KR(ret), KPC(this));
       } else if (OB_FAIL(rhs.get_rowkey(rhs_rowkey))) {
-        LOG_WARN("fail to assign rowkey", KR(ret), K(rhs));
       } else if (OB_FAIL(lhs_rowkey.compare(rhs_rowkey, datum_utils, cmp_ret))) {
-        LOG_WARN("fail to compare rowkey", KR(ret));
       }
     }
   }
@@ -160,7 +153,6 @@ int ObDirectLoadMultipleDatumRowkey::set_tablet_min_rowkey(const ObTabletID &tab
     reset();
     const ObDatumRowkey &min_rowkey = ObDatumRowkey::MIN_ROWKEY;
     if (OB_FAIL(datum_array_.assign(min_rowkey.datums_, min_rowkey.datum_cnt_))) {
-      LOG_WARN("fail to assign datum array", KR(ret));
     } else {
       tablet_id_ = tablet_id;
     }
@@ -178,7 +170,6 @@ int ObDirectLoadMultipleDatumRowkey::set_tablet_max_rowkey(const ObTabletID &tab
     reset();
     const ObDatumRowkey &max_rowkey = ObDatumRowkey::MAX_ROWKEY;
     if (OB_FAIL(datum_array_.assign(max_rowkey.datums_, max_rowkey.datum_cnt_))) {
-      LOG_WARN("fail to assign datum array", KR(ret));
     } else {
       tablet_id_ = tablet_id;
     }
@@ -238,7 +229,6 @@ int ObDirectLoadMultipleDatumRowkeyCompare::compare(const ObDirectLoadMultipleDa
     LOG_WARN("invalid args", KR(ret), KP(datum_utils_), K(lhs), K(rhs));
   } else {
     if (OB_FAIL(lhs.compare(rhs, *datum_utils_, cmp_ret))) {
-      LOG_WARN("fail to compare rowkey", KR(ret), K(lhs), K(rhs), K(datum_utils_));
     }
   }
   return ret;
@@ -255,7 +245,6 @@ bool ObDirectLoadMultipleDatumRowkeyCompare::operator()(const ObDirectLoadMultip
     LOG_WARN("invalid args", KR(ret), KP(datum_utils_), KP(lhs), KP(rhs));
   } else {
     if (OB_FAIL(lhs->compare(*rhs, *datum_utils_, cmp_ret))) {
-      LOG_WARN("fail to compare rowkey", KR(ret), KP(lhs), K(rhs), K(datum_utils_));
     }
   }
   if (OB_FAIL(ret)) {

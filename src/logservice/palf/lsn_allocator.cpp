@@ -231,8 +231,6 @@ SCN LSNAllocator::get_max_scn() const
     max_scn = scn_base_ + last.scn_delta_;
     int ret = OB_SUCCESS;
     if (OB_FAIL(result.convert_for_logservice(max_scn))) {
-      PALF_LOG(ERROR, "failed to convert_for_logservice", K(max_scn),
-               K(scn_base_), K(last.scn_delta_));
     }
   }
   return result;
@@ -510,7 +508,6 @@ int LSNAllocator::alloc_lsn_scn(const SCN &base_scn,
 
           uint64_t scn_val = scn_base_ + output_next_scn_delta;
           if (OB_FAIL(scn.convert_for_logservice(scn_val))) {
-            PALF_LOG(ERROR, "failed to convert scn", K(ret), K(base_scn), K(scn));
           }
 
           PALF_LOG(TRACE, "alloc_lsn_ts succ", K(ret), K(base_scn), K(size), K(lsn), K(last.lsn_val_),

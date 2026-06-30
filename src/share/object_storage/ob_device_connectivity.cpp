@@ -50,10 +50,8 @@ int ObDeviceCheckFile::check_io_permission(const ObBackupDest &storage_dest)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(storage_dest));
   } else if (OB_FAIL(get_permission_check_file_path_(storage_dest, false/*is_appender*/, path))) {
-      LOG_WARN("failed to get permission check file path", KR(ret), K(storage_dest));
   } else if (OB_FAIL(databuff_printf(buf_write, write_size, "writer at %ld",
                                      ObTimeUtility::current_time()))) {
-    LOG_WARN("fail to set buf_write", KR(ret));
   } else if (OB_FAIL(io_adapter.write_single_file(path, storage_dest.get_storage_info(),
                      buf_write, write_size, ObStorageIdMod::get_default_id_mod()))) {
     if (is_permission_error_(ret)) {
@@ -105,7 +103,6 @@ int ObDeviceCheckFile::get_check_file_path_(const ObBackupDest &storage_dest, ch
   } else if (OB_FAIL(databuff_printf(path, OB_MAX_BACKUP_DEST_LENGTH, "%s/%s_%ld/%s_%lu/%s",
              storage_dest.get_root_path().ptr(), "cluster", cluster_id, "server", server_id,
              OB_STR_CONNECTIVITY_CHECK))) {
-    LOG_WARN("fail to construct check file path", KR(ret), K(storage_dest));
   }
   return ret;
 }
@@ -126,12 +123,9 @@ int ObDeviceCheckFile::get_permission_check_file_path_(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(storage_dest), K(path));
   } else if (OB_FAIL(get_check_file_path_(storage_dest, path))) {
-    LOG_WARN("fail to get check file path", KR(ret), K(storage_dest));
   } else if (OB_FAIL(storage_time_to_strftime_(check_time_s, buf, sizeof(buf), pos, 'T'/* concat */))) {
-    LOG_WARN("fail to convert time", KR(ret), K(storage_dest));
   } else if (OB_FAIL(databuff_printf(path + STRLEN(path), OB_MAX_BACKUP_DEST_LENGTH - STRLEN(path),
       "/%s_%lu_%s_%s_%s%s_%ld", GCONF.zone.str(), server_id_in_GCONF, "permission", prefix, buf, OB_SS_SUFFIX, cur_us))) {
-    LOG_WARN("fail to set permission file name", KR(ret), K(buf));
   }
   return ret;
 }
@@ -154,25 +148,17 @@ int ObDeviceCheckFile::check_appender_permission_(const ObBackupDest &storage_de
   char data[BUF_LENGTH];
   char path[OB_MAX_BACKUP_DEST_LENGTH];
   if (OB_FAIL(get_permission_check_file_path_(storage_dest, true/*is_appender*/, path))) {
-    LOG_WARN("fail to get permission check file path", KR(ret), K(storage_dest));
   } else if (OB_FAIL(io_adapter.set_access_type(&iod_opts, true/*is_appender*/, DEFAULT_OPT_ARG_NUM))) {
-    LOG_WARN("fail to set access type");
   } else if (OB_FAIL(io_adapter.set_append_strategy(&iod_opts, is_data_file, epoch, DEFAULT_OPT_ARG_NUM))) {
-    LOG_WARN("fail to set append strategy");
   } else if (OB_FAIL(io_adapter.get_and_init_device(device_handle, storage_dest.get_storage_info(), path,
                                                     ObStorageIdMod::get_default_id_mod()))) {
-    LOG_WARN( "fail to get device", KR(ret));
   }
   // flag=-1 and mode=0 are invalid, because oss/cos unused flag and mode;
   else if (OB_FAIL(device_handle->open(path, -1/* flag */, 0/* mode */, fd, &iod_opts))) {
-    LOG_WARN("fail to open file", KR(ret), K(path));
   } else if (OB_FAIL(databuff_printf(data, sizeof(data), "appender writer at %ld",
                                      ObTimeUtility::current_time()))) {
-    LOG_WARN("fail to set data", KR(ret), K(path));
   } else if (OB_FAIL(device_handle->pwrite(fd, 0, strlen(data), data, write_size))) {
-    LOG_WARN("fail to write file", KR(ret), K(path), K(data));
   } else if (OB_FAIL(io_adapter.adaptively_del_file(path, storage_dest.get_storage_info()))) {
-    LOG_WARN("fail to del file", KR(ret));
   }
 
   if (OB_SUCCESS != (tmp_ret = io_adapter.close_device_and_fd(device_handle, fd))) {
@@ -203,11 +189,8 @@ int ObDeviceCheckFile::storage_time_to_strftime_(
   (void) localtime_r(&t, &lt);
 #endif
   if (OB_FAIL(format.assign("%Y%m%d"))) {
-    LOG_WARN("failed to build format string", KR(ret), K(concat));
   } else if (OB_FAIL(format.append_fmt("%c", concat))) {
-    LOG_WARN("failed to build format string", KR(ret), K(concat));
   } else if (OB_FAIL(format.append("%H%M%S"))) {
-    LOG_WARN("failed to build format string", KR(ret), K(concat));
   } else if (0 == (strftime_len = strftime(buf + pos, buf_len - pos, format.ptr(), &lt))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to convert timestamp to string", KR(ret), K(ts_s), KP(buf), K(buf_len),
@@ -236,7 +219,6 @@ int ObDirPrefixEntryFilter::init(
     OB_LOG(WARN, "the length of dir prefix is too long", KR(ret), K(filter_str_len));
   } else if (OB_FAIL(databuff_printf(filter_str_, sizeof(filter_str_), "%.*s",
                                      filter_str_len, filter_str))) {
-    OB_LOG(WARN, "fail to init filter_str", KR(ret), K(filter_str), K(filter_str_len));
   } else {
     is_inited_ = true;
   }
@@ -257,7 +239,6 @@ int ObDirPrefixEntryFilter::func(const dirent *entry)
   } else if (0 == STRNCMP(entry->d_name, filter_str_, STRLEN(filter_str_))) {
     ObIODirentEntry p_entry(entry->d_name, entry->d_type);
     if (OB_FAIL(d_entrys_.push_back(p_entry))) {
-      OB_LOG(WARN, "fail to push back directory entry", KR(ret), K(p_entry), K_(filter_str));
     }
   }
   return ret;

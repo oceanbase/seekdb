@@ -42,7 +42,6 @@ int ObSequenceSqlService::insert_sequence(const ObSequenceSchema &sequence_schem
     SHARE_SCHEMA_LOG(WARN, "sequence_schema is invalid", K(sequence_schema.get_sequence_name_str()), K(ret));
   } else {
     if (OB_FAIL(add_sequence(*sql_client, sequence_schema, false, old_sequence_id))) {
-      LOG_WARN("failed to add sequence", K(ret));
     } else {
       ObSchemaOperation opt;
       
@@ -54,7 +53,6 @@ int ObSequenceSqlService::insert_sequence(const ObSequenceSchema &sequence_schem
       opt.schema_version_ = sequence_schema.get_schema_version();
       opt.ddl_stmt_str_ = (NULL != ddl_stmt_str) ? *ddl_stmt_str : ObString();
       if (OB_FAIL(log_operation(opt, *sql_client))) {
-        LOG_WARN("Failed to log operation", K(ret));
       }
     }
   }
@@ -72,11 +70,9 @@ int ObSequenceSqlService::alter_sequence_start_with(const ObSequenceSchema &sequ
   const char *tname = OB_ALL_SEQUENCE_VALUE_TNAME;
   if (OB_FAIL(sql.assign_fmt("UPDATE %s set next_value = %s where sequence_id = %lu",
                             tname, sequence_schema.get_start_with().format(), sequence_id))) {
-    LOG_WARN("append table name failed", K(ret));
   } else if (OB_FAIL(sql_client.write(
                                       sql.ptr(),
                                       affected_rows))) {
-    LOG_WARN("fail to execute sql", K(sql), K(ret));
   } else if (!is_zero_row(affected_rows) && !is_single_row(affected_rows)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected affected rows", K(affected_rows), K(sql), K(ret));
@@ -102,15 +98,12 @@ int ObSequenceSqlService::get_sequence_sync_value(const uint64_t sequence_id,
                 "SELECT NEXT_VALUE FROM %s "
                 "WHERE SEQUENCE_ID = %lu",
                 tname, sequence_id))) {
-      LOG_WARN("fail to format sql", K(ret));
     } else if (is_for_update) {
       if (OB_FAIL(sql.append_fmt(" %s", is_for_update_str))) {
-        LOG_WARN("fail to assign sql", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-        LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else if (nullptr == (result = res.get_result())) {
         ret = OB_ENTRY_NOT_EXIST;
         LOG_WARN("can't find sequence", K(ret), K(tname), K(sequence_id));
@@ -124,9 +117,7 @@ int ObSequenceSqlService::get_sequence_sync_value(const uint64_t sequence_id,
       } else {
         EXTRACT_NUMBER_FIELD_MYSQL(*result, NEXT_VALUE, tmp);
         if (OB_FAIL(ret)) {
-          LOG_WARN("fail to get NEXT_VALUE", K(ret));
         } else if (OB_FAIL(next_value.from(tmp, allocator))) {
-          LOG_WARN("fail to deep copy next_val", K(tmp), K(ret));
         } else if (OB_ITER_END != (ret = result->next())) {
           LOG_WARN("expected OB_ITER_END", K(ret));
           ret = (OB_SUCCESS == ret ? OB_ERR_UNEXPECTED : ret);
@@ -149,24 +140,20 @@ int ObSequenceSqlService::get_lastest_local_cache(ObFixedArray<SequenceCacheNode
   ObNumber temp_diff;
   ObNumber tmp_inner_value;
   if (OB_FAIL(tmp_inner_value.from(inner_next_value, allocator))) {
-    LOG_WARN("fail to init tmp_inner_vale", K(ret));
   }
   for (int i = 0; OB_SUCC(ret) && i < prefetch_nodes.count(); i++) {
     const SequenceCacheNode &node = prefetch_nodes.at(i);
     if (OB_FAIL(node.end().sub(node.start(), temp_diff, allocator))) {
-      LOG_WARN("fail calc sub", K(ret), K(node));
     } else {
       if ((temp_diff >= static_cast<int64_t>(0) && node.start() >= target_cache_node.end())
           || (temp_diff < static_cast<int64_t>(0) && node.start() <= target_cache_node.end())) {
         if (OB_FAIL(tmp_inner_value.sub(temp_diff, tmp_inner_value, allocator))) {
-          LOG_WARN("fail calc sub", K(ret), K(tmp_inner_value), K(temp_diff));
         }
       }
     }
   }
   if (OB_SUCC(ret) && tmp_inner_value == target_cache_node.end()) {
     if (OB_FAIL(cache_res.cache_node_.assign(target_cache_node))) {
-      LOG_WARN("faul to assign cache_node");
     }
     cache_res.inited_ = true;
   }
@@ -185,9 +172,7 @@ int ObSequenceSqlService::clean_sequence_cache(uint64_t sequence_id,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql_proxy in GCTX is null", K(GCTX.sql_proxy_));
   } else if (OB_FAIL(ui_getter.init(*GCTX.sql_proxy_, &GCONF))) {
-    LOG_WARN("init unit info getter failed", K(ret));
   } else if (OB_FAIL(ui_getter.get_tenant_servers(server_list))) {
-    LOG_WARN("get tenant servers failed", K(ret));
   } else {
     ObSeqCleanCacheRes temp_cache_res;
     ObNumber min_diff;
@@ -195,9 +180,7 @@ int ObSequenceSqlService::clean_sequence_cache(uint64_t sequence_id,
     SequenceCacheNode target_cache_node;
     ObFixedArray<SequenceCacheNode, common::ObIAllocator> prefetch_nodes(allocator);
     if (OB_FAIL(prefetch_nodes.init(server_list.count()))) {
-      LOG_WARN("fail to init prefetch_nodes", K(ret));
     } else if (OB_FAIL(min_diff.from(INT64_MAX, allocator))) {
-      LOG_WARN("fail to init min_diff", K(ret));
     }
     for (int i = 0; OB_SUCC(ret) && i < server_list.count(); ++i) {
       temp_cache_res.inited_ = false;
@@ -223,12 +206,9 @@ int ObSequenceSqlService::clean_sequence_cache(uint64_t sequence_id,
         LOG_WARN("fail to push back prefetch cache node", K(ret));
       } else if (OB_FAIL(
                    inner_next_value.sub(temp_cache_res.cache_node_.end(), temp_diff, allocator))) {
-        LOG_WARN("fail calc sub", K(ret), K(inner_next_value), K(temp_cache_res));
       } else if (temp_diff.abs() < min_diff) {
         if (OB_FAIL(min_diff.from(temp_diff.abs(), allocator))) {
-          LOG_WARN("fail to set min_diff", K(ret));
         } else if (OB_FAIL(target_cache_node.assign(temp_cache_res.cache_node_))) {
-          LOG_WARN("fail to assign cache node", K(ret));
         }
       }
     }
@@ -263,9 +243,7 @@ int ObSequenceSqlService::clean_and_write_back_cache(common::ObISQLClient *sql_c
       if (OB_FAIL(sql.assign_fmt("SELECT NEXT_VALUE FROM %s "
                                  "WHERE SEQUENCE_ID = %lu FOR UPDATE",
                                  tname, sequence_id))) {
-        STORAGE_LOG(WARN, "fail format sql", K(ret));
       } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-        LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else if (NULL == (result = res.get_result())) {
         ret = OB_ENTRY_NOT_EXIST;
         LOG_WARN("can't find sequence", K(tname), K(sequence_id));
@@ -280,9 +258,7 @@ int ObSequenceSqlService::clean_and_write_back_cache(common::ObISQLClient *sql_c
       } else {
         EXTRACT_NUMBER_FIELD_MYSQL(*result, NEXT_VALUE, tmp);
         if (OB_FAIL(ret)) {
-          LOG_WARN("fail get NEXT_VALUE", K(ret));
         } else if (OB_FAIL(inner_next_value.from(tmp, allocator))) {
-          LOG_WARN("fail deep copy next_val", K(tmp), K(ret));
         } else if (OB_ITER_END != (ret = result->next())) {
           LOG_WARN("expected OB_ITER_END", K(ret));
           ret = (OB_SUCCESS == ret ? OB_ERR_UNEXPECTED : ret);
@@ -297,26 +273,21 @@ int ObSequenceSqlService::clean_and_write_back_cache(common::ObISQLClient *sql_c
     // do nothing
   } else if (OB_FAIL(clean_sequence_cache(sequence_id, inner_next_value, cache_res,
                                           allocator))) {
-    LOG_WARN("clean sequence cache failed", K(ret));
   } else if (!cache_res.inited_) {
     // do nothing
   } else if (OB_FAIL(cache_res.cache_node_.start().add(sequence_schema.get_increment_by(),
                                                        write_val, allocator))) {
-    LOG_WARN("fail calc new_start", K(ret), K(inner_next_value), K(cache_res));
   } else if (write_val != inner_next_value) {
     int64_t affected_rows = 0;
     bool is_standby = false;
     if (OB_FAIL(sql.assign_fmt("UPDATE %s SET next_value = %s "
                                "WHERE SEQUENCE_ID = %lu",
                                tname, write_val.format(), sequence_id))) {
-      LOG_WARN("format update sql fail", K(ret));
     } else if (OB_FAIL(ObShareUtil::table_check_if_tenant_role_is_standby( is_standby))) {
-      LOG_WARN("fail to execute table_check_if_tenant_role_is_standby", KR(ret));
     } else if (is_standby && false) {
       ret = OB_OP_NOT_ALLOW;
       LOG_WARN("can't write sys table now", K(ret));
     } else if (OB_FAIL(sql_client->write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", K(sql), K(ret));
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected value", K(affected_rows), K(sql), K(ret));
@@ -360,7 +331,6 @@ int ObSequenceSqlService::replace_sequence(const ObSequenceSchema &sequence_sche
           LOG_WARN("add column failed", K(ret));
         } else {
           if (OB_FAIL(dml.add_column("flag", sequence_schema.get_flag()))) {
-            LOG_WARN("add flag column failed", K(ret));
           }
         }
       } else { // rename sequence
@@ -375,7 +345,6 @@ int ObSequenceSqlService::replace_sequence(const ObSequenceSchema &sequence_sche
       // udpate __all_sequence_object table
       int64_t affected_rows = 0;
       if (FAILEDx(exec.exec_update(OB_ALL_SEQUENCE_OBJECT_TNAME, dml, affected_rows))) {
-        LOG_WARN("execute update sql fail", K(ret));
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("update should affect only 1 row", K(affected_rows), K(ret));
@@ -386,10 +355,6 @@ int ObSequenceSqlService::replace_sequence(const ObSequenceSchema &sequence_sche
     if (OB_SUCC(ret)) {
       const bool only_history = true;
       if (OB_FAIL(add_sequence(*sql_client, sequence_schema, only_history, nullptr /* old_sequence_id */))) {
-        LOG_WARN("add_sequence failed",
-                 K(sequence_schema.get_sequence_name_str()),
-                 K(only_history),
-                 K(ret));
       }
     }
     ObNumber inner_next_value; // default to zero
@@ -398,10 +363,8 @@ int ObSequenceSqlService::replace_sequence(const ObSequenceSchema &sequence_sche
       // do nothing
     } else if (alter_start_with) {
       if (OB_FAIL(alter_sequence_start_with(sequence_schema, *sql_client))) {
-        LOG_WARN("alter sequence for start with failed", K(ret));
       } else if (OB_FAIL(clean_sequence_cache(sequence_id, inner_next_value, cache_res,
                                               allocator))) {
-        LOG_WARN("clean sequence cache failed", K(ret));
       }
     } else if (need_clean_cache
                && OB_FAIL(clean_and_write_back_cache(sql_client, sequence_schema, need_write_back,
@@ -420,7 +383,6 @@ int ObSequenceSqlService::replace_sequence(const ObSequenceSchema &sequence_sche
       opt.schema_version_ = sequence_schema.get_schema_version();
       opt.ddl_stmt_str_ = (NULL != ddl_stmt_str) ? *ddl_stmt_str : ObString();
       if (OB_FAIL(log_operation(opt, *sql_client))) {
-        LOG_WARN("Failed to log operation", K(opt), K(ret));
       }
     }
   }
@@ -456,10 +418,7 @@ int ObSequenceSqlService::delete_sequence(const uint64_t database_id,
                 OB_ALL_SEQUENCE_OBJECT_HISTORY_TNAME,
                 ObSchemaUtils::get_extract_schema_id(sequence_id),
                 new_schema_version, IS_DELETED))) {
-      LOG_WARN("assign insert into all sequence history fail",
-               K(sequence_id), K(ret));
     } else if (OB_FAIL(sql_client->write(sql.ptr(), affected_rows))) {
-      LOG_WARN("execute sql fail", K(sql), K(ret));
     } else if (1 != affected_rows) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("no row has inserted", K(ret));
@@ -469,9 +428,7 @@ int ObSequenceSqlService::delete_sequence(const uint64_t database_id,
     if (FAILEDx(sql.assign_fmt("DELETE FROM %s WHERE sequence_id=%lu",
                                OB_ALL_SEQUENCE_OBJECT_TNAME,
                                ObSchemaUtils::get_extract_schema_id(sequence_id)))) {
-      LOG_WARN("append_fmt failed", K(ret));
     } else if (OB_FAIL(sql_client->write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", K(sql), K(ret));
     } else if (1 != affected_rows) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("no row deleted", K(sql), K(affected_rows), K(ret));
@@ -485,9 +442,7 @@ int ObSequenceSqlService::delete_sequence(const uint64_t database_id,
 
     if (FAILEDx(sql.assign_fmt("DELETE FROM %s WHERE sequence_id=%lu",
                                OB_ALL_SEQUENCE_VALUE_TNAME, sequence_id))) {
-      LOG_WARN("append_fmt failed", K(ret));
     } else if (OB_FAIL(sql_client->write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", K(sql), K(ret));
     } else if (1 < affected_rows) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("more than one row deleted", K(sql), K(affected_rows), K(ret));
@@ -510,7 +465,6 @@ int ObSequenceSqlService::delete_sequence(const uint64_t database_id,
       opt.schema_version_ = new_schema_version;
       opt.ddl_stmt_str_ = (NULL != ddl_stmt_str) ? *ddl_stmt_str : ObString();
       if (OB_FAIL(log_operation(opt, *sql_client))) {
-        LOG_WARN("Failed to log operation", K(ret));
       }
     }
   }
@@ -539,7 +493,6 @@ int ObSequenceSqlService::drop_sequence(const ObSequenceSchema &sequence_schema,
              K(sequence_schema.get_sequence_name_str()), K(ret));
   } else if (OB_FAIL(delete_sequence(database_id, sequence_id,
                                      new_schema_version, sql_client, ddl_stmt_str))) {
-    LOG_WARN("failed to delete sequence", K(sequence_schema.get_sequence_name_str()), K(ret));
   } else {/*do nothing*/}
   return ret;
 }
@@ -563,7 +516,6 @@ int ObSequenceSqlService::add_sequence(common::ObISQLClient &sql_client,
     if (only_history && 0 == STRCMP(tname[i], OB_ALL_SEQUENCE_OBJECT_TNAME)) {
       continue;
     } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s (", tname[i]))) {
-      STORAGE_LOG(WARN, "append table name failed, ", K(ret));
     } else {
       SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(
                                         sequence_schema.get_sequence_id()), "sequence_id", "%lu");
@@ -589,9 +541,7 @@ int ObSequenceSqlService::add_sequence(common::ObISQLClient &sql_client,
         if (OB_FAIL(sql.append_fmt(", gmt_modified) VALUES (%.*s, now(6))",
                                    static_cast<int32_t>(values.length()),
                                    values.ptr()))) {
-          LOG_WARN("append sql failed, ", K(ret));
         } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-          LOG_WARN("fail to execute sql", K(sql), K(ret));
         } else {
           if (!is_single_row(affected_rows)) {
             ret = OB_ERR_UNEXPECTED;
@@ -633,10 +583,8 @@ int ObSequenceSqlService::add_sequence_to_value_table(const uint64_t old_sequenc
                                       next_value))) {
     ret = OB_ITER_END == ret ? OB_SUCCESS : ret;
     if (OB_FAIL(ret)) {
-      LOG_WARN("fail to get sequence sync value", K(ret), K(old_sequence_id));
     }
   } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s (", OB_ALL_SEQUENCE_VALUE_TNAME))) {
-    LOG_WARN("append table name failed, ", K(ret));
   } else {
     SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(
                                       new_sequence_id), "sequence_id", "%lu");
@@ -646,7 +594,6 @@ int ObSequenceSqlService::add_sequence_to_value_table(const uint64_t old_sequenc
       if (OB_FAIL(sql.append_fmt(") VALUES (%.*s)",
                                  static_cast<int32_t>(values.length()),
                                  values.ptr()))) {
-        LOG_WARN("append sql failed, ", K(ret));
       } else if (OB_FAIL(sql_client.write(
                                           sql.ptr(),
                                           affected_rows))) {

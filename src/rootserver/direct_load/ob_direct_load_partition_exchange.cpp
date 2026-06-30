@@ -53,18 +53,14 @@ int ObDirectLoadPartitionExchange::exchange_multipart_table_partitions(ObDDLSQLT
   ObDDLOperator ddl_operator(ddl_service_.get_schema_service(), ddl_service_.get_sql_proxy());
 
   if (OB_FAIL(schema_guard.get_schema_version(schema_version))) {
-    LOG_WARN("failed to get tenant schema version", KR(ret), K(schema_version));
   } else if (OB_FAIL(check_multipart_exchange_conditions(schema_guard,
                                                          base_table_schema,
                                                          inc_table_schema,
                                                          base_table_tablet_ids,
                                                          inc_table_tablet_ids))) {
-    LOG_WARN("failed to check multipart exchange conditions", KR(ret), K(base_table_schema),
-        K(inc_table_schema), K(base_table_tablet_ids), K(inc_table_tablet_ids));
   } else if (OB_FAIL(inner_init(base_table_schema,
                                 inc_table_schema,
                                 schema_guard))) {
-    LOG_WARN("failed to inner init", KR(ret), K(base_table_schema), K(inc_table_schema));
   } else if (OB_FAIL(exchange_data_table_partitions(base_table_schema,
                                                     inc_table_schema,
                                                     base_table_tablet_ids,
@@ -73,9 +69,6 @@ int ObDirectLoadPartitionExchange::exchange_multipart_table_partitions(ObDDLSQLT
                                                     ddl_operator,
                                                     trans,
                                                     schema_guard))) {
-    LOG_WARN("failed to exchange data table partitions",
-        KR(ret), K(base_table_schema), K(inc_table_schema),
-        K(base_table_tablet_ids), K(inc_table_tablet_ids), K(part_exchange_type));
   } else if (OB_FAIL(exchange_auxiliary_table_partitions(base_table_schema,
                                                          inc_table_schema,
                                                          base_table_tablet_ids,
@@ -84,24 +77,15 @@ int ObDirectLoadPartitionExchange::exchange_multipart_table_partitions(ObDDLSQLT
                                                          ddl_operator,
                                                          trans,
                                                          schema_guard))) {
-    LOG_WARN("failed to exchange auxiliary table partitions",
-        KR(ret), K(base_table_schema), K(inc_table_schema),
-        K(base_table_tablet_ids), K(inc_table_tablet_ids), K(part_exchange_type));
   } else {
     int64_t new_inc_schema_version = OB_INVALID_VERSION;
     int64_t new_base_schema_version = OB_INVALID_VERSION;
     if (OB_FAIL(push_data_table_schema_version_( inc_table_schema,
         nullptr/*ddl_stmt_str*/, base_table_schema.get_table_id(), new_inc_schema_version, trans))) {
-      LOG_WARN("failed to push data table schema version",
-          KR(ret), K(inc_table_schema), K(base_table_schema.get_table_id()));
     } else if (OB_FAIL(push_data_table_schema_version_( base_table_schema,
         nullptr/*ddl_stmt_str*/, inc_table_schema.get_table_id(), new_base_schema_version, trans))) {
-      LOG_WARN("failed to push data table schema version",
-          KR(ret), K(base_table_schema), K(inc_table_schema.get_table_id()));
     } else if (OB_FAIL(adapting_cdc_changes_in_exchange_partition_(
         base_table_schema.get_table_id(), inc_table_schema.get_table_id(), trans))) {
-      LOG_WARN("failed to adapting cdc changes in exchange_partition",
-          KR(ret), K(base_table_schema.get_table_id()), K(inc_table_schema.get_table_id()));
     } else {
       LOG_INFO("succeed to exchange direct load table partitions",
           K(base_table_schema.get_table_name_str()), K(base_table_schema.get_table_id()),
@@ -136,8 +120,6 @@ int ObDirectLoadPartitionExchange::check_multipart_exchange_conditions(
         KR(ret), K(base_tablet_ids.count()), K(inc_tablet_ids.count()));
   } else if (OB_FAIL(check_data_table_partition_exchange_conditions_(
       base_table_schema, inc_table_schema, base_tablet_ids, inc_tablet_ids))) {
-    LOG_WARN("failed to check data table partition exchange conditions",
-        KR(ret), K(base_table_schema), K(inc_table_schema), K(part_name));
   }
   return ret;
 }
@@ -150,18 +132,14 @@ int ObDirectLoadPartitionExchange::check_table_conditions_in_common_(
   HEAP_VARS_2((ObTableSchema, new_base_table_schema),
               (ObTableSchema, new_inc_table_schema)) {
     if (OB_FAIL(new_base_table_schema.assign(base_table_schema))) {
-      LOG_WARN("failed to assign base table schema", KR(ret), K(base_table_schema));
     } else if (OB_FALSE_IT(new_base_table_schema.set_in_offline_ddl_white_list(true))) {
     } else if (OB_FAIL(new_inc_table_schema.assign(inc_table_schema))) {
-      LOG_WARN("failed to assign inc table schema", KR(ret), K(inc_table_schema));
     } else if (OB_FALSE_IT(new_inc_table_schema.set_in_offline_ddl_white_list(true))) {
     } else if (OB_FALSE_IT(new_inc_table_schema.set_table_mode(new_base_table_schema.get_table_mode()))) {
       // hidden table has different table mode
     } else if (OB_FAIL(ObPartitionExchange::check_table_conditions_in_common_(
         new_base_table_schema,
         new_inc_table_schema))) {
-      LOG_WARN("failed to check table conditions in common", KR(ret),
-          K(new_base_table_schema), K(new_inc_table_schema));
     }
   }
   return ret;

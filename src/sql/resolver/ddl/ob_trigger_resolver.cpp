@@ -19,7 +19,7 @@
 #include "sql/resolver/ddl/ob_create_routine_resolver.h"
 #include "pl/parser/parse_stmt_item_type.h"
 #include "pl/ob_pl_package.h"
-#include "pl/ob_pl_build.h"
+#include "pl/ob_pl_compile.h"
 #include "share/table/ob_ttl_util.h"
 
 namespace oceanbase
@@ -84,7 +84,6 @@ int ObTriggerResolver::get_drop_trigger_stmt_table_name(ObDropTriggerStmt *stmt)
     OX (schema_guard = schema_checker_->get_schema_guard());
     if (OB_SUCC(ret)) {
       if(OB_FAIL(schema_guard->get_database_schema( trigger_database, db_schema))) {
-        LOG_WARN("get database schema failed", K(ret));
       } else if (NULL == db_schema) {
         ret = OB_ERR_BAD_DATABASE;
         LOG_USER_ERROR(OB_ERR_BAD_DATABASE, trigger_database.length(), trigger_database.ptr());
@@ -98,7 +97,6 @@ int ObTriggerResolver::get_drop_trigger_stmt_table_name(ObDropTriggerStmt *stmt)
                  K(trigger_database), K(trigger_database_id), K(*db_schema), K(ret));
       } else if (OB_FAIL(schema_guard->get_trigger_info( trigger_database_id,
                                                        trigger_name, trigger_info))) {
-        LOG_WARN("get trigger info failed", K(ret), K(trigger_database), K(trigger_name));
       } else if (OB_ISNULL(trigger_info)) {
         ret = OB_ERR_TRIGGER_NOT_EXIST;
       } else if (trigger_info->is_in_recyclebin()) {
@@ -108,8 +106,6 @@ int ObTriggerResolver::get_drop_trigger_stmt_table_name(ObDropTriggerStmt *stmt)
       } else if (OB_FAIL(schema_guard->get_table_schema(
                                                   trigger_info->get_base_object_id(),
                                                   table))) {
-       LOG_WARN("Failed to get table schema",
-                   K(trigger_info->get_base_object_id()), K(ret));
       } else if (OB_ISNULL(table)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Table schema should not be NULL", K(ret));
@@ -199,9 +195,7 @@ int ObTriggerResolver::resolve_sp_definer(const ParseNode *parse_node,
     ObString priv_user(tmp_buf);
     if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
               *allocator_, session_info_->get_dtc_params(), priv_user))) {
-      LOG_WARN("fail to convert charset", K(ret));
     } else if (OB_FAIL(trigger_arg.trigger_info_.set_trigger_priv_user(priv_user))) {
-      LOG_WARN("failed to set priv user", K(ret));
     }
   }
 
@@ -287,7 +281,7 @@ int ObTriggerResolver::resolve_alter_trigger_stmt(const ParseNode &parse_node,
                                            trigger_arg));
   OZ (new_tg_info.deep_copy(*old_tg_info));
   OZ (resolve_alter_clause(*parse_node.children_[1], new_tg_info, trigger_db_name,
-                           trigger_arg.is_set_status_));
+                           trigger_arg.is_set_status_, trigger_arg.is_alter_compile_));
   OZ (trigger_arg.trigger_infos_.push_back(new_tg_info));
   return ret;
 }
@@ -783,7 +777,6 @@ int ObTriggerResolver::resolve_trigger_body(const ParseNode &parse_node,
         bool saved_trigger_flag = session_info_->is_for_trigger_package();
         session_info_->set_for_trigger_package(true);
         if (OB_FAIL(resolver.resolve(*parse_tree->children_[0]))) {
-          LOG_WARN("resolve trigger procedure failed", K(parse_tree->children_[0]->type_), K(ret));
         }
         // Regardless of whether the execution is successful, restore the original value of this variable
         session_info_->set_for_trigger_package(saved_trigger_flag);
@@ -831,7 +824,8 @@ int ObTriggerResolver::resolve_schema_name(const ParseNode &parse_node,
 int ObTriggerResolver::resolve_alter_clause(const ParseNode &alter_clause,
                                             ObTriggerInfo &tg_info,
                                             const ObString &db_name,
-                                            bool &is_set_status)
+                                            bool &is_set_status,
+                                            bool &is_alter_compile)
 {
   int ret = OB_SUCCESS;
   CK (OB_LIKELY(OB_NOT_NULL(schema_checker_)));
@@ -844,15 +838,12 @@ int ObTriggerResolver::resolve_alter_clause(const ParseNode &alter_clause,
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter editionable");
   } else if (TRIGGER_ALTER_IF_ENABLE == alter_clause.int16_values_[0]) {
     is_set_status = true;
+    is_alter_compile = false;
     if (T_ENABLE == static_cast<ObItemType>(alter_clause.int16_values_[1])) {
       tg_info.set_enable();
     } else {
       tg_info.set_disable();
     }
-  } else {
-    ret = OB_NOT_SUPPORTED;
-    LOG_WARN("alter trigger compile is not supported", K(ret), K(db_name), K(tg_info.get_trigger_name()));
-    LOG_USER_ERROR(OB_NOT_SUPPORTED, "alter trigger compile");
   }
   return ret;
 }
@@ -986,7 +977,8 @@ int ObTriggerResolver::analyze_trigger(ObSchemaGetterGuard &schema_guard,
                                        ObIAllocator &allocator,
                                        const ObTriggerInfo &trigger_info,
                                        const ObString &db_name,
-                                       ObIArray<ObDependencyInfo> &dep_infos)
+                                       ObIArray<ObDependencyInfo> &dep_infos,
+                                       bool is_alter_compile)
 {
   int ret = OB_SUCCESS;
   CK (OB_LIKELY(OB_NOT_NULL(session_info)));
@@ -997,7 +989,7 @@ int ObTriggerResolver::analyze_trigger(ObSchemaGetterGuard &schema_guard,
       ObPLPackageGuard package_guard{};
       const ObString &pkg_name = trigger_info.get_package_body_info().get_package_name();
       ObString source;
-      ObPLBuilder builder(allocator, *session_info, schema_guard, package_guard, *sql_proxy);
+      ObPLCompiler compiler(allocator, *session_info, schema_guard, package_guard, *sql_proxy);
       const ObPackageInfo &package_spec_info = trigger_info.get_package_spec_info();
       if (!trigger_info.get_update_columns().empty()) {
         ObPLParser parser(allocator, session_info->get_charsets4parser(), session_info->get_sql_mode());
@@ -1040,7 +1032,7 @@ int ObTriggerResolver::analyze_trigger(ObSchemaGetterGuard &schema_guard,
                                 NULL));
       OZ (ObTriggerInfo::gen_package_source(trigger_info.get_trigger_spec_package_id(trigger_info.get_trigger_id()),
                                             source, true, schema_guard, allocator));
-      OZ (builder.analyze_package(source, NULL, package_spec_ast, true));
+      OZ (compiler.analyze_package(source, NULL, package_spec_ast, true));
       OZ (package_body_ast.init(db_name,
                                 pkg_name,
                                 PL_PACKAGE_BODY,
@@ -1050,7 +1042,7 @@ int ObTriggerResolver::analyze_trigger(ObSchemaGetterGuard &schema_guard,
                                 &package_spec_ast));
       OZ (ObTriggerInfo::gen_package_source(trigger_info.get_trigger_body_package_id(trigger_info.get_trigger_id()),
                                             source, false, schema_guard, allocator));
-      OZ (builder.analyze_package(source,
+      OZ (compiler.analyze_package(source,
                                    &(package_spec_ast.get_body()->get_namespace()),
                                    package_body_ast,
                                    true));
@@ -1069,3 +1061,4 @@ const ObString ObTriggerResolver::REF_PARENT = "PARENT";
 
 } // namespace sql
 } // namespace oceanbase
+

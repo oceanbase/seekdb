@@ -82,7 +82,6 @@ int init_aggregates(RuntimeContext &agg_ctx, ObIAllocator &allocator,
   int ret = OB_SUCCESS;
   ObEvalCtx &ctx= agg_ctx.eval_ctx_;
   if (OB_FAIL(agg_ctx.init_row_meta(agg_ctx.aggr_infos_, allocator))) {
-    SQL_LOG(WARN, "init row meta failed", K(ret));
   }
   for (int i = 0; OB_SUCC(ret) && i < agg_ctx.aggr_infos_.count(); i++) {
     ObAggrInfo &aggr_info = agg_ctx.locate_aggr_info(i);
@@ -92,7 +91,6 @@ int init_aggregates(RuntimeContext &agg_ctx, ObIAllocator &allocator,
     }
     if (aggr_info.is_implicit_first_aggr()) {
       if (OB_FAIL(init_first_row_aggregate(agg_ctx, i, allocator, aggregate))) {
-        SQL_LOG(WARN, "init first row aggregate failed", K(ret));
       }
     } else {
       ObExprOperatorType fun_type =
@@ -126,7 +124,6 @@ int init_aggregates(RuntimeContext &agg_ctx, ObIAllocator &allocator,
       }
       }
       if (OB_FAIL(ret)) {
-        SQL_LOG(WARN, "init aggregate failed", K(ret));
       } else if (OB_ISNULL(aggregate)) {
         ret = OB_ERR_UNEXPECTED;
         SQL_LOG(WARN, "unexpected null aggregate", K(ret));

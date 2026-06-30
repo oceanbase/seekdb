@@ -229,7 +229,6 @@ int ObExprInnerDoubleToInt::double_to_number(double in_val,
         tmp_ret = OB_ERR_UNEXPECTED;
         LOG_WARN("bound_num is NULL", K(tmp_ret), K(ret), K(is_neg));
       } else if (OB_SUCCESS != (tmp_ret = number.from(*bound_num, alloc))) {
-        LOG_WARN("copy min number failed", K(ret), K(tmp_ret), KPC(bound_num));
       } else {
         ret = OB_SUCCESS;
       }
@@ -249,7 +248,6 @@ int ObExprInnerDoubleToInt::eval_inner_double_to_int(const ObExpr &expr, ObEvalC
   bool is_unsigned = (expr.extra_ & 4) == 4;
   bool is_decimal = (expr.extra_ & 8) == 8;
   if (OB_FAIL(expr.args_[0]->eval(ctx, val_datum))) {
-    LOG_WARN("fail to eval conv", K(ret), K(expr));
   } else if (val_datum->is_null()) {
     expr_datum.set_null();
   } else if (OB_FALSE_IT(val = val_datum->get_double())) {
@@ -263,21 +261,18 @@ int ObExprInnerDoubleToInt::eval_inner_double_to_int(const ObExpr &expr, ObEvalC
     } else if ((val > 0. && !is_start) ||
         (val < 0. && is_start)) {
       if (OB_FAIL(add_double_bit_1(val, tmp_d))) {
-        LOG_WARN("failed to add double bit 1", K(ret));
       } else {
         val = tmp_d;
       }
     } else if ((val > 0. && is_start) ||
                (val < 0. && !is_start)) {
       if (OB_FAIL(sub_double_bit_1(val, tmp_d))) {
-        LOG_WARN("failed to sub double bit 1", K(ret));
       } else {
         val = tmp_d;
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(double_to_number(val, tmp_alloc, number))) {
-      LOG_WARN("failed to trans double to number", K(ret));
     } else {
       expr_datum.set_number(number);
     }
@@ -309,7 +304,6 @@ int ObExprInnerDoubleToInt::eval_inner_double_to_int(const ObExpr &expr, ObEvalC
       }
     } else {
       if (OB_FAIL(convert_double_to_int64_range(val, start, end))) {
-        LOG_WARN("failed to convert double to int64 range", K(ret));
       } else if (is_start) {
         expr_datum.set_int(start);
       } else {
@@ -344,7 +338,6 @@ int ObExprInnerDoubleToInt::eval_inner_double_to_int(const ObExpr &expr, ObEvalC
       }
     } else {
       if (OB_FAIL(convert_double_to_uint64_range(val, start, end))) {
-        LOG_WARN("failed to convert double to int64 range", K(ret));
       } else if (is_start) {
         expr_datum.set_uint(start);
       } else {

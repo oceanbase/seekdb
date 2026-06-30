@@ -35,7 +35,6 @@ int ObTableLoadWriteOp::build(ObTableLoadTableOp *table_op,
     case ObTableLoadWriteType::DIRECT_WRITE: {
       ObTableLoadDirectWriteOp *direct_write_op = nullptr;
       if (OB_FAIL(table_op->alloc_op(direct_write_op))) {
-        LOG_WARN("fail to alloc op", KR(ret));
       } else {
         write_op = direct_write_op;
       }
@@ -44,7 +43,6 @@ int ObTableLoadWriteOp::build(ObTableLoadTableOp *table_op,
     case ObTableLoadWriteType::STORE_WRITE: {
       ObTableLoadStoreWriteOp *store_write_op = nullptr;
       if (OB_FAIL(table_op->alloc_op(store_write_op))) {
-        LOG_WARN("fail to alloc op", KR(ret));
       } else {
         write_op = store_write_op;
       }
@@ -53,7 +51,6 @@ int ObTableLoadWriteOp::build(ObTableLoadTableOp *table_op,
     case ObTableLoadWriteType::PRE_SORT_WRITE: {
       ObTableLoadPreSortWriteOp *pre_sort_write_op = nullptr;
       if (OB_FAIL(table_op->alloc_op(pre_sort_write_op))) {
-        LOG_WARN("fail to alloc op", KR(ret));
       } else {
         write_op = pre_sort_write_op;
       }

@@ -31,7 +31,6 @@ int ObTenantEventHistoryTableOperator::init(share::ObSQLiteConnectionPool *pool,
   const bool is_server_event = false;
   set_addr(self_addr, is_rs_event, is_server_event);
   if (OB_FAIL(ObEventHistoryTableOperator::init(pool, ObEventHistoryType::TENANT))) {
-    LOG_WARN("failed to init with SQLite", K(ret));
   }
   return ret;
 }

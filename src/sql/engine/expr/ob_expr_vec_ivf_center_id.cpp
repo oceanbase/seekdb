@@ -88,7 +88,6 @@ int ObExprVecIVFCenterID::calc_center_id(
     ObString str(buf_len, 0, buf);
     ObCenterId center_id(1, 0);
     if (OB_FAIL(ObVectorClusterHelper::set_center_id_to_string(center_id, str))) {
-      LOG_WARN("failed to set center_id to string", K(ret), K(center_id), K(str));
     } else {
       expr_datum.set_string(str);
     }
@@ -107,7 +106,6 @@ int ObExprVecIVFCenterID::calc_center_id(
     uint64_t center_prefix = 0;
     if (OB_FAIL(ObVectorIndexUtil::eval_ivf_centers_common(
         tmp_allocator, expr, eval_ctx, centers, table_id, tablet_id, dis_algo, contain_null, arr, center_prefix))) {
-      LOG_WARN("failed to eval ivf centers", K(ret), K(expr), K(eval_ctx));
     } else if (contain_null) {
       // do nothing
     } else {
@@ -120,9 +118,7 @@ int ObExprVecIVFCenterID::calc_center_id(
           1/*nprobe*/,
           tmp_allocator,
           VIDA_COS != dis_algo ? nullptr: &norm_info))) {
-        LOG_WARN("failed to get nearest center", K(ret));
       } else if (OB_FAIL(helper.get_center_idx(0, center_idx))) {
-        LOG_WARN("failed to get center idx", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -131,7 +127,6 @@ int ObExprVecIVFCenterID::calc_center_id(
       ObString str(buf_len, 0, buf);
       ObCenterId center_id(center_prefix, center_idx);
       if (OB_FAIL(ObVectorClusterHelper::set_center_id_to_string(center_id, str))) {
-        LOG_WARN("failed to set center_id to string", K(ret), K(center_id), K(str));
       } else {
         expr_datum.set_string(str);
       }

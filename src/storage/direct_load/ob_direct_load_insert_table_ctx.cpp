@@ -122,7 +122,6 @@ int ObDirectLoadInsertTabletContext::refresh_pk_cache(const ObTabletID &tablet_i
   pk_cache.tablet_id_ = tablet_id;
   pk_cache.cache_size_ = PK_CACHE_SIZE;
   if (OB_FAIL(auto_inc.get_tablet_cache_interval(pk_cache))) {
-    LOG_WARN("get_autoinc_seq fail", K(ret), K(tablet_id));
   } else if (OB_UNLIKELY(PK_CACHE_SIZE > pk_cache.count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected autoincrement value count", K(ret), K(pk_cache));
@@ -139,9 +138,7 @@ int ObDirectLoadInsertTabletContext::get_pk_interval(uint64_t count,
       LOG_WARN("fail to fetch from pk cache", KR(ret));
     } else {
       if (OB_FAIL(refresh_pk_cache((param_->reuse_pk_ ? pk_tablet_id_ : tablet_id_), pk_cache_))) {
-        LOG_WARN("fail to refresh pk cache", KR(ret), K(pk_tablet_id_));
       } else if (OB_FAIL(pk_cache_.fetch(count, pk_interval))) {
-        LOG_WARN("fail to fetch from pk cache", KR(ret));
       }
     }
   }
@@ -171,7 +168,6 @@ int ObDirectLoadInsertTabletContext::get_write_ctx(ObDirectLoadInsertTabletWrite
   } else {
     ObMutexGuard guard(mutex_);
     if (OB_FAIL(get_pk_interval(WRITE_BATCH_SIZE, write_ctx.pk_interval_))) {
-      LOG_WARN("fail to get pk interval", KR(ret), KP(this));
     } else {
       write_ctx.start_seq_.macro_data_seq_ = start_seq_.macro_data_seq_;
       write_ctx.slice_idx_ = slice_idx_;
@@ -220,7 +216,6 @@ int ObDirectLoadInsertTabletContext::init_datum_row(ObDatumRow &datum_row, const
     const int64_t real_column_count =
       param_->column_count_ + ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
     if (OB_FAIL(datum_row.init(real_column_count))) {
-      LOG_WARN("fail to init datum row", KR(ret), K(real_column_count));
     } else {
       const int64_t trans_version =
         !param_->is_incremental_ ? param_->snapshot_version_ : INT64_MAX;
@@ -276,16 +271,13 @@ int ObDirectLoadInsertTableContext::inner_init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tablet_ctx_map_.create(1024, "TLD_InsTabCtx", "TLD_InsTabCtx"))) {
-    LOG_WARN("fail to create tablet ctx map", KR(ret));
   } else if (param_.enable_dag_) {
     const int64_t trans_version = !param_.is_incremental_ ? param_.snapshot_version_ : INT64_MAX;
     const int64_t seq_no = param_.trans_param_.tx_seq_.cast_to_int();
     if (OB_FAIL(ObDirectLoadVectorUtils::make_const_multi_version_vector(-trans_version, allocator_,
                                                                          trans_version_vector_))) {
-      LOG_WARN("fail to make trans version vector", KR(ret));
     } else if (OB_FAIL(ObDirectLoadVectorUtils::make_const_multi_version_vector(-seq_no, allocator_,
                                                                                 seq_no_vector_))) {
-      LOG_WARN("fail to make seq no vector", KR(ret));
     }
   }
   return ret;

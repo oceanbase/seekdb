@@ -49,7 +49,6 @@ int ob_write_expr_item(AllocatorT &alloc, const ObPostExprItem &src,
     if (NEW_OP_WHEN_COPY == flag) {
       ObExprOperator *op = NULL;
       if (OB_FAIL(factory.alloc(item_type, op))) {
-        LOG_WARN("fail to alloc expr_op", K(ret));
       } else if (OB_ISNULL(op)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("no memory to alloc op", K(ret), K(item_type));
@@ -57,16 +56,13 @@ int ob_write_expr_item(AllocatorT &alloc, const ObPostExprItem &src,
         ret = OB_BAD_NULL_ERROR;
         LOG_WARN("src expr op is null", K(ret));
       } else if (OB_FAIL(op->assign(*src.get_expr_operator()))) {
-        LOG_WARN("deep copy op failed", K(ret));
       } else if (OB_FAIL(dst.assign(op))) {
-        LOG_WARN("failed to assign dst expr item", K(ret));
       }
     } else {
       if (OB_ISNULL(src.get_expr_operator())) {
         ret = OB_BAD_NULL_ERROR;
         LOG_WARN("src expr op is null", K(ret));
       } else if (OB_FAIL(dst.assign(const_cast<ObPostExprItem &>(src).get_expr_operator()))) {
-        LOG_WARN("failed to assign dst expr item", K(ret));
       }
     }
   } else {
@@ -204,7 +200,6 @@ int ObPostExprItem::deserialize(ObIAllocator &alloc,
       OB_UNIS_DECODE(tmp);
       ObObj local_mem_obj;
       if (OB_FAIL(deep_copy_obj(alloc, tmp, local_mem_obj))) {
-        LOG_WARN("failed to deep copy obj", K(ret));
       } else {
         new(&v2_.v1_) ObObj(local_mem_obj);
         OB_UNIS_DECODE(accuracy_);
@@ -212,7 +207,6 @@ int ObPostExprItem::deserialize(ObIAllocator &alloc,
     } else if (IS_EXPR_OP(item_type_)) {
       ObExprOperatorFactory factory(alloc);
       if (OB_FAIL(factory.alloc(item_type_, v2_.op_))) {
-        LOG_WARN("fail to alloc expr_op", K(ret));
       } else if (OB_ISNULL(v2_.op_)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("failed to allc expr operator", K(ret), K_(item_type));
@@ -278,15 +272,12 @@ int ObPostfixExpression::assign(const ObPostfixExpression &other)
   if (&other != this) {
     data_clear();
     if (OB_FAIL(post_exprs_.reserve(other.post_exprs_.count(), str_buf_))) {
-      LOG_WARN("failed to reserve", K(ret), "item_count", other.post_exprs_.count());
     } else {
       ObPostExprItem item_clone;
       for (int64_t i = 0; OB_SUCC(ret) && i < other.post_exprs_.count(); ++i) {
         const ObPostExprItem &item = other.post_exprs_[i];
         if (OB_FAIL(ob_write_expr_item(str_buf_, item, item_clone, NEW_OP_WHEN_COPY))) {
-          LOG_WARN("failed to deep copy expr item", K(ret));
         } else if (OB_FAIL(post_exprs_.push_back(item_clone))) {
-          LOG_WARN("failed to push into array", K(ret));
         }
       } // end for
       output_column_count_ = other.output_column_count_;
@@ -300,9 +291,7 @@ int ObPostfixExpression::add_expr_item(const ObPostExprItem &item)
   int ret = OB_SUCCESS;
   ObPostExprItem item_clone;
   if (OB_FAIL(ob_write_expr_item(str_buf_, item, item_clone, NO_NEW_OP_WHEN_COPY))) {
-    LOG_WARN("failed to deep copy expr item", K(ret));
   } else if (OB_FAIL(post_exprs_.push_back(item_clone))) {
-    LOG_WARN("failed to push into array", K(ret));
   }
   return ret;
 }
@@ -323,7 +312,6 @@ int ObPostfixExpression::calc(common::ObExprCtx &expr_ctx, const common::ObNewRo
       //result directly, even if it is a param array, this is to avoid constructing a param array
       //in the pre calculation
       if (OB_FAIL(ObSqlExpressionUtil::expand_array_params(expr_ctx, *value, value))) {
-        LOG_WARN("expand array params failed", K(ret), KPC(value));
       }
     }
     if (OB_SUCC(ret)) {
@@ -332,14 +320,12 @@ int ObPostfixExpression::calc(common::ObExprCtx &expr_ctx, const common::ObNewRo
   } else if (OB_UNLIKELY(post_exprs_.at(last_idx).get_item_type() == T_OP_SHADOW_UK_PROJECT)) {
     // For shadow unique key project expression take the optimized path
     if (OB_FAIL(uk_fast_project(expr_ctx, row, result_val))) {
-      LOG_WARN("fail to do uk fast project", K(ret));
     }
   } else {
     ObNewRow result_row;
     result_row.cells_ = &result_val;
     result_row.count_ = 1;
     if (OB_FAIL(calc_result_row(expr_ctx, row, result_row))) {
-      LOG_WARN("fail to calc result list", K(ret));
     } else {
       result_val = result_row.cells_[0];
     }
@@ -356,7 +342,6 @@ int ObPostfixExpression::calc(common::ObExprCtx &expr_ctx, const common::ObNewRo
   result_row.cells_ = &result_val;
   result_row.count_ = 1;
   if (OB_FAIL(calc_result_row(expr_ctx, row1, row2, result_row))) {
-    LOG_WARN("fail to calc result list", K(ret), K(row1), K(row2));
   } else {
     result_val = result_row.cells_[0];
   }
@@ -380,14 +365,12 @@ inline int ObPostfixExpression::uk_fast_project(ObExprCtx &expr_ctx, const ObNew
       } else {
         const int64_t col_idx = post_exprs_.at(i).get_column();
         if (OB_FAIL(projector.push_back(col_idx))) {
-          LOG_WARN("fail to push back projector", K(ret));
         }
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObUniqueIndexRowTransformer::check_need_shadow_columns(row, static_cast<ObCompatibilityMode>(THIS_WORKER.get_compatibility_mode()), unique_key_cnt,
           &projector, expr_ctx.row_ctx_.is_uk_cnt_null_))) {
-        LOG_WARN("fail to check need shadow columns", K(ret));
       }
     }
     expr_ctx.row_ctx_.is_uk_checked_ = true;
@@ -431,13 +414,11 @@ int ObPostfixExpression::calc_result_row(ObExprCtx &expr_ctx, const common::ObNe
     } else { // T_QUESTIONMARK
       const ObObj *obj = NULL;
       if (OB_FAIL(item.get_indirect_const(*expr_ctx.phy_plan_ctx_, obj))) {
-        LOG_WARN("fail to get obj", K(ret));
       } else if (!expr_ctx.is_pre_calculation_) {
         //in pre calculation, if only one question mark expr, return the question mark expression
         //result directly, even if it is a param array, this is to avoid constructing a param array
         //in the pre calculation
         if (OB_FAIL(ObSqlExpressionUtil::expand_array_params(expr_ctx, *obj, obj))) {
-          LOG_WARN("expand array params failed", K(ret), KPC(obj));
         }
       }
       if (OB_SUCC(ret)) {
@@ -461,7 +442,6 @@ int ObPostfixExpression::calc_result_row(ObExprCtx &expr_ctx, const common::ObNe
       LOG_ERROR("no memory", K(ret));
     }
     if (OB_FAIL(ret)) {
-      LOG_WARN("no memory or deep copy has failed", K(ret));
     } else if (OB_ISNULL(result_row.cells_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("result row cells is null", K(ret));
@@ -478,25 +458,21 @@ int ObPostfixExpression::calc_result_row(ObExprCtx &expr_ctx, const common::ObNe
           switch (item.get_item_type()) {
             case T_OP_AGG_PARAM_LIST: {
               if (OB_FAIL(calc_agg_param_list(result_row, item, stack, stack_top))) {
-                LOG_WARN("failed to calc agg param list", K(ret), K_(post_exprs));
               }
               break;
             }
             case T_REF_COLUMN: {
               if (OB_FAIL(calc_ref_column(row, result_row, item, stack, stack_top))) {
-                LOG_WARN("failed to calc ref column", K(ret), K_(post_exprs));
               }
               break;
             }
             case T_QUESTIONMARK: {
               if (OB_FAIL(calc_question_mark(expr_ctx, result_row, item, stack, stack_top))) {
-                LOG_WARN("failed to calc question mark", K(ret), K_(post_exprs));
               }
               break;
             }
             default: {
               if (OB_FAIL(calc_other_op(expr_ctx, item, stack, stack_top))) {
-                LOG_WARN("failed to calc other op", K(ret), K_(post_exprs));
               }
               break;
             }
@@ -541,7 +517,6 @@ int ObPostfixExpression::calc_result_row(ObExprCtx &expr_ctx, const common::ObNe
   expr_ctx.infix_expr_ = NULL;
 
   if (OB_FAIL(ret)) {
-    LOG_WARN("no memory or deep copy has failed", K(ret));
   } else if (OB_ISNULL(result_row.cells_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("result row cells is null", K(ret));
@@ -558,25 +533,21 @@ int ObPostfixExpression::calc_result_row(ObExprCtx &expr_ctx, const common::ObNe
         switch (item.get_item_type()) {
           case T_OP_AGG_PARAM_LIST: {
             if (OB_FAIL(calc_agg_param_list(result_row, item, stack, stack_top))) {
-              LOG_WARN("failed to calc agg param list", K(ret));
             }
             break;
           }
           case T_REF_COLUMN: {
             if (OB_FAIL(calc_ref_column(row1, row2, result_row, item, stack, stack_top))) {
-              LOG_WARN("failed to calc ref column", K(ret));
             }
             break;
           }
           case T_QUESTIONMARK: {
             if (OB_FAIL(calc_question_mark(expr_ctx, result_row, item, stack, stack_top))) {
-              LOG_WARN("failed to calc question mark", K(ret));
             }
             break;
           }
           default: {
             if (OB_FAIL(calc_other_op(expr_ctx, item, stack, stack_top))) {
-              LOG_WARN("failed to calc other op", K(ret));
             }
             break;
           }
@@ -711,9 +682,7 @@ OB_INLINE int ObPostfixExpression::calc_question_mark(ObExprCtx &expr_ctx,
     LOG_WARN("something is null, or stack_top out of range",
              K(ret), K(stack), K_(result_row.cells), K(stack_top), K_(expr_ctx.phy_plan_ctx));
   } else if (OB_FAIL(item.get_indirect_const(*expr_ctx.phy_plan_ctx_, obj))) {
-    LOG_WARN("failed to get value obj", K(ret));
   } else if (OB_FAIL(ObSqlExpressionUtil::expand_array_params(expr_ctx, *obj, obj))) {
-    LOG_WARN("expand array params failed", K(ret), KPC(obj));
   } else {
     stack[stack_top] = *obj;
     stack_top++;
@@ -737,8 +706,6 @@ OB_INLINE int ObPostfixExpression::calc_other_op(ObExprCtx &expr_ctx, const ObPo
       ret = OB_BAD_NULL_ERROR;
       LOG_WARN("expr_op is null", K(ret), K(item.get_item_type()));
     } else if (OB_FAIL(expr_op->call(stack, stack_top, expr_ctx))) {
-      LOG_WARN("failed to call expr operator", K(ret),
-               "expr_name", item.get_expr_operator()->get_name(), K(item));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -791,9 +758,7 @@ DEFINE_DESERIALIZE(ObPostfixExpression)
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < item_count; ++i) {
         if (OB_FAIL(item.deserialize(str_buf_, buf, data_len, pos))) {
-          LOG_WARN("fail to deserialize post_item", K(ret));
         } else if (OB_FAIL(post_exprs_.push_back(item))) {
-          LOG_WARN("failed to push into array", K(ret));
         }
       } // end for
       OB_UNIS_DECODE(output_column_count_);

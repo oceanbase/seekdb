@@ -41,7 +41,6 @@ int ObDDLExecutorUtil::handle_session_exception(ObSQLSessionInfo &session)
     ret = OB_SESSION_KILLED;
     LOG_WARN("session is killed", K(ret));
   } else if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_standby( is_standby))) {
-    LOG_WARN("fail to execute mtl_check_if_tenant_role_is_standby", KR(ret));
   } else if (is_standby) {
     ret = OB_SESSION_KILLED;
     LOG_WARN("session is killed", KR(ret));
@@ -96,10 +95,8 @@ int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
           }
           int64_t start_time = ObTimeUtility::current_time();
           if (OB_FAIL(ctx.set_timeout(consensus_timeout))) {
-            LOG_WARN("fail to set timeout ctx", KR(ret));
           } else if (OB_FAIL(ObSchemaUtils::try_check_parallel_ddl_schema_in_sync(
                       ctx, session, error_message.consensus_schema_version_, false /*skip_consensus*/))) {
-            LOG_WARN("fail to check parallel ddl schema in sync", KR(ret), K_(error_message.consensus_schema_version));
           } else {
             int64_t refresh_time = ObTimeUtility::current_time() - start_time;
             LOG_INFO("parallel ddl wait schema", KR(ret), K(refresh_time),
@@ -231,7 +228,6 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(const int64_t task_id,
           int tmp_ret = OB_SUCCESS;
           rpc::frame::ObResultCode result_code;
           if (OB_SUCCESS != (tmp_ret = result_code.deserialize(error_message.user_message_, forward_user_msg_len, pos))) {
-            LOG_WARN("deserialize rpc result code failed", K(ret), K(tmp_ret), K(forward_user_msg_len), K(error_message));
           } else if (OB_UNLIKELY(OB_SUCCESS != result_code.rcode_)) {
             FORWARD_USER_ERROR(result_code.rcode_, result_code.msg_);
           } else {
@@ -252,7 +248,6 @@ int ObDDLExecutorUtil::wait_ddl_retry_task_finish(const int64_t task_id,
       } else {
         if (OB_FAIL(ret)) {
         } else if (OB_TMP_FAIL(ObShareUtil::is_primary_cluster(is_primary_cluster))) {
-          LOG_WARN("fail to check whether is primary cluster", KR(ret), K(is_primary_cluster));
         } else if (!is_primary_cluster) {
           ret = OB_STANDBY_READ_ONLY;
           FORWARD_USER_ERROR(ret, "DDL execution status is undecided, please check later if it finishes successfully or not.");
@@ -323,14 +318,11 @@ int ObDDLExecutorUtil::execute_pcreate_table(ObSQLSessionInfo *my_session, const
   int64_t start_time = ObTimeUtility::current_time();
   ObTimeoutCtx ctx;
   if (OB_FAIL(ctx.set_timeout(THIS_WORKER.get_timeout_remain()))) {
-    LOG_WARN("fail to set timeout ctx", KR(ret));
   } else if (OB_FAIL(GCTX.root_service_->parallel_create_table(arg, res))) {
-    LOG_WARN("parallel create table failed", KR(ret), "dst", GCTX.self_addr());
   } else {
     int64_t refresh_time = ObTimeUtility::current_time();
     if (OB_FAIL(ObSchemaUtils::try_check_parallel_ddl_schema_in_sync(
         ctx, my_session, res.schema_version_, res.do_nothing_))) {
-      LOG_WARN("fail to check paralleld ddl schema in sync", KR(ret), K(res));
     }
     int64_t end_time = ObTimeUtility::current_time();
     LOG_INFO(parallel_ddl_type, KR(ret),

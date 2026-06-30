@@ -63,27 +63,19 @@ int ObTableLoadDagCompactTableOpTask::process()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObTableLoadDagParallelHeapTableCompactor", KR(ret));
     } else if (OB_FAIL(op->heap_table_compactor_->init(dag_->store_ctx_, op->op_ctx_))) {
-      LOG_WARN("fail to init heap table compactor", KR(ret));
     }
     // 创建task
     else if (OB_FAIL(dag_->alloc_task(compact_task, dag_))) {
-      LOG_WARN("failed to alloc task", KR(ret));
     } else if (OB_FAIL(dag_->alloc_task(op_finish_task, dag_, op_))) {
-      LOG_WARN("failed to alloc task", KR(ret));
     } else if (OB_FAIL(compact_task->init(op))) {
-      LOG_WARN("fail to init task", KR(ret));
     }
     // 建立依赖关系
     else if (OB_FAIL(compact_task->add_child(*op_finish_task))) {
-      LOG_WARN("fail to add child", KR(ret));
     } else if (OB_FAIL(op_finish_task->deep_copy_children(get_child_nodes()))) {
-      LOG_WARN("fail to deep copy children", KR(ret));
     }
     // 加入dag
     else if (OB_FAIL(dag_->add_task(*compact_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     } else if (OB_FAIL(dag_->add_task(*op_finish_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     }
   } else {
     // compact_task -> op_finish_task -> [next_op_task]
@@ -94,29 +86,20 @@ int ObTableLoadDagCompactTableOpTask::process()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObTableLoadDagParallelSSTableCompactor", KR(ret));
     } else if (OB_FAIL(op->sstable_compactor_->init(dag_->store_ctx_, op->op_ctx_))) {
-      LOG_WARN("fail to init heap table compactor", KR(ret));
     } else if (OB_FAIL(op->sstable_compactor_->prepare_compact())) {
-      LOG_WARN("fail to prepare compact", KR(ret));
     }
     // 创建task
     else if (OB_FAIL(dag_->alloc_task(compact_task, dag_))) {
-      LOG_WARN("failed to alloc task", KR(ret));
     } else if (OB_FAIL(dag_->alloc_task(op_finish_task, dag_, op_))) {
-      LOG_WARN("failed to alloc task", KR(ret));
     } else if (OB_FAIL(compact_task->init(op))) {
-      LOG_WARN("fail to init task", KR(ret));
     }
     // 建立依赖关系
     else if (OB_FAIL(compact_task->add_child(*op_finish_task))) {
-      LOG_WARN("fail to add child", KR(ret));
     } else if (OB_FAIL(op_finish_task->deep_copy_children(get_child_nodes()))) {
-      LOG_WARN("fail to deep copy children", KR(ret));
     }
     // 加入dag
     else if (OB_FAIL(dag_->add_task(*compact_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     } else if (OB_FAIL(dag_->add_task(*op_finish_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     }
   }
   return ret;
@@ -138,11 +121,9 @@ int ObTableLoadDagCompactTableOpFinishTask::process()
   ObTableLoadCompactDataOp *op = static_cast<ObTableLoadCompactDataOp *>(op_);
   if (nullptr != op->sstable_compactor_) {
     if (OB_FAIL(op->sstable_compactor_->close())) {
-      LOG_WARN("fail to close sstable compactor", KR(ret));
     }
   } else if (nullptr != op->heap_table_compactor_) {
     if (OB_FAIL(op->heap_table_compactor_->close())) {
-      LOG_WARN("fail to close heap table compactor", KR(ret));
     }
   }
 
@@ -211,9 +192,7 @@ int ObTableLoadSSTableSplitRangeTask::process()
     for (int64_t i = 0; OB_SUCC(ret) && i < merge_sstable_count; ++i) {
       ObDirectLoadTableHandle sstable;
       if (OB_FAIL(compact_ctx_->sstables_.get_table(i, sstable))) {
-        LOG_WARN("fail to get table", KR(ret), K(i));
       } else if (OB_FAIL(sstable_array.add(sstable))) {
-        LOG_WARN("fail to push back sstable", KR(ret));
       }
     }
     // split range
@@ -221,13 +200,10 @@ int ObTableLoadSSTableSplitRangeTask::process()
       ObDirectLoadMultipleSSTableRangeSplitter range_splitter;
       if (OB_FAIL(range_splitter.init(sstable_array, op_ctx_->table_store_.get_table_data_desc(),
                                       &op_ctx_->store_table_ctx_->schema_->datum_utils_))) {
-        LOG_WARN("fail to init range splitter", KR(ret));
       } else if (OB_FAIL(range_splitter.split_range(compact_ctx_->ranges_, store_ctx_->thread_cnt_,
                                                     compact_ctx_->range_allocator_))) {
-        LOG_WARN("fail to split range", KR(ret));
       } else if (OB_FAIL(compact_ctx_->set_parallel_merge_param(merge_sstable_count,
                                                                 compact_ctx_->ranges_.count()))) {
-        LOG_WARN("fail to set parallel merge param", KR(ret));
       }
     }
   }
@@ -281,13 +257,10 @@ int ObTableLoadSSTableMergeRangeTask::process()
     ObDirectLoadMultipleSSTable *sstable = nullptr;
     ObDirectLoadTableHandle sstable_handle;
     if (OB_FAIL(init_scan_merge())) {
-      LOG_WARN("fail to init scan merge", KR(ret));
     } else if (OB_FAIL(init_sstable_builder())) {
-      LOG_WARN("fail to init sstable builder", KR(ret));
     }
     while (OB_SUCC(ret)) {
       if (OB_FAIL(dag_->check_status())) {
-        LOG_WARN("fail to check status", KR(ret));
       } else if (OB_FAIL(scan_merge_.get_next_row(datum_row))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           LOG_WARN("fail to get next row", KR(ret));
@@ -296,16 +269,13 @@ int ObTableLoadSSTableMergeRangeTask::process()
           break;
         }
       } else if (OB_FAIL(sstable_builder_.append_row(*datum_row))) {
-        LOG_WARN("fail to append row", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sstable_builder_.close())) {
-        LOG_WARN("fail to close sstable builder", KR(ret));
       } else {
         ObMutexGuard guard(compact_ctx_->mutex_);
         if (OB_FAIL(sstable_builder_.get_tables(table_array, store_ctx_->table_mgr_))) {
-          LOG_WARN("fail to get tables", KR(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -313,7 +283,6 @@ int ObTableLoadSSTableMergeRangeTask::process()
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected table array count", KR(ret), K(table_array));
         } else if (OB_FAIL(table_array.get_table(0, sstable_handle))) {
-          LOG_WARN("fail to get table", KR(ret));
         } else if (compact_ctx_->range_sstables_.at(curr_thread_idx_).is_valid()) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected range idx", KR(ret), K(curr_thread_idx_));
@@ -336,13 +305,11 @@ int ObTableLoadSSTableMergeRangeTask::generate_next_task(ObITask *&next_task)
   } else {
     ObTableLoadSSTableMergeRangeTask *task = nullptr;
     if (OB_FAIL(dag_->alloc_task(task, dag_))) {
-      LOG_WARN("failed to alloc task", KR(ret));
     } else if (OB_ISNULL(task)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("task is null", KR(ret));
     } else if (OB_FAIL(
                  task->init(op_ctx_, compact_ctx_, total_thread_cnt_, curr_thread_idx_ + 1))) {
-      LOG_WARN("fail to init task", KR(ret));
     } else {
       next_task = task;
     }
@@ -360,15 +327,12 @@ int ObTableLoadSSTableMergeRangeTask::init_scan_merge()
   for (int64_t i = 0; OB_SUCC(ret) && i < compact_ctx_->merge_sstable_count_; ++i) {
     ObDirectLoadTableHandle sstable;
     if (OB_FAIL(compact_ctx_->sstables_.get_table(i, sstable))) {
-      LOG_WARN("fail to get table", KR(ret), K(i));
     } else if (OB_FAIL(sstable_array_.add(sstable))) {
-      LOG_WARN("fail to push back sstable", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(scan_merge_.init(scan_merge_param, sstable_array_,
                                  compact_ctx_->ranges_.at(curr_thread_idx_)))) {
-      LOG_WARN("fail to init sstable scan merge", KR(ret));
     }
   }
   return ret;
@@ -385,7 +349,6 @@ int ObTableLoadSSTableMergeRangeTask::init_sstable_builder()
   build_param.extra_buf_ = reinterpret_cast<char *>(1); // unuse, delete in future
   build_param.extra_buf_size_ = 4096;
   if (OB_FAIL(sstable_builder_.init(build_param))) {
-    LOG_WARN("fail to init sstable builder", KR(ret));
   }
   return ret;
 }
@@ -426,9 +389,7 @@ int ObTableLoadSSTableCompactTask::process()
   } else {
     ObDirectLoadTableHandle sstable_handle;
     if (OB_FAIL(compact_sstable(sstable_handle))) {
-      LOG_WARN("fail to compact sstable", KR(ret));
     } else if (OB_FAIL(apply_merged_sstable(sstable_handle))) {
-      LOG_WARN("fail to apply merged sstable", KR(ret));
     }
   }
   return ret;
@@ -443,19 +404,15 @@ int ObTableLoadSSTableCompactTask::compact_sstable(ObDirectLoadTableHandle &resu
   compact_param.table_data_desc_ = op_ctx_->table_store_.get_table_data_desc();
   compact_param.datum_utils_ = &op_ctx_->store_table_ctx_->schema_->datum_utils_;
   if (OB_FAIL(compactor.init(compact_param))) {
-    LOG_WARN("fail to init sstable compactor", KR(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < compact_ctx_->range_sstables_.count(); ++i) {
     ObDirectLoadTableHandle sstable_handle = compact_ctx_->range_sstables_.at(i);
     if (OB_FAIL(compactor.add_table(sstable_handle))) {
-      LOG_WARN("fail to add table", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(compactor.compact())) {
-      LOG_WARN("fail to do compact", KR(ret));
     } else if (OB_FAIL(compactor.get_table(result_sstable, store_ctx_->table_mgr_))) {
-      LOG_WARN("fail to get table", KR(ret));
     }
   }
   return ret;
@@ -479,7 +436,6 @@ int ObTableLoadSSTableCompactTask::apply_merged_sstable(
     LOG_INFO("parallel merge apply merged", K(compact_ctx_->merge_sstable_count_),
              K(compact_ctx_->sstables_.count()));
     if (OB_FAIL(result_sstables.add(merged_sstable))) {
-      LOG_WARN("fail to push back sstable", KR(ret));
     }
     // old_sstables_里的table_handle都被reset了, 这里直接清空数组
     compact_ctx_->old_sstables_.reset();
@@ -487,17 +443,14 @@ int ObTableLoadSSTableCompactTask::apply_merged_sstable(
       ObDirectLoadTableHandle &sstable_handle = compact_ctx_->sstables_.at(i);
       if (i < compact_ctx_->merge_sstable_count_) {
         if (OB_FAIL(compact_ctx_->old_sstables_.push_back(sstable_handle))) {
-          LOG_WARN("fail to push back", KR(ret));
         }
       } else {
         if (OB_FAIL(result_sstables.add(sstable_handle))) {
-          LOG_WARN("fail to push back sstable", KR(ret));
         }
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(compact_ctx_->sstables_.assign(result_sstables))) {
-        LOG_WARN("fail to assign sstables", KR(ret));
       } else {
         // clear merge ctx
         compact_ctx_->merge_sstable_count_ = 0;
@@ -536,7 +489,6 @@ int ObTableLoadCompactSSTableClearTask::generate_next_task(ObITask *&next_task)
   } else {
     ObTableLoadCompactSSTableClearTask *task = nullptr;
     if (OB_FAIL(dag_->alloc_task(task, dag_, compact_ctx_, next_thread_idx))) {
-      LOG_WARN("failed to alloc task", KR(ret));
     } else {
       next_task = task;
     }
@@ -604,48 +556,32 @@ int ObTableLoadCompactSSTableTask::post_generate_next_task(ObITask *&next_task)
         ObTableLoadSSTableCompactTask *compact_task = nullptr;
         ObTableLoadCompactSSTableClearTask *clear_task = nullptr;
         if (OB_FAIL(dag_->alloc_task(split_range_task, dag_))) {
-          LOG_WARN("failed to alloc task", KR(ret));
         } else if (OB_FAIL(dag_->alloc_task(merge_range_task, dag_))) {
-          LOG_WARN("failed to alloc task", KR(ret));
         } else if (OB_FAIL(dag_->alloc_task(compact_task, dag_))) {
-          LOG_WARN("failed to alloc task", KR(ret));
         } else if (OB_FAIL(dag_->alloc_task(clear_task, dag_, tablet_ctx, 0/*thread_idx*/))) {
-          LOG_WARN("failed to alloc task", KR(ret));
         } else if (sstable_task == nullptr && OB_FAIL(dag_->alloc_task(sstable_task, dag_))) {
           LOG_WARN("failed to alloc task", KR(ret));
         } else if (OB_FAIL(split_range_task->init(op_->op_ctx_, tablet_ctx))) {
-          LOG_WARN("fail to init split range task", KR(ret));
         } else if (OB_FAIL(merge_range_task->init(op_->op_ctx_, tablet_ctx, store_ctx_->thread_cnt_,
                                                   0 /*curr_thread_idx*/))) {
-          LOG_WARN("fail to init merge range task", KR(ret));
         } else if (OB_FAIL(compact_task->init(op_->op_ctx_, tablet_ctx))) {
-          LOG_WARN("fail to init compact task", KR(ret));
         }
         // 建立依赖关系: split_range_task -> merge_range_task -> compact_task -> clear_task -> sstable_task
         else if (OB_FAIL(split_range_task->add_child(*merge_range_task))) {
-          LOG_WARN("fail to add child", KR(ret));
         } else if (OB_FAIL(merge_range_task->add_child(*compact_task))) {
-          LOG_WARN("fail to add child", KR(ret));
         } else if (OB_FAIL(compact_task->add_child(*clear_task))) {
-          LOG_WARN("fail to add child", KR(ret));
         } else if (OB_FAIL(clear_task->add_child(*sstable_task))) {
-          LOG_WARN("fail to add child", KR(ret));
         }
         // 添加task
         else if (OB_FAIL(dag_->add_task(*split_range_task))) {
-          LOG_WARN("fail to add task", KR(ret));
         } else if (OB_FAIL(dag_->add_task(*merge_range_task))) {
-          LOG_WARN("fail to add task", KR(ret));
         } else if (OB_FAIL(dag_->add_task(*compact_task))) {
-          LOG_WARN("fail to add task", KR(ret));
         } else if (OB_FAIL(dag_->add_task(*clear_task))) {
-          LOG_WARN("fail to add task", KR(ret));
         }
       }
     }
     if (OB_SUCC(ret) && sstable_task) {
       if (OB_FAIL(sstable_task->init(op_))) {
-        LOG_WARN("fail to init compact task", KR(ret));
       } else {
         next_task = sstable_task;
       }
@@ -704,18 +640,14 @@ int ObTableLoadHeapTableCompactTask::process()
     compact_param.table_data_desc_ = op_->op_ctx_->table_store_.get_table_data_desc();
     compact_param.file_mgr_ = store_ctx_->tmp_file_mgr_;
     if (OB_FAIL(compact_param.file_mgr_->alloc_dir(compact_param.index_dir_id_))) {
-      LOG_WARN("fail to alloc dir", KR(ret));
     } else if (OB_FAIL(compactor.init(compact_param))) {
-      LOG_WARN("fail to init compactor", KR(ret));
     } else {
       int64_t start_idx = curr_thread_idx_ * table_cnt_;
       int64_t end_idx = start_idx + table_cnt_;
       while (OB_SUCC(ret) && start_idx < end_idx) {
         ObDirectLoadTableHandle table_handle;
         if (OB_FAIL(op_->heap_table_compactor_->tables_handle_.get_table(start_idx, table_handle))) {
-          LOG_WARN("fail to get table", KR(ret));
         } else if (OB_FAIL(compactor.add_table(table_handle))) {
-          LOG_WARN("fail to add table", KR(ret));
         } else {
           start_idx++;
         }
@@ -723,15 +655,12 @@ int ObTableLoadHeapTableCompactTask::process()
       if (OB_SUCC(ret)) {
         ObDirectLoadTableHandle table_handle;
         if (OB_FAIL(compactor.compact())) {
-          LOG_WARN("fail to do compact", KR(ret));
         } else {
           ObDirectLoadTableHandle table_handle;
           if (OB_FAIL(compactor.get_table(table_handle, store_ctx_->table_mgr_))) {
-            LOG_WARN("fail to get table", KR(ret));
           } else {
             ObMutexGuard guard(op_->heap_table_compactor_->mutex_);
             if (OB_FAIL(op_->heap_table_compactor_->result_tables_handle_.add(table_handle))) {
-              LOG_WARN("fail to add result sstable", KR(ret));
             }
           }
         }
@@ -750,13 +679,11 @@ int ObTableLoadHeapTableCompactTask::generate_next_task(ObITask *&next_task)
   } else {
     ObTableLoadHeapTableCompactTask *task = nullptr;
     if (OB_FAIL(dag_->alloc_task(task, dag_))) {
-      LOG_WARN("failed to alloc task", KR(ret));
     } else if (OB_ISNULL(task)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("task is null", KR(ret));
     } else if (OB_FAIL(task->init(op_, table_cnt_, total_thread_cnt_,
                                   curr_thread_idx_ + 1))) {
-      LOG_WARN("fail to init task", KR(ret));
     } else {
       next_task = task;
     }
@@ -801,7 +728,6 @@ int ObTableLoadCompactHeapTableTask::post_generate_next_task(ObITask *&next_task
       FOREACH_X(it, *table_store, OB_SUCC(ret))
       {
         if (OB_FAIL(op_->heap_table_compactor_->tables_handle_.assign(*it->second))) {
-          LOG_WARN("failed to assign", KR(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -811,7 +737,6 @@ int ObTableLoadCompactHeapTableTask::post_generate_next_task(ObITask *&next_task
     } else {
       op_->heap_table_compactor_->tables_handle_.reset();
       if (OB_FAIL(op_->heap_table_compactor_->tables_handle_.assign(op_->heap_table_compactor_->result_tables_handle_))) {
-        LOG_WARN("failed to assign", KR(ret));
       } else {
         op_->heap_table_compactor_->result_tables_handle_.reset();
       }
@@ -826,25 +751,18 @@ int ObTableLoadCompactHeapTableTask::post_generate_next_task(ObITask *&next_task
         for (int i = table_cnt * task_cnt; OB_SUCC(ret) && i < op_->heap_table_compactor_->tables_handle_.count();
              i++) {
           if (OB_FAIL(op_->heap_table_compactor_->result_tables_handle_.add(op_->heap_table_compactor_->tables_handle_.at(i)))) {
-            LOG_WARN("failed to add", KR(ret));
           }
         }
         if (OB_SUCC(ret)) {
           ObTableLoadHeapTableCompactTask *compact_task = nullptr;
           ObTableLoadCompactHeapTableTask *heap_table_task = nullptr;
           if (OB_FAIL(dag_->alloc_task(compact_task, dag_))) {
-            LOG_WARN("failed to alloc task", KR(ret));
           } else if (OB_FAIL(dag_->alloc_task(heap_table_task, dag_))) {
-            LOG_WARN("failed to alloc task", KR(ret));
           } else if (OB_FAIL(compact_task->init(op_, table_cnt, task_cnt,
                                                 0 /*curr_thread_idx_*/))) {
-            LOG_WARN("fail to init compact task", KR(ret));
           } else if (OB_FAIL(heap_table_task->init(op_))) {
-            LOG_WARN("fail to init heap table task", KR(ret));
           } else if (OB_FAIL(compact_task->add_child(*heap_table_task))) {
-            LOG_WARN("fail to add child", KR(ret));
           } else if (OB_FAIL(dag_->add_task(*compact_task))) {
-            LOG_WARN("fail to add task", KR(ret));
           } else {
             next_task = heap_table_task;
           }

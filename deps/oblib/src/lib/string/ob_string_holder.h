@@ -105,9 +105,7 @@ public:
     int ret = OB_SUCCESS;
     ObString str;
     if (OB_FAIL(str.deserialize(buf, data_len, pos))) {
-      OB_LOG(WARN, "deserialize ObString failed", K(ret));
     } else if (OB_FAIL(assign(str))) {
-      OB_LOG(WARN, "init ObStringHolder from ObString failed", K(ret), K(str));
     }
     return ret;
   }

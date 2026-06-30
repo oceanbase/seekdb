@@ -76,7 +76,6 @@ int ObPointerSwizzleNode::access_mem_ptr(blocksstable::ObMicroBlockBufferHandle 
     // The multithreaded safe loading of the node failed
     ret = OB_READ_NOTHING;
   } else if (OB_FAIL(handle.handle_.hazptr_holder_.protect(protect_success, tmp_ps_node.mb_handle_, tmp_ps_node.seq_num_))) {
-    COMMON_LOG(WARN, "protect failed", KP(tmp_ps_node.mb_handle_));
   } else if (!protect_success) {
     // The memory for value_ corresponding to the node has been released;
     // the node is reset to improve efficiency, whether the node is reset or not is 

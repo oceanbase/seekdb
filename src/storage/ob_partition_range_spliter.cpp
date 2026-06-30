@@ -102,16 +102,12 @@ int ObIndexBlockTreeTraverser::traverse(ObIMultiRangeEstimateContext &context,
   } else if (sstable_->is_empty()) {
     // skip
   } else if (OB_FAIL(sstable_->get_index_tree_root(root_index_block))) {
-    LOG_WARN("Fail to get index tree root", KR(ret), KPC(context_));
   } else if (OB_FAIL(path_caches_.load_root(root_index_block, *this))) {
-    LOG_WARN("Fail to load root node to path caches", KR(ret));
   } else if (OB_FAIL(inner_node_traverse(nullptr, PathInfo(), 0, avg_range_visited_node_cnt_))) {
-    LOG_WARN("Fail to traverse index block tree", KR(ret), K(root_index_block), KPC(context_));
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(handle_overflow_ranges())) {
-    LOG_WARN("Fail to handle overflow ranges", KR(ret), KPC(context_));
   }
 
   return ret;
@@ -133,7 +129,6 @@ int ObIndexBlockTreeTraverser::is_range_cover_node_end_key(const ObDatumRange &r
                                                read_info_->get_datum_utils(),
                                                endkey_cmp_ret,
                                                /* compare_datum_cnt */ false))) {
-    LOG_WARN("Fail to compare endkey", KR(ret), K(range), KPC(read_info_));
   } else {
     is_over = endkey_cmp_ret < 0 || (endkey_cmp_ret == 0 && range.is_right_closed());
   }
@@ -175,7 +170,6 @@ int ObIndexBlockTreeTraverser::goto_next_level_node(const ObMicroIndexInfo &micr
   if (OB_FAIL(ret)) {
   } else if (should_estimate) {
     if (OB_FAIL(context_->on_node_estimate(micro_index_info, path_info.in_middle_))) {
-      LOG_WARN("Fail to do context on leaf node estimate", KR(ret), K(micro_index_info));
     } else {
       remain_can_visited_node_cnt_ += open_index_micro_block_limit;
     }
@@ -188,7 +182,6 @@ int ObIndexBlockTreeTraverser::goto_next_level_node(const ObMicroIndexInfo &micr
     if (OB_FAIL(micro_index_info.is_data_block()
                     ? leaf_node_traverse(micro_index_info, path_info, level)
                     : inner_node_traverse(&micro_index_info, path_info, level, open_index_micro_block_limit))) {
-      LOG_WARN("Fail to traverse next level node", KR(ret));
     }
   }
 
@@ -208,11 +201,8 @@ int ObIndexBlockTreeTraverser::leaf_node_traverse(const ObMicroIndexInfo &micro_
   ObPartitionEst est;
 
   if (OB_FAIL(path_caches_.get(level, &micro_index_info, *this, cache_node, is_in_cache))) {
-    LOG_WARN("Fail to get node in path caches", KR(ret), K(micro_index_info));
   } else if (OB_FAIL(scanner.estimate_row_count(*read_info_, cache_node->micro_data_, range, false, est))) {
-    LOG_WARN("Fail to estimate row count", KR(ret), K(cache_node->micro_data_), KPC(context_));
   } else if (OB_FAIL(context_->on_leaf_node(micro_index_info, est))) {
-    LOG_WARN("Fail to do context on leaf node", KR(ret), K(micro_index_info), KPC(context_));
   }
 
   return ret;
@@ -233,7 +223,6 @@ int ObIndexBlockTreeTraverser::inner_node_traverse(const ObMicroIndexInfo *micro
   bool is_in_cache = false;
 
   if (OB_FAIL(path_caches_.get(level, micro_index_info, *this, cache_node, is_in_cache))) {
-    LOG_WARN("Fail to get node in path caches", KR(ret), KPC(micro_index_info));
   } else {
     node = &cache_node->context_;
   }
@@ -278,7 +267,6 @@ int ObIndexBlockTreeTraverser::inner_node_traverse(const ObMicroIndexInfo *micro
     // step 2. iterate the index row to sum row count
     for (int64_t i = 0; OB_SUCC(ret) && i < index_row_count; i++) {
       if (OB_FAIL(node->get_next_index_row(index_row))) {
-        LOG_WARN("Fail to get next index row", KR(ret), K(i), K(index_row_count));
       }
 
       // we can combine path_info information and compare endkey to check whether current range is
@@ -294,7 +282,6 @@ int ObIndexBlockTreeTraverser::inner_node_traverse(const ObMicroIndexInfo *micro
         if (range.get_end_key().is_max_rowkey()) {
           is_coverd_by_range = true;
         } else if (OB_FAIL(is_range_cover_node_end_key(range, index_row, is_coverd_by_range))) {
-          LOG_WARN("Fail to compare range endkey and index row", KR(ret));
         }
       } else if (next_level_node_path_info.right_most_ && next_level_node_path_info.left_most_) {
         // locate range only hit node
@@ -304,12 +291,10 @@ int ObIndexBlockTreeTraverser::inner_node_traverse(const ObMicroIndexInfo *micro
       ObIMultiRangeEstimateContext::ObTraverserOperationType operation;
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(context_->on_inner_node(index_row, is_coverd_by_range, operation))) {
-        LOG_WARN("Fail to do on inner node", KR(ret), K(is_coverd_by_range), K(index_row), KPC(context_));
       } else {
         switch (operation) {
         case ObIMultiRangeEstimateContext::GOTO_NEXT_LEVEL:
           if (OB_FAIL(goto_next_level_node(index_row, PathInfo(index_row_count, i, path_info), level + 1, 1.0 * open_index_micro_block_limit / index_row_count))) {
-            LOG_WARN("Fail to goto next level", KR(ret), K(index_row));
           }
           break;
         case ObIMultiRangeEstimateContext::NOTHING:
@@ -349,7 +334,6 @@ int ObIndexBlockTreeTraverser::PathNodeCaches::load_root(const ObMicroBlockData 
     // is inited, skip
   } else if (FALSE_IT(caches_[0].micro_data_ = block_data)) {
   } else if (OB_FAIL(caches_[0].context_.init(block_data, nullptr, traverser))) {
-    LOG_WARN("Fail to init root node context", KR(ret), K(block_data));
   } else {
     caches_[0].is_inited_ = true;
   }
@@ -389,7 +373,6 @@ int ObIndexBlockTreeTraverser::PathNodeCaches::get(const int64_t level,
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(find(level, micro_index_info, is_in_cache))) {
-    LOG_WARN("Fail to find node in cache", KR(ret), KPC(micro_index_info));
   } else if (is_in_cache) {
     cache_node = &caches_[level];
   } else {
@@ -405,10 +388,8 @@ int ObIndexBlockTreeTraverser::PathNodeCaches::get(const int64_t level,
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(prefetch(*micro_index_info, cache_node->micro_handle_))) {
-      LOG_WARN("Fail to prefetch next level micro block data", KR(ret), K(micro_index_info));
     } else if (OB_FAIL(cache_node->micro_handle_.get_micro_block_data(
                    nullptr, cache_node->micro_data_, micro_index_info->is_data_block()))) {
-      LOG_WARN("Fail to get index block data", KR(ret), K(cache_node->micro_data_));
     } else if (!micro_index_info->is_data_block()
                && OB_FAIL(
                    cache_node->is_inited_
@@ -417,7 +398,6 @@ int ObIndexBlockTreeTraverser::PathNodeCaches::get(const int64_t level,
       LOG_WARN("Fail to init root node context", KR(ret), K(cache_node->micro_data_));
     } else if (OB_FAIL(
                    cache_node->key_.assign(ObMicroBlockCacheKey(*micro_index_info)))) {
-      LOG_WARN("Fail to assign cache key", KR(ret), KPC(micro_index_info));
     } else {
       cache_node->is_inited_ = true;
     }
@@ -458,13 +438,11 @@ int ObIndexBlockTreeTraverser::PathNodeCaches::prefetch(const ObMicroIndexInfo &
   if (OB_SUCC(ret) && !found) {
     if (OB_FAIL(micro_index_info.row_header_->fill_micro_des_meta(true /* deep_copy_key */,
                                                                   micro_handle.des_meta_))) {
-      LOG_WARN("Fail to fill micro block deserialize meta", KR(ret));
     } else if (OB_FAIL(cache->prefetch(micro_index_info.get_macro_id(),
                                        micro_index_info,
                                        /* use_cache */ true,
                                        micro_handle.io_handle_,
                                        &allocator_))) {
-      LOG_WARN("Fail to prefetch data micro block", KR(ret), K(micro_index_info));
     } else if (ObSSTableMicroBlockState::UNKNOWN_STATE == micro_handle.block_state_) {
       
       micro_handle.macro_block_id_ = micro_index_info.get_macro_id();
@@ -500,9 +478,7 @@ int ObIndexBlockTreeTraverser::TreeNodeContext::init(const ObMicroBlockData &blo
                                    allocator_,
                                    query_flag,
                                    traverser.get_sstable()->get_macro_offset()))) {
-    LOG_WARN("Fail to init scanner", KR(ret), K(traverser));
   } else if (OB_FAIL(open(block_data, micro_index_info))) {
-    LOG_WARN("Fail to open index block", KR(ret), K(scanner_));
   }
 
   return ret;
@@ -517,7 +493,6 @@ int ObIndexBlockTreeTraverser::TreeNodeContext::open(const ObMicroBlockData &blo
                                 ? ObIndexBlockRowHeader::DEFAULT_IDX_ROW_MACRO_ID
                                 : micro_index_info->get_macro_id(),
                             block_data))) {
-    LOG_WARN("Fail to open index block", KR(ret), K(scanner_));
   }
 
   return ret;
@@ -540,7 +515,6 @@ int ObIndexBlockTreeTraverser::TreeNodeContext::locate_range(const ObDatumRange 
       LOG_WARN("Fail to locate range", KR(ret), K(range));
     }
   } else if (OB_FAIL(scanner_.get_index_row_count(index_row_count))) {
-    LOG_WARN("Fail to get index row count", KR(ret), K(scanner_));
   }
 
   return ret;
@@ -551,7 +525,6 @@ int ObIndexBlockTreeTraverser::TreeNodeContext::get_next_index_row(ObMicroIndexI
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(scanner_.get_next(idx_block_row))) {
-    LOG_WARN("Fail to get next index row", KR(ret), K(scanner_));
   }
 
   return ret;
@@ -572,14 +545,12 @@ int ObMultiRangeRowEstimateContext::init(const ObIArray<ObPairStoreAndDatumRange
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument for context", KR(ret), K(ranges), K(range_precision));
   } else if (OB_FAIL(ranges_.reserve(ranges.count()))) {
-    LOG_WARN("Fail to reserve range info array", KR(ret), K(ranges));
   } else {
     curr_range_idx_ = 0;
     range_precision_ = range_precision;
     sample_step_ = max(1.0, 1.0 * 100 / range_precision);
     for (int64_t i = 0; OB_SUCC(ret) && i < ranges.count(); i++) {
       if (OB_FAIL(ranges_.push_back(ObRangeInfo(&ranges.at(i).datum_range_)))) {
-        LOG_WARN("Fail to push back to range array", KR(ret), K(ranges), K(i));
       }
     }
   }
@@ -590,7 +561,6 @@ int ObMultiRangeRowEstimateContext::init(const ObIArray<ObPairStoreAndDatumRange
     ObRangeCompartor compartor(read_info);
     lib::ob_sort(ranges_.begin(), ranges_.end(), compartor);
     if (OB_FAIL(compartor.sort_ret_)) {
-      LOG_WARN("Fail to sort range array", KR(ret), K(ranges_));
     }
   }
 
@@ -748,7 +718,6 @@ int ObMultiRangeSplitContext::init(const ObIArray<ObPairStoreAndDatumRange> &ran
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(ObMultiRangeRowEstimateContext::init(ranges, read_info, need_sort, range_precision))) {
-    LOG_WARN("Fail to init base context", KR(ret));
   } else {
     split_row_limit_ = split_row_limit;
     split_row_upper_limit_ = split_row_limit * SPLIT_ROW_UPPER_RATIO;
@@ -796,16 +765,13 @@ int ObMultiRangeSplitContext::try_to_add_new_split_range(int64_t &curr_row_count
                                read_info_->get_datum_utils(),
                                cmp_ret,
                                /* compare datum cnt */ false))) {
-      LOG_WARN("Fail to compare end rowkey", KR(ret));
     } else if (cmp_ret >= 0) {
       if (OB_FAIL(info->origin_range_->get_end_key().deep_copy(info->split_rowkey_, *allocator_))) {
-        LOG_WARN("Fail to deep copy rowkey", KR(ret), K(ranges_), K(curr_range_idx_));
       } else {
         info->is_range_end_split_ = true;
       }
     } else {
       if (OB_FAIL(rowkey.deep_copy(info->split_rowkey_, *allocator_))) {
-        LOG_WARN("Fail to deep copy rowkey", KR(ret), K(rowkey));
       } else {
         info->is_range_end_split_ = false;
       }
@@ -824,7 +790,6 @@ int ObMultiRangeSplitContext::on_node_estimate(const ObMicroIndexInfo &index_row
                                          is_coverd_by_range ? index_row.get_row_count()
                                                             : index_row.get_row_count() >> 1,
                                          index_row.endkey_))) {
-    LOG_WARN("Fail to add new split range", KR(ret), K(index_row), K(ranges_), K(curr_range_idx_));
   }
 
   return ret;
@@ -838,12 +803,6 @@ int ObMultiRangeSplitContext::on_leaf_node(const ObMicroIndexInfo &index_row,
   if (OB_FAIL(try_to_add_new_split_range(ranges_.at(curr_range_idx_).row_count_,
                                          est.physical_row_count_,
                                          index_row.endkey_))) {
-    LOG_WARN("Fail to add new split range",
-             KR(ret),
-             K(index_row),
-             K(est),
-             K(ranges_),
-             K(curr_range_idx_));
   }
 
   return ret;
@@ -870,12 +829,6 @@ int ObMultiRangeSplitContext::on_inner_node(const ObMicroIndexInfo &index_row,
 
   if (operation == NOTHING) {
     if (OB_FAIL(try_to_add_new_split_range(curr_row_count, inc_row_count, index_row.endkey_))) {
-      LOG_WARN("Fail to add new split range",
-               KR(ret),
-               K(index_row),
-               K(curr_row_count),
-               K(is_coverd_by_range),
-               K(split_row_limit_));
     }
   }
 
@@ -903,7 +856,6 @@ int ObMultiRangeSplitContext::next_range()
           LOG_WARN("Fail to alloc place holder", KR(ret));
         } else if (OB_FAIL(curr_range.range_->get_end_key().deep_copy(info->split_rowkey_,
                                                                       *allocator_))) {
-          LOG_WARN("Fail to deep copy rowkey", KR(ret), K(ranges_), K(curr_range_idx_));
         } else {
           info->row_count_ = curr_range.row_count_;
           info->origin_range_ = curr_range.range_;
@@ -979,18 +931,15 @@ int ObPartitionMultiRangeSpliter::get_tables(ObTableStoreIterator &table_iter,
       if (static_cast<ObSSTable *>(table)->get_occupy_size() <= MIN_SPLIT_TABLE_SIZE) {
         // very small table, skip
       } else if (OB_FAIL(tables.push_back(table))) {
-        LOG_WARN("Fail to add minor sstable", KR(ret), KPC(table));
       }
     } else if (table->is_data_memtable()) {
       int64_t mem_rows = 0;
       int64_t mem_size = 0;
       memtable::ObMemtable *memtable = static_cast<memtable::ObMemtable *>(table);
       if (OB_FAIL(memtable->estimate_phy_size(nullptr, nullptr, mem_size, mem_rows))) {
-        STORAGE_LOG(WARN, "Failed to get estimate size from memtable", K(ret));
       } else if (mem_size <= MIN_SPLIT_TABLE_SIZE) {
         // very small table, skip
       } else if (OB_FAIL(tables.push_back(table))) {
-        LOG_WARN("Fail to add minor sstable", KR(ret), KPC(table));
       }
     } else if (table->is_direct_load_memtable()) {
       // TODO : @suzhi.yt may cause uneven range partitioning, to be implemented later
@@ -999,7 +948,6 @@ int ObPartitionMultiRangeSpliter::get_tables(ObTableStoreIterator &table_iter,
 
   if (OB_SUCC(ret) && major_size > MIN_SPLIT_TABLE_SIZE) {
     if (OB_FAIL(tables.push_back(last_major_sstable))) {
-      LOG_WARN("Fail to add last major sstable", KR(ret), KPC(last_major_sstable));
     }
   }
 
@@ -1019,7 +967,6 @@ int ObPartitionMultiRangeSpliter::fast_build_range_array(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument to build single range array", KR(ret), K(ranges));
   } else if (OB_FAIL(multi_range_split_array.reserve(expected_task_cnt))) {
-    LOG_WARN("Fail to reserve array memory", KR(ret));
   } else {
     ObSEArray<ObRange, 4> one_task_ranges;
     ObRange range;
@@ -1032,14 +979,11 @@ int ObPartitionMultiRangeSpliter::fast_build_range_array(
 
       if constexpr (std::is_same_v<ObRange, ObStoreRange>) {
         if (OB_FAIL(ranges.at(i).deep_copy(allocator, range))) {
-          LOG_WARN("Fail to deep copy store range", KR(ret), K(i), K(ranges.at(i)));
         }
       } else if constexpr (std::is_same_v<ObRange, ObDatumRange>) {
         ObStoreRange tmp_range;
         if (OB_FAIL(ranges.at(i).deep_copy(allocator, tmp_range))) {
-          LOG_WARN("Fail to deep copy store range", KR(ret), K(i), K(ranges.at(i)));
         } else if (OB_FAIL(range.from_range(tmp_range, allocator))) {
-          LOG_WARN("Fail to deep copy store range", KR(ret), K(i), K(ranges.at(i)));
         }
       } else {
         static_assert(std::is_same_v<ObRange, ObStoreRange>
@@ -1049,10 +993,8 @@ int ObPartitionMultiRangeSpliter::fast_build_range_array(
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(one_task_ranges.push_back(range))) {
-        LOG_WARN("Fail to push back store range", KR(ret), K(range));
       } else if (one_task_ranges.count() >= task_range_cnt) {
         if (OB_FAIL(multi_range_split_array.push_back(one_task_ranges))) {
-          LOG_WARN("Fail to push range split array", KR(ret), K(one_task_ranges));
         } else {
           one_task_ranges.reset();
         }
@@ -1084,7 +1026,6 @@ int ObPartitionMultiRangeSpliter::transform_to_datum_range_and_sort(
 
   sorted_ranges.reset();
   if (OB_FAIL(sorted_ranges.reserve(ranges.count()))) {
-    LOG_WARN("Fail to reserve range array", KR(ret));
   }
 
   for (int i = 0; OB_SUCC(ret) && i < ranges.count(); i++) {
@@ -1093,7 +1034,6 @@ int ObPartitionMultiRangeSpliter::transform_to_datum_range_and_sort(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("Fail to alloc place holder for datum range", KR(ret));
     } else if (OB_FAIL(range->datum_range_.from_range(ranges.at(i), allocator))) {
-      LOG_WARN("Fail to transform store range to datum range", KR(ret), K(ranges.at(i)));
     } else {
       range->origin_store_range_ = &ranges.at(i);
     }
@@ -1104,7 +1044,6 @@ int ObPartitionMultiRangeSpliter::transform_to_datum_range_and_sort(
     ObRangeCompartor cmp(read_info);
     lib::ob_sort(sorted_ranges.get_data(), sorted_ranges.get_data() + sorted_ranges.count(), cmp);
     if (OB_FAIL(cmp.sort_ret_)) {
-      LOG_WARN("Fail to sort range array", KR(ret));
     }
   }
 
@@ -1153,7 +1092,6 @@ int ObPartitionMultiRangeSpliterHelper::deepcopy_rowkey(const ObDatumRowkey &row
                                         read_info_->get_columns_desc(),
                                         read_info_->get_schema_rowkey_count(),
                                         0))) {
-      LOG_WARN("Fail to deepcopy rowkey (datum -> store)", KR(ret), K(for_compaction), K(rowkey));
     }
   } else if constexpr (std::is_same_v<ObDatumRowkey, ObTemplateRowkey>) {
     ObDatumRowkey tmp_rowkey;
@@ -1166,11 +1104,8 @@ int ObPartitionMultiRangeSpliterHelper::deepcopy_rowkey(const ObDatumRowkey &row
       target.set_max_rowkey();
     } else if (OB_FAIL(target.assign(const_cast<ObStorageDatum *>(rowkey.get_datum_ptr()),
                                      read_info_->get_schema_rowkey_count()))) {
-      LOG_WARN("Fail to assign tmp rowkey", KR(ret), K(for_compaction), K(rowkey));
     } else if (OB_FAIL(target.deep_copy(tmp_rowkey, *allocator_))) {
-      LOG_WARN("Fail to deepcopy rowkey (datum -> datum)", KR(ret), K(for_compaction), K(rowkey));
     } else if (OB_FAIL(tmp_rowkey.to_multi_version_rowkey(/* min_value */ false, *allocator_, target))) {
-      LOG_WARN("Fail to transform to multi version rowkey");
     }
   } else {
     static_assert(std::is_same_v<ObTemplateRowkey, ObStoreRowkey>
@@ -1196,11 +1131,9 @@ int ObPartitionMultiRangeSpliterHelper::construct_range(const ObDatumRowkey &sta
   } else if (OB_FAIL(deepcopy_rowkey(start_key,
                                      for_compaction,
                                      const_cast<ObRange &>(range).get_start_key()))) {
-    LOG_WARN("Fail to transform start key to store range", KR(ret));
   } else if (OB_FAIL(deepcopy_rowkey(end_key,
                                      for_compaction,
                                      const_cast<ObRange &>(range).get_end_key()))) {
-    LOG_WARN("Fail to transform end key to store range", KR(ret));
   } else {
     range.set_border_flag(flag);
 
@@ -1232,13 +1165,10 @@ int ObPartitionMultiRangeSpliterHelper::construct_and_push_range(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Invalid start key or end key", KR(ret), KPC(start_key), KPC(end_key));
   } else if (OB_FAIL(start_key->equal(*end_key, read_info_->get_datum_utils(), is_equal))) {
-    LOG_WARN("Fail to compare start key and end key", KR(ret), KPC(start_key), KPC(end_key));
   } else if (is_equal && !(flag.inclusive_start() && flag.inclusive_end())) {
     // empty range
   } else if (OB_FAIL(construct_range(*start_key, *end_key, flag, for_compaction, range))) {
-    LOG_WARN("Fail to construct store range", KR(ret));
   } else if (OB_FAIL(ranges.push_back(range))) {
-    LOG_WARN("Fail to push back store range", KR(ret));
   }
 
   return ret;
@@ -1260,7 +1190,6 @@ int ObPartitionMultiRangeSpliter::estimate_ranges_row_and_split(
   estimate_rows_sum = 0;
 
   if (OB_FAIL(heap_element_iters.reserve(tables.count()))) {
-    LOG_WARN("Fail to reserve heap element iters", KR(ret));
   }
 
   int64_t total_macro_block_cnt = 0;
@@ -1289,7 +1218,6 @@ int ObPartitionMultiRangeSpliter::estimate_ranges_row_and_split(
                                            heap_element_iters,
                                            estimate_rows_sum,
                                            range_precision))) {
-        LOG_WARN("Fail to split ranges for sstable", KR(ret));
       }
     } else if (table->is_data_memtable()) {
       memtable::ObMemtable *memtable = static_cast<memtable::ObMemtable *>(table);
@@ -1300,7 +1228,6 @@ int ObPartitionMultiRangeSpliter::estimate_ranges_row_and_split(
                                             heap_element_iters,
                                             estimate_rows_sum,
                                             range_precision))) {
-        LOG_WARN("Fail to split ranges for memtable", KR(ret));
       }
     }
   }
@@ -1331,11 +1258,8 @@ int ObPartitionMultiRangeSpliter::split_ranges_for_sstable(
     LOG_WARN("Fail to alloc place holder", KR(ret));
   } else if (OB_FAIL(row_estimate_context.init(
                  sorted_ranges, read_info, /* need_sort */ false, range_precision))) {
-    LOG_WARN("Fail to init row estimate context", KR(ret));
   } else if (OB_FAIL(traverser.init(sstable, read_info))) {
-    LOG_WARN("Fail to init row estimate traverser", KR(ret));
   } else if (OB_FAIL(traverser.traverse(row_estimate_context, open_index_block_limit))) {
-    LOG_WARN("Fail to traverse sstable index block tree", KR(ret));
   } else if (FALSE_IT(estimate_rows_sum += row_estimate_context.get_row_count_sum())) {
   } else if (OB_FAIL(
                  split_context.init(sorted_ranges,
@@ -1348,10 +1272,8 @@ int ObPartitionMultiRangeSpliter::split_ranges_for_sstable(
                                     iter->get_split_ranges(),
                                     /* need_sort */ false,
                                     range_precision))) {
-    LOG_WARN("Fail to init split context", KR(ret));
   } else if (FALSE_IT(traverser.reuse())) {
   } else if (OB_FAIL(traverser.traverse(split_context, open_index_block_limit))) {
-    LOG_WARN("Fail to traverse sstable index block tree", KR(ret));
   }
 
   return ret;
@@ -1389,7 +1311,6 @@ int ObPartitionMultiRangeSpliter::split_ranges_for_memtable(
                                              &ranges.at(i).origin_store_range_->get_end_key(),
                                              estimate_bytes,
                                              estimate_rows))) {
-        LOG_WARN("Fail to estimate rows for memtable", KR(ret), K(ranges.at(i)), K(memtable));
       } else {
         last_estimate_rows = estimate_rows;
         next_sample_point += sample_step;
@@ -1400,7 +1321,6 @@ int ObPartitionMultiRangeSpliter::split_ranges_for_memtable(
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(range_estimate_rows.push_back(estimate_rows))) {
-      LOG_WARN("Fail to push back estimate rows", KR(ret), K(estimate_rows), K(memtable));
     } else {
       rows_sum += estimate_rows;
     }
@@ -1417,14 +1337,12 @@ int ObPartitionMultiRangeSpliter::split_ranges_for_memtable(
       int64_t split_count = range_estimate_rows.at(i) / row_split_limit + 1;
       if (OB_FAIL(memtable.get_split_ranges(
               *ranges.at(i).origin_store_range_, split_count, store_ranges))) {
-        LOG_WARN("Fail to split range for memtable", KR(ret), K(ranges.at(i)), K(memtable));
       } else {
         avg_split_range_rows = range_estimate_rows.at(i) / split_count;
         next_sample_point += sample_step;
       }
     } else {
       if (OB_FAIL(store_ranges.push_back(*ranges.at(i).origin_store_range_))) {
-        LOG_WARN("Fail to push back to store ranges", KR(ret));
       }
     }
     
@@ -1438,7 +1356,6 @@ int ObPartitionMultiRangeSpliter::split_ranges_for_memtable(
           LOG_WARN("Fail to alloc place holder", KR(ret));
         } else if (OB_FAIL(info->split_rowkey_.from_rowkey(
                        store_ranges.at(j).get_end_key().get_rowkey(), allocator))) {
-          LOG_WARN("Fail to transform store rowkey to datum rowkey", KR(ret), K(info));
         } else {
           info->row_count_ = avg_split_range_rows;
           info->origin_range_ = &ranges.at(i).datum_range_;
@@ -1472,7 +1389,6 @@ int ObPartitionMultiRangeSpliter::build_heap(
         ret = OB_SUCCESS;
       }
     } else if (OB_FAIL(heap.push(element))) {
-      LOG_WARN("Fail to push element to heap", KR(ret));
     }
   }
 
@@ -1507,7 +1423,6 @@ int ObPartitionMultiRangeSpliter::do_task_split_algorithm(
   int64_t low_task_row_count = max(1.0, (1.0 - (1.0 / SPLIT_RANGE_FACTOR / 2.0)) * curr_avg_row_count);
 
   if (OB_FAIL(helper.init(allocator, read_info, ranges))) {
-    LOG_WARN("Fail to init spliter helper", KR(ret));
   }
 
   while (OB_SUCC(ret) && !heap.empty()) {
@@ -1521,7 +1436,6 @@ int ObPartitionMultiRangeSpliter::do_task_split_algorithm(
       // split one task
       if (OB_FAIL(helper.construct_and_push_range(
               start_key, end_key, flag, for_compaction, one_task_ranges))) {
-        LOG_WARN("Fail to construct store range", KR(ret));
       } else if (!one_task_ranges.empty() && OB_FAIL(multi_range_split_array.push_back(one_task_ranges))) {
         // if there are lots of multi-version same rowkey, the one_task_ranges may be empty
         LOG_WARN("Fail to push back one task ranges", KR(ret));
@@ -1547,7 +1461,6 @@ int ObPartitionMultiRangeSpliter::do_task_split_algorithm(
                && element.split_range_info_->origin_range_ != last_origin_range) {
       if (OB_FAIL(helper.construct_and_push_range(
               start_key, end_key, flag, for_compaction, one_task_ranges))) {
-        LOG_WARN("Fail to construct store range", KR(ret));
       }
       last_origin_range = nullptr;
       start_key = end_key = nullptr;
@@ -1582,7 +1495,6 @@ int ObPartitionMultiRangeSpliter::do_task_split_algorithm(
     ObSplitRangeHeapElement new_element;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(heap.pop())) {
-      LOG_WARN("Fail to pop element in heap", KR(ret));
     } else if (OB_FAIL(element.iter_->get_next(new_element))) {
       if (ret != OB_ITER_END) {
         LOG_WARN("Fail to get next element in iter", KR(ret), K(element));
@@ -1590,7 +1502,6 @@ int ObPartitionMultiRangeSpliter::do_task_split_algorithm(
         ret = OB_SUCCESS;
       }
     } else if (OB_FAIL(heap.push(new_element))) {
-      LOG_WARN("Fail to push element to heap", KR(ret));
     }
   }
 
@@ -1598,7 +1509,6 @@ int ObPartitionMultiRangeSpliter::do_task_split_algorithm(
   if (OB_SUCC(ret)) {
     if (OB_FAIL(helper.construct_and_push_range(
             start_key, end_key, flag, for_compaction, one_task_ranges))) {
-      LOG_WARN("Fail to transform to store rowkey", KR(ret));
     } else if (!one_task_ranges.empty() && OB_FAIL(multi_range_split_array.push_back(one_task_ranges))) {
       LOG_WARN("Fail to push back one task ranges", KR(ret));
     }
@@ -1629,7 +1539,6 @@ int ObPartitionMultiRangeSpliter::build_range_array(const ObIArray<ObStoreRange>
   int64_t estimate_rows_sum = 0;
 
   if (OB_FAIL(transform_to_datum_range_and_sort(ranges, index_read_info, allocator, sorted_ranges))) {
-    LOG_WARN("Fail to transform store range array to datum range array", KR(ret));
   } else if (OB_FAIL(estimate_ranges_row_and_split(sorted_ranges,
                                                    expected_task_count,
                                                    index_read_info,
@@ -1639,9 +1548,7 @@ int ObPartitionMultiRangeSpliter::build_range_array(const ObIArray<ObStoreRange>
                                                    estimate_rows_sum,
                                                    max_time,
                                                    range_precision))) {
-    LOG_WARN("Fail to estimate row and split", KR(ret));
   } else if (OB_FAIL(build_heap(heap_element_iters, heap))) {
-    LOG_WARN("Fail to build heap for task split", KR(ret));
   } else if (OB_FAIL(do_task_split_algorithm(ranges,
                                              index_read_info,
                                              expected_task_count,
@@ -1650,7 +1557,6 @@ int ObPartitionMultiRangeSpliter::build_range_array(const ObIArray<ObStoreRange>
                                              heap,
                                              multi_range_split_array,
                                              for_compaction))) {
-    LOG_WARN("Fail to do task split algorithm", KR(ret));
   }
 
   return ret;
@@ -1715,7 +1621,6 @@ int ObPartitionMultiRangeSpliter::get_multi_range_size(const ObIArray<ObStoreRan
                                           unused_total_macro_block_count,
                                           max_time,
                                           range_precision))) {
-    LOG_WARN("Fail to build range array", KR(ret));
   }
 
   return ret;
@@ -1747,7 +1652,6 @@ int ObPartitionMultiRangeSpliter::get_multi_ranges_row_count(const ObIArray<ObSt
              K(max_time));
   } else if (FALSE_IT(recalc_range_precision(ranges, range_precision))) {
   } else if (OB_FAIL(get_tables(table_iter, tables))) {
-    LOG_WARN("Fail to get split tables", KR(ret), K(table_iter));
   } else if (ranges.empty()) {
     // do nothing
   } else if (tables.empty()) {
@@ -1762,7 +1666,6 @@ int ObPartitionMultiRangeSpliter::get_multi_ranges_row_count(const ObIArray<ObSt
                                           macro_block_count,
                                           max_time,
                                           range_precision))) {
-    LOG_WARN("Fail to estimate ranges size", KR(ret));
   }
 
   return ret;
@@ -1786,10 +1689,8 @@ int ObPartitionMultiRangeSpliter::get_multi_range_size(const ObIArray<ObStoreRan
     LOG_WARN("Invalid argument to get split multi ranges", KR(ret), K(table_iter));
   } else if (FALSE_IT(recalc_range_precision(ranges, range_precision))) {
   } else if (OB_FAIL(get_tables(table_iter, tables))) {
-    LOG_WARN("Fail to get split tables", KR(ret), K(table_iter));
   } else if (OB_FAIL(get_multi_range_size(
                  ranges, index_read_info, tables, total_size, max_time, range_precision))) {
-    LOG_WARN("Fail to get multi range size", KR(ret));
   }
 
   return ret;
@@ -1816,12 +1717,10 @@ int ObPartitionMultiRangeSpliter::estimate_ranges_info(const ObIArray<ObStoreRan
   int64_t memtable_total_size = 0;
 
   if (OB_FAIL(sampled_ranges.reserve(ranges.count()))) {
-    LOG_WARN("Fail to reserve sampled ranges", KR(ret));
   } else {
     int64_t sample_step = max(1, 100 / range_precision);
     for (int64_t i = 0; OB_SUCC(ret) && i < ranges.count(); i += sample_step) {
       if (OB_FAIL(sampled_ranges.push_back(ranges.at(i)))) {
-        LOG_WARN("Fail to push back sampled range", KR(ret));
       }
     }
   }
@@ -1829,7 +1728,6 @@ int ObPartitionMultiRangeSpliter::estimate_ranges_info(const ObIArray<ObStoreRan
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(transform_to_datum_range_and_sort(
                  sampled_ranges, read_info, allocator, sorted_ranges))) {
-    LOG_WARN("Fail to transform store range array to datum range array", KR(ret));
   } else {
     int64_t total_macro_block_cnt = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < tables.count(); i++) {
@@ -1850,15 +1748,12 @@ int ObPartitionMultiRangeSpliter::estimate_ranges_info(const ObIArray<ObStoreRan
         if (sstable->is_empty() || total_macro_block_cnt == 0) {
           // empty sstable, skip
         } else if (OB_FAIL(info_estimate_context.init(sorted_ranges, read_info, false))) {
-          LOG_WARN("Fail to init info estimate context", KR(ret));
         } else if (OB_FAIL(traverser.init(*sstable, read_info))) {
-          LOG_WARN("Fail to init info estimate traverser", KR(ret));
         } else if (OB_FAIL(traverser.traverse(
                        info_estimate_context,
                        max(1,
                            INDEX_BLOCK_PER_TIME * max_time * sstable->get_data_macro_block_count()
                                / total_macro_block_cnt)))) {
-          LOG_WARN("Fail to traverse sstable index block tree", KR(ret));
         } else {
           total_size += info_estimate_context.get_total_size();
           total_row_count += info_estimate_context.get_total_row_count();
@@ -1875,10 +1770,6 @@ int ObPartitionMultiRangeSpliter::estimate_ranges_info(const ObIArray<ObStoreRan
                                                   &sampled_ranges.at(j).get_end_key(),
                                                   estimate_bytes,
                                                   estimate_rows))) {
-            LOG_WARN("Fail to estimate rows for memtable",
-                     KR(ret),
-                     K(sampled_ranges.at(j)),
-                     K(memtable));
           } else {
             memtable_total_size += estimate_bytes;
             total_size += estimate_bytes;
@@ -1955,7 +1846,6 @@ int ObPartitionMultiRangeSpliter::get_split_multi_ranges(
   } else if (fast_split_range_task_count > 0) {
     if (OB_FAIL(fast_build_range_array(
             ranges, fast_split_range_task_count, allocator, multi_range_split_array))) {
-      LOG_WARN("Fail to fast build range array", KR(ret));
     }
   } else if (OB_FAIL(build_range_array(ranges,
                                        expected_task_count,
@@ -1966,7 +1856,6 @@ int ObPartitionMultiRangeSpliter::get_split_multi_ranges(
                                        for_compaction,
                                        max_time,
                                        range_precision))) {
-    LOG_WARN("Fail to build range array", KR(ret));
   }
 
   int64_t end_time_ms = ObTimeUtility::current_time_ms();
@@ -1999,7 +1888,6 @@ int ObPartitionMultiRangeSpliter::get_split_multi_ranges(
     LOG_WARN("Invalid argument to get split multi ranges", KR(ret), K(table_iter));
   } else if (FALSE_IT(recalc_range_precision(ranges, range_precision))) {
   } else if (OB_FAIL(get_tables(table_iter, tables))) {
-    LOG_WARN("Fail to get split tables", KR(ret), K(table_iter));
   } else if (OB_FAIL(get_split_multi_ranges(ranges,
                                             expected_task_count,
                                             index_read_info,
@@ -2009,7 +1897,6 @@ int ObPartitionMultiRangeSpliter::get_split_multi_ranges(
                                             for_compaction,
                                             max_time,
                                             range_precision))) {
-    LOG_WARN("Fail to split multi ranges", KR(ret), K(table_iter));
   }
 
   return ret;
@@ -2080,7 +1967,6 @@ int ObPartitionMajorSSTableRangeSpliter::scan_major_sstable_secondary_meta(
   int ret = OB_SUCCESS;
   if (OB_FAIL(major_sstable_->scan_secondary_meta(*allocator_, scan_range, *index_read_info_,
                                                   DATA_BLOCK_META, meta_iter))) {
-    STORAGE_LOG(WARN, "Failed to scan secondary meta", KR(ret), K(*major_sstable_));
   }
   return ret;
 }
@@ -2111,11 +1997,9 @@ int ObPartitionMajorSSTableRangeSpliter::split_ranges(ObIArray<ObStoreRange> &re
       ObStoreRange whole_range;
       whole_range.set_whole_range();
       if (OB_FAIL(result_ranges.push_back(whole_range))) {
-        STORAGE_LOG(WARN, "failed to push back merge range to array", KR(ret), K(whole_range));
       }
     } else {
       if (OB_FAIL(generate_ranges_by_macro_block(parallel_degree, result_ranges))) {
-        STORAGE_LOG(WARN, "failed to generate ranges by macro block", KR(ret), K(parallel_degree));
       }
     }
   }
@@ -2137,7 +2021,6 @@ int ObPartitionMajorSSTableRangeSpliter::generate_ranges_by_macro_block(
   ObDatumRange scan_range;
   scan_range.set_whole_range();
   if (OB_FAIL(scan_major_sstable_secondary_meta(scan_range, meta_iter))) {
-    STORAGE_LOG(WARN, "Failed to scan secondary meta", KR(ret), K(*major_sstable_));
   }
 
   // generate ranges
@@ -2153,14 +2036,11 @@ int ObPartitionMajorSSTableRangeSpliter::generate_ranges_by_macro_block(
       // locate to the last macro-block meta in current range
       while (OB_SUCC(meta_iter->get_next(blk_meta)) && i++ < last);
       if (OB_FAIL(ret)) {
-        STORAGE_LOG(WARN, "Failed to get macro block meta", KR(ret), K(i - 1));
       } else if (OB_UNLIKELY(!blk_meta.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "Unexpected invalid macro block meta", KR(ret), K(i - 1));
       } else if (OB_FAIL(blk_meta.get_rowkey(endkey))) {
-        STORAGE_LOG(WARN, "Failed to get rowkey", KR(ret), K(blk_meta));
       } else if (OB_FAIL(endkey.to_store_rowkey(col_descs, *allocator_, range.get_end_key()))) {
-        STORAGE_LOG(WARN, "Failed to transfer store rowkey", K(ret), K(endkey));
       }
     } else { // last range
       i = last + 1;
@@ -2226,17 +2106,11 @@ int ObPartitionIncrementalRangeSpliter::ObIncrementalIterator::init()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       STORAGE_LOG(WARN, "failed to allocate memory", KR(ret));
     } else if (OB_FAIL(prepare_table_access_param())) {
-      STORAGE_LOG(WARN, "Failed to prepare table access param", KR(ret));
     } else if (OB_FAIL(prepare_store_ctx())) {
-      STORAGE_LOG(WARN, "Failed to prepare store ctx", KR(ret));
     } else if (OB_FAIL(prepare_table_access_context())) {
-      STORAGE_LOG(WARN, "Failed to prepare table access context", KR(ret));
     } else if (OB_FAIL(prepare_get_table_param())) {
-      STORAGE_LOG(WARN, "Failed to prepare get table param", KR(ret));
     } else if (OB_FAIL(mpl_scan_mrg->init(tbl_xs_param_, tbl_xs_ctx_, get_tbl_param_))) {
-      STORAGE_LOG(WARN, "Failed to init multiple scan merge", KR(ret));
     } else if (OB_FAIL(mpl_scan_mrg->open(range_to_scan_))) {
-      STORAGE_LOG(WARN, "Failed to open multiple scan merge", KR(ret));
     } else {
       mpl_scan_mrg->set_iter_del_row(true);
       iter_ = mpl_scan_mrg;
@@ -2269,21 +2143,17 @@ int ObPartitionIncrementalRangeSpliter::ObIncrementalIterator::prepare_table_acc
   int ret = OB_SUCCESS;
   const ObStorageSchema *storage_schema = merge_ctx_.get_schema();
   if (OB_FAIL(storage_schema->get_mulit_version_rowkey_column_ids(rowkey_col_ids_))) {
-    STORAGE_LOG(WARN, "Failed to get rowkey column ids", KR(ret));
   } else if (OB_FAIL(tbl_read_info_.init(allocator_, storage_schema->get_column_count(),
                                          storage_schema->get_rowkey_column_num(),
                                          rowkey_col_ids_))) {
-    STORAGE_LOG(WARN, "Failed to init columns info", KR(ret));
   } else if (OB_FAIL(tbl_xs_param_.init_merge_param(merge_ctx_.get_tablet_id().id(), 
                                                     merge_ctx_.get_tablet_id(), 
                                                     tbl_read_info_,
                                                     false/*is_multi_version_minor_merge*/,
                                                     false/*is_delete_insert*/))) {
-    STORAGE_LOG(WARN, "Failed to init table access param", KR(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < rowkey_col_ids_.count(); i++) {
     if (OB_FAIL(out_cols_project_.push_back(static_cast<int32_t>(i)))) {
-      STORAGE_LOG(WARN, "Failed to push column project", KR(ret), K(i));
     }
   }
   if (OB_SUCC(ret)) {
@@ -2299,13 +2169,11 @@ int ObPartitionIncrementalRangeSpliter::ObIncrementalIterator::prepare_store_ctx
   int64_t snapshot = merge_ctx_.get_snapshot();
   SCN scn;
   if (OB_FAIL(scn.convert_for_tx(snapshot))) {
-    STORAGE_LOG(WARN, "convert for tx fail", K(ret), K(ls_id), K(snapshot));
   } else if (OB_FAIL(store_ctx_.init_for_read(ls_id,
                                               merge_ctx_.get_tablet_id(),
                                               INT64_MAX,
                                               -1,
                                               scn))) {
-    STORAGE_LOG(WARN, "init store ctx fail", K(ret), K(ls_id), K(snapshot));
   }
   return ret;
 }
@@ -2325,7 +2193,6 @@ int ObPartitionIncrementalRangeSpliter::ObIncrementalIterator::prepare_table_acc
   ObVersionRange scan_version_range = merge_ctx_.static_param_.version_range_;
   scan_version_range.base_version_ = major_sstable->get_snapshot_version();
   if (OB_FAIL(tbl_xs_ctx_.init(query_flag, store_ctx_, allocator_, allocator_, scan_version_range))) {
-    STORAGE_LOG(WARN, "Failed to init table access context", KR(ret));
   } else {
     tbl_xs_ctx_.merge_scn_ = merge_ctx_.static_param_.merge_scn_;
   }
@@ -2339,12 +2206,10 @@ int ObPartitionIncrementalRangeSpliter::ObIncrementalIterator::prepare_get_table
   for (int64_t i = 1; OB_SUCC(ret) && i < merge_ctx_.get_tables_handle().get_count(); i++) {
     table = merge_ctx_.get_tables_handle().get_table(i);
     if (OB_FAIL(tbls_iter_.add_table(table))) {
-      STORAGE_LOG(WARN, "Failed to add table to inc handle", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(get_tbl_param_.tablet_iter_.table_iter()->assign(tbls_iter_))) {
-      STORAGE_LOG(WARN, "Failed to assign tablet iterator", KR(ret));
     }
   }
   return ret;
@@ -2413,7 +2278,6 @@ int ObPartitionIncrementalRangeSpliter::init(compaction::ObTabletMergeCtx &merge
       ret = OB_INVALID_ARGUMENT;
       STORAGE_LOG(WARN, "invalid argument tablet size", KR(ret), K_(tablet_size));
     } else if (OB_FAIL(alloc_ranges())) {
-      STORAGE_LOG(WARN, "failed to alloc ranges", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -2450,7 +2314,6 @@ int ObPartitionIncrementalRangeSpliter::init_incremental_iter()
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(iter_->init())) {
-      STORAGE_LOG(WARN, "failed to init incremental iterator", KR(ret));
     }
   }
   return ret;
@@ -2460,7 +2323,6 @@ int ObPartitionIncrementalRangeSpliter::get_major_sstable_end_rowkey(ObDatumRowk
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(major_sstable_->get_last_rowkey(*allocator_, rowkey))) {
-    STORAGE_LOG(WARN, "failed to get major sstable last rowkey", KR(ret), K(*major_sstable_));
   }
   return ret;
 }
@@ -2473,7 +2335,6 @@ int ObPartitionIncrementalRangeSpliter::scan_major_sstable_secondary_meta(
     merge_ctx_->get_tablet()->get_rowkey_read_info();
   if (OB_FAIL(major_sstable_->scan_secondary_meta(*allocator_, scan_range, rowkey_read_info,
                                                   DATA_BLOCK_META, meta_iter))) {
-    STORAGE_LOG(WARN, "Failed to scan secondary meta", KR(ret), K(*major_sstable_));
   }
   return ret;
 }
@@ -2496,7 +2357,6 @@ int ObPartitionIncrementalRangeSpliter::check_is_incremental(bool &is_incrementa
     int64_t row_count = 0;
     is_incremental = false;
     if (OB_FAIL(init_incremental_iter())) {
-      STORAGE_LOG(WARN, "failed to init incremental iterator", KR(ret));
     } else {
       // skip a few rows to avoid updated noise
       while (OB_SUCC(ret) && OB_SUCC(iter_->get_next_row(row)) && OB_NOT_NULL(row) &&
@@ -2513,12 +2373,8 @@ int ObPartitionIncrementalRangeSpliter::check_is_incremental(bool &is_incrementa
         const ObStorageDatumUtils &datum_utils =
           merge_ctx_->get_tablet()->get_rowkey_read_info().get_datum_utils();
         if (OB_FAIL(row_rowkey.assign(row->storage_datums_, rowkey_column_num))) {
-          STORAGE_LOG(WARN, "failed to assign datum rowkey", KR(ret), K(*row),
-                      K(rowkey_column_num));
         } else if (OB_FAIL(get_major_sstable_end_rowkey(end_rowkey))) {
-          STORAGE_LOG(WARN, "failed to get base sstable last rowkey", KR(ret), K(*major_sstable_));
         } else if (OB_FAIL(row_rowkey.compare(end_rowkey, datum_utils, cmp_ret))) {
-          STORAGE_LOG(WARN, "failed to compare rowkey", KR(ret), K(row_rowkey), K(end_rowkey));
         } else if (cmp_ret > 0) {
           is_incremental = true;
         }
@@ -2540,19 +2396,15 @@ int ObPartitionIncrementalRangeSpliter::split_ranges(ObDatumRangeArray &result_r
     ObDatumRange whole_range;
     whole_range.set_whole_range();
     if (OB_FAIL(result_ranges.push_back(whole_range))) {
-      STORAGE_LOG(WARN, "failed to push back merge range to array", KR(ret), K(whole_range));
     }
   } else {
     ObDatumRangeArray *ranges = nullptr;
     if (OB_FAIL(get_ranges_by_inc_data(*inc_ranges_))) {
-      STORAGE_LOG(WARN, "failed to get ranges by inc data", KR(ret));
     } else if (merge_ctx_->get_is_full_merge()) {
       if (major_sstable_->is_empty()) {
         ranges = inc_ranges_;
       } else if (OB_FAIL(get_ranges_by_base_sstable(*base_ranges_))) {
-        STORAGE_LOG(WARN, "failed to get ranges by base sstable", KR(ret));
       } else if (OB_FAIL(combine_ranges(*base_ranges_, *inc_ranges_, *combined_ranges_))) {
-        STORAGE_LOG(WARN, "failed to combine base and inc ranges", KR(ret));
       } else {
         ranges = combined_ranges_;
       }
@@ -2565,7 +2417,6 @@ int ObPartitionIncrementalRangeSpliter::split_ranges(ObDatumRangeArray &result_r
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "Unexpected null ranges", K(ret), K(ranges));
       } else if (OB_FAIL(merge_ranges(*ranges, result_ranges))) {
-        STORAGE_LOG(WARN, "failed to merge ranges", KR(ret));
       }
     }
 
@@ -2573,7 +2424,6 @@ int ObPartitionIncrementalRangeSpliter::split_ranges(ObDatumRangeArray &result_r
       const ObStorageDatumUtils &datum_utils =
         merge_ctx_->get_tablet()->get_rowkey_read_info().get_datum_utils();
       if (OB_FAIL(check_continuous(datum_utils, result_ranges))) {
-        STORAGE_LOG(WARN, "failed to check continuous", KR(ret), K(result_ranges));
       }
     }
   }
@@ -2590,7 +2440,6 @@ int ObPartitionIncrementalRangeSpliter::get_ranges_by_inc_data(ObDatumRangeArray
     STORAGE_LOG(WARN, "invalid argument", KR(ret), K_(tablet_size), K(tables_handle_cnt));
   } else {
     if (OB_FAIL(init_incremental_iter())) {
-      STORAGE_LOG(WARN, "failed to init incremental iterator", KR(ret));
     } else {
       int64_t num_rows_per_range = default_row_num_per_range_;
       // calculate num_rows_per_range by macro block
@@ -2635,14 +2484,9 @@ int ObPartitionIncrementalRangeSpliter::get_ranges_by_inc_data(ObDatumRangeArray
           count = 0;
           range.start_key_ = range.end_key_;
           if (OB_FAIL(rowkey.assign(row->storage_datums_, rowkey_column_num))) {
-            STORAGE_LOG(WARN, "failed to assign datum rowkey", KR(ret), K(*row),
-                        K(rowkey_column_num));
           } else if (OB_FAIL(rowkey.deep_copy(range.end_key_, *allocator_))) {
-            STORAGE_LOG(WARN, "failed to deep copy datum rowkey", KR(ret), K(rowkey));
           } else if (OB_FAIL(range.to_multi_version_range(*allocator_, multi_version_range))) {
-            STORAGE_LOG(WARN, "failed to transfer multi version range", KR(ret), K(range));
           } else if (OB_FAIL(ranges.push_back(multi_version_range))) {
-            STORAGE_LOG(WARN, "failed to push range", KR(ret), K(range));
           }
         }
       }
@@ -2654,14 +2498,11 @@ int ObPartitionIncrementalRangeSpliter::get_ranges_by_inc_data(ObDatumRangeArray
           range.end_key_.set_max_rowkey();
           range.set_right_open();
           if (OB_FAIL(range.to_multi_version_range(*allocator_, multi_version_range))) {
-            STORAGE_LOG(WARN, "failed to transfer multi version range", KR(ret), K(range));
           } else if (OB_FAIL(ranges.push_back(multi_version_range))) {
-            STORAGE_LOG(WARN, "failed to push range", KR(ret), K(range));
           }
         } else if (ranges.empty()) {
           range.set_whole_range();
           if (OB_FAIL(ranges.push_back(range))) {
-            STORAGE_LOG(WARN, "failed to push range", KR(ret), K(range));
           }
         } else {
           ObDatumRange &last_range = ranges.at(ranges.count() - 1);
@@ -2686,7 +2527,6 @@ int ObPartitionIncrementalRangeSpliter::get_ranges_by_base_sstable(ObDatumRangeA
     ObDatumRange scan_range;
     scan_range.set_whole_range();
     if (OB_FAIL(scan_major_sstable_secondary_meta(scan_range, meta_iter))) {
-      STORAGE_LOG(WARN, "Failed to scan secondary meta", KR(ret), K(*major_sstable_));
     } else {
       const int64_t macro_block_cnt =
         major_sstable_->get_data_macro_block_count();
@@ -2709,14 +2549,11 @@ int ObPartitionIncrementalRangeSpliter::get_ranges_by_base_sstable(ObDatumRangeA
           // locate to the last macro-block meta in current range
           while (OB_SUCC(meta_iter->get_next(blk_meta)) && i++ < last);
           if (OB_FAIL(ret)) {
-            STORAGE_LOG(WARN, "Failed to get macro block meta", KR(ret), K(i - 1));
           } else if (OB_UNLIKELY(!blk_meta.is_valid())) {
             ret = OB_ERR_UNEXPECTED;
             STORAGE_LOG(WARN, "Unexpected invalid macro block meta", KR(ret), K(i - 1));
           } else if (OB_FAIL(blk_meta.get_rowkey(endkey))) {
-            STORAGE_LOG(WARN, "Failed to get rowkey", KR(ret), K(blk_meta));
           } else if (OB_FAIL(endkey.deep_copy(range.end_key_, *allocator_))) {
-            STORAGE_LOG(WARN, "Failed to transfer store rowkey", K(ret), K(endkey));
           }
         } else { // last range
           i = last + 1;
@@ -2752,18 +2589,15 @@ int ObPartitionIncrementalRangeSpliter::combine_ranges(const ObDatumRangeArray &
 
     ObDatumRowkey end_rowkey;
     if (OB_FAIL(get_major_sstable_end_rowkey(end_rowkey))) {
-      STORAGE_LOG(WARN, "failed to get base sstable last rowkey", KR(ret), K_(major_sstable));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < base_ranges.count(); i++) {
         const ObDatumRange &range = base_ranges.at(i);
         if (OB_FAIL(result_ranges.push_back(range))) {
-          STORAGE_LOG(WARN, "failed to push range", KR(ret), K(range));
         }
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < inc_ranges.count(); i++) {
         const ObDatumRange &range = inc_ranges.at(i);
         if (OB_FAIL(result_ranges.push_back(range))) {
-          STORAGE_LOG(WARN, "failed to push range", KR(ret), K(range));
         }
       }
       if (OB_SUCC(ret)) {
@@ -2771,8 +2605,6 @@ int ObPartitionIncrementalRangeSpliter::combine_ranges(const ObDatumRangeArray &
         ObDatumRange &base_last_range = result_ranges.at(base_ranges.count() - 1);
         ObDatumRange &inc_first_range = result_ranges.at(base_ranges.count());
         if (OB_FAIL(end_rowkey.deep_copy(base_last_range.end_key_, *allocator_))) {
-          STORAGE_LOG(WARN, "failed to deep copy rowkey", KR(ret), K(end_rowkey),
-                      K(base_last_range.get_end_key()));
         } else {
           base_last_range.set_right_closed();
           inc_first_range.start_key_ = base_last_range.end_key_;
@@ -2812,7 +2644,6 @@ int ObPartitionIncrementalRangeSpliter::merge_ranges(const ObDatumRangeArray &ra
       }
 
       if (OB_FAIL(result_ranges.push_back(*range))) {
-        STORAGE_LOG(WARN, "failed to push range", KR(ret), K(*range));
       }
     }
     if (OB_SUCC(ret)) {
@@ -2848,7 +2679,6 @@ int ObPartitionIncrementalRangeSpliter::check_continuous(const ObStorageDatumUti
         STORAGE_LOG(WARN, "Unexpected bad ranges (start key not excluded)", K(ret), K(i), K(ranges));
       } else if (OB_FAIL(ranges.at(i).get_start_key().equal(ranges.at(i - 1).get_end_key(),
                                                             datum_utils, is_equal))) {
-        STORAGE_LOG(WARN, "Failed to compare rowkeys", K(ret), K(i), K(ranges));
       } else if (OB_UNLIKELY(!is_equal)) {
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "Unexpected bad ranges (not contiguous)", K(ret), K(i), K(ranges));

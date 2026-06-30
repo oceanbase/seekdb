@@ -101,7 +101,6 @@ int ObTenantDataVersionMgr::set(const uint64_t data_version)
   if (OB_SUCC(ret) && need_to_set) {
     SpinWLockGuard guard(lock_);
     if (OB_FAIL(set_(data_version))) {
-      COMMON_LOG(WARN, "fail to set data_version", K(ret), KDV(data_version));
     }
   }
 
@@ -125,7 +124,6 @@ int ObTenantDataVersionMgr::remove()
   } else if (version->is_removed()) {
     // already removed
   } else if (OB_FAIL(remove_and_dump_to_file_(remove_ts))) {
-    COMMON_LOG(WARN, "fail to dump data_version file", K(ret));
   } else {
     version->set_removed(true, remove_ts);
     DV_ILOG_F("Tenant DATA_VERSION is removed", K(ret), K(remove_ts), K(*version));
@@ -178,7 +176,6 @@ int ObTenantDataVersionMgr::load_from_file()
         ObRecordHeader header;
         int64_t pos = 0;
          if (OB_FAIL(header.deserialize(load_buf, read_len, pos))) {
-          COMMON_LOG(ERROR, "deserialize header failed", K(ret), K(read_len), K(pos));
         } else {
           const int64_t header_length = header.header_length_;
           const int64_t data_length = read_len - header_length;
@@ -188,13 +185,11 @@ int ObTenantDataVersionMgr::load_from_file()
             COMMON_LOG(ERROR, "invalid data length", K(ret), K(header_length),
                        K(data_length), K(buf_size), K(read_len), K(header));
           } else if (OB_FAIL(header.check_header_checksum())) {
-            COMMON_LOG(ERROR, "check header checksum failed", K(ret), K(header));
           } else if (OB_CONFIG_MAGIC != header.magic_) {
             ret = OB_INVALID_DATA;
             COMMON_LOG(ERROR, "check magic number failed", K(ret),
                        K_(header.magic));
           } else if (OB_FAIL(header.check_payload_checksum(p_data, data_length))) {
-            COMMON_LOG(ERROR, "check data checksum failed", K(ret));
           } else {
             while (OB_SUCC(ret) && pos < read_len) {
               ret = load_data_version_(load_buf, pos);
@@ -243,7 +238,6 @@ int ObTenantDataVersionMgr::set_(const uint64_t data_version)
                  "old_version", old_version,
                  "new_version", data_version);
     } else if (OB_FAIL(set_and_dump_to_file_(data_version, need_to_insert))) {
-      COMMON_LOG(WARN, "fail to dump data_version file", K(ret));
     } else {
       if (need_to_insert) {
         void *version_buf = NULL;
@@ -292,12 +286,10 @@ int ObTenantDataVersionMgr::set_and_dump_to_file_(const uint64_t data_version,
     const bool removed = (OB_NOT_NULL(version_) ? version_->is_removed() : false);
     const int64_t remove_ts = (OB_NOT_NULL(version_) ? version_->get_remove_timestamp() : 0);
     if (OB_FAIL(dump_data_version_(dump_buf, buf_length, pos, removed, remove_ts, data_version))) {
-      COMMON_LOG(WARN, "fail to dump data_version", K(ret), KDV(data_version));
     }
     if (OB_FAIL(ret)) {
 
     } else if (OB_FAIL(write_to_file_(dump_buf, buf_length, pos - data_pos))) {
-      COMMON_LOG(WARN, "fail to write data_version file", K(ret));
     }
   }
 
@@ -327,12 +319,10 @@ int ObTenantDataVersionMgr::remove_and_dump_to_file_(const int64_t remove_ts) {
     if (OB_FAIL(dump_data_version_(dump_buf, buf_length, pos,
                                    true /*removed*/, remove_ts,
                                    version_->get_version()))) {
-      COMMON_LOG(WARN, "fail to dump data_version", K(ret), K(remove_ts));
     }
     if (OB_FAIL(ret)) {
 
     } else if (OB_FAIL(write_to_file_(dump_buf, buf_length, pos - data_pos))) {
-      COMMON_LOG(WARN, "fail to write data_version file", K(ret));
     }
   }
 
@@ -355,7 +345,6 @@ int ObTenantDataVersionMgr::dump_data_version_(char *buf, int64_t buf_length, in
   } else if (OB_FAIL(databuff_printf(
                  buf, buf_length, pos, ObTenantDataVersion::DUMP_BUF_FORMAT,
                  version_str, data_version, removed, remove_ts))) {
-    COMMON_LOG(WARN, "fail to printf", K(ret), K(buf_length), K(pos));
   } else if (pos >= buf_length) {
     ret = OB_SIZE_OVERFLOW;
     COMMON_LOG(WARN, "buffer size overflow", K(ret), K(buf_length), K(pos));
@@ -437,13 +426,11 @@ int ObTenantDataVersionMgr::write_to_file_(char *buf, int64_t buf_length, int64_
     header.data_checksum_ = ob_crc64(buf + header_length, data_length);
     header.set_header_checksum();
     if (OB_FAIL(header.serialize(buf, buf_length, header_pos))) {
-      COMMON_LOG(WARN, "fail to serialize header", K(ret), K(header), K(buf_length), K(header_pos));
     } else {
       const char *file_path = TENANT_DATA_VERSION_FILE_PATH;
       char tmp_path[MAX_PATH_SIZE]{0};
       char hist_path[MAX_PATH_SIZE]{0};
       if (OB_FAIL(databuff_printf(tmp_path, MAX_PATH_SIZE, "%s.tmp", file_path))) {
-        COMMON_LOG(WARN, "fail to printf", K(ret));
       } else if (OB_FAIL(databuff_printf(hist_path, MAX_PATH_SIZE, "%s.history", file_path))) {
         COMMON_LOG(WARN, "fail to printf", K(ret));
 #ifdef _WIN32

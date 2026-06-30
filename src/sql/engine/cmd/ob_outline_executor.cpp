@@ -50,7 +50,6 @@ int ObOutlineExecutor::generate_outline_info2(ObExecContext &ctx,
     ObMaxConcurrentParam concurrent_param(&ctx.get_allocator());
     concurrent_param.concurrent_num_ = create_outline_stmt->get_max_concurrent();
     if (OB_FAIL(outline_info.add_param(concurrent_param))) {
-     LOG_WARN("fail to add param", K(ret));
     }
   }
   return ret;
@@ -107,11 +106,9 @@ int ObOutlineExecutor::generate_outline_info1(ObExecContext &ctx,
                                                  FP_PARAMERIZE_AND_FILTER_HINT_MODE,
                                                  has_questionmark_in_outline_sql,
                                                  outline_info.is_format()))) {
-    LOG_WARN("fail to get outline key", "outline_sql", outline_sql, K(ret));
   } else if (OB_FAIL(ObSqlParameterization::search_in_expr_pos(outline_info.get_format_sql_text_str().ptr(),
                                                                outline_info.get_format_sql_text_str().length(),
                                                                in_expr_pos, has_in_expr))) {
-    LOG_WARN("failed to search in expr", K(ret), K(outline_info.get_format_sql_text_str()));
   } else if (FALSE_IT(max_concurrent = query_hint->get_global_hint().max_concurrent_)) {
   } else if (OB_UNLIKELY(has_questionmark_in_outline_sql && query_hint->has_hint_exclude_concurrent())) {
     ret = OB_INVALID_OUTLINE;
@@ -125,7 +122,6 @@ int ObOutlineExecutor::generate_outline_info1(ObExecContext &ctx,
     LOG_WARN("format outline with in expr can not have const param",
              "outline_format_sql_text", outline_info.get_format_sql_text_str(), K(ret));
   } else if (OB_FAIL(get_outline(ctx, outline_stmt, outline))) {
-    LOG_WARN("fail to get outline", K(ret));
   } else {
     //to check whether ok
     outline_info.set_outline_content(outline);
@@ -147,8 +143,6 @@ int ObOutlineExecutor::generate_outline_info1(ObExecContext &ctx,
                                               FP_PARAMERIZE_AND_FILTER_HINT_MODE,
                                               has_questionmark_in_target_sql,
                                               outline_info.is_format()))) {
-        LOG_WARN("fail to get outline key", K(target_sql), K(ret));
-
       } else if (target_key != outline_key || has_questionmark_in_target_sql != has_questionmark_in_outline_sql) {
         ret = OB_INVALID_OUTLINE;
         LOG_USER_ERROR(OB_INVALID_OUTLINE,
@@ -158,7 +152,6 @@ int ObOutlineExecutor::generate_outline_info1(ObExecContext &ctx,
       } else if (max_concurrent >= 0
                  && (OB_FAIL(concurrent_param.same_param_as(target_param, is_same_param)) || !is_same_param)) {
         if (OB_FAIL(ret)) {
-          LOG_WARN("fail to check if param is same", K(outline_sql), K(target_sql), K(ret));
         } else {
           ret = OB_INVALID_OUTLINE;
           LOG_USER_ERROR(OB_INVALID_OUTLINE,
@@ -171,7 +164,6 @@ int ObOutlineExecutor::generate_outline_info1(ObExecContext &ctx,
                                                      FP_MODE,
                                                      has_questionmark_in_target_sql,
                                                      outline_info.is_format()))) {
-        LOG_WARN("fail to get outline key", K(target_sql), K(ret));
       } else {
         //replace outline_key with target_key derived from to_clause with index not filtered
         outline_info.set_signature(target_key_with_hint);
@@ -185,7 +177,6 @@ int ObOutlineExecutor::generate_outline_info1(ObExecContext &ctx,
         concurrent_param.concurrent_num_ = max_concurrent;
         concurrent_param.sql_text_ = outline_info.get_sql_text_str();
         if (OB_FAIL(outline_info.add_param(concurrent_param))) {
-          LOG_WARN("fail to add param", K(ret));
         }
       }
     }
@@ -208,7 +199,6 @@ int ObOutlineExecutor::generate_logical_plan(ObExecContext &ctx,
     LOG_WARN("invalid parameter", K(session_info), K(outline_stmt));
   } else if (OB_FAIL(ObCacheObjectFactory::alloc(
                   guard, ObLibCacheNameSpace::NS_CRSR))) {
-    LOG_WARN("fail to alloc phy_plan", K(ret));
   } else if (FALSE_IT(phy_plan = static_cast<ObPhysicalPlan*>(guard.get_cache_obj()))) {
     // do nothing
   } else if (OB_ISNULL(phy_plan)) {
@@ -218,18 +208,15 @@ int ObOutlineExecutor::generate_logical_plan(ObExecContext &ctx,
                                                       ctx,
                                                       *outline_stmt,
                                                       *phy_plan))) {
-    LOG_WARN("fail to calc pre calculable expr", K(ret));
   } else if (OB_FAIL(ObSql::transform_stmt(opt_ctx.get_sql_schema_guard(),
                                            opt_ctx.get_opt_stat_manager(),
                                            &opt_ctx.get_local_server_addr(),
                                            phy_plan,
                                            ctx,
                                            outline_stmt))) {
-    LOG_WARN("fail to transform outline stmt", K(ret));
   } else if (FALSE_IT(opt_ctx.set_root_stmt(outline_stmt))) {
     /*do nothing*/
   } else if (OB_FAIL(ObSql::optimize_stmt(optimizer, *session_info, *outline_stmt, logical_plan))) {
-    LOG_WARN("fail to optimize stmt", K(ret));
   } else {/*do nothing*/}
 
   return ret;
@@ -261,7 +248,6 @@ int ObOutlineExecutor::print_outline(ObExecContext &ctx, ObLogPlan *log_plan, Ob
     plan_text.buf_ = buf;
     plan_text.buf_len_ = OB_MAX_SQL_LENGTH;
     if (OB_FAIL(ObSqlPlan::get_plan_outline_info_one_line(plan_text, log_plan))) {
-      LOG_WARN("failed to get plan outline info", K(ret));
     } else {
       outline.assign_ptr(buf, static_cast<ObString::obstr_size_t>(plan_text.pos_));
     }
@@ -307,9 +293,7 @@ int ObOutlineExecutor::get_outline(ObExecContext &ctx, ObDMLStmt *outline_stmt, 
                               false,
                               ctx.get_stmt_factory()->get_query_ctx());
     if (OB_FAIL(generate_logical_plan(ctx, optctx, outline_stmt, log_plan))) {
-      LOG_WARN("fail to generate logical plan", K(ret));
     } else if (OB_FAIL(print_outline(ctx, log_plan, outline))) {
-      LOG_WARN("fail to print outline", K(ret));
     } else {/*do nothing*/}
   }
   return ret;
@@ -324,20 +308,16 @@ int ObCreateOutlineExecutor::execute(ObExecContext &ctx, ObCreateOutlineStmt &st
   ObOutlineInfo &outline_info = arg.outline_info_;
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
-    LOG_WARN("fail to get first stmt" , K(ret));
   } else {
     arg.ddl_stmt_str_ = first_stmt;
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(generate_outline_info(ctx, &stmt, outline_info))) {
-    LOG_WARN("generate_outline_info failed", K(ret));
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed", K(ret));
   } else if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){
-    LOG_WARN("schema_guard reset failed", K(ret));
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_outline(arg); }))) {
-    LOG_WARN("rpc proxy create outline failed", "dst", GCTX.self_addr(), K(ret));
   } else {/*do nothing*/ }
   return ret;
 }
@@ -354,7 +334,6 @@ int ObAlterOutlineExecutor::execute(ObExecContext &ctx, ObAlterOutlineStmt &stmt
   ObString &outline_sql = stmt.get_outline_sql();
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
-    LOG_WARN("fail to get first stmt" , K(ret));
   } else {
     arg.ddl_stmt_str_ = first_stmt;
   }
@@ -363,13 +342,11 @@ int ObAlterOutlineExecutor::execute(ObExecContext &ctx, ObAlterOutlineStmt &stmt
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("outline stmt is empty", K(ret));
   } else if (OB_FAIL(generate_outline_info1(ctx, outline_stmt, outline_info))) {
-    LOG_WARN("generate_outline_info failed", K(outline_sql), K(ret));
   } else {
     ObAlterOutlineInfo &alter_outline_info = arg.alter_outline_info_;
     int64_t index = OB_INVALID_INDEX;
     bool has_limit_param = false;
     if (OB_FAIL(alter_outline_info.has_concurrent_limit_param(has_limit_param))) {
-      LOG_WARN("fail to judge whether outline_info has concurrent_limit_param", K(ret));
     } else if (has_limit_param) {
       index = ObAlterOutlineArg::ADD_CONCURRENT_LIMIT;
     } else if (!alter_outline_info.get_outline_content_str().empty()) {
@@ -389,9 +366,7 @@ int ObAlterOutlineExecutor::execute(ObExecContext &ctx, ObAlterOutlineStmt &stmt
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(ctx.get_sql_ctx()->schema_guard_->reset())){
-    LOG_WARN("schema_guard reset failed", K(ret));
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->alter_outline(arg); }))) {
-    LOG_WARN("rpc proxy alter outline failed", "dst", GCTX.self_addr(), K(ret));
   } else {/*do nothing*/ }
   return ret;
 }
@@ -403,7 +378,6 @@ int ObDropOutlineExecutor::execute(ObExecContext &ctx, ObDropOutlineStmt &stmt)
   ObTaskExecutorCtx *task_exec_ctx = NULL;
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
-    LOG_WARN("fail to get first stmt" , K(ret));
   } else {
     arg.ddl_stmt_str_ = first_stmt;
   }
@@ -412,8 +386,6 @@ int ObDropOutlineExecutor::execute(ObExecContext &ctx, ObDropOutlineStmt &stmt)
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_outline(arg); }))) {
-    LOG_WARN("rpc proxy drop outline failed", K(ret),
-             "dst", GCTX.self_addr());
   } else {/*do nothing*/ }
 
   return ret;

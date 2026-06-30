@@ -267,19 +267,12 @@ int ObEmbeddingTask::init(const ObString &model_url,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid http timeout", K(ret), K(http_timeout_us), K(http_max_retries));
   } else if (OB_FAIL(input_chunks_.assign(input_chunks))) {
-    LOG_WARN("failed to assign input chunks", K(ret), K(input_chunks));
   } else if (OB_FAIL(init_curl_handler(model_url, user_key, http_timeout_us))) {
-    LOG_WARN("failed to init curl handler", K(ret), K(model_url), K(user_key));
   } else if (OB_FAIL(task_cond_.init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
-    LOG_WARN("failed to init completion cond", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator_, model_url, model_url_))) {
-    LOG_WARN("failed to copy model_url", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator_, model_name, model_name_))) {
-    LOG_WARN("failed to copy model_name", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator_, user_key, user_key_))) {
-    LOG_WARN("failed to copy user_key", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator_, provider, provider_))) {
-    LOG_WARN("failed to copy provider", K(ret));
   } else {
     task_id_ = (ObTimeUtility::current_time() & 0xFFFFFFFF);
     use_base64_format_ = ObAIFuncUtils::is_provider_support_base64(provider);
@@ -337,7 +330,6 @@ int ObEmbeddingTask::parse_embedding_response(const char *response_data, size_t 
     LOG_WARN("invalid response data", K(ret), KP(response_data), K(response_size));
   } else {
     if (OB_FAIL(json_reader.parse(response_data, response_size, root))) {
-      LOG_WARN("failed to parse json response", K(ret), KP(response_data), K(response_size));
     } else if (OB_ISNULL(root)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("root is null", K(ret));
@@ -347,7 +339,6 @@ int ObEmbeddingTask::parse_embedding_response(const char *response_data, size_t 
     } else {
       ObIJsonBase *data_array = nullptr;
       if (OB_FAIL(json_reader.get_object_value(root, DATA_NAME, data_array))) {
-        LOG_WARN("data array not found in response", K(ret), K(DATA_NAME));
       } else if (!ObJsonHelper::is_array_type(data_array)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("data field is not an array", K(ret), "data_type", ObJsonHelper::get_type_name(data_array));
@@ -356,7 +347,6 @@ int ObEmbeddingTask::parse_embedding_response(const char *response_data, size_t 
         for (uint64_t data_idx = 0; data_idx < data_array_size && OB_SUCC(ret); data_idx++) {
           ObIJsonBase *data_item = nullptr;
           if (OB_FAIL(json_reader.get_array_element(data_array, data_idx, data_item))) {
-            LOG_WARN("failed to get data array element", K(ret), K(data_idx));
           } else if (!ObJsonHelper::is_object_type(data_item)) {
             ret = OB_INVALID_ARGUMENT;
             LOG_WARN("data item is not an object", K(ret), K(data_idx));
@@ -364,7 +354,6 @@ int ObEmbeddingTask::parse_embedding_response(const char *response_data, size_t 
             ObIJsonBase *embedding_jbase = nullptr;
             float *vector = nullptr;
             if (OB_FAIL(json_reader.get_object_value(data_item, EMBEDDING_NAME, embedding_jbase))) {
-              LOG_WARN("embedding array not found", K(ret), K(EMBEDDING_NAME));
             } else if (OB_ISNULL(embedding_jbase)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("embedding jbase is null", K(ret));
@@ -377,7 +366,6 @@ int ObEmbeddingTask::parse_embedding_response(const char *response_data, size_t 
             } else {
               // no need to lock here, only access by other thread when task is done
               if (OB_FAIL(output_vectors_.push_back(vector))) {
-                LOG_WARN("failed to push back vector", K(ret));
               }
             }
           }
@@ -437,7 +425,6 @@ void ObEmbeddingTask::set_stop()
 {
   int ret = set_phase(OB_EMBEDDING_TASK_DONE);
   if (OB_FAIL(ret)) {
-    LOG_WARN("failed to set phase to DONE when stopping task", K(ret));
   }
 }
 
@@ -482,7 +469,6 @@ int ObEmbeddingTask::handle_reschedule_failure(ObEmbeddingTaskHandler *thread_po
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(complete_task(OB_EMBEDDING_TASK_DONE, error_code, true))) {
-    LOG_WARN("failed to handle task failure after reschedule failure", K(ret));
   } else {
     LOG_WARN("task reschedule failed, marking as failed", K(error_code), K(*this));
   }
@@ -524,22 +510,18 @@ int ObEmbeddingTask::start_async_work()
       Value *root = nullptr;
       Value *input_array = nullptr;
       if (OB_FAIL(json_builder.create_object(root))) {
-        LOG_WARN("failed to create json object", K(ret));
       } else if (OB_FAIL(json_builder.add_array_field(root, INPUT_NAME, input_array))) {
-        LOG_WARN("failed to add input array field", K(ret));
       } else {
         for (int64_t i = start_idx; i < end_idx && OB_SUCC(ret); i++) {
           const ObString &text = input_chunks_.at(i);
           LOG_DEBUG("Adding text to input array", K(i), K(text));
           if (OB_FAIL(json_builder.array_add_string(input_array, text))) {
-            LOG_WARN("failed to add text to input array", K(ret), K(i));
           } else {
             total_text_length += text.length();
           }
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(json_builder.add_string_field(root, MODEL_NAME_NAME, model_name_))) {
-          LOG_WARN("failed to add model field", K(ret));
         } else if (use_base64_format_ && OB_FAIL(json_builder.add_string_field(root, ENCODING_FORMAT_NAME, BASE64_FORMAT))) {
           LOG_WARN("failed to add encoding format field", K(ret));
         } else if (!use_base64_format_ && OB_FAIL(json_builder.add_string_field(root, ENCODING_FORMAT_NAME, FLOAT_FORMAT))) {
@@ -555,11 +537,9 @@ int ObEmbeddingTask::start_async_work()
           } else {
             int64_t json_len = 0;
             if (OB_FAIL(json_builder.to_string(root, json_buf, json_buf_len, json_len))) {
-              LOG_WARN("failed to convert json to string", K(ret));
             } else {
               if (OB_FAIL(send_http_request_async(json_buf, json_len))) {
                 if (OB_FAIL(complete_task(OB_EMBEDDING_TASK_DONE, ret, true))) {
-                  LOG_WARN("failed to handle task failure", K(ret));
                 }
               } else {
                 LOG_DEBUG("HTTP request sent successfully for batch", K(current_batch_idx_),
@@ -600,11 +580,9 @@ int ObEmbeddingTask::check_async_progress()
           http_response_data_size_ = 0;
 
           if (OB_FAIL(set_phase(OB_EMBEDDING_TASK_INIT))) {
-            LOG_WARN("failed to reset phase for retry", K(ret));
           } else if (OB_FAIL(start_async_work())) {
             LOG_WARN("failed to retry HTTP request", K(ret));
             if (OB_FAIL(complete_task(OB_EMBEDDING_TASK_DONE, ret, true))) {
-              LOG_WARN("failed to handle retry failure", K(ret));
             }
           }
           // reset flag
@@ -618,7 +596,6 @@ int ObEmbeddingTask::check_async_progress()
       } else {
         // non-retryable error
         if (OB_FAIL(complete_task(OB_EMBEDDING_TASK_DONE, ret, true))) {
-          LOG_WARN("failed to handle task failure", K(ret));
         }
       }
     } else if (is_http_response_ready()) {
@@ -626,7 +603,6 @@ int ObEmbeddingTask::check_async_progress()
       reset_retry_state();
       
       if (OB_FAIL(set_phase(OB_EMBEDDING_TASK_HTTP_COMPLETED))) {
-        LOG_WARN("failed to set phase to HTTP_COMPLETED", K(ret));
       }
     } else { // http not response
       if (REACH_TIME_INTERVAL(10L * 1000L * 1000L)) { //10s
@@ -636,7 +612,6 @@ int ObEmbeddingTask::check_async_progress()
   } else if (current_phase == OB_EMBEDDING_TASK_HTTP_COMPLETED) {
     if (OB_FAIL(process_http_response())) {
       if (OB_FAIL(complete_task(OB_EMBEDDING_TASK_DONE, ret, true))) {
-        LOG_WARN("failed to handle task failure", K(ret), K(*this));
       }
     } else {
       int64_t actual_chunks_in_batch = OB_MIN(batch_size_, input_chunks_.count() - (current_batch_idx_ * batch_size_));
@@ -645,7 +620,6 @@ int ObEmbeddingTask::check_async_progress()
         processed_chunks_ += actual_chunks_in_batch;
       }
       if (OB_FAIL(set_phase(OB_EMBEDDING_TASK_PARSED))) {
-        LOG_WARN("failed to set phase to PARSED", K(ret), K(*this));
       }
     }
   } else if (current_phase == OB_EMBEDDING_TASK_PARSED) {
@@ -654,11 +628,9 @@ int ObEmbeddingTask::check_async_progress()
     if (next_start_idx < input_chunks_.count()) {
       current_batch_idx_++;
       if (OB_FAIL(set_phase(OB_EMBEDDING_TASK_INIT))) {
-        LOG_WARN("failed to set phase to INIT for next batch", K(ret), K(*this));
       }
     } else {
       if (OB_FAIL(complete_task(OB_EMBEDDING_TASK_DONE, OB_SUCCESS, true))) {
-        LOG_WARN("failed to handle task success", K(ret), K(*this));
       }
     }
   }
@@ -685,7 +657,6 @@ int ObEmbeddingTask::get_async_result(ObArray<float*> &vectors)
     } else {
       vectors.reset();
       if (OB_FAIL(vectors.assign(output_vectors_))) {
-        LOG_WARN("failed to assign output_vectors", K(ret), K(*this));
       }
     }
   }
@@ -698,10 +669,8 @@ int ObEmbeddingTask::send_http_request_async(const char *json_data, int64_t json
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_http_request(json_data, json_len))) {
-    LOG_WARN("failed to init async http request", K(ret), K(*this));
   } else {
     if (OB_FAIL(set_phase(OB_EMBEDDING_TASK_HTTP_SENT))) {
-      LOG_WARN("failed to set phase to HTTP_SENT", K(ret), K(*this));
     } else {
       http_send_time_us_ = ObTimeUtility::current_time();
       curl_request_in_progress_ = true;
@@ -920,7 +889,6 @@ int ObEmbeddingTask::process_http_response()
     LOG_WARN("no HTTP response data available", K(ret), K(*this));
   } else {
     if (OB_FAIL(parse_embedding_response(http_response_data_, http_response_data_size_))) {
-      LOG_WARN("failed to parse embedding response", K(ret), K(*this));
     }
   }
   
@@ -984,7 +952,6 @@ int ObEmbeddingTask::do_work(ThreadPoolType *thread_pool)
             if (OB_NOT_NULL(thread_pool)) {
               if (OB_FAIL(reschedule(thread_pool))) {
                 if (OB_FAIL(handle_reschedule_failure(thread_pool, ret))) {
-                  LOG_WARN("failed to handle reschedule failure", K(ret));
                 }
                 HANDLE_TASK_FAILURE_AND_CLEANUP(this, thread_pool, ret, "failed to reschedule task");
               }
@@ -1008,7 +975,6 @@ int ObEmbeddingTask::do_work(ThreadPoolType *thread_pool)
           LOG_DEBUG("Finalizing PARSED task", K(*this));
           if (OB_FAIL(check_async_progress())) {
             if (OB_FAIL(complete_task(OB_EMBEDDING_TASK_DONE, ret, true))) {
-              LOG_WARN("failed to mark task as failed", K(ret), K(*this));
             }
             HANDLE_TASK_FAILURE_AND_CLEANUP(this, thread_pool, ret, "failed to finalize task");
           } else if (is_finished()) {
@@ -1061,11 +1027,9 @@ int ObEmbeddingTask::set_phase(ObEmbeddingTaskPhase new_phase)
   if (OB_SUCC(ret) && should_callback) {
     int cb_ret = maybe_callback();
     if (OB_SUCCESS != cb_ret) {
-      LOG_WARN("failed to maybe callback", K(cb_ret));
     }
     int tmp_ret = wake_up();
     if (OB_SUCCESS != tmp_ret) {
-      LOG_WARN("failed to wake up after callback", K(tmp_ret));
     }
     release_if_managed();
   }
@@ -1084,8 +1048,6 @@ int ObEmbeddingTask::complete_task(ObEmbeddingTaskPhase new_phase, int result_co
   }
 
   if (OB_FAIL(set_phase(new_phase))) {
-    LOG_WARN("invalid phase transition for task completion", K(ret),
-            "to", ObEmbeddingTaskPhaseManager::get_phase_string(new_phase));
   } else {
     ObThreadCondGuard guard(task_cond_);
     if (finished && new_phase == OB_EMBEDDING_TASK_DONE) {
@@ -1170,13 +1132,10 @@ int ObEmbeddingTaskHandler::start()
   int64_t max_thread_cnt = MTL_CPU_COUNT() * THREAD_FACTOR;
   max_thread_cnt = OB_MAX(max_thread_cnt, MIN_THREAD_COUNT);
   if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::VectorTaskPool, tg_id_))) {
-    LOG_WARN("TG_CREATE_TENANT failed for embedding thread pool", KR(ret));
   } else if (OB_FAIL(TG_START(tg_id_))) {
-    LOG_WARN("TG_START failed for embedding thread pool", KR(ret));
   } else if (OB_FAIL(TG_SET_ADAPTIVE_THREAD(tg_id_, MIN_THREAD_COUNT,
                                             max_thread_cnt))) {  // must be call TG_SET_ADAPTIVE_THREAD
   } else if (OB_FAIL(TG_SET_HANDLER_AND_START(tg_id_, *this))) {
-    LOG_WARN("TG_SET_HANDLER_AND_START failed", KR(ret), K_(tg_id));
   } else {
     LOG_INFO("succ to start embedding task handler", K_(tg_id));
   }
@@ -1199,7 +1158,6 @@ void ObEmbeddingTaskHandler::wait()
     TG_WAIT(tg_id_);
   }
   if (OB_FAIL(wait_all_tasks_finished())) {
-    LOG_WARN("failed to wait all tasks finished", K(ret));
   }
 }
 
@@ -1233,7 +1191,6 @@ int ObEmbeddingTaskHandler::wait_all_tasks_finished(int64_t timeout_us)
                                                       K(elapsed_time),
                                                       K(timeout_us));
       if (OB_FAIL(force_drop_all_remaining_tasks())) {
-        LOG_ERROR("failed to force drop remaining tasks", K(ret));
       }
     }
     ob_usleep(100 * 1000); // 100ms
@@ -1262,7 +1219,6 @@ int ObEmbeddingTaskHandler::force_drop_all_remaining_tasks()
       ObEmbeddingTask *task = active_tasks_.at(i);
       if (OB_NOT_NULL(task)) {
         if (OB_FAIL(task->mark_task_failed(OB_TIMEOUT))) {
-          LOG_WARN("failed to update task status to failed", K(ret), K(*task));
         } else {
           LOG_INFO("updated task status to failed", K(*task));
         }
@@ -1288,7 +1244,6 @@ int ObEmbeddingTaskHandler::get_all_active_tasks(common::ObArray<ObEmbeddingTask
     ObEmbeddingTask *task = active_tasks_.at(i);
     if (OB_NOT_NULL(task)) {
       if (OB_FAIL(task_list.push_back(task))) {
-        LOG_WARN("failed to push back task", K(ret), K(i));
       }
     }
   }
@@ -1303,7 +1258,6 @@ void ObEmbeddingTaskHandler::destroy()
   if (ATOMIC_LOAD(&task_ref_cnt_) > 0) {
     int ret = OB_SUCCESS;
     if (OB_FAIL(force_drop_all_remaining_tasks())) {
-      LOG_WARN("failed to force drop remaining tasks during destroy", K(ret));
     }
   }
   
@@ -1369,7 +1323,6 @@ void ObEmbeddingTaskHandler::handle(void *task)
     LOG_INFO("handling embedding task", K_(task_ref_cnt), KPC(embedding_task));
     
     if (OB_FAIL(embedding_task->do_work(this))) {
-      LOG_WARN("failed to do work for embedding task", K(ret), KPC(embedding_task));
     }
   }
 
@@ -1396,7 +1349,6 @@ void ObEmbeddingTaskHandler::handle_drop(void *task)
 
     if (embedding_task->get_task_id() != OB_INVALID_ID) {
       if (OB_FAIL(embedding_task->mark_task_failed(OB_ERR_UNEXPECTED))) {
-        LOG_WARN("failed to update task status to failed", K(ret), KPC(embedding_task));
       }
     }
 
@@ -1420,7 +1372,6 @@ int ObEmbeddingTaskHandler::add_task_to_tracking(ObEmbeddingTask *task)
   if (OB_NOT_NULL(task)) {
     common::ObSpinLockGuard guard(task_list_lock_);
     if (OB_FAIL(active_tasks_.push_back(task))) {
-      LOG_WARN("failed to add task to tracking", K(ret), KP(task));
     } else {
       LOG_DEBUG("task added to tracking", KP(task), K_(task_ref_cnt));
     }
@@ -1441,7 +1392,6 @@ int ObEmbeddingTaskHandler::remove_task_from_tracking(ObEmbeddingTask *task)
       if (active_tasks_.at(i) == task) {
         found = true;
         if (OB_FAIL(active_tasks_.remove(i))) {
-          LOG_WARN("failed to remove task from tracking", K(ret), KP(task));
         } else {
           LOG_DEBUG("task removed from tracking", KP(task), K_(task_ref_cnt));
         }
@@ -1588,7 +1538,6 @@ int ObEmbeddingTask::maybe_callback()
 
     if (OB_UNLIKELY(internal_error_code_ != OB_SUCCESS)) {
       if (OB_FAIL(cb_handle_->process())) {
-        LOG_WARN("Failed to process IO callback on error", K(ret));
       }
     } else {
       if (OB_SUCC(ret) && current_vectors_count > 0 &&
@@ -1597,7 +1546,6 @@ int ObEmbeddingTask::maybe_callback()
                   K(current_vectors_count), K(CALLBACK_BATCH_SIZE), K(total_chunks),
                   K(process_callback_offset_));
         if (OB_FAIL(cb_handle_->process())) {
-          LOG_WARN("Failed to process IO callback", K(ret));
         } else {
           process_callback_offset_ = current_vectors_count;
           LOG_DEBUG("Updated process_callback_offset_", K(process_callback_offset_));
@@ -1609,7 +1557,6 @@ int ObEmbeddingTask::maybe_callback()
         LOG_DEBUG("Calling IO callback on task completion",
                   K(current_vectors_count), K(total_chunks), K(process_callback_offset_));
         if (OB_FAIL(cb_handle_->process())) {
-          LOG_WARN("Failed to process IO callback on completion", K(ret));
         } else {
           process_callback_offset_ = total_chunks;
           LOG_DEBUG("Updated process_callback_offset_ to completion", K(process_callback_offset_));
@@ -1646,8 +1593,7 @@ int ObEmbeddingTask::init_curl_handler(const ObString &model_url, const ObString
     curl_headers_ = curl_slist_append(curl_headers_, "Content-Type: application/json");
     curl_headers_ = curl_slist_append(curl_headers_, auth_header);
     char *model_url_cstr = nullptr;
-    if (OB_FAIL(ob_dup_cstring(allocator_, model_url, model_url_cstr))) { // add \0
-      LOG_WARN("failed to duplicate model url", K(ret));
+    if (OB_FAIL(ob_dup_cstring(allocator_, model_url, model_url_cstr))) {
     } else if (OB_ISNULL(model_url_cstr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to duplicate model url", K(ret));
@@ -1691,7 +1637,6 @@ int ObEmbeddingTask::wait_for_completion()
       // do nothing
     } else {
       if (OB_FAIL(task_cond_.wait(wait_for_completion_timeout_us_ / 1000))) {
-        LOG_WARN("failed to wait for completion", K(ret));
       }
     }
   }
@@ -1707,7 +1652,6 @@ int ObEmbeddingTask::wake_up()
   } else {
     ObThreadCondGuard guard(task_cond_);
     if (OB_FAIL(task_cond_.signal())) {
-      LOG_WARN("failed to signal completion cond", K(ret));
     }
   }
   return ret;

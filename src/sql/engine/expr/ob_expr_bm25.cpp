@@ -78,7 +78,6 @@ int ObExprBM25::eval_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, ObD
         doc_token_cnt_datum,
         avg_doc_token_cnt_datum,
         related_token_cnt_datum))) {
-      LOG_WARN("evaluate parameter value failed", K(ret));
     } else if (OB_UNLIKELY(token_doc_cnt_datum->is_null() || total_doc_cnt_datum->is_null()
         || doc_token_cnt_datum->is_null() || avg_doc_token_cnt_datum->is_null() || related_token_cnt_datum->is_null())) {
       ret = OB_ERR_UNEXPECTED;
@@ -114,7 +113,6 @@ int ObExprBM25::eval_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ctx, ObD
         token_weight_datum,
         avg_doc_token_cnt_datum,
         related_token_cnt_datum))) {
-      LOG_WARN("evaluate parameter value failed", K(ret));
     } else if (OB_UNLIKELY(token_doc_cnt_datum->is_null() || total_doc_cnt_datum->is_null()
         || doc_length_datum->is_null() || token_weight_datum->is_null()
         || avg_doc_token_cnt_datum->is_null() || related_token_cnt_datum->is_null())) {
@@ -158,7 +156,6 @@ int ObExprBM25::eval_batch_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ct
       doc_token_cnt_datum,
       avg_doc_token_cnt_datum,
       related_token_cnt_datum))) {
-        LOG_WARN("evaluate parameter value failed", K(ret));
     } else if (OB_UNLIKELY(token_doc_cnt_datum.at(0)->is_null() || total_doc_cnt_datum.at(0)->is_null()
         || avg_doc_token_cnt_datum.at(0)->is_null())) {
         ret = OB_ERR_UNEXPECTED;
@@ -207,7 +204,6 @@ int ObExprBM25::eval_batch_bm25_relevance_expr(const ObExpr &expr, ObEvalCtx &ct
       token_weight_datum,
       avg_doc_token_cnt_datum,
       related_token_cnt_datum))) {
-        LOG_WARN("evaluate parameter value failed", K(ret));
     } else if (OB_UNLIKELY(token_doc_cnt_datum.at(0)->is_null() || total_doc_cnt_datum.at(0)->is_null()
         || token_weight_datum.at(0)->is_null() || avg_doc_token_cnt_datum.at(0)->is_null())) {
         ret = OB_ERR_UNEXPECTED;

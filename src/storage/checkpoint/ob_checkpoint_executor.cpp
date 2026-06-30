@@ -174,7 +174,6 @@ int ObCheckpointExecutor::update_clog_checkpoint()
       SCN checkpoint_scn;
       checkpoint_scn.set_max();
       if (OB_FAIL(freezer->get_max_consequent_callbacked_scn(checkpoint_scn))) {
-        STORAGE_LOG(WARN, "get_max_consequent_callbacked_scn failed", K(ret), K(freezer->get_ls_id()));
       } else {
         // used to record which handler provide the smallest rec_scn
         int min_rec_scn_service_type_index = 0;
@@ -209,7 +208,6 @@ int ObCheckpointExecutor::update_clog_checkpoint()
                         K(checkpoint_scn), K(checkpoint_scn_in_ls_meta));
           }
         } else if (OB_FAIL(ls_->set_clog_checkpoint(clog_checkpoint_lsn, checkpoint_scn, true/*write_slog*/))) {
-          STORAGE_LOG(WARN, "set clog checkpoint failed", K(ret), K(clog_checkpoint_lsn), K(checkpoint_scn), K(ls_id));
         } else {
           update_clog_checkpoint_times_++;
           FLOG_INFO("[CHECKPOINT] update clog checkpoint successfully",
@@ -238,13 +236,11 @@ int ObCheckpointExecutor::advance_checkpoint_by_flush(const share::SCN input_rec
   RLockGuard guard(rwlock_);
   if (update_checkpoint_enabled_) {
     if (OB_FAIL(loghandler_->get_max_decided_scn(max_decided_scn))) {
-      STORAGE_LOG(WARN, "failed to get_max_decided_scn", K(ls_id));
     } else if (!recycle_scn.is_valid() && OB_FAIL(calculate_recycle_scn_(max_decided_scn, recycle_scn))) {
       if (OB_EAGAIN != ret) {
         STORAGE_LOG(WARN, "calculate recycle scn failed", KR(ret));
       }
     } else if (OB_FAIL(check_need_flush_(max_decided_scn, recycle_scn))) {
-      STORAGE_LOG(WARN, "no need flush");
     } else {
       STORAGE_LOG(INFO, "start flush", K(recycle_scn), K(input_recycle_scn), K(ls_id));
       for (int i = 1; i < ObLogBaseType::MAX_LOG_BASE_TYPE; i++) {
@@ -347,9 +343,7 @@ int ObCheckpointExecutor::calculate_recycle_scn_(const SCN max_decided_scn, SCN 
     SCN min_recycle_scn;
     SCN expected_recycle_scn;
     if (OB_FAIL(calculate_min_recycle_scn_(clog_checkpoint_lsn, min_recycle_scn))) {
-      STORAGE_LOG(WARN, "calculate min recycle scn failed", KR(ret), K(ls_id));
     } else if (OB_FAIL(calculate_expected_recycle_scn_(clog_checkpoint_lsn, expected_recycle_scn))) {
-      STORAGE_LOG(WARN, "calculate expected recycle scn failed", KR(ret), K(ls_id));
     } else {
       recycle_scn = MIN(max_decided_scn, expected_recycle_scn);
       if (recycle_scn < min_recycle_scn) {
@@ -407,7 +401,6 @@ int ObCheckpointExecutor::calculate_min_recycle_scn_(const LSN clog_checkpoint_l
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "get_log_service failed", K(ret));
   } else if (OB_FAIL(log_service->get_palf_disk_usage(used_size, total_size))) {
-    STORAGE_LOG(WARN, "get_disk_usage failed", K(ret), K(used_size), K(total_size));
   } else {
     int64_t ls_count = ls_service->get_ls_count();
     if (ls_count <= 0) {
@@ -419,7 +412,6 @@ int ObCheckpointExecutor::calculate_min_recycle_scn_(const LSN clog_checkpoint_l
 
     LSN min_recycle_lsn = clog_checkpoint_lsn + (total_size * ls_min_recycle_clog_percentage / 100);
     if (OB_FAIL(loghandler_->locate_by_lsn_coarsely(min_recycle_lsn, min_recycle_scn))) {
-      STORAGE_LOG(WARN, "locate min_recycle_scn by lsn failed", KR(ret));
     }
   }
   return ret;
@@ -431,11 +423,9 @@ int ObCheckpointExecutor::calculate_expected_recycle_scn_(const palf::LSN clog_c
   int ret = OB_SUCCESS;
   LSN end_lsn;
   if (OB_FAIL(loghandler_->get_end_lsn(end_lsn))) {
-    STORAGE_LOG(WARN, "get end lsn failed", K(ret));
   } else {
     LSN calcu_recycle_lsn = clog_checkpoint_lsn + ((end_lsn - clog_checkpoint_lsn) * CLOG_GC_PERCENT / 100);
     if (OB_FAIL(loghandler_->locate_by_lsn_coarsely(calcu_recycle_lsn, expected_recycle_scn))) {
-      STORAGE_LOG(WARN, "locate_by_lsn_coarsely failed", K(calcu_recycle_lsn));
     }
   }
   return ret;
@@ -506,7 +496,6 @@ int ObCheckpointExecutor::traversal_flush() const
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "ls_tx_ser should not be null", K(ret), K(ls_->get_ls_id()));
   } else if (OB_FAIL(ls_tx_ser->traversal_flush())) {
-    STORAGE_LOG(WARN, "ls_tx_ser flush failed", K(ret), K(ls_->get_ls_id()));
   }
   return ret;
 }

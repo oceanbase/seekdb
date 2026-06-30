@@ -36,7 +36,6 @@ int ObNetEndpointPredictIngressArg::assign(const ObNetEndpointPredictIngressArg 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(endpoint_key_.assign(other.endpoint_key_))) {
-    LOG_WARN("fail to assign endpoint_key", KR(ret));
   }
   return ret;
 }
@@ -48,7 +47,6 @@ int ObNetEndpointSetIngressArg::assign(const ObNetEndpointSetIngressArg &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(endpoint_key_.assign(other.endpoint_key_))) {
-    LOG_WARN("fail to assign endpoint_key", KR(ret));
   } else {
     assigned_bw_ = other.assigned_bw_;
   }

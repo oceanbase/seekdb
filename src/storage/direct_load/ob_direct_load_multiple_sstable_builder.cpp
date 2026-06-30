@@ -105,16 +105,13 @@ int ObDirectLoadMultipleSSTableBuilder::DataBlockFlushCallback::write(char *buf,
     entry.size_ = buf_size;
     ++data_block_count_;
     if (OB_FAIL(index_block_writer_->append_entry(entry))) {
-      LOG_WARN("fail to append entry", KR(ret));
     } else if (!need_write_rowkey_) {
       // do nothing
     } else if (data_block_count_ >= data_block_count_per_rowkey_ || is_mark_close_) {
       // write rowkey
       RowType row;
       if (OB_FAIL(data_block_writer_->get_flush_last_row(row))) {
-        LOG_WARN("fail to get flush last row", KR(ret));
       } else if (OB_FAIL(rowkey_block_writer_->append_row(row.rowkey_))) {
-        LOG_WARN("fail to append row", KR(ret));
       } else {
         data_block_count_ = 0;
       }
@@ -154,40 +151,29 @@ int ObDirectLoadMultipleSSTableBuilder::init(const ObDirectLoadMultipleSSTableBu
     param_ = param;
     int64_t dir_id = -1;
     if (OB_FAIL(param_.file_mgr_->alloc_dir(dir_id))) {
-      LOG_WARN("fail to alloc dir", KR(ret));
     } else if (OB_FAIL(param_.file_mgr_->alloc_file(dir_id, index_file_handle_))) {
-      LOG_WARN("fail to alloc file", KR(ret));
     } else if (OB_FAIL(param_.file_mgr_->alloc_file(dir_id, data_file_handle_))) {
-      LOG_WARN("fail to alloc file", KR(ret));
     } else if (OB_FAIL(param_.file_mgr_->alloc_file(dir_id, rowkey_file_handle_))) {
-      LOG_WARN("fail to alloc file", KR(ret));
     } else if (OB_FAIL(callback_.init(&index_block_writer_,
                                       &data_block_writer_,
                                       &rowkey_block_writer_,
                                       param_.table_data_desc_.num_per_sample_,
                                       ObDirectLoadSampleMode::is_data_block_sample(param_.table_data_desc_.sample_mode_)
                                       ))) {
-      LOG_WARN("fail to init data block callback", KR(ret));
     } else if (OB_FAIL(index_block_writer_.init(param_.table_data_desc_.sstable_index_block_size_,
                                                 ObCompressorType::NONE_COMPRESSOR))) {
-      LOG_WARN("fail to init index block writer", KR(ret));
     } else if (OB_FAIL(data_block_writer_.init(param_.table_data_desc_.sstable_data_block_size_,
                                                param_.table_data_desc_.compressor_type_,
                                                param_.extra_buf_, param_.extra_buf_size_,
                                                &callback_))) {
-      LOG_WARN("fail to init data block writer", KR(ret));
     } else if (OB_FAIL(rowkey_block_writer_.init(param_.table_data_desc_.sstable_data_block_size_,
                                                  param_.table_data_desc_.compressor_type_,
                                                  param_.extra_buf_,
                                                  param_.extra_buf_size_,
                                                  nullptr /*callback*/))) {
-      LOG_WARN("fail to init rowkey block writer", KR(ret));
     } else if (OB_FAIL(index_block_writer_.open(index_file_handle_))) {
-      LOG_WARN("fail to open file", KR(ret));
     } else if (OB_FAIL(data_block_writer_.open(data_file_handle_))) {
-      LOG_WARN("fail to open file", KR(ret));
     } else if (OB_FAIL(rowkey_block_writer_.open(rowkey_file_handle_))) {
-      LOG_WARN("fail to open file", KR(ret));
     } else {
       first_rowkey_.set_min_rowkey();
       last_rowkey_.set_min_rowkey();
@@ -216,9 +202,7 @@ int ObDirectLoadMultipleSSTableBuilder::append_row(const ObTabletID &tablet_id,
     if (OB_FAIL(row_.from_datum_row(tablet_id,
                                     datum_row,
                                     param_.table_data_desc_.rowkey_column_num_))) {
-      LOG_WARN("fail to from datum row", KR(ret));
     } else if (OB_FAIL(append_row(row_))) {
-      LOG_WARN("fail to append row", KR(ret), K(row_));
     }
   }
   return ret;
@@ -241,11 +225,8 @@ int ObDirectLoadMultipleSSTableBuilder::append_row(const RowType &row)
     LOG_WARN("invalid args", KR(ret), K(param_), K(row));
   } else {
     if (OB_FAIL(check_rowkey_order(row.rowkey_))) {
-      LOG_WARN("fail to check rowkey order", KR(ret), K(row.rowkey_));
     } else if (OB_FAIL(data_block_writer_.append_row(row))) {
-      LOG_WARN("fail to append row", KR(ret));
     } else if (OB_FAIL(save_rowkey(row.rowkey_))) {
-      LOG_WARN("fail to save rowkey", KR(ret), K(row.rowkey_));
     }
   }
   return ret;
@@ -256,7 +237,6 @@ int ObDirectLoadMultipleSSTableBuilder::check_rowkey_order(const RowkeyType &row
   int ret = OB_SUCCESS;
   int cmp_ret = 0;
   if (OB_FAIL(rowkey.compare(last_rowkey_, *param_.datum_utils_, cmp_ret))) {
-    LOG_WARN("fail to compare rowkey", KR(ret));
   } else if (OB_UNLIKELY(0 == cmp_ret)) {
     ret = OB_ERR_PRIMARY_KEY_DUPLICATE;
     LOG_WARN("rowkey duplicate", KR(ret), K(last_rowkey_), K(rowkey));
@@ -274,7 +254,6 @@ int ObDirectLoadMultipleSSTableBuilder::save_rowkey(const RowkeyType &rowkey)
   if (first_rowkey_.is_min_rowkey() && OB_FAIL(first_rowkey_.deep_copy(rowkey, allocator_))) {
     LOG_WARN("fail to deep copy rowkey", KR(ret));
   } else if (OB_FAIL(last_rowkey_.deep_copy(rowkey, last_rowkey_allocator_))) {
-    LOG_WARN("fail to deep copy rowkey", KR(ret));
   } else if (ObDirectLoadSampleMode::is_row_sample(param_.table_data_desc_.sample_mode_) &&
              0 == data_block_writer_.get_item_count() % param_.table_data_desc_.num_per_sample_ &&
              OB_FAIL(rowkey_block_writer_.append_row(rowkey))) {
@@ -301,11 +280,8 @@ int ObDirectLoadMultipleSSTableBuilder::close()
         OB_FAIL(rowkey_block_writer_.append_row(last_rowkey_))) {
       LOG_WARN("fail to append rowkey", KR(ret));
     } else if (OB_FAIL(data_block_writer_.close())) {
-      LOG_WARN("fail to close data block writer", KR(ret));
     } else if (OB_FAIL(index_block_writer_.close())) {
-      LOG_WARN("fail to close index block writer", KR(ret));
     } else if (OB_FAIL(rowkey_block_writer_.close())) {
-      LOG_WARN("fail to close rowkey block writer", KR(ret));
     } else {
       is_closed_ = true;
     }
@@ -352,24 +328,17 @@ int ObDirectLoadMultipleSSTableBuilder::get_tables(ObDirectLoadTableHandleArray 
     create_param.start_key_ = first_rowkey_;
     create_param.end_key_ = last_rowkey_;
     if (OB_FAIL(fragment.index_file_handle_.assign(index_file_handle_))) {
-      LOG_WARN("fail to assign index file handle", KR(ret));
     } else if (OB_FAIL(fragment.data_file_handle_.assign(data_file_handle_))) {
-      LOG_WARN("fail to assign data file handle", KR(ret));
     } else if (OB_FAIL(fragment.rowkey_file_handle_.assign(rowkey_file_handle_))) {
-      LOG_WARN("fail to assign rowkey file handle", KR(ret));
     } else if (OB_FAIL(create_param.fragments_.push_back(fragment))) {
-      LOG_WARN("fail to push back", KR(ret));
     }
     if (OB_SUCC(ret)) {
       ObDirectLoadTableHandle sstable_handle;
       ObDirectLoadMultipleSSTable *sstable = nullptr;
       if (OB_FAIL(table_manager->alloc_multiple_sstable(sstable_handle))) {
-        LOG_WARN("fail to alloc sstable", KR(ret));
       } else if (FALSE_IT(sstable = static_cast<ObDirectLoadMultipleSSTable*>(sstable_handle.get_table()))) {        
       } else if (OB_FAIL(sstable->init(create_param))) {
-        LOG_WARN("fail to init sstable", KR(ret), K(create_param));
       } else if (OB_FAIL(table_array.add(sstable_handle))) {
-        LOG_WARN("fail to push back ssstable", KR(ret));
       }
     }
   }

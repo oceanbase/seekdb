@@ -48,9 +48,7 @@ int get_host_hash(char *buf, const int64_t buf_len)
   if (!addr.ip_to_string(ip_buf, sizeof(ip_buf))) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ObHashUtil::hash(OB_HASH_SH256, ip_buf, strlen(ip_buf), hash_buf, sizeof(hash_buf), out_len))) {
-    LOG_WARN("Failed to get host hash", K(ret));
   } else if (OB_FAIL(to_hex_cstr(hash_buf, out_len, buf, buf_len))) {
-    LOG_WARN("Failed to hex host hash", K(ret));
   }
   return ret;
 }
@@ -69,11 +67,8 @@ int generate_id(char *id, const int64_t id_len)
   addr.ip_to_string(buf, sizeof(buf));
   pos = strlen(buf);
   if (OB_FAIL(databuff_printf(buf, sizeof(buf) - pos, pos, "%ld%ld", port, ts))) {
-    LOG_WARN("Failed to concat ip and ts", K(ret));
   } else if (OB_FAIL(ObHashUtil::hash(OB_HASH_SH256, buf, strlen(buf), hash_buf, sizeof(hash_buf), out_len))) {
-    LOG_WARN("Failed to hash id", K(ret));
   } else if (OB_FAIL(to_hex_cstr(hash_buf, out_len, id, id_len))) {
-    LOG_WARN("Failed to hex id", K(ret));
   }
 
   return ret;
@@ -184,7 +179,6 @@ int generate_telemetry_json(const char* reporter, const char* event_name, ObIAll
   ObJsonBuffer j_buf(allocator);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(root.print(j_buf, false))) {
-    LOG_WARN("Failed to get json string", K(ret));
   } else {
     json_str.assign_ptr(j_buf.ptr(), j_buf.length());
   }
@@ -307,7 +301,6 @@ int report_telemetry(const char *reporter, const char *event_name)
   common::ObArenaAllocator allocator;
   ObString json_str;
   if (OB_FAIL(generate_telemetry_json(reporter, event_name, &allocator, json_str))) {
-    LOG_WARN("Failed to generate telemetry json", K(ret));
   } else if (is_telemetry_enabled()
              && OB_FAIL(send_telemetry(TELEMETRY_URL, json_str))) {
     LOG_WARN("Failed to send telemetry", K(ret));

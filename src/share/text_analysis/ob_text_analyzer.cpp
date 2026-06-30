@@ -49,7 +49,6 @@ int ObITextAnalyzer::init(const ObTextAnalysisCtx &ctx, ObIAllocator &allocator)
     LOG_WARN("invalid text analysis ctx", K(ret), K(ctx));
   } else if (FALSE_IT(allocator_ = &allocator)) {
   } else if (OB_FAIL(inner_init(ctx, allocator))) {
-    LOG_WARN("failed to inner init analyzer", K(ret), K(ctx));
   } else {
     ctx_ = &ctx;
     is_inited_ = true;
@@ -72,7 +71,6 @@ int ObITextAnalyzer::add_tokenizer(const ObTextTokenizer::TokenizerType &type)
     switch (type) {
     case ObTextTokenizer::WHITESPACE: {
       if (OB_FAIL(add_token_stream<ObTextWhitespaceTokenizer>(token_stream))) {
-        LOG_WARN("failed to add token stread", K(ret));
       }
       break;
     }
@@ -82,8 +80,6 @@ int ObITextAnalyzer::add_tokenizer(const ObTextTokenizer::TokenizerType &type)
     }
     }
     if (FAILEDx(analyze_pipeline_.push_back(token_stream))) {
-      LOG_WARN("failed to add tokenizer to analyse pipeline", K(ret),
-          K(type), KPC(token_stream), K_(analyze_pipeline));
     } 
   }
   return ret;
@@ -102,19 +98,16 @@ int ObITextAnalyzer::add_normalizer(
     switch (type) {
     case ObTokenNormalizer::STOPWORD_FILTER: {
       if (OB_FAIL(add_token_stream<ObTokenStopWordNormalizer>(token_stream))) {
-        LOG_WARN("failed to add token stop word filter", K(ret));
       }
       break;
     }
     case ObTokenNormalizer::TEXT_GROUPING_FILTER: {
       if (OB_FAIL(add_token_stream<ObTextTokenGroupNormalizer>(token_stream))) {
-        LOG_WARN("failed to add text grouping filter", K(ret));
       }
       break;
     }
     case ObTokenNormalizer::ENG_BASIC_NORM: {
       if (OB_FAIL(add_token_stream<ObBasicEnglishNormalizer>(token_stream))) {
-        LOG_WARN("failed to add basic english normalizer", K(ret));
       }
       break;
     }
@@ -127,10 +120,7 @@ int ObITextAnalyzer::add_normalizer(
     if (OB_SUCC(ret)) {
       ObTokenNormalizer *normalizer = static_cast<ObTokenNormalizer *>(token_stream);
       if (OB_FAIL(normalizer->init(ctx.cs_, *get_tail_token_stream()))) {
-        LOG_WARN("failed to init normalizer", K(ret), K(ctx), K(type), KPC(normalizer));
       } else if (OB_FAIL(analyze_pipeline_.push_back(normalizer))) {
-        LOG_WARN("failed to add normalizer to analyse pipeline", K(ret),
-            K(type), K(ctx), KPC(normalizer), K_(analyze_pipeline));
       }
     }
   }
@@ -164,11 +154,9 @@ int ObEnglishTextAnalyzer::inner_init(const ObTextAnalysisCtx &ctx, ObIAllocator
   int ret = OB_SUCCESS;
   UNUSEDx(ctx); // TODO: generate specific analyse pipeline by ctx
   if (OB_FAIL(add_tokenizer(ObTextTokenizer::WHITESPACE))) {
-    LOG_WARN("failed to add white space tokenizer", K(ret));
   } else if (ctx.filter_stopword_ && OB_FAIL(add_normalizer(ObTokenNormalizer::STOPWORD_FILTER, ctx))) {
     LOG_WARN("failed to add stop word filter", K(ret));
   } else if (OB_FAIL(add_normalizer(ObTokenNormalizer::ENG_BASIC_NORM, ctx))) {
-    LOG_WARN("failed to add basic english normalizer", K(ret));
   } else if (ctx.need_grouping_ && OB_FAIL(add_normalizer(ObTokenNormalizer::TEXT_GROUPING_FILTER, ctx))) {
     LOG_WARN("failed to add text grouping filter", K(ret));
   }
@@ -185,7 +173,6 @@ int ObEnglishTextAnalyzer::analyze(const ObDatum &document, ObITokenStream *&tok
     get_tail_token_stream()->reuse();
     ObTextTokenizer *tokenizer = static_cast<ObTextTokenizer *>(analyze_pipeline_.at(0));
     if (OB_FAIL(tokenizer->open(document, ctx_->cs_))) {
-      LOG_WARN("failed to open tokenizer", K(ret), KPC_(ctx));
     } else {
       token_stream = get_tail_token_stream();
     }

@@ -40,7 +40,6 @@ int ObP2PDatahubMsgBase::broadcast(
   // mirroring ObPxP2pDhMsgP::process (PX_P2P_DH.process_msg deep-copies the msg).
   for (int i = 0; i < target_addrs.count() && OB_SUCC(ret); ++i) {
     if (OB_FAIL(PX_P2P_DH.process_msg(*this))) {
-      LOG_WARN("fail to process p2p dh msg locally", K(ret));
     }
   }
   return ret;
@@ -180,7 +179,6 @@ int ObP2PDatahubMsgBase::proc_filter_empty<IntegerUniVec>(IntegerUniVec *res_vec
             ++total_count;
             return OB_SUCCESS;
           }))) {
-    LOG_WARN("fail to do for each operation", K(ret));
   }
   return ret;
 }

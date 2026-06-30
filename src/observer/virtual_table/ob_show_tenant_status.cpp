@@ -82,7 +82,6 @@ int ObShowTenantStatus::add_tenant_status(const ObAddr &server_addr,
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(scanner_.add_row(cur_row_))) {
-      SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
     }
   }
   return ret;
@@ -106,12 +105,10 @@ int ObShowTenantStatus::add_all_tenant_status()
     const ObTenantSchema *tenant_schema = NULL;
     const ObSysVariableSchema *sys_variable_schema = NULL;
     if (OB_FAIL(schema_guard_->get_tenant_info(tenant_schema))) {
-      SERVER_LOG(WARN, "get_tenant_info failed", K(ret));
     } else if (OB_ISNULL(tenant_schema)) {
       ret = OB_TENANT_NOT_EXIST;
       SERVER_LOG(WARN, "tenant not exist!");
     } else if (OB_FAIL(schema_guard_->get_sys_variable_schema( sys_variable_schema))) {
-      SERVER_LOG(WARN, "get sys variable schema failed", K(ret));
     } else if (OB_ISNULL(sys_variable_schema)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "sys variable schema is null", K(ret));
@@ -120,7 +117,6 @@ int ObShowTenantStatus::add_all_tenant_status()
       const ObAddr server_ip = server.get_self();
       if (OB_FAIL(add_tenant_status(server_ip, *tenant_schema, *sys_variable_schema,
                                     cells, output_column_ids_.count()))) {
-        SERVER_LOG(WARN, "failed to add table constraint of Tenant schema!", K(ret));
       } else {
         scanner_it_ = scanner_.begin();
         start_to_read_ = true;
@@ -142,7 +138,6 @@ int ObShowTenantStatus::inner_get_next_row(ObNewRow *&row)
   } else {
     if (!start_to_read_) {
       if (OB_FAIL(add_all_tenant_status())) {
-        SERVER_LOG(WARN, "failed to add all tenant status!", K(ret));
       }
     }
     if (OB_SUCCESS == ret && start_to_read_) {

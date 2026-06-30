@@ -42,14 +42,11 @@ int ObCGScanner::init(
     LOG_WARN("Invalid argument to init ObCGScanner", K(ret), K(wrapper), K(iter_param));
   } else if (FALSE_IT(table_wrapper_ = wrapper)) {
   } else if (OB_FAIL(table_wrapper_.get_loaded_column_store_sstable(sstable_))) {
-    LOG_WARN("fail to get sstable", K(ret), K(wrapper));
   } else if (OB_UNLIKELY(!sstable_->is_normal_cg_sstable())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected not normal cg sstable", K(ret), KPC_(sstable));
   } else if (OB_FAIL(prefetcher_.init(get_type(), *sstable_, iter_param, access_ctx))) {
-    LOG_WARN("fail to init prefetcher, ", K(ret));
   } else if (OB_FAIL(table_wrapper_.get_merge_row_cnt(iter_param, data_row_cnt))) {
-    LOG_WARN("fail to get merge row cnt", K(ret), K(iter_param), K(sstable_row_cnt_), K(table_wrapper_));
   } else {
     iter_param_ = &iter_param;
     access_ctx_ = &access_ctx;
@@ -82,7 +79,6 @@ int ObCGScanner::switch_context(
     LOG_WARN("Invalid argument", K(ret), K(wrapper), K(iter_param));
   } else if (FALSE_IT(table_wrapper_ = wrapper)) {
   } else if (OB_FAIL(table_wrapper_.get_loaded_column_store_sstable(sstable_))) {
-    LOG_WARN("fail to get sstable", K(ret), K(wrapper));
   } else if (OB_UNLIKELY(!sstable_->is_normal_cg_sstable())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected not normal cg sstable", K(ret), KPC_(sstable));
@@ -90,12 +86,9 @@ int ObCGScanner::switch_context(
     int64_t data_row_cnt = 0;
     if (!prefetcher_.is_valid()) {
       if (OB_FAIL(prefetcher_.init(get_type(), *sstable_, iter_param, access_ctx))) {
-        LOG_WARN("fail to init prefetcher, ", K(ret));
       }
     } else if (OB_FAIL(prefetcher_.switch_context(get_type(), *sstable_, iter_param, access_ctx))) {
-      LOG_WARN("Fail to switch context for prefetcher", K(ret));
     } else if (OB_FAIL(table_wrapper_.get_merge_row_cnt(iter_param, data_row_cnt))) {
-      LOG_WARN("fail to get merge row cnt", K(ret), K(iter_param), K(data_row_cnt), K(table_wrapper_));
     }
     if (OB_SUCC(ret)) {
       iter_param_ = &iter_param;
@@ -157,7 +150,6 @@ int ObCGScanner::init_micro_scanner()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Fail to allocate memory for micro block row scanner", K(ret));
   } else if (OB_FAIL(micro_scanner_->init(*iter_param_, *access_ctx_, sstable_))) {
-    LOG_WARN("Fail to init micro scanner", K(ret));
   }
   return ret;
 }
@@ -192,7 +184,6 @@ int ObCGScanner::locate(
       if (bitmap->is_all_true()) {
         locate_bitmap = nullptr;
       } else if (OB_FAIL(bitmap->get_first_valid_idx(range, current_))) {
-        LOG_WARN("Fail to get first valid idx", K(ret), K_(is_reverse_scan), K(range));
       } else {
         if (is_reverse_scan_) {
           query_index_range_.end_row_id_ = current_;
@@ -204,9 +195,7 @@ int ObCGScanner::locate(
 
     if (OB_FAIL(ret) || end_of_scan()) {
     } else if (OB_FAIL(prefetcher_.locate(query_index_range_, locate_bitmap))) {
-      LOG_WARN("Fail to locate range", K(ret), K_(query_index_range), K_(current));
     } else if (OB_FAIL(prefetcher_.prefetch())) {
-      LOG_WARN("Fail to prefetch", K(ret));
     }
   }
   LOG_TRACE("[COLUMNSTORE] CGScanner locate range", K(ret), "tablet_id", iter_param_->tablet_id_, "cg_idx", iter_param_->cg_idx_,
@@ -224,11 +213,9 @@ int ObCGScanner::open_cur_data_block()
   } else {
     if (nullptr == micro_scanner_) {
       if (OB_FAIL(init_micro_scanner())) {
-        LOG_WARN("fail to init micro scanner", K(ret));
       }
     } else if (OB_UNLIKELY(!micro_scanner_->is_valid())) {
       if (OB_FAIL(micro_scanner_->switch_context(*iter_param_, *access_ctx_, sstable_))) {
-        LOG_WARN("Failed to switch new table context", K(ret), KPC(access_ctx_));
       }
     }
     if (OB_SUCC(ret) && is_new_range_) {
@@ -243,12 +230,10 @@ int ObCGScanner::open_cur_data_block()
       ObCSRange data_range;
       get_data_range(micro_info, data_range);
       if (OB_FAIL(micro_handle.get_micro_block_data(&macro_block_reader_, block_data))) {
-        LOG_WARN("Fail to get block data", K(ret), K(micro_handle));
       } else if (OB_FAIL(micro_scanner_->open_column_block(
                   micro_handle.macro_block_id_,
                   block_data,
                   data_range))) {
-        LOG_WARN("Fail to open micro_scanner", K(ret), K(micro_info), K(micro_handle), KPC(this));
       }
       if (OB_SUCC(ret)) {
         const ObCSRange &cs_range = micro_info.get_row_range();
@@ -295,7 +280,6 @@ int ObCGScanner::apply_filter(
       if (end_of_scan()) {
         ret = OB_ITER_END;
       } else if (OB_FAIL(prefetcher_.prefetch())) {
-        LOG_WARN("Fail to prefetch micro block", K(ret), K_(prefetcher));
       } else if (prefetcher_.read_wait()) {
         continue;
       } else if (OB_FAIL(inner_filter(parent, filter_info, parent_bitmap, result_bitmap))) {
@@ -349,7 +333,6 @@ int ObCGScanner::get_next_valid_block(sql::ObPushdownFilterExecutor *parent,
                       query_index_range_.end_row_id_,
                       prefetch_constant_type.is_always_true(),
                       count))) {
-            LOG_WARN("Fail to set bitmap batch", K(ret), K_(query_index_range), K(prefetch_constant_id));
           }
         } else {
           if (OB_FAIL(result_bitmap.set_bitmap_batch(
@@ -357,7 +340,6 @@ int ObCGScanner::get_next_valid_block(sql::ObPushdownFilterExecutor *parent,
                       MIN(query_index_range_.end_row_id_, prefetch_constant_id),
                       prefetch_constant_type.is_always_true(),
                       count))) {
-            LOG_WARN("Fail to set bitmap batch", K(ret), K_(query_index_range), K(prefetch_constant_id));
           }
         }
       }
@@ -377,7 +359,6 @@ int ObCGScanner::get_next_valid_block(sql::ObPushdownFilterExecutor *parent,
                         MIN(query_index_range_.end_row_id_, row_range.end_row_id_),
                         false,
                         count))) {
-            LOG_WARN("Fail to set bitmap batch", K(ret), K(row_range));
           } else if (parent && parent->is_enable_reorder() && filter_info.disable_bypass_) {
             filter_info.filter_->get_filter_realtime_statistics().add_filtered_row_cnt(count);
             filter_info.filter_->get_filter_realtime_statistics().add_skip_index_skip_mb_cnt(1);
@@ -388,7 +369,6 @@ int ObCGScanner::get_next_valid_block(sql::ObPushdownFilterExecutor *parent,
                         MIN(query_index_range_.end_row_id_, row_range.end_row_id_),
                         true,
                         count))) {
-            LOG_WARN("Fail to set bitmap batch", K(ret), K(row_range));
           } else if (parent && parent->is_enable_reorder() && filter_info.disable_bypass_) {
             filter_info.filter_->get_filter_realtime_statistics().add_filtered_row_cnt(count);
             filter_info.filter_->get_filter_realtime_statistics().add_skip_index_skip_mb_cnt(1);
@@ -456,12 +436,10 @@ int ObCGScanner::inner_filter(
         index_info.pre_process_filter(*filter_info.filter_);
         if (OB_FAIL(micro_scanner_->filter_micro_block_in_cg(
                     parent, filter_info, parent_bitmap, row_range.start_row_id_, access_count))) {
-          LOG_WARN("Fail to apply filter", K(ret));
         } else if (OB_ISNULL(bitmap = filter_info.filter_->get_result()) || bitmap->size() != access_count) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Unexpected null filter bitmap", K(ret), KPC(filter_info.filter_), K(access_count));
         } else if (OB_FAIL(result_bitmap.append_bitmap(*bitmap, offset, false))) {
-          LOG_WARN("Fail to append bitmap", K(ret), K(offset), KPC(bitmap), K(result_bitmap));
         } else {
           current_ = is_reverse_scan_ ? current_ - access_count : current_ + access_count;
         }
@@ -518,7 +496,6 @@ int ObCGRowScanner::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), K(wrapper), K(iter_param));
   } else if (OB_FAIL(ObCGScanner::init(iter_param, access_ctx, wrapper))) {
-    LOG_WARN("Fail to init cg scanner", K(ret));
   } else {
     read_info_ = iter_param.get_read_info();
     col_params_.set_allocator(access_ctx_->stmt_allocator_);
@@ -535,8 +512,6 @@ int ObCGRowScanner::init(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Unexpected sql batch size", K(ret), K(sql_batch_size), K(iter_param));
     } else if (OB_FAIL(col_params_.init(expr_count))) {
-      LOG_WARN("Fail to init col params", K(ret));
-      // TODO: remove these later
     } else if (OB_ISNULL(buf = access_ctx.stmt_allocator_->alloc(sizeof(char *) * sql_batch_size))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc cell data", K(ret), K(sql_batch_size));
@@ -561,13 +536,11 @@ int ObCGRowScanner::init(
           col_param = out_cols_param->at(col_offset);
         }
         if (OB_FAIL(col_params_.push_back(col_param))) {
-          LOG_WARN("Failed to push back col param", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
         datum_infos_.set_allocator(access_ctx_->stmt_allocator_);
         if (OB_FAIL(datum_infos_.init(expr_count))) {
-          LOG_WARN("Failed to init datum infos", K(ret), K(expr_count));
         } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < expr_count; i++) {
             sql::ObExpr *expr = iter_param.output_exprs_->at(i);
@@ -581,7 +554,6 @@ int ObCGRowScanner::init(
               ret = OB_ERR_SYS;
               LOG_ERROR("Unexpected sql expr datum buffer", K(ret), KP(datums->ptr_), K(eval_ctx), KPC(expr));
             } else if (OB_FAIL(datum_infos_.push_back(ObSqlDatumInfo(datums, iter_param.output_exprs_->at(i))))) {
-              LOG_WARN("fail to push back datum", K(ret), K(datums));
             }
           }
         }
@@ -625,8 +597,6 @@ int ObCGRowScanner::get_next_rows(uint64_t &count, const uint64_t capacity, cons
     }
     while (OB_SUCC(ret) && count < batch_size) {
       if (OB_FAIL(prefetcher_.prefetch())) {
-        LOG_WARN("Fail to prefetch micro block", K(ret), K_(prefetcher));
-      // prefetched micro data maybe empty when using skip index
       } else if (end_of_scan() || prefetcher_.is_empty_range()) {
         ret = OB_ITER_END;
       } else if (prefetcher_.read_wait()) {
@@ -723,7 +693,6 @@ int ObCGRowScanner::inner_fetch_rows(const int64_t batch_size, uint64_t &count, 
                                          filter_bitmap_,
                                          batch_size - count,
                                          is_reverse_scan_))) {
-    LOG_WARN("Fail to get row ids", K(ret), K_(current), K_(query_index_range));
   } else if (0 != row_cap && OB_FAIL(micro_scanner_->get_next_rows(*iter_param_->out_cols_project_,
                                                    col_params_,
                                                    row_ids_,
@@ -746,7 +715,6 @@ int ObCGRowScanner::locate(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObCGScanner::locate(range, bitmap))) {
-    LOG_WARN("Fail to locate", K(ret));
   } else {
     filter_bitmap_ = (nullptr != bitmap && !bitmap->is_all_true()) ? bitmap : nullptr;
   }
@@ -832,7 +800,6 @@ int ObCGScanner::build_index_filter(sql::ObPushdownFilterExecutor &filter)
     LOG_WARN("Unexpected access context", K(ret), KP_(access_ctx), KP(access_ctx_->stmt_allocator_));
   } else if (OB_FAIL(ObSSTableIndexFilterFactory::build_sstable_index_filter(
               true, iter_param_->get_read_info(), filter, access_ctx_->allocator_, prefetcher_.sstable_index_filter_))) {
-    LOG_WARN("Failed to construct skip filter", K(ret), K(filter));
   }
 
   return ret;
@@ -851,8 +818,6 @@ int ObCGSingleRowScanner::get_next_row(const blocksstable::ObDatumRow *&datum_ro
     prefetcher_.recycle_block_data();
     while (OB_SUCC(ret)) {
       if (OB_FAIL(prefetcher_.prefetch())) {
-        LOG_WARN("Fail to prefetch micro block", K(ret), K_(prefetcher));
-      // prefetched micro data maybe empty when using skip index
       } else if (end_of_scan() || prefetcher_.is_empty_range()) {
         ret = OB_ITER_END;
       } else if (prefetcher_.read_wait()) {
@@ -900,7 +865,6 @@ int ObCGSingleRowScanner::fetch_row(const blocksstable::ObDatumRow *&datum_row)
         }
       }
     } else if (OB_FAIL(inner_fetch_row(datum_row))) {
-      LOG_WARN("Fail to get next rows", K(ret));
     } else {
       break;
     }
@@ -912,7 +876,6 @@ int ObCGSingleRowScanner::inner_fetch_row(const blocksstable::ObDatumRow *&datum
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(micro_scanner_->get_next_row(datum_row))) {
-    LOG_WARN("Failed to get next row", K(ret), K_(current));
   } else if (OB_UNLIKELY(1 != datum_row->count_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected column count in ObDatumRow", K(ret), K_(datum_row->count));

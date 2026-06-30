@@ -233,7 +233,6 @@ int proc_filter_not_active<IntegerUniVec>(IntegerUniVec *res_vec, const ObBitVec
             res_vec->set_int(idx, 1);
             return OB_SUCCESS;
           }))) {
-    SQL_LOG(WARN, "fail to do for each operation", K(ret));
   }
   return ret;
 }

@@ -106,9 +106,7 @@ int ObTableLoadTransBucketWriter::init()
       (!schema.is_table_with_hidden_pk_column_ ? schema.store_column_count_ : schema.store_column_count_ - 1);
     session_count_ = param_.write_session_count_;
     if (OB_FAIL(ObSQLUtils::get_default_cast_mode(coordinator_ctx_->ctx_->session_info_, cast_mode_))) {
-      LOG_WARN("fail to get_default_cast_mode", KR(ret));
     } else if (OB_FAIL(init_session_ctx_array())) {
-      LOG_WARN("fail to init session ctx array", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -141,13 +139,10 @@ int ObTableLoadTransBucketWriter::init_session_ctx_array()
                               coordinator_ctx_->partition_ids_[0])) {
         } else if (OB_FAIL(coordinator_ctx_->partition_location_.get_leader(
                      session_ctx->partition_id_.tablet_id_, info))) {
-          LOG_WARN("failed to get leader addr", K(ret));
         } else if (OB_FAIL(session_ctx->load_bucket_.init(info.leader_addr_))) {
-          LOG_WARN("fail to init bucket", KR(ret));
         }
       } else {
         if (OB_FAIL(session_ctx->load_bucket_map_.create(1024, "TLD_BucketMap", "TLD_BucketMap"))) {
-          LOG_WARN("fail to init partition bucket map", KR(ret));
         }
       }
     }
@@ -169,7 +164,6 @@ int ObTableLoadTransBucketWriter::write(int32_t session_id, ObTableLoadObjRowArr
     SessionContext &session_ctx = session_ctx_array_[session_id - 1];
     if (!is_partitioned_) {
       if (OB_FAIL(write_for_non_partitioned(session_ctx, obj_rows))) {
-        LOG_WARN("fail to write for non partitioned", KR(ret));
       }
     } else {
       if (coordinator_ctx_->partition_calc_.is_partition_with_autoinc_ &&
@@ -178,7 +172,6 @@ int ObTableLoadTransBucketWriter::write(int32_t session_id, ObTableLoadObjRowArr
             session_id))) {
         LOG_WARN("fail to handle partition column with autoincrement or identity", KR(ret));
       } else if (OB_FAIL(write_for_partitioned(session_ctx, obj_rows))) {
-        LOG_WARN("fail to write for partitioned", KR(ret));
       }
     }
 
@@ -230,7 +223,6 @@ int ObTableLoadTransBucketWriter::handle_partition_with_autoinc_identity(
                                                         column_schema,
                                                         obj,
                                                         tmp_obj))) {
-        LOG_WARN("fail to cast obj", KR(ret), K(obj), KPC(column_schema));
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(handle_autoinc_column(column_schema,
@@ -238,7 +230,6 @@ int ObTableLoadTransBucketWriter::handle_partition_with_autoinc_identity(
                                           out_obj,
                                           session_id,
                                           sql_mode))) {
-          LOG_WARN("fail to handle autoinc column", KR(ret), K(tmp_obj));
         }
       }
     } else if (column_schema->is_identity_column()) {
@@ -249,12 +240,10 @@ int ObTableLoadTransBucketWriter::handle_partition_with_autoinc_identity(
       }
       // The generated seq_value is a number, may need to convert to decimal int
       else if (OB_FAIL(handle_identity_column(column_schema, obj, tmp_obj, autoinc_allocator))) {
-        LOG_WARN("fail to handle identity column", KR(ret), K(obj));
       } else if (OB_FAIL(ObTableLoadObjCaster::cast_obj(cast_obj_ctx,
                                                         column_schema,
                                                         tmp_obj,
                                                         out_obj))) {
-        LOG_WARN("fail to cast obj", KR(ret), K(tmp_obj), KPC(column_schema));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -262,7 +251,6 @@ int ObTableLoadTransBucketWriter::handle_partition_with_autoinc_identity(
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ob_write_obj(*(obj_row.get_allocator_handler()), out_obj, obj))) {
-        LOG_WARN("fail to deep copy obj", KR(ret), K(tmp_obj));
       }
     }
   }
@@ -279,13 +267,10 @@ int ObTableLoadTransBucketWriter::handle_autoinc_column(const ObColumnSchemaV2 *
   const ObObjTypeClass &tc = column_schema->get_meta_type().get_type_class();
   ObStorageDatum datum;
   if (OB_FAIL(datum.from_obj_enhance(obj))) {
-    LOG_WARN("fail to from obj enhance", KR(ret), K(obj));
   } else if (OB_FAIL(ObTableLoadAutoincNextval::eval_nextval(
                &(coordinator_ctx_->session_ctx_array_[session_id - 1].autoinc_param_), datum, tc,
                sql_mode))) {
-    LOG_WARN("fail to get auto increment next value", KR(ret));
   } else if (OB_FAIL(datum.to_obj_enhance(out_obj, column_schema->get_meta_type()))) {
-    LOG_WARN("fail to obj enhance", KR(ret), K(datum));
   }
   return ret;
 }
@@ -312,11 +297,9 @@ int ObTableLoadTransBucketWriter::handle_identity_column(const ObColumnSchemaV2 
     if (OB_FAIL(ObSequenceCache::get_instance().nextval(coordinator_ctx_->sequence_schema_,
                                                         cast_allocator,
                                                         seq_value))) {
-      LOG_WARN("fail get nextval for seq", KR(ret));
     } else if (obj.is_nop_value() || obj.is_null()) {
       ObNumber number;
       if (OB_FAIL(number.from(seq_value.val(), cast_allocator))) {
-        LOG_WARN("fail deep copy value", KR(ret), K(seq_value));
       } else {
         out_obj.set_number(number);
       }
@@ -344,7 +327,6 @@ int ObTableLoadTransBucketWriter::write_for_non_partitioned(SessionContext &sess
                                             param_.batch_size_,
                                             WRITE_ROW_SIZE,
                                             need_write))) {
-      LOG_WARN("fail to add row", KR(ret));
     } else if (need_write && OB_FAIL(write_load_bucket(session_ctx, load_bucket))) {
       LOG_WARN("fail to write partition bucket", KR(ret));
     }
@@ -379,23 +361,18 @@ int ObTableLoadTransBucketWriter::write_for_partitioned(SessionContext &session_
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc memory", KR(ret));
     } else if (OB_FAIL(coordinator_ctx_->partition_calc_.get_part_key(row, part_key))) {
-      LOG_WARN("fail to get part key", KR(ret), K(i), K(row));
     } else if (OB_FAIL(coordinator_ctx_->partition_calc_.cast_part_key(part_key, allocator))) {
       LOG_INFO("cast part key error", K(ret), K(part_key), K(row));
       if (OB_FAIL(error_row_handler->handle_error_row(ret))) {
-        LOG_WARN("failed to handle error row", K(ret), K(part_key), K(row));
       } else {
         ret = OB_SUCCESS;
       }
     } else if (OB_FAIL(part_keys.push_back(part_key))) {
-      LOG_WARN("fail to push back part key", KR(ret));
     } else if (OB_FAIL(row_idxs.push_back(i))) {
-      LOG_WARN("fail to push back row idx", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(coordinator_ctx_->partition_calc_.get_partition_by_row(part_keys, partition_ids))) {
-      LOG_WARN("fail to calc partition", KR(ret));
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < row_idxs.count(); ++i) {
@@ -407,19 +384,15 @@ int ObTableLoadTransBucketWriter::write_for_partitioned(SessionContext &session_
       ret = OB_NO_PARTITION_FOR_GIVEN_VALUE;
       LOG_INFO("no partition for given value", K(ret), K(partition_id), K(part_keys.at(i)), K(row));
       if (OB_FAIL(error_row_handler->handle_error_row(ret))) {
-        LOG_WARN("failed to handle error row", K(ret), K(part_keys.at(i)), K(row));
       } else {
         ret = OB_SUCCESS;
       }
     } else if (OB_FAIL(get_load_bucket(session_ctx, partition_id, load_bucket))) {
-      LOG_WARN("fail to get partition bucket", KR(ret), K(session_ctx.session_id_),
-               K(partition_id));
     } else if (OB_FAIL(load_bucket->add_row(partition_id.tablet_id_,
                                             row,
                                             param_.batch_size_,
                                             WRITE_ROW_SIZE,
                                             need_write))) {
-      LOG_WARN("fail to add row", KR(ret));
     } else if (need_write && OB_FAIL(write_load_bucket(session_ctx, load_bucket))) {
       LOG_WARN("fail to write partition bucket", KR(ret));
     }
@@ -443,7 +416,6 @@ int ObTableLoadTransBucketWriter::flush(int32_t session_id, bool &is_finished)
       ObTableLoadBucket *load_bucket = &session_ctx.load_bucket_;
       if (!(load_bucket->row_array_.empty())) {
         if (OB_FAIL(write_load_bucket(session_ctx, load_bucket))) {
-          LOG_WARN("fail to write partition bucket", KR(ret), KPC(load_bucket));
         }
       }
     } else {
@@ -451,7 +423,6 @@ int ObTableLoadTransBucketWriter::flush(int32_t session_id, bool &is_finished)
         ObTableLoadBucket *load_bucket = session_ctx.load_bucket_array_.at(i);
         if (!(load_bucket->row_array_.empty())) {
           if (OB_FAIL(write_load_bucket(session_ctx, load_bucket))) {
-            LOG_WARN("fail to write partition bucket", KR(ret), KPC(load_bucket));
           }
         }
       }
@@ -479,7 +450,6 @@ int ObTableLoadTransBucketWriter::get_load_bucket(SessionContext &session_ctx,
   } else {
     ObTableLoadPartitionLocation::PartitionLocationInfo info;
     if (OB_FAIL(coordinator_ctx_->partition_location_.get_leader(partition_id.tablet_id_, info))) {
-      LOG_WARN("failed to get leader addr", K(ret));
     }
     if (OB_SUCC(ret)) {
       ret = session_ctx.load_bucket_map_.get_refactored(info.leader_addr_, load_bucket);
@@ -489,11 +459,8 @@ int ObTableLoadTransBucketWriter::get_load_bucket(SessionContext &session_ctx,
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("failed to new partition bucket", KR(ret));
         } else if (OB_FAIL(load_bucket->init(info.leader_addr_))) {
-          LOG_WARN("fail to init", KR(ret));
         } else if (OB_FAIL(session_ctx.load_bucket_map_.set_refactored(info.leader_addr_, load_bucket))) {
-          LOG_WARN("fail to put bucket", KR(ret));
         } else if (OB_FAIL(session_ctx.load_bucket_array_.push_back(load_bucket))) {
-          LOG_WARN("fail to push back bucket", KR(ret));
         }
         if (OB_FAIL(ret)) {
           if (nullptr != load_bucket) {
@@ -503,7 +470,6 @@ int ObTableLoadTransBucketWriter::get_load_bucket(SessionContext &session_ctx,
           }
         }
       } else if (OB_FAIL(ret)) {
-        LOG_WARN("fail to get bucket", KR(ret), K(partition_id));
       }
     }
   }
@@ -520,12 +486,9 @@ int ObTableLoadTransBucketWriter::write_load_bucket(SessionContext &session_ctx,
   } else {
     ObTableLoadCoordinator coordinator(coordinator_ctx_->ctx_);
     if (OB_FAIL(coordinator.init())) {
-      LOG_WARN("fail to init coordinator", KR(ret));
     } else if (OB_FAIL(coordinator.write_peer_leader(
                  trans_ctx_->trans_id_, session_ctx.session_id_, ++load_bucket->sequence_no_,
                  load_bucket->row_array_, load_bucket->leader_addr_))) {
-      LOG_WARN("fail to coordinator write peer leader", KR(ret), K(session_ctx.session_id_),
-               KPC(load_bucket));
     }
   }
   if (OB_SUCC(ret)) {

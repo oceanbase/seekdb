@@ -41,19 +41,15 @@ int ObSchemaGetterGuard::get_location_schema_by_name(const common::ObString &nam
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(name), KR(ret));
   } else if (OB_FAIL(get_tenant_name_case_mode(mode))) {
-    LOG_WARN("fail to get_tenant_name_case_mode", K(ret));
   } else if (OB_NAME_CASE_INVALID == mode) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid case mode", K(ret), K(mode));
   } else if (OB_FAIL(check_tenant_schema_guard())) {
-    LOG_WARN("fail to check tenant schema guard", KR(ret));
   } else if (OB_FAIL(get_schema_mgr( mgr))) {
-    LOG_WARN("fail to get schema mgr", KR(ret));
   } else if (OB_ISNULL(mgr)) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("get simple schema in lazy mode not supported", KR(ret));
   } else if (OB_FAIL(mgr->location_mgr_.get_location_schema_by_name(mode, name, schema))) {
-    LOG_WARN("get location schema failed", K(name), KR(ret));
   }
   return ret;
 }
@@ -69,14 +65,11 @@ int ObSchemaGetterGuard::get_location_schema_by_id(const uint64_t location_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(location_id), KR(ret));
   } else if (OB_FAIL(check_tenant_schema_guard())) {
-    LOG_WARN("fail to check tenant schema guard", KR(ret));
   } else if (OB_FAIL(get_schema_mgr( mgr))) {
-    LOG_WARN("fail to get schema mgr", KR(ret));
   } else if (OB_ISNULL(mgr)) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("get simple schema in lazy mode not supported", KR(ret));
   } else if (OB_FAIL(mgr->get_location_schema( location_id, schema))) {
-    LOG_WARN("get schema failed", K(location_id), KR(ret));
   }
   return ret;
 }

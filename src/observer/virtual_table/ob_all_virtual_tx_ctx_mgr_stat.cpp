@@ -59,7 +59,6 @@ int ObGVTxCtxMgrStat::prepare_start_to_read_()
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(tx_ctx_mgr_stat_iter_.set_ready())) {
-    TRANS_LOG(WARN, "tx_ctx_mgr_stat_iter set ready error", KR(ret));
   } else {
     start_to_read_ = true;
   }

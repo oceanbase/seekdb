@@ -101,9 +101,7 @@ public:
     int ret = OB_SUCCESS;
     // alloc dir id
     if (OB_FAIL(mem_ctx_->file_mgr_->alloc_dir(index_dir_id_))) {
-      LOG_WARN("fail to alloc dir", KR(ret));
     } else if (OB_FAIL(mem_ctx_->file_mgr_->alloc_dir(data_dir_id_))) {
-      LOG_WARN("fail to alloc dir", KR(ret));
     }
     // build heap table array
     while (OB_SUCC(ret) && !(mem_ctx_->has_error_)) {
@@ -116,7 +114,6 @@ public:
         static_cast<ObDirectLoadMultipleHeapTableSorter *>(worker);
       sorter->set_work_param(ctx_, index_dir_id_, data_dir_id_, &heap_table_array_);
       if (OB_FAIL(sorter->work())) {
-        LOG_WARN("fail to compact", KR(ret));
       }
       worker->~ObDirectLoadMemWorker();
     }
@@ -124,7 +121,6 @@ public:
     if (OB_SUCC(ret) && !heap_table_array_.empty()) {
       // TODO(suzhi.yt) optimize single heap table
       if (OB_FAIL(compact_heap_table())) {
-        LOG_WARN("fail to compact heap table", KR(ret));
       }
     }
     return ret;
@@ -143,11 +139,9 @@ private:
     heap_table_compact_param.file_mgr_ = mem_ctx_->file_mgr_;
     heap_table_compact_param.index_dir_id_ = index_dir_id_;
     if (OB_FAIL(heap_table_compactor.init(heap_table_compact_param))) {
-      LOG_WARN("fail to init heap table compactor", KR(ret));
     }
     while (OB_SUCC(ret) && curr_round->count() > mem_ctx_->merge_count_per_round_) {
       if (OB_FAIL(compact_heap_table_one_round(heap_table_compactor, curr_round, next_round))) {
-        LOG_WARN("fail to compact heap table one round", KR(ret));
       } else {
         heap_table_compactor.reuse();
         std::swap(curr_round, next_round);
@@ -161,16 +155,12 @@ private:
       for (int64_t i = 0; OB_SUCC(ret) && i < curr_round->count(); ++i) {
         ObDirectLoadTableHandle heap_table_handle;
         if (OB_FAIL(curr_round->get_table(i, heap_table_handle))) {
-          LOG_WARN("fail to get table", KR(ret));
         } else if (OB_FAIL(heap_table_compactor.add_table(heap_table_handle))) {
-          LOG_WARN("fail to add table", KR(ret));
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(heap_table_compactor.compact())) {
-          LOG_WARN("fail to do compact", KR(ret));
         } else if (OB_FAIL(mem_ctx_->add_tables_from_table_compactor(heap_table_compactor))) {
-          LOG_WARN("fail to add table from table compactor", KR(ret));
         } else {
           ATOMIC_AAF(&ctx_->job_stat_->store_.compact_stage_consume_tmp_files_,
                      curr_round->count());
@@ -194,20 +184,15 @@ private:
     for (int64_t i = 0; OB_SUCC(ret) && i < mem_ctx_->merge_count_per_round_; ++i) {
       ObDirectLoadTableHandle heap_table_handle;
       if (OB_FAIL(curr_round->get_table(i, heap_table_handle))) {
-        LOG_WARN("fail to get table", KR(ret));
       } else if (OB_FAIL(heap_table_compactor.add_table(heap_table_handle))) {
-        LOG_WARN("fail to add table", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
       ObDirectLoadTableHandle compacted_table_handle;
       if (OB_FAIL(heap_table_compactor.compact())) {
-        LOG_WARN("fail to do compact", KR(ret));
       } else if (OB_FAIL(
                    heap_table_compactor.get_table(compacted_table_handle, mem_ctx_->table_mgr_))) {
-        LOG_WARN("fail to get table", KR(ret));
       } else if (OB_FAIL(next_round->add(compacted_table_handle))) {
-        LOG_WARN("fail to push back", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -215,9 +200,7 @@ private:
            ++i) {
         ObDirectLoadTableHandle heap_table_handle;
         if (OB_FAIL(curr_round->get_table(i, heap_table_handle))) {
-          LOG_WARN("fail to get table", KR(ret));
         } else if (OB_FAIL(next_round->add(heap_table_handle))) {
-          LOG_WARN("fail to add table", KR(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -253,7 +236,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(compactor_->handle_compact_task_finish(ret_code))) {
-      LOG_WARN("fail to handle compact task finish", KR(ret));
     }
     if (OB_FAIL(ret)) {
       ctx_->store_ctx_->set_status_error(ret);
@@ -321,7 +303,6 @@ int ObTableLoadMultipleHeapTableCompactor::init(ObTableLoadMergeMemSortOp *op)
     mem_ctx_.load_thread_cnt_ = mem_ctx_.total_thread_cnt_;
 
     if (OB_FAIL(mem_ctx_.init())) {
-      LOG_WARN("fail to init compactor ctx", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -337,9 +318,7 @@ int ObTableLoadMultipleHeapTableCompactor::start()
     LOG_WARN("ObTableLoadMultipleHeapTableCompactor not init", KR(ret), KP(this));
   } else {
     if (OB_FAIL(construct_compactors())) {
-      LOG_WARN("fail to construct compactors", KR(ret));
     } else if (OB_FAIL(start_sort())) {
-      LOG_WARN("fail to start sort", KR(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -362,7 +341,6 @@ int ObTableLoadMultipleHeapTableCompactor::construct_compactors()
       ObDirectLoadTableHandleArray *table_handle_array = it->second;
       for (int64_t i = 0; OB_SUCC(ret) && i < table_handle_array->count(); ++i) {
         if (OB_FAIL(add_tablet_table(table_handle_array->at(i)))) {
-          LOG_WARN("fail to add tablet table", KR(ret));
         }
       }
     }
@@ -388,9 +366,7 @@ int ObTableLoadMultipleHeapTableCompactor::add_tablet_table(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadMultipleHeapTableSorter", KR(ret));
     } else if (OB_FAIL(sorter->add_table(table_handle))) {
-      LOG_WARN("fail to add table", KR(ret));
     } else if (OB_FAIL(mem_ctx_.mem_loader_queue_.push(sorter))) {
-      LOG_WARN("fail to push", KR(ret));
     }
     if (OB_FAIL(ret)) {
       if (nullptr != sorter) {
@@ -411,19 +387,15 @@ int ObTableLoadMultipleHeapTableCompactor::start_sort()
     ObTableLoadTask *task = nullptr;
     // 1. assign task
     if (OB_FAIL(ctx->alloc_task(task))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     }
     // 2. Set processor
     else if (OB_FAIL(task->set_processor<CompactTaskProcessor>(ctx, &mem_ctx_))) {
-      LOG_WARN("fail to set compact task processor", KR(ret));
     }
     // 3. Set callback
     else if (OB_FAIL(task->set_callback<CompactTaskCallback>(ctx, this))) {
-      LOG_WARN("fail to set compact task callback", KR(ret));
     }
     // 4. Put task into scheduler
     else if (OB_FAIL(store_ctx_->task_scheduler_->add_task(i, task))) {
-      LOG_WARN("fail to add task", KR(ret), K(i), KPC(task));
     }
     if (OB_FAIL(ret)) {
       if (nullptr != task) {
@@ -464,11 +436,9 @@ int ObTableLoadMultipleHeapTableCompactor::finish()
   table_store->set_table_data_desc(mem_ctx_.table_data_desc_);
   table_store->set_multiple_heap_table();
   if (OB_FAIL(table_store->add_tables(mem_ctx_.tables_handle_))) {
-    LOG_WARN("fail to add tables", KR(ret));
   } else {
     mem_ctx_.reset();
     if (OB_FAIL(op_->on_success())) {
-      LOG_WARN("fail to handle success", KR(ret));
     }
   }
   return ret;

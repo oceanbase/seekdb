@@ -36,19 +36,16 @@ int ObPxMultiPartInsertOp::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableModifyOp::inner_open())) {
-    LOG_WARN("failed to inner open", K(ret));
   } else if (OB_FAIL(ObDMLService::init_ins_rtdef(dml_rtctx_,
                                                   ins_rtdef_,
                                                   MY_SPEC.ins_ctdef_,
                                                   trigger_clear_exprs_,
                                                   fk_checkers_))) {
-    LOG_WARN("init insert rtdef failed", K(ret));
   } else if (!(MY_SPEC.row_desc_.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table or row desc is invalid", K(ret), K(MY_SPEC.row_desc_));
   } else if (OB_FAIL(data_driver_.init(get_spec(), ctx_.get_allocator(), ins_rtdef_, this, this,
                                        MY_SPEC.ins_ctdef_.is_table_without_pk_))) {
-    LOG_WARN("failed to init data driver", K(ret));
   } else if (OB_UNLIKELY(GET_PHY_PLAN_CTX(ctx_)->get_is_direct_insert_plan())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("direct-insert plan should not use pdml op",
@@ -99,7 +96,6 @@ int ObPxMultiPartInsertOp::inner_close()
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   if (OB_FAIL(ObTableModifyOp::inner_close())) {
-    LOG_WARN("failed to inner close table modify", K(ret));
   } else {
     data_driver_.destroy();
   }
@@ -128,7 +124,6 @@ int ObPxMultiPartInsertOp::read_row(ObExecContext &ctx,
     // Every time new data is obtained from the child node, a clear calculation flag is required
     clear_evaluated_flag();
     if (OB_FAIL(ObDMLService::process_insert_row(MY_SPEC.ins_ctdef_, ins_rtdef_, *this, is_skipped))) {
-      LOG_WARN("process insert row failed", K(ret));
     } else if (!is_skipped) {
       // Obtain the corresponding partition for the row through the partition id expr
       const int64_t part_id_idx = MY_SPEC.row_desc_.get_part_id_index();
@@ -174,7 +169,6 @@ int ObPxMultiPartInsertOp::write_rows(ObExecContext &ctx,
       ObChunkDatumStore::StoredRow* stored_row = nullptr;
       clear_evaluated_flag();
       if (OB_FAIL(try_check_status())) {
-        LOG_WARN("check status failed", K(ret));
       } else if (OB_FAIL(dml_row_iter.get_next_row(child_->get_spec().output_))) {
         if (OB_ITER_END != ret) {
           LOG_WARN("fail to get next row", K(ret));
@@ -182,9 +176,7 @@ int ObPxMultiPartInsertOp::write_rows(ObExecContext &ctx,
           iter_end_ = true;
         }
       } else if (OB_FAIL(ObDMLService::insert_row(MY_SPEC.ins_ctdef_, ins_rtdef_, tablet_loc, dml_rtctx_, stored_row))) {
-        LOG_WARN("insert row to das failed", K(ret));
       } else if (OB_FAIL(discharge_das_write_buffer())) {
-        LOG_WARN("failed to submit all dml task when the buffer of das op is full", K(ret));
       } else {
         op_monitor_info_.otherstat_3_value_++;
       }
@@ -192,7 +184,6 @@ int ObPxMultiPartInsertOp::write_rows(ObExecContext &ctx,
 
     if (OB_ITER_END == ret) {
       if (OB_FAIL(submit_all_dml_task())) {
-        LOG_WARN("do insert rows post process failed", K(ret));
       } else {
         op_monitor_info_.otherstat_5_value_ += ins_rtdef_.das_rtdef_.affected_rows_;
       }

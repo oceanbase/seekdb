@@ -104,8 +104,6 @@ int ObSysDispatchCallResolver::resolve(const ParseNode &parse_tree)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("name node or tenant node is nullptr", K(name_node), K(designated_tenant_node));
   } else if (OB_FAIL(check_sys_dispatch_call_priv(*name_node))) {
-    // check system package subroutine call whitelist
-    LOG_WARN("check sys dispatch call privilege failed");
   } else if (OB_ISNULL(stmt = create_stmt<ObSysDispatchCallStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("create ObSysDispatchCallStmt failed");
@@ -116,7 +114,6 @@ int ObSysDispatchCallResolver::resolve(const ParseNode &parse_tree)
   } else if (FALSE_IT(tenant_name.assign_ptr(designated_tenant_node->str_value_,
                                              designated_tenant_node->str_len_))) {
   } else if (OB_FAIL(schema_checker_->get_tenant_info(tenant_schema))) {
-    LOG_WARN("get tenant schema failed");
   } else if (OB_ISNULL(tenant_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tenant schema is nullptr");

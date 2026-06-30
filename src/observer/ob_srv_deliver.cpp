@@ -63,9 +63,7 @@ int get_endpoint_tenant(char *endpoint_tenant_mapping_buf, const int64_t vid, co
     ret = OB_INVALID_CONFIG;
     LOG_WARN("_endpoint_tenant_mapping is null", K(ret));
   } else if (OB_FAIL(parser.init(&allocator))) {
-    LOG_WARN("parser init failed", K(ret));
   } else if (OB_FAIL(parser.parse(endpoint_tenant_mapping_buf, endpoint_tenant_mapping_buf_len, data))) {
-    LOG_WARN("parse json failed", K(ret));
   } else if (NULL == data) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("no root value", K(ret));
@@ -184,16 +182,11 @@ int get_user_tenant(ObRequest &req, char *user_name_buf, char *tenant_name_buf)
   obmysql::OMPKHandshakeResponse hsr = static_cast<const obmysql::OMPKHandshakeResponse &>(req.get_packet());
   int tmp_ret = OB_SUCCESS;
   if (OB_TMP_FAIL(hsr.decode())) {
-    // ignore error and handle in ObMPConnect
-    LOG_WARN("decode hsr fail", K(tmp_ret));
   } else if (OB_TMP_FAIL(extract_user_tenant(hsr.get_username(), user_name, tenant_name))) {
-    // ignore error and handle in ObMPConnect
-    LOG_WARN("parse user@tenant fail", K(ret), "str", hsr.get_username());
   } else if (!tenant_name.empty()) {
     // use this tenant_name
   } else {
     if (OB_TMP_FAIL(lib::ObVTOAUtility::get_virtual_addr(fd, is_slb, vid, vaddr))) {
-      LOG_WARN("failed to get virtual addr", K(tmp_ret), K(fd));
     }
     if (is_slb) {
       const int64_t endpoint_tenant_mapping_buf_len = STRLEN(GCONF._endpoint_tenant_mapping.str());
@@ -206,7 +199,6 @@ int get_user_tenant(ObRequest &req, char *user_name_buf, char *tenant_name_buf)
         MEMCPY(endpoint_tenant_mapping_buf, GCONF._endpoint_tenant_mapping.str(), endpoint_tenant_mapping_buf_len);
         endpoint_tenant_mapping_buf[endpoint_tenant_mapping_buf_len] = '\0';
         if (OB_FAIL(get_endpoint_tenant(endpoint_tenant_mapping_buf, vid, vaddr, tenant_name))) {
-          LOG_WARN("fail to get tenant name by vaddr", K(ret), K(vid), K(vaddr));
         } else {
           ObSMConnection *conn = static_cast<ObSMConnection *>(SQL_REQ_OP.get_sql_session(&req));
           conn->vid_ = vid;
@@ -286,7 +278,6 @@ int ObSrvDeliver::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_queue_threads())) {
-    SERVER_LOG(ERROR, "init queue threads fail", K(ret));
   } else {
     SERVER_LOG(INFO, "init ObSrvDeliver done");
     is_inited_ = true;
@@ -320,7 +311,6 @@ int ObSrvDeliver::create_queue_thread(int tg_id, const char *thread_name, QueueT
   if (OB_ISNULL(qthread)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(qthread->init())) {
-    LOG_WARN("init qthread failed", K(ret));
   } else {
     qthread->queue_.set_qhandler(&qhandler_);
   }
@@ -388,7 +378,6 @@ int ObSrvDeliver::deliver_mysql_request(ObRequest &req)
         char user_name_buf[OB_MAX_USER_NAME_BUF_LENGTH] = "";
         char tenant_name_buf[OB_MAX_TENANT_NAME_LENGTH + 1] = "";
         if (OB_FAIL(get_user_tenant(req, user_name_buf, tenant_name_buf))) {
-          LOG_WARN("fail to get username and tenant name", K(ret), K(req));
         } else if (0 != STRLEN(user_name_buf)) {
           if (0 == STRCMP(tenant_name_buf, OB_DIAG_TENANT_NAME)) {
             MEMCPY(tenant_name_buf, user_name_buf, STRLEN(user_name_buf));
@@ -402,7 +391,6 @@ int ObSrvDeliver::deliver_mysql_request(ObRequest &req)
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(dispatch_req(req))) {
-            LOG_ERROR("deliver request in dispatch_req fail", K(ret), K(req));
           }
         }
       }

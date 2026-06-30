@@ -73,7 +73,6 @@ int ObTableLoadDataTableInsertRowHandler::handle_insert_row(const ObTabletID &ta
   } else {
     ATOMIC_INC(&result_info_->rows_affected_);
     if (OB_FAIL(push_insert_row(tablet_id, datum_row))) {
-      LOG_WARN("fail to push insert row", KR(ret));
     }
   }
   return ret;
@@ -89,7 +88,6 @@ int ObTableLoadDataTableInsertRowHandler::handle_insert_row(const ObTabletID &ta
   } else {
     ATOMIC_INC(&result_info_->rows_affected_);
     if (OB_FAIL(push_insert_row(tablet_id, datum_row))) {
-      LOG_WARN("fail to push insert row", KR(ret));
     }
   }
   return ret;
@@ -107,7 +105,6 @@ int ObTableLoadDataTableInsertRowHandler::handle_insert_batch(const ObTabletID &
   } else {
     ATOMIC_AAF(&result_info_->rows_affected_, datum_rows.row_count_);
     if (OB_FAIL(push_insert_batch(tablet_id, datum_rows))) {
-      LOG_WARN("fail to push insert batch", KR(ret));
     }
   }
   return ret;
@@ -124,7 +121,6 @@ int ObTableLoadDataTableInsertRowHandler::handle_update_row(const ObTabletID &ta
     if (ObLoadDupActionType::LOAD_STOP_ON_DUP == dup_action_) {
       LOG_INFO("duplicate row", K(tablet_id), K(datum_row));
       if (OB_FAIL(error_row_handler_->handle_error_row(OB_ERR_PRIMARY_KEY_DUPLICATE))) {
-        LOG_WARN("fail to handle error row", KR(ret));
       }
     } else if (ObLoadDupActionType::LOAD_REPLACE == dup_action_) {
       ATOMIC_AAF(&result_info_->rows_affected_, 2);
@@ -137,7 +133,6 @@ int ObTableLoadDataTableInsertRowHandler::handle_update_row(const ObTabletID &ta
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(push_update_row(tablet_id, datum_row))) {
-        LOG_WARN("fail to push update row", KR(ret));
       }
     }
   }
@@ -168,7 +163,6 @@ int ObTableLoadDataTableInsertRowHandler::handle_update_row(
     if (ObLoadDupActionType::LOAD_STOP_ON_DUP == dup_action_) {
       if (OB_FAIL(error_row_handler_->handle_error_row(OB_ERR_PRIMARY_KEY_DUPLICATE,
                                                        duplicate_row_count))) {
-        LOG_WARN("fail to handle error row", KR(ret));
       } else {
         row = rows.at(0);
       }
@@ -185,7 +179,6 @@ int ObTableLoadDataTableInsertRowHandler::handle_update_row(
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(push_update_row(tablet_id, rows, row))) {
-        LOG_WARN("fail to push update row", K(ret));
       }
     }
   }
@@ -216,7 +209,6 @@ int ObTableLoadDataTableInsertRowHandler::handle_update_row(
     if (ObLoadDupActionType::LOAD_STOP_ON_DUP == dup_action_) {
       if (OB_FAIL(error_row_handler_->handle_error_row(OB_ERR_PRIMARY_KEY_DUPLICATE,
                                                        duplicate_row_count))) {
-        LOG_WARN("fail to handle error row", KR(ret));
       } else {
         row = rows.at(0);
       }
@@ -233,7 +225,6 @@ int ObTableLoadDataTableInsertRowHandler::handle_update_row(
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(push_update_row(rows, row))) {
-        LOG_WARN("fail to push update row", K(ret));
       }
     }
   }
@@ -253,7 +244,6 @@ int ObTableLoadDataTableInsertRowHandler::handle_update_row(const ObTabletID &ta
     if (ObLoadDupActionType::LOAD_STOP_ON_DUP == dup_action_) {
       LOG_INFO("duplicate row", K(tablet_id), K(old_row), K(new_row));
       if (OB_FAIL(error_row_handler_->handle_error_row(OB_ERR_PRIMARY_KEY_DUPLICATE))) {
-        LOG_WARN("fail to handle error row", KR(ret));
       } else {
         result_row = &old_row;
       }
@@ -270,7 +260,6 @@ int ObTableLoadDataTableInsertRowHandler::handle_update_row(const ObTabletID &ta
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(push_update_row(tablet_id, old_row, new_row, result_row))) {
-        LOG_WARN("fail to push update row", KR(ret));
       }
     }
   }
@@ -287,7 +276,6 @@ int ObTableLoadDataTableInsertRowHandler::handle_insert_delete_conflict(const Ob
   } else {
     ATOMIC_INC(&result_info_->rows_affected_);
     if (OB_FAIL(push_insert_delete_conflict(tablet_id, datum_row))) {
-      LOG_WARN("fail to push insert delete conflict", KR(ret));
     }
   }
   return ret;

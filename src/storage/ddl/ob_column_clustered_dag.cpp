@@ -53,16 +53,13 @@ int ObColumnClusteredDag::init_by_param(const share::ObIDagInitParam *param)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(init_param));
   } else if (OB_FAIL(ObDDLIndependentDag::init_by_param(init_param))) {
-    LOG_WARN("init ddl independent dag failed", K(ret), KPC(init_param));
   } else {
     px_thread_count_ = init_param->px_thread_count_;
     is_inited_ = true;
 
     ObArray<ObITask *> write_macro_block_tasks;
     if (OB_FAIL(generate_write_macro_block_tasks(write_macro_block_tasks))) {
-      LOG_WARN("fail to generate write macro block tasks", KR(ret));
     } else if (OB_FAIL(batch_add_task(write_macro_block_tasks))) {
-      LOG_WARN("batch add task failed", K(ret), K(write_macro_block_tasks.count()));
     }
   }
   FLOG_INFO("columnn clustered dag init", K(ret), KPC(this));
@@ -105,7 +102,6 @@ int ObColumnClusteredDag::update_tablet_range_count()
         LOG_WARN("sql proxy is null", K(ret));
       } else if (OB_FAIL(rootserver::ObDDLTaskRecordOperator::get_schedule_info(
                      *sql_proxy, ddl_task_param_.ddl_task_id_, arena, false/*is_for_update*/, ddl_slice_info, use_idempotent_mode))) {
-        LOG_WARN("fail to get schedule info", K(ret), K(ddl_task_param_));
       } else if (!use_idempotent_mode) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("ddl dag always use idempotent mode", K(ret), K(use_idempotent_mode), K(ddl_task_param_));
@@ -125,7 +121,6 @@ int ObColumnClusteredDag::update_tablet_range_count()
             total_slice_count_ = part_ranges.at(0).range_cut_.count() + 1;
             ObDDLTabletContext *tablet_context = nullptr;
             if (OB_FAIL(get_tablet_context(tablet_id, tablet_context))) {
-              LOG_WARN("get tablet context failed", K(ret), K(tablet_id));
             } else {
               tablet_context->slice_count_ = total_slice_count_;
               tablet_context->table_slice_offset_ = 0;

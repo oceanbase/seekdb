@@ -63,7 +63,6 @@ int ObMulSourceTxDataNotifier::notify_table_lock(const ObTxBufferNodeArray &arra
 
       if (ObTxDataSourceType::TABLE_LOCK == node.type_) {
         if (OB_FAIL(notify_table_lock(notify_type, buf, len, tmp_notify_arg, mt_ctx))) {
-          TRANS_LOG(WARN, "notify table lock failed", KR(ret), K(node));
         }
       }
       if (notify_time.get_diff() > 1 * 1000 * 1000) {
@@ -244,7 +243,6 @@ int ObMulSourceTxDataNotifier::notify(const ObTxBufferNodeArray &array,
         mds::TLOCAL_MDS_INFO.reset();
       }
       if (OB_FAIL(ret)) {
-        TRANS_LOG(WARN, "notify data source failed", KR(ret), K(node));
       }
 
       if (notify_time.get_diff() > 1 * 1000 * 1000) {
@@ -310,12 +308,10 @@ int ObMulSourceTxDataNotifier::notify_table_lock(
     // TABLELOCK only need deal with replay process, but not apply.
     // the replay process will produce a lock op and will be dealt at trans end.
   } else if (OB_FAIL(lock_op.deserialize(buf, len, pos))) {
-    TRANS_LOG(WARN, "deserialize lock op failed", K(ret), K(len), KP(buf));
   } else if (FALSE_IT(lock_op.create_timestamp_ = OB_MIN(curr_timestamp,
                                                          lock_op.create_timestamp_))) {
   } else if (OB_FAIL(mt_ctx->replay_lock(lock_op,
                                          arg.scn_))) {
-    TRANS_LOG(WARN, "replay lock failed", K(ret));
   } else {
     // do nothing
   }
@@ -348,7 +344,6 @@ int ObMulSourceTxDataNotifier::notify_standby_upgrade(const NotifyType type,
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(buf), K(len), K(type));
   } else if (OB_FAIL(data_version.deserialize(buf, len, pos))) {
-    TRANS_LOG(WARN, "failed to deserialize data_version", KR(ret), K(buf), K(len));
   } else if (pos > len) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(WARN, "deserialize error", KR(ret), K(pos), K(len));
@@ -403,7 +398,6 @@ ObMulSourceTxDataDump::dump_buf(
     case ObTxDataSourceType::TABLE_LOCK: {
       tablelock::ObTableLockOp lock_op;
       if (OB_FAIL(lock_op.deserialize(buf, len, pos))) {
-        TRANS_LOG(WARN, "deserialize lock op failed", K(ret), K(len), KP(buf));
       } else if (pos > len) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "deserialize error", KR(ret), K(pos), K(len));
@@ -420,7 +414,6 @@ ObMulSourceTxDataDump::dump_buf(
     case ObTxDataSourceType::CREATE_TABLET_NEW_MDS: {
       obcall::ObBatchCreateTabletArg create_arg;
       if (OB_FAIL(create_arg.deserialize(buf, len, pos))) {
-        TRANS_LOG(WARN, "deserialize failed for ls_member trans", KR(ret));
       } else if (pos > len) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "deserialize error", KR(ret), K(pos), K(len));
@@ -432,7 +425,6 @@ ObMulSourceTxDataDump::dump_buf(
     case ObTxDataSourceType::DELETE_TABLET_NEW_MDS: {
       obcall::ObBatchRemoveTabletArg remove_arg;
       if (OB_FAIL(remove_arg.deserialize(buf, len, pos))) {
-        TRANS_LOG(WARN, "deserialize failed for ls_member trans", KR(ret));
       } else if (pos > len) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "deserialize error", KR(ret), K(pos), K(len));
@@ -444,7 +436,6 @@ ObMulSourceTxDataDump::dump_buf(
     case ObTxDataSourceType::DDL_BARRIER: {
       ObDDLBarrierLog log;
       if (OB_FAIL(log.deserialize(buf, len, pos))) {
-        TRANS_LOG(WARN, "failed to deserialize buf", K(ret));
       } else if (pos > len) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "deserialize error", KR(ret), K(pos), K(len));
@@ -456,7 +447,6 @@ ObMulSourceTxDataDump::dump_buf(
     case ObTxDataSourceType::UNBIND_TABLET_NEW_MDS: {
       ObBatchUnbindTabletArg modify_arg;
       if (OB_FAIL(modify_arg.deserialize(buf, len, pos))) {
-        TRANS_LOG(WARN, "failed to deserialize arg", K(ret));
       } else if (pos > len) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "deserialize error", KR(ret), K(pos), K(len));
@@ -468,7 +458,6 @@ ObMulSourceTxDataDump::dump_buf(
     case ObTxDataSourceType::UNBIND_LOB_TABLET: {
       ObBatchUnbindLobTabletArg modify_arg;
       if (OB_FAIL(modify_arg.deserialize(buf, len, pos))) {
-        TRANS_LOG(WARN, "failed to deserialize arg", K(ret));
       } else if (pos > len) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "deserialize error", KR(ret), K(pos), K(len));

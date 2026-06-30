@@ -74,9 +74,7 @@ int ObExprCurrentCatalog::eval_current_catalog(const ObExpr &expr, ObEvalCtx &ct
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected NULL GCTX.schema_service_", K(ret));
       } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-        LOG_WARN("failed to get tenant schema guard", K(ret));
       } else if (OB_FAIL(schema_guard.get_catalog_schema_by_id( catalog_id, catalog_schema))) {
-        LOG_WARN("failed to get user info", K(ret), K(catalog_id));
       } else if (OB_ISNULL(catalog_schema)) {
         expr_datum.set_null();
       } else {

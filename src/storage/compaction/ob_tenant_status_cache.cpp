@@ -91,9 +91,7 @@ int ObTenantStatusCache::inner_refresh_restore_status()
     const ObSimpleTenantSchema *tenant_schema = nullptr;
     
     if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("fail to get schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_schema))) {
-      LOG_WARN("fail to get tenant schema", K(ret));
     } else if (OB_ISNULL(tenant_schema)) {
       ret = OB_SCHEMA_ERROR;
       LOG_WARN("tenant schema is null", K(ret));
@@ -113,7 +111,6 @@ int ObTenantStatusCache::get_min_data_version(uint64_t &min_data_version)
   if (0 == min_data_version) { // force call GET_MIN_DATA_VERSION
     uint64_t compat_version = 0;
     if (OB_FAIL(GET_MIN_DATA_VERSION(compat_version))) {
-      LOG_WARN("fail to get data version", KR(ret));
     } else {
       uint64_t old_version = min_data_version_;
       while (old_version < compat_version) {

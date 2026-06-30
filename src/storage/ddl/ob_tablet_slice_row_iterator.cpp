@@ -86,9 +86,7 @@ int ObTabletSliceRowIterator::get_next_row(const blocksstable::ObDatumRow *&row)
   // convert sql row to storage row
   if (OB_SUCC(ret)) {
     if (OB_FAIL(row_iter_->get_next_row(current_row))) {
-      LOG_WARN("eval current row failed", K(ret));
     } else if (OB_FAIL(ObDDLUtil::convert_to_storage_row(tablet_id_, slice_idx_, *param_, lob_writer_, arena_, const_cast<blocksstable::ObDatumRow &>(*current_row)))) {
-      LOG_WARN("convert sql row to storage row failed", K(ret));
     }
   }
 

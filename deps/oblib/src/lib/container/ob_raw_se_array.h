@@ -127,7 +127,6 @@ public:
         } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < count_; i++) {
             if (OB_FAIL(construct_assign(new_data[i], local_data_[i]))) {
-              LIB_LOG(WARN, "failed to copy new_data", K(ret));
             }
           }
           if (is_destructor_safe()) {
@@ -252,7 +251,6 @@ int ObRawSEArray<T, LOCAL_ARRAY_SIZE, BlockAllocatorT, auto_free>::deserialize(
   T item;
   reset();
   if (OB_SUCCESS != (ret = serialization::decode_vi64(buf, data_len, pos, &count))) {
-    LIB_LOG(WARN, "fail to decode ob array count", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < count; i ++) {
     if (OB_SUCCESS != (ret = serialization::decode(buf, data_len, pos, item))) {
@@ -333,7 +331,6 @@ OB_INLINE int ObRawSEArray<T, LOCAL_ARRAY_SIZE, BlockAllocatorT, auto_free>::pus
       count_++;
     } else {
       if (OB_FAIL(construct_assign(local_data_[count_], obj))) {
-        LIB_LOG(WARN, "failed to copy data", K(ret));
       } else {
         count_++;
       }

@@ -65,14 +65,12 @@ int ObConnectResourceMgr::init(ObMultiVersionSchemaService &schema_service)
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(user_res_map_.init("UserResCtrl"))) {
-    LOG_WARN("fail to init user resource map", K(ret));
   } else {
     schema_service_ = &schema_service;
     inited_ = true;
     const int64_t delay = ConnResourceCleanUpTask::SLEEP_USECONDS;
     const bool repeat = false;
     if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::ServerGTimer, cleanup_task_, delay, repeat))) {
-      LOG_WARN("schedual connect resource mgr failed", K(ret));
     }
   }
   return ret;
@@ -228,7 +226,6 @@ int ObConnectResourceMgr::on_user_connect(
   } else if (compat_mode == lib::Worker::CompatMode::MYSQL) {
     if (!session.has_got_tenant_conn_res()) {
       if (OB_FAIL(apply_for_tenant_conn_resource( priv, max_tenant_connections))) {
-        LOG_WARN("reach teannt max connections", K(ret));
       } else {
         session.set_got_tenant_conn_res(true);
       }
@@ -245,10 +242,8 @@ int ObConnectResourceMgr::on_user_connect(
       bool user_conn_increased = false;
       if (OB_FAIL(get_or_insert_user_resource( user_id, max_user_connections,
                                               max_connections_per_hour, user_res))) {
-        LOG_WARN("get or insert user resource failed", K(ret));
       } else if (OB_FAIL(increase_user_connections_count(max_user_connections, max_connections_per_hour,
             user_name, user_res, user_conn_increased))) {
-        LOG_WARN("increase user connection count failed", K(ret));
       }
       if (user_conn_increased) {
         session.set_got_user_conn_res(true);
@@ -262,7 +257,6 @@ int ObConnectResourceMgr::on_user_connect(
   } else {
     if (!session.has_got_tenant_conn_res()) {
       if (OB_FAIL(apply_for_tenant_conn_resource( priv, UINT64_MAX))) {
-        LOG_WARN("reach teannt max connections", K(ret));
       } else {
         session.set_got_tenant_conn_res(true);
       }
@@ -322,7 +316,6 @@ int ObConnectResourceMgr::erase_tenant_conn_res_map()
   int64_t erase_user_cnt = 0;
   int64_t erase_tenant_cnt = 0;
   if (OB_FAIL(user_res_map_.remove_if(func))) {
-    LOG_WARN("remove_if failed", K(ret));
   } else {
     erase_user_cnt = func.erase_cnt_;
     user_res_map_.purge();
@@ -372,13 +365,11 @@ void ObConnectResourceMgr::ConnResourceCleanUpTask::runTimerTask()
   //FIXME: Here, key may confict when tenant is removed from used_id.
   //       This logic should execute by tenant and don't use get_cluster_schema_guard() again.
   } else if (OB_FAIL(conn_res_mgr_.schema_service_->get_cluster_schema_guard(schema_guard))) {
-    LOG_WARN("get sys tenant schema guard failed", K(ret));
   } else {
     LOG_INFO("clean up connection resource",
               K(conn_res_mgr_.user_res_map_.size()), K(conn_res_mgr_.tenant_res_inited_));
     CleanUpConnResourceFunc user_func(schema_guard, conn_res_mgr_.user_res_map_);
     if (OB_FAIL(conn_res_mgr_.user_res_map_.for_each(user_func))) {
-      LOG_WARN("cleanup dropped user failed", K(ret));
     }
   }
   const int64_t delay = SLEEP_USECONDS;

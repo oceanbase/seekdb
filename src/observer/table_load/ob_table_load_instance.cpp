@@ -52,12 +52,10 @@ void ObTableLoadInstance::destroy()
   int ret = OB_SUCCESS;
   if (nullptr != table_ctx_) {
     if (OB_FAIL(end_direct_load(false /*commit*/))) {
-      LOG_WARN("fail to end direct load", KR(ret));
     }
   }
   if (stmt_ctx_.is_started()) {
     if (OB_FAIL(end_stmt(false /*commit*/))) {
-      LOG_WARN("fail to end stmt", KR(ret));
     }
   }
 }
@@ -101,15 +99,12 @@ int ObTableLoadInstance::init(ObTableLoadParam &param,
                      K(param));
 
     if (OB_FAIL(param.normalize())) {
-      LOG_WARN("fail to normalize param", KR(ret));
     }
     // check tenant
     else if (OB_FAIL(ObTableLoadService::check_tenant())) {
-      LOG_WARN("fail to check tenant", KR(ret));
     }
     // start stmt
     else if (OB_FAIL(start_stmt(param, tablet_ids))) {
-      LOG_WARN("fail to start stmt", KR(ret), K(param), K(tablet_ids));
     }
     // double check support for concurrency of direct load and ddl
     else if (OB_FAIL(ObTableLoadService::check_support_direct_load(param.table_id_,
@@ -127,7 +122,6 @@ int ObTableLoadInstance::init(ObTableLoadParam &param,
     }
     // start direct load
     else if (OB_FAIL(start_direct_load(param, column_ids, tablet_ids))) {
-      LOG_WARN("fail to start direct load", KR(ret));
     }
     // init succ
     else {
@@ -149,11 +143,9 @@ int ObTableLoadInstance::commit()
   } else {
     // end direct load
     if (OB_FAIL(end_direct_load(true /*commit*/))) {
-      LOG_WARN("fail to end direct load", KR(ret));
     }
     // end stmt
     else if (OB_FAIL(end_stmt(true /*commit*/))) {
-      LOG_WARN("fail to end stmt", KR(ret));
     }
   }
   return ret;
@@ -168,7 +160,6 @@ int ObTableLoadInstance::px_commit_data()
     LOG_WARN("ObTableLoadInstance not init", KR(ret), KP(this));
   } else {
     if (OB_FAIL(end_direct_load(true /*commit*/))) {
-      LOG_WARN("fail to end direct load", KR(ret));
     }
   }
   return ret;
@@ -182,7 +173,6 @@ int ObTableLoadInstance::px_commit_ddl()
     LOG_WARN("ObTableLoadInstance not init", KR(ret), KP(this));
   } else {
     if (OB_FAIL(end_stmt(true /*commit*/))) {
-      LOG_WARN("fail to end stmt", KR(ret));
     }
   }
   return ret;
@@ -201,23 +191,17 @@ int ObTableLoadInstance::start_stmt(
   stmt_ctx_.use_insert_into_select_tx_ = param.px_mode_;
   if (stmt_ctx_.is_incremental_) { // incremental direct-load
     if (OB_FAIL(build_tx_param())) {
-      LOG_WARN("fail to build tx param", KR(ret), K(stmt_ctx_));
     } else if (OB_FAIL(start_sql_tx())) {
-      LOG_WARN("fail to start sql tx", KR(ret), K(stmt_ctx_));
     } else if (OB_FAIL(lock_for_inc_load(tablet_ids))) {
-      LOG_WARN("fail to lock table in tx", KR(ret), K(stmt_ctx_), K(tablet_ids));
     } else if (OB_FAIL(init_ddl_param_for_inc_direct_load())) {
-      LOG_WARN("fail to init ddl param for inc direct load", KR(ret), K(stmt_ctx_));
     }
     if (OB_FAIL(ret)) {
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(end_sql_tx(false /*commit*/))) {
-        LOG_WARN("fail to end sql tx", KR(tmp_ret));
       }
     }
   } else {
     if (OB_FAIL(start_redef_table(param, tablet_ids))) {
-      LOG_WARN("fail to start redef table", KR(ret), K(param), K(tablet_ids));
     }
   }
   if (OB_SUCC(ret)) {
@@ -233,7 +217,6 @@ int ObTableLoadInstance::end_stmt(const bool commit)
   int tmp_ret = OB_SUCCESS;
   if (stmt_ctx_.is_incremental_) {
     if (OB_FAIL(end_sql_tx(commit))) {
-      LOG_WARN("fail to end sql tx", KR(ret));
     }
   } else {
     if (commit && OB_FAIL(commit_redef_table())) {
@@ -278,7 +261,6 @@ int ObTableLoadInstance::build_tx_param()
   ObTxParam &tx_param = stmt_ctx_.tx_param_;
   int64_t timeout_us = 0;
   if (OB_FAIL(session_info->get_tx_timeout(timeout_us))) {
-    LOG_WARN("failed to get tx timeout", KR(ret));
   } else {
     tx_param.timeout_us_ = timeout_us;
     tx_param.lock_timeout_us_ = session_info->get_trx_lock_timeout();
@@ -321,7 +303,6 @@ int ObTableLoadInstance::start_sql_tx()
       LOG_WARN("failed to start tx", KR(ret), K(stmt_ctx_));
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(txs->release_tx(*tx_desc))) {
-        LOG_WARN("failed to release tx", KR(tmp_ret), KPC(tx_desc));
       } else {
         tx_desc = nullptr;
       }
@@ -351,19 +332,16 @@ int ObTableLoadInstance::end_sql_tx(const bool commit)
       if (commit) {
         const int64_t stmt_timeout_ts = get_stmt_expire_ts(session_info);
         if (OB_FAIL(txs->commit_tx(*tx_desc, stmt_timeout_ts))) {
-          LOG_WARN("failed to commit tx", KR(ret), KPC(tx_desc));
         } else {
           LOG_INFO("commit tx succeed", KPC(tx_desc));
         }
       } else {
         if (OB_FAIL(txs->rollback_tx(*tx_desc))) {
-          LOG_WARN("failed to rollback tx", KR(ret), KPC(tx_desc));
         } else {
           LOG_INFO("rollback tx succeed", KPC(tx_desc));
         }
       }
       if (OB_TMP_FAIL(txs->release_tx(*tx_desc))) {
-        LOG_ERROR("failed to release tx", KR(tmp_ret), KPC(tx_desc));
       }
       // reset session tx_desc
       session_info->get_tx_desc() = nullptr;
@@ -378,11 +356,9 @@ int ObTableLoadInstance::lock_for_inc_load(const ObIArray<ObTabletID> &tablet_id
   int ret = OB_SUCCESS;
   if (tablet_ids.empty()) {
     if (OB_FAIL(lock_table_in_tx())) {
-      LOG_WARN("fail to lock table in tx", KR(ret));
     }
   } else {
     if (OB_FAIL(lock_tablets_in_tx(tablet_ids))) {
-      LOG_WARN("fail to lock tablets in tx", KR(ret), K(tablet_ids));
     }
   }
   return ret;
@@ -405,9 +381,7 @@ int ObTableLoadInstance::lock_table_in_tx()
   int ret = OB_SUCCESS;
   ObLockTableRequest lock_table_arg;
   if (OB_FAIL(build_base_lock_arg(lock_table_arg))) {
-    LOG_WARN("fail to build lock arg", KR(ret));
   } else if (OB_FAIL(try_lock_in_tx(lock_table_arg))) {
-    LOG_WARN("fail to try lock in tx", KR(ret), K(lock_table_arg));
   } else {
     LOG_INFO("lock table in tx succeed", K(lock_table_arg));
   }
@@ -420,18 +394,14 @@ int ObTableLoadInstance::lock_tablets_in_tx(const ObIArray<ObTabletID> &tablet_i
   ObLockTabletsRequest lock_tablets_arg;
   ObArray<ObTabletID> tmp_tablet_ids;
   if (OB_FAIL(tmp_tablet_ids.assign(tablet_ids))) {
-    LOG_WARN("fail to assign tablet ids", KR(ret), K(tablet_ids));
   } else {
     lib::ob_sort(tmp_tablet_ids.begin(), tmp_tablet_ids.end());
   }
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(build_base_lock_arg(lock_tablets_arg))) {
-    LOG_WARN("fail to build lock arg", KR(ret), K(tablet_ids));
   } else if (OB_FAIL(lock_tablets_arg.tablet_ids_.assign(tmp_tablet_ids))) {
-    LOG_WARN("fail to assign tablet ids", KR(ret), K(tmp_tablet_ids));
   } else if (OB_FAIL(try_lock_in_tx(lock_tablets_arg))) {
-    LOG_WARN("fail to try lock in tx", KR(ret), K(lock_tablets_arg));
   } else {
     LOG_INFO("lock tablets in tx succeed", K(lock_tablets_arg), K(tablet_ids));
   }
@@ -453,7 +423,6 @@ int ObTableLoadInstance::try_lock_in_tx(const ObLockRequest &lock_arg)
   } else {
     while (OB_SUCC(ret) && !lock_succeed) {
       if (OB_FAIL(execute_ctx_->check_status())) {
-        LOG_WARN("failed to check status", KR(ret));
       } else if (OB_FAIL(table_lock_service->lock(*tx_desc, stmt_ctx_.tx_param_, lock_arg))) {
         if (OB_EAGAIN == ret) {
           ob_usleep(sleep_time);
@@ -485,18 +454,13 @@ int ObTableLoadInstance::init_ddl_param_for_inc_direct_load()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema guard in exe ctx is nullptr", KR(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema( table_id, table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_SCHEMA_ERROR;
     LOG_WARN("fail to get table schema", KR(ret), K(table_id));
   } else if (OB_FAIL(ObCommonIDUtils::gen_unique_id_by_rpc( raw_id))) {
-    LOG_WARN("failed to gen unique id by rpc", KR(ret));
   } else if (OB_FAIL(share::ObShareUtil::get_tenant_gts(current_scn))) {
-    LOG_WARN("failed to get gts", KR(ret));
   } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_version))) {
-    LOG_WARN("failed to get min data version", KR(ret));
   } else if (OB_FAIL(ObDDLUtil::get_no_logging_param(ddl_param.is_no_logging_))) {
-    LOG_WARN("fail to get no logging param", KR(ret));
   } else {
     ddl_param.dest_table_id_ = table_id;
     ddl_param.task_id_ = raw_id.id();
@@ -554,7 +518,6 @@ int ObTableLoadInstance::commit_redef_table()
   arg.task_id_ = stmt_ctx_.ddl_param_.task_id_;
   arg.schema_version_ = stmt_ctx_.ddl_param_.schema_version_;
   if (OB_FAIL(ObTableLoadRedefTable::finish(arg, *stmt_ctx_.session_info_))) {
-    LOG_WARN("fail to finish redef table", KR(ret), K(arg));
   } else {
     LOG_INFO("commit redef table succeed");
   }
@@ -568,7 +531,6 @@ int ObTableLoadInstance::abort_redef_table()
   
   arg.task_id_ = stmt_ctx_.ddl_param_.task_id_;
   if (OB_FAIL(ObTableLoadRedefTable::abort(arg, *stmt_ctx_.session_info_))) {
-    LOG_WARN("fail to abort redef table", KR(ret), K(arg));
   } else {
     LOG_INFO("abort redef table succeed");
   }
@@ -586,13 +548,9 @@ int ObTableLoadInstance::start_direct_load(const ObTableLoadParam &param,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected table ctx is not null", KR(ret));
   } else if (OB_FAIL(ObTableLoadService::alloc_ctx(table_ctx))) {
-    LOG_WARN("fail to alloc table ctx", KR(ret), K(param));
   } else if (OB_FAIL(table_ctx->init(param, stmt_ctx_.ddl_param_, session_info, ObString::make_string(""), execute_ctx_->exec_ctx_))) {
-    LOG_WARN("fail to init table ctx", KR(ret));
   } else if (OB_FAIL(ObTableLoadCoordinator::init_ctx(table_ctx, column_ids, tablet_ids, execute_ctx_))) {
-    LOG_WARN("fail to coordinator init ctx", KR(ret));
   } else if (OB_FAIL(ObTableLoadService::add_ctx(table_ctx))) {
-    LOG_WARN("fail to add ctx", KR(ret));
   } else {
     table_ctx_ = table_ctx;
   }
@@ -606,11 +564,8 @@ int ObTableLoadInstance::start_direct_load(const ObTableLoadParam &param,
   if (OB_SUCC(ret)) {
     ObTableLoadCoordinator coordinator(table_ctx_);
     if (OB_FAIL(coordinator.init())) {
-      LOG_WARN("fail to init coordinator", KR(ret));
     } else if (OB_FAIL(coordinator.begin())) {
-      LOG_WARN("fail to coodrinator begin", KR(ret));
     } else if (OB_FAIL(wait_begin_finish())) {
-      LOG_WARN("fail to wait begin finish", KR(ret));
     }
   }
   return ret;
@@ -622,14 +577,12 @@ int ObTableLoadInstance::wait_begin_finish()
   ObTableLoadCoordinator coordinator(table_ctx_);
  
   if (OB_FAIL(coordinator.init())) {
-    LOG_WARN("fail to init coordinator", KR(ret));
   } else {
     ObTableLoadStatusType status = ObTableLoadStatusType::NONE;
     int error_code = OB_SUCCESS;
     ObTableLoadIndexLongWait wait_obj(10 * 1000, WAIT_INTERVAL_US);
     while (OB_SUCC(ret) && ObTableLoadStatusType::LOADING != status && OB_SUCC(execute_ctx_->check_status())) {
       if (OB_FAIL(coordinator.get_status(status, error_code))) {
-        LOG_WARN("fail to coordinator get status", KR(ret));
       } else {
         switch (status) {
           case ObTableLoadStatusType::INITED:
@@ -667,17 +620,14 @@ int ObTableLoadInstance::end_direct_load(const bool commit)
       int error_code = OB_SUCCESS;
       ObTableLoadCoordinator coordinator(table_ctx_);
       if (OB_FAIL(coordinator.init())) {
-        LOG_WARN("fail to init coordinator", KR(ret));
       }
       // finish
       else if (OB_FAIL(coordinator.finish())) {
-        LOG_WARN("fail to finish", KR(ret));
       }
       ObTableLoadIndexLongWait wait_obj(10 * 1000, WAIT_INTERVAL_US);
       while (OB_SUCC(ret) && ObTableLoadStatusType::MERGED != status &&
              OB_SUCC(execute_ctx_->check_status())) {
         if (OB_FAIL(coordinator.get_status(status, error_code))) {
-          LOG_WARN("fail to coordinator get status", KR(ret));
         } else {
           switch (status) {
             case ObTableLoadStatusType::FROZEN:
@@ -700,7 +650,6 @@ int ObTableLoadInstance::end_direct_load(const bool commit)
       if (OB_SUCC(ret)) {
         // commit
         if (OB_FAIL(coordinator.commit(result_info_))) {
-          LOG_WARN("fail to commit", KR(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -716,7 +665,6 @@ int ObTableLoadInstance::end_direct_load(const bool commit)
       ret = COVER_SUCC(tmp_ret);
     }
     if (OB_TMP_FAIL(ObTableLoadService::remove_ctx(table_ctx_))) {
-      LOG_WARN("table ctx may remove by service", KR(tmp_ret), KP(table_ctx_));
     }
     ObTableLoadService::put_ctx(table_ctx_);
     table_ctx_ = nullptr;
@@ -737,9 +685,7 @@ int ObTableLoadInstance::add_tx_result_to_user_session()
   } else if (stmt_ctx_.is_incremental_ && !stmt_ctx_.has_added_tx_result_ && OB_NOT_NULL(tx_desc)) {
     ObTxExecResult exec_result;
     if (OB_FAIL(txs->get_tx_exec_result(*table_ctx_->session_info_->get_tx_desc(), exec_result))) {
-      LOG_WARN("failed to get tx exec result", KR(ret));
     } else if (OB_FAIL(txs->add_tx_exec_result(*tx_desc, exec_result))) {
-      LOG_WARN("failed to add tx exec result", KR(ret), K(exec_result));
     } else {
       stmt_ctx_.has_added_tx_result_ = true;
       LOG_INFO("add tx result to user session succeed");
@@ -759,9 +705,7 @@ int ObTableLoadInstance::check_status()
     ObTableLoadStatusType status = ObTableLoadStatusType::NONE;
     int error_code = OB_SUCCESS;
     if (OB_FAIL(coordinator.init())) {
-      LOG_WARN("fail to init coordinator", KR(ret));
     } else if (OB_FAIL(coordinator.get_status(status, error_code))) {
-      LOG_WARN("fail to coordinator get status", KR(ret));
     } else if (OB_UNLIKELY(ObTableLoadStatusType::ERROR == status ||
                            ObTableLoadStatusType::ABORT == status)) {
       ret = (OB_SUCCESS != error_code ? error_code : OB_CANCELED);
@@ -777,13 +721,10 @@ int ObTableLoadInstance::start_trans(TransCtx &trans_ctx, int64_t segment_id,
   int ret = OB_SUCCESS;
   ObTableLoadCoordinator coordinator(table_ctx_);
   if (OB_FAIL(coordinator.init())) {
-    LOG_WARN("fail to init coordinator", KR(ret));
   } else if (OB_FAIL(
                coordinator.start_trans(ObTableLoadSegmentID(segment_id), trans_ctx.trans_id_))) {
-    LOG_WARN("fail to coordinator start trans", KR(ret));
   } else if (OB_FAIL(trans_ctx.next_sequence_no_array_.create(table_ctx_->param_.session_count_,
                                                               allocator))) {
-    LOG_WARN("fail to create next sequence no array", KR(ret));
   } else {
     for (int64_t i = 0; i < table_ctx_->param_.session_count_; ++i) {
       trans_ctx.next_sequence_no_array_[i] = 1;
@@ -801,15 +742,12 @@ int ObTableLoadInstance::commit_trans(TransCtx &trans_ctx)
   } else {
     ObTableLoadCoordinator coordinator(table_ctx_);
     if (OB_FAIL(coordinator.init())) {
-      LOG_WARN("fail to init coordinator", KR(ret));
     }
     // finish trans
     else if (OB_FAIL(coordinator.finish_trans(trans_ctx.trans_id_))) {
-      LOG_WARN("fail to finish trans", KR(ret));
     }
     // wait trans commit
     else if (OB_FAIL(check_trans_committed(trans_ctx))) {
-      LOG_WARN("fail to check trans committed", KR(ret));
     }
   }
   return ret;
@@ -823,13 +761,11 @@ int ObTableLoadInstance::check_trans_committed(TransCtx &trans_ctx)
   int error_code = OB_SUCCESS;
   ObTableLoadCoordinator coordinator(table_ctx_);
   if (OB_FAIL(coordinator.init())) {
-    LOG_WARN("fail to init coordinator", KR(ret));
   }
   ObTableLoadIndexLongWait wait_obj(10 * 1000, WAIT_INTERVAL_US);
   while (OB_SUCC(ret) && ObTableLoadTransStatusType::COMMIT != trans_status &&
          OB_SUCC(execute_ctx_->check_status())) {
     if (OB_FAIL(coordinator.get_trans_status(trans_id, trans_status, error_code))) {
-      LOG_WARN("fail to coordinator get trans status", KR(ret));
     } else {
       switch (trans_status) {
         case ObTableLoadTransStatusType::FROZEN:
@@ -867,10 +803,8 @@ int ObTableLoadInstance::write_trans(TransCtx &trans_ctx, int32_t session_id,
     uint64_t &next_sequence_no = trans_ctx.next_sequence_no_array_[session_id - 1];
     ObTableLoadCoordinator coordinator(table_ctx_);
     if (OB_FAIL(coordinator.init())) {
-      LOG_WARN("fail to init coordinator", KR(ret));
     } else if (OB_FAIL(coordinator.write(trans_ctx.trans_id_, session_id, next_sequence_no++,
                                          obj_rows))) {
-      LOG_WARN("fail to write coordinator", KR(ret));
     }
   }
   return ret;

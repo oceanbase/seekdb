@@ -58,7 +58,6 @@
    }
  
    if (OB_FAIL(ret)) {
-     LOG_WARN("fail to exec ddl sql", K(ret), K(schema), K(ddl_type));
    } else {
      ObSchemaOperation operation;
      
@@ -67,7 +66,6 @@
      operation.schema_version_ = schema.get_schema_version();
      operation.ddl_stmt_str_ = ddl_stmt_str;
      if (OB_FAIL(log_operation(operation, sql_client))) {
-       SHARE_SCHEMA_LOG(WARN, "failed to log operation", K(ret));
      }
    }
    return ret;
@@ -89,9 +87,7 @@
         OB_SUCC(ret) && i < ARRAYSIZEOF(LOCATION_TABLES);
         ++i) {
      if (OB_FAIL(sql.assign_fmt("INSERT INTO %s(", LOCATION_TABLES[i]))) {
-       STORAGE_LOG(WARN, "append table name failed", K(ret));
      } else if (OB_FAIL(gen_sql(sql, values, schema))) {
-       LOG_WARN("fail to gen sql", K(ret));
      } else if (i == THE_HISTORY_TABLE_IDX) {
        SQL_COL_APPEND_VALUE(sql, values, 0, "is_deleted", "%d");
        SQL_COL_APPEND_VALUE(sql, values, schema.get_schema_version(), "schema_version", "%ld");
@@ -100,9 +96,7 @@
        if (OB_FAIL(sql.append_fmt(", gmt_modified) VALUES (%.*s, now(6))",
                                   static_cast<int32_t>(values.length()),
                                   values.ptr()))) {
-         LOG_WARN("append sql failed, ", K(ret));
        } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-         LOG_WARN("fail to execute sql", K(sql), K(ret));
        } else if (!is_single_row(affected_rows)) {
          ret = OB_ERR_UNEXPECTED;
          LOG_WARN("unexpected value", K(affected_rows), K(sql), K(ret));
@@ -131,9 +125,7 @@
      if (OB_FAIL(sql.assign_fmt("%s INTO %s(",
                                 (i == THE_HISTORY_TABLE_IDX) ? "INSERT" : "REPLACE",
                                 LOCATION_TABLES[i]))) {
-       STORAGE_LOG(WARN, "append table name failed", K(ret));
      } else if (OB_FAIL(gen_sql(sql, values, schema))) {
-       LOG_WARN("fail to gen sql", K(ret));
      } else if (i == THE_HISTORY_TABLE_IDX) {
        SQL_COL_APPEND_VALUE(sql, values, 0, "is_deleted", "%d");
        SQL_COL_APPEND_VALUE(sql, values, schema.get_schema_version(), "schema_version", "%ld");
@@ -142,9 +134,7 @@
        if (OB_FAIL(sql.append_fmt(", gmt_modified) VALUES (%.*s, now(6))",
                                   static_cast<int32_t>(values.length()),
                                   values.ptr()))) {
-         LOG_WARN("append sql failed, ", K(ret));
        } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-         LOG_WARN("fail to execute sql", K(sql), K(ret));
        } else if (!is_single_row(affected_rows) && !is_double_row(affected_rows)) {
          ret = OB_ERR_UNEXPECTED;
          LOG_WARN("unexpected value", K(affected_rows), K(sql), K(ret));
@@ -171,9 +161,7 @@
       if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE location_id = %lu",
                                  LOCATION_TABLES[THE_SYS_TABLE_IDX],
                                  ObSchemaUtils::get_extract_schema_id(schema.get_location_id())))) {
-        LOG_WARN("fail to assign sql format", K(ret));
       } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-        LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected value", K(affected_rows), K(sql), K(ret));
@@ -183,9 +171,7 @@
          OB_SUCC(ret) && i < ARRAYSIZEOF(LOCATION_TABLES);
          ++i) {
       if (OB_FAIL(sql.assign_fmt("INSERT INTO %s(", LOCATION_TABLES[i]))) {
-        STORAGE_LOG(WARN, "append table name failed", K(ret));
       } else if (OB_FAIL(gen_sql(sql, values, schema))) {
-        LOG_WARN("fail to gen sql", K(ret));
       } else if (i == THE_HISTORY_TABLE_IDX) {
         SQL_COL_APPEND_VALUE(sql, values, 1, "is_deleted", "%d");
         SQL_COL_APPEND_VALUE(sql, values, schema.get_schema_version(), "schema_version", "%ld");
@@ -194,9 +180,7 @@
         if (OB_FAIL(sql.append_fmt(", gmt_modified) VALUES (%.*s, now(6))",
                                    static_cast<int32_t>(values.length()),
                                    values.ptr()))) {
-          LOG_WARN("append sql failed, ", K(ret));
         } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-          LOG_WARN("fail to execute sql", K(sql), K(ret));
         } else if (!is_single_row(affected_rows)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected value", K(affected_rows), K(sql), K(ret));

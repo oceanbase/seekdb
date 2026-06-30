@@ -108,10 +108,8 @@ int calc_to_temporal_expr(const ObExpr &expr,
         if (NULL == (dfm_convert_ctx = static_cast<ObExprDFMConvertCtx *>
                      (ctx.exec_ctx_.get_expr_op_ctx(rt_ctx_id)))) {
           if (OB_FAIL(ctx.exec_ctx_.create_expr_op_ctx(rt_ctx_id, dfm_convert_ctx))) {
-            LOG_WARN("failed to create operator ctx", K(ret));
           } else if (OB_FAIL(dfm_convert_ctx->parse_format(format_str, target_type,
                                                            true, ctx.exec_ctx_.get_allocator()))) {
-            LOG_WARN("fail to parse format", K(ret), K(format_str));
           }
           LOG_DEBUG("new dfm convert ctx", K(ret), KPC(dfm_convert_ctx));
         }

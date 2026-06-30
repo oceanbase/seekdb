@@ -60,22 +60,15 @@ int ObDDLLock::lock_for_add_drop_index_in_trans(
   } else if (!need_lock(data_table_schema)) {
     LOG_INFO("skip ddl lock", K(data_table_id));
   } else if (OB_FAIL(data_table_schema.get_tablet_ids(data_tablet_ids))) {
-    LOG_WARN("failed to get data tablet ids", K(ret));
   } else if (index_schema.is_storage_local_index_table()) {
     if (OB_FAIL(lock_table_lock_in_trans(data_table_id, data_tablet_ids, ROW_SHARE, timeout_us, trans))) {
-      LOG_WARN("failed to lock data table", K(ret));
     } else if (OB_FAIL(ObOnlineDDLLock::lock_table_in_trans(data_table_id, ROW_EXCLUSIVE, timeout_us, trans))) {
-      LOG_WARN("failed to lock data table", K(ret));
     } else if (OB_FAIL(ObOnlineDDLLock::lock_tablets_in_trans(data_tablet_ids, ROW_EXCLUSIVE, timeout_us, trans))) {
-      LOG_WARN("failed to lock data table tablet", K(ret));
     }
   } else {
     if (OB_FAIL(lock_table_lock_in_trans(data_table_id, data_tablet_ids, ROW_SHARE, timeout_us, trans))) {
-      LOG_WARN("failed to lock data table", K(ret));
     } else if (OB_FAIL(ObOnlineDDLLock::lock_table_in_trans(data_table_id, ROW_EXCLUSIVE, timeout_us, trans))) {
-      LOG_WARN("failed to lock data table", K(ret));
     } else if (OB_FAIL(ObOnlineDDLLock::lock_table_in_trans(index_table_id, EXCLUSIVE, timeout_us, trans))) {
-      LOG_WARN("failed to lock index table", K(ret));
     }
   }
   return ret;
@@ -103,35 +96,26 @@ int ObDDLLock::lock_for_add_drop_index(
     LOG_INFO("skip ddl lock", K(data_table_id));
   } else {
     if (OB_FAIL(data_table_schema.get_tablet_ids(data_tablet_ids))) {
-      LOG_WARN("failed to get data tablet ids", K(ret));
     } else if (nullptr != del_data_tablet_ids) {
       ObArray<ObTabletID> tmp_tablet_ids;
       if (OB_FAIL(get_difference(data_tablet_ids, *del_data_tablet_ids, tmp_tablet_ids))) {
-        LOG_WARN("failed to get diff tablet ids", K(ret));
       } else if (OB_FAIL(data_tablet_ids.assign(tmp_tablet_ids))) {
-        LOG_WARN("failed to assign data tablet ids", K(ret));
       }
     }
     if (OB_SUCC(ret) && nullptr != inc_data_tablet_ids) {
       if (OB_FAIL(append(data_tablet_ids, *inc_data_tablet_ids))) {
-        LOG_WARN("failed to append inc data tablet ids", K(ret));
       }
     }
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObOnlineDDLLock::lock_table(data_table_id, ROW_EXCLUSIVE, lock_owner, timeout_us, trans))) {
-      LOG_WARN("failed to lock data table", K(ret));
     } else if (OB_FAIL(ObOnlineDDLLock::lock_tablets(data_tablet_ids, ROW_EXCLUSIVE, lock_owner, timeout_us, trans))) {
-      LOG_WARN("failed to lock data table tablet", K(ret));
     } else if (OB_FAIL(do_table_lock(data_table_id, data_tablet_ids, ROW_SHARE, lock_owner, timeout_us, true/*is_lock*/, trans))) {
-      LOG_WARN("failed to lock data tablet", K(ret));
     } else if (index_schema.is_storage_local_index_table() || index_schema.is_mlog_table()) {
       if (OB_FAIL(check_tablet_in_same_ls(data_table_schema, index_schema, trans))) {
-        LOG_WARN("failed to check tablet in same ls", K(ret));
       }
     } else {
       if (OB_FAIL(ObOnlineDDLLock::lock_table(index_table_id, EXCLUSIVE, lock_owner, timeout_us, trans))) {
-        LOG_WARN("failed to lock index table", K(ret));
       }
     }
   }
@@ -154,16 +138,11 @@ int ObDDLLock::unlock_for_add_drop_index(
   if (!need_lock(data_table_schema) || data_table_schema.is_user_hidden_table()) {
     LOG_INFO("skip ddl lock", K(data_table_id));
   } else if (OB_FAIL(data_table_schema.get_tablet_ids(data_tablet_ids))) {
-    LOG_WARN("failed to get data tablet ids", K(ret));
   } else if (OB_FAIL(do_table_lock(data_table_id, data_tablet_ids, ROW_SHARE, lock_owner, timeout_us, false/*is_lock*/, trans))) {
-    LOG_WARN("failed to unlock data tablet", K(ret));
   } else if (OB_FAIL(ObOnlineDDLLock::unlock_tablets(data_tablet_ids, ROW_EXCLUSIVE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
-    LOG_WARN("failed to unlock data tablet", K(ret));
   } else if (OB_FAIL(ObOnlineDDLLock::unlock_table(data_table_id, ROW_EXCLUSIVE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
-    LOG_WARN("failed to unlock data table", K(ret));
   } else if (is_global_index) {
     if (OB_FAIL(ObOnlineDDLLock::unlock_table(index_table_id, EXCLUSIVE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
-      LOG_WARN("failed to unlock index table", K(ret));
     }
   }
   return ret;
@@ -189,18 +168,12 @@ int ObDDLLock::lock_for_rebuild_index(
   } else if (!need_lock(data_table_schema)) {
     LOG_INFO("skip ddl lock", K(data_table_id));
   } else if (OB_FAIL(data_table_schema.get_tablet_ids(data_tablet_ids))) {
-    LOG_WARN("failed to get data tablet ids", K(ret));
   } else if (OB_FAIL(ObOnlineDDLLock::lock_table(data_table_id, ROW_EXCLUSIVE, lock_owner, timeout_us, trans))) {
-    LOG_WARN("failed to lock data table", K(ret));
   } else if (OB_FAIL(ObOnlineDDLLock::lock_tablets(data_tablet_ids, ROW_EXCLUSIVE, lock_owner, timeout_us, trans))) {
-    LOG_WARN("failed to lock data table tablet", K(ret));
   } else if (OB_FAIL(do_table_lock(data_table_id, data_tablet_ids, ROW_SHARE, lock_owner, timeout_us, true/*is_lock*/, trans))) {
-    LOG_WARN("failed to lock data tablet", K(ret));
   } else if (is_global_index) {
     if (OB_FAIL(ObOnlineDDLLock::lock_table(old_index_table_id, EXCLUSIVE, lock_owner, timeout_us, trans))) {
-      LOG_WARN("failed to lock index table", K(ret));
     } else if (OB_FAIL(ObOnlineDDLLock::lock_table(new_index_table_id, EXCLUSIVE, lock_owner, timeout_us, trans))) {
-      LOG_WARN("failed to lock index table", K(ret));
     }
   }
   return ret;
@@ -223,18 +196,12 @@ int ObDDLLock::unlock_for_rebuild_index(
   if (!need_lock(data_table_schema) || data_table_schema.is_user_hidden_table()) {
     LOG_INFO("skip ddl lock", K(data_table_id));
   } else if (OB_FAIL(data_table_schema.get_tablet_ids(data_tablet_ids))) {
-    LOG_WARN("failed to get data tablet ids", K(ret));
   } else if (OB_FAIL(do_table_lock(data_table_id, data_tablet_ids, ROW_SHARE, lock_owner, timeout_us, false/*is_lock*/, trans))) {
-    LOG_WARN("failed to unlock data tablet", K(ret));
   } else if (OB_FAIL(ObOnlineDDLLock::unlock_tablets(data_tablet_ids, ROW_EXCLUSIVE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
-    LOG_WARN("failed to unlock data tablet", K(ret));
   } else if (OB_FAIL(ObOnlineDDLLock::unlock_table(data_table_id, ROW_EXCLUSIVE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
-    LOG_WARN("failed to unlock data table", K(ret));
   } else if (is_global_index) {
     if (OB_FAIL(ObOnlineDDLLock::unlock_table(old_index_table_id, EXCLUSIVE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
-      LOG_WARN("failed to unlock index table", K(ret));
     } else if (OB_FAIL(ObOnlineDDLLock::unlock_table(new_index_table_id, EXCLUSIVE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
-      LOG_WARN("failed to unlock index table", K(ret));
     }
   }
   return ret;
@@ -260,25 +227,17 @@ int ObDDLLock::lock_for_split_partition(
   } else if (table_schema.is_global_index_table()) {
     if (lock_src_and_dst_od) {
       if (OB_FAIL(ObOnlineDDLLock::lock_table(table_id, ROW_SHARE, lock_owner, timeout_us, trans))) {
-        LOG_WARN("failed to lock data table", K(ret));
       } else if (OB_FAIL(ObOnlineDDLLock::lock_tablets(*src_tablet_ids, EXCLUSIVE, lock_owner, timeout_us, trans))) {
-        LOG_WARN("failed to lock tablets", K(ret));
       } else if (OB_FAIL(do_table_lock(table_schema.get_data_table_id(), ROW_SHARE, lock_owner, timeout_us, true/*is_lock*/, trans))) {
-        LOG_WARN("failed to lock data table", K(ret));
       } else if (OB_FAIL(ObOnlineDDLLock::lock_tablets(dst_tablet_ids, EXCLUSIVE, lock_owner, timeout_us, trans))) {
-        LOG_WARN("failed to lock tablets", K(ret));
       }
     }
   } else if (need_lock(table_schema)) {
     if (lock_src_and_dst_od) {
       if (OB_FAIL(ObOnlineDDLLock::lock_table(table_id, ROW_SHARE, lock_owner, timeout_us, trans))) {
-        LOG_WARN("failed to lock data table", K(ret));
       } else if (OB_FAIL(ObOnlineDDLLock::lock_tablets(*src_tablet_ids, EXCLUSIVE, lock_owner, timeout_us, trans))) {
-        LOG_WARN("failed to lock tablets", K(ret));
       } else if (OB_FAIL(do_table_lock(table_id, *src_tablet_ids, ROW_EXCLUSIVE, lock_owner, timeout_us, true/*is_lock*/, trans))) {
-        LOG_WARN("failed to lock data table", K(ret));
       } else if (OB_FAIL(ObOnlineDDLLock::lock_tablets(dst_tablet_ids, EXCLUSIVE, lock_owner, timeout_us, trans))) {
-        LOG_WARN("failed to lock tablets", K(ret));
       }
     } else {
       // performance crucial
@@ -293,9 +252,7 @@ int ObDDLLock::lock_for_split_partition(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid conn", K(ret));
       } else if (OB_FAIL(append(arg.tablet_ids_, dst_tablet_ids))) {
-        LOG_WARN("failed to push back", K(ret));
       } else if (OB_FAIL(ObInnerConnectionLockUtil::lock_tablet(arg, iconn))) {
-        LOG_WARN("failed to lock tablet", K(ret), K(arg));
       }
     }
   } else {
@@ -318,27 +275,19 @@ int ObDDLLock::unlock_for_split_partition(
   bool some_lock_not_exist = false;
   ObArray<ObTabletID> tablet_ids;
   if (OB_FAIL(append(tablet_ids, src_tablet_ids))) {
-    LOG_WARN("failed to append", K(ret));
   } else if (OB_FAIL(append(tablet_ids, dst_tablet_ids))) {
-    LOG_WARN("failed to append", K(ret));
   }
 
   if (OB_FAIL(ret)) {
   } else if (table_schema.is_global_index_table()) {
     if (OB_FAIL(ObOnlineDDLLock::unlock_table(table_id, ROW_SHARE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
-      LOG_WARN("failed to lock data table", K(ret));
     } else if (OB_FAIL(ObOnlineDDLLock::unlock_tablets(tablet_ids, EXCLUSIVE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
-      LOG_WARN("failed to lock tablets", K(ret));
     } else if (OB_FAIL(do_table_lock(table_schema.get_data_table_id(), ROW_SHARE, lock_owner, timeout_us, false/*is_lock*/, trans))) {
-      LOG_WARN("failed to lock data table", K(ret));
     }
   } else if (need_lock(table_schema)) {
     if (OB_FAIL(ObOnlineDDLLock::unlock_table(table_id, ROW_SHARE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
-      LOG_WARN("failed to lock data table", K(ret));
     } else if (OB_FAIL(ObOnlineDDLLock::unlock_tablets(tablet_ids, EXCLUSIVE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
-      LOG_WARN("failed to lock tablets", K(ret));
     } else if (OB_FAIL(do_table_lock(table_id, tablet_ids, ROW_EXCLUSIVE, lock_owner, timeout_us, false/*is_lock*/, trans))) {
-      LOG_WARN("failed to lock data tablets", K(ret));
     }
   } else {
     LOG_INFO("skip ddl lock", K(ret), K(table_id));
@@ -365,10 +314,7 @@ int ObDDLLock::replace_tablet_lock_for_split(const ObTableSchema &table_schema,
   } else if (!is_global_idx && !need_lock(table_schema)) {
     LOG_INFO("skip ddl lock", K(ret), K(table_id));
   } else if (OB_FAIL(ObOnlineDDLLock::unlock_table(table_id, ROW_SHARE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
-    LOG_WARN("failed to lock data table", K(ret), K(table_id), K(lock_owner), K(timeout_us));
   } else if (OB_FAIL(ObOnlineDDLLock::unlock_tablets(tablet_ids, EXCLUSIVE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
-    LOG_WARN("failed to lock tablets", K(ret), K(tablet_ids), K(lock_owner), K(timeout_us));
-    /*wait split source tablets trans end, split source tablets table lock will be unlocked in unlock_for_offline_ddl function*/
   } else if (!is_global_idx && OB_FAIL(replace_tablet_lock(table_id, tablet_ids, ROW_EXCLUSIVE, lock_owner, EXCLUSIVE, new_lock_owner, timeout_us, trans))) {
     LOG_WARN("failed to replace table lock", K(ret), K(table_id), K(tablet_ids), K(lock_owner), K(new_lock_owner), K(timeout_us));
   }
@@ -402,7 +348,6 @@ int ObDDLLock::replace_table_lock_for_split(
       req.op_type_ = OUT_TRANS_UNLOCK;
       req.timeout_us_ = timeout_us;
       if (OB_FAIL(unlock_req_list.push_back(req))) {
-        LOG_WARN("failed to push back unlock_req_list", K(ret), K(i));
       }
     }
 
@@ -416,12 +361,10 @@ int ObDDLLock::replace_table_lock_for_split(
       req.op_type_ = OUT_TRANS_UNLOCK;
       req.timeout_us_ = timeout_us;
       if (OB_FAIL(unlock_req_list.push_back(req))) {
-        LOG_WARN("failed to push back unlock_req_list", K(ret), K(i));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < unlock_req_list.count(); ++i) {
       if (OB_FAIL(rep_all_lock_req.unlock_req_list_.push_back(&unlock_req_list.at(i)))) {
-        LOG_WARN("faild to push back unlock_req_list_", K(ret), K(i));
       } 
     }
      
@@ -439,7 +382,6 @@ int ObDDLLock::replace_table_lock_for_split(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid conn", K(ret));
       } else if (OB_FAIL(ObInnerConnectionLockUtil::replace_lock(rep_all_lock_req, iconn))) {
-        LOG_WARN("failed to replace all lock", K(ret), K(rep_all_lock_req));
       }
     } 
   }
@@ -454,14 +396,11 @@ int ObDDLLock::lock_for_modify_auto_part_size_in_trans(const uint64_t data_table
   const ObArray<ObTabletID> no_tablet_ids;
   const int64_t timeout_us = DEFAULT_TIMEOUT;
   if (OB_FAIL(ObOnlineDDLLock::lock_table_in_trans(data_table_id, EXCLUSIVE, timeout_us, trans))) {
-    LOG_WARN("failed to lock data table", K(ret));
   } else if (OB_FAIL(lock_table_lock_in_trans(data_table_id, no_tablet_ids, ROW_SHARE, timeout_us, trans))) {
-    LOG_WARN("failed to lock tablet", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < global_index_table_ids.count(); i++) {
       const uint64_t table_id = global_index_table_ids.at(i);
       if (OB_FAIL(ObOnlineDDLLock::lock_table_in_trans(table_id, EXCLUSIVE, timeout_us, trans))) {
-        LOG_WARN("failed to lock data table tablets", K(ret));
       }
     }
   }
@@ -474,7 +413,6 @@ int ObDDLLock::lock_for_modify_truncate_info_in_trans(const uint64_t global_inde
   int ret = OB_SUCCESS;
   const int64_t timeout_us = DEFAULT_TIMEOUT;
   if (OB_FAIL(ObOnlineDDLLock::lock_table_in_trans(global_index_table_id, EXCLUSIVE, timeout_us, trans))) {
-    LOG_WARN("failed to lock online ddl table", K(ret));
   }
   return ret;
 }
@@ -491,13 +429,9 @@ int ObDDLLock::lock_for_add_lob_in_trans(
   if (!need_lock(data_table_schema)) {
     LOG_INFO("skip ddl lock", K(data_table_id));
   } else if (OB_FAIL(data_table_schema.get_tablet_ids(data_tablet_ids))) {
-    LOG_WARN("failed to get tablet ids", K(ret));
   } else if (OB_FAIL(lock_table_lock_in_trans(data_table_id, data_tablet_ids, ROW_EXCLUSIVE, timeout_us, trans))) {
-    LOG_WARN("failed to lock tablet", K(ret));
   } else if (OB_FAIL(ObOnlineDDLLock::lock_table_in_trans(data_table_id, ROW_EXCLUSIVE, timeout_us, trans))) {
-    LOG_WARN("failed to lock data table", K(ret));
   } else if (OB_FAIL(ObOnlineDDLLock::lock_tablets_in_trans(data_tablet_ids, ROW_EXCLUSIVE, timeout_us, trans))) {
-    LOG_WARN("failed to lock data table tablets", K(ret));
   }
   return ret;
 }
@@ -512,11 +446,8 @@ int ObDDLLock::lock_for_online_drop_column_in_trans(const ObTableSchema &table_s
   if (!need_lock(table_schema)) {
     LOG_INFO("skip ddl lock for non-user table", K(table_schema.get_table_id()));
   } else if (OB_FAIL(table_schema.get_tablet_ids(tablet_ids))) {
-    LOG_WARN("failed to get tablet ids", K(ret));
   } else if (OB_FAIL(lock_table_lock_in_trans(table_id, tablet_ids, ROW_EXCLUSIVE, timeout_us, trans))) {
-    LOG_WARN("failed to lock table", K(ret));
   } else if (OB_FAIL(ObOnlineDDLLock::lock_table_in_trans(table_id, EXCLUSIVE, timeout_us, trans))) {
-    LOG_WARN("failed to lock ddl table", K(ret));
   }
   ret = share::ObDDLUtil::is_table_lock_retry_ret_code(ret) ? OB_EAGAIN : ret;
   return ret;
@@ -535,11 +466,8 @@ int ObDDLLock::lock_for_drop_lob(
   if (!need_lock(data_table_schema)) {
     LOG_INFO("skip ddl lock", K(data_table_id));
   } else if (OB_FAIL(data_table_schema.get_tablet_ids(data_tablet_ids))) {
-    LOG_WARN("failed to get tablet ids", K(ret));
   } else if (OB_FAIL(do_table_lock(data_table_id, data_tablet_ids, ROW_EXCLUSIVE, lock_owner, timeout_us, true/*is_lock*/, trans))) {
-    LOG_WARN("failed to lock data tablet", K(ret));
   } else if (OB_FAIL(ObOnlineDDLLock::lock_table(data_table_id, EXCLUSIVE, lock_owner, timeout_us, trans))) {
-    LOG_WARN("failed to lock data table", K(ret));
   }
   ret = share::ObDDLUtil::is_table_lock_retry_ret_code(ret) ? OB_EAGAIN : ret;
   return ret;
@@ -559,11 +487,8 @@ int ObDDLLock::unlock_for_drop_lob(
   if (!need_lock(data_table_schema)) {
     LOG_INFO("skip ddl lock", K(data_table_id));
   } else if (OB_FAIL(data_table_schema.get_tablet_ids(data_tablet_ids))) {
-    LOG_WARN("failed to get tablet ids", K(ret));
   } else if (OB_FAIL(do_table_lock(data_table_id, data_tablet_ids, ROW_EXCLUSIVE, lock_owner, timeout_us, false/*is_lock*/, trans))) {
-    LOG_WARN("failed to unlock data tablet", K(ret));
   } else if (OB_FAIL(ObOnlineDDLLock::unlock_table(data_table_id, EXCLUSIVE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
-    LOG_WARN("failed to unlock data table", K(ret));
   }
   ret = share::ObDDLUtil::is_table_lock_retry_ret_code(ret) ? OB_EAGAIN : ret;
   return ret;
@@ -583,9 +508,7 @@ int ObDDLLock::lock_for_add_partition_in_trans(
     LOG_WARN("not support to add partition to global index", K(ret));
   } else if (need_lock(table_schema)) {
     if (OB_FAIL(lock_table_lock_in_trans(table_id, no_tablet_ids, ROW_EXCLUSIVE, timeout_us, trans))) {
-      LOG_WARN("failed to lock data table", K(ret));
     } else if (OB_FAIL(ObOnlineDDLLock::lock_table_in_trans(table_id, SHARE, timeout_us, trans))) {
-      LOG_WARN("failed to lock ddl table", K(ret));
     }
   } else {
     LOG_INFO("skip ddl lock", K(ret), K(table_id));
@@ -609,15 +532,10 @@ int ObDDLLock::lock_table_and_global_indexes_for_fork(
   if (!need_lock(table_schema)) {
     LOG_INFO("skip ddl lock", K(table_id));
   } else if (OB_FAIL(table_schema.get_tablet_ids(tablet_ids))) {
-    LOG_WARN("failed to get tablet ids", K(ret));
   } else if (OB_FAIL(do_table_lock(table_id, tablet_ids, ROW_SHARE, lock_owner, timeout_us, true/*is_lock*/, trans))) {
-    LOG_WARN("failed to lock data table", K(ret));
   } else if (OB_FAIL(ObOnlineDDLLock::lock_table(table_id, EXCLUSIVE, lock_owner, timeout_us, trans))) {
-    LOG_WARN("failed to lock data table", K(ret));
   } else if (OB_FAIL(ObOnlineDDLLock::lock_tablets(tablet_ids, ROW_EXCLUSIVE, lock_owner, timeout_us, trans))) {
-    LOG_WARN("failed to lock data table tablet", K(ret));
   } else if (OB_FAIL(schema_guard.get_index_schemas_with_data_table_id(table_id, index_schemas))) {
-    LOG_WARN("failed to get index schemas", K(ret), K(table_id));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < index_schemas.count(); ++i) {
       const share::schema::ObSimpleTableSchemaV2 *index_schema = index_schemas.at(i);
@@ -628,11 +546,8 @@ int ObDDLLock::lock_table_and_global_indexes_for_fork(
         const uint64_t index_table_id = index_schema->get_table_id();
         ObSEArray<ObTabletID, 1> index_tablet_ids;
         if (OB_FAIL(index_schema->get_tablet_ids(index_tablet_ids))) {
-          LOG_WARN("failed to get index tablet ids", K(ret), K(index_table_id));
         } else if (OB_FAIL(ObOnlineDDLLock::lock_table(index_table_id, EXCLUSIVE, lock_owner, timeout_us, trans))) {
-          LOG_WARN("failed to lock index table", K(ret), K(index_table_id));
         } else if (OB_FAIL(ObOnlineDDLLock::lock_tablets(index_tablet_ids, ROW_EXCLUSIVE, lock_owner, timeout_us, trans))) {
-          LOG_WARN("failed to lock index table tablet", K(ret), K(index_table_id));
         }
         // Note: For global index tables, we only use OnlineDDL locks, not table locks via do_table_lock,
         // to avoid "lock table not allowed now" errors that may occur during Fork Table operations.
@@ -659,15 +574,10 @@ int ObDDLLock::unlock_table_and_global_indexes_for_fork(
   if (!need_lock(table_schema) || table_schema.is_user_hidden_table()) {
     LOG_INFO("skip ddl unlock", K(table_id));
   } else if (OB_FAIL(table_schema.get_tablet_ids(tablet_ids))) {
-    LOG_WARN("failed to get tablet ids", K(ret));
   } else if (OB_FAIL(ObOnlineDDLLock::unlock_tablets(tablet_ids, ROW_EXCLUSIVE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
-    LOG_WARN("failed to unlock tablet", K(ret));
   } else if (OB_FAIL(ObOnlineDDLLock::unlock_table(table_id, EXCLUSIVE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
-    LOG_WARN("failed to unlock table", K(ret));
   } else if (OB_FAIL(do_table_lock(table_id, tablet_ids, ROW_SHARE, lock_owner, timeout_us, false/*is_lock*/, trans))) {
-    LOG_WARN("failed to unlock tablet", K(ret));
   } else if (OB_FAIL(schema_guard.get_index_schemas_with_data_table_id(table_id, index_schemas))) {
-    LOG_WARN("failed to get index schemas", K(ret), K(table_id));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < index_schemas.count(); ++i) {
       const share::schema::ObSimpleTableSchemaV2 *index_schema = index_schemas.at(i);
@@ -678,13 +588,9 @@ int ObDDLLock::unlock_table_and_global_indexes_for_fork(
         const uint64_t index_table_id = index_schema->get_table_id();
         ObSEArray<ObTabletID, 1> index_tablet_ids;
         if (OB_FAIL(index_schema->get_tablet_ids(index_tablet_ids))) {
-          LOG_WARN("failed to get index tablet ids", K(ret), K(index_table_id));
         } else if (OB_FAIL(ObOnlineDDLLock::unlock_tablets(index_tablet_ids, ROW_EXCLUSIVE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
-          LOG_WARN("failed to unlock index tablet", K(ret), K(index_table_id));
         } else if (OB_FAIL(ObOnlineDDLLock::unlock_table(index_table_id, EXCLUSIVE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
-          LOG_WARN("failed to unlock index table", K(ret), K(index_table_id));
         } else if (OB_FAIL(do_table_lock(OB_INVALID_ID, index_tablet_ids, ROW_SHARE, lock_owner, timeout_us, false/*is_lock*/, trans))) {
-          LOG_WARN("failed to unlock index tablet table lock", K(ret), K(index_table_id));
         }
         // Note: For global index tables, we unlock both OnlineDDL locks and table locks.
         // The table lock unlock is needed for dst tables which have table locks via lock_dst_table_and_global_indexes_for_fork.
@@ -721,13 +627,10 @@ int ObDDLLock::lock_dst_table_and_global_indexes_for_fork(
     } else if (!need_lock(data_table_schema)) {
       LOG_INFO("skip ddl lock", K(data_table_id));
     } else if (OB_FAIL(data_table_schema.get_tablet_ids(data_tablet_ids))) {
-      LOG_WARN("failed to get data tablet ids", K(ret));
     } else if (OB_FAIL(append(all_tablet_ids, data_tablet_ids))) {
-      LOG_WARN("failed to append data tablet ids", K(ret));
     } else {
       // Lock OnlineDDL table lock for data table
       if (OB_FAIL(ObOnlineDDLLock::lock_table(data_table_id, EXCLUSIVE, lock_owner, timeout_us, trans))) {
-        LOG_WARN("failed to lock data table", K(ret));
       } else {
         // Find and lock global index tables from dst_table_schemas (starting from index 1)
         for (int64_t i = 1; OB_SUCC(ret) && i < dst_table_schemas.count(); ++i) {
@@ -736,11 +639,8 @@ int ObDDLLock::lock_dst_table_and_global_indexes_for_fork(
             const uint64_t index_table_id = table_schema.get_table_id();
             ObSEArray<ObTabletID, 1> index_tablet_ids;
             if (OB_FAIL(table_schema.get_tablet_ids(index_tablet_ids))) {
-              LOG_WARN("failed to get index tablet ids", K(ret), K(index_table_id));
             } else if (OB_FAIL(ObOnlineDDLLock::lock_table(index_table_id, EXCLUSIVE, lock_owner, timeout_us, trans))) {
-              LOG_WARN("failed to lock index table", K(ret), K(index_table_id));
             } else if (OB_FAIL(append(all_tablet_ids, index_tablet_ids))) {
-              LOG_WARN("failed to append index tablet ids", K(ret));
             }
           }
         }
@@ -748,7 +648,6 @@ int ObDDLLock::lock_dst_table_and_global_indexes_for_fork(
         // Lock all tablets (data table + global indexes) OnlineDDL locks in one request
         if (OB_SUCC(ret)) {
           if (OB_FAIL(ObOnlineDDLLock::lock_tablets(all_tablet_ids, ROW_EXCLUSIVE, lock_owner, timeout_us, trans))) {
-            LOG_WARN("failed to lock all tablets", K(ret));
           } else {
             // Lock all tablets (data table + global indexes) in one request using ObLockAloneTabletRequest
             ObLockAloneTabletRequest arg;
@@ -762,9 +661,7 @@ int ObDDLLock::lock_dst_table_and_global_indexes_for_fork(
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("invalid conn", K(ret));
             } else if (OB_FAIL(append(arg.tablet_ids_, all_tablet_ids))) {
-              LOG_WARN("failed to push back", K(ret));
             } else if (OB_FAIL(ObInnerConnectionLockUtil::lock_tablet(arg, iconn))) {
-              LOG_WARN("failed to lock tablet", K(ret), K(arg));
             }
           }
         }
@@ -785,9 +682,7 @@ int ObDDLLock::lock_for_fork_table(
 
   // lock src table and src global indexes
   if (OB_FAIL(lock_table_and_global_indexes_for_fork(schema_guard, src_table_schema, lock_owner, trans))) {
-    LOG_WARN("failed to lock src table and global indexes", K(ret));
   } else if (OB_FAIL(lock_dst_table_and_global_indexes_for_fork(dst_table_schemas, lock_owner, trans))) {
-    LOG_WARN("failed to lock dst table and global indexes", K(ret));
   }
 
   return ret;
@@ -807,19 +702,16 @@ int ObDDLLock::check_has_dependent_task(const int64_t current_task_id,
   if (OB_FAIL(sql_string.assign_fmt("SELECT EXISTS(SELECT 1 FROM %s WHERE task_id != %ld AND ddl_type = %d "
                                     "AND (object_id = %lu OR target_object_id = %lu)) as has",
       share::OB_ALL_DDL_TASK_STATUS_TNAME, current_task_id, share::ObDDLType::DDL_FORK_TABLE, table_id, table_id))) {
-    LOG_WARN("assign sql string failed", K(ret));
   } else {
     ObInnerSQLConnection *iconn = static_cast<ObInnerSQLConnection *>(trans.get_connection());
     if (OB_ISNULL(iconn)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid connection", K(ret));
     } else if (OB_FAIL(iconn->execute_read(sql_string.ptr(), res))) {
-      LOG_WARN("query ddl task record failed", K(ret), K(sql_string));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to get sql result", K(ret), KP(result));
     } else if (OB_FAIL(result->next())) {
-      LOG_WARN("result next failed", K(ret));
     } else {
       EXTRACT_BOOL_FIELD_MYSQL(*result, "has", has_dependent_task);
     }
@@ -848,22 +740,18 @@ int ObDDLLock::unlock_for_fork_table(
     // Check and unlock src table and src global indexes
     bool has_src_dependent_task = false;
     if (OB_FAIL(check_has_dependent_task(task_id, src_table_id, trans, has_src_dependent_task))) {
-      LOG_WARN("failed to check src dependent task", K(ret));
     } else if (has_src_dependent_task) {
       LOG_INFO("skip unlock for src table due to dependent tasks", K(task_id), K(src_table_id));
     } else if (OB_FAIL(unlock_table_and_global_indexes_for_fork(schema_guard, src_table_schema, lock_owner, trans))) {
-      LOG_WARN("failed to unlock src table and global indexes", K(ret));
     }
 
     // Check and unlock dst table and dst global indexes
     bool has_dst_dependent_task = false;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(check_has_dependent_task(task_id, dst_table_id, trans, has_dst_dependent_task))) {
-      LOG_WARN("failed to check dst dependent task", K(ret));
     } else if (has_dst_dependent_task) {
       LOG_INFO("skip unlock for dst table due to dependent tasks", K(task_id), K(dst_table_id));
     } else if (OB_FAIL(unlock_table_and_global_indexes_for_fork(schema_guard, dst_table_schema, lock_owner, trans))) {
-      LOG_WARN("failed to unlock dst table and global indexes", K(ret));
     }
   }
   return ret;
@@ -882,11 +770,8 @@ int ObDDLLock::lock_for_common_ddl_in_trans(
   if (!need_lock(table_schema)) {
     LOG_INFO("skip ddl lock for non-user table", K(table_schema.get_table_id()));
   } else if (OB_FAIL(table_schema.get_tablet_ids(tablet_ids))) {
-    LOG_WARN("failed to get tablet ids", K(ret));
   } else if (OB_FAIL(lock_table_lock_in_trans(table_id, tablet_ids, ROW_EXCLUSIVE, timeout_us, trans))) {
-    LOG_WARN("failed to lock table", K(ret));
   } else if (OB_FAIL(ObOnlineDDLLock::lock_table_in_trans(table_id, require_strict_binary_format ? SHARE : ROW_SHARE, timeout_us, trans))) {
-    LOG_WARN("failed to lock ddl table", K(ret));
   }
   return ret;
 }
@@ -903,9 +788,7 @@ int ObDDLLock::lock_for_common_ddl(
   if (!need_lock(table_schema)) {
     LOG_INFO("skip ddl lock for non-user table", K(table_schema.get_table_id()));
   } else if (OB_FAIL(do_table_lock(table_id, ROW_EXCLUSIVE, lock_owner, timeout_us, true/*is_lock*/, trans))) {
-    LOG_WARN("failed to lock table", K(ret));
   } else if (OB_FAIL(ObOnlineDDLLock::lock_table(table_id, ROW_SHARE, lock_owner, timeout_us, trans))) {
-    LOG_WARN("failed to lock ddl table", K(ret));
   }
   return ret;
 }
@@ -923,9 +806,7 @@ int ObDDLLock::unlock_for_common_ddl(
   if (!need_lock(table_schema)) {
     LOG_INFO("skip ddl lock for non-user table", K(table_schema.get_table_id()));
   } else if (OB_FAIL(do_table_lock(table_id, ROW_EXCLUSIVE, lock_owner, timeout_us, false/*is_lock*/, trans))) {
-    LOG_WARN("failed to unlock table", K(ret));
   } else if (OB_FAIL(ObOnlineDDLLock::unlock_table(table_id, ROW_SHARE, lock_owner, timeout_us, trans, some_lock_not_exist))) {
-    LOG_WARN("failed to unlock ddl table", K(ret));
   }
   return ret;
 }
@@ -943,10 +824,8 @@ int ObDDLLock::lock_for_offline_ddl(
   if (!need_lock(table_schema)) {
     LOG_INFO("skip ddl lock for non-user table", K(table_id));
   } else if (OB_FAIL(do_table_lock(table_id, EXCLUSIVE, lock_owner, timeout_us, true/*is_lock*/, trans))) {
-    LOG_WARN("failed to lock table lock", K(ret));
   } else if (nullptr != hidden_table_schema_to_check_bind) {
     if (OB_FAIL(check_tablet_in_same_ls(table_schema, *hidden_table_schema_to_check_bind, trans))) {
-      LOG_WARN("failed to check tablet in same ls", K(ret));
     }
   }
   return ret;
@@ -960,10 +839,8 @@ int ObDDLLock::unlock_for_offline_ddl(const uint64_t table_id,
   int ret = OB_SUCCESS;
   const int64_t timeout_us = DEFAULT_TIMEOUT;
   if (OB_FAIL(do_table_lock(table_id, EXCLUSIVE, lock_owner, timeout_us, false/*is_lock*/, trans))) {
-    LOG_WARN("failed to lock table lock", K(ret));
   } else if (nullptr != hidden_tablet_ids_alone) {
     if (OB_FAIL(do_table_lock(OB_INVALID_ID/*table_id*/, *hidden_tablet_ids_alone, EXCLUSIVE, lock_owner, timeout_us, false/*is_lock*/, trans))) {
-      LOG_WARN("failed to unlock tablets", K(ret), KPC(hidden_tablet_ids_alone), K(lock_owner));
     }
   }
   return ret;
@@ -985,7 +862,6 @@ int ObDDLLock::lock_table_in_trans(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid conn", K(ret));
   } else if (OB_FAIL(ObInnerConnectionLockUtil::lock_table(table_id, lock_mode, timeout_us, iconn))) {
-    LOG_WARN("failed to lock table", K(ret), K(table_id));
   }
   return ret;
 }
@@ -1004,12 +880,10 @@ int ObDDLLock::lock_table_lock_in_trans(const uint64_t table_id,
     LOG_WARN("invalid conn", K(ret));
   } else if (tablet_ids.empty()) {
     if (OB_FAIL(ObInnerConnectionLockUtil::lock_table(table_id, lock_mode, timeout_us, iconn))) {
-      LOG_WARN("failed to lock table", K(ret));
     }
   } else {
     if (OB_FAIL(
           ObInnerConnectionLockUtil::lock_tablet(table_id, tablet_ids, lock_mode, timeout_us, iconn))) {
-      LOG_WARN("failed to lock tablets", K(ret), K(table_id), K(tablet_ids), K(lock_mode), K(timeout_us));
     }
   }
   return ret;
@@ -1037,7 +911,6 @@ int ObDDLLock::do_table_lock(const uint64_t table_id,
       arg.op_type_ = op_type;
       arg.timeout_us_ = timeout_us;
       if (OB_FAIL(ObInnerConnectionLockUtil::lock_table(arg, iconn))) {
-        LOG_WARN("failed to lock table", K(ret));
       }
     } else {
       ObUnLockTableRequest arg;
@@ -1082,7 +955,6 @@ int ObDDLLock::do_table_lock(const uint64_t table_id,
   if (OB_SUCC(ret) && OB_INVALID_ID != table_id) {
     const ObTableLockMode table_level_lock_mode = lock_mode == ROW_SHARE || lock_mode == SHARE ? ROW_SHARE : ROW_EXCLUSIVE;
     if (OB_FAIL(do_table_lock(table_id, table_level_lock_mode, lock_owner, timeout_us, is_lock, trans))) {
-      LOG_WARN("failed to lock table", K(ret));
     }
   }
 
@@ -1092,7 +964,6 @@ int ObDDLLock::do_table_lock(const uint64_t table_id,
     ObArray<ObUnLockAloneTabletRequest> unlock_args;
     int64_t arg_count = 0;
     if (OB_FAIL(share::ObTabletToLSTableOperator::batch_get_ls(trans, tablet_ids, ls_ids))) {
-      LOG_WARN("failed to get tablet ls", K(ret));
     } else if (OB_UNLIKELY(ls_ids.count() != tablet_ids.count())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid ls ids count", K(ret), K(ls_ids.count()), K(tablet_ids.count()));
@@ -1117,13 +988,11 @@ int ObDDLLock::do_table_lock(const uint64_t table_id,
         arg.timeout_us_ = timeout_us;
         arg.ls_id_ = ls_id;
         if (OB_FAIL(is_lock ? lock_args.push_back(lock_arg) : unlock_args.push_back(unlock_arg))) {
-          LOG_WARN("failed to push back modify arg", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
         ObLockAloneTabletRequest &arg = is_lock ? lock_args.at(j) : unlock_args.at(j);
         if (OB_FAIL(arg.tablet_ids_.push_back(tablet_ids.at(i)))) {
-          LOG_WARN("failed to push back", K(ret));
         }
       }
     }
@@ -1131,7 +1000,6 @@ int ObDDLLock::do_table_lock(const uint64_t table_id,
     for (int64_t i = 0; OB_SUCC(ret) && i < arg_count; i++) {
       if (is_lock) {
         if (OB_FAIL(ObInnerConnectionLockUtil::lock_tablet(lock_args[i], iconn))) {
-          LOG_WARN("failed to lock tablet", K(ret), K(lock_args[i]));
         }
       } else {
         if (OB_FAIL(ObInnerConnectionLockUtil::unlock_tablet(unlock_args[i], iconn))) {
@@ -1163,13 +1031,9 @@ int ObDDLLock::check_tablet_in_same_ls(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tenant id not match", K(ret));
   } else if (OB_FAIL(lhs_schema.get_tablet_ids(lhs_tablet_ids))) {
-    LOG_WARN("failed to get orig tablet ids", K(ret));
   } else if (OB_FAIL(rhs_schema.get_tablet_ids(rhs_tablet_ids))) {
-    LOG_WARN("failed to get index tablet ids", K(ret));
   } else if (OB_FAIL(share::ObTabletToLSTableOperator::batch_get_ls(trans, lhs_tablet_ids, lhs_ls_ids))) {
-    LOG_WARN("failed to get data tablet ls", K(ret));
   } else if (OB_FAIL(share::ObTabletToLSTableOperator::batch_get_ls(trans, rhs_tablet_ids, rhs_ls_ids))) {
-    LOG_WARN("failed to get data tablet ls", K(ret));
   } else if (!is_array_equal(lhs_ls_ids, rhs_ls_ids)) {
     ret = OB_EAGAIN;
     LOG_WARN("tablet not in same ls", K(ret), K(lhs_ls_ids), K(rhs_ls_ids));
@@ -1198,7 +1062,6 @@ int ObDDLLock::replace_tablet_lock(const uint64_t table_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(table_id), K(tablet_ids.count()));
   } else if (OB_FAIL(get_unlock_alone_tablet_request_args(old_lock_mode, old_lock_owner, timeout_us, tablet_ids, unlock_args, trans))) {
-    LOG_WARN("fail to get unlock alone tablet request args", K(ret), K(old_lock_mode), K(old_lock_owner), K(timeout_us), K(tablet_ids));
   } else {
     int64_t arg_count = unlock_args.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < arg_count; i++) {
@@ -1207,7 +1070,6 @@ int ObDDLLock::replace_tablet_lock(const uint64_t table_id,
       replace_req.new_lock_owner_ = new_lock_owner;
       replace_req.unlock_req_ = &unlock_args[i];
       if (OB_FAIL(ObInnerConnectionLockUtil::replace_lock(replace_req, iconn))) {
-        LOG_WARN("failed to replace lock", K(ret), K(replace_req));  
       }
     }
   }
@@ -1231,7 +1093,6 @@ int ObDDLLock::get_unlock_alone_tablet_request_args(const transaction::tablelock
     ObArray<ObLSID> ls_ids;
     int64_t arg_count = 0;
     if (OB_FAIL(share::ObTabletToLSTableOperator::batch_get_ls(trans, tablet_ids, ls_ids))) {
-      LOG_WARN("failed to get tablet ls", K(ret));
     } else if (OB_UNLIKELY(ls_ids.count() != tablet_ids.count())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid ls ids count", K(ret), K(ls_ids.count()), K(tablet_ids.count()));
@@ -1254,13 +1115,11 @@ int ObDDLLock::get_unlock_alone_tablet_request_args(const transaction::tablelock
         unlock_arg.timeout_us_ = timeout_us;
         unlock_arg.ls_id_ = ls_id;
         if (OB_FAIL(unlock_args.push_back(unlock_arg))) {
-          LOG_WARN("failed to push back modify arg", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
         ObLockAloneTabletRequest &arg = unlock_args.at(j);
         if (OB_FAIL(arg.tablet_ids_.push_back(tablet_ids.at(i)))) {
-          LOG_WARN("failed to push back", K(ret));
         }
       }
     }
@@ -1290,7 +1149,6 @@ int ObOnlineDDLLock::lock_table_in_trans(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid conn", K(ret));
   } else if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(arg, iconn))) {
-    LOG_WARN("failed to lock online ddl table in trans", K(ret), K(arg));
   }
   return ret;
 }
@@ -1315,9 +1173,7 @@ int ObOnlineDDLLock::lock_tablets_in_trans(const ObIArray<ObTabletID> &tablet_id
     arg.owner_id_.set_default();
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); i++) {
       if (OB_FAIL(lock_id.set(ObLockOBJType::OBJ_TYPE_ONLINE_DDL_TABLET, tablet_ids.at(i).id()))) {
-        LOG_WARN("set lock id failed", K(ret), K(i), K(tablet_ids));
       } else if (OB_FAIL(arg.objs_.push_back(lock_id))) {
-        LOG_WARN("add lock id failed", K(ret), K(lock_id));
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(ObInnerConnectionLockUtil::lock_obj(arg, iconn))) {
@@ -1347,7 +1203,6 @@ int ObOnlineDDLLock::lock_table(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid conn", K(ret));
   } else if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(arg, iconn))) {
-    LOG_WARN("failed to lock online ddl table", K(ret));
   }
   return ret;
 }
@@ -1374,9 +1229,7 @@ int ObOnlineDDLLock::lock_tablets(
     arg.owner_id_ = lock_owner;
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); i++) {
       if (OB_FAIL(lock_id.set(ObLockOBJType::OBJ_TYPE_ONLINE_DDL_TABLET, tablet_ids.at(i).id()))) {
-        LOG_WARN("set lock id failed", K(ret), K(i), K(tablet_ids));
       } else if (OB_FAIL(arg.objs_.push_back(lock_id))) {
-        LOG_WARN("add lock id failed", K(ret), K(lock_id));
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(ObInnerConnectionLockUtil::lock_obj(arg, iconn))) {
@@ -1441,9 +1294,7 @@ int ObOnlineDDLLock::unlock_tablets(const ObIArray<ObTabletID> &tablet_ids,
 
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); i++) {
       if (OB_FAIL(lock_id.set(ObLockOBJType::OBJ_TYPE_ONLINE_DDL_TABLET, tablet_ids.at(i).id()))) {
-        LOG_WARN("set lock id failed", K(ret), K(i), K(tablet_ids));
       } else if (OB_FAIL(arg.objs_.push_back(lock_id))) {
-        LOG_WARN("add lock id failed", K(ret), K(lock_id));
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(ObInnerConnectionLockUtil::unlock_obj(arg, iconn))) {

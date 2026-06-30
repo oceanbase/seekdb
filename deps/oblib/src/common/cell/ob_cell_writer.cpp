@@ -187,10 +187,7 @@ int ObCellWriter::write_text(const ObObj &obj, const enum ObObjType store_type, 
       lob_scale.set_in_row();
     }
     if (OB_FAIL(append<uint8_t>(static_cast<uint8_t>(lob_scale.get_scale())))) {
-      COMMON_LOG(WARN, "fail to append scale, ",
-         K(ret), K(lob_scale));
     } else if (OB_FAIL(append<uint8_t>(TEXT_CELL_META_VERSION))) {
-      COMMON_LOG(WARN, "fail to append lob version", K(ret));
     }
   }
   if (OB_SUCC(ret)) {

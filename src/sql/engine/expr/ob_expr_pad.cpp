@@ -66,11 +66,8 @@ int ObExprPad::calc_result_type3(ObExprResType &type,
 
     ObSEArray<ObExprResType, 2> types;
     if (OB_FAIL(types.push_back(source))) {
-      LOG_WARN("failed to push back source type", K(ret));
     } else if (OB_FAIL(types.push_back(padding_str))) {
-      LOG_WARN("failed to push back padding source type", K(ret));
     } else if (OB_FAIL(aggregate_charsets_for_string_result(type, &types.at(0), 2, type_ctx))) {
-      LOG_WARN("failed to set collation", K(ret));
     } else {
       source.set_calc_collation_type(type.get_collation_type());
       source.set_calc_collation_level(type.get_collation_level());
@@ -93,7 +90,6 @@ int ObExprPad::calc_pad_expr(const ObExpr &expr, ObEvalCtx &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid arg cnt, must be 3", K(ret), K(expr.arg_cnt_));
   } else if (OB_FAIL(expr.eval_param_value(ctx, src, pad, len))) {
-    LOG_WARN("eval param value failed", K(ret));
   } else if (src->is_null() || pad->is_null() || len->is_null()) {
     res.set_null();
   } else {
@@ -114,7 +110,6 @@ int ObExprPad::calc_pad_expr(const ObExpr &expr, ObEvalCtx &ctx,
         LOG_WARN("session is NULL", K(ret));
       } else if (OB_FAIL(ObExprBaseLRpad::calc_mysql(ObExprBaseLRpad::RPAD_TYPE, expr, ctx,
                             *src, len_char, *pad, *session, res_alloc, res))) {
-        LOG_WARN("calc_mysql failed", K(ret));
       }
     } else {
       res.set_datum(*src);

@@ -67,7 +67,6 @@ int ObDirectLoadMultipleHeapTableIndexScanMerge::init(
       // init rows merger
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(init_rows_merger(scanners.count()))) {
-        LOG_WARN("fail to init rows merger", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -98,10 +97,8 @@ int ObDirectLoadMultipleHeapTableIndexScanMerge::init_rows_merger(int64_t count)
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(rows_merger_->init(MAX_SCANNER_COUNT, count, allocator_))) {
-      LOG_WARN("fail to init rows merger", KR(ret), K(count));
     } else if (FALSE_IT(rows_merger_->reuse())) {
     } else if (OB_FAIL(rows_merger_->open(count))) {
-      LOG_WARN("fail to open rows merger", KR(ret), K(count));
     }
   }
   return ret;
@@ -123,14 +120,12 @@ int ObDirectLoadMultipleHeapTableIndexScanMerge::supply_consume()
     } else {
       item.iter_idx_ = iter_idx;
       if (OB_FAIL(rows_merger_->push(item))) {
-        LOG_WARN("fail to push to loser tree", KR(ret));
       }
     }
   }
   if (OB_SUCC(ret)) {
     // no worry, if no new items pushed, the rebuild will quickly exit
     if (OB_FAIL(rows_merger_->rebuild())) {
-      LOG_WARN("fail to rebuild loser tree", KR(ret), K(consumer_cnt_));
     } else {
       consumer_cnt_ = 0;
     }
@@ -148,13 +143,11 @@ int ObDirectLoadMultipleHeapTableIndexScanMerge::inner_get_next_index(
   } else {
     const LoserTreeItem *top_item = nullptr;
     if (OB_FAIL(rows_merger_->top(top_item))) {
-      LOG_WARN("fail to get top item", KR(ret));
     } else {
       idx = top_item->iter_idx_;
       tablet_index = top_item->index_;
       consumers_[consumer_cnt_++] = top_item->iter_idx_;
       if (OB_FAIL(rows_merger_->pop())) {
-        LOG_WARN("fail to pop item", KR(ret));
       }
     }
   }

@@ -53,7 +53,6 @@ int ObAllVirtualTabletCompactionHistory::inner_get_next_row(ObNewRow *&row)
   int n = 0;
   if (!major_merge_info_iter_.is_opened() && !minor_merge_info_iter_.is_opened()) {
     if (OB_FAIL(share::g_mp->tenant_ss_table_merge_info_mgr()->open_iter(major_merge_info_iter_, minor_merge_info_iter_))) {
-      STORAGE_LOG(WARN, "fail to open ObTenantSSTableMergeInfoMgr::Iterator", K(ret));
     }
   }
   

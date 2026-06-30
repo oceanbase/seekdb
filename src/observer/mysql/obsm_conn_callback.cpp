@@ -62,7 +62,6 @@ static int create_scramble_string(char *scramble_buf, const int64_t buf_len, com
   }
 
   if (FAILEDx(thread_rand.create_random_string(scramble_buf, buf_len))) {
-    LOG_ERROR("fail to create_random_string", K(scramble_buf), K(buf_len), K(ret));
   }
   return ret;
 }
@@ -77,12 +76,10 @@ static int send_handshake(ObSqlSockSession& sess, const OMPKHandshake &hsp)
   int64_t pkt_count = 0;
 
   if (OB_FAIL(hsp.encode(buf, len, pos, pkt_count))) {
-    LOG_WARN("encode handshake packet fail", K(ret));
   } else if (OB_UNLIKELY(pkt_count <= 0)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid pkt count", K(pkt_count), K(ret));
   } else if (OB_FAIL(sess.write_hanshake_packet(buf, pos))) {
-    LOG_WARN("write handshake packet data fail", K(ret));
   }
 
   return ret;
@@ -113,9 +110,7 @@ static int sm_conn_build_handshake(ObSMConnection& conn, obmysql::OMPKHandshake&
   hsp.set_ssl_cap(support_ssl);
   const int64_t BUF_LEN = sizeof(conn.scramble_buf_);
   if (OB_FAIL(create_scramble_string(conn.scramble_buf_, BUF_LEN, thread_scramble_rand))) {
-    LOG_WARN("create scramble string failed", K(ret));
   } else if (OB_FAIL(hsp.set_scramble(conn.scramble_buf_, BUF_LEN))) {
-    LOG_WARN("set scramble failed", K(ret));
   } else {
     LOG_INFO("new mysql sessid created", K(conn.sessid_), K(support_ssl));
   }
@@ -127,11 +122,8 @@ int ObSMConnectionCallback::init(ObSqlSockSession& sess, ObSMConnection& conn)
   int ret = OB_SUCCESS;
   obmysql::OMPKHandshake hsp;
   if (OB_FAIL(sm_conn_init(conn))) {
-    LOG_WARN("init conn fail", K(ret));
   } else if (OB_FAIL(sm_conn_build_handshake(conn, hsp))) {
-    LOG_WARN("conn send handshake fail", K(ret));
   } else if (OB_FAIL(send_handshake(sess, hsp))) {
-    LOG_WARN("send handshake fail", K(ret), K(sess.client_addr_));
   } else {
     sess.sql_session_id_ = conn.sessid_;
     uint64_t tls_version_option = ob_calculate_tls_version_option(
@@ -196,7 +188,6 @@ void ObSMConnectionCallback::destroy(ObSMConnection& conn)
         ObMPDisconnect disconnect_processor(ctx);
         rpc::frame::ObReqProcessor *processor = static_cast<rpc::frame::ObReqProcessor *>(&disconnect_processor);
         if (OB_FAIL(processor->run())) {
-          LOG_WARN("free session fail and related session id can not be reused", K(ret), K(ctx));
         }
       }
    }
@@ -228,7 +219,6 @@ int ObSMConnectionCallback::on_disconnect(observer::ObSMConnection& conn)
     sql::ObSQLSessionInfo *sess_info = NULL;
     sql::ObSessionGetterGuard guard(*(GCTX.session_mgr_), conn.sessid_);
     if (OB_FAIL(guard.get_session(sess_info))) {
-      LOG_WARN("fail to get session", K(conn.sessid_));
     } else if (OB_ISNULL(sess_info)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("session info is NULL", K(conn.sessid_));

@@ -54,7 +54,6 @@ int ObTableLoadMemChunkManager::init(ObTableLoadStoreCtx *store_ctx,
     mem_ctx_ = mem_ctx;
     const int64_t chunk_count = MAX(mem_ctx->max_mem_chunk_count_ / 2, 1);
     if (OB_FAIL(chunk_nodes_.prepare_allocate(chunk_count))) {
-      LOG_WARN("fail to prepare allocate chunk node", KR(ret), K(chunk_count));
     } else {
       is_inited_ = true;
     }
@@ -81,7 +80,6 @@ int ObTableLoadMemChunkManager::get_chunk(int64_t &chunk_node_id, ChunkType *&ch
         if (nullptr == chunk_node.chunk_) {
           // wait for memory to be available
           if (OB_FAIL(mem_ctx_->acquire_chunk(chunk_node.chunk_))) {
-            LOG_WARN("fail to acquire chunk", KR(ret));
           } else {
             chunk_node_id = cur_chunk_node_id;
             chunk = chunk_node.chunk_;
@@ -118,7 +116,6 @@ int ObTableLoadMemChunkManager::get_unclosed_chunks(ObIArray<int64_t> &chunk_nod
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected set chunk node used failed", KR(ret), K(i), K(chunk_node));
       } else if (OB_FAIL(chunk_node_ids.push_back(i))) {
-        LOG_WARN("fail to push back", KR(ret), K(i));
       }
     }
   }
@@ -165,11 +162,8 @@ int ObTableLoadMemChunkManager::close_chunk(int64_t chunk_node_id)
       LOG_WARN("chunk node should be used and chunk not null", KR(ret), K(chunk_node_id),
                K(chunk_node));
     } else if (OB_FAIL(compare.init(*(mem_ctx_->datum_utils_), mem_ctx_->dup_action_))) {
-      LOG_WARN("fail to init compare", KR(ret));
     } else if (OB_FAIL(chunk_node.chunk_->sort(compare, mem_ctx_->enc_params_))) {
-      LOG_WARN("fail to sort chunk", KR(ret));
     } else if (OB_FAIL(mem_ctx_->mem_chunk_queue_.push(chunk_node.chunk_))) {
-      LOG_WARN("fail to push", KR(ret));
     } else if (FALSE_IT(chunk_node.chunk_ = nullptr)) {
     } else if (OB_UNLIKELY(!chunk_node.set_unused())) {
       ret = OB_ERR_UNEXPECTED;
@@ -196,15 +190,11 @@ int ObTableLoadMemChunkManager::close_and_acquire_chunk(int64_t chunk_node_id, C
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("chunk node should be used and chunk not null", KR(ret), K(chunk_node_id), K(chunk_node));
     } else if (OB_FAIL(compare.init(*(mem_ctx_->datum_utils_), mem_ctx_->dup_action_))) {
-      LOG_WARN("fail to init compare", KR(ret));
     } else if (OB_FAIL(chunk->sort(compare, mem_ctx_->enc_params_))) {
-      LOG_WARN("fail to sort chunk", KR(ret));
     } else if (OB_FAIL(mem_ctx_->mem_chunk_queue_.push(chunk))) {
-      LOG_WARN("fail to push", KR(ret));
     } else {
       chunk_node.chunk_ = nullptr;
       if (OB_FAIL(mem_ctx_->acquire_chunk(chunk_node.chunk_))) {
-        LOG_WARN("fail to acquire chunk", KR(ret));
       } else {
         chunk = chunk_node.chunk_;
       }

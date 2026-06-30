@@ -89,7 +89,6 @@ int ObExprErrno::eval_errno(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("evaluate parameters failed", K(ret));
   } else {
     int64_t value = 0;
     res.set_null();

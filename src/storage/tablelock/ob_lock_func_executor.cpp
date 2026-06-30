@@ -123,17 +123,12 @@ int ObGetLockExecutor::lock_obj_(sql::ObSQLSessionInfo *session,
   arg.detect_func_no_ = ObTableLockDetectType::DETECT_SESSION_ALIVE;
 
   if (OB_FAIL(lock_id.set(ObLockOBJType::OBJ_TYPE_MYSQL_LOCK_FUNC, obj_id))) {
-    LOG_WARN("set lock_id failed", K(ret), K(obj_id));
   } else if (OB_FAIL(arg.owner_id_.convert_from_client_sessid(client_session_id, client_session_create_ts))) {
-    LOG_WARN("convert client_session_id to owner_id failed", K(ret), K(client_session_id));
   } else if (OB_FAIL(arg.objs_.push_back(lock_id))) {
-    LOG_WARN("push_back lock_id to arg.objs_ failed", K(ret), K(arg), K(lock_id));
   } else if (OB_FAIL(ObTableLockDetector::record_detect_info_to_inner_table(
                session, LOCK_OBJECT, arg, /*for_dbms_lock*/ false, need_record_to_lock_table))) {
-    LOG_WARN("record_detect_info_to_inner_table failed", K(ret), K(arg));
   } else if (need_record_to_lock_table) {
     if (OB_FAIL(lock_service->lock(*tx_desc, tx_param, arg))) {
-      LOG_WARN("lock obj failed", K(ret), KPC(tx_desc), K(arg));
     }
   }
 
@@ -167,7 +162,6 @@ int ObGetLockExecutor::generate_lock_id_(const ObString &lock_name,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lock handle can not be null", K(ret));
   } else if (OB_FAIL(ObCommonIDUtils::gen_unique_id(unique_lock_id))) {
-    LOG_WARN("generate unique id for lock handle failed", K(ret));
   } else {
     uint64_t hash_val = 0;
     hash_val = murmurhash(lock_name.ptr(), lock_name.length(), hash_val);
@@ -278,7 +272,6 @@ int ObReleaseLockExecutor::execute(ObExecContext &ctx,
         } else if (OB_EMPTY_RESULT == ret) {
           if (OB_TMP_FAIL(ObTableLockDetector::check_lock_id_exist_in_inner_table(
                 session, lock_id, ObLockOBJType::OBJ_TYPE_MYSQL_LOCK_FUNC, lock_id_existed))) {
-            LOG_WARN("check lock_id existed failed", K(tmp_ret), K(lock_id));
           } else if (lock_id_existed) {
             release_cnt = LOCK_NOT_OWN_RELEASE_CNT;
           } else {

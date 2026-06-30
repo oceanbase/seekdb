@@ -97,12 +97,10 @@ int ObTruncatePartitionFilter::init(
     filter_type_ = ObTruncateFilterType::BASE_VERSION_FILTER;
     is_inited_ = true;
   } else if (OB_FAIL(mds_info_mgr_.init(truncate_info_allocator_, tablet, split_extra_tablet_handles, read_version_range, true/*for_access*/))) {
-    LOG_WARN("failed to init mds filter info mgr", KR(ret), K(read_version_range));
   } else if (mds_info_mgr_.empty()) {
     filter_type_ = has_truncate_flag ? ObTruncateFilterType::BASE_VERSION_FILTER : ObTruncateFilterType::EMPTY_FILTER;
     is_inited_ = true;
   } else if (OB_FAIL(init(schema_rowkey_cnt_, cols_desc, cols_param, mds_info_mgr_))) {
-    LOG_WARN("failed to init", K(ret));
   }
   if (OB_SUCC(ret)) {
     base_version_ = read_version_range.base_version_;
@@ -125,11 +123,8 @@ int ObTruncatePartitionFilter::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid empty mds info", K(ret));
   } else if (OB_FAIL(truncate_info_array_.init_for_first_creation(truncate_info_allocator_))) {
-    LOG_WARN("failed to init truncate info array", KR(ret));
   } else if (OB_FAIL(mds_info_mgr.get_distinct_truncate_info_array(truncate_info_array_))) {
-    LOG_WARN("failed to read truncate info array", K(ret));
   } else if (OB_FAIL(init_truncate_filter(schema_rowkey_cnt, cols_desc, cols_param, truncate_info_array_))) {
-    LOG_WARN("failed to init truncate filter", K(ret));
   } else {
     filter_type_ = ObTruncateFilterType::NORMAL_FILTER;
   }
@@ -153,24 +148,19 @@ int ObTruncatePartitionFilter::switch_info(
   } else if (has_truncate_flag && !has_truncate_info) {
     filter_type_ = ObTruncateFilterType::BASE_VERSION_FILTER;
   } else if (OB_FAIL(mds_info_mgr_.init(truncate_info_allocator_, tablet, split_extra_tablet_handles, read_version_range, true/*for_access*/))) {
-    LOG_WARN("failed to init mds filter info mgr", KR(ret), K(read_version_range));
   } else if (mds_info_mgr_.empty()) {
     filter_type_ = has_truncate_flag ? ObTruncateFilterType::BASE_VERSION_FILTER : ObTruncateFilterType::EMPTY_FILTER;
   } else if (OB_FAIL(truncate_info_array_.init_for_first_creation(truncate_info_allocator_))) {
-    LOG_WARN("failed to init truncate info array", KR(ret));
   } else if (OB_FAIL(mds_info_mgr_.get_distinct_truncate_info_array(truncate_info_array_))) {
-    LOG_WARN("failed to read truncate info array", K(ret));
   } else if (OB_UNLIKELY(schema_rowkey_cnt_ != tablet.get_rowkey_read_info().get_schema_rowkey_count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected not equal schema rowkey cnt", K(ret), K_(schema_rowkey_cnt), K(tablet.get_rowkey_read_info().get_schema_rowkey_count()));
   } else if (OB_ISNULL(truncate_filter_executor_)) {
     if (OB_FAIL(init_truncate_filter(schema_rowkey_cnt_, cols_desc, cols_param, truncate_info_array_))) {
-      LOG_WARN("failed to init truncate filter", K(ret));
     } else {
       filter_type_ = ObTruncateFilterType::NORMAL_FILTER;
     }
   } else if (OB_FAIL(truncate_filter_executor_->switch_info(filter_factory_, schema_rowkey_cnt_, cols_desc, truncate_info_array_))) {
-    LOG_WARN("failed to init truncate filter executor", K(ret));
   } else {
     filter_type_ = ObTruncateFilterType::NORMAL_FILTER;
   }
@@ -230,7 +220,6 @@ int ObTruncatePartitionFilter::do_normal_filter(const blocksstable::ObDatumRow &
   if (OB_UNLIKELY(row.row_flag_.is_delete() || row.row_flag_.is_lock())) {
     filtered = false;
   } else if (OB_FAIL(truncate_filter_executor_->filter(row, filtered))) {
-    LOG_WARN("failed to filter", K(ret));
   }
   return ret;
 }
@@ -319,15 +308,11 @@ int ObTruncatePartitionFilter::init_truncate_filter(
   int ret = OB_SUCCESS;
   ObPushdownFilterExecutor *executor = nullptr;
   if (OB_FAIL(filter_factory_.alloc(PushdownFilterType::TRUNCATE_AND_FILTER, 0, truncate_filter_node_))) {
-    LOG_WARN("failed to alloc truncate filter node", K(ret));
   } else if (OB_FAIL(filter_factory_.alloc(PushdownExecutorType::TRUNCATE_AND_FILTER_EXECUTOR,
                                            0, *truncate_filter_node_, executor, op_))) {
-    LOG_WARN("failed to alloc truncate filter executor", K(ret));
   } else if (FALSE_IT(truncate_filter_executor_ = static_cast<ObTruncateAndFilterExecutor*>(executor))) {
   } else if (OB_FAIL(truncate_filter_executor_->init(filter_factory_, schema_rowkey_cnt, cols_desc, cols_param, array))) {
-    LOG_WARN("failed to init truncate filter executor", K(ret));
   } else if (OB_FAIL(init_column_idxs(array))) {
-    LOG_WARN("failed to init column idxs", KR(ret), K(array));
   } else {
     is_inited_ = true;
   }
@@ -345,7 +330,6 @@ int ObTruncatePartitionFilter::init_column_idxs(const ObTruncateInfoArray &array
       LOG_WARN("failed to init column idx", KR(ret), K(idx), KPC(array.at(idx)));
     } else if (array.at(idx)->is_sub_part_) {
       if (OB_FAIL(init_column_idxs(array.at(idx)->truncate_subpart_.part_key_idxs_))) {
-        LOG_WARN("failed to init column idx", KR(ret), K(idx), KPC(array.at(idx)));
       } else {
         break;
       }
@@ -359,7 +343,6 @@ int ObTruncatePartitionFilter::init_column_idxs(const ObPartKeyIdxArray &key_idx
   int ret = OB_SUCCESS;
   for (int64_t idx = 0; OB_SUCC(ret) && idx < key_idx_array.count(); ++idx) {
     if (OB_FAIL(ref_column_idxs_.push_back(key_idx_array.at(idx)))) {
-      LOG_WARN("failed to push back part key idx", KR(ret), K(idx), K(key_idx_array));
     }
   }
   return ret;
@@ -393,7 +376,6 @@ int ObTruncatePartitionFilterFactory::build_truncate_partition_filter(
       STORAGE_LOG(WARN, "failed to alloc memory", K(ret));
     } else if (OB_FAIL(truncate_part_filter->init(tablet, split_extra_tablet_handles, cols_desc, cols_param, read_version_range,
                                                   has_truncate_flag, has_truncate_info, *outer_allocator))) {
-      LOG_WARN("failed to init filter wrapper", K(ret));
     }
     if (OB_FAIL(ret) && nullptr != truncate_part_filter) {
       truncate_part_filter->~ObTruncatePartitionFilter();
@@ -403,7 +385,6 @@ int ObTruncatePartitionFilterFactory::build_truncate_partition_filter(
   } else if (FALSE_IT(truncate_part_filter->reuse())) {
   } else if (OB_FAIL(truncate_part_filter->switch_info(tablet, split_extra_tablet_handles, cols_desc, cols_param, read_version_range,
                                                        has_truncate_flag, has_truncate_info))) {
-    LOG_WARN("failed to switch info", K(ret));
   }
   return ret;
 }

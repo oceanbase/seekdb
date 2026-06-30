@@ -53,14 +53,12 @@ int ObResourceInnerSQLConnectionPool::init(ObMultiVersionSchemaService *schema_s
     LOG_WARN("ObResourceInnerSQLConnectionPool has already been inited", K(ret));
   } else if (OB_FAIL(id_conn_map_.create(10000,
                                          attr, attr))) {
-    LOG_WARN("fail to create id_conn_map_", K(ret));
   } else if (OB_FAIL(inner_sql_conn_pool_.init(schema_service,
                                                ob_sql,
                                                vt_iter_creator,
                                                config,
                                                false,
                                                true /* is_resource_conn_pool */))) {
-    LOG_ERROR("init inner sql connection pool failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -100,7 +98,6 @@ int ObResourceInnerSQLConnectionPool::acquire(
       session_info->set_compatibility_mode(ObCompatibilityMode::MYSQL_MODE);
     }
     if (OB_FAIL(inner_sql_conn_pool_.acquire(session_info, conn))) {
-      LOG_WARN("failed to acquire inner connection", K(ret));
     } else if (FALSE_IT(inner_conn = static_cast<ObInnerSQLConnection *>(conn))) {
     } else if (OB_ISNULL(inner_conn)) {
       ret = OB_ERR_UNEXPECTED;
@@ -108,7 +105,6 @@ int ObResourceInnerSQLConnectionPool::acquire(
     } else {
       uint64_t conn_id = OB_INVALID_ID;
       if (OB_FAIL(fetch_max_conn_id(conn_id))) {
-        LOG_WARN("failed to fetch max_conn_id", K(ret));
       } else {
         inner_conn->set_is_idle(false);
         inner_conn->set_resource_svr(MYADDR);
@@ -116,7 +112,6 @@ int ObResourceInnerSQLConnectionPool::acquire(
         inner_conn->set_last_query_timestamp(ObTimeUtility::current_time());
         if (OB_FAIL(id_conn_map_.set_refactored(conn_id, conn,
                                                 0 /* do not overwrite existing object */))) {
-          LOG_WARN("set the pair of conn_id and inner_conn to the id_conn_map_ failed", K(ret));
         }
       }
     }
@@ -176,7 +171,6 @@ int ObResourceInnerSQLConnectionPool::acquire(
       } else if (now - inner_sql_conn_pool_.used_conn_list_.get_first()->get_last_query_timestamp()
                  > max_last_query_elapse_time) {
         if (OB_FAIL(inner_release(inner_sql_conn_pool_.used_conn_list_.get_first()))) {
-          LOG_WARN("release connection failed", K(ret));
         }
       } else {
         need_check_last_query_elapse_time = false;
@@ -199,9 +193,7 @@ int ObResourceInnerSQLConnectionPool::inner_release(common::sqlclient::ObISQLCon
     LOG_WARN("conn is null", K(ret));
   } else if (OB_FAIL(id_conn_map_.erase_refactored(
                      static_cast<ObInnerSQLConnection *>(conn)->get_resource_conn_id()))) {
-    LOG_WARN("fail to erase from id_conn_map_", K(ret));
   } else if (OB_FAIL(inner_sql_conn_pool_.release(conn, true))) {
-    LOG_WARN("inner_release connection failed", K(ret));
   }
 
   return ret;
@@ -223,7 +215,6 @@ int ObResourceInnerSQLConnectionPool::release(
     ObInnerSQLConnection *inner_conn = static_cast<ObInnerSQLConnection *>(conn);
     if (!reuse_conn || inner_conn->is_force_no_reuse()) {
       if (OB_FAIL(inner_release(conn))) {
-        LOG_WARN("release connection failed", K(ret));
       }
       conn = NULL;
     } else {

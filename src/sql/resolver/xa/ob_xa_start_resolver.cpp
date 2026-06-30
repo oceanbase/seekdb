@@ -51,9 +51,7 @@ int ObXaStartResolver::resolve(const ParseNode &parse_node)
     int64_t format_id = -1;
     int64_t flag = 0;
     if (OB_FAIL(ObResolverUtils::resolve_xid(parse_node.children_[0], gtrid_string, bqual_string, format_id))) {
-      LOG_WARN("resolve xid failed in xa start", K(ret));
     } else if (OB_FAIL(ObResolverUtils::resolve_opt_join_or_resume(parse_node.children_[1], flag))) {
-      LOG_WARN("resolve xa start join or resume failed", K(ret));
     } else {
       if(gtrid_string.length() <= 0) {
         ret = OB_TRANS_XA_INVAL;

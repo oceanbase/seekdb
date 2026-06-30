@@ -46,7 +46,6 @@ int ObAllVirtualLoadDataStat::inner_open()
   int ret = OB_SUCCESS;
   sql::ObGlobalLoadDataStatMap *job_status_map = sql::ObGlobalLoadDataStatMap::getInstance();
   if (OB_FAIL(job_status_map->get_all_job_status(all_job_status_op_))) {
-    SERVER_LOG(WARN, "fail to get all job status", K(ret));
   }
   return ret;
 }
@@ -215,7 +214,6 @@ int ObAllVirtualLoadDataStat::inner_get_next_row(ObNewRow *&row)
                                       job_status->store_.compact_stage_consume_tmp_files_,
                                       job_status->store_.compact_stage_merge_write_rows_,
                                       job_status->store_.merge_stage_write_rows_))) {
-            SERVER_LOG(WARN, "fail to fill message_", K(ret));
           } else {
             cells[i].set_varchar(job_status->message_);
             cells[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));

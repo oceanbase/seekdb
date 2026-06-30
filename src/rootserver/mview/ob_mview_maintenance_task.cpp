@@ -118,18 +118,15 @@ void ObMViewMaintenanceTask::runTimerTask()
     switch (status_) {
       case StatusType::PREPARE:
         if (OB_FAIL(prepare())) {
-          LOG_WARN("fail to prepare", KR(ret));
         }
         break;
       case StatusType::GC_MVIEW:
         if (OB_FAIL(gc_mview())) {
-          LOG_WARN("fail to gc mview", KR(ret));
         }
         break;
       case StatusType::SUCCESS:
       case StatusType::FAIL:
         if (OB_FAIL(finish())) {
-          LOG_WARN("fail to finish", KR(ret));
         }
         break;
       default:
@@ -186,7 +183,6 @@ int ObMViewMaintenanceTask::gc_mview()
     if (OB_FAIL(ObMViewInfo::batch_fetch_mview_ids(*GCTX.sql_proxy_,
                                                    last_fetch_mview_id_, mview_ids_,
                                                    MVIEW_NUM_FETCH_PER_SCHED))) {
-      LOG_WARN("fail to batch fetch mview ids", KR(ret), K(last_fetch_mview_id_));
     } else {
       fetch_mview_num_ += mview_ids_.count();
       fetch_finish_ = mview_ids_.count() < MVIEW_NUM_FETCH_PER_SCHED;
@@ -201,9 +197,7 @@ int ObMViewMaintenanceTask::gc_mview()
     int64_t gc_stats_num = 0;
     int64_t affected_rows = 0;
     if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("fail to get tenant schema guard", KR(ret));
     } else if (OB_FAIL(schema_guard.get_schema_version(tenant_schema_version))) {
-      LOG_WARN("fail to get schema version", KR(ret));
     }
     while (OB_SUCC(ret) && (mview_idx_ < mview_ids_.count() || OB_INVALID_ID != gc_mview_id_) &&
            gc_stats_num < MVREF_STATS_NUM_PURGE_PER_SCHED) {
@@ -215,11 +209,9 @@ int ObMViewMaintenanceTask::gc_mview()
         bool is_exist = false;
         if (OB_FAIL(
               ObMViewInfo::fetch_mview_info(*GCTX.sql_proxy_, mview_id, mview_info))) {
-          LOG_WARN("fail to fetch mview info", KR(ret), K(mview_id));
         } else if (mview_info.get_schema_version() > tenant_schema_version) {
           is_exist = true; // skip, wait next round
         } else if (OB_FAIL(schema_guard.get_table_schema( mview_id, table_schema))) {
-          LOG_WARN("fail to get table schema", KR(ret), K(mview_id));
         } else {
           is_exist = (nullptr != table_schema);
         }
@@ -236,14 +228,11 @@ int ObMViewMaintenanceTask::gc_mview()
         filter_param.set_mview_id(mview_id);
         if (OB_FAIL(ObMViewRefreshStatsPurgeUtil::purge_refresh_stats(
               *GCTX.sql_proxy_, filter_param, affected_rows, limit))) {
-          LOG_WARN("fail to purge refresh stats", KR(ret), K(filter_param),
-                   K(limit));
         } else {
           gc_stats_num += affected_rows;
         }
         if (OB_SUCC(ret) && affected_rows < limit) {
           if (OB_FAIL(drop_mview(mview_id))) {
-            LOG_WARN("fail to drop mview", KR(ret), K(mview_id));
           } else {
             gc_mview_id_ = OB_INVALID_ID;
             ++gc_mview_num;
@@ -310,7 +299,6 @@ int ObMViewMaintenanceTask::drop_mview(uint64_t mview_id)
     ObMySQLTransaction trans;
     ObMViewInfo mview_info;
     if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-      LOG_WARN("fail to start trans", KR(ret));
     } else if (OB_FAIL(ObMViewInfo::fetch_mview_info(trans, mview_id, mview_info,
                                                      true /*for_update*/, true /*nowait*/))) {
       if (OB_LIKELY(OB_ERR_EXCLUSIVE_LOCK_CONFLICT_NOWAIT == ret)) {
@@ -324,14 +312,12 @@ int ObMViewMaintenanceTask::drop_mview(uint64_t mview_id)
       }
     } else if (OB_FAIL(ObMViewRefreshStatsParams::drop_mview_refresh_stats_params(
                  trans, mview_id, true /*if_exists*/))) {
-      LOG_WARN("fail to drop mview refresh stats params", KR(ret), K(mview_id));
     } else if (!mview_info.get_refresh_job().empty() &&
                OB_FAIL(ObDBMSSchedJobUtils::remove_dbms_sched_job(
                  trans, mview_info.get_refresh_job(), true /*if_exists*/))) {
       LOG_WARN("fail to remove dbms sched job", KR(ret), "job_name",
                mview_info.get_refresh_job());
     } else if (OB_FAIL(ObMViewInfo::drop_mview_info(trans, mview_info))) {
-      LOG_WARN("fail to drop mview info", KR(ret), K(mview_info));
     }
     if (trans.is_started()) {
       int tmp_ret = OB_SUCCESS;

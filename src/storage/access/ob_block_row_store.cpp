@@ -73,7 +73,6 @@ int ObBlockRowStore::init(const ObTableAccessParam &param, common::hash::ObHashS
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument to init store pushdown filter", K(ret));
   } else if (OB_FAIL(pd_filter_info_.init(param.iter_param_, *context_.stmt_allocator_))) {
-    LOG_WARN("Fail to init pd filter info", K(ret));
   } else if (nullptr != context_.sample_filter_ 
               && OB_FAIL(context_.sample_filter_->combine_to_filter_tree(pd_filter_info_.filter_))) {
       LOG_WARN("Failed to combine sample filter to filter tree", K(ret), K_(pd_filter_info), KP_(context_.sample_filter));
@@ -85,7 +84,6 @@ int ObBlockRowStore::init(const ObTableAccessParam &param, common::hash::ObHashS
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("Failed to alloc memory for ObWhereOptimizer", K(ret));
     } else if (OB_FAIL(where_optimizer_->init(&param.iter_param_, pd_filter_info_.filter_))) {
-      LOG_WARN("Failed to init where optimizer", K(ret), K(param.iter_param_), K(pd_filter_info_.filter_));
     }
   }
   if (OB_SUCC(ret)) {
@@ -117,7 +115,6 @@ int ObBlockRowStore::open(ObTableIterParam &iter_param)
   } else if (nullptr == pd_filter_info_.filter_) {
     // nothing to do
   } else if (OB_FAIL(pd_filter_info_.filter_->init_evaluated_datums(filter_valid))) {
-    LOG_WARN("Failed to init pushdown filter evaluated datums", K(ret));
   } else {
     if (OB_UNLIKELY(!filter_valid)) {
       iter_param.disable_pd_filter();
@@ -125,13 +122,10 @@ int ObBlockRowStore::open(ObTableIterParam &iter_param)
     }
     if (iter_param.is_use_column_store()) {
       if (OB_FAIL(pd_filter_info_.filter_->init_co_filter_param(iter_param, need_padding))) {
-        LOG_WARN("Failed to init pushdown filter executor", K(ret));
       }
     } else if (OB_FAIL(iter_param.build_index_filter_for_row_store(context_.allocator_))) {
-      LOG_WARN("Failed to build skip index for row store", K(ret));
     } else if (OB_FAIL(pd_filter_info_.filter_->init_filter_param(
             *iter_param.get_col_params(), *iter_param.out_cols_project_, need_padding))) {
-      LOG_WARN("Failed to init pushdown filter executor", K(ret));
     }
   }
   return ret;

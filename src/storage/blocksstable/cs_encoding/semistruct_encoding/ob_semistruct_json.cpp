@@ -76,7 +76,6 @@ static int datum_to_json(ObJsonNode &base_node, const ObDatum &datum)
       ObJsonDatetime& node = static_cast<ObJsonDatetime&>(base_node);
       ObTime time;
       if (OB_FAIL(ObTimeConverter::date_to_ob_time(datum.get_date(), time))) {
-        LOG_WARN("to ob time fail", K(ret), K(datum));
       } else {
         node.set_value(time);
       }
@@ -86,7 +85,6 @@ static int datum_to_json(ObJsonNode &base_node, const ObDatum &datum)
       ObJsonDatetime& node = static_cast<ObJsonDatetime&>(base_node);
       ObTime time;
       if (OB_FAIL(ObTimeConverter::time_to_ob_time(datum.get_int(), time))) {
-        LOG_WARN("to ob time fail", K(ret), K(datum));
       } else {
         node.set_value(time);
       }
@@ -96,7 +94,6 @@ static int datum_to_json(ObJsonNode &base_node, const ObDatum &datum)
       ObJsonDatetime& node = static_cast<ObJsonDatetime&>(base_node);
       ObTime time;
       if (OB_FAIL(ObTimeConverter::datetime_to_ob_time(datum.get_int(), nullptr, time))) {
-        LOG_WARN("to ob time fail", K(ret), K(datum));
       } else {
         node.set_value(time);
       }
@@ -106,7 +103,6 @@ static int datum_to_json(ObJsonNode &base_node, const ObDatum &datum)
       ObJsonDatetime& node = static_cast<ObJsonDatetime&>(base_node);
       ObTime time;
       if (OB_FAIL(ObTimeConverter::mdate_to_ob_time(datum.get_int(), time))) {
-        LOG_WARN("to ob time fail", K(ret), K(datum));
       } else {
         node.set_value(time);
       }
@@ -116,7 +112,6 @@ static int datum_to_json(ObJsonNode &base_node, const ObDatum &datum)
       ObJsonDatetime& node = static_cast<ObJsonDatetime&>(base_node);
       ObTime time;
       if (OB_FAIL(ObTimeConverter::mdatetime_to_ob_time(datum.get_int(), time))) {
-        LOG_WARN("to ob time fail", K(ret), K(datum));
       } else {
         node.set_value(time);
       }
@@ -126,7 +121,6 @@ static int datum_to_json(ObJsonNode &base_node, const ObDatum &datum)
       ObJsonDatetime& node = static_cast<ObJsonDatetime&>(base_node);
       ObTime time;
       if (OB_FAIL(ObTimeConverter::usec_to_ob_time(datum.get_int(), time))) {
-        LOG_WARN("to ob time fail", K(ret), K(datum));
       } else {
         node.set_value(time);
       }
@@ -220,7 +214,6 @@ static int bin_to_tree(const ObJsonBin &bin, ObJsonNode &base_node)
         ObJsonDatetime& node = static_cast<ObJsonDatetime&>(base_node);
         ObTime time;
         if (OB_FAIL(bin.get_obtime(time))) {
-          LOG_WARN("get obtime fail", K(ret), K(bin));
         } else {
           node.set_value(time);
         }
@@ -264,7 +257,6 @@ int ObJsonDataFlatter::visit(const ObString& data)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc spare col fail", K(ret), "size", sizeof(ObJsonObject));
   } else if (OB_FAIL(do_visit(data, flat_json_))) {
-    LOG_WARN("flat fail", K(ret));
   } else if (use_lexicographical_order_ != sub_schema_->use_lexicographical_order()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lexicographical_order is different", K(ret), K(use_lexicographical_order_), K(sub_schema_->use_lexicographical_order()));
@@ -275,15 +267,12 @@ int ObJsonDataFlatter::visit(const ObString& data)
     if (spare_col_->element_count() == 0) {
       datum.set_null();
     } else if (OB_FAIL(ObJsonBinSerializer::serialize_json_value(spare_col_, result_buffer, false/*enable_reserialize*/))) {
-      LOG_WARN("serialize json tree fail", K(ret));
     } else if (OB_FAIL(result_buffer.get_result_string(spare_col_data))) {
-      LOG_WARN("get result string fail", K(ret));
     } else {
       datum.set_string(spare_col_data);
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(sub_col_datums_->at(sub_col_datums_->count() - 1)->push_back(datum))) {
-      LOG_WARN("add value fail", K(ret));
     }
     spare_col_->~ObJsonObject();
     spare_col_ = nullptr;
@@ -303,7 +292,6 @@ int ObJsonDataFlatter::copy_datum(const ObFlatJson &flat_json, ObDatum &dest)
     int64_t datum_size = sizeof(uint64_t);
     if (! is_int_sc) {
       if (OB_FAIL(dest.deep_copy(src, *allocator_))) {
-        LOG_WARN("deep copy fail", K(ret), K(flat_json));
       }
     } else if (OB_ISNULL(datum_ptr = static_cast<char*>(allocator_->alloc(datum_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -348,15 +336,12 @@ int ObJsonDataFlatter::add(const ObFlatJson &flat_json)
     LOG_WARN("sub column type is not match", K(ret), KPC(sub_column), K(flat_json), K(datum_));
   } else if (sub_column->is_spare_storage()) {
     if (OB_FAIL(add_spare_col(flat_json, *sub_column))) {
-      LOG_WARN("add_spare_col fail", K(ret), K(flat_json), K(col_cnt_));
     }
   } else if (sub_column->get_col_id() >= sub_col_datums_->count() - sub_schema_->has_spare_column()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid sub col id", K(ret), K(sub_column->get_col_id()), K(sub_col_datums_->count()), K(sub_schema_->has_spare_column()));
   } else if (OB_FAIL(copy_datum(flat_json, datum))) {
-    LOG_WARN("deep copy datum fail", K(ret));
   } else if (OB_FAIL(sub_col_datums_->at(sub_column->get_col_id())->push_back(datum))) {
-    LOG_WARN("add value fail", K(ret), K(col_cnt_), KPC(sub_column), K(flat_json));
   }
 
   if (OB_SUCC(ret)) {
@@ -370,7 +355,6 @@ int ObJsonDataFlatter::add_object_key(const ObString &key, ObFlatJson &flat_json
   int ret = OB_SUCCESS;
   if (! sub_schema_->has_key_dict()) {
     if (OB_FAIL(flat_json.add_path_item(share::ObSubColumnPathItem::OBJECT, key))) {
-      LOG_WARN("add object path item fail", K(ret), K(key));
     }
   } else {
     int64_t key_id = -1;
@@ -380,7 +364,6 @@ int ObJsonDataFlatter::add_object_key(const ObString &key, ObFlatJson &flat_json
         ret = OB_SEMISTRUCT_SCHEMA_NOT_MATCH;
       }
     } else if (OB_FAIL(flat_json.add_path_item(share::ObSubColumnPathItem::DICT_KEY, key_id))) {
-      LOG_WARN("add dict key path item fail", K(ret), K(key), K(key_id));
     }
   }
   return ret;
@@ -401,7 +384,6 @@ int ObJsonDataFlatter::add_spare_col(const ObFlatJson &flat_json, const ObSemiSt
   } else if (flat_json.json_type() == ObJsonNodeType::J_NULL) {
     node = &ObSemiStructScalar::null_;
   } else if (OB_FAIL(ObJsonBaseFactory::alloc_node(spare_data_allocator_, flat_json.json_type(), node))) {
-    LOG_WARN("alloc node fail", K(ret), K(flat_json));
   } else if (flat_json.json_type() == ObJsonNodeType::J_OBJECT || flat_json.json_type() == ObJsonNodeType::J_ARRAY){
     if(! flat_json.get_value().is_null()) {
       ret = OB_ERR_UNEXPECTED;
@@ -412,18 +394,15 @@ int ObJsonDataFlatter::add_spare_col(const ObFlatJson &flat_json, const ObSemiSt
     ObDatum datum;
     // decimal has special binary format, need deep copy to avoid random memory
     if (OB_FAIL(datum.deep_copy(flat_json.get_value(), *allocator_))) {
-      LOG_WARN("deep copy fail", K(ret), K(flat_json));
     } else {
       decimal_node.set_value(datum.get_number());
       decimal_node.set_precision(flat_json.get_precision());
       decimal_node.set_scale(flat_json.get_scale());
     } 
   } else if (OB_FAIL(datum_to_json(*node, flat_json.get_value()))) {
-    LOG_WARN("set datum to json node fail", K(ret), K(flat_json));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(spare_col_->add(key, node, true, true, false))) {
-    LOG_WARN("add fail", K(ret), K(sub_column));
   }
   return ret;
 }
@@ -436,7 +415,6 @@ int ObJsonDataFlatter::handle_null()
   datum.set_null();
   for (int i = 0 ; OB_SUCC(ret) && i < sub_col_cnt; ++i) {
     if (OB_FAIL(sub_col_datums_->at(i)->push_back(datum))) {
-      LOG_WARN("add value fail", K(ret), K(i), K(sub_col_cnt));
     }
   }
   return ret;
@@ -455,10 +433,8 @@ int ObJsonSchemaFlatter::visit(const ObString& data)
   tmp_sub_schema_.reuse();
   tmp_sub_schema_.set_use_lexicographical_order(use_lexicographical_order_);
   if (OB_FAIL(do_visit(data, flat_json_))) {
-    LOG_WARN("flat fail", K(ret));
   } else if (OB_FALSE_IT(tmp_sub_schema_.set_use_lexicographical_order(use_lexicographical_order_))) {
   } else if (OB_FAIL(sub_schema_.merge(tmp_sub_schema_))) {
-    LOG_WARN("merge fail", K(ret), K(tmp_sub_schema_), K(sub_schema_));
   }
   return ret;
 }
@@ -467,7 +443,6 @@ int ObJsonSchemaFlatter::add(const ObFlatJson &flat_json)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tmp_sub_schema_.add_column(flat_json))) {
-    LOG_WARN("add sub column fail", K(ret), K(flat_json));
   }
   return ret;
 }
@@ -476,7 +451,6 @@ int ObJsonSchemaFlatter::build_sub_schema(ObSemiStructSubSchema &result) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(sub_schema_.build_sub_schema(result, total_cnt_ - null_cnt_))) {
-    LOG_WARN("build_sub_schema fail", K(ret), K(sub_schema_), K(total_cnt_), K(null_cnt_));
   }
   return ret;
 }
@@ -534,7 +508,6 @@ int ObSemiStructSubColumn::init(const share::ObSubColumnPath& path, const ObJson
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(path_.assign(path))) {
-    LOG_WARN("assign path item fail", K(ret));
   } else {
     json_type_ = json_type;
     obj_type_ = obj_type;
@@ -547,7 +520,6 @@ int ObSemiStructSubColumn::deep_copy(ObIAllocator& allocator, const ObSemiStruct
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(path_.deep_copy(allocator, other.path_))) {
-    LOG_WARN("deep_copy path fail", K(ret), K(other));
   } else {
     json_type_ = other.json_type_;
     obj_type_ = other.obj_type_;
@@ -683,14 +655,12 @@ int ObSemiStructSubSchema::encode(char *buf, const int64_t buf_len, int64_t &pos
   OB_UNIS_ENCODE(column_count);
   for (int64_t i = 0; OB_SUCC(ret) && i < column_count; ++i) {
     if (OB_FAIL(columns_[i].encode(buf, buf_len, pos))) {
-      LOG_WARN("encode failed", K(ret), K(i), K(column_count), K(pos), K(buf_len));
     }
   }
   int64_t spare_column_count = spare_columns_.count();
   OB_UNIS_ENCODE(spare_column_count);
   for (int64_t i = 0; OB_SUCC(ret) && i < spare_column_count; ++i) {
     if (OB_FAIL(spare_columns_[i].encode(buf, buf_len, pos))) {
-      LOG_WARN("encode spare_columns failed", K(ret), K(i), K(spare_column_count), K(pos), K(buf_len));
     }
   }
   return ret;
@@ -710,7 +680,6 @@ int ObSemiStructSubSchema::decode(const char *buf, const int64_t data_len, int64
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < column_count; ++i) {
     if (OB_FAIL(columns_.at(i).decode(buf, data_len, pos))) {
-      LOG_WARN("decode failed", K(ret), K(i), K(column_count), K(pos), K(data_len));
     }
   }
   int64_t spare_column_count = 0;
@@ -720,7 +689,6 @@ int ObSemiStructSubSchema::decode(const char *buf, const int64_t data_len, int64
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < spare_column_count; ++i) {
     if (OB_FAIL(spare_columns_.at(i).decode(buf, data_len, pos))) {
-      LOG_WARN("decode spare_columns failed", K(ret), K(i), K(spare_column_count), K(pos), K(data_len));
     }
   }
   if (OB_SUCC(ret)) is_inited_ = true;
@@ -761,11 +729,9 @@ int ObSemiStructSubSchema::get_column(const int64_t col_idx, const share::ObSubC
     // need search with column path
     // search freq columns
     if (OB_FAIL(find_column(columns_, path, sub_column))) {
-      LOG_WARN("find column in freq columns fail", K(ret), K(path), K(columns_));
     } else if (OB_NOT_NULL(sub_column)) {
     // search spare columns
     } else if (OB_FAIL(find_column(spare_columns_, path, sub_column))) {
-      LOG_WARN("find column in spare columns fail", K(ret), K(path), K(spare_columns_));
     } else if (OB_ISNULL(sub_column)) {
       ret = OB_SEARCH_NOT_FOUND;
       LOG_WARN("sub column is not found", K(ret), K(path), K(columns_), K(spare_columns_));
@@ -789,18 +755,15 @@ int ObSemiStructSubSchema::get_column(const share::ObSubColumnPath& path, const 
   const share::ObSubColumnPath* path_ptr = &path;
   if (has_key_dict_) {
     if (OB_FAIL(make_column_path(path, new_path))) {
-      LOG_WARN("make_column_path fail", K(ret), K(path));
     } else {
       path_ptr = &new_path;
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(find_column(columns_, *path_ptr, sub_column))) {
-    LOG_WARN("find column in freq columns fail", K(ret), K(path), KPC(path_ptr), K(columns_));
   } else if (OB_NOT_NULL(sub_column)) {
   // search spare columns
   } else if (OB_FAIL(find_column(spare_columns_, *path_ptr, sub_column))) {
-    LOG_WARN("find column in spare columns fail", K(ret), K(path), KPC(path_ptr), K(spare_columns_));
   }
   return ret;
 }
@@ -841,20 +804,17 @@ int ObSemiStructSubSchema::make_column_path(const share::ObSubColumnPath& path, 
     const share::ObSubColumnPathItem &path_item = path.get_path_item(i);
     if (path_item.is_array() || path_item.is_dict_key()) {
       if (OB_FAIL(result.add_path_item(path_item.type_, path_item.array_idx_))) {
-        LOG_WARN("add path item fail", K(ret), K(path_item));
       }
     } else if (path_item.is_object()) {
       const ObString &key = path_item.key_;
       int64_t id = -1;
       if (OB_FAIL(key_dict_.get(key, id))) {
-        LOG_WARN("look up key dick fail", K(ret), K(key), K(key_dict_));
       }
       if (OB_SUCC(ret)) {
         if (id < 0) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("id is negetive", K(ret), K(id));
         } else if (OB_FAIL(result.add_path_item(share::ObSubColumnPathItem::DICT_KEY, id))) {
-          LOG_WARN("add path item fail", K(ret), K(id));
         }
       }
     } else {
@@ -911,9 +871,7 @@ int ObSimpleSubSchema::add_column(const ObFlatJson &flat_json)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc sub column fail", K(ret), "size", sizeof(ObSemiStructSubColumn));
   } else if (OB_FAIL(sub_column->init(path, json_type, obj_type, column_count))) {
-    LOG_WARN("init sub column fail", K(ret), K(path));
   } else if (OB_FAIL(columns_.push_back(ObSimpleSubColumn(sub_column, 1/*cnt*/)))) {
-    LOG_WARN("push back sub column fail", K(ret));
   } else if (ObJsonNodeType::J_DECIMAL == json_type) {
     sub_column->set_precision_and_scale(flat_json.get_precision(), flat_json.get_scale());
   } else if (ObJsonNodeType::J_STRING == json_type) {
@@ -932,9 +890,7 @@ int ObSimpleSubSchema::add_column(const share::ObSubColumnPath& path, const ObJs
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc sub column fail", K(ret), "size", sizeof(ObSemiStructSubColumn));
   } else if (OB_FAIL(sub_column->init(path, json_type, obj_type, column_count))) {
-    LOG_WARN("init sub column fail", K(ret), K(path));
   } else if (OB_FAIL(columns_.push_back(ObSimpleSubColumn(sub_column, 1/*cnt*/)))) {
-    LOG_WARN("push back sub column fail", K(ret));
   }
   return ret;
 }
@@ -983,9 +939,7 @@ int ObSimpleSubSchema::build_sub_schema(ObSemiStructSubSchema& sub_schema, const
   int ret = OB_SUCCESS;
   sub_schema.use_lexicographical_order_ = use_lexicographical_order_;
   if (OB_FAIL(build_key_dict(sub_schema, row_cnt))) {
-    LOG_WARN("build_key_dict fail", K(ret), K(sub_schema));
   } else if (OB_FAIL(build_freq_and_spare_cols(sub_schema.allocator_, sub_schema.columns_, sub_schema.spare_columns_, row_cnt))) {
-    LOG_WARN("simple sub schema to array fail", K(ret), K(row_cnt));
   } else {
     int32_t col_id = 0;
     for (int i = 0; OB_SUCC(ret) && i < sub_schema.columns_.count(); ++i) {
@@ -1012,7 +966,6 @@ int ObSimpleSubSchema::build_freq_and_spare_cols(ObIAllocator &allocator, ObIArr
   int ret = OB_SUCCESS;
   const int64_t column_count = columns_.size();
   if (OB_FAIL(freq_cols.reserve(column_count))) {
-    LOG_WARN("reserve array failed", K(ret), "size", column_count);
   } else {
     ObList<ObSimpleSubColumn, ObIAllocator>::const_iterator iter = columns_.begin();
     while(OB_SUCC(ret) && iter != columns_.end()) {
@@ -1029,14 +982,10 @@ int ObSimpleSubSchema::build_freq_and_spare_cols(ObIAllocator &allocator, ObIArr
         LOG_DEBUG("spare sub column", K(sub_column), K(row_cnt), K(need_as_spare), K(freq_col_threshold_));
         if (need_as_spare) sub_column.col_->set_is_spare_storage();
         if (OB_FAIL(spare_cols.push_back(ObSemiStructSubColumn()))) {
-          LOG_WARN("push back fail", K(ret), "size", spare_cols.count(), K(*iter));
         } else if (OB_FAIL(spare_cols.at(spare_cols.count()-1).deep_copy(allocator, *sub_column.col_))) {
-          LOG_WARN("deep copy fail", K(ret), K(spare_cols.count()), K(column_count), K(sub_column));
         }
       } else if (OB_FAIL(freq_cols.push_back(ObSemiStructSubColumn()))) {
-        LOG_WARN("push back fail", K(ret), "size", freq_cols.count(), K(*iter));
       } else if (OB_FAIL(freq_cols.at(freq_cols.count()-1).deep_copy(allocator, *sub_column.col_))) {
-        LOG_WARN("deep copy fail", K(ret), K(freq_cols.count()), K(column_count), K(sub_column));
       } else if (sub_column.get_obj_type() == ObNullType && OB_FAIL(handle_null_type(freq_cols.at(freq_cols.count()-1)))) {
         LOG_WARN("handle null type fail", K(ret), K(sub_column));
       } else if (use_lexicographical_order_ && sub_column.get_obj_type() == ObVarcharType && sub_column.min_len_ == sub_column.max_len_
@@ -1074,9 +1023,7 @@ int ObSimpleSubSchema::build_key_dict(ObSemiStructSubSchema& sub_schema, const i
       if (path_item.is_object()) {
         ObString key;
         if (OB_FAIL(ob_write_string(allocator, path_item.key_, key))) {
-          LOG_WARN("copys string fail", K(ret), K(path_item));
         } else if (OB_FAIL(array.push_back(key))) {
-          LOG_WARN("push_back fail", K(ret), K(j), K(key), K(key_dict));
         }
       }
     }
@@ -1127,7 +1074,6 @@ int ObSimpleSubSchema::build_key_dict(ObSemiStructSubSchema& sub_schema, const i
       while(OB_SUCC(ret) && iter != columns_.end()) {
         ObSemiStructSubColumn& sub_column = *const_cast<ObSemiStructSubColumn*>((*iter).col_);
         if (OB_FAIL(encode_column_path_with_dict(key_dict, sub_column))) {
-          LOG_WARN("encode_column_path_with_dict fail", K(ret), K(sub_column));
         } else {
           ++iter;
         }
@@ -1149,7 +1095,6 @@ int ObSimpleSubSchema::encode_column_path_with_dict(ObSubSchemaKeyDict &key_dict
       const ObString &key = path_item.key_;
       int64_t id = -1;
       if (OB_FAIL(key_dict.get(key, id))) {
-        LOG_WARN("look up key dick fail", K(ret), K(i), K(key), K(key_dict));
       } else if (id < 0) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("id is negetive", K(ret), K(i), K(id), K(key));
@@ -1200,7 +1145,6 @@ int ObSimpleSubSchema::merge(ObSimpleSubSchema &other)
     } else if (cmp > 0) {
       // right is smaller, so insert before left
       if (OB_FAIL(columns_.insert(left_iter, right_sub_column))) {
-        LOG_WARN("insert sub column fail", K(ret), K(cmp), K(left_sub_column), K(right_sub_column));
       } else {
         // need set to null to avoid free twice
         right_sub_column.col_ = nullptr;
@@ -1246,7 +1190,6 @@ int ObSimpleSubSchema::merge(ObSimpleSubSchema &other)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("right sub column is null", K(ret), KPC(this), K(other));
     } else if (OB_FAIL(columns_.push_back(right_sub_column))) {
-      LOG_WARN("right push back fail", K(ret), K(right_sub_column));
     } else {
       // need set to null to avoid free twice
       right_sub_column.col_ = nullptr;
@@ -1483,7 +1426,6 @@ int ObSemiStructScalar::init(const ObSemiStructSubColumn& sub_column)
   if (obj_type_ == ObJsonType) {
 
   } else if (OB_FAIL(ObJsonBaseFactory::alloc_node(*allocator_, json_type_, json_node_))) {
-    LOG_WARN("alloc node fail", K(ret), K(json_type_));
   } else if (ObJsonNodeType::J_DECIMAL == json_type_) {
     ObJsonDecimal& decimal = static_cast<ObJsonDecimal&>(*json_node_);
     decimal.set_precision(sub_column.get_precision());
@@ -1529,10 +1471,8 @@ int ObSemiStructScalar::set_value(const ObDatum &datum)
     datum_ = datum;
   } else if (json_type_ == ObJsonNodeType::J_STRING && obj_type_ != ObVarcharType) {
     if (OB_FAIL(handle_int_to_string(*json_node_, datum))) {
-      LOG_WARN("handle_int_to_string fail", K(ret), K(json_type_), K(obj_type_));
     }
   } else if (OB_FAIL(datum_to_json(*json_node_, datum))) {
-    LOG_WARN("from datum fail", K(ret), K(json_type_), KPC(json_node_));
   }
   if (OB_SUCC(ret)) {
     has_value_ = true;
@@ -1547,7 +1487,6 @@ int ObSemiStructScalar::set_value(ObJsonBin &bin)
   ObStorageDatum datum;
   if (obj_type_ == ObJsonType) {
     if (OB_FAIL(bin.to_tree(json_node_))) {
-      LOG_WARN("to tree fail", K(ret), K(bin));
     } else {
       has_value_ = true;
       datum_ = datum;
@@ -1556,7 +1495,6 @@ int ObSemiStructScalar::set_value(ObJsonBin &bin)
     has_value_ = true;
     datum_.set_null();
   } else if (OB_FAIL(bin_to_tree(bin, *json_node_))) {
-    LOG_WARN("to datum fail", K(ret), K(bin), KPC(json_node_));
   } else {
     has_value_ = true;
     datum_ = datum;
@@ -1595,20 +1533,14 @@ int ObJsonReassembler::serialize(const ObDatumRow &row, ObString &result)
     ObStringBuffer j_bin_buf(decode_allocator_);
     ObString json_data;
     if (OB_FAIL(fill_freq_column(row))) {
-      LOG_WARN("fill freq column fail", K(ret), K(row));
     } else if (sub_schema_->has_spare_column() && OB_FAIL(fill_spare_column(row))) {
       LOG_WARN("fill spare column fail", K(ret), K(row));
     } else if (OB_FAIL(prepare_lob_common(j_bin_buf))) {
-      LOG_WARN("prepare_lob_common fail", K(ret));
     } else if (OB_FAIL(ObJsonBin::add_doc_header_v0(j_bin_buf))) {
-      LOG_WARN("add_doc_header_v0 fail", K(ret));
     } else if (OB_FAIL(ObJsonBinSerializer::serialize_json_value((ObJsonNode*)json_, j_bin_buf, false/*enable_reserialize*/))) {
-      LOG_WARN("serialize json binary fail", K(ret));
     } else if (OB_FAIL(j_bin_buf.get_result_string(result))) {
-      LOG_WARN("get_result_string fail", K(ret), K(row), K(j_bin_buf));
     } else if (OB_FALSE_IT(json_data.assign_ptr(result.ptr() + sizeof(ObLobCommon), static_cast<ObString::obstr_size_t>(result.length() - sizeof(ObLobCommon))))) {
     } else if (OB_FAIL(ObJsonBin::set_doc_header_v0(json_data, json_data.length(), sub_schema_->use_lexicographical_order()))) {
-      LOG_WARN("set_doc_header_v0 fail", K(ret));
     }
 
     if (allocator_.used() >= OB_DEFAULT_MACRO_BLOCK_SIZE) {
@@ -1624,7 +1556,6 @@ int ObJsonReassembler::fill_freq_column(const ObDatumRow &row)
   for (int i = 0; OB_SUCC(ret) && i < sub_schema_->get_freq_column_count(); ++i) {
     const ObDatum& datum = row.storage_datums_[i];
     if (OB_FAIL(leaves_.at(i)->set_value(datum))) {
-      LOG_WARN("set value fail", K(ret), K(i));
     }
   }
   return ret;
@@ -1641,7 +1572,6 @@ int ObJsonReassembler::fill_spare_column(const ObDatumRow &row)
       spare_leaves_.at(i)->set_no_value();
     }
   } else if (OB_FAIL(bin.reset_iter())) {
-    LOG_WARN("reset bin fail", K(ret), K(datum));
   } else if (bin.json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("spare column data is not json object", K(ret), K(bin));
@@ -1654,7 +1584,6 @@ int ObJsonReassembler::fill_spare_column(const ObDatumRow &row)
     }
     for (int i = 0; OB_SUCC(ret) && i < bin.element_count(); ++i) {
       if (OB_FAIL(bin.get_object_value(i, key, child_ptr))) {
-        LOG_WARN("get child fail", K(ret));
       } else if (key.length() != sizeof(int32_t)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("spare col key is incorrect", K(ret), K(key.length()));
@@ -1665,14 +1594,12 @@ int ObJsonReassembler::fill_spare_column(const ObDatumRow &row)
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("invalid spare col id", K(ret), K(col_id), K(idx), K(sub_schema_->get_freq_column_count()), K(spare_leaves_.count()));
         } else if (OB_FAIL(spare_leaves_.at(idx)->set_value(*static_cast<ObJsonBin*>(child_ptr)))) {
-          LOG_WARN("set value fail", K(ret), K(i), K(idx), K(col_id));
         }
       }
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(reshape(json_))) {
-    LOG_WARN("reshape fail", K(ret));
   }
   return ret;
 }
@@ -1708,7 +1635,6 @@ int ObJsonReassembler::reshape(ObIJsonBase *node)
           object->real_childs_[i] = ObJsonObjectPair();
         }
       } else if (OB_FAIL(reshape(object->childs_[i].get_value()))) {
-        LOG_WARN("reshape fail", K(ret), K(i));
       } else if (has_value(object->childs_[i].get_value())) {
         object->real_childs_[object->real_child_cnt_++] = object->childs_[i];
       }
@@ -1725,7 +1651,6 @@ int ObJsonReassembler::reshape(ObIJsonBase *node)
           array->real_childs_[i] = nullptr;
         }
       } else if (OB_FAIL(reshape(array->childs_[i]))) {
-        LOG_WARN("reshape fail", K(ret), K(i));
       } else if (has_value(array->childs_[i])) {
         array->real_childs_[array->real_child_cnt_++] = array->childs_[i];
       }
@@ -1743,14 +1668,12 @@ int ObJsonReassembler::prepare_lob_common(ObJsonBuffer &result)
   const int64_t header_size = sizeof(ObLobCommon);
   char *buf = nullptr;
   if (OB_FAIL(result.reserve(sizeof(ObLobCommon)))) {
-    LOG_WARN("reserve fail", K(ret), K(header_size));
   } else if (OB_ISNULL(buf = result.ptr() + result.length())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("result ptr is null", K(ret), K(result));
   } else {
     ObLobCommon *lob_common = new (buf) ObLobCommon();
     if (OB_FAIL(result.set_length(result.length() + header_size))) {
-      LOG_WARN("set length fail", K(ret), K(header_size), K(result));
     }
   }
   return ret;
@@ -1766,7 +1689,6 @@ int ObJsonReassembler::alloc_container_node(const share::ObSubColumnPathItem& it
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("alloc fail", K(ret), "size", sizeof(ObSemiStructArray));
     } else if (OB_FAIL(array->init(child_cnt))) {
-      LOG_WARN("init array fail", K(ret), K(item));
     } else {
       node = array;
     }
@@ -1776,7 +1698,6 @@ int ObJsonReassembler::alloc_container_node(const share::ObSubColumnPathItem& it
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("alloc fail", K(ret), "size", sizeof(ObSemiStructObject));
     } else if (OB_FAIL(object->init(child_cnt))) {
-      LOG_WARN("init array fail", K(ret), K(item));
     } else {
       object->set_use_lexicographical_order(sub_schema_->use_lexicographical_order());
       node = object;
@@ -1798,7 +1719,6 @@ int ObJsonReassembler::alloc_scalar_json_node(const ObSemiStructSubColumn& sub_c
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc fail", K(ret), "size", sizeof(ObSemiStructScalar));
   } else if (OB_FAIL(scalar->init(sub_column))) {
-    LOG_WARN("init semistruct scalar node fail", K(ret), K(obj_type), K(json_type), KPC(scalar));
   } else {
     node = scalar;
   }
@@ -1813,18 +1733,14 @@ int ObJsonReassembler::add_child(ObIJsonBase *parent, ObIJsonBase *child, const 
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("exist", K(ret), K(item), K(parent->element_count()));
     } else if (OB_FAIL(parent->array_append(child))) {
-      LOG_WARN("append fail", K(ret), K(item));
     }
   } else if (item.type_ == share::ObSubColumnPathItem::OBJECT) {
     if (OB_FAIL(parent->object_add(item.key_, child))) {
-      LOG_WARN("append fail", K(ret), K(item));
     }
   } else if (item.type_ == share::ObSubColumnPathItem::DICT_KEY) {
     ObString key;
     if (OB_FAIL(sub_schema_->get_key_str(item.id_, key))) {
-      LOG_WARN("get key str fail", K(ret), K(item));
     } else if (OB_FAIL(parent->object_add(key, child))) {
-      LOG_WARN("append fail", K(ret), K(item));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -1846,13 +1762,10 @@ int ObJsonReassembler::reassemble(const int start, const int end, const int dept
       LOG_WARN("alloc node fail", K(ret), K(path_item));
     } else if (depth + 1 == sub_cloumn_path.get_path_item_count()) {
       if (OB_FAIL(alloc_scalar_json_node(sub_column, child))) {
-        LOG_WARN("alloc node fail", K(ret), K(path_item));
       } else if (sub_column.is_spare_storage()) {
         if (OB_FAIL(spare_leaves_.push_back((ObSemiStructScalar*)child))) {
-          LOG_WARN("push back spare leaf fail", K(ret));
         }
       } else if (OB_FAIL(leaves_.push_back((ObSemiStructScalar*)child))) {
-        LOG_WARN("push back freq leaf fail", K(ret));
       }
       if (OB_SUCC(ret)) {
         ++i;
@@ -1867,7 +1780,6 @@ int ObJsonReassembler::reassemble(const int start, const int end, const int dept
         }
       }
       if (OB_FAIL(reassemble(child_start, child_end, depth + 1, child))) {
-        LOG_WARN("reassembler child fail", K(ret), K(depth));
       } else {
         i = child_end;
       }
@@ -1875,7 +1787,6 @@ int ObJsonReassembler::reassemble(const int start, const int end, const int dept
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(add_child(current, child, path_item))) {
-      LOG_WARN("add child fail", K(ret), K(i), K(depth));
     }
   }
   return ret;
@@ -1891,15 +1802,10 @@ int ObJsonReassembler::init()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sub schema is null", K(ret));
   } else if (OB_FAIL(sub_row_.init(allocator_, sub_schema_->get_store_column_count()))) {
-    LOG_WARN("init sub row fail", K(ret), K(sub_schema_->get_store_column_count()));
   } else if (OB_FAIL(merge_sub_cols())) {
-    LOG_WARN("merge_sub_cols fail", K(ret), KPC(sub_schema_));
   } else if (OB_FAIL(leaves_.reserve(sub_schema_->get_freq_column_count()))) {
-    LOG_WARN("reserve array fail", K(ret), K(sub_schema_->get_freq_column_count()));
   } else if (OB_FAIL(spare_leaves_.reserve(sub_schema_->get_spare_column_count()))) {
-    LOG_WARN("reserve array fail", K(ret), K(sub_schema_->get_spare_column_count()));
   } else if (OB_FAIL(reassemble(0, sub_cols_.count(), 0, json_))) {
-    LOG_WARN("reassemble fail", K(ret), KPC(sub_schema_));
   }
   return ret;
 }
@@ -1918,13 +1824,11 @@ int ObJsonReassembler::merge_sub_cols()
     int cmp = freq_sub_col.compare(spare_sub_col, sub_schema_->use_lexicographical_order());
     if (cmp < 0) {
       if (OB_FAIL(sub_cols_.push_back(&freq_sub_col))) {
-        LOG_WARN("push back freq sub col fail", K(ret), K(freq_sub_col));
       } else {
         ++freq_idx;
       }
     } else if (cmp > 0) {
       if (OB_FAIL(sub_cols_.push_back(&spare_sub_col))) {
-        LOG_WARN("push back freq sub col fail", K(ret), K(spare_sub_col));
       } else {
         ++spare_idx;
       }
@@ -1937,7 +1841,6 @@ int ObJsonReassembler::merge_sub_cols()
   while(OB_SUCC(ret) && freq_idx < freq_columns.count()) {
     const ObSemiStructSubColumn& freq_sub_col = freq_columns.at(freq_idx);
     if (OB_FAIL(sub_cols_.push_back(&freq_sub_col))) {
-      LOG_WARN("push back freq sub col fail", K(ret), K(freq_sub_col));
     } else {
       ++freq_idx;
     }
@@ -1946,7 +1849,6 @@ int ObJsonReassembler::merge_sub_cols()
   while(OB_SUCC(ret) && spare_idx < spare_columns.count()) {
     const ObSemiStructSubColumn& spare_sub_col = spare_columns.at(spare_idx);
     if (OB_FAIL(sub_cols_.push_back(&spare_sub_col))) {
-      LOG_WARN("push back freq sub col fail", K(ret), K(spare_sub_col));
     } else {
       ++spare_idx;
     }
@@ -1999,11 +1901,8 @@ int ObJsonBinVisitor::deserialize_decimal()
   ObScale scale = -1;
   int64_t pos = pos_;
   if (OB_FAIL(serialization::decode_i16(ptr_, len_, pos, &prec))) {
-    LOG_WARN("fail to deserialize decimal precision.", K(ret), KP(ptr_), K(len_), K(pos_), K(pos));
   } else if (OB_FAIL(serialization::decode_i16(ptr_, len_, pos, &scale))) {
-    LOG_WARN("fail to deserialize decimal scale.", K(ret), KP(ptr_), K(len_), K(pos_), K(pos));
   } else if (OB_FAIL(number_.deserialize(ptr_, len_, pos))) {
-    LOG_WARN("failed to deserialize decimal data", K(ret), KP(ptr_), K(len_), K(pos_), K(pos));
   } else {
     prec_ = prec;
     scale_ = scale;
@@ -2019,7 +1918,6 @@ int ObJsonBinVisitor::deserialize_int()
   if (meta_.is_inline_vertype()) {
     uint64_t inline_val = 0;
     if (OB_FAIL(ObJsonVar::read_var(ptr_ + pos_, meta_.entry_size_, reinterpret_cast<int64_t*>(&inline_val)))) {
-      LOG_WARN("read inline value fail", K(ret), K(meta_));
     } else {
       int_val_ = ObJsonVar::var_uint2int(inline_val, meta_.entry_size_);
       meta_.bytes_ = 0;
@@ -2029,7 +1927,6 @@ int ObJsonBinVisitor::deserialize_int()
     int64_t val = 0;
     int64_t pos = pos_;
     if (OB_FAIL(serialization::decode_vi64(ptr_, len_, pos, &val))) {
-      LOG_WARN("decode int val failed.", K(ret), KP(ptr_), K(len_), K(pos_));
     } else {
       int_val_ = val;
       meta_.bytes_ = pos - pos_;
@@ -2044,7 +1941,6 @@ int ObJsonBinVisitor::deserialize_uint()
   int ret = OB_SUCCESS;
   if (meta_.is_inline_vertype()) {
     if (OB_FAIL(ObJsonVar::read_var(ptr_ + pos_, meta_.entry_size_, &uint_val_))) {
-      LOG_WARN("read inline value fail", K(ret), K(meta_));
     } else {
       meta_.bytes_ = 0;
       datum_.set_uint(uint_val_);
@@ -2053,7 +1949,6 @@ int ObJsonBinVisitor::deserialize_uint()
     int64_t val = 0;
     int64_t pos = pos_;
     if (OB_FAIL(serialization::decode_vi64(ptr_, len_, pos, &val))) {
-      LOG_WARN("decode uint val failed.", K(ret), KP(ptr_), K(len_), K(pos_));
     } else {
       uint_val_ = static_cast<uint64_t>(val);
       meta_.bytes_ = pos - pos_;
@@ -2069,7 +1964,6 @@ int ObJsonBinVisitor::deserialize_string()
   int64_t str_len = 0;
   int64_t offset = pos_ + sizeof(uint8_t);
   if (OB_FAIL(serialization::decode_vi64(ptr_, len_, offset, &str_len))) {
-    LOG_WARN("decode string length fail", K(ret), KP(ptr_), K(len_), K(pos_), K(offset));
   } else if (offset + str_len > len_) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("data buffer is not enough", K(ret),  K(ret), KP(ptr_), K(len_), K(pos_), K(offset), K(str_len));
@@ -2112,7 +2006,6 @@ int ObJsonBinVisitor::deserialize_boolean()
   int ret = OB_SUCCESS;
   if (meta_.is_inline_vertype()) {
     if (OB_FAIL(ObJsonVar::read_var(ptr_ + pos_, meta_.entry_size_, &uint_val_))) {
-      LOG_WARN("read inline value fail", K(ret), K(meta_));
     } else {
       meta_.bytes_ = 0;
       datum_.set_uint(uint_val_);
@@ -2165,10 +2058,8 @@ int ObJsonBinVisitor::deserialize_bin_header()
     LOG_WARN("cast header is null", K(ret), K(offset));
   } else if (OB_FALSE_IT(offset += sizeof(ObJsonBinHeader))) {
   } else if (OB_FAIL(ObJsonVar::read_var(ptr_ + offset, header->count_size_, &element_count))) {
-    LOG_WARN("read element_count_ fail", K(ret), KPC(header));
   } else if (OB_FALSE_IT(offset += ObJsonVar::get_var_size(header->count_size_))) {  
   } else if (OB_FAIL(ObJsonVar::read_var(ptr_ + offset, header->obj_size_size_, &obj_size))) {
-    LOG_WARN("read obj_size_ fail", K(ret), KPC(header));
   } else {
     offset += ObJsonVar::get_var_size(header->obj_size_size_);
     meta_.set_type(header->type_);
@@ -2179,7 +2070,6 @@ int ObJsonBinVisitor::deserialize_bin_header()
     meta_.set_obj_size(obj_size);
     meta_.set_element_count(element_count);
     if (OB_FAIL(meta_.calc_entry_array())) {
-      LOG_WARN("calc_entry_array fail", K(ret));
     } else {
       meta_.bytes_ = meta_.obj_size();
       visited_bytes_ += meta_.get_value_entry_offset(element_count);
@@ -2196,9 +2086,7 @@ int ObJsonBinVisitor::get_key_entry(const ObJsonBinMeta &meta, const char* buf_p
   uint8_t var_type = meta.entry_var_type();
   uint64_t offset = meta.get_key_entry_offset(index);
   if (OB_FAIL(ObJsonVar::read_var(buf_ptr + offset, var_type, &key_offset))) {
-    LOG_WARN("read key_offset fail", K(ret));
   } else if (OB_FAIL(ObJsonVar::read_var(buf_ptr + offset + ObJsonVar::get_var_size(var_type), var_type, &key_len))) {
-    LOG_WARN("read key_len fail", K(ret));
   } else {
     key.assign_ptr(buf_ptr + key_offset, key_len);
   }
@@ -2213,7 +2101,6 @@ int ObJsonBinVisitor::get_value_entry(
   uint8_t var_type = meta.entry_var_type();
   uint64_t offset = meta.get_value_entry_offset(index);
   if (OB_FAIL(ObJsonVar::read_var(buf_ptr + offset, var_type, &value_offset))) {
-    LOG_WARN("read obj_size_ fail", K(ret), KP(buf_ptr), K(offset), K(var_type));
   } else {
     value_type = *reinterpret_cast<const uint8_t*>(buf_ptr + offset + ObJsonVar::get_var_size(var_type));
   }
@@ -2234,21 +2121,18 @@ int ObJsonBinVisitor::deserialize()
     case ObJsonNodeType::J_DECIMAL: 
     case ObJsonNodeType::J_ODECIMAL: {
       if (OB_FAIL(deserialize_decimal())) {
-        LOG_WARN("fail to deserialize decimal", K(ret), KP(ptr_), K(len_), K(pos_));
       }
       break;
     }
     case ObJsonNodeType::J_INT: 
     case ObJsonNodeType::J_OINT: {
       if (OB_FAIL(deserialize_int())) {
-        LOG_WARN("decode int val failed.", K(ret));
       }
       break;
     }
     case ObJsonNodeType::J_UINT:
     case ObJsonNodeType::J_OLONG:  {
       if (OB_FAIL(deserialize_uint())) {
-        LOG_WARN("decode uint val failed.", K(ret));
       }
       break;
     }
@@ -2267,13 +2151,11 @@ int ObJsonBinVisitor::deserialize()
     }
     case ObJsonNodeType::J_STRING: {
       if (OB_FAIL(deserialize_string())) {
-        LOG_WARN("deserialize_string fail", K(ret));
       }
       break;
     }
     case ObJsonNodeType::J_BOOLEAN: {
       if (OB_FAIL(deserialize_boolean())) {
-        LOG_WARN("deserialize_boolean fail", K(ret));
       }
       break;
     }
@@ -2333,7 +2215,6 @@ int ObJsonBinVisitor::deserialize()
     }
     case ObJsonNodeType::J_OPAQUE: {
       if (OB_FAIL(deserialize_opaque())) {
-        LOG_WARN("deserialize_opaque fail", K(ret));
       }
       break;
     }
@@ -2357,19 +2238,15 @@ int ObJsonBinVisitor::do_visit(const ObString& data, ObFlatJson &flat_json)
   len_ = data.length();
   visited_bytes_ = 0;
   if (OB_FAIL(read_type())) {
-    LOG_WARN("read type fail", K(ret));
   } else if (! ObJsonBin::is_doc_header(meta_.type_)) {
     ret = OB_NOT_SUPPORT_SEMISTRUCT_ENCODE;
     LOG_WARN("there is no json doc header", K(ret), K(meta_), K(pos_));
   } else if (OB_FAIL(deserialize_doc_header())) {
-    LOG_WARN("deserialize_doc_header fail", K(ret));
   } else if (OB_FAIL(read_type())) {
-    LOG_WARN("read type fail", K(ret));
   } else if (json_type_ != ObJsonNodeType::J_OBJECT && json_type_ != ObJsonNodeType::J_ARRAY) {
     ret = OB_NOT_SUPPORT_SEMISTRUCT_ENCODE;
     LOG_WARN("scalar json is not support encoding", K(ret), K(meta_), K(pos_));
   } else if (OB_FAIL(visit_value(flat_json))) {
-    LOG_WARN("deserialize fail", K(ret));
   } else if (visited_bytes_ != data.length()) {
     ret = OB_NOT_SUPPORT_SEMISTRUCT_ENCODE;
     LOG_WARN("visited_bytes is not equal to data length, may be partial update, so do not trigger semistruct encoding",
@@ -2385,19 +2262,16 @@ int ObJsonBinVisitor::visit_value(ObFlatJson &flat_json)
   switch (j_type) {
     case ObJsonNodeType::J_OBJECT: {
       if (OB_FAIL(visit_object(flat_json))) {
-        LOG_WARN("visit_object fail", K(ret));
       }
       break;
     }
     case ObJsonNodeType::J_ARRAY: {
       if (OB_FAIL(visit_array(flat_json))) {
-        LOG_WARN("visit_array fail", K(ret));
       }
       break;
     }
     default: {
       if (OB_FAIL(visit_scalar(flat_json))) {
-        LOG_WARN("visit_scalar fail", K(ret));
       }
       break;
     }
@@ -2409,14 +2283,11 @@ int ObJsonBinVisitor::visit_object(ObFlatJson &flat_json)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(deserialize_bin_header())) {
-    LOG_WARN("init meta fail", K(ret));
   } else if (meta_.element_count() == 0) {
     datum_.reuse();
     datum_.set_null();
     if (OB_FAIL(flat_json.set_value(ObJsonNodeType::J_OBJECT, ObJsonType, datum_))) {
-      LOG_WARN("set value to flat json fail", K(ret));
     } else if (OB_FAIL(add(flat_json))) {
-      LOG_WARN("handle fail", K(ret), K(flat_json));
     }
   } else {
     const int64_t cur_pos = pos_;
@@ -2427,17 +2298,13 @@ int ObJsonBinVisitor::visit_object(ObFlatJson &flat_json)
       uint64_t value_offset = 0;
       uint8_t value_type = 0;
       if (OB_FAIL(get_key_entry(cur_meta, buf_ptr, i, key))) {
-        LOG_WARN("get key fail", K(ret), K(i), K(cur_meta));
       } else if (OB_FAIL(get_value_entry(cur_meta, buf_ptr, i, value_offset, value_type))) {
-        LOG_WARN("get value fail", K(ret), K(i), K(cur_meta));
       } else if (OB_FAIL(add_object_key(key, flat_json))) {
-        LOG_WARN("add path item fail", K(ret), K(i), K(key));
       } else if (OB_FALSE_IT(meta_.type_ = value_type)) {
       } else if (OB_FALSE_IT(meta_.entry_size_ = cur_meta.entry_size_)) {
       } else if (OB_FALSE_IT(json_type_ = meta_.json_type())) {
       } else if (OB_FALSE_IT(pos_ = cur_pos + (meta_.is_inline_vertype() ? cur_meta.get_value_entry_offset(i) : value_offset))) {
       } else if (OB_FAIL(visit_value(flat_json))) {
-        LOG_WARN("deserialize fail", K(ret), K(pos_), K(value_offset), K(value_type));
       } else {
         visited_bytes_ += key.length();
         flat_json.pop_back();
@@ -2456,14 +2323,11 @@ int ObJsonBinVisitor::visit_array(ObFlatJson &flat_json)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(deserialize_bin_header())) {
-    LOG_WARN("init meta fail", K(ret));
   } else if (meta_.element_count() == 0) {
     datum_.reuse();
     datum_.set_null();
     if (OB_FAIL(flat_json.set_value(ObJsonNodeType::J_ARRAY, ObJsonType, datum_))) {
-      LOG_WARN("set value to flat json fail", K(ret));
     } else if (OB_FAIL(add(flat_json))) {
-      LOG_WARN("handle fail", K(ret), K(flat_json));
     }
   } else {
     const int64_t cur_pos = pos_;
@@ -2473,15 +2337,12 @@ int ObJsonBinVisitor::visit_array(ObFlatJson &flat_json)
       uint64_t value_offset = 0;
       uint8_t value_type = 0;
       if (OB_FAIL(get_value_entry(cur_meta, buf_ptr, i, value_offset, value_type))) {
-        LOG_WARN("get value fail", K(ret), K(i), K(cur_meta));
       } else if (OB_FAIL(flat_json.add_path_item(share::ObSubColumnPathItem::ARRAY, i))) {
-        LOG_WARN("add path item fail", K(ret), K(i));
       } else if (OB_FALSE_IT(meta_.type_ = value_type)) {
       } else if (OB_FALSE_IT(meta_.entry_size_ = cur_meta.entry_size_)) {
       } else if (OB_FALSE_IT(json_type_ = meta_.json_type())) {
       } else if (OB_FALSE_IT(pos_ = cur_pos + (meta_.is_inline_vertype() ? cur_meta.get_value_entry_offset(i) : value_offset))) {
       } else if (OB_FAIL(visit_value(flat_json))) {
-        LOG_WARN("deserialize fail", K(ret), K(pos_), K(value_offset), K(value_type));
       } else {
         flat_json.pop_back();
       }
@@ -2495,16 +2356,13 @@ int ObJsonBinVisitor::visit_scalar(ObFlatJson &flat_json)
   int ret = OB_SUCCESS;
   datum_.reuse();
   if (OB_FAIL(deserialize())) {
-    LOG_WARN("deserialize fail", K(ret), K(meta_));
   } else if (OB_FAIL(flat_json.set_value(json_type_, json_type_to_obj_type(json_type_), datum_))) {
-    LOG_WARN("set value to flat json fail", K(ret));
   } else if (ObJsonNodeType::J_DECIMAL == json_type_) {
     flat_json.set_precision(get_decimal_precision());
     flat_json.set_scale(get_decimal_scale());
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(add(flat_json))) {
-    LOG_WARN("handle fail", K(ret), K(flat_json));
   }
   return ret;
 }
@@ -2515,7 +2373,6 @@ int ObJsonBinVisitor::flat_datums(const ObColDatums &datums)
   total_cnt_ = datums.count();
   for (int i = 0; OB_SUCC(ret) && i < datums.count(); ++i) {
     if (OB_FAIL(flat_datum(datums.at(i)))) {
-      LOG_WARN("flat datum fail", K(ret), K(i));
     }
   }
   return ret;
@@ -2527,7 +2384,6 @@ int ObJsonBinVisitor::flat_datum(const ObDatum &datum)
   if (datum.is_null()) {
     ++null_cnt_;
     if (OB_FAIL(handle_null())) {
-      LOG_WARN("handle null fail", K(ret), K(datum));
     }
   } else {
     // lob must have lob header in storage
@@ -2542,7 +2398,6 @@ int ObJsonBinVisitor::flat_datum(const ObDatum &datum)
       ObString json_data(lob_common.get_byte_size(datum.len_), lob_common.get_inrow_data_ptr());
       reuse();
       if (OB_FAIL(visit(json_data))) {
-        LOG_WARN("flat_json fail", K(ret), K(json_data));
       }
     }
   }

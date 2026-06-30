@@ -100,7 +100,6 @@ int ObTenantCompactionProgressMgr::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObInfoRingArray::init(SERVER_PROGRESS_MAX_CNT))) {
-    STORAGE_LOG(WARN, "failed to init ObInfoRingArray", K(ret));
   }
   return ret;
 }
@@ -120,7 +119,6 @@ int ObTenantCompactionProgressMgr::loop_major_sstable_(
   ObSharedGuard<ObLSIterator> ls_iter_guard;
   ObLS *ls = nullptr;
   if (OB_FAIL(share::g_mp->ls_service()->get_ls_iter(ls_iter_guard, ObLSGetMod::COMPACT_MODE))) {
-    LOG_WARN("failed to get ls iterator", K(ret));
   }
 
   while (OB_SUCC(ret)) { // loop all log_stream
@@ -138,7 +136,6 @@ int ObTenantCompactionProgressMgr::loop_major_sstable_(
     } else if (ls->is_deleted()) {
       // do nothing
     } else if (OB_FAIL(ls->get_tablet_svr()->build_tablet_iter(tablet_iter))) {
-      LOG_WARN("failed to build ls tablet iter", K(ret), K(ls));
     } else {
       const ObLSID &ls_id = ls->get_ls_id();
       ObTabletHandle tablet_handle;
@@ -200,7 +197,6 @@ int ObTenantCompactionProgressMgr::init_progress(const int64_t major_snapshot_ve
       progress.start_time_ = ObTimeUtility::fast_current_time();
       progress.status_ = share::ObIDag::DAG_STATUS_INITING;
       if (OB_FAIL(ObInfoRingArray::add_no_lock(progress))) {
-        LOG_WARN("failed to add progress", K(ret));
       } else {
         pos = get_last_pos();
         LOG_INFO("success to add progress", K(ret), K(major_snapshot_version), K(progress), K(size()));
@@ -211,7 +207,6 @@ int ObTenantCompactionProgressMgr::init_progress(const int64_t major_snapshot_ve
   int64_t total_tablet_cnt = 0;
   int64_t occupy_size = 0;
   if (FAILEDx(loop_major_sstable_(major_snapshot_version, total_tablet_cnt, occupy_size))) {
-    LOG_WARN("failed to get sstable info", K(ret));
   } else {
     SpinWLockGuard guard(lock_);
     if (OB_UNLIKELY(array_[pos].merge_version_ != major_snapshot_version)) {
@@ -251,9 +246,7 @@ int ObTenantCompactionProgressMgr::finish_progress(const int64_t major_snapshot_
     int64_t pos = -1;
     SpinWLockGuard guard(lock_);
     if (OB_FAIL(get_pos_(major_snapshot_version, pos))) {
-      LOG_WARN("pos is invalid", K(ret), K(pos), K(major_snapshot_version));
     } else if (OB_FAIL(finish_progress_(array_[pos]))) {
-      LOG_WARN("failed to finish progress", K(ret), K(pos), K(major_snapshot_version));
     } else {
       LOG_DEBUG("success to update status", K(ret), K(pos), K(major_snapshot_version), K(array_[pos]));
     }
@@ -307,7 +300,6 @@ int ObTenantCompactionProgressMgr::update_progress(
     int64_t pos = -1;
     SpinWLockGuard guard(lock_);
     if (OB_FAIL(get_pos_(major_snapshot_version, pos))) {
-      LOG_WARN("pos is invalid", K(ret), K(pos), K(major_snapshot_version));
     } else if (share::ObIDag::DAG_STATUS_FINISH != array_[pos].status_) {
       if (finish_flag && !co_merge) {
         if (array_[pos].is_inited_ && OB_UNLIKELY(0 == array_[pos].unfinished_tablet_cnt_)) {
@@ -378,7 +370,6 @@ int ObTenantCompactionProgressMgr::update_unfinish_tablet(
     int64_t pos = -1;
     SpinWLockGuard guard(lock_);
     if (OB_FAIL(get_pos_(major_snapshot_version, pos))) {
-      LOG_WARN("pos is invalid", K(ret), K(pos), K(major_snapshot_version));
     } else if (OB_UNLIKELY(0 == array_[pos].unfinished_tablet_cnt_
             || array_[pos].unfinished_tablet_cnt_ < reduce_tablet_cnt
             || array_[pos].unfinished_data_size_ < reduce_data_size)) { // wait for calling finish merge progress
@@ -406,7 +397,6 @@ int ObTenantCompactionProgressMgr::update_compression_ratio(
     int64_t pos = -1;
     SpinWLockGuard guard(lock_);
     if (OB_FAIL(get_pos_(major_snapshot_version, pos))) {
-      LOG_WARN("pos is invalid", K(ret), K(pos), K(major_snapshot_version));
     } else {
       array_[pos].original_size_ += merge_history.block_info_.original_size_;
       array_[pos].compressed_size_ += merge_history.block_info_.compressed_size_;
@@ -433,7 +423,6 @@ int ObTenantCompactionProgressIterator::open()
     { // skip virtual tenant
       MOD_SCOPE {
         if (OB_FAIL(share::g_mp->tenant_compaction_progress_mgr()->get_list(progress_array_))) {
-          LOG_WARN("failed to get compaction info", K(ret));
         }
       } else {
         if (OB_TENANT_NOT_IN_SERVER != ret) {
@@ -492,7 +481,6 @@ int ObTabletCompactionProgressIterator::open()
     { // skip virtual tenant
       MOD_SCOPE {
         if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->get_all_compaction_dag_info(allocator_, progress_array_))) {
-          LOG_WARN("failed to get compaction info", K(ret));
         }
       } else {
         if (OB_TENANT_NOT_IN_SERVER != ret) {

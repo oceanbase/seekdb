@@ -155,7 +155,6 @@ int ObDFMUtil::match_int_value_with_comma(ObDFMParseCtx &ctx,
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(check_int_value_length(ctx, expected_len, real_data_len))) {
-      LOG_WARN("int value length is not equal to expected len", K(ret), K(real_data_len), K(expected_len), K(ctx));
     } else {
       value_len = real_data_len;
       result = temp_value;
@@ -262,7 +261,6 @@ int ObDFMUtil::match_int_value(ObDFMParseCtx &ctx,
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(check_int_value_length(ctx, expected_len, real_data_len))) {
-      LOG_WARN("int value length is not equal to expected len", K(ret), K(real_data_len), K(expected_len), K(ctx));
     } else {
       value_len = real_data_len;
       result = temp_value * value_sign;
@@ -297,9 +295,7 @@ int ObDFMUtil::parse_datetime_format_string(const ObString &fmt_str, ObDFMElemAr
         }
 
         if (OB_FAIL(parse_one_elem(parse_ctx, value_elem, support_double_quotes))) {
-          LOG_WARN("failed to parse one element", K(ret));
         } else if (OB_FAIL(elements.push_back(value_elem))) {
-          LOG_WARN("failed to push back elem", K(ret));
         }
       }
     }
@@ -487,7 +483,6 @@ int ObDFMUtil::check_semantic(const ObDFMElemArr &elements, ObFixedBitSet<OB_DEF
         ret = OB_ERR_FORMAT_CODE_APPEARS_TWICE; //OBE-01810: format code appears twice
         LOG_WARN("datetime format model check failed", K(ret), "flag", ObString(ObDFMFlag::PATTERN[flag].ptr_));
       } else if (OB_FAIL(flag_bitmap.add_member(flag))) {
-        LOG_WARN("failed to add bitmap", K(ret), "flag", ObString(ObDFMFlag::PATTERN[flag].ptr_));
       }
     }
     //check conflict in group which the element belongs to
@@ -563,7 +558,6 @@ int ObDFMUtil::match_literal_ignore_case(ObDFMParseCtx &ctx, const ObDFMElem &el
   ObString literal;
   matched = false;
   if (OB_FAIL(validate_literal_elem(elem, format, literal))) {
-    LOG_WARN("validate literal elem failed", K(ret), K(format), K(elem));
   } else if (ctx.remain_len_ >= literal.length()) {
     matched = (0 == strncasecmp(ctx.cur_ch_, literal.ptr(), literal.length()));
     if (matched) {
@@ -581,9 +575,7 @@ int ObDFMUtil::print_literal(char *buf, const int64_t buf_len, int64_t &pos, con
   int ret = OB_SUCCESS;
   ObString literal;
   if (OB_FAIL(validate_literal_elem(elem, format, literal))) {
-    LOG_WARN("validate literal elem failed", K(ret), K(format), K(elem));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%.*s", literal.length(), literal.ptr()))) {
-    LOG_WARN("databuff printf failed", K(ret), K(buf_len), K(pos), K(literal));
   } else {
     LOG_DEBUG("dfm print literal", K(ObString(pos, buf)), K(literal), K(elem), K(format));
   }

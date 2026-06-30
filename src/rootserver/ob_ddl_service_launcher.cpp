@@ -42,7 +42,6 @@ int ObDDLServiceLauncher::mtl_init(ObDDLServiceLauncher *&ddl_service_launcher)
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] begin mtl_init for ddl_service_launcher");
   if (OB_NOT_NULL(ddl_service_launcher)) {
     if (OB_FAIL(ddl_service_launcher->init())) {
-      LOG_WARN("failed to init ddl_service_launcher", KR(ret));
     }
   }
   int64_t duration_time = ObTimeUtility::current_time() - start_time;
@@ -93,7 +92,6 @@ int ObDDLServiceLauncher::switch_to_leader()
                         true/*with_new_mode*/,
                         0/*proposal_id_to_check: not used with new_mode*/,
                         0/*new_rs_epoch: not used with new_mode*/))) {
-    LOG_WARN("fail to inner start ddl service with lock", KR(ret));
   }
   int64_t duration_time = ObTimeUtility::current_time() - start_time;
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] finish switch_to_leader for ddl_service_launcher", KR(ret),
@@ -121,7 +119,6 @@ int ObDDLServiceLauncher::get_sys_palf_role_and_epoch(
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("mtl ObLogService should not be null", KR(ret), KP(log_service));
       } else if (OB_FAIL(log_service->get_palf_role(SYS_LS, role, proposal_id))) {
-        LOG_WARN("failed to get role from palf", KR(ret));
       }
     }
   }
@@ -143,8 +140,6 @@ int ObDDLServiceLauncher::start_ddl_service_with_old_logic(
                          false/*with_new_mode*/,
                          proposal_id_to_check,
                          new_rs_epoch))) {
-    LOG_WARN("fail to inner start ddl service with lock",
-             KR(ret), K(new_rs_epoch), K(proposal_id_to_check));
   }
   int64_t duration_time = ObTimeUtility::current_time() - start_time;
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] finish start ddl service by old logic", KR(ret),
@@ -157,7 +152,6 @@ int ObDDLServiceLauncher::resume_leader()
   int ret = OB_SUCCESS;
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] begin resume_leader for ddl_service_launcher");
   if (OB_FAIL(switch_to_leader())) {
-    LOG_WARN("fail to switch to leader", KR(ret));
   }
   FLOG_INFO("[DDL_SERVICE_LAUNCHER] finish resume_leader for ddl_service_launcher", KR(ret));
   return ret;
@@ -217,10 +211,8 @@ int ObDDLServiceLauncher::init_sequence_id_(
     } else if (!with_new_mode) {
       // init sequence id with old logic
       if (OB_FAIL(schema_service->init_sequence_id_by_rs_epoch(new_rs_epoch))) {
-        LOG_WARN("init sequence id by rootservice epoch failed", KR(ret), K(new_rs_epoch));
       } else if (OB_FAIL(GCTX.root_service_->get_schema_service().get_tenant_refreshed_schema_version(
                              schema_version))) {
-        LOG_WARN("fail to get sys tenant refreshed schema version", KR(ret));
       } else if (schema_version <= OB_CORE_SCHEMA_VERSION + 1) {
         // in bootstrap and new schema mode, to avoid write failure while schema_version change,
         // only actively refresh schema at the end of bootstrap, and make heartbeat's refresh_schema_info effective.
@@ -241,14 +233,11 @@ int ObDDLServiceLauncher::init_sequence_id_(
         LOG_INFO("sys tenant schema version not refreshed, do not trigger schema refresh",
                  KR(ret), K(schema_version));
       } else if (OB_FAIL(schema_service->set_refresh_schema_info(schema_info))) {
-        LOG_WARN("fail to set refresh schema info", KR(ret), K(schema_info));
       }
     } else {
       // init sequence id with new logic
       if (OB_FAIL(schema_service->init_sequence_id_by_sys_leader_epoch(proposal_id))) {
-        LOG_WARN("fail to init sequence id by sys leader epoch", KR(ret), K(proposal_id));
       } else if (OB_FAIL(schema_service->set_refresh_schema_info(schema_info))) {
-        LOG_WARN("fail to set refresh schema info", K(ret), K(schema_info));
       }
     }
   }
@@ -282,7 +271,6 @@ int ObDDLServiceLauncher::inner_start_ddl_service_with_lock_(
   //         we should prevent this start ddl service request triggered from old RS
   //         by double checking proposal id not changed
   } else if (OB_FAIL(get_sys_palf_role_and_epoch(role, proposal_id))) {
-    LOG_WARN("fail to get role and proposal id", KR(ret));
   } else if (!is_leader_like(role)) {
     // DO NOT use is_strong_leader(), because standby cluster's role is STANDBY_LEADER
     ret = OB_LS_NOT_LEADER;
@@ -292,20 +280,7 @@ int ObDDLServiceLauncher::inner_start_ddl_service_with_lock_(
     LOG_WARN("leader already switched", KR(ret), K(proposal_id), K(proposal_id_to_check));
   // 3. init sequence id and set refresh schema info
   } else if (OB_FAIL(init_sequence_id_(with_new_mode, proposal_id, new_rs_epoch))) {
-    LOG_WARN("fail to init sequence id", KR(ret), K(with_new_mode), K(proposal_id), K(new_rs_epoch));
-  // 4. reset ddl epoch for all tenant
-  //    ddl epoch should reset to trigger ddl_epoch to promote
-  //    when ddl operation performing ObDDLSQLTransaction::lock_all_ddl_operation,
-  //    ddl epoch will promoted and persist new ddl epoch both in __all_core_table and memory
   } else if (OB_FAIL(GCTX.root_service_->get_schema_service().get_ddl_epoch_mgr().remove_all_ddl_epoch())) {
-    LOG_WARN("fail to remove ddl epoch", KR(ret));
-  // 5. set is_ddl_service_started_ only if operations above all correctly done.
-  //    this static variable means whether ddl service can provide service
-  //    it has two meanings:
-  //      (1) ddl service is ready with old logic
-  //          ddl operations rely on RS full service
-  //      (2) ddl service is ready with new logic
-  //          from 4.3.5.2 ddl just rely on sys leader, do not concern status of RS
   } else {
     ATOMIC_SET(&is_ddl_service_started_, true);
   }

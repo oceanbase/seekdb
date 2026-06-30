@@ -45,15 +45,13 @@ int ObRemoteJobExecutor::execute(ObExecContext &query_ctx)
   if (OB_ISNULL(job_) || OB_ISNULL(executor_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("job_ or executor_ is NULL", K(ret), K(job_), K(executor_));
-  } else if (OB_FAIL(get_executable_task(query_ctx, task_info))) { // get a task info
-    LOG_WARN("fail get a executable task", K(ret));
+  } else if (OB_FAIL(get_executable_task(query_ctx, task_info))) {
   } else if (OB_ISNULL(task_info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("task info is NULL", K(ret));
   } else if (OB_FAIL(executor_->execute(query_ctx,
                                         job_,
-                                        task_info))) { // job_ + task_info as the skeleton and parameters of the task
-    LOG_WARN("fail execute task", K(ret), K(*task_info));
+                                        task_info))) {
   } else {}
   return ret;
 }
@@ -75,16 +73,13 @@ int ObRemoteJobExecutor::get_executable_task(ObExecContext &ctx, ObTaskInfo *&ta
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("job_ or executor_ is NULL", K(ret), K(job_), K(executor_));
   } else if (OB_FAIL(job_->get_task_control(ctx, tq))) {
-    LOG_WARN("fail get task control", K(ret));
   } else if (OB_ISNULL(tq)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("succ to get task control, but task control is NULL", K(ret));
   } else if (OB_FAIL(tq->get_ready_tasks(ready_tasks))) {
-    LOG_WARN("fail get ready task", K(ret));
   } else if (OB_UNLIKELY(1 != ready_tasks.count())) {
     LOG_WARN("unexpected ready task count", "count", ready_tasks.count());
   } else if (OB_FAIL(ready_tasks.at(0, task_info))) {
-    LOG_WARN("fail get task from array", K(ret));
   } else {}
   return ret;
 }

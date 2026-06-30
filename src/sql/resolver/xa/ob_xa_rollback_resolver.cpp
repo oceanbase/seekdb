@@ -49,7 +49,6 @@ int ObXaRollBackResolver::resolve(const ParseNode &parse_node)
     ObString bqual_string;
     int64_t format_id = -1;
     if (OB_FAIL(ObResolverUtils::resolve_xid(parse_node.children_[0], gtrid_string, bqual_string, format_id))) {
-      LOG_WARN("resolve xid failed", K(ret));
     } else {
       if(gtrid_string.length() <= 0) {
         ret = OB_TRANS_XA_INVAL;

@@ -72,12 +72,10 @@ int ObExprArraySort::calc_result_type1(ObExprResType &type,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(type1.get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type))) {
-    LOG_WARN("failed to get array type by subschema id", K(ret), K(type1.get_subschema_id()));
   } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("invalid collection type", K(ret), K(coll_type->type_id_));
   } else if (OB_FAIL(ObArrayExprUtils::get_array_element_type(exec_ctx, type1.get_subschema_id(), src_elem_type, depth, is_vec))) {
-    LOG_WARN("failed to get array element type", K(ret));
   } else if (depth != 1) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "array_sort with multi-dimension array");
@@ -104,22 +102,16 @@ int ObExprArraySort::eval_array_sort(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("subschema id is not equal", K(ret), K(subschema_id), K(expr.obj_meta_.get_subschema_id()));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, arr_datum))) {
-    LOG_WARN("failed to eval source array", K(ret));
   } else if (arr_datum->is_null()) {
     res.set_null();
   } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_datum->get_string(), src_arr))) {
-    LOG_WARN("construct array obj failed", K(ret));
   } else if (OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator,ctx, subschema_id, res_arr, false))) {
-    LOG_WARN("construct result array obj failed", K(ret));
   } else if (OB_FAIL(ObExprArraySortby::index_sort(tmp_allocator, src_arr, sort_idx))) {
-    LOG_WARN("failed to sort array index", K(ret));
   } else if (OB_FAIL(ObExprArraySortby::fill_array_by_index(src_arr, sort_idx, res_arr))) {
-    LOG_WARN("failed to fill array by index", K(ret));
   } else {
     ObString res_str;
     if (OB_FAIL(ObArrayExprUtils::set_array_res(
             res_arr, res_arr->get_raw_binary_len(), expr, ctx, res_str))) {
-      LOG_WARN("get array binary string failed", K(ret));
     } else {
       res.set_string(res_str);
     }
@@ -145,7 +137,6 @@ int ObExprArraySort::eval_array_sort_batch(const ObExpr &expr, ObEvalCtx &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("subschema id is not equal", K(ret), K(subschema_id), K(expr.obj_meta_.get_subschema_id()));
   } else if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("failed to eval source array", K(ret));
   } else {
     ObDatumVector arr_datum = expr.args_[0]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
@@ -156,31 +147,24 @@ int ObExprArraySort::eval_array_sort_batch(const ObExpr &expr, ObEvalCtx &ctx,
       if (arr_datum.at(j)->is_null()) {
         res_datum.at(j)->set_null();
       } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id,
-                                                         arr_datum.at(j)->get_string(), src_arr))) { 
-        LOG_WARN("construct array obj failed", K(ret));
+                                                         arr_datum.at(j)->get_string(), src_arr))) {
       } else if (OB_NOT_NULL(res_arr) && OB_FALSE_IT(res_arr->clear())) {
       } else if (OB_ISNULL(res_arr) && OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator,ctx, subschema_id, res_arr, false))) {
         LOG_WARN("construct result array obj failed", K(ret));
       } else if (OB_FAIL(ObExprArraySortby::index_sort(tmp_allocator, src_arr, sort_idx))) {
-        LOG_WARN("failed to sort array index", K(ret));
       } else if (OB_FAIL(ObExprArraySortby::fill_array_by_index(src_arr, sort_idx, res_arr))) {
-        LOG_WARN("failed to fill array by index", K(ret));
       } else {
         int32_t res_size = res_arr->get_raw_binary_len();
         char *res_buf = nullptr;
         int64_t res_buf_len = 0;
         ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, res_datum.at(j));
         if (OB_FAIL(output_result.init_with_batch_idx(res_size, j))) {
-          LOG_WARN("fail to init result", K(ret), K(res_size));
         } else if (OB_FAIL(output_result.get_reserved_buffer(res_buf, res_buf_len))) {
-          LOG_WARN("fail to get reserver buffer", K(ret));
         } else if (res_buf_len < res_size) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get invalid res buf len", K(ret), K(res_buf_len), K(res_size));
         } else if (OB_FAIL(res_arr->get_raw_binary(res_buf, res_buf_len))) {
-          LOG_WARN("get array raw binary failed", K(ret), K(res_buf_len), K(res_size));
         } else if (OB_FAIL(output_result.lseek(res_size, 0))) {
-          LOG_WARN("failed to lseek res.", K(ret), K(output_result), K(res_size));
         } else {
           output_result.set_result();
         }
@@ -206,7 +190,6 @@ int ObExprArraySort::eval_array_sort_vector(const ObExpr &expr, ObEvalCtx &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("subschema id is not equal", K(ret), K(subschema_id), K(expr.obj_meta_.get_subschema_id()));
   } else if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval source array failed", K(ret));
   } else {
     ObIVector *arr_vec = expr.args_[0]->get_vector(ctx);
     ObIVector *res_vec = expr.get_vector(ctx);
@@ -224,7 +207,6 @@ int ObExprArraySort::eval_array_sort_vector(const ObExpr &expr, ObEvalCtx &ctx,
       } else {
         ObString arr_str = arr_vec->get_string(idx);
         if (OB_FAIL(ObNestedVectorFunc::construct_param(tmp_allocator, ctx, subschema_id, arr_str, src_arr))) {
-          LOG_WARN("construct array obj failed", K(ret));
         }
       }
       if (OB_FAIL(ret) || is_null_res) {
@@ -232,23 +214,18 @@ int ObExprArraySort::eval_array_sort_vector(const ObExpr &expr, ObEvalCtx &ctx,
       } else if (OB_ISNULL(res_arr) && OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator,ctx, subschema_id, res_arr, false))) {
         LOG_WARN("construct child array obj failed", K(ret));
       } else if (OB_FAIL(ObExprArraySortby::index_sort(tmp_allocator, src_arr, sort_idx))) {
-        LOG_WARN("failed to sort array index", K(ret));
       } else if (OB_FAIL(ObExprArraySortby::fill_array_by_index(src_arr, sort_idx, res_arr))) {
-        LOG_WARN("failed to fill array by index", K(ret));
       }
       if (OB_FAIL(ret)) {
       } else if (is_null_res) {
         res_vec->set_null(idx);
       } else if (res_format == VEC_DISCRETE) {
         if (OB_FAIL(ObArrayExprUtils::set_array_res<ObDiscreteFormat>(res_arr, expr, ctx, static_cast<ObDiscreteFormat *>(res_vec), idx))) {
-          LOG_WARN("set array res failed", K(ret));
         }
       } else if (res_format == VEC_UNIFORM) {
         if (OB_FAIL(ObArrayExprUtils::set_array_res<ObUniformFormat<false>>(res_arr, expr, ctx, static_cast<ObUniformFormat<false> *>(res_vec), idx))) {
-          LOG_WARN("set array res failed", K(ret));
         }
       } else if (OB_FAIL(ObArrayExprUtils::set_array_res<ObVectorBase>(res_arr, expr, ctx, static_cast<ObVectorBase *>(res_vec), idx))) {
-        LOG_WARN("set array res failed", K(ret));
       } 
     } //end for
   }

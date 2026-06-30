@@ -122,11 +122,8 @@ struct ObNestedVectorCmpFunc
     ObIArrayType *res_obj = NULL;
     ObString res_str;
     if (OB_FAIL(construct_param(tmp_allocator, ctx, left_meta_id, left, left_obj))) {
-      SQL_ENG_LOG(WARN, "init nested obj failed", K(ret)); 
     } else if (OB_FAIL(construct_param(tmp_allocator, ctx, right_meta_id, right, right_obj))) {
-      SQL_ENG_LOG(WARN, "init nested obj failed", K(ret));
     } else if (OB_FAIL(left_obj->compare(*right_obj, cmp_ret))) {
-      SQL_ENG_LOG(WARN, "init nested obj failed", K(ret)); 
     } 
     return ret;
   }
@@ -148,11 +145,8 @@ struct ObNestedVectorCmpFunc
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(ObArrayExprUtils::get_array_obj(alloc, ctx, left_meta_id, left, left_obj))) {
-      SQL_ENG_LOG(WARN, "get array failed", K(ret));
     } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(alloc, ctx, right_meta_id, right, right_obj))) {
-      SQL_ENG_LOG(WARN, "get array failed", K(ret));
     } else if (OB_FAIL(ObArrayExprUtils::construct_array_obj(alloc, ctx, res_meta_id, res_obj, false))) {
-      SQL_ENG_LOG(WARN, "construct res array failed", K(ret));
     }
     return ret;
   }
@@ -179,7 +173,6 @@ static int eval_right_operand(const ObExpr &cmp_expr, const ObExpr &left, const 
   }
   // if rskip is all true, `eval_vector` still needs to be called, for that expr format may not be inited.
   if (OB_FAIL(right.eval_vector(ctx, *rskip, pvt_bound))) {
-    LOG_WARN("eval right operand failed", K(ret));
   }
   return ret;
 }
@@ -191,7 +184,6 @@ static int eval_cmp_operands(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVect
   const ObExpr &left = *expr.args_[0];
   const ObExpr &right = *expr.args_[1];
   if (OB_FAIL(left.eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval left operand failed", K(ret));
   } else {
     VectorFormat left_format = left.get_format(ctx);
     switch (left_format) {
@@ -351,7 +343,6 @@ struct EvalVectorCmp
     int ret = eval_cmp_operands(expr, ctx, skip, bound);
 
     if (OB_FAIL(ret)) {
-      LOG_WARN("eval cmp operands failed", K(ret));
     } else {
       const ObExpr &left = *expr.args_[0];
       const ObExpr &right = *expr.args_[1];
@@ -394,7 +385,6 @@ struct EvalVectorCmpWithNull
   {
     int ret = eval_cmp_operands(expr, ctx, skip, bound);
     if (OB_FAIL(ret)) {
-      LOG_WARN("eval cmp operands failed", K(ret));
     } else {
       VectorFormat res_format = expr.get_format(ctx);
       ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);

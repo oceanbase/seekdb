@@ -69,7 +69,6 @@ public:
       if (bucket_num_ != 0) {
         bucket_size_ = (topn_cnt + bucket_num_ - 1) / bucket_num_;
         if (OB_FAIL(init_output_brs(max_batch_size))) {
-          SQL_ENG_LOG(WARN, "init ouput batch rows failed", K(ret));
         }
       } else {
         is_by_pass_ = true;
@@ -158,7 +157,6 @@ int ObSortVecOpEagerFilter<Compare, Store_Row, has_addon>::filter(
         ret = comp_->ret_;
       }
       if (ret != OB_SUCCESS) {
-        LOG_WARN("failed to eager filter rows in topn operator", K(ret));
       }
     }
   }
@@ -200,9 +198,7 @@ int ObSortVecOpEagerFilter<Compare, Store_Row, has_addon>::update_filter(
       } else if (less) {
         if (OB_FAIL(
                 store_row_factory_.copy_to_row(bucket_head_row, reuse_row))) {
-          LOG_WARN("failed to generate new row", K(ret));
         } else if (OB_FAIL(bucket_heap_->replace_top(reuse_row))) {
-          LOG_WARN("failed to replace heap top element", K(ret));
         }
         updated = true;
       } else {

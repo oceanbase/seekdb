@@ -95,7 +95,6 @@ int ObTenantMediumChecker::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTenantMediumChecker is inited before", KR(ret), KPC(this));
   } else if (OB_FAIL(tablet_ls_set_.create(DEFAULT_MAP_BUCKET, "MedCheckSet", "CheckSetNode"))) {
-    LOG_WARN("failed to create set", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -128,7 +127,6 @@ int ObTenantMediumChecker::add_tablet_ls(const ObTabletID &tablet_id, const shar
     lib::ObMutexGuard guard(lock_);
     // just cover the old info
     if (OB_FAIL(tablet_ls_set_.set_refactored(ObTabletCheckInfo(tablet_id, ls_id, medium_scn)))) {
-      LOG_WARN("failed to set tablet_ls_info", K(ret), K(ls_id), K(tablet_id));
     }
   }
   return ret;
@@ -162,12 +160,10 @@ int ObTenantMediumChecker::check_medium_finish_schedule()
     {
       lib::ObMutexGuard guard(lock_);
       if (OB_FAIL(tablet_ls_infos.reserve(tablet_ls_set_.size()))) {
-        LOG_WARN("fail to reserve array", K(ret), "size", tablet_ls_set_.size());
       } else {
         for (TabletLSSet::const_iterator iter = tablet_ls_set_.begin();
             OB_SUCC(ret) && iter != tablet_ls_set_.end(); ++iter) {
           if (OB_FAIL(tablet_ls_infos.push_back(iter->first))) {
-            LOG_WARN("failed to push back tablet_ls_info", K(ret), K(iter->first));
           }
         }
       }
@@ -178,9 +174,7 @@ int ObTenantMediumChecker::check_medium_finish_schedule()
     const int64_t batch_size = share::g_mp->tenant_tablet_scheduler()->get_checker_batch_size();
     if (OB_FAIL(ret) || tablet_ls_infos.empty()) {
     } else if (OB_FAIL(batch_tablet_ls_infos.reserve(batch_size))) {
-      LOG_WARN("fail to reserve array", K(ret), "size", batch_size);
     } else if (OB_FAIL(finish_tablet_ls_infos.reserve(batch_size))) {
-      LOG_WARN("fail to reserve array", K(ret), "size", batch_size);
     } else {
       // batch check
       int64_t info_count = tablet_ls_infos.count();
@@ -190,7 +184,6 @@ int ObTenantMediumChecker::check_medium_finish_schedule()
       ObBatchFinishCheckStat stat;
       while (start_idx < end_idx) {
         if (OB_TMP_FAIL(check_medium_finish(tablet_ls_infos, start_idx, end_idx, batch_tablet_ls_infos, finish_tablet_ls_infos, stat))) {
-          LOG_WARN("failed to check medium finish", K(tmp_ret));
         }
         start_idx = end_idx;
         end_idx = min(start_idx + batch_size, info_count);
@@ -247,7 +240,6 @@ int ObTenantMediumChecker::check_medium_finish(
         LOG_WARN("unexpected medium scn", K(tmp_ret), K(tablet_ls_infos.at(i)));
       } else {
         if (OB_FAIL(check_tablet_ls_infos.push_back(tablet_ls_infos.at(i)))) {
-          LOG_WARN("fail to push back check_tablet_ls_infos", K(ret), K(tablet_ls_infos.at(i)));
         }
       }
     }
@@ -262,7 +254,6 @@ int ObTenantMediumChecker::check_medium_finish(
         stat.failed_info_ = check_tablet_ls_infos.at(0);
       }
       if (OB_TMP_FAIL(reput_check_info(check_tablet_ls_infos))) {
-        LOG_WARN("fail to reput failed check infos", K(tmp_ret));
       }
     } else {
       LOG_INFO("success to check medium finish", K(ret), K(tablet_ls_infos.count()), K(check_tablet_ls_infos.count()),
@@ -271,7 +262,6 @@ int ObTenantMediumChecker::check_medium_finish(
       stat.finish_cnt_ += finish_tablet_ls_infos.count();
       ObScheduleNewMediumLoop medium_loop(finish_tablet_ls_infos);
       if (OB_FAIL(medium_loop.loop())) {
-        LOG_WARN("failed to leader schedule", K(ret));
       } else {
         time_guard.click(ObCompactionScheduleTimeGuard::SCHEDULER_NEXT_ROUND);
       }
@@ -300,7 +290,6 @@ int ObTenantMediumChecker::reput_check_info(ObIArray<ObTabletCheckInfo> &tablet_
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to check exist in tablet set", K(ret), K(tmp_ret), K(check_info));
       } else if (OB_TMP_FAIL(tablet_ls_set_.set_refactored(check_info))) {
-        LOG_WARN("failed to set tablet_ls_info", K(tmp_ret), K(check_info));
       }
     }
   }

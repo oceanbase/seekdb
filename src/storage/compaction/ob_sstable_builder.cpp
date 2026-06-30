@@ -50,7 +50,6 @@ int ObSSTableRebuildMicroBlockIter::prefetch()
       
 
       if (OB_FAIL(ObObjectManager::async_read_object(read_info, macro_io_handle))) {
-        LOG_WARN("Fail to read macro block", K(ret), K(read_info));
       }
     } else {
       break;
@@ -79,7 +78,6 @@ int ObSSTableRebuildMicroBlockIter::open_next_macro_block()
   if (OB_UNLIKELY(is_iter_end())) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(prefetch())) {
-    STORAGE_LOG(WARN, "fail to prefetch", K(ret));
   } else {
     iter_idx_++;
     ObDatumRange range;
@@ -88,7 +86,6 @@ int ObSSTableRebuildMicroBlockIter::open_next_macro_block()
     mirco_block_iter_.reset();
 
     if (OB_FAIL(macro_io_handle.wait())) {
-        LOG_WARN("failed to read macro block from io", K(ret));
     } else if (OB_FAIL(mirco_block_iter_.open(
                 macro_io_handle.get_buffer(),
                 macro_io_handle.get_data_size(),
@@ -97,7 +94,6 @@ int ObSSTableRebuildMicroBlockIter::open_next_macro_block()
                 false,
                 false,
                 false))) {
-      STORAGE_LOG(WARN, "fail to open macro block", K(ret));
     }
   }
 
@@ -168,7 +164,6 @@ int ObSSTableBuilder::prepare_index_builder()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid data store desc", K(ret), K(data_store_desc_));
   } else if (OB_FAIL(index_builder_.init(data_store_desc_.get_desc()))) {
-    STORAGE_LOG(WARN, "fail to init", K(ret), K(data_store_desc_));
   }
 
   return ret;
@@ -192,7 +187,6 @@ int ObSSTableBuilder::build_sstable_merge_res(
   } else if (OB_FAIL(rebuilder_ptr_->build_res_with_rewrite_macros(
             merge_param, pre_warm_param, input_macro_seq, index_builder_,
             block_info, res))) {
-    LOG_WARN("failed to build res with rewrite macros", KR(ret));
   }
   return ret;
 }
@@ -237,22 +231,16 @@ int ObSSTableRebuilder::build_res_with_rewrite_macros(
   bool build_res_with_rebuild = false;
 
   if (OB_FAIL(rebuild_index_builder_.init(data_store_desc_.get_desc()))) {
-    STORAGE_LOG(WARN, "fail to init", K(ret), K(data_store_desc_));
   } else if (OB_FAIL(open_macro_writer(pre_warm_param))) {
-    STORAGE_LOG(WARN, "fail to open macro writer", K(ret), K(pre_warm_param));
   } else if (OB_FAIL(index_builder.init_meta_iter(local_arena, iter))) {
-    STORAGE_LOG(WARN, "fail to init meta iter", K(ret), K(index_builder));
   } else if (OB_FAIL(check_need_rebuild(merge_param, macro_id_array, iter, multiplexed_macro_block_count))) {
-    STORAGE_LOG(WARN, "failed to check need rebuild", K(ret));
   } else if (macro_id_array.count() != 0) {
     build_res_with_rebuild = true;
     iter.reuse();
     STORAGE_LOG(INFO, "rebuild sstable merge", K(ret), K(data_store_desc_.get_desc().get_table_cg_idx()));
     if (OB_FAIL(rebuild_macro_block(macro_id_array, iter))) {
-      STORAGE_LOG(WARN, "fail to rebuild macro block", K(ret), K(macro_id_array));
     } else if (OB_FAIL(rebuild_index_builder_.close_with_macro_seq(
         res, macro_start_seq, OB_DEFAULT_MACRO_BLOCK_SIZE/*nested_size*/, 0/*nested_offset*/, pre_warm_param))) {
-      STORAGE_LOG(WARN, "fail to close", K(ret), K(rebuild_index_builder_));
     } else { //update merge info
       block_info.multiplexed_macro_block_count_ = multiplexed_macro_block_count;
       block_info.macro_block_count_ = res.data_blocks_cnt_;
@@ -268,7 +256,6 @@ int ObSSTableRebuilder::build_res_with_rewrite_macros(
   if (OB_FAIL(ret) || build_res_with_rebuild) {
   } else if (OB_FAIL(index_builder.close_with_macro_seq(
     res, macro_start_seq, OB_DEFAULT_MACRO_BLOCK_SIZE/*nested_size*/, 0/*nested_offset*/, pre_warm_param))) {
-    STORAGE_LOG(WARN, "fail to close", K(ret), K(index_builder));
   } else if (!is_local_exec_mode(merge_param.get_exec_mode())) {
     STORAGE_LOG(INFO, "success to close index builder", KR(ret), K(macro_start_seq), K(input_macro_seq));
   }
@@ -289,7 +276,6 @@ int ObSSTableRebuilder::open_macro_writer(const share::ObPreWarmerParam &pre_war
   if (OB_FAIL(macro_writer_.open(
           data_store_desc_.get_desc(), 0 /*parallel_idx*/, macro_seq_param,
           pre_warm_param, rebuild_index_builder_.get_private_object_cleaner()))) {
-    STORAGE_LOG(WARN, "failed to open macro writer", K(ret), K(data_store_desc_));
   }
 
   return ret;
@@ -322,7 +308,6 @@ int ObSSTableRebuilder::check_need_rebuild(const ObStaticMergeParam &merge_param
   bool need_check_rebuild = true;
 
   if (OB_FAIL(pre_check_rebuild(merge_param, iter, need_check_rebuild))) {
-    STORAGE_LOG(WARN, "Fail to pre check need rebuild", K(ret));
   } else if (need_check_rebuild) {
     // find continues macro to rewrite
     while (OB_SUCC(ret) && OB_SUCC(iter.get_next_macro_block(macro_meta))) {
@@ -331,7 +316,6 @@ int ObSSTableRebuilder::check_need_rebuild(const ObStaticMergeParam &merge_param
         bool need_merge = false;
         // check last_macro_block_sum + cur_macro can be merged into one
         if (OB_FAIL(check_cur_macro_need_merge(last_macro_block_sum, macro_meta, need_merge))) {
-          STORAGE_LOG(WARN, "fail to check_cur_macro_need_merge", K(ret), K(macro_meta));
         } else if (!need_merge) { // found first can't merge macro, reset collect info
           last_macro_id = macro_meta.get_macro_id();
           last_macro_is_first = true;
@@ -342,7 +326,6 @@ int ObSSTableRebuilder::check_need_rebuild(const ObStaticMergeParam &merge_param
           if (last_macro_is_first && OB_FAIL(macro_id_array.push_back(last_macro_id))) {
             STORAGE_LOG(WARN, "failed to push back macro id", K(ret), K(last_macro_id));
           } else if (OB_FAIL(macro_id_array.push_back(macro_meta.get_macro_id()))) {
-            STORAGE_LOG(WARN, "failed to push back macro id", K(ret), K(macro_meta));
           } else {
             reduce_macro_block_cnt++;
             last_macro_block_sum += macro_block_sum;
@@ -380,7 +363,6 @@ int ObSSTableRebuilder::check_cur_macro_need_merge(
       || last_macro_blocks_sum + macro_block_sum >= DEFAULT_MACRO_BLOCK_SIZE) {
     need_merge = false;
   } else if (OB_FAIL(macro_writer_.get_estimate_meta_block_size(curr_macro_meta, estimate_meta_size))) {
-    STORAGE_LOG(WARN, "fail to get_estimate_meta_block_size", K(ret), K(curr_macro_meta));
   } else if (last_macro_blocks_sum + estimate_meta_size + macro_block_sum >= DEFAULT_MACRO_BLOCK_SIZE) {
     need_merge = false;
   }
@@ -398,7 +380,6 @@ int ObSSTableRebuilder::rebuild_macro_block(const ObIArray<MacroBlockId> &macro_
   } else {
     ObSSTableRebuildMicroBlockIter micro_iter(macro_id_array, *index_read_info_);
     if (OB_FAIL(micro_iter.init())) {
-      STORAGE_LOG(WARN, "init SSTableRebuildMicroBlockIter failed", K(ret));
     } else {
       blocksstable::ObDataMacroBlockMeta macro_meta;
       int64_t macro_id_idx = 0;
@@ -408,15 +389,12 @@ int ObSSTableRebuilder::rebuild_macro_block(const ObIArray<MacroBlockId> &macro_
           STORAGE_LOG(WARN, "unexpected macro meta", K(ret), K(macro_meta));
         } else if (macro_id_idx < macro_id_array.count() && macro_meta.get_macro_id() == macro_id_array.at(macro_id_idx)) {
           if (OB_FAIL(micro_iter.open_next_macro_block())) {
-            STORAGE_LOG(WARN, "fail to open next macro block", K(ret), K(micro_iter));
           } else if (OB_FAIL(rewrite_macro_block(micro_iter))) {
-            STORAGE_LOG(WARN, "fail to rewrite macro block", K(ret), K(micro_iter));
           } else {
             macro_id_idx++;
             STORAGE_LOG(INFO, "reopen macro block", K(ret), K(macro_meta.get_macro_id()));
           }
         } else if (OB_FAIL(macro_writer_.append_macro_block(macro_meta))) {
-          STORAGE_LOG(WARN, "fail to appen macro block", K(ret), K(macro_meta));
         }
       }
 
@@ -427,7 +405,6 @@ int ObSSTableRebuilder::rebuild_macro_block(const ObIArray<MacroBlockId> &macro_
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "unexpected ietr idx", K(ret), K(macro_id_idx), K(macro_id_array), K(micro_iter));
       } else if (OB_FAIL(macro_writer_.close())) {
-        STORAGE_LOG(WARN, "failed to close", K(ret), K(macro_writer_));
       }
     }
   }
@@ -449,7 +426,6 @@ int ObSSTableRebuilder::rewrite_macro_block(ObSSTableRebuildMicroBlockIter &micr
         STORAGE_LOG(WARN, "fail to get next micro block", K(ret), K(micro_iter));
       }
     } else if (OB_FAIL(macro_writer_.append_micro_block(micro_block_desc, micro_index_data))) {
-      STORAGE_LOG(WARN, "fail to append micro", K(ret), K(micro_block_desc), K(macro_writer_));
     }
   }
 

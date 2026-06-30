@@ -47,7 +47,6 @@ int ObJoinVecOp::blank_row_batch(const ExprFixedArray &exprs, int64_t batch_size
   int ret = OB_SUCCESS;
   for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < exprs.count(); col_idx++) {
     if (OB_FAIL(exprs.at(col_idx)->init_vector_default(eval_ctx_, batch_size))) {
-      LOG_WARN("fail to init vector", K(ret));
     } else {
       ObIVector *vec = exprs.at(col_idx)->get_vector(eval_ctx_);
       if (OB_UNLIKELY(VEC_UNIFORM_CONST == exprs.at(col_idx)->get_format(eval_ctx_))) {
@@ -91,7 +90,6 @@ int ObJoinVecOp::calc_other_conds(const ObBitVector &skip, bool &is_match)
   ObIVector *res_vec = nullptr;
   ARRAY_FOREACH(conds, i) {
     if (OB_FAIL(conds.at(i)->eval_vector(eval_ctx_, skip, eval_bound))) {
-      LOG_WARN("fail to calc other join condition", K(ret), K(*conds.at(i)));
     } else if (OB_ISNULL(res_vec = conds.at(i)->get_vector(eval_ctx_))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get source vector", K(ret), K(res_vec));
@@ -109,7 +107,6 @@ int ObJoinVecOp::batch_calc_other_conds(ObBatchRows &brs)
   const ObIArray<ObExpr *> &conds = get_spec().other_join_conds_;
   ARRAY_FOREACH(conds, i) {
     if (OB_FAIL(conds.at(i)->eval_vector(eval_ctx_, brs))) {
-      LOG_WARN("fail to calc other join condition", K(ret), K(*conds.at(i)));
     } else {
       VectorHeader &vec_header = conds.at(i)->get_vector_header(eval_ctx_);
       common::ObIVector *vec = conds.at(i)->get_vector(eval_ctx_);

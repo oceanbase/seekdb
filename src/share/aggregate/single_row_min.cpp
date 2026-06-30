@@ -42,7 +42,6 @@ int init_single_row_min_aggregate(RuntimeContext &agg_ctx, const int col_id,
     }
   }
   if (OB_FAIL(ret)) {
-    SQL_LOG(WARN, "init count aggregate failed", K(ret));
   }
   return ret;
 }

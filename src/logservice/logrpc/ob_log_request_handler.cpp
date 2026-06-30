@@ -39,7 +39,6 @@ int LogRequestHandler::get_palf_handle_guard_(const int64_t palf_id,
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "get_log_service failed", K(ret));
   } else if (OB_FAIL(log_service->open_palf(ls_id, palf_handle_guard))) {
-    CLOG_LOG(WARN, "open palf failed", K(ret), K(palf_id));
   }
 	return ret;
 }
@@ -58,7 +57,6 @@ int LogRequestHandler::get_log_handler_(
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "mtl ObLSService should not be null", K(ret));
   } else if (OB_FAIL(ls_svr->get_ls(ls_id, ls_handle, ObLSGetMod::LOG_MOD))) {
-    CLOG_LOG(WARN, "get ls failed", KR(ret), K(ls_id));
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "ls should not be null", KR(ret));
@@ -127,12 +125,10 @@ int LogRequestHandler::handle_sync_request<LogConfigChangeCmd, LogConfigChangeCm
     const common::ObAddr &server = req.src_;
     palf::PalfHandleGuard palf_handle_guard;
     if (OB_FAIL(get_palf_handle_guard_(palf_id, palf_handle_guard))) {
-      CLOG_LOG(WARN, "get_palf_handle_guard_ failed", K(ret), K(palf_id));
     } else {
       palf::PalfHandle *palf_handle = palf_handle_guard.get_palf_handle();
       ConfigChangeCmdHandler cmd_handler(palf_handle);
       if (OB_FAIL(cmd_handler.handle_config_change_cmd(req, resp))) {
-        CLOG_LOG(WARN, "handle_config_change_cmd failed", K(ret), K(palf_id), K(server), K(req));
       } else {
         CLOG_LOG(INFO, "handle_config_change_cmd success", K(ret), K(palf_id), K(server), K(req), K(resp));
       }
@@ -161,14 +157,12 @@ int LogRequestHandler::handle_sync_request<LogGetPalfStatReq, LogGetPalfStatResp
     bool is_pending_state = true;
     int64_t paxos_replica_num = 0;
     if (OB_FAIL(get_palf_handle_guard_(palf_id, palf_handle_guard))) {
-      CLOG_LOG(WARN, "get_palf_handle_guard_ failed", K(ret), K(palf_id));
     } else if (req.is_to_leader_ && OB_FAIL(palf_handle_guard.get_role(role, unused_pid, is_pending_state))) {
       CLOG_LOG(WARN, "palf_handle get_role failed", K(ret), K(palf_id), K(server));
     } else if (req.is_to_leader_ && (role != LEADER || true == is_pending_state)) {
       ret = OB_NOT_MASTER;
       CLOG_LOG(WARN, "get_palf_stat failed", K(ret), K(req), K(role), K(is_pending_state));
     } else if (OB_FAIL(palf_handle_guard.stat(resp.palf_stat_))) {
-      CLOG_LOG(WARN, "palf stat failed", K(ret), K(palf_id), K(server));
     } else {
       CLOG_LOG(TRACE, "get_palf_stat success", K(ret), K(palf_id), K(server), K(req), K(resp));
     }
@@ -248,7 +242,6 @@ int LogRequestHandler::handle_request<LogChangeAccessModeCmd>(const LogChangeAcc
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(ERROR, "Invalid argument!!!", K(ret), K(req));
   } else if (OB_FAIL(change_access_mode_(req))) {
-    CLOG_LOG(WARN, "handle_request fail", K(ret), K(req));
   } else {
     CLOG_LOG(TRACE, "handle_request success", K(ret), K(req));
   }
@@ -263,9 +256,7 @@ int LogRequestHandler::change_access_mode_(const LogChangeAccessModeCmd &req)
   storage::ObLSHandle ls_handle;
   logservice::ObLogHandler *log_handler = nullptr;
   if (OB_FAIL(get_log_handler_(palf_id, ls_handle, log_handler))) {
-    CLOG_LOG(WARN, "get_log_handler_ failed", K(ret), K(palf_id), K(server));
   } else if (OB_FAIL(log_handler->change_access_mode(req.mode_version_, req.access_mode_, req.ref_scn_))) {
-    CLOG_LOG(WARN, "change_access_mode failed", K(ret), K(palf_id), K(server));
   } else {
     CLOG_LOG(INFO, "change_access_mode success", K(ret), K(req));
   }
@@ -292,35 +283,26 @@ int LogRequestHandler::handle_request<LogFlashbackMsg>(const LogFlashbackMsg &re
     palf::AccessMode curr_access_mode = palf::AccessMode::INVALID_ACCESS_MODE;
     int64_t curr_mode_version = 0;
     if (OB_FAIL(get_replay_service_(replay_srv))) {
-      CLOG_LOG(WARN, "get_replay_service_ failed", K(ret), K(palf_id));
     } else if (OB_FAIL(get_palf_handle_guard_(palf_id, palf_handle_guard))) {
-      CLOG_LOG(WARN, "get_palf_handle_guard_ failed", K(ret), K(palf_id));
     } else if (OB_FAIL(palf_handle_guard.get_access_mode(curr_mode_version, curr_access_mode))) {
-      CLOG_LOG(WARN, "get_access_mode failed", K(ret), K(palf_id), K(self));
     } else if (req.mode_version_ != curr_mode_version || palf::AccessMode::FLASHBACK != curr_access_mode) {
       ret = OB_STATE_NOT_MATCH;
       CLOG_LOG(WARN, "access_mode do not match, can not do flashback", K(ret), K(palf_id), K(self), K(curr_mode_version),
           K(curr_access_mode), K(req));
     } else if (OB_FAIL(palf_handle_guard.flashback(req.mode_version_, req.flashback_scn_, FLASHBACK_TIMEOUT_US))) {
-      CLOG_LOG(WARN, "flashback failed", K(ret), K(palf_id), K(req));
     } else if (OB_FAIL(get_self_addr_(self))) {
-      CLOG_LOG(WARN, "get_self_addr_ failed", K(ret), K(palf_id), K(self));
     } else if (OB_FAIL(get_flashback_service_(flashback_srv))) {
-      CLOG_LOG(WARN, "get_flashback_service_ failed", K(ret), K(palf_id));
     } else {
       // single-replica: deliver flashback response in-process (sender is always self)
       LogFlashbackMsg flashback_resp(self, palf_id, req.mode_version_, req.flashback_scn_, false);
       if (OB_FAIL(flashback_srv->handle_flashback_resp(flashback_resp))) {
-        CLOG_LOG(WARN, "handle_flashback_resp failed", K(ret), K(palf_id), K(server), K(flashback_resp));
       }
     }
     CLOG_LOG(INFO, "handle_log_flashback_msg finish", K(ret), K(req));
   } else {
     logservice::ObLogFlashbackService *flashback_srv = nullptr;
     if (OB_FAIL(get_flashback_service_(flashback_srv))) {
-      CLOG_LOG(WARN, "get_flashback_service_ failed", K(ret), K(palf_id));
     } else if (OB_FAIL(flashback_srv->handle_flashback_resp(req))) {
-      CLOG_LOG(WARN, "handle_flashback_resp failed", K(ret), K(req));
     } else {
       CLOG_LOG(INFO, "handle_flashback_resp success", K(ret), K(req));
     }
@@ -346,7 +328,6 @@ int LogRequestHandler::handle_sync_request<LogGetCkptReq, LogGetCkptResp>(
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "mtl ObLSService should not be null", K(ret));
   } else if (OB_FAIL(ls_svr->get_ls(ls_id, handle, ObLSGetMod::LOG_MOD))) {
-    CLOG_LOG(WARN, "get ls failed", KR(ret), K(ls_id));
   } else if (OB_ISNULL(ls = handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "ls should not be null", KR(ret));

@@ -62,7 +62,6 @@ void __attribute__((used)) lib_mtl_switch(lib::IRunWrapper *run_wrapper, std::fu
   int ret = OB_SUCCESS;
   MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
   if (OB_FAIL(guard.switch_to(static_cast<share::ObTenantBase *>(run_wrapper)))) {
-    LOG_WARN("failed to switch to tenant", K(ret), KP(run_wrapper));
   } else {
     fn();
   }
@@ -131,9 +130,7 @@ int ObTenantBase::init(ObCgroupCtrl *cgroup)
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice error", K(ret));
   } else if (OB_FAIL(tg_set_.create(1024))) {
-    LOG_WARN("fail to create tg set", K(ret));
   } else if (OB_FAIL(thread_dynamic_factor_map_.create(1024, attr))) {
-    LOG_WARN("fail to create thread dynamic_factor_map", K(ret));
   } else {
     if (cgroup == nullptr) {
       LOG_WARN("ObTenantBase init cgroup is null");
@@ -289,7 +286,6 @@ int ObTenantBase::update_thread_cnt(double tenant_unit_cpu)
         tmp_ret = it->first.get_dynamic_impl()->set_thread_cnt(cnt);
       }
       if (tmp_ret != OB_SUCCESS) {
-        LOG_WARN("update_thread_cnt", K(it->first), K(cnt), K(tmp_ret), K(it->second));
       }
     }
   }

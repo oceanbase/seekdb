@@ -45,7 +45,6 @@ void ObLSFreezeTask::handle()
   }
   if (OB_NOT_NULL(host_)) {
     if (OB_FAIL(host_->push_back_(this))) {
-      STORAGE_LOG(WARN, "push back ls free task failed", K(ret));
     }
   }
 }
@@ -86,9 +85,7 @@ int ObLSFreezeThread::init(int tg_id)
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "ObLSFreezeThread has already been inited", K(ret));
   } else if (OB_FAIL(TG_CREATE_TENANT(tg_id, tg_id_))) {
-    STORAGE_LOG(WARN, "ObSimpleThreadPool tg create", K(ret));
   } else if (OB_FAIL(TG_SET_HANDLER_AND_START(tg_id_, *this))) {
-    STORAGE_LOG(WARN, "ObSimpleThreadPool inited error.", K(ret));
   } else {
     ObMemAttr memattr("FreezeTask");
     for (int64_t i = 0; OB_SUCC(ret) && i < MAX_FREE_TASK_NUM; i++) {
@@ -129,7 +126,6 @@ int ObLSFreezeThread::add_task(ObDataCheckpoint *data_checkpoint,
   if (OB_SUCC(ret)) {
     task->set_task(this, data_checkpoint, rec_scn);
     if (OB_FAIL(TG_PUSH_TASK(tg_id_, task))) {
-      STORAGE_LOG(WARN, "schedule timer task failed", K(ret));
     }
   }
   return ret;

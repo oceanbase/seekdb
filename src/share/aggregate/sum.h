@@ -87,7 +87,6 @@ public:
       SumCalcInfo &sum_calc_info = reinterpret_cast<SumCalcInfo &>(calc_info);
       if (OB_FAIL(add_to_result(*lparam, rparam, sum_calc_info.scale_, agg_cell,
                                 sum_calc_info.agg_cell_len_))) {
-        SQL_LOG(WARN, "add_to_result failed", K(ret));
       }
     }
     return ret;
@@ -106,7 +105,6 @@ public:
     SQL_LOG(DEBUG, "sum sub row", K(agg_col_id));
     ret = sub_values(rparam, *lparam, agg_cell, sizeof(ResultType));
     if (OB_FAIL(ret)) {
-      SQL_LOG(WARN, "sub value failed", K(ret));
     }
     return ret;
   }
@@ -120,7 +118,6 @@ public:
       SQL_LOG(DEBUG, "add null row", K(ret), K(row_num));
     } else if (OB_FAIL(
                  add_row(agg_ctx, columns, row_num, agg_col_id, agg_cell, tmp_res, calc_info))) {
-      SQL_LOG(WARN, "add row failed", K(ret));
     } else {
       NotNullBitVector &not_nulls = agg_ctx.locate_notnulls_bitmap(agg_col_id, agg_cell);
       not_nulls.set(agg_col_id);
@@ -137,11 +134,9 @@ public:
     if (!columns.is_null(row_num)) {
       if (is_trans) {
         if (OB_FAIL(add_row(agg_ctx, columns, row_num, agg_col_id, agg_cell, tmp_res, calc_info))) {
-          SQL_LOG(WARN, "add row failed", K(ret));
         }
       } else if (OB_FAIL(
                    sub_row(agg_ctx, columns, row_num, agg_col_id, agg_cell, tmp_res, calc_info))) {
-        SQL_LOG(WARN, "sub row failed", K(ret));
       }
     } else {
       if (is_trans) {
@@ -229,7 +224,6 @@ public:
 
         if (OB_FAIL(add_to_result(*lparam, rparam, calc_info.scale_, agg_cell,
                                   calc_info.agg_cell_len_))) {
-          SQL_LOG(WARN, "add_to_result failed", K(ret), K(*this), K(*lparam), K(rparam), K(batch_idx), KP(data));
         }
       }
       if (OB_SUCC(ret)) {
@@ -264,7 +258,6 @@ public:
 
         if (OB_FAIL(add_to_result(*curr_param, rollup_param, calc_info.scale_, rollup_agg_cell,
                                   calc_info.agg_cell_len_))) {
-          SQL_LOG(WARN, "add_to_result failed", K(ret), K(*this), K(*curr_param), K(rollup_param));
         }
       }
     } else if (curr_not_nulls.at(agg_col_idx)) {
@@ -336,14 +329,12 @@ public:
         ObScale scale = agg_ctx.get_first_param_scale(agg_col_id);
         if (out_tc == VEC_TC_NUMBER) {
           if (OB_FAIL(add_value_to_nmb(tmp_res, scale, agg_cell))) {
-            SQL_LOG(WARN, "add value to nmb failed", K(ret));
           }
         } else {
           ResultType *res_val = reinterpret_cast<ResultType *>(agg_cell);
           ret = add_values(tmp_res, *res_val, agg_cell, agg_ctx.get_cell_len(agg_col_id, agg_cell));
         }
         if (OB_FAIL(ret)) {
-          SQL_LOG(WARN, "do op failed", K(ret));
         } else {
           tmp_res = 0;
         }
@@ -355,9 +346,7 @@ public:
           number::ObCompactNumber *res_cnum = reinterpret_cast<number::ObCompactNumber *>(agg_cell);
           ObNumStackAllocator<3> tmp_alloc;
           if (OB_FAIL(to_nmb(tmp_res, scale, tmp_alloc, param_nmb))) {
-            SQL_LOG(WARN, "to number failed", K(ret));
           } else if (OB_FAIL(cur_nmb.sub(param_nmb, res_nmb, tmp_alloc))) {
-            SQL_LOG(WARN, "number::sub failed", K(ret));
           } else {
             res_cnum->desc_ = res_nmb.d_;
             MEMCPY(&(res_cnum->digits_[0]), res_nmb.get_digits(), sizeof(uint32_t) * res_nmb.d_.len_);
@@ -395,9 +384,7 @@ public:
           if (out_tc == VEC_TC_NUMBER) {
             ObScale scale = agg_ctx.get_first_param_scale(agg_col_idx);
             if (OB_FAIL(add_value_to_nmb(copied_tmp_res, scale, agg_cell))) {
-              SQL_LOG(WARN, "add value to nmb failed", K(ret));
             } else if (OB_FAIL(add_value_to_nmb(*row_param, scale, agg_cell))) {
-              SQL_LOG(WARN, "add value to nmb failed", K(ret));
             } else {
               *tmp_res = 0;
             }
@@ -412,7 +399,6 @@ public:
         }
       }
       if (OB_FAIL(ret)) {
-        SQL_LOG(WARN, "do addition failed", K(ret));
       } else {
         NotNullBitVector &not_nulls = agg_ctx.locate_notnulls_bitmap(agg_col_idx, agg_cell);
         not_nulls.set(agg_col_idx);
@@ -444,18 +430,14 @@ public:
         if (out_tc == VEC_TC_NUMBER) {
           ObScale in_scale = agg_ctx.get_first_param_scale(agg_col_id);
           if (OB_FAIL(add_value_to_nmb(copied_tmp_res, in_scale, agg_cell))) {
-            SQL_LOG(WARN, "add_value_to_nmb failed", K(ret));
           } else if (OB_FAIL(add_value_to_nmb(*row_param, in_scale, agg_cell))) {
-            SQL_LOG(WARN, "add_value_to_nmb failed", K(ret));
           } else {
             tmp_res = 0;
           }
         } else {
           ResultType &res_val = *reinterpret_cast<ResultType *>(agg_cell);
           if (OB_FAIL(add_values(copied_tmp_res, res_val, agg_cell, sizeof(ResultType)))) {
-            SQL_LOG(WARN, "add values failed", K(ret));
           } else if (OB_FAIL(add_values(*row_param, res_val, agg_cell, sizeof(ResultType)))) {
-            SQL_LOG(WARN, "add values failed", K(ret));
           } else {
             tmp_res = 0;
           }
@@ -478,7 +460,6 @@ public:
       // do nothing
     } else if (OB_FAIL(add_row(agg_ctx, columns, row_num, agg_col_id, agg_cell, tmp_res_ptr,
                                calc_info))) {
-      SQL_LOG(WARN, "add row failed", K(ret));
     } else {
       NotNullBitVector &not_nulls = agg_ctx.locate_notnulls_bitmap(agg_col_id, agg_cell);
       not_nulls.set(agg_col_id);
@@ -507,13 +488,9 @@ public:
           number::ObNumber cur_nmb(*reinterpret_cast<number::ObCompactNumber *>(agg_cell));
           ObScale scale = agg_ctx.get_first_param_scale(agg_col_id);
           if (OB_FAIL(to_nmb(tmp_val, scale, tmp_alloc, sub1))) {
-            SQL_LOG(WARN, "to number failed", K(ret));
           } else if (OB_FAIL(to_nmb(param, scale, tmp_alloc, sub2))) {
-            SQL_LOG(WARN, "to number failed", K(ret));
           } else if (OB_FAIL(sub1.add(sub2, tmp_sum, tmp_alloc))) {
-            SQL_LOG(WARN, "number::add failed", K(ret));
           } else if (OB_FAIL(cur_nmb.sub(tmp_sum, res_nmb, tmp_alloc))) {
-            SQL_LOG(WARN, "number::sub failed", K(ret));
           } else {
             number::ObCompactNumber *res_cnum = reinterpret_cast<number::ObCompactNumber *>(agg_cell);
             res_cnum->desc_ = res_nmb.d_;
@@ -526,9 +503,7 @@ public:
           using res_int_type = wide::ObWideInteger<res_bits>;
           res_int_type &res_val = *reinterpret_cast<res_int_type *>(agg_cell);
           if (OB_FAIL(sub_values(res_val, tmp_val, agg_cell, sizeof(ResultType)))) {
-            SQL_LOG(WARN, "sub values failed", K(ret));
           } else if (OB_FAIL(sub_values(res_val, param, agg_cell, sizeof(ResultType)))) {
-            SQL_LOG(WARN, "sub values failed", K(ret));
           } else {
             tmp_val = 0;
           }
@@ -550,11 +525,9 @@ public:
       if (is_trans) {
         ret = add_row(agg_ctx, columns, row_num, agg_col_id, agg_cell, tmp_res, calc_info);
         if (OB_FAIL(ret)) {
-          SQL_LOG(WARN, "add row failed", K(ret));
         }
       } else {
         if (OB_FAIL(sub_row(agg_ctx, columns, row_num, agg_col_id, agg_cell, tmp_res, calc_info))) {
-          SQL_LOG(WARN, "sub row failed", K(ret));
         }
       }
     } else {
@@ -582,7 +555,6 @@ public:
       if (VEC_TC_NUMBER == out_tc) {
         ObScale scale = agg_ctx.get_first_param_scale(agg_col_id);
         if (OB_FAIL(add_value_to_nmb(*tmp_res, scale, const_cast<char *>(agg_cell)))) {
-          SQL_LOG(WARN, "add value to nmb failed", K(ret));
         } else {
           CellWriter<ResultType>::set(agg_cell, agg_len, res_vec, output_idx, nullptr);
         }
@@ -590,7 +562,6 @@ public:
         ResultType *res_val = reinterpret_cast<ResultType *>(const_cast<char *>(agg_cell));
         ret = add_values(*tmp_res, *res_val, const_cast<char *>(agg_cell), agg_len);
         if (OB_FAIL(ret)) {
-          SQL_LOG(WARN, "add values failed", K(ret));
         } else {
           CellWriter<ResultType>::set(agg_cell, agg_len, res_vec, output_idx, nullptr);
         }
@@ -653,7 +624,6 @@ public:
       ret =
         add_values(*cur_cell, *rollup_cell, reinterpret_cast<char *>(rollup_cell), rollup_cell_len);
       if (OB_FAIL(ret)) {
-        SQL_LOG(WARN, "do addition failed", K(ret));
       } else {
         rollup_not_nulls.set(agg_col_idx);
       }
@@ -718,16 +688,13 @@ private:
     int ret = OB_SUCCESS;
     if (sizeof(T) > sizeof(int64_t)) {
       if (OB_FAIL(wide::to_number(v, in_scale, alloc, res_nmb))) {
-        SQL_LOG(WARN, "wide::to_number failed", K(ret));
       }
     } else if (sizeof(T) <= sizeof(int32_t) || std::is_same<T, int64_t>::value) {
       int64_t tmp_v = v;
       if (OB_FAIL(wide::to_number(tmp_v, in_scale, alloc, res_nmb))) {
-        SQL_LOG(WARN, "wide::to_number failed", K(ret));
       }
     } else if (std::is_same<T, uint64_t>::value) {
       if (OB_FAIL(wide::to_number(static_cast<uint64_t>(v), in_scale, alloc, res_nmb))) {
-        SQL_LOG(WARN, "wide::to_number failed", K(ret));
       }
     }
     return ret;
@@ -740,9 +707,7 @@ private:
     number::ObNumber res_nmb, param_nmb;
     number::ObNumber tmp(*reinterpret_cast<number::ObCompactNumber *>(agg_cell));
     if (OB_FAIL(to_nmb(v, in_scale, tmp_alloc, param_nmb))) {
-      SQL_LOG(WARN, "to_nmb failed", K(ret));
     } else if (OB_FAIL(tmp.add_v3(param_nmb, res_nmb, tmp_alloc))) {
-      SQL_LOG(WARN, "ObNumber::add_v3 failed", K(ret));
     } else {
       number::ObCompactNumber *cnum = reinterpret_cast<number::ObCompactNumber *>(agg_cell);
       cnum->desc_ = res_nmb.d_;
@@ -779,7 +744,6 @@ public:
                                                             CS_TYPE_BINARY,
                                                             true,
                                                             array_data))) {
-        SQL_LOG(WARN, "fail to get real data.", K(ret), K(array_data));
       } else if (not_nulls.at(agg_col_idx)) {
         int32_t agg_cell_len = *reinterpret_cast<int32_t *>(agg_cell + sizeof(char *));
         const char *agg_cell_data = reinterpret_cast<const char *>(*reinterpret_cast<int64_t *>(agg_cell));
@@ -837,7 +801,6 @@ public:
                                                                  CS_TYPE_BINARY,
                                                                  true,
                                                                  array_data))) {
-      SQL_LOG(WARN, "fail to get real data.", K(ret), K(array_data));
     } else if (not_nulls.at(agg_col_id)) {
       int32_t agg_cell_len = *reinterpret_cast<int32_t *>(aggr_cell + sizeof(char *));
       const char *agg_cell_data = reinterpret_cast<const char *>(*reinterpret_cast<int64_t *>(aggr_cell));
@@ -894,7 +857,6 @@ public:
       SQL_LOG(DEBUG, "add null row", K(ret), K(row_num));
     } else if (OB_FAIL(
                  add_row(agg_ctx, columns, row_num, agg_col_id, agg_cell, tmp_res, calc_info))) {
-      SQL_LOG(WARN, "add row failed", K(ret));
     } else {
       NotNullBitVector &not_nulls = agg_ctx.locate_notnulls_bitmap(agg_col_id, agg_cell);
       not_nulls.set(agg_col_id);
@@ -919,11 +881,9 @@ public:
     if (!columns.is_null(row_num)) {
       if (is_trans) {
         if (OB_FAIL(add_row(agg_ctx, columns, row_num, agg_col_id, agg_cell, tmp_res, calc_info))) {
-          SQL_LOG(WARN, "add row failed", K(ret));
         }
       } else if (OB_FAIL(
                    sub_row(agg_ctx, columns, row_num, agg_col_id, agg_cell, tmp_res, calc_info))) {
-        SQL_LOG(WARN, "sub row failed", K(ret));
       }
     } else {
       if (is_trans) {
@@ -948,7 +908,6 @@ public:
     if (OB_LIKELY(not_nulls.at(agg_col_id))) {
       ObString res;
       if (OB_FAIL(ObArrayExprUtils::set_array_res(nullptr, agg_cell_len, agg_ctx.allocator_, res, agg_data))) {
-        SQL_LOG(WARN, "failed to set array res", K(ret));
       } else {
         static_cast<ColumnFmt *>(output_vec)->set_string(output_idx, res);
       }

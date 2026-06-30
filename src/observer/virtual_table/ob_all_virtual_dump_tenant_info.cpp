@@ -171,7 +171,6 @@ int ObAllVirtualDumpTenantInfo::inner_get_next_row(common::ObNewRow *&row)
       if (OB_SUCC(ret)) {
         // The scanner supports up to 64M, so the overflow situation is not considered for the time being
         if (OB_FAIL(scanner_.add_row(cur_row_))) {
-          SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
         }
       }
       return ret;
@@ -187,7 +186,6 @@ int ObAllVirtualDumpTenantInfo::inner_get_next_row(common::ObNewRow *&row)
         ret = func(*the_tenant);
       }
       if (OB_FAIL(ret)) {
-        SERVER_LOG(WARN, "run tenant func failed", K(ret));
       } else {
         scanner_it_ = scanner_.begin();
         is_inited_ = true;

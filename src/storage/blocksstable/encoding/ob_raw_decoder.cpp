@@ -265,13 +265,11 @@ int ObRawDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDatum &datum, 
         data_offset = ctx.micro_block_header_->row_count_ * ctx.micro_block_header_->extend_value_bit_;
         if (OB_FAIL(ObBitStream::get(col_data, row_id * ctx.micro_block_header_->extend_value_bit_,
             ctx.micro_block_header_->extend_value_bit_, val))) {
-          LOG_WARN("get extend value failed", K(ret), K(ctx));
         }
       } else {
         if (OB_FAIL(bs.get(ctx.col_header_->extend_value_index_,
                            ctx.micro_block_header_->extend_value_bit_,
                            val))) {
-          LOG_WARN("get extend value failed", K(ret), K(bs), K(ctx));
         }
       }
     }
@@ -288,12 +286,10 @@ int ObRawDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDatum &datum, 
       if (OB_FAIL(get_uint_data_datum_len(
           ObDatum::get_obj_datum_map_type(ctx.obj_meta_.get_type()),
           datum_len))) {
-        LOG_WARN("Failed to get datum len for int data", K(ret));
       } else {
         datum.pack_ = datum_len;
         if (OB_FAIL(ObBitStream::get(col_data, data_offset + row_id * ctx.col_header_->length_,
             ctx.col_header_->length_, val))) {
-          LOG_WARN("get bit packing value failed", K(ret), K(ctx));
         } else {
           MEMCPY(const_cast<char *>(datum.ptr_), &val, datum_len);
         }
@@ -309,7 +305,6 @@ int ObRawDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDatum &datum, 
       } else {
         if (OB_FAIL(locate_cell_data(cell_data, cell_len, data, len,
                 *ctx.micro_block_header_, *ctx.col_header_, *ctx.col_header_))) {
-          LOG_WARN("locate cell data failed", K(ret), K(len), K(ctx));
         }
       }
       if (OB_FAIL(ret)){
@@ -319,7 +314,6 @@ int ObRawDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDatum &datum, 
           cell_len,
           integer_mask_,
           datum))) {
-        LOG_WARN("Failed to load data to datum", K(ret), K(datum));
       }
     }
   }
@@ -361,10 +355,8 @@ int ObRawDecoder::batch_decode(
     LOG_WARN("Raw decoder not inited", K(ret));
   } else if (fast_decode_valid(ctx)) {
     if (OB_FAIL(batch_decode_fast(ctx, row_index, row_ids, row_cap, datums))) {
-      LOG_WARN("Failed to decode", K(ret), K(ctx));
     }
   } else if (OB_FAIL(batch_decode_general(ctx, row_index, row_ids, cell_datas, row_cap, datums))) {
-    LOG_WARN("Failed to decode ", K(ret), K(ctx));
   }
   return ret;
 }
@@ -460,11 +452,9 @@ int ObRawDecoder::batch_decode_general(
           * ctx.micro_block_header_->extend_value_bit_;
       if (OB_FAIL(set_null_datums_from_fixed_column(
           ctx, row_ids, row_cap, col_data, datums))) {
-        LOG_WARN("Failed to set null datums from fixed data", K(ret), K(ctx));
       }
     } else if (OB_FAIL(set_null_datums_from_var_column(
         ctx, row_index, row_ids, row_cap, datums))) {
-      LOG_WARN("Failed to set null datums from var data", K(ret), K(ctx));
     }
   }
 
@@ -476,7 +466,6 @@ int ObRawDecoder::batch_decode_general(
     if (OB_FAIL(get_uint_data_datum_len(
         ObDatum::get_obj_datum_map_type(ctx.col_header_->get_store_obj_type()),
         datum_len))) {
-      LOG_WARN("Failed to get datum len for int data", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < row_cap; ++i) {
       if (ctx.has_extend_value() && datums[i].is_null()) {
@@ -490,7 +479,6 @@ int ObRawDecoder::batch_decode_general(
             data_offset + row_id * ctx.col_header_->length_,
             ctx.col_header_->length_,
             value))) {
-          LOG_WARN("Failed to get bitpacked value from bit stream", K(ret), K(row_id));
         } else {
             MEMCPY(const_cast<char *>(datums[i].ptr_), &value, datum_len);
         }
@@ -510,11 +498,8 @@ int ObRawDecoder::batch_decode_general(
       }
     } else {
       if (OB_FAIL(batch_locate_row_data(ctx, row_index, row_ids, row_cap, cell_datas, datums))) {
-        LOG_WARN("Failed to batch locate row data offset from row index",
-            K(ret), K(ctx), K(row_cap));
       } else if (OB_FAIL(batch_locate_cell_data(cell_datas, datums, row_cap,
           *ctx.micro_block_header_, *ctx.col_header_, *ctx.col_header_))) {
-        LOG_WARN("Failed to batch locate cell data for datum", K(ret), K(ctx), K(row_cap));
       }
     }
 
@@ -525,7 +510,6 @@ int ObRawDecoder::batch_decode_general(
         row_cap,
         integer_mask_,
         datums))) {
-      LOG_WARN("Failed to batch load data to datum", K(ret));
     }
   }
   return ret;
@@ -543,7 +527,6 @@ int ObRawDecoder::decode_vector(
   if (decoder_ctx.is_bit_packing()) {
     // bit packing
     if (OB_FAIL(decode_vector_bitpacked(decoder_ctx, vector_ctx))) {
-      LOG_WARN("Failed to decode bitpacked data to vector", K(ret), K(decoder_ctx), K(vector_ctx));
     }
   } else {
     if (decoder_ctx.is_fix_length()) {
@@ -561,13 +544,11 @@ int ObRawDecoder::decode_vector(
           decoder_ctx.obj_meta_, decoder_ctx.col_header_->get_store_obj_type(), fixed_packing_len,
           decoder_ctx.has_extend_value(), fixed_locator, vector_ctx.row_cap_,
           vector_ctx.vec_offset_, vector_ctx.vec_header_))) {
-        LOG_WARN("failed to load byte aligned data to vector", K(ret));
       }
     } else {
       // var-length
       bool has_null = false;
       if (OB_FAIL(batch_locate_var_len_row(decoder_ctx, row_index, vector_ctx, has_null))) {
-        LOG_WARN("Faild to set null vector from var-length column", K(ret));
       } else if (has_null) {
         ret = ObIColumnDecoder::batch_locate_cell_data<ObColumnHeader, true>(decoder_ctx, *decoder_ctx.col_header_,
             vector_ctx.ptr_arr_, vector_ctx.len_arr_, vector_ctx.row_ids_, vector_ctx.row_cap_);
@@ -577,7 +558,6 @@ int ObRawDecoder::decode_vector(
       }
 
       if (OB_FAIL(ret)) {
-        LOG_WARN("failed to locate cell datas", K(ret));
       } else {
         const int64_t fixed_packing_len = 0;
         DataDiscreteLocator discrete_locator(vector_ctx.ptr_arr_, vector_ctx.len_arr_);
@@ -585,7 +565,6 @@ int ObRawDecoder::decode_vector(
             decoder_ctx.obj_meta_, decoder_ctx.col_header_->get_store_obj_type(), fixed_packing_len,
             has_null, discrete_locator, vector_ctx.row_cap_,
             vector_ctx.vec_offset_, vector_ctx.vec_header_))) {
-          LOG_WARN("failed to load byte aligned data to vector", K(ret));
         }
       }
     }
@@ -678,7 +657,6 @@ int ObRawDecoder::decode_vector_bitpacked(
   uint32_t vec_data_len = 0;
   if (OB_FAIL(get_uint_data_datum_len(
       ObDatum::get_obj_datum_map_type(decoder_ctx.obj_meta_.get_type()), vec_data_len))) {
-    LOG_WARN("Failed to get vec data length", K(ret), K(decoder_ctx));
   } else {
     if (decoder_ctx.has_extend_value()) {
       data_offset = decoder_ctx.micro_block_header_->row_count_ * decoder_ctx.micro_block_header_->extend_value_bit_;
@@ -728,7 +706,6 @@ int ObRawDecoder::pushdown_operator(
     LOG_WARN("Null pointer for data at pushdown operator", K(ret), K(meta_data));
   } else if (OB_FAIL(get_is_null_bitmap(col_ctx, col_data,
       row_index, pd_filter_info, result_bitmap))) {
-    LOG_WARN("Failed to get isnull bitmap", K(ret), K(col_ctx));
   } else if (OB_UNLIKELY(op_type >= sql::WHITE_OP_MAX)){
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid op type for pushed down white filter", K(ret), K(op_type));
@@ -742,8 +719,6 @@ int ObRawDecoder::pushdown_operator(
     }
     case sql::WHITE_OP_NN: {
       if (OB_FAIL(result_bitmap.bit_not())) {
-        LOG_WARN("Failed to flip bits for result bitmap",
-            K(ret), K(result_bitmap.size()));
       }
       break;
     }
@@ -757,34 +732,28 @@ int ObRawDecoder::pushdown_operator(
       bool is_signed_data = false;
       bool fast_filter_valid = false;
       if (OB_FAIL(check_fast_filter_valid(col_ctx, filter, fix_len_tag, is_signed_data, fast_filter_valid))) {
-        LOG_WARN("Failed to check fast binary filter valid", K(ret));
       } else if (fast_filter_valid) {
         if (OB_FAIL(fast_binary_comparison_operator(col_ctx, col_data,
           filter, fix_len_tag, is_signed_data, pd_filter_info, result_bitmap))) {
-          LOG_WARN("Failed on fast binary comparison operator", K(ret), K(col_ctx));
         }
       } else if (0 != pd_filter_info.batch_size_ && fast_decode_valid(col_ctx)) {
         if (OB_FAIL(fast_datum_comparison_operator(
             col_ctx, row_index, filter, pd_filter_info, result_bitmap))) {
-          LOG_WARN("Failed on fast datum comparison operator", K(ret), K(col_ctx));
         }
       } else if (OB_FAIL(comparison_operator(parent, col_ctx, col_data, row_index,
           filter, pd_filter_info, result_bitmap))) {
-        LOG_WARN("Failed on Comparison Operator", K(ret), K(col_ctx));
       }
       break;
     }
     case sql::WHITE_OP_IN: {
       if (OB_FAIL(in_operator(parent, col_ctx, col_data, row_index,
                   filter, pd_filter_info, result_bitmap))) {
-        LOG_WARN("Failed on In Operator", K(ret), K(col_ctx));
       }
       break;
     }
     case sql::WHITE_OP_BT: {
       if (OB_FAIL(bt_operator(parent, col_ctx, col_data, row_index,
                   filter, pd_filter_info, result_bitmap))) {
-        LOG_WARN("Failed on Between Operator", K(ret), K(col_ctx));
       }
       break;
     }
@@ -807,7 +776,6 @@ int ObRawDecoder::check_fast_filter_valid(
   int ret = OB_SUCCESS;
   common::ObObjMeta filter_val_meta;
   if (OB_FAIL(filter.get_filter_node().get_filter_val_meta(filter_val_meta))) {
-    LOG_WARN("Fail to find datum meta", K(ret), K(filter));
   } else {
     valid = !ctx.has_extend_value()
                 && !ctx.is_bit_packing()
@@ -876,7 +844,6 @@ int ObRawDecoder::get_null_count(
       row_cap,
       meta_data_,
       null_count)) {
-    LOG_WARN("Failed to get null count", K(ctx), K(ret));
   }
   return ret;
 }
@@ -898,12 +865,10 @@ int ObRawDecoder::get_is_null_bitmap(
   } else if (col_ctx.is_fix_length() || col_ctx.is_bit_packing()) {
     if (OB_FAIL(get_is_null_bitmap_from_fixed_column(col_ctx, col_data,
         pd_filter_info, result_bitmap))) {
-      LOG_WARN("Failed to get isnull bitmap from fixed column", K(ret));
     }
   } else {
     if (OB_FAIL(get_is_null_bitmap_from_var_column(col_ctx, row_index,
         pd_filter_info, result_bitmap))) {
-      LOG_WARN("Failed to get isnull bitmap from variable column", K(ret));
     }
   }
   return ret;
@@ -932,7 +897,6 @@ int ObRawDecoder::comparison_operator(
     ObRawDecoderFilterCmpFunc eval(type_cmp_func, get_cmp_ret);
 
     if (OB_FAIL(traverse_all_data(parent, col_ctx, row_index, filter, pd_filter_info, result_bitmap, eval))) {
-      LOG_WARN("Failed to traverse all data and evaluate operator", K(ret));
     }
   }
   return ret;
@@ -958,7 +922,6 @@ int ObRawDecoder::fast_binary_comparison_operator(
     LOG_WARN("Filter pushdown operator: Invalid argument",
         K(ret), K(col_ctx), K(fix_len_tag), K(pd_filter_info), K(result_bitmap.size()));
   } else if (OB_FAIL(filter.get_filter_node().get_filter_val_meta(filter_val_meta))) {
-    LOG_WARN("Fail to find datum meta", K(ret), K(filter));
   } else {
     const int64_t type_store_size = filter_val_meta.is_decimal_int() ?
       wide::ObDecimalIntConstValue::get_int_bytes_by_precision(filter_val_meta.get_stored_precision())
@@ -976,7 +939,6 @@ int ObRawDecoder::fast_binary_comparison_operator(
       } else if (sql::WHITE_OP_NE == op_type) {
         // All true
         if (OB_FAIL(result_bitmap.bit_not())) {
-          LOG_WARN("Failed to set result bitmap to all true", K(ret));
         }
       } else if (is_signed_data) {
         // ObIntTC, ObDateTimeTC, ObDateTC, ObTimeTC
@@ -984,14 +946,12 @@ int ObRawDecoder::fast_binary_comparison_operator(
           // negative node value, node value always smaller
           if (sql::WHITE_OP_GT == op_type || sql::WHITE_OP_GE == op_type) {
             if (OB_FAIL(result_bitmap.bit_not())) {
-              LOG_WARN("Failed to set result bitmap to all true", K(ret));
             }
           }
         } else {
           // positive node value, node value always larger
           if (sql::WHITE_OP_LT == op_type || sql::WHITE_OP_LE == op_type) {
             if (OB_FAIL(result_bitmap.bit_not())) {
-              LOG_WARN("Failed to set result bitmap to all true", K(ret));
             }
           }
         }
@@ -1001,7 +961,6 @@ int ObRawDecoder::fast_binary_comparison_operator(
         if (sql::WHITE_OP_LT == op_type || sql::WHITE_OP_LE == op_type
             || sql::WHITE_OP_NE == op_type) {
           if (OB_FAIL(result_bitmap.bit_not())) {
-            LOG_WARN("Failed to set result bitmap to all true", K(ret));
           }
         }
       }
@@ -1038,7 +997,6 @@ int ObRawDecoder::fast_datum_comparison_operator(
     LOG_WARN("Filter pushdown operator: Invalid argument",
         K(ret), K(col_ctx), K(pd_filter_info), K(result_bitmap.size()));
   } else if (OB_FAIL(pd_filter_info.get_col_datum(datums))) {
-    LOG_WARN("Failed to get col datum for batch decode", K(ret), K(pd_filter_info));
   } else {
     ObGetFilterCmpRetFunc get_cmp_ret = get_filter_cmp_ret_func(filter.get_op_type());
     ObDatumCmpFuncType cmp_func = filter.cmp_func_;
@@ -1054,7 +1012,6 @@ int ObRawDecoder::fast_datum_comparison_operator(
         row_ids[i] = first_row_id + i;
       }
       if (OB_FAIL(batch_decode_fast(col_ctx, row_index, row_ids, curr_batch_size, datums))) {
-        LOG_WARN("Failed to batch decode", K(ret), K(col_ctx), K(evaluated_row_cnt), K(curr_batch_size));
       } else if (need_padding(filter.is_padding_mode(), col_ctx.obj_meta_)
           && OB_FAIL(storage::pad_on_datums(
               col_ctx.col_param_->get_accuracy(),
@@ -1067,11 +1024,8 @@ int ObRawDecoder::fast_datum_comparison_operator(
         int cmp_res = 0;
         for (int64_t i = 0; OB_SUCC(ret) && i < curr_batch_size; ++i) {
           if (OB_FAIL(cmp_func(datums[i], filter.get_datums().at(0), cmp_res))) {
-            LOG_WARN("Failed to compare datum", K(ret),
-                K(i), K(datums[i]), K(filter.get_datums().at(0)));
           } else if (get_cmp_ret(cmp_res)) {
             if (OB_FAIL(result_bitmap.set(evaluated_row_cnt + i))) {
-              LOG_WARN("Failed to set result bitmap", K(ret), K(evaluated_row_cnt), K(i), K(curr_batch_size));
             }
           }
         }
@@ -1106,7 +1060,6 @@ int ObRawDecoder::bt_operator(
     ObDatumCmpFuncType type_cmp_func = filter.cmp_func_;
     ObRawDecoderFilterBetweenFunc eval(type_cmp_func);
     if (OB_FAIL(traverse_all_data(parent, col_ctx, row_index, filter, pd_filter_info, result_bitmap, eval))) {
-      LOG_WARN("Failed to traverse all data in micro block", K(ret));
     }
   }
   return ret;
@@ -1131,7 +1084,6 @@ int ObRawDecoder::in_operator(
   } else {
     ObRawDecoderFilterInFunc eval;
     if (OB_FAIL(traverse_all_data(parent, col_ctx, row_index, filter, pd_filter_info, result_bitmap, eval))) {
-      LOG_WARN("Failed to traverse all data in micro block", K(ret));
     }
   }
   return ret;
@@ -1170,27 +1122,22 @@ int ObRawDecoder::traverse_all_data(
       } else if (col_ctx.has_extend_value() && result_bitmap.test(offset)) {
         // datum in this row is null
         if (OB_FAIL(result_bitmap.set(offset, false))) {
-          LOG_WARN("Failed to set null value to false", K(ret), K(offset), K(pd_filter_info));
         }
       } else if (OB_FAIL(get_uint_data_datum_len(
           ObDatum::get_obj_datum_map_type(col_ctx.obj_meta_.get_type()),
           datum_len))) {
-        LOG_WARN("Failed to get datum len for int data", K(ret));
       } else if (OB_FAIL(ObBitStream::get(
                   col_data,
                   data_offset + row_id * col_ctx.col_header_->length_,
                   col_ctx.col_header_->length_,
                   value))) {
-        LOG_WARN("Failed to read bit packing object data from bitstream", K(ret), K(col_ctx));
       } else {
         cur_datum.pack_ = datum_len;
         cur_datum.ptr_ = (const char *)(&value);
         bool result = false;
         if (OB_FAIL(eval(cur_datum, filter, result))) {
-          LOG_WARN("Failed on trying to filter the row", K(ret), K(row_id), K(cur_datum));
         } else if (result) {
           if (OB_FAIL(result_bitmap.set(offset))) {
-            LOG_WARN("Failed to set result bitmap", K(ret), K(offset), K(filter));
           }
         }
       }
@@ -1212,15 +1159,12 @@ int ObRawDecoder::traverse_all_data(
       } else if (col_ctx.has_extend_value() && result_bitmap.test(offset)) {
         // object in this row is null
         if (OB_FAIL(result_bitmap.set(offset, false))) {
-          LOG_WARN("Failed to set null value to false", K(ret), K(offset));
        }
       } else {
         if (!col_ctx.is_fix_length()) {
           if (OB_FAIL(locate_row_data(col_ctx, row_index, row_id, row_data, row_len))) {
-            LOG_WARN("Failed to read data offset from row index", K(ret), K(row_index));
           } else if (OB_FAIL(locate_cell_data(cell_data, cell_len, row_data, row_len,
                                               *col_ctx.micro_block_header_, *col_ctx.col_header_, *col_ctx.col_header_))) {
-            LOG_WARN("Failed to locate cell data", K(ret), K(row_len), K(col_ctx));
           }
         } else {
           cell_data = meta_data_ + data_offset + row_id * col_ctx.col_header_->length_;
@@ -1228,13 +1172,11 @@ int ObRawDecoder::traverse_all_data(
 
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(load_data_to_datum(col_ctx.obj_meta_.get_type(), cell_data, cell_len, integer_mask_, cur_datum))) {
-          LOG_WARN("Failed to load data to object cell", K(ret), K(cell_data), K(cell_len));
         } else {
           // Padding for non-bitpacking data if required
           if (need_padding(filter.is_padding_mode(), col_ctx.obj_meta_)) {
             if (OB_FAIL(storage::pad_column(col_ctx.obj_meta_, col_ctx.col_param_->get_accuracy(),
                                             *col_ctx.allocator_, cur_datum))) {
-              LOG_WARN("Failed to pad column", K(ret));
             }
           }
         }
@@ -1242,11 +1184,8 @@ int ObRawDecoder::traverse_all_data(
           // Run lambda here to filter out the data according to op_type
           bool result = false;
           if (OB_FAIL(eval(cur_datum, filter, result))) {
-            LOG_WARN("Failed on trying to filter the row", K(ret), K(row_id), K(cur_datum));
           } else if (result) {
             if (OB_FAIL(result_bitmap.set(offset))) {
-              LOG_WARN("Failed to set result bitmap",
-                  K(ret), K(offset), K(pd_filter_info), K(filter));
             }
           }
         }
@@ -1264,7 +1203,6 @@ int ObRawDecoder::ObRawDecoderFilterCmpFunc::operator()(
   int ret = OB_SUCCESS;
   int cmp_res = 0;
   if (OB_FAIL(type_cmp_func_(cur_datum, filter.get_datums().at(0), cmp_res))) {
-    LOG_WARN("Failed to compare datum", K(ret), K(cur_datum), K(filter.get_datums().at(0)));
   } else {
     result = get_cmp_ret_(cmp_res);
   }
@@ -1280,11 +1218,9 @@ int ObRawDecoder::ObRawDecoderFilterBetweenFunc::operator()(
   int left_cmp_res = 0;
   int right_cmp_res = 0;
   if (OB_FAIL(type_cmp_func_(cur_datum, filter.get_datums().at(0), left_cmp_res))) {
-    LOG_WARN("Failed to compare datum", K(ret), K(cur_datum), K(filter.get_datums().at(0)));
   } else if (left_cmp_res < 0) {
     result = false;
   } else if (OB_FAIL(type_cmp_func_(cur_datum, filter.get_datums().at(1), right_cmp_res))) {
-    LOG_WARN("Failed to compare datum", K(ret), K(cur_datum), K(filter.get_datums().at(1)));
   } else {
     result = (right_cmp_res <= 0);
   }
@@ -1298,7 +1234,6 @@ int ObRawDecoder::ObRawDecoderFilterInFunc::operator()(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(filter.exist_in_set(cur_datum, result))) {
-    LOG_WARN("Failed to check datum in hashset", K(ret), K(cur_datum));
   }
   return ret;
 }

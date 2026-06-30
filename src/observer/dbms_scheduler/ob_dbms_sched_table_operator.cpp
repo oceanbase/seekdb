@@ -502,7 +502,6 @@ int ObDBMSSchedTableOperator::check_job_can_running(int64_t alive_job_count, boo
         && !is_restore) {
       SMART_VAR(ObMySQLProxy::MySQLResult, result) {
         if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
-          LOG_WARN("execute query failed", K(ret), K(sql));
         } else if (OB_ISNULL(result.get_result())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get result failed", K(ret), K(sql));
@@ -510,7 +509,6 @@ int ObDBMSSchedTableOperator::check_job_can_running(int64_t alive_job_count, boo
           if (OB_SUCCESS == (ret = result.get_result()->next())) {
             int64_t int_value = 0;
             if (OB_FAIL(result.get_result()->get_int(static_cast<const int64_t>(0), int_value))) {
-              LOG_WARN("failed to get column in row. ", K(ret));
             } else {
               job_running_cnt = static_cast<uint64_t>(int_value);
             }
@@ -675,7 +673,6 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_info(
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
       if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
-        LOG_WARN("execute query failed", K(ret), K(sql), K(job_id));
       } else if (OB_ISNULL(result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get result", K(ret), K(job_id));
@@ -721,14 +718,12 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_infos_in_tenant(
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
       if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
-        LOG_WARN("execute query failed", K(ret), K(sql));
       } else if (OB_ISNULL(result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get result failed", K(ret), K(sql));
       } else {
         do {
           if (OB_FAIL(result.get_result()->next())) {
-            LOG_INFO("failed to get result", K(ret));
           } else {
             ObDBMSSchedJobInfo job_info;
             OZ (extract_info(*(result.get_result()), is_oracle_tenant, allocator, job_info));
@@ -781,7 +776,6 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_class_info(
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
       if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
-        LOG_WARN("execute query failed", K(ret), K(sql), K(job_class_name));
       } else if (OB_ISNULL(result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get result failed", K(ret), K(sql), K(job_class_name));
@@ -825,14 +819,12 @@ int ObDBMSSchedTableOperator::get_dbms_sched_job_class_infos_in_tenant(
   if (OB_SUCC(ret)) {
     SMART_VAR(ObMySQLProxy::MySQLResult, result) {
       if (OB_FAIL(sql_proxy_->read(result, sql.ptr()))) {
-        LOG_WARN("execute query failed", K(ret), K(sql));
       } else if (OB_ISNULL(result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get result failed", K(ret), K(sql));
       } else {
         do {
           if (OB_FAIL(result.get_result()->next())) {
-            LOG_INFO("failed to get result", K(ret));
           } else {
             ObDBMSSchedJobClassInfo job_class_info;
             OZ (extract_job_class_info(*(result.get_result()), is_oracle_tenant, allocator, job_class_info));
@@ -925,7 +917,6 @@ int ObDBMSSchedTableOperator::purge_run_detail()
     ObArenaAllocator allocator("DBMSSchedTmp");
     int64_t log_history = DEFAULT_LOG_HISTORY;
     if (OB_TMP_FAIL(get_dbms_sched_job_class_infos_in_tenant(false/*is_oracle_tenant has no effect,so set false*/, allocator, job_class_infos))) {
-      LOG_WARN("get job class infos failed", K(tmp_ret));
     } else {
       ObDBMSSchedJobClassInfo job_class_info;
       for (int64_t i = 0; !THIS_WORKER.is_timeout() && i < job_class_infos.count(); i++) {
@@ -934,10 +925,8 @@ int ObDBMSSchedTableOperator::purge_run_detail()
         if (!job_class_info.valid()) {
           LOG_WARN("job_class_info not valid", K(job_class_info));
         } else if (OB_TMP_FAIL(job_class_info.get_log_history().extract_valid_int64_with_trunc(log_history))) {
-          LOG_WARN("get log_history failed", K(tmp_ret), K(job_class_info));
         } else {
           if (OB_TMP_FAIL(_purge(job_class_info.get_job_class_name(), log_history))) {
-            LOG_WARN("purge run detail failed", K(tmp_ret), K(job_class_info));
           }
           // purge max log_history for fallback
           if (i == 0 && OB_TMP_FAIL(_purge_fallback(log_history))) {
@@ -948,24 +937,19 @@ int ObDBMSSchedTableOperator::purge_run_detail()
     }
     // default job class
     if (OB_TMP_FAIL(_purge(ObString("DEFAULT_JOB_CLASS"), DEFAULT_LOG_HISTORY))) {
-      LOG_WARN("purge default class run detail failed", K(tmp_ret));
     }
     // for compatible, purge old olap async job run detail
     if (OB_TMP_FAIL(_purge(ObString("OLAP_ASYNC_JOB_CLASS"), DEFAULT_LOG_HISTORY))) {
-      LOG_WARN("purge olap async job class run detail failed", K(tmp_ret));
     }
     // for compatible, purge old mview refresh job run detail
     if (OB_TMP_FAIL(_purge(ObString("DATE_EXPRESSION_JOB_CLASS"), DEFAULT_LOG_HISTORY))) {
-      LOG_WARN("purge mview refresh job class run detail failed", K(tmp_ret));
     }
     // for compatible, purge old mysql event job run detail
     if (OB_TMP_FAIL(_purge(ObString("MYSQL_EVENT_JOB_CLASS"), DEFAULT_LOG_HISTORY))) {
-      LOG_WARN("purge mysql event job class run detail failed", K(tmp_ret));
     }
   }
   // for compatible, purge old run detail table
   if (OB_TMP_FAIL(_purge_old())) {
-    LOG_WARN("purge old run detail failed", K(tmp_ret));
   }
   return ret;
 }

@@ -45,7 +45,6 @@ int ObServerUtils::get_server_ip(ObIAllocator *allocator, ObString &ipstr)
   } else {
     ObString ipstr_tmp = ObString::make_string(ip_buf);
     if (OB_FAIL(ob_write_string (*allocator, ipstr_tmp, ipstr))) {
-      SERVER_LOG(WARN, "ob write string failed", K(ret));
     } else if (ipstr.empty()) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "host ip is empty", K(ret));
@@ -74,16 +73,12 @@ int ObServerUtils::get_log_disk_info_in_config(int64_t& log_disk_size,
                                                    clog_disk_total_size,
                                                    clog_default_disk_percentage,
                                                    shared_mode))) {
-    LOG_ERROR("cal all part disk default percentage failed",
-        KR(ret), K(data_dir), K(data_default_disk_percentage), K(shared_mode));
   } else if (OB_FAIL(decide_disk_size(clog_disk_total_size,
                                       suggested_clog_disk_size,
                                       suggested_clog_disk_percentage,
                                       clog_default_disk_percentage,
                                       log_disk_size,
                                       log_disk_percentage))) {
-    LOG_ERROR("decide disk size failed",
-        KR(ret), K(data_dir), K(data_default_disk_percentage), K(shared_mode));
   } else {
     total_log_disk_size = clog_disk_total_size;
     LOG_INFO("get_log_disk_info_in_config", K(suggested_clog_disk_size),
@@ -111,18 +106,12 @@ int ObServerUtils::get_data_disk_info_in_config(int64_t& data_disk_size,
                                                    clog_disk_total_size,
                                                    clog_default_disk_percentage,
                                                    shared_mode))) {
-    LOG_ERROR("cal all part disk default percentage failed",
-        KR(ret), K(data_dir), K(suggested_data_disk_size), K(suggested_data_disk_percentage),
-        K(data_default_disk_percentage), K(shared_mode));
   } else if (OB_FAIL(decide_disk_size(data_disk_total_size,
                                       suggested_data_disk_size,
                                       suggested_data_disk_percentage,
                                       data_default_disk_percentage,
                                       data_disk_size,
                                       data_disk_percentage))) {
-    LOG_ERROR("decide data disk size failed",
-        KR(ret), K(data_dir), K(suggested_data_disk_size), K(suggested_data_disk_percentage),
-        K(data_default_disk_percentage), K(shared_mode));
   } else {
     LOG_INFO("get_data_disk_info_in_config", K(suggested_data_disk_size),
              K(suggested_data_disk_percentage), K(data_disk_size),
@@ -143,9 +132,7 @@ int ObServerUtils::cal_all_part_disk_size(const int64_t suggested_data_disk_size
   int ret = OB_SUCCESS;
   int64_t total_log_disk_space = 0;
   if (OB_FAIL(get_data_disk_info_in_config(data_disk_size, data_disk_percentage))) {
-    LOG_ERROR("get_data_disk_info_in_config failed", K(data_disk_size), K(data_disk_percentage));
   } else if (OB_FAIL(get_log_disk_info_in_config(log_disk_size, log_disk_percentage, total_log_disk_space))) {
-    LOG_ERROR("get_log_disk_info_in_config failed", K(log_disk_size), K(log_disk_percentage));
   } else {
     LOG_INFO("cal_all_part_disk_size success", K(suggested_data_disk_size), K(suggested_clog_disk_size),
              K(suggested_data_disk_percentage), K(suggested_clog_disk_percentage), K(data_disk_size),

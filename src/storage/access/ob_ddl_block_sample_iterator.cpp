@@ -65,7 +65,6 @@ int ObDDLBlockSampleIterator::open(ObMultipleScanMerge &scan_merge,
                                            sample_info_->percent_,
                                            is_reverse_scan,
                                            SampleInfo::SampleMethod::DDL_BLOCK_SAMPLE))) {
-    STORAGE_LOG(WARN, "fail to initialize micro block iterator", K(ret));
   } else {
     scan_merge_ = &scan_merge;
     has_opened_range_ = false;
@@ -73,7 +72,6 @@ int ObDDLBlockSampleIterator::open(ObMultipleScanMerge &scan_merge,
     read_info_ = &get_table_param.tablet_iter_.get_tablet()->get_rowkey_read_info();
   }
   if (FAILEDx(reservoir_block_sample())) {
-    STORAGE_LOG(WARN, "fail to do reservoir sampling", K(ret));
   } else {
     is_opened_ = true;
   }
@@ -99,14 +97,12 @@ int ObDDLBlockSampleIterator::get_next_row(blocksstable::ObDatumRow *&row)
           ObDatumRange *micro_range = nullptr;
           micro_range_.reset();
           if (OB_FAIL(reservoir_.pop_back(micro_range))) {
-            STORAGE_LOG(WARN, "failed to pop back range", K(ret));
           } else if (OB_UNLIKELY(nullptr == micro_range)) {
             ret = OB_ERR_UNEXPECTED;
             STORAGE_LOG(WARN, "the micro range is null", K(ret));
           } else {
             micro_range_ = *micro_range;
             if (OB_FAIL(open_range(micro_range_))) {
-              STORAGE_LOG(WARN, "failed to open range", K(ret), K(micro_range_));
             }
           }
         } else {
@@ -139,14 +135,12 @@ int ObDDLBlockSampleIterator::get_next_rows(int64_t &count, int64_t capacity)
           ObDatumRange *micro_range = nullptr;
           micro_range_.reset();
           if (OB_FAIL(reservoir_.pop_back(micro_range))) {
-            STORAGE_LOG(WARN, "failed to pop back range", K(ret));
           } else if (OB_UNLIKELY(nullptr == micro_range)) {
             ret = OB_ERR_UNEXPECTED;
             STORAGE_LOG(WARN, "the micro range is null", K(ret));
           } else {
             micro_range_ = *micro_range;
             if (OB_FAIL(open_range(micro_range_))) {
-              STORAGE_LOG(WARN, "failed to open range", K(ret), K(micro_range_));
             }
           }
         } else {
@@ -170,7 +164,6 @@ int ObDDLBlockSampleIterator::open_range(blocksstable::ObDatumRange &range)
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "the are invalid argument", K(ret), K(range));
   } else if (OB_FAIL(inner_open_range(range))) {
-    STORAGE_LOG(WARN, "failed to inner open range", K(ret), K(range));
   }
   return ret;
 }
@@ -198,10 +191,8 @@ int ObDDLBlockSampleIterator::reservoir_block_sample()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       STORAGE_LOG(WARN, "fail to allocate memory for datum range", K(ret));
     } else if (OB_FAIL(range->deep_copy(*next_range, range_allocator_))) {
-      STORAGE_LOG(WARN, "fail to deep copy datum range", K(ret));
     } else if (reservoir_.count() < ObBlockSampleRangeIterator::EXPECTED_OPEN_RANGE_NUM) {
       if (OB_FAIL(reservoir_.push_back(range))) {
-        STORAGE_LOG(WARN, "fail to push back range", K(ret), KPC(range));
       } else {
         ++curr_num;
       }

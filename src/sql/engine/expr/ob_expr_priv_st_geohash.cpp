@@ -116,7 +116,6 @@ int ObExprPrivSTGeoHash::calc_geohash(ObGeogBox *&gbox, int precision, ObStringB
     if (bit < 4) {
       bit++;
     } else if (OB_FAIL(geohash_buf.append(&base32[ch_index], 1))) {
-      LOG_WARN("char append failed", K(ret), K(ch_index));
     } else {
       bit = 0;
       ch_index = 0;
@@ -195,9 +194,7 @@ int ObExprPrivSTGeoHash::get_gbox(lib::MemoryContext &mem_ctx, ObGeometry *&geo,
   box_ctx.set_is_called_in_pg_expr(true);
 
   if (OB_FAIL(box_ctx.append_geo_arg(geo))) {
-    LOG_WARN("build gis context failed", K(ret), K(box_ctx.get_geo_count()));
   } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Box>::geo_func::eval(box_ctx, gbox))) {
-    LOG_WARN("failed to do box functor failed", K(ret));
   } else if (ObGeoBoxUtil::is_float_gt(gbox->xmin, gbox->xmax)
               || ObGeoBoxUtil::is_float_gt(gbox->ymin , gbox->ymax)) {
     ret = OB_ERR_GIS_INVALID_DATA;
@@ -231,7 +228,6 @@ int ObExprPrivSTGeoHash::process_input_geometry(
   bool is_geo_empty = true;
 
   if (OB_FAIL(geo_arg->eval(ctx, geo_datum))) {
-    LOG_WARN("fail to eval args", K(ret));
   } else if (geo_datum->is_null()) {
     is_null_res = true;
   } else {
@@ -245,7 +241,6 @@ int ObExprPrivSTGeoHash::process_input_geometry(
                     geo_arg->datum_meta_,
                     geo_arg->obj_meta_.has_lob_header(),
                     geo_wkb))) {
-      LOG_WARN("fail to read real string data", K(ret), K(geo_arg->obj_meta_.has_lob_header()), K(geo_wkb));
     } else if (geo_wkb.empty()) {
       is_null_res = true;
     } else if (OB_FAIL(ObGeoTypeUtil::get_type_srid_from_wkb(geo_wkb, geo_type, geo_srid))) {
@@ -253,17 +248,14 @@ int ObExprPrivSTGeoHash::process_input_geometry(
         LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_GEOHASH);
       }
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, geo_wkb, geo_srs, true, N_PRIV_ST_GEOHASH))) {
-      LOG_WARN("fail to get srs item", K(ret), K(geo_wkb));
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(
                           allocator,
                           geo_wkb,
                           geo,
                           nullptr,
                           N_PRIV_ST_GEOHASH,
-                          ObGeoBuildFlag::GEO_ALLOW_3D_DEFAULT))) {  // ObIWkbGeom
-      LOG_WARN("fail to build geometry from wkb", K(ret), K(geo_wkb));
+                          ObGeoBuildFlag::GEO_ALLOW_3D_DEFAULT))) {
     } else if (OB_FAIL(ObGeoExprUtils::check_empty(geo, is_geo_empty))) {
-      LOG_WARN("check geo empty failed", K(ret));
     } else if (is_geo_empty) {
       is_null_res = true;
     }
@@ -275,7 +267,6 @@ int ObExprPrivSTGeoHash::process_input_geometry(
     if (ob_is_null(prec_arg->datum_meta_.type_)) {
       precision = 0;
     } else if (OB_FAIL(prec_arg->eval(ctx, prec_datum))) {
-      LOG_WARN("fail to eval args", K(ret));
     } else if (prec_datum->is_null()) {
       precision = 0;
     } else {
@@ -307,7 +298,6 @@ int ObExprPrivSTGeoHash::eval_priv_st_geohash(const ObExpr &expr, ObEvalCtx &ctx
   int precision = 0;
 
   if (OB_FAIL(process_input_geometry(expr, ctx, temp_allocator, is_null_res, geo, precision))) {
-    LOG_WARN("fail to process input geometry", K(ret), K(is_null_res), K(geo), K(precision));
   } 
   ObGeoBoostAllocGuard guard{};
   lib::MemoryContext *mem_ctx = nullptr;
@@ -315,19 +305,16 @@ int ObExprPrivSTGeoHash::eval_priv_st_geohash(const ObExpr &expr, ObEvalCtx &ctx
   } else if (is_null_res) {
     res.set_null();
   } else if (OB_FAIL(guard.init())) {
-    LOG_WARN("fail to init geo allocator guard", K(ret));
   } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("fail to get mem ctx", K(ret));
   } else if (OB_FAIL(get_gbox(*mem_ctx, geo, gbox))) {
-    LOG_WARN("fail to calculate geometry gbox", K(ret));
   } else if (OB_ISNULL(bounds = OB_NEWx(ObGeogBox, &temp_allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory", K(ret), KP(bounds));
   } else if (precision <= 0 && OB_FAIL(calc_precision(gbox, bounds, precision))) {
     LOG_WARN("fail to calculate precision", K(ret));
   } else if (OB_FAIL(calc_geohash(gbox, precision, geohash_buf))) {
-    LOG_WARN("fail to calculate geohash", K(ret));
   } else {
     ObExprStrResAlloc res_alloc(expr, ctx);
     char *res_buf = (char *)res_alloc.alloc(geohash_buf.length());

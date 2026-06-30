@@ -66,7 +66,6 @@ int ObGeoPointLocationVisitor::calculate_point_location_in_polygon(T_BIN *poly)
   bool is_on_boundary = false;
   uint32_t intersects_cnt = 0;
   if (OB_FAIL(calculate_ring_intersects_cnt(ext, intersects_cnt, is_on_boundary))) {
-    LOG_WARN("failed to get intersects cnt", K(ret), K(ext.size()));
   } else {
     if (is_on_boundary) {
       pos = ObPointLocation::BOUNDARY;
@@ -79,7 +78,6 @@ int ObGeoPointLocationVisitor::calculate_point_location_in_polygon(T_BIN *poly)
       typename T_RINGS::iterator iter_end = inner_rings.end();
       for (; iterInnerRing != iter_end && OB_SUCC(ret) && pos == ObPointLocation::INVALID; ++iterInnerRing) {
         if (OB_FAIL(calculate_ring_intersects_cnt(*iterInnerRing, intersects_cnt, is_on_boundary))) {
-          LOG_WARN("failed to get intersects cnt", K(ret), K(iterInnerRing->size()));
         } else if (is_on_boundary) {
           pos = ObPointLocation::BOUNDARY;
         } else if (intersects_cnt % 2 == 1) {

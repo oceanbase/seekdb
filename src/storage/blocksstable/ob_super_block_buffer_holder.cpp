@@ -77,8 +77,6 @@ int ObSuperBlockBufferHolder::serialize_super_block(const storage::ObServerSuper
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "not inited", K(ret));
   } else if (OB_FAIL(super_block.serialize(buf_, len_, pos))) {
-    STORAGE_LOG(ERROR, "fail to write super block buf", K(ret), KP_(buf), K_(len),
-        K(pos), K(super_block));
   }
   return ret;
 }

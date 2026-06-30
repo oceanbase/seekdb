@@ -58,7 +58,6 @@ T *ObMicroBlockCSEncoder::alloc_encoder_()
   T *encoder = NULL;
   int ret = OB_SUCCESS;
   if (OB_FAIL(encoder_allocator_.alloc(encoder))) {
-    LOG_WARN("alloc encoder failed", K(ret));
   }
   return encoder;
 }
@@ -90,7 +89,6 @@ int ObMicroBlockCSEncoder::alloc_and_init_encoder_(const int64_t column_index, O
       col_ctxs_.at(column_index).try_set_need_sort(
           e->get_type(), column_index, has_lob_out_row_, ctx_.major_working_cluster_version_);
       if (OB_FAIL(e->init(col_ctxs_.at(column_index), column_index, appended_row_count_))) {
-        LOG_WARN("init column encoder failed", K(ret), K(column_index));
       }
       if (OB_FAIL(ret)) {
         free_encoder_(e);
@@ -146,20 +144,13 @@ int ObMicroBlockCSEncoder::init(const ObMicroBlockEncodingCtx &ctx)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid encoder context", K(ret), K(ctx));
   } else if (OB_FAIL(encoders_.reserve(ctx.column_cnt_))) {
-    LOG_WARN("reserve array failed", K(ret), "size", ctx.column_cnt_);
   } else if (OB_FAIL(encoder_allocator_.init())) {
-    LOG_WARN("encoder_allocator init failed", K(ret));
   } else if (OB_FAIL(hashtables_.reserve(ctx.column_cnt_))) {
-    LOG_WARN("reserve array failed", K(ret), "size", ctx.column_cnt_);
   } else if (OB_FAIL(col_ctxs_.reserve(ctx.column_cnt_))) {
-    LOG_WARN("reserve array failed", K(ret), "size", ctx.column_cnt_);
   } else if (OB_FAIL(init_all_col_values_(ctx))) {
-    LOG_WARN("init all_col_values failed", K(ret), K(ctx));
   } else if (OB_FAIL(checksum_helper_.init(ctx.col_descs_, true/*need_opt_row_checksum*/))) {
-    LOG_WARN("fail to init checksum_helper", K(ret), K(ctx));
   } else if (FALSE_IT(ctx_ = ctx)) {
   } else if (OB_FAIL(ctx_.previous_cs_encoding_.init(ctx.column_cnt_))) {
-    LOG_WARN("fail to init previous_cs_encoding_info", K(ret));
   } else {
     all_headers_size_ =
       ObMicroBlockHeader::get_serialize_size(ctx.column_cnt_, ctx.need_calc_column_chksum_) +
@@ -189,16 +180,12 @@ int ObMicroBlockCSEncoder::inner_init_()
       LOG_WARN("unexpected invalid ctx", K(ret), K_(ctx));
     } else if (!data_buffer_.is_inited()) {
       if (OB_FAIL(data_buffer_.init(ObCSEncodingUtil::MAX_BLOCK_ENCODING_STORE_SIZE))) {
-        LOG_WARN("fail to init data_buffer", K(ret));
       } else if (OB_FAIL(row_buf_holder_.init(ObCSEncodingUtil::DEFAULT_DATA_BUFFER_SIZE))) {
-        LOG_WARN("fail to init row_buf_holder", K(ret));
       } else if (OB_FAIL(all_string_data_buffer_.init(ObCSEncodingUtil::DEFAULT_DATA_BUFFER_SIZE))) {
-        LOG_WARN("fail to init all_string_data_buffer_", K(ret), K(all_string_data_buffer_));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(reserve_header_(ctx_))) {
-      LOG_WARN("fail to reserve micro header", K(ret));
     } else {
       update_estimate_size_limit_(ctx_);
     }
@@ -321,24 +308,19 @@ void ObMicroBlockCSEncoder::dump_diagnose_info()
     ObMicroBlockChecksumHelper tmp_checksum_helper;
     blocksstable::ObNewRowBuilder new_row_builder;
     if (OB_FAIL(tmp_checksum_helper.init(ctx_.col_descs_, true))) {
-      LOG_WARN("Failed to init ObMicroBlockChecksumHelper", K(ret), KPC_(ctx_.col_descs));
     } else if (OB_FAIL(new_row_builder.init(*ctx_.col_descs_, allocator))) {
-      LOG_WARN("Failed to init ObNewRowBuilder", K(ret), KPC_(ctx_.col_descs));
     } else if (OB_FAIL(datum_row.init(column_cnt))) {
-      LOG_WARN("fail to init datum row", K_(ctx), K(column_cnt));
     } else {
       bool can_dump_buffered_row = false;
       if (0 == appended_batch_count_) {
         // non-batch interface
         if (OB_FAIL(set_datum_rows_ptr_())) {
-          LOG_WARN("fail to set datum rows ptr", K(ret));
         } else {
           can_dump_buffered_row = true;
         }
       } else {
         if (!encoder_freezed_) {
           if (OB_FAIL(build_all_col_datums_())) {
-            LOG_WARN("fail to build all column datums before dump diagnose info", K(ret));
           } else {
             can_dump_buffered_row = true;
           }
@@ -360,12 +342,10 @@ void ObMicroBlockCSEncoder::dump_diagnose_info()
           datum_row.storage_datums_[col_idx].pack_ = all_col_datums_.at(col_idx)->at(row_id).pack_;
         }
         if (OB_TMP_FAIL(tmp_checksum_helper.cal_row_checksum(datum_row.storage_datums_, column_cnt))) {
-          LOG_WARN("Failed to cal row checksum", K(ret), K(datum_row));
         }
         FLOG_WARN("error micro block row (original)", K(row_id), K(datum_row),
             "orig_checksum", tmp_checksum_helper.get_row_checksum());
         if (OB_FAIL(new_row_builder.build_store_row(datum_row, store_row))) {
-          LOG_WARN("Failed to transfer datum row to store row", K(ret), K(datum_row));
         } else {
           FLOG_WARN("error micro block store_row (original)", K(row_id), K(store_row));
         }
@@ -380,7 +360,6 @@ int ObMicroBlockCSEncoder::init_all_col_values_(const ObMicroBlockEncodingCtx &c
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(all_col_datums_.reserve(ctx.column_cnt_))) {
-    LOG_WARN("reserve array failed", K(ret), "size", ctx.column_cnt_);
   }
   for (int64_t i = all_col_datums_.count(); i < ctx.column_cnt_ && OB_SUCC(ret); ++i) {
     ObColDatums *c = OB_NEWx(ObColDatums, &pivot_allocator_, pivot_allocator_);
@@ -402,7 +381,6 @@ int ObMicroBlockCSEncoder::init_vec_batch_info_arrs_(const ObMicroBlockEncodingC
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(vec_batch_info_arrs_.reserve(ctx.column_cnt_))) {
-    LOG_WARN("reserve array failed", K(ret), "size", ctx.column_cnt_);
   }
   for (int64_t i = vec_batch_info_arrs_.count(); i < ctx.column_cnt_ && OB_SUCC(ret); ++i) {
     ObVecBatchInfoArr *arr = OB_NEWx(ObVecBatchInfoArr, &pivot_allocator_, pivot_allocator_);
@@ -410,7 +388,6 @@ int ObMicroBlockCSEncoder::init_vec_batch_info_arrs_(const ObMicroBlockEncodingC
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("alloc memory failed", K(ret), K(ctx));
     } else if (OB_FAIL(vec_batch_info_arrs_.push_back(arr))) {
-      LOG_WARN("push back vec_batch_info_arrs_ failed", K(ret));
     }
   }
   return ret;
@@ -477,10 +454,8 @@ int ObMicroBlockCSEncoder::append_row(const ObDatumRow &row)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected encoder status", K(ret), K_(encoder_freezed), K_(appended_row_count), K_(appended_batch_count));
   } else if (OB_FAIL(inner_init_())) {
-    LOG_WARN("failed to inner init", K(ret));
   } else if (0 == appended_row_count_) {
     if (OB_FAIL(init_column_ctxs_())) {
-      LOG_WARN("fail to init_column_ctxs_", K(ret), K_(ctx));
     }
   }
 
@@ -528,10 +503,8 @@ int ObMicroBlockCSEncoder::append_batch(const ObBatchDatumRows &vec_batch,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected encoder status", K(ret), K_(encoder_freezed), K_(appended_row_count), K_(appended_batch_count));
   } else if (OB_FAIL(inner_init_())) {
-    LOG_WARN("failed to inner init", K(ret));
   } else if (0 == appended_batch_count_) {
     if (OB_FAIL(init_column_ctxs_())) {
-      LOG_WARN("fail to init_column_ctxs_", K(ret), K_(ctx));
     } else if (vec_batch_info_arrs_.count() < ctx_.column_cnt_ &&
         OB_FAIL(init_vec_batch_info_arrs_(ctx_))) {
       LOG_WARN("init vec_batch_info_arrs_ failed", K(ret), K_(ctx));
@@ -607,14 +580,11 @@ int ObMicroBlockCSEncoder::copy_and_append_batch_(const ObBatchDatumRows &vec_ba
         } else if (is_row_holder_not_enough) {
           int64_t need_size = 0;
           if (OB_FAIL(calc_batch_data_size_(vec_batch.vectors_, start, row_count, need_size))) {
-            LOG_WARN("fail to calc_vec_batch_data_size", K(ret), K(row_count));
           } else if (OB_UNLIKELY(need_size <= row_buf_holder_.size() - row_buf_holder_.length())) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected row holder buf not enough", K(ret), K(need_size), K(row_buf_holder_));
           } else if (OB_FAIL(row_buf_holder_.ensure_space(need_size))) {
-            LOG_WARN("failed to ensure space", K(ret), K(need_size), K(row_buf_holder_));
           } else if (OB_FAIL(remove_invalid_vec_batch_info_(col_idx))) {
-            LOG_WARN("fail to remove_invalid_vec_batch_info_", K(ret), K(column_cnt));
           } else {
             is_finish = false;
             break;
@@ -624,7 +594,6 @@ int ObMicroBlockCSEncoder::copy_and_append_batch_(const ObBatchDatumRows &vec_ba
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(row_buf_holder_.write_nop(length_ - start_offset))) {
-        STORAGE_LOG(WARN, "fail to write nop", K(ret), K(length_), K(start_offset), K(row_buf_holder_));
       }
     }
   }
@@ -670,7 +639,6 @@ int ObMicroBlockCSEncoder::copy_vector_(const ObIVector *vector,
   ObDataFormatType data_format_type = ObDataFormatType::MAX;
 
   if (OB_FAIL(calc_col_batch_data_size_(vector, start, row_count, col_idx, vec_data_size))) {
-    LOG_WARN("fail to calc_col_batch_data_size_", K(ret), K(col_desc));
   } else if (is_int_sc) {
     store_size += sizeof(uint64_t) * row_count;
     if (VectorFormat::VEC_FIXED == vec_format) {
@@ -729,8 +697,6 @@ int ObMicroBlockCSEncoder::copy_vector_(const ObIVector *vector,
                                      vec_data_size,
                                      data_format_type,
                                      store_class == ObIntSC /*is_signed*/))) {
-    LOG_WARN("fail to do copy vector", K(ret),
-        K(data_format_type), K(col_desc), K(row_count), K(vec_data_size));
   }
   return ret;
 }
@@ -1035,10 +1001,7 @@ int ObMicroBlockCSEncoder::do_copy_vector_(const ObIVector *vector,
                                      nulls,
                                      vec_start_offset,
                                      is_integer))) {
-    LOG_ERROR("fail to init vector batch info", K(ret), K(row_count), K(fixed_len), KP(offsets),
-        KP(nulls), K(vec_start_offset), K(is_integer));
   } else if (OB_FAIL(vec_batch_info_arrs_.at(col_idx)->push_back(batch_info))) {
-    LOG_WARN("fail to push batch info", K(ret), K(batch_info));
   }
   return ret;
 }
@@ -1053,7 +1016,6 @@ int ObMicroBlockCSEncoder::build_all_col_datums_()
     const ObVecBatchInfoArr &vec_batch_arr = *vec_batch_info_arrs_[col_idx];
     ObColDatums &col_datums = *all_col_datums_[col_idx];
     if (OB_FAIL(col_datums.resize(appended_row_count_))) {
-      LOG_WARN("fail to resize", K(ret), K(appended_row_count_));
     } else {
       for (int64_t batch_idx = 0; batch_idx < appended_batch_count_; batch_idx++) {
         const ObVecBatchInfo &batch_info = vec_batch_arr.at(batch_idx);
@@ -1119,7 +1081,6 @@ int ObMicroBlockCSEncoder::reserve_header_(const ObMicroBlockEncodingCtx &ctx)
       ObMicroBlockHeader::get_serialize_size(ctx.column_cnt_, ctx.need_calc_column_chksum_);
 
     if (OB_FAIL(data_buffer_.write_nop(header_size, true))) {
-      LOG_WARN("data buffer fail to advance headers size.", K(ret), K(header_size));
     } else {
       ObMicroBlockHeader *header = get_header(data_buffer_);
       header->magic_ = MICRO_BLOCK_HEADER_MAGIC;
@@ -1152,20 +1113,14 @@ int ObMicroBlockCSEncoder::store_columns_(int64_t &column_data_offset)
     LOG_WARN("column data offset must equal to all_headers_size_",
         K(ret), K(column_data_offset), K(all_headers_size_));
   } else if (OB_FAIL(all_string_data_buffer_.ensure_space(all_string_data_len_))) {
-    LOG_WARN("fail to ensure space", K(ret), K(all_string_data_len_));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < encoders_.count(); ++i) {
     ObIColumnCSEncoder &encoder = *encoders_.at(i);
     if (OB_FAIL(encoder.get_maximal_encoding_store_size(need_store_size))) {
-      LOG_WARN("fail to get_maximal_encoding_store_size", K(ret), K(i));
     } else if (OB_FAIL(data_buffer_.ensure_space(need_store_size))) {
-      LOG_WARN("fail to ensure space", K(ret), K(need_store_size), K_(data_buffer));
     } else if (OB_FAIL(encoder.store_column(data_buffer_))) {
-      LOG_WARN("fail to store column", K(ret), K(i));
     } else if (OB_FAIL(update_previous_info_after_encoding_(i, encoder))) {
-      LOG_WARN("failt to update_previous_info_after_encoding", K(ret), K(i));
     } else if (OB_FAIL(encoder.get_stream_offsets(stream_offsets_))) {
-      LOG_WARN("fail to get stream offsets", K(ret));
     }
   }
   return ret;
@@ -1191,24 +1146,19 @@ int ObMicroBlockCSEncoder::store_all_string_data_(uint32_t &data_size, bool &use
       use_compress = true;
       if (OB_FAIL(ObCompressorPool::get_instance().get_compressor(
           static_cast<ObCompressorType>(ctx_.compressor_type_), compressor))) {
-        LOG_WARN("fail to get compressor", K(ret), K_(ctx));
       } else if (OB_FAIL(compressor->get_max_overflow_size(all_string_data_len_, max_overflow_size))) {
-        LOG_WARN("fail to get_max_overflow_size", K(ret), K(all_string_data_len_), K_(ctx));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(data_buffer_.ensure_space(all_string_data_len_ + max_overflow_size))) {
-      LOG_WARN("fail to ensure space", K(ret), K(all_string_data_len_), K(max_overflow_size));
     } else if (use_compress) {
       int64_t compressed_size = 0;
       int64_t remain_buf_len = data_buffer_.remain_buffer_size();
       if (OB_FAIL(compressor->compress(all_string_data_buffer_.data(),
           all_string_data_len_, data_buffer_.current(), remain_buf_len, compressed_size))) {
-        LOG_WARN("fail to compress", K(ret), K(all_string_data_len_));
       } else if (compressed_size >= all_string_data_len_) {
         use_compress = false;
       } else if (OB_FAIL(data_buffer_.advance(compressed_size))) {
-        LOG_WARN("fail to advance", K(compressed_size), K(ret));
       } else {
         data_size = compressed_size;
       }
@@ -1218,7 +1168,6 @@ int ObMicroBlockCSEncoder::store_all_string_data_(uint32_t &data_size, bool &use
       if (!use_compress) {
         MEMCPY(data_buffer_.current(), all_string_data_buffer_.data(), all_string_data_len_);
         if (OB_FAIL(data_buffer_.advance(all_string_data_len_))) {
-          LOG_WARN("fail to advance", K(all_string_data_len_), K(ret));
         }
       }
     }
@@ -1239,7 +1188,6 @@ int ObMicroBlockCSEncoder::store_stream_offsets_(int64_t &stream_offsets_length)
     uint32_t end_offset = stream_offsets_.at(stream_offsets_.count() - 1);
     if (OB_FAIL(enc_ctx.build_offset_array_stream_meta(
         end_offset, false/*force raw*/, ctx_.major_working_cluster_version_))) {
-      LOG_WARN("fail to build_offset_array_stream_meta", K(ret));
     } else if(OB_FAIL(enc_ctx.build_stream_encoder_info(
                                      false/*has_null*/,
                                      true/*monotonic inc*/,
@@ -1248,31 +1196,26 @@ int ObMicroBlockCSEncoder::store_stream_offsets_(int64_t &stream_offsets_length)
                                      -1/*stream_idx*/,
                                      ctx_.compressor_type_,
                                      &allocator_))) {
-      LOG_WARN("fail to build_stream_encoder_info", K(ret));
     } else if (FALSE_IT(need_store_size = sizeof(ObIntegerStreamMeta) +
         common::ObCodec::get_moderate_encoding_size(
             enc_ctx.meta_.get_uint_width_size() * stream_offsets_.count()))) {
     } else if (OB_FAIL(data_buffer_.ensure_space(need_store_size))) {
-      LOG_WARN("fail to ensure space", K(ret), K(need_store_size), K_(data_buffer));
     } else {
       int64_t pos_bak = data_buffer_.length();
       const uint32_t width_size = enc_ctx.meta_.get_uint_width_size();
       switch(width_size) {
       case 1 : {
         if (OB_FAIL(do_encode_stream_offsets_<uint8_t>(enc_ctx))) {
-          LOG_WARN("fail to do_encode_offset_stream_", K(ret), K_(ctx));
         }
         break;
       }
       case 2 : {
         if (OB_FAIL(do_encode_stream_offsets_<uint16_t>(enc_ctx))) {
-          LOG_WARN("fail to do_encode_offset_stream_", K(ret), K_(ctx));
         }
         break;
       }
       case 4 : {
         if (OB_FAIL(do_encode_stream_offsets_<uint32_t>(enc_ctx))) {
-          LOG_WARN("fail to do_encode_offset_stream_", K(ret), K_(ctx));
         }
         break;
       }
@@ -1295,11 +1238,9 @@ int ObMicroBlockCSEncoder::prepare_for_build_block_()
   int ret = OB_SUCCESS;
   if (appended_batch_count_ == 0) { // use singel-row interface
     if (OB_FAIL(set_datum_rows_ptr_())) {
-      LOG_WARN("fail to set datum rows ptr", K(ret));
     }
   } else { // use batch-row interface
     if (OB_FAIL(build_all_col_datums_())) {
-      LOG_WARN("fail to build all col datums", K(ret));
     } else if (need_cal_row_checksum() &&
         OB_FAIL(checksum_helper_.cal_rows_checksum(all_col_datums_, appended_row_count_))) {
       LOG_WARN("fail to cal row chksum", K(ret), K_(appended_row_count), K_(checksum_helper));
@@ -1324,13 +1265,9 @@ int ObMicroBlockCSEncoder::build_block(char *&buf, int64_t &size)
     LOG_WARN("unexpected encoder status", K(ret), K_(encoder_freezed), K_(appended_row_count), K_(appended_batch_count));
   } else if (FALSE_IT(encoder_freezed_ = true)) {
   } else if (OB_FAIL(prepare_for_build_block_())) {
-    LOG_WARN("fail to prepare_for_build_block", K(ret));
   } else if (OB_FAIL(encoder_detection_())) {
-    LOG_WARN("detect column encoding failed", K(ret));
   } else if (OB_FAIL(process_out_row_columns_())) {
-    LOG_WARN("failed to process out row columns", K(ret));
   } else if (OB_FAIL(data_buffer_.write_nop(all_column_header_size + column_headers_size))) {
-    LOG_WARN("fail to ensure space", K(ret), K_(data_buffer), K(all_column_header_size), K(column_headers_size));
   } else {
     LOG_DEBUG("build micro block", K_(estimate_size), K_(all_headers_size),
         K(column_headers_size), K_(expand_pct), K_(appended_row_count), K(ctx_));
@@ -1341,15 +1278,8 @@ int ObMicroBlockCSEncoder::build_block(char *&buf, int64_t &size)
     uint32_t all_string_data_size = 0;
     // <1> store all columns, include column meta and column data
     if (OB_FAIL(store_columns_(column_data_offset))) {
-      LOG_WARN("fail to store columns", K(ret), K_(ctx), K_(appended_row_count), K(estimate_size_));
-    // <2> store all string data
     } else if (OB_FAIL(store_all_string_data_(all_string_data_size, is_all_string_compress))) {
-      LOG_WARN("fail to store_all_string_data_", K(ret));
-
-    // <3> store stream offsets
     } else if (OB_FAIL(store_stream_offsets_(stream_offsets_length))) {
-      LOG_WARN("fail to store stream offsets", K(ret));
-
     } else {
       ObMicroBlockHeader *header = get_header(data_buffer_);
       const int64_t header_size = header->header_size_;
@@ -1413,7 +1343,6 @@ int ObMicroBlockCSEncoder::init_column_ctxs_()
 
     for (int64_t i = 0; OB_SUCC(ret) && i < ctx_.column_cnt_; ++i) {
       if (OB_FAIL(col_ctxs_.push_back(cc))) {
-        LOG_WARN("failed to push back column ctx", K(ret));
       }
     }
   }
@@ -1543,7 +1472,6 @@ int ObMicroBlockCSEncoder::copy_and_append_row_(const ObDatumRow &src, int64_t &
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected row holder buf not enough", K(ret), K(need_size), K(row_buf_holder_));
           } else if (OB_FAIL(row_buf_holder_.ensure_space(need_size))) {
-            LOG_WARN("failed to ensure space", K(ret), K(need_size), K(row_buf_holder_));
           } else {
             int tmp_ret = OB_SUCCESS;
             if (OB_TMP_FAIL(remove_invalid_datums_(col_idx))) {
@@ -1554,13 +1482,11 @@ int ObMicroBlockCSEncoder::copy_and_append_row_(const ObDatumRow &src, int64_t &
             break;
           }
         } else if (OB_FAIL(all_col_datums_.at(col_idx)->push_back(dst_datum))) {
-          LOG_WARN("fail to push back dst datum", K(ret), K(col_idx), K(src), K(dst_datum));
         }
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(row_buf_holder_.write_nop(length_ - datum_row_offset))) {
-        STORAGE_LOG(WARN, "fail to write nop", K(ret), K(length_), K(datum_row_offset), K(row_buf_holder_));
       }
     }
   }
@@ -1578,7 +1504,6 @@ int ObMicroBlockCSEncoder::copy_and_append_row_(const ObDatumRow &src, int64_t &
       }
     }
   } else if (OB_FAIL(datum_row_offset_arr_.push_back(datum_row_offset))) {
-    LOG_WARN("fail to push back datum_row_offset", K(ret), K(datum_row_offset));
   } else {
     appended_row_count_++;
   }
@@ -1591,7 +1516,6 @@ int ObMicroBlockCSEncoder::remove_invalid_datums_(const int32_t column_cnt)
   int ret = OB_SUCCESS;
   for (int64_t i  = 0; OB_SUCC(ret) && i < column_cnt; i++) {
     if (OB_FAIL(all_col_datums_.at(i)->resize(appended_row_count_))) {
-      LOG_ERROR("fail to resize all_col_datums_", K(ret), K_(appended_row_count), K(i), K(column_cnt));
     }
   }
   return ret;
@@ -1602,7 +1526,6 @@ int ObMicroBlockCSEncoder::remove_invalid_vec_batch_info_(const int32_t column_c
   int ret = OB_SUCCESS;
   for (int64_t i  = 0; OB_SUCC(ret) && i < column_cnt; i++) {
     if (OB_FAIL(vec_batch_info_arrs_.at(i)->resize(appended_batch_count_))) {
-      LOG_ERROR("fail to resize vec_batch_info_arrs_", K(ret), K_(appended_batch_count), K(i), K(column_cnt));
     }
   }
   return ret;
@@ -1763,7 +1686,6 @@ int ObMicroBlockCSEncoder::calc_batch_data_size_(const ObIArray<ObIVector *> &ve
   int64_t col_data_size = 0;
   for (int64_t col_idx = 0; OB_SUCC(ret) && col_idx < vectors.count(); ++col_idx) {
     if (OB_FAIL(calc_col_batch_data_size_(vectors.at(col_idx), start, row_count, col_idx, col_data_size))) {
-      LOG_WARN("fail to calc_col_batch_data_size_", K(ret), K(col_idx));
     } else {
       size += col_data_size;
     }
@@ -1821,17 +1743,14 @@ int ObMicroBlockCSEncoder::prescan_(const int64_t column_index)
         LOG_ERROR("row_count and col_datums_count is not requal",
             K(ret), K(node_num), KPC(col_ctx.col_datums_));
       } else if (OB_FAIL(hashtable_factory_.create(bucket_num, node_num, ht))) {
-        LOG_WARN("create hashtable failed", K(ret), K(bucket_num), K(node_num));
       } else if (FALSE_IT(builder = static_cast<ObDictEncodingHashTableBuilder *>(ht))) {
       } else if (OB_FAIL(builder->build(*col_ctx.col_datums_, col_desc))) {
-        LOG_WARN("build hash table failed", K(ret), K(column_index), K(column_type));
       }
     }
 
     if (OB_SUCC(ret)) {
       col_ctx.ht_ = ht;
       if (OB_FAIL(ObCSEncodingUtil::build_cs_column_encoding_ctx(store_class, precision_bytes, col_ctx))) {
-        LOG_WARN("build_column_encoding_ctx failed", K(ret), KP(ht), K(store_class), K(precision_bytes));
       } else if (ht != nullptr && OB_FAIL(hashtables_.push_back(ht))) {
         LOG_WARN("failed to push back", K(ret));
       }
@@ -1840,7 +1759,6 @@ int ObMicroBlockCSEncoder::prescan_(const int64_t column_index)
 
     if (OB_SUCC(ret) && is_semistruct_store_(store_class, ctx_.is_enable_semistruct_encoding())) {
       if (OB_FAIL(semistruct_prescan_(column_index))) {
-        LOG_WARN("semistruct_scan_ fail", K(ret), K(column_index));
       }
     }
 
@@ -1848,7 +1766,6 @@ int ObMicroBlockCSEncoder::prescan_(const int64_t column_index)
       // avoid overwirte ret
       int temp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (temp_ret = hashtable_factory_.recycle(true, ht))) {
-        LOG_WARN("recycle hashtable failed", K(temp_ret));
       }
     }
   }
@@ -1867,7 +1784,6 @@ int ObMicroBlockCSEncoder::semistruct_prescan_(const int64_t column_index)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc semistruct_encoder fail", K(ret), "size", sizeof(ObSemiStructEncodeCtx));
   } else if (OB_FAIL(semistruct_encode_ctx_->get_col_ctx(column_index, semistruct_col_ctx))) {
-    LOG_WARN("aloc semistruct_col_ctx fail",K(ret), K(column_index), K(col_desc), K(col_ctx));
   } else {
     semistruct_col_ctx->encoding_ctx_ = &ctx_;
     semistruct_col_ctx->column_index_ = column_index;
@@ -1876,7 +1792,6 @@ int ObMicroBlockCSEncoder::semistruct_prescan_(const int64_t column_index)
     semistruct_col_ctx->all_string_buf_writer_ = &all_string_data_buffer_;
     col_ctx.semistruct_ctx_ = semistruct_col_ctx;
     if (OB_FAIL(semistruct_col_ctx->scan())) {
-      LOG_WARN("semistruct handle fail", K(ret), K(column_index), K(col_desc));
     }
   }
   return ret;
@@ -1891,19 +1806,15 @@ int ObMicroBlockCSEncoder::encoder_detection_()
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < ctx_.column_cnt_; ++i) {
       if (OB_FAIL(prescan_(i))) {
-        LOG_WARN("failed to prescan", K(ret), K(i));
       }
     }
     uint32_t string_data_len = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < ctx_.column_cnt_; ++i) {
       if (OB_FAIL(fast_encoder_detect_(i))) {
-        LOG_WARN("fast encoder detect failed", K(ret), K(i));
       } else if (encoders_.count() <= i && OB_FAIL(choose_encoder_(i))) {
         LOG_WARN("choose_encoder failed", K(ret), K(i));
       } else if (OB_FAIL(update_previous_info_after_choose_encoder_(i, *encoders_[i]))) {
-        LOG_WARN("fail to update previous info after choose encoder", K(ret), K(i));
       } else if (OB_FAIL(encoders_[i]->get_string_data_len(string_data_len))) {
-        LOG_WARN("fail to get string data len", K(ret), K(i));
       } else {
         all_string_data_len_ += string_data_len;
       }
@@ -1936,17 +1847,14 @@ int ObMicroBlockCSEncoder::fast_encoder_detect_(const int64_t column_idx)
     const ObCSColumnHeader::Type type =
         static_cast<ObCSColumnHeader::Type>(ctx_.column_encodings_[column_idx]);
     if (OB_FAIL(choose_specified_encoder_(column_idx, store_class, type, e))) {
-      LOG_WARN("fail to choose_specified_encoder", K(column_idx), K(store_class), K(type), K(column_type));
     }
   } else if (is_all_column_force_raw_) {
     col_ctx.force_raw_encoding_ = true;
     if (is_integer_store_(store_class, col_ctx.is_wide_int_)) {
       if (OB_FAIL(alloc_and_init_encoder_<ObIntegerColumnEncoder>(column_idx, e))) {
-        LOG_WARN("fail to alloc encoder", K(ret), K(column_idx), K(column_type), K(type_class));
       }
     } else if (is_string_store_(store_class, col_ctx.is_wide_int_)) {
       if (OB_FAIL(alloc_and_init_encoder_<ObStringColumnEncoder>(column_idx, e))) {
-        LOG_WARN("fail to alloc encoder", K(ret), K(column_idx), K(column_type), K(type_class));
       }
     } else {
       ret = OB_INNER_STAT_ERROR;
@@ -1954,7 +1862,6 @@ int ObMicroBlockCSEncoder::fast_encoder_detect_(const int64_t column_idx)
     }
   } else if (previous_encoding->column_encoding_type_can_be_reused()) {
     if (OB_FAIL(use_previous_encoder_(column_idx, store_class, e))) {
-      LOG_WARN("fail to use_previous_encoder_", K(column_idx), K(store_class));
     }
   }
 
@@ -1984,11 +1891,9 @@ int ObMicroBlockCSEncoder::choose_specified_encoder_(const int64_t column_idx,
   if (is_integer_store_(store_class, col_ctx.is_wide_int_)) {
     if (ObCSColumnHeader::Type::INTEGER  == type) {
       if (OB_FAIL(alloc_and_init_encoder_<ObIntegerColumnEncoder>(column_idx, e))) {
-        LOG_WARN("fail to alloc encoder", K(ret), K(column_idx), K(store_class));
       }
     } else if (ObCSColumnHeader::Type::INT_DICT == type) {
       if (OB_FAIL(alloc_and_init_encoder_<ObIntDictColumnEncoder>(column_idx, e))) {
-        LOG_WARN("fail to alloc encoder", K(ret), K(column_idx), K(store_class));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -1996,16 +1901,13 @@ int ObMicroBlockCSEncoder::choose_specified_encoder_(const int64_t column_idx,
     }
   } else if (ObCSColumnHeader::Type::SEMISTRUCT == type) {
     if (OB_FAIL(alloc_and_init_encoder_<ObSemiStructColumnEncoder>(column_idx, e))) {
-      LOG_WARN("fail to alloc encoder", K(ret), K(column_idx), K(store_class));
     }
   } else if (is_string_store_(store_class, col_ctx.is_wide_int_)) {
     if (ObCSColumnHeader::Type::STRING == type) {
       if (OB_FAIL(alloc_and_init_encoder_<ObStringColumnEncoder>(column_idx, e))) {
-        LOG_WARN("fail to alloc encoder", K(ret), K(column_idx), K(store_class));
       }
     } else if (ObCSColumnHeader::Type::STR_DICT == type) {
       if (OB_FAIL(alloc_and_init_encoder_<ObStrDictColumnEncoder>(column_idx, e))) {
-        LOG_WARN("fail to alloc encoder", K(ret), K(column_idx), K(store_class));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -2074,23 +1976,18 @@ int ObMicroBlockCSEncoder::use_previous_encoder_(const int64_t column_idx,
     if (OB_SUCC(ret)) {
       if (ObCSColumnHeader::Type::INTEGER == curr_type) {
         if (OB_FAIL(alloc_and_init_encoder_<ObIntegerColumnEncoder>(column_idx, e))) {
-          LOG_WARN("fail to alloc encoder", K(ret), K(column_idx), K(store_class));
         }
       } else if (ObCSColumnHeader::Type::INT_DICT == curr_type) {
         if (OB_FAIL(alloc_and_init_encoder_<ObIntDictColumnEncoder>(column_idx, e))) {
-          LOG_WARN("fail to alloc encoder", K(ret), K(column_idx), K(store_class));
         }
       } else if (ObCSColumnHeader::Type::STRING == curr_type) {
         if (OB_FAIL(alloc_and_init_encoder_<ObStringColumnEncoder>(column_idx, e))) {
-          LOG_WARN("fail to alloc encoder", K(ret), K(column_idx), K(store_class));
         }
       } else if (ObCSColumnHeader::Type::STR_DICT == curr_type) {
         if (OB_FAIL(alloc_and_init_encoder_<ObStrDictColumnEncoder>(column_idx, e))) {
-          LOG_WARN("fail to alloc encoder", K(ret), K(column_idx), K(store_class));
         }
       } else if (ObCSColumnHeader::Type::SEMISTRUCT == curr_type) {
         if (OB_FAIL(alloc_and_init_encoder_<ObSemiStructColumnEncoder>(column_idx, e))) {
-          LOG_WARN("fail to alloc encoder", K(ret), K(column_idx), K(store_class));
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -2116,15 +2013,12 @@ int ObMicroBlockCSEncoder::choose_encoder_(const int64_t column_idx)
     LOG_WARN("not init", K(ret));
   } else if (is_integer_store_(store_class, col_ctx.is_wide_int_)) {
     if (OB_FAIL(choose_encoder_for_integer_(column_idx, e))) {
-      LOG_WARN("fail to choose encoder for integer", K(ret));
     }
   } else if (is_semistruct_encoding_enable_(store_class, column_idx)) {
     if (OB_FAIL(choose_encoder_for_semistruct_(column_idx, e))) {
-      LOG_WARN("fail to choose encoder for semistruct type", K(ret), K(store_class));
     }
   } else if (is_string_store_(store_class, col_ctx.is_wide_int_)) {
     if (OB_FAIL(choose_encoder_for_string_(column_idx, e))) {
-      LOG_WARN("fail to choose encoder for variable length type", K(ret));
     }
   } else {
     ret = OB_NOT_SUPPORTED;
@@ -2133,7 +2027,6 @@ int ObMicroBlockCSEncoder::choose_encoder_(const int64_t column_idx)
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(encoders_.push_back(e))) {
-      LOG_WARN("push back encoder failed");
     }
   }
   if (OB_FAIL(ret)) {
@@ -2154,9 +2047,7 @@ int ObMicroBlockCSEncoder::choose_encoder_for_integer_(
   ObIColumnCSEncoder *dict_encoder = nullptr;
 
   if (OB_FAIL(alloc_and_init_encoder_<ObIntegerColumnEncoder>(column_idx, integer_encoder))) {
-    LOG_WARN("fail to alloc encoder", K(ret), K(column_idx));
   } else if (OB_FAIL(alloc_and_init_encoder_<ObIntDictColumnEncoder>(column_idx, dict_encoder))) {
-    LOG_WARN("fail to alloc encoder", K(ret), K(column_idx));
   } else {
     int64_t integer_estimate_size = integer_encoder->estimate_store_size();
     int64_t dict_estimate_size = dict_encoder->estimate_store_size();
@@ -2200,9 +2091,7 @@ int ObMicroBlockCSEncoder::choose_encoder_for_string_(
   ObIColumnCSEncoder *dict_encoder = nullptr;
 
   if (OB_FAIL(alloc_and_init_encoder_<ObStringColumnEncoder>(column_idx, string_encoder))) {
-    LOG_WARN("fail to alloc encoder", K(ret), K(column_idx));
   } else if (OB_FAIL(alloc_and_init_encoder_<ObStrDictColumnEncoder>(column_idx, dict_encoder))) {
-    LOG_WARN("fail to alloc encoder", K(ret), K(column_idx));
   } else {
     int64_t string_estimate_size = string_encoder->estimate_store_size();
     int64_t dict_estimate_size = dict_encoder->estimate_store_size();
@@ -2262,11 +2151,8 @@ int ObMicroBlockCSEncoder::choose_encoder_for_semistruct_(
   ObIColumnCSEncoder *dict_encoder = nullptr;
   ObIColumnCSEncoder *semistruct_encoder = nullptr;
   if (OB_FAIL(alloc_and_init_encoder_<ObStringColumnEncoder>(column_idx, string_encoder))) {
-    LOG_WARN("fail to alloc encoder", K(ret), K(column_idx));
   } else if (OB_FAIL(alloc_and_init_encoder_<ObStrDictColumnEncoder>(column_idx, dict_encoder))) {
-    LOG_WARN("fail to alloc encoder", K(ret), K(column_idx));
   } else if (OB_FAIL(alloc_and_init_encoder_<ObSemiStructColumnEncoder>(column_idx, semistruct_encoder))) {
-    LOG_WARN("fail to alloc encoder", K(ret), K(column_idx));
   } else {
     int64_t string_estimate_size = string_encoder->estimate_store_size();
     int64_t dict_estimate_size = dict_encoder->estimate_store_size();
@@ -2324,10 +2210,8 @@ int ObMicroBlockCSEncoder::update_previous_info_after_choose_encoder_(const int3
   const ObIntegerStream::EncodingType *types = nullptr;
   ObColumnEncodingIdentifier identifier;
   if (OB_FAIL(e.get_identifier_and_stream_types(identifier, types))) {
-    LOG_WARN("fail to get_identifier_and_stream_types", K(ret));
   } else if (OB_FAIL(ctx_.previous_cs_encoding_.update_column_detect_info(
       col_idx, identifier, ctx_.micro_block_cnt_, ctx_.major_working_cluster_version_))) {
-    LOG_WARN("fail to check_and_set_identifier", K(ret), K(col_idx), K(identifier), K(ctx_.micro_block_cnt_));
   }
   return ret;
 }
@@ -2338,10 +2222,8 @@ int ObMicroBlockCSEncoder::update_previous_info_after_encoding_(const int32_t co
   const ObIntegerStream::EncodingType *stream_types = nullptr;
   ObColumnEncodingIdentifier identifier;
   if (OB_FAIL(e.get_identifier_and_stream_types(identifier, stream_types))) {
-    LOG_WARN("fail to get_identifier_and_stream_types", K(ret), K(col_idx));
   } else if (OB_FAIL(ctx_.previous_cs_encoding_.update_stream_detect_info(
       col_idx, identifier, stream_types, ctx_.major_working_cluster_version_))) {
-    LOG_WARN("fail to check_and_set_valid", K(ret), K(col_idx), K(identifier));
   }
 
   return ret;
@@ -2358,7 +2240,6 @@ void ObMicroBlockCSEncoder::free_encoders_()
   {
     // should continue even fail
     if (OB_FAIL(hashtable_factory_.recycle(true, *ht))) {
-      LOG_WARN("recycle hashtable failed", K(ret));
     }
   }
   hashtables_.reuse();

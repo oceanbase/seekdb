@@ -72,7 +72,6 @@ public:
     int ret = common::OB_SUCCESS;
     for (int i = 0 ; i < user_vars.count() ; ++i) {
       if (OB_FAIL(user_vars_.push_back(user_vars.at(i)))) {
-        SQL_OPT_LOG(ERROR, "push back failed", K(ret));
       }
     }
   }
@@ -125,7 +124,6 @@ public:
     int ret = common::OB_SUCCESS;
     for (int i = 0 ; OB_SUCC(ret) && i < alias_names.count() ; ++i) {
       if (OB_FAIL(alias_names_.push_back(alias_names.at(i)))) {
-        SQL_OPT_LOG(WARN, "push back failed", K(ret));
       }
     }
   }

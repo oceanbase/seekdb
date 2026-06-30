@@ -96,8 +96,6 @@ class ObCompositeCodec : public ObCodec
     const uint64_t rounded_byte_length = rounded_length * get_uint_bytes();
     if (rounded_length > 0) {
       if (OB_FAIL(codec1.encode(in, rounded_byte_length, out, out_len, out_pos))) {
-        LIB_LOG(WARN, "fail to encode array", K(rounded_byte_length), KPC(this),
-                K(out_len), K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -107,8 +105,6 @@ class ObCompositeCodec : public ObCodec
           LIB_LOG(WARN, "invalid out pos", K(ret), K(out_pos), K(out_len));
         } else if (OB_FAIL(codec2.encode(in + rounded_byte_length,
                 in_len - rounded_byte_length, out, out_len, out_pos))) {
-          LIB_LOG(WARN, "fail to encode array", KP(in), K(rounded_byte_length),
-                  K(out_len), K(in_len), K(out_pos), K(ret));
         }
       }
     }
@@ -129,15 +125,12 @@ class ObCompositeCodec : public ObCodec
     uint64_t uint_count1 = rounded_length;
     if (uint_count1 > 0) {
       if (OB_FAIL(codec1.decode(in, in_len, in_pos, uint_count1, out, out_len, out_pos))) {
-        LIB_LOG(WARN, "fail to decode array", K(in_len), K(in_pos), K(uint_count1), K(out_len),
-                K(out_pos), K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (uint_count > rounded_length) {
         uint64_t uint_count2 = uint_count - rounded_length;
         if (OB_FAIL(codec2.decode(in, in_len, in_pos, uint_count2, out, out_len, out_pos))) {
-          LIB_LOG(WARN, "fail to decode array", K(in_len), K(in_pos), K(uint_count2), K(out_pos), K(ret));
         }
       } else if (uint_count == rounded_length) {
         //nothing

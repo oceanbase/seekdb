@@ -72,7 +72,6 @@ public:
       add_one_row_fn fn = add_one_row_fns_.at(col_id);
       if (OB_FAIL(
             fn(aggregates_.at(col_id), agg_ctx_, col_id, row, aggr_vectors[col_id], batch_idx, batch_size))) {
-        SQL_LOG(WARN, "add one row failed", K(ret));
       }
     }
     return ret;
@@ -88,7 +87,6 @@ public:
     for (int col_id = start_agg_id; OB_SUCC(ret) && col_id < end_agg_id; col_id++) {
       if (OB_FAIL(aggregates_.at(col_id)->add_batch_for_multi_groups(agg_ctx_, agg_rows, iter,
                                                                      batch_size, col_id))) {
-        SQL_LOG(WARN, "add batch for multi groups failed", K(ret));
       }
     }
     return ret;

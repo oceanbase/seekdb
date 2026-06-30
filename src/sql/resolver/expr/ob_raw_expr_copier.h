@@ -48,14 +48,12 @@ public:
     for (int64_t i = 0; OB_SUCC(ret) && i < input_exprs.count(); ++i) {
       ObRawExpr *temp_expr = NULL;
       if (OB_FAIL(copy(input_exprs.at(i), temp_expr))) {
-        SQL_RESV_LOG(WARN, "failed to copy expr", K(ret));
       } else if (OB_ISNULL(temp_expr)) {
         ret = common::OB_ERR_UNEXPECTED;
         SQL_RESV_LOG(WARN, "null expr", K(ret));
       } else {
         T cast_expr = static_cast<T>(temp_expr);
         if (OB_FAIL(output_exprs.push_back(cast_expr))) {
-          SQL_RESV_LOG(WARN, "failed to push back expr", K(ret));
         } else { /*do nothing*/ }
       }
     }
@@ -197,7 +195,6 @@ int ObRawExprCopier::copy_on_replace(const common::ObIArray<T *> &from_exprs,
     if (OB_FAIL(copy_on_replace(from_exprs.at(i),
                                 to_expr,
                                 replacer))) {
-      SQL_RESV_LOG(WARN, "failed to replace expr", K(ret));
     } else if (tmp == to_expr || std::is_same<T, ObRawExpr>::value) {
       // do nothing
     } else if (OB_ISNULL(to_expr) ||

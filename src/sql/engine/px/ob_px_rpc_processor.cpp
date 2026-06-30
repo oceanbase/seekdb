@@ -74,7 +74,6 @@ int ObInitSqcP::process()
   if (OB_NOT_NULL(sqc_handler)) {
     ObPxRpcInitSqcArgs &arg = sqc_handler->get_sqc_init_arg();
     if (OB_FAIL(SET_INTERRUPTABLE(arg.sqc_.get_interrupt_id().px_interrupt_id_))) {
-      LOG_WARN("sqc failed to SET_INTERRUPTABLE");
     } else {
       unregister_interrupt_ = true;
     }
@@ -85,13 +84,9 @@ int ObInitSqcP::process()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Sqc handler can't be nullptr", K(ret));
   } else if (OB_FAIL(sqc_handler->init_env())) {
-    LOG_WARN("Failed to init sqc env", K(ret));
   } else if (OB_FAIL(sqc_handler->pre_acquire_px_worker(result_.reserved_thread_count_))) {
-    LOG_WARN("Failed to pre acquire px worker", K(ret));
   } else if (OB_FAIL(pre_setup_op_input(*sqc_handler))) {
-    LOG_WARN("pre setup op input failed", K(ret));
   } else if (OB_FAIL(sqc_handler->thread_count_auto_scaling(result_.reserved_thread_count_))) {
-    LOG_WARN("fail to do thread auto scaling", K(ret), K(result_.reserved_thread_count_));
   } else if (result_.reserved_thread_count_ <= 0) {
     ret = OB_ERR_INSUFFICIENT_PX_WORKER;
     ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(dop_, sqc_handler->get_phy_plan().get_px_dop());
@@ -99,7 +94,6 @@ int ObInitSqcP::process()
     ACTIVE_SESSION_RETRY_DIAG_INFO_SETTER(admitted_px_workers_number_, result_.reserved_thread_count_);
     LOG_WARN("Worker thread res not enough", K_(result));
   } else if (OB_FAIL(sqc_handler->link_qc_sqc_channel())) {
-    LOG_WARN("Failed to link qc sqc channel", K(ret));
   } else {
     /*do nothing*/
   }
@@ -152,7 +146,6 @@ int ObInitSqcP::pre_setup_op_input(ObPxSqcHandler &sqc_handler)
   } else if (OB_FAIL(sub_coord.pre_setup_op_input(*ctx, *root, sub_coord.get_sqc_ctx(),
       sqc.get_access_table_locations(),
       sqc.get_access_table_location_keys()))) {
-    LOG_WARN("pre_setup_op_input failed", K(ret));
   }
   return ret;
 }
@@ -183,9 +176,7 @@ int ObInitSqcP::startup_normal_sqc(ObPxSqcHandler &sqc_handler)
     arg.exec_ctx_->set_ori_frame_cnt(arg.exec_ctx_->get_frame_cnt());
     arg.exec_ctx_->set_ori_expr_op_size(arg.exec_ctx_->get_expr_op_size());
     if (OB_FAIL(session->store_query_string(ObString::make_string("PX SUB COORDINATOR")))) {
-      LOG_WARN("store query string to session failed", K(ret));
     } else if (OB_FAIL(sub_coord.pre_process())) {
-      LOG_WARN("fail process sqc", K(arg), K(ret));
     } else if (OB_FAIL(sub_coord.try_start_tasks(dispatched_worker_count))) {
       /**
        * When starting some workers fails, we proactively interrupt the already started workers.
@@ -317,14 +308,11 @@ int ObFastInitSqcReportQCMessageCall::mock_sqc_finish_msg()
           buffer->set_msg_type(dtl::ObDtlMsgType::FINISH_SQC_RESULT);
           const bool inc_recv_buf_cnt = false;
           if (OB_FAIL(common::serialization::encode(buf, size, pos, header))) {
-            LOG_WARN("fail to encode buffer", K(ret));
           } else if (OB_FAIL(common::serialization::encode(buf, size, pos, finish_msg))) {
-            LOG_WARN("serialize RPC channel message fail", K(ret));
           } else if (FALSE_IT(buffer->size() = pos)) {
           } else if (FALSE_IT(pos = 0)) {
           } else if (false) {
           } else if (OB_FAIL(ch->attach(buffer, inc_recv_buf_cnt))) {
-            LOG_WARN("fail to feedup buffer", K(ret));
           } else if (FALSE_IT(ch->free_buffer_count())) {
           } else {
             need_interrupt_ = false;
@@ -385,31 +373,26 @@ int ObInitFastSqcP::process()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Sqc handler can't be nullptr", K(ret));
   } else if (OB_FAIL(sqc_handler->init_env())) {
-    LOG_WARN("Failed to init sqc env", K(ret));
   } else if (OB_ISNULL(sqc_handler = arg_.sqc_handler_)
              || !sqc_handler->valid()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Invalid sqc handler", K(ret), KPC(sqc_handler));
   } else if (OB_FAIL(OB_E(EventTable::EN_PX_SQC_EXECUTE_FAILED) OB_SUCCESS)) {
-    LOG_WARN("match sqc execute errism", K(ret));
   } else if (OB_ISNULL(session = sqc_handler->get_exec_ctx().get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Session can't be null", K(ret));
   } else if (OB_FAIL(sqc_handler->link_qc_sqc_channel())) {
-    LOG_WARN("fail to link qc sqc channel", K(ret));
   } else {
     ObPxRpcInitSqcArgs &arg = sqc_handler->get_sqc_init_arg();
     arg.sqc_.set_task_count(1);
     ObPxInterruptGuard px_int_guard(arg.sqc_.get_interrupt_id().px_interrupt_id_);
     if (OB_FAIL(px_int_guard.get_interrupt_reg_ret())) {
-      LOG_WARN("fast sqc failed to SET_INTERRUPTABLE");
     } else {
       LOG_TRACE("process dfo",
                 K(arg),
                 K(session->get_compatibility_mode()),
                 K(sqc_handler->get_reserved_px_thread_count()));
       if (OB_FAIL(startup_normal_sqc(*sqc_handler))) {
-        LOG_WARN("fail to startup normal sqc", K(ret));
       }
     }
   }
@@ -438,7 +421,6 @@ int ObInitFastSqcP::process()
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = ObInterruptUtil::interrupt_qc(
               sqc_arg.sqc_, ret, &sqc_handler->get_exec_ctx()))) {
-        LOG_WARN("fail to interrupt qc for pre-link sqc init failure", K(tmp_ret), K(ret));
       }
     }
     sqc_handler->reset_reference_count();
@@ -467,11 +449,8 @@ int ObInitFastSqcP::startup_normal_sqc(ObPxSqcHandler &sqc_handler)
     session->set_peer_addr(arg.sqc_.get_qc_addr());
     ObDIActionGuard action_guard("PX SUB COORDINATOR");
     if (OB_FAIL(session->store_query_string(ObString::make_string("PX SUB COORDINATOR")))) {
-      LOG_WARN("store query string to session failed", K(ret));
     } else if (OB_FAIL(sub_coord.pre_process())) {
-      LOG_WARN("fail process sqc", K(arg), K(ret));
     } else if (OB_FAIL(sub_coord.try_start_tasks(dispatched_worker_count, true))) {
-      LOG_WARN("fail to start tasks", K(ret));
     }
   }
 
@@ -497,13 +476,9 @@ int px_init_sqc_async_in_proc(const char *buf, const int64_t len,
   ObInitSqcP p(GCTX);
   int64_t pos = 0;
   if (OB_FAIL(p.init())) {
-    // init failed: handler not set, nothing to release here (init self-cleans).
-    LOG_WARN("fail to init in-proc sqc processor", K(ret));
   } else {
     // From here, decode/process/after_process/destroy mirror the transport flow.
     if (OB_FAIL(p.decode_arg(buf, len, pos))) {
-      LOG_WARN("fail to decode sqc init args", K(ret));
-      // decode populated the handler partially; destroy releases it.
     } else {
       // process() always returns OB_SUCCESS and reports logic errors via result_.rc_.
       (void)p.process();
@@ -530,10 +505,8 @@ int px_init_sqc_fast_in_proc(const char *buf, const int64_t len)
   ObInitFastSqcP p(GCTX);
   int64_t pos = 0;
   if (OB_FAIL(p.init())) {
-    LOG_WARN("fail to init in-proc fast sqc processor", K(ret));
   } else {
     if (OB_FAIL(p.decode_arg(buf, len, pos))) {
-      LOG_WARN("fail to decode fast sqc init args", K(ret));
     } else {
       // process() runs the single task inline and reports to the QC via the
       // qc-sqc dtl channel (or returns ret if the channel was never linked).

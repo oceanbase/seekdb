@@ -595,7 +595,6 @@ public:
   int peek_data(int64_t limit, const char*& buf, int64_t& sz) {
     int ret = OB_SUCCESS;
     if (OB_FAIL(try_read_fd(limit))) {
-      LOG_WARN("read fail", K(ret), K_(reader), K(limit));
     } else {
       buf = cur_buf_;
       sz = remain();
@@ -635,7 +634,6 @@ private:
     } else if (cur_buf_ + limit > buf_end_ && OB_FAIL(switch_buffer(limit))) {
       LOG_ERROR("alloc read buffer fail", K_(reader), K(ret));
     } else if (OB_FAIL(do_read_fd(limit))) {
-      LOG_WARN("do_read_fd fail", K(ret), K_(reader), K(limit));
     }
     return ret;
   }
@@ -727,7 +725,6 @@ public:
     if (NULL == buf_) {
       // no pending task
     } else if (OB_FAIL(do_write(fd, buf_, sz_, wbytes))) {
-      LOG_WARN("do_write fail", K(ret));
     } else if (wbytes >= sz_) {
       become_clean = true;
       reset();
@@ -1013,7 +1010,6 @@ int ObSqlSock::set_ssl_enabled()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ob_fd_enable_ssl_for_server(fd_, OB_SSL_CTX_ID_SQL_NIO, tls_verion_option_, ssl_st_))) {
-    LOG_WARN("sqlnio enable ssl for server failed", K(ret), K(reader_));
   }
   return ret;
 }
@@ -1315,7 +1311,6 @@ public:
       ret = OB_IO_ERROR;
       LOG_WARN("epoll_create fail", K(ret), K(errno));
     } else if (OB_FAIL(evfd_.create(epfd_))) {
-      LOG_WARN("evfd create fail", K(ret));
     } else {
       LOG_INFO("sql_nio init io succ");
     }
@@ -1392,7 +1387,6 @@ public:
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(evfd_.create(epfd_))) {
-        LOG_WARN("evfd create fail", K(ret));
       } else {
         LOG_INFO("sql_nio init listen succ", K(port));
       }
@@ -1772,7 +1766,6 @@ int ObSqlNio::start(int port, ObISqlSockHandler *handler, int n_thread, bool dis
       bool need_monopolize = ((i == 0) ? true : false);
       new (impl_ + i) ObSqlNioImpl(*handler);
       if (OB_FAIL(impl_[i].init(port, need_monopolize, unix_socket_path, disable_tcp))) {
-        LOG_WARN("impl init fail", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -1937,7 +1930,6 @@ int ObSqlNio::set_thread_count(const int n_thread)
       for (int i = cur_thread; OB_SUCCESS == ret && i < n_thread; i++) {
         new (impl_ + i) ObSqlNioImpl(*handler_);
         if (OB_FAIL(impl_[i].init(port_, need_monopolize, NULL, false))) {
-          LOG_WARN("impl init fail");
         }
       }
       if (OB_SUCC(ret)) {

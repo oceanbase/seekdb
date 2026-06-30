@@ -53,7 +53,6 @@ int subschema_value_serialize(void *value, char* buf, const int64_t buf_len, int
   } else {
     const CLZ *subschema_value = reinterpret_cast<CLZ *>(value);
     if (OB_FAIL(subschema_value->serialize(buf, buf_len, pos))) {
-      LOG_WARN("failed to do sql subschema value serialize", K(ret), K(*subschema_value));
     }
   }
 
@@ -70,7 +69,6 @@ int subschema_value_deserialize(void *value, const char* buf, const int64_t data
   } else {
     CLZ *subschema_value = reinterpret_cast<CLZ *>(value);
     if (OB_FAIL(subschema_value->deserialize(buf, data_len, pos))) {
-      LOG_WARN("failed to do sql subschema value deserialize", K(ret), KP(buf), K(data_len));
     }
   }
   return ret;
@@ -115,7 +113,6 @@ int subschema_value_deep_copy(const void *src_value, void *&dst_value, ObIAlloca
     const CLZ *src_subschema_value = reinterpret_cast<const CLZ *>(src_value);
     CLZ* copy_value = NULL;
     if (OB_FAIL(src_subschema_value->deep_copy(allocator, copy_value))) {
-      LOG_WARN("failed to deep copy subschema value", K(ret), K(TYPE));
     } else if (OB_ISNULL(copy_value)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("deep copy subschema value result is null", K(ret), K(TYPE));
@@ -160,7 +157,6 @@ int ObSubSchemaValue::deep_copy_value(const void *src_value, ObIAllocator &alloc
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null value for deep copy subschema value", K(ret));
   } else if (OB_FAIL(SUBSCHEMA_FUNCS[type_].deep_copy(src_value, value_, allocator))) {
-    LOG_WARN("failed deep copy subschema value", K(ret), K(*this), KP(src_value));
   }
   return ret;
 }
@@ -173,7 +169,6 @@ OB_DEF_SERIALIZE(ObSubSchemaValue)
               type_,
               signature_);
   if (OB_FAIL(ret)) {
-    LOG_WARN("fail to serialize subschema type info", K(ret), K(type_), K(signature_));
   } else if (is_valid_type(type_) &&
       OB_FAIL(SUBSCHEMA_FUNCS[type_].value_serialize(value_, buf, buf_len, pos))) {
     LOG_WARN("fail to serialize subschema data", K(ret), K(type_), K(signature_));
@@ -188,7 +183,6 @@ OB_DEF_DESERIALIZE(ObSubSchemaValue)
               type_,
               signature_);
   if (OB_FAIL(ret)) {
-    LOG_WARN("fail to deserialize subschema type info", K(ret), K(type_), K(signature_));
   } else if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("allocator is null", K(ret), K(type_), K(signature_));
@@ -196,9 +190,7 @@ OB_DEF_DESERIALIZE(ObSubSchemaValue)
     ObIAllocator *alloc = allocator_;
     void *value_meta = NULL;
     if (OB_FAIL(SUBSCHEMA_FUNCS[type_].init(value_meta, *alloc))) {
-      LOG_WARN("fail to init value", K(ret));
     } else if (OB_FAIL(SUBSCHEMA_FUNCS[type_].value_deserialize(value_meta, buf, data_len, pos))) {
-      LOG_WARN("fail to deserialize subschema data", K(ret), K(type_), K(signature_));
     } else {
       value_ = value_meta;
     }
@@ -229,7 +221,6 @@ OB_DEF_SERIALIZE(ObSubSchemaCtx)
     OB_UNIS_ENCODE(subschema_count);
     OB_UNIS_ENCODE(used_subschema_id_);
     if (OB_FAIL(ret)) {
-      LOG_WARN("fail to serialize subschema ctx", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < subschema_array_.count(); ++i) {
         if (OB_LIKELY(subschema_array_.at(i).is_valid())) {
@@ -254,7 +245,6 @@ OB_DEF_DESERIALIZE(ObSubSchemaCtx)
     } else {
       OB_UNIS_DECODE(used_subschema_id_);
       if (OB_FAIL(ret)) {
-        LOG_WARN("fail to deserialize subschema ctx", K(ret));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < subschema_count; i++) {
           uint64_t subschema_id = 0;
@@ -264,7 +254,6 @@ OB_DEF_DESERIALIZE(ObSubSchemaCtx)
           OB_UNIS_DECODE(value);
           if (OB_FAIL(ret)) { // copy value from buffer to local memory
           } else if (OB_FAIL(set_subschema(subschema_id, value))) {
-            LOG_WARN("fail to set subschema", K(ret), K(subschema_id), K(value));
           }
         }
       }
@@ -310,9 +299,7 @@ int ObSubSchemaCtx::assgin(const ObSubSchemaCtx &other)
         const ObSubSchemaValue src = other.get_subschema_array().at(subschema_id);
         ObSubSchemaValue dst = src;
         if (OB_FAIL(dst.deep_copy_value(src.value_, allocator_))) {
-          LOG_WARN("deep copy value failed", K(ret), K(i), K(dst));
         } else if (OB_FAIL(set_subschema(i, dst))) {
-          LOG_WARN("fail to set subschema", K(ret), K(i), K(dst));
         }
       }
       used_subschema_id_ = other.used_subschema_id_;
@@ -333,11 +320,9 @@ int ObSubSchemaCtx::init()
     if (OB_FAIL(subschema_reverse_map_.create(SUBSCHEMA_BUCKET_NUM,
                                       "SubSchemaRev",
                                       "SubSchemaRev"))) {
-      LOG_WARN("fail to create subschema reverse map", K(ret));
     } else if (OB_FAIL(enum_set_meta_reverse_map_.create(SUBSCHEMA_BUCKET_NUM,
                                                               "SubSchemaRev",
                                                               "SubSchemaRev"))) {
-      LOG_WARN("fail to create enum_set meta reverse map", K(ret));
     } else {
       subschema_array_.set_attr(ObMemAttr("SubSchemaHash"));
       is_inited_ = true;
@@ -406,7 +391,6 @@ int ObSubSchemaCtx::ensure_array_capacity(const uint16_t count)
         OB_FAIL(subschema_array_.reserve(next_pow2(count)))) {
     LOG_WARN("fail to reserve array capacity", K(ret), K(count), K_(subschema_array));
   } else if (OB_FAIL(subschema_array_.prepare_allocate(count))) {
-    LOG_WARN("fail to prepare allocate array", K(ret), K(count), K_(subschema_array));
   }
   return ret;
 }
@@ -429,7 +413,6 @@ int ObSubSchemaCtx::set_subschema(uint16_t subschema_id, ObSubSchemaValue &value
       ret = OB_SUCCESS;
       LOG_DEBUG("add new subschema", K(ret), K(subschema_id), K(value), K(subschema_array_.count()));
       if (OB_FAIL(ensure_array_capacity(subschema_id + 1))) {
-        LOG_WARN("fail to ensure array capacity", K(ret));
       } else if (FALSE_IT(subschema_array_.at(subschema_id) = value)) {
       } else if (OB_FAIL(subschema_reverse_map_.set_refactored(rev_key, key))) {
         if (OB_HASH_EXIST == ret) {
@@ -501,7 +484,6 @@ int ObSubSchemaCtx::get_subschema_id_by_typedef(const ObString &type_def,
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to create ObSqlCollectionInfo buffer", K(ret));
       } else if (OB_FAIL(get_new_subschema_id(new_tmp_id))) {
-        LOG_WARN("fail to get new subschema id", K(ret));
       } else if (OB_ISNULL(name_def = static_cast<char *>(allocator_.alloc(type_def.length())))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to create ObSqlCollectionInfo buffer", K(ret));
@@ -512,7 +494,6 @@ int ObSubSchemaCtx::get_subschema_id_by_typedef(const ObString &type_def,
         type_info.write(type_def.ptr(), type_def.length());
         buf->set_name(type_info);
         if (OB_FAIL(buf->parse_type_info())) {
-          LOG_WARN("fail to parse ObSqlCollectionInfo", K(ret));
         } else {
           ObSubSchemaValue value;
           value.type_ = OB_SUBSCHEMA_COLLECTION_TYPE;
@@ -520,7 +501,6 @@ int ObSubSchemaCtx::get_subschema_id_by_typedef(const ObString &type_def,
           uint64_t key = tmp_subid;
           rev_key.str_signature_.assign_ptr(type_info.ptr(), type_info.length());
           if (OB_FAIL(ensure_array_capacity(key + 1))) {
-            LOG_WARN("fail to ensure array capacity", K(ret));
           } else if (FALSE_IT(subschema_array_.at(key) = value)) {
           } else if (OB_FAIL(subschema_reverse_map_.set_refactored(rev_key, key))) {
             LOG_WARN("set subschema map failed", K(ret), K(rev_key), K(key));
@@ -543,7 +523,6 @@ int ObSubSchemaCtx::get_subschema_id_by_typedef(const ObString &type_def,
   ObSubSchemaReverseKey rev_key(OB_SUBSCHEMA_COLLECTION_TYPE, type_def);
   uint64_t tmp_subid = ObMaxSystemUDTSqlType;
   if (OB_FAIL(subschema_reverse_map_.get_refactored(rev_key, tmp_subid))) {
-    LOG_WARN("failed to get subschemaid from reverse map", K(ret));
   } else {
     subschema_id = tmp_subid;
   }
@@ -558,11 +537,9 @@ int ObSubSchemaCtx::get_subschema_id_by_typedef(ObNestedType coll_type,
   const int MAX_LEN = 256;
   char tmp[MAX_LEN] = {0};
   if (OB_FAIL(ObArrayUtil::get_type_name(coll_type, elem_type, tmp, MAX_LEN))) {
-    LOG_WARN("failed to convert len to string", K(ret));
   } else {
     ObString tmp_def(strlen(tmp), tmp);
     if (OB_FAIL(get_subschema_id_by_typedef(tmp_def, subschema_id))) {
-      LOG_WARN("failed to get subschemaid by typedef", K(ret));
     }
   }
   return ret;
@@ -577,11 +554,9 @@ int ObSubSchemaCtx::get_subschema_id_by_typedef(ObNestedType coll_type,
   int64_t pos = 0;
   char tmp[MAX_LEN] = {0};
   if (OB_FAIL(ObArrayUtil::get_type_name(coll_type, elem_type, tmp, MAX_LEN))) {
-    LOG_WARN("failed to convert len to string", K(ret));
   } else {
     ObString tmp_def(strlen(tmp), tmp);
     if (OB_FAIL(get_subschema_id_by_typedef(tmp_def, subschema_id))) {
-      LOG_WARN("failed to get subschemaid by typedef", K(ret));
     }
   }
   return ret;

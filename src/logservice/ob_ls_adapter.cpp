@@ -65,7 +65,6 @@ int ObLSAdapter::replay(ObLogReplayTask *replay_task)
     ret = OB_NOT_INIT;
     CLOG_LOG(ERROR, "ObLSAdapter not inited", K(ret));
   } else if (OB_FAIL(ls_service_->get_ls(replay_task->ls_id_, ls_handle, ObLSGetMod::ADAPTER_MOD))) {
-    CLOG_LOG(ERROR, "get log stream failed", KPC(replay_task), K(ret));
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, " log stream not exist", KPC(replay_task), K(ret));
@@ -77,7 +76,6 @@ int ObLSAdapter::replay(ObLogReplayTask *replay_task)
                                 replay_task->get_replay_payload_size(),
                                 replay_task->lsn_,
                                 replay_task->scn_))) {
-    CLOG_LOG(WARN, "log stream do replay failed", K(ret), KPC(replay_task));
   }
   if (OB_EAGAIN == ret) {
     if (common::OB_INVALID_TIMESTAMP == replay_task->first_handle_ts_) {
@@ -117,7 +115,6 @@ int ObLSAdapter::wait_append_sync(const share::ObLSID &ls_id)
   ObLSHandle ls_handle;
   ObLogHandler *log_handler = NULL;
   if (OB_FAIL(ls_service_->get_ls(ls_id, ls_handle, ObLSGetMod::ADAPTER_MOD))) {
-    CLOG_LOG(WARN, "get log stream failed", K(ret), K(ls_id));
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(ERROR, "log stream not exist", K(ret), K(ls_id));

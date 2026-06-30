@@ -31,6 +31,8 @@
 #include "storage/blocksstable/ob_sstable.h"
 #include "storage/blocksstable/ob_row_writer.h"
 
+#include "storage/checkpoint/ob_checkpoint_diagnose.h"
+
 namespace oceanbase
 {
 namespace storage
@@ -127,13 +129,11 @@ public:
     int64_t data_size = 0;
     new_node = nullptr;
     if (OB_FAIL(get_data_size(data, data_size))) {
-      TRANS_LOG(WARN, "get_data_size failed", K(ret), KP(data), K(data_size));
     } else if (OB_ISNULL(new_node = (ObMvccTransNode *)allocator.alloc(sizeof(ObMvccTransNode) + data_size))
                || OB_ISNULL(new(new_node) ObMvccTransNode())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       TRANS_LOG(WARN, "alloc ObMvccTransNode fail", K(data_size));
     } else if (OB_FAIL(ObMemtableDataHeader::build(reinterpret_cast<ObMemtableDataHeader *>(new_node->buf_), data))) {
-      TRANS_LOG(WARN, "MemtableData dup fail", K(ret));
     }
     return ret;
   }
@@ -181,6 +181,52 @@ public:
 
 class ObMemtable : public ObITabletMemtable
 {
+public:
+struct TabletMemtableUpdateFreezeInfo
+{
+public:
+  TabletMemtableUpdateFreezeInfo(ObMemtable &memtable) : memtable_(memtable) {}
+  TabletMemtableUpdateFreezeInfo& operator=(const TabletMemtableUpdateFreezeInfo&) = delete;
+  void operator()(const checkpoint::ObCheckpointDiagnoseParam& param) const
+  {
+    checkpoint::ObCheckpointDiagnoseMgr *cdm = share::g_mp->checkpoint_diagnose_mgr();
+    if (OB_NOT_NULL(cdm)) {
+      cdm->update_freeze_info(param, memtable_.get_rec_scn(),
+       memtable_.get_start_scn(), memtable_.get_end_scn(), memtable_.get_btree_alloc_memory());
+    }
+  }
+private:
+  ObMemtable &memtable_;
+};
+
+struct UpdateMergeInfoForMemtable
+{
+public:
+  UpdateMergeInfoForMemtable(int64_t merge_start_time,
+    int64_t merge_finish_time,
+    int64_t occupy_size,
+    int64_t concurrent_cnt)
+    : merge_start_time_(merge_start_time),
+      merge_finish_time_(merge_finish_time),
+      occupy_size_(occupy_size),
+      concurrent_cnt_(concurrent_cnt)
+  {}
+  UpdateMergeInfoForMemtable& operator=(const UpdateMergeInfoForMemtable&) = delete;
+  void operator()(const checkpoint::ObCheckpointDiagnoseParam& param) const
+  {
+    checkpoint::ObCheckpointDiagnoseMgr *cdm = share::g_mp->checkpoint_diagnose_mgr();
+    if (OB_NOT_NULL(cdm)) {
+      cdm->update_merge_info_for_memtable(param, merge_start_time_, merge_finish_time_,
+          occupy_size_, concurrent_cnt_);
+    }
+  }
+private:
+  int64_t merge_start_time_;
+  int64_t merge_finish_time_;
+  int64_t occupy_size_;
+  int64_t concurrent_cnt_;
+};
+
 public:
   typedef share::ObMemstoreAllocator::AllocHandle ObSingleMemstoreAllocator;
 public:

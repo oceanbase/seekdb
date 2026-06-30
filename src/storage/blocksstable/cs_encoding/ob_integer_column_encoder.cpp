@@ -44,7 +44,6 @@ int ObIntegerColumnEncoder::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnCSEncoder::init(ctx, column_index, row_count))) {
-    LOG_WARN("init base column encoder failed", K(ret), K(ctx), K(column_index), K(row_count));
   } else {
     column_header_.type_ = type_;
     column_header_.set_is_fixed_length();
@@ -60,7 +59,6 @@ int ObIntegerColumnEncoder::init(
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("not supported store class", K(ret), K_(store_class), K_(column_type), K_(type_store_size), K_(column_index));
     } else if (OB_FAIL(do_init_())) {
-      LOG_WARN("fail to do init", K(ret));
     } else {
       LOG_DEBUG("init integer column encoder", K(ret), K_(store_class),
           K_(column_type), K_(type_store_size), K_(column_index), K_(precision_width_size));
@@ -90,15 +88,12 @@ int ObIntegerColumnEncoder::do_init_()
     if (OB_FAIL(enc_ctx_.build_signed_stream_meta(
         0, 0, true/*is_replace_null*/, 0, precision_width_size_, is_force_raw_,
         ctx_->encoding_ctx_->major_working_cluster_version_, integer_range_))) {
-      LOG_WARN("fail to build_signed_stream_meta", K(ret));
     } 
   } else if (ObIntSC == store_class_ || ObDecimalIntSC == store_class_) {
     if (OB_FAIL(build_signed_stream_meta_())) {
-      LOG_WARN("fail to build signed encoder ctx", K(ret));
     }
   } else if (ObUIntSC == store_class_) {
     if (OB_FAIL(build_unsigned_encoder_ctx_())) {
-      LOG_WARN("fail to build signed raw encoder ctx", K(ret));
     }
   } else {
     ret = OB_INNER_STAT_ERROR;
@@ -114,14 +109,12 @@ int ObIntegerColumnEncoder::do_init_()
     int_stream_count_ = 1;
     ObPreviousColumnEncoding *pre_col_encoding = nullptr;
     if (OB_FAIL(get_previous_cs_encoding(pre_col_encoding))) {
-      LOG_WARN("get_previous_cs_encoding fail", K(ret));
     } else if (OB_FAIL(enc_ctx_.build_stream_encoder_info(
         ctx_->null_cnt_ > 0/*has_null*/,
         false/*not monotonic*/,
         &ctx_->encoding_ctx_->cs_encoding_opt_,
         pre_col_encoding,
         0/*stream_idx*/, ctx_->encoding_ctx_->compressor_type_, ctx_->allocator_))) {
-      LOG_WARN("fail to build_stream_encoder_info", K(ret));
     }
   }
 
@@ -142,9 +135,7 @@ int ObIntegerColumnEncoder::store_column(ObMicroBufferWriter &buf_writer)
     } else {
       ObColumnDatumIter iter(*ctx_->col_datums_);
       if (OB_FAIL(integer_stream_encoder_.encode(enc_ctx_, iter, buf_writer))) {
-        LOG_WARN("fail to encode stream", K(ret), K(enc_ctx_));
       } else if (OB_FAIL(stream_offsets_.push_back(buf_writer.length()))) {
-        LOG_WARN("fail to push back", K(ret));
       } else {
         int_stream_encoding_types_[0] = enc_ctx_.meta_.get_encoding_type();
       }
@@ -158,7 +149,6 @@ int ObIntegerColumnEncoder::store_column_meta(ObMicroBufferWriter &buf_writer)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(store_null_bitamp(buf_writer))) {
-    LOG_WARN("fail to store null bitmap", K(ret));
   }
 
   return ret;
@@ -219,7 +209,6 @@ int ObIntegerColumnEncoder::build_signed_stream_meta_()
     if (OB_FAIL(enc_ctx_.build_signed_stream_meta(new_int_min, new_int_max, is_replace_null,
         null_replaced_value, precision_width_size_, is_force_raw_,
         ctx_->encoding_ctx_->major_working_cluster_version_, integer_range_))) {
-      LOG_WARN("fail to build_signed_stream_meta", K(ret));
     }
   }
 
@@ -265,7 +254,6 @@ int ObIntegerColumnEncoder::build_unsigned_encoder_ctx_()
     if (OB_FAIL(enc_ctx_.build_unsigned_stream_meta(
         new_uint_min, new_uint_max, is_replace_null, null_replaced_value,
         is_force_raw_, ctx_->encoding_ctx_->major_working_cluster_version_, integer_range_))) {
-      LOG_WARN("fail to build_unsigned_stream_meta", K(ret));
     }
   }
 

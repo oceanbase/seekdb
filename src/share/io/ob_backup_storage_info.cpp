@@ -56,7 +56,6 @@ int ObBackupStorageInfo::set(
       && OB_FAIL(set_storage_info_field_(extension, storage_info, sizeof(storage_info)))) {
     LOG_WARN("failed to set storage info", K(ret));
   } else if (OB_FAIL(set(device_type, storage_info))) {
-    LOG_WARN("failed to set storage info", K(ret), KPC(this));
   }
   return ret;
 }
@@ -78,18 +77,14 @@ int ObBackupStorageInfo::get_authorization_info(char *authorization, const int64
   } else if (!is_assume_role_mode_) {
     // access by ak/sk mode
     if (OB_FAIL(get_access_key_(access_key_buf, sizeof(access_key_buf)))) {
-      LOG_WARN("failed to get access key", K(ret));
     } else if (OB_FAIL(databuff_printf(authorization, length, "%s&%s", access_id_, access_key_buf))) {
-      LOG_WARN("failed to set authorization", K(ret), K(length), K_(access_id), K(strlen(access_key_buf)));
     }
   } else {
     // access by assume role mode
     int64_t pos = 0;
     if (OB_FAIL(databuff_printf(authorization, length, pos, "%s", role_arn_))) {
-      LOG_WARN("failed to set authorization", K(ret), K(length), KP_(role_arn));
     } else if (external_id_[0] != '\0') {
       if (OB_FAIL(databuff_printf(authorization, length, pos, "&%s", external_id_))) {
-        LOG_WARN("failed to set authorization", K(ret), K(length), KP_(external_id));
       }
     }
   }
@@ -113,7 +108,6 @@ int ObBackupStorageInfo::get_unencrypted_authorization_info(
   } else if (OB_STORAGE_FILE == device_type_) {
     // do nothing
   } else if (OB_FAIL(databuff_printf(authorization, length, "%s&%s",  access_id_, access_key_))) {
-    LOG_WARN("failed to set authorization", K(ret), K(length), K_(access_id), K(strlen(access_key_)));
   }
 
   return ret;
@@ -137,7 +131,6 @@ int ObBackupStorageInfo::set_endpoint(const common::ObStorageType device_type, c
     ret = OB_INVALID_BACKUP_DEST;
     LOG_WARN("storage info is empty", K(ret), K_(device_type));
   } else if (OB_FAIL(parse_storage_info_(storage_info, has_needed_extension))) {
-    LOG_WARN("parse storage info failed", K(ret), KP(storage_info), K_(device_type));
   } else if (OB_UNLIKELY(0 == strlen(endpoint_))) {
     ret = OB_INVALID_BACKUP_DEST;
     LOG_WARN("backup device is not nfs, endpoint do not allow to be empty", K(ret),K_(device_type), K_(endpoint));
@@ -202,9 +195,7 @@ int ObBackupDest::deep_copy(const ObBackupDest &backup_dest)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memory failed", KR(ret));
   } else if (OB_FAIL(backup_dest.get_backup_dest_str(backup_dest_str, share::OB_MAX_BACKUP_DEST_LENGTH))) {
-    LOG_WARN("failed to get backup dest str", K(ret));
   } else if (OB_FAIL(set(backup_dest_str))) {
-    LOG_WARN("failed to set backup dest", K(ret));
   }
   return ret;
 }
@@ -249,7 +240,6 @@ int ObBackupDest::parse_backup_dest_str_(const char *backup_dest, const bool onl
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("backup_dest not init", K(ret), K(backup_dest));
   } else if (OB_FAIL(get_storage_type_from_path(bakup_dest_str, type))) {
-    LOG_WARN("failed to get storage type", K(ret));
   } else {
     // file:///root_backup_dir"
     while (backup_dest[pos] != '\0') {
@@ -270,11 +260,9 @@ int ObBackupDest::parse_backup_dest_str_(const char *backup_dest, const bool onl
       }
       if (!only_parse_for_unique_path) {
         if (OB_FAIL(storage_info_->set(type, backup_dest + pos))) {
-          LOG_WARN("failed to init storage_info", K(ret), K(type), K(pos), K(backup_dest));
         }
       } else {
         if (OB_FAIL(storage_info_->set_endpoint(type, backup_dest + pos))) {
-          LOG_WARN("failed to set endpoint", K(ret), K(type), K(pos), K(backup_dest));
         }
       } 
     }
@@ -293,9 +281,7 @@ int ObBackupDest::set(const char *backup_dest)
     ret = OB_INVALID_BACKUP_DEST;
     LOG_WARN("invalid args", K(ret), KP(backup_dest));
   } else if (OB_FAIL(alloc_and_init())) {
-    LOG_WARN("failed to alloc and init backup dest", K(ret));
   } else if (OB_FAIL(parse_backup_dest_str_(backup_dest, false/*only_parse_for_unique_path*/))) {
-    LOG_WARN("failed to parse backup dest str", K(ret), K(backup_dest));
   } else {
     root_path_trim_();
   }
@@ -314,7 +300,6 @@ int ObBackupDest::set(const common::ObString &backup_dest)
     MEMCPY(backup_dest_str, backup_dest.ptr(), backup_dest.length());
     backup_dest_str[backup_dest.length()] = '\0';
     if (OB_FAIL(set(backup_dest_str))) {
-      LOG_WARN("failed to set backup dest", KR(ret), K(backup_dest));
     }
   }
   return ret;
@@ -324,7 +309,6 @@ int ObBackupDest::set(const ObBackupPathString &backup_dest_str)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(set(backup_dest_str.ptr()))) {
-    LOG_WARN("failed to set backup dest", KR(ret), K(backup_dest_str));
   }
   return ret;
 }
@@ -346,13 +330,9 @@ int ObBackupDest::set(
     ret = OB_INVALID_BACKUP_DEST;
     LOG_WARN("invalid args", K(ret), KP(path), KP(endpoint));
   } else if (OB_FAIL(alloc_and_init())) {
-    LOG_WARN("failed to alloc and init backup dest", K(ret));
   } else if (OB_FAIL(get_storage_type_from_path(root_path_str, type))) {
-    LOG_WARN("failed to get storage type", K(ret));
   } else if (OB_FAIL(databuff_printf(root_path_, OB_MAX_BACKUP_PATH_LENGTH, "%s", path))) {
-    LOG_WARN("failed to set root path", K(ret), K(path), K(strlen(path)));
   } else if (OB_FAIL(storage_info_->set(type, endpoint, authorization, extension))) {
-    LOG_WARN("failed to set storage info", K(ret), K(endpoint), K(authorization), K(extension));
   } else {
     root_path_trim_();
   }
@@ -372,13 +352,9 @@ int ObBackupDest::set(const char *root_path, const char *storage_info)
     ret = OB_INVALID_BACKUP_DEST;
     LOG_WARN("invalid args", K(ret));
   } else if (OB_FAIL(alloc_and_init())) {
-    LOG_WARN("failed to alloc and init backup dest", K(ret));
   } else if (OB_FAIL(get_storage_type_from_path(root_path, type))) {
-    LOG_WARN("failed to get storage type", K(ret));
   } else if (OB_FAIL(databuff_printf(root_path_, OB_MAX_BACKUP_PATH_LENGTH, "%s", root_path))) {
-    LOG_WARN("failed to set root path", K(ret), K(root_path));
   } else if (OB_FAIL(storage_info_->set(type, storage_info))) {
-    LOG_WARN("failed to set storage info", K(ret));
   } else {
     root_path_trim_();
   }
@@ -396,11 +372,8 @@ int ObBackupDest::set(const char *root_path, const ObBackupStorageInfo *storage_
     ret = OB_INVALID_BACKUP_DEST;
     LOG_WARN("invalid args", K(ret), K(root_path), K(storage_info));
   } else if (OB_FAIL(alloc_and_init())) {
-    LOG_WARN("failed to alloc and init backup dest", K(ret));
   } else if (OB_FAIL(databuff_printf(root_path_, OB_MAX_BACKUP_PATH_LENGTH, "%s", root_path))) {
-    LOG_WARN("failed to set root path", K(ret), K(root_path));
   } else if (OB_FAIL(storage_info_->assign(*storage_info))) {
-    LOG_WARN("failed to set storage info", K(ret));
   } else {
     root_path_trim_();
   }
@@ -424,7 +397,6 @@ int ObBackupDest::set_without_decryption(const common::ObString &backup_dest) {
       LOG_WARN("backup destination should not contain encrypt_key", K(ret), K(backup_dest_str));
       LOG_USER_ERROR(OB_INVALID_BACKUP_DEST, "backup destination contains encrypt_key, which");
     } else if (OB_FAIL(set(backup_dest_str))) {
-      LOG_WARN("fail to set backup dest", K(ret));
     }
   }
   return ret;
@@ -444,7 +416,6 @@ int ObBackupDest::set_storage_path(const common::ObString &storage_path_str)
     ret = OB_INVALID_BACKUP_DEST;
     LOG_WARN("storage path is empty", K(ret), K(storage_path_str));
   } else if (OB_FAIL(alloc_and_init())) {
-    LOG_WARN("failed to alloc and init backup dest", K(ret));
   } else if (OB_ISNULL(backup_dest_str = reinterpret_cast<char *>(allocator.alloc(storage_path_str.length()+1)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memory failed", KR(ret));
@@ -452,7 +423,6 @@ int ObBackupDest::set_storage_path(const common::ObString &storage_path_str)
     MEMCPY(backup_dest_str, storage_path_str.ptr(), storage_path_str.length());
     backup_dest_str[storage_path_str.length()] = '\0';
     if (OB_FAIL(parse_backup_dest_str_(backup_dest_str, true/*only_parse_for_unique_path*/))) {
-      LOG_WARN("failed to parse backup dest str", K(ret), K(backup_dest_str));
     } else {
       root_path_trim_();
     }
@@ -473,11 +443,8 @@ int ObBackupDest::reset_access_id_and_access_key(
     LOG_WARN("storage info is null", K(ret));
   } else if (OB_FAIL(databuff_printf(new_authorization, OB_MAX_BACKUP_AUTHORIZATION_LENGTH, pos, "%s%s&%s%s", 
                 ACCESS_ID, access_id, ACCESS_KEY, access_key))) {
-    LOG_WARN("failed to print authorization", K(ret), KCSTRING(access_id));
   } else if (OB_FAIL(storage_info_->get_authorization_info(current_authorization, sizeof(current_authorization)))) {
-    LOG_WARN("fail to set authorization", K(ret));
   } else if (OB_FAIL(storage_info_->reset_access_id_and_access_key(access_id, access_key))) {
-    LOG_WARN("failed to reset access id and access key", K(ret), KCSTRING(access_id));
   } else {
     LOG_INFO("reset access id and access key", KCSTRING(access_id));
   }
@@ -538,11 +505,9 @@ int ObBackupDest::get_backup_path_str(char *buf, const int64_t buf_size) const
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get backup dest str get invalid argument", K(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(databuff_printf(buf, buf_size, "%s", root_path_))) {
-    LOG_WARN("failed to set backup path", K(ret), K(root_path_), K(sizeof(root_path_)));
   } else if (ObStorageType::OB_STORAGE_FILE != storage_info_->device_type_) {
     const int64_t str_len = strlen(buf);
     if (OB_FAIL(databuff_printf(buf + str_len, buf_size - str_len, "?%s", storage_info_->endpoint_))) {
-      LOG_WARN("failed to set backup path", K(ret), K(storage_info_->endpoint_));
     }
   }
   return ret;
@@ -560,9 +525,7 @@ int ObBackupDest::get_backup_dest_str(char *buf, const int64_t buf_size) const
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(databuff_printf(buf, buf_size, "%s", root_path_))) {
-    LOG_WARN("failed to get backup dest str", K(ret), K(root_path_), K(storage_info_));
   } else if (OB_FAIL(storage_info_->get_storage_info_str(storage_info_str, sizeof(storage_info_str)))) {
-    OB_LOG(WARN, "fail to get storage info str!", K(ret), K(storage_info_));
   } else if (0 != strlen(storage_info_str) && OB_FAIL(databuff_printf(buf + strlen(buf), buf_size - strlen(buf), "?%s",storage_info_str))) {
     LOG_WARN("failed to get backup dest str", K(ret), K(root_path_), K(storage_info_));
   }

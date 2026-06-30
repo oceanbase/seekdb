@@ -224,14 +224,12 @@ public:
             if (OB_UNLIKELY(OB_SUCCESS !=
               (temp_ret =
               time_wheel_->schedule(this, next_expected_run_ts_us - ObClockGenerator::getRealClock())))) {
-              OCCAM_LOG(WARN, "timer schedule task failed", K(temp_ret), KR(ret), K(*this));
             } else {
               OCCAM_LOG(DEBUG, "schedule task", KR(ret), K(*this));
             }
           } while (OB_INVALID_ARGUMENT == temp_ret);// means time delay arg is negative
           CLICK();
-          if (OB_UNLIKELY(OB_SUCCESS != ret)) {// register next task failed
-            OCCAM_LOG(ERROR, "fail to register next timer task", K(temp_ret), KR(ret), K(*this));
+          if (OB_UNLIKELY(OB_SUCCESS != ret)) {
           } else {
             expected_run_ts_us_ = next_expected_run_ts_us;
           }
@@ -524,7 +522,6 @@ private:
         if (OB_TIMER_TASK_HAS_NOT_SCHEDULED == ret) {
           OCCAM_LOG(INFO, "task return not scheduled, need try again", K(*this));
         } else if (OB_SUCCESS != ret) {
-          OCCAM_LOG(ERROR, "cancel error", K(*this));
         } else if (!task_->is_running()) {
           OCCAM_LOG(DEBUG, "cancel task success", K(*this));
           break;// successfully cancle task, others maybe failed

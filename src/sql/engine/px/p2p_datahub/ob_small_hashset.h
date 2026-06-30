@@ -53,7 +53,6 @@ public:
       
       alloc_.set_label("ObSmallHashSet");
       if (OB_FAIL(expand(capacity))) {
-        COMMON_LOG(WARN, "failed to expand when init");
       } else {
         inited_ = true;
       }

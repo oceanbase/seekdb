@@ -67,7 +67,6 @@ int CollectTxCtxInfo::assign(const CollectTxCtxInfo &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(args_.assign(other.args_))) {
-    LOG_WARN("collect tx ctx info assign failed", KR(ret), K(other));
   } else {
     src_ls_id_ = other.src_ls_id_;
     dest_ls_id_ = other.dest_ls_id_;

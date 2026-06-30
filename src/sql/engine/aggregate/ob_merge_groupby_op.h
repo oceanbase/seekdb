@@ -277,10 +277,8 @@ OB_INLINE int ObMergeGroupByOp::aggregate_group_rows(const int64_t group_id,
   if (!(start_idx == 0 && end_idx == 0)) {
     ObAggregateProcessor::GroupRow *group_row = nullptr;
     if (OB_FAIL(aggr_processor_.get_group_row(group_id, group_row))) {
-      SQL_LOG(WARN, "failed to get_group_row", K(group_id), K(ret));
     } else if (OB_FAIL(aggr_processor_.process_batch(*group_row, brs, start_idx,
                                                      end_idx))) {
-      SQL_LOG(WARN, "failed to calc aggr", K(ret));
     }
   }
   return ret;

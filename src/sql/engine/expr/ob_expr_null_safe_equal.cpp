@@ -37,7 +37,6 @@ int ObExprNullSafeEqual::calc_result_type2(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObRelationalExprOperator::calc_result_type2(type, type1, type2, type_ctx))) {
-    LOG_WARN("failed to calc_result_type2", K(ret));
   }
   // always allow NULL value
   type.set_result_flag(NOT_NULL_FLAG);
@@ -51,7 +50,6 @@ int ObExprNullSafeEqual::calc_result_typeN(ObExprResType &type,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObRelationalExprOperator::calc_result_typeN(type, types, param_num, type_ctx))) {
-    LOG_WARN("failed to calc_result_typeN", K(ret));
   }
   // always allow NULL value
   type.set_result_flag(NOT_NULL_FLAG);
@@ -122,7 +120,6 @@ int ObExprNullSafeEqual::ns_equal(const ObExpr &expr, ObDatum &res,
         equal = true;
       } else if (!l->is_null() && !r->is_null()) {
         if (OB_FAIL(reinterpret_cast<DatumCmpFunc>(expr.inner_functions_[i])(*l, *r, cmp_ret))) {
-          LOG_WARN("cmp failed", K(ret));
         } else {
           equal = (0 == cmp_ret);
         }

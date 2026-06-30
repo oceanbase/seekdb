@@ -158,7 +158,6 @@ public:
       int ret = common::OB_SUCCESS;
       size = 0;
       if (OB_FAIL(row_copy_size<NEED_EVAL>(exprs, ctx, size))) {
-        SQL_ENG_LOG(WARN, "failed to calc store row size", K(ret));
       } else {
         size += ROW_HEAD_SIZE + ROW_INDEX_SIZE + row_extend_size;
       }
@@ -171,7 +170,6 @@ public:
       int ret = common::OB_SUCCESS;
       size = 0;
       if (OB_FAIL(row_copy_size(datums, size))) {
-        SQL_ENG_LOG(WARN, "failed to calc store row size", K(ret));
       } else {
         size += ROW_HEAD_SIZE + ROW_INDEX_SIZE + row_extend_size;
       }

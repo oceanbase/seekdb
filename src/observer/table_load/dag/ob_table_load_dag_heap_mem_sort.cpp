@@ -66,7 +66,6 @@ int ObTableLoadHeapMemSorter::init(ObTableLoadDag *dag, ObTableLoadMemSortOp *op
         const ObDirectLoadExternalFragmentArray &fragments =
           static_cast<ObDirectLoadExternalTable *>(table_handle.get_table())->get_fragments();
         if (OB_FAIL(source_fragments_.push_back(fragments))) {
-          LOG_WARN("fail to push back", KR(ret));
         }
       }
     }
@@ -94,7 +93,6 @@ int ObTableLoadHeapMemSorter::get_next_source_fragment(ObDirectLoadExternalFragm
     if (idx >= source_fragments_.count()) {
       ret = OB_ITER_END;
     } else if (OB_FAIL(fragment.assign(source_fragments_.at(idx)))) {
-      LOG_WARN("fail to assign fragment", KR(ret));
     } else {
       source_fragments_.at(idx).reset(); // 清除引用计数
     }
@@ -118,7 +116,6 @@ int ObTableLoadHeapMemSorter::add_result_table(const ObDirectLoadTableHandle &ta
   } else {
     ObMutexGuard guard(mutex_);
     if (OB_FAIL(result_tables_handle_.add(table_handle))) {
-      LOG_WARN("fail to add table", KR(ret));
     }
   }
   return ret;
@@ -138,7 +135,6 @@ int ObTableLoadHeapMemSorter::close()
     table_store.clear();
     table_store.set_multiple_heap_table();
     if (OB_FAIL(table_store.add_tables(result_tables_handle_))) {
-      LOG_WARN("fail to add tables", KR(ret));
     } else {
       result_tables_handle_.reset();
       is_closed_ = true;
@@ -205,7 +201,6 @@ int ObTableLoadHeapMemSortTask::Sorter::init()
     LOG_WARN("Sorter init twice", KR(ret), KP(this));
   } else {
     if (OB_FAIL(chunk_.init())) {
-      LOG_WARN("fail to init chunk", KR(ret));
     } else {
       if (ObTableLoadExeMode::MAX_TYPE == store_ctx_->ctx_->param_.exe_mode_) {
         chunk_.set_mem_limit(store_ctx_->heap_table_mem_chunk_size_);
@@ -229,15 +224,11 @@ int ObTableLoadHeapMemSortTask::Sorter::process(const ObDirectLoadExternalFragme
     ExternalReader external_reader;
     if (OB_FAIL(external_reader.init(table_data_desc_.external_data_block_size_,
                                      table_data_desc_.compressor_type_))) {
-      LOG_WARN("fail to init external reader", KR(ret));
     } else if (OB_FAIL(external_reader.open(fragment.file_handle_, 0, fragment.file_size_))) {
-      LOG_WARN("fail to open file", KR(ret));
     } else if (OB_FAIL(resize_chunk())) {
-      LOG_WARN("fail to resize chunk", KR(ret));
     }
     while (OB_SUCC(ret)) {
       if (OB_FAIL(dag_->check_status())) {
-        LOG_WARN("fail to check status", KR(ret));
       } else if (OB_FAIL(external_reader.get_next_item(row))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           LOG_WARN("fail to get next item", KR(ret));
@@ -253,9 +244,7 @@ int ObTableLoadHeapMemSortTask::Sorter::process(const ObDirectLoadExternalFragme
           } else {
             ret = OB_SUCCESS;
             if (OB_FAIL(close_chunk())) {
-              LOG_WARN("fail to close chunk", KR(ret));
             } else if (OB_FAIL(chunk_.add_row(row->tablet_id_, const_row))) {
-              LOG_WARN("fail to add row", KR(ret));
             }
           }
         }
@@ -274,7 +263,6 @@ int ObTableLoadHeapMemSortTask::Sorter::resize_chunk()
   if (ObTableLoadExeMode::MAX_TYPE != store_ctx_->ctx_->param_.exe_mode_) {
     int64_t sort_memory = 0;
     if (OB_FAIL(ObTableLoadService::get_sort_memory(sort_memory))) {
-      LOG_WARN("fail to get sort memory", KR(ret));
     } else {
       chunk_.set_mem_limit(sort_memory);
     }
@@ -298,11 +286,8 @@ int ObTableLoadHeapMemSortTask::Sorter::close_chunk()
   table_builder_param.index_dir_id_ = parent_->index_dir_id_;
   table_builder_param.data_dir_id_ = parent_->data_dir_id_;
   if (OB_FAIL(chunk_.get_all_key_sorted(keys))) {
-    LOG_WARN("fail to get keys", KR(ret));
   } else if (OB_FAIL(datum_row.init(table_data_desc_.column_count_))) {
-    LOG_WARN("fail to init datum row", KR(ret));
   } else if (OB_FAIL(table_builder.init(table_builder_param))) {
-    LOG_WARN("fail to init table builder", KR(ret));
   }
   // 按tablet_id顺序写入table_builder
   for (int64_t i = 0; OB_SUCC(ret) && i < keys.count(); i++) {
@@ -310,25 +295,19 @@ int ObTableLoadHeapMemSortTask::Sorter::close_chunk()
     ObArray<const ConstRowType *> bag;
     
     if (OB_FAIL(chunk_.get(tablet_id, bag))) {
-      LOG_WARN("fail to get bag", KR(ret));
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < bag.count(); j++) {
       const ConstRowType *row = bag.at(j);
       if (OB_FAIL(row->to_datum_row(datum_row))) {
-        LOG_WARN("fail to transfer dataum row", KR(ret));
       } else if (OB_FAIL(table_builder.append_row(tablet_id, datum_row))) {
-        LOG_WARN("fail to append row", KR(ret));
       }
     }
   }
   if (OB_SUCC(ret)) {
     ObDirectLoadTableHandleArray tables_handle;
     if (OB_FAIL(table_builder.close())) {
-      LOG_WARN("fail to close table builder", KR(ret));
     } else if (OB_FAIL(table_builder.get_tables(tables_handle, store_ctx_->table_mgr_))) {
-      LOG_WARN("fail to get tables", KR(ret));
     } else if (OB_FAIL(parent_->tables_handle_.add(tables_handle))) {
-      LOG_WARN("fail to add tables", KR(ret));
     } else {
       chunk_.reuse();
     }
@@ -418,7 +397,6 @@ int ObTableLoadHeapMemSortTask::Compactor::init()
   heap_table_compact_param.file_mgr_ = store_ctx_->tmp_file_mgr_;
   heap_table_compact_param.index_dir_id_ = parent_->index_dir_id_;
   if (OB_FAIL(compactor_.init(heap_table_compact_param))) {
-    LOG_WARN("fail to init heap table compactor", KR(ret));
   }
   return ret;
 }
@@ -437,9 +415,7 @@ int ObTableLoadHeapMemSortTask::Compactor::process(
     while (OB_SUCC(ret) && curr_round_->count() > 1) {
       const int64_t compact_cnt = MIN(curr_round_->count(), store_ctx_->merge_count_per_round_);
       if (OB_FAIL(dag_->check_status())) {
-        LOG_WARN("fail to check status", KR(ret));
       } else if (OB_FAIL(compact_one_round(compact_cnt))) {
-        LOG_WARN("fail to compact one round", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -468,16 +444,13 @@ int ObTableLoadHeapMemSortTask::Compactor::compact_one_round(const int64_t compa
   for (int64_t i = 0; OB_SUCC(ret) && i < curr_round_->count(); ++i) {
     ObDirectLoadTableHandle table_handle;
     if (OB_FAIL(curr_round_->get_table(i, table_handle))) {
-      LOG_WARN("fail to get table", KR(ret));
     } else if (i < compact_cnt) {
       // 取最小的compact_cnt个table进行合并
       if (OB_FAIL(compactor_.add_table(table_handle))) {
-        LOG_WARN("fail to add table", KR(ret));
       }
     } else {
       // 将未参与合并的table进入next_round_中
       if (OB_FAIL(next_round_->add(table_handle))) {
-        LOG_WARN("fail to add table", KR(ret));
       }
     }
   }
@@ -486,11 +459,8 @@ int ObTableLoadHeapMemSortTask::Compactor::compact_one_round(const int64_t compa
     curr_round_->reset();
     ObDirectLoadTableHandle compacted_table_handle;
     if (OB_FAIL(compactor_.compact())) {
-      LOG_WARN("fail to do compact", KR(ret));
     } else if (OB_FAIL(compactor_.get_table(compacted_table_handle, store_ctx_->table_mgr_))) {
-      LOG_WARN("fail to get table", KR(ret));
     } else if (OB_FAIL(next_round_->add(compacted_table_handle))) {
-      LOG_WARN("fail to push back", KR(ret));
     } else {
       compactor_.reuse();
       std::swap(curr_round_, next_round_);
@@ -534,7 +504,6 @@ int ObTableLoadHeapMemSortTask::generate_next_task(ObITask *&next_task)
   } else {
     ObTableLoadHeapMemSortTask *task = nullptr;
     if (OB_FAIL(dag_->alloc_task(task, this, next_thread_idx))) {
-      LOG_WARN("fail to alloc task", KR(ret), K(next_thread_idx));
     } else {
       next_task = task;
     }
@@ -546,13 +515,9 @@ int ObTableLoadHeapMemSortTask::process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(store_ctx_->tmp_file_mgr_->alloc_dir(index_dir_id_))) {
-    LOG_WARN("fail to alloc dir", KR(ret));
   } else if (OB_FAIL(store_ctx_->tmp_file_mgr_->alloc_dir(data_dir_id_))) {
-    LOG_WARN("fail to alloc dir", KR(ret));
   } else if (OB_FAIL(do_sort())) {
-    LOG_WARN("fail to do sort", KR(ret));
   } else if (OB_FAIL(do_compact())) {
-    LOG_WARN("fail to do compact", KR(ret));
   }
   return ret;
 }
@@ -562,12 +527,10 @@ int ObTableLoadHeapMemSortTask::do_sort()
   int ret = OB_SUCCESS;
   Sorter sorter(this);
   if (OB_FAIL(sorter.init())) {
-    LOG_WARN("fail to init sorter", KR(ret));
   }
   while (OB_SUCC(ret)) {
     ObDirectLoadExternalFragment fragment;
     if (OB_FAIL(dag_->check_status())) {
-      LOG_WARN("fail to check status", KR(ret));
     } else if (OB_FAIL(mem_sorter_->get_next_source_fragment(fragment))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
         LOG_WARN("fail to get next source fragment", KR(ret));
@@ -576,11 +539,9 @@ int ObTableLoadHeapMemSortTask::do_sort()
         break;
       }
     } else if (OB_FAIL(sorter.process(fragment))) {
-      LOG_WARN("fail to do sort fragment", KR(ret));
     }
   }
   if (FAILEDx(sorter.close())) {
-    LOG_WARN("fail to close sorter", KR(ret));
   }
   return ret;
 }
@@ -594,11 +555,8 @@ int ObTableLoadHeapMemSortTask::do_compact()
     Compactor compactor(this);
     ObDirectLoadTableHandle table_handle;
     if (OB_FAIL(compactor.init())) {
-      LOG_WARN("fail to init compactor", KR(ret));
     } else if (OB_FAIL(compactor.process(tables_handle_, table_handle))) {
-      LOG_WARN("fail to compact", KR(ret));
     } else if (OB_FAIL(mem_sorter_->add_result_table(table_handle))) {
-      LOG_WARN("fail to add result table", KR(ret));
     }
   }
   return ret;

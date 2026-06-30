@@ -56,7 +56,6 @@ int ObDDLIncStartTask::generate_next_task(ObITask *&next_task)
   } else {
     ObDDLIncStartTask *start_task = nullptr;
     if (OB_FAIL(dag->alloc_task(start_task, next_tablet_idx))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     } else {
       next_task = start_task;
     }
@@ -74,15 +73,11 @@ int ObDDLIncStartTask::process()
   ObDDLIncRedoLogWriter redo_writer;
   SCN start_scn;
   if (OB_FAIL(dag->get_tablet_context(ls_tablet_id.second, tablet_ctx))) {
-    LOG_WARN("fail to get tablet context", KR(ret), K(ls_tablet_id.second));
   } else if (OB_FAIL(redo_writer.init(ls_tablet_id.first,
                                       ls_tablet_id.second))) {
-    LOG_WARN("fail to init inc redo writer", KR(ret), K(ls_tablet_id.first), K(ls_tablet_id.second),
-        K(dag->get_direct_load_type()), K(dag->get_tx_info().trans_id_), K(dag->get_tx_info().seq_no_), K(dag->is_inc_major_log()));
   } else if (OB_FAIL(redo_writer.write_inc_start_log_with_retry(tablet_ctx->lob_meta_tablet_id_,
                                                                 dag->get_tx_info().tx_desc_,
                                                                 start_scn))) {
-    LOG_WARN("fail to write inc start log", KR(ret), KPC(tablet_ctx), K(dag->get_tx_info()));
   }
   return ret;
 }
@@ -115,7 +110,6 @@ int ObDDLIncCommitTask::generate_next_task(ObITask *&next_task)
   } else {
     ObDDLIncCommitTask *commit_task = nullptr;
     if (OB_FAIL(dag->alloc_task(commit_task, next_tablet_idx))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     } else {
       next_task = commit_task;
     }
@@ -135,15 +129,11 @@ int ObDDLIncCommitTask::process()
   ObDDLTabletContext *tablet_ctx = nullptr;
   ObDDLIncRedoLogWriter redo_writer;
   if (OB_FAIL(dag->get_tablet_context(tablet_id_, tablet_ctx))) {
-    LOG_WARN("fail to get tablet context", KR(ret), K(tablet_id_));
   } else if (OB_FAIL(redo_writer.init(tablet_ctx->ls_id_,
                                       tablet_id_))) {
-    LOG_WARN("fail to init inc redo writer", KR(ret), K(tablet_ctx->ls_id_), K(tablet_id_),
-        K(dag->get_direct_load_type()), K(dag->get_tx_info().trans_id_), K(dag->get_tx_info().seq_no_), K(dag->is_inc_major_log()));
   } else if (OB_FAIL(redo_writer.write_inc_commit_log_with_retry(true /*allow_remote_write*/,
                                                                  tablet_ctx->lob_meta_tablet_id_,
                                                                  dag->get_tx_info().tx_desc_))) {
-    LOG_WARN("fail to write inc commit log", KR(ret), KPC(tablet_ctx), K(dag->get_tx_info()));
   }
   return ret;
 }

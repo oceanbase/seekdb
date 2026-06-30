@@ -99,7 +99,6 @@ int ObPxMSReceiveVecOp::init_merge_sort_input(int64_t n_channel)
           msi->io_event_observer_ = &io_event_observer_;
           msi->compressor_type_ = MY_SPEC.compress_type_;
           if (OB_FAIL(merge_inputs_.push_back(msi))) {
-            LOG_WARN("push back merge sort input fail", K(idx), K(ret));
           }
         }
       }
@@ -115,9 +114,7 @@ int ObPxMSReceiveVecOp::inner_open()
   param.set_mem_attr("PxMsReceiveOp",
         ObCtxIds::WORK_AREA);
   if (OB_FAIL(ObPxReceiveOp::inner_open())) {
-    LOG_WARN("initialize operator context failed", K(ret));
   } else if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
-    LOG_WARN("failed to create context", K(ret));
   } else if (OB_ISNULL(mem_context_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null memory entity returned", K(ret));
@@ -125,18 +122,15 @@ int ObPxMSReceiveVecOp::inner_open()
     int64_t row_count = MY_SPEC.rows_;
     if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
         &ctx_, MY_SPEC.px_est_size_factor_, row_count, row_count))) {
-      LOG_WARN("failed to get px size", K(ret));
     } else if (OB_FAIL(sql_mem_processor_.init(
         &mem_context_->get_malloc_allocator(),
         row_count * MY_SPEC.width_, MY_SPEC.type_, MY_SPEC.id_, &ctx_))) {
-      LOG_WARN("failed to init sql memory manager processor", K(ret));
     } else {
       void *mem = NULL;
       ObMemAttr attr("PxMsOutputStore", ObCtxIds::EXECUTE_CTX_ID);
       if (OB_FAIL(output_store_.init(MY_SPEC.all_exprs_, get_spec().max_batch_size_,
                                      attr, 0 /*mem_limit*/, false /*enable_dump*/,
                                      0 /*row_extra_size*/, NONE_COMPRESSOR))) {
-        LOG_WARN("init output store failed", K(ret));
       } else if (OB_ISNULL(mem = ctx_.get_allocator().alloc(
             ObBitVector::memory_size(get_spec().max_batch_size_)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -187,29 +181,23 @@ int ObPxMSReceiveVecOp::inner_close()
   output_store_.reset();
   int release_channel_ret = ObPxChannelUtil::flush_rows(task_channels_);
   if (release_channel_ret != common::OB_SUCCESS) {
-    LOG_WARN("release dtl channel failed", K(release_channel_ret));
   }
 
   release_channel_ret = msg_loop_.unregister_all_channel();
   if (release_channel_ret != common::OB_SUCCESS) {
-    // the following unlink actions is not safe is any unregister failure happened
-    LOG_ERROR("fail unregister all channel from msg_loop", KR(release_channel_ret));
   }
 
   release_channel_ret = ObPxChannelUtil::unlink_ch_set(get_ch_set(), &dfc_, true);
   if (release_channel_ret != common::OB_SUCCESS) {
-    LOG_WARN("release dtl channel failed", K(release_channel_ret));
   }
 
   int release_merge_sort_ret = OB_SUCCESS;
   release_merge_sort_ret = release_merge_inputs();
   if (release_merge_sort_ret != common::OB_SUCCESS) {
-    LOG_WARN("release dtl channel failed", K(release_merge_sort_ret));
   }
 
   release_channel_ret = erase_dtl_interm_result();
   if (release_channel_ret != common::OB_SUCCESS) {
-    LOG_TRACE("release interm result failed", KR(release_channel_ret));
   }
   sql_mem_processor_.unregister_profile();
   return ret;
@@ -333,7 +321,6 @@ int ObPxMSReceiveVecOp::GlobalOrderInput::switch_get_row_store() {
   if (OB_ISNULL(get_row_store_)) {
     get_row_store_ = add_row_store_;
     if (OB_FAIL(get_reader_.init(get_row_store_))) {
-      LOG_WARN("failed to init chunk store iterator", K(ret));
     } else {
       get_row_reader_ = &get_reader_;
     }
@@ -354,7 +341,6 @@ int ObPxMSReceiveVecOp::GlobalOrderInput::switch_get_row_store() {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to get row store, all row store is empty", K(ret));
     } else if (OB_FAIL(add_row_store_->finish_add_row())) {
-      LOG_WARN("failed to finish add row", K(ret));
     } else {
       // switch row store that has data
       // Here previously to avoid frequent role switch of row store and reset, the data was appended to a certain amount before actually clearing
@@ -396,7 +382,6 @@ int ObPxMSReceiveVecOp::GlobalOrderInput::get_rows_from_channels(
       if (OB_DTL_WAIT_EAGAIN == ret) {
         ret = OB_SUCCESS;
         if (OB_FAIL(eval_ctx.exec_ctx_.check_status())) {
-          LOG_WARN("check status failed", K(channel_idx), K(ret));
         }
       } else {
         LOG_WARN("failed to process", K(channel_idx), K(got_channel_idx), K(ret));
@@ -415,7 +400,6 @@ int ObPxMSReceiveVecOp::GlobalOrderInput::get_rows_from_channels(
                                                               spec.max_batch_size_,
                                                               read_rows,
                                                               ms_receive_op->vector_rows_))) {
-          LOG_WARN("get row failed", K(ret));
         } else {
           processed_cnt_ += read_rows;
           add_rows += read_rows;
@@ -423,11 +407,8 @@ int ObPxMSReceiveVecOp::GlobalOrderInput::get_rows_from_channels(
           LOG_DEBUG("[VEC2.0 PX] global input get batch from channel", K(read_rows),
                     K(got_channel_idx), K(tmp_msi));
           if (OB_FAIL(process_dump(*ms_receive_op))) {
-            LOG_WARN("failed to process dump", K(ret));
           } else if (OB_FAIL(ms_receive_op->eval_all_exprs(read_rows))) {
-            LOG_WARN("eval all exprs failed", K(ret));
           } else if (OB_FAIL(tmp_msi->add_batch(*ms_receive_op, exprs, eval_ctx, read_rows))) {
-            LOG_WARN("fail to add row", K(got_channel_idx), K(ret));
           }
         }
       }
@@ -472,7 +453,6 @@ int ObPxMSReceiveVecOp::GlobalOrderInput::get_row(
   int ret = OB_SUCCESS;
   if (is_empty()) {
     if (OB_FAIL(get_rows_from_channels(ms_receive_op, phy_plan_ctx, channel_idx, exprs, eval_ctx))) {
-      LOG_WARN("fail to get one row in global order", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -499,7 +479,6 @@ int ObPxMSReceiveVecOp::GlobalOrderInput::get_row(
         }
       }
     } else if (OB_FAIL(switch_get_row_store())) {
-      LOG_WARN("fail to switch get row store", K(ret));
     } else if (OB_FAIL(get_row_reader_->get_next_batch(max_rows, read_rows,
                         static_cast<const ObCompactRow **>(ms_receive_op->stored_compact_rows_)))) {
       if (ret != OB_ITER_END) {
@@ -606,11 +585,9 @@ int ObPxMSReceiveVecOp::GlobalOrderInput::add_batch(
   if (OB_ISNULL(add_row_store_)) {
     ObTempRowStore *row_store = nullptr;
     if (OB_FAIL(create_temp_row_store(ms_receive_op, row_store))) {
-      LOG_WARN("failed to create row store", K(ret));
     } else {
       add_row_store_ = row_store;
       if (OB_FAIL(temp_row_reader_.init(add_row_store_))) {
-        LOG_WARN("failed to init chunk store iterator", K(ret));
       } else {
         add_row_reader_ = &temp_row_reader_;
       }
@@ -624,13 +601,11 @@ int ObPxMSReceiveVecOp::GlobalOrderInput::add_batch(
       bool reset = false;
       // Before writing a row to add_row_store_, call reset once. If store has no data, reset returns true, at which point reset add_row_store
       if (OB_FAIL(reset_add_row_store(reset))) {
-        LOG_WARN("fail to switch add row store", K(ret));
       } else if (reset) {
         LOG_TRACE("reset add row store", K(add_row_reader_), K(*add_row_store_));
         add_row_reader_->reset();
         add_row_store_->reset();
         if (OB_FAIL(add_row_reader_->init(add_row_store_))) {
-          LOG_WARN("failed to init chunk store iterator", K(ret));
         }
       }
     }
@@ -638,7 +613,6 @@ int ObPxMSReceiveVecOp::GlobalOrderInput::add_batch(
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(add_row_store_->add_batch(ms_receive_op.all_expr_vectors_,
                                                ms_receive_op.selector_, size))) {
-    LOG_WARN("fail to add row", K(ret));
   } else {
     LOG_DEBUG("[VEC2.0 PX]add row store add_batch", K(add_row_store_), K(size),
              K(ObArrayWrap<uint16_t>(ms_receive_op.selector_, size)));
@@ -654,7 +628,6 @@ int ObPxMSReceiveVecOp::inner_get_next_row()
   int ret = OB_SUCCESS;
   const int64_t max_row_cnt = 1;
   if (OB_FAIL(inner_get_next_batch(max_row_cnt))) {
-    LOG_WARN("inner get next batch failed", K(ret));
   } else if (OB_UNLIKELY((brs_.end_ && brs_.size_ == 0))) {
     ret = OB_ITER_END;
   }
@@ -673,7 +646,6 @@ int ObPxMSReceiveVecOp::inner_get_next_batch(const int64_t max_row_cnt)
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("Get operator context failed", K(ret), K(MY_SPEC.id_));
   } else if (OB_FAIL(try_link_channel())) {
-    LOG_WARN("failed to init channel", K(ret));
   }
   if (OB_SUCC(ret) && MY_SPEC.local_order_ && !finish_) {
     // local order needs to first take all the data from the channel, each channel's data is segmented to generate a group of inputs
@@ -702,7 +674,6 @@ int ObPxMSReceiveVecOp::inner_get_next_batch(const int64_t max_row_cnt)
         } else if (OB_ISNULL(store_row)) {
           ret = OB_ERR_UNEXPECTED;
         } else if (OB_FAIL(row_heap_.push(store_row))) {
-          LOG_WARN("fail push row to heap", K(ret));
         }
       }
       // (2) Pop the maximum value from the heap
@@ -714,14 +685,11 @@ int ObPxMSReceiveVecOp::inner_get_next_batch(const int64_t max_row_cnt)
           metric_.mark_eof();
           int release_ret = OB_SUCCESS;
           if (OB_SUCCESS != (release_ret = release_merge_inputs())) {
-            LOG_WARN("failed to release merge sort and row store", K(ret), K(release_ret));
           }
         } else if (row_heap_.capacity() == row_heap_.count()) {
           // Pop the maximum value, put it into the expression datum
           if (OB_FAIL(row_heap_.pop(store_row))) {
-            LOG_WARN("fail pop row from heap", K(ret));
           } else if (OB_FAIL(output_store_.add_row(store_row, out_row))) {
-            LOG_WARN("failed to push back", K(ret));
           }
           metric_.count();
           metric_.mark_first_out();
@@ -811,11 +779,9 @@ int ObPxMSReceiveVecOp::new_local_order_input(MergeSortInput *&out_msi)
                                          mem_attr, 0 /* mem_limit */, true /* enable_dump*/,
                                          0 /*row_extra_size*/,
                                          local_input->compressor_type_))) {
-      LOG_WARN("failed to init temp row store", K(ret));
     } else if (FALSE_IT(local_input->row_store_.set_dir_id(sql_mem_processor_.get_dir_id()))) {
       LOG_WARN("failed to allocate dir id for temp row store", K(ret));
     } else if (OB_FAIL(merge_inputs_.push_back(local_input))) {
-      LOG_WARN("fail push back MergeSortInput", K(ret));
     } else {
       out_msi = local_input;
     }
@@ -841,7 +807,6 @@ int ObPxMSReceiveVecOp::get_all_rows_from_channels(ObPhysicalPlanCtx *phy_plan_c
       Compare cmp_fun(MY_SPEC.all_exprs_);
       const ObCompactRow *last_store_row = nullptr;
       if (OB_FAIL(cmp_fun.init(&MY_SPEC.sort_collations_, &MY_SPEC.sort_cmp_funs_))) {
-        LOG_WARN("failed to init cmp function", K(ret));
       }
       // Each channel's data is local sort, so it is necessary to segment which part is ordered, and at the same time generate MergeSortInput information
       while (OB_SUCC(ret) && !finish_) {
@@ -856,7 +821,6 @@ int ObPxMSReceiveVecOp::get_all_rows_from_channels(ObPhysicalPlanCtx *phy_plan_c
             // If no data fetch, then return OB_DTL_WAIT_EAGAIN after OB_ITER_END
             ret = OB_SUCCESS;
             if (OB_FAIL(ctx_.check_status())) {
-              LOG_WARN("check status failed", K(ret));
             }
           }
         }
@@ -871,9 +835,7 @@ int ObPxMSReceiveVecOp::get_all_rows_from_channels(ObPhysicalPlanCtx *phy_plan_c
                                                         get_spec().max_batch_size_,
                                                         read_rows,
                                                         vector_rows_))) {
-            LOG_WARN("get row from reader failed", K(ret));
           } else if (OB_FAIL(eval_all_exprs(read_rows))) {
-            LOG_WARN("eval all exprs failed", K(ret));
           } else if (0 > got_channel_idx) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("invalid channel idx", K(got_channel_idx), K(ret));
@@ -906,7 +868,6 @@ int ObPxMSReceiveVecOp::get_all_rows_from_channels(ObPhysicalPlanCtx *phy_plan_c
               }
               if (OB_FAIL(ret)) {
               } else if (OB_FAIL(cmp_fun.ret_)) {
-                LOG_WARN("fail split new group", K(got_channel_idx), K(ret));
               } else if (is_new_group) {
                 // rows in [start_idx, cur_idx) belong to the last group.
                 int64_t store_row_cnt = NULL == cur_temp_store ? 0 : cur_temp_store->get_row_cnt();
@@ -917,11 +878,9 @@ int ObPxMSReceiveVecOp::get_all_rows_from_channels(ObPhysicalPlanCtx *phy_plan_c
                     ret = OB_ERR_UNEXPECTED;
                     LOG_WARN("last temp store should not be null", K(ret));
                   } else if (OB_FAIL(process_dump(full_dump_array, temp_store_array))) {
-                    LOG_WARN("failed to process dump", K(ret), K(got_channel_idx));
                   } else if (OB_FAIL(cur_temp_store->add_batch(all_expr_vectors_, &selector_[start_idx],
                                      cur_idx - start_idx,
                                      const_cast<ObCompactRow **>(stored_compact_rows_)))) {
-                    LOG_WARN("temp row store add batch failed", K(ret));
                   } else {
                     start_idx = cur_idx;
                   }
@@ -936,7 +895,6 @@ int ObPxMSReceiveVecOp::get_all_rows_from_channels(ObPhysicalPlanCtx *phy_plan_c
                   ret = OB_ERR_UNEXPECTED;
                   LOG_WARN("too much local order inputs", K(ret));
                 } else if (OB_FAIL(new_local_order_input(new_msi))) {
-                  LOG_WARN("failed to create new local order input", K(ret));
                 } else {
                   LocalOrderInput *local_msi = static_cast<LocalOrderInput*>(new_msi);
                   cur_temp_store = &local_msi->row_store_;
@@ -950,11 +908,9 @@ int ObPxMSReceiveVecOp::get_all_rows_from_channels(ObPhysicalPlanCtx *phy_plan_c
             if (OB_SUCC(ret) && OB_LIKELY(cur_idx > start_idx)) {
               // store remaining rows of this batch
               if (OB_FAIL(process_dump(full_dump_array, temp_store_array))) {
-                LOG_WARN("failed to process dump", K(ret), K(got_channel_idx));
               } else if (OB_FAIL(cur_temp_store->add_batch(all_expr_vectors_, &selector_[start_idx],
                                      cur_idx - start_idx,
                                      const_cast<ObCompactRow **>(stored_compact_rows_)))) {
-                LOG_WARN("temp row store add batch failed", K(ret));
               } else {
                 last_store_row = stored_compact_rows_[cur_idx - start_idx - 1];
                 last_store_row_array.at(got_channel_idx) = last_store_row;
@@ -974,7 +930,6 @@ int ObPxMSReceiveVecOp::get_all_rows_from_channels(ObPhysicalPlanCtx *phy_plan_c
       } else if (OB_FAIL(row_heap_.init(merge_inputs_.count(),
           &MY_SPEC.sort_collations_,
           &MY_SPEC.sort_cmp_funs_))) {
-        LOG_WARN("fail to init row heap", K(ret));
       } else {
         row_heap_.set_row_meta(cur_temp_store->get_row_meta());
         // TODO: shanting store row_meta_ more gracefully
@@ -982,10 +937,7 @@ int ObPxMSReceiveVecOp::get_all_rows_from_channels(ObPhysicalPlanCtx *phy_plan_c
         for (int64_t i = 0; i < merge_inputs_.count() && OB_SUCC(ret); ++i) {
           LocalOrderInput *local_order_input = static_cast<LocalOrderInput*>(merge_inputs_.at(i));
           if (OB_FAIL(local_order_input->row_store_.finish_add_row())) {
-            LOG_WARN("failed to finish add row", K(ret));
-          // open when initializing reader_, subsequent get_row will directly fetch rows from reader_.
           } else if (OB_FAIL(local_order_input->open())) {
-            LOG_WARN("failed to open local order input", K(ret));
           }
         }
       }
@@ -1008,9 +960,7 @@ int ObPxMSReceiveVecOp::eval_all_exprs(const int64_t size)
     for (int64_t i = 0; i < all_exprs.count() && OB_SUCC(ret); i++) {
       ObExpr *expr = all_exprs.at(i);
       if (OB_FAIL(expr->eval_vector(eval_ctx_, *skip_, bound))) {
-        LOG_WARN("eval failed", K(ret));
       } else if (OB_FAIL(all_expr_vectors_.push_back(expr->get_vector(eval_ctx_)))) {
-        LOG_WARN("push back failed", K(ret));
       }
     }
   }
@@ -1032,14 +982,12 @@ int ObPxMSReceiveVecOp::try_link_channel()
         interrupt_proc_);
     metric_.set_id(MY_SPEC.id_);
     if (OB_FAIL(ret)) {
-      LOG_WARN("Fail to init channel", K(ret));
     } else if (!MY_SPEC.local_order_
         && OB_FAIL(row_heap_.init(get_channel_count(),
           &MY_SPEC.sort_collations_,
           &MY_SPEC.sort_cmp_funs_))) {
       LOG_WARN("Row heap init failed", "count", get_channel_count(), K(ret));
     } else if (OB_FAIL(init_merge_sort_input(get_channel_count()))) {
-      LOG_WARN("Merge sort input init failed", K(ret));
     }
   }
   return ret;
@@ -1054,16 +1002,13 @@ int ObPxMSReceiveVecOp::inner_rescan()
   output_iter_.reset();
   output_store_.reset();
   if (OB_FAIL(ObPxReceiveOp::inner_rescan())) {
-    LOG_WARN("fail to do receive op rescan", K(ret));
   } else if (!MY_SPEC.local_order_
              && OB_FAIL(row_heap_.init(get_channel_count(),
                                        &MY_SPEC.sort_collations_,
                                        &MY_SPEC.sort_cmp_funs_))) {
     LOG_WARN("Row heap init failed", "count", get_channel_count(), K(ret));
   } else if (OB_FAIL(release_merge_inputs())) {
-    LOG_WARN("fail to release merge sort input", K(ret));
   } else if (OB_FAIL(init_merge_sort_input(task_channels_.count()))) {
-    LOG_WARN("Merge sort input init failed", K(ret));
   }
   return ret;
 }
@@ -1078,9 +1023,7 @@ int ObPxMSReceiveVecOp::process_dump(const common::ObIArray<ObTempRowStore *> &f
       &mem_context_->get_malloc_allocator(),
       [&](int64_t cur_cnt){ return processed_cnt_ > cur_cnt; },
       updated))) {
-    LOG_WARN("failed to update max available memory size periodically", K(ret));
   } else if (OB_FAIL(MergeSortInput::need_dump(sql_mem_processor_, mem_context_->get_malloc_allocator(), dumped))) {
-    LOG_WARN("failed to extend max memory size", K(ret));
   } else if (dumped) {
     for (int64_t i = 0; OB_SUCC(ret) && i < full_dump_array.count(); ++i) {
       CK (OB_NOT_NULL(full_dump_array.at(i)));
@@ -1111,7 +1054,6 @@ int ObPxMSReceiveVecOp::GlobalOrderInput::process_dump(ObPxMSReceiveVecOp &ms_re
       alloc_,
       [&](int64_t cur_cnt){ return processed_cnt_ > cur_cnt; },
       updated))) {
-    LOG_WARN("failed to update max available memory size periodically", K(ret));
   } else if (need_dump(*sql_mem_processor_, *alloc_, dumped)) {
     LOG_WARN("failed to extend max memory size", K(ret));
   } else if (dumped) {
@@ -1184,7 +1126,6 @@ bool ObPxMSReceiveVecOp::Compare::operator()(const ObCompactRow *l,
       const ObObjMeta &obj_meta = expr->obj_meta_;
       if (OB_FAIL(cmp_func(obj_meta, obj_meta, l_datum.ptr_, l_datum.len_, l_datum.is_null(),
                       r_data, r_len, vec->is_null(r_idx), cmp))) {
-        LOG_WARN("failed to compare", K(ret));
       } else if (cmp < 0) {
         less = !sort_collations_->at(i).is_ascending_;
       } else if (cmp > 0) {
@@ -1226,7 +1167,6 @@ bool ObPxMSReceiveVecOp::Compare::operator()(const common::ObIArray<ObIVector *>
       vec->get_payload(r_idx, r_data, r_len);
       if (OB_FAIL(cmp_func(obj_meta, obj_meta, l_data, l_len, vec->is_null(l_idx),
                            r_data, r_len, vec->is_null(r_idx), cmp))) {
-        LOG_WARN("failed to compare", K(ret));
       } else if (cmp < 0) {
         less = !sort_collations_->at(i).is_ascending_;
       } else if (cmp > 0) {

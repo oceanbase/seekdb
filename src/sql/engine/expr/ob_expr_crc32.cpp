@@ -64,7 +64,6 @@ int ObExprCrc32::calc_crc32_expr(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& re
   ObDatum* s_datum = NULL;
   const ObDatumMeta &datum_meta = expr.args_[0]->datum_meta_;
   if (OB_FAIL(expr.args_[0]->eval(ctx, s_datum))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else if (s_datum->is_null()) {
     res_datum.set_null();
   } else if (!ob_is_text_tc(datum_meta.type_)) {
@@ -76,7 +75,6 @@ int ObExprCrc32::calc_crc32_expr(const ObExpr& expr, ObEvalCtx& ctx, ObDatum& re
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *s_datum,
                 datum_meta, expr.args_[0]->obj_meta_.has_lob_header(), str_val))) {
-      LOG_WARN("get string data failed", K(ret));
     } else {
       calc_crc32_inner(str_val, res_datum);
     }

@@ -43,7 +43,6 @@ int ObSysDDLReplicaBuilderUtil::push_task(ObAsyncTask &task)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("sys ddl scheduler service is null", KR(ret), KP(sys_ddl_scheduler));
       } else if (OB_FAIL(sys_ddl_scheduler->get_ddl_builder().push_task(task))) {
-        LOG_WARN("add task to ddl builder failed", KR(ret));
       }
     }
   }

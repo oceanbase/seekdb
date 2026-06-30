@@ -150,7 +150,6 @@ int ObJsonBuilder::add_array_field(Value *obj, const ObString &key, Value *&arra
     Pair *pair = nullptr;
     
     if (OB_FAIL(create_array(array))) {
-      LOG_WARN("failed to create array", K(ret));
     } else if (OB_ISNULL(pair = (Pair*)allocator_.alloc(sizeof(Pair)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc pair", K(ret));
@@ -252,7 +251,6 @@ int ObJsonReaderHelper::get_object_value(const ObIJsonBase *obj, const ObString 
     LOG_WARN("json node is not an object", K(ret));
   } else {
     if (OB_FAIL(obj->get_object_value(key, value))) {
-      LOG_WARN("failed to get object value", K(ret), K(key)); 
     } else if (OB_ISNULL(value)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("object value is null", K(ret), K(key));
@@ -274,7 +272,6 @@ int ObJsonReaderHelper::get_array_element(const ObIJsonBase *array, uint64_t ind
     ret = OB_ARRAY_OUT_OF_RANGE;
     LOG_WARN("array index out of range", K(ret), K(index), K(array->element_count()));
   } else if (OB_FAIL(array->get_array_element(index, element))) {
-    LOG_WARN("failed to get array element", K(ret), K(index));
   } else if (OB_ISNULL(element)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("array element is null", K(ret), K(index));
@@ -309,7 +306,6 @@ int ObJsonReaderHelper::get_float_value(const ObIJsonBase *element, float &value
       char decimal_buf[512];
       int64_t pos = 0;
       if (OB_FAIL(decimal_val.format(decimal_buf, sizeof(decimal_buf), pos, -1))) {
-        LOG_WARN("failed to format decimal", K(ret));
       } else {
         decimal_buf[pos] = '\0';
         value = static_cast<float>(atof(decimal_buf));

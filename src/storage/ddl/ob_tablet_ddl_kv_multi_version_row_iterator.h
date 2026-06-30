@@ -80,7 +80,6 @@ public:
         ret = OB_INVALID_ARGUMENT;
         STORAGE_LOG(WARN, "invalid rowkey cnt", K(ret), KPC(rowkey), K(column_count));
       } else if (OB_FAIL(not_exist_row_.init(*context.get_range_allocator(), column_count))) {
-        STORAGE_LOG(WARN, "fail to init datum row", K(ret));
       } else {
         not_exist_row_.row_flag_.reset();
         not_exist_row_.row_flag_.set_flag(ObDmlFlag::DF_NOT_EXIST);
@@ -152,7 +151,6 @@ public:
       base_rowkeys_ = reinterpret_cast<const ObIArray<ObDatumRowkey> *>(query_range);
       const int64_t column_count = param.get_out_col_cnt();
       if (OB_FAIL(not_exist_row_.init(*context.get_range_allocator(), column_count))) {
-        STORAGE_LOG(WARN, "fail to init datum row", K(ret));
       } else {
         not_exist_row_.row_flag_.reset();
         not_exist_row_.row_flag_.set_flag(ObDmlFlag::DF_NOT_EXIST);
@@ -215,7 +213,6 @@ private:
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "unexpected ddl memtable is null", K(ret));
       } else if (OB_FAIL(iterator_.init(param_, context_, ddl_memtable, query_range_))) {
-        STORAGE_LOG(WARN, "fail to init iterator", K(ret));
       }
       return ret;
     }
@@ -262,7 +259,6 @@ public:
       IteratorInitializer initializer(iterator_, param, context, query_range);
       bool can_access = false;
       if (OB_FAIL(ddl_kv->check_can_access(context, can_access))) {
-        STORAGE_LOG(WARN, "fail to check ddl kv can access", KR(ret));
       } else if (!can_access) {
         is_empty_ = true;
       } else if (OB_FAIL(ddl_kv->access_first_ddl_memtable(initializer))) {
@@ -275,7 +271,6 @@ public:
       }
       if (OB_SUCC(ret) && is_empty_) {
         if (OB_FAIL(empty_iterator_.init(param, context, nullptr, query_range))) {
-          STORAGE_LOG(WARN, "fail to init empty ddl memtable", K(ret));
         }
       }
     }

@@ -33,11 +33,8 @@ int ObTextTaaTIter::init(const ObTextTaaTParam &param)
     LOG_WARN("unexpected null pointer in param", K(ret), KP_(param.base_param),
              KP_(param.dim_iter), KP_(param.allocator));
   } else if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, mem_param))) {
-    LOG_WARN("failed to create text taat iter memory context", K(ret));
   } else if (OB_FAIL(ObSRTaaTIterImpl::init(*param.base_param_, *param.dim_iter_, *param.allocator_))) {
-    LOG_WARN("failed to init sr taat iter", K(ret));
   } else if (OB_FAIL(bm25_param_estimator_.init(param.bm25_param_est_ctx_))) {
-    LOG_WARN("failed to init bm25 param estimator", K(ret));
   } else {
     query_tokens_ = param.query_tokens_;
     mode_flag_ = param.mode_flag_;
@@ -73,7 +70,6 @@ int ObTextTaaTIter::pre_process()
     if (!is_first_estimation) {
       // skip
     } else if (OB_FAIL(bm25_param_estimator_.do_estimation(*iter_param_->eval_ctx_))) {
-      LOG_WARN("failed to do bm25 param estimation", K(ret));
     } else {
       const int64_t total_doc_cnt = bm25_param_estimator_.get_total_doc_cnt();
       partition_cnt_ = MIN((total_doc_cnt-1) / OB_HASHMAP_DEFAULT_SIZE + 1, OB_MAX_HASHMAP_COUNT);
@@ -93,7 +89,6 @@ int ObTextTaaTIter::update_dim_iter(const int64_t dim_idx)
   } else if (FALSE_IT(mem_context_->reset_remain_one_page())) {
   } else if (OB_FAIL(static_cast<ObTextRetrievalTokenIter *>(dim_iter_)
       ->update_scan_param(query_tokens_->at(dim_idx), mem_context_->get_arena_allocator()))) {
-    LOG_WARN("failed to update scan param of dim iter", K(ret));
   }
   return ret;
 }

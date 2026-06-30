@@ -180,7 +180,6 @@ public:
     int ret = OB_SUCCESS;
     if (size > vec_.size()) {
       if (OB_FAIL(vec_.prepare_allocate(size))) {
-        OB_LOG(WARN, "failed to resize ObGeomVector", K(ret), K(size));
       }
     } else {
       while (size != vec_.size()) {

@@ -63,7 +63,6 @@ int ObPartGetter::get_part_ids(const common::ObString &part_name,
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("get null subpartition", K(ret));
               } else if (OB_FAIL(part_ids.push_back(subpart->get_sub_part_id()))) {
-                LOG_WARN("failed to push back subpart id", K(ret));
               }
             }
             if (OB_LIKELY(OB_ITER_END == ret)) {
@@ -71,7 +70,6 @@ int ObPartGetter::get_part_ids(const common::ObString &part_name,
             }
           } else if (OB_FAIL(part_ids.push_back(PARTITION_LEVEL_ZERO == table_.get_part_level() ?
                                                 table_.get_object_id() : part->get_part_id()))) {
-            LOG_WARN("failed to push back part id", K(ret));
           }
         } else if (PARTITION_LEVEL_TWO == part_level &&
                    OB_FAIL(get_subpart_ids_in_partition(part_name, *part, part_ids, find))) {
@@ -111,7 +109,6 @@ int ObPartGetter::get_subpart_ids(const common::ObString &part_name,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get null partition", K(ret));
       } else if (OB_FAIL(get_subpart_ids_in_partition(part_name, *part, part_ids, find))) {
-        LOG_WARN("failed to get subpart ids in partition", K(ret));
       }
     }
     if (!find && OB_ITER_END == ret) {
@@ -144,7 +141,6 @@ int ObPartGetter::get_subpart_ids_in_partition(const common::ObString &part_name
       LOG_DEBUG("cmp part name", K(cmp_part_name));
       if (ObCharset::case_insensitive_equal(part_name, cmp_part_name)) {
         if (OB_FAIL(part_ids.push_back(subpart->get_sub_part_id()))) {
-          LOG_WARN("failed to push back subpart id", K(ret));
         } else {
           find = true;
         }
@@ -183,7 +179,6 @@ int ObPartIterator::next(const ObPartition *&part)
         ObString part_name(
                            ObPartitionSchema::MYSQL_NON_PARTITIONED_TABLE_PART_NAME);
         if (OB_FAIL(part_.set_part_name(part_name))) {
-          LOG_WARN("fail to set part name", KR(ret), K(part_name));
         } else {
           part_.set_part_id(0);
           part = &part_;

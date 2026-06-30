@@ -68,7 +68,6 @@ int ObExprMapComponents::calc_map_components_result_type(ObExprResType &type,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid input type", K(ret));
   } else if (OB_FAIL(exec_ctx->get_sqludt_meta_by_subschema_id(type1.get_subschema_id(), map_meta))) {
-    LOG_WARN("failed to get elem meta.", K(ret), K(type1.get_subschema_id()));
   } else if (map_meta.type_ != ObSubSchemaType::OB_SUBSCHEMA_COLLECTION_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("invalid subschema type", K(ret), K(map_meta.type_));
@@ -85,7 +84,6 @@ int ObExprMapComponents::calc_map_components_result_type(ObExprResType &type,
     } else if (!is_key && OB_FAIL(coll_info->get_map_attr_def_string(tmp_allocator, attr_def, true))) {
       LOG_WARN("failed to get map value define", K(ret), K(*coll_info));
     } else if (OB_FAIL(exec_ctx->get_subschema_id_by_type_string(attr_def, component_subid))) {
-      LOG_WARN("failed to get type1 key subschema id", K(ret), K(*coll_info), K(attr_def));
     } else {
       type.set_collection(component_subid);
       type.set_length((ObAccuracy::DDL_DEFAULT_ACCURACY[ObCollectionSQLType]).get_length());
@@ -106,17 +104,14 @@ int ObExprMapComponents::eval_map_components(const ObExpr &expr, ObEvalCtx &ctx,
   if (ob_is_null(expr.obj_meta_.get_type())) {
     res.set_null();
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, map_datum))) {
-    LOG_WARN("failed to eval source map", K(ret));
   } else if (map_datum->is_null()) {
     res.set_null();
   } else {
     ObString map_blob = map_datum->get_string();
     if (OB_FAIL(get_map_components_arr(tmp_allocator, ctx, map_blob, arr_res, res_subschema_id, subschema_id, is_key))) {
-      LOG_WARN("failed to get map key array", K(ret));
     } else {
       ObString res_str;
       if (OB_FAIL(ObArrayExprUtils::set_array_res(arr_res, arr_res->get_raw_binary_len(), expr, ctx, res_str))) {
-        LOG_WARN("get key array binary string failed", K(ret));
       } else {
         res.set_string(res_str);
       }
@@ -138,7 +133,6 @@ int ObExprMapComponents::eval_map_components_vector(const ObExpr &expr,
   uint16_t subschema_id = expr.args_[0]->obj_meta_.get_subschema_id();
 
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval source map failed", K(ret));
   } else {
     ObIVector *map_vec = expr.args_[0]->get_vector(ctx);
     ObIVector *res_vec = expr.get_vector(ctx);
@@ -156,7 +150,6 @@ int ObExprMapComponents::eval_map_components_vector(const ObExpr &expr,
       } else {
         ObString map_blob = map_vec->get_string(idx);
         if (OB_FAIL(get_map_components_arr(tmp_allocator, ctx, map_blob, res_arr, res_subschema_id, subschema_id, is_key))) {
-          LOG_WARN("failed to get map key array", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -164,14 +157,11 @@ int ObExprMapComponents::eval_map_components_vector(const ObExpr &expr,
         res_vec->set_null(idx);
       } else if (res_format == VEC_DISCRETE) {
         if (OB_FAIL(ObArrayExprUtils::set_array_res<ObDiscreteFormat>(res_arr, expr, ctx, static_cast<ObDiscreteFormat *>(res_vec), idx))) {
-          LOG_WARN("set array res failed", K(ret));
         }
       } else if (res_format == VEC_UNIFORM) {
         if (OB_FAIL(ObArrayExprUtils::set_array_res<ObUniformFormat<false>>(res_arr, expr, ctx, static_cast<ObUniformFormat<false> *>(res_vec), idx))) {
-          LOG_WARN("set array res failed", K(ret));
         }
       } else if (OB_FAIL(ObArrayExprUtils::set_array_res<ObVectorBase>(res_arr, expr, ctx, static_cast<ObVectorBase *>(res_vec), idx))) {
-        LOG_WARN("set array res failed", K(ret));
       } 
     } // end for
   }
@@ -194,7 +184,6 @@ int ObExprMapComponents::get_map_components_arr(ObIAllocator &tmp_allocator,
   ObIArrayType *map_obj = NULL;
 
   if (OB_FAIL(ctx.exec_ctx_.get_sqludt_meta_by_subschema_id(subschema_id, value))) {
-    LOG_WARN("failed to get subschema ctx", K(ret));
   } else if (value.type_ >= OB_SUBSCHEMA_MAX_TYPE) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid subschema type", K(ret), K(value));
@@ -208,16 +197,13 @@ int ObExprMapComponents::get_map_components_arr(ObIAllocator &tmp_allocator,
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("map type is null", K(ret), K(subschema_id));
   } else if (OB_FAIL(ObArrayTypeObjFactory::construct(tmp_allocator, *map_type, map_obj, true))) {
-    LOG_WARN("construct map obj failed", K(ret), K(subschema_id), K(coll_info));
   } else {
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(&tmp_allocator,
                                                           ObLongTextType,
                                                           CS_TYPE_BINARY,
                                                           true,
                                                           map_blob))) {
-      LOG_WARN("fail to get real data.", K(ret), K(map_blob));
     } else if (OB_FAIL(dynamic_cast<ObMapType *>(map_obj)->init(map_blob))) {
-      LOG_WARN("failed to get map obj", K(ret));
     } else {
       if (is_key){
         arr_res = dynamic_cast<ObMapType *>(map_obj)->get_key_array();

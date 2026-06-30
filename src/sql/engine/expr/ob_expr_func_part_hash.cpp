@@ -130,7 +130,6 @@ int ObExprFuncPartHash::calc_hash_value_with_seed(const ObObj &obj, int64_t seed
     // oracle hash test
     if (OB_FAIL(common::ObCharset::trim_end_of_str(obj1_str, val_len, real_end,
                                                    ObCharset::charset_type_by_coll(obj.get_collation_type())))){
-      LOG_WARN("fail to trim end of str", K(ret));
     } else if (OB_ISNULL(real_end)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null ptr", K(ret));
@@ -143,7 +142,6 @@ int ObExprFuncPartHash::calc_hash_value_with_seed(const ObObj &obj, int64_t seed
         obj_trimmed.set_collation_type(obj.get_collation_type());
         obj_trimmed.set_string(ObCharType, obj.get_string_ptr(), val_len);
         if (OB_FAIL(obj_trimmed.hash_murmur(res, seed))) {
-          LOG_WARN("fail to do hash", K(ret));
         }
       }
     }
@@ -151,7 +149,6 @@ int ObExprFuncPartHash::calc_hash_value_with_seed(const ObObj &obj, int64_t seed
     ret = wide::PartitionHash<ObMurmurHash, ObObj>::calculate(obj, seed, res);
   } else {
     if (OB_FAIL(obj.hash_murmur(res, seed))) {
-      LOG_WARN("fail to do hash", K(ret));
     }
   }
   return ret;
@@ -222,11 +219,9 @@ int ObExprFuncPartHash::eval_part_hash(
   // for mysql, see calc_value_for_mysql
   ObDatum *arg0 = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg0))) {
-    LOG_WARN("evaluate parameter failed", K(ret));
   } else if (arg0->is_null()) {
     expr_datum.set_int(0);
   } else if (OB_FAIL(calc_value_for_mysql(*arg0, expr_datum, expr.args_[0]->datum_meta_.type_))) {
-    LOG_WARN("calc value for mysql failed", K(ret));
   }
   return ret;
 }

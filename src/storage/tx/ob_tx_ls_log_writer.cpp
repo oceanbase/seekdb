@@ -120,7 +120,6 @@ int ObTxLSLogCb::on_success()
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "[TxLsLogWriter] invalid arguments", KP(base_wr_));
   } else if (OB_FAIL(base_wr_->on_success(this))) {
-    TRANS_LOG(WARN, "[TxLsLogWriter] on_success failed", KR(ret), K(log_ts_), K(type_));
   }
   return ret;
 }
@@ -133,7 +132,6 @@ int ObTxLSLogCb::on_failure()
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "[TxLsLogWriter] invalid arguments", KP(base_wr_));
   } else if (OB_FAIL(base_wr_->on_failure(this))) {
-    TRANS_LOG(WARN, "[TxLsLogWriter] on_failure failed", KR(ret), K(log_ts_), K(type_));
   }
   return ret;
 }
@@ -181,7 +179,6 @@ int ObTxLSLogWriter::init(const ObLSID &ls_id,
     ObTxLSLogLimit::decide_log_buf_size();
     while (free_cbs_.get_size() < DEFAULT_LOG_CB_CNT && OB_SUCC(ret)) {
       if (OB_FAIL(append_free_log_cb_())) {
-        TRANS_LOG(WARN, "init free log cb error", KR(ret));
       }
     }
   }
@@ -241,7 +238,6 @@ int ObTxLSLogWriter::submit_start_working_log(const int64_t &leader_epoch, SCN &
 
   ObTxStartWorkingLog sw_log(leader_epoch);
   if (OB_FAIL(submit_ls_log_(sw_log, logservice::ObReplayBarrierType::STRICT_BARRIER, false, log_ts))) {
-    TRANS_LOG(WARN, "[TxLsLogWriter] submit start working log failed", KR(ret));
   }
 
   return ret;
@@ -258,7 +254,6 @@ int ObTxLSLogWriter::on_success(ObTxLSLogCb *cb)
   switch (log_type) {
   case ObTxLogType::TX_START_WORKING_LOG: {
     if (OB_FAIL(ctx_mgr_->on_start_working_log_cb_succ(cb->get_log_ts()))) {
-      TRANS_LOG(WARN, "start working log callback failed", KR(ret));
     }
     break;
   }
@@ -269,8 +264,6 @@ int ObTxLSLogWriter::on_success(ObTxLSLogCb *cb)
   }
   return_log_cb_(cb);
   if (OB_FAIL(ret)) {
-    TRANS_LOG(WARN, "[TxLsLogWriter] on success", KR(ret), K(cb->get_log_type()),
-              K(cb->get_log_ts()));
   }
   return ret;
 }
@@ -286,7 +279,6 @@ int ObTxLSLogWriter::on_failure(ObTxLSLogCb *cb)
   switch (log_type) {
   case ObTxLogType::TX_START_WORKING_LOG: {
     if (OB_FAIL(ctx_mgr_->on_start_working_log_cb_fail())) {
-      TRANS_LOG(WARN, "start working log callback failed", KR(ret));
     }
     break;
   }

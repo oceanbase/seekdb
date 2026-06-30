@@ -80,13 +80,10 @@ int ObDirectLoadExternalMultiPartitionTableBuilder::init(
   } else {
     param_ = param;
     if (OB_FAIL(alloc_tmp_file())) {
-      LOG_WARN("fail to alloc tmp file", KR(ret));
     } else if (OB_FAIL(external_writer_.init(param_.table_data_desc_.external_data_block_size_,
                                              param_.table_data_desc_.compressor_type_,
                                              param_.extra_buf_, param_.extra_buf_size_))) {
-      LOG_WARN("fail to init external writer", KR(ret));
     } else if (OB_FAIL(external_writer_.open(file_handle_))) {
-      LOG_WARN("fail to open file", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -113,16 +110,13 @@ int ObDirectLoadExternalMultiPartitionTableBuilder::append_row(const ObTabletID 
     row_.tablet_id_ = tablet_id;
     if (OB_FAIL(row_.external_row_.from_datum_row(datum_row,
                                                   param_.table_data_desc_.rowkey_column_num_))) {
-      LOG_WARN("fail to from datums", KR(ret));
     } else if (OB_FAIL(external_writer_.write_item(row_))) {
-      LOG_WARN("fail to write item", KR(ret));
     } else {
       ++fragment_row_count_;
       ++total_row_count_;
     }
     if (OB_SUCC(ret) && (external_writer_.get_file_size() >= MAX_TMP_FILE_SIZE)) {
       if (OB_FAIL(switch_fragment())) {
-        LOG_WARN("fail to switch fragment", KR(ret));
       }
     }
   }
@@ -134,9 +128,7 @@ int ObDirectLoadExternalMultiPartitionTableBuilder::alloc_tmp_file()
   int ret = OB_SUCCESS;
   int64_t dir_id = -1;
   if (OB_FAIL(param_.file_mgr_->alloc_dir(dir_id))) {
-    LOG_WARN("fail to alloc dir", KR(ret));
   } else if (OB_FAIL(param_.file_mgr_->alloc_file(dir_id, file_handle_))) {
-    LOG_WARN("fail to alloc file", KR(ret));
   }
   return ret;
 }
@@ -149,9 +141,7 @@ int ObDirectLoadExternalMultiPartitionTableBuilder::generate_fragment()
   fragment.row_count_ = fragment_row_count_;
   fragment.max_data_block_size_ = external_writer_.get_max_block_size();
   if (OB_FAIL(fragment.file_handle_.assign(file_handle_))) {
-    LOG_WARN("fail to assign file handle", KR(ret));
   } else if (OB_FAIL(fragment_array_.push_back(fragment))) {
-    LOG_WARN("fail to push back fragment", KR(ret));
   } else if (max_data_block_size_ < fragment.max_data_block_size_) {
     max_data_block_size_ = fragment.max_data_block_size_;
   }
@@ -162,15 +152,11 @@ int ObDirectLoadExternalMultiPartitionTableBuilder::switch_fragment()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(external_writer_.close())) {
-    LOG_WARN("fail to close external writer", KR(ret));
   } else if (OB_FAIL(generate_fragment())) {
-    LOG_WARN("fail to generate fragment", KR(ret));
   } else if (OB_FAIL(alloc_tmp_file())) {
-    LOG_WARN("fail to alloc tmp file", KR(ret));
   } else {
     external_writer_.reuse();
     if (OB_FAIL(external_writer_.open(file_handle_))) {
-      LOG_WARN("fail to open file", KR(ret));
     } else {
       fragment_row_count_ = 0;
     }
@@ -188,10 +174,8 @@ int ObDirectLoadExternalMultiPartitionTableBuilder::close()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("direct load external multi partition table is closed", KR(ret));
   } else if (OB_FAIL(external_writer_.close())) {
-    LOG_WARN("fail to close external writer", KR(ret));
   } else if ((fragment_row_count_ > 0) || fragment_array_.empty()) {
     if (OB_FAIL(generate_fragment())) {
-      LOG_WARN("failed to generate fragment", KR(ret));
     } else {
       fragment_row_count_ = 0;
     }
@@ -221,17 +205,13 @@ int ObDirectLoadExternalMultiPartitionTableBuilder::get_tables(
     create_param.row_count_ = total_row_count_;
     create_param.max_data_block_size_ = max_data_block_size_;
     if (OB_FAIL(create_param.fragments_.assign(fragment_array_))) {
-      LOG_WARN("fail to assign fragment array", KR(ret), K(fragment_array_));
     } else {
       ObDirectLoadTableHandle table_handle;
       ObDirectLoadExternalTable *external_table = nullptr;
       if (OB_FAIL(table_manager->alloc_external_table(table_handle))) {
-        LOG_WARN("fail to alloc external table", KR(ret));
       } else if (FALSE_IT(external_table = static_cast<ObDirectLoadExternalTable*>(table_handle.get_table()))) {
       } else if (OB_FAIL(external_table->init(create_param))) {
-        LOG_WARN("fail to init external table", KR(ret));
       } else if (OB_FAIL(table_array.add(table_handle))) {
-        LOG_WARN("fail to add table handle", KR(ret));
       }
     }
   }

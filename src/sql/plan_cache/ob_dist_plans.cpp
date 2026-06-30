@@ -78,7 +78,6 @@ int ObDistPlans::get_plan(ObPlanCacheCtx &pc_ctx,
       } else if (OB_FAIL(ObPhyLocationGetter::get_phy_locations(plan->get_table_locations(),
                                                                 pc_ctx,
                                                                 candi_table_locs))) {
-        LOG_WARN("failed to get physical table locations", K(ret));
       } else if (candi_table_locs.empty()) {
         // do nothing.
       } else if (!pc_ctx.try_get_plan_
@@ -102,7 +101,6 @@ int ObDistPlans::get_plan(ObPlanCacheCtx &pc_ctx,
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(tmp_plan));
     } else if (OB_FAIL(helper.match_plan(pc_ctx, tmp_plan, is_matched, phy_tbl_infos, out_tbl_locations))) {
-      LOG_WARN("fail to match dist plan", K(ret));
     } else if (is_matched) {
       if (!is_plan_available(*tmp_plan, pc_ctx)) {
         is_matched = false;
@@ -144,7 +142,6 @@ int ObDistPlans::add_plan(ObPhysicalPlan &plan,
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(tmp_plan));
     } else if (OB_FAIL(helper.match_plan(pc_ctx, tmp_plan, is_matched, phy_tbl_infos, out_tbl_locations))) {
-      LOG_WARN("fail to match dist plan", K(ret));
     } else {
       is_matched = is_matched && tmp_plan->has_same_location_constraints(plan)
                    && is_same_plan(plan, *tmp_plan, pc_ctx);
@@ -159,7 +156,6 @@ int ObDistPlans::add_plan(ObPhysicalPlan &plan,
 
   if (OB_SUCC(ret) && !is_matched) {
     if (OB_FAIL(dist_plans_.push_back(&plan))) {
-      LOG_WARN("fail to add plan", K(ret));
     }
   }
 

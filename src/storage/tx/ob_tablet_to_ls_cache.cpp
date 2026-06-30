@@ -30,7 +30,6 @@ int ObTabletToLSCache::init(ObTxCtxMgr *tx_ctx_mgr)
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(tx_ctx_mgr));
   } else if (OB_FAIL(map_.init(lib::ObMemAttr(lib::ObLabel("TabletToLS"))))) {
-    TRANS_LOG(WARN, "map init fail", KR(ret), K(tx_ctx_mgr));
   } else {
     tx_ctx_mgr_ = tx_ctx_mgr;
     is_inited_ = true;
@@ -64,16 +63,13 @@ int ObTabletToLSCache::create_tablet(const common::ObTabletID &tablet_id, const 
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(tablet_id), K(ls_id));
   } else if (OB_FAIL(tx_ctx_mgr_->get_ls_tx_ctx_mgr(ls_id, ls_tx_ctx_mgr))) {
-    TRANS_LOG(WARN, "get ls tx ctx mgr fail", KR(ret), K_(tx_ctx_mgr), K(tablet_id), K(ls_id));
   } else if (OB_ISNULL(ls_tx_ctx_mgr)) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "unexpected ls_tx_ctx_mgr is null ", KR(ret), K(tablet_id), K(ls_id));
   } else {
     if (OB_FAIL(map_.alloc_value(ls_cache))) {
-      TRANS_LOG(WARN, "alloc ls cache fail", KR(ret), K(tablet_id), K(ls_id));
     } else {
       if (OB_FAIL(ls_cache->init(tablet_id, ls_tx_ctx_mgr, tx_ctx_mgr_))) {
-        TRANS_LOG(WARN, "init ls cache fail", KR(ret), K(tablet_id), K(ls_id), KP(ls_tx_ctx_mgr));
       } else if (OB_FAIL(map_.insert(tablet_id, ls_cache))) {
         tg.click();
         if (OB_ENTRY_EXIST == ret) {
@@ -178,7 +174,6 @@ int ObTabletToLSCache::remove_ls_tablets(const share::ObLSID &ls_id)
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(ls_id));
   } else if (OB_FAIL(map_.remove_if(functor))) {
-    TRANS_LOG(ERROR, "remove ls tablets cache fail", KR(ret), K(ls_id));
   }
   TRANS_LOG(INFO, "remove ls tablets cache", KR(ret), K(ls_id));
 

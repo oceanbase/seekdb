@@ -157,7 +157,6 @@ public:
       
       alloc_.set_label("ObColumnHashSet");
       if (OB_FAIL(alloc_mem(capacity))) {
-        COMMON_LOG(WARN, "failed to alloc when init");
       } else {
         inited_ = true;
       }

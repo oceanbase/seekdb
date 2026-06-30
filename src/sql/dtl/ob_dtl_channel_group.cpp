@@ -111,7 +111,6 @@ int ObDtlChannelGroup::link_channel(const ObDtlChannelInfo &ci, ObDtlChannel *&c
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("only local dtl channel is supported", KP(chid), K(ret), K(ci.type_));
   } else if (OB_FAIL(DTL.create_local_channel(ci.chid_, ci.peer_, chan, dfc))) {
-    LOG_WARN("create local channel fail", KP(chid), K(ret));
   }
   LOG_TRACE("trace create local channel", KP(chid), K(ret), K(ci.peer_), K(ci.type_));
   return ret;

@@ -40,9 +40,7 @@ int ObPluginMgr::init(const ObString &plugin_dir)
   if (inited_) {
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(init_plugin_handle_maps(mem_attr))) {
-    LOG_WARN("failed to init plugin entry handle map", K(ret));
   } else if (OB_FAIL(plugin_handle_map_.create(DEFAULT_PLUGIN_BUCKET_NUM, mem_attr))) {
-    LOG_WARN("failed to init plugin handle map", K(ret));
   } else {
     inited_     = true;
     plugin_dir_ = plugin_dir;
@@ -63,7 +61,6 @@ int ObPluginMgr::init_plugin_handle_maps(const ObMemAttr &mem_attr)
   } else {
     for (int64_t i = 0; i < OBP_PLUGIN_TYPE_MAX && OB_SUCC(ret); i++) {
       if (OB_FAIL(entry_handle_maps_[i].create(DEFAULT_PLUGIN_BUCKET_NUM, mem_attr))) {
-        LOG_WARN("failed to init plugin handle map", K(ret));
       }
     }
   }
@@ -268,7 +265,6 @@ int ObPluginMgr::find_plugin_entry_list(ObPluginType type, const ObString &name,
   if (OB_FUNCTION_NOT_DEFINED == ret) {
     LOG_DEBUG("failed to find plugin entry list", K(type), K(name), K(ret));
   } else if (OB_FAIL(ret)) {
-    LOG_WARN("failed to find plugin entry list", K(type), K(name), K(ret));
   }
   return ret;
 }
@@ -297,7 +293,6 @@ int ObPluginMgr::register_plugin(const ObPluginEntry &plugin_entry)
       LOG_WARN("failed to allocate plugin entry list", K(ret));
     } else if (OB_FAIL(entry_handle_maps_[plugin_entry.interface_type]
                          .set_refactored(plugin_entry.name, plugin_entry_list))) {
-      LOG_WARN("failed to insert plugin entry list into plugin entry handle map", K(ret));
     }
   }
 
@@ -314,11 +309,8 @@ int ObPluginMgr::register_plugin(const ObPluginEntry &plugin_entry)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate plugin handle", K(ret));
   } else if (OB_FAIL(entry_handle->init(plugin_entry))) {
-    LOG_WARN("failed to init plugin entry handle", K(ret));
   } else if (OB_FAIL(entry_handle->init_plugin())) {
-    LOG_WARN("failed to init plugin", K(ret), KPC(entry_handle));
   } else if (OB_FAIL(plugin_entry_list->insert(entry_handle, entry_iterator, ObPluginEntry2EntryComparator()))) {
-    LOG_WARN("failed to insert plugin entry into list", K(ret), K(plugin_entry));
   } else {
     LOG_INFO("register plugin success",
              KPC(entry_handle), K(ObPluginAdaptor(plugin_entry.plugin_handle->plugin())), K(ret), KCSTRING(lbt()));
@@ -341,9 +333,7 @@ int ObPluginMgr::install_library(const ObString &dl_name)
     ret = OB_NOT_INIT;
     LOG_WARN("plugin mgr is not inited", K(ret));
   } else if (OB_FAIL(find_or_load_dl(dl_name, plugin_handle))) {
-    LOG_WARN("cannot find or load dl", K(dl_name));
   } else if (OB_FAIL(load_plugin(plugin_handle))) {
-    LOG_WARN("failed to load plugin suite", K(ret), K(dl_name));
   }
   return ret;
 }
@@ -386,13 +376,11 @@ int ObPluginMgr::find_or_load_dl(const ObString &dl_name, ObPluginHandle *&plugi
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate memory for plugin suite handle", K(ret));
     } else if (OB_FAIL(this_plugin_handle->init(this, plugin_dir_, dl_name))) {
-      LOG_WARN("failed to init suite handle", K(ret), K(dl_name));
     } else if (OB_FAIL(plugin_handle_map_.set_refactored(this_plugin_handle->name(), this_plugin_handle))) {
       LOG_WARN("failed to insert suite handle into map", K(ret), K(dl_name));
       OB_DELETE(ObPluginHandle, OB_PLUGIN_MEMORY_LABEL, this_plugin_handle);
       this_plugin_handle = nullptr;
     } else if (OB_FAIL(this_plugin_handle->valid())) {
-      LOG_WARN("suite handle is invalid", K(ret), K(dl_name));
     } else {
       plugin_handle = this_plugin_handle;
     }
@@ -413,7 +401,6 @@ int ObPluginMgr::load_builtin_plugins()
     ret = OB_NOT_INIT;
     LOG_WARN("plugin mgr is not inited", K(ret));
   } else if (OB_FAIL(plugin_register_global_plugins(builtin_plugins))) {
-    LOG_WARN("failed to get global builtin plugins", K(ret));
   } else {
     LOG_INFO("got builtin plugins", K(builtin_plugins.count()));
 
@@ -447,9 +434,7 @@ int ObPluginMgr::load_builtin_plugin(const ObBuiltinPlugin &builtin_plugin)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory for plugin suite handle", K(ret));
   } else if (OB_FAIL(plugin_handle->init(this, OBP_PLUGIN_API_VERSION_CURRENT, builtin_plugin.name, plugin))) {
-    LOG_WARN("failed to init plugin suite handle", K(ret));
   } else if (OB_FAIL(plugin_handle_map_.set_refactored(plugin_handle->name(), plugin_handle))) {
-    LOG_WARN("failed to insert suite handle into suite handle map", K(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -458,7 +443,6 @@ int ObPluginMgr::load_builtin_plugin(const ObBuiltinPlugin &builtin_plugin)
       OB_DELETE(ObPluginHandle, OB_PLUGIN_MEMORY_LABEL, plugin_handle);
     }
   } else if (OB_FAIL(load_plugin(plugin_handle))) {
-    LOG_WARN("failed load plugin in plugin suite", K(ret));
   } else {
     LOG_INFO("load plugin suite success", KPC(plugin_handle));
   }
@@ -482,7 +466,6 @@ int ObPluginMgr::load_plugin(ObPluginHandle *plugin_handle)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("plugin is invalid", K(ret), K(ObPluginAdaptor(plugin)));
   } else if (OB_FAIL(plugin->init(reinterpret_cast<ObPluginDatum>(&plugin_handle->plugin_param())))) {
-    LOG_WARN("failed to call plugin init", K(ret), K(ObPluginAdaptor(plugin)), K(plugin_handle->plugin_param()));
   } else {
     LOG_INFO("load plugin success", KPC(plugin_handle));
   }
@@ -511,7 +494,6 @@ int ObPluginMgr::load_dynamic_plugins(const ObString &plugins_load)
     const int64_t param_count = plugin_load_params.count();
     for (int64_t i = 0; i < param_count && OB_SUCC(ret); i++) {
       if (OB_FAIL(plugin_load_params.at(i, plugin_load_param))) {
-        LOG_WARN("failed to get param", K(i), K(ret));
       } else if (plugin_load_param.library_name.empty() ||
                  plugin_load_param.load_option.value() <= ObPluginLoadOption::INVALID ||
                  plugin_load_param.load_option.value() >= ObPluginLoadOption::MAX) {
@@ -556,7 +538,6 @@ public:
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("got a null plugin entry while iterate plugin entry list", K(node.first), K(ret));
         } else if (OB_FAIL(entry_array_.push_back(entry))) {
-          LOG_WARN("failed to push plugin handle pointer into array", K(ret));
         }
       }
     }
@@ -578,7 +559,6 @@ int ObPluginMgr::list_all_plugin_entries(ObIArray<ObPluginEntryHandle *> &plugin
   } else {
     for (int64_t i = 0; i < OBP_PLUGIN_TYPE_MAX && OB_SUCC(ret); i++) {
       if (OB_FAIL(entry_handle_maps_[i].foreach_refactored(collector))) {
-        LOG_WARN("failed to iterate plugin entry map", K(ret), K(i));
       }
     }
   }

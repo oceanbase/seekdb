@@ -67,7 +67,6 @@ int ObVirtualSpanInfo::inner_open()
       ret = OB_INVALID_ARGUMENT;
       SERVER_LOG(WARN, "Invalid Allocator", K(ret));
     } else if (OB_FAIL(set_ip(addr_))) {
-      SERVER_LOG(WARN, "failed to set server ip addr", K(ret));
     } else {
       // do nothing
     }
@@ -102,7 +101,6 @@ int ObVirtualSpanInfo::inner_get_next_row(common::ObNewRow *&row)
     bool is_valid = true;
     cur_flt_span_mgr_ = nullptr;
     if (OB_FAIL(check_ip_and_port(is_valid))) {
-      SERVER_LOG(WARN, "check ip and port failed", K(ret));
     } else if (!is_valid) {
       ret = OB_ITER_END;;
     }
@@ -157,7 +155,6 @@ int ObVirtualSpanInfo::inner_get_next_row(common::ObNewRow *&row)
       if (NULL != rec) {
         sql::ObFLTSpanRec *record = static_cast<sql::ObFLTSpanRec*> (rec);
         if (OB_FAIL(fill_cells(*record))) {
-          SERVER_LOG(WARN, "failed to fill cells", K(ret));
         } else {
           //finish fetch one row
           row = &cur_row_;

@@ -107,12 +107,10 @@ struct ToFloatCastImpl
           if (std::is_same<IN_TYPE, double>::value && std::is_same<OUT_TYPE, float>::value) {
             float out_val = 0.0;
             if (OB_FAIL(ObDataTypeCastUtil::common_double_float_wrap(expr, in_val, out_val))) {
-              SQL_LOG(WARN, "common_double_float_fastfloat failed", K(ret));
             }
             res_val = out_val;
           } else if (ob_is_unsigned_type(out_type_)) {
             if (CAST_FAIL(numeric_negative_check(res_val))) {
-              SQL_LOG(WARN, "numeric_negative_check failed", K(ret));
             }
           }
           if (OB_SUCC(ret)) {
@@ -128,7 +126,6 @@ struct ToFloatCastImpl
       FloatDoubleToFloatDoubleFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec);
       if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-        SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
       }
     }
     return ret;
@@ -150,7 +147,6 @@ struct ToFloatCastImpl
           if (std::is_same<IN_TYPE, int64_t>::value && ob_is_unsigned_type(out_type_)) {
             OUT_TYPE res_val = static_cast<OUT_TYPE>(static_cast<double>(arg_vec_->get_int(idx)));
             if (CAST_FAIL(numeric_negative_check(res_val))) {
-              SQL_LOG(WARN, "numeric_negative_check failed", K(ret));
             } else {
               res_vec_->set_payload(idx, &res_val, sizeof(OUT_TYPE));
             }
@@ -169,7 +165,6 @@ struct ToFloatCastImpl
       IntUIntToFloatDoubleFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec);
       if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-        SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
       }
     }
     return ret;
@@ -191,7 +186,6 @@ struct ToFloatCastImpl
           int32_t date = arg_vec_->get_date(idx);
           int64_t out_val = 0;
           if (OB_FAIL(ObTimeConverter::date_to_int(date, out_val))) {
-            SQL_LOG(WARN, "convert date to int failed", K(ret));
           } else {
             OUT_TYPE res_val = static_cast<OUT_TYPE>(out_val);
             res_vec_->set_payload(idx, &res_val, sizeof(OUT_TYPE));
@@ -206,7 +200,6 @@ struct ToFloatCastImpl
       DateToFloatDoubleFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec);
       if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-        SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
       }
     }
     return ret;
@@ -225,7 +218,6 @@ struct ToFloatCastImpl
         ret = OB_ERR_UNEXPECTED;
         SQL_LOG(WARN, "session is NULL", K(ret));
       } else if (OB_FAIL(helper.get_time_zone_info(tz_info_local))) {
-        SQL_LOG(WARN, "get time zone info failed", K(ret));
       } else {
         class DatetimeToFloatDoubleFn : public CastFnBase {
         public:
@@ -239,7 +231,6 @@ struct ToFloatCastImpl
             int ret = OB_SUCCESS;
             double dbl = 0;
             if (OB_FAIL(ObTimeConverter::datetime_to_double(arg_vec_->get_datetime(idx), tz_info_, dbl))) {
-              SQL_LOG(WARN, "datetime_to_double failed", K(ret), K(dbl));
             } else {
               OUT_TYPE out_val = dbl;
               res_vec_->set_payload(idx, &out_val, sizeof(OUT_TYPE));
@@ -257,7 +248,6 @@ struct ToFloatCastImpl
         DatetimeToFloatDoubleFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec, tz_info);
         if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-          SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
         }
       }
     }
@@ -343,13 +333,11 @@ struct ToFloatCastImpl
               float out_val_float = 0.0;
               if (OB_FAIL(ObDataTypeCastUtil::common_double_float_wrap(
                                           expr, tmp_out_val, out_val_float))) {
-                SQL_LOG(WARN, "common_double_float failed", K(ret));
               } else {
                 res_vec_->set_float(idx, out_val_float);
               }
             } else if (ob_is_unsigned_type(out_type_)) { // unsigned double
               if (CAST_FAIL(numeric_negative_check(tmp_out_val))) {
-                SQL_LOG(WARN, "numeric_negative_check failed", K(ret));
               } else {
                 res_vec_->set_double(idx, tmp_out_val);
               }
@@ -360,20 +348,17 @@ struct ToFloatCastImpl
             int64_t pos = 0;
             if (OB_FAIL(wide::to_string(arg_vec_->get_decimal_int(idx), sizeof(IN_TYPE), in_scale_,
                                         buf_, sizeof(buf_), pos))) {
-              SQL_LOG(WARN, "to_string failed", K(ret));
             } else {
               ObString num_str(pos, buf_);
               if (std::is_same<OUT_TYPE, float>::value) {
                 float out_val = 0.0;
                 if (OB_FAIL(ObDataTypeCastUtil::common_string_float_wrap(expr, num_str, out_val))) {
-                  SQL_LOG(WARN, "common_string_float failed", K(ret), K(num_str));
                 } else {
                   res_vec_->set_float(idx, out_val);
                 }
               } else {  // double
                 if (OB_FAIL(common_string_double(expr, in_type_, in_cs_type_, out_type_,
                                                 num_str, double_datum_))) {
-                  SQL_LOG(WARN, "common_string_double failed", K(ret));
                 } else {
                   double out_val = double_datum_.get_double();
                   res_vec_->set_double(idx, out_val);
@@ -397,7 +382,6 @@ struct ToFloatCastImpl
       DecimalintToFloatDoubleFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec, tmp_datum);
       if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-        SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
       }
     }
     return ret;
@@ -428,7 +412,6 @@ struct ToFloatCastImpl
             if (std::is_same<OUT_TYPE, float>::value) {
               float out_val = 0.0;
               if (OB_FAIL(ObDataTypeCastUtil::common_string_float_wrap(expr, num_str, out_val))) {
-                SQL_LOG(WARN, "common_string_float failed", K(ret), K(num_str));
               } else {
                 res_vec_->set_float(idx, out_val);
               }
@@ -436,7 +419,6 @@ struct ToFloatCastImpl
               double out_val = 0.0;
               if (OB_FAIL(common_string_double(expr, in_type_, in_cs_type_, out_type_,
                                                num_str, double_datum_))) {
-                SQL_LOG(WARN, "common_string_double failed", K(ret), K(num_str));
               } else {
                 double out_val = double_datum_.get_double();
                 res_vec_->set_double(idx, out_val);
@@ -458,7 +440,6 @@ struct ToFloatCastImpl
       NumberToFloatDoubleFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec, tmp_datum);
       if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-        SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
       }
     }
     return ret;

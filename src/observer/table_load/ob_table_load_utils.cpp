@@ -34,7 +34,6 @@ int ObTableLoadUtils::deep_copy(const ObString &src, ObString &dest, ObIAllocato
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ob_write_string(allocator, src, dest))) {
-    LOG_WARN("fail to deep copy str", KR(ret));
   }
   return ret;
 }
@@ -53,7 +52,6 @@ int ObTableLoadUtils::deep_copy(const ObObj &src, ObObj &dest, ObIAllocator &all
       LOG_WARN("fail to allocate memory", KR(ret));
     } else {
       if (OB_FAIL(dest.deep_copy(src, buf, size, pos))) {
-        LOG_WARN("fail to deep copy obj", KR(ret), K(src));
       }
       if (OB_FAIL(ret)) {
         allocator.free(buf);
@@ -68,7 +66,6 @@ int ObTableLoadUtils::deep_copy(const ObStoreRowkey &src, ObStoreRowkey &dest, O
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(src.deep_copy(dest, allocator))) {
-    LOG_WARN("fail to deep copy store rowkey", KR(ret), K(src));
   }
   return ret;
 }
@@ -80,9 +77,7 @@ int ObTableLoadUtils::deep_copy(const ObDatumRowkey &src, ObDatumRowkey &dest, O
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(src.deep_copy(dest, allocator))) {
-    LOG_WARN("fail to deep copy datum rowkey", KR(ret), K(src));
   } else if (OB_FAIL(deep_copy(src.store_rowkey_, dest.store_rowkey_, allocator))) {
-    LOG_WARN("fail to deep copy store rowkey", KR(ret), K(src));
   }
   return ret;
 }
@@ -99,14 +94,12 @@ int ObTableLoadUtils::deep_copy(const sql::ObSQLSessionInfo &src, sql::ObSQLSess
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate buffer", KR(ret), K(buf_size));
   } else if (OB_FAIL(src.serialize(buf, buf_size, pos))) {
-    LOG_WARN("serialize session info failed", KR(ret));
   } else {
     data_len = pos;
     pos = 0;
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(dest.deserialize(buf, data_len, pos))) {
-      LOG_WARN("deserialize session info failed", KR(ret));
     }
   }
   return ret;
@@ -123,7 +116,6 @@ int ObTableLoadUtils::create_session_info(sql::ObSQLSessionInfo *&session_info, 
   
   uint32_t sid = sql::ObSQLSessionInfo::INVALID_SESSID;
   if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
-    LOG_WARN("alloc session id failed", KR(ret));
   } else if (OB_FAIL(GCTX.session_mgr_->create_session(
               sid, ObTimeUtility::current_time(), session_info))) {
     session_info = nullptr;

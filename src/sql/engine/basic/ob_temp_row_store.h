@@ -114,7 +114,6 @@ public:
       if (!RA) {
         // do nothing
       } else if (OB_FAIL(buf.fill_tail(ROW_INDEX_SIZE))) {
-        SQL_LOG(WARN, "fill buffer tail failed", K(ret), K(buf), LITERAL_K(ROW_INDEX_SIZE));
       } else {
         *reinterpret_cast<row_idx_t *>(buf.tail()) = static_cast<row_idx_t>(buf.head() - payload_);
       }
@@ -318,7 +317,6 @@ public:
     int ret = common::OB_SUCCESS;
     if (NULL == blk_ || mem_size > blk_buf_.remain()) {
       if (OB_FAIL(new_block(mem_size))) {
-        SQL_ENG_LOG(WARN, "fail to new block", K(ret), K(mem_size));
       }
     }
     return ret;
@@ -330,7 +328,6 @@ public:
     if (!RA) {
       // do nothing, non ra store dont need compact
     } else if (OB_FAIL(blk_buf_.compact())) {
-      SQL_LOG(WARN, "fail to compact block", K(ret));
     }
     return ret;
   }
@@ -408,7 +405,6 @@ public:
     int ret = OB_SUCCESS;
     stores_.at(part_idx) = store;
     if (OB_FAIL(store->init_batch_ctx())) {
-      SQL_ENG_LOG(WARN, "failed to init ctx", K(ret));
     }
     return ret;
   }

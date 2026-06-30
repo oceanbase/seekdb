@@ -97,7 +97,6 @@ int ObPluginDlHandle::read_value(const char *symbol_name, void *ptr, int64_t siz
     int ret = OB_SUCCESS;
     void *address = nullptr;
     if (OB_FAIL(read_symbol(symbol_name, address))) {
-      LOG_WARN("failed to find symbol from dl", K(ret));
     } else if (OB_ISNULL(address)) {
       ret = OB_ENTRY_NOT_EXIST;
       LOG_WARN("no such symbol or get null value");

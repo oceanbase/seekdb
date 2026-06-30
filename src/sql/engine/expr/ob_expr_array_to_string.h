@@ -50,15 +50,12 @@ public:
     int64_t len = 0;
     ObTextStringVectorResult<ResVec> str_result(expr.datum_meta_.type_, &expr, &ctx, res_vec, batch_idx);
     if (OB_FAIL(str_result.init_with_batch_idx(res_buf.length(), batch_idx))) {
-      SQL_ENG_LOG(WARN, "fail to init result", K(ret), K(res_buf.length()));
     } else if (OB_FAIL(str_result.get_reserved_buffer(buf, len))) {
-      SQL_ENG_LOG(WARN, "fail to get reserver buffer", K(ret));
     } else if (len < res_buf.length()) {
       ret = OB_ERR_UNEXPECTED;
       SQL_ENG_LOG(WARN, "get invalid res buf len", K(ret), K(len), K(res_buf.length()));
     } else if (OB_FALSE_IT(MEMCPY(buf, res_buf.ptr(), res_buf.length()))) {
     } else if (OB_FAIL(str_result.lseek(len, 0))) {
-      SQL_ENG_LOG(WARN, "failed to lseek res.", K(ret), K(str_result), K(len));
     } else {
       str_result.set_result();
     }

@@ -161,14 +161,11 @@ int LogReconfirm::init_reconfirm_()
   ObMemberList member_list;
   int64_t replica_num = 0;
   if (OB_FAIL(mm_->get_alive_member_list_with_arb(member_list, replica_num))) {
-    PALF_LOG(WARN, "get_alive_member_list_with_arb failed", K_(palf_id));
   } else if (!member_list.contains(self_)) {
     ret = OB_ERR_UNEXPECTED;
     PALF_LOG(WARN, "self is not in curr_member_list", K_(palf_id), K(member_list), K(self_));
   } else if (OB_FAIL(curr_paxos_follower_list_.deep_copy(member_list))) {
-    PALF_LOG(ERROR, "deep_copy failed", K_(palf_id));
   } else if (OB_FAIL(curr_paxos_follower_list_.remove_server(self_))) {
-    PALF_LOG(ERROR, "remove_server failed", K_(palf_id), K_(curr_paxos_follower_list), K_(self), KP(mm_));
   } else {
     majority_cnt_ = replica_num / 2 + 1;
     PALF_LOG(INFO, "init_reconfirm_ success", K(ret), K_(palf_id), K(member_list), K_(self), K_(majority_cnt), K(replica_num));
@@ -184,7 +181,6 @@ int LogReconfirm::submit_prepare_log_()
 	int64_t max_flushed_log_pid = INVALID_PROPOSAL_ID;
   const int64_t now_us = ObTimeUtility::current_time();
   if (OB_FAIL(sw_->get_max_flushed_log_info(unused_prev_lsn, max_flushed_end_lsn, max_flushed_log_pid))) {
-    PALF_LOG(WARN, "get_max_flushed_log_info failed", K_(palf_id));
   } else if (OB_EAGAIN != (ret = mode_mgr_->reconfirm_mode_meta())) {
     PALF_LOG(WARN, "reconfirm_mode_meta failed", K_(palf_id));
   } else {
@@ -221,7 +217,6 @@ int LogReconfirm::submit_prepare_log_()
     new_proposal_id_ = old_proposal_id + 1;
 
     if (OB_FAIL(state_mgr_->handle_prepare_request(self_, new_proposal_id_))) {
-      PALF_LOG(WARN, "handle_prepare_request failed", K_(palf_id), K_(self), K(new_proposal_id_));
     } else if (curr_paxos_follower_list_.is_valid()
         && OB_FAIL(log_engine_->submit_prepare_meta_req(curr_paxos_follower_list_, new_proposal_id_))) {
 			PALF_LOG(WARN, "submit_prepare_meta_req failed", K_(palf_id), K_(self), K_(new_proposal_id));
@@ -273,7 +268,6 @@ int LogReconfirm::handle_prepare_response(const common::ObAddr &server,
     PALF_LOG(WARN, "receive prepare req not in follower_list", K_(palf_id), K(server),
         K_(curr_paxos_follower_list));
   } else if (OB_FAIL(prepare_log_ack_list_.add_server(server))) {
-    PALF_LOG(WARN, "prepare_log_ack_list_ add_sever failed", K_(palf_id), K(server));
   } else if (INVALID_PROPOSAL_ID != majority_max_accept_pid_
              && accept_proposal_id < majority_max_accept_pid_) {
     // accept_proposal_id is smaller than cur majority value, ignore
@@ -343,7 +337,6 @@ int LogReconfirm::ack_log_with_end_lsn_()
     const common::ObAddr &server = follower_end_lsn_list_.at(idx).member_.get_server();
     const LSN &end_lsn = follower_end_lsn_list_.at(idx).last_flushed_end_lsn_;
     if (OB_SUCCESS != (tmp_ret = sw_->ack_log(server, end_lsn))) {
-      PALF_LOG(WARN, "ack_log failed", K(tmp_ret), K(server), K(end_lsn));
     }
   }
   return ret;
@@ -383,7 +376,6 @@ int LogReconfirm::try_fetch_log_()
       || (sw_start_id == last_record_sw_start_id_
           && now_us - last_fetch_log_time_us_ >= PALF_FETCH_LOG_INTERVAL_US)) {
     if (OB_FAIL(sw_->try_fetch_log_for_reconfirm(majority_max_log_server_, majority_max_lsn_, is_fetched))) {
-      PALF_LOG(WARN, "try_fetch_log_for_reconfirm failed", K_(palf_id));
     } else if (is_fetched) {
       // send fetch req success
       last_record_sw_start_id_ = sw_start_id;
@@ -464,7 +456,6 @@ int LogReconfirm::reconfirm()
     switch (state_) {
       case INITED: {
         if (OB_FAIL(init_reconfirm_())) {
-          PALF_LOG(WARN, "init reconfirm failed", K_(palf_id));
         } else {
           state_ = WAITING_LOG_FLUSHED;
           PALF_EVENT("Reconfirm come into WAITING_LOG_FLUSHED state", palf_id_, K_(self), K_(majority_cnt),
@@ -476,11 +467,8 @@ int LogReconfirm::reconfirm()
       }
       case WAITING_LOG_FLUSHED: {
         if (OB_FAIL(purge_throttling_())) {
-          PALF_LOG(WARN, "purge throttling failed", K_(palf_id));
         } else if (OB_FAIL(wait_all_log_flushed_())) {
-          PALF_LOG(WARN, "wait_all_log_flushed_ failed", K_(palf_id));
         } else if (OB_FAIL(submit_prepare_log_())) {
-          PALF_LOG(WARN, "submit_prepare_log_ failed", K_(palf_id));
         } else {
           state_ = FETCH_MAX_LOG_LSN;
           //reset last_purge_throttling_time_us_to avoid impacting purging throttling during RECONFIRM_FETCH_LOG
@@ -534,10 +522,8 @@ int LogReconfirm::reconfirm()
         // For this case, followers' match_lsn at A will be 100, and it has no chance to be updated during reconfirm,
         // which will lead to waiting majority sync timeout.
         if (OB_FAIL(ack_log_with_end_lsn_())) {
-          PALF_LOG(WARN, "ack_log_with_end_lsn_", K_(follower_end_lsn_list));
         } else if (majority_max_log_server_ != self_ && !is_fetch_log_finished_()) {
           if (OB_FAIL(try_fetch_log_())) {
-            PALF_LOG(WARN, "try_fetch_log_ failed", K_(palf_id));
           }
         } else {
           state_ = RECONFIRMING;
@@ -563,7 +549,6 @@ int LogReconfirm::reconfirm()
                 K_(self), K_(palf_id), K_(majority_max_lsn));
           }
         } else if (OB_FAIL(sw_->get_max_flushed_log_info(last_lsn, last_end_lsn, last_log_proposal_id))) {
-          PALF_LOG(WARN, "get_max_flushed_log_info failed", K_(self), K_(palf_id));
         } else if (OB_FAIL(mm_->confirm_start_working_log(new_proposal_id_, leader_epoch, sw_config_version_))
             && OB_EAGAIN != ret) {
           PALF_LOG(WARN, "confirm_start_working_log failed", K_(self), K_(palf_id));
@@ -639,7 +624,6 @@ int LogReconfirm::purge_throttling_()
   int ret = OB_SUCCESS;
   if (palf_reach_time_interval(100 * 1000L, last_purge_throttling_time_us_)) {
     if (OB_FAIL(log_engine_->submit_purge_throttling_task(PurgeThrottlingType::PURGE_BY_RECONFIRM))) {
-      PALF_LOG(WARN, "submit_purge_throttling_task", K_(palf_id));
     } else {
       PALF_LOG(INFO, "submit_purge_throttling_task during reconfirming", K_(palf_id));
     }

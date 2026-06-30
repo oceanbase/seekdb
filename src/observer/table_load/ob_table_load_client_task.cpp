@@ -94,13 +94,9 @@ int ObTableLoadClientTaskParam::assign(const ObTableLoadClientTaskParam &other)
     timeout_us_ = other.timeout_us_;
     heartbeat_timeout_us_ = other.heartbeat_timeout_us_;
     if (OB_FAIL(set_table_name(other.table_name_))) {
-      LOG_WARN("fail to set table name", KR(ret));
     } else if (OB_FAIL(set_load_method(other.load_method_))) {
-      LOG_WARN("fail to set load method", KR(ret));
     } else if (OB_FAIL(set_column_names(other.column_names_))) {
-      LOG_WARN("fail to deep copy column names", KR(ret));
     } else if (OB_FAIL(set_part_names(other.part_names_))) {
-      LOG_WARN("fail to deep copy part names", KR(ret));
     }
   }
   return ret;
@@ -119,7 +115,6 @@ int ObTableLoadClientTaskParam::set_string(const ObString &src, ObString &dest)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ob_write_string(allocator_, src, dest))) {
-    LOG_WARN("fail to write string", KR(ret));
   }
   return ret;
 }
@@ -133,9 +128,7 @@ int ObTableLoadClientTaskParam::set_string_array(const ObIArray<ObString> &src,
     const ObString &src_str = src.at(i);
     ObString dest_str;
     if (OB_FAIL(ob_write_string(allocator_, src_str, dest_str))) {
-      LOG_WARN("fail to write string", KR(ret));
     } else if (OB_FAIL(dest.push_back(dest_str))) {
-      LOG_WARN("fail to push back", KR(ret));
     }
   }
   return ret;
@@ -172,13 +165,11 @@ public:
       session_info->set_thread_id(get_tid_cache());
       session_info->update_last_active_time();
       if (OB_TMP_FAIL(session_info->set_session_state(QUERY_ACTIVE))) {
-        LOG_WARN("fail to set session state", KR(tmp_ret));
       }
     }
     // resolve
     if (OB_FAIL(
           resolve(client_task_->client_exec_ctx_, client_task_->param_, load_param, column_ids, tablet_ids))) {
-      LOG_WARN("fail to resolve", KR(ret), K(client_task_->param_));
     }
     // check support
     else if (OB_FAIL(ObTableLoadService::check_support_direct_load(schema_guard,
@@ -188,16 +179,12 @@ public:
                                                                    load_param.load_mode_,
                                                                    load_param.load_level_,
                                                                    column_ids))) {
-      LOG_WARN("fail to check support direct load", KR(ret));
     }
     // begin
     if (OB_SUCC(ret)) {
       if (OB_FAIL(client_task_->init_instance(load_param, column_ids, tablet_ids))) {
-        LOG_WARN("fail to init instance", KR(ret));
       } else if (OB_FAIL(client_task_->set_status_waitting())) {
-        LOG_WARN("fail to set status waitting", KR(ret));
       } else if (OB_FAIL(client_task_->set_status_running())) {
-        LOG_WARN("fail to set status running", KR(ret));
       }
     }
     // wait client commit
@@ -218,9 +205,7 @@ public:
     // commit
     if (OB_SUCC(ret)) {
       if (OB_FAIL(client_task_->commit_instance())) {
-        LOG_WARN("fail to commit instance", KR(ret));
       } else if (OB_FAIL(client_task_->set_status_commit())) {
-        LOG_WARN("fail to set status running", KR(ret));
       }
     }
     client_task_->destroy_instance();
@@ -257,31 +242,24 @@ public:
     // resolve table_name_
     else if (OB_FAIL(ObTableLoadSchema::get_table_schema(
                *schema_guard, database_id, task_param.get_table_name(), table_schema))) {
-      LOG_WARN("fail to get table schema", KR(ret), K(database_id),
-               K(task_param.get_table_name()));
     }
     // resolve column_names_
     else if (OB_FAIL(resolve_columns(table_schema, task_param.get_column_names(), column_ids))) {
-      LOG_WARN("fail to resolve columns", KR(ret), K(task_param.get_column_names()));
     }
     // resolve load_method_
     else if (OB_FAIL(resolve_load_method(task_param.get_load_method(), method, insert_mode))) {
-      LOG_WARN("fail to resolve load method", KR(ret), K(task_param.get_load_method()));
     }
     // compress type
     else if (OB_FAIL(ObDDLUtil::get_temp_store_compress_type(
             table_schema, task_param.get_parallel(), compressor_type))) {
-      LOG_WARN("fail to get tmp store compressor type", KR(ret));
     }
     // opt stat gather
     else if (OB_FAIL(ObTableLoadSchema::get_tenant_optimizer_gather_stats_on_load( online_opt_stat_gather))) {
-      LOG_WARN("fail to get tenant optimizer gather stats on load", KR(ret));
     } else if (online_opt_stat_gather && OB_FAIL(ObDbmsStatsUtils::get_sys_online_estimate_percent(
                                            *(client_exec_ctx.exec_ctx_),
                                            table_schema->get_table_id(), online_sample_percent))) {
       LOG_WARN("failed to get sys online sample percent", K(ret));
     } else if (OB_FAIL(resolve_part_names(table_schema, task_param.get_part_names(), tablet_ids))) {
-      LOG_WARN("fail to resolve part name", KR(ret));
     }
     if (OB_SUCC(ret) && ObDirectLoadMethod::INCREMENTAL == method) {
       if (ObDirectLoadInsertMode::NORMAL == insert_mode
@@ -334,7 +312,6 @@ public:
       LOG_WARN("unexpected table schema is null", KR(ret), KP(table_schema));
     } else if (column_names.empty()) {
       if (OB_FAIL(ObTableLoadSchema::get_user_column_ids(table_schema, column_ids))) {
-        LOG_WARN("fail to get user column ids", KR(ret));
       }
     } else {
       const static uint64_t INVALID_COLUMN_ID = UINT64_MAX;
@@ -343,7 +320,6 @@ public:
       if (OB_FAIL(ObTableLoadSchema::get_user_column_id_and_names(table_schema,
                                                                   user_column_ids,
                                                                   user_column_names))) {
-        LOG_WARN("fail to get user column id and names", KR(ret));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < column_names.count(); ++i) {
         const ObString &column_name = column_names.at(i);
@@ -368,7 +344,6 @@ public:
               ret = OB_ERR_FIELD_SPECIFIED_TWICE;
               LOG_WARN("column specified twice", KR(ret), K(i), K(column_name), K(column_names));
             } else if (OB_FAIL(column_ids.push_back(user_column_id))) {
-              LOG_WARN("fail to push back column id", KR(ret));
             } else {
               user_column_ids.at(found_column_idx) = INVALID_COLUMN_ID;
             }
@@ -405,7 +380,6 @@ public:
                           table_schema->get_table_name_str().ptr());
           }
         } else if (OB_FAIL(append_array_no_dup(part_ids, partition_ids))) {
-          LOG_WARN("Push partition id error", K(ret));
         }
       } // end of for
       if (OB_SUCC(ret) && OB_FAIL(ObTableLoadSchema::get_tablet_ids_by_part_ids(table_schema, part_ids, tablet_ids))) {
@@ -524,11 +498,8 @@ int ObTableLoadClientTask::init(const ObTableLoadClientTaskParam &param)
     LOG_WARN("invalid args", KR(ret), K(param));
   } else {
     if (OB_FAIL(param_.assign(param))) {
-      LOG_WARN("fail to assign param", KR(ret), K(param));
     } else if (OB_FAIL(init_exec_ctx())) {
-      LOG_WARN("fail to init exec ctx", KR(ret));
     } else if (OB_FAIL(init_task_scheduler())) {
-      LOG_WARN("fail to init task scheduler", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -549,22 +520,18 @@ int ObTableLoadClientTask::create_session_info()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected session info not null", KR(ret));
   } else if (OB_FAIL(schema_guard_.get_tenant_info(tenant_info))) {
-    LOG_WARN("get tenant info failed", K(ret));
   } else if (OB_ISNULL(tenant_info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid tenant schema", K(ret));
   } else if (OB_FAIL(schema_guard_.get_user_info(user_id, user_info))) {
-    LOG_WARN("get user info failed", K(ret));
   } else if (OB_ISNULL(user_info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid user_info", K(ret), K(user_id));
   } else if (OB_FAIL(schema_guard_.get_database_schema( database_id, database_schema))) {
-    LOG_WARN("get database schema failed", K(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid database schema", K(ret), K(database_id));
   } else if (OB_FAIL(ObTableLoadUtils::create_session_info(session_info_, free_session_ctx_))) {
-    LOG_WARN("create session id failed", KR(ret));
   } else {
     ObSqlString query_str;
     ObObj timeout_val;
@@ -596,9 +563,7 @@ int ObTableLoadClientTask::init_exec_ctx()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableLoadSchema::get_schema_guard(schema_guard_))) {
-    LOG_WARN("get_schema_guard failed", K(ret));
   } else if (OB_FAIL(create_session_info())) {
-    LOG_WARN("fail to create session info", KR(ret));
   } else {
     sql_ctx_.schema_guard_ = &schema_guard_;
     plan_ctx_.set_timeout_timestamp(ObTimeUtil::current_time() + param_.get_timeout_us());
@@ -606,10 +571,8 @@ int ObTableLoadClientTask::init_exec_ctx()
     exec_ctx_.set_physical_plan_ctx(&plan_ctx_);
     exec_ctx_.set_my_session(session_info_);
     if (OB_FAIL(session_info_->set_cur_phy_plan(&plan_))) {
-      LOG_WARN("fail to set cur phy plan", KR(ret));
     } else if (FALSE_IT(exec_ctx_.reference_my_plan(&plan_))) {
     } else if (OB_FAIL(exec_ctx_.init_phy_op(1))) {
-      LOG_WARN("fail to init phy op", KR(ret));
     } else {
       client_exec_ctx_.exec_ctx_ = &exec_ctx_;
       client_exec_ctx_.init_heart_beat(param_.get_heartbeat_timeout_us());
@@ -631,9 +594,7 @@ int ObTableLoadClientTask::init_task_scheduler()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new ObTableLoadTaskThreadPoolScheduler", KR(ret));
   } else if (OB_FAIL(task_scheduler_->init())) {
-    LOG_WARN("fail to init task scheduler", KR(ret));
   } else if (OB_FAIL(task_scheduler_->start())) {
-    LOG_WARN("fail to start task scheduler", KR(ret));
   }
   THIS_WORKER.set_timeout_ts(origin_timeout_ts);
   return ret;
@@ -646,7 +607,6 @@ int ObTableLoadClientTask::start()
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadClientTask not init", KR(ret));
   } else if (OB_FAIL(set_status_initializing())) {
-    LOG_WARN("fail to set status initializing", KR(ret));
   } else {
     ObMemAttr attr("TLD_CTExecTask");
     ObTableLoadTask *task = nullptr;
@@ -654,11 +614,8 @@ int ObTableLoadClientTask::start()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObTableLoadTask", KR(ret));
     } else if (OB_FAIL(task->set_processor<ClientTaskExectueProcessor>(this))) {
-      LOG_WARN("fail to set client task processor", KR(ret));
     } else if (OB_FAIL(task->set_callback<ClientTaskExectueCallback>(this))) {
-      LOG_WARN("fail to set common task callback", KR(ret));
     } else if (OB_FAIL(task_scheduler_->add_task(0, task))) {
-      LOG_WARN("fail to add task", KR(ret));
     }
     if (OB_FAIL(ret)) {
       set_status_error(ret);
@@ -693,7 +650,6 @@ int ObTableLoadClientTask::write(ObTableLoadObjRowArray &obj_rows)
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(instance_.write_trans(trans_ctx_, session_id, obj_rows))) {
-        LOG_WARN("fail to write trans", KR(ret));
       }
     }
   }
@@ -856,10 +812,8 @@ int ObTableLoadClientTask::init_instance(ObTableLoadParam &load_param,
   int ret = OB_SUCCESS;
   const ObTableLoadTableCtx *tmp_ctx = nullptr;
   if (OB_FAIL(instance_.init(load_param, column_ids, tablet_ids, &client_exec_ctx_))) {
-    LOG_WARN("fail to init instance", KR(ret));
   } else if (OB_FAIL(instance_.start_trans(trans_ctx_, ObTableLoadInstance::DEFAULT_SEGMENT_ID,
                                            allocator_))) {
-    LOG_WARN("fail to start trans", KR(ret));
   } else if (OB_ISNULL(tmp_ctx = instance_.get_table_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get table ctx", KR(ret));
@@ -874,9 +828,7 @@ int ObTableLoadClientTask::commit_instance()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(instance_.commit_trans(trans_ctx_))) {
-    LOG_WARN("fail to commit trans", KR(ret));
   } else if (OB_FAIL(instance_.commit())) {
-    LOG_WARN("fail to commit instance", KR(ret));
   } else {
     result_info_ = instance_.get_result_info();
   }

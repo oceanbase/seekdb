@@ -53,7 +53,6 @@ struct Deep_Copy_Action
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("value is NULL", K(value), K(ret));
     } else if (OB_FAIL(context_mgr_.add_context(*value))) {
-      LOG_WARN("push back failed", K(ret), K(value->get_namespace()));
     }
     UNUSED(infos);
     UNUSED(map);
@@ -107,7 +106,6 @@ int ObContextMgr::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("init private context manager twice", K(ret));
   } else if (OB_FAIL(context_map_.init())) {
-    LOG_WARN("init private context map failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -133,9 +131,7 @@ int ObContextMgr::assign(const ObContextMgr &other)
     LOG_WARN("context manager not init", K(ret));
   } else if (this != &other) {
     if (OB_FAIL(context_map_.assign(other.context_map_))) {
-      LOG_WARN("assign context map failed", K(ret));
     } else if (OB_FAIL(context_infos_.assign(other.context_infos_))) {
-      LOG_WARN("assign context infos vector failed", K(ret));
     }
   }
   return ret;
@@ -153,7 +149,6 @@ int ObContextMgr::deep_copy(const ObContextMgr &other)
     context_mgr::Deep_Copy_Action action(*this);
     context_mgr::Deep_Copy_EarlyStopCondition condition;
     if (OB_FAIL((const_cast<ObContextMgr&>(other)).for_each(filter, action, condition))) {
-      LOG_WARN("deep copy failed", K(ret));
     }
   }
   return ret;
@@ -176,7 +171,6 @@ int ObContextMgr::add_context(const ObContextSchema &context_schema)
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_,
                                                  context_schema,
                                                  new_context_schema))) {
-    LOG_WARN("alloc context schema failed", K(ret));
   } else if (OB_ISNULL(new_context_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(new_context_schema), K(ret));
@@ -185,11 +179,9 @@ int ObContextMgr::add_context(const ObContextSchema &context_schema)
                                              compare_context,
                                              equal_context,
                                              replaced_context))) {
-    LOG_WARN("failed to add context schema", K(ret));
   } else {
     ObContextHashWrapper hash_wrapper(new_context_schema->get_namespace());
     if (OB_FAIL(context_map_.set_refactored(hash_wrapper, new_context_schema, overwrite))) {
-      LOG_WARN("build context hash map failed", K(ret));
     } else {
       LOG_INFO("add new context to context map", K(*new_context_schema));
     }
@@ -205,7 +197,6 @@ int ObContextMgr::add_context(const ObContextSchema &context_schema)
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = ObContextMgr::rebuild_context_hashmap(context_infos_,
                                                                        context_map_))) {
-      LOG_WARN("rebuild context hashmap failed", K(tmp_ret));
     }
   }
   return ret;
@@ -249,7 +240,6 @@ int ObContextMgr::add_contexts(const common::ObIArray<ObContextSchema> &context_
   int ret = OB_SUCCESS;
   for (int64_t i = 0; i < context_schemas.count() && OB_SUCC(ret); ++i) {
     if (OB_FAIL(add_context(context_schemas.at(i)))) {
-      LOG_WARN("push context failed", K(ret));
     }
   }
   return ret;
@@ -303,7 +293,6 @@ int ObContextMgr::del_context(const ObContextKey &context)
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret
                        = ObContextMgr::rebuild_context_hashmap(context_infos_, context_map_))) {
-      LOG_WARN("rebuild context hashmap failed", K(tmp_ret));
     }
   }
   return ret;
@@ -347,7 +336,6 @@ int ObContextMgr::for_each(Filter &filter, Acation &action, EarlyStopCondition &
     } else {
       if (filter(value)) {
         if (OB_FAIL(action(value, context_infos_, context_map_))) {
-            LOG_WARN("action failed", K(ret));
         }
       }
     }
@@ -399,7 +387,6 @@ int ObContextMgr::get_context_schemas_in_tenant(ObIArray<const ObContextSchema *
     } else if (false) {
       is_stop = true;
     } else if (OB_FAIL(context_schemas.push_back(context))) {
-      LOG_WARN("push back context failed", K(ret));
     }
   }
 

@@ -150,7 +150,6 @@ int ObGAISNextSequenceValReq::init(const schema::ObSequenceSchema &schema,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(schema), K(sender));
   } else if (OB_FAIL(schema_.assign(schema))){
-    LOG_WARN("fail to init schemar_", K(ret));
   } else {
     sender_ = sender;
   }

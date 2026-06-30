@@ -62,7 +62,6 @@ int ObAllVirtualPluginInfo::inner_open()
 
   if (FALSE_IT(plugin_entries_.set_attr(mem_attr))) {
   } else if (OB_FAIL(GCTX.plugin_mgr_->list_all_plugin_entries(plugin_entries_))) {
-    SERVER_LOG(WARN, "failed to init tenant plugin array");
   } else {
     iter_index_ = 0;
   }
@@ -83,8 +82,6 @@ int ObAllVirtualPluginInfo::inner_get_next_row(ObNewRow *&row)
   ObPluginEntryHandle *entry_handle = nullptr;
   if (iter_index_ >= 0 && iter_index_ < plugin_entries_.count()) {
     if (OB_FAIL(plugin_entries_.at(iter_index_, entry_handle))) {
-      LOG_WARN("failed to get plugin entry handle from plugin entries",
-               K(iter_index_), K(ret));
     } else if (OB_ISNULL(entry_handle)) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "iterate plugin handle success but got null",

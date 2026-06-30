@@ -847,8 +847,6 @@ public:
       if (OB_SUCC(ret)) {
         encoding.assign_ptr(temp_str.ptr(), length);
         if (OB_FAIL(func(encoding, wchar))) {
-          COMMON_LOG(WARN, "fail to call func", K(ret), K(encoding),
-                     KPHEX(encoding.ptr(), encoding.length()), K(wchar));
         }
         COMMON_LOG(DEBUG, "foreach char", K(encoding),
                    KPHEX(encoding.ptr(), encoding.length()), K(wchar));

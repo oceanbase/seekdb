@@ -57,25 +57,21 @@ DEFINE_SERIALIZE(ObProposalID)
   if ((NULL == buf) || (buf_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
   } else if ((OB_FAIL(serialization::encode_i8(buf, buf_len, new_pos, current_version)))) {
-    CLOG_LOG(WARN, "serialize version error", K(ret), K(buf), K(buf_len), K(pos), K(new_pos));
   }
 
   if (OB_SUCC(ret)) {
     if (PROPOSAL_ID_VERSION6 == current_version) {
       if ((OB_FAIL(addr_.serialize(buf, buf_len, new_pos)))) {
-        CLOG_LOG(WARN, "serialize addr error", K(ret), K(buf), K(buf_len), K(pos), K(new_pos));
       }
     } else {
       if ((OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos,
                                              addr_.get_ipv4_server_id())))) {
-        CLOG_LOG(WARN, "serialize addr error", K(ret), K(buf), K(buf_len), K(pos), K(new_pos));
       }
     }
   }
 
   if (OB_FAIL(ret)) {
   } else if ((OB_FAIL(serialization::encode_i64(buf, buf_len, new_pos, ts_)))) {
-    CLOG_LOG(WARN, "serialize timestamp error", K(ret), K(buf), K(buf_len), K(pos), K(new_pos));
   } else {
     pos = new_pos;
   }

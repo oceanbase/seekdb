@@ -45,18 +45,13 @@ int ObTableLoadRedefTable::check_table_consistency(const uint64_t table_id,
     const ObTableSchema *table_schema = nullptr;
     const ObTableSchema *dest_table_schema = nullptr;
     if (OB_FAIL(ObTableLoadSchema::get_schema_guard(schema_guard, schema_version))) {
-      LOG_WARN("fail to get schema guard", KR(ret), K(schema_version));
     } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(schema_guard, table_id, table_schema))) {
-      LOG_WARN("fail to get table schema", KR(ret), K(table_id));
     } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(schema_guard, dest_table_id, dest_table_schema))) {
-      LOG_WARN("fail to get table schema", KR(ret), K(dest_table_id));
     } else {
       ObArray<ObColDesc> column_descs;
       ObArray<ObColDesc> dest_column_descs;
       if (OB_FAIL(table_schema->get_column_ids(column_descs))) {
-        LOG_WARN("fail to get column ids", KR(ret), KPC(table_schema));
       } else if (OB_FAIL(dest_table_schema->get_column_ids(dest_column_descs))) {
-        LOG_WARN("fail to get column ids", KR(ret), KPC(dest_table_schema));
       } else if (OB_UNLIKELY(column_descs.count() != dest_column_descs.count())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected column desc count not match", KR(ret), K(column_descs),
@@ -107,7 +102,6 @@ int ObTableLoadRedefTable::start(const ObTableLoadRedefTableStartArg &arg,
           res.schema_version_,
           res.is_no_logging_,
           unused_is_offline_index_rebuild))) {
-        LOG_WARN("fail to get ddl task info", KR(ret), K(arg));
       }
     }
   } else {
@@ -131,10 +125,8 @@ int ObTableLoadRedefTable::start(const ObTableLoadRedefTableStartArg &arg,
                                       arg.tablet_ids_,
                                       need_reorder_column_id,
                                       foreign_key_checks))) {
-      LOG_WARN("fail to init create hidden table arg", KR(ret));
     } else if (OB_FAIL(ObDDLServerClient::create_hidden_table(create_table_arg, create_table_res, 
         res.snapshot_version_, res.data_format_version_, session_info))) {
-      LOG_WARN("failed to create hidden table", KR(ret), K(create_table_arg));
     } else {
       res.dest_table_id_ = create_table_res.dest_table_id_;
       res.task_id_ = create_table_res.task_id_;
@@ -150,7 +142,6 @@ int ObTableLoadRedefTable::start(const ObTableLoadRedefTableStartArg &arg,
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(check_table_consistency( arg.table_id_, res.dest_table_id_, res.schema_version_))) {
-      LOG_WARN("fail to check table consistenc", KR(ret), K(arg), K(res));
     }
   }
   if (OB_FAIL(ret) && res.task_id_ > 0) {
@@ -159,7 +150,6 @@ int ObTableLoadRedefTable::start(const ObTableLoadRedefTableStartArg &arg,
     
     abort_arg.task_id_ = res.task_id_;
     if (OB_TMP_FAIL(abort(abort_arg, session_info))) {
-      LOG_WARN("fail to abort hidden table", KR(tmp_ret), K(abort_arg));
     }
   }
   return ret;
@@ -187,7 +177,6 @@ int ObTableLoadRedefTable::finish(const ObTableLoadRedefTableFinishArg &arg,
     copy_table_dependents_arg.copy_foreign_keys_ = foreign_key_checks;
     copy_table_dependents_arg.ignore_errors_ = false;
     if (OB_FAIL(ObDDLServerClient::copy_table_dependents(copy_table_dependents_arg, session_info))) {
-      LOG_WARN("failed to copy table dependents", KR(ret), K(copy_table_dependents_arg));
     } else {
       LOG_INFO("succeed to copy table dependents", K(copy_table_dependents_arg));
       ObFinishRedefTableArg finish_redef_table_arg;
@@ -240,7 +229,6 @@ int ObTableLoadRedefTable::abort(const ObTableLoadRedefTableAbortArg &arg,
     abort_redef_table_arg.task_id_ = arg.task_id_;
     
     if (OB_FAIL(ObDDLServerClient::abort_redef_table(abort_redef_table_arg, &session_info))) {
-      LOG_WARN("failed to abort redef table", KR(ret), K(abort_redef_table_arg));
     } else {
       LOG_INFO("succeed to abort hidden table", K(arg));
     }

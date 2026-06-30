@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX PL_STORAGEROUTINE
 #include "ob_pl_persistent.h"
-#include "ob_pl_build.h"
+#include "ob_pl_compile.h"
 #include "share/ob_version.h"
 
 namespace oceanbase
@@ -53,7 +53,6 @@ int ObRoutinePersistentInfo::has_same_name_dependency_with_public_synonym(
           const ObSequenceSchema *sequence_schema = NULL;
           if (OB_FAIL(schema_guard.get_sequence_schema( 
                                                         obj_id, sequence_schema))) {
-            LOG_WARN("failed to get sequence schema", K(ret), K(obj_id));
           } else if (nullptr == sequence_schema) {
             LOG_WARN("get an unexpected null sequence schema", K(obj_id));
           } else {
@@ -66,7 +65,6 @@ int ObRoutinePersistentInfo::has_same_name_dependency_with_public_synonym(
           const ObRoutineInfo *routine_schema = NULL;
           if (OB_FAIL(schema_guard.get_routine_info( 
                                                         obj_id, routine_schema))) {
-            LOG_WARN("failed to get routine_schema", K(ret), K(obj_id));
           } else if (nullptr == routine_schema) {
             LOG_WARN("get an unexpected null routine_schema", K(obj_id));
           } else {
@@ -79,7 +77,6 @@ int ObRoutinePersistentInfo::has_same_name_dependency_with_public_synonym(
           const ObPackageInfo *package_info = NULL;
           if (OB_FAIL(schema_guard.get_package_info( 
                                                         obj_id, package_info))) {
-            LOG_WARN("failed to get package_info", K(ret), K(obj_id));
           } else if (nullptr == package_info) {
             LOG_WARN("get an unexpected null package_info", K(obj_id));
           } else {
@@ -93,7 +90,6 @@ int ObRoutinePersistentInfo::has_same_name_dependency_with_public_synonym(
           if (OB_FAIL(schema_guard.get_simple_table_schema(
                                                           obj_id,
                                                           table_schema))) {
-            LOG_WARN("failed to get table schema", K(ret), K(obj_id));
           } else if (nullptr == table_schema) {
             LOG_WARN("get an unexpected null table schema", K(obj_id));
           } else {
@@ -105,7 +101,6 @@ int ObRoutinePersistentInfo::has_same_name_dependency_with_public_synonym(
           break;
     }
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to get obj name using dependency id", K(ret), K(obj_id));
     } else if (OB_ISNULL(obj_name)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("get null obj name using dependency id", K(ret), K(obj_id));
@@ -135,8 +130,6 @@ int ObRoutinePersistentInfo::check_dep_schema(ObSchemaGetterGuard &schema_guard,
       if (OB_FAIL(schema_guard.get_schema_version(dep_schema_objs.at(i).get_schema_type(),
                                                   dep_schema_objs.at(i).object_id_,
                                                   new_version))) {
-        LOG_WARN("failed to get schema version",
-                  K(ret), K(dep_schema_objs.at(i)));
       } else if (new_version <= merge_version) {
         match = true;
       } else {
@@ -147,7 +140,6 @@ int ObRoutinePersistentInfo::check_dep_schema(ObSchemaGetterGuard &schema_guard,
       if (OB_FAIL(schema_guard.get_simple_table_schema(
                                                       dep_schema_objs.at(i).object_id_,
                                                       table_schema))) {
-        LOG_WARN("failed to get table schema", K(ret), K(dep_schema_objs.at(i)));
       } else if (nullptr == table_schema) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get an unexpected null table schema", K(dep_schema_objs.at(i).object_id_));
@@ -190,7 +182,6 @@ int ObRoutinePersistentInfo::delete_dll_from_disk(common::ObISQLClient &trans,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected sql proxy", K(ret));
   } else if (OB_FAIL(ObShareUtil::is_primary_cluster(is_primary_cluster))) {
-    LOG_WARN("fail to check whether is primary cluster", KR(ret), K(is_primary_cluster));
   } else if (!is_primary_cluster) {
     // do nothing
   } else {
@@ -202,10 +193,8 @@ int ObRoutinePersistentInfo::delete_dll_from_disk(common::ObISQLClient &trans,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected key id.", K(ret));
     } else if (OB_FAIL(sql.assign_fmt("delete FROM %s where database_id = %ld and key_id = %ld", OB_ALL_NCOMP_DLL_V2_TNAME, database_id, key_id))) {
-      LOG_WARN("delete from __all_ncomp_dll table failed.", K(ret), K(key_id));
     } else {
       if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
-        LOG_WARN("execute query failed", K(ret), K(sql));
       } else {
         // do nothing
         LOG_INFO("succ to delete dll", K(key_id), K(affected_rows));

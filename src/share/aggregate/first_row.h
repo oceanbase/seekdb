@@ -77,7 +77,6 @@ public:
             null_cell = true;
           } else if (aggr_info.expr_->is_nested_expr()) {
             if(OB_FAIL(ObArrayExprUtils::get_collection_payload(agg_ctx.allocator_, ctx, *aggr_info.expr_, i, payload, data_len))) {
-              SQL_LOG(WARN, "get collection payload failed", K(ret));
             }
           } else {
             data_vec->get_payload(i, payload, data_len);
@@ -93,7 +92,6 @@ public:
           null_cell = true;
         } else if (aggr_info.expr_->is_nested_expr()) {
           if(OB_FAIL(ObArrayExprUtils::get_collection_payload(agg_ctx.allocator_, ctx, *aggr_info.expr_, row_sel.index(i), payload, data_len))) {
-            SQL_LOG(WARN, "get collection payload failed", K(ret));
           }
         } else {
           aggr_info.expr_->get_vector(ctx)->get_payload(row_sel.index(i), payload, data_len);
@@ -142,7 +140,6 @@ public:
         if (OB_FAIL(ObArrayExprUtils::get_collection_payload(agg_ctx.allocator_, agg_ctx.eval_ctx_,
                                                              *aggr_info.expr_, batch_idx,
                                                              compact_ptr, compact_data_len))) {
-          SQL_LOG(WARN, "get collection payload failed", K(ret));
         } else {
           agg_ctx.set_agg_cell(compact_ptr, compact_data_len, agg_col_idx, agg_cell);
         }

@@ -43,7 +43,6 @@ int ObUtlFileHandler::get_line_raw(const int64_t &fd, char *buffer, const int64_
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(buffer), K(len));
   } else if (OB_FAIL(read_impl(fd, buffer, len, read_size))) {
-    LOG_WARN("fail to get line", K(ret), K(len));
   } else if (0 == read_size) {
     ret = OB_READ_NOTHING;
     LOG_WARN("read size is 0", K(ret), K(fd), K(len));
@@ -134,7 +133,6 @@ int ObUtlFileHandler::put_impl(const int64_t &fd, const char *buffer, const int6
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(buffer), K(size));
   } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.write(io_fd, buffer, size, write_size))) {
-    LOG_WARN("fail to write", K(ret), K(size));
   } else if (autoflush && OB_FAIL(LOCAL_DEVICE_INSTANCE.fsync(io_fd))) {
     LOG_WARN("fail to flush", K(ret), K(io_fd));
   }
@@ -152,7 +150,6 @@ int ObUtlFileHandler::read_impl(const int64_t &fd, char *buffer, const int64_t l
       && retry_cnt++ < ObUtlFileConstants::DEFAULT_IO_RETRY_CNT) {
     int64_t sz = 0;
     if (OB_FAIL(LOCAL_DEVICE_INSTANCE.read(io_fd, buffer, size, sz))) {
-      LOG_WARN("fail to read", K(ret), K(size));
     } else {
       read_size += sz;
       size -= sz;
@@ -211,7 +208,6 @@ int ObUtlFileHandler::find_and_copy_lines(const char *buffer, const int64_t len,
       }
 
       if (OB_FAIL(find_single_line(single_line, buffer_len, line_feed_pos, found))) {
-        LOG_WARN("failed to find single line", K(ret), K(single_line), K(buffer_len));
       } else if (found) {
         if (line_num >= start_line && line_num <= end_line) {
           write_buffer_end += (line_feed_pos + 1);
@@ -261,8 +257,6 @@ int ObUtlFileHandler::copy_lines(const ObIOFd &src_io_fd, const ObIOFd &dst_io_f
         // do nothing
       } else if (OB_FAIL(find_and_copy_lines(data, read_size, dst_io_fd,
           start_line, end_line, line_num))) {
-        LOG_WARN("fail to find lines", K(ret), K(read_size), K(dst_io_fd),
-            K(start_line), K(end_line), K(line_num));
       } else {
         offset += read_size;
       }

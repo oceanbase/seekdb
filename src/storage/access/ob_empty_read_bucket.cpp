@@ -63,7 +63,6 @@ int ObEmptyReadBucket::mtl_init(ObEmptyReadBucket *&bucket)
   } else {
     int64_t bucket_num_lower_bound = common::calculate_scaled_value_by_memory(BUCKET_SIZE_LOWER_LIMIT, BUCKET_SIZE_LIMIT);
     if(OB_FAIL(bucket->init(bucket_num_lower_bound))) {
-      STORAGE_LOG(WARN, "failed to init EmptyReadBucket, ", K(ret));
     }
   }
   return ret;

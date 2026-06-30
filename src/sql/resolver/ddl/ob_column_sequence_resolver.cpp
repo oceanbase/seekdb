@@ -70,7 +70,6 @@ int ObColumnSequenceResolver::resolve_sequence_without_name(ObColumnSequenceStmt
       } else {
         ObSequenceResolver<ObColumnSequenceStmt> resolver;
         if (OB_FAIL(resolver.resolve_sequence_options(mystmt, node))) {
-          LOG_WARN("resolve sequence options failed", K(ret));
         }
       }
     }

@@ -31,7 +31,6 @@ int ObTenantMBList::init()
     COMMON_LOG(WARN, "init twice", K(ret));
   } else if (OB_FAIL(ObResourceMgr::get_instance().get_tenant_resource_mgr(
       resource_mgr_))) {
-    COMMON_LOG(WARN, "get_tenant_resource_mgr failed", K(ret));
   } else {
     head_.reset();
     head_.prev_ = &head_;
@@ -144,7 +143,6 @@ int ObKVCacheInstMap::init(const int64_t max_entry_cnt, const ObKVCacheConfig *c
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(inst_map_.create(max_entry_cnt, "CACHE_INST_MAP", "CACHE_INST_MAP"))) {
-      COMMON_LOG(WARN, "Fail to create inst map, ", K(ret));
     }
   }
 
@@ -203,7 +201,6 @@ int ObKVCacheInstMap::get_cache_inst(
           ret = OB_ALLOCATE_MEMORY_FAILED;
           COMMON_LOG(WARN, "Fail to alloc cache inst, ", K(ret));
         } else if (OB_FAIL(inst_map_.set_refactored(inst_key, inst))) {
-          COMMON_LOG(WARN, "Fail to set inst to inst map, ", K(ret));
         } else {
           inst->cache_id_ = inst_key.cache_id_;
           inst->node_allocator_ = node_allocator_;
@@ -287,16 +284,13 @@ int ObKVCacheInstMap::erase_tenant()
         COMMON_LOG(WARN, "Still can not destroy cache inst", K(ret), KPC(inst), K(inst->status_.store_size_),
                    K(inst->status_.kv_cnt_), K(inst->status_.lfu_mb_cnt_), K(inst->status_.lru_mb_cnt_));
       } else if (OB_FAIL(erase_key_list.push_back(iter->first))) {
-        COMMON_LOG(WARN, "Fail to push back erase inst key", K(ret));
       } else if (OB_FAIL(erase_inst_list.push_back(inst))) {
-        COMMON_LOG(WARN, "Fail to push back erase inst key", K(ret));
       }
     }
     for (int i = 0 ; OB_SUCC(ret) && i < erase_key_list.count() ; ++i) {
       ObKVCacheInstKey tmp_key = erase_key_list.at(i);
       inst = erase_inst_list.at(i);
       if (OB_FAIL(inst_map_.erase_refactored(tmp_key))) {
-        COMMON_LOG(WARN, "Fail to erase cache inst from inst map", K(ret));
       } else if (FALSE_IT(inst->reset())) {
       } else {
         ob_delete(inst);
@@ -350,7 +344,6 @@ int ObKVCacheInstMap::get_cache_info(ObIArray<ObKVCacheInstHandle> &inst_handles
         COMMON_LOG(WARN, "Unexpected null cache inst", K(ret));
       } else if (iter->second->is_mark_delete()) {
       } else if (OB_FAIL(inner_push_inst_handle(iter, inst_handles))) {
-        COMMON_LOG(WARN, "Fail to inner push cache inst", K(ret));
       }
     }
   }
@@ -431,7 +424,6 @@ int ObKVCacheInstMap::inner_push_inst_handle(const KVCacheInstMap::iterator &ite
   handle.map_ = this;
   add_inst_ref(handle.inst_);
   if (OB_FAIL(inst_handles.push_back(handle))) {
-    COMMON_LOG(WARN, "Fail to push back inst handle to array", K(ret));
   }
 
   return ret;

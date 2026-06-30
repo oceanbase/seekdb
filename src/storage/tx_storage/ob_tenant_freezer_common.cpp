@@ -252,7 +252,6 @@ ObTenantFreezeGuard::~ObTenantFreezeGuard()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(error_code_)) {
-    LOG_WARN("[FREEZE_CHECKER]tenant freeze failed, skip check frozen memstore", KR(error_code_));
   } else {
     ObMemstoreAllocator &tenant_allocator = share::g_mp->shared_mem_alloc_mgr()->memstore_allocator();
     int64_t curr_frozen_pos = 0;

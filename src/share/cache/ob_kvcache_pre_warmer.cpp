@@ -104,7 +104,6 @@ int ObDataBlockCachePreWarmer::reserve(const blocksstable::ObMicroBlockDesc &mic
   } else {
     if (FALSE_IT(reuse())) {
     } else if (OB_FAIL(do_reserve_kvpair(micro_block_desc, kvpair_size))) {
-      COMMON_LOG(WARN, "Fail to reserve block cache value", K(ret), K(micro_block_desc));
     } else {
       rest_size_ = MAX(0, rest_size_ - kvpair_size);
       reserve_succ_flag = true;
@@ -130,9 +129,7 @@ int ObDataBlockCachePreWarmer::add(
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(WARN, "The block cache pre warmer is not inited", K(ret), KP(cache_));
   } else if (OB_FAIL(cache_->get_cache(kvcache))) {
-    COMMON_LOG(WARN, "Fail to get block kvcache", K(ret));
   } else if (OB_FAIL(do_put_kvpair(micro_block_desc, *kvcache))) {
-    COMMON_LOG(WARN, "Fail to put kvpair into kvcache", K(ret));
   }
   COMMON_LOG(DEBUG, "pre warmer build cache key and put details", K(ret), K(rest_size_), K(update_step_),
                                                                   K(micro_block_desc), KPC(micro_block_desc.header_));
@@ -213,7 +210,6 @@ int ObDataBlockCachePreWarmer::do_put_kvpair(
         micro_block_desc.buf_size_ + micro_block_desc.header_->header_size_);
     }
     if (OB_FAIL(kvcache.put_kvpair(inst_handle_, kvpair_, cache_handle_))) {
-      COMMON_LOG(WARN, "failed to put kvpair to block cache", K(ret));
     }
   }
   return ret;
@@ -267,7 +263,6 @@ int ObIndexBlockCachePreWarmer::do_reserve_kvpair(
   blocksstable::ObMicroBlockData micro_data(micro_block_desc.get_block_buf(), micro_block_desc.get_block_size());
   char *allocated_buf = nullptr;
   if (OB_FAIL(idx_transformer_.transform(micro_data, value_.get_block_data(), allocator_, allocated_buf, table_read_info_))) {
-    COMMON_LOG(WARN, "Fail to transform index block to memory format", K(ret));
   } else {
     kvpair_size = sizeof(blocksstable::ObMicroBlockCacheKey) + value_.size();
   }
@@ -294,7 +289,6 @@ int ObIndexBlockCachePreWarmer::do_put_kvpair(
         micro_block_desc.buf_size_ + micro_block_desc.header_->header_size_);
     }
     if (OB_FAIL(kvcache.put(key_, value_))) {
-      COMMON_LOG(WARN, "failed to put index block to cache", K(ret), K_(key), K_(value));
     }
   }
   return ret;

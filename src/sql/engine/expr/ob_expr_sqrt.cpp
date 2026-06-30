@@ -56,7 +56,6 @@ int calc_sqrt_expr_mysql(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
-    LOG_WARN("eval arg failed", K(ret), K(expr));
   } else if (arg->is_null()) {
     res_datum.set_null();
   } else {
@@ -77,7 +76,6 @@ int calc_sqrt_expr_mysql_in_batch(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("vectorized evaluate failed", K(ret), K(expr));
   } else {
     ObBitVector &eval_flag = expr.get_evaluated_flags(ctx);
     ObDatumVector arg_datums = expr.args_[0]->locate_expr_datumvector(ctx);

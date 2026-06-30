@@ -39,7 +39,6 @@ int ObDBMSSession::clear_identifier(sql::ObExecContext &ctx,
     ret = OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE;
     LOG_USER_ERROR(OB_ERR_WRONG_FUNC_ARGUMENTS_TYPE, func_name.length(), func_name.ptr());
   } else if (OB_FAIL(session->set_client_id(client_id))) {
-    LOG_WARN("failed to set client id", K(ret));
   }
   return ret;
 }
@@ -64,11 +63,9 @@ int ObDBMSSession::set_identifier(sql::ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get wrong param in set identifier", K(ret), K(params.at(0)));
   } else if (OB_FAIL(params.at(0).get_varchar(client_id))) {
-    LOG_WARN("failed to get param", K(ret), K(params.at(0)));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(session->set_client_id(client_id))) {
-    LOG_WARN("failed to set client id", K(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -76,9 +73,7 @@ int ObDBMSSession::set_identifier(sql::ObExecContext &ctx,
   } else {
     ObFLTControlInfoManager mgr;
     if (OB_FAIL(mgr.init())) {
-      LOG_WARN("failed to init full link trace info manager", K(ret));
     } else if (OB_FAIL(mgr.find_appropriate_con_info(*session))) {
-      LOG_WARN("failed to get control info for client info", K(ret));
     } else {
       // do nothing
     }
@@ -124,13 +119,11 @@ int ObDBMSSession::check_argument(const ObObj &input_param, bool allow_null,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected param", K(ret), K(input_param), K(param_idx));
   } else if (OB_FAIL(input_param.get_varchar(output_param))) {
-    LOG_WARN("failed to get varchar", K(ret), K(input_param), K(param_idx));
   } else if (output_param.length() > max_len) {
     ret = OB_ERR_INVALID_INPUT_ARGUMENT;
     LOG_USER_ERROR(OB_ERR_INVALID_INPUT_ARGUMENT, param_idx + 1);
   } else if (need_case_up) {
     if (OB_FAIL(try_caseup(input_param.get_collation_type(), output_param, alloc))) {
-      LOG_WARN("failed to case up", K(ret));
     }
   }
   return ret;
@@ -148,12 +141,10 @@ int ObDBMSSession::check_client_id(const ObObj &input_param,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected param", K(ret), K(input_param));
   } else if (OB_FAIL(input_param.get_varchar(output_param))) {
-    LOG_WARN("failed to get varchar", K(ret), K(input_param));
   } else if (output_param.length() > max_len) {
     ret = OB_ERR_CLIENT_IDENTIFIER_TOO_LONG;
     LOG_USER_ERROR(OB_ERR_CLIENT_IDENTIFIER_TOO_LONG);
   } else if (OB_FAIL(try_caseup(input_param.get_collation_type(), output_param, alloc))) {
-    LOG_WARN("failed to case up", K(ret));
   }
   return ret;
 }
@@ -166,7 +157,6 @@ int ObDBMSSession::try_caseup(ObCollationType cs_type, ObString &str_val, ObIAll
     if (str_val.ptr()[0] == '\"' && str_val.ptr()[str_val.length() - 1] == '\"') {
       str_val.assign(str_val.ptr() + 1, str_val.length() - 2);
     } else if (OB_FAIL(ObCharset::caseup(cs_type, str_val, dest, alloc))) {
-      LOG_WARN("failed to case up", K(ret));
     } else {
       str_val = dest;
     }

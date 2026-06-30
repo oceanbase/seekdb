@@ -47,7 +47,6 @@ int ObOptEstUtils::extract_column_exprs_with_op_check(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Raw expr is NULL", K(ret));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
-    LOG_WARN("check stack overflow failed", K(ret));
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recursive", K(ret));
@@ -65,7 +64,6 @@ int ObOptEstUtils::extract_column_exprs_with_op_check(
                                                                 column_exprs,
                                                                 only_monotonic_op,
                                                                 level + 1)))) {
-        LOG_WARN("Failed to extract column exprs", K(ret));
       }
     }
   }
@@ -89,11 +87,9 @@ int ObOptEstUtils::is_range_expr(const ObRawExpr *qual, bool &is_simple_filter)
     const ObRawExpr *const_expr2 = NULL;
     ObItemType dummy = T_INVALID;
     if (OB_FAIL(extract_var_op_const(qual, var, const_expr1, const_expr2, dummy, is_simple_filter))) {
-      LOG_WARN("failed to extract var", K(ret));
     } else if (!is_simple_filter) {
       // do nothing
     } else if (OB_FAIL(ObOptimizerUtil::get_expr_without_lossless_cast(var, var))) {
-      LOG_WARN("failed to get expr without lossless cast", K(ret));
     } else if (!var->is_column_ref_expr()) {
       is_simple_filter = false;
     }
@@ -101,7 +97,6 @@ int ObOptEstUtils::is_range_expr(const ObRawExpr *qual, bool &is_simple_filter)
     const ObOpRawExpr *op_expr = static_cast<const ObOpRawExpr *>(qual);
     for (int idx = 0 ; idx < op_expr->get_param_count() && is_simple_filter && OB_SUCC(ret); ++idx) {
       if (OB_FAIL(is_range_expr(op_expr->get_param_expr(idx), is_simple_filter))) {
-        LOG_WARN("failed to judge if expr is range", K(ret));
       }
     }
   } else {
@@ -199,7 +194,6 @@ int ObOptEstUtils::get_expr_value(const ParamStore *params,
                                                           value,
                                                           get_value,
                                                           allocator))) {
-      LOG_WARN("Failed to get const or calculable expr value", K(ret));
     }
   } else { }//do nothing
   return ret;
@@ -220,7 +214,6 @@ int ObOptEstUtils::if_expr_value_null(const ParamStore *params,
     LOG_WARN("null input", K(params), K(ret));
   } else if (OB_FAIL(get_expr_value(params, expr, exec_ctx,
                                     allocator, get_value, value))) {
-    LOG_WARN("Failed to get expr value", K(ret));
   } else if (get_value) {
     is_null = value.is_null();
   } else { }//do nothing
@@ -248,7 +241,6 @@ int ObOptEstUtils::if_expr_start_with_patten_sign(const ParamStore *params,
     LOG_WARN("null input", K(ret), K(params), K(expr), K(esp_expr));
   } else if (OB_FAIL(get_expr_value(params, *esp_expr, exec_ctx,
                                     allocator, get_value, esp_value))) {
-    LOG_WARN("Failed to get expr value", K(ret));
   } else if (!get_value || !esp_value.is_string_type()) {
     // do nothing
   } else {
@@ -263,7 +255,6 @@ int ObOptEstUtils::if_expr_start_with_patten_sign(const ParamStore *params,
       valid_escape = false;
     }
     if (OB_FAIL(get_expr_value(params, *expr, exec_ctx, allocator, get_value, value))) {
-      LOG_WARN("Failed to get expr value", K(ret));
     } else if (get_value && value.is_string_type() && value.get_string().length() > 0) {
       // 1. patten not start with `escape sign`
       // 2. patten start with `%` or `_` && `%` or `_` is not `escape sign`
@@ -324,13 +315,11 @@ int ObOptEstUtils::if_expr_value_equal(ObOptimizerContext &opt_ctx,
                 exec_ctx,
                 allocator,
                 get_first, first_value))) {
-    LOG_WARN("Failed to get first value", K(ret));
   } else if (!get_first) {
     equal = false;
   } else if (OB_FAIL(get_expr_value(params, second_expr,
                                     exec_ctx, allocator,
                                     get_second, second_value))) {
-    LOG_WARN("Failed to get second value", K(ret));
   } else if (!get_second) {
     equal = false;
   } else if (first_value.is_null() && second_value.is_null() && null_safe) {
@@ -368,9 +357,7 @@ int ObOptEstUtils::if_expr_value_equal(ObOptimizerContext &opt_ctx,
     type_ctx.set_raw_expr(&equal_expr);
     equal_op.set_raw_expr(&equal_expr);
     if (OB_FAIL(ObSQLUtils::wrap_expr_ctx(stmt->get_stmt_type(), *exec_ctx, allocator, expr_ctx))) {
-      LOG_WARN("Failed to wrap expr ctx", K(ret));
     } else if (OB_FAIL(equal_op.calc_result_type2(result_type, first_type, second_type, type_ctx))) {
-      LOG_WARN("Failed to calc result type", K(ret));
     } else {
       ObCompareCtx cmp_ctx(result_type.get_type(),
                            result_type.get_collation_type(),
@@ -542,7 +529,6 @@ int ObOptEstObjToScalar::convert_obj_to_double(const ObObj *obj, double &num)
       }
     }
   } else if (OB_FAIL(convert_obj_to_scalar(obj, num))) {
-    LOG_WARN("failed to convert obj to scalar", K(ret));
   }
   return ret;
 }
@@ -599,7 +585,6 @@ int ObOptEstObjToScalar::convert_obj_to_scalar_obj(const common::ObObj* obj, com
     default: {
       double num = 0.0;
       if (OB_FAIL(convert_obj_to_scalar(obj, num))) {
-        LOG_WARN("failed to convert obj to scalar", K(ret));
       } else {
         out->set_double(num);
       }
@@ -686,7 +671,6 @@ int ObOptEstObjToScalar::convert_objs_to_scalars(
             }
           }
           if (OB_FAIL(convert_strings_to_scalar(cs_type, strs, string_scalars))) {
-            LOG_WARN("Failed to convert string scalar", K(ret));
           } else if (string_scalars.count() != strs.count()) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("Scalars and strings not match",
@@ -714,7 +698,6 @@ int ObOptEstObjToScalar::convert_objs_to_scalars(
           ++skip_count;
           if (NULL != out_ptr && NULL != in_ptr) {
             if (OB_FAIL(convert_obj_to_scalar_obj(in_ptr, out_ptr))) {
-              LOG_WARN("Failed to convert obj using old method", K(ret));
             }
           }
         }
@@ -744,11 +727,8 @@ int ObOptEstObjToScalar::add_to_string_conversion_array(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Already in array", K(pos), K(ret));
   } else if (OB_FAIL(strobj.get_string(str))) {
-    LOG_WARN("Failed to get string", K(ret));
   } else if (OB_FAIL(arr.push_back(str))) {
-    LOG_WARN("Failed to push back", K(ret));
   } else if (OB_FAIL(cs_type.push_back(strobj.get_collation_type()))) {
-    LOG_WARN("failed to push back", K(ret));
   } else {
     convertable_map |= (0x1 << pos);
   }
@@ -778,13 +758,10 @@ int ObOptEstObjToScalar::convert_strings_to_scalar(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate", K(ret));
     } else if (OB_FAIL(get_string_sort_key(tmp_alloc, cs_type.at(i), origin_strs.at(i), *sort_key))) {
-      LOG_WARN("failed to get sort key", K(ret));
     }
   }
   if (FAILEDx(find_common_prefix_len(sort_keys, common_prefix_length))) {
-    LOG_WARN("Failed to find common prefix length", K(ret));
   } else if (OB_FAIL(find_string_scalar_offset_base(sort_keys, common_prefix_length, offset, base))) {
-    LOG_WARN("Failed to find offset and base", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < origin_strs.count(); ++i) {
       double scalar = convert_string_to_scalar(sort_keys.at(i),
@@ -792,7 +769,6 @@ int ObOptEstObjToScalar::convert_strings_to_scalar(
                                                offset,
                                                base);
       if (OB_FAIL(scalars.push_back(scalar))) {
-        LOG_WARN("Failed to push back", K(ret));
       }
     }
   }
@@ -911,7 +887,6 @@ int ObOptEstObjToScalar::get_string_sort_key(ObIAllocator &alloc, ObCollationTyp
     ObArrayWrap<char> buffer;
     bool is_valid_character = false;
     if (OB_FAIL(buffer.allocate_array(alloc, buf_len))) {
-      LOG_WARN("failed to allocate", K(ret));
     } else {
       size_t sort_key_len = ObCharset::sortkey(cs_type, str.ptr(), str.length(),
                                                buffer.get_data(), buf_len, is_valid_character);
@@ -927,7 +902,6 @@ int ObOptEstObjToScalar::convert_string_to_scalar(ObCollationType cs_type, const
   ObString sort_key;
   ObArenaAllocator tmp_alloc("ObOptEstUtils");
   if (OB_FAIL(get_string_sort_key(tmp_alloc, cs_type, str, sort_key))) {
-    LOG_WARN("failed to get sort key", K(ret));
   } else {
     scalar = convert_string_to_scalar(sort_key);
   }

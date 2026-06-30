@@ -84,7 +84,6 @@ int LogWritingThrottle::throttling(const int64_t throttling_size,
       int64_t time_interval = 0;
       if (OB_FAIL(ObThrottlingUtils::get_throttling_interval(THROTTLING_CHUNK_SIZE, throttling_size, trigger_base_log_disk_size,
                                                              cur_unrecyclable_size, decay_factor_, time_interval))) {
-        LOG_WARN("failed to get_throttling_interval", KPC(this));
       }
       int64_t remain_interval_us = time_interval;
       bool has_freed_up_space = false;
@@ -98,7 +97,6 @@ int LogWritingThrottle::throttling(const int64_t throttling_size,
         if (remain_interval_us <= 0) {
           //do nothing
         } else if (OB_FAIL(update_throtting_options_guarded_by_lock_(palf_env_impl, has_freed_up_space))) {
-          LOG_WARN("failed to update_throttling_info_", KPC(this), K(time_interval), K(remain_interval_us));
         } else if (!need_throttling_not_guarded_by_lock_(need_purging_throttling_func)
                    || has_freed_up_space) {
           LOG_TRACE("no need throttling or log disk has been freed up", KPC(this), K(time_interval), K(remain_interval_us), K(has_freed_up_space));
@@ -143,7 +141,6 @@ int LogWritingThrottle::update_throtting_options_guarded_by_lock_(IPalfEnvImpl *
   if (ATOMIC_LOAD(&need_writing_throttling_notified_)) {
     PalfThrottleOptions new_throttling_options;
     if (OB_FAIL(palf_env_impl->get_throttling_options(new_throttling_options))) {
-      PALF_LOG(WARN, "failed to get_writing_throttling_option");
     } else if (OB_UNLIKELY(!new_throttling_options.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       PALF_LOG(WARN, "options is invalid", K(new_throttling_options), KPC(this));
@@ -165,7 +162,6 @@ int LogWritingThrottle::update_throtting_options_guarded_by_lock_(IPalfEnvImpl *
         if (need_update_decay_factor) {
           if (OB_FAIL(ObThrottlingUtils::calc_decay_factor(new_available_size_after_limit, new_maximum_duration,
                   THROTTLING_CHUNK_SIZE, decay_factor_))) {
-            PALF_LOG(ERROR, "failed to calc_decay_factor", K(throttling_options_), K(THROTTLING_CHUNK_SIZE));
           } else {
             PALF_LOG(INFO, "[LOG DISK THROTTLING] success to calc_decay_factor", K(decay_factor_), K(throttling_options_),
                      K(new_throttling_options), K(THROTTLING_CHUNK_SIZE));

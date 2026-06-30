@@ -129,7 +129,6 @@ int ObGlobalInterruptManager::register_checker(ObInterruptChecker *checker,
     ret = OB_HASH_EXIST;
     LIB_LOG(ERROR, "the check has already registered", K(ret));
   } else if (OB_FAIL(create_checker_node(checker, checker_node))) {
-    LIB_LOG(ERROR, "fail to create checker node", K(ret));
   } else {
     // A slightly more complicated but safe inspection operation
     // Since map does not provide the operation of "create or modify", nor does it provide the ability to hold bucket locks
@@ -183,7 +182,6 @@ int ObGlobalInterruptManager::unregister_checker(ObInterruptChecker *checker,
       ObInterruptCheckerRemoveCall call(checker_node);
       ret = map_.atomic_refactored(tid, call);
       if (OB_LIKELY(OB_SUCCESS != ret)) {
-        LIB_LOG(ERROR, "unregister checker failed", K(ret));
       } else if (call.is_empty()) {
         // Delete here must be successful
         ignore = map_.erase_refactored(tid, nullptr);

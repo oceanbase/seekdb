@@ -506,7 +506,6 @@ int PalfHandle::register_file_size_cb(PalfFSCb *fs_cb)
     if (NULL == fs_cb_node) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_FAIL(palf_handle_impl_->register_file_size_cb(fs_cb_node))) {
-      PALF_LOG(WARN, "register_file_size_cb failed", K(ret));
     } else {
       fs_cb_ = fs_cb_node;
     }
@@ -525,7 +524,6 @@ int PalfHandle::unregister_file_size_cb()
   if (NULL == fs_cb_) {
     PALF_LOG(TRACE, "no need unregister_file_size_cb", K(fs_cb_));
   } else if (OB_FAIL(palf_handle_impl_->unregister_file_size_cb(fs_cb_))) {
-    PALF_LOG(WARN, "unregister_role_change_cb failed", K(ret));
   } else {
     MTL_DELETE(PalfFSCbNode, "PalfFSCbNode", fs_cb_);
     fs_cb_ = NULL;
@@ -547,7 +545,6 @@ int PalfHandle::register_role_change_cb(PalfRoleChangeCb *rc_cb)
     if (NULL == rc_cb_node) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_FAIL(palf_handle_impl_->register_role_change_cb(rc_cb_node))) {
-      PALF_LOG(WARN, "register_role_change_cb failed", K(ret));
     } else {
       rc_cb_ = rc_cb_node;
     }
@@ -566,7 +563,6 @@ int PalfHandle::unregister_role_change_cb()
   if (NULL == rc_cb_) {
     PALF_LOG(TRACE, "no need unregister_role_change_cb", K(rc_cb_));
   } else if (OB_FAIL(palf_handle_impl_->unregister_role_change_cb(rc_cb_))) {
-    PALF_LOG(WARN, "unregister_role_change_cb failed", K(ret));
   } else {
     MTL_DELETE(PalfRoleChangeCbNode, "PalfRCCbNode", rc_cb_);
     rc_cb_ = NULL;
@@ -589,7 +585,6 @@ int PalfHandle::register_rebuild_cb(PalfRebuildCb *rebuild_cb)
     if (NULL == rebuild_cb_node) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_FAIL(palf_handle_impl_->register_rebuild_cb(rebuild_cb_node))) {
-      PALF_LOG(WARN, "register_rebuild_cb failed", K(ret));
     } else {
       rebuild_cb_ = rebuild_cb_node;
     }
@@ -608,7 +603,6 @@ int PalfHandle::unregister_rebuild_cb()
   if (NULL == rebuild_cb_) {
     PALF_LOG(TRACE, "no need unregister_rebuild_cb", K(ret));
   } else if (OB_FAIL(palf_handle_impl_->unregister_rebuild_cb(rebuild_cb_))) {
-    PALF_LOG(WARN, "unregister_rebuild_cb failed", K(ret));
   } else {
     MTL_DELETE(PalfRebuildCbNode, "RebuildCbNode", rebuild_cb_);
     rebuild_cb_ = NULL;
@@ -624,7 +618,6 @@ int PalfHandle::set_location_cache_cb(PalfLocationCacheCb *lc_cb)
   if (OB_ISNULL(lc_cb)) {
     PALF_LOG(INFO, "no need set_location_cache_cb", KR(ret));
   } else if (OB_FAIL(palf_handle_impl_->set_location_cache_cb(lc_cb))) {
-    PALF_LOG(WARN, "set_location_cache_cb failed", KR(ret));
   } else {
   }
   return ret;
@@ -635,7 +628,6 @@ int PalfHandle::reset_location_cache_cb()
   int ret = OB_SUCCESS;
   CHECK_VALID;
   if (OB_FAIL(palf_handle_impl_->reset_location_cache_cb())) {
-    PALF_LOG(WARN, "reset_location_cache_cb failed", KR(ret));
   } else {
     PALF_LOG(INFO, "reset_location_cache_cb success", KR(ret));
   }
@@ -650,7 +642,6 @@ int PalfHandle::set_election_priority(election::ElectionPriority *priority)
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(WARN, "priority is nullptr", KR(ret), KP(priority));
   } else if (OB_FAIL(palf_handle_impl_->set_election_priority(priority))) {
-    PALF_LOG(WARN, "set election priority to palf failed", KR(ret));
   }
   return ret;
 }
@@ -660,7 +651,6 @@ int PalfHandle::reset_election_priority()
   int ret = OB_SUCCESS;
   CHECK_VALID;
   if (OB_FAIL(palf_handle_impl_->reset_election_priority())) {
-    PALF_LOG(WARN, "set election priority to palf failed", KR(ret));
   }
   return ret;
 }

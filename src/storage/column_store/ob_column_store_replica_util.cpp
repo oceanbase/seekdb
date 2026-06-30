@@ -93,7 +93,6 @@ int ObCSReplicaUtil::check_need_wait_for_report(
   ObCSReplicaTabletStatus cs_replica_status = ObCSReplicaTabletStatus::MAX_STATUS;
   if (!ls.is_cs_replica()) {
   } else if (OB_FAIL(ObCSReplicaUtil::init_cs_replica_tablet_status(ls, tablet, cs_replica_status))) {
-    LOG_WARN("fail to init cs replica tablet status", K(ret), K(ls), K(tablet));
   } else if (OB_UNLIKELY(!is_valid_cs_replica_status(cs_replica_status))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("cs replica status is invalid", K(ret), K(ls), K(tablet));
@@ -117,11 +116,9 @@ int ObCSReplicaUtil::init_cs_replica_tablet_status(
     bool need_procss_cs_replica = false;
     ObMigrationStatus migration_status = ObMigrationStatus::OB_MIGRATION_STATUS_MAX;
     if (OB_FAIL(ObCSReplicaUtil::check_need_process_cs_replica(ls, tablet, need_procss_cs_replica))) {
-      LOG_WARN("fail to check need process cs replica", K(ret), K(ls), K(tablet));
     } else if (!need_procss_cs_replica) {
       cs_replica_status = ObCSReplicaTabletStatus::NORMAL;
     } else if (OB_FAIL(ls.get_ls_meta().get_migration_status(migration_status))) {
-      LOG_WARN("failed to get migration status", K(ret), K(ls));
     } else if (ObMigrationStatus::OB_MIGRATION_STATUS_NONE != migration_status) {
       cs_replica_status = ObCSReplicaTabletStatus::NOT_COMPLETE;
     } else if (tablet.get_last_major_snapshot_version() <= 0) {
@@ -195,13 +192,9 @@ int ObCSReplicaUtil::get_full_column_array_from_table_schema(
   ObSchemaGetterGuard schema_guard;
   ObMultiVersionSchemaService &schema_service = ObMultiVersionSchemaService::get_instance();
   if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("failed to get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_schema_version(tenant_schema_version))) {
-    LOG_WARN("failed to get tenant schema version", K(ret));
   } else if (OB_FAIL(compaction::ObMediumCompactionScheduleFunc::get_table_id(schema_service, tablet_id, tenant_schema_version, table_id))) {
-    LOG_WARN("failed to get table id", K(ret), K(tablet_id), K(tenant_schema_version));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
-    LOG_WARN("failed to get table schema", K(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_IS_DELETED;
     LOG_WARN("table is deleted", K(ret), K(table_id));
@@ -209,14 +202,10 @@ int ObCSReplicaUtil::get_full_column_array_from_table_schema(
     ObStorageSchema *full_storage_schema = nullptr;
     uint64_t tenant_data_version = 0;
     if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, full_storage_schema))) {
-      LOG_WARN("alloc and new failed", K(ret));
     } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_version))) {
-      LOG_WARN("unable to get tenant data version", K(ret));
     } else if (OB_FAIL(full_storage_schema->init(allocator, *table_schema, simplified_schema.get_compat_mode(), 
                   false/*skip_column_info*/, tenant_data_version, true/*generate_cs_replica_cg_array*/))) {
-      LOG_WARN("failed to init storage schema", K(ret), K(table_id));
     } else if (OB_FAIL(get_column_array_from_full_storage_schema(allocator, expected_stored_column_cnt, *full_storage_schema, column_array))) {
-      LOG_WARN("failed to get column array from full storage schema", K(ret), K(update_param), K(expected_stored_column_cnt), K(full_storage_schema));
     } else {
       LOG_INFO("[CS-Replica] Successfully get column array", K(ret), K(update_param), K(expected_stored_column_cnt), K(column_array));
     }
@@ -254,7 +243,6 @@ int ObCSReplicaUtil::get_column_array_from_full_storage_schema(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected column cnt", K(ret), K(column_cnt), K(stored_column_cnt), K(expected_stored_column_cnt), K(stored_column_cnt), K(full_storage_schema));
   } else if (OB_FAIL(column_array.init(column_cnt))) {
-    LOG_WARN("failed to init column array", K(ret), K(column_cnt));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < column_cnt; ++i) {
       ObStorageColumnSchema col_schema;
@@ -263,7 +251,6 @@ int ObCSReplicaUtil::get_column_array_from_full_storage_schema(
       col_schema.default_checksum_ = src_col_schema.default_checksum_;
       col_schema.meta_type_ = src_col_schema.meta_type_;
       if (OB_FAIL(col_schema.deep_copy_default_val(allocator, src_col_schema.orig_default_value_))) {
-        STORAGE_LOG(WARN, "failed to deep copy col schema", K(ret), K(i), K(src_col_schema));
       } else if (OB_FAIL(column_array.push_back(col_schema))) {
         STORAGE_LOG(WARN, "failed to push back col schema", K(ret));
         col_schema.destroy(allocator);
@@ -292,10 +279,8 @@ int ObCSReplicaUtil::get_rebuild_storage_schema(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KPC(full_storage_schema), K(param), K(simplified_schema));
   } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, schema))) {
-    LOG_WARN("fail to alloc and new storage schema", K(ret));
   } else if (OB_FAIL(schema->init(allocator, simplified_schema, false /*skip_column_info*/, 
                                   nullptr /*column_group_schema*/, true /*need_generate_cs_replica_cg_array*/, &param))) {
-    LOG_WARN("fail to init full storage schema", K(ret), K(simplified_schema));
   }
 
   if (OB_FAIL(ret)) {
@@ -344,7 +329,6 @@ int ObCSReplicaStorageSchemaGuard::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_handle));
   } else if (OB_FAIL(tablet_handle.get_obj()->load_storage_schema(mem_ctx.get_allocator(), schema_on_tablet))) {
-    LOG_WARN("failed to load storage schema", K(ret), K(tablet_handle));
   } else {
     schema_ = schema_on_tablet;
     is_inited_ = true;
@@ -399,10 +383,8 @@ int ObGlobalCSReplicaMgr::try_init(const ObIArray<share::ObLSID> &ls_id_array)
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
-  } else if (OB_FAIL(cs_replica_ls_id_set_.create(CS_REPLICA_LS_ID_SET_BUCKET_NUM, "CSRplLSIDSet", "CSRplLSIDSet"))) { // use 500 tenant memory since the tenant may not been created
-    LOG_WARN("failed to create cs replica set", K(ret));
+  } else if (OB_FAIL(cs_replica_ls_id_set_.create(CS_REPLICA_LS_ID_SET_BUCKET_NUM, "CSRplLSIDSet", "CSRplLSIDSet"))) {
   } else if (OB_FAIL(ObCSReplicaUtil::get_cs_replica_ls_set(ls_id_array, cs_replica_ls_id_set_))) {
-    LOG_WARN("failed to get cs replica ls set", K(ret), K(ls_id_array));
   } else {
     is_inited_ = true;
   }

@@ -61,14 +61,12 @@ int ObLockTableExecutor::execute_mysql_(ObExecContext &ctx,
     case ObLockTableStmt::MYSQL_LOCK_TABLE_STMT: {
       ObMySQLLockTableExecutor executor;
       if (OB_FAIL(executor.execute(ctx, stmt.get_mysql_lock_list()))) {
-        LOG_WARN("lock table failed", K(ret));
       }
       break;
     }
     case ObLockTableStmt::MYSQL_UNLOCK_TABLE_STMT: {
       ObMySQLUnlockTableExecutor executor;
       if (OB_FAIL(executor.execute(ctx))) {
-        LOG_WARN("unlock table failed", K(ret));
       }
       break;
     }

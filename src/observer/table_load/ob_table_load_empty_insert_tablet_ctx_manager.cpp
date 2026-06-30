@@ -57,11 +57,8 @@ int ObTableLoadEmptyInsertTabletCtxManager::init(
                                                                       target_partition_ids,
                                                                       partition_location_,
                                                                       target_partition_location_))) {
-      LOG_WARN("fail to init partition location", KR(ret));
     } else if (OB_FAIL(partition_location_.get_all_leader_info(all_leader_info_array_))) {
-      LOG_WARN("fail to get all origin leader info", KR(ret));
     } else if (OB_FAIL(target_partition_location_.get_all_leader_info(target_all_leader_info_array_))) {
-      LOG_WARN("fail to get all target leader info", KR(ret));
     } 
   }
   if (OB_SUCC(ret)) {
@@ -90,9 +87,7 @@ int ObTableLoadEmptyInsertTabletCtxManager::get_next_task(
       for (; OB_SUCC(ret) && start_ < target_leader_info.partition_id_array_.count()
                           && partition_ids.count() < TABLET_COUNT_PER_TASK; ++start_) {
         if (OB_FAIL(partition_ids.push_back(leader_info.partition_id_array_.at(start_)))) {
-          LOG_WARN("fail to push back partition ids", KR(ret));
         } else if (OB_FAIL(target_partition_ids.push_back(target_leader_info.partition_id_array_.at(start_)))) {
-          LOG_WARN("fail to push back target partition ids", KR(ret));
         }
       }
       if (target_leader_info.partition_id_array_.count() == start_) {
@@ -145,7 +140,6 @@ int ObTableLoadEmptyInsertTabletCtxManager::execute(
   ObDirectLoadInsertTableParam insert_table_param;
   ObDirectLoadInsertDataTableContext tmp_insert_table_ctx;
   if (OB_FAIL(table_load_schema.init(table_id, ddl_param.schema_version_))) {
-    LOG_WARN("fail to init table load schema", KR(ret));
   }
   insert_table_param.table_id_ = table_id;
   insert_table_param.schema_version_ = ddl_param.schema_version_;
@@ -176,7 +170,6 @@ int ObTableLoadEmptyInsertTabletCtxManager::execute(
   } else if (OB_FAIL(tmp_insert_table_ctx.init(insert_table_param,
                                         ls_part_ids,
                                         target_ls_part_ids))) {
-    LOG_WARN("fail to init tmp insert table ctx", KR(ret));
   }
   FOREACH_X(it, tmp_insert_table_ctx.get_tablet_ctx_map(), OB_SUCC(ret)) {
     int64_t slice_id = 0;
@@ -187,18 +180,13 @@ int ObTableLoadEmptyInsertTabletCtxManager::execute(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("insert tablet ctx is nullptr", KR(ret));
     } else if (OB_FAIL(insert_tablet_ctx->get_ddl_agent(tmp_agent))) {
-      LOG_WARN("failed to get direct load mgr agent", K(ret));
     } else if (!tmp_agent.is_inited()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ddl agent should not be invalid", K(ret), K(tmp_agent));
     } else if (OB_FAIL(insert_tablet_ctx->open())) {
-      LOG_WARN("fail to open tablet ctx", KR(ret));
     } else if (OB_FAIL(insert_tablet_ctx->open_sstable_slice(block_start_seq, 0/*slice_idx*/, slice_id, tmp_agent))) {
-      LOG_WARN("fail to open sstable slice", KR(ret), K(block_start_seq), K(slice_id));
     } else if (OB_FAIL(insert_tablet_ctx->close_sstable_slice(slice_id, 0/*slice_idx*/, tmp_agent))) {
-      LOG_WARN("fail to close sstable slice", KR(ret), K(slice_id));
     } else if (OB_FAIL(insert_tablet_ctx->close())) {
-      LOG_WARN("fail to close tablet ctx", KR(ret));
     }
   }
   return ret;
@@ -228,7 +216,6 @@ int ObTableLoadEmptyInsertTabletCtxManager::execute_for_dag(
           dag_init_param.ls_tablet_ids_,
           std::make_pair(target_ls_part_ids.at(i).ls_id_,
                          target_ls_part_ids.at(i).part_tablet_id_.tablet_id_)))) {
-      LOG_WARN("add var to array no dup failed", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -237,11 +224,8 @@ int ObTableLoadEmptyInsertTabletCtxManager::execute_for_dag(
     ObArenaAllocator allocator;
     allocator.set_attr(ObMemAttr("TLD_EI_Dag"));
     if (OB_FAIL(ObTenantDagScheduler::alloc_dag(allocator, false /*is_ha_dag*/, dag))) {
-      LOG_WARN("alloc ddl dag failed", KR(ret));
     } else if (OB_FAIL(dag->init(&dag_init_param, cur_dag_id))) {
-      LOG_WARN("fail to init dag", KR(ret));
     } else if (OB_FAIL(dag->process())) {
-      LOG_WARN("fail to process dag", KR(ret));
     } else {
       ret = dag->get_dag_ret();
     }

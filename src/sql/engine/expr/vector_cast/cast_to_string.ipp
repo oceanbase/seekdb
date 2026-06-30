@@ -73,7 +73,6 @@ struct ToStringCastImpl
           int64_t out_len = 0;
           if (OB_FAIL(CastHelperImpl::vector_copy_string_zf(
                           expr, ctx_, idx, length, buf_, out_scale_, out_len, out_ptr, align_offset))) {
-            SQL_LOG(WARN, "vector_copy_string_zf failed", K(ret), K(buf_));
           } else {
             res_vec_->set_string(idx, out_ptr, out_len);
           }
@@ -92,7 +91,6 @@ struct ToStringCastImpl
         FloatDoubleToStringFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec);
         if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-          SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
         }
       }
     }
@@ -118,7 +116,6 @@ struct ToStringCastImpl
           ObFastFormatInt ffi(in_val);
           if(OB_FAIL(CastHelperImpl::vector_copy_string_zf(
                         expr, ctx_, idx, ffi.length(), ffi.ptr(), out_scale_, out_len, out_ptr))) {
-            SQL_LOG(WARN, "vector_ffi_copy_string_zf failed", K(ret));
           } else {
             res_vec_->set_string(idx, out_ptr, out_len);
           }
@@ -136,7 +133,6 @@ struct ToStringCastImpl
         IntUIntToStringFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec);
         if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-          SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
         }
       }
     }
@@ -158,13 +154,11 @@ struct ToStringCastImpl
           int32_t in_val = arg_vec_->get_date(idx);
           int64_t len = 0;
           if (OB_FAIL(ObTimeConverter::date_to_str(in_val, buf_, sizeof(buf_), len))) {
-            SQL_LOG(WARN, "date_to_str failed", K(ret));
           } else {
             char *out_ptr = NULL;
             int64_t out_len = 0;
             if(OB_FAIL(CastHelperImpl::vector_copy_string(
                           expr, ctx_, idx, len, buf_, out_len, out_ptr))) {
-              SQL_LOG(WARN, "vector_ffi_copy_string_zf failed", K(ret));
             } else {
               res_vec_->set_string(idx, out_ptr, out_len);
             }
@@ -180,7 +174,6 @@ struct ToStringCastImpl
       DateToStringFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec);
       if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-        SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
       }
     }
     return ret;
@@ -203,13 +196,11 @@ struct ToStringCastImpl
           if (OB_FAIL(common_datetime_string(expr, in_type_, out_type_, in_scale_,
                                             CM_IS_FORCE_USE_STANDARD_NLS_FORMAT(expr.extra_),
                                             in_val, ctx_, buf_, sizeof(buf_), len))) {
-            SQL_LOG(WARN, "common_datetime_string failed", K(ret));
           } else {
             char *out_ptr = NULL;
             int64_t out_len = 0;
             if(OB_FAIL(CastHelperImpl::vector_copy_string(
                           expr, ctx_, idx, len, buf_, out_len, out_ptr))) {
-              SQL_LOG(WARN, "vector_ffi_copy_string_zf failed", K(ret));
             } else {
               res_vec_->set_string(idx, out_ptr, out_len);
             }
@@ -225,7 +216,6 @@ struct ToStringCastImpl
       DatetimeToStringFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec);
       if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-        SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
       }
     }
     return ret;
@@ -248,7 +238,6 @@ struct ToStringCastImpl
           int buf_len = sizeof(buf_);
           if (OB_FAIL(wide::to_string(arg_vec_->get_decimal_int(idx), sizeof(IN_TYPE), in_scale_,
                                         buf_, buf_len, length))) {
-            SQL_LOG(WARN, "to_string failed", K(ret));
           } else {
             const ObCharsetInfo *cs = NULL;
             int64_t align_offset = 0;
@@ -262,7 +251,6 @@ struct ToStringCastImpl
             int64_t out_len = 0;
             if (OB_FAIL(CastHelperImpl::vector_copy_string_zf(
                             expr, ctx_, idx, length, buf_, out_scale_, out_len, out_ptr, align_offset))) {
-              SQL_LOG(WARN, "vector_copy_string_zf failed", K(ret), K(buf_));
             } else {
               res_vec_->set_string(idx, out_ptr, out_len);
             }
@@ -282,7 +270,6 @@ struct ToStringCastImpl
         DecimalintToStringFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec);
         if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-          SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
         }
       }
     }
@@ -304,7 +291,6 @@ struct ToStringCastImpl
           const number::ObNumber nmb(arg_vec_->get_number(idx));
           int64_t length = 0;
           if (OB_FAIL(nmb.format(buf_, sizeof(buf_), length, in_scale_))) {
-            SQL_LOG(WARN, "fail to format", K(ret), K(nmb));
           }
           if (OB_SUCC(ret)) {
             const ObCharsetInfo *cs = NULL;
@@ -319,7 +305,6 @@ struct ToStringCastImpl
             int64_t out_len = 0;
             if (OB_FAIL(CastHelperImpl::vector_copy_string_zf(
                             expr, ctx_, idx, length, buf_, out_scale_, out_len, out_ptr, align_offset))) {
-              SQL_LOG(WARN, "vector_copy_string_zf failed", K(ret), K(buf_));
             } else {
               res_vec_->set_string(idx, out_ptr, out_len);
             }
@@ -339,7 +324,6 @@ struct ToStringCastImpl
         NumberToStringFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec);
         if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-          SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
         }
       }
     }
@@ -374,7 +358,6 @@ struct ToStringCastImpl
                                                           out_cs_type_, buf, buf_len, result_len, true,
                                                           !CM_IS_IGNORE_CHARSET_CONVERT_ERR(expr.extra_) && CM_IS_IMPLICIT_CAST(expr.extra_),
                                                           ObCharset::is_cs_unicode(out_cs_type_) ? 0xFFFD : '?'))) {
-              SQL_LOG(WARN, "charset convert failed", K(ret));
             } else {
               res_vec_->set_string(idx, buf, result_len);
             }
@@ -391,7 +374,6 @@ struct ToStringCastImpl
             int64_t out_len = 0;
             if (OB_FAIL(CastHelperImpl::vector_copy_string_zf(
                     expr, ctx_, idx, in_str.length(), in_str.ptr(), out_scale_, out_len, out_ptr, align_offset))) {
-              SQL_LOG(WARN, "vector_copy_string_zf failed", K(ret), K(out_ptr));
             } else {
               res_vec_->set_string(idx, out_ptr, out_len);
             }
@@ -414,7 +396,6 @@ struct ToStringCastImpl
         StringToStringFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec);
         if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-          SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
         }
       }
     }

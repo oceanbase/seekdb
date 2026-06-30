@@ -64,13 +64,10 @@ int ObExchangeInfo::init_calc_part_id_expr(ObOptimizerContext &opt_ctx)
     } else if (T_OP_ROW == repartition_func_exprs_.at(0)->get_expr_type()) {
       ObOpRawExpr *op_row_expr = NULL;
       if (OB_FAIL(expr_factory.create_raw_expr(T_OP_ROW, op_row_expr))) {
-        LOG_WARN("fail to create raw expr", K(ret));
       } else if (OB_FAIL(op_row_expr->init_param_exprs(repartition_keys_.count()))) {
-        LOG_WARN("failed to init param exprs", K(ret));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < repartition_keys_.count(); i ++) {
           if (OB_FAIL(op_row_expr->add_param_expr(repartition_keys_.at(i)))) {
-            LOG_WARN("fail to add param expr", K(ret));
           }
         } // for end
         part_expr = op_row_expr;
@@ -87,13 +84,10 @@ int ObExchangeInfo::init_calc_part_id_expr(ObOptimizerContext &opt_ctx)
     } else if (T_OP_ROW == repartition_func_exprs_.at(1)->get_expr_type()) {
       ObOpRawExpr *op_row_expr = NULL;
       if (OB_FAIL(expr_factory.create_raw_expr(T_OP_ROW, op_row_expr))) {
-        LOG_WARN("fail to create raw expr", K(ret));
       } else if (OB_FAIL(op_row_expr->init_param_exprs(repartition_sub_keys_.count()))) {
-        LOG_WARN("failed to init param exprs", K(ret));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < repartition_sub_keys_.count(); i ++) {
           if (OB_FAIL(op_row_expr->add_param_expr(repartition_sub_keys_.at(i)))) {
-            LOG_WARN("fail to add param expr", K(ret));
           }
         } // for end
         subpart_expr = op_row_expr;
@@ -114,7 +108,6 @@ int ObExchangeInfo::init_calc_part_id_expr(ObOptimizerContext &opt_ctx)
                                                               part_expr,
                                                               subpart_expr,
                                                               calc_part_id_expr_))) {
-    LOG_WARN("fail to init calc part id expr", K(ret));
   } else if (OB_ISNULL(calc_part_id_expr_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to init calc part id expr", K(ret));
@@ -140,7 +133,6 @@ int ObExchangeInfo::append_hash_dist_expr(const common::ObIArray<ObRawExpr *> &e
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(hash_dist_exprs_.push_back(HashExpr(raw_expr)))) {
-      LOG_WARN("failed to push back expr", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -150,25 +142,15 @@ int ObExchangeInfo::assign(const ObExchangeInfo &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(sort_keys_.assign(other.sort_keys_))) {
-    LOG_WARN("failed to assign sort keys", K(ret));
   } else if (OB_FAIL(repartition_keys_.assign(other.repartition_keys_))) {
-    LOG_WARN("failed to assign exprs", K(ret));
   } else if (OB_FAIL(repartition_sub_keys_.assign(other.repartition_sub_keys_))) {
-    LOG_WARN("failed to assign exprs", K(ret));
   } else if (OB_FAIL(repartition_func_exprs_.assign(other.repartition_func_exprs_))) {
-    LOG_WARN("failed to assign exprs", K(ret));
   } else if (OB_FAIL(hash_dist_exprs_.assign(other.hash_dist_exprs_))) {
-    LOG_WARN("failed to assign exprs", K(ret));
   } else if (OB_FAIL(popular_values_.assign(other.popular_values_))) {
-    LOG_WARN("failed to assign exprs", K(ret));
   } else if (OB_FAIL(weak_sharding_.assign(other.weak_sharding_))) {
-    LOG_WARN("failed to assign weak sharding", K(ret));
   } else if (OB_FAIL(wf_hybrid_pby_exprs_cnt_array_.assign(other.wf_hybrid_pby_exprs_cnt_array_))) {
-    LOG_WARN("failed to assign hybrid phy exprs cnt array", K(ret));
   } else if (OB_FAIL(repart_all_tablet_ids_.assign(other.repart_all_tablet_ids_))) {
-    LOG_WARN("failed to assign partition ids", K(ret));
   } else if (OB_FAIL(server_list_.assign(other.server_list_))) {
-    LOG_WARN("failed to assign server list", K(ret));
   } else {
     is_remote_ = other.is_remote_;
     is_task_order_ = other.is_task_order_;
@@ -201,9 +183,7 @@ int AllocOpContext::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(visited_map_.create(2, "HashAllocOp"))) {
-    LOG_WARN("failed to create hash map", K(ret));
   } else if (OB_FAIL(disabled_op_set_.create(10))) {
-    LOG_WARN("failed to create hash set", K(ret));
   }
   return ret;
 }
@@ -223,7 +203,6 @@ int AllocOpContext::visit(uint64_t op_id, uint8_t flag)
   if (OB_ISNULL(op_ids)) {
     ObSEArray<uint64_t, 8> new_op_ids;
     if (OB_FAIL(visited_map_.set_refactored(flag, new_op_ids))) {
-      LOG_WARN("fail to set_refactored", K(ret));
     } else { 
       op_ids = visited_map_.get(flag);
     }
@@ -234,7 +213,6 @@ int AllocOpContext::visit(uint64_t op_id, uint8_t flag)
       LOG_WARN("op ids is null", K(ret));
     } else if (!has_exist_in_array(*op_ids, op_id)) {
       if (OB_FAIL(op_ids->push_back(op_id))) {
-        LOG_WARN("failed to push back op ids", K(ret));
       }
     }
   }
@@ -311,15 +289,12 @@ int ObAllocExprContext::add(const ExprProducer &producer)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr_producers_.push_back(producer))) {
-    LOG_WARN("failed to push back producer", K(ret));
   } else if (expr_producers_.count() == 1 &&
              OB_FAIL(expr_map_.create(128, "ExprAlloc"))) {
     LOG_WARN("failed to init hash map", K(ret));
   } else if (OB_FAIL(expr_map_.set_refactored(reinterpret_cast<uint64_t>(producer.expr_),
                                               expr_producers_.count() - 1))) {
-    LOG_WARN("failed to add entry into hash map", K(ret));
   } else if (OB_FAIL(add_flattern_expr(producer.expr_))) {
-    LOG_WARN("failed to add flattern expr", K(ret));
   }
   return ret;
 }
@@ -335,7 +310,6 @@ int ObAllocExprContext::add_flattern_expr(const ObRawExpr* expr)
       ret = OB_SUCCESS;
       if (OB_FAIL(flattern_expr_map_.set_refactored(reinterpret_cast<uint64_t>(expr),
                                                     1))) {
-        LOG_WARN("failed to add entry into hash map", K(ret));
       }
     } else {
       LOG_WARN("failed to get expr entry from the map", K(ret));
@@ -345,7 +319,6 @@ int ObAllocExprContext::add_flattern_expr(const ObRawExpr* expr)
     LOG_WARN("ref_cnt is invalid", K(ret), K(ref_cnt));
   } else if (OB_FAIL(flattern_expr_map_.set_refactored(reinterpret_cast<uint64_t>(expr),
                                                        ref_cnt + 1, 1))) {
-    LOG_WARN("failed to add entry into hash map", K(ret));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
@@ -448,7 +421,6 @@ void ObLogicalOperator::set_child(int64_t child_num,
   int ret = OB_SUCCESS;
   for (; OB_SUCC(ret) && child_.count() <= child_num;) {
     if (OB_FAIL(child_.push_back(NULL))) {
-      LOG_WARN("failed to enlarge child array", K(ret));
     }
   }
   if (OB_SUCC(ret) && child_.count() > child_num) {
@@ -472,7 +444,6 @@ int ObLogicalOperator::get_parent(ObLogicalOperator *root, ObLogicalOperator *&p
       } else if (root->get_child(i) == this) {
         parent = root;
       } else if (OB_FAIL(get_parent(root->get_child(i), parent))) {
-        LOG_WARN("failed to get parent", K(ret));
       } else { /*do nothing*/ }
     }
   }
@@ -514,7 +485,6 @@ int ObLogicalOperator::add_child(ObLogicalOperator *child_op)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(child_.push_back(child_op))) {
-    LOG_WARN("failed to push back child op", K(ret));
   }
   return ret;
 }
@@ -527,7 +497,6 @@ int ObLogicalOperator::add_child(const ObIArray<ObLogicalOperator*> &child_ops)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(child_.push_back(child_ops.at(i)))) {
-      LOG_WARN("failed to push back child ops", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -548,7 +517,6 @@ int ObLogicalOperator::is_dfo_contains_partition_wise(bool &contain_partition_wi
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("child op is null", K(ret), K(i), K(get_num_of_child()), K(get_type()));
       } else if (OB_FAIL(SMART_CALL(child_op->is_dfo_contains_partition_wise(contain_partition_wise)))) {
-        LOG_WARN("failed to check child is dfo partition wise", K(ret), K(i), K(get_num_of_child()), K(get_type()));
       }
     }
   }
@@ -559,7 +527,6 @@ int ObLogicalOperator::set_op_ordering(const common::ObIArray<OrderItem> &op_ord
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(op_ordering_.assign(op_ordering))) {
-    LOG_WARN("failed to assign ordering", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -574,7 +541,6 @@ int ObLogicalOperator::get_input_equal_sets(EqualSets &input_esets) const
       LOG_WARN("child is null", K(ret), K(i));
     } else if (OB_FAIL(append(input_esets,
                               child->get_output_equal_sets()))) {
-      LOG_WARN("failed to append ordering equal sets", K(ret));
     }
   }
   return ret;
@@ -605,7 +571,6 @@ int ObLogicalOperator::compute_equal_set()
                        filter_exprs_,
                        child->get_output_equal_sets(),
                        *ordering_esets))) {
-    LOG_WARN("failed to compute ordering output equal set", K(ret));
   } else {
     set_output_equal_sets(ordering_esets);
   }
@@ -625,11 +590,9 @@ int ObLogicalOperator::compute_const_exprs()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("child is null", K(ret), K(child));
   } else if (OB_FAIL(append(output_const_exprs_, child->output_const_exprs_))) {
-    LOG_WARN("failed to append exprs", K(ret));
   } else if (filter_exprs_.empty()) {
     /*do nothing*/
   } else if (OB_FAIL(ObOptimizerUtil::compute_const_exprs(filter_exprs_, output_const_exprs_))) {
-    LOG_WARN("failed to compute const conditionexprs", K(ret));
   } else {/*do nothing*/}
   return ret;
 }
@@ -657,13 +620,11 @@ int ObLogicalOperator::deduce_const_exprs_and_ft_item_set(ObFdItemSet &fd_item_s
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(get_stmt()->get_column_exprs(column_exprs))) {
-    LOG_WARN("failed to get column exprs", K(ret));
   } else if (OB_FAIL(my_plan_->get_fd_item_factory().deduce_fd_item_set(
                                                           get_output_equal_sets(),
                                                           column_exprs,
                                                           get_output_const_exprs(),
                                                           fd_item_set))) {
-    LOG_WARN("falied to remove const in fd item", K(ret));
   }
   return ret;
 }
@@ -677,7 +638,6 @@ int ObLogicalOperator::compute_op_ordering()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(set_op_ordering(child->get_op_ordering()))) {
-    LOG_WARN("failed to set op ordering", K(ret));
   } else {
     is_local_order_ = child->get_is_local_order();
     is_range_order_ = child->get_is_range_order();
@@ -713,7 +673,6 @@ int ObLogicalOperator::compute_op_parallel_and_server_info()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpect null child", K(ret), K(child));
   } else if (OB_FAIL(get_server_list().assign(child->get_server_list()))) {
-    LOG_WARN("failed to assign server list", K(ret));
   } else {
     set_parallel(child->get_parallel());
     set_available_parallel(child->get_available_parallel());
@@ -756,7 +715,6 @@ int ObLogicalOperator::compute_normal_multi_child_parallel_and_server_info()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null ", K(ret), K(max_parallel_child));
   } else if (OB_FAIL(get_server_list().assign(max_parallel_child->get_server_list()))) {
-    LOG_WARN("failed to assign server list", K(ret));
   } else {
     set_parallel(max_parallel_child->get_parallel());
     set_available_parallel(max_available_parallel);
@@ -773,7 +731,6 @@ int ObLogicalOperator::set_parallel_and_server_info_for_match_all()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(get_plan()));
   } else if (OB_FAIL(get_server_list().push_back(get_plan()->get_optimizer_context().get_local_server_addr()))) {
-    LOG_WARN("failed to push back server list", K(ret));
   } else {
     set_parallel(ObGlobalHint::DEFAULT_PARALLEL);
     set_available_parallel(ObGlobalHint::DEFAULT_PARALLEL);
@@ -864,7 +821,6 @@ int ObLogicalOperator::compute_sharding_info()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(weak_sharding_.assign(child->get_weak_sharding()))) {
-    LOG_WARN("failed to assign sharding info", K(ret));
   } else {
     strong_sharding_ = child->get_strong_sharding();
     inherit_sharding_index_ = ObLogicalOperator::first_child;
@@ -1030,11 +986,8 @@ int ObLogicalOperator::compute_property(Path *path)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("path is null", K(ret), K(path));
   } else if (OB_FAIL(append(get_output_const_exprs(), path->parent_->get_output_const_exprs()))) {
-    LOG_WARN("failed to append const exprs", K(ret));
   } else if (OB_FAIL(set_op_ordering(path->get_ordering()))) {
-    LOG_WARN("failed to set ordering", K(ret));
   } else if (OB_FAIL(set_weak_sharding(path->weak_sharding_))) {
-    LOG_WARN("failed to set weak sharding", K(ret));
   } else {
     set_output_equal_sets(&path->parent_->get_output_equal_sets());
     set_fd_item_set(&path->parent_->get_fd_item_set());
@@ -1065,11 +1018,8 @@ int ObLogicalOperator::compute_property(Path *path)
     set_server_cnt(path->server_cnt_);
     set_inherit_sharding_index(path->inherit_sharding_index_);
     if (OB_FAIL(server_list_.assign(path->server_list_))) {
-      LOG_WARN("failed to assign path's server list to op", K(ret));
     } else if (OB_FAIL(ambient_card_.assign(path->parent_->get_ambient_card()))) {
-      LOG_WARN("failed to assign ambient cards", K(ret));
     } else if (OB_FAIL(check_property_valid())) {
-      LOG_WARN("failed to check property valid", K(ret), KPC(path));
     } else {
       LOG_TRACE("compute property finished",
                 K(get_op_name(type_)),
@@ -1125,11 +1075,8 @@ int ObLogicalOperator::re_est_cost(EstimateCostInfo &param, double &card, double
     card = get_card();
     cost = get_cost();
   } else if (OB_FAIL(check_need_parallel_valid(parallel))) {
-    LOG_WARN("failed to check need parallel valid", K(ret));
   } else if (OB_FAIL(SMART_CALL(do_re_est_cost(param, card, op_cost, cost)))) {
-    LOG_WARN("failed to do re est operator", K(ret), K(card), K(cost), K(op_cost), K(get_name()));
   } else if (OB_FAIL(check_contain_false_startup_filter(contain_false_filter))) {
-    LOG_WARN("failed to check startup filter", K(ret));
   } else if (contain_false_filter && FALSE_IT(card = 0.0)) {
     // never reach
   } else if (!param.override_) {
@@ -1181,13 +1128,11 @@ int ObLogicalOperator::do_re_est_cost(EstimateCostInfo &param, double &card, dou
       ObOptimizerContext &opt_ctx = get_plan()->get_optimizer_context();
       op_cost = ObOptEstCost::cost_get_rows(child_card / parallel, opt_ctx);
       if (OB_FAIL(SMART_CALL(child->re_est_cost(param, child_card, child_cost)))) {
-        LOG_WARN("failed to re est cost", K(ret));
       } else if (OB_FAIL(ObOptSelectivity::calculate_selectivity(get_plan()->get_basic_table_metas(),
                                                                 get_plan()->get_selectivity_ctx(),
                                                                 get_filter_exprs(),
                                                                 selectivity,
                                                                 get_plan()->get_predicate_selectivities()))) {
-        LOG_WARN("failed to calculate selectivity", K(ret));
       } else {
         cost = child_cost + op_cost;
         card = child_card * selectivity;
@@ -1264,37 +1209,21 @@ int ObLogicalOperator::compute_property()
   int ret = OB_SUCCESS;
   // compute new property
   if (OB_FAIL(compute_const_exprs())) {
-    LOG_WARN("failed to compute compute const exprs", K(ret));
   } else if (OB_FAIL(compute_equal_set())) {
-    LOG_WARN("failed to compute equal sets", K(ret));
   } else if (OB_FAIL(compute_fd_item_set())) {
-    LOG_WARN("failed to compute fd item sets", K(ret));
   } else if (OB_FAIL(compute_table_set())) {
-    LOG_WARN("failed to compute table sets", K(ret));
   } else if (OB_FAIL(compute_one_row_info())) {
-    LOG_WARN("failed to compute one row info", K(ret));
   } else if (OB_FAIL(compute_pipeline_info())) {
-    LOG_WARN("failed to compute pipeline info", K(ret));
   } else if (OB_FAIL(compute_sharding_info())) {
-    LOG_WARN("failed to compute sharding info", K(ret));
   } else if (OB_FAIL(compute_plan_type())) {
-    LOG_WARN("failed to compute plan type", K(ret));
   } else if (OB_FAIL(compute_op_other_info())) {
-    LOG_WARN("failed to check and replace aggr exprs", K(ret));
   } else if (OB_FAIL(compute_op_ordering())) {
-    LOG_WARN("failed to compute op ordering", K(ret));
   } else if (OB_FAIL(compute_op_interesting_order_info())) {
-    LOG_WARN("failed to compute op ordering match info", K(ret));
   } else if (OB_FAIL(compute_op_parallel_and_server_info())) {
-    LOG_WARN("failed to compute op server info", K(ret));
   } else if (OB_FAIL(est_width())) {
-    LOG_WARN("failed to compute width", K(ret));
   } else if (OB_FAIL(est_cost())) {
-    LOG_WARN("failed to estimate cost", K(ret));
   } else if (OB_FAIL(est_ambient_card())) {
-    LOG_WARN("failed to est ambient card");
   } else if (OB_FAIL(check_property_valid())) {
-    LOG_WARN("failed to check property valid", K(ret));
   } else {
     LOG_TRACE("compute property finished",
               K(get_op_name(type_)),
@@ -1325,7 +1254,6 @@ int ObLogicalOperator::est_ambient_card()
   int ret = OB_SUCCESS;
   if (1 == get_num_of_child()) {
     if (OB_FAIL(inner_est_ambient_card_by_child(ObLogicalOperator::first_child))) {
-      LOG_WARN("failed to est ambient cards by first child", K(ret), K(get_type()));
     }
   } else if (0 == get_num_of_child()) {
     // do nothing
@@ -1346,7 +1274,6 @@ int ObLogicalOperator::inner_est_ambient_card_by_child(int64_t child_idx)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(child), K(ret));
   } else if (OB_FAIL(ambient_card_.assign(child->get_ambient_card()))) {
-    LOG_WARN("failed to assign", K(ret));
   } else {
     for (int64_t i = 0; i < ambient_card_.count(); i ++) {
       ambient_card_.at(i) = ObOptSelectivity::scale_distinct(get_card(), child->get_card(), ambient_card_.at(i));
@@ -1399,7 +1326,6 @@ int ObLogicalOperator::get_plan_item_info(PlanText &plan_text,
   if (OB_SUCC(ret) && get_plan() && get_plan()->get_stmt()) {
     ObString qb_name;
     if (OB_FAIL(get_plan()->get_stmt()->get_qb_name(qb_name))) {
-      LOG_WARN("failed to get qb name", K(ret));
     } else {
       BEGIN_BUF_PRINT;
       BUF_PRINTF("%.*s", qb_name.length(), qb_name.ptr());
@@ -1470,7 +1396,6 @@ int ObLogicalOperator::print_outline_table(PlanText &plan_text, const TableItem 
     LOG_WARN("unexpected NULL", K(ret), K(table_item));
   } else if (OB_FALSE_IT(table_hint.set_table(*table_item))) {
   } else if (OB_FAIL(table_hint.print_table_in_hint(plan_text))) {
-    LOG_WARN("failed to print table hint", K(ret));
   }
   return ret;
 }
@@ -1490,14 +1415,12 @@ int ObLogicalOperator::do_pre_traverse_operation(const TraverseOp &op, void *ctx
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("NULL ctx", K(ret));
         } else if (OB_FAIL(px_pipe_blocking_pre(*pipe_blocking_ctx))) {
-          LOG_WARN("blocking px pipe failed", K(ret));
         }
       }
       break;
     }
     case PX_RESCAN: {
       if (OB_FAIL(px_rescan_pre())) {
-        LOG_WARN("blocking px pipe failed", K(ret));
       }
       break;
     }
@@ -1512,7 +1435,6 @@ int ObLogicalOperator::do_pre_traverse_operation(const TraverseOp &op, void *ctx
           alloc_gi_ctx->add_multi_child_op_count();
         }
         if (OB_FAIL(allocate_granule_pre(*alloc_gi_ctx))) {
-          LOG_WARN("allocate granule pre failed", K(ret));
         } else if (alloc_gi_ctx->alloc_gi_ && OB_FAIL(allocate_granule_nodes_above(*alloc_gi_ctx))) {
           LOG_WARN("allocate granule iterator failed", K(ret));
         }
@@ -1524,7 +1446,6 @@ int ObLogicalOperator::do_pre_traverse_operation(const TraverseOp &op, void *ctx
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("ctx is null", K(ret));
       } else if (OB_FAIL(alloc_op_pre(*static_cast<AllocOpContext *>(ctx)))) {
-        LOG_WARN("alloc op pre failed", K(ret));
       }
       break;
     }
@@ -1540,7 +1461,6 @@ int ObLogicalOperator::do_pre_traverse_operation(const TraverseOp &op, void *ctx
       } else if (is_plan_root() && OB_FAIL(collecte_inseparable_exprs(*alloc_expr_context))) {
         LOG_WARN("failed to set plan root output", K(ret));
       } else if (OB_FAIL(allocate_expr_pre(*alloc_expr_context))) {
-        LOG_WARN("failed to do allocate expr pre", K(ret));
       } else {
         LOG_TRACE("succeed to do allocate expr pre", K(get_type()), K(get_name()), K(get_op_id()), K(ret));
       }
@@ -1551,7 +1471,6 @@ int ObLogicalOperator::do_pre_traverse_operation(const TraverseOp &op, void *ctx
     }
     case PROJECT_PRUNING: {
       if (OB_FAIL(project_pruning_pre())) {
-        LOG_WARN("Project pruning pre error", K(ret));
       } else { /* Do nothing */ }
       break;
     }
@@ -1560,7 +1479,6 @@ int ObLogicalOperator::do_pre_traverse_operation(const TraverseOp &op, void *ctx
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("ctx is null", K(ret));
       } else if (OB_FAIL(numbering_operator_pre(*static_cast<NumberingCtx *>(ctx)))) {
-        LOG_WARN("numbering operator pre failed", K(ret));
       }
       break;
     }
@@ -1569,7 +1487,6 @@ int ObLogicalOperator::do_pre_traverse_operation(const TraverseOp &op, void *ctx
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("ctx is null", K(ret));
       } else if (OB_FAIL(numbering_exchange_pre(*static_cast<NumberingExchangeCtx *>(ctx)))) {
-        LOG_WARN("fail numbering exchange pre", K(ret));
       }
       break;
     }
@@ -1587,7 +1504,6 @@ int ObLogicalOperator::do_pre_traverse_operation(const TraverseOp &op, void *ctx
       break;
     case COLLECT_BATCH_EXEC_PARAM: {
       if (OB_FAIL(collect_batch_exec_param_pre(ctx))) {
-        LOG_WARN("failed to gen batch exec param pre", K(ret));
       }
       break;
     }
@@ -1598,7 +1514,6 @@ int ObLogicalOperator::do_pre_traverse_operation(const TraverseOp &op, void *ctx
             LOG_TABLE_SCAN == log_sort->get_topn_filter_node()->get_type()) {
           ObLogTableScan *log_tsc = static_cast<ObLogTableScan *>(log_sort->get_topn_filter_node());
           if (OB_FAIL(log_tsc->try_adjust_scan_direction(log_sort->get_sort_keys()))) {
-            LOG_WARN("failed to adjust table scan direction", K(ret));
           }
         }
       }
@@ -1652,7 +1567,6 @@ int ObLogicalOperator::do_post_traverse_operation(const TraverseOp &op, void *ct
     	      alloc_gi_ctx->delete_multi_child_op_count();
     	    }
     	    if (OB_FAIL(allocate_granule_post(*alloc_gi_ctx))) {
-    	      LOG_WARN("failed to allocate granule post", K(ret));
     	    } else if (alloc_gi_ctx->alloc_gi_ &&
     	               OB_FAIL(allocate_granule_nodes_above(*alloc_gi_ctx))) {
     	      LOG_WARN("failed to allcoate granule nodes", K(ret));
@@ -1666,7 +1580,6 @@ int ObLogicalOperator::do_post_traverse_operation(const TraverseOp &op, void *ct
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected null", K(ret));
         } else if (OB_FAIL(allocate_expr_post(*alloc_expr_ctx))) {
-          LOG_WARN("failed to do allocate expr post", K(ret));
         } else { /* Do nothing */ }
         break;
       }
@@ -1688,7 +1601,6 @@ int ObLogicalOperator::do_post_traverse_operation(const TraverseOp &op, void *ct
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("ctx is null", K(ret));
         } else if (OB_FAIL(alloc_op_post(*static_cast<AllocOpContext *>(ctx)))) {
-          LOG_WARN("failed to alloc op for monitering post",  K(ret));
         }
         break;
       }
@@ -1707,7 +1619,6 @@ int ObLogicalOperator::do_post_traverse_operation(const TraverseOp &op, void *ct
           LOG_WARN("ctx is null", K(ret));
         } else if (LOG_EXCHANGE == type_) {
           if (OB_FAIL(numbering_exchange_post(*static_cast<NumberingExchangeCtx *>(ctx)))) {
-            LOG_WARN("fail numbering exchange post", K(ret));
           } else if (static_cast<ObLogExchange*>(this)->is_rescanable() &&
              OB_FAIL(static_cast<ObLogExchange*>(this)->gen_px_pruning_table_locations())) {
             LOG_WARN("fail to gen px pruning table locations", K(ret));
@@ -1736,13 +1647,11 @@ int ObLogicalOperator::do_post_traverse_operation(const TraverseOp &op, void *ct
       }
       case ALLOC_STARTUP_EXPR: {
         if (OB_FAIL(allocate_startup_expr_post())) {
-          LOG_WARN("failed to alloc startup expr post", K(ret));
         }
         break;
       }
       case COLLECT_BATCH_EXEC_PARAM: {
         if (OB_FAIL(collect_batch_exec_param_post(ctx))) {
-          LOG_WARN("failed to gen batch exec param post",  K(ret));
         }
         break;
       }
@@ -1760,7 +1669,6 @@ int ObLogicalOperator::do_plan_tree_traverse(const TraverseOp &operation, void *
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(do_pre_traverse_operation(operation, ctx))) {
-    LOG_WARN("failed to perform traverse operation", K(ret), "operator", get_name(), K(operation));
   } else {
     LOG_TRACE("succ to perform pre traverse operation", "operator", get_name(), K(operation));
   }
@@ -1770,14 +1678,12 @@ int ObLogicalOperator::do_plan_tree_traverse(const TraverseOp &operation, void *
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get_child(i) is null", K(ret), K(i));
     } else if (OB_FAIL(SMART_CALL(get_child(i)->do_plan_tree_traverse(operation, ctx)))) {
-      LOG_WARN("failed to bottom-up traverse operator", "operator", get_name(), K(operation), K(ret));
     } else { /*do nothing*/ }
   }
 
   // post_traverse_operation
   if (OB_SUCC(ret)) {
     if (OB_FAIL(do_post_traverse_operation(operation, ctx))) {
-      LOG_WARN("failed to perform post traverse action", K(ret), K(operation));
     } else {
       LOG_TRACE("succ to perform post traverse action", K(operation), "operator", get_name());
     }
@@ -1811,7 +1717,6 @@ int ObLogicalOperator::should_allocate_gi_for_dml(bool &is_valid)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(get_child(i)->should_allocate_gi_for_dml(is_valid))) {
-      LOG_WARN("failed to check should allocate gi for dml", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -1828,13 +1733,11 @@ int ObLogicalOperator::mark_expr_produced(ObRawExpr *expr,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(expr), K(branch_id), K(producer_id));
   } else if (OB_FAIL(gen_expr_ctx.find(expr, expr_producer))) {
-    LOG_WARN("failed to find expr producer", K(ret));
   } else if (OB_ISNULL(expr_producer)) {
     ExprProducer new_expr_producer(expr, id_);
     new_expr_producer.producer_branch_ = branch_id;
     new_expr_producer.producer_id_ = producer_id;
     if (OB_FAIL(gen_expr_ctx.add(new_expr_producer))) {
-      LOG_WARN("failed to add expr producer", K(ret));
     } else { /*do nothing*/ }
   } else {
     // mark as produced
@@ -1867,14 +1770,10 @@ int ObLogicalOperator::allocate_expr_pre(ObAllocExprContext &ctx)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(get_op_exprs(all_exprs))) {
-    LOG_WARN("failed to get op exprs", K(ret));
   } else if (OB_FAIL(get_plan()->get_optimizer_context().get_all_exprs().append(all_exprs))) {
-    LOG_WARN("failed to append exprs", K(ret));
   } else if (OB_FAIL(extract_non_const_exprs(all_exprs,
                                              op_exprs_))) {
-    LOG_WARN("failed to extract const exprs", K(ret));
   } else if (OB_FAIL(add_exprs_to_ctx(ctx, op_exprs_))) {
-    LOG_WARN("failed to add exprs to ctx", K(ret));
   } else {
     LOG_TRACE("succeed to allocate expr pre", K(id_), K(op_exprs_.count()),
         K(op_exprs_), K(get_name()), K(is_plan_root()));
@@ -1886,9 +1785,7 @@ int ObLogicalOperator::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(append_array_no_dup(all_exprs, get_filter_exprs()))) {
-    LOG_WARN("failed to append filter exprs", K(ret));
   } else if (OB_FAIL(append_array_no_dup(all_exprs, get_startup_exprs()))) {
-    LOG_WARN("failed to get start up exprs", K(ret));
   } else if (is_plan_root() && OB_FAIL(append_array_no_dup(all_exprs, get_output_exprs()))) {
     LOG_WARN("failed to get output exprs", K(ret));
   } else { /*do noting*/ }
@@ -1938,16 +1835,13 @@ int ObLogicalOperator::build_and_put_pack_expr(ObIArray<ObRawExpr*> &output_expr
        get_plan()->get_optimizer_context().get_exec_ctx()->get_physical_plan_ctx()->get_field_array(),
        output_exprs,
        pack_expr))) {
-    LOG_WARN("failed to build pack expr", K(ret));
   } else if (OB_ISNULL(pack_expr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FALSE_IT(output_exprs.reuse())) {
     /*do nothing*/
   } else if (OB_FAIL(output_exprs.push_back(pack_expr))) {
-    LOG_WARN("failed to push back pack expr", K(ret));
   } else if (OB_FAIL(child->add_op_exprs(pack_expr))) {
-    LOG_WARN("failed to add op exprs", K(ret));
   } else {
     get_plan()->get_optimizer_context().set_packed(true);
   }
@@ -1961,9 +1855,7 @@ int ObLogicalOperator::add_exprs_to_ctx(ObAllocExprContext &ctx,
   int ret = OB_SUCCESS;
   uint64_t producer_id = OB_INVALID_ID;
   if (OB_FAIL(get_next_producer_id(this, producer_id))) {
-    LOG_WARN("failed to get next producer id", K(ret));
   } else if (OB_FAIL(add_exprs_to_ctx(ctx, exprs, producer_id))) {
-    LOG_WARN("failed to add exprs to ctx", K(exprs), K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -1975,7 +1867,6 @@ int ObLogicalOperator::add_exprs_to_ctx(ObAllocExprContext &ctx,
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < input_exprs.count(); i++) {
     if (OB_FAIL(add_expr_to_ctx(ctx, input_exprs.at(i), producer_id))) {
-      LOG_WARN("failed to add expr to ctx", K(ret));
     }
   }
   return ret;
@@ -1996,7 +1887,6 @@ int ObLogicalOperator::add_expr_to_ctx(ObAllocExprContext &ctx,
                                           ctx,
                                           0,
                                           shared_exprs))) {
-    LOG_WARN("failed to extract column input_exprs", K(ret));
   }
   // add shared exprs, should set both producer id and consumer id
   for (int64_t i = 0; OB_SUCC(ret) && i < shared_exprs.count(); i++) {
@@ -2006,7 +1896,6 @@ int ObLogicalOperator::add_expr_to_ctx(ObAllocExprContext &ctx,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(ctx.find(raw_expr, raw_producer))) {
-      LOG_WARN("failed to find raw expr producer", K(ret));
     } else if (NULL != raw_producer) {
       // update the raw_producer id
       real_producer_id = std::min(raw_producer->producer_id_, producer_id);
@@ -2016,7 +1905,6 @@ int ObLogicalOperator::add_expr_to_ctx(ObAllocExprContext &ctx,
       } else if (!can_update_producer_id_for_shared_expr(raw_expr)) {
         // do nothing
       } else if (OB_FAIL(find_producer_id_for_shared_expr(raw_expr, real_producer_id))) {
-        LOG_WARN("failed to find sharable expr producer id", K(ret));
       } else {
         raw_producer->producer_id_ = real_producer_id;
       }
@@ -2024,16 +1912,13 @@ int ObLogicalOperator::add_expr_to_ctx(ObAllocExprContext &ctx,
                 K(producer_id), K(consumer_id), KPC(raw_producer), K(get_name()));
     } else if (OB_FAIL(find_consumer_id_for_shared_expr(&ctx.expr_producers_, raw_expr,
                                                         consumer_id))) {
-      LOG_WARN("failed to find sharable expr consumer id", K(ret));
     } else if (OB_FAIL(find_producer_id_for_shared_expr(raw_expr, real_producer_id))) {
-      LOG_WARN("failed to find sharable expr producer id", K(ret));
     } else if (OB_UNLIKELY(OB_INVALID_ID == consumer_id || OB_INVALID_ID == real_producer_id)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected conusmer id or producer id", K(*raw_expr), K(ret));
     } else {
       ExprProducer expr_producer(raw_expr, consumer_id, real_producer_id);
       if (OB_FAIL(ctx.add(expr_producer))) {
-        LOG_WARN("failed to push balck raw_expr", K(ret));
       } else {
         LOG_TRACE("succeed to add shared exprs", KP(raw_expr), K(producer_id), K(consumer_id),
                                                  K(expr_producer), K(get_name()));
@@ -2046,7 +1931,6 @@ int ObLogicalOperator::add_expr_to_ctx(ObAllocExprContext &ctx,
     if (ObOptimizerUtil::find_item(shared_exprs, expr)) {
       /*do nothing*/
     } else if (OB_FAIL(ctx.find(expr, raw_producer))) {
-      LOG_WARN("failed to raw expr producer", K(ret));
     } else if (NULL != raw_producer) {
       // update the raw_producer id, this branch seems to be unreachable
       if (OB_ISNULL(raw_producer)) {
@@ -2067,7 +1951,6 @@ int ObLogicalOperator::add_expr_to_ctx(ObAllocExprContext &ctx,
     } else {
       ExprProducer expr_producer(expr, consumer_id, producer_id);
       if (OB_FAIL(ctx.add(expr_producer))) {
-        LOG_WARN("failed to push balck expr", K(ret));
       } else {
         LOG_TRACE("succeed to add input expr", KP(expr), K(producer_id), K(consumer_id),
                                                K(expr_producer), K(get_name()));
@@ -2105,7 +1988,6 @@ int ObLogicalOperator::extract_non_const_exprs(const ObIArray<ObRawExpr*> &input
                expr->has_flag(IS_DYNAMIC_USER_VARIABLE)) {
       /*do nothing*/
     } else if (OB_FAIL(add_var_to_array_no_dup(non_const_exprs, expr))) {
-      LOG_WARN("failed to push back expr", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -2127,11 +2009,9 @@ int ObLogicalOperator::extract_shared_exprs(ObRawExpr *raw_expr,
   } else if (T_OP_ROW == raw_expr->get_expr_type()) {
     /*do nothing*/
   } else if (OB_FAIL(ctx.get_expr_ref_cnt(raw_expr, ref_cnt))) {
-    LOG_WARN("failed to get expr ref cnt", K(ret));
   } else if (ref_cnt <= parent_ref_cnt) {
     /*do nothing*/
   } else if (OB_FAIL(add_var_to_array_no_dup(shard_exprs, raw_expr))) {
-    LOG_WARN("failed to add var to array", K(ret));
   }
 
   if (!ObOptimizerUtil::find_item(ctx.inseparable_exprs_, raw_expr) &&
@@ -2184,15 +2064,12 @@ int ObLogicalOperator::find_producer_id_for_shared_expr(const ObRawExpr *expr,
   bool can_pushdown = false;
   uint64_t pushdown_producer_id = OB_INVALID_ID;
   if (OB_FAIL(check_need_pushdown_expr(producer_id, need_pushdown))) {
-    LOG_WARN("failed to check need pushdown expr");
   } else if (!need_pushdown) {
     // do nothing
   } else if (OB_FAIL(check_can_pushdown_expr(expr, can_pushdown))) {
-    LOG_WARN("failed to check can push down expr", K(ret));
   } else if (!can_pushdown) {
     // do nothing
   } else if (OB_FAIL(get_pushdown_producer_id(expr, pushdown_producer_id))) {
-    LOG_WARN("failed to get pushdown producer id", K(ret));
   } else if (OB_INVALID_ID != pushdown_producer_id) {
     producer_id = pushdown_producer_id;
   }
@@ -2239,7 +2116,6 @@ int ObLogicalOperator::check_can_pushdown_expr(const ObRawExpr *expr,
   } else if (child_.count() > 1 && expr->has_flag(CNT_OP_PSEUDO_COLUMN)) {
     // do nothing, I have no idea to pushdown the op pseudo column into which child op
   } else if (OB_FAIL(contain_my_fixed_expr(expr, is_contain))) {
-    LOG_WARN("failed to check contain my fixed expr", K(ret));
   } else if (!is_contain) {
     can_pushdown = true;
   }
@@ -2261,11 +2137,9 @@ int ObLogicalOperator::contain_my_fixed_expr(const ObRawExpr *expr,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(is_my_fixed_expr(expr, is_contain))) {
-    LOG_WARN("failed to check is my fixed expr", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && !is_contain && i < expr->get_param_count(); ++i) {
     if (OB_FAIL(SMART_CALL(contain_my_fixed_expr(expr->get_param_expr(i), is_contain)))) {
-      LOG_WARN("failed to check contain my fixed expr", K(ret));
     }
   }
   return ret;
@@ -2290,7 +2164,6 @@ int ObLogicalOperator::get_pushdown_producer_id(const ObRawExpr *expr, uint64_t 
     } else if (!expr->get_relation_ids().is_subset(node->get_table_set())) {
       // do nothing
     } else if (OB_FAIL(get_next_producer_id(node, producer_id))) {
-      LOG_WARN("failed to get next producer id", K(ret));
     } else {
       found = true;
     }
@@ -2309,7 +2182,6 @@ int ObLogicalOperator::allocate_expr_post(ObAllocExprContext &ctx)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(output_exprs_.assign(child->get_output_exprs()))) {
-      LOG_WARN("failed to assign output exprs", K(ret));
     } else { /*do nothing*/ }
   } else if (log_op_def::LOG_EXCHANGE == type_ &&
              static_cast<ObLogExchange*>(this)->get_is_remote() &&
@@ -2319,9 +2191,7 @@ int ObLogicalOperator::allocate_expr_post(ObAllocExprContext &ctx)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(parent), K(child), K(ret));
     } else if (OB_FAIL(output_exprs_.assign(parent->get_output_exprs()))) {
-      LOG_WARN("failed to assign output exprs", K(ret));
     } else if (OB_FAIL(child->get_output_exprs().assign(parent->get_output_exprs()))) {
-      LOG_WARN("failed to push back exprs", K(ret));
     } else { /*do nothing*/ }
   } else {
     ObIArray<ExprProducer> &producers = ctx.expr_producers_;
@@ -2337,7 +2207,6 @@ int ObLogicalOperator::allocate_expr_post(ObAllocExprContext &ctx)
           LOG_TRACE("try to produce expr", K(*expr), K(get_name()));
           bool can_be_produced = false;
           if (OB_FAIL(expr_can_be_produced(expr, ctx, can_be_produced))) {
-            LOG_WARN("expr_can_be_produced fails", K(ret));
           } else if (can_be_produced) {
             producers.at(i).producer_branch_ = branch_id_;
             producers.at(i).producer_id_ = id_; // dummy assign
@@ -2351,7 +2220,6 @@ int ObLogicalOperator::allocate_expr_post(ObAllocExprContext &ctx)
         if (OB_SUCC(ret) && OB_INVALID_ID != producers.at(i).producer_branch_ && producers.at(i).consumer_id_ > id_) {
           if (!is_plan_root() && (is_child_output_exprs(expr) || producers.at(i).producer_id_ == id_)) {
             if (OB_FAIL(add_var_to_array_no_dup(output_exprs_, expr))) {
-              LOG_WARN("failed to add expr to output", K(ret));
             } else {
               LOG_TRACE("expr is added into output expr", K(*expr), K(get_name()),
                   K(producers.at(i).consumer_id_), K(id_));
@@ -2379,7 +2247,6 @@ int ObLogicalOperator::expr_can_be_produced(const ObRawExpr *expr,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(expr));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
-    LOG_WARN("check stack overflow failed", K(ret));
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recursive", K(ret));
@@ -2387,7 +2254,6 @@ int ObLogicalOperator::expr_can_be_produced(const ObRawExpr *expr,
     LOG_TRACE("checking if expr can be produced", K(expr), K(*expr), K(get_name()),
         K(id_), K(branch_id_));
     if (OB_FAIL(expr_has_been_produced(expr, expr_ctx, can_be_produced))) {
-      LOG_WARN("failed to check whether expr_has_been_produced", K(ret));
     } else if (can_be_produced) {
       LOG_TRACE("expr has been produced", K(expr), K(get_name()), K(id_), K(branch_id_));
     } else if (!expr->has_flag(CNT_COLUMN)) {
@@ -2397,7 +2263,6 @@ int ObLogicalOperator::expr_can_be_produced(const ObRawExpr *expr,
     } else if (expr->is_column_ref_expr() &&
                NULL != (dependant_expr = static_cast<const ObColumnRefRawExpr*>(expr)->get_dependant_expr())) {
       if (OB_FAIL(expr_can_be_produced(dependant_expr, expr_ctx, can_be_produced))) {
-        LOG_WARN("failed to check expr can be produced", K(ret));
       } else { /*do nothing*/ }
     } else {
       can_be_produced = false;
@@ -2415,12 +2280,10 @@ int ObLogicalOperator::expr_can_be_produced(const ObRawExpr *expr,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null ", K(ret));
       } else if (OB_FAIL(expr_has_been_produced(param_expr, expr_ctx, param_produced))) {
-        LOG_WARN("failed to check whether expr_has_been_produced", K(ret));
       } else if (param_produced) {
         LOG_TRACE("input expr has been produced", K(param_expr), K(*param_expr),
             K(get_name()), K(id_), K(branch_id_));
       } else if (OB_FAIL(SMART_CALL(expr_can_be_produced(param_expr, expr_ctx, param_produced)))) {
-        LOG_WARN("failed to check expr can be produced", K(ret));
       } else if (!param_produced) {
         // if any of their inputs is not produced yet, the expr cannot be produced
         can_be_produced = false;
@@ -2443,7 +2306,6 @@ int ObLogicalOperator::expr_has_been_produced(const ObRawExpr *expr,
   has_been_produced = false;
   ExprProducer *expr_producer = NULL;
   if (OB_FAIL(expr_ctx.find(expr, expr_producer)))  {
-    LOG_WARN("failed to find expr producer", K(ret));
   } else if (NULL == expr_producer) {
     // not find
     /*
@@ -2512,12 +2374,10 @@ int ObLogicalOperator::reorder_filter_exprs()
     LOG_WARN("Get unexpeced null", K(ret), K(get_plan()));
   } else if (OB_FAIL(reorder_filters_exprs(get_plan()->get_predicate_selectivities(),
                                            filter_exprs_))) {
-    LOG_WARN("reorder filter exprs failed", K(ret));
   } else if (log_op_def::LOG_JOIN == get_type()) {
     ObLogJoin *join_op = static_cast<ObLogJoin *>(this);
     if (OB_FAIL(reorder_filters_exprs(get_plan()->get_predicate_selectivities(), 
                                       join_op->get_join_filters()))) {
-      LOG_WARN("reorder join filters failed", K(ret));
     }
   }
   return ret;
@@ -2534,7 +2394,6 @@ int ObLogicalOperator::reorder_filters_exprs(common::ObIArray<ObExprSelPair> &pr
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(get_plan()));
   } else if (OB_FAIL(get_card_without_filter(card))) {
-    LOG_WARN("get num of rows to be filtered failed", K(ret));
   } else if (card < 1.0) {
     card = 1.0;
   }
@@ -2549,13 +2408,11 @@ int ObLogicalOperator::reorder_filters_exprs(common::ObIArray<ObExprSelPair> &pr
                                                             card,
                                                             cost_per_tuple,
                                                             get_plan()->get_optimizer_context()))) {
-      LOG_WARN("calc pred cost failed", K(ret));
     } else {
       rank = (sel - 1) / cost_per_tuple;
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(filter_ranks.push_back(ObExprRankPair(rank, filter_exprs.at(i))))) {
-        LOG_WARN("push back failed", K(ret));
       }
     }
   }
@@ -2603,33 +2460,25 @@ int ObLogicalOperator::gen_location_constraint(void *ctx)
         } else if (log_scan_op->use_das()) {
           // not add to constraints for das
         } else if (OB_FAIL(get_tbl_loc_cons_for_scan(loc_cons))) {
-          LOG_WARN("failed to get location constraint for table scan op", K(ret));
         } else if (OB_FAIL(get_dup_replica_cons_for_scan(dup_rep_cons, found_dup_con))) {
-          LOG_WARN("failed to get duplicate table replica constraint for table scan op", K(ret));
         } else if (found_dup_con &&
                    OB_FAIL(loc_cons_ctx->dup_table_replica_cons_.push_back(dup_rep_cons))) {
           LOG_WARN("failed to push back location constraint", K(ret));
         } else if (OB_FAIL(loc_cons_ctx->base_table_constraints_.push_back(loc_cons))) {
-          LOG_WARN("failed to push back location constraint", K(ret));
         } else if (OB_FAIL(strict_pwj_constraint_.push_back(
                     loc_cons_ctx->base_table_constraints_.count() - 1))) {
-          LOG_WARN("failed to push back location constraint offset", K(ret));
         } else if (OB_FAIL(non_strict_pwj_constraint_.push_back(
                     loc_cons_ctx->base_table_constraints_.count() - 1))) {
-          LOG_WARN("failed to push back location constraint offset", K(ret));
         }
       } else if (log_op_def::LOG_TEMP_TABLE_ACCESS == get_type()) {
         ObLogTempTableAccess *access = static_cast<ObLogTempTableAccess*>(this);
         ObLogicalOperator *insert_op = NULL;
         if (OB_FAIL(access->get_temp_table_plan(insert_op))) {
-          LOG_WARN("failed to get temp table plan", K(ret));
         } else if (OB_ISNULL(insert_op)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpect null operator", K(ret));
         } else if (OB_FAIL(append(strict_pwj_constraint_, insert_op->strict_pwj_constraint_))) {
-          LOG_WARN("failed to append child pwj constraint", K(ret));
         } else if (OB_FAIL(append(non_strict_pwj_constraint_, insert_op->non_strict_pwj_constraint_))) {
-          LOG_WARN("failed to append child pwj constraint", K(ret));
         }
       }
     } else if (get_num_of_child() > 0) {
@@ -2666,17 +2515,13 @@ int ObLogicalOperator::gen_location_constraint(void *ctx)
         bool is_multi_part_dml = false;
         LocationConstraint loc_cons;
         if (OB_FAIL(get_tbl_loc_cons_for_insert(loc_cons, is_multi_part_dml))) {
-          LOG_WARN("failed to get location constraint for insert op", K(ret));
         } else if (!is_multi_part_dml) {
           // non-multi part insert
           if (OB_FAIL(loc_cons_ctx->base_table_constraints_.push_back(loc_cons))) {
-            LOG_WARN("failed to push back location constraint", K(ret));
           } else if (OB_FAIL(strict_pwj_constraint_.push_back(
                       loc_cons_ctx->base_table_constraints_.count() - 1))) {
-            LOG_WARN("failed to push back location constraint offset", K(ret));
           } else if (OB_FAIL(non_strict_pwj_constraint_.push_back(
                       loc_cons_ctx->base_table_constraints_.count() - 1))) {
-            LOG_WARN("failed to push back location constraint offset", K(ret));
           } else {
             ++add_count;
           }
@@ -2696,7 +2541,6 @@ int ObLogicalOperator::gen_location_constraint(void *ctx)
             // local multi part insert, remove location constraint of insert table because 
             // we didn't add it's table location.
           } else if (OB_FAIL(loc_cons_ctx->base_table_constraints_.push_back(loc_cons))) {
-            LOG_WARN("failed to push back location constraint", K(ret));
           }
         }
       }
@@ -2713,16 +2557,11 @@ int ObLogicalOperator::gen_location_constraint(void *ctx)
             LocationConstraint loc_cons;
             is_pdml = true;
             if (OB_FAIL(get_tbl_loc_cons_for_pdml_index(loc_cons))) {
-              LOG_WARN("failed to get table location constraint for pdml index",
-                K(ret), K(get_name()));
             } else if (OB_FAIL(loc_cons_ctx->base_table_constraints_.push_back(loc_cons))) {
-              LOG_WARN("failed to push back location constraint", K(ret));
             } else if (OB_FAIL(strict_pwj_constraint_.push_back(
                         loc_cons_ctx->base_table_constraints_.count() - 1))) {
-              LOG_WARN("failed to push back location constraint offset", K(ret));
             } else if (OB_FAIL(non_strict_pwj_constraint_.push_back(
                         loc_cons_ctx->base_table_constraints_.count() - 1))) {
-              LOG_WARN("failed to push back location constraint offset", K(ret));
             } else {
               ++add_count;
               LOG_TRACE("add location constraint for pdml index maintain op",
@@ -2777,14 +2616,12 @@ int ObLogicalOperator::gen_location_constraint(void *ctx)
             ++add_count;
             if (need_add_strict) {
               if (OB_FAIL(append(strict_pwj_constraint_, get_child(i)->strict_pwj_constraint_))) {
-                LOG_WARN("failed to append child pwj constraint", K(ret));
               } else if (is_union_all_set_pw || is_setop_ext_pw || is_join_ext_pw) {
                 need_add_strict = false;
               }
             }
             if (need_add_non_strict) {
               if (OB_FAIL(append(non_strict_pwj_constraint_, get_child(i)->non_strict_pwj_constraint_))) {
-                LOG_WARN("failed to append child pwj constraint", K(ret));
               } else if (!is_union_all_set_pw) {
                 need_add_non_strict = false;
               }
@@ -2796,10 +2633,8 @@ int ObLogicalOperator::gen_location_constraint(void *ctx)
       if (OB_SUCC(ret) && add_count > 1) {
         if (is_union_all_set_pw) {
           if (OB_FAIL(loc_cons_ctx->non_strict_constraints_.push_back(&non_strict_pwj_constraint_))) {
-            LOG_WARN("failed to push back pwj constraint");
           }
         } else if (OB_FAIL(loc_cons_ctx->strict_constraints_.push_back(&strict_pwj_constraint_))) {
-          LOG_WARN("fail to push back pwj constraint", K(ret));
         }
         LOG_TRACE("succ to gen location cons", K(is_union_all_set_pw), K(is_setop_ext_pw), K(is_join_ext_pw),
                   K(strict_pwj_constraint_), K(non_strict_pwj_constraint_));
@@ -2820,7 +2655,6 @@ int ObLogicalOperator::get_tbl_loc_cons_for_pdml_index(LocationConstraint &loc_c
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("dml logical operator is null", K(ret), K(dml_log_op));
   } else if (OB_FAIL(dml_log_op->get_table_location_type(location_type))) {
-    LOG_WARN("failed to get location type", K(ret));
   } else {
     loc_cons.phy_loc_type_ = location_type;
     loc_cons.key_.table_id_ = dml_log_op->get_loc_table_id();
@@ -2846,7 +2680,6 @@ int ObLogicalOperator::get_tbl_loc_cons_for_scan(LocationConstraint &loc_cons)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(log_scan_op), K(sharding));
   } else if (OB_FAIL(log_scan_op->get_phy_location_type(loc_cons.phy_loc_type_))) {
-    LOG_WARN("failed to get phy location type", K(ret));
   } else {
     loc_cons.key_.table_id_ = log_scan_op->get_table_id();
     loc_cons.table_partition_info_ = log_scan_op->get_table_partition_info();
@@ -2902,7 +2735,6 @@ int ObLogicalOperator::get_tbl_loc_cons_for_insert(LocationConstraint &loc_cons,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(log_insert_op), K(sharding));
   } else if (OB_FAIL(log_insert_op->get_table_location_type(location_type))) {
-    LOG_WARN("failed to get location type", K(ret));
   } else {
     is_multi_part_dml = log_insert_op->is_multi_part_dml();
     loc_cons.phy_loc_type_ = location_type;
@@ -2940,7 +2772,6 @@ int ObLogicalOperator::get_table_scan(ObLogicalOperator *&tsc, uint64_t table_id
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get_child(i) is null", K(ret), K(i));
     } else if (OB_FAIL(SMART_CALL(get_child(i)->get_table_scan(tsc, table_id)))) {
-      LOG_WARN("failed to set op ordering in parts recursively", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -2957,14 +2788,12 @@ int ObLogicalOperator::find_all_tsc(ObIArray<ObLogicalOperator *> &tsc_ops,
     for(int64_t i = 0; i < root->get_num_of_child(); i++) {
       ObLogicalOperator *child = root->get_child(i);
       if (OB_FAIL(find_all_tsc(tsc_ops, child))) {
-        LOG_WARN("failed to find all tsc", K(ret));
       }
     }
   }
 
   if (OB_SUCC(ret) && log_op_def::LOG_TABLE_SCAN == root->get_type()) {
     if (OB_FAIL(tsc_ops.push_back(root))) {
-      LOG_WARN("failed to push back tsc ops", K(ret));
     }
   }
   return ret;
@@ -2990,7 +2819,6 @@ int ObLogicalOperator::allocate_material(const int64_t index)
     mat_op->set_parent(this);
     set_child(index, mat_op);
     if (OB_FAIL(mat_op->compute_property())) {
-      LOG_WARN("failed to compute property");
     } else {
       mat_op->set_op_cost(0.0);
       mat_op->set_cost(child->get_cost());
@@ -2998,7 +2826,6 @@ int ObLogicalOperator::allocate_material(const int64_t index)
     // Treat Material as the top vertex of the lower LogPlan, otherwise no one will assign an expression to this Material
     if (OB_SUCC(ret) && child->is_plan_root()) {
       if (OB_FAIL(mat_op->get_output_exprs().assign(child->get_output_exprs()))) {
-        LOG_WARN("failed to assign output exprs", K(ret));
       } else {
         mat_op->mark_is_plan_root();
         child_plan->set_plan_root(mat_op);
@@ -3024,7 +2851,6 @@ int ObLogicalOperator::check_exchange_rescan(bool &need_rescan)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get_child(i) returns null", K(i), K(ret));
       } else if (OB_FAIL(get_child(i)->check_exchange_rescan(need_rescan))) {
-        LOG_WARN("get_child(i)->check_exchange_rescan() fails", K(ret));
       } else { /* Do nothing */ }
     }
   }
@@ -3044,7 +2870,6 @@ int ObLogicalOperator::check_has_op_below(const log_op_def::ObLogOpType target_t
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get_child(i) returns null", K(i), K(ret));
       } else if (OB_FAIL(SMART_CALL(child_op->check_has_op_below(target_type, has)))) {
-        LOG_WARN("failed to check if child operator has exchange below", KPC(child_op), K(ret));
       } else { /* Do nothing */ }
     }
   }
@@ -3143,7 +2968,6 @@ int ObLogicalOperator::alloc_op_pre(AllocOpContext& ctx)
   } else {
     if (!ctx.gen_temp_op_id_) {
       if (OB_FAIL(gen_temp_op_id(ctx))) {
-        LOG_WARN("fail to gen temp op id", K(ret));
       }
       ctx.gen_temp_op_id_ = true;
     }
@@ -3156,7 +2980,6 @@ int ObLogicalOperator::alloc_op_pre(AllocOpContext& ctx)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get the second child of nested loop join", K(ret));
       } else if (OB_FAIL(get_child(second_child)->recursively_disable_alloc_op_above(ctx))) {
-        LOG_WARN("fail to disable alloc op above", K(ret));
       }
     }
     // disable nodes of a remote plan
@@ -3232,13 +3055,11 @@ int ObLogicalOperator::numbering_exchange_post(NumberingExchangeCtx &ctx)
       int64_t px_id = OB_INVALID_ID;
       int64_t dfo_id = OB_INVALID_ID;
       if (OB_FAIL(ctx.next_dfo(px_id, dfo_id))) {
-        LOG_WARN("get next dfo id fail", K(ret));
       } else {
         exchange_op->set_dfo_id(dfo_id);
         exchange_op->set_px_id(px_id);
         // refine dop by DOP() hint
         if (OB_FAIL(refine_dop_by_hint())) {
-          LOG_WARN("fail refine dfo dop", K(ret), K(dfo_id), K(px_id));
         }
       }
     } else if (exchange_op->is_px_consumer() && exchange_op->is_rescanable()) {
@@ -3354,13 +3175,11 @@ int ObLogicalOperator::px_rescan_pre()
   if ((is_plan_root() && nullptr == get_parent()) ||
        (NULL != get_parent() && get_parent()->get_type() == LOG_TEMP_TABLE_TRANSFORMATION)) {
     if (OB_FAIL(mark_child_exchange_rescanable())) {
-      LOG_WARN("failed to mark child exchange rescanable", K(ret));
     } else { /*do nothing*/ }
   }
   if (OB_FAIL(ret)) {
   } else if (LOG_SUBPLAN_FILTER == type_) {
     if (OB_FAIL(check_subplan_filter_child_exchange_rescanable())) {
-      LOG_WARN("mark child ex-receive as px op fail", K(ret));
     } else if (get_plan()->get_optimizer_context().get_max_parallel() <= 1 &&
         !static_cast<ObLogSubPlanFilter*>(this)->get_exec_params().empty() &&
         get_plan()->get_optimizer_context().enable_px_batch_rescan()) {
@@ -3377,15 +3196,12 @@ int ObLogicalOperator::px_rescan_pre()
                    || static_cast<ObLogSubPlanFilter *>(this)->get_initplan_idxs().has_member(i)) {
           find_px = false;
         } else if (OB_FAIL(get_child(i)->find_nested_dis_rescan(nested_rescan, false))) {
-          LOG_WARN("fail to find nested rescan", K(ret));
         } else if (nested_rescan) {
           /*do nothing*/
         } else if (OB_FAIL(get_child(i)->find_px_for_batch_rescan(this, find_px))) {
-          LOG_WARN("fail to find px for batch rescan", K(ret));
         }
         if (OB_SUCC(ret) && 0 != i) {
           if (OB_FAIL(enable_px_batch_rescans.push_back(find_px))) {
-            LOG_WARN("fail to push back find px", K(ret));
           }
         }
       }
@@ -3398,7 +3214,6 @@ int ObLogicalOperator::px_rescan_pre()
     } else if (LOG_MATERIAL == get_child(second_child)->get_type()) {
       /*do nothing*/
     } else if (OB_FAIL(get_child(second_child)->mark_child_exchange_rescanable())) {
-      LOG_WARN("mark child ex-receive as px op fail", K(ret));
     } else if (static_cast<ObLogJoin*>(this)->is_nlj_with_param_down() &&
                !IS_SEMI_ANTI_JOIN(static_cast<ObLogJoin*>(this)->get_join_type()) &&
                get_plan()->get_optimizer_context().get_max_parallel() <= 1 &&
@@ -3406,11 +3221,9 @@ int ObLogicalOperator::px_rescan_pre()
       bool find_px = false;
       bool nested_rescan = false;
       if (OB_FAIL(get_child(second_child)->find_nested_dis_rescan(nested_rescan, false))) {
-       LOG_WARN("fail to find nested rescan", K(ret));
       } else if (nested_rescan) {
         /*do nothing*/
       } else if (OB_FAIL(get_child(second_child)->find_px_for_batch_rescan(this, find_px))) {
-          LOG_WARN("fail to find px for batch rescan", K(ret));
       } else if (find_px) {
         static_cast<ObLogJoin*>(this)->set_px_batch_rescan(true);
       }
@@ -3422,7 +3235,6 @@ int ObLogicalOperator::px_rescan_pre()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(get_child(second_child)->mark_child_exchange_rescanable())) {
-      LOG_WARN("mark child ex-receive as px op fail", K(ret));
     }
   }
   return ret;
@@ -3442,7 +3254,6 @@ int ObLogicalOperator::mark_child_exchange_rescanable()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get_child(i) returns null", K(i), K(ret));
       } else if (OB_FAIL(SMART_CALL(get_child(i)->mark_child_exchange_rescanable()))) {
-        LOG_WARN("mark child ex-receive as px op fail", K(ret));
       }
     }
   }
@@ -3456,11 +3267,8 @@ int ObLogicalOperator::check_output_dependance(ObIArray<ObRawExpr *> &child_outp
   LOG_TRACE("start to check output exprs", K(type_), K(child_output), K(deps));
   ObRawExprCheckDep dep_checker(child_output, deps, false);
   if (OB_FAIL(append(exprs, op_exprs_))) {
-    LOG_WARN("failed to append exprs", K(ret));
   } else if (OB_FAIL(append_array_no_dup(exprs, output_exprs_))) {
-    LOG_WARN("failed to append exprs", K(ret));
   } else if (OB_FAIL(dep_checker.check(exprs))) {
-    LOG_WARN("failed to check output exprs", K(ret));
   } else {
     LOG_TRACE("succeed to check output exprs", K(exprs), K(type_), K(deps));
   }
@@ -3478,7 +3286,6 @@ int ObLogicalOperator::project_pruning_pre()
       LOG_VALUES_TABLE_ACCESS != type_) {
     PPDeps deps;
     if (OB_FAIL(parent_->check_output_dependance(get_output_exprs(), deps))) {
-      LOG_WARN("parent_->check_output_dep() fails", K(ret));
     } else {
       do_project_pruning(get_output_exprs(), deps);
     }
@@ -3490,7 +3297,6 @@ int ObLogicalOperator::project_pruning_pre()
     ObLogTableScan *table_scan = static_cast<ObLogTableScan*>(this);
     PPDeps deps;
     if (OB_FAIL(check_output_dependance(table_scan->get_access_exprs(), deps))) {
-      LOG_WARN("check_output_dep fails", K(ret));
     } else {
       do_project_pruning(table_scan->get_access_exprs(), deps);
     }
@@ -3501,7 +3307,6 @@ int ObLogicalOperator::project_pruning_pre()
     ObLogSubPlanScan *subplan_scan = static_cast<ObLogSubPlanScan*>(this);
     PPDeps deps;
     if (OB_FAIL(check_output_dependance(subplan_scan->get_access_exprs(), deps))) {
-      LOG_WARN("check_output_dep fails", K(ret));
     } else {
       do_project_pruning(subplan_scan->get_access_exprs(), deps);
     }
@@ -3509,7 +3314,6 @@ int ObLogicalOperator::project_pruning_pre()
     ObLogTempTableAccess *temp_scan = static_cast<ObLogTempTableAccess*>(this);
     PPDeps deps;
     if (OB_FAIL(check_output_dependance(temp_scan->get_access_exprs(), deps))) {
-      LOG_WARN("check_output_dep fails", K(ret));
     } else {
       do_project_pruning(temp_scan->get_access_exprs(), deps);
     }
@@ -3553,7 +3357,6 @@ int ObLogicalOperator::adjust_plan_root_output_exprs()
   } else if (NULL == get_parent()) {
     bool need_pack = false;
     if (OB_FAIL(check_stmt_can_be_packed(stmt, need_pack))) {
-      LOG_WARN("failed to check stmt can be pack", K(ret));
     } else if (need_pack && OB_FAIL(build_and_put_pack_expr(output_exprs_))) {
       LOG_WARN("failed to add pack expr to context", K(ret));
     }
@@ -3577,7 +3380,6 @@ int ObLogicalOperator::set_plan_root_output_exprs()
   } else if (stmt->is_returning()) {
     const ObDelUpdStmt *del_upd_stmt = static_cast<const ObDelUpdStmt *>(stmt);
     if (OB_FAIL(append(output_exprs_, del_upd_stmt->get_returning_exprs()))) {
-      LOG_WARN("failed to append returning exprs into output", K(ret));
     }
   } else { /*do nothing*/ }
 
@@ -3610,16 +3412,12 @@ int ObLogicalOperator::replace_op_exprs(ObRawExprReplacer &replacer)
   if (!replacer.empty()) {
     FOREACH_CNT_X(it, get_op_ordering(), OB_SUCC(ret)) {
       if (OB_FAIL(replace_expr_action(replacer, it->expr_))) {
-        LOG_WARN("replace expr failed", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(replace_exprs_action(replacer, get_filter_exprs()))) {
-      LOG_WARN("failed to replace expr", K(ret));
     } else if (OB_FAIL(replace_exprs_action(replacer, get_output_exprs()))) {
-      LOG_WARN("failed to replace expr", K(ret));
     } else if (OB_FAIL(inner_replace_op_exprs(replacer))) {
-      LOG_WARN("failed to inner replace expr", K(ret));
     } else { /* Do nothing */ }
   } else { /* Do nothing */ }
   return ret;
@@ -3646,7 +3444,6 @@ int ObLogicalOperator::replace_exprs_action(
     for (int64_t i = 0; OB_SUCC(ret) && i < dest_num; ++i) {
       ObRawExpr *&cur_expr = dest_exprs.at(i);
       if (OB_FAIL(replace_expr_action(replacer, cur_expr))) {
-        LOG_WARN("failed to do replace expr action", K(ret));
       } else { /* Do nothing */ }
     }
   } else { /* Do nothing */ }
@@ -3658,14 +3455,12 @@ int ObLogicalOperator::replace_expr_action(ObRawExprReplacer &replacer, ObRawExp
   int ret = OB_SUCCESS;
   if (!replacer.empty()) {
     if (OB_FAIL(replacer.replace(dest_expr))) {
-      LOG_WARN("failed to replace expr", K(ret));
     } else if (replacer.get_replace_happened()) {
       ObSQLSessionInfo *session_info = get_plan()->get_optimizer_context().get_session_info();
       if (OB_ISNULL(session_info)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("session is null", K(ret));
       } else if (OB_FAIL(dest_expr->formalize(session_info))) {
-        LOG_WARN("fail to formalize expr", K(ret));
       }
     }
   } else { /* Do nothing */ }
@@ -3686,7 +3481,6 @@ int ObLogicalOperator::check_sharding_compatible_with_reduce_expr(
   if (NULL == strong_sharding_) {
     /*do nothing*/
   } else if (OB_FAIL(strong_sharding_->get_all_partition_keys(part_exprs, true))) {
-    LOG_WARN("failed to get all part keys", K(ret));
   } else if (0 == part_exprs.count()) {
     compatible = false;
   } else if (ObOptimizerUtil::subset_exprs(part_exprs,
@@ -3698,7 +3492,6 @@ int ObLogicalOperator::check_sharding_compatible_with_reduce_expr(
   } else if (OB_FAIL(ObRawExprUtils::extract_column_exprs(part_exprs,
                                                           part_column_exprs,
                                                           is_groupby_with_hash_rollup))) {
-    LOG_WARN("failed to extract column exprs", K(ret));
   } else if (ObOptimizerUtil::subset_exprs(part_column_exprs,
                                            reduce_exprs,
                                            get_output_equal_sets())) {
@@ -3763,7 +3556,6 @@ int ObLogicalOperator::explain_print_partitions(ObTablePartitionInfo &table_part
   } else if (partitions.count() == 0) {
     // do nothing
   } else if (OB_FAIL(schema_guard->get_table_schema(ref_table_id, table_schema))) {
-    LOG_WARN("fail to get index schema", K(ret), K(ref_table_id), K(table_id));
   }
   int64_t N = partitions.count();
   for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
@@ -3791,7 +3583,6 @@ int ObLogicalOperator::explain_print_partitions(ObTablePartitionInfo &table_part
     lib::ob_sort(part_infos.begin(), part_infos.end(), CopyableComparer(cmp));
     if (OB_FAIL(ObLogicalOperator::explain_print_partitions(part_infos, two_level,
                                                             buf, buf_len, pos))) {
-      LOG_WARN("Failed to print partitions");
     } else { }//do nothing
   }
   return ret;
@@ -3812,7 +3603,6 @@ int ObLogicalOperator::explain_print_partitions(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Input arguments erro", K(ret), K(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(BUF_PRINTF("partitions("))) {
-    LOG_WARN("Failed to printf partitions", K(ret));
   } else if (0 == count){
     ret = BUF_PRINTF("nil");
   } else {
@@ -3962,7 +3752,6 @@ int ObLogicalOperator::px_pipe_blocking_post(ObPxPipeBlockingCtx &ctx)
               static_cast<ObLogDistinct*>(child)->set_block_mode(true);
               LOG_DEBUG("distinct block mode", K(lbt()));
             } else if (OB_FAIL(allocate_material(i))) {
-              LOG_WARN("allocate material failed", K(ret));
             }
           } else if (!got_in_exch) {
             got_in_exch = true;
@@ -4048,7 +3837,6 @@ int ObLogicalOperator::has_block_parent_for_shj(bool &has_non_block_shj)
       bool tmp_has_shj = false;
       auto child = get_child(i);
       if (OB_FAIL(child->has_block_parent_for_shj(tmp_has_shj))) {
-        LOG_WARN("failed to process block parent", K(ret));
       } else if (tmp_has_shj) {
         if (!is_block_input(i)) {
           // need to find whether the parent is blocked
@@ -4077,7 +3865,6 @@ int ObLogicalOperator::check_has_temp_table_access(ObLogicalOperator *cur,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("child is null", K(ret));
   } else if (OB_FAIL(SMART_CALL(check_has_temp_table_access(first_child, has_temp_table_access)))) {
-    LOG_WARN("failed to check has temp table access", K(ret));
   }
   return ret;
 }
@@ -4167,7 +3954,6 @@ int ObLogicalOperator::allocate_granule_nodes_above(AllocGIContext &ctx)
           ObLogTableScan *table_scan = static_cast<ObLogTableScan*>(this);
           ObOpPseudoColumnRawExpr *tablet_id_expr = NULL;
           if (OB_FAIL(generate_pseudo_partition_id_expr(tablet_id_expr))) {
-            LOG_WARN("fail alloc partition id expr", K(ret));
           } else {
             gi_op->set_tablet_id_expr(tablet_id_expr);
             gi_op->set_join_filter_info(table_scan->get_join_filter_info());
@@ -4197,13 +3983,11 @@ int ObLogicalOperator::allocate_granule_nodes_above(AllocGIContext &ctx)
 
       if (OB_SUCC(ret)) {
         if (OB_FAIL(gi_op->compute_property())) {
-          LOG_WARN("failed to compute equal sets", K(ret));
         }
       }
 
       if (OB_SUCC(ret) && is_plan_root()) {
         if (OB_FAIL(gi_op->get_output_exprs().assign(output_exprs_))) {
-          LOG_WARN("failed to assign output exprs", K(ret));
         } else {
           gi_op->mark_is_plan_root();
           get_plan()->set_plan_root(gi_op);
@@ -4216,7 +4000,6 @@ int ObLogicalOperator::allocate_granule_nodes_above(AllocGIContext &ctx)
           && static_cast<ObLogTableScan *>(this)->get_px_rf_info().is_inited_) {
         ObLogTableScan *table_scan = static_cast<ObLogTableScan *>(this);
         if (OB_FAIL(gi_op->set_px_rf_info(table_scan->get_px_rf_info()))) {
-          LOG_WARN("failed to set px rf info", K(ret));
         }
       }
 
@@ -4256,7 +4039,6 @@ int ObLogicalOperator::set_granule_nodes_affinity(AllocGIContext &ctx, int64_t c
     } else {
         for (int64_t i = 0; i < child_op->get_num_of_child() && OB_SUCC(ret); i++) {
           if (OB_FAIL(child_op->set_granule_nodes_affinity(ctx, i))) {
-            LOG_WARN("set granule affinity failed", K(ret));
           }
         }
     }
@@ -4300,12 +4082,10 @@ int ObLogicalOperator::allocate_gi_recursively(AllocGIContext &ctx)
       ctx.alloc_gi_ = false;
     }
     if (OB_FAIL(allocate_granule_nodes_above(ctx))) {
-      LOG_WARN("allocate gi above table scan failed", K(ret));
     }
   } else if (is_fully_partition_wise()) {
     ctx.alloc_gi_ = true;
     if (OB_FAIL(allocate_granule_nodes_above(ctx))) {
-      LOG_WARN("allocate gi above table scan failed", K(ret));
     }
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < get_num_of_child(); i++) {
@@ -4315,7 +4095,6 @@ int ObLogicalOperator::allocate_gi_recursively(AllocGIContext &ctx)
       } else if (LOG_EXCHANGE == get_child(i)->get_type()) {
         //do not allocate gi over a dfo bound.
       } else if (OB_FAIL(get_child(i)->allocate_gi_recursively(ctx))) {
-        LOG_WARN("failed to bottom-up traverse operator", K(ret), K(get_name()));
       } else { /* Do nothing */ }
     }
   }
@@ -4379,11 +4158,9 @@ int ObLogicalOperator::pw_allocate_granule_post(AllocGIContext &ctx)
     if (ctx.is_in_partition_wise_state() && is_fully_partition_wise()) {
       ctx.alloc_gi_ = true;
       if (OB_FAIL(allocate_granule_nodes_above(ctx))) {
-        LOG_WARN("allocate gi above table scan failed", K(ret));
       }
     } else if (ctx.is_in_partition_wise_state() || ctx.is_in_pw_affinity_state()) {
       if (OB_FAIL(allocate_gi_recursively(ctx))) {
-        LOG_WARN("failed to allocate gi recursively", K(ret));
       }
     }
     IGNORE_RETURN ctx.reset_info();
@@ -4396,7 +4173,6 @@ int ObLogicalOperator::allocate_startup_expr_post()
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < get_num_of_child(); ++i) {
     if (OB_FAIL(allocate_startup_expr_post(i))) {
-      LOG_WARN("failed to allocate startup expr post", K(i), K(ret));
     }
   }
   return ret;
@@ -4422,12 +4198,10 @@ int ObLogicalOperator::allocate_startup_expr_post(int64_t child_idx)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpect null expr", K(ret));
       } else if (OB_FAIL(new_startup_exprs.push_back(startup_exprs.at(i)))) {
-        LOG_WARN("failed to push back expr", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObOptimizerUtil::append_exprs_no_dup(get_startup_exprs(), new_startup_exprs))) {
-        LOG_WARN("failed to add startup exprs", K(ret));
       } else {
         //exchange out above the startup filter retain, used to control the current dfo early termination
         bool mark_exchange_out = false;
@@ -4444,7 +4218,6 @@ int ObLogicalOperator::allocate_startup_expr_post(int64_t child_idx)
         }
         if (!mark_exchange_out) {
           if (OB_FAIL(child->get_startup_exprs().assign(non_startup_exprs))) {
-            LOG_WARN("failed to assign exprs", K(ret));
           }
         }
       }
@@ -4538,7 +4311,6 @@ int ObLogicalOperator::allocate_material_node_above()
     for (int64_t i = 0; OB_SUCC(ret) && !found_child && i < get_parent()->get_num_of_child(); ++i) {
       if (get_parent()->get_child(i) == this) {
         if (OB_FAIL(get_parent()->allocate_material(i))) {
-          LOG_WARN("fail to allocate material", K(ret));
         }
         found_child = true;
       }
@@ -4554,9 +4326,7 @@ int ObLogicalOperator::allocate_material_node_above()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Get unexpected null", K(ret), K(get_plan()));
     } else if (OB_FAIL(get_plan()->allocate_material_as_top(top))) {
-      LOG_WARN("failed to allocate material as top", K(ret));
     } else if (OB_FAIL(top->get_output_exprs().assign(output_exprs_))) {
-      LOG_WARN("failed to assign output exprs", K(ret));
     } else {
       set_parent(top);
       get_plan()->set_plan_root(top);
@@ -4610,13 +4380,11 @@ int ObLogicalOperator::allocate_monitoring_dump_node_above(uint64_t flags, uint6
 
       if (OB_SUCC(ret)) {
         if (OB_FAIL(monitoring_dump->compute_property())) {
-          LOG_WARN("Failed to compute equal sets", K(ret));
         }
       }
 
       if (OB_SUCC(ret) && is_plan_root()) {
         if (OB_FAIL(monitoring_dump->get_output_exprs().assign(output_exprs_))) {
-          LOG_WARN("failed to assign output exprs", K(ret));
         } else {
           monitoring_dump->mark_is_plan_root();
           get_plan()->set_plan_root(monitoring_dump);
@@ -4646,17 +4414,11 @@ int ObLogicalOperator::add_join_filter_info(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null operator", K(join_filter_use), K(join_filter_create_op), K(ret));
   } else if (OB_FAIL(join_filter_use->add_join_filter_expr(join_filter_expr))) {
-    LOG_WARN("fail to add join filter use", K(ret));
   } else if (OB_FAIL(join_filter_use->add_join_filter_type(type))) {
-    LOG_WARN("fail to add join filter use", K(ret));
   } else if (OB_FAIL(join_filter_create->add_join_filter_type(type))) {
-    LOG_WARN("fail to add join filter use", K(ret));
   } else if (OB_FAIL(PX_P2P_DH.generate_p2p_dh_id(p2p_sequence_id))) {
-    LOG_WARN("fail to generate p2p dh id", K(ret));
   } else if (OB_FAIL(join_filter_create->add_p2p_sequence_id(p2p_sequence_id))) {
-    LOG_WARN("fail to add join filter use", K(ret));
   } else if (OB_FAIL(join_filter_use->add_p2p_sequence_id(p2p_sequence_id))) {
-    LOG_WARN("fail to add join filter use", K(ret));
   }
   return ret;
 }
@@ -4672,11 +4434,8 @@ int ObLogicalOperator::add_partition_join_filter_info(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null operator", K(join_filter_create_op), K(ret));
   } else if (OB_FAIL(join_filter_create->add_join_filter_type(type))) {
-    LOG_WARN("fail to add join filter use", K(ret));
   } else if (OB_FAIL(PX_P2P_DH.generate_p2p_dh_id(p2p_sequence_id))) {
-    LOG_WARN("fail to generate p2p dh id", K(ret));
   } else if (OB_FAIL(join_filter_create->add_p2p_sequence_id(p2p_sequence_id))) {
-    LOG_WARN("fail to add join filter use", K(ret));
   } else {
     ObLogJoin *join_op = static_cast<ObLogJoin*>(this);
     ObLogJoinFilter *join_filter_create = static_cast<ObLogJoinFilter *>(join_filter_create_op);
@@ -4685,7 +4444,6 @@ int ObLogicalOperator::add_partition_join_filter_info(
     } else {
       for (int i = 0; i < join_op->get_join_conditions().count(); ++i) {
         if (OB_FAIL(join_filter_create->get_is_null_safe_cmps().push_back(false))) {
-          LOG_WARN("fail to push back is null safe flag", K(ret));
         }
       }
     }
@@ -4764,9 +4522,7 @@ int ObLogicalOperator::generate_runtime_filter_expr(
     LOG_WARN("join_use_exprs's size doesn't match join_create_exprs's size",
         K(join_use_exprs.count()), K(join_create_exprs.count()));
   } else if (OB_FAIL(expr_factory.create_raw_expr(T_OP_RUNTIME_FILTER, join_filter_expr))) {
-    LOG_WARN("fail to create raw expr", K(ret));
   } else if (OB_FAIL(join_filter_expr->init_param_exprs(join_use_exprs.count()))) {
-    LOG_WARN("failed to init param exprs", K(ret));
   } else {
     join_filter_expr->set_runtime_filter_type(type);
     ObLogJoin *join_op = static_cast<ObLogJoin*>(this);
@@ -4777,7 +4533,6 @@ int ObLogicalOperator::generate_runtime_filter_expr(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("join_use_expr or join_create_expr is NULL!", K(join_use_expr), K(join_create_expr));
       } else if (OB_FAIL(join_filter_expr->add_param_expr(join_use_exprs.at(i)))) {
-        LOG_WARN("fail to add param expr", K(ret));
       } else if (join_filter_use->get_join_filter_cmp_funcs().count() < join_use_exprs.count()
           && OB_FAIL(cal_runtime_filter_compare_func(join_filter_use, join_use_expr, join_create_expr))) {
         LOG_WARN("fail to cal compare function", K(ret));
@@ -4792,15 +4547,11 @@ int ObLogicalOperator::generate_runtime_filter_expr(
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(join_filter_expr->formalize(session_info))) {
-        LOG_WARN("fail to formalize expr", K(ret));
       } else if (OB_FAIL(exprs.push_back(join_filter_expr))) {
-        LOG_WARN("fail to to push back expr", K(ret));
       } else if (OB_FAIL(add_var_to_array_no_dup(get_plan()->get_predicate_selectivities(),
           ObExprSelPair(join_filter_expr, join_filter_rate)))) {
-        LOG_WARN("fail to add join filter expr", K(ret));
       } else if (OB_FAIL(add_join_filter_info(join_filter_create_op,
           join_filter_use_op, join_filter_expr, type))) {
-        LOG_WARN("fail to add join filter info", K(ret));
       }
     }
   }
@@ -4887,7 +4638,6 @@ int ObLogicalOperator::check_can_extract_query_range_by_rf(
         // mark this runtime filter can_extract_query_range
         can_extract_query_range = true;
         if (OB_FAIL(prefix_col_idxs.push_back(col_idx))) {
-          LOG_WARN("failed to push back col_idx");
         }
       }
     }
@@ -4909,7 +4659,6 @@ int ObLogicalOperator::try_prepare_rf_query_range_info(
   if (OB_FAIL(check_can_extract_query_range_by_rf(
                  scan_node, join_filter_create_op, join_filter_use_op, can_extract_query_range,
                  prefix_col_idxs))) {
-    LOG_WARN("failed to check can extrace query range by runtime filter");
   } else if (!can_extract_query_range) {
     // do nothing
   } else {
@@ -4928,7 +4677,6 @@ int ObLogicalOperator::try_prepare_rf_query_range_info(
       join_filter_create->set_probe_table_id(info.ref_table_id_);
       join_filter_create->set_range_column_cnt(range_column_cnt);
       if (OB_FAIL(join_filter_create->set_rf_prefix_col_idxs(prefix_col_idxs))) {
-        LOG_WARN("failed to set rf_prefix_col_idxs");
       }
 
       // 2 set runtime filter p2p id info to tabls scan op, it will passed to GI op later.
@@ -4941,15 +4689,12 @@ int ObLogicalOperator::try_prepare_rf_query_range_info(
           if (RuntimeFilterType::IN == type || RuntimeFilterType::RANGE == type) {
             if (OB_FAIL(
                   p2p_dh_ids.push_back(join_filter_create->get_p2p_sequence_ids().at(i)))) {
-              LOG_WARN("fail to push_back", K(ret));
             }
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(px_rf_info.init(p2p_dh_ids, join_filter_create->is_shared_join_filter()))) {
-            LOG_WARN("fail to init rf_query_range_info", K(ret));
           } else if (OB_FAIL(table_scan->set_px_rf_info(px_rf_info))) {
-            LOG_WARN("fail to set rf_query_range_info to scan op", K(ret));
           }
         }
       }
@@ -4990,7 +4735,6 @@ int ObLogicalOperator::create_runtime_filter_info(ObLogicalOperator *op,
       for (int i = 0; OB_SUCC(ret) && i < join_op->get_join_conditions().count(); ++i) {
         if (OB_FAIL(join_filter_create->get_is_null_safe_cmps().push_back(
               T_OP_NSEQ == join_op->get_join_conditions().at(i)->get_expr_type()))) {
-          LOG_WARN("fail to push back is null safe flag", K(ret));
         }
       }
     }
@@ -5027,7 +4771,6 @@ int ObLogicalOperator::find_table_scan(ObLogicalOperator* root_op,
                                              scan_op, 
                                              table_scan_has_exchange,
                                              has_px_coord)))) {
-        LOG_WARN("failed to find operator", K(ret));
       }
     }
     if (OB_SUCC(ret) && NULL != scan_op) {
@@ -5059,7 +4802,6 @@ int ObLogicalOperator::check_sort_key_can_pushdown_to_tsc_detail(
         if (OB_FAIL(check_sort_key_can_pushdown_to_tsc_for_gby(
                 op, candidate_sk_expr, table_id, scan_op, find_table_scan,
                 table_scan_has_exchange, has_px_coord))) {
-          LOG_WARN("failed to check group by");
         }
         break;
       }
@@ -5068,7 +4810,6 @@ int ObLogicalOperator::check_sort_key_can_pushdown_to_tsc_detail(
         if (OB_FAIL(check_sort_key_can_pushdown_to_tsc_for_winfunc(
                 op, candidate_sk_expr, table_id, scan_op, find_table_scan, table_scan_has_exchange,
                 has_px_coord))) {
-          LOG_WARN("failed to check window function");
         }
         break;
       }
@@ -5077,7 +4818,6 @@ int ObLogicalOperator::check_sort_key_can_pushdown_to_tsc_detail(
         if (OB_FAIL(check_sort_key_can_pushdown_to_tsc_for_join(
                 op, candidate_sk_expr, table_id, scan_op, find_table_scan, table_scan_has_exchange,
                 has_px_coord))) {
-          LOG_WARN("failed to check join");
         }
         break;
       }
@@ -5092,7 +4832,6 @@ int ObLogicalOperator::check_sort_key_can_pushdown_to_tsc_detail(
         } else if (OB_FAIL(SMART_CALL(check_sort_key_can_pushdown_to_tsc_detail(
                        child, candidate_sk_expr, table_id, scan_op, find_table_scan,
                        table_scan_has_exchange, has_px_coord)))) {
-          LOG_WARN("failed to check", K(ret));
         }
         break;
       }
@@ -5103,7 +4842,6 @@ int ObLogicalOperator::check_sort_key_can_pushdown_to_tsc_detail(
           if (scan->use_das()) {
             OPT_TRACE("[TopN Filter] can not pushdown to das table scan");
           } else if (OB_FAIL(scan->has_exec_param(has_exec_param))) {
-            LOG_WARN("failed to has_exec_param");
           } else if (has_exec_param) {
             OPT_TRACE("[TopN Filter] can not pushdown to tsc with exec param");
           } else {
@@ -5158,7 +4896,6 @@ int ObLogicalOperator::check_sort_key_can_pushdown_to_tsc_for_gby(
     } else if (OB_FAIL(SMART_CALL(check_sort_key_can_pushdown_to_tsc_detail(
                    child, candidate_sk_expr, table_id, scan_op, find_table_scan,
                    table_scan_has_exchange, has_px_coord)))) {
-      LOG_WARN("failed to check", K(ret));
     }
   }
   return ret;
@@ -5179,11 +4916,9 @@ int ObLogicalOperator::check_sort_key_can_pushdown_to_tsc_for_winfunc(
       LOG_WARN("window function expr is null", K(ret));
     } else if (i == 0) {
       if (OB_FAIL(partition_exprs.assign(win_expr->get_partition_exprs()))) {
-        LOG_WARN("failed to assign partition exprs", K(ret));
       }
     } else if (OB_FAIL(ObOptimizerUtil::intersect_exprs(
                    partition_exprs, win_expr->get_partition_exprs(), partition_exprs))) {
-      LOG_WARN("failed to intersect expr array", K(ret));
     } else if (partition_exprs.empty()) {
       break;
     }
@@ -5199,7 +4934,6 @@ int ObLogicalOperator::check_sort_key_can_pushdown_to_tsc_for_winfunc(
     } else if (OB_FAIL(SMART_CALL(check_sort_key_can_pushdown_to_tsc_detail(
                    child, candidate_sk_expr, table_id, scan_op, find_table_scan,
                    table_scan_has_exchange, has_px_coord)))) {
-      LOG_WARN("failed to check", K(ret));
     }
   }
   return ret;
@@ -5225,7 +4959,6 @@ int ObLogicalOperator::check_sort_key_can_pushdown_to_tsc_for_join(
     } else if (OB_FAIL(SMART_CALL(check_sort_key_can_pushdown_to_tsc_detail(
                    child, candidate_sk_expr, table_id, scan_op, find_table_scan,
                    table_scan_has_exchange, has_px_coord)))) {
-      LOG_WARN("failed to check", K(ret));
     }
   } else if (RIGHT_OUTER_JOIN == join_type || RIGHT_ANTI_JOIN == join_type
              || RIGHT_SEMI_JOIN == join_type) {
@@ -5236,7 +4969,6 @@ int ObLogicalOperator::check_sort_key_can_pushdown_to_tsc_for_join(
     } else if (OB_FAIL(SMART_CALL(check_sort_key_can_pushdown_to_tsc_detail(
                    child, candidate_sk_expr, table_id, scan_op, find_table_scan,
                    table_scan_has_exchange, has_px_coord)))) {
-      LOG_WARN("failed to check", K(ret));
     }
   } else if (INNER_JOIN == join_type) {
     for (int64_t i = 0; OB_SUCC(ret) && !find_table_scan && i < log_join->get_num_of_child(); ++i) {
@@ -5246,7 +4978,6 @@ int ObLogicalOperator::check_sort_key_can_pushdown_to_tsc_for_join(
       } else if (OB_FAIL(SMART_CALL(check_sort_key_can_pushdown_to_tsc_detail(
                      child, candidate_sk_expr, table_id, scan_op, find_table_scan,
                      table_scan_has_exchange, has_px_coord)))) {
-        LOG_WARN("failed to check", K(ret));
       }
     }
   }
@@ -5273,7 +5004,6 @@ int ObLogicalOperator::check_sort_key_can_pushdown_to_tsc(
     if (OB_FAIL(check_sort_key_can_pushdown_to_tsc_detail(root_op, candidate_sk_expr, table_id,
                                                           scan_op, find_table_scan,
                                                           table_scan_has_exchange, has_px_coord))) {
-      LOG_WARN("failed to check_sort_key_can_pushdown_to_tsc_detail");
     } else if (find_table_scan) {
       effective_sk_cnt = i + 1;
     }
@@ -5311,7 +5041,6 @@ int ObLogicalOperator::allocate_partition_join_filter(const ObIArray<JoinFilterI
                                        node,
                                        right_has_exchange,
                                        right_has_px_coord))) {
-      LOG_WARN("failed to find table scan", K(ret));
     } else if (right_has_px_coord) {
       //not support now
     } else if (OB_ISNULL(node)) {
@@ -5327,8 +5056,6 @@ int ObLogicalOperator::allocate_partition_join_filter(const ObIArray<JoinFilterI
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_ERROR("failed to allocate exchange nodes", K(ret));
     } else if (OB_FAIL(add_partition_join_filter_info(filter_create, RuntimeFilterType::BLOOM_FILTER))) {
-      // only bloom filter.
-      LOG_WARN("fail to add parttition join filter info", K(ret));
     } else {
       bool is_shared_hash_join = static_cast<ObLogJoin*>(this)->is_shared_hash_join();
       ObPxBFStaticInfo bf_info;
@@ -5433,7 +5160,6 @@ int ObLogicalOperator::allocate_normal_join_filter(const ObIArray<JoinFilterInfo
                                          node,
                                          right_has_exchange,
                                          right_has_px_coord))) {
-        LOG_WARN("failed to find table scan", K(ret));
       } else if (right_has_px_coord) {
         //no support now
       } else if (OB_ISNULL(node)) {
@@ -5477,7 +5203,6 @@ int ObLogicalOperator::allocate_normal_join_filter(const ObIArray<JoinFilterInfo
             has_shared_join_filter = true;
             int64_t max_wait_time_ms = 0;
             if (OB_FAIL(calc_rf_max_wait_time(node, info.filter_table_id_, max_wait_time_ms))) {
-              LOG_WARN("failed to calc_rf_max_wait_time");
             } else {
               join_filter_use->set_rf_max_wait_time(max_wait_time_ms);
             }
@@ -5493,7 +5218,6 @@ int ObLogicalOperator::allocate_normal_join_filter(const ObIArray<JoinFilterInfo
           } else if (OB_FALSE_IT(join_filter_use->set_plan(*node->get_plan()))) {
           } else if (node->is_plan_root()) {
             if (OB_FAIL(join_filter_use->get_output_exprs().assign(node->get_output_exprs()))) {
-              LOG_WARN("failed to assign output exprs", K(ret));
             } else {
               join_filter_use->mark_is_plan_root();
               node->get_plan()->set_plan_root(join_filter_use);
@@ -5517,7 +5241,6 @@ int ObLogicalOperator::allocate_normal_join_filter(const ObIArray<JoinFilterInfo
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(try_prepare_rf_query_range_info(join_filter_create, join_filter_use,
                                                            node, info))) {
-          LOG_WARN("failed to prepare_rf_query_range_info");
         }
         if (OB_SUCC(ret) && LOG_TABLE_SCAN == node->get_type()) {
           ObLogTableScan *scan = static_cast<ObLogTableScan*>(node);
@@ -5594,7 +5317,6 @@ int ObLogicalOperator::allocate_normal_join_filter(const ObIArray<JoinFilterInfo
     // add full hash join key left exprs to join filter
     const JoinFilterInfo &info = infos.at(last_valid_join_filter_info_idx);
     if (OB_FAIL(join_filter_create->set_all_join_key_left_exprs(info.all_join_key_left_exprs_))) {
-      LOG_WARN("failed to set_all_join_key_left_exprs");
     }
   }
   return ret;
@@ -5641,10 +5363,8 @@ int ObLogicalOperator::allocate_runtime_filter_for_hash_join(AllocBloomFilterCon
     //do nothing
   } else if (OB_FAIL(allocate_partition_join_filter(join_op->get_join_filter_infos(),
                                                     ctx.filter_id_))) {
-    LOG_WARN("fail to allocate partition join filter", K(ret));
   } else if (OB_FAIL(allocate_normal_join_filter(join_op->get_join_filter_infos(),
                                                  ctx.filter_id_))) {
-    LOG_WARN("fail to allocate normal join filter", K(ret));
   }
   return ret;
 }
@@ -5662,9 +5382,7 @@ int ObLogicalOperator::generate_pseudo_partition_id_expr(ObOpPseudoColumnRawExpr
                                                           "PARTITION_ID",
                                                           res_type,
                                                           expr))) {
-    LOG_WARN("build operator pseudo column failed", K(ret));
   } else if (OB_FAIL(expr->formalize(ctx.get_session_info()))) {
-    LOG_WARN("expr formalize failed", K(ret));
   }
 
   return ret;
@@ -5692,7 +5410,6 @@ int ObLogicalOperator::find_nested_dis_rescan(bool &find, bool nested)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(get_child(i)), K(ret));
       } else if (OB_FAIL(SMART_CALL(child->find_nested_dis_rescan(find, nested)))) {
-        LOG_WARN("fail to find px for batch rescan", K(ret));
       }
     }
   }
@@ -5719,7 +5436,6 @@ int ObLogicalOperator::pre_check_can_px_batch_rescan(bool &find_nested_rescan,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(get_child(i)), K(ret));
       } else if (OB_FAIL(SMART_CALL(child->pre_check_can_px_batch_rescan(find_nested_rescan, find_rescan_px, nested)))) {
-        LOG_WARN("fail to find px for batch rescan", K(ret));
       }
     }
   }
@@ -5764,7 +5480,6 @@ int ObLogicalOperator::check_subplan_filter_child_exchange_rescanable()
       }
       if (!is_onetime_expr || force_right_coord) {
         if (OB_FAIL(get_child(i)->mark_child_exchange_rescanable())) {
-          LOG_WARN("mark child ex-receive as px op fail", K(ret));
         }
       }
     }
@@ -5810,7 +5525,6 @@ int ObLogicalOperator::find_px_for_batch_rescan(ObLogicalOperator *px_batch_op, 
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(get_child(i)), K(ret));
       } else if (OB_FAIL(SMART_CALL(child->find_px_for_batch_rescan(px_batch_op, find)))) {
-        LOG_WARN("fail to find px for batch rescan", K(ret));
       }
     }
   }
@@ -5824,7 +5538,6 @@ int ObLogicalOperator::add_op_exprs(ObRawExpr *expr)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(op_exprs_.push_back(expr))) {
-    LOG_WARN("failed to push back exprs", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -5846,7 +5559,6 @@ int ObLogicalOperator::find_shuffle_join_filter(bool &find) const
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null", K(ret), K(child));
       } else if (OB_FAIL(SMART_CALL(child->find_shuffle_join_filter(find)))) {
-        LOG_WARN("failed to find shuffle join filter", K(ret));
       }
     }
   } else {
@@ -5856,7 +5568,6 @@ int ObLogicalOperator::find_shuffle_join_filter(bool &find) const
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null", K(ret), K(child));
       } else if (OB_FAIL(SMART_CALL(child->find_shuffle_join_filter(find)))) {
-        LOG_WARN("failed to find shuffle join filter", K(ret));
       }
     }
   }
@@ -5882,7 +5593,6 @@ int ObLogicalOperator::get_pushdown_op(log_op_def::ObLogOpType op_type, const Ob
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), K(child));
   } else if (OB_FAIL(SMART_CALL(child->get_pushdown_op(op_type, op)))) {
-    LOG_WARN("failed to check push down", K(ret));
   }
   return ret;
 }
@@ -5894,7 +5604,6 @@ int ObLogicalOperator::need_alloc_material_for_shared_hj(ObLogicalOperator &curr
   ObLogicalOperator *parent = curr_op.get_parent();
   bool stack_overflow = false;
   if (OB_FAIL(check_stack_overflow(stack_overflow))) {
-    LOG_WARN("failed to check stack overflow", K(ret));
   } else if (stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recursive", K(ret));
@@ -5938,7 +5647,6 @@ int ObLogicalOperator::need_alloc_material_for_push_down_wf(
   bool stack_overflow = false;
   int64_t child_num = curr_op.get_num_of_child();
   if (OB_FAIL(check_stack_overflow(stack_overflow))) {
-    LOG_WARN("failed to check stack overflow", K(ret));
   } else if (stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recursive", K(ret));
@@ -5952,8 +5660,6 @@ int ObLogicalOperator::need_alloc_material_for_push_down_wf(
         LOG_WARN("unexpected got nullptr child", K(ret), K(i));
       } else if (curr_op.is_block_input(i)) { // do nothing
       } else if (OB_FAIL(need_alloc_material_for_push_down_wf(*curr_op.get_child(i), need_alloc))) {
-        LOG_WARN("check need_alloc_material_for_push_down_wf failed",
-                 K(ret), K(curr_op), K(i), KPC(curr_op.get_child(i)));
       }
     }
   }
@@ -5970,20 +5676,16 @@ int ObLogicalOperator::collect_batch_exec_param_pre(void* ctx)
   } else if (ObLogOpType::LOG_JOIN == get_type() &&
              NESTED_LOOP_JOIN == static_cast<ObLogJoin*>(this)->get_join_algo()) {
     if (OB_FAIL(param_ctx->params_idx_.push_back(param_ctx->exec_params_.count()))) {
-      LOG_WARN("failed to push back params idx", K(ret));
     }
   } else if (ObLogOpType::LOG_SUBPLAN_FILTER == get_type()) {
     if (OB_FAIL(param_ctx->params_idx_.push_back(param_ctx->exec_params_.count()))) {
-      LOG_WARN("failed to push back params idx", K(ret));
     }
   } else if (param_ctx->params_idx_.empty()) {
     /* do nothing */
   } else {
     ObSEArray<ObRawExpr*, 4> param_exprs;
     if (OB_FAIL(ObRawExprUtils::extract_params(get_filter_exprs(), param_exprs))) {
-      LOG_WARN("extract params failed", K(ret));
     } else if (OB_FAIL(ObRawExprUtils::extract_params(get_startup_exprs(), param_exprs))) {
-      LOG_WARN("extract params failed", K(ret));
     } else if (ObLogOpType::LOG_TABLE_SCAN == get_type() &&
                OB_FAIL(ObRawExprUtils::extract_params(static_cast<ObLogTableScan*>(this)->get_range_conditions(),
                                                       param_exprs))) {
@@ -5997,7 +5699,6 @@ int ObLogicalOperator::collect_batch_exec_param_pre(void* ctx)
       } else if (expr->has_flag(IS_DYNAMIC_PARAM)) {
         ObBatchExecParamCtx::ExecParam param(expr, branch_id_);
         if (OB_FAIL(param_ctx->exec_params_.push_back(param))) {
-          LOG_WARN("failed to push back exec params", K(ret));
         }
       }
     }
@@ -6018,7 +5719,6 @@ int ObLogicalOperator::collect_batch_exec_param_post(void* ctx)
                                           filter_op->get_exec_params(),
                                           filter_op->get_above_pushdown_left_params(),
                                           filter_op->get_above_pushdown_right_params()))) {
-      LOG_WARN("failed to collect batch exec param", K(ret));
     }
   } else if (ObLogOpType::LOG_JOIN == get_type() &&
              NESTED_LOOP_JOIN == static_cast<ObLogJoin*>(this)->get_join_algo()) {
@@ -6027,7 +5727,6 @@ int ObLogicalOperator::collect_batch_exec_param_post(void* ctx)
                                          join_op->get_nl_params(),
                                          join_op->get_above_pushdown_left_params(),
                                          join_op->get_above_pushdown_right_params()))) {
-      LOG_WARN("failed to collect batch exec param", K(ret));
     }
   }
   return ret;
@@ -6043,7 +5742,6 @@ int ObLogicalOperator::pick_out_startup_filters()
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("NULL pointer error", K(plan), K(opt_ctx), K(ret));
   } else if (OB_FAIL(filter_exprs.assign(filter_exprs_))) {
-    LOG_WARN("assign filter exprs failed", K(ret));
   } else {
     filter_exprs_.reset();
   }
@@ -6054,10 +5752,8 @@ int ObLogicalOperator::pick_out_startup_filters()
       LOG_WARN("unexpect null expr", K(ret));
     } else if (qual->is_const_expr()) {
       if (OB_FAIL(startup_exprs_.push_back(qual))) {
-        LOG_WARN("add filter expr failed", K(i), K(ret));
       } else { /* Do nothing */ }
     } else if (OB_FAIL(filter_exprs_.push_back(qual))) {
-      LOG_WARN("add filter expr failed", K(i), K(ret));
     } else { /* Do nothing */ }
   }
   return ret;
@@ -6078,7 +5774,6 @@ int ObLogicalOperator::check_contain_false_startup_filter(bool &contain_false)
       LOG_WARN("unexpect null expr", K(ret));
     } else if (OB_FAIL(ObOptimizerUtil::check_is_static_false_expr(
         get_plan()->get_optimizer_context(), *qual, contain_false))) {
-      LOG_WARN("failed to check is static false", K(ret));
     } else { /* Do nothing */ }
   }
   return ret;
@@ -6099,7 +5794,6 @@ int ObLogicalOperator::collect_batch_exec_param(void* ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("params idx is null", K(ret));
   } else if (OB_FAIL(param_ctx->params_idx_.pop_back(start))) {
-    LOG_WARN("failed to pop back idx", K(ret));
   } else if (OB_UNLIKELY(start > param_ctx->exec_params_.count())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("params idx is large than count", K(ret));
@@ -6109,7 +5803,6 @@ int ObLogicalOperator::collect_batch_exec_param(void* ctx,
       if (!ObOptimizerUtil::find_item(exec_params, param.expr_)) {
         /* do nothing */
       } else if (OB_FAIL(param_ctx->exec_params_.remove(i))) {
-        LOG_WARN("failed to remove params", K(ret));
       }
     }
     for (int64_t i = start; OB_SUCC(ret) && i < param_ctx->exec_params_.count(); ++i) {
@@ -6138,7 +5831,6 @@ int ObLogicalOperator::recursively_disable_alloc_op_above(AllocOpContext& ctx)
   LOG_DEBUG("disable alloc op above", K(op_id_), K(type_));
   for (int64_t i = 0; OB_SUCC(ret) && i < get_num_of_child(); i++) {
     if (OB_FAIL(SMART_CALL(get_child(i)->recursively_disable_alloc_op_above(ctx)))) {
-      LOG_WARN("fail to disable alloc op above", K(ret));
     }
   }
   return ret;
@@ -6153,7 +5845,6 @@ int ObLogicalOperator::gen_temp_op_id(AllocOpContext& ctx)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get_child(i) is null", K(ret), K(i));
     } else if (OB_FAIL(get_child(i)->gen_temp_op_id(ctx))) {
-      LOG_WARN("fail to generate original op id", K(ret));
     }
   }
   return ret;
@@ -6171,9 +5862,7 @@ int ObLogicalOperator::alloc_nodes_above(AllocOpContext& ctx, const uint64_t &fl
     } else if (OB_HASH_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
       if (OB_FAIL(allocate_material_node_above())) {
-        LOG_WARN("failed to allocate material above", K(ret));
       } else if (OB_FAIL(ctx.visit(op_id_, ObAllocOpHint::OB_MATERIAL))) {
-        LOG_WARN("failed to visit alloc op", K(ret));
       }
     } else {
       LOG_WARN("exist_refactored fail", K(ret));
@@ -6184,9 +5873,7 @@ int ObLogicalOperator::alloc_nodes_above(AllocOpContext& ctx, const uint64_t &fl
               || (flags & ObAllocOpHint::OB_MONITOR_TRACING))
              && !ctx.is_visited(op_id_, ObAllocOpHint::OB_MONITOR_STAT | ObAllocOpHint::OB_MONITOR_TRACING)) {
     if (OB_FAIL(allocate_monitoring_dump_node_above(flags, op_id_))) {
-      LOG_WARN("failed to allocate monitoring dump above", K(ret));
     } else if (OB_FAIL(ctx.visit(op_id_, ObAllocOpHint::OB_MONITOR_STAT | ObAllocOpHint::OB_MONITOR_TRACING))) {
-      LOG_WARN("failed to visit alloc op", K(ret));
     }
   }
   return ret;
@@ -6242,21 +5929,17 @@ int ObLogicalOperator::open_px_resource_analyze(OPEN_PX_RESOURCE_ANALYZE_DECLARE
       for (int64_t i = 0; i < get_num_of_child() && OB_SUCC(ret); i++) {
         child = get_child(i);
        if (OB_FAIL(SMART_CALL(child->open_px_resource_analyze(OPEN_PX_RESOURCE_ANALYZE_ARG)))) {
-          LOG_WARN("open px resource analyze failed", K(ret));
         } else if (OB_FAIL(SMART_CALL(child->close_px_resource_analyze(CLOSE_PX_RESOURCE_ANALYZE_ARG)))) {
-          LOG_WARN("close px resource analyze failed", K(ret));
         }
       }
     } else {
       // open all then close all
       for (int64_t i = 0; i < get_num_of_child() && OB_SUCC(ret); i++) {
         if (OB_FAIL(SMART_CALL(get_child(i)->open_px_resource_analyze(OPEN_PX_RESOURCE_ANALYZE_ARG)))) {
-          LOG_WARN("open px resource analyze failed", K(ret));
         }
       }
       for (int64_t i = 0; i < get_num_of_child() && OB_SUCC(ret); i++) {
         if (OB_FAIL(SMART_CALL(get_child(i)->close_px_resource_analyze(CLOSE_PX_RESOURCE_ANALYZE_ARG)))) {
-          LOG_WARN("close px resource analyze failed", K(ret));
         }
       }
     }
@@ -6266,24 +5949,19 @@ int ObLogicalOperator::open_px_resource_analyze(OPEN_PX_RESOURCE_ANALYZE_DECLARE
     for (; child_idx < get_num_of_child() && is_block_input(child_idx) && OB_SUCC(ret); child_idx++) {
       child = get_child(child_idx);
       if (OB_FAIL(SMART_CALL(child->open_px_resource_analyze(OPEN_PX_RESOURCE_ANALYZE_ARG)))) {
-        LOG_WARN("open px resource analyze failed", K(ret));
       } else if (OB_FAIL(SMART_CALL(child->close_px_resource_analyze(CLOSE_PX_RESOURCE_ANALYZE_ARG)))) {
-        LOG_WARN("close px resource analyze failed", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(find_max_px_resource_child(OPEN_PX_RESOURCE_ANALYZE_ARG, child_idx))) {
-      LOG_WARN("find max px resource child failed", K(ret));
     } else { 
       for (; child_idx < get_num_of_child() && OB_SUCC(ret); child_idx++) {
         if (child_idx == max_px_thread_branch_ || child_idx == max_px_group_branch_) {
           // skip, open later
         } else if (OB_FAIL(SMART_CALL(get_child(child_idx)->open_px_resource_analyze(
                         OPEN_PX_RESOURCE_ANALYZE_ARG)))) {
-          LOG_WARN("child open px resource analyze failed", K(ret));
         } else if (OB_FAIL(SMART_CALL(get_child(child_idx)->close_px_resource_analyze(
                                                               CLOSE_PX_RESOURCE_ANALYZE_ARG)))) {
-          LOG_WARN("child close px resource analyze failed", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -6295,8 +5973,6 @@ int ObLogicalOperator::open_px_resource_analyze(OPEN_PX_RESOURCE_ANALYZE_DECLARE
         // all inputs are block, do nothing.
       } else if (OB_FAIL(SMART_CALL(get_child(max_px_thread_branch_)->open_px_resource_analyze(
                                     OPEN_PX_RESOURCE_ANALYZE_ARG)))) {
-        LOG_WARN("child open px resource analyze failed", K(ret));
-      // open both child with max thread and child with max group. may be inaccurate, by design.
       } else if (max_px_group_branch_ != max_px_thread_branch_ &&
                 OB_FAIL(SMART_CALL(get_child(max_px_group_branch_)->open_px_resource_analyze(
                                     OPEN_PX_RESOURCE_ANALYZE_ARG)))) {
@@ -6307,7 +5983,6 @@ int ObLogicalOperator::open_px_resource_analyze(OPEN_PX_RESOURCE_ANALYZE_DECLARE
     // non block op and not consume child one by one, open all children. example: nlj, merge union distinct.
     for (int64_t i = 0; i < get_num_of_child() && OB_SUCC(ret); i++) {
       if (OB_FAIL(SMART_CALL(get_child(i)->open_px_resource_analyze(OPEN_PX_RESOURCE_ANALYZE_ARG)))) {
-        LOG_WARN("open px resource analyze failed", K(ret));
       }
     }
   }
@@ -6326,8 +6001,6 @@ int ObLogicalOperator::close_px_resource_analyze(CLOSE_PX_RESOURCE_ANALYZE_DECLA
       // all children are block input and have been closed, do nothing.
     } else if (OB_FAIL(SMART_CALL(get_child(max_px_thread_branch_)->close_px_resource_analyze(
                             CLOSE_PX_RESOURCE_ANALYZE_ARG)))) {
-      LOG_WARN("child open px resource analyze failed", K(ret));
-    // close both child with max thread and child with max group.
     } else if (max_px_group_branch_ != max_px_thread_branch_ &&
               OB_FAIL(SMART_CALL(get_child(max_px_group_branch_)->close_px_resource_analyze(
                             CLOSE_PX_RESOURCE_ANALYZE_ARG)))) {
@@ -6336,7 +6009,6 @@ int ObLogicalOperator::close_px_resource_analyze(CLOSE_PX_RESOURCE_ANALYZE_DECLA
   } else {
     for (int64_t i = 0; i < get_num_of_child() && OB_SUCC(ret); i++) {
       if (OB_FAIL(SMART_CALL(get_child(i)->close_px_resource_analyze(CLOSE_PX_RESOURCE_ANALYZE_ARG)))) {
-        LOG_WARN("open px resource analyze failed", K(ret));
       }
     }
   }
@@ -6379,7 +6051,6 @@ int ObLogicalOperator::find_max_px_resource_child(OPEN_PX_RESOURCE_ANALYZE_DECLA
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("child is null", K(ret));
       } else if (OB_FAIL(SMART_CALL(child->open_px_resource_analyze(OPEN_PX_RESOURCE_ANALYZE_ARG)))) {
-        LOG_WARN("child open px resource analyze failed", K(ret));
       } else {
         int64_t thread_inc = cur_parallel_thread_count - ori_thread_cnt;
         int64_t group_inc = cur_parallel_group_count - ori_group_cnt;
@@ -6399,7 +6070,6 @@ int ObLogicalOperator::find_max_px_resource_child(OPEN_PX_RESOURCE_ANALYZE_DECLA
           }
         }
         if (OB_FAIL(SMART_CALL(child->close_px_resource_analyze(CLOSE_PX_RESOURCE_ANALYZE_ARG)))) {
-          LOG_WARN("child close px resource analyze failed", K(ret));
         } else {
           OB_ASSERT(cur_parallel_thread_count == ori_thread_cnt);
           OB_ASSERT(cur_parallel_group_count == ori_group_cnt);
@@ -6441,7 +6111,6 @@ int ObLogicalOperator::check_op_orderding_used_by_parent(bool &used)
     } else if (NULL == parent) {
       break;
     } else if (OB_FAIL(parent->check_use_child_ordering(used, inherit_child_ordering_index))) {
-      LOG_WARN("failed to check use child ordering", K(ret));
     } else if (OB_FALSE_IT(inherit_child_ordering = child == parent->get_child(inherit_child_ordering_index))) {
     } else if (used || !inherit_child_ordering) {
       break;
@@ -6473,7 +6142,6 @@ int ObLogicalOperator::check_contain_dist_das(const ObIArray<ObAddr> &exec_serve
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("child is null", K(ret), K(i));
       } else if (OB_FAIL(SMART_CALL(child->check_contain_dist_das(exec_server_list, contain_dist_das)))) {
-        LOG_WARN("failed to smart call check contain dist das", K(ret));
       }
     }
   }

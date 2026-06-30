@@ -40,7 +40,6 @@ int ObTableLoadUniqueIndexToAckDataTableChannel::create_row_projector()
   } else if (OB_FAIL(row_projector_->init(
                up_table_op_->op_ctx_->store_table_ctx_->schema_->table_id_,
                down_table_op_->op_ctx_->store_table_ctx_->schema_->table_id_))) {
-    LOG_WARN("fail to init row projector", KR(ret));
   }
   return ret;
 }
@@ -58,16 +57,13 @@ int ObTableLoadUniqueIndexToAckDataTableChannel::handle_insert_row(
   } else if (datum_row.is_ack_) {
     ObTableLoadTableBuilder *table_builder = nullptr;
     if (OB_FAIL(table_builder_mgr_.get_table_builder(table_builder))) {
-      LOG_WARN("fail to get table builder", KR(ret));
     } else {
       ObDirectLoadDatumRow &insert_datum_row = table_builder->get_insert_datum_row();
       insert_datum_row.seq_no_ = datum_row.seq_no_;
       ObTabletID data_tablet_id;
       if (OB_FAIL(
             row_projector_->projector(tablet_id, datum_row, data_tablet_id, insert_datum_row))) {
-        LOG_WARN("fail to project row", KR(ret));
       } else if (OB_FAIL(table_builder->append_row(data_tablet_id, insert_datum_row))) {
-        LOG_WARN("fail to append row", KR(ret));
       }
     }
   }
@@ -126,16 +122,13 @@ int ObTableLoadUniqueIndexToAckDataTableChannel::handle_update_row(
   } else {
     ObTableLoadTableBuilder *table_builder = nullptr;
     if (OB_FAIL(table_builder_mgr_.get_table_builder(table_builder))) {
-      LOG_WARN("fail to get table builder", KR(ret));
     } else {
       ObDirectLoadDatumRow &insert_datum_row = table_builder->get_insert_datum_row();
       insert_datum_row.seq_no_ = result_row->seq_no_;
       ObTabletID data_tablet_id;
       if (OB_FAIL(
             row_projector_->projector(tablet_id, *result_row, data_tablet_id, insert_datum_row))) {
-        LOG_WARN("fail to project row", KR(ret));
       } else if (OB_FAIL(table_builder->append_row(data_tablet_id, insert_datum_row))) {
-        LOG_WARN("fail to append row", KR(ret));
       }
     }
   }

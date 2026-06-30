@@ -59,7 +59,6 @@ int ObFlashBackTableFromRecyclebinResolver::resolve(const ParseNode &parser_tree
                                                    origin_table_name,
                                                    origin_db_name,
                                                    true /*get origin db_name*/))) {
-      LOG_WARN("failed to resolve_table_relation_node", K(ret));
     } else {
       OX (flashback_table_from_recyclebin_stmt->set_origin_table_name(origin_table_name));
       OX (flashback_table_from_recyclebin_stmt->set_origin_table_id(OB_INVALID_ID));
@@ -74,7 +73,6 @@ int ObFlashBackTableFromRecyclebinResolver::resolve(const ParseNode &parser_tree
         if (OB_FAIL(resolve_table_relation_node(rename_node,
                                                 new_table_name,
                                                 new_db_name))) {
-          LOG_WARN("failed to resolve_table_relation_node", K(ret));
         } else if (ObString(OB_RECYCLEBIN_SCHEMA_NAME) == new_db_name
                    || ObString(OB_PUBLIC_SCHEMA_NAME) == new_db_name) {
           ret = OB_OP_NOT_ALLOW;
@@ -138,9 +136,7 @@ int ObFlashBackTableToScnResolver::resolve(const ParseNode &parse_tree)
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("table node is null", K(ret));
         } else if (OB_FAIL(resolve_table_relation_node(node, table_name, db_name))) {
-          LOG_WARN("failed to resolve table relaiton node", K(ret));
         } else if (OB_FAIL(session_info_->get_name_case_mode(table_item.mode_))) {
-          LOG_WARN("failed to get name case mode", K(ret));
         } else {
           const share::schema::ObTableSchema *table_schema = NULL;
           table_item.database_name_ = db_name;
@@ -167,7 +163,6 @@ int ObFlashBackTableToScnResolver::resolve(const ParseNode &parse_tree)
         LOG_WARN("time_node is null", K(ret));
       } else if (OB_FAIL(ObResolverUtils::resolve_const_expr(
               params_, *time_node, expr, nullptr))) {
-        LOG_WARN("resolve sql expr failed");
       } else if (OB_ISNULL(expr)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("expr is null", K(ret));
@@ -234,7 +229,6 @@ int ObFlashBackIndexResolver::resolve(const ParseNode &parser_tree)
                                                    origin_table_name,
                                                    origin_db_name,
                                                    true /*get origin db_name*/))) {
-      LOG_WARN("failed to resolve_table_relation_node", K(ret));
     } else if (!origin_db_name.empty() && origin_db_name != OB_RECYCLEBIN_SCHEMA_NAME) {
       ret = OB_TABLE_NOT_EXIST;
       ObCStringHelper helper;

@@ -52,7 +52,6 @@ int ObMViewMdsOpHelper::on_register(
   transaction::ObTransID tx_id = user_ctx.get_writer().writer_id_;
 
   if (OB_FAIL(arg.deserialize(buf, len, pos))) {
-    LOG_WARN("failed to deserialize transfer dest prepare info", KR(ret), K(len), K(pos));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K(arg));
@@ -62,7 +61,6 @@ int ObMViewMdsOpHelper::on_register(
     int tmp_ret = OB_SUCCESS;
     if (arg.mview_op_type_ == MVIEW_OP_TYPE::NESTED_SYNC_REFRESH) {
       if (OB_TMP_FAIL(share::g_mp->m_view_maintenance_service()->get_mview_mds_op().set_refactored(tx_id, arg, 1))) {
-        LOG_WARN("fail to set refactored mview mds op map", K(ret), K(tx_id), K(arg));
       }
       LOG_INFO("register nested mview mds op", K(tx_id), K(arg));
     }
@@ -84,7 +82,6 @@ int ObMViewMdsOpHelper::on_replay(
   transaction::ObTransID tx_id = user_ctx.get_writer().writer_id_;
 
   if (OB_FAIL(arg.deserialize(buf, len, pos))) {
-    LOG_WARN("failed to deserialize", KR(ret), K(len), K(pos));
   } else if (!arg.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K(arg));
@@ -113,7 +110,6 @@ int ObMViewOpArg::assign(const ObMViewOpArg& other)
   refresh_id_ = other.refresh_id_;
   target_data_sync_scn_ = other.target_data_sync_scn_;
   if (OB_FAIL(nested_mview_lists_.assign(other.nested_mview_lists_))) {
-    LOG_WARN("failed to copy nested mview lists", KR(ret), K(other));
   }
   return ret;
 }
@@ -122,7 +118,6 @@ int ObMViewMdsOpCtx::assign(const ObMViewMdsOpCtx &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(arg_.assign(other.arg_))) {
-    LOG_WARN("transfer dest prepare info assign failed", KR(ret), K(other));
   } else {
     writer_ = other.writer_;
     op_scn_ = other.op_scn_;
@@ -153,7 +148,6 @@ void ObMViewMdsOpCtx::on_commit(const share::SCN &commit_version, const share::S
   int64_t ts = ObTimeUtil::current_time();
   int ret = OB_SUCCESS;
   if (OB_FAIL(share::g_mp->m_view_maintenance_service()->get_mview_mds_op().erase_refactored(tx_id))) {
-    LOG_WARN("fail to erase mview mds op map", K(ret), K(tx_id), K(arg_));
   }
   share::g_mp->m_view_maintenance_service()->update_mview_mds_ts(ts);
   LOG_INFO("mview mds on_commit", K(tx_id), KPC(this), K(commit_scn), K(commit_version));
@@ -165,7 +159,6 @@ void ObMViewMdsOpCtx::on_abort(const share::SCN &abort_scn)
   int64_t ts = ObTimeUtil::current_time();
   int ret = OB_SUCCESS;
   if (OB_FAIL(share::g_mp->m_view_maintenance_service()->get_mview_mds_op().erase_refactored(tx_id))) {
-    LOG_WARN("fail to erase mview mds op map", K(ret), K(tx_id), K(arg_));
   }
   share::g_mp->m_view_maintenance_service()->update_mview_mds_ts(ts);
   LOG_INFO("mview mds on_abort", K(tx_id), KPC(this), K(abort_scn));
@@ -193,13 +186,11 @@ int ObMViewMdsOpHelper::register_mview_mds(const ObMViewOpArg &arg, ObISQLClient
      ret = OB_ALLOCATE_MEMORY_FAILED;
      LOG_WARN("failed to allocate", K(ret));
   } else if (OB_FAIL(arg.serialize(buf, size, pos))) {
-    LOG_WARN("failed to serialize arg", K(ret));
   } else if (OB_FAIL(conn->register_multi_data_source(ls_id,
                                                       ObTxDataSourceType::MVIEW_MDS_OP,
                                                       buf,
                                                       size,
                                                       flag))) {
-    LOG_WARN("register mview mds failed", KR(ret));
   } else {
     LOG_INFO("register mview mds succ", K(arg));
   }

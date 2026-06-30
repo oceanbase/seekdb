@@ -35,8 +35,6 @@ int ObMViewTimerTask::schedule_task(const int64_t delay, bool repeate, bool imme
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("shared timer is NULL", KR(ret));
   } else if (OB_FAIL(TG_SCHEDULE(timer->get_tg_id(), *this, delay, repeate, immediate))) {
-    LOG_WARN("fail to schedule mview timer task", KR(ret), KP(this), K(delay), K(repeate),
-             K(immediate));
   }
   return ret;
 }
@@ -91,7 +89,6 @@ int ObMViewTimerTask::need_push_major_mv_merge_scn(bool &need_push,
   compaction::ObTenantTabletScheduler* tablet_scheduler = share::g_mp->tenant_tablet_scheduler();
 
   if (OB_FAIL(need_schedule_major_refresh_mv_task( need_schedule))) {
-    LOG_WARN("failed to check need schedule", KR(ret));
   } else if (!need_schedule) {
     // do nothing
   } else if (OB_ISNULL(tablet_scheduler)) {
@@ -102,7 +99,6 @@ int ObMViewTimerTask::need_push_major_mv_merge_scn(bool &need_push,
     LOG_WARN("failed to convert_for_gts", KR(ret));
   } else if (OB_FAIL(global_proxy.get_major_refresh_mv_merge_scn(false /*select for update*/,
                                                                  major_mv_merge_scn))) {
-    LOG_WARN("fail to get major_refresh_mv_merge_scn", KR(ret));
   }
 
   if (OB_FAIL(ret)) {

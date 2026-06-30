@@ -91,7 +91,6 @@ int ObVirtualSqlPlanMonitor::inner_open()
       ret = OB_INVALID_ARGUMENT;
       SERVER_LOG(WARN, "Invalid Allocator", K(ret));
     } else if (OB_FAIL(set_ip(addr_))) {
-      SERVER_LOG(WARN, "failed to set server ip addr", K(ret));
     } else {
       // do nothing
     }
@@ -140,7 +139,6 @@ int ObVirtualSqlPlanMonitor::inner_get_next_row(common::ObNewRow *&row)
     // if use primary key scan, we need to perform check on ip and port
     if (!is_index_scan()) {
       if (OB_FAIL(check_ip_and_port(is_valid))) {
-        SERVER_LOG(WARN, "check ip and port failed", K(ret));
       } else if (!is_valid) {
         ret = OB_ITER_END;;
       }
@@ -182,7 +180,6 @@ int ObVirtualSqlPlanMonitor::inner_get_next_row(common::ObNewRow *&row)
       if (NULL != rec) {
         ObMonitorNode *node = static_cast<ObMonitorNode *>(rec);
         if (OB_FAIL(convert_node_to_row(*node, row))) {
-          LOG_WARN("fail convert node", K(ret));
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -216,7 +213,6 @@ int ObVirtualSqlPlanMonitor::report_rt_monitor_node(common::ObNewRow *&row)
   if (need_rt_node_ && OB_NOT_NULL(cur_mysql_req_mgr_)) {
     if (rt_nodes_.empty()) {
       if (OB_FAIL(cur_mysql_req_mgr_->convert_node_map_2_array(rt_nodes_))) {
-        LOG_WARN("fail to convert node map to array", K(ret));
       } else {
         rt_start_idx_ = MAX(rt_start_idx_, 0);
         rt_end_idx_ = MIN(rt_end_idx_, rt_nodes_.count());
@@ -232,7 +228,6 @@ int ObVirtualSqlPlanMonitor::report_rt_monitor_node(common::ObNewRow *&row)
       ret = OB_ITER_END;
       LOG_WARN("rt node iter end", K(ret));
     } else if (OB_FAIL(convert_node_to_row(rt_nodes_.at(rt_node_idx_), row))) {
-      LOG_WARN("fail to convert node to row", K(ret));
     } else if (OB_ISNULL(row)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpectd null row", K(ret));
@@ -297,7 +292,6 @@ int ObVirtualSqlPlanMonitor::switch_tenant_monitor_node_list()
           reset_rt_node_info();
           bool is_req_valid = true;
           if (OB_FAIL(extract_request_ids(start_id_, end_id_, is_req_valid))) {
-            SERVER_LOG(WARN, "failed to extract request ids", K(ret));
           } else if (!is_req_valid) {
             SERVER_LOG(DEBUG, "invalid query range", K(key_ranges_));
             ret = OB_ITER_END;

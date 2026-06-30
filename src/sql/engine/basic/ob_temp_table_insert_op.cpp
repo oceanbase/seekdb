@@ -72,7 +72,6 @@ int ObTempTableInsertOp::inner_open()
     param.set_mem_attr("TempTableInsert", ObCtxIds::WORK_AREA)
       .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
-      LOG_WARN("create entity failed", K(ret));
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null memory entity returned", K(ret));
@@ -82,7 +81,6 @@ int ObTempTableInsertOp::inner_open()
         MY_SPEC.type_,
         MY_SPEC.id_,
         &ctx_))) {
-      LOG_WARN("failed to init sql memory manager processor", K(ret));
     }
   }
   return ret;
@@ -100,14 +98,11 @@ int ObTempTableInsertOp::inner_close()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("result ids should be empty", K(ret));
   } else if (OB_FAIL(task_->interm_result_ids_.assign(interm_result_ids_))) {
-    LOG_WARN("failed to assign result ids", K(ret));
   } else {
     task_->temp_table_id_ = MY_SPEC.temp_table_id_;
   }
   int temp_ret = ret;
   if (OB_FAIL(clear_all_datum_store())) {
-    // overwrite ret
-    LOG_WARN("failed to clear datum store", K(ret));
   }
   ret = temp_ret;
   sql_mem_processor_.unregister_profile();
@@ -127,7 +122,6 @@ int ObTempTableInsertOp::inner_get_next_row()
   int ret = OB_SUCCESS;
   dtl::ObDTLIntermResultInfo *chunk_row_store = NULL;
   if (OB_FAIL(THIS_WORKER.check_status())) {
-    LOG_WARN("check physical plan status failed.", K(ret));
   } else if (OB_ISNULL(child_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("child operator is null");
@@ -139,12 +133,10 @@ int ObTempTableInsertOp::inner_get_next_row()
           LOG_WARN("fail to get next row from child.", K(ret));
         } else { /*do nothing.*/ }
       } else if (OB_FAIL(add_row_to_temp_table(chunk_row_store))) {
-        LOG_WARN("failed to add row to chunk row store.", K(ret));
       }
     }
     if (OB_ITER_END == ret) {
       if (OB_FAIL(insert_chunk_row_store())) {
-        LOG_WARN("failed to insert chunk row store to dtl", K(ret));
       } else {
         ret = OB_ITER_END;
       }
@@ -161,15 +153,12 @@ int ObTempTableInsertOp::inner_get_next_batch(const int64_t max_row_cnt)
   int ret = OB_SUCCESS;
   dtl::ObDTLIntermResultInfo chunk_row_store;
   if (OB_FAIL(THIS_WORKER.check_status())) {
-    LOG_WARN("check physical plan status failed.", K(ret));
   } else if (OB_ISNULL(child_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("child operator is null");
   } else if (init_temp_table_) {
     if (OB_FAIL(do_get_next_batch(max_row_cnt))) {
-      LOG_WARN("failed to insert chunk row to temp table in vectorized mode", K(ret));
     } else if (OB_FAIL(insert_chunk_row_store())) {
-      LOG_WARN("failed to insert chunk row store to dtl", K(ret));
     } else {
       init_temp_table_ = false;
     }
@@ -188,11 +177,8 @@ int ObTempTableInsertOp::do_get_next_batch(const int64_t max_row_cnt)
     clear_evaluated_flag();
     clear_datum_eval_flag();
     if (OB_FAIL(child_->get_next_batch(max_row_cnt, child_brs))) {
-      LOG_WARN("fail to get next row from child.", K(ret));
     } else if (OB_FAIL(add_rows_to_temp_table(chunk_row_store, child_brs))) {
-      LOG_WARN("failed to add row to chunk row store.", K(ret));
     } else if (OB_FAIL(THIS_WORKER.check_status())) {
-      LOG_WARN("check physical plan status failed.", K(ret));
     }
     if (child_brs->end_) {
       (void) brs_.copy(child_brs);
@@ -211,11 +197,9 @@ int ObTempTableInsertOp::add_rows_to_temp_table(
   if (NULL == chunk_row_store && OB_FAIL(init_chunk_row_store(chunk_row_store))) {
     LOG_WARN("failed to init chunk row store", K(ret));
   } else if (OB_FAIL(process_dump(*chunk_row_store))) {
-    LOG_WARN("failed to process dump", K(ret));
   } else if (OB_FAIL(chunk_row_store->datum_store_->add_batch(
                  MY_SPEC.get_child()->output_, eval_ctx_, *brs->skip_,
                  brs->size_, read_rows))) {
-    LOG_WARN("failed to add rows to chunk row store.", K(ret), KPC(brs));
   } else if (!MY_SPEC.is_distributed_) {
     //do nothing
   } else if (chunk_row_store->datum_store_->get_row_cnt() <
@@ -233,10 +217,8 @@ int ObTempTableInsertOp::add_row_to_temp_table(ObDTLIntermResultInfo *&chunk_row
   if (NULL == chunk_row_store && OB_FAIL(init_chunk_row_store(chunk_row_store))) {
     LOG_WARN("failed to init chunk row store", K(ret));
   } else if (OB_FAIL(process_dump(*chunk_row_store))) {
-    LOG_WARN("failed to process dump", K(ret));
   } else if (OB_FAIL(chunk_row_store->datum_store_->add_row(
                  MY_SPEC.get_child()->output_, &eval_ctx_))) {
-    LOG_WARN("failed to add row to chunk row store.", K(ret));
   } else if (!MY_SPEC.is_distributed_) {
     // local data is stored only once, not split, do nothing
   } else if (chunk_row_store->datum_store_->get_row_cnt() <
@@ -267,16 +249,13 @@ int ObTempTableInsertOp::init_chunk_row_store(ObDTLIntermResultInfo *&chunk_row_
                                             MY_INPUT.sqc_id_
                                           ),
                                           ObDTLIntermResultInfo::StoreType::DATUM))) {
-      LOG_WARN("failed to create row store.", K(ret));
     } else if (FALSE_IT(chunk_row_store = result_info_guard.result_info_)) {
     } else if (OB_FAIL(chunk_row_store->datum_store_->init(UINT64_MAX,
                                                 ObCtxIds::WORK_AREA,
                                                 "SqlTempTableRowSt",
                                                 true,
                                                 sizeof(uint64_t)))) {
-      LOG_WARN("failed to init the chunk row store.", K(ret));
     } else if (OB_FAIL(all_datum_store_.push_back(chunk_row_store))) {
-      LOG_WARN("failed to push back datum store", K(ret));
     } else {
       chunk_row_store->datum_store_->set_callback(&sql_mem_processor_);
       chunk_row_store->datum_store_->set_dir_id(sql_mem_processor_.get_dir_id());
@@ -324,7 +303,6 @@ int ObTempTableInsertOp::insert_chunk_row_store()
               OB_FAIL(prepare_interm_result_id_for_distribute(interm_result_id))) {
       LOG_WARN("failed to prepare interm result id", K(ret));
     } else if (OB_FAIL(row_store->datum_store_->finish_add_row())) {
-      LOG_WARN("failed to finish add row", K(ret));
     } else {
       dtl_int_key.channel_id_ = interm_result_id;
       dtl_int_key.start_time_ = oceanbase::common::ObTimeUtility::current_time();
@@ -334,7 +312,6 @@ int ObTempTableInsertOp::insert_chunk_row_store()
       row_store->is_read_ = true;
       if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->insert_interm_result_info(
                                         dtl_int_key, row_store))) {
-        LOG_WARN("failed to insert row store.", K(ret), K(dtl_int_key.channel_id_));
       } else if (OB_FAIL(keys_insert.push_back(dtl_int_key))) {
         LOG_WARN("failed to push back key", K(ret));
         share::g_mp->dtl_interm_result_manager()->erase_interm_result_info(dtl_int_key);
@@ -378,11 +355,8 @@ int ObTempTableInsertOp::prepare_interm_result_id_for_local(uint64_t &interm_res
   ObTempTableResultInfo info;
   info.addr_ = GCTX.self_addr();
   if (OB_FAIL(info.interm_result_ids_.push_back(interm_result_id))) {
-    LOG_WARN("failed to push back", K(ret));
   } else if (OB_FAIL(temp_table_ctx.interm_result_infos_.push_back(info))) {
-    LOG_WARN("failed to push back info", K(ret));
   } else if (OB_FAIL(get_exec_ctx().get_temp_table_ctx().push_back(temp_table_ctx))) {
-    LOG_WARN("failed to push back", K(ret));
   }
   return ret;
 }
@@ -392,7 +366,6 @@ int ObTempTableInsertOp::prepare_interm_result_id_for_distribute(uint64_t &inter
   int ret = OB_SUCCESS;
   interm_result_id = dtl::ObDtlChannel::generate_id();
   if (OB_FAIL(interm_result_ids_.push_back(interm_result_id))) {
-    LOG_WARN("failed to push back result id", K(ret));
   }
   return ret;
 }
@@ -409,7 +382,6 @@ int ObTempTableInsertOp::process_dump(dtl::ObDTLIntermResultInfo &chunk_row_stor
       &mem_context_->get_malloc_allocator(),
       [&](int64_t cur_cnt){ return chunk_row_store.datum_store_->get_row_cnt_in_memory() > cur_cnt; },
       updated))) {
-    LOG_WARN("failed to update max available memory size periodically", K(ret));
   } else if (need_dump() && GCONF.is_sql_operator_dump_enabled()
           && OB_FAIL(sql_mem_processor_.extend_max_memory_size(
             &mem_context_->get_malloc_allocator(),
@@ -425,7 +397,6 @@ int ObTempTableInsertOp::process_dump(dtl::ObDTLIntermResultInfo &chunk_row_stor
       // The last block of the last chunk may still need to insert data, do not dump
       bool dump_last_block = i < all_datum_store_.count() - 1;
       if (OB_FAIL(all_datum_store_.at(i)->datum_store_->dump(false, dump_last_block))) {
-        LOG_WARN("failed to dump row store", K(ret));
       } else {
         dump_end_time = oceanbase::common::ObTimeUtility::current_time();
         all_datum_store_.at(i)->dump_time_ = 0 == all_datum_store_.at(i)->dump_time_ ?

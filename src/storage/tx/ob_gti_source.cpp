@@ -40,7 +40,6 @@ int ObGtiSource::init(const ObAddr &server)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "alloc gti_reqeust_rpc fail", KR(ret));
   } else if (OB_FAIL(gti_request_rpc_->init(server, this))) {
-    TRANS_LOG(WARN, "response rpc init failed", KR(ret), K(server));
   } else {
     server_ = server;
     is_inited_ = true;
@@ -67,7 +66,6 @@ int ObGtiSource::start()
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "ObGtiSource is already running", KR(ret));
   } else if (OB_FAIL(gti_request_rpc_->start())) {
-    TRANS_LOG(WARN, "gti request rpc start", KR(ret));
   } else {
     is_running_ = true;
     TRANS_LOG(INFO, "ObGtiSource start success");
@@ -83,7 +81,6 @@ void ObGtiSource::stop()
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "ObGtiSource is not inited", KR(ret));
   } else if (OB_FAIL(gti_request_rpc_->stop())) {
-    TRANS_LOG(WARN, "gti request rpc stop", KR(ret));
   } else {
     is_running_ = false;
     TRANS_LOG(INFO, "ObGtiSource stop success");
@@ -101,7 +98,6 @@ void ObGtiSource::wait()
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "ObGtiSource is running", KR(ret));
   } else if (OB_FAIL(gti_request_rpc_->wait())) {
-    TRANS_LOG(WARN, "gti request rpc wait", KR(ret));
   } else {
     TRANS_LOG(INFO, "ObGtiSource wait success");
   }
@@ -204,9 +200,7 @@ int ObGtiSource::get_trans_id(int64_t &trans_id)
     if (cur_ts - last_request_ts_ > retry_interval && ATOMIC_BCAS(&is_requesting_, false, true)) {
       ObGtiRequest req;
       if (OB_FAIL(req.init(get_preallocate_count_()))) {
-        TRANS_LOG(WARN, "ObGtiRequest init fail", KR(ret));
       } else if (OB_FAIL(gti_request_rpc_->post(req))) {
-        TRANS_LOG(WARN, "ObGtiRequest post fail", KR(ret));
       } else {
         last_request_ts_ = cur_ts;
         retry_request_cnt_++;

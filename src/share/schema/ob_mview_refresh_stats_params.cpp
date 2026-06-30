@@ -96,7 +96,6 @@ int ObMViewRefreshStatsParams::read_stats_params(ObISQLClient &sql_client,
   {
     common::sqlclient::ObMySQLResult *result = nullptr;
     if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-      LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("result is null", KR(ret));
@@ -141,7 +140,6 @@ int ObMViewRefreshStatsParams::set_sys_defaults(ObISQLClient &sql_client,
   } else {
     ObDMLSqlSplicer dml;
     if (OB_FAIL(params.gen_sys_defaults_dml(dml))) {
-      LOG_WARN("fail to gen sys defaults dml", KR(ret), K(params));
     } else {
       
       ObDMLExecHelper exec(sql_client);
@@ -149,10 +147,8 @@ int ObMViewRefreshStatsParams::set_sys_defaults(ObISQLClient &sql_client,
       // singleton sys-defaults row: id is a fixed singleton key, not a tenant id
       static const int64_t SINGLETON_ID = 1;
       if (OB_FAIL(dml.add_pk_column("id", SINGLETON_ID))) {
-        LOG_WARN("fail to add primary key", KR(ret));
       } else if (OB_FAIL(exec.exec_insert_update(OB_ALL_MVIEW_REFRESH_STATS_SYS_DEFAULTS_TNAME, dml,
                                           affected_rows))) {
-        LOG_WARN("execute insert update failed", KR(ret));
       } else if (OB_UNLIKELY(!is_zero_row(affected_rows) && !is_single_row(affected_rows) &&
                              !is_double_row(affected_rows))) {
         ret = OB_ERR_UNEXPECTED;
@@ -176,7 +172,6 @@ int ObMViewRefreshStatsParams::fetch_sys_defaults(ObISQLClient &sql_client,
     ObSqlString sql;
     if (OB_FAIL(sql.assign_fmt("SELECT collection_level, retention_period FROM %s ",
                                OB_ALL_MVIEW_REFRESH_STATS_SYS_DEFAULTS_TNAME))) {
-      LOG_WARN("fail to assign sql", KR(ret));
     } else if (for_update && OB_FAIL(sql.append(" for update"))) {
       LOG_WARN("fail to append sql", KR(ret));
     } else if (OB_FAIL(read_stats_params(sql_client, sql, params))) {
@@ -222,13 +217,11 @@ int ObMViewRefreshStatsParams::set_mview_refresh_stats_params(
     
     ObDMLSqlSplicer dml;
     if (OB_FAIL(params.gen_mview_refresh_stats_params_dml(mview_id, dml))) {
-      LOG_WARN("fail to gen mview refresh stats params dml", KR(ret), K(params));
     } else {
       ObDMLExecHelper exec(sql_client);
       int64_t affected_rows = 0;
       if (OB_FAIL(
             exec.exec_insert_update(OB_ALL_MVIEW_REFRESH_STATS_PARAMS_TNAME, dml, affected_rows))) {
-        LOG_WARN("execute insert update failed", KR(ret));
       } else if (OB_UNLIKELY(!is_zero_row(affected_rows) && !is_single_row(affected_rows) &&
                              !is_double_row(affected_rows))) {
         ret = OB_ERR_UNEXPECTED;
@@ -250,12 +243,10 @@ int ObMViewRefreshStatsParams::drop_mview_refresh_stats_params(ObISQLClient &sql
     
     ObDMLSqlSplicer dml;
     if (OB_FAIL(dml.add_pk_column("mview_id", mview_id))) {
-      LOG_WARN("add column failed", KR(ret));
     } else {
       ObDMLExecHelper exec(sql_client);
       int64_t affected_rows = 0;
       if (OB_FAIL(exec.exec_delete(OB_ALL_MVIEW_REFRESH_STATS_PARAMS_TNAME, dml, affected_rows))) {
-        LOG_WARN("execute update failed", KR(ret));
       } else if (!if_exists && OB_UNLIKELY(!is_single_row(affected_rows))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows unexpected to be one", KR(ret), K(affected_rows));
@@ -278,11 +269,9 @@ int ObMViewRefreshStatsParams::drop_all_mview_refresh_stats_params(ObISQLClient 
     ObSqlString sql;
     if (OB_FAIL(sql.assign_fmt("delete from %s",
                                OB_ALL_MVIEW_REFRESH_STATS_PARAMS_TNAME))) {
-      LOG_WARN("fail to assign sql", KR(ret));
     } else if (limit > 0 && OB_FAIL(sql.append_fmt(" limit %ld", limit))) {
       LOG_WARN("fail to append sql", KR(ret));
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", KR(ret), K(1UL), K(sql));
     }
   }
   return ret;
@@ -325,17 +314,13 @@ int ObMViewRefreshStatsParams::fetch_mview_refresh_stats_params(ObISQLClient &sq
             ")",
             OB_ALL_MVIEW_REFRESH_STATS_SYS_DEFAULTS_TNAME, OB_ALL_MVIEW_REFRESH_STATS_PARAMS_TNAME,
             OB_ALL_MVIEW_TNAME, mview_id))) {
-        LOG_WARN("fail to assign sql with sys defaults", KR(ret));
       } else if (OB_FAIL(read_stats_params(sql_client, sql, params))) {
-        LOG_WARN("fail to read stats params", KR(ret), K(sql));
       }
     } else {
       if (OB_FAIL(sql.assign_fmt("select collection_level, retention_period from %s"
                                  " where mview_id = %ld",
                                  OB_ALL_MVIEW_REFRESH_STATS_PARAMS_TNAME, mview_id))) {
-        LOG_WARN("fail to assign sql without sys defaults", KR(ret));
       } else if (OB_FAIL(read_stats_params(sql_client, sql, params))) {
-        LOG_WARN("fail to read stats params", KR(ret), K(sql));
       }
     }
   }

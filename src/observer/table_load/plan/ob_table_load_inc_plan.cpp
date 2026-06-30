@@ -152,7 +152,6 @@ int ObTableLoadIncPKTablePlan::generate()
     if (OB_FAIL(ObTableLoadIncDataTableEputOp::build(this, store_ctx_->data_store_table_ctx_,
                                                             get_write_type(),
                                                             inc_minor_data_table_insert_op))) {
-      LOG_WARN("fail to create data table insert op", KR(ret));
     } else {
       data_table_insert_op = inc_minor_data_table_insert_op;
     }
@@ -163,12 +162,10 @@ int ObTableLoadIncPKTablePlan::generate()
       ObTableLoadIncLobTableDeleteOp *lob_delete_op = nullptr;
       if (OB_FAIL(ObTableLoadIncLobTableDeleteOp::build(
             this, store_ctx_->data_store_table_ctx_->lob_table_ctx_, lob_delete_op))) {
-        LOG_WARN("fail to build inc lob table delete op", KR(ret));
       }
       // lob数据来源于有主键表冲突检测
       else if (OB_FAIL(lob_delete_op->add_dependency(data_table_insert_op,
                                                      ObTableLoadDependencyType::DATA_DEPENDENCY))) {
-        LOG_WARN("fail to add dependency", KR(ret));
       }
     }
     // 索引表插入算子
@@ -181,18 +178,15 @@ int ObTableLoadIncPKTablePlan::generate()
         ObTableLoadIncIndexTableInsertOp *index_table_insert_op = nullptr;
         if (OB_FAIL(ObTableLoadIncIndexTableInsertOp::build(this, index_table_ctx,
                                                             index_table_insert_op))) {
-          LOG_WARN("fail to alloc op", KR(ret));
         }
         // 普通索引表数据来源于数据表
         else if (OB_FAIL(index_table_insert_op->add_dependency(
                    data_table_insert_op, ObTableLoadDependencyType::DATA_DEPENDENCY))) {
-          LOG_WARN("fail to add dependency", KR(ret));
         }
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(finish_generate(data_table_insert_op))) {
-        LOG_WARN("fail to set finish generate", KR(ret), KPC(data_table_insert_op));
       }
     }
   }
@@ -296,7 +290,6 @@ int ObTableLoadIncHeapTablePlan::generate()
     if (OB_FAIL(ObTableLoadIncMinorDataTableInsertOp::build(this, store_ctx_->data_store_table_ctx_,
                                                             get_write_type(),
                                                             inc_minor_data_table_insert_op))) {
-      LOG_WARN("fail to create data table insert op", KR(ret));
     } else {
       data_table_insert_op = inc_minor_data_table_insert_op;
     }
@@ -309,7 +302,6 @@ int ObTableLoadIncHeapTablePlan::generate()
           nullptr;
         if (OB_FAIL(ObTableLoadIncUniqueIndexTableInsertOp::build(
               this, index_table_ctx, inc_minor_unique_index_table_insert_op))) {
-          LOG_WARN("fail to alloc op", KR(ret));
         } else {
           unique_index_table_insert_op = inc_minor_unique_index_table_insert_op;
         }
@@ -317,7 +309,6 @@ int ObTableLoadIncHeapTablePlan::generate()
           // 唯一索引表数据来源于数据表
           if (OB_FAIL(unique_index_table_insert_op->add_dependency(
                 data_table_insert_op, ObTableLoadDependencyType::DATA_DEPENDENCY))) {
-            LOG_WARN("fail to add dependency", KR(ret));
           }
         }
       } else { // 普通索引
@@ -326,7 +317,6 @@ int ObTableLoadIncHeapTablePlan::generate()
         ObTableLoadIncMinorIndexTableInsertOp *inc_minor_index_table_insert_op = nullptr;
         if (OB_FAIL(ObTableLoadIncMinorIndexTableInsertOp::build(
               this, index_table_ctx, inc_minor_index_table_insert_op))) {
-          LOG_WARN("fail to alloc op", KR(ret));
         } else {
           index_table_insert_op = inc_minor_index_table_insert_op;
         }
@@ -334,7 +324,6 @@ int ObTableLoadIncHeapTablePlan::generate()
           // 普通索引表数据来源于数据表
           if (OB_FAIL(index_table_insert_op->add_dependency(
                 data_table_insert_op, ObTableLoadDependencyType::DATA_DEPENDENCY))) {
-            LOG_WARN("fail to add dependency", KR(ret));
           }
         }
       }
@@ -346,7 +335,6 @@ int ObTableLoadIncHeapTablePlan::generate()
       ObTableLoadIncDataTableDeleteOp *pt_delete_op = nullptr;
       if (OB_FAIL(ObTableLoadIncDataTableDeleteOp::build(this, store_ctx_->data_store_table_ctx_,
                                                          pt_delete_op))) {
-        LOG_WARN("fail to build inc data table insert op", KR(ret));
       } else {
         data_table_delete_op = pt_delete_op;
       }
@@ -354,17 +342,14 @@ int ObTableLoadIncHeapTablePlan::generate()
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(data_table_delete_op->add_dependency(
                  unique_index_table_insert_op, ObTableLoadDependencyType::DATA_DEPENDENCY))) {
-        LOG_WARN("fail to add dependency", KR(ret));
       }
       // 需要删除lob
       else if (nullptr != store_ctx_->data_store_table_ctx_->lob_table_ctx_) {
         ObTableLoadIncLobTableDeleteOp *lob_delete_op = nullptr;
         if (OB_FAIL(ObTableLoadIncLobTableDeleteOp::build(
               this, store_ctx_->data_store_table_ctx_->lob_table_ctx_, lob_delete_op))) {
-          LOG_WARN("fail to build inc lob table delete op", KR(ret));
         } else if (OB_FAIL(lob_delete_op->add_dependency(
                      data_table_delete_op, ObTableLoadDependencyType::DATA_DEPENDENCY))) {
-          LOG_WARN("fail to add dependency", KR(ret));
         }
       }
       // 需要删除索引
@@ -376,10 +361,8 @@ int ObTableLoadIncHeapTablePlan::generate()
           continue;
         } else if (OB_FAIL(ObTableLoadIncIndexTableDeleteOp::build(this, index_table_ctx,
                                                                    index_table_delete_op))) {
-          LOG_WARN("fail to alloc op", KR(ret));
         } else if (OB_FAIL(index_table_delete_op->add_dependency(
                      data_table_delete_op, ObTableLoadDependencyType::DATA_DEPENDENCY))) {
-          LOG_WARN("fail to add dependency", KR(ret));
         }
       }
     }
@@ -388,22 +371,18 @@ int ObTableLoadIncHeapTablePlan::generate()
       ObTableLoadIncDataTableAckOp *data_table_ack_op = nullptr;
       if (OB_FAIL(ObTableLoadIncDataTableAckOp::build(this, store_ctx_->data_store_table_ctx_,
                                                       data_table_ack_op))) {
-        LOG_WARN("fail to build inc data table insert op", KR(ret));
       }
       // data_table_ack_op要在data_table_delete_op之后执行
       else if (OB_FAIL(data_table_ack_op->add_dependency(
                  data_table_delete_op, ObTableLoadDependencyType::BUSINESS_DEPENDENCY))) {
-        LOG_WARN("fail to add dependency", KR(ret));
       }
       // 数据来源于唯一索引冲突检测
       else if (OB_FAIL(data_table_ack_op->add_dependency(
                  unique_index_table_insert_op, ObTableLoadDependencyType::DATA_DEPENDENCY))) {
-        LOG_WARN("fail to add dependency", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(finish_generate(data_table_insert_op))) {
-        LOG_WARN("fail to set finish generate", KR(ret), KPC(data_table_insert_op));
       }
     }
   }

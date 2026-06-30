@@ -141,16 +141,12 @@ static int apply_bg_union_collection(const ObGeometry *g1, const ObGeometry *g2,
     ObGeoToTreeVisitor geo2_visitor(context.get_allocator());
     IGeometryType2 *i_geo2 = const_cast<IGeometryType2 *>(reinterpret_cast<const IGeometryType2 *>(g2));
     if (OB_FAIL(i_geo2->do_visit(geo2_visitor))) {
-      LOG_WARN("failed to do geo2 to_tree visit", K(ret));
     } else if (OB_FAIL(res->push_back(*geo2_visitor.get_geometry()))) {
-      LOG_WARN("failed to push geo2 to collection", K(ret));
     } else if (apply_bg_disjoint(geo1, geo2, context)) {
       ObGeoToTreeVisitor geo1_visitor(context.get_allocator());
       IGeometryType1 *i_geo1 = const_cast<IGeometryType1 *>(reinterpret_cast<const IGeometryType1 *>(g1));
       if (OB_FAIL(i_geo1->do_visit(geo1_visitor))) {
-        LOG_WARN("failed to do geo1 to_tree visit", K(ret));
       } else if (OB_FAIL(res->push_back(*geo1_visitor.get_geometry()))) {
-        LOG_WARN("failed to push geo1 to collection", K(ret));
       }
     }
 
@@ -180,9 +176,7 @@ static int apply_bg_multi_union_collection(const ObGeometry *g1, const ObGeometr
       IGeometryType2 i_geo2;
       i_geo2.set_data(ObString(sizeof(*it), reinterpret_cast<char *>(it.operator->())));
       if (OB_FAIL(i_geo2.do_visit(geo2_visitor))) {
-        LOG_WARN("failed to do geo2 to_tree visit", K(ret));
       } else if (OB_FAIL(res->push_back(*geo2_visitor.get_geometry()))) {
-        LOG_WARN("failed to push geo2 to collection", K(ret));
       }
     }
 
@@ -190,9 +184,7 @@ static int apply_bg_multi_union_collection(const ObGeometry *g1, const ObGeometr
       ObGeoToTreeVisitor geo1_visitor(context.get_allocator());
       IGeometryType1 *i_geo1 = const_cast<IGeometryType1 *>(reinterpret_cast<const IGeometryType1 *>(g1));
       if (OB_FAIL(i_geo1->do_visit(geo1_visitor))) {
-        LOG_WARN("failed to do geo1 to_tree visit", K(ret));
       } else if (OB_FAIL(res->push_back(*geo1_visitor.get_geometry()))) {
-        LOG_WARN("failed to push geo1 to collection", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -225,13 +217,10 @@ static int apply_bg_diff_union_collection(const ObGeometry *g1, const ObGeometry
       ObGeoToTreeVisitor visitor(context.get_allocator());
       IGeometryType2 *i_geo2 = const_cast<IGeometryType2 *>(reinterpret_cast<const IGeometryType2 *>(g2));
       if (OB_FAIL(i_geo2->do_visit(visitor))) {
-        LOG_WARN("failed to do geo visit", K(ret));
       } else if (OB_FAIL(res->push_back(*visitor.get_geometry()))) {
-        LOG_WARN("failed to push geo2 to collection", K(ret));
       } else {
         FOREACH_X(item, *diff_geo, OB_SUCC(ret)) {
           if (OB_FAIL(res->push_back(*item))) {
-            LOG_WARN("failed to add geo to collection", K(ret));
           }
         }
       }
@@ -256,7 +245,6 @@ static int push_back_innerpoint(const ObWkbGeomInnerPoint &innerpoint, const ObG
     point->x(innerpoint.get<0>());
     point->y(innerpoint.get<1>());
     if (OB_FAIL(res.push_back(*point))) {
-      LOG_WARN("failed to add geo to collection", K(ret));
     }
   }
   return ret;
@@ -274,7 +262,6 @@ static int push_back_innerpoint(const ObWkbGeogInnerPoint &innerpoint, const ObG
     point->x(innerpoint.get<0>());
     point->y(innerpoint.get<1>());
     if (OB_FAIL(res.push_back(*point))) {
-      LOG_WARN("failed to add geo to collection", K(ret));
     }
   }
   return ret;
@@ -302,22 +289,18 @@ static int apply_bg_union_multiline_multipolygon(const ObGeometry *g1, const ObG
       ObGeoToTreeVisitor visitor(context.get_allocator());
       IGeometryType2 *i_geo2 = const_cast<IGeometryType2 *>(reinterpret_cast<const IGeometryType2 *>(g2));
       if (OB_FAIL(i_geo2->do_visit(visitor))) {
-        LOG_WARN("failed to do geo visit", K(ret));
       } else {
         GeometryTreeType2 *geo2_tree = static_cast<GeometryTreeType2 *>(visitor.get_geometry());
         if (diff_geo->is_empty()) {
           if (OB_FAIL(res->push_back(*geo2_tree))) {
-            LOG_WARN("failed to add geo to collection", K(ret));
           }
         } else {
           FOREACH_X(item, *geo2_tree, OB_SUCC(ret)) {
             if (OB_FAIL(res->push_back(*item))) {
-              LOG_WARN("failed to add geo to collection", K(ret));
             }
           }
           FOREACH_X(diff_item, *diff_geo, OB_SUCC(ret)) {
             if (OB_FAIL(res->push_back(*diff_item))) {
-              LOG_WARN("failed to add geo to collection", K(ret));
             }
           }
         }
@@ -352,22 +335,18 @@ static int apply_bg_union_multipoint_multigeo(const ObGeometry *g1, const ObGeom
       ObGeoToTreeVisitor visitor(context.get_allocator());
       IGeometryType2 *i_geo2 = const_cast<IGeometryType2 *>(reinterpret_cast<const IGeometryType2 *>(g2));
       if (OB_FAIL(i_geo2->do_visit(visitor))) {
-        LOG_WARN("failed to do geo visit", K(ret));
       } else {
         GeometryTreeType2 *geo2_tree = static_cast<GeometryTreeType2 *>(visitor.get_geometry());
         if (diff_geo->is_empty()) {
           if (OB_FAIL(res->push_back(*geo2_tree))) {
-            LOG_WARN("failed to add geo to collection", K(ret));
           }
         } else {
           FOREACH_X(item, *geo2_tree, OB_SUCC(ret)) {
             if (OB_FAIL(res->push_back(*item))) {
-              LOG_WARN("failed to add geo to collection", K(ret));
             }
           }
           FOREACH_X(diff_item, *diff_geo, OB_SUCC(ret)) {
             if (OB_FAIL(push_back_innerpoint(*diff_item, context, *res))) {
-              LOG_WARN("failed to add geo to collection", K(ret));
             }
           }
         }
@@ -402,13 +381,10 @@ static int apply_bg_union_multipoint_geo(const ObGeometry *g1, const ObGeometry 
       ObGeoToTreeVisitor visitor(context.get_allocator());
       IGeometryType2 *i_geo2 = const_cast<IGeometryType2 *>(reinterpret_cast<const IGeometryType2 *>(g2));
       if (OB_FAIL(i_geo2->do_visit(visitor))) {
-        LOG_WARN("failed to do geo visit", K(ret));
       } else if (OB_FAIL(res->push_back(*visitor.get_geometry()))) {
-        LOG_WARN("failed to add geo to collection", K(ret));
       } else {
         FOREACH_X(diff_item, *diff_geo, OB_SUCC(ret)) {
           if (OB_FAIL(push_back_innerpoint(*diff_item, context, *res))) {
-            LOG_WARN("failed to add geo to collection", K(ret));
           }
         }
       }
@@ -472,9 +448,7 @@ public:
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failt alloc memory for geometry", K(ret));
       } else if (OB_FAIL(ObGeoTypeUtil::check_empty(geo1, is_g1_empty))) {
-        LOG_WARN("fail to check is g1 empty", K(ret));
       } else if (OB_FAIL(ObGeoTypeUtil::check_empty(geo2, is_g2_empty))) {
-        LOG_WARN("fail to check is g2 empty", K(ret));
       } else if (!is_g1_empty || !is_g2_empty) {
         typename GcTreeType::sub_mpt_type *mpt = NULL;
         typename GcTreeType::sub_ml_type *mls = NULL;
@@ -488,30 +462,22 @@ public:
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("failt alloc memory for geometry", K(ret));
         } else if (OB_FAIL(geo1->do_visit(tree_visitor1))) {
-          LOG_WARN("fail to do visit", K(ret));
         } else if (FALSE_IT(g1_tree = tree_visitor1.get_geometry())) {
         } else if (OB_FAIL(geo_coll->push_back(*g1_tree))) {
-          LOG_WARN("fail to push back geometry", K(ret));
         } else if (OB_FAIL(geo2->do_visit(tree_visitor2))) {
-          LOG_WARN("fail to do visit", K(ret));
         } else if (FALSE_IT(g2_tree = tree_visitor2.get_geometry())) {
         } else if (OB_FAIL(geo_coll->push_back(*g2_tree))) {
-          LOG_WARN("fail to push back geometry", K(ret));
         } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_split(*allocator, *geo_coll, mpt, mls, mpy))) {
-          LOG_WARN("failed to do gc split", K(ret));
         } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_union(context.get_mem_ctx(), *context.get_srs(), mpt, mls, mpy))) {
-          LOG_WARN("failed to do gc union", K(ret));
         } else {
           for (int i = 0; OB_SUCC(ret) && i < mpy->size(); ++i) {
             if (OB_FAIL(
                     res_coll->push_back(reinterpret_cast<const ObGeometry &>((*mpy)[i])))) {
-              LOG_WARN("fail to push back geometry", K(ret));
             }
           }
           for (int i = 0; OB_SUCC(ret) && i < mls->size(); ++i) {
             if (OB_FAIL(
                     res_coll->push_back(reinterpret_cast<const ObGeometry &>((*mls)[i])))) {
-              LOG_WARN("fail to push back geometry", K(ret));
             }
           }
           for (int i = 0; OB_SUCC(ret) && i < mpt->size(); ++i) {
@@ -526,7 +492,6 @@ public:
               LOG_WARN("fail to allocate memory", K(ret));
             } else if (OB_FAIL(res_coll->push_back(
                             reinterpret_cast<const ObGeometry &>(*pt_tree)))) {
-              LOG_WARN("fail to push back geometry", K(ret));
             }
           }
         }

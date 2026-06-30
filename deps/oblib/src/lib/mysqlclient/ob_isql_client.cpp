@@ -82,7 +82,6 @@ void ObISQLClient::set_inactive()
   if (NULL != get_pool()) {
     int ret = get_pool()->on_client_inactive(this);
     if (OB_FAIL(ret)) {
-      COMMON_LOG(WARN, "connection pool on client inactive failed", K(ret));
     }
   }
 }

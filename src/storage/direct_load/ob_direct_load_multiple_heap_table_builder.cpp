@@ -70,21 +70,15 @@ int ObDirectLoadMultipleHeapTableBuilder::init(const ObDirectLoadMultipleHeapTab
   } else {
     param_ = param;
     if (OB_FAIL(param_.file_mgr_->alloc_file(param_.index_dir_id_, index_file_handle_))) {
-      LOG_WARN("fail to alloc file", KR(ret));
     } else if (OB_FAIL(param_.file_mgr_->alloc_file(param_.data_dir_id_, data_file_handle_))) {
-      LOG_WARN("fail to alloc file", KR(ret));
     } else if (OB_FAIL(index_block_writer_.init(param_.table_data_desc_.sstable_index_block_size_,
                                                 param_.table_data_desc_.compressor_type_))) {
-      LOG_WARN("fail to init index block writer", KR(ret));
     } else if (OB_FAIL(data_block_writer_.init(param_.table_data_desc_.sstable_data_block_size_,
                                                param_.table_data_desc_.compressor_type_,
                                                param_.extra_buf_, param_.extra_buf_size_,
                                                &callback_))) {
-      LOG_WARN("fail to init data block writer", KR(ret));
     } else if (OB_FAIL(index_block_writer_.open(index_file_handle_))) {
-      LOG_WARN("fail to open file", KR(ret));
     } else if (OB_FAIL(data_block_writer_.open(data_file_handle_))) {
-      LOG_WARN("fail to open file", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -108,9 +102,7 @@ int ObDirectLoadMultipleHeapTableBuilder::append_row(const ObTabletID &tablet_id
     LOG_WARN("invalid args", KR(ret), K(param_), K(datum_row));
   } else {
     if (OB_FAIL(row_.from_datum_row(tablet_id, datum_row))) {
-      LOG_WARN("fail to from datum row", KR(ret));
     } else if (OB_FAIL(append_row(row_))) {
-      LOG_WARN("fail to append row", KR(ret), K(row_));
     }
   }
   return ret;
@@ -140,7 +132,6 @@ int ObDirectLoadMultipleHeapTableBuilder::append_row(const RowType &row)
         } else {
           // save last tablet index
           if (OB_FAIL(index_block_writer_.append_index(last_tablet_index_))) {
-            LOG_WARN("fail to append tablet index", KR(ret));
           } else {
             ++index_entry_count_;
           }
@@ -155,7 +146,6 @@ int ObDirectLoadMultipleHeapTableBuilder::append_row(const RowType &row)
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(data_block_writer_.write_item(row))) {
-        LOG_WARN("fail to append row", KR(ret));
       } else {
         ++last_tablet_index_.row_count_;
         ++row_count_;
@@ -178,16 +168,13 @@ int ObDirectLoadMultipleHeapTableBuilder::close()
     if (last_tablet_index_.tablet_id_.is_valid()) {
       // save last tablet index
       if (OB_FAIL(index_block_writer_.append_index(last_tablet_index_))) {
-        LOG_WARN("fail to append tablet index", KR(ret));
       } else {
         ++index_entry_count_;
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(data_block_writer_.close())) {
-        LOG_WARN("fail to close data block writer", KR(ret));
       } else if (OB_FAIL(index_block_writer_.close())) {
-        LOG_WARN("fail to close index block writer", KR(ret));
       } else {
         is_closed_ = true;
       }
@@ -226,22 +213,16 @@ int ObDirectLoadMultipleHeapTableBuilder::get_tables(
     create_param.row_count_ = row_count_;
     create_param.max_data_block_size_ = data_block_writer_.get_max_block_size();
     if (OB_FAIL(data_fragment.file_handle_.assign(data_file_handle_))) {
-      LOG_WARN("fail to assign data file handle", KR(ret));
     }  else if (OB_FAIL(create_param.index_file_handle_.assign(index_file_handle_))) {
-      LOG_WARN("fail to assign file handle", KR(ret));
     } else if (OB_FAIL(create_param.data_fragments_.push_back(data_fragment))) {
-      LOG_WARN("fail to push back data fragment", KR(ret));
     }
     if (OB_SUCC(ret)) {
       ObDirectLoadTableHandle table_handle;
       ObDirectLoadMultipleHeapTable *heap_table = nullptr;
       if (OB_FAIL(table_manager->alloc_multiple_heap_table(table_handle))) {
-        LOG_WARN("fail to alloc multiple heap table", KR(ret));
       } else if (FALSE_IT(heap_table = static_cast<ObDirectLoadMultipleHeapTable *>(table_handle.get_table()))) {
       } else if (OB_FAIL(heap_table->init(create_param))) {
-        LOG_WARN("fail to init heap_table", KR(ret), K(create_param));
       } else if (OB_FAIL(table_array.add(table_handle))) {
-        LOG_WARN("fail to push back heap table", KR(ret));
       }
     }
   }

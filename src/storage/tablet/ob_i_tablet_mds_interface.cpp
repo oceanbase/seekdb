@@ -38,12 +38,10 @@ int ObITabletMdsInterface::get_src_tablet_handle_and_base_ptr_(
   ObTablet *tablet = nullptr;
 
   if (OB_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::TABLET_MOD))) {
-    MDS_LOG(WARN, "fail to get ls", K(ret), K(ls_id));
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     MDS_LOG(WARN, "ls is null", K(ret), KP(ls), K(ls_id));
   } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle, 0, ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-    MDS_LOG(WARN, "fail to get tablet", K(ret), K(ls_id), K(tablet_id));
   } else if (OB_ISNULL(tablet = tablet_handle.get_obj())) {
     ret = OB_ERR_UNEXPECTED;
     MDS_LOG(WARN, "tablet is null", K(ret), K(ls_id), K(tablet_id), K(tablet_handle));
@@ -327,9 +325,7 @@ int ObITabletMdsInterface::read_raw_data(
         ObVersionRange(0/*base_version*/, snapshot.get_val_for_tx()/*snapshot_version*/),
         placeholder_collector,
         scan_param))) {
-      MDS_LOG(WARN, "fail to build scan param", K(ret));
     } else if (OB_FAIL(mds_table_scan(scan_param, store_ctx, iter))) {
-      MDS_LOG(WARN, "fail to do mds table scan", K(ret), K(snapshot), K(scan_param));
     } else {
       int tmp_ret = OB_SUCCESS;
       if (OB_FAIL(iter.get_next_mds_kv(allocator, kv))) {
@@ -359,9 +355,7 @@ int ObITabletMdsInterface::mds_table_scan(
   ObTabletHandle tablet_handle;
 
   if (OB_FAIL(get_tablet_handle_from_this(tablet_handle))) {
-    MDS_LOG(WARN, "fail to build tablet handle", K(ret));
   } else if (OB_FAIL(iter.init(scan_param, tablet_handle, store_ctx))) {
-    MDS_LOG(WARN, "fail to init mds row iter", K(ret), KPC(tablet_handle.get_obj()), K(scan_param));
   }
 
   return ret;
@@ -376,7 +370,6 @@ int ObITabletMdsInterface::get_tablet_handle_from_this(
   const common::ObTabletID &tablet_id = get_tablet_meta_().tablet_id_;
   ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
   if (OB_FAIL(t3m->build_tablet_handle_for_mds_scan(const_cast<ObTablet*>(tablet), tablet_handle))) {
-    MDS_LOG(WARN, "fail to build tablet handle", K(ret), K(ls_id), K(tablet_id));
   } 
   return ret;
 }

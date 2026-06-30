@@ -56,7 +56,6 @@ public:
                                                agg_col_id, agg_cell, row_sel);
     }
     if (OB_FAIL(ret)) {
-      SQL_LOG(WARN, "failed to add batch rows", K(ret));
     }
     return ret;
   }
@@ -133,9 +132,7 @@ public:
       }
     }
     if (OB_FAIL(ret)) {
-      SQL_LOG(WARN, "failed to add batch rows", K(ret));
     } else if (OB_FAIL(extra->flush_batch_rows(true))) {
-      SQL_LOG(WARN, "failed to flush batch rows", K(ret));
     } else if (is_lob) {
       extra->get_lob_prefix_allocator().reuse();
     }
@@ -174,7 +171,6 @@ public:
                                                                      obj_meta,
                                                                      tmp_datum,
                                                                      new_prev_datum))) {
-       SQL_LOG(WARN, "failed to build prefix str datum for lob", K(ret));
       } else {
         payload = new_prev_datum.ptr_;
         len = new_prev_datum.pack_;
@@ -193,11 +189,9 @@ public:
                                 extra->get_prev_payload(), 
                                 extra->get_prev_payload_len(),
                                 false, cmp_ret))) {
-      SQL_LOG(WARN, "failed to cmp null first row", K(ret));
     } else if (cmp_ret == 0) {
       extra->inc_repeat_count();
     } else if (OB_FAIL(extra->add_one_batch_item(payload, len))) {
-      SQL_LOG(WARN, "failed to add one batch item", K(ret));
     }
     return ret;
   }
@@ -217,14 +211,12 @@ public:
       ret = OB_ERR_UNEXPECTED;
       SQL_LOG(WARN , "invalid null top fre hist extra", K(ret));
     } else if (OB_FAIL(extra->prepare_for_eval())) {
-      SQL_LOG(WARN, "failed to eval", K(ret));
     } else if (OB_UNLIKELY(extra->get_num_distinct() <= 0)) {
       res_vec->set_null(output_idx);
     } else if (OB_FAIL(extra->compute_hybrid_hist_result(agg_ctx.eval_ctx_.max_batch_size_,
                                                          obj_meta,
                                                          agg_ctx.allocator_,
                                                          hybrid_hist))) {
-      SQL_LOG(WARN, "failed to compute hybrid hist result", K(ret));
     } else {
       char *buf = NULL;
       int64_t buf_size = hybrid_hist.get_serialize_size();
@@ -233,13 +225,9 @@ public:
       ObExprStrResAlloc expr_res_alloc(agg_expr, agg_ctx.eval_ctx_);
       ObTextStringResult new_tmp_lob(ObLongTextType, has_lob_header, &expr_res_alloc);
       if (OB_FAIL(new_tmp_lob.init(buf_size))) {
-        SQL_LOG(WARN, "init tmp lob failed", K(ret), K(buf_size));
       } else if (OB_FAIL(new_tmp_lob.get_reserved_buffer(buf, buf_size))) {
-        SQL_LOG(WARN, "tmp lob append failed", K(ret), K(new_tmp_lob));
       } else if (OB_FAIL(hybrid_hist.serialize(buf, buf_size, buf_pos))) {
-        SQL_LOG(WARN, "fail serialize init task arg", KP(buf), K(buf_size), K(buf_pos), K(ret));
       } else if (OB_FAIL(new_tmp_lob.lseek(buf_pos, 0))) {
-        SQL_LOG(WARN, "temp lob lseek failed", K(ret), K(new_tmp_lob), K(buf_pos));
       } else {
         ObString lob_loc_str;
         new_tmp_lob.get_result_buffer(lob_loc_str);

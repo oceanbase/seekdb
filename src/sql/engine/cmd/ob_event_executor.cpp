@@ -43,7 +43,6 @@ int ObCreateEventExecutor::execute(ObExecContext &ctx, ObCreateEventStmt &stmt)
   } else {
     int64_t job_id = OB_INVALID_ID;
     if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::generate_job_id(job_id))) {
-      LOG_WARN("generate_job_id failed", KR(ret));
     } else {
       int64_t start_date_us = stmt.get_event_info().get_start_time() == OB_INVALID_TIMESTAMP ? ObTimeUtility::current_time() : stmt.get_event_info().get_start_time();
       int64_t end_date_us = stmt.get_event_info().get_end_time() == OB_INVALID_TIMESTAMP ? dbms_scheduler::ObDBMSSchedJobInfo::DEFAULT_MAX_END_DATE : stmt.get_event_info().get_end_time(); // 4000-01-01
@@ -73,10 +72,8 @@ int ObCreateEventExecutor::execute(ObExecContext &ctx, ObCreateEventStmt &stmt)
         job_info.comments_ = stmt.get_event_info().get_event_comment();
         ObMySQLTransaction trans;
         if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-          LOG_WARN("failed to start trans", KR(ret));
         } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(
             trans, job_id, job_info))) {
-          LOG_WARN("failed to create dbms scheduler job", KR(ret), K(stmt.get_event_info().get_if_exist_or_if_not_exist()));
         }
         if (trans.is_started()) {
           int tmp_ret = OB_SUCCESS;
@@ -107,7 +104,6 @@ int ObAlterEventExecutor::execute(ObExecContext &ctx, ObAlterEventStmt &stmt)
   dbms_scheduler::ObDBMSSchedJobInfo job_info;
   ObMySQLTransaction trans;
   if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-    LOG_WARN("failed to start trans", KR(ret));
   } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::get_dbms_sched_job_info(*GCTX.sql_proxy_, 
                                                                               false, // is_oracle_tenant
                                                                               stmt.get_event_info().get_event_name(),

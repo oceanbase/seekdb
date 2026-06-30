@@ -61,7 +61,6 @@ int ObMViewExecutorUtil::check_min_data_version(const uint64_t min_data_version,
   int ret = OB_SUCCESS;
   uint64_t compat_version = 0;
   if (OB_FAIL(oceanbase::common::ObClusterVersion::get_instance().get_tenant_data_version(compat_version))) {
-    LOG_WARN("fail to get data version", KR(ret));
   } else if (OB_UNLIKELY(compat_version < min_data_version)) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("version lower than 4.3 does not support this operation", KR(ret),
@@ -107,8 +106,6 @@ int ObMViewExecutorUtil::resolve_table_name(const ObCollationType cs_type,
         LOG_WARN("fail to check and convert database name", KR(ret), K(database_name));
       } else if (OB_FAIL(ObSQLUtils::check_and_convert_table_name(cs_type, preserve_lettercase,
                                                                   table_name))) {
-        LOG_WARN("fail to check and convert table name", KR(ret), K(cs_type),
-                 K(preserve_lettercase), K(table_name));
       }
     }
   }
@@ -175,13 +172,11 @@ int ObMViewExecutorUtil::generate_refresh_id(int64_t &refresh_id)
   MOD_SCOPE
   {
     if (OB_FAIL(ObCommonIDUtils::gen_unique_id(unique_id))) {
-      LOG_WARN("failed to gen unique id", KR(ret));
     }
   }
   else
   {
     if (OB_FAIL(ObCommonIDUtils::gen_unique_id_by_rpc( unique_id))) {
-      LOG_WARN("failed to gen unique id", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {

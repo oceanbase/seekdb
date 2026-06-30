@@ -32,7 +32,6 @@ int ObHelpStmt::add_col_name(ObString col_name)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(col_names_.push_back(col_name))) {
-    SQL_RESV_LOG(WARN, "fail to push back column name", K(ret), K(col_name));
   }
   return ret;
 }

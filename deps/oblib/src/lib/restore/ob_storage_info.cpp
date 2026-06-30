@@ -143,7 +143,6 @@ int ObObjectStorageCredential::assign(const ObObjectStorageCredential &credentia
   access_time_us_ = credential.access_time_us_;
   born_time_us_ = credential.born_time_us_;
   if (OB_FAIL(sts_token_.assign(credential.sts_token_))) {
-    LOG_WARN("failed to assign sts token", K(ret), K(credential), KPC(this));
   }
   char *a = nullptr;
   return ret;
@@ -252,13 +251,11 @@ int ObObjectStorageInfo::reset_access_id_and_access_key(
   if (OB_NOT_NULL(access_id)) {
     int64_t pos = 0;
     if (OB_FAIL(databuff_printf(access_id_, OB_MAX_BACKUP_ACCESSID_LENGTH, pos, "%s%s", ACCESS_ID, access_id))) {
-      LOG_WARN("failed to databuff printf", K(ret), KCSTRING(access_id));
     }
   }
   if (OB_NOT_NULL(access_key)) {
     int64_t pos = 0;
     if (FAILEDx(databuff_printf(access_key_, OB_MAX_BACKUP_ACCESSKEY_LENGTH, pos, "%s%s", ACCESS_KEY, access_key))) {
-      LOG_WARN("failed to databuff printf", K(ret));
     }
   }
   return ret;
@@ -332,10 +329,8 @@ int ObObjectStorageInfo::set(const common::ObStorageType device_type, const char
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("cluster_version_mgr is null", K(ret), KP(cluster_version_mgr_));
     } else if (OB_FAIL(cluster_version_mgr_->is_supported_azblob_version())) {
-      LOG_WARN("azblob version is not supported", K(ret), K(device_type));
     }
   } else if (OB_FAIL(parse_storage_info_(storage_info, has_needed_extension))) {
-    LOG_WARN("parse storage info failed", K(ret), KP(storage_info), K_(device_type));
   } else if (OB_FAIL(validate_arguments())) {
     ret = OB_INVALID_BACKUP_DEST;
     LOG_WARN("invalid arguments after parse storage info", K(ret), KPC(this));
@@ -397,9 +392,7 @@ int ObObjectStorageInfo::set(const char *uri, const char *storage_info)
   int ret = OB_SUCCESS;
   common::ObStorageType device_type;
   if (OB_FAIL(get_storage_type_from_path(uri, device_type))) {
-    LOG_WARN("failed to get storage type from path", K(ret), KPC(this));
   } else if (OB_FAIL(set(device_type, storage_info))) {
-    LOG_WARN("failed to set storage info", K(ret), KPC(this));
   }
   return ret;
 }
@@ -433,28 +426,22 @@ int ObObjectStorageInfo::parse_storage_info_(const char *storage_info, bool &has
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("only s3 protocol can set s3_region", K(ret), K(token), K(device_type_));
         } else if (OB_FAIL(set_storage_info_field_(token, region_, sizeof(region_)))) {
-          LOG_WARN("faield to set region", K(ret), K(token));
         } else if (OB_FAIL(set_storage_info_field_(token, extension_, sizeof(extension_)))) {
-          LOG_WARN("failed to set region", K(ret), K(token));
         }
       } else if (0 == strncmp(HOST, token, strlen(HOST))) {
         if (OB_FAIL(set_storage_info_field_(token, endpoint_, sizeof(endpoint_)))) {
-          LOG_WARN("failed to set endpoint", K(ret), K(token));
         }
       } else if (0 == strncmp(ACCESS_ID, token, strlen(ACCESS_ID))) {
         if (OB_FAIL(set_storage_info_field_(token, access_id_, sizeof(access_id_)))) {
-          LOG_WARN("failed to set access id", K(ret), K(token));
         }
       } else if (0 == strncmp(ACCESS_KEY, token, strlen(ACCESS_KEY))) {
         if (OB_FAIL(set_storage_info_field_(token, access_key_, sizeof(access_key_)))) {
-          LOG_WARN("failed to set access key", K(ret));
         }
       } else if (0 == strncmp(MAX_IOPS, token, strlen(MAX_IOPS))) {
         int64_t value = 0;
         char buf[OB_MAX_BACKUP_STORAGE_INFO_LENGTH] = { 0 };
         int64_t pos = 0;
         if (OB_FAIL(databuff_printf(buf, OB_MAX_BACKUP_STORAGE_INFO_LENGTH, pos, "%s", token))) {
-          LOG_WARN("failed to databuff printf", K(ret));
         } else if (1 == sscanf(buf, "max_iops=%ld", &value)) {
           max_iops_ = value;
           LOG_INFO("set max iops", K(ret), K(value));
@@ -467,7 +454,6 @@ int ObObjectStorageInfo::parse_storage_info_(const char *storage_info, bool &has
         char buf[OB_MAX_BACKUP_STORAGE_INFO_LENGTH] = { 0 };
         int64_t pos = 0;
         if (OB_FAIL(databuff_printf(buf, OB_MAX_BACKUP_STORAGE_INFO_LENGTH, pos, "%s", token))) {
-          LOG_WARN("failed to databuff printf", K(ret));
         } else {
           bool is_valid = false;
           value = parse_config_capacity(buf + strlen(MAX_BANDWIDTH), is_valid, true /*check_unit*/);
@@ -485,28 +471,20 @@ int ObObjectStorageInfo::parse_storage_info_(const char *storage_info, bool &has
           OB_LOG(WARN, "OB_STORAGE_FILE don't support delete mode yet",
             K(ret), K_(device_type), K(token));
         } else if (OB_FAIL(set_delete_mode_(token + strlen(DELETE_MODE)))) {
-          OB_LOG(WARN, "failed to check delete mode", K(ret), K(token));
         } else if (OB_FAIL(set_storage_info_field_(token, extension_, sizeof(extension_)))) {
-          LOG_WARN("failed to set delete mode", K(ret), K(token));
         }
       } else if (0 == strncmp(ADDRESSING_MODEL, token, strlen(ADDRESSING_MODEL))) {
         if (OB_FAIL(set_addressing_model_(token + strlen(ADDRESSING_MODEL)))) {
-          OB_LOG(WARN, "failed to check addressing model", K(ret), K(token));
         } else if (OB_FAIL(set_storage_info_field_(token, extension_, sizeof(extension_)))) {
-          LOG_WARN("failed to set addressing model", K(ret), K(token));
         }
       } else if (0 == strncmp(CHECKSUM_TYPE, token, strlen(CHECKSUM_TYPE))) {
         const char *checksum_type_str = token + strlen(CHECKSUM_TYPE);
         if (OB_FAIL(set_checksum_type_(checksum_type_str))) {
-          OB_LOG(WARN, "fail to set checksum type", K(ret), K(checksum_type_str));
         } else if (OB_FAIL(set_storage_info_field_(token, extension_, sizeof(extension_)))) {
-          LOG_WARN("fail to set checksum type into extension", K(ret), K(token));
         }
       } else if (0 == strncmp(ENABLE_WORM, token, strlen(ENABLE_WORM))) {
         if (OB_FAIL(set_enable_worm_(token + strlen(ENABLE_WORM)))) {
-          LOG_WARN("failed to check enable worm", K(ret), K(token));
         } else if (OB_FAIL(set_storage_info_field_(token, extension_, sizeof(extension_)))) {
-          LOG_WARN("failed to set enable worm", K(ret), K(token));
         }
       } else if (0 == strncmp(ROLE_ARN, token, strlen(ROLE_ARN))) {
         if (ObStorageType::OB_STORAGE_FILE == device_type_
@@ -516,7 +494,6 @@ int ObObjectStorageInfo::parse_storage_info_(const char *storage_info, bool &has
           LOG_WARN("OB_STORAGE_FILE don't support assume role yet",
               K(ret), K_(device_type), KP(token));
         } else if (OB_FAIL(set_storage_info_field_(token, role_arn_, sizeof(role_arn_)))) {
-          LOG_WARN("failed to set role arn", K(ret), KP(token), KP_(role_arn), K(sizeof(role_arn_)));
         }
       } else if (0 == strncmp(EXTERNAL_ID, token, strlen(EXTERNAL_ID))) {
         if (ObStorageType::OB_STORAGE_FILE == device_type_) {
@@ -524,8 +501,6 @@ int ObObjectStorageInfo::parse_storage_info_(const char *storage_info, bool &has
           LOG_WARN("OB_STORAGE_FILE don't support external id yet", K(ret),
               K_(device_type), KP(token));
         } else if (OB_FAIL(set_storage_info_field_(token, external_id_, sizeof(external_id_)))) {
-          LOG_WARN("failed to set external id", K(ret), KP(token), KP_(external_id),
-              K(sizeof(external_id_)));
         }
       }
     }
@@ -537,13 +512,10 @@ int ObObjectStorageInfo::parse_storage_info_(const char *storage_info, bool &has
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("cluster version mgr is null", K(ret), KP(cluster_version_mgr_));
         } else if (OB_FAIL(cluster_version_mgr_->is_supported_assume_version())) {
-          LOG_WARN("The current version does not support the assume role", K(ret), KPC(this));
         } else {
           is_assume_role_mode_ = true;
           ObObjectStorageCredential credential;
           if (OB_FAIL(ObDeviceCredentialMgr::get_instance().get_credential(*this, credential))) {
-            LOG_WARN("failed to get credential by role arn first", K(ret), KPC(this),
-                KP(storage_info), K(credential));
           }
         }
       }
@@ -559,7 +531,6 @@ int ObObjectStorageInfo::set_enable_worm_(const char *enable_worm)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("cluster version mgr is null", K(ret), KP(cluster_version_mgr_));
   } else if (OB_FAIL(cluster_version_mgr_->is_supported_enable_worm_version())) {
-    LOG_WARN("The current version does not support enable worm", K(ret), KPC(this));
   } else if (OB_ISNULL(enable_worm)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), KP(enable_worm));
@@ -662,7 +633,6 @@ int ObObjectStorageInfo::set_storage_info_field_(const char *info, char *field, 
       // so delimiter '&' should be included
       LOG_WARN("failed to add delimiter to storage info field", K(ret), K(pos), KP(field), K(length));
     } else if (OB_FAIL(databuff_printf(field, length, pos, "%s", info))) {
-      LOG_WARN("failed to set storage info field", K(ret), K(pos), KP(field), K(length));
     }
   }
   return ret;
@@ -702,9 +672,7 @@ int ObObjectStorageInfo::get_info_str_(char *storage_info, const int64_t info_le
   } else if (OB_STORAGE_FILE != device_type_ && !is_assume_role_mode_) {
     // Access object storage by ak/sk
     if (OB_FAIL(get_access_key_(key, sizeof(key)))) {
-      LOG_WARN("failed to get access key", K(ret));
     } else if (OB_FAIL(databuff_printf(storage_info, info_len, "%s&%s&%s", endpoint_, access_id_, key))) {
-      LOG_WARN("failed to set storage info", K(ret), K(info_len));
     }
   }
   return ret;
@@ -725,7 +693,6 @@ int ObObjectStorageInfo::append_extension_str_(char *storage_info, const int64_t
     if (str_len > 0 && OB_FAIL(databuff_printf(storage_info, info_len, str_len, "&"))) {
       LOG_WARN("failed to add delimiter to storage info", K(ret), K(info_len), K(str_len));
     } else if (OB_FAIL(databuff_printf(storage_info, info_len, str_len, "%s", extension_))) {
-      LOG_WARN("failed to add extension", K(ret), K(info_len), K(str_len), K_(extension));
     }
   }
   return ret;
@@ -746,12 +713,10 @@ int ObObjectStorageInfo::get_storage_info_str(char *storage_info, const int64_t 
     // Access object storage by assume_role
     int64_t pos = 0;
     if (OB_FAIL(databuff_printf(storage_info, info_len, pos, "%s&%s", endpoint_, role_arn_))) {
-      LOG_WARN("failed to set storage info of other types", K(ret), K(info_len), KPC(this));
     }
     // `external_id` is optional
     else if (strlen(external_id_) > strlen(EXTERNAL_ID)) {
       if (OB_FAIL(databuff_printf(storage_info, info_len, pos, "&%s", external_id_))) {
-        LOG_WARN("failed to set storage info of other types", K(ret), K(info_len), KPC(this));
       }
     }
   }
@@ -779,14 +744,10 @@ int ObObjectStorageInfo::get_authorization_str(
     // access by assume role
     ObObjectStorageCredential credential;
     if (OB_FAIL(ObDeviceCredentialMgr::get_instance().get_credential(*this, credential))) {
-      OB_LOG(WARN, "failed to get credential", K(ret), KPC(this), K(credential));
     } else if (OB_FAIL(databuff_printf(authorization_str, authorization_str_len,
                    "%s&%s%s&%s%s", endpoint_, ACCESS_ID, credential.access_id_, ACCESS_KEY,
                    credential.access_key_))) {
-      OB_LOG(WARN, "failed to set storage info of other types", K(ret), KP(authorization_str),
-          K(authorization_str_len), KPC(this));
     } else if (OB_FAIL(sts_token.assign(credential.sts_token_))) {
-      OB_LOG(WARN, "failed to set sts_token_", K(ret), K(sts_token), K(credential.sts_token_));
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(append_extension_str_(authorization_str, authorization_str_len))) {
@@ -803,24 +764,17 @@ int ObObjectStorageInfo::to_account(ObStorageAccount &account) const
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("storage info is invalid", K(ret), K(device_type_), KPC(this));
   } else if (OB_FAIL(ob_set_field(endpoint_ + strlen(HOST), account.endpoint_, sizeof(account.endpoint_)))) {
-    OB_LOG(WARN, "failed to set endpoint", K(ret), K(endpoint_));
   } else if (is_assume_role_mode_) {
     // access by assume role
     ObObjectStorageCredential credential;
     if (OB_FAIL(ObDeviceCredentialMgr::get_instance().get_credential(*this, credential))) {
-      OB_LOG(WARN, "failed to get credential", K(ret), KPC(this), K(credential));
     } else if (OB_FAIL(ob_set_field(credential.access_id_ + strlen(ACCESS_ID), account.access_id_, sizeof(account.access_id_)))) {
-      OB_LOG(WARN, "failed to set access_id", K(ret), K(access_id_));
     } else if (OB_FAIL(ob_set_field(credential.access_key_ + strlen(ACCESS_KEY), account.access_key_, sizeof(account.access_key_)))) {
-      OB_LOG(WARN, "failed to set access_key", K(ret), K(access_key_));
     } else if (OB_FAIL(account.sts_token_.assign(credential.sts_token_))) {
-      OB_LOG(WARN, "failed to set sts_token_", K(ret), K(account.sts_token_), K(credential.sts_token_));
     }
   } else {
     if (OB_FAIL(ob_set_field(access_id_ + strlen(ACCESS_ID), account.access_id_, sizeof(account.access_id_)))) {
-      OB_LOG(WARN, "failed to set access_id", K(ret), K(access_id_));
     } else if (OB_FAIL(ob_set_field(access_key_ + strlen(ACCESS_KEY), account.access_key_, sizeof(account.access_key_)))) {
-      OB_LOG(WARN, "failed to set access_key", K(ret), K(access_key_));
     }
   }
 
@@ -847,10 +801,8 @@ int ObObjectStorageInfo::get_device_map_key_str(char *key_str, const int64_t len
             static_cast<uint32_t>(device_type_), static_cast<uint32_t>(checksum_type_),
             static_cast<uint8_t>(is_use_obdal()),
             endpoint_, role_arn_, extension_))) {
-      LOG_WARN("failed to set key str with assume role", K(ret), K(len), K(pos), KPC(this));
     } else if (strlen(external_id_) > strlen(EXTERNAL_ID)) {
       if (OB_FAIL(databuff_printf(key_str, len, pos, "&%s", external_id_))) {
-        LOG_WARN("failed to set key str with assume role", K(ret), K(len), K(pos), KPC(this));
       }
     }
   }
@@ -859,7 +811,6 @@ int ObObjectStorageInfo::get_device_map_key_str(char *key_str, const int64_t len
                static_cast<uint32_t>(device_type_), static_cast<uint32_t>(checksum_type_),
                static_cast<uint8_t>(is_use_obdal()),
                endpoint_, access_id_, access_key_, extension_))) {
-    LOG_WARN("failed to set key str with access_id", K(ret), K(len), KPC(this));
   }
   return ret;
 }
@@ -920,7 +871,6 @@ int ObStsCredential::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("sts credential init twice", K(ret));
   } else if (OB_FAIL(get_sts_credential())) {
-    LOG_WARN("failed to get sts credential", K(ret));
   } else {
     
     is_inited_ = true;
@@ -937,14 +887,12 @@ int ObStsCredential::get_sts_credential()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sts_credential_mgr is null", K(ret), KPC(this));
   } else if (OB_FAIL(sts_credential_mgr_->get_sts_credential(sts_credential, sizeof(sts_credential)))) {
-    LOG_WARN("fail to get sts credential", K(ret), KPC(this));
   } else if (FALSE_IT(sts_credential_len = strlen(sts_credential))) {
   } else if (OB_UNLIKELY(sts_credential_len <= 0
       || sts_credential_len >= OB_MAX_STS_CREDENTIAL_LENGTH)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("sts_credential is invalid", K(ret), K(sts_credential), K(sts_credential_len));
   } else if (OB_FAIL(check_sts_credential_format(sts_credential, *this))) {
-    LOG_WARN("failed to check sts credential format", K(ret), KP(sts_credential), KPC(this));
   }
   return ret;
 }
@@ -982,7 +930,6 @@ int ObDeviceCredentialKey::init(const ObObjectStorageInfo &storage_info)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(storage_info));
   } else if (OB_FAIL(init_(storage_info.role_arn_, storage_info.external_id_))) {
-    LOG_WARN("failed to init device credential key", K(ret), K(storage_info));
   }
   return ret;
 }
@@ -1133,28 +1080,16 @@ int ObDeviceCredentialKey::construct_signed_url(char *url_buf, const int64_t url
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "invalid args", K(ret), KP(url_buf), K(url_buf_len));
   } else if (OB_FAIL(generate_signature_nonce(signature_nonce, sizeof(signature_nonce)))) {
-    LOG_WARN("failed to generate signature nonce",
-        K(ret), K(signature_nonce), K(sizeof(signature_nonce)));
   } else if (OB_FAIL(generate_request_id(request_id, sizeof(request_id)))) {
-    LOG_WARN("failed to generate request id", K(ret), K(request_id), K(sizeof(request_id)));
   } else if (OB_FAIL(sts_credential.init())) {
-    LOG_WARN("failed to init sts credential", K(ret));
   } else {
     if (OB_FAIL(params.push_back(ParamType("Action", STS_ACTION)))) {
-      OB_LOG(WARN, "fail to push back", K(ret), K(params.count()), K(params));
     } else if (OB_FAIL(params.push_back(ParamType("RequestSource", STS_RESOURCE_SOURCE)))) {
-      OB_LOG(WARN, "fail to push back", K(ret), K(params.count()), K(params));
     } else if (OB_FAIL(params.push_back(ParamType("RequestId", request_id)))) {
-      OB_LOG(WARN, "fail to push back", K(ret), K(params.count()), K(params));
     } else if (OB_FAIL(params.push_back(ParamType("RoleArn", role_arn)))) {
-      OB_LOG(WARN, "fail to push back", K(ret), K(params.count()), K(params));
     } else if (OB_FAIL(params.push_back(ParamType("SignatureNonce", signature_nonce)))) {
-      OB_LOG(WARN, "fail to push back", K(ret), K(params.count()), K(params));
     } else if (OB_FAIL(params.push_back(ParamType("ObSignatureKey", sts_credential.sts_ak_)))) {
-      OB_LOG(WARN, "fail to push back", K(ret), K(params.count()), K(params));
     } else if (OB_FAIL(params.push_back(ParamType("ObSignatureSecret", sts_credential.sts_sk_)))) {
-      OB_LOG(WARN, "fail to push back", K(ret), K(params.count()), K(params));
-    // be careful to handle external_id_ and external_id
     } else if (external_id_[0] != '\0'
         && OB_FAIL(params.push_back(ParamType("ExternalId", external_id)))) {
       OB_LOG(WARN, "fail to push back", K(ret), K(params.count()));
@@ -1166,14 +1101,11 @@ int ObDeviceCredentialKey::construct_signed_url(char *url_buf, const int64_t url
         "&RequestId=%s&RoleArn=%s&SignatureNonce=%s&ObSignatureKey=%s",
         sts_credential.sts_url_, STS_ACTION, STS_RESOURCE_SOURCE,
         request_id, role_arn, signature_nonce, sts_credential.sts_ak_))) {
-      LOG_WARN("failed to generate json payload", K(ret), K(url_buf_len), KPC(this));
     } else if (external_id_[0] != '\0'
         && OB_FAIL(databuff_printf(url_buf, url_buf_len, pos, "&ExternalId=%s", external_id))) {
       LOG_WARN("failed to concat external id", K(ret), K(url_buf_len), K(pos), KPC(this));
     } else if (OB_FAIL(sign_request(params, "POST", signature, sizeof(signature)))) {
-      LOG_WARN("failed to sign request", K(ret), K(signature), K(params), KPC(this));
     } else if (OB_FAIL(databuff_printf(url_buf, url_buf_len, pos, "&ObSignature=%s", signature))) {
-      LOG_WARN("failed to concat sts signature", K(ret), K(pos), K(url_buf_len), KPC(this));
     }
   }
   return ret;
@@ -1226,18 +1158,12 @@ int check_sts_credential_format(const char *sts_credential_str, ObStsCredential 
         break;
       } else if (0 == strncmp(STS_AK, token, strlen(STS_AK))) {
         if (OB_FAIL(ob_set_field(token + strlen(STS_AK), sts_ak, sizeof(sts_credential.sts_ak_)))) {
-          LOG_WARN("failed to set sts ak", K(ret), KP(token), K(sts_ak),
-              K(sizeof(sts_credential.sts_ak_)));
         }
       } else if (0 == strncmp(STS_SK, token, strlen(STS_SK))) {
         if (OB_FAIL(ob_set_field(token + strlen(STS_SK), sts_sk, sizeof(sts_credential.sts_sk_)))) {
-          LOG_WARN("failed to set sts sk", K(ret), KP(token), KP(sts_sk),
-              K(sizeof(sts_credential.sts_sk_)));
         }
       } else if (0 == strncmp(STS_URL, token, strlen(STS_URL))) {
         if (OB_FAIL(ob_set_field(token + strlen(STS_URL), sts_url, sizeof(sts_credential.sts_url_)))) {
-          LOG_WARN("failed to set sts url", K(ret), K(token), K(sts_url),
-              K(sizeof(sts_credential.sts_url_)));
         }
       }
     }
@@ -1282,7 +1208,6 @@ int ObDeviceCredentialMgr::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(credential_map_.create(DEFAULT_MAP_BUCKET_CNT, "CredentialMap", "CredentialMap"))) {
-    LOG_WARN("fail to init credential map", K(ret), K(DEFAULT_MAP_BUCKET_CNT));
   } else {
     credential_duration_us_ = MAX_CREDENTIAL_IDLE_DURATION_US;
     is_inited_ = true;
@@ -1316,7 +1241,6 @@ int ObDeviceCredentialMgr::connect_to_sts(
     ret = OB_CURL_ERROR;
     LOG_WARN("fail to init curl", K(ret));
   } else if (OB_FAIL(credential_key.construct_signed_url(json_data, sizeof(json_data)))) {
-    LOG_WARN("fail to construct signed url", K(ret), K(credential_key));
   } else {
     CURLcode cc;
     int64_t http_code = 0;
@@ -1413,9 +1337,7 @@ int ObDeviceCredentialMgr::curl_credential(
   } else {
     ObDeviceCredentialKey credential_key;
     if (OB_FAIL(credential_key.init(storage_info))) {
-      LOG_WARN("failed to init credential key", K(ret), K(storage_info));
     } else if (OB_FAIL(curl_credential(credential_key, update_access_time))) {
-      LOG_WARN("failed to curl credential", K(ret), K(credential_key));
     }
   }
   return ret;
@@ -1437,12 +1359,10 @@ int ObDeviceCredentialMgr::curl_credential(
     ObArenaAllocator allocator(OB_DEVICE_CREDENTIAL_ALLOCATOR);
     ResponseAndAllocator res_and_allocator(response, allocator);
     if (OB_FAIL(connect_to_sts(credential_key, res_and_allocator))) {
-      LOG_WARN("fail to connect to sts", K(ret), K(credential_key));
     } else {
       ObObjectStorageCredential device_credential;
       CredentialAccessTimeCallBack read_callback(false /*update_access_time*/);
       if (OB_FAIL(parse_device_credential_(res_and_allocator.response_, device_credential))) {
-        LOG_WARN("fail to parse device credential", K(ret), K(res_and_allocator.response_), K(credential_key));
       } else {
         SpinWLockGuard w_guard(credential_lock_);
         if (update_access_time) {
@@ -1462,7 +1382,6 @@ int ObDeviceCredentialMgr::curl_credential(
 
         if (FAILEDx(credential_map_.set_refactored(
                 credential_key, device_credential, true /*overwrite*/))) {
-          LOG_WARN("fail to set refactored", K(ret), K(credential_key), K(device_credential));
         }
       }
     }
@@ -1483,9 +1402,7 @@ int ObDeviceCredentialMgr::get_credential(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("storage_info is invalid", K(ret), K(storage_info));
   } else if (OB_FAIL(credential_key.init(storage_info))) {
-    LOG_WARN("failed to init credential key", K(ret), K(storage_info));
   } else if (OB_FAIL(get_credential(credential_key, device_credential))) {
-    LOG_WARN("failed to get credential", K(ret), K(storage_info), K(credential_key));
   }
   return ret;
 }
@@ -1504,9 +1421,7 @@ int ObDeviceCredentialMgr::get_credential(
     if (OB_HASH_NOT_EXIST == ret) {
       ret = OB_SUCCESS;  // ignore ret
       if (OB_FAIL(curl_credential(credential_key, true /*update_access_time*/))) {
-        LOG_WARN("fail to curl credential", K(ret), K(credential_key));
       } else if (OB_FAIL(get_credential_from_map_(credential_key, device_credential))) {
-        LOG_WARN("fail to get_refactored", K(ret), K(credential_key));
       }
     } else {
       LOG_WARN("fail to get_refactored", K(ret), K(credential_key));
@@ -1521,18 +1436,12 @@ int ObDeviceCredentialMgr::get_credential(
     if (remained_time_us < CREDENTIAL_TASK_SCHEDULE_INTERVAL_US / 2) {
       ObObjectStorageCredential tmp_credential;
       if (OB_TMP_FAIL(curl_credential(credential_key, true/*update_access_time*/))) {
-        LOG_WARN("fail to refresh the nearly expiring credential", K(ret),
-            K(tmp_ret), K(credential_key), K(device_credential), K(remained_time_us));
       } else {
         LOG_INFO("succeed refreshing the cached credential",
             K(credential_key), K(remained_time_us));
 
         if (OB_TMP_FAIL(get_credential_from_map_(credential_key, tmp_credential))) {
-          LOG_WARN("fail to get refreshed credential",
-              K(ret), K(tmp_ret), K(credential_key), K(remained_time_us));
         } else if (OB_FAIL(device_credential.assign(tmp_credential))) {
-          LOG_WARN("succeed refreshing the cached credential but fail to assign",
-              K(ret), K(credential_key), K(remained_time_us));
         }
       }
     }
@@ -1562,9 +1471,7 @@ int ObDeviceCredentialMgr::get_credential_from_map_(
   } else {
     CredentialAccessTimeCallBack callback(true /*update_access_time*/);
     if (OB_FAIL(credential_map_.get_refactored(credential_key, device_credential))) {
-      LOG_WARN("fail to get_refactored", K(ret), K(credential_key));
     } else if (OB_FAIL(credential_map_.atomic_refactored(credential_key, callback))) {
-      LOG_WARN("fail to update access time", K(ret), K(device_credential), K(credential_key));
     }
   }
   return ret;
@@ -1593,7 +1500,6 @@ int64_t ObDeviceCredentialMgr::on_write_data_(
       char *tmp_response = nullptr;
       const int64_t prev_response_size = STRLEN(response);
       if (OB_FAIL(ob_dup_cstring(tmp_allocator, ObString(response), tmp_response))) {
-        LOG_WARN("fail to dup cstring", K(ret), K(response), K(prev_response_size));
       }
       // 2. copy previous response data and current response data to response
       if (OB_SUCC(ret)) {
@@ -1611,7 +1517,6 @@ int64_t ObDeviceCredentialMgr::on_write_data_(
     } else {  // first time to receive response data
       // copy response data to response
       if (OB_FAIL(ob_dup_cstring(allocator, ObString(static_cast<const char *>(ptr)), response))) {
-        LOG_WARN("fail to dup cstring", K(ret), K(ptr), K(size), K(nmemb));
       }
     }
   }
@@ -1631,9 +1536,7 @@ int ObDeviceCredentialMgr::parse_device_credential_(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("res_ptr is null", K(ret));
   } else if (OB_FAIL(parser.init(&allocator))) {
-    LOG_WARN("parser init failed", K(ret));
   } else if (OB_FAIL(parser.parse(res_ptr, STRLEN(res_ptr), root))) {
-    LOG_WARN("parse json failed", K(ret));
   } else if (OB_ISNULL(root)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("no root value", K(ret));
@@ -1715,12 +1618,9 @@ int ObDeviceCredentialMgr::parse_device_credential_(
             security_token.empty(), "expiration", expiration);
       } else if (OB_FAIL(databuff_printf(credential.access_id_, sizeof(credential.access_id_),
                      "%.*s", access_key_id.length(), access_key_id.ptr()))) {
-        LOG_WARN("failed to set credential access id", K(ret), K(access_key_id));
       } else if (OB_FAIL(databuff_printf(credential.access_key_, sizeof(credential.access_key_),
                      "%.*s", access_key_secret.length(), access_key_secret.ptr()))) {
-        LOG_WARN("failed to set credential access key", K(ret), K(access_key_secret.length()));
       } else if (OB_FAIL(credential.sts_token_.set(security_token))) {
-        LOG_WARN("failed to set credential sts token", K(ret));
       } else {
         if (OB_UNLIKELY(expiration < CREDENTIAL_TASK_SCHEDULE_INTERVAL_US / 1000LL / 1000LL / 2)) {
           ret = OB_ERR_UNEXPECTED;
@@ -1751,13 +1651,9 @@ int ObDeviceCredentialMgr::refresh()
         ObDeviceCredentialKey &tmp_key = iter->first;
         if (ObTimeUtility::current_time() - iter->second.access_time_us_ >= credential_duration_us_) {
           if (OB_FAIL(credential_key_to_delete.push_back(tmp_key))) {
-            LOG_WARN("failed to push back into credential key array", K(ret),
-                K(credential_key_to_delete), K(tmp_key), K_(credential_duration_us));
           }
         } else {
           if (OB_FAIL(credential_key_to_refresh.push_back(tmp_key))) {
-            LOG_WARN("failed to push back into credential key array", K(ret),
-                K(credential_key_to_refresh), K(tmp_key), K_(credential_duration_us));
           }
         }
         ++iter;
@@ -1766,7 +1662,6 @@ int ObDeviceCredentialMgr::refresh()
     //A write lock is requested in curl_credential, so the above read lock needs to be released as soon as possible
     for (int64_t i = 0; OB_SUCC(ret) && i < credential_key_to_refresh.count(); i++) {
       if (OB_FAIL(curl_credential(credential_key_to_refresh[i], false /*update_access_time*/))) {
-        LOG_WARN("failed to refresh credential", K(ret), K(i), K(credential_key_to_refresh));
       }
     }
     // Minimize the scope of write locks

@@ -108,9 +108,7 @@ int ObDictColumnEncoder::do_store_dict_ref_(ObMicroBufferWriter &buf_writer)
   ObIntegerStreamEncoder integer_encoder;
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(integer_encoder.encode(ref_enc_ctx_, ref_arr, dict_encoding_meta_.ref_row_cnt_, buf_writer))) {
-    STORAGE_LOG(WARN, "fail to store ref integer stream", K(ret), K(ref_enc_ctx_), K_(dict_encoding_meta));
   } else if (OB_FAIL(stream_offsets_.push_back((uint32_t)buf_writer.length()))) {
-    STORAGE_LOG(WARN, "fail to push back ref stream offset", K(ret));
   } else {
     int_stream_encoding_types_[int_stream_idx_] = ref_enc_ctx_.meta_.get_encoding_type();
     int_stream_idx_++;

@@ -62,7 +62,6 @@ int ObMicroBlockHashIndexBuilder::init_if_needed(const ObDataStoreDesc *data_sto
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument to init micro hash index block builder", K(ret), KPC(data_store_desc));
   } else if (OB_FAIL(check_need_build_hash_index(*data_store_desc, need_build))) {
-    STORAGE_LOG(WARN, "Failed to check if need build has index", K(ret));
   } else if (need_build) {
     row_index_ = 0;
     count_ = 0;
@@ -87,9 +86,7 @@ int ObMicroBlockHashIndexBuilder::add(const ObDatumRow &row)
     uint64_t hash_value = 0;
     ObDatumRowkey tmp_rowkey;
     if (OB_FAIL(tmp_rowkey.assign(row.storage_datums_, schema_rowkey_col_cnt))) {
-      STORAGE_LOG(WARN, "Failed to assign rowkey", K(ret), K(row), K(schema_rowkey_col_cnt));
     } else if (OB_FAIL(tmp_rowkey.murmurhash(0, datum_utils, hash_value))) {
-      STORAGE_LOG(WARN, "Failed to calc rowkey hash", K(ret), K(tmp_rowkey), K(datum_utils));
     } else if (OB_FAIL(internal_add(hash_value, row_index_))) {
       if (ret != OB_NOT_SUPPORTED) {
         STORAGE_LOG(WARN, "Failed to add row index to hash_index", K(ret), K(row_index_));
@@ -137,11 +134,8 @@ int ObMicroBlockHashIndexBuilder::build_block(ObMicroBufferWriter &buffer)
       if ((collision_count * ObMicroBlockHashIndex::MAX_COLLISION_RATIO) <= count_) {
         const uint8_t reserved_byte = ObMicroBlockHashIndex::RESERVED_BYTE;
         if (OB_FAIL(buffer.write(reserved_byte))) {
-          STORAGE_LOG(WARN, "Data buffer fail to write reserved byte", K(ret), K(num_buckets), K(count_), K(reserved_byte));
         } else if (OB_FAIL(buffer.write(num_buckets))) {
-          STORAGE_LOG(WARN, "Data buffer fail to write hash index buckets number", K(ret), K(num_buckets), K(count_));
         } else if (OB_FAIL(buffer.write(reinterpret_cast<const void *>(buckets_), num_buckets))) {
-          STORAGE_LOG(WARN, "Data buffer fail to write hash index buckets", K(ret), K(num_buckets), K(count_));
         }
       } else {
         ret = OB_NOT_SUPPORTED;

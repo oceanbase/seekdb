@@ -80,9 +80,7 @@ int ObAllVirtualIOCalibrationStatus::init(const common::ObAddr &addr)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_addr(addr))) {
-    LOG_WARN("init failed", K(ret), K(addr));
   } else if (OB_FAIL(ObIOCalibration::get_instance().get_benchmark_status(start_ts_, finish_ts_, ret_code_))) {
-    LOG_WARN("get io benchmark timestamp failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -181,9 +179,7 @@ int ObAllVirtualIOBenchmark::init(const common::ObAddr &addr)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_addr(addr))) {
-    LOG_WARN("init failed", K(ret), K(addr));
   } else if (OB_FAIL(ObIOCalibration::get_instance().get_io_ability(io_ability_))) {
-    LOG_WARN("get io ability failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -307,7 +303,6 @@ int ObAllVirtualIOQuota::init(const common::ObAddr &addr)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_addr(addr))) {
-    LOG_WARN("init failed", K(ret), K(addr));
   } else {
     {
       ObRefHolder<ObTenantIOManager> tenant_holder;
@@ -319,9 +314,7 @@ int ObAllVirtualIOQuota::init(const common::ObAddr &addr)
           LOG_WARN("tenant not exist", K(ret), K(1UL));
         }
       } else if (OB_FAIL(record_user_group( tenant_holder.get_ptr()->get_io_usage(), tenant_holder.get_ptr()->get_io_config()))) {
-        LOG_WARN("fail to record user group item", K(ret), K(1UL), K(tenant_holder.get_ptr()->get_io_config()));
       } else if (OB_FAIL(record_sys_group( tenant_holder.get_ptr()->get_sys_io_usage()))) {
-        LOG_WARN("fail to record sys group item", K(ret), K(1UL));
       }
     }
     if (OB_SUCC(ret)) {
@@ -336,7 +329,6 @@ int ObAllVirtualIOQuota::init(const common::ObAddr &addr)
         read.real_iops_ = OB_IO_MANAGER.get_tc().get_net_ibw();
         read.max_iops_ = OB_IO_MANAGER.get_tc().get_device_bandwidth();
         if (OB_FAIL(quota_infos_.push_back(read))) {
-          LOG_WARN("fail to push ibw info", K(ret));
         }
       }
       if (obw > 0) {
@@ -348,7 +340,6 @@ int ObAllVirtualIOQuota::init(const common::ObAddr &addr)
         write.max_iops_ = OB_IO_MANAGER.get_tc().get_device_bandwidth();
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(quota_infos_.push_back(write))) {
-          LOG_WARN("fail to push obw info", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -392,7 +383,6 @@ int ObAllVirtualIOQuota::record_user_group(ObIOUsage &io_usage, const ObTenantIO
                                                group_min,
                                                group_max,
                                                group_weight))) {
-          LOG_WARN("get group config failed", K(ret), K(group_config_index));
         } else {
           LOG_INFO("get group config", K(ret), K(group_config_index), K(io_config), K(item), K(group_min), K(group_max), K(group_weight));
         }
@@ -417,7 +407,6 @@ int ObAllVirtualIOQuota::record_user_group(ObIOUsage &io_usage, const ObTenantIO
           item.min_iops_ = group_min == INT64_MAX ? INT64_MAX : static_cast<int64_t>((double)group_min * iops_scale);
           item.max_iops_ = group_max == INT64_MAX ? INT64_MAX : static_cast<int64_t>((double)group_max * iops_scale);
           if (OB_FAIL(quota_infos_.push_back(item))) {
-            LOG_WARN("push back io group item failed", K(i), K(ret), K(item));
           } else {
             LOG_INFO("push back item", K(ret), K(item));
           }
@@ -457,7 +446,6 @@ int ObAllVirtualIOQuota::record_sys_group(ObIOUsage &sys_io_usage)
         item.io_delay_us_ = info.at(i).avg_device_delay_us_;
         item.total_us_ = info.at(i).avg_total_delay_us_;
         if (OB_FAIL(quota_infos_.push_back(item))) {
-          LOG_WARN("push back io group item failed", K(i), K(ret), K(item));
         }
       }
     }
@@ -611,7 +599,6 @@ int ObAllVirtualGroupIOStat::init(const common::ObAddr &addr)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(init_addr(addr))) {
-    LOG_WARN("init failed", K(ret), K(addr));
   } else {
     {
       ObRefHolder<ObTenantIOManager> tenant_holder;
@@ -624,9 +611,7 @@ int ObAllVirtualGroupIOStat::init(const common::ObAddr &addr)
             LOG_WARN("tenant not exist", K(ret), K(1UL));
           }
         } else if (OB_FAIL(record_user_group_io_status(tenant_holder.get_ptr()))) {
-          LOG_WARN("fail to record group io status", K(ret), K(1UL));
         } else if (OB_FAIL(record_sys_group_io_status(tenant_holder.get_ptr()))) {
-          LOG_WARN("fail to record sys group io status", K(ret), K(1UL));
         }
       }
     }
@@ -648,9 +633,7 @@ int ObAllVirtualGroupIOStat::record_user_group_io_status(ObTenantIOManager *io_m
   } else {
     ObIOUsage io_usage;
     if (OB_FAIL(io_usage.init(2))) {
-      LOG_WARN("init io usage failed", K(ret));
     } else if (OB_FAIL(io_usage.assign(io_manager->get_io_usage()))) {
-      LOG_WARN("assign io usage failed", K(ret));
     } else {
       int tmp_ret = OB_SUCCESS;
       const ObTenantIOConfig io_config = io_manager->get_io_config();
@@ -688,12 +671,10 @@ int ObAllVirtualGroupIOStat::record_user_group_io_status(ObTenantIOManager *io_m
                                                       group_min_iops,
                                                       group_max_iops,
                                                       group_iops_weight))) {
-            LOG_WARN("get group io config failed", K(ret), K(local_group_config_index));
           } else if (OB_FAIL(io_config.get_group_config(remote_group_config_index,
                                                       group_min_net_bandwidth,
                                                       group_max_net_bandwidth,
                                                       group_net_bandwidth_weight))) {
-            LOG_WARN("get group net config failed", K(ret), K(remote_group_config_index));
           } else {
             // local read and remote read
             GroupIoStat read_item;
@@ -716,12 +697,9 @@ int ObAllVirtualGroupIOStat::record_user_group_io_status(ObTenantIOManager *io_m
                 info.at(local_read_index).avg_byte_, info.at(local_read_index).avg_iops_, ObIOMode::READ);
             if (OB_FAIL(convert_bandwidth_format(read_item.max_net_bandwidth_,
                                                  read_item.max_net_bandwidth_display_))) {
-              LOG_WARN("convert bandwidth format failed", K(ret), K(read_item));
             } else if (OB_FAIL(convert_bandwidth_format(read_item.real_net_bandwidth_,
                                                         read_item.real_net_bandwidth_display_))) {
-              LOG_WARN("convert bandwidth format failed", K(ret), K(read_item));
             } else if (OB_FAIL(group_io_stats_.push_back(read_item))) {
-              LOG_WARN("push back group io stat failed", K(ret), K(read_item));
             }
             // local write and remote write
             if (OB_FAIL(ret)) {
@@ -746,12 +724,9 @@ int ObAllVirtualGroupIOStat::record_user_group_io_status(ObTenantIOManager *io_m
                   info.at(local_write_index).avg_byte_, info.at(local_write_index).avg_iops_, ObIOMode::WRITE);
               if (OB_FAIL(convert_bandwidth_format(write_item.max_net_bandwidth_,
                                                    write_item.max_net_bandwidth_display_))) {
-                LOG_WARN("convert bandwidth format failed", K(ret), K(write_item));
               } else if (OB_FAIL(convert_bandwidth_format(write_item.real_net_bandwidth_,
                                                           write_item.real_net_bandwidth_display_))) {
-                LOG_WARN("convert bandwidth format failed", K(ret), K(write_item));
               } else if (OB_FAIL(group_io_stats_.push_back(write_item))) {
-                LOG_WARN("push back group io stat failed", K(ret), K(write_item));
               }
             }
           }
@@ -775,9 +750,7 @@ int ObAllVirtualGroupIOStat::record_sys_group_io_status(ObTenantIOManager *io_ma
     const int64_t GROUP_MODE_CNT = static_cast<int64_t>(ObIOGroupMode::MODECNT);
     ObIOUsage sys_io_usage;
     if (OB_FAIL(sys_io_usage.init(2))) {
-      LOG_WARN("init io usage failed", K(ret));
     } else if (OB_FAIL(sys_io_usage.assign(io_manager->get_sys_io_usage()))) {
-      LOG_WARN("assign io usage failed", K(ret));
     } else {
       sys_io_usage.calculate_io_usage();
       const ObIOUsageInfoArray &info = sys_io_usage.get_io_usage();
@@ -820,12 +793,9 @@ int ObAllVirtualGroupIOStat::record_sys_group_io_status(ObTenantIOManager *io_ma
                 info.at(local_read_index).avg_byte_, info.at(local_read_index).avg_iops_, ObIOMode::READ);
             if (OB_FAIL(convert_bandwidth_format(read_item.max_net_bandwidth_,
                                                  read_item.max_net_bandwidth_display_))) {
-                LOG_WARN("convert bandwidth format failed", K(ret), K(read_item));
             } else if (OB_FAIL(convert_bandwidth_format(read_item.real_net_bandwidth_,
                                                         read_item.real_net_bandwidth_display_))) {
-              LOG_WARN("convert bandwidth format failed", K(ret), K(read_item));
             } else if (OB_FAIL(group_io_stats_.push_back(read_item))) {
-              LOG_WARN("push back group io stat failed", K(ret), K(read_item));
             }
             // local write and remote write
             if (OB_FAIL(ret)) {
@@ -849,12 +819,9 @@ int ObAllVirtualGroupIOStat::record_sys_group_io_status(ObTenantIOManager *io_ma
                   info.at(local_write_index).avg_byte_, info.at(local_write_index).avg_iops_, ObIOMode::WRITE);
               if (OB_FAIL(convert_bandwidth_format(write_item.max_net_bandwidth_,
                                                    write_item.max_net_bandwidth_display_))) {
-                  LOG_WARN("convert bandwidth format failed", K(ret), K(write_item));
               } else if (OB_FAIL(convert_bandwidth_format(write_item.real_net_bandwidth_,
                                                           write_item.real_net_bandwidth_display_))) {
-                LOG_WARN("convert bandwidth format failed", K(ret), K(write_item));
               } else if (OB_FAIL(group_io_stats_.push_back(write_item))) {
-                LOG_WARN("push back group io stat failed", K(ret), K(write_item));
               } 
             }
           }
@@ -1000,7 +967,6 @@ int ObAllVirtualFunctionIOStat::init(const common::ObAddr &addr)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_addr(addr))) {
-    LOG_WARN("init failed", K(ret), K(addr));
   } else {
     {
       ObRefHolder<ObTenantIOManager> tenant_holder;
@@ -1012,7 +978,6 @@ int ObAllVirtualFunctionIOStat::init(const common::ObAddr &addr)
           LOG_WARN("tenant not exist", K(ret), K(1UL));
         }
       } else if (OB_FAIL(record_function_info(tenant_holder.get_ptr()->get_io_func_infos().func_usages_))) {
-        LOG_WARN("fail to record function item", K(ret), K(1UL));
       }
     }
     if (OB_SUCC(ret)) {
@@ -1053,7 +1018,6 @@ int ObAllVirtualFunctionIOStat::record_function_info(const ObIOFuncUsageArr &fun
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(func_infos_.push_back(item))) {
-          LOG_WARN("fail to push back func info", K(ret), K(item));
         }
       }
     }

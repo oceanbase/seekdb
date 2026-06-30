@@ -392,7 +392,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_SUCCESS != (ret = destroy())) {
-      LIB_LOG(WARN, "failed to destroy hash map", K(ret));
     }
   }
   // Initialization & destruction.
@@ -659,7 +658,6 @@ int ObLinearHashMap<Key, Value, MemMgrTag>::HashMapMemMgrCore::init()
   ret = node_alloc_.init(static_cast<int64_t>(sizeof(Node)),
                          SET_USE_500(ObMemAttr("LinearHashMapNo")));
   if (OB_FAIL(ret)) {
-    LIB_LOG(WARN, "failed to init node alloc", K(ret));
   }
   return ret;
 }
@@ -674,7 +672,6 @@ ObLinearHashMap<Key, Value, MemMgrTag>::HashMapMemMgrCore::~HashMapMemMgrCore()
     }
   }
   if (OB_SUCCESS != (ret = node_alloc_.destroy())) {
-    LIB_LOG(ERROR, "failed to destroy node alloc", K(ret));
   }
 }
 
@@ -688,7 +685,6 @@ ObLinearHashMap<Key, Value, MemMgrTag>::HashMapMemMgrCore::get_instance()
     {
       int ret = OB_SUCCESS;
       if (OB_FAIL(core.init())) {
-        LIB_LOG(ERROR, "failed to init MemMgrCore", K(ret));
       }
     }
   };
@@ -728,13 +724,10 @@ void ObLinearHashMap<Key, Value, MemMgrTag>::HashMapMemMgrCore::add_map(void *pt
   int ret = OB_SUCCESS;
   int lock_ret = OB_SUCCESS;
   if (OB_SUCCESS != (lock_ret = map_array_lock_.lock())) {
-    LIB_LOG(ERROR, "err lock map array lock", K(lock_ret));
   }
   if (OB_SUCCESS != (ret = map_array_.push_back(ptr))) {
-    LIB_LOG(WARN, "failed to push back map array", K(ret), K(ptr));
   }
   if (OB_SUCCESS != (lock_ret = map_array_lock_.unlock())) {
-    LIB_LOG(ERROR, "err unlock map array lock", K(lock_ret));
   }
 };
 
@@ -744,7 +737,6 @@ void ObLinearHashMap<Key, Value, MemMgrTag>::HashMapMemMgrCore::rm_map(void *ptr
   int ret = OB_SUCCESS;
   int lock_ret = OB_SUCCESS;
   if (OB_SUCCESS != (lock_ret = map_array_lock_.lock())) {
-    LIB_LOG(ERROR, "err lock map array lock", K(lock_ret));
   }
   int64_t idx = -1;
   for (int64_t i = 0; (i < map_array_.count()) && (-1 == idx); ++i) {
@@ -756,7 +748,6 @@ void ObLinearHashMap<Key, Value, MemMgrTag>::HashMapMemMgrCore::rm_map(void *ptr
     LIB_LOG(WARN, "failed to remove map array", K(ret), K(idx), K(ptr));
   }
   if (OB_SUCCESS != (lock_ret = map_array_lock_.unlock())) {
-    LIB_LOG(ERROR, "err unlock map array lock", K(lock_ret));
   }
 };
 
@@ -939,7 +930,6 @@ int ObLinearHashMap<Key, Value, MemMgrTag>::init(uint64_t m_seg_sz, uint64_t s_s
   if (!init_) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = destroy())) {
-      LIB_LOG(ERROR, "clear init fail memory failed", K(tmp_ret), K(ret));
     } else {
       LIB_LOG(ERROR, "init counter failed", K(ret));
     }
@@ -1132,7 +1122,6 @@ void ObLinearHashMap<Key, Value, MemMgrTag>::es_lock_()
 {
   int ret = eslock_.lock();
   if (OB_SUCCESS != ret) {
-    LIB_LOG(ERROR, "err lock eslock", K(ret));
   }
 }
 
@@ -1141,7 +1130,6 @@ void ObLinearHashMap<Key, Value, MemMgrTag>::es_unlock_()
 {
   int ret = eslock_.unlock();
   if (OB_SUCCESS != ret) {
-    LIB_LOG(ERROR, "err unlock eslock", K(ret));
   }
 }
 

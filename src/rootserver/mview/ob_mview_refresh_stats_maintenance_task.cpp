@@ -120,18 +120,15 @@ void ObMViewRefreshStatsMaintenanceTask::runTimerTask()
     switch (status_) {
       case StatusType::PREPARE:
         if (OB_FAIL(prepare())) {
-          LOG_WARN("fail to prepare", KR(ret));
         }
         break;
       case StatusType::PURGE:
         if (OB_FAIL(purge())) {
-          LOG_WARN("fail to purge", KR(ret));
         }
         break;
       case StatusType::SUCCESS:
       case StatusType::FAIL:
         if (OB_FAIL(finish())) {
-          LOG_WARN("fail to finish", KR(ret));
         }
         break;
       default:
@@ -191,7 +188,6 @@ int ObMViewRefreshStatsMaintenanceTask::purge()
     if (OB_FAIL(ObMViewInfo::batch_fetch_mview_ids(*GCTX.sql_proxy_,
                                                    last_fetch_mview_id_, mview_ids_,
                                                    MVIEW_NUM_FETCH_PER_SCHED))) {
-      LOG_WARN("fail to batch fetch mview ids", KR(ret), K(last_fetch_mview_id_));
     } else {
       fetch_mview_num_ += mview_ids_.count();
       fetch_finish_ = mview_ids_.count() < MVIEW_NUM_FETCH_PER_SCHED;
@@ -212,7 +208,6 @@ int ObMViewRefreshStatsMaintenanceTask::purge()
       if (OB_FAIL(ObMViewRefreshStatsParams::fetch_mview_refresh_stats_params(
             *GCTX.sql_proxy_, mview_id, refresh_stats_params,
             true /*with_sys_defaults*/))) {
-        LOG_WARN("fail to fetch mview refresh stats params", KR(ret), K(mview_id));
       } else if (refresh_stats_params.get_retention_period() == -1) {
         // never be purged, skip
         affected_rows = 0;
@@ -221,8 +216,6 @@ int ObMViewRefreshStatsMaintenanceTask::purge()
         filter_param.set_retention_period(refresh_stats_params.get_retention_period());
         if (OB_FAIL(ObMViewRefreshStatsPurgeUtil::purge_refresh_stats(
               *GCTX.sql_proxy_, filter_param, affected_rows, limit))) {
-          LOG_WARN("fail to purge refresh stats", KR(ret), K(filter_param),
-                   K(limit));
         }
       }
       if (OB_SUCC(ret)) {

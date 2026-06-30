@@ -53,7 +53,6 @@ int ObDirectLoadTmpFileHandle::assign(const ObDirectLoadTmpFileHandle &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(set_file(other.tmp_file_))) {
-    LOG_WARN("fail to set file", KR(ret));
   }
   return ret;
 }
@@ -107,7 +106,6 @@ int ObDirectLoadTmpFilesHandle::add_file(ObDirectLoadTmpFile *tmp_file)
     LOG_WARN("invalid args", KR(ret), KPC(tmp_file));
   } else {
     if (OB_FAIL(tmp_file_list_.push_back(tmp_file))) {
-      LOG_WARN("fail to push back", KR(ret));
     } else {
       tmp_file->inc_ref_count();
     }
@@ -151,14 +149,12 @@ int ObDirectLoadTmpFileIOHandle::open(const ObDirectLoadTmpFileHandle &file_hand
     LOG_WARN("invalid args", KR(ret), K(file_handle));
   } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.get_tmp_file_size(
                      tmp_file->get_file_id().fd_, file_size))) {
-    LOG_WARN("fail to get tmp file size", KR(ret), KPC(tmp_file));
   } else if (OB_UNLIKELY(file_size != tmp_file->get_file_size())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected file size", KR(ret), K(file_size), KPC(tmp_file));
   } else {
     reset();
     if (OB_FAIL(file_handle_.assign(file_handle))) {
-      LOG_WARN("fail to assign file handle", KR(ret));
     } else {
       tmp_file_ = tmp_file;
       io_info_.dir_id_ = tmp_file_->get_file_id().dir_id_;
@@ -203,7 +199,6 @@ int ObDirectLoadTmpFileIOHandle::pread(char *buf, int64_t size, int64_t offset)
     io_info_.disable_page_cache_ = true;
     while (OB_SUCC(ret)) {
       if (OB_FAIL(check_status())) {
-        LOG_WARN("fail to check status", KR(ret));
       } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.pread(io_info_, offset, file_io_handle_))) {
         LOG_WARN("fail to do pread from tmp file", KR(ret), K_(io_info), K(offset));
         if (OB_LIKELY(is_retry_err(ret))) {
@@ -240,7 +235,6 @@ int ObDirectLoadTmpFileIOHandle::write(char *buf, int64_t size)
     io_info_.disable_page_cache_ = false;
     while (OB_SUCC(ret)) {
       if (OB_FAIL(check_status())) {
-        LOG_WARN("fail to check status", KR(ret));
       }
       // TODO(suzhi.yt): Keep the original call for now, aio_write submission success is equivalent to write success
       else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.aio_write(io_info_, file_io_handle_))) {
@@ -251,7 +245,6 @@ int ObDirectLoadTmpFileIOHandle::write(char *buf, int64_t size)
             int64_t new_file_size = 0;
             if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.get_tmp_file_size(
                         tmp_file_->get_file_id().fd_, new_file_size))) {
-              LOG_WARN("fail to get tmp file size", KR(ret), KPC_(tmp_file));
             } else {
               const int64_t write_size = new_file_size - tmp_file_->get_file_size();
               tmp_file_->inc_file_size(write_size);
@@ -286,7 +279,6 @@ int ObDirectLoadTmpFileIOHandle::wait()
     int64_t retry_cnt = 0;
     while (OB_SUCC(ret)) {
       if (OB_FAIL(check_status())) {
-        LOG_WARN("fail to check status", KR(ret));
       } else if (file_io_handle_.is_valid() && OB_FAIL(file_io_handle_.wait())) {
         LOG_WARN("fail to wait io finish", KR(ret));
         if (OB_LIKELY(is_retry_err(ret))) {
@@ -311,7 +303,6 @@ int ObDirectLoadTmpFileIOHandle::seal()
     ret = OB_FILE_NOT_EXIST;
     LOG_WARN("tmp file not set", KR(ret));
   } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.seal(io_info_.fd_))) {
-    LOG_WARN("failed to seal tmp file", KR(ret), K_(io_info));
   }
   return ret;
 }
@@ -337,7 +328,6 @@ int ObDirectLoadTmpFileManager::init()
     LOG_WARN("ObDirectLoadTmpFileManager init twice", KR(ret), KP(this));
   } else {
     if (OB_FAIL(file_allocator_.init("TLD_FilePool"))) {
-      LOG_WARN("fail to init allocator", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -352,7 +342,6 @@ int ObDirectLoadTmpFileManager::alloc_dir(int64_t &dir_id)
     ret = OB_NOT_INIT;
     LOG_WARN("ObDirectLoadTmpFileManager not init", KR(ret), KP(this));
   } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.alloc_dir(dir_id))) {
-    LOG_WARN("fail to alloc dir", KR(ret));
   }
   return ret;
 }
@@ -372,12 +361,10 @@ int ObDirectLoadTmpFileManager::alloc_file(int64_t dir_id,
     ObDirectLoadTmpFileId file_id;
     file_id.dir_id_ = dir_id;
     if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.open(file_id.fd_, file_id.dir_id_))) {
-      LOG_WARN("fail to open file", KR(ret));
     } else if (OB_ISNULL(tmp_file = file_allocator_.alloc(this, file_id))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc tmp file", KR(ret));
     } else if (OB_FAIL(tmp_file_handle.set_file(tmp_file))) {
-      LOG_WARN("fail to set file", KR(ret));
     }
     if (OB_FAIL(ret)) {
       if (nullptr != tmp_file) {

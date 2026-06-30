@@ -39,7 +39,6 @@ int ObContextSqlService::insert_context(const ObContextSchema &context_schema,
     SHARE_SCHEMA_LOG(WARN, "context_schema is invalid", K(context_schema.get_namespace()), K(ret));
   } else {
     if (OB_FAIL(add_context(*sql_client, context_schema))) {
-      LOG_WARN("failed to add context", K(ret));
     } else {
       ObSchemaOperation opt;
       
@@ -49,7 +48,6 @@ int ObContextSqlService::insert_context(const ObContextSchema &context_schema,
       opt.schema_version_ = context_schema.get_schema_version();
       opt.ddl_stmt_str_ = (NULL != ddl_stmt_str) ? *ddl_stmt_str : ObString();
       if (OB_FAIL(log_operation(opt, *sql_client))) {
-        LOG_WARN("Failed to log operation", K(ret));
       }
     }
   }
@@ -75,9 +73,7 @@ int ObContextSqlService::alter_context(const ObContextSchema &context_schema,
       // udpate __all_context table
       int64_t affected_rows = 0;
       if (OB_FAIL(format_dml_sql(context_schema, dml, is_history))) {
-        LOG_WARN("failed to get dml sql", K(ret));
       } else if (FAILEDx(exec.exec_update(OB_ALL_CONTEXT_TNAME, dml, affected_rows))) {
-        LOG_WARN("execute update sql fail", K(ret));
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("update should affect only 1 row", K(affected_rows), K(ret));
@@ -88,10 +84,6 @@ int ObContextSqlService::alter_context(const ObContextSchema &context_schema,
     if (OB_SUCC(ret)) {
       const bool only_history = true;
       if (OB_FAIL(add_context(*sql_client, context_schema, only_history))) {
-        LOG_WARN("add_context failed",
-                 K(context_schema.get_namespace()),
-                 K(only_history),
-                 K(ret));
       }
     }
 
@@ -105,7 +97,6 @@ int ObContextSqlService::alter_context(const ObContextSchema &context_schema,
       opt.schema_version_ = context_schema.get_schema_version();
       opt.ddl_stmt_str_ = (NULL != ddl_stmt_str) ? *ddl_stmt_str : ObString();
       if (OB_FAIL(log_operation(opt, *sql_client))) {
-        LOG_WARN("Failed to log operation", K(opt), K(ret));
       }
     }
   }
@@ -137,10 +128,7 @@ int ObContextSqlService::delete_context(const uint64_t context_id,
                 ObSchemaUtils::get_extract_schema_id(context_id),
                 ctx_namespace.ptr(),
                 new_schema_version, IS_DELETED))) {
-      LOG_WARN("assign insert into all tenant context history fail",
-               K(context_id), K(ret));
     } else if (OB_FAIL(sql_client->write(sql.ptr(), affected_rows))) {
-      LOG_WARN("execute sql fail", K(sql), K(ret));
     } else if (1 != affected_rows) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("no row has inserted", K(ret));
@@ -150,9 +138,7 @@ int ObContextSqlService::delete_context(const uint64_t context_id,
     if (FAILEDx(sql.assign_fmt("DELETE FROM %s WHERE context_id=%lu",
                                OB_ALL_CONTEXT_TNAME,
                                ObSchemaUtils::get_extract_schema_id(context_id)))) {
-      LOG_WARN("append_fmt failed", K(ret));
     } else if (OB_FAIL(sql_client->write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", K(sql), K(ret));
     } else if (1 != affected_rows) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("no row deleted", K(sql), K(affected_rows), K(ret));
@@ -174,7 +160,6 @@ int ObContextSqlService::delete_context(const uint64_t context_id,
       opt.schema_version_ = new_schema_version;
       opt.ddl_stmt_str_ = (NULL != ddl_stmt_str) ? *ddl_stmt_str : ObString();
       if (OB_FAIL(log_operation(opt, *sql_client))) {
-        LOG_WARN("Failed to log operation", K(ret));
       }
     }
   }
@@ -206,7 +191,6 @@ int ObContextSqlService::drop_context(const ObContextSchema &context_schema,
   } else if (OB_FAIL(delete_context(context_id, ctx_namespace,
                                     new_schema_version, context_schema.get_context_type(),
                                     sql_client, ddl_stmt_str))) {
-    LOG_WARN("failed to delete context", K(context_schema.get_namespace()), K(ret));
   } else {
     need_clean = (ACCESSED_GLOBALLY == context_schema.get_context_type());
   }
@@ -230,9 +214,7 @@ int ObContextSqlService::add_context(common::ObISQLClient &sql_client,
     if (only_history && 0 == STRCMP(tname[i], OB_ALL_CONTEXT_TNAME)) {
       continue;
     } else if (OB_FAIL(format_dml_sql(context_schema, dml, is_history))) {
-      LOG_WARN("failed to format dml sql", K(ret));
     } else if (OB_FAIL(exec.exec_insert(tname[i], dml, affected_rows))) {
-      LOG_WARN("failed to exec insert", K(ret));
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected value", K(affected_rows), K(ret));

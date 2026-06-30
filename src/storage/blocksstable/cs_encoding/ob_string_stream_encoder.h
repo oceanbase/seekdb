@@ -83,7 +83,6 @@ int ObStringStreamEncoder::do_convert_datum_to_stream_(ObIDatumIter &iter)
       // remain size is not enough to hold umcompress_len and offset_array_len, which is possible
       // if the fixed-length data use variable-length encoding due to existing many null values.
       if (OB_FAIL(all_string_writer_->ensure_space(umcompress_len))) {
-        STORAGE_LOG(WARN, "fail to ensure space", K(ret), K(umcompress_len), K(offset_arr_len));
       } else {
         byte_arr_ = all_string_writer_->current();
         if (OB_ISNULL(offset_arr_ = ctx_->info_.allocator_->alloc(offset_arr_len))) {
@@ -92,7 +91,6 @@ int ObStringStreamEncoder::do_convert_datum_to_stream_(ObIDatumIter &iter)
         }
       }
     } else if (OB_FAIL(all_string_writer_->ensure_space(umcompress_len + offset_arr_len))) {
-      STORAGE_LOG(WARN, "fail to ensure space", K(ret), K(umcompress_len), K(offset_arr_len));
     } else {
       byte_arr_ = all_string_writer_->current();
       offset_arr_ = byte_arr_ + umcompress_len; 
@@ -150,7 +148,6 @@ int ObStringStreamEncoder::do_convert_datum_to_stream_(ObIDatumIter &iter)
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "unexpected datum count and bytes len", K(ret), K(i), K(iter.size()), K(pos), K(umcompress_len));
     } else if (OB_FAIL(all_string_writer_->advance(umcompress_len))) {
-      STORAGE_LOG(WARN, "fail to advance all_string_writer_", K(ret), K(umcompress_len));
     }
   }
 
@@ -172,7 +169,6 @@ int ObStringStreamEncoder::do_encode_offset_stream_(ObIArray<uint32_t> &stream_o
       STORAGE_LOG(WARN, "max string offset must equal to total_bytes_len_", K(ret), K(end_offset), KPC_(ctx));
     } else if (OB_FAIL(int_ctx_.build_offset_array_stream_meta(
         end_offset, ctx_->info_.raw_encoding_str_offset_, ctx_->info_.major_working_cluster_version_))) {
-      STORAGE_LOG(WARN, "fail to build_offset_array_stream_meta", KR(ret));
     } else if (OB_FAIL(int_ctx_.build_stream_encoder_info(
                                 false/*has_null*/,
                                 true/*monotonic inc*/,
@@ -180,11 +176,8 @@ int ObStringStreamEncoder::do_encode_offset_stream_(ObIArray<uint32_t> &stream_o
                                 ctx_->info_.previous_encoding_, ctx_->info_.int_stream_idx_,
                                 ctx_->info_.compressor_type_,
                                 ctx_->info_.allocator_))) {
-      STORAGE_LOG(WARN, "fail to build_stream_encoder_info", K(ret));
     } else if (OB_FAIL(int_encoder.encode(int_ctx_, offset_arr, offset_arr_count_, *writer_))) {
-      STORAGE_LOG(WARN, "fail to encode string offset", KR(ret));
     } else if (OB_FAIL(stream_offset_arr.push_back((uint32_t)writer_->length()))) {
-      STORAGE_LOG(WARN, "fail to push back", KPC(writer_), KR(ret));
     }
   }
 

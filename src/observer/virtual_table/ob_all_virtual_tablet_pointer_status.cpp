@@ -162,7 +162,6 @@ int ObAllVirtualTabletPtr::inner_get_next_row(ObNewRow *&row)
         case OLD_CHAIN:
           MEMSET(old_chain_, 0, STR_LEN);
           if (OB_FAIL(share::g_mp->tenant_meta_mem_mgr()->print_old_chain(key, *tablet_pointer, STR_LEN, old_chain_))) {
-            SERVER_LOG(WARN, "fail to print old chain", K(ret), K(key), KPC(tablet_pointer));
           } else {
             cur_row_.cells_[i].set_varchar(old_chain_);
             cur_row_.cells_[i].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));

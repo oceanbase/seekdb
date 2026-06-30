@@ -47,7 +47,6 @@ int ObDirectLoadMultipleHeapTableDataFragment::assign(
   row_count_ = other.row_count_;
   max_block_size_ = other.max_block_size_;
   if (OB_FAIL(file_handle_.assign(other.file_handle_))) {
-    LOG_WARN("fail to assign file handle", KR(ret));
   }
   return ret;
 }
@@ -165,9 +164,7 @@ int ObDirectLoadMultipleHeapTable::init(const ObDirectLoadMultipleHeapTableCreat
     meta_.row_count_ = param.row_count_;
     meta_.max_data_block_size_ = param.max_data_block_size_;
     if (OB_FAIL(index_file_handle_.assign(param.index_file_handle_))) {
-      LOG_WARN("fail to assign file handle", KR(ret));
     } else if (OB_FAIL(data_fragments_.assign(param.data_fragments_))) {
-      LOG_WARN("fail to assign data fragments", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -206,7 +203,6 @@ int ObDirectLoadMultipleHeapTable::get_tablet_row_count(
     const ObDirectLoadMultipleHeapTableTabletIndex *tablet_index = nullptr;
     ObDirectLoadMultipleHeapTableTabletIndexWholeScanner index_scanner;
     if (OB_FAIL(index_scanner.init(this, tablet_id, table_data_desc))) {
-      LOG_WARN("fail to init index scanner", KR(ret));
     }
     while (OB_SUCC(ret)) {
       if (OB_FAIL(index_scanner.get_next_index(tablet_index))) {

@@ -111,7 +111,6 @@ public:
     ObMemAttr attr("leakMap", ObCtxIds::DEFAULT_CTX_ID);
     int ret = malloc_info_.create(512, attr, attr);
     if (OB_FAIL(ret)) {
-      _OB_LOG(ERROR, "failed to create hashmap, err=%d", ret);
     } else {
       _OB_LOG(INFO, "leak checker init succ");
     }
@@ -184,8 +183,6 @@ public:
       int ret = OB_SUCCESS;
 
       if (OB_FAIL(malloc_info_.set_refactored(ptr_key, info))) {
-        _OB_LOG(WARN, "failed to insert leak checker(ret=%d), ptr=%p bt=%s",
-                ret, ptr_key.ptr_, lbt());
       } else {
         obj.on_leak_check_ = true;
       }
@@ -230,7 +227,6 @@ public:
             item.first += 1;
             item.second += node_it->second.bytes_;
             if (OB_FAIL(info_map->set_refactored(node_it->second, item, 1, 0, 1))) {
-              _OB_LOG(WARN, "failed to aggregate memory size, ret=%d", ret);
             } else {
               _OB_LOG(DEBUG, "LEAK_CHECKER hash updated");
             }
@@ -238,7 +234,6 @@ public:
             item.first = 1;
             item.second = node_it->second.bytes_;
             if (OB_FAIL(info_map->set_refactored(node_it->second, item, 1, 0, 0))) {
-              _OB_LOG(WARN, "failed to aggregate memory size, ret=%d", ret);
             } else {
               _OB_LOG(DEBUG, "LEAK_CHECKER hash inserted");
             }
@@ -255,9 +250,7 @@ public:
     mod_info_map_t tmp_map;
     int ret = tmp_map.create(10000);
     if (OB_FAIL(ret)) {
-      _OB_LOG(ERROR, "failed to create hashmap, err=%d", ret);
     } else if (OB_FAIL(load_leak_info_map(tmp_map))) {
-      _OB_LOG(INFO, "failed to collection leak info, ret=%d", ret);
     } else {
       _OB_LOG(INFO, "######## LEAK_CHECKER (str = %s)########", origin_str_);
 

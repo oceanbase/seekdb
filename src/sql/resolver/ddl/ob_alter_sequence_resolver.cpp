@@ -76,7 +76,6 @@ int ObAlterSequenceResolver::resolve(const ParseNode &parse_tree)
                                    session_info_,
                                    sequence_name,
                                    db_name))) {
-      LOG_WARN("parse ref factor failed", K(ret));
     } else if (sequence_name.length() > OB_MAX_SEQUENCE_NAME_LENGTH) {
         ret = OB_ERR_TOO_LONG_IDENT;
         LOG_USER_ERROR(OB_ERR_TOO_LONG_IDENT, sequence_name.length(), sequence_name.ptr());

@@ -36,29 +36,23 @@ int ObDefaultValueUtils::generate_insert_value(const ColumnItem *column,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(column), K(params_), K(params_->expr_factory_), K(params_->session_info_));
   } else if (OB_FAIL(get_default_type_for_insert(column, op))) {
-    LOG_WARN("fail to check column default value", K(column), K(ret));
   } else if (has_instead_of_trigger
              && op > OB_INVALID_DEFAULT_OP) {
     // default expr in insert values is alway replaced to null if has instead of trigger
     if (OB_FAIL(build_default_expr_for_gc_column_ref(*column, expr))) {
-      LOG_WARN("fail to build default expr for generate column", K(ret));
     }
   } else {
     if (OB_NORMAL_DEFAULT_OP == op) {
       if (OB_FAIL(build_default_expr_strict(column, expr))) {
-        LOG_WARN("fail to build default expr", K(ret));
       }
     } else if (OB_NOT_STRICT_DEFAULT_OP == op) {
       if (OB_FAIL(build_default_expr_not_strict(column, expr))) {
-        LOG_WARN("fail to build default expr according to datatype", K(ret));
       }
     } else if (OB_GENERATED_COLUMN_DEFAULT_OP == op) {
       if (OB_FAIL(build_default_expr_for_generated_column(*column, expr))) {
-        LOG_WARN("build default expr for generated column failed", K(ret));
       }
     } else if (OB_IDENTITY_COLUMN_DEFAULT_OP == op) {
       if (OB_FAIL(build_default_expr_for_identity_column(*column, expr, T_INSERT_SCOPE))) {
-        LOG_WARN("build default expr for identity column failed", K(ret));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -104,23 +98,18 @@ int ObDefaultValueUtils::resolve_default_function_static(
                                          session_info,
                                          *col_schema,
                                          fun_expr->get_param_expr(0)))) {
-        LOG_WARN("fail to replace first child", K(ret));
       } else if (OB_FAIL(build_collation_expr_static(expr_factory, 
                                                      col_schema->get_collation_type(), 
                                                      fun_expr->get_param_expr(1)))) {
-        LOG_WARN("fail to build accuracy expr", K(ret));
       } else if (OB_FAIL(build_accuracy_expr_static(expr_factory, 
                                                     col_schema->get_accuracy(), 
                                                     fun_expr->get_param_expr(2)))) {
-        LOG_WARN("fail to build accuracy expr", K(ret));
       } else if (OB_FAIL(build_nullable_expr_static(expr_factory, 
                                                     col_schema->is_nullable(), 
                                                     fun_expr->get_param_expr(3)))) {
-        LOG_WARN("fail to build is nullable expr", K(ret));
       } else if (OB_FAIL(build_default_function_expr_static(
                   expr_factory, col_schema, fun_expr->get_param_expr(4),
                   session_info))) {
-        LOG_WARN("fail to build default value", K(ret));
       } else {/*do nothing*/}
     }
   }
@@ -192,20 +181,14 @@ int ObDefaultValueUtils::resolve_default_function(ObRawExpr *&expr, ObStmtScope 
     if (OB_SUCC(ret)) {
       if (column_item->get_column_type()->is_timestamp()) {
         if (OB_FAIL(build_default_expr_for_timestamp(column_item, expr))) {
-          LOG_WARN("fail to build default expr for timestamp", K(ret));
         }
       } else {
         if (OB_FAIL(build_type_expr(column_item, fun_expr->get_param_expr(0)))) {
-          LOG_WARN("fail to replace first child", K(ret));
         } else if (OB_FAIL(build_collation_expr(column_item, fun_expr->get_param_expr(1)))) {
-          LOG_WARN("fail to build accuracy expr", K(ret));
         } else if (OB_FAIL(build_accuracy_expr(column_item, fun_expr->get_param_expr(2)))) {
-          LOG_WARN("fail to build accuracy expr", K(ret));
         } else if (OB_FAIL(build_nullable_expr(column_item, fun_expr->get_param_expr(3)))) {
-          LOG_WARN("fail to build is nullable expr", K(ret));
         } else if (OB_FAIL(build_default_function_expr(
                     column_item, fun_expr->get_param_expr(4), scope, false))) {
-          LOG_WARN("fail to build default value", K(ret));
         }
       }
     }
@@ -224,11 +207,9 @@ int ObDefaultValueUtils::resolve_default_expr(const ColumnItem &column_item, ObR
     LOG_WARN("invalid stmt", K(stmt_), KP_(params));
   } else if (column_item.expr_->is_generated_column()) {
     if (OB_FAIL(build_default_expr_for_generated_column(column_item, expr))) {
-      LOG_WARN("build default expr for generated column failed", K(ret));
     }
   } else if (column_item.expr_->is_identity_column()) {
     if (OB_FAIL(build_default_expr_for_identity_column(column_item, expr, scope))) {
-      LOG_WARN("build default expr for identity column failed", K(ret));
     }
   } else {
     ObSysFunRawExpr *default_func_expr = NULL;
@@ -238,7 +219,6 @@ int ObDefaultValueUtils::resolve_default_expr(const ColumnItem &column_item, ObR
     ObRawExpr *accuracy_expr = NULL;
     ObRawExpr *default_value_expr = NULL;
     if (OB_FAIL(params_->expr_factory_->create_raw_expr(T_FUN_SYS_DEFAULT, default_func_expr))) {
-      LOG_WARN("create raw expr failed", K(ret));
     } else if (OB_ISNULL(default_func_expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("default func expr is null");
@@ -249,27 +229,16 @@ int ObDefaultValueUtils::resolve_default_expr(const ColumnItem &column_item, ObR
       default_func_expr->set_func_name(ObString::make_string(N_DEFAULT));
       default_func_expr->set_result_type(*column_item.get_column_type());
       if (OB_FAIL(build_type_expr(&column_item, c_expr))) {
-        LOG_WARN("fail to build type expr", K(ret));
       } else if (OB_FAIL(default_func_expr->init_param_exprs(5))) {
-        LOG_WARN("failed to init param exprs", K(ret));
       } else if (OB_FAIL(default_func_expr->add_param_expr(c_expr))) {
-        LOG_WARN("fail to add param expr", K(ret));
       } else if (OB_FAIL(build_collation_expr(&column_item, collation_expr))) {
-        LOG_WARN("fail to build collation expr", K(ret));
       } else if (OB_FAIL(default_func_expr->add_param_expr(collation_expr))) {
-        LOG_WARN("fail to add param expr", K(ret));
       } else if (OB_FAIL(build_accuracy_expr(&column_item, accuracy_expr))) {
-        LOG_WARN("fail to build accuracy expr", K(ret));
       } else if (OB_FAIL(default_func_expr->add_param_expr(accuracy_expr))) {
-        LOG_WARN("fail to add param expr", K(ret), K(accuracy_expr));
       } else if (OB_FAIL(build_nullable_expr(&column_item, is_null_expr))) {
-        LOG_WARN("fail to build is nullable expr", K(ret));
       } else if (OB_FAIL(default_func_expr->add_param_expr(is_null_expr))) {
-        LOG_WARN("fail to add is nullable expr", K(ret));
       } else if (OB_FAIL(build_default_function_expr(&column_item, default_value_expr, scope, true))) {
-        LOG_WARN("fail to build default value expr", K(ret));
       } else if (OB_FAIL(default_func_expr->add_param_expr(default_value_expr))) {
-        LOG_WARN("fail to add defualt value expr", K(ret));
       } else {
         expr = default_func_expr;
       }
@@ -294,7 +263,6 @@ int ObDefaultValueUtils::build_default_expr_strict_static(
   } else if (OB_FAIL(expr_factory.create_raw_expr(
               static_cast<ObItemType>(column_schema->get_cur_default_value().get_type()), 
               c_expr))) {
-    LOG_WARN("create const expr failed", K(ret));
   } else {
     c_expr->set_accuracy(column_schema->get_accuracy());
     if (column_schema->get_meta_type().is_enum()
@@ -315,7 +283,6 @@ int ObDefaultValueUtils::build_default_expr_strict_static(
                                                           column_schema->get_extended_type_info(),
                                                           session_info,
                                                           subschema_id))) {
-        LOG_WARN("failed to get column subschema id", K(ret));
       } else {
         default_value.set_subschema_id(subschema_id);
         if (ob_is_enumset_tc(c_expr->get_data_type())) {
@@ -327,7 +294,6 @@ int ObDefaultValueUtils::build_default_expr_strict_static(
       c_expr->set_value(default_value);
       expr = c_expr;
       if (OB_FAIL(expr->formalize(&session_info))) {
-        LOG_WARN("failed to extract info", K(ret));
       }
     }
   }
@@ -346,22 +312,18 @@ int ObDefaultValueUtils::build_default_expr_strict(const ColumnItem *column, ObR
     LOG_WARN("invalid resolver", K(resolver_), K(stmt_), KP_(params));
   } else if (IS_DEFAULT_NOW_OBJ(column->default_value_)) {
     if (OB_FAIL(build_now_expr(column, expr))) {
-      LOG_WARN("fail to build now expr", K(ret));
     }
   } else if (NULL != column->default_value_expr_) {
     if (OB_FAIL(build_expr_default_expr(column, const_cast<ColumnItem *>(column)->default_value_expr_, expr))) {
-      LOG_WARN("fail to build expr_default expr", K(ret));
     } else {
       ObDelUpdResolver* del_upd_resolver = dynamic_cast<ObDelUpdResolver *>(resolver_);
       if (OB_ISNULL(del_upd_resolver)) {
         // do nothing
       } else if (OB_FAIL(del_upd_resolver->recursive_search_sequence_expr(expr))) {
-        LOG_WARN("fail to search sequence expr", K(ret));
       }
     }
   } else if (column->base_cid_ == OB_HIDDEN_PK_INCREMENT_COLUMN_ID) {
     if (OB_FAIL(resolver_->build_heap_table_hidden_pk_expr(expr, column->get_expr()))) {
-      LOG_WARN("failed to build next_val expr", K(ret), KPC(column->get_expr()));
     }
   } else if (OB_ISNULL(column->get_expr())) {
     ret = OB_ERR_UNEXPECTED;
@@ -372,11 +334,9 @@ int ObDefaultValueUtils::build_default_expr_strict(const ColumnItem *column, ObR
                                                       column->base_cid_,
                                                       column->get_expr()->get_table_name(),
                                                       column->get_expr()->get_column_name()))) {
-      LOG_WARN("failed to build next_val expr", K(ret));
     }
   } else if (OB_FAIL(params_->expr_factory_->create_raw_expr(
               static_cast<ObItemType>(column->default_value_.get_type()), c_expr))) {
-    LOG_WARN("create const expr failed", K(ret));
   } else if (OB_ISNULL(column->get_column_type())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("column type is NULL", KPC(column), K(ret));
@@ -414,7 +374,6 @@ int ObDefaultValueUtils::build_default_expr_strict(const ColumnItem *column, ObR
                                                             *c_expr,
                                                             *column->get_column_type(),
                                                             cast_expr))) {
-          LOG_WARN("failed to create raw expr.", K(ret));
         } else {
           expr = cast_expr;
         }
@@ -438,7 +397,6 @@ int ObDefaultValueUtils::build_now_expr(const ColumnItem *column, ObRawExpr *&ex
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid resolver", KP_(params));
   } else if (OB_FAIL(params_->expr_factory_->create_raw_expr(T_FUN_SYS_CUR_TIMESTAMP, f_expr))) {
-    LOG_WARN("create sysfunc raw expr failed", K(ret));
   } else if (OB_ISNULL(f_expr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("timestamp expr is null");
@@ -449,7 +407,6 @@ int ObDefaultValueUtils::build_now_expr(const ColumnItem *column, ObRawExpr *&ex
     expr = f_expr;
     //replace function now() with param expr
     if (OB_FAIL(expr->formalize(params_->session_info_))) {
-      LOG_WARN("failed to formalize expr", K(ret));
     }
   }
   return ret;
@@ -470,9 +427,7 @@ int ObDefaultValueUtils::build_expr_default_expr(const ColumnItem *column,
   } else if (OB_FAIL(ObRawExprCopier::copy_expr(*params_->expr_factory_,
                                                 input_expr,
                                                 temp_expr))) {
-    LOG_WARN("failed to copy expr", K(ret));
   } else if (OB_FAIL(ObRawExprUtils::extract_invalid_sequence_expr(temp_expr, seq_expr))) {
-    LOG_WARN("fail to get invalid sequence expr", K(ret));
   } else if (nullptr != seq_expr) {
     ret = OB_ERR_SEQ_NOT_EXIST;
     LOG_WARN("sequence not exist", K(ret));
@@ -490,26 +445,21 @@ int ObDefaultValueUtils::resolve_column_ref_in_insert(const ColumnItem *column, 
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(expr), K(column));
   } else if (OB_FAIL(get_default_type_for_column_expr(column, op))){
-    LOG_WARN("fail to get default type for column expr", K(ret));
   } else {
     if (OB_NORMAL_DEFAULT_OP == op) {
       if (OB_FAIL(build_default_expr_strict(column, expr))) {
-        LOG_WARN("fail to build default expr", K(ret));
       }
     } else if (OB_NOT_STRICT_DEFAULT_OP == op) {
       if (OB_FAIL(build_default_expr_not_strict(column, expr))) {
-        LOG_WARN("fail to build default expr according to datatype", K(ret));
       }
     } else if (OB_TIMESTAMP_COLUMN_DEFAULT_OP == op) {
       //timestamp column is quite annoying, very special; can only be handled separately here;
       // Not taking the conventional route
       if (OB_FAIL(build_default_expr_for_timestamp(column, expr))) {
-        LOG_WARN("fail to build default expr for timestamp", K(ret));
       }
     } else if (OB_GENERATED_COLUMN_DEFAULT_OP == op) {
       // the ref_column to generated_column in insert values is always replaced to null
       if (OB_FAIL(build_default_expr_for_gc_column_ref(*column, expr))) {
-        LOG_WARN("fail to build default expr for generate column");
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -684,7 +634,6 @@ int ObDefaultValueUtils::build_default_expr_for_timestamp(const ColumnItem *colu
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(column), K_(params));
   } else if (OB_FAIL(params_->expr_factory_->create_raw_expr(T_INVALID, c_expr))) {
-    LOG_WARN("create timestamp expr failed", K(ret));
   } else if (OB_ISNULL(c_expr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("create raw expr fail", K(c_expr));
@@ -704,7 +653,6 @@ int ObDefaultValueUtils::build_default_expr_for_timestamp(const ColumnItem *colu
     c_expr->set_value(default_value);
     expr = c_expr;
     if (OB_FAIL(expr->formalize(params_->session_info_))) {
-      LOG_WARN("failed to extract info", K(ret));
     }
   }
   return ret;
@@ -752,7 +700,6 @@ int ObDefaultValueUtils::build_default_expr_not_strict_static(
   } else {
     default_value.set_type(column_schema->get_data_type());
     if (OB_FAIL(default_value.build_not_strict_default_value(column_schema->get_accuracy().get_precision(), column_schema->get_collation_type()))) {
-      LOG_WARN("failed to build not strict default value info", K(column_schema), K(ret));
     } else if (ob_is_enumset_tc(default_value.get_type()) || default_value.is_collection_sql_type()) {
       uint16_t subschema_id = 0;
       if (OB_UNLIKELY(column_schema->get_extended_type_info().count() < 1)) {
@@ -762,7 +709,6 @@ int ObDefaultValueUtils::build_default_expr_not_strict_static(
                                                           column_schema->get_extended_type_info(),
                                                           session_info,
                                                           subschema_id))) {
-        LOG_WARN("failed to get column subschema id", K(ret));
       } else {
         default_value.set_subschema_id(subschema_id);
         if (ob_is_enumset_tc(c_expr->get_data_type())) {
@@ -776,7 +722,6 @@ int ObDefaultValueUtils::build_default_expr_not_strict_static(
     // ObObjType must be the same as the item type related to the data type in ObItemType, so casting here is possible
     if (OB_FAIL(expr_factory.create_raw_expr(
                 static_cast<ObItemType>(default_value.get_type()), c_expr))) {
-      LOG_WARN("create default value expr failed", K(ret));
     } else if (OB_ISNULL(c_expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to create raw expr", K(c_expr));
@@ -791,7 +736,6 @@ int ObDefaultValueUtils::build_default_expr_not_strict_static(
   if (OB_SUCC(ret)) {
     expr = c_expr;
     if (OB_FAIL(expr->formalize(&session_info))) {
-      LOG_WARN("failed to extract info", K(ret));
     }
   }
   return ret;
@@ -812,7 +756,6 @@ int ObDefaultValueUtils::build_default_expr_not_strict(const ColumnItem *column,
   } else {
     default_value.set_type(column->get_column_type()->get_type());
     if (OB_FAIL(default_value.build_not_strict_default_value(column->get_column_type()->get_accuracy().get_precision(), column->get_column_type()->get_collation_type()))) {
-      LOG_WARN("failed to build not strict default value info", K(column), K(ret));
     } else if (ob_is_enumset_tc(default_value.get_type()) || default_value.is_collection_sql_type()) {
       const ObColumnRefRawExpr *column_expr = column->get_expr();
       if (OB_ISNULL(column_expr)) {
@@ -830,7 +773,6 @@ int ObDefaultValueUtils::build_default_expr_not_strict(const ColumnItem *column,
     //create default value raw expr
     // ObObjType must be the same as the item type related to the data type in ObItemType, so casting here is possible
     if (OB_FAIL(params_->expr_factory_->create_raw_expr(static_cast<ObItemType>(default_value.get_type()), c_expr))) {
-      LOG_WARN("create default value expr failed", K(ret));
     } else if (OB_ISNULL(c_expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to create raw expr", K(c_expr));
@@ -844,7 +786,6 @@ int ObDefaultValueUtils::build_default_expr_not_strict(const ColumnItem *column,
   if (OB_SUCC(ret)) {
     expr = c_expr;
     if (OB_FAIL(expr->formalize(params_->session_info_))) {
-      LOG_WARN("failed to extract info", K(ret));
     }
   }
   return ret;
@@ -863,7 +804,6 @@ int ObDefaultValueUtils::build_default_function_expr_static(
     LOG_WARN("invald argument", K(column_schema));
   } else {
     if (OB_FAIL(get_default_type_for_default_function_static(column_schema, op))) {
-      LOG_WARN("fail to get default type for default function", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -872,14 +812,12 @@ int ObDefaultValueUtils::build_default_function_expr_static(
                                                    column_schema, 
                                                    expr, 
                                                    session_info))) {
-        LOG_WARN("fail to build default expr", K(ret));
       }
     } else if (OB_NOT_STRICT_DEFAULT_OP == op) {
       if (OB_FAIL(build_default_expr_not_strict_static(expr_factory, 
                                                        column_schema, 
                                                        expr, 
                                                        session_info))) {
-        LOG_WARN("fail to build default expr according to datatype", K(ret));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -901,21 +839,17 @@ int ObDefaultValueUtils::build_default_function_expr(const ColumnItem *column,
     LOG_WARN("invald argument", K(column));
   } else if (is_default_expr) {
     if (OB_FAIL(get_default_type_for_default_expr(column, op, scope))) {
-      LOG_WARN("fail to get default type for default expr", K(ret));
     }
   } else {
     if (OB_FAIL(get_default_type_for_default_function(column, op, scope))) {
-      LOG_WARN("fail to get default type for default function", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_NORMAL_DEFAULT_OP == op) {
       if (OB_FAIL(build_default_expr_strict(column, expr))) {
-        LOG_WARN("fail to build default expr", K(ret));
       }
     } else if (OB_NOT_STRICT_DEFAULT_OP == op) {
       if (OB_FAIL(build_default_expr_not_strict(column, expr))) {
-        LOG_WARN("fail to build default expr according to datatype", K(ret));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -935,7 +869,6 @@ int ObDefaultValueUtils::build_collation_expr_static(ObRawExprFactory& expr_fact
               expr_factory, ObInt32Type,
               coll_type,
               c_expr))) {
-    LOG_WARN("fail to build accuracy expr", K(ret));
   } else {
     expr = c_expr;
   }
@@ -956,7 +889,6 @@ int ObDefaultValueUtils::build_collation_expr(const ColumnItem *column, ObRawExp
   } else if (OB_FAIL(ObRawExprUtils::build_const_int_expr(*expr_factory, ObInt32Type,
                                                           static_cast<int32_t>(column->get_column_type()->get_collation_type()),
                                                           c_expr))) {
-    LOG_WARN("fail to build accuracy expr", K(ret));
   } else {
     expr = c_expr;
   }
@@ -977,7 +909,6 @@ int ObDefaultValueUtils::build_accuracy_expr(const ColumnItem *column, ObRawExpr
   } else {
     int64_t accuracy = column->get_column_type()->get_accuracy().get_accuracy();
     if (OB_FAIL(ObRawExprUtils::build_const_int_expr(*expr_factory, ObIntType, accuracy, c_expr))) {
-      LOG_WARN("fail to build accuracy expr", K(ret));
     } else {
       expr = c_expr;
     }
@@ -996,7 +927,6 @@ int ObDefaultValueUtils::build_accuracy_expr_static(ObRawExprFactory& expr_facto
                                                    ObIntType, 
                                                    accuracy.get_accuracy(), 
                                                    c_expr))) {
-    LOG_WARN("fail to build accuracy expr", K(ret));
   } else {
     expr = c_expr;
   }
@@ -1013,17 +943,14 @@ int ObDefaultValueUtils::build_type_expr_static(ObRawExprFactory& expr_factory,
   ObObjType data_type = column_schema.get_data_type();
   if (OB_FAIL(ObRawExprUtils::build_const_int_expr(
               expr_factory, ObInt32Type, data_type, c_expr))) {
-    LOG_WARN("fail to build accuracy expr", K(ret));
   } else if (column_schema.is_enum_or_set() || column_schema.is_collection()) {
     uint16_t subschema_id = 0;
     if (OB_FAIL(ObRawExprUtils::get_subschema_id(column_schema.get_meta_type(),
                                                  column_schema.get_extended_type_info(),
                                                  session_info,
                                                  subschema_id))) {
-      LOG_WARN("failed to get column subschema id", K(ret));
     } else if (OB_FAIL(ObRawExprUtils::adjust_type_expr_with_subschema(
                                                 data_type, subschema_id, false, c_expr))) {
-      LOG_WARN("failed to adjust type expr with subschema", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -1045,13 +972,11 @@ int ObDefaultValueUtils::build_type_expr(const ColumnItem *column, ObRawExpr *&e
     LOG_WARN("invalid allocator", KP_(params), KP(expr_factory));
   } else if (OB_FAIL(ObRawExprUtils::build_const_int_expr(
               *expr_factory, ObInt32Type, column->get_column_type()->get_type(), c_expr))) {
-    LOG_WARN("fail to build accuracy expr", K(ret));
   } else if (OB_FAIL(ObRawExprUtils::adjust_type_expr_with_subschema(
                                                   column->get_column_type()->get_type(),
                                                   column->get_column_type()->get_subschema_id(),
                                                   false,
                                                   c_expr))) {
-    LOG_WARN("failed to adjust type expr with subschema", K(ret));
   } else {
     expr = c_expr;
   }
@@ -1068,7 +993,6 @@ int ObDefaultValueUtils::build_nullable_expr_static(ObRawExprFactory& expr_facto
                                                    ObTinyIntType,
                                                    nullable,
                                                    c_expr))) {
-    OB_LOG(WARN, "fail to build int expr", K(ret), K(nullable));
   } else {
     expr = c_expr;
   }
@@ -1088,7 +1012,6 @@ int ObDefaultValueUtils::build_nullable_expr(const ColumnItem *column, ObRawExpr
     LOG_WARN("invalid allocator", KP_(params), KP(expr_factory));
   } else if (OB_FAIL(ObRawExprUtils::build_const_int_expr(*expr_factory, ObTinyIntType,
                                                        !column->is_not_null_for_write(), c_expr))) {
-    OB_LOG(WARN, "fail to build int expr", K(ret), K(c_expr));
   } else {
     expr = c_expr;
   }
@@ -1105,7 +1028,6 @@ int ObDefaultValueUtils::build_default_expr_for_generated_column(const ColumnIte
   } else if (OB_FAIL(ObDMLResolver::copy_schema_expr(*params_->expr_factory_,
                                                      column.expr_->get_dependant_expr(),
                                                      expr))) {
-    LOG_WARN("failed to copy dependant expr", K(ret));
   }
   return ret;
 }
@@ -1117,7 +1039,6 @@ int ObDefaultValueUtils::build_default_expr_for_gc_column_ref(const ColumnItem &
     ret = OB_NOT_INIT;
     LOG_WARN("column expr is null", K_(column.expr), K_(stmt));
   } else if (OB_FAIL(ObRawExprUtils::build_null_expr(*params_->expr_factory_, expr))) {
-    LOG_WARN("fail to build null expr", K(ret));
   }
   return ret;
 }
@@ -1138,20 +1059,16 @@ int ObDefaultValueUtils::build_default_expr_for_identity_column(const ColumnItem
     uint64_t sequence_id;
     if (OB_FAIL(params_->schema_checker_->get_column_schema(
                 column.base_tid_, column.base_cid_, column_schema))) {
-      LOG_WARN("get column schema fail", K(ret));
     } else {
       sequence_id = column_schema->get_sequence_id();
       const ObString seq_oper("NEXTVAL");
       if (OB_FAIL(params_->schema_checker_->get_schema_guard()->get_sequence_schema
                       ( sequence_id, sequence_schema))) {
-        LOG_WARN("get column schema fail", K(ret));
       } else if (OB_FAIL(ObRawExprUtils::build_seq_nextval_expr(
                   expr, resolver_->session_info_, resolver_->params_.expr_factory_, dummy_db_name,
                   sequence_schema->get_sequence_name(), seq_oper, sequence_id,
                   resolver_->get_stmt()))) {
-        LOG_WARN("resolve column item fail", K(sequence_id), K(ret));
       } else if (OB_FAIL(resolver_->add_sequence_id_to_stmt(sequence_id))) {
-        LOG_WARN("fail add sequence id to stmt", K(sequence_id), K(ret));
       } else if ((column.get_expr()->is_table_part_key_column() || 
                   column.get_expr()->is_table_part_key_org_column()) && scope == T_INSERT_SCOPE) {
         ObDelUpdStmt *del_upd_stmt = static_cast<ObDelUpdStmt*>(stmt_);

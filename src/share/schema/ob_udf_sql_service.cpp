@@ -40,7 +40,6 @@ int ObUDFSqlService::insert_udf(const ObUDF &udf_info,
     SHARE_SCHEMA_LOG(WARN, "udf_info is invalid", K(udf_info.get_name_str()), K(ret));
   } else {
     if (OB_FAIL(add_udf(*sql_client, udf_info))) {
-      LOG_WARN("failed to add udf", K(ret));
     } else {
       ObSchemaOperation opt;
       
@@ -55,7 +54,6 @@ int ObUDFSqlService::insert_udf(const ObUDF &udf_info,
       opt.table_name_ = udf_info.get_udf_name_str();
       opt.ddl_stmt_str_ = (NULL != ddl_stmt_str) ? *ddl_stmt_str : ObString();
       if (OB_FAIL(log_operation(opt, *sql_client))) {
-        LOG_WARN("Failed to log operation", K(ret));
       }
     }
   }
@@ -84,9 +82,7 @@ int ObUDFSqlService::delete_udf(const common::ObString &name,
                    OB_ALL_FUNC_HISTORY_TNAME,
                    name.ptr(),
                    new_schema_version, IS_DELETED))) {
-      LOG_WARN("assign insert into all udf history fail", K(ret));
     } else if (OB_FAIL(sql_client->write(sql.ptr(), affected_rows))) {
-      LOG_WARN("execute sql fail", K(sql), K(ret));
     } else if (1 != affected_rows) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("no row has inserted", K(ret));
@@ -96,9 +92,7 @@ int ObUDFSqlService::delete_udf(const common::ObString &name,
     if (FAILEDx(sql.assign_fmt("DELETE FROM %s WHERE name='%s'",
                                OB_ALL_FUNC_TNAME,
                                name.ptr()))) {
-      LOG_WARN("append_fmt failed", K(ret));
     } else if (OB_FAIL(sql_client->write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", K(sql), K(ret));
     } else if (1 != affected_rows) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("no row deleted", K(sql), K(affected_rows), K(ret));
@@ -117,7 +111,6 @@ int ObUDFSqlService::delete_udf(const common::ObString &name,
       opt.table_name_ = name;
       opt.ddl_stmt_str_ = (NULL != ddl_stmt_str) ? *ddl_stmt_str : ObString();
       if (OB_FAIL(log_operation(opt, *sql_client))) {
-        LOG_WARN("Failed to log operation", K(ret));
       }
     }
   }
@@ -140,7 +133,6 @@ int ObUDFSqlService::drop_udf(const ObUDF &udf_info,
     LOG_WARN("invalid udf info in drop udf", K(udf_info.get_name_str()), K(ret));
   } else if (OB_FAIL(delete_udf(udf_info.get_name(),
                                 new_schema_version, sql_client, ddl_stmt_str))) {
-    LOG_WARN("failed to delete udf", K(udf_info.get_name_str()), K(ret));
   } else {/*do nothing*/}
   return ret;
 }
@@ -163,7 +155,6 @@ int ObUDFSqlService::add_udf(common::ObISQLClient &sql_client,
     if (only_history && 0 == STRCMP(tname[i], OB_ALL_FUNC_TNAME)) {
       continue;
     } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s (", tname[i]))) {
-      STORAGE_LOG(WARN, "append table name failed, ", K(ret));
     } else {
       SQL_COL_APPEND_VALUE(sql, values, ObSchemaUtils::get_extract_schema_id(
                                         udf_info.get_udf_id()), "udf_id", "%lu");
@@ -183,9 +174,7 @@ int ObUDFSqlService::add_udf(common::ObISQLClient &sql_client,
         if (OB_FAIL(sql.append_fmt(", gmt_modified) VALUES (%.*s, now(6))",
                                    static_cast<int32_t>(values.length()),
                                    values.ptr()))) {
-          LOG_WARN("append sql failed, ", K(ret));
         } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-          LOG_WARN("fail to execute sql", K(sql), K(ret));
         } else {
           if (!is_single_row(affected_rows)) {
             ret = OB_ERR_UNEXPECTED;

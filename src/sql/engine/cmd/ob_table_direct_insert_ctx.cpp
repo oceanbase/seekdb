@@ -99,15 +99,11 @@ int ObTableDirectInsertCtx::init(
       ObDirectLoadMode::Type load_mode = is_insert_overwrite ? ObDirectLoadMode::INSERT_OVERWRITE : ObDirectLoadMode::INSERT_INTO;
       ObArray<ObTabletID> tablet_ids;
       if (OB_FAIL(ObTableLoadSchema::get_table_schema(*schema_guard, table_id, table_schema))) {
-        LOG_WARN("fail to get table schema", KR(ret));
       } else if (OB_FAIL(ObDDLUtil::get_temp_store_compress_type(table_schema,
                                                                  parallel,
                                                                  compressor_type))) {
-        LOG_WARN("fail to get tmp store compressor type", KR(ret));
       } else if (OB_FAIL(ObTableLoadSchema::get_column_ids(table_schema, column_ids))) {
-        LOG_WARN("failed to init store column idxs", KR(ret));
       } else if (OB_FAIL(get_partition_level_tablet_ids(phy_plan, table_schema, tablet_ids))) {
-        LOG_WARN("failed to get partition level tablet ids", KR(ret), K(phy_plan), KPC(table_schema));
       } else {
         ObTableLoadParam param;
         
@@ -130,7 +126,6 @@ int ObTableDirectInsertCtx::init(
         param.online_sample_percent_ = online_sample_percent;
         param.load_level_ = tablet_ids.empty() ? ObDirectLoadLevel::TABLE : ObDirectLoadLevel::PARTITION;
         if (OB_FAIL(table_load_instance_->init(param, column_ids, tablet_ids, load_exec_ctx_))) {
-          LOG_WARN("failed to init direct loader", KR(ret), K(param), K(column_ids), K(tablet_ids));
         } else {
           phy_plan.set_ddl_task_id(table_load_instance_->get_table_ctx()->ddl_param_.task_id_);
           is_inited_ = true;
@@ -150,7 +145,6 @@ int ObTableDirectInsertCtx::commit()
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableDirectInsertCtx is not init", KR(ret));
   } else if (OB_FAIL(table_load_instance_->px_commit_data())) {
-    LOG_WARN("failed to do px_commit_data", KR(ret));
   }
   return ret;
 }
@@ -163,7 +157,6 @@ int ObTableDirectInsertCtx::finish()
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableDirectInsertCtx is not init", KR(ret));
   } else if (OB_FAIL(table_load_instance_->px_commit_ddl())) {
-    LOG_WARN("failed to do px_commit_ddl", KR(ret));
   } else {
     LOG_DEBUG("succeeded to finish direct loader");
   }

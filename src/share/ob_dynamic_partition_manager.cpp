@@ -48,11 +48,8 @@ int ObDynamicPartitionManager::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("session is null", KR(ret));
   } else if (OB_FAIL(str_to_dynamic_partition_policy_(table_schema->get_dynamic_partition_policy(), policy_))) {
-    LOG_WARN("fail to convert str to dynamic partition policy", KR(ret), KPC(table_schema));
   } else if (OB_FAIL(check_is_supported(*table_schema))) {
-    LOG_WARN("fail to check table schema is supported for dynamic partition", KR(ret), KPC(table_schema));
   } else if (OB_FAIL(check_is_valid(*table_schema))) {
-    LOG_WARN("fail to check table schema is valid for dynamic partition", KR(ret), KPC(table_schema));
   } else {
     inited_ = true;
   }
@@ -68,7 +65,6 @@ int ObDynamicPartitionManager::execute(
   int ret = OB_SUCCESS;
   skipped = false;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     bool enable = policy_.enable_;
     ObDateUnitType time_unit = policy_.time_unit_;
@@ -80,9 +76,7 @@ int ObDynamicPartitionManager::execute(
       skipped = true;
     } else {
       if (OB_FAIL(add_dynamic_partition_(specified_precreate_time))) {
-        LOG_WARN("fail to add table dynamic partitions", KR(ret), K(specified_precreate_time));
       } else if (OB_FAIL(drop_dynamic_partition_())) {
-        LOG_WARN("fail to drop table dynamic partitions", KR(ret));
       }
     }
   }
@@ -116,7 +110,6 @@ int ObDynamicPartitionManager::add_dynamic_partition_(const ObString &specified_
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     int64_t precreate_time_num = policy_.precreate_time_num_;
     ObDateUnitType precreate_time_unit = policy_.precreate_time_unit_;
@@ -124,11 +117,9 @@ int ObDynamicPartitionManager::add_dynamic_partition_(const ObString &specified_
     if (precreate_time_num < 0) {
       // precreate is off, skip
     } else if (OB_FAIL(build_add_partition_sql_(specified_precreate_time, sql))) {
-      LOG_WARN("fail to build add partition sql", KR(ret), K(specified_precreate_time));
     } else if (sql.empty()) {
       // no need to pre create partitions, skip
     } else if (OB_FAIL(write_ddl_(sql))) {
-      LOG_WARN("fail to write ddl", KR(ret), K(sql));
     }
   }
 
@@ -139,7 +130,6 @@ int ObDynamicPartitionManager::drop_dynamic_partition_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     int64_t expire_time_num = policy_.expire_time_num_;
     ObDateUnitType expire_time_unit = policy_.expire_time_unit_;
@@ -147,11 +137,9 @@ int ObDynamicPartitionManager::drop_dynamic_partition_()
     if (expire_time_num < 0) {
       // expire is off, skip
     } else if (OB_FAIL(build_drop_partition_sql_(sql))) {
-      LOG_WARN("fail to build drop partition sql", KR(ret));
     } else if (sql.empty()) {
       // no need to drop partitions, skip
     } else if (OB_FAIL(write_ddl_(sql))) {
-      LOG_WARN("fail to write ddl", KR(ret), K(sql));
     }
   }
 
@@ -162,19 +150,16 @@ int ObDynamicPartitionManager::write_ddl_(const ObSqlString &ddl)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     int64_t affected_rows = 0;
     ObTimeZoneInfoWrap tz_info_wrap;
     ObSessionParam session_param;
     if (OB_FAIL(get_table_time_zone_wrap_(tz_info_wrap))) {
-      LOG_WARN("fail to get tenant time zone wrap", KR(ret));
     } else if (FALSE_IT(session_param.tz_info_wrap_ = &tz_info_wrap)) {
     } else if (OB_FAIL(GCTX.sql_proxy_->write(ddl.ptr(),
                                               affected_rows,
                                               ObCompatibilityMode::MYSQL_MODE,
                                               &session_param))) {
-      LOG_WARN("fail to execute dynamic partition ddl", KR(ret), K(ddl));
     }
   }
 
@@ -189,20 +174,16 @@ int ObDynamicPartitionManager::build_add_partition_sql_(
   sql.reset();
 
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     ObSchemaGetterGuard schema_guard;
     const uint64_t database_id = table_schema_->get_database_id();
     const ObSimpleDatabaseSchema *database_schema = NULL;
     ObSqlString part_def_list;
     if (OB_FAIL(build_precreate_partition_definition_list_(specified_precreate_time, part_def_list))) {
-      LOG_WARN("fail to build precreate partition definition list", KR(ret), K(specified_precreate_time));
     } else if (part_def_list.empty()) {
       // no need to add partition
     }  else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("fail to get tenant schema guard", KR(ret));
     } else if (OB_FAIL(schema_guard.get_database_schema( database_id, database_schema))) {
-      LOG_WARN("fail to get database schema", KR(ret), K(database_id));
     } else if (OB_ISNULL(database_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("database schema is null", KR(ret));
@@ -215,7 +196,6 @@ int ObDynamicPartitionManager::build_add_partition_sql_(
                                  static_cast<int32_t>(part_def_list.length()),
                                  part_def_list.ptr(),
                                  ")"))) {
-        LOG_WARN("fail to append sql", KR(ret));
       }
     }
   }
@@ -229,20 +209,16 @@ int ObDynamicPartitionManager::build_drop_partition_sql_(
   sql.reset();
 
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     ObSchemaGetterGuard schema_guard;
     const uint64_t database_id = table_schema_->get_database_id();
     const ObSimpleDatabaseSchema *database_schema = NULL;
     ObSqlString part_name_list;
     if (OB_FAIL(build_expired_partition_name_list_(part_name_list))) {
-      LOG_WARN("fail to build expired partition name list", KR(ret));
     } else if (part_name_list.empty()) {
       // no need to drop expired partition
     } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("fail to get tenant schema guard", KR(ret));
     } else if (OB_FAIL(schema_guard.get_database_schema( database_id, database_schema))) {
-      LOG_WARN("fail to get database schema", KR(ret), K(database_id));
     } else if (OB_ISNULL(database_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("database schema is null", KR(ret));
@@ -253,7 +229,6 @@ int ObDynamicPartitionManager::build_drop_partition_sql_(
                                  quote, table_schema_->get_table_name(), quote,
                                  static_cast<int32_t>(part_name_list.length()),
                                  part_name_list.ptr()))) {
-        LOG_WARN("fail to append sql", KR(ret));
       }
     }
   }
@@ -269,7 +244,6 @@ int ObDynamicPartitionManager::build_precreate_partition_definition_list_(
   part_def_list.reset();
 
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     const ObPartition *max_part = NULL;
     int64_t target_precreate_timestamp = 0;
@@ -277,9 +251,7 @@ int ObDynamicPartitionManager::build_precreate_partition_definition_list_(
     int64_t high_bound_val_timestamp = 0;
     ObDateUnitType time_unit = policy_.time_unit_;
     if (OB_FAIL(get_target_precreate_timestamp_(specified_precreate_time, target_precreate_timestamp))) {
-      LOG_WARN("fail to get target precreate timestamp", KR(ret), K(specified_precreate_time));
     } else if (OB_FAIL(get_start_precreate_timestamp_(low_bound_val_timestamp))) {
-      LOG_WARN("fail to get start precreate timestamp", KR(ret));
     } else {
       int64_t part_cnt = 0;
       while (OB_SUCC(ret) && low_bound_val_timestamp <= target_precreate_timestamp) {
@@ -287,11 +259,8 @@ int ObDynamicPartitionManager::build_precreate_partition_definition_list_(
         ObSqlString high_bound_val;
         high_bound_val_timestamp = low_bound_val_timestamp;
         if (OB_FAIL(add_timestamp_(1, time_unit, high_bound_val_timestamp))) {
-          LOG_WARN("fail to add timestamp", KR(ret), K(time_unit));
         } else if (OB_FAIL(build_part_name_(low_bound_val_timestamp, part_name))) {
-          LOG_WARN("fail to convert timestamp to part_name", KR(ret), K(low_bound_val_timestamp));
         } else if (OB_FAIL(build_high_bound_val_(high_bound_val_timestamp, high_bound_val))) {
-          LOG_WARN("fail to convert timestamp to obj", KR(ret), K(high_bound_val_timestamp));
         } else {
           part_cnt++;
           if (part_cnt > MAX_PRECREATE_PART_NUM) {
@@ -304,7 +273,6 @@ int ObDynamicPartitionManager::build_precreate_partition_definition_list_(
                                                       part_name.ptr(),
                                                       static_cast<int32_t>(high_bound_val.length()),
                                                       high_bound_val.ptr()))) {
-            LOG_WARN("fail to append sql", KR(ret));
           }
         }
         low_bound_val_timestamp = high_bound_val_timestamp;
@@ -322,7 +290,6 @@ int ObDynamicPartitionManager::build_expired_partition_name_list_(
   part_name_list.reset();
 
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     int64_t expire_timestamp = get_current_timestamp_();
     int64_t expire_time_num = policy_.expire_time_num_;
@@ -331,7 +298,6 @@ int ObDynamicPartitionManager::build_expired_partition_name_list_(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("dynamic partition expire is off", KR(ret));
     } else if (OB_FAIL(add_timestamp_(-expire_time_num, expire_time_unit, expire_timestamp))) {
-      LOG_WARN("fail to add timestamp", KR(ret), K(-expire_time_num), K(expire_time_unit));
     } else {
       // keep at least one partition
       const char *quote = "`";
@@ -342,7 +308,6 @@ int ObDynamicPartitionManager::build_expired_partition_name_list_(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("part is null", KR(ret), K_(table_schema));
         } else if (OB_FAIL(fetch_timestamp_from_part_key_(*part, high_bound_val_timestamp))) {
-          LOG_WARN("fail to fetch timestamp from part key", KR(ret), KPC(part));
         } else if (high_bound_val_timestamp >= expire_timestamp) {
           // subsequent partitions are not expired
           break;
@@ -352,7 +317,6 @@ int ObDynamicPartitionManager::build_expired_partition_name_list_(
                                                      part->get_part_name().length(),
                                                      part->get_part_name().ptr(),
                                                      quote))) {
-          LOG_WARN("fail to append sql", KR(ret));
         }
       }
     }
@@ -367,12 +331,10 @@ int ObDynamicPartitionManager::build_part_name_(const int64_t timestamp, ObSqlSt
   str.reset();
 
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     ObDateUnitType time_unit = policy_.time_unit_;
     ObTimeZoneInfoWrap time_zone_info_wrap;
     if (OB_FAIL(get_table_time_zone_wrap_(time_zone_info_wrap))) {
-      LOG_WARN("fail to get table time zone wrap", KR(ret));
     } else {
       ObString format;
       switch (time_unit) {
@@ -404,7 +366,6 @@ int ObDynamicPartitionManager::build_part_name_(const int64_t timestamp, ObSqlSt
       ObString locale;
       const char *quote = "`";
       if (FAILEDx(ObTimeConverter::datetime_to_ob_time(timestamp, time_zone_info_wrap.get_time_zone_info(), ob_time))) {
-        LOG_WARN("fail to convert timestamp to ob time", KR(ret), K(timestamp));
       } else if (OB_FAIL(ObTimeConverter::ob_time_to_str_format(ob_time,
                                                                 format,
                                                                 buf,
@@ -412,12 +373,10 @@ int ObDynamicPartitionManager::build_part_name_(const int64_t timestamp, ObSqlSt
                                                                 pos,
                                                                 res_null,
                                                                 locale))) {
-        LOG_WARN("fail to convert ob time to str", KR(ret), K(ob_time), K(format));
       } else if (OB_UNLIKELY(res_null)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to convert ob time to str", KR(ret), K(ob_time), K(format));
       } else if (OB_FAIL(str.append_fmt("%sP%.*s%s", quote, static_cast<int32_t>(pos), buf, quote))) {
-        LOG_WARN("fail to assign str", KR(ret));
       }
     }
   }
@@ -431,15 +390,12 @@ int ObDynamicPartitionManager::build_high_bound_val_(const int64_t timestamp, Ob
   str.reset();
 
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     ObObjType obj_type = ObObjType::ObMaxType;
     ObTimeZoneInfoWrap time_zone_info_wrap;
     ObObj high_bound_val_obj;
     if (OB_FAIL(table_schema_->get_part_key_column_type(0, obj_type))) {
-      LOG_WARN("fail to get part key column type", KR(ret));
     } else if (OB_FAIL(get_table_time_zone_wrap_(time_zone_info_wrap))) {
-      LOG_WARN("fail to get table time zone wrap", KR(ret));
     } else {
       switch (obj_type) {
         case ObObjType::ObIntType:
@@ -463,7 +419,6 @@ int ObDynamicPartitionManager::build_high_bound_val_(const int64_t timestamp, Ob
           int64_t datetime = 0;
           // ObTimestampType can not cast to oracle time type, so first cast to ObDateTimeType
           if (OB_FAIL(ObTimeConverter::timestamp_to_datetime(timestamp, time_zone_info_wrap.get_time_zone_info(), datetime))) {
-            LOG_WARN("fail to convert timestamp to datetime", KR(ret), K(timestamp));
           } else {
             ObObj datetime_obj;
             datetime_obj.set_datetime(datetime);
@@ -471,7 +426,6 @@ int ObDynamicPartitionManager::build_high_bound_val_(const int64_t timestamp, Ob
             cast_ctx.dtc_params_ = session_->get_dtc_params();
             cast_ctx.dtc_params_.tz_info_ = time_zone_info_wrap.get_time_zone_info();
             if (OB_FAIL(ObObjCaster::to_type(obj_type, cast_ctx, datetime_obj, high_bound_val_obj))) {
-              LOG_WARN("fail to cast datetime obj", KR(ret), K(obj_type), K(datetime_obj));
             }
           }
           break;
@@ -494,9 +448,7 @@ int ObDynamicPartitionManager::build_high_bound_val_(const int64_t timestamp, Ob
                                                                     pos,
                                                                     false/*print_collation,*/,
                                                                     time_zone_info_wrap.get_time_zone_info()))) {
-          LOG_WARN("fail to convert rowkey to sql literal", KR(ret), K(high_bound_val_rowkey));
         } else if (OB_FAIL(str.assign(buf))) {
-          LOG_WARN("fail to assign str", KR(ret));
         }
         } // end SMART_VAR
       }
@@ -514,7 +466,6 @@ int ObDynamicPartitionManager::get_start_precreate_timestamp_(int64_t &timestamp
   timestamp = 0;
 
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     const ObPartition *max_part = NULL;
     int64_t part_num = table_schema_->get_partition_num();
@@ -529,11 +480,9 @@ int ObDynamicPartitionManager::get_start_precreate_timestamp_(int64_t &timestamp
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("max part is null", KR(ret), K_(table_schema));
     } else if (OB_FAIL(fetch_timestamp_from_part_key_(*max_part, timestamp))) {
-      LOG_WARN("fail to fetch timestamp from part key", KR(ret), KPC(max_part));
     }
 
     if (FAILEDx(floor_timestamp_(time_unit, timestamp))) {
-      LOG_WARN("fail to floor timestamp", KR(ret), K(time_unit));
     }
   }
 
@@ -549,7 +498,6 @@ int ObDynamicPartitionManager::get_target_precreate_timestamp_(
   timestamp = 0;
 
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     int64_t cur_timestamp = get_current_timestamp_();
     timestamp = cur_timestamp;
@@ -559,7 +507,6 @@ int ObDynamicPartitionManager::get_target_precreate_timestamp_(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("dynamic partition precreate is off", KR(ret));
     } else if (OB_FAIL(add_timestamp_(precreate_time_num, precreate_time_unit, timestamp))) {
-      LOG_WARN("fail to add timestamp", KR(ret), K(precreate_time_num), K(precreate_time_unit));
     } else if (!specified_precreate_time.empty()) {
       int64_t specified_precreate_time_num = -1;
       ObDateUnitType specified_precreate_time_unit = ObDateUnitType::DATE_UNIT_MAX;
@@ -567,12 +514,10 @@ int ObDynamicPartitionManager::get_target_precreate_timestamp_(
       if (OB_FAIL(OB_FAIL(str_to_time(specified_precreate_time,
                                       specified_precreate_time_num,
                                       specified_precreate_time_unit)))) {
-        LOG_WARN("fail to convert str to time", KR(ret), K(specified_precreate_time));
       } else if (OB_UNLIKELY(specified_precreate_time_num < 0)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid specified precreate time", KR(ret));
       } else if (OB_FAIL(add_timestamp_(specified_precreate_time_num, specified_precreate_time_unit, specified_timestamp))) {
-        LOG_WARN("fail to add timestamp", KR(ret), K(precreate_time_num), K(precreate_time_unit));
       } else {
         timestamp = max(timestamp, specified_timestamp);
       }
@@ -588,18 +533,15 @@ int ObDynamicPartitionManager::get_table_time_zone_wrap_(ObTimeZoneInfoWrap &tz_
   tz_info_wrap.reset();
 
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     ObString time_zone = policy_.time_zone_;
     int64_t pos = 0;
     const int64_t len = OB_MAX_TIMESTAMP_TZ_LENGTH;
     char buf[len] = {0};
     if (OB_FAIL(get_session_time_zone_str_(buf, len, pos))) {
-      LOG_WARN("fail to get session time zone str", KR(ret));
     } else {
       time_zone = 0 == time_zone.case_compare("DEFAULT") ? ObString(pos, buf) : time_zone;
       if (OB_FAIL(get_time_zone_wrap_( time_zone, tz_info_wrap))) {
-        LOG_WARN("failed to get time zone wrap", KR(ret), K(time_zone));
       }
     }
   }
@@ -615,7 +557,6 @@ int ObDynamicPartitionManager::fetch_timestamp_from_part_key_(
   timestamp = 0;
 
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     const ObRowkey &high_bound_val = part.get_high_bound_val();
     const ObObj *high_bound_val_obj = NULL;
@@ -627,7 +568,6 @@ int ObDynamicPartitionManager::fetch_timestamp_from_part_key_(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("high bound val obj is null", KR(ret));
     } else if (OB_FAIL(get_table_time_zone_wrap_(time_zone_info_wrap))) {
-      LOG_WARN("fail to get tenant time zone wrap", KR(ret));
     } else {
       ObObjType obj_type = high_bound_val_obj->get_type();
       ObCastCtx cast_ctx;
@@ -641,11 +581,9 @@ int ObDynamicPartitionManager::fetch_timestamp_from_part_key_(
         case ObObjType::ObTimestampType: {
           ObObj datetime_obj;
           if (OB_FAIL(ObObjCaster::to_type(ObDateTimeType, cast_ctx, *high_bound_val_obj, datetime_obj))) {
-            LOG_WARN("fail to cast obj to timestamp type", KR(ret), K(high_bound_val_obj));
           } else if (OB_FAIL(ObTimeConverter::datetime_to_timestamp(datetime_obj.get_datetime(),
                                                                     time_zone_info_wrap.get_time_zone_info(),
                                                                     timestamp))) {
-            LOG_WARN("fail to convert datetime to timestamp", KR(ret), K(datetime_obj));
           }
           break;
         }
@@ -656,11 +594,9 @@ int ObDynamicPartitionManager::fetch_timestamp_from_part_key_(
           ObDateSqlMode date_sql_mode;
           // get int as YYYY
           if (OB_FAIL(ObTimeConverter::year_to_int(year, int_val))) {
-            LOG_WARN("fail to convert year to int", KR(ret), K(year));
           } else if (FALSE_IT(int_val = (int_val * 100 + 1) * 100 + 1)) {
             // YYYY -> YYYY0101
           } else if (OB_FAIL(ObTimeConverter::int_to_datetime(int_val, 0/*dec_part*/, cvrt_ctx, timestamp, date_sql_mode))) {
-            LOG_WARN("fail to convert int to timestamp", KR(ret), K(int_val));
           }
           break;
         }
@@ -670,7 +606,6 @@ int ObDynamicPartitionManager::fetch_timestamp_from_part_key_(
           ObString bigint_precision = policy_.bigint_precision_;
           int64_t scale = bigint_precision_scale_(bigint_precision);
           if (OB_FAIL(ObObjCaster::to_type(ObIntType, cast_ctx, *high_bound_val_obj, int_obj))) {
-            LOG_WARN("fail to cast obj to timestamp type", KR(ret), K(high_bound_val_obj));
           } else {
             timestamp = int_obj.get_int();
             if (0 == scale) {
@@ -702,14 +637,12 @@ int ObDynamicPartitionManager::get_session_time_zone_str_(char *buf, const int64
   int64_t ret = OB_SUCCESS;
 
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     const ObTimeZoneInfo *tz_info = NULL;
     if (OB_ISNULL(tz_info = session_->get_timezone_info())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("timezone info is null", KR(ret));
     } else if (OB_FAIL(tz_info->timezone_to_str(buf, len, pos))) {
-      LOG_WARN("fail to convert timezone to str", KR(ret));
     }
   }
 
@@ -721,7 +654,6 @@ int ObDynamicPartitionManager::add_timestamp_(const int64_t num, const ObDateUni
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     ObSqlString interval_str;
     ObDateSqlMode date_sql_mode;
@@ -730,15 +662,10 @@ int ObDynamicPartitionManager::add_timestamp_(const int64_t num, const ObDateUni
     int64_t datetime = 0;
     if (0 == num) {
     } else if (OB_FAIL(get_table_time_zone_wrap_(time_zone_info_wrap))) {
-      LOG_WARN("fail to get table time zone wrap", KR(ret));
     } else if (OB_FAIL(ObTimeConverter::timestamp_to_datetime(timestamp, time_zone_info_wrap.get_time_zone_info(), datetime))) {
-      LOG_WARN("fail to convert timestamp to datetime", KR(ret), K(timestamp), K(time_zone_info_wrap.get_time_zone_info()));
     } else if (OB_FAIL(interval_str.append_fmt("%ld", is_add ? num : -num))) {
-      LOG_WARN("fail to append str", KR(ret));
     } else if (OB_FAIL(ObTimeConverter::date_adjust(datetime, interval_str.string(), time_unit, datetime, is_add, date_sql_mode))) {
-      LOG_WARN("fail to adjust date", KR(ret), K(timestamp), K(interval_str), K(time_unit));
     } else if (OB_FAIL(ObTimeConverter::datetime_to_timestamp(datetime, time_zone_info_wrap.get_time_zone_info(), timestamp))) {
-      LOG_WARN("fail to convert datetime to timestamp", KR(ret), K(datetime), K(time_zone_info_wrap.get_time_zone_info()));
     }
   }
 
@@ -750,19 +677,16 @@ int ObDynamicPartitionManager::floor_timestamp_(const ObDateUnitType time_unit, 
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     ObTime ob_time;
     ObTimeZoneInfoWrap time_zone_info_wrap;
     const ObTimeZoneInfo *tz_info = NULL;
     int32_t sec_offset = 0;
     if (OB_FAIL(get_table_time_zone_wrap_(time_zone_info_wrap))) {
-      LOG_WARN("fail to get table time zone wrap", KR(ret));
     } else if (OB_ISNULL(tz_info = time_zone_info_wrap.get_time_zone_info())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tz info is null", KR(ret));
     } else if (OB_FAIL(ObTimeConverter::datetime_to_ob_time(timestamp, tz_info, ob_time))) {
-      LOG_WARN("fail to convert timestamp to ob time", KR(ret), K(timestamp));
     } else {
       // To floor a datetime:
       //
@@ -819,7 +743,6 @@ int ObDynamicPartitionManager::check_enable_is_valid_(const ObTableSchema &table
   int ret = OB_SUCCESS;
   bool enable = false;
   if (OB_FAIL(get_enable(table_schema, enable))) {
-    LOG_WARN("fail to get dynamic partition enable", KR(ret));
   }
 
   return ret;
@@ -835,9 +758,7 @@ int ObDynamicPartitionManager::check_time_unit_is_valid_(const ObTableSchema &ta
   ObDateUnitType time_unit;
   ObObjType col_data_type = ObObjType::ObMaxType;
   if (OB_FAIL(get_time_unit(table_schema, time_unit))) {
-    LOG_WARN("fail to get dynamic partition time unit", KR(ret));
   } else if (OB_FAIL(table_schema.get_part_key_column_type(0, col_data_type))) {
-    LOG_WARN("fail to get part key column type", KR(ret));
   } else if (!is_valid_time_unit_(col_data_type, time_unit)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid time unit type", KR(ret), K(col_data_type), K(time_unit));
@@ -860,9 +781,7 @@ int ObDynamicPartitionManager::check_precreate_time_is_valid_(const ObTableSchem
   ObDateUnitType precreate_time_unit = ObDateUnitType::DATE_UNIT_MAX;
   ObDateUnitType time_unit = ObDateUnitType::DATE_UNIT_MAX;
   if (OB_FAIL(get_precreate_time(table_schema, precreate_num, precreate_time_unit))) {
-    LOG_WARN("fail to get precreate time", KR(ret), K(table_schema));
   } else if (OB_FAIL(get_time_unit(table_schema, time_unit))) {
-    LOG_WARN("fail to get time unit", KR(ret), K(table_schema));
   } else if (precreate_num <= -2) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid precreate time", KR(ret));
@@ -907,7 +826,6 @@ int ObDynamicPartitionManager::check_expire_time_is_valid_(const ObTableSchema &
   int64_t expire_num = -1;
   ObDateUnitType expire_time_unit = ObDateUnitType::DATE_UNIT_MAX;
   if (OB_FAIL(get_expire_time(table_schema, expire_num, expire_time_unit))) {
-    LOG_WARN("fail to get expire time", KR(ret), K(table_schema));
   }
   return ret;
 }
@@ -924,10 +842,8 @@ int ObDynamicPartitionManager::check_time_zone_is_valid_(const ObTableSchema &ta
   ObObjType col_data_type = ObObjType::ObMaxType;
   ObString time_zone;
   if (OB_FAIL(get_time_zone(table_schema, time_zone))) {
-    LOG_WARN("fail to get dynamic partition time zone", KR(ret), K(table_schema));
   } else if (0 == time_zone.case_compare(DEFAULT_DYNAMIC_PARTITION_TIME_ZONE_STR)) {
   } else if (OB_FAIL(table_schema.get_part_key_column_type(0, col_data_type))) {
-    LOG_WARN("fail to get part key column type", KR(ret));
   } else if (is_stored_in_utc_(col_data_type)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("can not specify time zone", KR(ret), K(col_data_type), K(time_zone));
@@ -946,9 +862,7 @@ int ObDynamicPartitionManager::check_bigint_precision_is_valid_(const ObTableSch
   ObObjType col_data_type = ObObjType::ObMaxType;
   ObString bigint_precision;
   if (OB_FAIL(get_bigint_precision(table_schema, bigint_precision))) {
-    LOG_WARN("fail to get dynamic partition time zone", KR(ret), K(table_schema));
   } else if (OB_FAIL(table_schema.get_part_key_column_type(0, col_data_type))) {
-    LOG_WARN("fail to get part key column type", KR(ret));
   } else {
     if (0 == bigint_precision.case_compare(DEFAULT_DYNAMIC_PARTITION_BIGINT_PRECISION_STR)) {
       if (is_int_as_timestamp_(col_data_type)) {
@@ -993,7 +907,6 @@ int ObDynamicPartitionManager::print_dynamic_partition_policy_(
                               policy.time_zone_.ptr(),
                               policy.bigint_precision_.length(),
                               policy.bigint_precision_.ptr()))) {
-    LOG_WARN("fail to build dynamic partition policy str", KR(ret), K(policy));
   }
   return ret;
 }
@@ -1089,7 +1002,6 @@ int ObDynamicPartitionManager::format_dynamic_partition_policy_str(
     }
     new_str.assign_ptr(new_ptr, j);
     if (FAILEDx(ob_simple_low_to_up(allocator, new_str, new_str))) {
-      LOG_WARN("fail to simple low to up", KR(ret));
     }
   }
 
@@ -1104,7 +1016,6 @@ int ObDynamicPartitionManager::fill_default_value(
   int ret = OB_SUCCESS;
   ObString empty_str;
   if (OB_FAIL(update_dynamic_partition_policy_str(allocator, empty_str, orig_str, new_str))) {
-    LOG_WARN("fail to alter dynamic partition policy str", KR(ret), K(orig_str));
   }
 
   return ret;
@@ -1120,11 +1031,8 @@ int ObDynamicPartitionManager::update_dynamic_partition_policy_str(
   ObDynamicPartitionPolicy policy;
   bool is_alter = !orig_str.empty();
   if (OB_FAIL(str_to_dynamic_partition_policy_(orig_str, policy))) {
-    LOG_WARN("fail to convert str to dynamic partition policy", KR(ret), K(orig_str));
   } else if (OB_FAIL(update_dynamic_partition_policy_with_str_(alter_str, is_alter, policy))) {
-    LOG_WARN("fail to alter dynamic partition policy with str", KR(ret), K(is_alter), K(alter_str));
   } else if (OB_FAIL(dynamic_partition_policy_to_str_(allocator, policy, new_str))) {
-    LOG_WARN("fail to convert dynamic partition policy to str", KR(ret), K(policy));
   }
   return ret;
 }
@@ -1141,14 +1049,11 @@ int ObDynamicPartitionManager::check_tenant_is_valid_for_dynamic_partition(bool 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(is_primary))) {
-    LOG_WARN("fail to check if tenant role is primary", KR(ret));
   } else if (OB_UNLIKELY(!is_primary)) {
     is_valid = false;
     LOG_INFO("not primary tenant", KR(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get sys tenant schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_schema))) {
-    LOG_WARN("fail to get tenant info", KR(ret));
   } else if (OB_ISNULL(tenant_schema)) {
     is_valid = false;
     LOG_INFO("tenant schema is null", KR(ret));
@@ -1186,13 +1091,11 @@ int ObDynamicPartitionManager::check_is_supported(const ObTableSchema &table_sch
     LOG_WARN("specify dynamic partition on table not partitioned by range is not supported", KR(ret));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "specify dynamic partition on table not partitioned by range is");
   } else if (OB_FAIL(table_schema.get_part_key_column_type(0, col_data_type))) {
-    LOG_WARN("fail to get part key column type", KR(ret));
   } else if (!support_part_key_type_(col_data_type)) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("for dynamic partition, this part key type is not supported", KR(ret), K(col_data_type));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "for dynamic partition, this part key type is");
   } else if (OB_FAIL(table_schema.get_part_key_column_name(0, part_key_column_name))) {
-    LOG_WARN("fail to get part key column name", KR(ret));
   } else if (0 != part_key_column_name.case_compare(table_schema.get_part_option().get_part_func_expr_str())) {
     // part key with function
     ret = OB_NOT_SUPPORTED;
@@ -1208,17 +1111,11 @@ int ObDynamicPartitionManager::check_is_valid(const ObTableSchema &table_schema)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(check_enable_is_valid_(table_schema))) {
-    LOG_WARN("fail to check dynamic partition enable is legal", KR(ret), K(table_schema));
   } else if (OB_FAIL(check_time_unit_is_valid_(table_schema))) {
-    LOG_WARN("fail to check dynamic partition time unit is legal", KR(ret), K(table_schema));
   } else if (OB_FAIL(check_precreate_time_is_valid_(table_schema))) {
-    LOG_WARN("fail to check dynamic partition precreate time is legal", KR(ret), K(table_schema));
   } else if (OB_FAIL(check_expire_time_is_valid_(table_schema))) {
-    LOG_WARN("fail to check dynamic partition expire time is legal", KR(ret), K(table_schema));
   } else if (OB_FAIL(check_time_zone_is_valid_(table_schema))) {
-    LOG_WARN("fail to check dynamic partition time zone is legal", KR(ret), K(table_schema));
   } else if (OB_FAIL(check_bigint_precision_is_valid_(table_schema))) {
-    LOG_WARN("fail to check dynamic partition bigint precision is legal", KR(ret), K(table_schema));
   }
 
   return ret;
@@ -1235,9 +1132,7 @@ int ObDynamicPartitionManager::print_dynamic_partition_policy(
   ObDynamicPartitionPolicy policy;
   const ObString &str = table_schema.get_dynamic_partition_policy();
   if (OB_FAIL(str_to_dynamic_partition_policy_(str, policy))) {
-    LOG_WARN("fail to convert str to dynamic partition policy", KR(ret), K(str));
   } else if (OB_FAIL(print_dynamic_partition_policy_(policy, true/*is_show_create_table*/, buf, buf_len, pos))) {
-    LOG_WARN("fail to print dynamic partition policy", KR(ret), K(policy));
   }
   return ret;
 }
@@ -1320,13 +1215,11 @@ int ObDynamicPartitionManager::update_dynamic_partition_policy_with_str_(
   ObArray<ObString> tmp_strs;
   if (tmp_str.empty()) {
   } else if (OB_FAIL(split_on(tmp_str, ',', tmp_strs))) {
-    LOG_WARN("fail to split on str", KR(ret), K(tmp_str));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < tmp_strs.count(); i++) {
       ObString kv_str = tmp_strs.at(i);
       ObArray<ObString> kv;
       if (OB_FAIL(split_on(kv_str, '=', kv))) {
-        LOG_WARN("fail to split on str", KR(ret), K(kv_str));
       } else if (OB_UNLIKELY(kv.count() != 2)) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("dynamic partition policy is invalid", KR(ret), K(kv.count()));
@@ -1347,15 +1240,12 @@ int ObDynamicPartitionManager::update_dynamic_partition_policy_with_str_(
             ret = OB_NOT_SUPPORTED;
             LOG_WARN("not support to alter dynamic partition time unit", KR(ret));
           } else if (OB_FAIL(str_to_time_unit(v, policy.time_unit_))) {
-            LOG_WARN("fail to convert str to time unit", KR(ret), K(v));
           }
         } else if (0 == k.case_compare("PRECREATE_TIME")) {
           if (OB_FAIL(str_to_time(v, policy.precreate_time_num_, policy.precreate_time_unit_))) {
-            LOG_WARN("fail to convert str to time interval", KR(ret), K(v));
           }
         } else if (0 == k.case_compare("EXPIRE_TIME")) {
           if (OB_FAIL(str_to_time(v, policy.expire_time_num_, policy.expire_time_unit_))) {
-            LOG_WARN("fail to convert str to time interval", KR(ret), K(v));
           }
         } else if (0 == k.case_compare("TIME_ZONE")) {
           int32_t offset = 0;
@@ -1414,7 +1304,6 @@ int ObDynamicPartitionManager::dynamic_partition_policy_to_str_(
                                                      new_ptr,
                                                      len,
                                                      pos))) {
-    LOG_WARN("fail to print dynamic partition policy", KR(ret), K(policy));
   } else {
     str.assign_ptr(new_ptr, pos);
   }
@@ -1426,7 +1315,6 @@ int ObDynamicPartitionManager::str_to_dynamic_partition_policy_(const ObString &
   int ret = OB_SUCCESS;
   policy.reset();
   if (OB_FAIL(update_dynamic_partition_policy_with_str_(str, false/*is_alter*/, policy))) {
-    LOG_WARN("fail to update dynamic partition polict with str", KR(ret), K(str));
   }
   return ret;
 }
@@ -1454,14 +1342,12 @@ int ObDynamicPartitionManager::get_time_zone_wrap_(const ObString &time_zone, Ob
   ObTimeZoneInfoManager *tz_info_mgr = nullptr;
   ObSchemaGetterGuard schema_guard;
   if (OB_FAIL(OTTZ_MGR.get_tenant_timezone(tz_map_wrap, tz_info_mgr))) {
-    LOG_WARN("failed to get tenant timezone", KR(ret));
   } else if (OB_ISNULL(tz_map_wrap.get_tz_map())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tz map is null", KR(ret));
   } else if (OB_FAIL(tz_info_wrap.init_time_zone(time_zone,
                                                  OB_INVALID_VERSION,
                                                  *(const_cast<ObTZInfoMap *>(tz_map_wrap.get_tz_map()))))) {
-    LOG_WARN("failed to init time zone", KR(ret), K(time_zone));
   }
   return ret;
 }
@@ -1497,7 +1383,6 @@ int ObDynamicPartitionManager::get_enable(
   ObDynamicPartitionPolicy policy;
   enable = false;
   if (OB_FAIL(str_to_dynamic_partition_policy_(table_schema.get_dynamic_partition_policy(), policy))) {
-    LOG_WARN("fail to parse str to dynamic_partition_policy", KR(ret));
   } else {
     enable = policy.enable_;
   }
@@ -1512,7 +1397,6 @@ int ObDynamicPartitionManager::get_time_unit(
   ObDynamicPartitionPolicy policy;
   time_unit = ObDateUnitType::DATE_UNIT_MAX;
   if (OB_FAIL(str_to_dynamic_partition_policy_(table_schema.get_dynamic_partition_policy(), policy))) {
-    LOG_WARN("fail to parse str to dynamic_partition_policy", KR(ret));
   } else {
     time_unit = policy.time_unit_;
   }
@@ -1527,7 +1411,6 @@ int ObDynamicPartitionManager::get_time_zone(
   ObDynamicPartitionPolicy policy;
   time_zone.reset();
   if (OB_FAIL(str_to_dynamic_partition_policy_(table_schema.get_dynamic_partition_policy(), policy))) {
-    LOG_WARN("fail to parse str to dynamic_partition_policy", KR(ret));
   } else {
     time_zone = policy.time_zone_;
   }
@@ -1544,7 +1427,6 @@ int ObDynamicPartitionManager::get_precreate_time(
   num = -1;
   time_unit = ObDateUnitType::DATE_UNIT_MAX;
   if (OB_FAIL(str_to_dynamic_partition_policy_(table_schema.get_dynamic_partition_policy(), policy))) {
-    LOG_WARN("fail to parse str to dynamic_partition_policy", KR(ret));
   } else {
     num = policy.precreate_time_num_;
     time_unit = policy.precreate_time_unit_;
@@ -1562,7 +1444,6 @@ int ObDynamicPartitionManager::get_expire_time(
   num = -1;
   time_unit = ObDateUnitType::DATE_UNIT_MAX;
   if (OB_FAIL(str_to_dynamic_partition_policy_(table_schema.get_dynamic_partition_policy(), policy))) {
-    LOG_WARN("fail to parse str to dynamic_partition_policy", KR(ret));
   } else {
     num = policy.expire_time_num_;
     time_unit = policy.expire_time_unit_;
@@ -1578,7 +1459,6 @@ int ObDynamicPartitionManager::get_bigint_precision(
   ObDynamicPartitionPolicy policy;
   bigint_precision.reset();
   if (OB_FAIL(str_to_dynamic_partition_policy_(table_schema.get_dynamic_partition_policy(), policy))) {
-    LOG_WARN("fail to parse str to dynamic_partition_policy", KR(ret));
   } else {
     bigint_precision = policy.bigint_precision_;
   }

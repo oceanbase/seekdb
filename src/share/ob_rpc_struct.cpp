@@ -169,7 +169,6 @@ OB_DEF_SERIALIZE(ObStartRedefTableArg)
     if (OB_SUCC(ret)) {
       for (int64_t i = 0; OB_SUCC(ret) && i < ObNLSFormatEnum::NLS_MAX; i++) {
         if (OB_FAIL(nls_formats_[i].serialize(buf, buf_len, pos))) {
-          LOG_WARN("fail to serialize nls_formats_[i]", K(ret), K(nls_formats_[i]));
         }
       }
     }
@@ -201,7 +200,6 @@ OB_DEF_DESERIALIZE(ObStartRedefTableArg)
     char *tmp_ptr[ObNLSFormatEnum::NLS_MAX] = {};
     for (int64_t i = 0; OB_SUCC(ret) && i < ObNLSFormatEnum::NLS_MAX; i++) {
       if (OB_FAIL(tmp_string.deserialize(buf, data_len, pos))) {
-        LOG_WARN("fail to deserialize nls_formats_", K(ret), K(i));
       } else if (OB_ISNULL(tmp_ptr[i] = (char *)allocator_.alloc(tmp_string.length()))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to alloc memory!", K(ret));
@@ -307,7 +305,6 @@ int ObCreateHiddenTableArg::init(const uint64_t dest_tid,
   int ret = OB_SUCCESS;
   reset();
   if (OB_FAIL(tz_info_wrap_.deep_copy(tz_info_wrap))) {
-    LOG_WARN("failed to deep copy tz_info_wrap", KR(ret));
   } else if (FALSE_IT(nls_formats_[ObNLSFormatEnum::NLS_DATE].assign_ptr(local_nls_date.ptr(), static_cast<int32_t>(local_nls_date.length())))) {
     // do nothing
   } else if (FALSE_IT(nls_formats_[ObNLSFormatEnum::NLS_TIMESTAMP].assign_ptr(local_nls_timestamp.ptr(), static_cast<int32_t>(local_nls_timestamp.length())))) {
@@ -315,7 +312,6 @@ int ObCreateHiddenTableArg::init(const uint64_t dest_tid,
   } else if (FALSE_IT(nls_formats_[ObNLSFormatEnum::NLS_TIMESTAMP_TZ].assign_ptr(local_nls_timestamp_tz.ptr(), static_cast<int32_t>(local_nls_timestamp_tz.length())))) {
     // do nothing
   } else if (OB_FAIL(tablet_ids_.assign(tablet_ids))) {
-    LOG_WARN("failed to assign tablet ids", KR(ret), K(tablet_ids));
   } else {
     
     
@@ -341,7 +337,6 @@ OB_DEF_SERIALIZE(ObCreateHiddenTableArg)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(ObDDLArg::serialize(buf, buf_len, pos))) {
-    LOG_WARN("fail to serialize DDLArg", K(ret), K(buf_len), K(pos));
   } else {
     LST_DO_CODE(OB_UNIS_ENCODE,
                 
@@ -357,7 +352,6 @@ OB_DEF_SERIALIZE(ObCreateHiddenTableArg)
     if (OB_SUCC(ret)) {
       for (int64_t i = 0; OB_SUCC(ret) && i < ObNLSFormatEnum::NLS_MAX; i++) {
         if (OB_FAIL(nls_formats_[i].serialize(buf, buf_len, pos))) {
-          LOG_WARN("fail to serialize nls_formats_[i]", K(ret), K(nls_formats_[i]));
         }
       }
     }
@@ -374,7 +368,6 @@ OB_DEF_DESERIALIZE(ObCreateHiddenTableArg)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDDLArg::deserialize(buf, data_len, pos))) {
-    LOG_WARN("fail to deserialize DDLArg", K(ret), K(data_len), K(pos));
   } else {
     LST_DO_CODE(OB_UNIS_DECODE,
               
@@ -391,7 +384,6 @@ OB_DEF_DESERIALIZE(ObCreateHiddenTableArg)
     char *tmp_ptr[ObNLSFormatEnum::NLS_MAX] = {};
     for (int64_t i = 0; OB_SUCC(ret) && i < ObNLSFormatEnum::NLS_MAX; i++) {
       if (OB_FAIL(tmp_string.deserialize(buf, data_len, pos))) {
-        LOG_WARN("fail to deserialize nls_formats_", K(ret), K(i));
       } else if (OB_ISNULL(tmp_ptr[i] = (char *)allocator_.alloc(tmp_string.length()))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to alloc memory!", K(ret));
@@ -537,13 +529,9 @@ int ObCreateTenantArg::assign(const ObCreateTenantArg &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDDLArg::assign(other))) {
-    LOG_WARN("fail to assign ddl arg", KR(ret));
   } else if (OB_FAIL(tenant_schema_.assign(other.tenant_schema_))) {
-    LOG_WARN("fail to assign tenant schema", K(ret), K(other));
   } else if (OB_FAIL(pool_list_.assign(other.pool_list_))) {
-    LOG_WARN("fail to assign pool list", K(ret), K(other));
   } else if (OB_FAIL(sys_var_list_.assign(other.sys_var_list_))) {
-    LOG_WARN("fail to assign sys var list", K(ret), K(other));
   } else {
     if_not_exist_ = other.if_not_exist_;
     name_case_mode_ = other.name_case_mode_;
@@ -585,7 +573,6 @@ int ObLoadTenantTableSchemaArg::init(const uint64_t table_id,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(insert_idx_.assign(insert_idx))) {
-    LOG_WARN("failed to assign insert_idx_", KR(ret), K(insert_idx));
   } else {
     
     table_id_ = table_id;
@@ -600,7 +587,6 @@ int ObLoadTenantTableSchemaArg::assign(const ObLoadTenantTableSchemaArg &arg)
   int ret = OB_SUCCESS;
   if (this == &arg) {
   } else if (OB_FAIL(insert_idx_.assign(arg.insert_idx_))) {
-    LOG_WARN("failed to assign insert_idx_", KR(ret), K(arg.insert_idx_));
   } else {
     
     table_id_ = arg.table_id_;
@@ -664,7 +650,6 @@ int ObAddSysVarArg::init(const bool &update_sys_var, const bool &if_not_exist,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(sysvar_.assign(sysvar))) {
-    LOG_WARN("failed to assign sysvar", KR(ret), K(sysvar));
   } else {
     
     update_sys_var_ = update_sys_var;
@@ -1177,7 +1162,6 @@ int ObAlterTableArg::serialize_index_args(char *buf, const int64_t data_len, int
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), "self", *this, KP(buf), K(data_len), K(pos));
   } else if (OB_FAIL(serialization::encode_vi64(buf, data_len, pos, index_arg_list_.size()))) {
-    SHARE_LOG(WARN, "Fail to serialize index arg count", K(ret));
   }
   for (int i = 0; OB_SUCC(ret) && i < index_arg_list_.size(); ++i) {
     ObIndexArg *index_arg = index_arg_list_.at(i);
@@ -1189,9 +1173,7 @@ int ObAlterTableArg::serialize_index_args(char *buf, const int64_t data_len, int
         SHARE_LOG(WARN, "index arg is null", K(ret));
       } else if (OB_FAIL(serialization::encode_vi32(buf, data_len, pos,
           alter_pk_arg->index_action_type_))) {
-        SHARE_LOG(WARN, "failed to serialize index type", K(ret));
       } else if (OB_FAIL(alter_pk_arg->serialize(buf, data_len, pos))) {
-        SHARE_LOG(WARN, "failed to serialize create index arg!", K(data_len), K(pos), K(ret));
       }
     } else if (index_arg->index_action_type_ == ObIndexArg::ADD_INDEX
               || index_arg->index_action_type_ == ObIndexArg::ADD_PRIMARY_KEY) {
@@ -1201,9 +1183,7 @@ int ObAlterTableArg::serialize_index_args(char *buf, const int64_t data_len, int
         SHARE_LOG(WARN, "index arg is null", K(ret));
       } else if (OB_FAIL(serialization::encode_vi32(buf, data_len, pos,
           create_index_arg->index_action_type_))) {
-        SHARE_LOG(WARN, "failed to serialize index type", K(ret));
       } else if (OB_FAIL(create_index_arg->serialize(buf, data_len, pos))) {
-        SHARE_LOG(WARN, "failed to serialize create index arg!", K(data_len), K(pos), K(ret));
       }
     } else if (index_arg->index_action_type_ == ObIndexArg::DROP_INDEX) {
       ObDropIndexArg *drop_index_arg = static_cast<ObDropIndexArg *>(index_arg);
@@ -1212,9 +1192,7 @@ int ObAlterTableArg::serialize_index_args(char *buf, const int64_t data_len, int
         SHARE_LOG(WARN, "index arg is null", K(ret));
       } else if (OB_FAIL(serialization::encode_vi32(buf, data_len, pos,
                                                     drop_index_arg->index_action_type_))) {
-        SHARE_LOG(WARN, "failed to serialize index type", K(ret));
       } else if (OB_FAIL(drop_index_arg->serialize(buf, data_len, pos))) {
-        SHARE_LOG(WARN, "failed to serialize drop index arg!", K(data_len), K(pos), K(ret));
       }
     } else if (index_arg->index_action_type_ == ObIndexArg::ALTER_INDEX) {
       ObAlterIndexArg *alter_index_arg = static_cast<ObAlterIndexArg *>(index_arg);
@@ -1223,9 +1201,7 @@ int ObAlterTableArg::serialize_index_args(char *buf, const int64_t data_len, int
         SHARE_LOG(WARN, "index arg is null", K(ret));
       } else if (OB_FAIL(serialization::encode_vi32(buf, data_len, pos,
                                                     alter_index_arg->index_action_type_))) {
-        SHARE_LOG(WARN, "failed to serialize index type", K(ret));
       } else if (OB_FAIL(alter_index_arg->serialize(buf, data_len, pos))) {
-        SHARE_LOG(WARN, "failed to serialize alter index arg!", K(data_len), K(pos), K(ret));
       }
     } else if (index_arg->index_action_type_ == ObIndexArg::ALTER_INDEX_PARALLEL) {
       ObAlterIndexParallelArg *alter_index_parallel_arg = static_cast<ObAlterIndexParallelArg *>(index_arg);
@@ -1234,10 +1210,7 @@ int ObAlterTableArg::serialize_index_args(char *buf, const int64_t data_len, int
         SHARE_LOG(WARN, "index arg is null", K(ret));
       } else if (OB_FAIL(serialization::encode_vi32(buf, data_len, pos,
                                                     alter_index_parallel_arg->index_action_type_))) {
-        SHARE_LOG(WARN, "failed to serialize index type", K(ret));
       } else if (OB_FAIL(alter_index_parallel_arg->serialize(buf, data_len, pos))) {
-        SHARE_LOG(WARN, "failed to serialize alter index parallel arg!",
-          K(data_len), K(pos), K(ret));
       }
     } else if (index_arg->index_action_type_ == ObIndexArg::RENAME_INDEX) {
       ObRenameIndexArg *rename_index_arg = static_cast<ObRenameIndexArg *>(index_arg);
@@ -1248,9 +1221,7 @@ int ObAlterTableArg::serialize_index_args(char *buf, const int64_t data_len, int
         SHARE_LOG(WARN, "index arg is null", K(ret));
       } else if (OB_FAIL(serialization::encode_vi32(buf, data_len, pos,
                                                     rename_index_arg->index_action_type_))) {
-        SHARE_LOG(WARN, "failed to serialize index type", K(ret));
       } else if (OB_FAIL(rename_index_arg->serialize(buf, data_len, pos))) {
-        SHARE_LOG(WARN, "failed to serialize alter index arg!", K(data_len), K(pos), K(ret));
       }
     } else if (index_arg->index_action_type_ == ObIndexArg::DROP_FOREIGN_KEY) {
       ObDropForeignKeyArg *foreign_key_arg = static_cast<ObDropForeignKeyArg *>(index_arg);
@@ -1259,9 +1230,7 @@ int ObAlterTableArg::serialize_index_args(char *buf, const int64_t data_len, int
         SHARE_LOG(WARN, "index arg is null", K(ret));
       } else if (OB_FAIL(serialization::encode_vi32(buf, data_len, pos,
                                                     foreign_key_arg->index_action_type_))) {
-        SHARE_LOG(WARN, "failed to serialize index type", K(ret));
       } else if (OB_FAIL(foreign_key_arg->serialize(buf, data_len, pos))) {
-        SHARE_LOG(WARN, "failed to serialize drop foreign key arg!", K(data_len), K(pos), K(ret));
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
@@ -1350,7 +1319,6 @@ int ObAlterTableArg::deserialize_index_args(const char *buf, const int64_t data_
   } else if (pos == data_len) {
     //do nothing
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
-    SHARE_LOG(WARN, "Fail to decode column count", K(ret));
   }
   for (int i = 0; OB_SUCC(ret) && i < count; ++i) {
     ObIndexArg::IndexActionType index_action_type = ObIndexArg::INVALID_ACTION;
@@ -1359,14 +1327,11 @@ int ObAlterTableArg::deserialize_index_args(const char *buf, const int64_t data_
       SHARE_LOG(WARN, "failed to decode index action type", K(ret));
       break;
     } else if (OB_FAIL(alloc_index_arg(index_action_type, index_arg))) {
-      SHARE_LOG(WARN, "alloc index arg failed", K(ret));
     } else if (OB_ISNULL(index_arg)) {
       ret = OB_ERR_UNEXPECTED;
       SHARE_LOG(WARN, "error unexpected, index arg must not be nullptr", K(ret));
     } else if (OB_FAIL(index_arg->deserialize(buf, data_len, pos))) {
-      SHARE_LOG(WARN, "deserialize index arg failed", K(ret));
     } else if (OB_FAIL(index_arg_list_.push_back(index_arg))) {
-      SHARE_LOG(WARN, "push back index arg failed", K(ret));
     }
     if (OB_FAIL(ret) && nullptr != index_arg) {
       index_arg->~ObIndexArg();
@@ -1472,41 +1437,29 @@ OB_DEF_SERIALIZE(ObAlterTableArg)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), "self", *this);
   } else if (OB_FAIL(ObDDLArg::serialize(buf, buf_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to serialize DDLArg", K(buf_len), K(pos), K(ret));
   } else if (OB_FAIL(serialize_index_args(buf, buf_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to serialize index args", K(buf_len), K(pos), K(ret));
   } else if (OB_FAIL(alter_table_schema_.serialize(buf, buf_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to serialize alter table schema", K(ret));
   } else if (OB_FAIL(tz_info_.serialize(buf, buf_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to serialize timezone info", K(ret));
   } else if (OB_FAIL(serialization::encode_vi32(buf, buf_len, pos, alter_part_type_))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to serialize alter_part_type", K(ret));
   } else if (OB_FAIL(serialization::encode_vi32(buf, buf_len, pos, alter_constraint_type_))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to serialize alter_constraint_type", K(ret));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, session_id_))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to serialize session_id", K(ret));
   } else if (OB_FAIL(tz_info_wrap_.serialize(buf, buf_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to serialize timezone info wrap", K(ret));
   } else {
     for (int64_t i = 0; i < ObNLSFormatEnum::NLS_MAX; ++i) {
       if (OB_FAIL(nls_formats_[i].serialize(buf, buf_len, pos))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to serialize nls_formats_[i]", K(nls_formats_[i]), K(ret));
       }
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(foreign_key_arg_list_.serialize(buf, buf_len, pos))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to serialize foreign_key_arg_list_", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(sequence_ddl_arg_.serialize(buf, buf_len, pos))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to serialize sequence_ddl_arg_", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, sql_mode_))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to serialize sql mode", K(ret));
     }
   }
   LST_DO_CODE(OB_UNIS_ENCODE,
@@ -1539,7 +1492,6 @@ OB_DEF_SERIALIZE(ObAlterTableArg)
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(rebuild_index_arg_list_.serialize(buf, buf_len, pos))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to serialize rebuild_index_arg_list_", K(ret));
     }
   }
 
@@ -1558,22 +1510,14 @@ OB_DEF_DESERIALIZE(ObAlterTableArg)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDDLArg::deserialize(buf, data_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to deserialize DDLArg", K(data_len), K(pos), K(ret));
   } else if (OB_FAIL(deserialize_index_args(buf, data_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to deserialize index args, ", K(ret));
   } else if (OB_FAIL(alter_table_schema_.deserialize(buf, data_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to deserialize alter table schema, ", K(ret));
   } else if (OB_FAIL(tz_info_.deserialize(buf, data_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to deserialize timezone info", K(ret));
   } else if (OB_FAIL(serialization::decode_vi32(buf, data_len, pos, ((int32_t *)(&alter_part_type_))))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to deserialize alter_part_type_, ", K(ret));
   } else if (OB_FAIL(serialization::decode_vi32(buf, data_len, pos, ((int32_t *)(&alter_constraint_type_))))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to deserialize alter_constraint_type_, ", K(ret));
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, ((int64_t *)(&session_id_))))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to deserialize session_id_, ", K(ret));
   } else if (pos < data_len) {
     if (OB_FAIL(tz_info_wrap_.deserialize(buf, data_len, pos))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to deserialize timezone info", K(ret));
     }
   } else {
     tz_info_wrap_.set_tz_info_offset(tz_info_.get_offset());
@@ -1585,7 +1529,6 @@ OB_DEF_DESERIALIZE(ObAlterTableArg)
     char *tmp_ptr[ObNLSFormatEnum::NLS_MAX] = {};
     for (int64_t i = 0; OB_SUCC(ret) && i < ObNLSFormatEnum::NLS_MAX; ++i) {
       if (OB_FAIL(tmp_string.deserialize(buf, data_len, pos))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to deserialize nls_formats_", K(i), K(ret));
       } else if (OB_ISNULL(tmp_ptr[i] = (char *)allocator_.alloc(tmp_string.length()))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         SHARE_LOG(ERROR, "failed to alloc memory!", "size", tmp_string.length(), K(ret));
@@ -1608,18 +1551,15 @@ OB_DEF_DESERIALIZE(ObAlterTableArg)
 
   if (OB_SUCC(ret) && pos < data_len) {
     if (OB_FAIL(foreign_key_arg_list_.deserialize(buf, data_len, pos))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to deserialize foreign_key_arg_list_", K(ret));
     }
   }
 
   if (OB_SUCC(ret) && pos < data_len) {
     if (OB_FAIL(sequence_ddl_arg_.deserialize(buf, data_len, pos))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to deserialize sequence_ddl_arg_", K(ret));
     }
   }
   if (OB_SUCC(ret) && pos < data_len) {
     if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, reinterpret_cast<int64_t *>(&sql_mode_)))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to decode sql mode", K(ret));
     }
   }
   LST_DO_CODE(OB_UNIS_DECODE,
@@ -1652,7 +1592,6 @@ OB_DEF_DESERIALIZE(ObAlterTableArg)
 
   if (OB_SUCC(ret) && pos < data_len) {
     if (OB_FAIL(rebuild_index_arg_list_.deserialize(buf, data_len, pos))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to deserialize rebuild_index_arg_list_", K(ret));
     }
   }
   LST_DO_CODE(OB_UNIS_DECODE,
@@ -1741,7 +1680,6 @@ int ObExchangePartitionArg::assign(const ObExchangePartitionArg &other)
   if (this == &other) {
     //do nothing
   } else if (OB_FAIL(ObDDLArg::assign(other))) {
-    LOG_WARN("assign failed", K(ret));
   } else {
     session_id_ = other.session_id_;
     
@@ -1985,7 +1923,6 @@ int ObForkTableArg::assign(const ObForkTableArg &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDDLArg::assign(other))) {
-    LOG_WARN("assign ddl arg failed", K(ret));
   } else {
     
     src_database_name_ = other.src_database_name_;
@@ -2034,7 +1971,6 @@ int ObForkDatabaseArg::assign(const ObForkDatabaseArg &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDDLArg::assign(other))) {
-    LOG_WARN("assign ddl arg failed", K(ret));
   } else {
     
     src_database_name_ = other.src_database_name_;
@@ -2261,7 +2197,6 @@ int ObCreateIndexArg::ObIndexColumnGroupItem::assign(const ObCreateIndexArg::ObI
   is_each_cg_ = other.is_each_cg_;
   cg_type_ = other.cg_type_;
   if (OB_FAIL(column_list_.assign(other.column_list_))) {
-    LOG_WARN("fail to assign array", K(ret));
   }
   return ret;
 }
@@ -2408,9 +2343,7 @@ int ObDropIndexArg::assign(const ObDropIndexArg &other)
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(ObIndexArg::assign(other))) {
-    LOG_WARN("fail to assign base", K(ret));
   } else if (OB_FAIL(index_ids_.assign(other.index_ids_))) {
-    LOG_WARN("fail to assign index columns", K(ret));
   } else {
     index_table_id_ = other.index_table_id_;
     is_add_to_scheduler_ = other.is_add_to_scheduler_;
@@ -2841,7 +2774,6 @@ bool ObCheckModifyTimeElapsedArg::is_valid() const
 int ObDDLCheckTabletMergeStatusArg::assign(const ObDDLCheckTabletMergeStatusArg &other) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tablet_ids_.assign(other.tablet_ids_))) {
-    LOG_WARN("assign tablet_ids_ failed", K(ret), K(other.tablet_ids_));
   } else {
     
     ls_id_ = other.ls_id_;
@@ -2933,7 +2865,6 @@ OB_DEF_DESERIALIZE(ObDropUserArg)
     const ObString TMP_DEFAULT_HOST_NAME(OB_DEFAULT_HOST_NAME);
     for (int64_t i = 0; i < users_.count() && OB_SUCC(ret); ++i) {
       if (OB_FAIL(hosts_.push_back(TMP_DEFAULT_HOST_NAME))) {
-        LOG_WARN("fail to push_back DEFAULT_HOST_NAME", K(ret));
       }
     }
   }
@@ -3039,9 +2970,7 @@ OB_DEF_DESERIALIZE(ObRenameUserArg)
       const ObString TMP_DEFAULT_HOST_NAME(OB_DEFAULT_HOST_NAME);
       for (int64_t i = 0; i < old_users_.count() && OB_SUCC(ret); ++i) {
         if (OB_FAIL(old_hosts_.push_back(TMP_DEFAULT_HOST_NAME))) {
-          LOG_WARN("fail to push_back DEFAULT_HOST_NAME", K(ret));
         } else if (OB_FAIL(new_hosts_.push_back(TMP_DEFAULT_HOST_NAME))) {
-          LOG_WARN("fail to push_back DEFAULT_HOST_NAME", K(ret));
         }
       }
     }
@@ -3162,7 +3091,6 @@ OB_DEF_DESERIALIZE(ObLockUserArg)
     const ObString TMP_DEFAULT_HOST_NAME(OB_DEFAULT_HOST_NAME);
     for (int64_t i = 0; i < users_.count() && OB_SUCC(ret); ++i) {
       if (OB_FAIL(hosts_.push_back(TMP_DEFAULT_HOST_NAME))) {
-        LOG_WARN("fail to push_back DEFAULT_HOST_NAME", K(ret));
       }
     }
   }
@@ -3280,7 +3208,6 @@ OB_DEF_DESERIALIZE(ObGrantArg)
     const ObString TMP_DEFAULT_HOST_NAME(OB_DEFAULT_HOST_NAME);
     for (int64_t i = 0; i < user_count && OB_SUCC(ret); ++i) {
       if (OB_FAIL(hosts_.push_back(TMP_DEFAULT_HOST_NAME))) {
-        LOG_WARN("fail to push_back DEFAULT_HOST_NAME", K(ret));
       }
     }
   }
@@ -3673,6 +3600,17 @@ OB_SERIALIZE_MEMBER((ObCreatePackageArg, ObDDLArg), is_replace_,
                     is_editionable_, db_name_, package_info_,
                     public_routine_infos_, error_info_, dependency_infos_);
 
+bool ObAlterPackageArg::is_valid() const
+{
+  return !db_name_.empty()
+      && !package_name_.empty()
+      && INVALID_PACKAGE_TYPE != package_type_;
+}
+
+
+OB_SERIALIZE_MEMBER((ObAlterPackageArg, ObDDLArg), db_name_, package_name_, package_type_,
+                    compatible_mode_, public_routine_infos_, error_info_, exec_env_, dependency_infos_);
+
 bool ObDropPackageArg::is_valid() const
 {
   return !db_name_.empty()
@@ -3724,7 +3662,7 @@ bool ObAlterTriggerArg::is_valid() const
 
 
 OB_SERIALIZE_MEMBER((ObAlterTriggerArg, ObDDLArg), trigger_database_,
-                    trigger_info_, trigger_infos_, is_set_status_);
+                    trigger_info_, trigger_infos_, is_set_status_, is_alter_compile_);
 
 
 
@@ -3759,13 +3697,11 @@ int ObForceSetServerListResult::ResultInfo::add_ls_info(const share::ObLSID ls_i
     LOG_WARN("invalid argument", K(ret), K(ls_id), K(failed_ret));
   } else if (OB_SUCCESS == failed_ret) {
     if (OB_FAIL(successful_ls_.push_back(ls_id))) {
-      LOG_WARN("push_back failed", K(ret), K(ls_id));
     }
   } else {
     const common::ObString failed_reason = ob_error_name(failed_ret);
     LSFailedInfo failed_info(ls_id, failed_ret, failed_reason);
     if (OB_FAIL(failed_ls_info_.push_back(failed_info))) {
-      LOG_WARN("insert_and_get failed for failed_ls_info_", K(ret), K(ls_id), K(failed_ret));
     }
   }
   return ret;
@@ -3860,7 +3796,6 @@ int ObEstPartArgElement::deserialize(common::ObIAllocator &allocator,
   OB_UNIS_DECODE(range_columns_count_);
   if (OB_SUCC(ret)) {
     if (OB_FAIL(batch_.deserialize(allocator, buf, data_len, pos))) {
-      LOG_WARN("fail to deserialize batch", K(ret), K(data_len), K(pos));
     }
   }
   OB_UNIS_DECODE(tablet_id_);
@@ -3901,9 +3836,7 @@ OB_DEF_DESERIALIZE(ObEstPartArg)
   for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
     ObEstPartArgElement arg;
     if (OB_FAIL(arg.deserialize(allocator_, buf, data_len, pos))) {
-      SQL_OPT_LOG(WARN, "fail to deserialize index param", K(ret));
     } else if (OB_FAIL(index_params_.push_back(arg))) {
-      SQL_OPT_LOG(WARN, "failed to push back arg element", K(ret));
     }
   }
   return ret;
@@ -3954,7 +3887,6 @@ int ObTenantSchemaVersions::add(const int64_t schema_version)
     
     info.schema_version_ = schema_version;
     if (OB_FAIL(tenant_schema_versions_.push_back(info))) {
-      LOG_WARN("fail to push back", KR(ret));
     }
   }
   return ret;
@@ -4047,7 +3979,6 @@ int ObCheckServerEmptyResult::init(const bool &server_empty, const ObZone &zone)
   int ret = OB_SUCCESS;
   server_empty_ = server_empty;
   if (OB_FAIL(zone_.assign(zone))) {
-    LOG_WARN("failed to assign zone", KR(ret), K(zone));
   }
   return ret;
 }
@@ -4147,7 +4078,6 @@ OB_DEF_DESERIALIZE(ObDDLBuildSingleReplicaRequestArg)
       lob_col_idxs_);
   if (FAILEDx(ObSplitUtil::deserializ_parallel_datum_rowkey(
         rowkey_allocator_, buf, data_len, pos, parallel_datum_rowkey_list_))) {
-    LOG_WARN("deserialzie parallel info failed", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -4186,9 +4116,7 @@ int ObDDLBuildSingleReplicaRequestArg::assign(const ObDDLBuildSingleReplicaReque
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(other));
   } else if (OB_FAIL(lob_col_idxs_.assign(other.lob_col_idxs_))) {
-    LOG_WARN("failed to assign to lob col idxs", K(ret));
-  } else if (OB_FAIL(parallel_datum_rowkey_list_.assign(other.parallel_datum_rowkey_list_))) { // shallow copy.
-    LOG_WARN("assign failed", K(ret));
+  } else if (OB_FAIL(parallel_datum_rowkey_list_.assign(other.parallel_datum_rowkey_list_))) {
   } else {
     
     ls_id_ = other.ls_id_;
@@ -4241,7 +4169,6 @@ OB_DEF_DESERIALIZE(ObPrepareSplitRangesRes)
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObSplitUtil::deserializ_parallel_datum_rowkey(
       rowkey_allocator_, buf, data_len, pos, parallel_datum_rowkey_list_))) {
-    LOG_WARN("deserialzie parallel info failed", K(ret));
   }
   return ret;
 }
@@ -4275,11 +4202,8 @@ int ObTabletSplitArg::assign(const ObTabletSplitArg &other)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(other));
   } else if (OB_FAIL(dest_tablets_id_.assign(other.dest_tablets_id_))) {
-    LOG_WARN("assign failed", K(ret), K(other));
   } else if (OB_FAIL(lob_col_idxs_.assign(other.lob_col_idxs_))) {
-    LOG_WARN("assign failed", K(ret));
-  } else if (OB_FAIL(parallel_datum_rowkey_list_.assign(other.parallel_datum_rowkey_list_))) { // shallow cpy.
-    LOG_WARN("assign failed", K(ret), K(other));
+  } else if (OB_FAIL(parallel_datum_rowkey_list_.assign(other.parallel_datum_rowkey_list_))) {
   } else {
     ls_id_                 = other.ls_id_;
     table_id_              = other.table_id_;
@@ -4340,7 +4264,6 @@ OB_DEF_DESERIALIZE(ObTabletSplitArg)
     lob_col_idxs_);
   if (FAILEDx(ObSplitUtil::deserializ_parallel_datum_rowkey(
       rowkey_allocator_, buf, data_len, pos, parallel_datum_rowkey_list_))) {
-    LOG_WARN("deserialzie parallel info failed", K(ret));
   } else {
     LST_DO_CODE(OB_UNIS_DECODE, min_split_start_scn_);
   }
@@ -4442,7 +4365,6 @@ int ObBatchRemoveTabletArg::assign(const ObBatchRemoveTabletArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tablet_ids_.assign(arg.tablet_ids_))) {
-    LOG_WARN("failed to assign table ids", KR(ret), K(arg));
   } else {
     id_ = arg.id_;
     is_old_mds_ = arg.is_old_mds_;
@@ -4462,7 +4384,6 @@ int ObBatchRemoveTabletArg::init(const ObIArray<common::ObTabletID> &tablet_ids,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(tablet_ids), K(id));
   } else if (OB_FAIL(tablet_ids_.assign(tablet_ids))) {
-    LOG_WARN("failed to assign table schema index", KR(ret), K(tablet_ids));
   } else {
     id_ = id;
   }
@@ -4479,7 +4400,6 @@ int ObBatchRemoveTabletArg::skip_array_len(const char *buf,
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid args", K(ret), KP(buf), K(data_len), K(pos));
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
-    TRANS_LOG(WARN, "failed to decode array count", K(ret), KP(buf), K(data_len));
   } else if (count <= 0) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid args", K(ret), KP(buf), K(data_len), K(pos), K(count));
@@ -4512,7 +4432,6 @@ int ObBatchRemoveTabletArg::is_old_mds(const char *buf,
     }
     // tablets array
     else if (OB_FAIL(skip_array_len(buf, data_len, pos))) {
-      TRANS_LOG(WARN, "failed to skip_unis_array_len", K(ret), KP(buf), K(data_len), K(pos), K(version), K(len), K(id));
     } else {
       LST_DO_CODE(OB_UNIS_DECODE, id, is_old_mds);
     }
@@ -4654,13 +4573,9 @@ int ObCreateTabletInfo::assign(const ObCreateTabletInfo &info)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("info is invalid", KR(ret), K(info));
   } else if (OB_FAIL(tablet_ids_.assign(info.tablet_ids_))) {
-    LOG_WARN("failed to assign table ids", KR(ret), K(info));
   } else if (OB_FAIL(table_schema_index_.assign(info.table_schema_index_))) {
-    LOG_WARN("failed to assign table schema index", KR(ret), K(info));
   } else if (OB_FAIL(create_commit_versions_.assign(info.create_commit_versions_))) {
-    LOG_WARN("failed to assign create commit versions", KR(ret), K(info));
   } else if (OB_FAIL(fork_tablet_infos_.assign(info.fork_tablet_infos_))) {
-    LOG_WARN("failed to assign fork tablet infos", KR(ret), K(info));
   } else {
     data_tablet_id_ = info.data_tablet_id_;
     compat_mode_ = info.compat_mode_;
@@ -4690,11 +4605,8 @@ int ObCreateTabletInfo::init(const ObIArray<common::ObTabletID> &tablet_ids,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(tablet_ids), K(data_tablet_id), K(table_schema_index));
   } else if (OB_FAIL(tablet_ids_.assign(tablet_ids))) {
-    LOG_WARN("failed to assign table schema index", KR(ret), K(table_schema_index));
   } else if (OB_FAIL(table_schema_index_.assign(table_schema_index))) {
-    LOG_WARN("failed to assign table schema index", KR(ret), K(table_schema_index));
   } else if (OB_FAIL(create_commit_versions_.assign(create_commit_versions))) {
-    LOG_WARN("failed to assign create commit versions", KR(ret), K(create_commit_versions));
   } else {
     data_tablet_id_ = data_tablet_id;
     compat_mode_ = mode;
@@ -4720,9 +4632,7 @@ int ObCreateTabletInfo::init(const ObIArray<common::ObTabletID> &tablet_ids,
       K(fork_tablet_infos));
   } else if (OB_FAIL(init(tablet_ids, data_tablet_id, table_schema_index, mode, is_create_bind_hidden_tablets,
       create_commit_versions, has_cs_replica))) {
-    LOG_WARN("failed to init create tablet info", KR(ret));
   } else if (OB_FAIL(fork_tablet_infos_.assign(fork_tablet_infos))) {
-    LOG_WARN("failed to assign fork tablet infos", KR(ret), K(fork_tablet_infos));
   }
   return ret;
 }
@@ -4853,13 +4763,9 @@ int ObBatchCreateTabletArg::assign(const ObBatchCreateTabletArg &arg)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("arg is invalid", KR(ret), K(arg));
   } else if (OB_FAIL(tablets_.assign(arg.tablets_))) {
-    LOG_WARN("failed to assign tablets", KR(ret), K(arg));
   } else if (OB_FAIL(table_schemas_.assign(arg.table_schemas_))) {
-    LOG_WARN("failed to assign table schema", KR(ret), K(arg));
   } else if (OB_FAIL(tablet_extra_infos_.assign(arg.tablet_extra_infos_))) {
-    LOG_WARN("failed to assign tablet extra infos", K(ret), K(arg));
   } else if (OB_FAIL(create_tablet_schemas_.reserve(create_tablet_schemas.count()))) {
-    STORAGE_LOG(WARN, "Fail to reserve schema array", K(ret), K(create_tablet_schemas.count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < create_tablet_schemas.count(); ++i) {
       if (OB_ISNULL(create_tablet_schemas[i])) {
@@ -4957,14 +4863,12 @@ int ObBatchCreateTabletArg::serialize_for_create_tablet_schemas(char *buf,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::encode_vi64(buf, data_len, pos, create_tablet_schemas_.count()))) {
-    STORAGE_LOG(WARN, "failed to encode schema count", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < create_tablet_schemas_.count(); ++i) {
     if (OB_ISNULL(create_tablet_schemas_.at(i))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null tx service ptr", KR(ret), K(i), KPC(this));
     } else if (OB_FAIL(create_tablet_schemas_.at(i)->serialize(buf, data_len, pos))) {
-      STORAGE_LOG(WARN, "failed to serialize schema", K(ret));
     }
   }
   return ret;
@@ -4980,7 +4884,6 @@ int ObBatchCreateTabletArg::skip_unis_array_len(const char *buf,
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid args", K(ret), KP(buf), K(data_len), K(pos));
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
-    TRANS_LOG(WARN, "failed to decode array count", K(ret), KP(buf), K(data_len));
   } else if (count < 0) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid args", K(ret), KP(buf), K(data_len), K(pos), K(count));
@@ -5025,14 +4928,12 @@ int ObBatchCreateTabletArg::deserialize_create_tablet_schemas(const char *buf,
   } else if (pos == data_len) {
     //do nothing
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
-    STORAGE_LOG(WARN, "failed to decode schema count", K(ret));
   } else if (count < 0) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "count invalid", KR(ret), K(buf), K(data_len), K(pos), K(count));
   } else if (count == 0) {
     STORAGE_LOG(INFO, "upgrade, count is 0", KR(ret), K(buf), K(data_len), K(pos), K(count));
   } else if (OB_FAIL(create_tablet_schemas_.reserve(count))) {
-    STORAGE_LOG(WARN, "failed to reserve schema array", K(ret), K(count), K(buf), K(data_len), K(pos));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
       ObCreateTabletSchema *create_tablet_schema = NULL;
@@ -5078,11 +4979,9 @@ int ObBatchCreateTabletArg::is_old_mds(const char *buf,
     }
     // tablets array
     else if (OB_FAIL(skip_unis_array_len(buf, data_len, pos))) {
-      TRANS_LOG(WARN, "failed to skip_unis_array_len", K(ret), KP(buf), K(data_len), K(pos));
     }
     // schema array
     else if (OB_FAIL(skip_unis_array_len(buf, data_len, pos))) {
-      TRANS_LOG(WARN, "failed to skip_unis_array_len", K(ret), KP(buf), K(data_len), K(pos));
     } else {
       LST_DO_CODE(OB_UNIS_DECODE, need_check_tablet_cnt, is_old_mds);
     }
@@ -5104,7 +5003,6 @@ OB_DEF_SERIALIZE(ObBatchCreateTabletArg)
   LST_DO_CODE(OB_UNIS_ENCODE, id_, major_frozen_scn_, tablets_, table_schemas_, need_check_tablet_cnt_, is_old_mds_);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(serialize_for_create_tablet_schemas(buf, buf_len, pos))) {
-    LOG_WARN("failed to serialize_for_create_tablet_schemas", KR(ret), KPC(this));
   } else {
     OB_UNIS_ENCODE_ARRAY(tablet_extra_infos_, tablet_extra_infos_.count());
   }
@@ -5134,7 +5032,6 @@ OB_DEF_DESERIALIZE(ObBatchCreateTabletArg)
       if (OB_FAIL(ret)) {
       } else if (pos == data_len) {
       } else if (OB_FAIL(deserialize_create_tablet_schemas(buf, data_len, pos))) {
-        LOG_WARN("failed to deserialize_for_create_tablet_schemas", KR(ret));
       } else {
         int64_t tablet_extra_infos_count = 0;
         OB_UNIS_DECODE(tablet_extra_infos_count);
@@ -5157,7 +5054,6 @@ OB_DEF_DESERIALIZE(ObBatchCreateTabletArg)
       for (int64_t i = 0; OB_SUCC(ret) && i < schemas_count; i++) {
         obcall::ObCreateTabletExtraInfo create_tablet_extra_info; // placeholder.
         if (OB_FAIL(tablet_extra_infos_.push_back(create_tablet_extra_info))) {
-          LOG_WARN("failed to push back create tablet extra info", K(ret));
         }
       }
     }
@@ -5264,7 +5160,6 @@ ObCallRemoteWriteDDLIncCommitLogArg::~ObCallRemoteWriteDDLIncCommitLogArg()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(release())) {
-    LOG_WARN("fail to release tx_desc", K(ret));
   }
 }
 
@@ -5279,7 +5174,6 @@ int ObCallRemoteWriteDDLIncCommitLogArg::init(const share::ObLSID &ls_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tablet id is not valid", K(ret), K(ls_id), K(tablet_id), K(lob_meta_tablet_id), KPC(tx_desc));
   } else if (OB_FAIL(release())) {
-    LOG_WARN("fail to release tx_desc", K(ret));
   } else {
     
     ls_id_ = ls_id;
@@ -5299,7 +5193,6 @@ int ObCallRemoteWriteDDLIncCommitLogArg::release()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null tx service ptr", K(ret));
     } else if (OB_FAIL(tx_svc->release_tx(*tx_desc_))) {
-      LOG_WARN("release tx fail", K(ret));
     } else {
       need_release_ = false;
       tx_desc_ = nullptr;
@@ -5331,12 +5224,10 @@ OB_DEF_DESERIALIZE(ObCallRemoteWriteDDLIncCommitLogArg)
   if (OB_SUCC(ret)) {
     ObTransService *tx_svc = nullptr;
     if (OB_FAIL(release())) {
-      LOG_WARN("fail to release tx_desc", K(ret));
     } else if (OB_ISNULL(tx_svc = MTL_WITH_CHECK(ObTransService *))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null tx service ptr", KR(ret));
     } else if (OB_FAIL(tx_svc->acquire_tx(buf, data_len, pos, tx_desc_))) {
-      LOG_WARN("acquire tx by deserialize fail", K(data_len), K(pos), KR(ret));
     } else {
       need_release_ = true;
     }
@@ -5420,7 +5311,6 @@ OB_DEF_DESERIALIZE(ObRegisterTxDataArg)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null tx service ptr", KR(ret));
     } else if (OB_FAIL(tx_svc->acquire_tx(buf, data_len, pos, tx_desc_))) {
-      LOG_WARN("acquire tx by deserialize fail", K(data_len), K(pos), KR(ret));
     } else {
       LST_DO_CODE(OB_UNIS_DECODE, ls_id_, type_, buf_, request_id_, register_flag_, seq_no_);
       LOG_INFO("deserialize txDesc from session", KPC_(tx_desc), KPC(this));
@@ -5508,9 +5398,7 @@ int ObEstBlockResElement::assign(const ObEstBlockResElement &other)
   sstable_row_count_ = other.sstable_row_count_;
   memtable_row_count_ = other.memtable_row_count_;
   if (OB_FAIL(cg_macro_cnt_arr_.assign(other.cg_macro_cnt_arr_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else if (OB_FAIL(cg_micro_cnt_arr_.assign(other.cg_micro_cnt_arr_))) {
-    LOG_WARN("failed to assign");
   }
   return ret;
 }
@@ -5529,9 +5417,7 @@ int ObEstSkipRateArgElement::assign(const ObEstSkipRateArgElement &other)
   tablet_id_ = other.tablet_id_;
   ls_id_ = other.ls_id_;
   if (OB_FAIL(sample_count_.assign(other.sample_count_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else if (OB_FAIL(column_ids_.assign(other.column_ids_))) {
-    LOG_WARN("failed to assign", K(ret));
   }
   return ret;
 }
@@ -5545,9 +5431,7 @@ int ObEstSkipRateResElement::assign(const ObEstSkipRateResElement &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(cg_skip_rate_arr_.assign(other.cg_skip_rate_arr_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else if (OB_FAIL(sample_count_.assign(other.sample_count_))) {
-    LOG_WARN("failed to assign", K(ret));
   }
   return ret;
 }
@@ -5565,9 +5449,7 @@ int ObBatchGetTabletAutoincSeqArg::assign(const ObBatchGetTabletAutoincSeqArg &o
   
   ls_id_ = other.ls_id_;
   if (OB_FAIL(src_tablet_ids_.assign(other.src_tablet_ids_))) {
-    LOG_WARN("failed to assign src tablet ids", K(ret), K(other));
   } else if (OB_FAIL(dest_tablet_ids_.assign(other.dest_tablet_ids_))) {
-    LOG_WARN("failed to assign dest tablet ids", K(ret), K(other));
   }
   return ret;
 }
@@ -5582,9 +5464,7 @@ int ObBatchGetTabletAutoincSeqArg::init(const share::ObLSID &ls_id, const ObIArr
   for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); i++) {
     const ObMigrateTabletAutoincSeqParam &param = params.at(i);
     if (OB_FAIL(src_tablet_ids_.push_back(param.src_tablet_id_))) {
-      LOG_WARN("failed to push src tablet id", K(ret));
     } else if (OB_FAIL(dest_tablet_ids_.push_back(param.dest_tablet_id_))) {
-      LOG_WARN("failed to push dest tablet id", K(ret));
     }
   }
   if (OB_SUCC(ret) && OB_UNLIKELY(!is_valid())) {
@@ -5606,7 +5486,6 @@ int ObBatchSetTabletAutoincSeqArg::assign(const ObBatchSetTabletAutoincSeqArg &o
   ls_id_ = other.ls_id_;
   is_tablet_creating_ = other.is_tablet_creating_;
   if (OB_FAIL(autoinc_params_.assign(other.autoinc_params_))) {
-    LOG_WARN("failed to assign autoinc params", K(ret), K(other));
   }
   return ret;
 }
@@ -5620,7 +5499,6 @@ int ObBatchSetTabletAutoincSeqArg::init(const share::ObLSID &ls_id, const ObIArr
   for (int64_t i = 0; OB_SUCC(ret) && i < params.count(); i++) {
     const ObMigrateTabletAutoincSeqParam &param = params.at(i);
     if (OB_FAIL(autoinc_params_.push_back(param))) {
-      LOG_WARN("failed to push dest tablet id", K(ret));
     }
   }
   if (OB_SUCC(ret) && OB_UNLIKELY(!is_valid())) {
@@ -5652,7 +5530,6 @@ int ObBatchGetTabletBindingArg::init(const share::ObLSID &ls_id, const ObIArray<
   ls_id_ = ls_id;
   check_committed_ = check_committed;
   if (OB_FAIL(tablet_ids_.assign(tablet_ids))) {
-    LOG_WARN("failed to assign", K(ret));
   }
   if (OB_SUCC(ret) && OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_ARGUMENT;
@@ -5674,7 +5551,6 @@ int ObBatchGetTabletSplitArg::init(const share::ObLSID &ls_id, const ObIArray<Ob
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(ls_id), K(tablet_ids), K(check_committed));
   } else if (OB_FAIL(tablet_ids_.assign(tablet_ids))) {
-    LOG_WARN("failed to assign", K(ret));
   } else {
     
     ls_id_ = ls_id;
@@ -5718,7 +5594,6 @@ OB_DEF_DESERIALIZE(ObSessionInfoVeriRes)
     char *tmp_ptr = NULL;
 
     if (OB_FAIL(tmp_string.deserialize(buf, data_len, pos))) {
-      LOG_WARN("fail to deserialize nls_formats_", K(ret));
     } else if (OB_ISNULL(tmp_ptr = (char *)allocator_.alloc(tmp_string.length()))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc memory!", K(ret));
@@ -5779,7 +5654,6 @@ int ObInitTenantConfigArg::assign(const ObInitTenantConfigArg &other)
   int ret = OB_SUCCESS;
   if (this == &other) {
   } else if (OB_FAIL(tenant_configs_.assign(other.tenant_configs_))) {
-    LOG_WARN("fail to assign tenant configs", KR(ret), K(other));
       }
   return ret;
 }
@@ -5789,7 +5663,6 @@ int ObInitTenantConfigArg::add_tenant_config(const ObTenantConfigArg &arg)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tenant_configs_.push_back(arg))) {
-    LOG_WARN("fail to push back config configs", KR(ret), K(arg));
   }
   return ret;
 }
@@ -5990,7 +5863,6 @@ int ObCreateAiModelArg::check_valid() const
     return OB_INVALID_ARGUMENT;
     LOG_WARN("invalid tenant id");
   } else if (OB_FAIL(model_info_.check_valid())) {
-    LOG_WARN("invalid model info", K(ret), K(model_info_));
   }
   return ret;
 }
@@ -6000,7 +5872,6 @@ int ObCreateAiModelArg::assign(const ObCreateAiModelArg &other)
   int ret = OB_SUCCESS;
   if (this == &other) {
   } else if (OB_FAIL(ObDDLArg::assign(other))) {
-    LOG_WARN("fail to assign ddl arg", KR(ret), K(other));
   } else {
     model_info_ = other.model_info_;
   }
@@ -6012,7 +5883,6 @@ int ObDropAiModelArg::assign(const ObDropAiModelArg &other)
   int ret = OB_SUCCESS;
   if (this == &other) {
   } else if (OB_FAIL(ObDDLArg::assign(other))) {
-    LOG_WARN("fail to assign ddl arg", KR(ret), K(other));
   } else {
     ai_model_name_ = other.ai_model_name_;
   }
@@ -6029,7 +5899,6 @@ int ObRevokeObjMysqlArg::assign(const ObRevokeObjMysqlArg& other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDDLArg::assign(other))) {
-    LOG_WARN("fail to assign ddl arg", KR(ret));
   } else {
     
     user_id_ = other.user_id_;
@@ -6057,9 +5926,7 @@ int ObCreateLocationArg::assign(const ObCreateLocationArg &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDDLArg::assign(other))) {
-    LOG_WARN("fail to assign ddl arg", KR(ret));
   } else if (OB_FAIL(schema_.assign(other.schema_))) {
-    LOG_WARN("fail to assign directory schema", KR(ret));
   } else {
     or_replace_ = other.or_replace_;
     user_id_ = other.user_id_;
@@ -6073,7 +5940,6 @@ int ObDropLocationArg::assign(const ObDropLocationArg &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDDLArg::assign(other))) {
-    LOG_WARN("fail to assign ddl arg", KR(ret));
   } else {
     
     location_name_ = other.location_name_;

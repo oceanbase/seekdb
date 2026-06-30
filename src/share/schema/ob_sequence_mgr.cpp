@@ -103,7 +103,6 @@ struct Get_Sequence_Action
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(sequence_schemas_.push_back(value))) {
-      LOG_WARN("push back failed", K(ret), K(value->get_sequence_name_str()));
     }
     UNUSED(infos);
     UNUSED(map);
@@ -137,7 +136,6 @@ struct Deep_Copy_Action
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("value is NULL", K(value), K(ret));
     } else if (OB_FAIL(sequence_mgr_.add_sequence(*value))) {
-      LOG_WARN("push back failed", K(ret), K(value->get_sequence_name_str()));
     }
     UNUSED(infos);
     UNUSED(map);
@@ -191,7 +189,6 @@ int ObSequenceMgr::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("init private sequence manager twice", K(ret));
   } else if (OB_FAIL(sequence_map_.init())) {
-    LOG_WARN("init private sequence map failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -217,9 +214,7 @@ int ObSequenceMgr::assign(const ObSequenceMgr &other)
     LOG_WARN("sequence manager not init", K(ret));
   } else if (this != &other) {
     if (OB_FAIL(sequence_map_.assign(other.sequence_map_))) {
-      LOG_WARN("assign sequence map failed", K(ret));
     } else if (OB_FAIL(sequence_infos_.assign(other.sequence_infos_))) {
-      LOG_WARN("assign sequence infos vector failed", K(ret));
     }
   }
   return ret;
@@ -237,7 +232,6 @@ int ObSequenceMgr::deep_copy(const ObSequenceMgr &other)
     sequence_mgr::Deep_Copy_Action action(*this);
     sequence_mgr::Deep_Copy_EarlyStopCondition condition;
     if (OB_FAIL((const_cast<ObSequenceMgr&>(other)).for_each(filter, action, condition))) {
-      LOG_WARN("deep copy failed", K(ret));
     }
   }
   return ret;
@@ -260,7 +254,6 @@ int ObSequenceMgr::add_sequence(const ObSequenceSchema &sequence_schema)
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_,
                                                  sequence_schema,
                                                  new_sequence_schema))) {
-    LOG_WARN("alloca sequence schema failed", K(ret));
   } else if (OB_ISNULL(new_sequence_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(new_sequence_schema), K(ret));
@@ -269,12 +262,10 @@ int ObSequenceMgr::add_sequence(const ObSequenceSchema &sequence_schema)
                                              compare_sequence,
                                              equal_sequence,
                                              replaced_sequence))) {
-    LOG_WARN("failed to add sequence schema", K(ret));
   } else {
     ObSequenceHashWrapper hash_wrapper(new_sequence_schema->get_database_id(),
                                        new_sequence_schema->get_sequence_name());
     if (OB_FAIL(sequence_map_.set_refactored(hash_wrapper, new_sequence_schema, overwrite))) {
-      LOG_WARN("build sequence hash map failed", K(ret));
     } else {
       LOG_INFO("add new sequence to sequence map", K(*new_sequence_schema));
     }
@@ -292,7 +283,6 @@ int ObSequenceMgr::add_sequence(const ObSequenceSchema &sequence_schema)
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = ObSequenceMgr::rebuild_sequence_hashmap(sequence_infos_,
                                                                          sequence_map_))) {
-      LOG_WARN("rebuild sequence hashmap failed", K(tmp_ret));
     }
   }
   return ret;
@@ -314,7 +304,6 @@ int ObSequenceMgr::rebuild_sequence_hashmap(const SequenceInfos &sequence_infos,
       ObSequenceHashWrapper hash_wrapper(sequence_schema->get_database_id(),
                                         sequence_schema->get_sequence_name());
       if (OB_FAIL(sequence_map.set_refactored(hash_wrapper, sequence_schema, overwrite))) {
-        LOG_WARN("build sequence hash map failed", K(ret));
       }
     }
   }
@@ -326,7 +315,6 @@ int ObSequenceMgr::add_sequences(const common::ObIArray<ObSequenceSchema> &seque
   int ret = OB_SUCCESS;
   for (int64_t i = 0; i < sequence_schemas.count() && OB_SUCC(ret); ++i) {
     if (OB_FAIL(add_sequence(sequence_schemas.at(i)))) {
-      LOG_WARN("push sequence failed", K(ret));
     }
   }
   return ret;
@@ -377,10 +365,6 @@ int ObSequenceMgr::del_sequence(const ObTenantSequenceId &sequence)
                                               compare_with_tenant_sequence_id,
                                               equal_to_tenant_sequence_id,
                                               schema_to_del))) {
-    LOG_WARN("failed to remove sequence schema, ",
-             "sequence_id",
-             sequence.sequence_id_,
-             K(ret));
   } else if (OB_ISNULL(schema_to_del)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("removed sequence schema return NULL, ",
@@ -411,7 +395,6 @@ int ObSequenceMgr::del_sequence(const ObTenantSequenceId &sequence)
              sequence.sequence_id_);
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = ObSequenceMgr::rebuild_sequence_hashmap(sequence_infos_, sequence_map_))) {
-      LOG_WARN("rebuild sequence hashmap failed", K(tmp_ret));
     }
   }
   return ret;
@@ -424,7 +407,6 @@ int ObSequenceMgr::get_sequence_schemas_in_database(const uint64_t database_id, 
   sequence_mgr::Get_Sequence_Action action(sequence_schemas);
   sequence_mgr::Get_Sequence_EarlyStopCondition condition;
   if (OB_FAIL((const_cast<ObSequenceMgr&>(*this)).for_each(filter, action, condition))) {
-    LOG_WARN("get schema failed", K(ret));
   }
   return ret;
 }
@@ -438,7 +420,6 @@ int ObSequenceMgr::get_sequence_schema(const uint64_t sequence_id,
   sequence_mgr::Get_Sequence_Schema_Action action(sequence_schema);
   sequence_mgr::Get_Sequence_Schema_EarlyStopCondition condition(sequence_schema);
   if (OB_FAIL((const_cast<ObSequenceMgr&>(*this)).for_each(filter,action, condition))) {
-    LOG_WARN("get sequence schema failed", K(ret));
   }
   return ret;
 }
@@ -456,7 +437,6 @@ int ObSequenceMgr::for_each(Filter &filter, Acation &action, EarlyStopCondition 
     } else {
       if (filter(value)) {
         if (OB_FAIL(action(value, sequence_infos_, sequence_map_))) {
-            LOG_WARN("action failed", K(ret));
         }
       }
     }
@@ -507,7 +487,6 @@ int ObSequenceMgr::get_sequence_schemas_in_tenant(ObIArray<const ObSequenceSchem
     } else if (false) {
       is_stop = true;
     } else if (OB_FAIL(sequence_schemas.push_back(sequence))) {
-      LOG_WARN("push back sequence failed", K(ret));
     }
   }
 

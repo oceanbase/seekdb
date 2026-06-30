@@ -72,9 +72,7 @@ int ObTmpFileIOHandle::init_write(const ObTmpFileIOInfo &io_info)
   } else if (OB_FAIL(ctx_.init(io_info.fd_, io_info.dir_id_, false /*is_read*/,
                                io_info.io_desc_, io_info.io_timeout_ms_, io_info.disable_page_cache_,
                                io_info.disable_block_cache_, false /*prefetch*/))) {
-    LOG_WARN("failed to init io handle context", KR(ret), K(io_info));
   } else if (OB_FAIL(ctx_.prepare_write(io_info.buf_, io_info.size_))) {
-    LOG_WARN("fail to prepare write context", KR(ret), KPC(this));
   } else {
     is_inited_ = true;
     fd_ = io_info.fd_;
@@ -104,9 +102,7 @@ int ObTmpFileIOHandle::init_pread(const ObTmpFileIOInfo &io_info, const int64_t 
   } else if (OB_FAIL(ctx_.init(io_info.fd_, io_info.dir_id_, true /*is_read*/,
                                io_info.io_desc_, io_info.io_timeout_ms_, io_info.disable_page_cache_,
                                io_info.disable_block_cache_, io_info.prefetch_))) {
-    LOG_WARN("failed to init io handle context", KR(ret), K(io_info));
   } else if (OB_FAIL(ctx_.prepare_read(io_info.buf_, MIN(io_info.size_, ObTmpFileGlobal::TMP_FILE_READ_BATCH_SIZE), read_offset))) {
-    LOG_WARN("fail to prepare read context", KR(ret), KPC(this), K(read_offset));
   } else {
     is_inited_ = true;
     fd_ = io_info.fd_;
@@ -134,9 +130,7 @@ int ObTmpFileIOHandle::init_read(const ObTmpFileIOInfo &io_info)
   } else if (OB_FAIL(ctx_.init(io_info.fd_, io_info.dir_id_, true /*is_read*/,
                                io_info.io_desc_, io_info.io_timeout_ms_, io_info.disable_page_cache_,
                                io_info.disable_block_cache_, io_info.prefetch_))) {
-    LOG_WARN("failed to init io handle context", KR(ret), K(io_info));
   } else if (OB_FAIL(ctx_.prepare_read(io_info.buf_, MIN(io_info.size_, ObTmpFileGlobal::TMP_FILE_READ_BATCH_SIZE)))) {
-    LOG_WARN("fail to prepare read context", KR(ret), KPC(this));
   } else {
     is_inited_ = true;
     fd_ = io_info.fd_;
@@ -176,27 +170,20 @@ int ObTmpFileIOHandle::wait()
     MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
     
     if (FAILEDx(ctx_.wait())) {
-      LOG_WARN("fail to wait tmp file io", KR(ret), KPC(this));
     } else if (OB_FAIL(handle_finished_ctx_(ctx_))) {
-      LOG_WARN("fail to handle finished ctx", KR(ret), KPC(this));
     } else if (OB_UNLIKELY(done_size_ > buf_size_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("done size is larger than total todo size", KR(ret), KPC(this));
     } else if (OB_FAIL(share::g_mp->tenant_tmp_file_manager()->get_tmp_file(fd_, file_handle))) {
-      LOG_WARN("fail to get tmp file handle", KR(ret), K(fd_));
     } else {
       while (OB_SUCC(ret) && !is_finished()) {
         if (OB_FAIL(ctx_.prepare_read(buf_ + done_size_,
                                       MIN(buf_size_ - done_size_,
                                           ObTmpFileGlobal::TMP_FILE_READ_BATCH_SIZE),
                                       read_offset_in_file_))) {
-          LOG_WARN("fail to generate read ctx", KR(ret), KPC(this));
         } else if (OB_FAIL(file_handle.get()->aio_pread(ctx_))) {
-          LOG_WARN("fail to continue read once batch", KR(ret), K(ctx_));
         } else if (OB_FAIL(ctx_.wait())) {
-          LOG_WARN("fail to wait tmp file io", KR(ret), K(ctx_));
         } else if (OB_FAIL(handle_finished_ctx_(ctx_))) {
-          LOG_WARN("fail to handle finished ctx", KR(ret), KPC(this));
         }
       } // end while
 

@@ -170,13 +170,9 @@ int ObLogFileReader2::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("already inited", K(ret));
   } else if (OB_FAIL(quick_map_.create(MAP_BUCKET_INIT_CNT, "LogFileReaderM"))) {
-    LOG_WARN("already inited", K(ret));
   } else if (OB_FAIL(timer_.set_run_wrapper_with_ret(MTL_CTX()))) {
-    LOG_WARN("timer set_run_wrapper fail", K(ret));
   } else if (OB_FAIL(timer_.init("ObLogFileReader2"))) {
-    LOG_WARN("init timer fail", K(ret));
   } else if (OB_FAIL(timer_.schedule(evict_task_, cache_evict_time_in_us_, true))) {
-    LOG_WARN("schedule timer fail", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -228,7 +224,6 @@ int ObLogFileReader2::pread(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid fd", K(ret), K(target_io_fd));
     } else if (OB_FAIL(LOCAL_DEVICE_INSTANCE.pread(target_io_fd, offset, count, buf, read_size))) {
-      LOG_ERROR("fail to pread", K(ret), K(target_io_fd), K(offset), K(count), K(errno), KERRMSG);
     }
   }
   return ret;
@@ -292,9 +287,7 @@ int ObLogFileReader2::evict_fd(const char* log_dir, const uint32_t file_id)
     LOG_WARN("invalid argument.", K(ret), K(file_id), KP(log_dir));
   } else if (OB_FAIL(ObLogFileHandler::format_file_path(file_path, sizeof(file_path),
       log_dir, file_id))) {
-    LOG_WARN("format_file_path fail", K(ret), K(file_id), K(log_dir));
   } else if (OB_FAIL(evict_fd(file_path))) {
-    LOG_WARN("evict fd fail", K(ret), K(file_path));
   }
   return ret;
 }
@@ -311,7 +304,6 @@ int ObLogFileReader2::evict_fd(const char* file_path)
     STRNCPY(fd_key.path_, file_path, MAX_PATH_SIZE - 1);
     fd_key.path_[MAX_PATH_SIZE - 1] = 0;
     if (OB_FAIL(evict_fd_from_map(fd_key))) {
-      LOG_WARN("move item to tail fail", K(ret), K(fd_key));
     }
   }
   return ret;
@@ -336,7 +328,6 @@ int ObLogFileReader2::get_fd(
     LOG_WARN("invalid argument.", K(ret), K(file_id), KP(log_dir));
   } else if (OB_FAIL(ObLogFileHandler::format_file_path(file_path, sizeof(file_path),
       log_dir, file_id))) {
-    LOG_WARN("format_file_path fail", K(ret), K(file_id), K(log_dir));
   } else {
     ObLogReadFdKey fd_key;
     STRNCPY(fd_key.path_, file_path, MAX_PATH_SIZE);
@@ -349,7 +340,6 @@ int ObLogFileReader2::get_fd(
         ret = OB_SUCCESS;
         if (hit_cache) {
           if (OB_FAIL(fd_handle.set_read_fd(ret_item, false/*is_local*/))) {
-            LOG_ERROR("set read handle fail", K(ret), K(fd_key));
           }
         }
       }
@@ -358,14 +348,11 @@ int ObLogFileReader2::get_fd(
     if (OB_SUCC(ret) && !hit_cache) {
       common::ObIOFd ret_io_fd;
       if (OB_FAIL(open_fd(fd_key, ret_io_fd))) {
-        LOG_WARN("prepare fd fail", K(ret), K(fd_key));
       } else {
         bool is_tmp = false;
         lib::ObMutexGuard guard(lock_);
         if (OB_FAIL(put_new_item(fd_key, ret_io_fd, ret_item, is_tmp))) {
-          LOG_WARN("put new item fail", K(ret), K(fd_key), K(is_tmp));
         } else if (OB_FAIL(fd_handle.set_read_fd(ret_item, is_tmp))) {
-          LOG_ERROR("set read handle fail", K(ret), K(fd_key), K(ret_io_fd), K(is_tmp));
         }
       }
     }
@@ -395,7 +382,6 @@ int ObLogFileReader2::do_clear_work()
         ret = OB_ITER_END; // stop this round, take a rest
       } else if (cur->in_map_) { // evict old fd in map
         if (OB_FAIL(evict_fd_from_map(cur->key_))) {
-          LOG_WARN("erase item from map fail", K(ret), K(*cur));
         } else {
           LOG_TRACE("evict fd from map", K(*cur));
         }
@@ -444,7 +430,6 @@ int ObLogFileReader2::open_fd(const ObLogReadFdKey &fd_key, common::ObIOFd &ret_
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(fd_key));
   } else if (OB_FAIL(ObLogFileHandler::open(fd_key.path_, O_RDONLY | O_DIRECT, 0, ret_io_fd))) {
-    LOG_WARN("failed to open file", K(ret), K(fd_key));
   } else if (OB_UNLIKELY(!ret_io_fd.is_normal_file())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("get invalid fd", K(ret), K(fd_key), K(ret_io_fd));
@@ -492,7 +477,6 @@ int ObLogFileReader2::put_new_item(
           OB_DELETE(ObLogReadFdCacheItem, MEMORY_LABEL, new_item);
         }
         if (OB_FAIL(try_get_cache(fd_key, ret_item))) {
-          LOG_ERROR("get cache item fail", K(ret), K(fd_key));
         }
       } else {
         ret_item->in_map_ = true;
@@ -544,12 +528,10 @@ int ObLogFileReader2::try_get_cache(const ObLogReadFdKey &fd_key, ObLogReadFdCac
   } else if (p_item->timestamp_ == OB_INVALID_TIMESTAMP
       || ObTimeUtility::fast_current_time() - p_item->timestamp_ > cache_evict_time_in_us_) {
     if (OB_FAIL(evict_fd_from_map(fd_key))) {
-      LOG_WARN("retire expired fd from map fail", K(ret), K(fd_key), K(*p_item));
     } else {
       ret = OB_HASH_NOT_EXIST;
     }
   } else if (OB_FAIL(move_item_to_head(*p_item))) {
-    LOG_WARN("move item to head fail", K(ret), K(*p_item));
   } else {
     ret_item = p_item;
     ret_item->timestamp_ = ObTimeUtility::fast_current_time();

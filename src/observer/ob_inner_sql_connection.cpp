@@ -194,7 +194,6 @@ ObInnerSQLConnection::TimeoutGuard::~TimeoutGuard()
       }
       #else
       if (OB_FAIL(conn_.set_session_timeout(query_timeout_, trx_timeout_))) {
-        LOG_ERROR("set session timeout failed", K(ret));
       }
       #endif
     }
@@ -289,7 +288,6 @@ int ObInnerSQLConnection::init(ObInnerSQLConnectionPool *pool,
       LOG_WARN("init session failed", K(ret));
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = destroy_inner_session())) {
-        LOG_WARN("Failed to destroy inner session when the session initialization failed, which may result in a session leak.", K(tmp_ret), K(ret));
       }
     } else {
       group_id_ = group_id;
@@ -352,7 +350,6 @@ void ObInnerSQLConnection::unref()
   } else {
     if (0 == --ref_cnt_) {
       if (OB_FAIL(pool_->revert(this))) {
-        LOG_WARN("revert connection failed", K(ret));
       }
     } else {
       // see
@@ -366,7 +363,6 @@ int ObInnerSQLConnection::try_acquire_query_lock()
   int ret = OB_SUCCESS;
   if (!inner_sess_query_locked_) {
     if (OB_FAIL(inner_session_->get_query_lock().lock())) {
-      LOG_WARN("fail to acquire query lock", K(ret), KPC(inner_session_));
     } else {
       inner_sess_query_locked_ = true;
     }
@@ -379,7 +375,6 @@ void ObInnerSQLConnection::try_release_query_lock()
   int ret = OB_SUCCESS;
   if (inner_sess_query_locked_) {
     if (OB_FAIL(inner_session_->get_query_lock().unlock())) {
-      LOG_WARN("fail to release query lock", K(ret), KPC(inner_session_));
     } else {
       inner_sess_query_locked_ = false;
     }
@@ -410,7 +405,6 @@ int ObInnerSQLConnection::set_tz_info_wrap(const ObTimeZoneInfoWrap &tz_info_wra
   int ret = OB_SUCCESS;
   sql::ObSQLSessionInfo &session = get_session();
   if (OB_FAIL(session.set_tz_info_wrap(tz_info_wrap))) {
-    LOG_WARN("fail to set time zone info", K(ret), K(tz_info_wrap));
   }
   return ret;
 }
@@ -449,15 +443,11 @@ int ObInnerSQLConnection::init_session_info(
     } else if (NOT_SPEED_UP_INIT_SESSION_INFO && OB_FAIL(session->load_default_sys_variable(print_info_log, is_sys_tenant))) {
       LOG_WARN("session load default system variable failed", K(ret));
     } else if (OB_FAIL(session->update_max_packet_size())) {
-      LOG_WARN("fail to update max packet size", K(ret));
     } else if (OB_FAIL(session->init_tenant(OB_SYS_TENANT_NAME))) {
-      LOG_WARN("fail to init tenant", K(ret));
     } else {
       if (!is_extern_session) { // if not exetern session
         if(OB_FAIL(session->switch_tenant())) {
-          LOG_WARN("Init sys tenant in session error", K(ret));
         } else if (OB_FAIL(session->set_user(OB_SYS_USER_NAME, OB_SYS_HOST_NAME, OB_SYS_USER_ID))) {
-          LOG_WARN("Set sys user in session error", K(ret));
         } else {
           session->set_user_priv_set(OB_PRIV_ALL | OB_PRIV_GRANT);
           session->set_database_id(OB_SYS_DATABASE_ID);
@@ -469,25 +459,18 @@ int ObInnerSQLConnection::init_session_info(
       if (OB_SUCC(ret)) {
         if (OB_FAIL(session->update_sys_variable(
             SYS_VAR_SQL_MODE, mysql_sql_mode))) {
-          LOG_WARN("update sys variables failed", K(ret));
         } else if (OB_FAIL(session->update_sys_variable(
             SYS_VAR_OB_COMPATIBILITY_MODE, mysql_mode))) {
-          LOG_WARN("update sys variables failed", K(ret));
         } else if (OB_FAIL(session->update_sys_variable(
             SYS_VAR_NLS_DATE_FORMAT, ObTimeConverter::COMPAT_OLD_NLS_DATE_FORMAT))) {
-          LOG_WARN("update sys variables failed", K(ret));
         } else if (OB_FAIL(session->update_sys_variable(
             SYS_VAR_NLS_TIMESTAMP_FORMAT, ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_FORMAT))) {
-          LOG_WARN("update sys variables failed", K(ret));
         } else if (OB_FAIL(session->update_sys_variable(
             SYS_VAR_NLS_TIMESTAMP_TZ_FORMAT, ObTimeConverter::COMPAT_OLD_NLS_TIMESTAMP_TZ_FORMAT))) {
-          LOG_WARN("update sys variables failed", K(ret));
         } else {
           ObString database_name(OB_SYS_DATABASE_NAME);
           if (OB_FAIL(session->set_default_database(database_name))) {
-            LOG_WARN("fail to set default database", K(ret), K(database_name));
           } else if (OB_FAIL(session->get_pc_mem_conf(pc_mem_conf))) {
-            LOG_WARN("fail to get pc mem conf", K(ret));
           } else {
             session->set_database_id(OB_SYS_DATABASE_ID);
             //TODO shengle ?
@@ -516,25 +499,21 @@ int ObInnerSQLConnection::init_session(sql::ObSQLSessionInfo* extern_session, co
     }
     if (is_create_session_mgr && is_inner_session_mgr_enable()) {
       if (OB_FAIL(create_session_by_mgr())) {
-        LOG_WARN("failed to create inner session by GCTX.session_mgr, will create default session", K(ret));
       }
 
       if (OB_FAIL(ret)) {
         if (OB_FAIL(create_default_session())) {
-          LOG_WARN("failed to create default session", K(ret));
         } else {
           ret = OB_SUCCESS;
         }
       }
     } else {
       if (OB_FAIL(create_default_session())) {
-        LOG_WARN("failed to create default session", K(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(init_session_info(inner_session_, is_extern_session, is_ddl))) {
-        LOG_WARN("fail to init session info", K(ret), KPC(inner_session_));
       }
     }
 
@@ -577,7 +556,6 @@ int ObInnerSQLConnection::init_result(ObInnerSQLResult &res,
   res.sql_ctx().is_cursor_ = is_cursor;
   res.sql_ctx().schema_guard_ = &schema_guard;
   if (OB_FAIL(res.result_set().init())) {
-    LOG_WARN("result set init failed", K(ret));
   } else if (is_prepare_protocol
              && NULL == secondary_namespace
              && !is_dynamic_sql) {
@@ -808,7 +786,6 @@ int ObInnerSQLConnection::do_query(sqlclient::ObIExecutor &executor, ObInnerSQLR
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("ob_sql_ is NULL", K(ret));
     } else if (OB_FAIL(executor.execute(*ob_sql_, res.sql_ctx(), res.result_set()))) {
-      LOG_WARN("executor execute failed", K(ret));
     } else {
       ObSQLSessionInfo &session = res.result_set().get_session();
       session.set_expect_group_id(group_id_);
@@ -818,7 +795,6 @@ int ObInnerSQLConnection::do_query(sqlclient::ObIExecutor &executor, ObInnerSQLR
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("schema guard is null");
       } else if (OB_FAIL(session.update_query_sensitive_system_variable(*(res.sql_ctx().schema_guard_)))) {
-        LOG_WARN("update query affacted system variable failed", K(ret));
       } else if (OB_UNLIKELY(is_restore)
                  && OB_FAIL(sql_modifier_->modify(res.result_set()))) {
         LOG_WARN("fail modify sql", K(res.result_set().get_statement_name()), K(ret));
@@ -828,7 +804,6 @@ int ObInnerSQLConnection::do_query(sqlclient::ObIExecutor &executor, ObInnerSQLR
         // Opening the result set would attempt to execute/prefetch, which
         // fails with OB_NOT_INIT because there is no physical plan.
       } else if (OB_FAIL(res.open())) {
-        LOG_WARN("result set open failed", K(ret), K(executor));
       }
     }
   }
@@ -871,7 +846,6 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
     LOG_ERROR("connection still be referred by previous sql result, can not execute sql now",
               K(ret), K(executor));
   } else if (OB_FAIL(set_timeout(abs_timeout_us))) {
-    LOG_WARN("set timeout failed", K(ret));
   } else if (OB_ISNULL(ob_sql_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid sql engine", K(ret), K(ob_sql_));
@@ -881,7 +855,6 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
       LOG_ERROR("retry info is inited", K(ret), K(retry_info), K(executor));
     }
   } else if (OB_FAIL(retry_info.init())) {
-    LOG_WARN("fail to init retry info", K(ret), K(retry_info), K(executor));
   }
 
   // switch tenant for MTL tenant ctx
@@ -902,7 +875,6 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
           res.~ObInnerSQLResult();
           new (&res) ObInnerSQLResult(get_session(), is_inner_session(), nullptr);
           if (OB_FAIL(res.init())) {
-            LOG_WARN("fail to init result set", K(ret));
           } else {
             res.result_set().set_user_sql(is_user_sql);
             res.set_is_read(true);
@@ -937,14 +909,10 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
           if (OB_FAIL(ret)){
             // do nothing
           } else if (OB_FAIL(gctx.schema_service_->get_tenant_schema_guard(res.schema_guard_))) {
-            LOG_WARN("get schema guard failed", K(ret));
           } else if (OB_FAIL(init_result(res, vt_iter_factory, retry_cnt,
                                          res.schema_guard_, NULL, false, false))) {
-            LOG_WARN("failed to init result", K(ret));
           } else if (OB_FAIL(res.schema_guard_.get_schema_version(local_tenant_schema_version))) {
-            LOG_WARN("get tenant schema version failed", K(ret), K(ob_sql_));
           } else if (OB_FAIL(res.schema_guard_.get_schema_version(local_sys_schema_version))) {
-            LOG_WARN("get sys tenant schema version failed", K(ret), K(ob_sql_));
           } else {
             res.result_set().get_exec_context().get_task_exec_ctx().set_query_tenant_begin_schema_version(local_tenant_schema_version);
             res.result_set().get_exec_context().get_task_exec_ctx().set_query_sys_begin_schema_version(local_sys_schema_version);
@@ -961,7 +929,6 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
             // moved here from ObInnerSQLConnection::do_query() -> ObInnerSQLResult::open().
             int close_ret = res.force_close();
             if (OB_SUCCESS != close_ret) {
-              LOG_WARN("failed to close result", K(close_ret), K(ret));
             }
           } else if (retry_cnt > 0) {
             int64_t total_time_cost_us = (ObTimeUtility::current_time() - start_time);
@@ -991,7 +958,6 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
                                 max_wait_desc, total_wait_desc, exec_record, exec_timestamp,
                                 res.has_tenant_resource(), dummy_ps_sql);
           if (OB_SUCCESS != record_ret) {
-            LOG_WARN("failed to process record",  K(executor), K(record_ret), K(ret));
           }
 
           if (enable_sqlstat) {
@@ -1020,7 +986,6 @@ int ObInnerSQLConnection::query(sqlclient::ObIExecutor &executor,
   if (res.is_inited()) {
     int aret = process_final(executor, res, ret);
     if (OB_SUCCESS != aret) {
-      LOG_WARN("failed to process final",  K(executor), K(aret), K(ret));
     }
   }
 
@@ -1056,7 +1021,6 @@ int ObInnerSQLConnection::retry_while_no_tenant_resource(const int64_t cluster_i
   TimeoutGuard timeout_guard(*this); // backup && restore worker/session timeout.
 
   if (OB_FAIL(set_timeout(abs_timeout_us))) {
-    LOG_WARN("set timeout failed", K(ret));
   } else {
     ObInnerSqlWaitGuard guard(is_inner_session(), nullptr, inner_session_);
     do {
@@ -1090,7 +1054,6 @@ int ObInnerSQLConnection::start_transaction(
   int ret = OB_SUCCESS;
   auto function = [&]() { return start_transaction_inner(with_snap_shot); };
   if (OB_FAIL(retry_while_no_tenant_resource(GCONF.cluster_id, function))) {
-    LOG_WARN("start_transaction failed", K(ret), K(with_snap_shot));
   }
   return ret;
 }
@@ -1115,7 +1078,6 @@ int ObInnerSQLConnection::start_transaction_inner(
     } else if (GCTX.omt_->is_available_tenant()) {
       has_tenant_resource = true;
       if (OB_FAIL(switch_tenant())) {
-        LOG_WARN("set system tenant id failed", K(ret));
       }
     } else {
       has_tenant_resource = false;
@@ -1126,13 +1088,10 @@ int ObInnerSQLConnection::start_transaction_inner(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("inner conn is already in trans", K(ret));
       } else if (OB_FAIL(res.init(has_tenant_resource))) {
-        LOG_WARN("init result set", K(ret), K(has_tenant_resource));
       } else if (has_tenant_resource) {
         // local
         if (OB_FAIL(query(executor, res))) {
-          LOG_WARN("start transaction failed", K(ret), K(with_snap_shot));
         } else if (OB_FAIL(res.close())) {
-          LOG_WARN("close result set failed", K(ret), K(sql));
         }
         // remote
       } else {
@@ -1154,10 +1113,8 @@ int ObInnerSQLConnection::start_transaction_inner(
               K(ret), K(get_resource_conn_id()), K(get_resource_svr()));
         } else if (OB_FAIL(nonblock_get_leader(GCONF.cluster_id, ls_id,
                                                resource_server_addr))) {
-          LOG_WARN("nonblock get leader failed", KR(ret), K(ls_id), K(resource_server_addr));
         } else if (FALSE_IT(set_resource_svr(resource_server_addr))) {
         } else if (OB_FAIL(get_session_timeout_for_rpc(query_timeout, trx_timeout))) {
-          LOG_WARN("fail to get_session_timeout_for_rpc", K(ret), K(query_timeout), K(trx_timeout));
         } else {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("inner sql resource-server RPC path removed (single-replica)", K(ret));
@@ -1193,7 +1150,6 @@ int ObInnerSQLConnection::register_multi_data_source(
       LOG_WARN("connection not inited", K(ret));
     } else if (local_execute) {
       if (OB_FAIL(switch_tenant())) {
-        LOG_WARN("set system tenant id failed", K(ret));
       }
     } else {
       LOG_DEBUG("tenant may be not in server", K(ret), K(local_execute), K(MYADDR));
@@ -1204,7 +1160,6 @@ int ObInnerSQLConnection::register_multi_data_source(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("inner conn must be already in trans when register multi source data", K(ret));
       } else if (OB_FAIL(res.init(local_execute))) {
-        LOG_WARN("init result set", K(ret), K(local_execute));
       } else if (local_execute) {
         if (OB_ISNULL(tx_desc = get_session().get_tx_desc())) {
           // TODO ADD LOG and check get_session
@@ -1220,9 +1175,7 @@ int ObInnerSQLConnection::register_multi_data_source(
                                                                                  buf_len,
                                                                                  0,
                                                                                  register_flag))) {
-              LOG_WARN("regiser multi data source failed", K(ret), K(type));
             } else if (OB_FAIL(res.close())) {
-              LOG_WARN("close result set failed", K(ret));
             }
           }
         }
@@ -1250,13 +1203,11 @@ int ObInnerSQLConnection::register_multi_data_source(
           int64_t pos = 0;
           ObString sql;
           if (OB_FAIL(mds_str.set(buf, buf_len, type, ls_id, register_flag))) {
-            LOG_WARN("set multi source data in msd_str error", K(ret), K(type), K(ls_id));
           } else if (OB_ISNULL(tmp_str = static_cast<char *>(
                                    ob_malloc(mds_str.get_serialize_size(), "MulTxDataStr")))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
             LOG_WARN("alloc memory for sql_str failed", K(ret), K(mds_str.get_serialize_size()));
           } else if (OB_FAIL(mds_str.serialize(tmp_str, mds_str.get_serialize_size(), pos))) {
-            LOG_WARN("serialize mds_str failed", K(ret), K(mds_str), K(mds_str.get_serialize_size()));
           } else {
             sql.assign_ptr(tmp_str, mds_str.get_serialize_size());
             ret = forward_request_(ObInnerSQLTransmitArg::OPERATION_TYPE_REGISTER_MDS, sql, res);
@@ -1317,7 +1268,6 @@ int ObInnerSQLConnection::forward_request_(const int64_t op_type,
     LOG_WARN("resource_conn_id or resource_svr is invalid", K(ret),
              K(get_resource_conn_id()), K(get_resource_svr()));
   } else if (OB_FAIL(get_session_timeout_for_rpc(query_timeout, trx_timeout))) {
-    LOG_WARN("fail to get_session_timeout_for_rpc", K(ret), K(query_timeout), K(trx_timeout));
   } else {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("inner sql resource-server RPC path removed (single-replica)", K(ret));
@@ -1342,12 +1292,9 @@ int ObInnerSQLConnection::rollback()
         ret = OB_NOT_INIT;
         LOG_WARN("connection not inited", K(ret));
       } else if (OB_FAIL(res.init(has_tenant_resource))) {
-        LOG_WARN("init result set", K(ret));
       } else if (has_tenant_resource) {
         if (OB_FAIL(query(executor, res))) {
-          LOG_WARN("rollback failed", K(ret));
         } else if (OB_FAIL(res.close())) {
-          LOG_WARN("close result set failed", K(ret));
         }
       } else {
         TimeoutGuard timeout_guard(*this); // backup && restore worker/session timeout
@@ -1361,7 +1308,6 @@ int ObInnerSQLConnection::rollback()
           LOG_WARN("resource_conn_id or resource_svr is invalid in rollback",
                     K(ret), K(get_resource_conn_id()), K(get_resource_svr()));
         } else if (OB_FAIL(get_session_timeout_for_rpc(query_timeout, trx_timeout))) {
-          LOG_WARN("fail to get_session_timeout_for_rpc", K(ret), K(query_timeout), K(trx_timeout));
         } else {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("inner sql resource-server RPC path removed (single-replica)", K(ret));
@@ -1390,12 +1336,9 @@ int ObInnerSQLConnection::commit()
         ret = OB_NOT_INIT;
         LOG_WARN("connection not inited", K(ret));
       } else if (OB_FAIL(res.init(has_tenant_resource))) {
-        LOG_WARN("init result set", K(ret));
       } else if (has_tenant_resource) {
         if (OB_FAIL(query(executor, res))) {
-          LOG_WARN("commit failed", K(ret));
         } else if (OB_FAIL(res.close())) {
-          LOG_WARN("close result set failed", K(ret));
         }
       } else {
         TimeoutGuard timeout_guard(*this); // backup && restore worker/session timeout
@@ -1408,7 +1351,6 @@ int ObInnerSQLConnection::commit()
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("resource_svr is invalid in commit", K(ret), K(get_resource_svr()));
         } else if (OB_FAIL(get_session_timeout_for_rpc(query_timeout, trx_timeout))) {
-          LOG_WARN("fail to get_session_timeout_for_rpc", K(ret), K(query_timeout), K(trx_timeout));
         } else {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("inner sql resource-server RPC path removed (single-replica)", K(ret));
@@ -1426,7 +1368,6 @@ int ObInnerSQLConnection::execute_write(const ObString &sql,
   int ret = OB_SUCCESS;
   auto function = [&]() { return execute_write_inner(sql, affected_rows, is_user_sql, sql_exec_addr); };
   if (OB_FAIL(retry_while_no_tenant_resource(GCONF.cluster_id, function))) {
-    LOG_WARN("execute_write failed", K(ret), K(sql), K(is_user_sql));
   }
   return ret;
 }
@@ -1464,17 +1405,14 @@ int ObInnerSQLConnection::execute_write_inner(const ObString &sql,
       if (local_execute && OB_FAIL(switch_tenant())) {
         LOG_WARN("switch tenant failed", K(ret));
       } else if (OB_FAIL(res.init(local_execute))) {
-        LOG_WARN("init result set", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (local_execute) {
       res.result_set().set_user_sql(is_user_sql);
       if (OB_FAIL(query(executor, res))) {
-        LOG_WARN("execute sql failed", K(ret), K(sql));
       } else if (FALSE_IT(affected_rows = res.result_set().get_affected_rows())) {
       } else if (OB_FAIL(res.close())) {
-        LOG_WARN("close result set failed", K(ret), K(sql));
       }
       if (get_session().get_ddl_info().is_ddl()) {
         SERVER_EVENT_ADD(
@@ -1511,19 +1449,16 @@ int ObInnerSQLConnection::execute_write_inner(const ObString &sql,
         share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
         if (OB_FAIL(nonblock_get_leader(
                     GCONF.cluster_id, ls_id, resource_server_addr))) {
-          LOG_WARN("nonblock get leader failed", K(ret), K(ls_id));
         } else {
           set_resource_svr(resource_server_addr);
           set_resource_conn_id(OB_INVALID_ID);
         }
       }
       if (FAILEDx(get_session_timeout_for_rpc(query_timeout, trx_timeout))) {
-        LOG_WARN("fail to get_session_timeout_for_rpc", K(ret), K(query_timeout), K(trx_timeout));
       }
       if (OB_SUCC(ret)) {
         ObObj tmp_sql_mode;
         if (OB_FAIL(get_session().get_sys_variable_by_name("sql_mode", tmp_sql_mode))) {
-          LOG_WARN("fail to get sql mode", K(ret));
         } else {
           sql_mode = tmp_sql_mode.get_uint64();
         }
@@ -1549,7 +1484,6 @@ int ObInnerSQLConnection::get_session_timeout_for_rpc(int64_t &query_timeout, in
   int64_t start_time = ObTimeUtility::current_time();
   get_session().set_query_start_time(start_time);
   if (OB_FAIL(set_timeout(abs_timeout_us))) {
-    LOG_WARN("set timeout failed", K(ret));
   } else if (OB_FAIL(get_session().get_query_timeout(query_timeout))
              || OB_FAIL(get_session().get_tx_timeout(trx_timeout))) {
     LOG_WARN("get sessio timeout failed", KR(ret), K(query_timeout), K(trx_timeout));
@@ -1578,7 +1512,6 @@ int ObInnerSQLConnection::execute_read(const int64_t cluster_id,
     return execute_read_inner(cluster_id, sql, res, is_user_sql, sql_exec_addr);
   };
   if (OB_FAIL(retry_while_no_tenant_resource(cluster_id, function))) {
-    LOG_WARN("execute_read failed", K(ret), K(cluster_id));
   }
   return ret;
 }
@@ -1623,14 +1556,11 @@ int ObInnerSQLConnection::execute_read_inner(const int64_t cluster_id,
   } else if (local_execute && OB_FAIL(switch_tenant())) {
     LOG_WARN("switch tenant failed", K(ret));
   } else if (OB_FAIL(res.create_handler(read_ctx, *this))) {
-    LOG_WARN("create result handler failed", K(ret));
   } else if (OB_FAIL(read_ctx->get_result().init(local_execute))) {
-    LOG_WARN("init result set", K(ret), K(local_execute));
   } else if (local_execute) {
     read_ctx->get_result().result_set().set_user_sql(is_user_sql);
     if (OB_FAIL(query(executor, read_ctx->get_result(),
                       &read_ctx->get_vt_iter_factory()))) {
-      LOG_WARN("execute sql failed", K(ret), K(sql));
     }
   } else if (is_resource_conn()) {
     ret = OB_ERR_UNEXPECTED;
@@ -1661,19 +1591,16 @@ int ObInnerSQLConnection::execute_read_inner(const int64_t cluster_id,
       share::ObLSID ls_id(share::ObLSID::SYS_LS_ID);
       if (OB_FAIL(nonblock_get_leader(
                   cluster_id, ls_id, resource_server_addr))) {
-        LOG_WARN("nonblock get leader failed", K(ret), K(ls_id), K(cluster_id));
       } else {
         set_resource_svr(resource_server_addr);
         set_resource_conn_id(OB_INVALID_ID);
       }
     }
     if (FAILEDx(get_session_timeout_for_rpc(query_timeout, trx_timeout))) {
-      LOG_WARN("fail to get_session_timeout_for_rpc", K(ret), K(query_timeout), K(trx_timeout));
     }
     if (OB_SUCC(ret)) {
       ObObj tmp_sql_mode;
       if (OB_FAIL(get_session().get_sys_variable_by_name("sql_mode", tmp_sql_mode))) {
-        LOG_WARN("fail to get sql mode", K(ret));
       } else {
         sql_mode = tmp_sql_mode.get_uint64();
       }
@@ -1708,7 +1635,6 @@ int ObInnerSQLConnection::nonblock_get_leader(
     ret = OB_NOT_INIT;
     LOG_WARN("location cache is NULL", K(ret));
   } else if (OB_FAIL(set_timeout(abs_timeout_us))) {
-    LOG_WARN("set timeout failed", K(ret));
   } else {
     int64_t tmp_abs_timeout_us = 0;
     const int64_t retry_interval_us = 200 * 1000; // 200ms
@@ -1722,8 +1648,6 @@ int ObInnerSQLConnection::nonblock_get_leader(
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(GCTX.location_service_->get_leader_with_retry_until_timeout(
                   cluster_id, ls_id, leader, tmp_abs_timeout_us, retry_interval_us))) {
-        LOG_WARN("get leader with retry until timeout failed",  KR(ret), K(ls_id),
-            K(leader), K(cluster_id), K(tmp_abs_timeout_us), K(retry_interval_us));
       } else if (OB_UNLIKELY(!leader.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("leader addr invalid", K(ret), K(cluster_id), K(ls_id), K(leader));
@@ -1743,22 +1667,17 @@ int ObInnerSQLConnection::execute(
   FLTSpanGuard(inner_execute);
   SMART_VAR(ObInnerSQLResult, res, get_session(), is_inner_session(), nullptr) {
     if (OB_FAIL(res.init())) {
-      LOG_WARN("init result set", K(ret));
     } else if (!inited_) {
       ret = OB_NOT_INIT;
       LOG_WARN("connection not inited", K(ret));
     } else if (OB_FAIL(switch_tenant())) {
-      LOG_WARN("switch tenant failed", K(ret));
     } else if (OB_FAIL(query(executor, res))) {
-      LOG_WARN("executor execute failed", K(ret), K(executor));
     } else {
       MOD_SCOPE {
         WITH_CONTEXT(res.mem_context_) {
           if (OB_FAIL(executor.process_result(res.result_set()))) {
-            LOG_WARN("process result failed", K(ret));
           } else {
             if (OB_FAIL(res.close())) {
-              LOG_WARN("close result set failed", K(ret), K(executor));
             }
           }
         }
@@ -1780,19 +1699,15 @@ int ObInnerSQLConnection::switch_tenant()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema service is nullptr", K(ret));
     } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("failed to get schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_schema))) {
-      LOG_WARN("failed to get tenant schema", K(tenant_schema));
     } else if (OB_ISNULL(tenant_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tenant schema is null", K(ret));
     } else if (OB_FAIL(get_session().switch_tenant_with_name(tenant_schema->get_tenant_name_str()))) {
-      LOG_WARN("Init sys tenant in session error", K(ret));
     }
     if (OB_SUCC(ret)) {
       const char *sys_user_name = OB_SYS_USER_NAME;
       if (OB_FAIL(get_session().set_user(sys_user_name, OB_SYS_HOST_NAME, OB_SYS_USER_ID))) {
-        LOG_WARN("Set sys user in session error", K(ret));
       } else {
         get_session().set_user_priv_set(OB_PRIV_ALL | OB_PRIV_GRANT);
         get_session().set_database_id(OB_SYS_DATABASE_ID);
@@ -1862,7 +1777,6 @@ int ObInnerSQLConnection::set_timeout(int64_t &abs_timeout_us)
   if (OB_SUCC(ret)
       && (is_inner_session() || ctx.is_timeout_set() || ctx.is_trx_timeout_set())) {
     if (OB_FAIL(set_session_timeout(timeout, trx_timeout))) {
-      LOG_WARN("set session timeout failed", K(timeout), K(trx_timeout), K(ret));
     } else {
       THIS_WORKER.set_timeout_ts(get_session().get_query_start_time() + timeout);
     }
@@ -1878,7 +1792,6 @@ int ObInnerSQLConnection::set_session_timeout(int64_t query_timeout, int64_t trx
     ObObj val;
     val.set_int(query_timeout);
     if (OB_FAIL(get_session().update_sys_variable(SYS_VAR_OB_QUERY_TIMEOUT, val))) {
-      LOG_WARN("set sys variable failed", K(ret), K(OB_SV_QUERY_TIMEOUT), K(val));
     }
   }
   if (OB_SUCC(ret)) {
@@ -1886,7 +1799,6 @@ int ObInnerSQLConnection::set_session_timeout(int64_t query_timeout, int64_t trx
     ObObj val;
     val.set_int(trx_timeout);
     if (OB_FAIL(get_session().update_sys_variable(SYS_VAR_OB_TRX_TIMEOUT, val))) {
-      LOG_WARN("set sys variable failed", K(ret), K(OB_SV_TRX_TIMEOUT), K(val));
     }
   }
 
@@ -1960,7 +1872,6 @@ int ObInnerSQLConnection::get_session_variable(const ObString &name, int64_t &va
     // Isolation level is a varchar value
     ObObj obj;
     if (OB_FAIL(get_session().get_sys_variable_by_name(name, obj))) {
-      LOG_WARN("get tx_isolation system variable value fail", K(ret), K(name));
     } else {
       // varchar conversion to int
       val = transaction::ObTransIsolation::get_level(obj.get_string());
@@ -1988,10 +1899,8 @@ int ObInnerSQLConnection::set_session_variable(const ObString &name, int64_t val
     obj.set_varchar(transaction::ObTransIsolation::get_name(val));
     obj.set_collation_type(ObCharset::get_system_collation());
     if (OB_FAIL(get_session().update_sys_variable_by_name(name, obj))) {
-      LOG_WARN("update sys variable by name fail", K(ret), K(name), K(obj), K(name), K(val));
     }
   } else if (OB_FAIL(get_session().update_sys_variable_by_name(name, val))) {
-    LOG_WARN("failed to update sys variable", K(ret), K(name), K(val));
   } else if (0 == name.case_compare("ob_read_consistency")) {
     LOG_INFO("inner session use weak consitency", K(val), "inner_connection_p", this);
   }
@@ -2005,7 +1914,6 @@ int ObInnerSQLConnection::set_session_variable(const ObString &name, const ObStr
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(get_session().update_sys_variable(name, val))) {
-    LOG_WARN("failed to update sys variable", K(ret), K(name), K(val));
   }
   return ret;
 }
@@ -2025,7 +1933,6 @@ int ObInnerSQLConnection::begin_nested_session(ObSQLSessionInfo::StmtSavedValue 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("connection is not extern session", K(ret));
   } else if (OB_FAIL(extern_session_->begin_nested_session(saved_session, skip_cur_stmt_tables))) {
-    LOG_WARN("failed to begin nested session", K(ret));
   } else {
     saved_conn.ref_ctx_ = ref_ctx_;
     saved_conn.execute_start_timestamp_ = execute_start_timestamp_;
@@ -2042,7 +1949,6 @@ int ObInnerSQLConnection::end_nested_session(ObSQLSessionInfo::StmtSavedValue &s
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("connection is not extern session", K(ret));
   } else if (OB_FAIL(extern_session_->end_nested_session(saved_session))) {
-    LOG_WARN("failed to end nested session", K(ret));
   } else {
     ref_ctx_ = saved_conn.ref_ctx_;
     execute_start_timestamp_ = saved_conn.execute_start_timestamp_;
@@ -2061,7 +1967,6 @@ int ObInnerSQLConnection::create_session_by_mgr()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session_mgr_ or omt_ is NULL", K(ret));
   } else if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
-    LOG_WARN("alloc session id failed", K(ret));
   } else if (OB_FAIL(GCTX.session_mgr_->create_session(sid,
                                                       ObTimeUtility::current_time(),
                                                       inner_session_))) {
@@ -2088,7 +1993,6 @@ int ObInnerSQLConnection::create_default_session()
   } else if (FALSE_IT(inner_session_ = new(buf) ObSQLSessionInfo())) {
   } else if (FALSE_IT(free_session_ctx_.sessid_ = INNER_SQL_SESS_ID)) {
   } else if (OB_FAIL(inner_session_->init(INNER_SQL_SESS_ID, allocator))) {
-    LOG_WARN("init session failed", K(ret));
   }
   return ret;
 }
@@ -2184,7 +2088,6 @@ int ObInnerSQLConnection::stmt_prepare(const ObString &sql,
   ObPsPrepareExecutor executor(sql);
   LOG_INFO("[PS_DEBUG] calling execute(executor)");
   if (OB_FAIL(execute(executor))) {
-    LOG_WARN("stmt_prepare execute failed", K(ret), K(sql));
   } else {
     stmt_id = executor.get_stmt_id();
     param_count = executor.get_param_count();
@@ -2199,7 +2102,6 @@ int ObInnerSQLConnection::stmt_execute(const uint64_t stmt_id,
   int ret = OB_SUCCESS;
   ObPsExecuteExecutor executor(stmt_id, params);
   if (OB_FAIL(execute(executor))) {
-    LOG_WARN("stmt_execute failed", K(ret), K(stmt_id));
   } else {
     affected_rows = executor.get_affected_rows();
     LOG_DEBUG("stmt_execute success", K(stmt_id), K(affected_rows));
@@ -2212,7 +2114,6 @@ int ObInnerSQLConnection::stmt_close(const uint64_t stmt_id)
   int ret = OB_SUCCESS;
   sql::ObSQLSessionInfo &session = get_session();
   if (OB_FAIL(session.close_ps_stmt(stmt_id))) {
-    LOG_WARN("close_ps_stmt failed", K(ret), K(stmt_id));
   } else {
     LOG_DEBUG("stmt_close success", K(stmt_id));
   }

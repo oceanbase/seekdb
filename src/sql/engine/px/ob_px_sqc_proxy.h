@@ -224,13 +224,11 @@ int ObPxSQCProxy::aggregate_sqc_pieces_and_get_dh_msg(uint64_t op_id, dtl::ObDtl
   ObPxDatahubDataProvider *provider = nullptr;
   typename WholeMsg::WholeMsgProvider *detail_p = nullptr;
   if (OB_FAIL(get_whole_msg_provider(op_id, msg_type, provider))) {
-    SQL_LOG(WARN, "failed to get provider", K(ret));
   } else if (FALSE_IT(detail_p = static_cast<typename WholeMsg::WholeMsgProvider *>(provider))) {
   } else if (is_local) {
     // for local datahub message, we can directly get the whole message from provider.
     if (OB_FAIL(detail_p->aggregate_sqc_piece_msgs_and_directly_return_whole(
             piece, whole, timeout_ts, get_task_count(), need_sync, need_wait_whole_msg))) {
-      SQL_LOG(WARN, "failed to aggregate_sqc_piece_msgs_and_directly_return_whole");
     }
   } else if (!is_local) {
     // for remote datahub message, only last piece is under obligation to send rpc
@@ -238,7 +236,6 @@ int ObPxSQCProxy::aggregate_sqc_pieces_and_get_dh_msg(uint64_t op_id, dtl::ObDtl
     const PieceMsg *sqc_piece = nullptr;
     if (OB_FAIL(detail_p->aggregate_sqc_piece_msgs(piece, sqc_piece, timeout_ts, get_task_count(),
                                                    need_sync, is_last_piece))) {
-      SQL_LOG(WARN, "failed to aggregate_sqc_piece_msgs");
     } else if (is_last_piece && OB_ISNULL(sqc_piece)) {
       ret = OB_ERR_UNEXPECTED;
       SQL_LOG(WARN, "unexpected null");
@@ -269,7 +266,6 @@ int ObPxSQCProxy::wait_whole_msg(ObPxDatahubDataProvider *provider, const WholeM
     if (OB_DTL_WAIT_EAGAIN == ret || OB_SUCCESS == ret) {
       const dtl::ObDtlMsg *msg = nullptr;
       if (OB_FAIL(p->get_msg_nonblock(msg, timeout_ts))) {
-        SQL_LOG(TRACE, "fail get msg", K(timeout_ts), K(ret));
       } else {
         whole = static_cast<const WholeMsg *>(msg);
       }
@@ -299,13 +295,11 @@ int ObPxSQCProxy::inner_get_dh_msg(
   int ret = common::OB_SUCCESS;
   ObPxDatahubDataProvider *provider = nullptr;
   if (OB_FAIL(get_whole_msg_provider(op_id, msg_type, provider))) {
-    SQL_LOG(WARN, "fail get provider", K(ret));
   } else if (need_sync && OB_FAIL(sync_wait_all(*provider))) {
     SQL_LOG(WARN, "failed to sync wait", K(ret));
   } else {
     if (send_piece) {
       if (OB_FAIL(send_dh_piece_msg(piece, timeout_ts))) {
-        SQL_LOG(WARN, "failed to send_dh_piece_msg");
       }
     }
     if (OB_SUCC(ret) && need_wait_whole_msg
@@ -325,10 +319,8 @@ int ObPxSQCProxy::send_dh_piece_msg(const PieceMsg &piece, int64_t timeout_ts)
   if (OB_ISNULL(ch)) {
     ret = common::OB_ERR_UNEXPECTED;
     SQL_LOG(WARN, "empty channel", K(ret));
-  } else if (OB_FAIL(ch->send(piece, timeout_ts))) { // Do our best, if push fails it will be handled by other mechanisms
-    SQL_LOG(WARN, "fail push data to channel", K(ret));
+  } else if (OB_FAIL(ch->send(piece, timeout_ts))) {
   } else if (OB_FAIL(ch->flush())) {
-    SQL_LOG(WARN, "fail flush dtl data", K(ret));
   }
   return ret;
 }

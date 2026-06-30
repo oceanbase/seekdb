@@ -64,9 +64,7 @@ int ObTmpWriteBufferPool::init()
   } else if (OB_FAIL(allocator_.init(
                      lib::ObMallocAllocator::get_instance(), OB_MALLOC_BIG_BLOCK_SIZE,
                      ObMemAttr("TmpFileWBPBlk", ObCtxIds::DEFAULT_CTX_ID)))) {
-    LOG_WARN("wbp fail to init fifo allocator", KR(ret));
   } else if (OB_FAIL(fat_.init())) {
-    LOG_WARN("fail to init fat", KR(ret));
   } else {
     last_shrink_complete_ts_ = ObTimeUtility::current_time();
     is_inited_ = true;
@@ -214,7 +212,6 @@ int ObTmpWriteBufferPool::alloc_page(const int64_t fd,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(fd), K(page_key));
   } else if (OB_FAIL(alloc_page_(fd, page_key, new_page_id, new_page_buf))) {
-    LOG_DEBUG("wbp fail to alloc page", KR(ret), K(fd), K(page_key));
   } else if (page_key.type_ == PageEntryType::META) {
     ATOMIC_INC(&meta_page_cnt_);
     LOG_INFO("alloc meta page", KR(ret), K(new_page_id), K(fd), K(page_key));
@@ -522,7 +519,6 @@ int ObTmpWriteBufferPool::expand_()
           if (OB_FAIL(fat_.push_back(ObPageEntry(ObTmpFileGlobal::INVALID_TMP_FILE_FD,
                                                  ObTmpFileGlobal::INVALID_PAGE_ID,
                                                  new_expand_buf + count * ObTmpFileGlobal::ALLOC_PAGE_SIZE)))) {
-            LOG_WARN("wbp fail to push back page into fat", KR(ret), K(count), K(new_page_id));
           } else {
             if (count > 0) {
               fat_[new_page_id].next_page_id_ = new_page_id - 1;
@@ -622,8 +618,6 @@ int ObTmpWriteBufferPool::init_shrink_context(const bool is_auto)
   uint32_t max_allow_alloc_page_id = ObTmpFileGlobal::INVALID_PAGE_ID;
 
   if (OB_FAIL(cal_target_shrink_range_(is_auto, lower_page_id, upper_page_id))) {
-    LOG_WARN("fail to calculate target shrinking range", KR(ret), K(is_auto),
-            K(ATOMIC_LOAD(&max_used_watermark_after_shrinking_)));
   } else {
     max_allow_alloc_page_id = cal_max_allow_alloc_page_id_(lower_page_id, upper_page_id);
     if (OB_UNLIKELY(!is_valid_page_id_(lower_page_id) || !is_valid_page_id_(upper_page_id))) {
@@ -636,7 +630,6 @@ int ObTmpWriteBufferPool::init_shrink_context(const bool is_auto)
           K(lower_page_id), K(upper_page_id), K(fat_.size()));
     } else if (OB_FAIL(shrink_ctx_.init(lower_page_id, max_allow_alloc_page_id,
                                         upper_page_id, is_auto))) {
-      LOG_WARN("wbp fail to init shrink context", KR(ret), K(lower_page_id), K(upper_page_id));
     } else {
       LOG_INFO("init shrinking context", KR(ret), K(shrink_ctx_));
     }
@@ -775,7 +768,6 @@ int ObTmpWriteBufferPool::begin_shrinking(const bool is_auto)
   switch (shrink_ctx_.wbp_shrink_state_) {
     case WBPShrinkContext::INVALID:
       if (OB_FAIL(init_shrink_context(is_auto))) {
-        LOG_ERROR("fail to init shrink context, could not begin shrink process", KR(ret));
       } else {
         LOG_INFO("wbp begin_shrinking", K(shrink_ctx_));
       }
@@ -884,7 +876,6 @@ int ObTmpWriteBufferPool::release_blocks_in_shrink_range()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("shrink_ctx_ is invalid", K(ret), K(shrink_ctx_));
   } else if (OB_FAIL(remove_invalid_page_in_free_list_())) {
-    LOG_WARN("fail to remove invalid page in free list", KR(ret), K(shrink_ctx_));
   } else {
     common::TCRWLock::WLockGuard guard(lock_);
 
@@ -1176,7 +1167,6 @@ int ObTmpWriteBufferPool::notify_dirty(
   } else if (FALSE_IT(is_already_dirty = (ObPageEntry::State::DIRTY == fat_[page_id].state_))) {
   } else if (FALSE_IT(is_write_back = (ObPageEntry::State::WRITE_BACK == fat_[page_id].state_))) {
   } else if (OB_FAIL(fat_[page_id].switch_state(ObPageEntry::Ops::WRITE))) {
-    LOG_WARN("fail to switch state to DIRTY", KR(ret), K(fd), K(page_id), K(fat_[page_id]));
   } else {
     if (!is_already_dirty) {
       ATOMIC_INC(&dirty_page_num_);
@@ -1225,7 +1215,6 @@ int ObTmpWriteBufferPool::notify_load(
     }
     LOG_WARN("invalid argument", KR(ret), K(fd), K(page_id), K(page_key), K(entry));
   } else if (OB_FAIL(fat_[page_id].switch_state(ObPageEntry::Ops::LOAD))) {
-    LOG_WARN("fail to switch state from INITED to LOADING", KR(ret), K(fd), K(page_id), K(fat_[page_id]));
   }
   return ret;
 }
@@ -1250,7 +1239,6 @@ int ObTmpWriteBufferPool::notify_load_succ(const int64_t fd, const uint32_t page
     }
     LOG_WARN("invalid argument", KR(ret), K(fd), K(page_id), K(page_key), K(entry));
   } else if (OB_FAIL(fat_[page_id].switch_state(ObPageEntry::Ops::LOAD_SUCC))) {
-    LOG_WARN("fail to switch state from LOADING to CACHED", KR(ret), K(fd), K(page_id), K(fat_[page_id]));
   }
   return ret;
 }
@@ -1277,7 +1265,6 @@ int ObTmpWriteBufferPool::notify_load_fail(
     }
     LOG_WARN("invalid argument", KR(ret), K(fd), K(page_id), K(page_key), K(entry));
   } else if (OB_FAIL(fat_[page_id].switch_state(ObPageEntry::Ops::LOAD_FAIL))) {
-    LOG_WARN("fail to switch state from LOADING to INITED", KR(ret), K(fd), K(page_id), K(fat_[page_id]));
   }
   return ret;
 }
@@ -1306,7 +1293,6 @@ int ObTmpWriteBufferPool::notify_write_back(
     LOG_WARN("invalid argument", KR(ret), K(fd), K(page_id), K(page_key), K(entry));
   } else if (FALSE_IT(is_dirty = (ObPageEntry::State::DIRTY == fat_[page_id].state_))) {
   } else if (OB_FAIL(fat_[page_id].switch_state(ObPageEntry::Ops::WRITE_BACK))) {
-    LOG_WARN("fail to switch state from DIRTY to WRITE_BACK", KR(ret), K(fd), K(page_id), K(fat_[page_id]));
   } else if (is_dirty) {
     ATOMIC_DEC(&dirty_page_num_);
     if (PageEntryType::DATA == fat_[page_id].page_key_.type_) {
@@ -1346,7 +1332,6 @@ int ObTmpWriteBufferPool::notify_write_back_succ(
     LOG_WARN("invalid argument", KR(ret), K(fd), K(page_id), K(page_key), K(entry));
   } else if (FALSE_IT(is_write_back = (ObPageEntry::State::WRITE_BACK == fat_[page_id].state_))) {
   } else if (OB_FAIL(fat_[page_id].switch_state(ObPageEntry::Ops::WRITE_BACK_SUCC))) {
-    LOG_WARN("fail to switch state from WRITE_BACK to CACHED", KR(ret), K(fd), K(page_id), K(fat_[page_id]));
   } else if (is_write_back) {
     if (PageEntryType::DATA == fat_[page_id].page_key_.type_) {
       ATOMIC_DEC(&write_back_data_cnt_);
@@ -1377,7 +1362,6 @@ int ObTmpWriteBufferPool::notify_write_back_fail(int64_t fd, uint32_t page_id,
     LOG_WARN("invalid argument", KR(ret), K(fd), K(page_id), K(page_key), K(fat_[page_id]));
   } else if (FALSE_IT(is_write_back = (ObPageEntry::State::WRITE_BACK == fat_[page_id].state_))) {
   } else if (OB_FAIL(fat_[page_id].switch_state(ObPageEntry::Ops::WRITE_BACK_FAILED))) {
-    LOG_WARN("fail to switch state from WRITE_BACK to DIRTY", K(fd), K(page_id), K(fat_[page_id]));
   } else if (is_write_back) {
     ATOMIC_INC(&dirty_page_num_);
     if (PageEntryType::DATA == fat_[page_id].page_key_.type_) {

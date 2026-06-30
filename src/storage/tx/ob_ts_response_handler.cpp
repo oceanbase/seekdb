@@ -61,7 +61,6 @@ int ObTsResponseHandler::run()
   } else {
     ObTsResponseTask *task = static_cast<ObTsResponseTask *>(task_);
     if (OB_FAIL(ts_mgr_->handle_gts_result(task->get_arg1(), task->get_ts_type()))) {
-      TRANS_LOG(WARN, "handle gts result failed", KR(ret), K(*task));
     }
     //op_reclaim_free(task);
     //task = NULL;
@@ -88,7 +87,6 @@ int ObTsResponseTask::init(const int64_t arg1,
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(arg1), KP(ts_mgr), K(ts_type));
   } else if (OB_FAIL(handler_.init(this, ts_mgr))) {
-    TRANS_LOG(WARN, "ObTsResponseHandler init error", KR(ret));
   } else {
     //Different from the task of sql disconnection, it is used for memory release
     set_type(ObRequest::OB_TS_TASK);

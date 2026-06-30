@@ -63,7 +63,6 @@ int ObTableLoadNormalRowHandler::handle_insert_row(const ObTabletID &tablet_id,
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadNormalRowHandler not init", KR(ret), KP(this));
   } else if (OB_FAIL(push_insert_row(tablet_id, datum_row))) {
-    LOG_WARN("fail to push insert row", KR(ret));
   }
   return ret;
 }
@@ -76,7 +75,6 @@ int ObTableLoadNormalRowHandler::handle_insert_row(const ObTabletID &tablet_id,
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadNormalRowHandler not init", KR(ret), KP(this));
   } else if (OB_FAIL(push_insert_row(tablet_id, datum_row))) {
-    LOG_WARN("fail to push insert row", KR(ret));
   }
   return ret;
 }
@@ -91,7 +89,6 @@ int ObTableLoadNormalRowHandler::handle_insert_batch(const ObTabletID &tablet_id
   } else if (0 == datum_rows.row_count_) {
     // do nothing
   } else if (OB_FAIL(push_insert_batch(tablet_id, datum_rows))) {
-    LOG_WARN("fail to push insert batch", KR(ret));
   }
   return ret;
 }
@@ -104,7 +101,6 @@ int ObTableLoadNormalRowHandler::handle_delete_row(const ObTabletID &tablet_id,
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadNormalRowHandler not init", KR(ret), KP(this));
   } else if (OB_FAIL(push_delete_row(tablet_id, datum_row))) {
-    LOG_WARN("fail to push insert batch", KR(ret));
   }
   return ret;
 }
@@ -117,7 +113,6 @@ int ObTableLoadNormalRowHandler::handle_update_row(const ObTabletID &tablet_id,
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(push_update_row(tablet_id, datum_row))) {
-    LOG_WARN("fail to push update row", KR(ret));
   }
   return ret;
 }
@@ -134,7 +129,6 @@ int ObTableLoadNormalRowHandler::handle_update_row(const ObTabletID &tablet_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret));
   } else if (OB_FAIL(push_update_row(tablet_id, rows, row))) {
-    LOG_WARN("fail to push update row", K(ret));
   }
   return ret;
 }
@@ -147,7 +141,6 @@ int ObTableLoadNormalRowHandler::handle_update_row(
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(push_update_row(rows, row))) {
-    LOG_WARN("fail to push update row", K(ret));
   }
   return ret;
 }
@@ -162,7 +155,6 @@ int ObTableLoadNormalRowHandler::handle_update_row(const ObTabletID &tablet_id,
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadNormalRowHandler not init", KR(ret), KP(this));
   } else if (OB_FAIL(push_update_row(tablet_id, old_row, new_row, result_row))) {
-    LOG_WARN("fail to push update row", KR(ret));
   }
   return ret;
 }
@@ -175,7 +167,6 @@ int ObTableLoadNormalRowHandler::handle_insert_delete_conflict(const ObTabletID 
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadNormalRowHandler not init", KR(ret), KP(this));
   } else if (OB_FAIL(push_insert_delete_conflict(tablet_id, datum_row))) {
-    LOG_WARN("fail to push insert delete conflict", KR(ret));
   }
   return ret;
 }

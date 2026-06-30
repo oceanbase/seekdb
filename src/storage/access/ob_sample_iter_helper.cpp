@@ -37,7 +37,6 @@ int ObGetSampleIterHelper::check_scan_range_count(bool &res, ObIArray<ObDatumRan
             false/*allow_not_ready*/, false/*major_sstable_only*/, true/*need_split_src_table*/, false/*need_split_dst_table*/))) {
       STORAGE_LOG(WARN, "Fail to read tables", K(ret));
     } else if (OB_FAIL(can_retire_to_memtable_row_sample_(retire_to_memtable_row_sample, sample_ranges))) {
-      STORAGE_LOG(WARN, "Fail to try to retire to row sample", K(ret));
     }
 
     if (retire_to_memtable_row_sample) {
@@ -45,10 +44,6 @@ int ObGetSampleIterHelper::check_scan_range_count(bool &res, ObIArray<ObDatumRan
     }
   } else if (scan_param_.sample_info_.is_row_sample()) {
     if (OB_FAIL(sample_ranges.assign(table_scan_range_.get_ranges()))) {
-      STORAGE_LOG(WARN,
-                  "copy assign from table scan range to sample ranges failed",
-                  KR(ret),
-                  K(table_scan_range_.get_ranges()));
     } else {
       need_scan_multiple_range_ = true;
     }
@@ -87,7 +82,6 @@ int ObGetSampleIterHelper::can_retire_to_memtable_row_sample_(bool &retire, ObIA
       } else if (table->is_data_memtable()) {
         memtable::ObMemtable *memtable = static_cast<memtable::ObMemtable *>(table);
         if (OB_FAIL(memtables.push_back(memtable))) {
-          STORAGE_LOG(WARN, "push back memtable failed", KR(ret));
         } else {
           memtable_row_count += memtable->get_physical_row_cnt();
         }
@@ -104,7 +98,6 @@ int ObGetSampleIterHelper::can_retire_to_memtable_row_sample_(bool &retire, ObIA
     } else if (FALSE_IT(get_table_param_.tablet_iter_.table_iter()->resume())) {
     } else if (sstable_row_count < memtable_row_count && memtable_row_count > 0) {
       if (OB_FAIL(get_memtable_sample_ranges_(memtables, sample_ranges))) {
-        STORAGE_LOG(WARN, "get memtable sample ranges failed", KR(ret), K(memtables));
       } else {
         retire = true;
       }
@@ -166,7 +159,6 @@ int ObGetSampleIterHelper::get_memtable_sample_ranges_(const ObIArray<memtable::
     }
 
     if (OB_FAIL(sample_ranges.push_back(table_scan_range_.get_ranges().at(0)))) {
-      STORAGE_LOG(WARN, "push back datum range to sample memtable ranges failed", KR(ret), K(memtables));
     }
     FLOG_INFO("split memtables failed", 
               KR(ret), 
@@ -224,7 +216,6 @@ int ObGetSampleIterHelper::get_sample_iter(ObBlockSampleIterator *&sample_iter,
                                 table_scan_range_.get_ranges().at(0),
                                 get_table_param_,
                                 scan_param_.scan_flag_.is_reverse_scan()))) {
-    STORAGE_LOG(WARN, "failed to open block_sample_iterator_", K(ret));
   } else {
     main_iter = sample_iter;
     main_table_ctx_.use_fuse_row_cache_ = false;
@@ -245,7 +236,6 @@ int ObGetSampleIterHelper::get_sample_iter(ObDDLBlockSampleIterator *&sample_ite
                                 table_scan_range_.get_ranges().at(0),
                                 get_table_param_,
                                 scan_param_.scan_flag_.is_reverse_scan()))) {
-    STORAGE_LOG(WARN, "failed to open ddl block sample iterator", K(ret));
   } else {
     main_iter = sample_iter;
     main_table_ctx_.use_fuse_row_cache_ = false;

@@ -78,7 +78,6 @@ int ObTxStat::init(const common::ObAddr &addr, const ObTransID &tx_id,  const bo
     TRANS_LOG(WARN, "ObTxStat init twice");
     ret = OB_INIT_TWICE;
   } else if (OB_SUCCESS != (ret = participants_.assign(participants))) {
-    TRANS_LOG(WARN, "ls array assign error", KR(ret), K(participants));
   } else {
     is_inited_ = true;
     addr_ = addr;
@@ -191,9 +190,7 @@ int ObTxSchedulerStat::init(const common::ObAddr &addr,
     TRANS_LOG(WARN, "ObTxSchedulerStat init twice");
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(parts_.assign(parts))) {
-    TRANS_LOG(WARN, "parts assign error", KR(ret), K(parts));
   } else if (OB_FAIL(get_valid_savepoints(savepoints))) {
-    TRANS_LOG(WARN, "savepoints assign error", KR(ret), K(savepoints));
   } else {
     is_inited_ = true;
     addr_ = addr;
@@ -272,7 +269,6 @@ int ObTxSchedulerStat::get_valid_savepoints(const ObTxSavePointList &savepoints)
   for (int i = 0; OB_SUCC(ret) && i < savepoints.count(); i++) {
     if (savepoints.at(i).is_savepoint()) {
       if (OB_FAIL(savepoints_.push_back(savepoints.at(i)))) {
-        TRANS_LOG(WARN, "failed to push into savepoints array", KR(ret));
       }
     }
   }

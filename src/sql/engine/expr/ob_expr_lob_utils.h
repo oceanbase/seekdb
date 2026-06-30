@@ -75,7 +75,6 @@ int ObTextStringVectorResult<VectorType>::init(int64_t res_len, ObIAllocator *al
     ret = OB_INVALID_ARGUMENT;
     SQL_LOG(WARN, "Lob: invalid arguments", K(ret), K(type_), KPC(res_datum_));
   } else if (OB_FAIL(ObTextStringResult::calc_buffer_len(res_len))) {
-    SQL_LOG(WARN, "Lob: calc buffer len failed", K(ret), K(type_), K(res_len));
   } else if (buff_len_ == 0) {
     OB_ASSERT(has_lob_header_ == false); // empty result without header
   } else {
@@ -85,7 +84,6 @@ int ObTextStringVectorResult<VectorType>::init(int64_t res_len, ObIAllocator *al
       ret = OB_ALLOCATE_MEMORY_FAILED;
       SQL_LOG(WARN, "Lob: alloc buffer failed", K(ret), KP(expr_), KP(allocator), K(buff_len_));
     } else if (OB_FAIL(fill_temp_lob_header(res_len))) {
-      SQL_LOG(WARN, "Lob: fill_temp_lob_header failed", K(ret), K(type_));
     }
   }
   if (OB_SUCC(ret)) {
@@ -104,14 +102,12 @@ int ObTextStringVectorResult<VectorType>::init_with_batch_idx(int64_t res_len, i
     ret = OB_INVALID_ARGUMENT;
     SQL_LOG(WARN, "Lob: invalid arguments", K(ret), K(type_), KP(expr_), KP(ctx_), KP(res_datum_));
   } else if (OB_FAIL(ObTextStringResult::calc_buffer_len(res_len))) {
-    SQL_LOG(WARN, "Lob: calc buffer len failed", K(ret), K(type_), KP(expr_), KP(ctx_), KP(res_datum_));
   } else {
     buffer_ = expr_->get_str_res_mem(*ctx_, buff_len_, batch_idx);
     if (OB_ISNULL(buffer_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       SQL_LOG(WARN, "Lob: alloc buffer failed", K(ret), KP(expr_), K(buff_len_));
     } else if (OB_FAIL(fill_temp_lob_header(res_len))) {
-      SQL_LOG(WARN, "Lob: fill_temp_lob_header failed", K(ret), K(type_));
     }
   }
   if (OB_SUCC(ret)) {
@@ -177,7 +173,6 @@ public:
       const ObDatumMeta &meta = expr.args_[idx]->datum_meta_;
       bool has_lob_header = expr.args_[idx]->obj_meta_.has_lob_header();
       if (OB_FAIL(ObTextStringHelper::read_real_string_data(allocator, *datum, meta, has_lob_header, str))) {
-        COMMON_LOG(WARN, "Lob: fail to get string.", K(ret), K(str));
       }
     }
     return ret;
@@ -195,7 +190,6 @@ public:
       const ObDatumMeta &meta = expr.args_[arg_idx]->datum_meta_;
       bool has_lob_header = expr.args_[arg_idx]->obj_meta_.has_lob_header();
       if (OB_FAIL(ObTextStringHelper::read_real_string_data(allocator, vector, meta, has_lob_header, str, idx))) {
-        COMMON_LOG(WARN, "Lob: fail to get string.", K(ret), K(str));
       }
     }
     return ret;
@@ -237,7 +231,6 @@ public:
               has_lob_header,
               str,
               exec_ctx))) {
-            COMMON_LOG(WARN, "read_real_string_data fail", K(ret), K(meta), K(has_lob_header), K(datum));
           }
         }
       }
@@ -288,7 +281,6 @@ public:
               has_lob_header,
               str,
               exec_ctx))) {
-            COMMON_LOG(WARN, "read_real_string_data fail", K(ret), K(meta), K(has_lob_header), K(vector));
           }
         }
       }
@@ -338,9 +330,7 @@ public:
       }
       ObTextStringIter str_iter(meta.type_, meta.cs_type_, str, has_lob_header);
       if (OB_FAIL(str_iter.init(0, NULL, &allocator, tmp_alloc_ptr))) {
-        COMMON_LOG(WARN, "Lob: str iter init failed ", K(ret), K(str_iter));
       } else if (OB_FAIL(str_iter.get_full_data(str))) {
-        COMMON_LOG(WARN, "Lob: str iter get full data failed ", K(ret), K(str_iter));
       } else if (!str_iter.is_outrow_lob()) {
         need_copy = true;
       }
@@ -350,7 +340,6 @@ public:
     if (OB_SUCC(ret) && need_copy) {
       ObString str_cpy;
       if (OB_FAIL(ob_write_string(allocator, str, str_cpy))) {
-        COMMON_LOG(WARN, "fail to copy inrow data");
       } else {
         str = str_cpy;
       }
@@ -374,9 +363,7 @@ public:
     } else if (ob_is_text_tc(meta.type_)) {
       ObTextStringIter str_iter(meta.type_, meta.cs_type_, str, has_lob_header);
       if (OB_FAIL(str_iter.init(0, NULL, allocator))) {
-        COMMON_LOG(WARN, "Lob: init lob str iter failed ", K(ret), K(str_iter));
       } else if (OB_FAIL(str_iter.get_inrow_or_outrow_prefix_data(str, prefix_char_len))) {
-        COMMON_LOG(WARN, "Lob: init lob str iter failed ", K(ret), K(str_iter));
       }
     }
     return ret;
@@ -396,9 +383,7 @@ public:
     } else if (ob_is_text_tc(meta.get_type())) {
       ObTextStringIter str_iter(meta.get_type(), meta.get_collation_type(), str, obj.has_lob_header());
       if (OB_FAIL(str_iter.init(0, NULL, allocator))) {
-        COMMON_LOG(WARN, "Lob: init lob str iter failed ", K(ret), K(str_iter));
       } else if (OB_FAIL(str_iter.get_inrow_or_outrow_prefix_data(str, prefix_char_len))) {
-        COMMON_LOG(WARN, "Lob: init lob str iter failed ", K(ret), K(str_iter));
       }
     }
     return ret;
@@ -412,9 +397,7 @@ public:
     common::ObArenaAllocator &temp_allocator = tmp_alloc_g.get_allocator();
     ObTextStringIter str_iter(meta.type_, meta.cs_type_, str, has_lob_header);
     if (OB_FAIL(str_iter.init(0, NULL, &temp_allocator))) {
-      COMMON_LOG(WARN, "Lob: init lob str iter failed ", K(ret), K(str_iter));
     } else if (OB_FAIL(str_iter.get_char_len(char_len))) {
-      COMMON_LOG(WARN, "Lob: init lob str iter failed ", K(ret), K(str_iter));
     }
     return ret;
   };
@@ -436,9 +419,7 @@ public:
     int ret = OB_SUCCESS;
     ObTextStringDatumResult tmp_lob_res(expr.datum_meta_.type_, &expr, &ctx, &res);
     if (OB_FAIL(tmp_lob_res.init(str.length()))) {
-      COMMON_LOG(WARN, "Lob: init lob result failed");
     } else if (OB_FAIL(tmp_lob_res.append(str.ptr(), str.length()))) {
-      COMMON_LOG(WARN, "Lob: append lob result failed");
     } else {
       tmp_lob_res.set_result();
     }
@@ -452,9 +433,7 @@ public:
     bool has_lob_header = true;
     ObTextStringObObjResult text_result(ObLongTextType, nullptr, &output, has_lob_header);
     if (OB_FAIL(text_result.init(input.length(), &allocator))) {
-      COMMON_LOG(WARN, "init lob result failed", K(ret));
     } else if (OB_FAIL(text_result.append(input.ptr(), input.length()))) {
-      COMMON_LOG(WARN, "failed to append realdata", K(ret), K(input), K(text_result));
     } else {
       text_result.set_result();
     }
@@ -475,7 +454,6 @@ public:
     int ret = OB_SUCCESS;
     ObString result;
     if (OB_FAIL(pack_to_disk_inrow_lob(allocator, data, result))) {
-      COMMON_LOG(WARN, "alloc memory for lob fail", K(ret), K(data));
     } else {
       res_datum.set_string(result.ptr(), result.length());
     }
@@ -488,7 +466,6 @@ public:
     int ret = OB_SUCCESS;
     ObString result;
     if (OB_FAIL(pack_to_disk_inrow_lob(allocator, data, result))) {
-      COMMON_LOG(WARN, "alloc memory for lob fail", K(ret), K(data));
     } else {
       res_obj.set_lob_value(type, result.ptr(), result.length());
       res_obj.set_has_lob_header();

@@ -41,7 +41,6 @@ int ObLogTempTableTransformation::compute_op_ordering()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("last_child is null", K(ret));
   } else if (OB_FAIL(set_op_ordering(last_child->get_op_ordering()))) {
-    LOG_WARN("failed to set op ordering", K(ret));
   } else {
     is_local_order_ = last_child->get_is_local_order();
   }
@@ -102,7 +101,6 @@ int ObLogTempTableTransformation::allocate_startup_expr_post()
   int ret = OB_SUCCESS;
   int64_t last_child = get_num_of_child() - 1;
   if (OB_FAIL(ObLogicalOperator::allocate_startup_expr_post(last_child))) {
-    LOG_WARN("failed to allocate startup expr post", K(ret));
   }
   return ret;
 }
@@ -115,7 +113,6 @@ int ObLogTempTableTransformation::compute_op_parallel_and_server_info()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(last_child), K(ret));
   } else if (OB_FAIL(get_server_list().assign(last_child->get_server_list()))) {
-    LOG_WARN("failed to assign server list", K(ret));
   } else {
     set_parallel(last_child->get_parallel());
     set_available_parallel(last_child->get_available_parallel());
@@ -128,7 +125,6 @@ int ObLogTempTableTransformation::est_ambient_card()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(inner_est_ambient_card_by_child(get_num_of_child() - 1))) {
-    LOG_WARN("failed to est ambient cards by last child", K(ret), K(get_type()));
   }
   return ret;
 }
@@ -152,7 +148,6 @@ int ObLogTempTableTransformation::do_re_est_cost(EstimateCostInfo &param, double
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(child->re_est_cost(child_param, card, child_cost))) {
-      LOG_WARN("failed to re est child cost", K(ret));
     } else {
       cost += child_cost;
     }

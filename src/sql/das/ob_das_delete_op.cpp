@@ -145,8 +145,6 @@ int ObDASDeleteOp::open_op()
   del_adaptor.ft_doc_word_infos_ = &doc_word_infos;
   if (OB_FAIL(ObDASDomainUtils::build_ft_doc_word_infos(ls_id_, trans_desc_, snapshot_, related_ctdefs_, related_tablet_ids_,
           del_ctdef_->is_main_table_in_fts_ddl_, doc_word_infos))) {
-    LOG_WARN("fail to build fulltext doc word infos", K(ret), K(ls_id_), KPC(snapshot_), K(related_ctdefs_),
-        K(related_tablet_ids_));
   } else if (OB_FAIL(del_adaptor.write_tablet(dml_iter, affected_rows))) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
       LOG_WARN("delete row to partition storage failed", K(ret));
@@ -226,7 +224,6 @@ int ObDASDeleteOp::swizzling_remote_task(ObDASRemoteInfo *remote_info)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIDASTaskOp::swizzling_remote_task(remote_info))) {
-    LOG_WARN("fail to swizzling remote task", K(ret));
   } else if (remote_info != nullptr) {
     //DAS delete is executed remotely
     trans_desc_ = remote_info->trans_desc_;
@@ -243,7 +240,6 @@ int ObDASDeleteOp::write_row(const ExprFixedArray &row,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("buffer not inited", K(ret));
   } else if (OB_FAIL(write_buffer_.add_row(row, &eval_ctx, stored_row, true))) {
-    LOG_WARN("add row to datum store failed", K(ret), K(row), K(write_buffer_));
   }
   return ret;
 }

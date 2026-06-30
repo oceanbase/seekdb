@@ -33,7 +33,6 @@ int ObIntDictColumnEncoder::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnCSEncoder::init(ctx, column_index, row_count))) {
-    LOG_WARN("init base column encoder failed", K(ret), K(ctx), K(column_index), K(row_count));
   } else {
     column_header_.type_ = type_;
     dict_encoding_meta_.distinct_val_cnt_ = ctx.ht_->distinct_val_cnt();
@@ -48,9 +47,7 @@ int ObIntDictColumnEncoder::init(
           wide::ObDecimalIntConstValue::get_int_bytes_by_precision(column_type_.get_stored_precision());
     }
     if (OB_FAIL(build_integer_dict_encoder_ctx_())) {
-      LOG_WARN("fail to build integer dict encoder ctx", K(ret));
     } else if (OB_FAIL(build_ref_encoder_ctx_())) {
-      LOG_WARN("fail to build ref encoder ctx", K(ret));
     }
   }
   return ret;
@@ -80,7 +77,6 @@ int ObIntDictColumnEncoder::build_integer_dict_encoder_ctx_()
       if (OB_FAIL(integer_dict_enc_ctx_.build_signed_stream_meta(int_min, int_max, is_replace_null,
           null_replaced_value, precision_width_size_, is_force_raw_,
           ctx_->encoding_ctx_->major_working_cluster_version_, dict_integer_range_))) {
-        LOG_WARN("fail to build_signed_stream_meta", K(ret));
       }
     } else if (ObUIntSC == store_class_) {
       const uint64_t uint_min = static_cast<uint64_t>(ctx_->integer_min_);
@@ -88,7 +84,6 @@ int ObIntDictColumnEncoder::build_integer_dict_encoder_ctx_()
       if (OB_FAIL(integer_dict_enc_ctx_.build_unsigned_stream_meta(
           uint_min, uint_max, is_replace_null, null_replaced_value,
           is_force_raw_, ctx_->encoding_ctx_->major_working_cluster_version_, dict_integer_range_))) {
-        LOG_WARN("fail to build_unsigned_stream_meta", K(ret));
       }
     } else {
       ret = OB_INNER_STAT_ERROR;
@@ -98,14 +93,12 @@ int ObIntDictColumnEncoder::build_integer_dict_encoder_ctx_()
     ObPreviousColumnEncoding *pre_col_encoding = nullptr;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(get_previous_cs_encoding(pre_col_encoding))) {
-      LOG_WARN("get_previous_cs_encoding fail", K(ret));
     } else if (OB_FAIL(integer_dict_enc_ctx_.build_stream_encoder_info(
         false/*has_null*/,
         is_monotonic_inc_integer_dict_,
         &ctx_->encoding_ctx_->cs_encoding_opt_,
         pre_col_encoding,
         0/*stream_idx*/, ctx_->encoding_ctx_->compressor_type_, ctx_->allocator_))) {
-      LOG_WARN("fail to build_stream_encoder_info", K(ret));
     } else {
       ++int_stream_count_;
     }
@@ -124,9 +117,7 @@ int ObIntDictColumnEncoder::store_column(ObMicroBufferWriter &buf_writer)
   } else if (! ctx_->has_stored_meta_ && OB_FAIL(store_column_meta(buf_writer))) {
     LOG_WARN("fail to store dict encoding meta", K(ret), K_(dict_encoding_meta));
   } else if (OB_FAIL(store_dict_(buf_writer))) {
-    LOG_WARN("fail to store dict", K(ret), K_(dict_encoding_meta));
   } else if (OB_FAIL(store_dict_ref_(buf_writer))) {
-    LOG_WARN("fail to store dict ref", K(ret), K_(dict_encoding_meta));
   }
 
   return ret;
@@ -139,7 +130,6 @@ int ObIntDictColumnEncoder::sort_dict_()
   if (!ctx_->need_sort_ || dict_encoding_meta_.distinct_val_cnt_ == 0) {
     // do nothing
   } else if (OB_FAIL(do_sort_dict_())) {
-    LOG_WARN("fail to do_sort_dict", K(ret));
   } else {
     const ObObjTypeClass tc = ob_obj_type_class(column_type_.get_type());
     uint64_t min = 0;
@@ -172,9 +162,7 @@ int ObIntDictColumnEncoder::store_column_meta(ObMicroBufferWriter &buf_writer)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(sort_dict_())) {
-    LOG_WARN("fail to sort dict", K(ret));
   } else if (OB_FAIL(store_dict_encoding_meta_(buf_writer))) {
-    LOG_WARN("fail to store dict encoding meta", K(ret), K_(dict_encoding_meta));
   }
   return ret;
 }
@@ -188,9 +176,7 @@ int ObIntDictColumnEncoder::store_dict_(ObMicroBufferWriter &buf_writer)
     ObIntegerStreamEncoder integer_encoder;
     ObDictDatumIter datum_iter(*ctx_->ht_);
     if (OB_FAIL(integer_encoder.encode(integer_dict_enc_ctx_, datum_iter, buf_writer))) {
-      LOG_WARN("fail to store dict integer stream", K(ret), K(integer_dict_enc_ctx_));
     } else if (OB_FAIL(stream_offsets_.push_back(buf_writer.length()))) {
-      LOG_WARN("fail to push back dict integer stream offset", K(ret));
     } else {
       int_stream_encoding_types_[int_stream_idx_] = integer_dict_enc_ctx_.meta_.get_encoding_type();
       int_stream_idx_++;

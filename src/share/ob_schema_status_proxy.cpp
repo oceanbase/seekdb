@@ -86,7 +86,6 @@ int ObSchemaStatusProxy::get_refresh_schema_status(
   int ret = OB_SUCCESS;
   refresh_schema_status.reset();
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("check inner stat failed", K(ret));
   } else if (false) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
@@ -103,11 +102,9 @@ int ObSchemaStatusProxy::get_refresh_schema_status(
   int ret = OB_SUCCESS;
   refresh_schema_status_array.reset();
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("check inner stat failed", K(ret));
   } else {
     common::SpinRLockGuard guard(schema_status_cache_lock_);
     if (OB_FAIL(refresh_schema_status_array.push_back(schema_status_cache_))) {
-      LOG_WARN("fail to push back refresh schema status", K(ret), "schema_status", schema_status_cache_);
     }
   }
   return ret;
@@ -117,11 +114,9 @@ int ObSchemaStatusProxy::load_refresh_schema_status()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("check inner stat failed", K(ret));
   } else {
     ObCoreTableProxy core_table(OB_ALL_SCHEMA_STATUS_TNAME, sql_proxy_);
     if (OB_FAIL(core_table.load())) {
-      LOG_WARN("fail to load core table", K(ret));
     } else {
       uint64_t row_id = OB_INVALID_TENANT_ID;
       int64_t snapshot_timestamp = OB_INVALID_TIMESTAMP;
@@ -135,11 +130,8 @@ int ObSchemaStatusProxy::load_refresh_schema_status()
             LOG_WARN("fail to next", K(ret));
           }
         } else if (OB_FAIL(core_table.get_uint(ROW_ID_CNAME, row_id))) {
-          LOG_WARN("fail to get int", K(ret));
         } else if (OB_FAIL(core_table.get_int(SNAPSHOT_TIMESTAMP_CNAME, snapshot_timestamp))) {
-          LOG_WARN("fail to get int", K(ret));
         } else if (OB_FAIL(core_table.get_int(READABLE_SCHEMA_VERSION_CNAME, readable_schema_version))) {
-          LOG_WARN("fail to get int", K(ret));
         }
         if (OB_FAIL(ret)) {
         } else {
@@ -155,7 +147,6 @@ int ObSchemaStatusProxy::load_refresh_schema_status()
           entry.first = 1UL;
           entry.second = schema_status_cache_;
           if (OB_FAIL(updater(entry))) {
-            LOG_WARN("fail to update schema_status", K(ret), K(schema_status));
           } else {
             schema_status_cache_ = entry.second;
           }
@@ -177,7 +168,6 @@ int ObSchemaStatusProxy::set_tenant_schema_status(
   ObArray<ObCoreTableProxy::UpdateCell> cells;
   ObMySQLTransaction trans;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("check inner stat failed", K(ret));
   } else if (!refresh_schema_status.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("refresh schema status is invalid", K(ret), K(refresh_schema_status));
@@ -186,7 +176,6 @@ int ObSchemaStatusProxy::set_tenant_schema_status(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("snapshot timestamp must invalid or zero", KR(ret), K(refresh_schema_status));
   } else if (OB_FAIL(trans.start(&sql_proxy_))) {
-    LOG_WARN("fail to start", K(ret));
   } else {
     ObCoreTableProxy kv(OB_ALL_SCHEMA_STATUS_TNAME, trans);
     if (OB_FAIL(dml.add_pk_column(ROW_ID_CNAME, static_cast<uint64_t>(1)))
@@ -194,11 +183,8 @@ int ObSchemaStatusProxy::set_tenant_schema_status(
         || OB_FAIL(dml.add_column(READABLE_SCHEMA_VERSION_CNAME, refresh_schema_status.readable_schema_version_))) {
       LOG_WARN("fail to add column", KR(ret), K(refresh_schema_status));
     } else if (OB_FAIL(kv.load_for_update())) {
-      LOG_WARN("fail to load for update", K(ret));
     } else if (OB_FAIL(dml.splice_core_cells(kv, cells))) {
-      LOG_WARN("fail to splice core cells", K(ret));
     } else if (OB_FAIL(kv.replace_row(cells, affected_rows))) {
-      LOG_WARN("fail to replace row", K(ret), K(refresh_schema_status), K(refresh_schema_status));
     } else if (affected_rows > 1) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("should update/insert 0 or 1 row", K(ret), K(affected_rows));
@@ -223,7 +209,6 @@ int ObSchemaStatusProxy::set_tenant_schema_status(
     entry.first = 1UL;
     entry.second = schema_status_cache_;
     if (OB_FAIL(updater(entry))) {
-      LOG_WARN("fail to set schema_status", K(ret), K(refresh_schema_status));
     } else {
       schema_status_cache_ = entry.second;
       LOG_INFO("[SCHEMA_STATUS] set create status", K(refresh_schema_status));

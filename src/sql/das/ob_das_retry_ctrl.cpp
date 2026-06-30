@@ -66,7 +66,6 @@ void ObDASRetryCtrl::tablet_location_retry_proc(ObDASRef &das_ref,
     // the location of the virtual table can't be refreshed,
     // so when a location exception occurs, virtual table is not retryable
   } else if (OB_FAIL(table_schema->check_if_tablet_exists(tablet_loc->tablet_id_, tablet_exist))) {
-    LOG_WARN("failed to check if tablet exists", K(ret), K(tablet_loc), K(ref_table_id));
   } else if (!tablet_exist) {
     // partition could be dropped or table could be truncated, in this case we return OB_SCHEMA_EAGAIN and
     // attempt statement-level retry

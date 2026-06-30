@@ -56,7 +56,6 @@ void ObDtlBufAllocator::free_buf(ObDtlBasicChannel &ch, ObDtlLinkedBuffer *&buf)
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("tenant_mem_mgr is null", K(lbt()), K(ret));
   } else if (OB_FAIL(tenant_mem_mgr->free(buf))) {
-    LOG_WARN("failed to free buffer", K(ret), K(lbt()));
   } else if (nullptr != buf) {
     free_buffer_cnt_++;
     ch.free_buffer_count();

@@ -161,7 +161,6 @@ int UserBinaryKey::deserialize(const char *buf, const int64_t data_len, int64_t 
 
   // roll back path
   if (OB_FAIL(ret)) {
-    DETECT_LOG(WARN, "serialization failed", PRINT_WRAPPER);
   } else {
     // do nothing
   }

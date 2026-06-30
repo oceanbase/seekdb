@@ -263,7 +263,6 @@ protected:
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret), K(ctx_.stmt_factory_.get_query_ctx()));
     } else if (OB_FAIL(ctx_.stmt_factory_.create_stmt(stmt))) {
-      LOG_WARN("failed to create stmt", K(ret));
     } else if (OB_UNLIKELY(stmt::T_SELECT != stmt->get_stmt_type()
                            && stmt::T_DELETE != stmt->get_stmt_type()
                            && stmt::T_UPDATE != stmt->get_stmt_type()

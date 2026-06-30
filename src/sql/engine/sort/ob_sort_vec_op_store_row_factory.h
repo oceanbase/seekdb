@@ -87,7 +87,6 @@ public:
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(reuse_row->assign(
             *reinterpret_cast<const ObCompactRow *>(src_row)))) {
-      LOG_WARN("stored row assign failed", K(ret));
     } else {
       if (has_addon && is_sort_key) {
         reuse_row->set_addon_ptr(nullptr, *sk_row_meta);
@@ -123,10 +122,8 @@ public:
     }
 
     if (OB_FAIL(copy_row(sk_row_meta_, src_row, true, reuse_row))) {
-      LOG_WARN("failed to copy sort key row", K(ret));
     } else if (has_addon) {
       if (OB_FAIL(copy_row(addon_row_meta_, ori_addon_row, false, reuse_addon_row))) {
-        LOG_WARN("failed to copy addon row", K(ret));
       } else {
         reuse_row->set_addon_ptr(reuse_addon_row, *sk_row_meta_);
       }
@@ -170,7 +167,6 @@ public:
       LOG_ERROR("failed to new row", K(ret));
     } else if (OB_FAIL(new_row->assign(
                    *reinterpret_cast<const ObCompactRow *>(orign_row)))) {
-      LOG_WARN("stored row assign failed", K(ret));
     } else {
       int64_t row_size = orign_row->get_row_size();
       sql_mem_processor_.alloc(row_size);
@@ -183,7 +179,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_SUCCESS != (ret = deep_copy_row(sk_row_meta_, orign_row, new_row))) {
-      LOG_WARN("failed to copy to row", K(ret));
     } else if (has_addon) {
       Store_Row *new_addon_row = nullptr;
       Store_Row *ori_addon_row =

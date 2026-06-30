@@ -135,7 +135,6 @@ static int load_tenant_info_from_config(ObAllTenantInfo &tenant_info)
       ret = OB_ENTRY_NOT_EXIST;
       LOG_WARN("ha_info config value is empty", KR(ret));
     } else if (OB_FAIL(deserialize_tenant_info_from_string(config_value, tenant_info))) {
-      LOG_WARN("failed to deserialize tenant_info from config", KR(ret), K(config_value));
     }
   }
   return ret;
@@ -159,7 +158,6 @@ static int update_tenant_info_config(const ObAllTenantInfo &tenant_info)
     common::ObArenaAllocator allocator(ObModIds::OB_TEMP_VARIABLES);
     common::ObString config_value;
     if (OB_FAIL(serialize_tenant_info_to_string(tenant_info, config_value, allocator))) {
-      LOG_WARN("failed to serialize tenant_info to string", KR(ret), K(tenant_info));
     } else {
       // Save config to internal table only (no reload)
       // config_value is allocated from allocator, need to ensure null-terminated for save_config
@@ -172,7 +170,6 @@ static int update_tenant_info_config(const ObAllTenantInfo &tenant_info)
         buf[config_value.length()] = '\0';
 
         if (OB_FAIL(GCTX.config_mgr_->save_config("ha_info", buf))) {
-          LOG_WARN("failed to save config ha_info", KR(ret), K(config_value));
         } else {
           LOG_INFO("persisted ha_info config to internal table", K(config_value), K(tenant_info));
         }
@@ -229,7 +226,6 @@ int ObAllTenantInfoProxy::update_tenant_role(
   tenant_info.switchover_status_ = new_status;
 
   if (OB_FAIL(update_tenant_info_config(tenant_info))) {
-    LOG_WARN("failed to update tenant_info config", KR(ret), K(tenant_info));
   } else {
     // Update GCTX.server_role_ immediately after config update
     // This ensures memory state is consistent with persisted state
@@ -253,11 +249,9 @@ int ObAllTenantInfoProxy::update_tenant_switchover_status(
   // Load current tenant_info first, then update switchover_status
   ObAllTenantInfo tenant_info;
   if (OB_FAIL(load_tenant_info(false, tenant_info))) {
-    LOG_WARN("failed to load tenant_info", KR(ret));
   } else {
     tenant_info.switchover_status_ = new_status;
     if (OB_FAIL(update_tenant_info_config(tenant_info))) {
-      LOG_WARN("failed to update tenant_info config", KR(ret), K(tenant_info));
     } else {
       LOG_INFO("updated tenant switchover_status via config", K(new_status));
     }
@@ -279,7 +273,6 @@ int ObAllTenantInfoProxy::update_tenant_status(
   tenant_info.switchover_status_ = new_status;
 
   if (OB_FAIL(update_tenant_info_config(tenant_info))) {
-    LOG_WARN("failed to update tenant_info config", KR(ret), K(tenant_info));
   } else {
     // Update GCTX.server_role_ immediately after config update
     // This ensures memory state is consistent with persisted state
@@ -314,7 +307,6 @@ int ObAllTenantInfoProxy::init_tenant_info_from_server_role(
   if (OB_SUCC(ret)) {
     // Update tenant_info via config parameter
     if (OB_FAIL(update_tenant_info_config(tenant_info))) {
-      LOG_WARN("failed to update tenant_info config", KR(ret), K(tenant_info));
     } else {
       LOG_INFO("initialized tenant_info from server role", K(server_role), K(tenant_info));
     }

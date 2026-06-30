@@ -32,10 +32,8 @@ int ObScheduledManageDynamicPartition::create_jobs(
   int ret = OB_SUCCESS;
   if (OB_FAIL(create_daily_job_(sys_variable,
                                 trans))) {
-    LOG_WARN("fail to create scheduled manage dynamic partition daily job", KR(ret));
   } else if (OB_FAIL(create_hourly_job_(sys_variable,
                                         trans))) {
-    LOG_WARN("fail to create scheduled manage dynamic partition hourly job", KR(ret));
   }
 
   return ret;
@@ -58,12 +56,10 @@ int ObScheduledManageDynamicPartition::create_jobs_for_upgrade(
                 sql_proxy,
                 SCHEDULED_MANAGE_DYNAMIC_PARTITION_DAILY_JOB_NAME,
                 daily_job_exists))) {
-      LOG_WARN("fail to check daily job exists", KR(ret));
     } else if (OB_FAIL(ObDbmsStatsMaintenanceWindow::check_job_exists(
                        sql_proxy,
                        SCHEDULED_MANAGE_DYNAMIC_PARTITION_HOURLY_JOB_NAME,
                        hourly_job_exists))) {
-      LOG_WARN("fail to check hourly job exists", KR(ret));
     } else if (!daily_job_exists && OB_FAIL(create_daily_job_(sys_variable,
                                                               trans))) {
       LOG_WARN("fail to create scheduled manage dynamic partition daily job", KR(ret));
@@ -106,9 +102,7 @@ int ObScheduledManageDynamicPartition::create_daily_job_(
   int64_t current_time = ObTimeUtility::current_time();
   if (OB_FAIL(ObDbmsStatsMaintenanceWindow::get_time_zone_offset(sys_variable,
                                                                  offset_sec))) {
-    LOG_WARN("fail to get time zone offset", KR(ret));
   } else if (OB_FAIL(get_today_zero_hour_timestamp_(offset_sec, timestamp))) {
-    LOG_WARN("failed to get time zone offset", KR(ret));
   } else {
     const int64_t start_usec_daily = timestamp + USEC_OF_HOUR * HOURS_PER_DAY; // next day 00:00:00
     ObString job_name_daily(SCHEDULED_MANAGE_DYNAMIC_PARTITION_DAILY_JOB_NAME);
@@ -120,7 +114,6 @@ int ObScheduledManageDynamicPartition::create_daily_job_(
                             repeat_interval_daily,
                             job_action_daily,
                             trans))) {
-      LOG_WARN("fail to create scheduled manage dynamic partition job", KR(ret), K(job_name_daily));
     }
   }
   return ret;
@@ -136,9 +129,7 @@ int ObScheduledManageDynamicPartition::create_hourly_job_(
   int64_t current_time = ObTimeUtility::current_time();
   if (OB_FAIL(ObDbmsStatsMaintenanceWindow::get_time_zone_offset(sys_variable,
                                                                  offset_sec))) {
-    LOG_WARN("fail to get time zone offset", KR(ret));
   } else if (OB_FAIL(get_today_zero_hour_timestamp_(offset_sec, timestamp))) {
-    LOG_WARN("failed to get time zone offset", KR(ret));
   } else {
     const int64_t start_usec_hourly = (current_time / USEC_OF_HOUR + 1) * USEC_OF_HOUR; // next hour 00:00
     ObString job_name_hourly(SCHEDULED_MANAGE_DYNAMIC_PARTITION_HOURLY_JOB_NAME);
@@ -150,7 +141,6 @@ int ObScheduledManageDynamicPartition::create_hourly_job_(
                             repeat_interval_hourly,
                             job_action_hourly,
                             trans))) {
-      LOG_WARN("fail to create scheduled manage dynamic partition job", KR(ret), K(job_name_hourly));
     }
   }
   return ret;
@@ -170,9 +160,7 @@ int ObScheduledManageDynamicPartition::create_job_(
   int64_t job_id = OB_INVALID_ID;
 
   if (OB_FAIL(sql::ObExecEnv::gen_exec_env(sys_variable, buf, OB_MAX_PROC_ENV_LENGTH, pos))) {
-    LOG_WARN("failed to gen exec env", KR(ret));
   } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::generate_job_id(job_id))) {
-    LOG_WARN("generate_job_id failed", KR(ret));
   } else {
     ObString exec_env(pos, buf);
 
@@ -244,7 +232,6 @@ int ObScheduledManageDynamicPartition::parse_next_date_(
     } else if (FALSE_IT(offset_sec = tz_info->get_offset())) {
     } else {
       if (OB_FAIL(ObObjCaster::to_type(ObDateTimeType, cast_ctx, src_obj, time_obj))) {
-        LOG_WARN("failed to ObDateTimeType type", KR(ret), K(src_obj));
       } else {
         next_date_ts = time_obj.get_datetime() - SEC_TO_USEC(offset_sec);
       }
@@ -264,7 +251,6 @@ int ObScheduledManageDynamicPartition::get_today_zero_hour_timestamp_(
   if (OB_FAIL(ObTimeConverter::usec_to_ob_time(
                      current_time + offset_sec * USECS_PER_SEC,
                      ob_time))) {
-    LOG_WARN("failed to usec to ob time", KR(ret), K(current_time), K(offset_sec));
   } else {
     int64_t current_hour = ob_time.parts_[DT_HOUR];
     timestamp = (current_time / USEC_OF_HOUR - current_hour) * USEC_OF_HOUR; // today day 00:00:00

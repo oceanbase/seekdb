@@ -63,10 +63,8 @@ int ObDirectLoadMultipleSSTableIndexBlockMetaWholeScanner::init(
   } else {
     if (OB_FAIL(index_block_reader_.init(table_data_desc.sstable_index_block_size_,
                                          table_data_desc.compressor_type_))) {
-      LOG_WARN("fail to index block reader", KR(ret));
     } else if (OB_FAIL(data_block_reader_.init(table_data_desc.sstable_data_block_size_,
                                                table_data_desc.compressor_type_))) {
-      LOG_WARN("fail to data block reader", KR(ret));
     } else {
       sstable_ = sstable;
       current_index_block_iter_ = sstable->index_block_begin();
@@ -96,14 +94,10 @@ int ObDirectLoadMultipleSSTableIndexBlockMetaWholeScanner::get_next_meta(
     data_block_reader_.reuse();
     if (OB_FAIL(index_block_reader_.open(fragment.index_file_handle_, index_block_offset,
                                          sstable_->get_meta().index_block_size_))) {
-      LOG_WARN("fail to open index file", KR(ret), K(fragment), K(index_block_offset));
     } else if (OB_FAIL(index_block_reader_.get_last_entry(last_index_entry))) {
-      LOG_WARN("fail to get last entry", KR(ret));
     } else if (OB_FAIL(data_block_reader_.open(
                  fragment.data_file_handle_, last_index_entry->offset_, last_index_entry->size_))) {
-      LOG_WARN("fail to open data file", KR(ret), K(fragment), KPC(last_index_entry));
     } else if (OB_FAIL(data_block_reader_.get_last_row(row))) {
-      LOG_WARN("fail to get last row", KR(ret));
     } else {
       index_block_meta.count_ = index_block_reader_.get_header().count_;
       index_block_meta.end_key_ = row->rowkey_;
@@ -148,12 +142,9 @@ int ObDirectLoadMultipleSSTableIndexBlockMetaTabletWholeScanner::init(
     datum_utils_ = datum_utils;
     if (OB_FAIL(index_block_reader_.init(table_data_desc.sstable_index_block_size_,
                                          table_data_desc.compressor_type_))) {
-      LOG_WARN("fail to index block reader", KR(ret));
     } else if (OB_FAIL(data_block_reader_.init(table_data_desc.sstable_data_block_size_,
                                                table_data_desc.compressor_type_))) {
-      LOG_WARN("fail to data block reader", KR(ret));
     } else if (OB_FAIL(locate_left_border(index_block_reader_, data_block_reader_))) {
-      LOG_WARN("fail to locate left border", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -172,7 +163,6 @@ int ObDirectLoadMultipleSSTableIndexBlockMetaTabletWholeScanner::locate_left_bor
   } else {
     ObDirectLoadMultipleDatumRowkey tablet_min_rowkey;
     if (OB_FAIL(tablet_min_rowkey.set_tablet_min_rowkey(tablet_id_))) {
-      LOG_WARN("fail to set tablet min rowkey", KR(ret));
     } else {
       ObDirectLoadMultipleSSTableIndexBlockEndKeyCompare compare(
         ret, sstable_, datum_utils_, index_block_reader, data_block_reader);
@@ -205,14 +195,10 @@ int ObDirectLoadMultipleSSTableIndexBlockMetaTabletWholeScanner::get_next_meta(
     data_block_reader_.reuse();
     if (OB_FAIL(index_block_reader_.open(fragment.index_file_handle_, index_block_offset,
                                          sstable_->get_meta().index_block_size_))) {
-      LOG_WARN("fail to open index file", KR(ret), K(fragment), K(index_block_offset));
     } else if (OB_FAIL(index_block_reader_.get_last_entry(last_index_entry))) {
-      LOG_WARN("fail to get last entry", KR(ret));
     } else if (OB_FAIL(data_block_reader_.open(
                  fragment.data_file_handle_, last_index_entry->offset_, last_index_entry->size_))) {
-      LOG_WARN("fail to open data file", KR(ret), K(fragment), KPC(last_index_entry));
     } else if (OB_FAIL(data_block_reader_.get_last_row(row))) {
-      LOG_WARN("fail to get last row", KR(ret));
     } else {
       int cmp_ret = tablet_id_.compare(row->rowkey_.tablet_id_);
       if (OB_UNLIKELY(cmp_ret > 0)) {
@@ -344,7 +330,6 @@ int ObDirectLoadMultipleSSTableIndexBlockTabletEndKeyIterator::get_next_rowkey(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected index block meta", KR(ret), K(tablet_id_), K(index_block_meta));
     } else if (OB_FAIL(index_block_meta.end_key_.get_rowkey(rowkey_))) {
-      LOG_WARN("fail to get rowkey", KR(ret));
     } else {
       rowkey = &rowkey_;
     }

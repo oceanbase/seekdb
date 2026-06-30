@@ -46,7 +46,6 @@ int ObMultiVersionRowkeyHelpper::add_extra_rowkey_cols(ObColDescIArray &store_ou
     // so in effect we store the latest version first
     desc.col_order_ = ObOrderType::ASC;
     if (OB_FAIL(store_out_cols.push_back(desc))) {
-      STORAGE_LOG(WARN, "add store utput columns failed", K(ret));
     }
   }
   return ret;
@@ -81,7 +80,6 @@ int ObStoreCtx::init_for_read(const ObLSID &ls_id,
   ObLSService *ls_svr = share::g_mp->ls_service();
   ObLSHandle ls_handle;
   if (OB_FAIL(ls_svr->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-    STORAGE_LOG(WARN, "get_ls from ls service fail.", K(ret), K(*ls_svr));
   } else {
     tablet_id_ = tablet_id;
     ret = init_for_read(ls_handle, timeout, tx_lock_timeout, snapshot_version);
@@ -107,7 +105,6 @@ int ObStoreCtx::init_for_read(const ObLSHandle &ls_handle,
     ret = OB_ERR_NULL_VALUE;
     STORAGE_LOG(WARN, "get_tx_table from log stream fail.", K(ret), K(*ls));
   } else if (OB_FAIL(mvcc_acc_ctx_.init_read(tx_table, snapshot_version, timeout, tx_lock_timeout))) {
-    STORAGE_LOG(WARN, "mvcc_acc_ctx init read fail", KR(ret), K(mvcc_acc_ctx_));
   } else {
     ls_id_ = ls->get_ls_id();
     timeout_ = timeout;
@@ -176,7 +173,6 @@ int ObStoreCtxForkGuard::enter_fork_snapshot(const share::SCN &fork_snapshot_scn
     STORAGE_LOG(WARN, "fork snapshot entered twice", K(ret));
   } else if (OB_FAIL(ctx_.enter_fork_snapshot(fork_snapshot_scn,
                                               saved_snapshot_version_))) {
-    STORAGE_LOG(WARN, "enter fork snapshot failed", K(ret), K(fork_snapshot_scn));
   } else {
     opened_ = true;
   }
@@ -200,7 +196,6 @@ int ObStoreCtx::get_all_tables(ObIArray<ObITable *> &iter_tables)
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(WARN, "table must not be null", K(ret), KPC(table_iter_));
     } else if (OB_FAIL(iter_tables.push_back(table_ptr))) {
-      TRANS_LOG(WARN, "rowkey_exists check::", K(ret), KPC(table_ptr));
     }
   }
   return ret;
@@ -219,16 +214,13 @@ int ObStoreCtx::get_fork_snapshot_scn(const common::ObTabletID &tablet_id,
     if (OB_ISNULL(fork_infos) || fork_infos->empty()) {
       fork_snapshot_map_inited_ = true;
     } else if (OB_FAIL(fork_snapshot_map_.create(fork_infos->count() * 2, "ForkSnapMap"))) {
-      STORAGE_LOG(WARN, "failed to create fork snapshot map", K(ret), K(fork_infos->count()));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < fork_infos->count(); ++i) {
         const share::ObForkTabletInfo &fork_info = fork_infos->at(i);
         share::SCN fork_snapshot_scn;
         if (OB_FAIL(fork_snapshot_scn.convert_for_tx(fork_info.get_fork_snapshot_version()))) {
-          STORAGE_LOG(WARN, "failed to convert fork snapshot version", K(ret), K(fork_info));
         } else if (OB_FAIL(fork_snapshot_map_.set_refactored(
                      fork_info.get_fork_src_tablet_id(), fork_snapshot_scn, true))) {
-          STORAGE_LOG(WARN, "failed to set fork snapshot map", K(ret), K(fork_info));
         }
       }
       if (OB_SUCC(ret)) {

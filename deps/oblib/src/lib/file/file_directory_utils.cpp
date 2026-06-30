@@ -195,7 +195,6 @@ int FileDirectoryUtils::create_full_path(const char *fullpath)
 
         *path = '\0';
         if (OB_FAIL(create_directory(dirpath))) {
-          LIB_LOG(WARN, "create directory failed.", KCSTRING(dirpath), K(ret));
         } else {
           *path++ = '/';
           // skip '/'
@@ -205,7 +204,6 @@ int FileDirectoryUtils::create_full_path(const char *fullpath)
 
       if (OB_SUCC(ret)) {
         if (OB_FAIL(create_directory(dirpath))) {
-          LIB_LOG(WARN, "create directory failed.", KCSTRING(dirpath), K(ret));
         }
       }
     }
@@ -250,7 +248,6 @@ int FileDirectoryUtils::delete_directory(const char *dirname)
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(dirname), K(ret));
   } else if (OB_FAIL(is_directory(dirname, is_dir))) {
-    LIB_LOG(WARN, "check if directory failed.", KCSTRING(dirname), K(ret));
   } else if (!is_dir) {
     ret = OB_FILE_NOT_EXIST;
     LIB_LOG(WARN, "file path is not a directory.", KCSTRING(dirname), K(ret));
@@ -407,7 +404,6 @@ int FileDirectoryUtils::unlink_symlink(const char *link_path)
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid arguments.", KCSTRING(link_path), K(ret));
   } else if (OB_FAIL(is_link(link_path, is_link_file))) {
-    LIB_LOG(WARN, "fail to exectue is_link", K(ret), KCSTRING(link_path));
   } else if (is_link_file) {
     if (0 != ::unlink(link_path)) {
       ret = OB_IO_ERROR;
@@ -496,8 +492,6 @@ int FileDirectoryUtils::delete_directory_rec(const char *path)
         ret = OB_ERR_UNEXPECTED;
         LIB_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(path), K(entry->d_name));
       } else if (OB_FAIL(FileDirectoryUtils::is_directory(current_file_path, is_dir))) {
-        LIB_LOG(WARN, "is_directory failed", K(ret), K(entry->d_name));
-        // delecte directory recursive
       } else if (true == is_dir && OB_FAIL(SMART_CALL(delete_directory_rec(current_file_path)))) {
         LIB_LOG(WARN, "delete directory failed", K(ret), K(entry->d_name), K(path));
         // delete normal file
@@ -507,9 +501,7 @@ int FileDirectoryUtils::delete_directory_rec(const char *path)
     }
   }
   if (OB_FAIL(ret)) {
-    LIB_LOG(WARN, "delete directory rec failed", K(ret), K(path));
   } else if (OB_FAIL(delete_directory(path))) {
-    LIB_LOG(WARN, "delete_directory failed", K(ret), K(path));
   }
   if (NULL != dir) {
     closedir(dir);
@@ -540,7 +532,6 @@ int FileDirectoryUtils::delete_tmp_file_or_directory_at(const char *path)
         ret = OB_ERR_UNEXPECTED;
         LIB_LOG(WARN, "snprintf failed", K(ret), K(current_file_path), K(path), K(entry->d_name));
       } else if (OB_FAIL(FileDirectoryUtils::is_directory(current_file_path, is_dir))) {
-        LIB_LOG(WARN, "is_directory failed", K(ret), K(entry->d_name));
       } else if (true == check_is_tmp_file(current_file_path)) {
         if (true == is_dir && OB_FAIL(delete_directory_rec(current_file_path))) {
           LIB_LOG(WARN, "delete_directory_rec failed", K(ret), K(entry->d_name), K(path));
@@ -606,7 +597,6 @@ int FileDirectoryUtils::to_absolute_path(ObSqlString &dir)
       LIB_LOG(WARN, "Failed to get absolute path", K(dir), KCSTRING(strerror(errno)));
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(dir.assign(real_path))) {
-      LIB_LOG(WARN, "Failed to assign absolute path.", K(dir));
     }
   }
   return ret;

@@ -84,7 +84,6 @@ int ObDesExecContext::create_my_session()
   } else {
     uint32_t sid = ObSQLSessionInfo::INVALID_SESSID;
     if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
-      LOG_WARN("alloc session id failed", K(ret));
     } else if (OB_FAIL(GCTX.session_mgr_->create_session(sid,
                                                     ObTimeUtility::current_time(),
                                                     my_session_))) {
@@ -105,7 +104,6 @@ int ObDesExecContext::create_my_session()
         local_session = new (local_session) ObSQLSessionInfo();
         uint32_t tmp_sid = 0;
         if (OB_FAIL(GCTX.session_mgr_->create_sessid(tmp_sid))) {
-          LOG_WARN("failed to mock session id", K(ret));
         } else if (OB_FAIL(local_session->init(tmp_sid, NULL))) {
           LOG_WARN("my session init failed", K(ret));
           local_session->~ObSQLSessionInfo();
@@ -137,12 +135,10 @@ DEFINE_DESERIALIZE(ObDesExecContext)
   //now to init ObExecContext container
   if (OB_SUCC(ret)) {
     if (OB_FAIL(create_physical_plan_ctx())) {
-      LOG_WARN("create physical plan context failed", K(ret));
     } else if (OB_ISNULL(phy_plan_ctx_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("succ to create phy plan ctx, but phy plan ctx is NULL", K(ret));
     } else if (OB_FAIL(create_my_session())) {
-      LOG_WARN("create my session failed", K(ret));
     } else if (OB_ISNULL(my_session_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("succ to create session, but session is NULL", K(ret));
@@ -154,11 +150,9 @@ DEFINE_DESERIALIZE(ObDesExecContext)
       my_session_->set_is_remote(true);
       my_session_->set_session_type_with_flag();
       if (OB_FAIL(ret)) {
-        LOG_WARN("session deserialize failed", K(ret));
       } else if (OB_FAIL(my_session_->set_session_active(
           ObString::make_string("REMOTE/DISTRIBUTE PLAN EXECUTING"),
           obmysql::COM_QUERY))) {
-        LOG_WARN("set remote session active failed", K(ret));
       }
       // alloc from session manager, increase active session number
       if (OB_SUCC(ret) && free_session_ctx_.sessid_ != ObSQLSessionInfo::INVALID_SESSID) {
@@ -173,7 +167,6 @@ DEFINE_DESERIALIZE(ObDesExecContext)
     set_mem_attr(ObMemAttr(ObModIds::OB_SQL_EXEC_CONTEXT, ObCtxIds::EXECUTE_CTX_ID));
     // init operator context need session info, initialized after session deserialized.
     if (OB_FAIL(init_phy_op(phy_op_size))) {
-      LOG_WARN("init exec context phy op failed", K(ret), K_(phy_op_size));
     }
   }
 
@@ -182,7 +175,6 @@ DEFINE_DESERIALIZE(ObDesExecContext)
   OB_UNIS_DECODE(sql_ctx_);
   if (OB_SUCC(ret)) {
     if (OB_FAIL(init_expr_op(phy_plan_ctx_->get_expr_op_size()))) {
-      LOG_WARN("init exec context expr op failed", K(ret));
     } else {
       das_ctx_.get_location_router().set_retry_info(&my_session_->get_retry_info());
     }

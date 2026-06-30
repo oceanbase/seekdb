@@ -71,7 +71,6 @@ OB_WEAK_SYMBOL int ObTenantTxDataAllocator::init(const char *label)
     SHARE_LOG(WARN, "throttle tool is unexpected null", KP(throttle_tool_), KP(share_mem_alloc_mgr));
   } else if (OB_FAIL(slice_allocator_.init(
                  storage::TX_DATA_SLICE_SIZE, OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_, mem_attr))) {
-    SHARE_LOG(WARN, "init slice allocator failed", KR(ret));
   } else {
     slice_allocator_.set_nway(ObTenantTxDataAllocator::ALLOC_TX_DATA_MAX_CONCURRENCY);
     is_inited_ = true;
@@ -127,7 +126,6 @@ ObTxDataThrottleGuard::~ObTxDataThrottleGuard()
     MDS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "throttle tool is unexpected nullptr", KP(throttle_tool_));
   } else if (throttle_tool_->is_throttling<ObTenantTxDataAllocator>(share_ti_guard, module_ti_guard)) {
     if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-      STORAGE_LOG(WARN, "get ls handle failed", KR(ret), K(ls_id_));
     } else if (OB_ISNULL(ls_handle.get_ls())) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(ERROR, "get ls handle failed", KR(ret), K(ls_id_));
@@ -173,7 +171,6 @@ int ObTenantTxDataOpAllocator::init()
     ret = OB_ERR_UNEXPECTED;
     SHARE_LOG(WARN, "throttle tool is unexpected null", KP(throttle_tool_), KP(share_mem_alloc_mgr));
   } else if (OB_FAIL(allocator_.init(OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_, mem_attr))) {
-    MDS_LOG(WARN, "init vslice allocator failed", K(ret), K(OB_MALLOC_NORMAL_BLOCK_SIZE), KP(this), K(mem_attr));
   } else {
     allocator_.set_nway(MDS_ALLOC_CONCURRENCY);
     is_inited_ = true;

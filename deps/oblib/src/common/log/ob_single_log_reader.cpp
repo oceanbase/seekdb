@@ -127,7 +127,6 @@ int ObSingleLogReader::read_log_()
     SHARE_LOG(DEBUG, "pread", K(ret), K(pread_pos_), K(read_size), "buf_pos", log_buffer_.get_position(),
               "buf_limit", log_buffer_.get_limit());
     if (OB_FAIL(ret)) {
-      SHARE_LOG(ERROR, "read log file error", K(ret), K(file_id_));
     } else {
       // comment this log due to too frequent invoke by replay thread
       // SHARE_LOG(DEBUG, "read data from log file", K(ret), K(file_id_), K(log_fd_));

@@ -138,7 +138,6 @@ public:
     if (IS_NOT_INIT) {
       PALF_LOG(WARN, "FixedSlidingWindow not init", K(is_inited_));
     } else if (OB_FAIL(clear_())) {
-      PALF_LOG(WARN, "fail to destroy FixedSlidingWindow");
     } else {
       is_inited_ = false;
       alloc_mgr_->ge_free(array_);
@@ -386,7 +385,6 @@ public:
         // pass
       }
     } else if (OB_FAIL(range_truncate_(t_id, get_end_sn_()))) {
-      PALF_LOG(ERROR, "range_truncate_failed", KR(ret));
     } else {
       PALF_LOG(INFO, "FixedSlidingWindow truncate success", K(ret), K(t_id), K(begin_sn_), K(end_sn_));
     }
@@ -416,13 +414,11 @@ public:
       PALF_LOG(ERROR, "ref count is not zero before forward_truncate", KR(ret), K(begin_sn_), K(end_sn_));
     } else if (OB_FAIL(check_id_in_range_(t_id))) {
       if (OB_FAIL(range_truncate_(get_begin_sn(), get_end_sn_()))) {
-        PALF_LOG(ERROR, "reand_truncate failed", K_(begin_sn), K_(end_sn), K(t_id));
       } else {
         begin_sn_ = t_id;
         end_sn_ = t_id + size_;
       }
     } else if (OB_FAIL(range_truncate_(get_begin_sn(), t_id))) {
-      PALF_LOG(ERROR, "range_truncate failed", KR(ret), K(t_id));
     } else {
       begin_sn_ = t_id;
       end_sn_ = begin_sn_ + size_;

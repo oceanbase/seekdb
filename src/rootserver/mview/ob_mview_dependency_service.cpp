@@ -53,11 +53,9 @@ int ObMViewDependencyService::remove_mview_dep_infos(
   bool all_mview_dep_table_exists = false;
   if (OB_FAIL(share::schema::ObSchemaUtils::check_sys_table_exist_by_sql(
       trans, OB_ALL_MVIEW_DEP_TID, all_mview_dep_table_exists))) {
-    LOG_WARN("failed to check whether __all_mview_dep table exists", KR(ret));
   } else if (all_mview_dep_table_exists) {
     if (OB_FAIL(ObMVDepUtils::get_table_ids_only_referenced_by_given_mv(
         trans, mview_table_id, stale_ref_table_ids))) {
-      LOG_WARN("failed to get table ids only referenced by given mv", KR(ret));
     } else if (!stale_ref_table_ids.empty()) {
       ObUpdateMViewRefTableOpt opt;
       opt.set_table_flag(ObTableReferencedByMVFlag::IS_NOT_REFERENCED_BY_MV);
@@ -66,12 +64,9 @@ int ObMViewDependencyService::remove_mview_dep_infos(
                                                       schema_guard,
                                                       stale_ref_table_ids,
                                                       opt))) {
-        LOG_WARN("failed to update mview reference table status", KR(ret),
-                 K(stale_ref_table_ids), K(opt));
       }
     } else if (OB_FAIL(ObMVDepUtils::get_table_ids_only_referenced_by_given_fast_lsm_mv(
                    trans, mview_table_id, stale_fast_lsm_ref_table_ids))) {
-      LOG_WARN("failed to get table ids only referenced by given fast lsm mv", KR(ret));
     } else if (!stale_fast_lsm_ref_table_ids.empty()) {
       ObUpdateMViewRefTableOpt opt;
       opt.set_mv_flag(ObTableReferencedByFastLSMMVFlag::IS_NOT_REFERENCED_BY_FAST_LSM_MV);
@@ -79,8 +74,6 @@ int ObMViewDependencyService::remove_mview_dep_infos(
                                                       schema_guard,
                                                       stale_fast_lsm_ref_table_ids,
                                                       opt))) {
-        LOG_WARN("failed to update mview reference table status", KR(ret),
-                 K(stale_fast_lsm_ref_table_ids), K(opt));
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(sql::ObMVDepUtils::delete_mview_dep_infos(
@@ -115,27 +108,20 @@ int ObMViewDependencyService::update_mview_dep_infos(
     LOG_WARN("invalid mview_table_id", KR(ret), K(mview_table_id));
   } else if (OB_FAIL(share::schema::ObSchemaUtils::check_sys_table_exist_by_sql(
       trans, OB_ALL_MVIEW_DEP_TID, all_mview_dep_table_exists))) {
-    LOG_WARN("failed to check is system table name", KR(ret));
   } else if (all_mview_dep_table_exists) {
     if (OB_FAIL(ObMViewInfo::fetch_mview_info(trans, mview_table_id, mview_info,
                                               false /*for_update*/, true /*nowait*/))) {
-      LOG_WARN("fail to fetch mview info", KR(ret), K(mview_table_id));
     } else if (OB_FAIL(sql::ObMVDepUtils::convert_to_mview_dep_infos(dep_infos, cur_mv_dep_infos))) {
-      LOG_WARN("failed to convert to mview dep infos", KR(ret));
     } else if (OB_FAIL(sql::ObMVDepUtils::get_mview_dep_infos(
         trans, mview_table_id, prev_mv_dep_infos))) {
-      LOG_WARN("failed to get mview dep infos", KR(ret));
     } else if (OB_FAIL(ObMVDepUtils::get_table_ids_only_referenced_by_given_mv(
         trans, mview_table_id, table_ids_only_ref_by_this_mv))) {
-      LOG_WARN("failed to get table ids only referenced by given mv", KR(ret));
     } else if (OB_FAIL(ObMVDepUtils::get_table_ids_only_referenced_by_given_fast_lsm_mv(
         trans, mview_table_id, table_ids_only_ref_by_this_fast_lsm_mv))) {
-      LOG_WARN("failed to get table ids only referenced by given fast lsm mv", KR(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && (i < cur_mv_dep_infos.count()); ++i) {
         const ObMVDepInfo &cur_mv_dep = cur_mv_dep_infos.at(i);
         if (OB_FAIL(new_ref_table_ids.push_back(cur_mv_dep.p_obj_))) {
-          LOG_WARN("failed to add cur ref table id to array", KR(ret));
         }
       }
     }
@@ -163,11 +149,9 @@ int ObMViewDependencyService::update_mview_dep_infos(
             // only when an old_ref_table_id exists in the list of table_ids_only_ref_by_this_mv,
             // its table_referenced_by_mv_flag needs to be cleared
             if (OB_FAIL(stale_ref_table_ids.push_back(old_ref_table_id))) {
-              LOG_WARN("failed to add old ref table id to array", KR(ret), K(old_ref_table_id));
             }
           } else if (has_exist_in_array(table_ids_only_ref_by_this_fast_lsm_mv, old_ref_table_id)) {
             if (OB_FAIL(stale_fast_lsm_ref_table_ids.push_back(old_ref_table_id))) {
-              LOG_WARN("failed to add old ref table id to array", KR(ret), K(old_ref_table_id));
             }
           }
         }
@@ -182,8 +166,6 @@ int ObMViewDependencyService::update_mview_dep_infos(
                                                       schema_guard,
                                                       stale_ref_table_ids,
                                                       opt))) {
-        LOG_WARN("failed to update mview reference table status", KR(ret),
-                 K(stale_ref_table_ids), K(opt));
       }
     }
 
@@ -194,8 +176,6 @@ int ObMViewDependencyService::update_mview_dep_infos(
                                                       schema_guard,
                                                       stale_fast_lsm_ref_table_ids,
                                                       opt))) {
-        LOG_WARN("failed to update mview reference table status", KR(ret),
-                 K(stale_fast_lsm_ref_table_ids), K(opt));
       }
     }
 
@@ -207,15 +187,12 @@ int ObMViewDependencyService::update_mview_dep_infos(
       }
       if (OB_FAIL(sql::ObMVDepUtils::delete_mview_dep_infos(
           trans, mview_table_id))) {
-        LOG_WARN("failed to delete mview dep infos", KR(ret), K(mview_table_id));
       } else if (OB_FAIL(sql::ObMVDepUtils::insert_mview_dep_infos(
           trans, mview_table_id, cur_mv_dep_infos))) {
-        LOG_WARN("failed to insert mview dep infos", KR(ret), K(new_ref_table_ids));
       } else if (OB_FAIL(update_mview_reference_table_status(trans,
                                                              schema_guard,
                                                              new_ref_table_ids,
                                                              opt))) {
-        LOG_WARN("failed to update mview reference table status", KR(ret), K(opt));
       }
     }
   }
@@ -236,17 +213,14 @@ int ObMViewDependencyService::update_mview_reference_table_status(
     const uint64_t ref_table_id = ref_table_ids.at(i);
     const ObTableSchema *ref_table_schema = NULL;
     if (OB_FAIL(schema_guard.get_table_schema( ref_table_id, ref_table_schema))) {
-      LOG_WARN("failed to get table schema", KR(ret), K(ref_table_id));
     } else if (OB_ISNULL(ref_table_schema)) {
       // the reference table has already been dropped, ignore it
       LOG_TRACE("ref table schema is null", KR(ret), K(ref_table_id));
     } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
-      LOG_WARN("fail to gen new schema_version", KR(ret));
     } else if ((update_opt.need_update_table_flag_ && ref_table_schema->get_table_mode_struct().table_referenced_by_mv_flag_ != update_opt.table_flag_) ||
                 (update_opt.need_update_mv_flag_ && ref_table_schema->get_mv_mode_struct().table_referenced_by_fast_lsm_mv_flag_ != update_opt.mv_flag_)) {
       SMART_VAR(ObTableSchema, new_ref_table_schema) {
         if (OB_FAIL(new_ref_table_schema.assign(*ref_table_schema))) {
-          LOG_WARN("fail to assign ref table schema", KR(ret));
         } else {
           new_ref_table_schema.set_table_id(ref_table_id);
           new_ref_table_schema.set_schema_version(new_schema_version);
@@ -258,8 +232,6 @@ int ObMViewDependencyService::update_mview_reference_table_status(
           }
           if (OB_FAIL(schema_service->get_table_sql_service().update_mview_reference_table_status(
               new_ref_table_schema, trans))) {
-            LOG_WARN("failed to update mview reference table status", KR(ret), K(ref_table_id),
-                      K(update_opt));
           }
         }
       }

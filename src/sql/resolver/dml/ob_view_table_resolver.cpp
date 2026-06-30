@@ -40,9 +40,7 @@ int ObViewTableResolver::do_resolve_set_query(const ParseNode &parse_tree,
   child_resolver.set_is_top_stmt(is_top_stmt());
   
   if (OB_FAIL(add_cte_table_to_children(child_resolver))) {
-    LOG_WARN("failed to add cte table to children", K(ret));
   } else if (OB_FAIL(child_resolver.resolve_child_stmt(parse_tree))) {
-    LOG_WARN("failed to resolve child stmt", K(ret));
   } else if (OB_ISNULL(child_stmt = child_resolver.get_child_stmt())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get null child stmt", K(ret));
@@ -58,7 +56,6 @@ int ObViewTableResolver::expand_view(TableItem &view_item)
     ret = OB_NOT_INIT;
     LOG_WARN("session info is null");
   } else if (OB_FAIL(check_view_circular_reference(view_item))) {
-    LOG_WARN("check view circular reference failed", K(ret));
   } else {
     // expand view as subquery which use view name as alias
     const ObTableSchema *view_schema = NULL;
@@ -73,15 +70,12 @@ int ObViewTableResolver::expand_view(TableItem &view_item)
       LOG_WARN("unexpected null", K(ret));
     } else if (OB_FAIL(schema_guard->get_database_id(view_item.database_name_,
                                                      database_id))) {
-      LOG_WARN("failed to get database id", K(ret));
     } else if (OB_FAIL(schema_checker_->get_table_schema(
                                                   view_item.ref_id_,
                                                   view_schema))) {
-      LOG_WARN("get table schema failed", K(view_item));
     } else if (OB_FAIL(ob_write_string(*allocator_,
                                        session_info_->get_database_name(),
                                        old_database_name))) {
-      LOG_WARN("failed to write string", K(ret));
     } else {
       ObViewTableResolver view_resolver(params_, view_db_name_, view_name_);
       view_resolver.set_current_level(current_level_);
@@ -156,11 +150,8 @@ int ObViewTableResolver::resolve_generate_table(const ParseNode &table_node, con
   view_table_resolver.set_parent_view_resolver(parent_view_resolver_);
   view_table_resolver.set_current_view_item(current_view_item);
   if (OB_FAIL(view_table_resolver.set_cte_ctx(cte_ctx_, true, true))) {
-    LOG_WARN("set cte ctx to child resolver failed", K(ret));
   } else if (OB_FAIL(add_cte_table_to_children(view_table_resolver))) {
-    LOG_WARN("add CTE table to children failed", K(ret));
   } else if (OB_FAIL(do_resolve_generate_table(table_node, alias_node, view_table_resolver, table_item))) {
-    LOG_WARN("do resolve generate table failed", K(ret));
   }
   return ret;
 }
@@ -183,17 +174,14 @@ int ObViewTableResolver::set_select_item(SelectItem &select_item, bool is_auto_g
     LOG_WARN("select stmt is null", K_(session_info), K(select_stmt), K_(select_item.expr));
   } else if (is_create_view_ && !select_item.is_real_alias_) {
     if (OB_FAIL(ObSelectResolver::set_select_item(select_item, is_auto_gen))) {
-      LOG_WARN("set select item failed", K(ret));
     }
   } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-    LOG_WARN("fail to get collation_connection", K(ret));
   } else if (select_item.is_real_alias_
              && OB_FAIL(ObSQLUtils::check_column_name(cs_type, select_item.alias_name_, true))) {
     // Only check real alias here,
     // auto generated alias will be checked in ObSelectResolver::check_auto_gen_column_names().
     LOG_WARN("fail to make field name", K(ret));
   } else if (OB_FAIL(select_stmt->add_select_item(select_item))) {
-    LOG_WARN("add select item to select stmt failed", K(ret));
   }
   return ret;
 }
@@ -219,7 +207,6 @@ int ObViewTableResolver::resolve_subquery_info(const ObIArray<ObSubQueryInfo> &s
     subquery_resolver.set_in_exists_subquery(info.parents_expr_info_.has_member(IS_EXISTS));
     set_query_ref_exec_params(info.ref_expr_ == NULL ? NULL : &info.ref_expr_->get_exec_params());
     if (OB_FAIL(add_cte_table_to_children(subquery_resolver))) {
-      LOG_WARN("add CTE table to children failed", K(ret));
     } else if (is_only_full_group_by_on(session_info_->get_sql_mode())) {
       subquery_resolver.set_parent_aggr_level(info.parents_expr_info_.has_member(IS_AGG) ?
           current_level_ : parent_aggr_level_);

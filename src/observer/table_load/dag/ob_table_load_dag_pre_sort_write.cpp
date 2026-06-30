@@ -86,11 +86,8 @@ int ObTableLoadPreSortWriteSortTask::process()
   if (OB_NOT_NULL(chunk_)) {
     CompareType compare;
     if (OB_FAIL(compare.init(*ctx_->datum_utils_, store_ctx_->ctx_->param_.dup_action_))) {
-      LOG_WARN("fail to init compare", KR(ret));
     } else if (OB_FAIL(chunk_->sort(compare, ctx_->enc_params_))) {
-      LOG_WARN("fail to sort chunk", KR(ret));
     } else if (OB_FAIL(round_ctx_->add_chunk(chunk_))) {
-      LOG_WARN("fail to add chunk", KR(ret));
     } else {
       chunk_ = nullptr;
     }
@@ -128,7 +125,6 @@ int ObTableLoadPreSortWriteTask::process()
   int ret = OB_SUCCESS;
   if (write_channel_->no_more_closed_chunk()) {
   } else if (OB_FAIL(ctx_->make_round_ctx(round_ctx_))) {
-    LOG_WARN("fail to make round ctx", KR(ret));
   } else {
     ObTableLoadPreSortWriteSortTask *sort_task = nullptr;
     ObTableLoadMemCompactSampleTask *sample_task = nullptr;
@@ -137,23 +133,15 @@ int ObTableLoadPreSortWriteTask::process()
     ObTableLoadPreSortWriteTask *next_task = nullptr;
     // alloc task
     if (OB_FAIL(dag_->alloc_task(sample_task, this))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     } else if (OB_FAIL(dag_->alloc_task(dump_task, this, 0 /*range_idx*/))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     } else if (OB_FAIL(dag_->alloc_task(compact_task, this))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     } else if (OB_FAIL(dag_->alloc_task(next_task, this))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < ctx_->compact_chunk_cnt_; ++i) {
       if (OB_FAIL(dag_->alloc_task(sort_task, this, i))) {
-        LOG_WARN("fail to alloc task", KR(ret));
       } else if (OB_FAIL(sort_task->add_child(*sample_task))) {
-        LOG_WARN("fail to add child", KR(ret));
       } else if (OB_FAIL(sort_task->add_child(*next_task))) {
-        LOG_WARN("fail to add child", KR(ret));
       } else if (OB_FAIL(write_channel_->add_sort_chunk_task(sort_task))) {
-        LOG_WARN("fail to add sort task", KR(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -162,23 +150,15 @@ int ObTableLoadPreSortWriteTask::process()
     //                 |
     //                 +-> next_task -> [next_op_task]
     else if (OB_FAIL(sample_task->add_child(*dump_task))) {
-      LOG_WARN("fail to add child", KR(ret));
     } else if (OB_FAIL(dump_task->add_child(*compact_task))) {
-      LOG_WARN("fail to add child", KR(ret));
     } else if (OB_FAIL(compact_task->deep_copy_children(get_child_nodes()))) {
-      LOG_WARN("fail to deep copy children", KR(ret));
     } else if (OB_FAIL(next_task->deep_copy_children(get_child_nodes()))) {
-      LOG_WARN("fail to deep copy children", KR(ret));
     }
     // 添加task
     else if (OB_FAIL(dag_->add_task(*next_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     } else if (OB_FAIL(dag_->add_task(*compact_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     } else if (OB_FAIL(dag_->add_task(*dump_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     } else if (OB_FAIL(dag_->add_task(*sample_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     }
   }
   return ret;
@@ -206,7 +186,6 @@ int ObTableLoadPreSortWriteOpTask::process()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new ObTableLoadDagPreSortWriteChannel", KR(ret));
   } else if (OB_FAIL(op->write_channel_->init(dag_, op))) {
-    LOG_WARN("fail to init write channel", KR(ret));
   }
   // init write_ctx_
   else {
@@ -221,34 +200,22 @@ int ObTableLoadPreSortWriteOpTask::process()
     ObTableLoadPreSortWriteOpFinishTask *op_finish_task = nullptr;
     ObTableLoadDagStartMergeTask *start_merge_task = nullptr;
     if (OB_FAIL(dag_->alloc_task(first_task, dag_, op->write_channel_))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     } else if (OB_FAIL(dag_->alloc_task(write_finish_task, op->write_channel_))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     } else if (OB_FAIL(dag_->alloc_task(op_finish_task, dag_, op_))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     } else if (OB_FAIL(dag_->alloc_task(start_merge_task, dag_))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     }
     // 建立依赖关系:
     // first_task -> write_finish_task -> op_finish_task -> start_merge_task -> [next_op_task]
     else if (OB_FAIL(first_task->add_child(*write_finish_task))) {
-      LOG_WARN("fail to add child", KR(ret));
     } else if (OB_FAIL(write_finish_task->add_child(*op_finish_task))) {
-      LOG_WARN("fail to add child", KR(ret));
     } else if (OB_FAIL(op_finish_task->add_child(*start_merge_task))) {
-      LOG_WARN("fail to add child", KR(ret));
     } else if (OB_FAIL(start_merge_task->deep_copy_children(get_child_nodes()))) {
-      LOG_WARN("fail to deep copy children", KR(ret));
     }
     // 添加task
     else if (OB_FAIL(dag_->add_task(*start_merge_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     } else if (OB_FAIL(dag_->add_task(*op_finish_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     } else if (OB_FAIL(dag_->add_task(*write_finish_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     } else if (OB_FAIL(dag_->add_task(*first_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     }
   }
   return ret;
@@ -269,7 +236,6 @@ int ObTableLoadPreSortWriteOpFinishTask::process()
   int ret = OB_SUCCESS;
   ObTableLoadPreSortWriteOp *op = static_cast<ObTableLoadPreSortWriteOp *>(op_);
   if (OB_FAIL(op->write_channel_->close())) {
-    LOG_WARN("fail to close write channel", KR(ret));
   }
 
   op->end_time_ = ObTimeUtil::current_time();

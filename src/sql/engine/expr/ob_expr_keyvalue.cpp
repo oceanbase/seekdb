@@ -59,7 +59,6 @@ int ObExprKeyValue::calc_result_typeN(ObExprResType &type,
       type.set_varchar();
     }
     if (OB_FAIL(aggregate_charsets_for_string_result(type, types, 1, type_ctx))) {
-      LOG_WARN("aggregate_charsets_for_string_result failed", K(ret));
     } else {
       types[0].set_calc_meta(type);
       for (int64_t i = 1; i < param_num; i++) {
@@ -180,7 +179,6 @@ int ObExprKeyValue::calc_key_value_expr(const ObExpr &expr, ObEvalCtx &ctx,
   ObCollationType cs_type = expr.args_[0]->datum_meta_.cs_type_;
   if (expr.arg_cnt_ == 2) {
     if (OB_FAIL(expr.eval_param_value(ctx, dict_str_datum, key_str_datum))) {
-      LOG_WARN("eval args failed", K(ret));
     } else if (dict_str_datum->is_null() ||
                key_str_datum->is_null() ||
                dict_str_datum->get_string().empty() ||
@@ -196,7 +194,6 @@ int ObExprKeyValue::calc_key_value_expr(const ObExpr &expr, ObEvalCtx &ctx,
     ObDatum *key_delim_datum = NULL;
     if (OB_FAIL(expr.eval_param_value(ctx, dict_str_datum, item_delim_datum,
                                       key_delim_datum, key_str_datum))) {
-      LOG_WARN("eval args failed", K(ret));
     } else if (dict_str_datum->is_null() || item_delim_datum->is_null() ||
                key_delim_datum->is_null() || key_str_datum->is_null() ||
                dict_str_datum->get_string().empty() ||
@@ -233,13 +230,11 @@ int ObExprKeyValue::calc_key_value_expr(const ObExpr &expr, ObEvalCtx &ctx,
       ObString dict_str;
       ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &res);
       if (OB_FAIL(ObTextStringHelper::get_string(expr, tmp_alloc, 0, dict_str_datum, dict_str))) {
-        LOG_WARN("get full text string failed ", K(ret));
       } else {
         if (get_first_matched_value(cs_type, dict_str,
                                 item_delim, key_delim,
                                 key_str_datum->get_string(), value)) {
           if (OB_FAIL(output_result.init(value.length()))) {
-                LOG_WARN("init TextString result failed", K(ret));
           } else {
             output_result.append(value);
             output_result.set_result();
@@ -265,7 +260,6 @@ int ObExprKeyValue::calc_key_value_expr_vector(const ObExpr &expr,
   ObString default_key_delim;
   ObCollationType cs_type = expr.args_[0]->datum_meta_.cs_type_;
   if (OB_FAIL(expr.eval_vector_param_value(ctx, skip, bound))) {
-    LOG_WARN("eval args failed", K(ret));
   } else {
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     ObIVector *dict_str_vec = expr.args_[0]->get_vector(ctx);
@@ -317,7 +311,6 @@ int ObExprKeyValue::calc_key_value_expr_vector(const ObExpr &expr,
           if (OB_FAIL(ObTextStringHelper::get_string<ObVectorBase>(
                   expr, tmp_alloc, 0, i,
                   static_cast<ObVectorBase *>(dict_str_vec), dict_str))) {
-            LOG_WARN("get full text string failed ", K(ret));
           } else {
             if (get_first_matched_value(
                     cs_type, dict_str,
@@ -327,7 +320,6 @@ int ObExprKeyValue::calc_key_value_expr_vector(const ObExpr &expr,
                                        : default_key_delim,
                     key_str_vec->get_string(i), value)) {
               if (OB_FAIL(output_result.init_with_batch_idx(value.length(), i))) {
-                LOG_WARN("init TextString result failed", K(ret));
               } else {
                 output_result.append(value);
                 output_result.set_result();

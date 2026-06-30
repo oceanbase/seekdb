@@ -98,7 +98,6 @@ int ObSchemaMemMgr::alloc_(const int size, void *&ptr,
       LOG_ERROR("alloc mem failed", K(ret), K(size), K(pos_));
     } else if (FALSE_IT(all_ptrs_[pos_]++)) {
     } else if (OB_FAIL(ptrs_[pos_].push_back(tmp_ptr))) {
-      LOG_WARN("push back ptr failed", K(ret), K(pos_));
     } else {
       ptr = tmp_ptr;
       LOG_INFO("alloc schema mgr", K(tmp_ptr), KP(tmp_ptr));
@@ -130,7 +129,6 @@ int ObSchemaMemMgr::alloc_schema_mgr(ObSchemaMgr *&schema_mgr)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("turn on error injection ERRSIM_ALLOC_SCHEMA_MGR", KR(ret));
   } else if (OB_FAIL(alloc_(sizeof(ObSchemaMgr), tmp_ptr, &allocator))) {
-    LOG_WARN("alloc memory for schema_mgr falied", KR(ret));
   } else if (OB_ISNULL(allocator) || OB_ISNULL(tmp_ptr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("tmp ptr or allocator is null", KR(ret), K(tmp_ptr), K(allocator));
@@ -186,9 +184,7 @@ int ObSchemaMemMgr::free_(void *ptr)
     int idx1 = -1;
     int idx2 = -1;
     if (OB_FAIL(find_ptr(ptr, pos_, idx1))) {
-      LOG_WARN("find ptr failed", K(pos_), K(ptr), K(idx1));
     } else if (OB_FAIL(find_ptr(ptr, 1 - pos_, idx2))) {
-      LOG_WARN("find ptr failed", K(1 - pos_), K(ptr), K(idx2));
     }
     if (OB_SUCC(ret)) {
       if (-1 == idx1 && -1 == idx2) {
@@ -199,11 +195,9 @@ int ObSchemaMemMgr::free_(void *ptr)
       } else {
         if (-1 != idx1) {
           if (OB_FAIL(ptrs_[pos_].remove(idx1))) {
-            LOG_WARN("failed to remove ptr", K(idx1), K(ret));
           }
         } else {
           if (OB_FAIL(ptrs_[1 - pos_].remove(idx2))) {
-            LOG_WARN("failed to remove ptr", K(idx2), K(ret));
           }
         }
       }
@@ -228,7 +222,6 @@ int ObSchemaMemMgr::free_schema_mgr(ObSchemaMgr *&schema_mgr)
     FLOG_INFO("[SCHEMA_RELEASE] free schema mgr", K(schema_version), K(timestamp_in_slot));
     SpinWLockGuard guard(schema_mem_rwlock_);
     if (OB_FAIL(free_(static_cast<void *>(schema_mgr)))) {
-      LOG_ERROR("free schema_mgr failed", KR(ret), K(schema_version));
     } else {
       schema_mgr = NULL;
     }
@@ -260,7 +253,6 @@ int ObSchemaMemMgr::get_all_alloc_info(common::ObIArray<ObSchemaMemory> &schema_
     free_schema_mgr_cnt = all_ptrs_[pos_] - used_schema_mgr_cnt;
     schema_mem.init(0, mem_used, mem_total, used_schema_mgr_cnt, free_schema_mgr_cnt, pos_);
     if (OB_FAIL(schema_mem_infos.push_back(schema_mem))) {
-      LOG_WARN("fail to push back schema_mem", KR(ret));
     } else {
       mem_used = allocator_[1 - pos_].used();
       mem_total = allocator_[1 - pos_].total();
@@ -268,7 +260,6 @@ int ObSchemaMemMgr::get_all_alloc_info(common::ObIArray<ObSchemaMemory> &schema_
       free_schema_mgr_cnt = all_ptrs_[1 - pos_] - used_schema_mgr_cnt;
       schema_mem.init(1, mem_used, mem_total, used_schema_mgr_cnt, free_schema_mgr_cnt, 1 - pos_);
       if (OB_FAIL(schema_mem_infos.push_back(schema_mem))) {
-        LOG_WARN("fail to push back schema_mem", KR(ret));
       }
     }
   }
@@ -436,7 +427,6 @@ int ObSchemaMemMgr::get_another_ptrs(common::ObArray<void *> &ptrs)
     common::ObArray<void *> &another_ptrs = ptrs_[1 - pos_];
     for (int64_t i = 0; OB_SUCC(ret) && i < another_ptrs.count(); i++) {
       if (OB_FAIL(ptrs.push_back(another_ptrs.at(i)))) {
-        LOG_WARN("fail to push back ptr", K(ret), K(i));
       }
     }
   }
@@ -456,7 +446,6 @@ int ObSchemaMemMgr::get_current_ptrs(common::ObArray<void *> &ptrs)
     common::ObArray<void *> &current_ptrs = ptrs_[pos_];
     for (int64_t i = 0; OB_SUCC(ret) && i < current_ptrs.count(); i++) {
       if (OB_FAIL(ptrs.push_back(current_ptrs.at(i)))) {
-        LOG_WARN("fail to push back ptr", KR(ret), K(i));
       }
     }
   }
@@ -477,12 +466,10 @@ int ObSchemaMemMgr::get_all_ptrs(common::ObArray<void *> &ptrs)
     common::ObArray<void *> &another_ptrs = ptrs_[1 - pos_];
     for (int64_t i = 0; OB_SUCC(ret) && i < current_ptrs.count(); i++) {
       if (OB_FAIL(ptrs.push_back(current_ptrs.at(i)))) {
-        LOG_WARN("fail to push back current ptr", KR(ret), K(i));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < another_ptrs.count(); i++) {
       if (OB_FAIL(ptrs.push_back(another_ptrs.at(i)))) {
-        LOG_WARN("fail to push back another ptr", KR(ret), K(i));
       }
     }
   }

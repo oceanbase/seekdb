@@ -48,7 +48,6 @@ int ObLogDelete::est_cost()
   } else {
     double op_cost = 0.0;
     if (OB_FAIL(inner_est_cost(child->get_card(), op_cost))) {
-      LOG_WARN("failed to get delete cost", K(ret));
     } else {
       set_op_cost(op_cost);
       set_cost(child->get_cost() + get_op_cost());
@@ -69,9 +68,7 @@ int ObLogDelete::do_re_est_cost(EstimateCostInfo &param, double &card, double &o
     double child_card = child->get_card();
     double child_cost = child->get_cost();
     if (OB_FAIL(SMART_CALL(child->re_est_cost(param, child_card, child_cost)))) {
-      LOG_WARN("failed to re est exchange cost", K(ret));
     } else if (OB_FAIL(inner_est_cost(child_card, op_cost))) {
-      LOG_WARN("failed to get delete cost", K(ret));
     } else {
       cost = child_cost + op_cost;
       card = child_card;
@@ -90,7 +87,6 @@ int ObLogDelete::inner_est_cost(double child_card, double &op_cost)
                                     get_index_dml_infos(),
                                     child_card,
                                     op_cost))) {
-    LOG_WARN("failed to get delete cost", K(ret));
   }
   return ret;
 }
@@ -111,7 +107,6 @@ int ObLogDelete::inner_est_cost(const ObOptimizerContext &opt_ctx,
     LOG_WARN("get unexpected null", K(ret), K(delete_dml_info));
   } else if (OB_FALSE_IT(cost_info.constraint_count_ = delete_dml_info->ck_cst_exprs_.count())) {
   } else if (OB_FAIL(ObOptEstCost::cost_delete(cost_info, op_cost, opt_ctx))) {
-    LOG_WARN("failed to get delete cost", K(ret));
   }
   return ret;
 }
@@ -120,7 +115,6 @@ int ObLogDelete::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObLogDelUpd::inner_get_op_exprs(all_exprs, true))) {
-    LOG_WARN("failed to get op exprs", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -129,7 +123,6 @@ int ObLogDelete::is_my_fixed_expr(const ObRawExpr *expr, bool &is_fixed)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(is_dml_fixed_expr(expr, get_index_dml_infos(), is_fixed))) {
-    LOG_WARN("failed to check is my fixed expr", K(ret));
   }
   return ret;
 }
@@ -142,7 +135,6 @@ int ObLogDelete::generate_multi_part_partition_id_expr()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("index dml info is null", K(ret));
     } else if (OB_FAIL(generate_old_calc_partid_expr(*get_index_dml_infos().at(i)))) {
-      LOG_WARN("failed to generate calc partid expr", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -162,7 +154,6 @@ int ObLogDelete::get_plan_item_info(PlanText &plan_text,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObLogDelUpd::get_plan_item_info(plan_text, plan_item))) {
-    LOG_WARN("failed to get plan item info", K(ret));
   } else {
     BEGIN_BUF_PRINT; 
     if (OB_FAIL(print_table_infos(ObString::make_string("table_columns"),
@@ -170,7 +161,6 @@ int ObLogDelete::get_plan_item_info(PlanText &plan_text,
                                   buf_len, 
                                   pos,
                                   type))) {
-      LOG_WARN("failed to print table infos", K(ret));
     } else if (need_barrier()) {
       ret = BUF_PRINTF(", ");
       ret = BUF_PRINTF("with_barrier");

@@ -373,7 +373,6 @@ public:
       }
 
       if (OB_FAIL(ret)) {
-        SQL_LOG(WARN, "add batch rows failed", K(ret), K(fmt), K(param_exprs.at(0)->datum_meta_));
       }
 
       // count *
@@ -382,7 +381,6 @@ public:
       if (T_FUN_COUNT == agg_fun_type) {
         if (OB_FAIL(quick_add_batch_rows_for_count(this, agg_ctx, false, skip, bound, row_sel,
                                                    agg_col_id, agg_cell))) {
-          SQL_LOG(WARN, "quick add batch rows failed", K(ret));
         }
       } else if (T_FUN_GROUP_ID == agg_fun_type) {
         // TODO:
@@ -396,7 +394,6 @@ public:
       // count distinct
     } else {
       if (OB_FAIL(add_params_batch_row(agg_ctx, agg_col_id, skip, bound, row_sel, agg_cell))) {
-        SQL_LOG(WARN, "add param batch rows failed", K(ret));
       }
     }
 

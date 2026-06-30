@@ -199,11 +199,8 @@ int ObMySQLConnection::create_statement(T &stmt, const ObString &sql, int64_t pa
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(switch_tenant())) {
-    _OB_LOG(WARN, "switch tenant failed, ret=%d", ret);
   } else if (OB_FAIL(reset_read_consistency())) {
-    _OB_LOG(WARN, "fail to set read consistency, ret=%d", ret);
   } else if (OB_FAIL(stmt.init(*this, sql, param_count))) {
-    _OB_LOG(WARN, "fail to init statement, ret=%d", ret);
   }
   return ret;
 }

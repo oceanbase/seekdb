@@ -52,11 +52,9 @@ int ObLogForUpdate::get_plan_item_info(PlanText &plan_text,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("stmt is null", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
-    LOG_WARN("failed to get plan item info", K(ret));
   } else {
     BEGIN_BUF_PRINT;
     if (OB_FAIL(BUF_PRINTF("lock tables"))) {
-      LOG_WARN("BUF_PRINTF fails", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < index_dml_info_.count(); ++i) {
       TableItem *table = NULL;
@@ -69,7 +67,6 @@ int ObLogForUpdate::get_plan_item_info(PlanText &plan_text,
                                   table->get_table_name().length(),
                                   table->get_table_name().ptr(),
                                   i == index_dml_info_.count() - 1 ? ')' : ','))) {
-        LOG_WARN("failed to print lock table name", K(ret));
       }
     }
     END_BUF_PRINT(plan_item.special_predicates_,
@@ -86,7 +83,6 @@ int ObLogForUpdate::compute_sharding_info()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(child), K(ret));
   } else if (OB_FAIL(ObLogicalOperator::compute_sharding_info())) {
-    LOG_WARN("failed to compute sharding info", K(ret));
   } else if (OB_ISNULL(get_sharding())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
@@ -110,13 +106,11 @@ int ObLogForUpdate::allocate_granule_post(AllocGIContext &ctx)
   if (OB_ISNULL(get_plan())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FAIL(pw_allocate_granule_post(ctx))) { // After allocating GI, the status of ctx will be cleaned up
-    LOG_WARN("failed to allocate pw gi post", K(ret));
+  } else if (OB_FAIL(pw_allocate_granule_post(ctx))) {
   } else {
     if (is_partition_wise_state && ctx.is_op_set_pw(this)) {
       ObSEArray<ObLogicalOperator *, 2> tsc_ops;
       if (OB_FAIL(find_all_tsc(tsc_ops, this))) {
-        LOG_WARN("failed to find all tsc", K(ret));
       } else if (tsc_ops.count() < 1){
         // do nothing
         set_gi_above(true);
@@ -142,11 +136,9 @@ int ObLogForUpdate::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
   if (is_multi_part_dml() && OB_FAIL(generate_multi_part_partition_id_expr())) {
     LOG_WARN("failed to generate update expr", K(ret));
   } else if (OB_FAIL(get_for_update_dependant_exprs(all_exprs))) {
-    LOG_WARN("failed to get for update dependant exprs", K(ret));
   } else if (NULL != lock_rownum_ && OB_FAIL(all_exprs.push_back(lock_rownum_))) {
     LOG_WARN("failed to push back exprs", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
-    LOG_WARN("failed to get op exprs", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -167,7 +159,6 @@ int ObLogForUpdate::generate_multi_part_partition_id_expr()
                                                          index_dml_info_.at(i)->ref_table_id_,
                                                          CALC_PARTITION_TABLET_ID,
                                                          part_expr))) {
-      LOG_WARN("failed to gen calc part id expr", K(ret));
     } else if (OB_ISNULL(part_expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret));
@@ -191,7 +182,6 @@ int ObLogForUpdate::get_for_update_dependant_exprs(ObIArray<ObRawExpr*> &dep_exp
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("index dml info is null", K(ret));
       } else if (OB_FAIL(append(dep_exprs, index_dml_info_.at(i)->column_exprs_))) {
-        LOG_WARN("failed to append rowkey expr", K(ret));
       } else if (!is_multi_part_dml()) {
         /*do nothing*/
       } else if (NULL != index_dml_info_.at(i)->old_part_id_expr_ &&
@@ -238,7 +228,6 @@ int ObLogForUpdate::compute_op_ordering()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Child is null", K(ret));
   } else if (OB_FAIL(set_op_ordering(child->get_op_ordering()))) {
-    LOG_WARN("Failed to set op ordering", K(ret));
   }
   return ret;
 }
@@ -264,7 +253,6 @@ int ObLogForUpdate::inner_replace_op_exprs(ObRawExprReplacer &replacer)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("dml info is null", K(ret));
     } else if (OB_FAIL(replace_exprs_action(replacer, dml_info->ck_cst_exprs_))) {
-      LOG_WARN("failed to replace exprs", K(ret));
     } else if (NULL != dml_info->new_part_id_expr_ &&
         OB_FAIL(replace_expr_action(replacer, dml_info->new_part_id_expr_))) {
       LOG_WARN("failed to replace new parititon id expr", K(ret));
@@ -278,13 +266,10 @@ int ObLogForUpdate::inner_replace_op_exprs(ObRawExprReplacer &replacer)
         OB_FAIL(replace_expr_action(replacer, dml_info->new_rowid_expr_))) {
       LOG_WARN("failed to replace new rowid expr", K(ret));
     } else if (OB_FAIL(replace_exprs_action(replacer, dml_info->column_convert_exprs_))) {
-      LOG_WARN("failed to replace exprs", K(ret));
     } else if (OB_FAIL(replace_exprs_action(replacer, dml_info->column_old_values_exprs_))) {
-      LOG_WARN("failed to replace column old values exprs ", K(ret));
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < dml_info->assignments_.count(); ++j) {
       if (OB_FAIL(replace_expr_action(replacer, dml_info->assignments_.at(j).expr_))) {
-        LOG_WARN("failed to replace expr", K(ret));
       }
     }
   }

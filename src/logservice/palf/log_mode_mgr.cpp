@@ -246,9 +246,7 @@ int LogModeMgr::init_change_mode_()
   int ret = OB_SUCCESS;
   int64_t replica_num = 0;
   if (OB_FAIL(config_mgr_->get_alive_member_list_with_arb(follower_list_, replica_num))) {
-    PALF_LOG(WARN, "get_alive_member_list_with_arb failed", K(ret), K_(palf_id), K_(self));
   } else if (OB_FAIL(follower_list_.remove_server(self_))) {
-    PALF_LOG(WARN, "remove_server failed", K(ret), K_(palf_id), K_(self), K_(follower_list));
   } else {
     majority_cnt_ = replica_num / 2 + 1;
     leader_epoch_ = state_mgr_->get_leader_epoch();
@@ -372,7 +370,6 @@ int LogModeMgr::change_access_mode(
     PALF_LOG(WARN, "invalid argument", K(ret), K_(palf_id), K_(self), K(access_mode),
         K(ref_scn), K(mode_version));
   } else if (OB_FAIL(can_change_access_mode_(mode_version))) {
-    PALF_LOG(WARN, "can_change_access_mode failed", K(ret), K_(palf_id), K_(self));
   } else if (applied_mode_meta_.access_mode_ == access_mode) {
     ret = OB_SUCCESS;
     PALF_LOG(INFO, "don't need change access_mode to self", K_(palf_id), K_(self),
@@ -419,9 +416,7 @@ int LogModeMgr::switch_state_(const AccessMode &access_mode,
       const bool need_send_and_handle_prepare = (!is_reconfirm);
       // if access_mode is already changed, just return OB_SUCCESS;
       if (OB_FAIL(init_change_mode_())) {
-        PALF_LOG(WARN, "init_change_mode_ failed", K(ret), K_(palf_id), K_(self));
       } else if (OB_FAIL(submit_prepare_req_(need_inc_pid, need_send_and_handle_prepare))) {
-        PALF_LOG(WARN, "submit_prepare_req_ failed", K(ret), K_(palf_id), K_(self), K(is_reconfirm));
       } else {
         ATOMIC_STORE(&state_, ModeChangeState::MODE_PREPARE);
       }
@@ -440,7 +435,6 @@ int LogModeMgr::switch_state_(const AccessMode &access_mode,
         const bool need_inc_pid = is_reconfirm;
         const bool need_send_and_handle_prepare = (!is_reconfirm);
         if (OB_FAIL(submit_prepare_req_(need_inc_pid, need_send_and_handle_prepare))) {
-          PALF_LOG(WARN, "submit_prepare_req_ failed", K(ret), K_(palf_id), K_(self));
         }
       }
       if (state_ != ModeChangeState::MODE_ACCEPT) {
@@ -485,9 +479,7 @@ int LogModeMgr::switch_state_(const AccessMode &access_mode,
               PALF_LOG(ERROR, "inc_update_base_log_ts failed", KR(ret), K_(palf_id), K_(self),
                   K_(applied_mode_meta), KPC(sw_));
             } else if (OB_FAIL(set_resend_mode_meta_list_())) {
-              PALF_LOG(WARN, "set_resend_mode_meta_list_ failed", K(ret), K_(palf_id), K_(self));
             } else if (OB_FAIL(resend_applied_mode_meta_())) {
-              PALF_LOG(WARN, "resend_applied_mode_meta_ failed", K(ret), K_(palf_id), K_(self));
             } else { }
           }
         } else {
@@ -503,8 +495,6 @@ int LogModeMgr::switch_state_(const AccessMode &access_mode,
           PALF_LOG(WARN, "generate mode_meta failed", K(ret), K_(palf_id), K_(self),
               K(access_mode), K(ref_scn), K_(new_proposal_id));
         } else if (OB_FAIL(submit_accept_req_(new_proposal_id_, is_applied_mode_meta, mode_meta))) {
-          PALF_LOG(WARN, "submit_accept_req_ failed", K(ret), K_(palf_id), K_(self),
-              K(mode_meta), K_(new_proposal_id));
         }
       }
       break;
@@ -540,9 +530,7 @@ int LogModeMgr::set_resend_mode_meta_list_()
   int64_t replica_num;
   resend_mode_meta_list_.reset();
   if (OB_FAIL(config_mgr_->get_alive_member_list_with_arb(member_list, replica_num))) {
-    PALF_LOG(WARN, "get_alive_member_list_with_arb failed", K(ret), K_(palf_id), K_(self));
   } else if (OB_FAIL(config_mgr_->get_global_learner_list(learner_list))) {
-    PALF_LOG(WARN, "get_global_learner_list failed", K(ret), K_(palf_id), K_(self));
   } else {
     member_list.remove_server(self_);
     (void) learner_list.deep_copy_to(resend_mode_meta_list_);
@@ -550,9 +538,7 @@ int LogModeMgr::set_resend_mode_meta_list_()
     for (int64_t idx = 0; idx < member_number && OB_SUCC(ret); ++idx) {
       common::ObAddr server;
       if (OB_FAIL(member_list.get_server_by_index(idx, server))) {
-        PALF_LOG(WARN, "get_server_by_index failed", K(ret), K(idx));
       } else if (OB_FAIL(resend_mode_meta_list_.add_learner(ObMember(server, 1)))) {
-        PALF_LOG(WARN, "add_learner failed", K(ret), K(server));
       }
     }
   }
@@ -607,7 +593,6 @@ int LogModeMgr::submit_prepare_req_(const bool need_inc_pid, const bool need_sen
     PALF_LOG(WARN, "submit_prepare_meta_req failed", K(ret), K_(palf_id), K_(self),
         K_(follower_list), K_(new_proposal_id));
   } else if (OB_FAIL(ack_list_.add_server(self_))) {
-    PALF_LOG(WARN, "add_server failed", K(ret), K_(palf_id), K_(self));
   } else {
     last_submit_req_ts_ = common::ObTimeUtility::current_time();
     max_majority_accepted_mode_meta_ = accepted_mode_meta_;
@@ -664,7 +649,6 @@ int LogModeMgr::handle_prepare_response(const common::ObAddr &server,
     PALF_LOG(WARN, "receive prepare req not from follower_list", K(ret), K_(palf_id), K(server),
         K_(follower_list));
   } else if (OB_FAIL(ack_list_.add_server(server))) {
-    PALF_LOG(WARN, "add_server failed", K(ret), K_(palf_id), K_(self), K(server));
   } else {
     if (false == max_majority_accepted_mode_meta_.is_valid() ||
         max_majority_accepted_mode_meta_.proposal_id_ < mode_meta.proposal_id_) {
@@ -747,7 +731,6 @@ int LogModeMgr::receive_mode_meta_(const common::ObAddr &server,
     // 4. if don't record LogModeMeta in FlushCtx, A will call 'after_flush_mode_meta'
     // and records last 'submit_mode_meta_' B to 'accepted_mode_meta_'. But B hasn't been flushed
     if (OB_FAIL(log_engine_->submit_flush_mode_meta_task(flush_ctx, mode_meta))) {
-      PALF_LOG(WARN, "submit_flush_mode_meta_task failed", K(ret), K_(palf_id), K_(self), K(mode_meta));
     } else {
       last_submit_mode_meta_ = mode_meta;
     }
@@ -792,7 +775,6 @@ int LogModeMgr::ack_mode_meta(const common::ObAddr &server, const int64_t propos
     PALF_LOG(WARN, "ack_mode_meta failed", K(ret), K_(palf_id), K_(self), K(server),
         K(proposal_id), K_(new_proposal_id), "state", state2str_(state_));
   } else if (OB_FAIL(ack_list_.add_server(server))) {
-    PALF_LOG(WARN, "add_server failed", K(ret), K_(palf_id), K_(self), K(server));
   } else {
     PALF_LOG(INFO, "ack_mode_meta finish", K(ret), K_(palf_id), K_(self), K(server),
         K(proposal_id), K_(follower_list), K_(majority_cnt), K_(ack_list), K_(resend_mode_meta_list));

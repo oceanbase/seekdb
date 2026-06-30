@@ -31,7 +31,6 @@ int ObCompactStore::prepare_blk_for_write(Block *blk)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("the store is not inited", K(ret));
   } else if (OB_FAIL(writer_->prepare_blk_for_write(blk))) {
-    LOG_WARN("fail to prepare blk for write", K(ret));
   }
 
   return ret;
@@ -44,7 +43,6 @@ int ObCompactStore::prepare_blk_for_read(Block *blk)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("the store is not inited", K(ret));
   } else if (OB_FAIL(reader_->prepare_blk_for_read(blk))) {
-    LOG_WARN("fail to prepare blk for write", K(ret));
   }
 
   return ret;
@@ -123,7 +121,6 @@ int ObCompactStore::inner_add_batch(const common::ObDatum **datums, const common
   int ret = OB_SUCCESS;
   if (inited_) {
     if (OB_FAIL(writer_->add_batch(datums, exprs, selector, size, stored_rows, batch_ctx_))) {
-      LOG_WARN("fail to add row", K(ret));
     } else {
       row_cnt_ += size;
     }
@@ -148,7 +145,6 @@ int ObCompactStore::add_batch_fallback(const common::ObIArray<ObExpr *> &exprs, 
     batch_info_guard.set_batch_idx(idx);
     ObChunkDatumStore::StoredRow *srow = NULL;
     if (OB_FAIL(add_row(exprs, ctx, &srow))) {
-      LOG_WARN("add row failed", K(ret), K(i), K(idx));
     } else {
       if (NULL != stored_rows) {
         stored_rows[i] = srow;
@@ -181,7 +177,6 @@ int ObCompactStore::add_batch(const common::ObIArray<ObExpr *> &exprs, ObEvalCtx
     stored_rows_count = size;
     if (OB_FAIL(add_batch(exprs, ctx, skip, batch_size,
                           batch_ctx_->selector_, size, stored_rows))) {
-      LOG_WARN("add batch failed");
     }
   }
   return ret;
@@ -201,7 +196,6 @@ int ObCompactStore::add_batch(const common::ObIArray<ObExpr *> &exprs, ObEvalCtx
     if (OB_ISNULL(e)) {
       batch_ctx_->datums_[i] = nullptr;
     } else if (OB_FAIL(e->eval_batch(ctx, skip, batch_size))) {
-      LOG_WARN("evaluate batch failed", K(ret));
     } else {
       if (!e->is_batch_result()) {
         all_batch_res = false;
@@ -213,14 +207,12 @@ int ObCompactStore::add_batch(const common::ObIArray<ObExpr *> &exprs, ObEvalCtx
   }
   if (OB_SUCC(ret) && !all_batch_res) {
     if (OB_FAIL(add_batch_fallback(exprs, ctx, skip, batch_size, selector, size, stored_rows))) {
-      LOG_WARN("add batch fallback failed", K(batch_size), K(size));
     }
   }
 
   if (OB_SUCC(ret) && all_batch_res) {
     if (OB_FAIL(inner_add_batch(batch_ctx_->datums_, exprs, selector, size,
                                 NULL == stored_rows ? batch_ctx_->stored_rows_ : stored_rows))) {
-      LOG_WARN("inner add batch failed", K(ret), K(batch_size), K(size));
     }
   }
 
@@ -247,7 +239,6 @@ int ObCompactStore::add_row(const common::ObIArray<ObExpr *> &exprs, ObEvalCtx &
   int ret = OB_SUCCESS;
   if (inited_) {
     if (OB_FAIL(writer_->add_row(exprs, ctx, stored_row))) {
-      LOG_WARN("fail to add row", K(ret));
     } else {
       row_cnt_++;
     }
@@ -264,7 +255,6 @@ int ObCompactStore::add_row(const blocksstable::ObDatumRow &datum_row, const ObS
   int ret = OB_SUCCESS;
   if (inited_) {
     if (OB_FAIL(writer_->add_row(datum_row.storage_datums_, cg_schema, extra_size, stored_row))) {
-      LOG_WARN("fail to add row", K(ret));
     } else {
       row_cnt_++;
     }
@@ -280,7 +270,6 @@ int ObCompactStore::add_row(const ObChunkDatumStore::StoredRow &src_sr, ObChunkD
   int ret = OB_SUCCESS;
   if (inited_) {
     if (OB_FAIL(writer_->add_row(src_sr, dst_sr))) {
-      LOG_WARN("fail to add row", K(ret));
     } else {
       row_cnt_++;
     }
@@ -416,7 +405,6 @@ int ObCompactStore::finish_write()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("the store in not proper status", K(ret));
   } else if (OB_FAIL(writer_->close())) {
-    LOG_WARN("fail to flush buffer", K(ret));
   }
   return ret;
 }
@@ -447,7 +435,6 @@ int ObCompactStore::get_last_stored_row(const ObChunkDatumStore::StoredRow *&sr)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("store is not inited", K(ret));
   } else if (OB_FAIL(writer_->get_last_stored_row(sr))) {
-    LOG_WARN("fail to get last stored row", K(ret));
   }
   return ret;
 }

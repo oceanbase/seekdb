@@ -56,7 +56,6 @@ int ObGtiRequestRpc::init(const ObAddr &self, ObGtiSource *gti_source)
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(self));
   } else if (OB_SUCCESS != (ret = gti_request_cb_.init(gti_source))) {
-    TRANS_LOG(WARN, "gti request callback inited failed", KR(ret));
   } else {
     self_ = self;
     is_inited_ = true;
@@ -142,7 +141,6 @@ int ObGtiRequestRpc::post(const ObGtiRequest &msg)
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(msg));
   } else if (OB_FAIL(share::g_mp->trans_service()->get_location_adapter()->nonblock_get_leader(GCONF.cluster_id, GTI_LS, server))) {
-    TRANS_LOG(WARN, "get leader failed", KR(ret), K(msg), K(GTI_LS));
   } else {
    // single-replica: target is always local; dispatch async in-process (ex-RPC),
    // restoring the original async .post(msg, &gti_request_cb_) decoupling. msg is
@@ -155,7 +153,6 @@ int ObGtiRequestRpc::post(const ObGtiRequest &msg)
      MOD_SCOPE {
        ObGtiRpcResult gti_rpc_result;
        if (OB_FAIL(share::g_mp->trans_id_service()->handle_request(m, gti_rpc_result))) {
-         TRANS_LOG(WARN, "post local gti request failed", KR(ret), K(server), K(m));
        } else if (!gti_rpc_result.is_valid()) {
          ret = OB_ERR_UNEXPECTED;
          TRANS_LOG(ERROR, "post local gti request and gti_rpc_result is invalid", KR(ret), K(server),
@@ -165,7 +162,6 @@ int ObGtiRequestRpc::post(const ObGtiRequest &msg)
          rcode.rcode_ = OB_SUCCESS;
          
          if (OB_FAIL(cb.process(gti_rpc_result, server, rcode))) {
-           TRANS_LOG(WARN, "post local gti request failed", KR(ret), K(server), K(m));
          } else {
            TRANS_LOG(DEBUG, "post local gti request success", KR(ret), K(server), K(m));
          }

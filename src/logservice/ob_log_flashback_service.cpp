@@ -130,7 +130,6 @@ int ObLogFlashbackService::wait_all_ls_replicas_log_sync_(const SCN &flashback_s
   // 2. motivates all ls operator until success, timeout or fail
   CheckLogOpArray check_log_op_array;
   if (OB_FAIL(construct_ls_operator_list_(flashback_scn, check_log_op_array))) {
-    CLOG_LOG(WARN, "construct_ls_operator_list_ failed", COMMON_LOG_INFO);
   } else {
     palf::TimeoutChecker not_timeout(timeout_us);
     while (OB_SUCC(not_timeout())) {
@@ -155,7 +154,6 @@ int ObLogFlashbackService::wait_all_ls_replicas_log_sync_(const SCN &flashback_s
         int tmp_ret = OB_SUCCESS;
         if (OB_SUCCESS == op.ret_) {
         } else if (OB_SUCCESS != (tmp_ret = failed_ls_ops.push_back(op))) {
-          CLOG_LOG(WARN, "push_back failed", K(ret), K_(self), K(op));
         }
       }
       LOG_USER_ERROR(OB_OP_NOT_ALLOW, "logs of some replicas may be not sync, role transition");
@@ -177,7 +175,6 @@ int ObLogFlashbackService::get_and_change_access_mode_(const SCN &flashback_scn,
   // 1. constructs ls operator list
   // 2. motivates all ls operator until success or fail
   if (OB_FAIL(construct_ls_operator_list_(flashback_scn, change_mode_op_array))) {
-    CLOG_LOG(WARN, "construct_ls_operator_list_ failed", COMMON_LOG_INFO);
   } else {
     for (int64_t i = 0; i < change_mode_op_array.count(); i++) {
       ChangeAccessModeOperator &op = change_mode_op_array.at(i);
@@ -218,7 +215,6 @@ int ObLogFlashbackService::do_flashback_(
   // 2. motivates all ls operator until success or fail
   // FlashbackOpArray flashback_op_array;
   if (OB_FAIL(cast_ls_operator_list_(mode_op_array, flashback_op_array_))) {
-    CLOG_LOG(WARN, "construct_ls_operator_list_ failed", COMMON_LOG_INFO);
   } else {
     palf::TimeoutChecker not_timeout(timeout_us);
     while (OB_SUCC(not_timeout())) {
@@ -244,7 +240,6 @@ int ObLogFlashbackService::do_flashback_(
         int tmp_ret = OB_SUCCESS;
         if (OB_SUCCESS == op.ret_) {
         } else if (OB_SUCCESS != (tmp_ret = failed_ls_ops.push_back(op))) {
-          CLOG_LOG(WARN, "push_back failed", K(ret), K_(self), K(op));
         }
       }
       LOG_USER_ERROR(OB_OP_NOT_ALLOW, "logs of some replicas may have not finished flashback, role transition");
@@ -267,7 +262,6 @@ int ObLogFlashbackService::construct_ls_operator_list_(const SCN &flashback_scn,
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "FlashbackService Operator invalid", K(ret), K_(self), K(op));
   } else if (OB_FAIL(ls_operator_array.push_back(op))) {
-    CLOG_LOG(WARN, "push_back failed", K(ret), K_(self));
   }
   CLOG_LOG(INFO, "construct_ls_operator_list_ finish", K(ret), K_(self), K(flashback_scn),
       K(ls_operator_array));
@@ -287,7 +281,6 @@ int ObLogFlashbackService::cast_ls_operator_list_(
       ret = OB_ERR_UNEXPECTED;
       CLOG_LOG(WARN, "FlashbackService Operator invalid", K(ret), K_(self), K(op));
     } else if (OB_FAIL(dst_array.push_back(op))) {
-      CLOG_LOG(WARN, "push_back failed", K(ret), K_(self));
     }
   }
   return ret;
@@ -334,7 +327,6 @@ int ObLogFlashbackService::BaseLSOperator::update_leader_()
   int ret = OB_SUCCESS;
   leader_.reset();
   if (OB_FAIL(location_adapter_->nonblock_get_leader(ls_id_.id(), leader_))) {
-    CLOG_LOG(INFO, "nonblock_get_leader failed", K(ret), K_(ls_id));
   }
   return ret;
 }
@@ -347,7 +339,6 @@ int ObLogFlashbackService::BaseLSOperator::get_palf_stat_in_process_(
   MOD_SCOPE {
     LogRequestHandler handler;
     if (OB_FAIL(handler.handle_sync_request(req, resp))) {
-      CLOG_LOG(WARN, "in-process get_palf_stat failed", K(ret), K(req));
     }
   }
   return ret;
@@ -361,7 +352,6 @@ int ObLogFlashbackService::BaseLSOperator::change_access_mode_in_process_(
   MOD_SCOPE {
     LogRequestHandler handler;
     if (OB_FAIL(handler.handle_request(cmd))) {
-      CLOG_LOG(WARN, "in-process change_access_mode failed", K(ret), K(cmd));
     }
   }
   return ret;
@@ -376,7 +366,6 @@ int ObLogFlashbackService::BaseLSOperator::send_flashback_msg_in_process_(
   MOD_SCOPE {
     LogRequestHandler handler;
     if (OB_FAIL(handler.handle_request(msg))) {
-      CLOG_LOG(WARN, "in-process send_log_flashback_msg failed", K(ret), K(msg));
     }
   }
   return ret;
@@ -412,7 +401,6 @@ int ObLogFlashbackService::BaseLSOperator::get_leader_list_(common::ObMemberList
   int ret = OB_SUCCESS;
   palf::PalfStat palf_stat;
   if (OB_FAIL(get_leader_palf_stat_(palf_stat))) {
-    CLOG_LOG(WARN, "get_leader_palf_stat_ failed", K(ret), KPC(this), K(palf_stat));
   } else {
     member_list = palf_stat.paxos_member_list_;
     learner_list = palf_stat.learner_list_;
@@ -488,7 +476,6 @@ int ObLogFlashbackService::ChangeAccessModeOperator::switch_state()
     // single-replica: leader is always self, change access mode in-process
     LogChangeAccessModeCmd change_mode_cmd(self_, ls_id_.id(), mode_version_, dst_mode_, SCN::min_scn());
     if (OB_FAIL(change_access_mode_in_process_(change_mode_cmd))) {
-      CLOG_LOG(WARN, "send_change_access_mode_cmd failed", K(ret), KPC(this), K(change_mode_cmd));
     }
     ret = OB_EAGAIN;
   }

@@ -138,12 +138,10 @@ int ObMergeSetOp::do_strict_distinct(
         ret = OB_ERR_UNEXPECTED;
         SQL_ENG_LOG(WARN, "first row: compare row must be null", K(ret));
       } else if (OB_FAIL(last_row_.save_store_row(child_op.get_spec().output_, eval_ctx_, 0))) {
-        SQL_ENG_LOG(WARN, "failed to save right row", K(ret));
       }
     } else if (OB_NOT_NULL(compare_row)) {
       if (OB_FAIL(cmp_(
           *compare_row, child_op.get_spec().output_, eval_ctx_, cmp_ret))) {
-        SQL_ENG_LOG(WARN, "strict compare with last_row failed", K(ret), K(compare_row));
       } else if (0 != cmp_ret) {
         is_break = true;
       }

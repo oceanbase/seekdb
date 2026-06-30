@@ -138,9 +138,7 @@ int ObExprDateDiff::eval_date_diff_vector(const ObExpr &expr, ObEvalCtx &ctx, co
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval date_diff param_1", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval date_diff param_2", K(ret));
   } else {
     VectorFormat left_arg_format = expr.args_[0]->get_format(ctx);
     VectorFormat right_arg_format = expr.args_[1]->get_format(ctx);
@@ -191,7 +189,6 @@ int ObExprDateDiff::eval_date_diff_vector(const ObExpr &expr, ObEvalCtx &ctx, co
 #undef DEF_DATE_DIFF_VECTOR
 
     if (OB_FAIL(ret)) {
-      LOG_WARN("expr calculation failed", K(ret));
     }
   }
 

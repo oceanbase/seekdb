@@ -45,9 +45,7 @@ int ObCompressorPool::get_compressor(const char *compressor_name,
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid compressor name argument, ", K(ret), KP(compressor_name));
   } else if (OB_FAIL(get_compressor_type(compressor_name, compressor_type))) {
-    LIB_LOG(WARN, "fail to get compressor type, ", K(ret), KCSTRING(compressor_name));
   } else if (OB_FAIL(get_compressor(compressor_type, compressor))) {
-    LIB_LOG(WARN, "fail to get compressor", K(ret), K(compressor_type));
   }
   return ret;
 }
@@ -116,7 +114,6 @@ int ObCompressorPool::get_compressor_type(const ObString &compressor_name,
     MEMCPY(comp_name, compressor_name.ptr(), len - 1);
     comp_name[len - 1] = '\0';
     if (OB_FAIL(get_compressor_type(comp_name, compressor_type))) {
-      LIB_LOG(ERROR, "no support compressor name", K(ret), K(compressor_name));
     }
   }
   return ret;
@@ -132,9 +129,7 @@ int ObCompressorPool::get_stream_compressor(const char *compressor_name,
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid compressor name argument, ", K(ret), KP(compressor_name));
   } else if (OB_FAIL(get_compressor_type(compressor_name, compressor_type))) {
-    LIB_LOG(WARN, "fail to get compressor type, ", K(ret), KCSTRING(compressor_name));
   } else if (OB_FAIL(get_stream_compressor(compressor_type, stream_compressor))) {
-    LIB_LOG(WARN, "fail to get stream compressor", K(ret), K(compressor_type));
   } else {/*do nothing*/}
   return ret;
 }

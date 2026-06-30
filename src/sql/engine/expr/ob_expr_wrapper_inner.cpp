@@ -56,7 +56,6 @@ int ObExprWrapperInner::eval_wrapper_inner(const ObExpr &expr,
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
-    LOG_WARN("expr evaluate parameter failed", K(ret));
   } else {
     expr_datum.set_datum(*arg);
   }

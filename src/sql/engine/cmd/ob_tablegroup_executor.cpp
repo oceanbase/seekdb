@@ -43,7 +43,6 @@ int ObCreateTablegroupExecutor::execute(ObExecContext &ctx, ObCreateTablegroupSt
 
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
-    LOG_WARN("fail to get first stmt" , K(ret));
   } else {
     const_cast<obcall::ObCreateTablegroupArg&>(create_tablegroup_arg).ddl_stmt_str_ = first_stmt;
   }
@@ -52,11 +51,9 @@ int ObCreateTablegroupExecutor::execute(ObExecContext &ctx, ObCreateTablegroupSt
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(ObPartitionExecutorUtils::calc_values_exprs(ctx, stmt))) {
-    LOG_WARN("compare range parition expr fail", K(ret));
   } else {
     obcall::UInt64 tablegroup_id(0);
     if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_tablegroup(create_tablegroup_arg, tablegroup_id); }))) {
-      LOG_WARN("rpc proxy create tablegroup failed", K(ret));
     }
   }
   LOG_INFO("finish execute create tablegroup.", K(stmt), K(ret));
@@ -70,7 +67,6 @@ int ObDropTablegroupExecutor::execute(ObExecContext &ctx, ObDropTablegroupStmt &
   const obcall::ObDropTablegroupArg &drop_tablegroup_arg = stmt.get_drop_tablegroup_arg();
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
-    LOG_WARN("fail to get first stmt" , K(ret));
   } else {
     const_cast<obcall::ObDropTablegroupArg&>(drop_tablegroup_arg).ddl_stmt_str_ = first_stmt;
   }
@@ -79,7 +75,6 @@ int ObDropTablegroupExecutor::execute(ObExecContext &ctx, ObDropTablegroupStmt &
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_tablegroup(drop_tablegroup_arg); }))) {
-    LOG_WARN("rpc proxy drop tablegroup failed", K(ret));
   }
   LOG_INFO("finish execute drop tablegroup.", K(stmt), K(ret));
   return ret;
@@ -95,7 +90,6 @@ int ObAlterTablegroupExecutor::execute(ObExecContext &ctx, ObAlterTablegroupStmt
 
   ObString first_stmt;
   if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
-    LOG_WARN("fail to get first stmt" , K(ret));
   } else {
     const_cast<obcall::ObAlterTablegroupArg&>(alter_tablegroup_arg).ddl_stmt_str_ = first_stmt;
   }
@@ -104,7 +98,6 @@ int ObAlterTablegroupExecutor::execute(ObExecContext &ctx, ObAlterTablegroupStmt
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->alter_tablegroup(alter_tablegroup_arg); }))) {
-    LOG_WARN("rpc proxy alter table group failed", "dst", GCTX.self_addr(), K(ret), K(alter_tablegroup_arg));
   }
   return ret;
 }

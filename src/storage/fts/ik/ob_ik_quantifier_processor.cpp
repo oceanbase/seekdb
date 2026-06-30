@@ -37,9 +37,7 @@ int ObIKQuantifierProcessor::do_process(TokenizeContext &ctx,
   int ret = OB_SUCCESS;
   // it do have an order, process number first
   if (OB_FAIL(process_CN_number(ctx, ch, char_len, type))) {
-    LOG_WARN("Fail to process CN number", K(ret));
   } else if (OB_FAIL(process_CN_count(ctx, ch, char_len, type))) {
-    LOG_WARN("Fail to process CN count", K(ret));
   }
   return ret;
 }
@@ -68,7 +66,6 @@ int ObIKQuantifierProcessor::process_CN_number(TokenizeContext &ctx,
     end_ = ctx.get_end_cursor();
     quan_char_cnt_++;
   } else if (OB_FAIL(output_num_token(ctx))) {
-    LOG_WARN("Failed to output number token", K(ret));
   } else {
     reset();
   }
@@ -76,7 +73,6 @@ int ObIKQuantifierProcessor::process_CN_number(TokenizeContext &ctx,
   if (OB_SUCC(ret)) {
     if (ctx.is_last() && (start_ != -1 && end_ != -1)) {
       if (OB_FAIL(output_num_token(ctx))) {
-        LOG_WARN("Failed to output number token", K(ret));
       }
     }
     if (ctx.is_last()) {
@@ -103,14 +99,12 @@ int ObIKQuantifierProcessor::process_CN_count(TokenizeContext &ctx,
           if (OB_FAIL(ret)) {
             break;
           } else if (OB_FAIL(quan_dict_.match({char_len, ch}, hit))) {
-            LOG_WARN("Failed to match quantifier.", K(ret));
           } else if (hit.is_match()) {
             if (OB_FAIL(ctx.add_token(ctx.fulltext(),
                                       hit.start_pos_,
                                       hit.end_pos_ - hit.start_pos_,
                                       hit.char_cnt_,
                                       ObIKTokenType::IK_COUNT_TOKEN))) {
-              LOG_WARN("Failed to add token", K(ret));
             } else {
               // add ok
             }
@@ -135,20 +129,16 @@ int ObIKQuantifierProcessor::process_CN_count(TokenizeContext &ctx,
 
         ObDATrieHit hit(&quan_dict_, ctx.get_cursor());
         if (OB_FAIL(quan_dict_.match({char_len, ch}, hit))) {
-          LOG_WARN("Fail to match", K(ret));
         } else if (hit.is_match()) {
           if (OB_FAIL(ctx.add_token(ctx.fulltext(),
                                     hit.start_pos_,
                                     hit.end_pos_ - hit.start_pos_,
                                     hit.char_cnt_,
                                     ObIKTokenType::IK_COUNT_TOKEN))) {
-            LOG_WARN("Failed to add token", K(ret));
           } else if (OB_FAIL(count_hits_.push_back(hit))) {
-            LOG_WARN("Failed to push hit list", K(ret));
           }
         } else if (hit.is_prefix()) {
           if (OB_FAIL(count_hits_.push_back(hit))) {
-            LOG_WARN("Failed to push hit list", K(ret));
           }
         } else if (hit.is_unmatch()) {
           count_hits_.clear();

@@ -62,7 +62,6 @@ int ObDASExtraData::get_next_row()
   if (!result_iter_.is_valid()) {
     // hasn't fetched any data yet
     if (OB_FAIL(fetch_result())) {
-      LOG_WARN("fetch result failed", KR(ret));
     }
   }
   while (!got_row && OB_SUCC(ret)) {
@@ -72,7 +71,6 @@ int ObDASExtraData::get_next_row()
       } else if (has_more_) {
         ret = OB_SUCCESS;
         if (OB_FAIL(fetch_result())) {
-          LOG_WARN("fetch result failed", KR(ret));
         }
       }
     } else {
@@ -92,7 +90,6 @@ int ObDASExtraData::get_next_rows(int64_t &count, int64_t capacity)
       || (!enable_rich_format_ && !result_iter_.is_valid())) {
     // hasn't fetched any data yet
     if (OB_FAIL(fetch_result())) {
-      LOG_WARN("fetch result failed", KR(ret));
     }
   }
   while (!got_row && OB_SUCC(ret)) {
@@ -111,7 +108,6 @@ int ObDASExtraData::get_next_rows(int64_t &count, int64_t capacity)
       } else if (has_more_) {
         ret = OB_SUCCESS;
         if (OB_FAIL(fetch_result())) {
-          LOG_WARN("fetch result failed", KR(ret));
         }
       }
     } else {

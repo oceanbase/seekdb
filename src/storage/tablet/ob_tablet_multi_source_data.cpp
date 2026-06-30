@@ -142,21 +142,13 @@ int ObTabletTxMultiSourceDataUnit::serialize(
     LOG_WARN("invalid args", K(ret), K(buf), K(len), K(pos));
   } else if (FALSE_IT(length_ = get_serialize_size())) {
   } else if (OB_FAIL(serialization::encode_i32(buf, len, new_pos, version_))) {
-    LOG_WARN("failed to serialize version", K(ret), K(len), K(new_pos), K_(version));
   } else if (OB_FAIL(serialization::encode_i32(buf, len, new_pos, length_))) {
-    LOG_WARN("failed to serialize length", K(ret), K(len), K(new_pos), K_(length));
   } else if (OB_FAIL(tx_id_.serialize(buf, len, new_pos))) {
-    LOG_WARN("failed to serialize tx id", K(ret), K(len), K(new_pos));
   } else if (OB_FAIL(tx_scn_.fixed_serialize(buf, len, new_pos))) {
-    LOG_WARN("failed to serialize tx scn", K(ret), K(len), K(new_pos), K_(tx_scn));
   } else if (OB_FAIL(tablet_status_.serialize(buf, len, new_pos))) {
-    LOG_WARN("failed to serialize tablet status", K(ret), K(len), K(new_pos));
   } else if (OB_FAIL(serialization::encode_i64(buf, len, new_pos, transfer_seq_))) {
-    LOG_WARN("failed to serialize tx log ts", K(ret), K(len), K(new_pos), K_(transfer_seq));
   } else if (OB_FAIL(transfer_ls_id_.serialize(buf, len, new_pos))) {
-    LOG_WARN("failed to serialize transfer ls id", K(ret), K(len), K(new_pos), K_(transfer_ls_id));
   } else if (OB_FAIL(transfer_scn_.fixed_serialize(buf, len, new_pos))) {
-    LOG_WARN("failed to serialize transfer scn", K(ret), K(len), K(new_pos), K_(transfer_scn));
   } else if (OB_UNLIKELY(pos + length_ != new_pos)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("serialize length does not match member length", K(ret), K(pos), K_(length), K(new_pos));
@@ -181,12 +173,9 @@ int ObTabletTxMultiSourceDataUnit::deserialize(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(buf), K(len), K(pos));
   } else if (OB_FAIL(serialization::decode_i32(buf, len, new_pos, &version_))) {
-    LOG_WARN("failed to deserialize version", K(ret), K(len), K(new_pos));
   } else if (OB_FAIL(serialization::decode_i32(buf, len, new_pos, &length_))) {
-    LOG_WARN("failed to deserialize length", K(ret), K(len), K(new_pos));
   } else if (TX_DATA_VERSION == version_) {
     if (OB_FAIL(new_pos - pos < length_ && tx_id_.deserialize(buf, len, new_pos))) {
-      LOG_WARN("failed to deserialize tx id", K(ret), K(len), K(new_pos));
     } else if (new_pos - pos < length_ && OB_FAIL(tx_scn_.fixed_deserialize(buf, len, new_pos))) {
       LOG_WARN("failed to deserialize tx scn", K(ret), K(len), K(new_pos));
     } else if (new_pos - pos < length_ && OB_FAIL(tablet_status_.deserialize(buf, len, new_pos))) {

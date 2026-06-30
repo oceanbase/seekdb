@@ -37,24 +37,19 @@ int ObDtlTenantMemManager::init()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alloc channel memory manager", K(ret));
   } else if (OB_FAIL(mem_mgrs_.reserve(hash_cnt_))) {
-    LOG_WARN("failed to reserver memory manager", K(ret));
   } else if (OB_FAIL(times_.reserve(hash_cnt_))) {
-    LOG_WARN("failed to reserver times", K(ret));
   } else {
     for (int i = 0; i < hash_cnt_ && OB_SUCC(ret); ++i) {
       ObDtlChannelMemManager *ch_mem_mgr = new (buf + i * sizeof(ObDtlChannelMemManager)) ObDtlChannelMemManager (*this);
       if (OB_FAIL(ch_mem_mgr->init())) {
-        LOG_WARN("failed to init channel memory manager", K(ret));
       } else {
         ch_mem_mgr->set_seqno(i);
         if (OB_FAIL(mem_mgrs_.push_back(ch_mem_mgr))) {
-          LOG_WARN("failed to push back memory manager", K(ret));
         }
       }
     }
     for (int i = 0; i < hash_cnt_ && OB_SUCC(ret); ++i) {
       if (OB_FAIL(times_.push_back(0))) {
-        LOG_WARN("failed to push back memory manager", K(ret));
       }
     }
   }
@@ -65,7 +60,6 @@ int ObDtlTenantMemManager::init()
       int64_t cnt = mem_mgrs_.count();
       for (int i = 0; i <  cnt && OB_SUCCESS == tmp_ret; ++i) {
         if (OB_SUCCESS != (tmp_ret = mem_mgrs_.pop_back(ch_mem_mgr))) {
-          LOG_ERROR("failed to push back memory manager", K(ret));
         } else {
           ch_mem_mgr->destroy();
         }
@@ -107,7 +101,6 @@ void ObDtlTenantMemManager::destroy()
     for (int i = 0; i < cnt && OB_SUCC(ret); ++i) {
       ObDtlChannelMemManager *tmp_ch_mem_mgr = nullptr;
       if (OB_FAIL(mem_mgrs_.pop_back(tmp_ch_mem_mgr))) {
-        LOG_ERROR("failed to push back memory manager", K(ret));
       }
       tmp_ch_mem_mgr->destroy();
       ch_mem_mgr = tmp_ch_mem_mgr;

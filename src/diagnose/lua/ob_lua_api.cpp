@@ -169,7 +169,6 @@ public:
       } else {
         int ret = OB_SUCCESS;
         if (OB_FAIL(APIRegister::get_instance().append("\n"))) {
-          OB_LOG(ERROR, "append failed", K(ret));
         }
       }
     }
@@ -186,7 +185,6 @@ public:
       } else {
         int ret = OB_SUCCESS;
         if (OB_FAIL(APIRegister::get_instance().append("NULL "))) {
-          OB_LOG(ERROR, "append failed", K(ret));
         }
       }
     }
@@ -201,10 +199,8 @@ public:
       } else {
         int ret = OB_SUCCESS;
         if (OB_FAIL(APIRegister::get_instance().append(str))) {
-          OB_LOG(ERROR, "append failed", K(ret));
         }
         if (OB_FAIL(APIRegister::get_instance().append(" "))) {
-          OB_LOG(ERROR, "append failed", K(ret));
         }
       }
     }
@@ -219,7 +215,6 @@ public:
       } else {
         int ret = OB_SUCCESS;
         if (OB_FAIL(APIRegister::get_instance().append(value ? "1 " : "0 "))) {
-          OB_LOG(ERROR, "append failed", K(ret));
         }
       }
     }
@@ -236,7 +231,6 @@ public:
         char buf[32];
         snprintf(buf, 32, "%ld ", value);
         if (OB_FAIL(APIRegister::get_instance().append(buf))) {
-          OB_LOG(ERROR, "append failed", K(ret));
         }
       }
     }
@@ -253,7 +247,6 @@ public:
         char buf[32];
         snprintf(buf, 32, "%lf ", value);
         if (OB_FAIL(APIRegister::get_instance().append(buf))) {
-          OB_LOG(ERROR, "append failed", K(ret));
         }
       }
     }
@@ -367,16 +360,13 @@ int print_to_client(lua_State* L)
       size_t len = 0;
       const char *arg = lua_tolstring(L, i, &len);
       if (OB_FAIL(APIRegister::get_instance().append(arg, len))) {
-        OB_LOG(ERROR, "append failed", K(ret), K(len));
       }
     } else if (lua_isboolean(L, i)) {
       if (0 == lua_toboolean(L, i)) {
         if (OB_FAIL(APIRegister::get_instance().append("0"))) {
-          OB_LOG(ERROR, "append failed", K(ret));
         }
       } else {
         if (OB_FAIL(APIRegister::get_instance().append("1"))) {
-          OB_LOG(ERROR, "append failed", K(ret));
         }
       }
     } else if (lua_islightuserdata(L, i)) {
@@ -384,7 +374,6 @@ int print_to_client(lua_State* L)
       char buf[65];
       snprintf(buf, sizeof(buf), "%p", ptr);
       if (OB_FAIL(APIRegister::get_instance().append(buf))) {
-        OB_LOG(ERROR, "append failed", K(ret));
       }
     } else if (lua_isnil(L, i)) {
       ret = APIRegister::get_instance().append("NULL");
@@ -445,7 +434,6 @@ int get_tenant_sysstat_by_id(lua_State* L)
     for (int i = 0; i < ObStatEventIds::STAT_EVENT_SET_END; ++i) {
       if (OB_STAT_EVENTS[i].stat_id_ == stat_id) {
         if (OB_FAIL(get_tenant_sysstat(i, value))) {
-          OB_LOG(ERROR, "failed to get tenant diag info", K(ret), K(i), K(stat_id));
         } else {
           lua_pushinteger(L, value);
         }
@@ -477,7 +465,6 @@ int get_tenant_sysstat_by_name(lua_State* L)
     for (int i = 0; i < ObStatEventIds::STAT_EVENT_SET_END; ++i) {
       if (0 == strcmp(OB_STAT_EVENTS[i].name_, name)) {
         if (OB_FAIL(get_tenant_sysstat(i, value))) {
-          OB_LOG(ERROR, "failed to get tenant diag info", K(ret), K(i), K(name));
         } else {
           lua_pushinteger(L, value);
         }
@@ -709,7 +696,6 @@ int select_processlist(lua_State* L)
     LuaVtableGenerator gen(L, columns);
     GetProcess iter(gen);
     if (OB_FAIL(GCTX.session_mgr_->for_each_session(iter))) {
-      OB_LOG(ERROR, "failed to select_processlist", K(ret));
     }
   }
   return 1;
@@ -866,7 +852,6 @@ int select_trans_stat(lua_State *L)
         MOD_SCOPE {
           auto* txs = share::g_mp->trans_service();
           if (OB_FAIL(txs->iterate_all_observer_tx_stat(iter))) {
-            OB_LOG(ERROR, "iterate transaction stat failed", K(ret));
           }
         }
       }
@@ -1314,9 +1299,7 @@ int select_mem_leak_checker_info(lua_State *L)
     int ret = OB_SUCCESS;
     ObMemLeakChecker::mod_info_map_t info_map;
     if (OB_FAIL(info_map.create(10000))) {
-      OB_LOG(ERROR, "failed to create hashmap", K(ret));
     } else if (OB_FAIL(leak_checker->load_leak_info_map(info_map))) {
-      OB_LOG(ERROR, "failed to collection leak info", K(ret));
     } else {
       std::vector<const char*> columns = {
         "mod_name",
@@ -1427,17 +1410,12 @@ int select_server_schema_info(lua_State *L)
         int64_t schema_count = OB_INVALID_ID;
         int64_t schema_size = OB_INVALID_ID;
         if (OB_FAIL(schema_service.get_tenant_refreshed_schema_version(refreshed_schema_version))) {
-          OB_LOG(ERROR, "fail to get tenant refreshed schema version", K(ret), K(refreshed_schema_version));
         } else if (OB_FAIL(schema_service.get_tenant_received_broadcast_version(received_schema_version))) {
-          OB_LOG(ERROR, "fail to get tenant receieved schema version", K(ret), K(received_schema_version));
         } else {
           int tmp_ret = OB_SUCCESS;
           if (OB_SUCCESS != (tmp_ret = schema_service.get_tenant_schema_guard(guard))) {
-            OB_LOG(ERROR, "fail to get schema guard", K(tmp_ret));
           } else if (OB_SUCCESS != (tmp_ret = guard.get_schema_count(schema_count))) {
-            OB_LOG(ERROR, "fail to get schema count", K(tmp_ret));
           } else if (OB_SUCCESS != (tmp_ret = guard.get_schema_size(schema_size))) {
-            OB_LOG(ERROR, "fail to get schema size", K(tmp_ret));
           }
           gen.next_row();
           // refreshed_schema_version
@@ -1482,7 +1460,6 @@ int select_schema_slot(lua_State *L)
       const static int64_t DEFAULT_SLOT_NUM = 32;
       ObSEArray<ObSchemaSlot, DEFAULT_SLOT_NUM> schema_slot_infos;
       if (OB_FAIL(schema_service.get_tenant_slot_info(get_global_allocator(), 1UL, schema_slot_infos))) {
-        OB_LOG(ERROR, "fail to get tenant slot info", K(ret));
       } else {
         for (int64_t slot_idx = 0; slot_idx < schema_slot_infos.count() && !gen.is_end(); ++slot_idx) {
           auto& schema_slot = schema_slot_infos.at(slot_idx);
@@ -1646,9 +1623,7 @@ int select_malloc_sample_info(lua_State *L)
     OB_LOG_RET(ERROR, OB_INVALID_ARGUMENT, "call select_malloc_sample_info() failed, bad arguments count, should be less than 2.");
     lua_pushnil(L);
   } else if (OB_FAIL(malloc_sample_map.create(1000, "MallocInfoMap", "MallocInfoMap"))) {
-    OB_LOG(ERROR, "failed to create hashmap", K(ret));
   } else if (OB_FAIL(ObMemoryDump::get_instance().load_malloc_sample_map(malloc_sample_map))) {
-    OB_LOG(ERROR, "failed to create memory info map", K(ret));
   } else {
     std::vector<const char*> columns = {
       "ctx_id",
@@ -1762,7 +1737,6 @@ int APIRegister::append(const char *buffer, const int len)
     strncpy(print_buffer_ + print_offset_, buffer, len);
     print_offset_ += len;
   } else if (OB_FAIL(flush())) {
-    OB_LOG(ERROR, "failed to flush", K(ret));
   } else if (print_offset_ + len + 1 >= print_capacity_) {
     ret = OB_ARRAY_OUT_OF_RANGE;
   } else {

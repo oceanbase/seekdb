@@ -71,9 +71,7 @@ int ObTableLoadUniqueIndexRowHandler::handle_insert_row(const ObTabletID &tablet
   if (datum_row.is_ack_) {
     ObTableLoadDataTableBuilder *data_builder = nullptr;
     if (OB_FAIL(store_ctx_->data_store_table_ctx_->get_ack_table_builder(data_builder))) {
-      LOG_WARN("fail to get ack table builder", KR(ret));
     } else if (OB_FAIL(data_builder->append_ack_row(tablet_id, datum_row))) {
-      LOG_WARN("fail to append ack row", KR(ret), K(tablet_id), K(datum_row));
     }
   }
   return ret;
@@ -90,15 +88,12 @@ int ObTableLoadUniqueIndexRowHandler::handle_update_row(const ObTabletID &tablet
     if (ObLoadDupActionType::LOAD_STOP_ON_DUP == dup_action_) {
       LOG_INFO("duplicate row", K(tablet_id), K(datum_row));
       if (OB_FAIL(error_row_handler_->handle_error_row(OB_ERR_PRIMARY_KEY_DUPLICATE))) {
-        LOG_WARN("fail to handle error row", KR(ret));
       } else {
         ATOMIC_DEC(&result_info_->rows_affected_); // delete one row in load data
         // Need to delete data row
         ObTableLoadDataTableBuilder *data_builder = nullptr;
         if (OB_FAIL(store_ctx_->data_store_table_ctx_->get_delete_table_builder(data_builder))) {
-          LOG_WARN("fail to get delete table builder", KR(ret));
         } else if (OB_FAIL(data_builder->append_delete_row(tablet_id, datum_row))) {
-          LOG_WARN("fail to append delete row", KR(ret), K(tablet_id), K(datum_row));
         }
       }
     } else if (ObLoadDupActionType::LOAD_REPLACE == dup_action_) {
@@ -106,9 +101,7 @@ int ObTableLoadUniqueIndexRowHandler::handle_update_row(const ObTabletID &tablet
       // Need to delete data row
       ObTableLoadDataTableBuilder *data_builder = nullptr;
       if (OB_FAIL(store_ctx_->data_store_table_ctx_->get_delete_table_builder(data_builder))) {
-        LOG_WARN("fail to get delete table builder", KR(ret));
       } else if (OB_FAIL(data_builder->append_delete_row(tablet_id, datum_row))) {
-        LOG_WARN("fail to append delete row", KR(ret), K(tablet_id), K(datum_row));
       }
     } else if (ObLoadDupActionType::LOAD_IGNORE == dup_action_) {
       ATOMIC_INC(&result_info_->skipped_);
@@ -116,9 +109,7 @@ int ObTableLoadUniqueIndexRowHandler::handle_update_row(const ObTabletID &tablet
       // Need to delete data row
       ObTableLoadDataTableBuilder *data_builder = nullptr;
       if (OB_FAIL(store_ctx_->data_store_table_ctx_->get_delete_table_builder(data_builder))) {
-        LOG_WARN("fail to get delete table builder", KR(ret));
       } else if (OB_FAIL(data_builder->append_delete_row(tablet_id, datum_row))) {
-        LOG_WARN("fail to append delete row", KR(ret), K(tablet_id), K(datum_row));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -154,7 +145,6 @@ int ObTableLoadUniqueIndexRowHandler::handle_update_row(
     if (ObLoadDupActionType::LOAD_STOP_ON_DUP == dup_action_) {
       if (OB_FAIL(error_row_handler_->handle_error_row(OB_ERR_PRIMARY_KEY_DUPLICATE,
                                                        duplicate_row_count))) {
-        LOG_WARN("fail to handle error row", KR(ret));
       } else {
         result_row = rows.at(0);
         ATOMIC_FAS(&result_info_->rows_affected_, duplicate_row_count);
@@ -179,9 +169,7 @@ int ObTableLoadUniqueIndexRowHandler::handle_update_row(
       ObTableLoadDataTableBuilder *data_builder = nullptr;
       if (row == result_row) {
       } else if (OB_FAIL(store_ctx_->data_store_table_ctx_->get_delete_table_builder(data_builder))) {
-        LOG_WARN("fail to get delete table builder", KR(ret));
       } else if (OB_FAIL(data_builder->append_delete_row(tablet_id, *row))) {
-        LOG_WARN("fail to append delete row", KR(ret), KPC(row));
       }
     }
   }
@@ -214,7 +202,6 @@ int ObTableLoadUniqueIndexRowHandler::handle_update_row(
     if (ObLoadDupActionType::LOAD_STOP_ON_DUP == dup_action_) {
       if (OB_FAIL(error_row_handler_->handle_error_row(OB_ERR_PRIMARY_KEY_DUPLICATE,
                                                        duplicate_row_count))) {
-        LOG_WARN("fail to handle error row", KR(ret));
       } else {
         result_row = rows.at(0);
         ATOMIC_FAS(&result_info_->rows_affected_, duplicate_row_count);
@@ -239,9 +226,7 @@ int ObTableLoadUniqueIndexRowHandler::handle_update_row(
       ObTableLoadDataTableBuilder *data_builder = nullptr;
       if (row == result_row) {
       } else if (OB_FAIL(store_ctx_->data_store_table_ctx_->get_delete_table_builder(data_builder))) {
-        LOG_WARN("fail to get delete table builder", KR(ret));
       } else if (OB_FAIL(data_builder->append_delete_row(*row))) {
-        LOG_WARN("fail to append delete row", KR(ret), KPC(row));
       }
     }
   }
@@ -261,7 +246,6 @@ int ObTableLoadUniqueIndexRowHandler::handle_update_row(const ObTabletID &tablet
     if (ObLoadDupActionType::LOAD_STOP_ON_DUP == dup_action_) {
       LOG_INFO("duplicate row", K(tablet_id), K(old_row), K(new_row));
       if (OB_FAIL(error_row_handler_->handle_error_row(OB_ERR_PRIMARY_KEY_DUPLICATE))) {
-        LOG_WARN("fail to handle error row", KR(ret));
       } else {
         result_row = &old_row;
         ATOMIC_DEC(&result_info_->rows_affected_); // delete one row in load data
@@ -282,21 +266,15 @@ int ObTableLoadUniqueIndexRowHandler::handle_update_row(const ObTabletID &tablet
       ObTableLoadDataTableBuilder *delete_builder = nullptr;
       ObTableLoadDataTableBuilder *ack_builder = nullptr;
       if (OB_FAIL(store_ctx_->data_store_table_ctx_->get_delete_table_builder(delete_builder))) {
-        LOG_WARN("fail to get delete table builder", KR(ret));
       } else if (OB_FAIL(store_ctx_->data_store_table_ctx_->get_ack_table_builder(ack_builder))) {
-        LOG_WARN("fail to get ack table builder", KR(ret));
       } else {
         if (result_row == &old_row) {
           if (OB_FAIL(ack_builder->append_ack_row(tablet_id, old_row))) {
-            LOG_WARN("fail to append ack row", KR(ret), K(old_row));
           } else if (OB_FAIL(delete_builder->append_delete_row(tablet_id, new_row))) {
-            LOG_WARN("fail to append delete row", KR(ret), K(new_row));
           }
         } else {
           if (OB_FAIL(delete_builder->append_delete_row(tablet_id, old_row))) {
-            LOG_WARN("fail to append delete row", KR(ret), K(old_row));
           } else if (OB_FAIL(ack_builder->append_ack_row(tablet_id, new_row))) {
-            LOG_WARN("fail to append ack row", KR(ret), K(new_row));
           }
         }
       }

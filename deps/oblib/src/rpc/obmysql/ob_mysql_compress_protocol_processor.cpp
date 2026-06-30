@@ -68,7 +68,6 @@ int ObMysqlCompressProtocolProcessor::do_decode(ObSMConnection& conn, ObICSMemPo
       next_read_bytes = delta_len;
     // Attention!! when arrive here, all mysql compress protocols are in command phase
     } else if (OB_FAIL(decode_compressed_body(pool, start, pktlen, pktseq, pktlen_before_compress, pkt))) {
-      LOG_ERROR("fail to decode_compressed_body", K(sessid), K(pktseq), K(ret));
     }
   } else {
     /* read at least a header size*/
@@ -83,7 +82,6 @@ int ObMysqlCompressProtocolProcessor::do_splice(observer::ObSMConnection& conn, 
   INIT_SUCC(ret);
   if (OB_FAIL(process_compressed_packet(conn.compressed_pkt_context_, conn.mysql_pkt_context_,
                                           conn.pkt_rec_wrapper_, pool, pkt, need_decode_more))) {
-    LOG_ERROR("fail to process_compressed_packet", K(ret));
   }
   return ret;
 }
@@ -136,7 +134,6 @@ inline int ObMysqlCompressProtocolProcessor::decode_compressed_packet(
       int64_t decompress_data_len = 0;
       if (OB_FAIL(compressor.decompress(comp_buf, comp_pktlen, pkt_body,
                                         pktlen_before_compress, decompress_data_len))) {
-        LOG_ERROR("failed to decompress packet", K(ret));
       } else if (OB_UNLIKELY(pktlen_before_compress != decompress_data_len)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("failed to decompress packet", K(pktlen_before_compress),
@@ -182,11 +179,8 @@ inline int ObMysqlCompressProtocolProcessor::process_compressed_packet(
       if (OB_FAIL(decode_compressed_packet(iraw_pkt->get_cdata(), iraw_pkt->get_comp_len(),
                                            iraw_pkt->get_uncomp_len(), decompress_data_buf,
                                            decompress_data_size))) {
-        LOG_ERROR("fail to decode_compressed_packet", K(ret));
       } else if (OB_FAIL(process_fragment_mysql_packet(mysql_pkt_context, pool, decompress_data_buf,
               decompress_data_size, ipacket, need_decode_more))) {
-        LOG_ERROR("fail to process fragment mysql packet", KP(decompress_data_buf),
-                  K(decompress_data_size), K(need_decode_more), K(ret));
       } else {
         context.last_pkt_seq_ = iraw_pkt->get_comp_seq();
         if (need_decode_more) {

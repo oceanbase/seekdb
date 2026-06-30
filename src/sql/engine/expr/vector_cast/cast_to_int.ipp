@@ -65,7 +65,6 @@ struct ToIntegerCastImpl
             ret = common_string_integer(cast_mode, in_type_, in_cs_type_, in_str, true, out_val);
           }
           if (CAST_FAIL(ret)) {
-            SQL_LOG(WARN, "string_int failed", K(ret), K(in_str));
           } else if (out_type_ < ObIntType && CAST_FAIL(int_range_check(out_type_, out_val, out_val))) {
             SQL_LOG(WARN, "int_range_check failed", K(ret));
           } else {
@@ -83,7 +82,6 @@ struct ToIntegerCastImpl
       StringToIntFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec, support_avx512);
       if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-        SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
       }
     }
     return ret;
@@ -126,7 +124,6 @@ struct ToIntegerCastImpl
             ret = common_string_unsigned_integer(cast_mode, in_type_, in_cs_type_, in_str, true, out_val);
           }
           if (CAST_FAIL(ret)) {
-            SQL_LOG(WARN, "string_int failed", K(ret));
           } else if (out_type_ < ObUInt64Type && CM_NEED_RANGE_CHECK(expr.extra_) &&
                       CAST_FAIL(uint_upper_check(out_type_, out_val))) {
             SQL_LOG(WARN, "uint_upper_check failed", K(ret));
@@ -145,7 +142,6 @@ struct ToIntegerCastImpl
       StringToUIntFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec, support_avx512);
       if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-        SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
       }
     }
     return ret;
@@ -169,7 +165,6 @@ struct ToIntegerCastImpl
           const int64_t trunc_max_value = (std::is_same<IN_TYPE, double>::value || CM_IS_COLUMN_CONVERT(expr.extra_))
                                            ? LLONG_MAX : LLONG_MIN;
           if (CAST_FAIL(ObDataTypeCastUtil::common_double_int_wrap(in_val, out_val, LLONG_MIN, trunc_max_value))) {
-            SQL_LOG(WARN, "common_double_int_wrap failed", K(ret));
           } else if ((CM_NEED_RANGE_CHECK(expr.extra_) || std::is_same<IN_TYPE, float>::value)
                      && CAST_FAIL(int_range_check(out_type_, out_val, out_val))) {
             SQL_LOG(WARN, "int_range_check failed", K(ret), K(out_val));
@@ -186,7 +181,6 @@ struct ToIntegerCastImpl
       FloatDoubleToIntFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec);
       if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-        SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
       }
     }
     return ret;
@@ -230,9 +224,7 @@ struct ToIntegerCastImpl
             }
           }
           if (CAST_FAIL(ret)) {
-            SQL_LOG(WARN, "cast float to uint failed", K(ret), K(in_val), K(out_val));
           } else if (CAST_FAIL(uint_range_check(out_type_, out_val, out_val))) {
-            SQL_LOG(WARN, "int_range_check failed", K(ret));
           } else {
             res_vec_->set_uint(idx, out_val);
           }
@@ -246,7 +238,6 @@ struct ToIntegerCastImpl
       FloatDoubleToUIntFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec);
       if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-        SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
       }
     }
     return ret;
@@ -282,7 +273,6 @@ struct ToIntegerCastImpl
       IntToIntFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec);
       if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-        SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
       }
     }
     return ret;
@@ -321,7 +311,6 @@ struct ToIntegerCastImpl
         IntToUIntFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec);
         if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-          SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
         }
       }
     }
@@ -357,7 +346,6 @@ struct ToIntegerCastImpl
       UIntToIntFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec);
       if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-        SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
       }
     }
     return ret;
@@ -392,7 +380,6 @@ struct ToIntegerCastImpl
       UIntToUIntFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec);
       if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-        SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
       }
     }
     return ret;
@@ -416,7 +403,6 @@ struct ToIntegerCastImpl
           int warning = OB_SUCCESS;
           int64_t int_val = 0;
           if (OB_FAIL(ObTimeConverter::date_to_int(arg_vec_->get_date(idx), int_val))) {
-            SQL_LOG(WARN, "convert date to int failed", K(ret));
           } else {
             OUT_TYPE out_val = int_val;
             bool need_range_check = std::is_same<OUT_TYPE, int64_t>::value
@@ -443,7 +429,6 @@ struct ToIntegerCastImpl
       DateToIntUIntFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec, type_min_val, type_max_val);
       if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-        SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
       }
     }
     return ret;
@@ -462,7 +447,6 @@ struct ToIntegerCastImpl
         ret = OB_ERR_UNEXPECTED;
         SQL_LOG(WARN, "session is NULL", K(ret));
       } else if (OB_FAIL(helper.get_time_zone_info(tz_info_local))) {
-        SQL_LOG(WARN, "get time zone info failed", K(ret));
       } else {
         class DatetimeToIntUIntFn : public CastFnBase {
         public:
@@ -478,7 +462,6 @@ struct ToIntegerCastImpl
             int64_t int_val = 0;
             if (OB_FAIL(ObTimeConverter::datetime_to_int(arg_vec_->get_datetime(idx),
                                                          tz_info_, int_val))) {
-              SQL_LOG(WARN, "datetime_to_int failed", K(ret), K(int_val));
             } else {
               OUT_TYPE out_val = int_val;
               bool need_range_check = std::is_same<OUT_TYPE, int64_t>::value
@@ -508,7 +491,6 @@ struct ToIntegerCastImpl
         DatetimeToIntUIntFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec, type_min_val, type_max_val, tz_info);
         if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-          SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
         }
       }
     }
@@ -537,7 +519,6 @@ struct ToIntegerCastImpl
             ret = OB_DATA_OUT_OF_RANGE;
           }
           if (CAST_FAIL(ret)) {
-            SQL_LOG(WARN, "decimalint int failed", K(ret));
           } else if (out_type_ < ObIntType && CAST_FAIL(int_range_check(out_type_, out_val, out_val))) {
             SQL_LOG(WARN, "int_range_check failed", K(ret), K(expr.extra_));
           } else {
@@ -559,7 +540,6 @@ struct ToIntegerCastImpl
         DecimalintToIntFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec, sf);
         if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-          SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
         }
       }
     }
@@ -593,7 +573,6 @@ struct ToIntegerCastImpl
             ret = OB_DATA_OUT_OF_RANGE;
           }
           if (CAST_FAIL(ret)) {
-            SQL_LOG(WARN, "decimalint uint failed", K(ret));
           } else if ((out_type_ < ObUInt64Type && CM_NEED_RANGE_CHECK(expr.extra_))
               && CAST_FAIL(uint_upper_check(out_type_, out_val))) {
             SQL_LOG(WARN, "int_range_check failed", K(ret), K(expr.extra_));
@@ -616,7 +595,6 @@ struct ToIntegerCastImpl
         DecimalintToUIntFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec, sf);
         if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-          SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
         }
       }
     }
@@ -647,7 +625,6 @@ struct ToIntegerCastImpl
             ret = common_string_integer(expr.extra_, in_type_, in_cs_type_,
                                         num_str, false, out_val);
             if (CAST_FAIL(ret)) {
-              SQL_LOG(WARN, "string_int failed", K(ret), K(num_str));
             } else if (out_type_ < ObIntType &&
                        CAST_FAIL(int_range_check(out_type_, out_val, out_val))) {
               SQL_LOG(WARN, "int_range_check failed", K(ret));
@@ -665,7 +642,6 @@ struct ToIntegerCastImpl
       NumberToIntFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec);
       if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-        SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
       }
     }
     return ret;
@@ -695,7 +671,6 @@ struct ToIntegerCastImpl
             ret = common_string_unsigned_integer(expr.extra_, in_type_, in_cs_type_,
                                                  num_str, false, out_val);
             if (CAST_FAIL(ret)) {
-              SQL_LOG(WARN, "string_int failed", K(ret));
             } else if (out_type_ < ObUInt64Type && CM_NEED_RANGE_CHECK(expr.extra_) &&
               CAST_FAIL(uint_upper_check(out_type_, out_val))) {
               SQL_LOG(WARN, "uint_upper_check failed", K(ret));
@@ -713,7 +688,6 @@ struct ToIntegerCastImpl
       NumberToUIntFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec);
       if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-        SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
       }
     }
     return ret;

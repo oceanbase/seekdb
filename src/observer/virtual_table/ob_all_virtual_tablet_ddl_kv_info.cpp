@@ -80,7 +80,6 @@ int ObAllVirtualTabletDDLKVInfo::get_next_ddl_kv_mgr(ObDDLKvMgrHandle &ddl_kv_mg
           SERVER_LOG(WARN, "fail to get next ls", K(ret));
         }
       } else if (OB_FAIL(ls->build_tablet_iter(ls_tablet_iter_))) {
-        SERVER_LOG(WARN, "fail to build tablet iter", K(ret));
       }
     }
 
@@ -112,7 +111,6 @@ int ObAllVirtualTabletDDLKVInfo::get_next_ddl_kv(ObDDLKV *&ddl_kv)
           SERVER_LOG(WARN, "get_next_ddl_kv_mgr failed", K(ret));
         }
       } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->get_ddl_kvs(false/*frozen_only*/, ddl_kvs_handle_))) {
-        SERVER_LOG(WARN, "fail to get ddl kvs", K(ret));
       } else if (ddl_kvs_handle_.count() > 0) {
         ddl_kv_idx_ = 0;
       }

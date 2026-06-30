@@ -87,12 +87,9 @@ int ObSSTableMultiVersionRowGetter::inner_open(
   } else {
     base_rowkey_ = static_cast<const ObDatumRowkey *>(query_range);
     if (OB_FAIL(base_rowkey_->to_multi_version_range(*access_ctx.get_range_allocator(), multi_version_range_))) {
-      STORAGE_LOG(WARN, "Failed to transfer multi version range", K(ret), KPC_(base_rowkey));
     } else if (OB_FAIL(ObSSTableRowScanner::inner_open(
                 iter_param, access_ctx, table, &multi_version_range_))) {
-      LOG_WARN("failed to open scanner", K(ret));
     } else if (OB_FAIL(not_exist_row_.init(*access_ctx.get_range_allocator(), iter_param.get_out_col_cnt()))) {
-        LOG_WARN("fail to init datum row", K(ret));
     } else {
       not_exist_row_.row_flag_.reset();
       not_exist_row_.row_flag_.set_flag(ObDmlFlag::DF_NOT_EXIST);
@@ -115,7 +112,6 @@ int ObSSTableMultiVersionRowGetter::inner_get_next_row(const ObDatumRow *&row)
                   *base_rowkey_,
                   not_exist_row_,
                   row))) {
-        LOG_WARN("failed to get not exist row, ", K(ret));
       } else {
         ++range_idx_;
         ret = OB_SUCCESS;
@@ -161,9 +157,7 @@ int ObSSTableMultiVersionRowScanner::inner_open(
     ObSSTable *sstable = static_cast<ObSSTable *>(table);
     base_range_ = static_cast<const ObDatumRange *>(query_range);
     if (OB_FAIL(base_range_->to_multi_version_range(*access_ctx.get_range_allocator(), multi_version_range_))) {
-      STORAGE_LOG(WARN, "Failed to transfer multi version range", K(ret), KPC(base_range_));
     } else if (OB_FAIL(ObSSTableRowScanner::inner_open(iter_param, access_ctx, table, &multi_version_range_))) {
-      LOG_WARN("failed to open scanner", K(ret));
     }
   }
   return ret;
@@ -214,23 +208,18 @@ int ObSSTableMultiVersionRowMultiGetter::inner_open(
     base_rowkeys_ = reinterpret_cast<const ObIArray<ObDatumRowkey> *> (query_range);
 
     if (OB_FAIL(multi_version_ranges_.reserve(base_rowkeys_->count()))) {
-      LOG_WARN("reserve multi_version_ranges_ failed", K(ret), K(base_rowkeys_->count()));
     } else {
       ObDatumRange tmp_multi_version_range;
       for (int i = 0; OB_SUCC(ret) && i < base_rowkeys_->count(); i++) {
         tmp_multi_version_range.reset();
         if (OB_FAIL(base_rowkeys_->at(i).to_multi_version_range(*access_ctx.get_range_allocator(), tmp_multi_version_range))) {
-          STORAGE_LOG(WARN, "Failed to transfer multi version range", K(ret), K(i), K(base_rowkeys_->at(i)));
         } else if (OB_FAIL(multi_version_ranges_.push_back(tmp_multi_version_range))) {
-          LOG_WARN("push back multi version range failed", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObSSTableRowMultiScanner::inner_open(
                   iter_param, access_ctx, table, &multi_version_ranges_))) {
-        LOG_WARN("failed to open multi scanner", K(ret));
       } else if (OB_FAIL(not_exist_row_.init(*access_ctx.get_range_allocator(), iter_param.get_out_col_cnt()))) {
-        LOG_WARN("fail to init datum row", K(ret));
       } else {
         not_exist_row_.row_flag_.reset();
         not_exist_row_.row_flag_.set_flag(ObDmlFlag::DF_NOT_EXIST);
@@ -278,7 +267,6 @@ int ObSSTableMultiVersionRowMultiGetter::inner_get_next_row(const ObDatumRow *&r
                   base_rowkeys_->at(range_idx_),
                   not_exist_row_,
                   row))) {
-        LOG_WARN("failed to get not exist row, ", K(ret));
       }
     }
 
@@ -326,21 +314,17 @@ int ObSSTableMultiVersionRowMultiScanner::inner_open(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Unexpected empty out_cols", K(ret), K(iter_param));
     } else if (OB_FAIL(multi_version_ranges_.reserve(base_ranges->count()))) {
-      LOG_WARN("reserve multi_version_ranges_ failed", K(ret), K(base_ranges->count()));
     } else {
       ObDatumRange tmp_multi_version_range;
       for (int i = 0; OB_SUCC(ret) && i < base_ranges->count(); i++) {
         tmp_multi_version_range.reset();
         if (OB_FAIL(base_ranges->at(i).to_multi_version_range(*access_ctx.get_range_allocator(), tmp_multi_version_range))) {
-          STORAGE_LOG(WARN, "Failed to transfer multi version range", K(ret), K(i), K(base_ranges->at(i)));
         } else if (OB_FAIL(multi_version_ranges_.push_back(tmp_multi_version_range))) {
-          LOG_WARN("push back multi version range failed", K(ret));
         }
       }
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObSSTableRowMultiScanner::inner_open(iter_param, access_ctx, table, &multi_version_ranges_))) {
-        LOG_WARN("failed to open scanner", K(ret));
       }
     }
   }

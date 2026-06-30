@@ -157,7 +157,6 @@ int ObInnerTableSchemaDumper::get_schema_pointers_(
   schema_ptrs.reset();
   for (int64_t i = 0; OB_SUCC(ret) && i < schemas_.count(); i++) {
     if (OB_FAIL(schema_ptrs.push_back(&schemas_.at(i)))) {
-      LOG_WARN("failed to push_back", KR(ret), K(i));
     }
   }
   return ret;
@@ -179,16 +178,13 @@ int ObInnerTableSchemaDumper::get_inner_table_schema_info(ObIArray<ObLoadInnerTa
     &ObInnerTableSchemaDumper::get_all_column_info_,
   };
   if (OB_FAIL(get_schema_pointers_(schema_ptrs))) {
-    LOG_WARN("failed to get schema pointers", KR(ret));
   } else {
     for (int64_t i = 0; i < ARRAYSIZEOF(func) && OB_SUCC(ret); i++) {
       if (OB_ISNULL(func[i])) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("pointer is null", KR(ret));
       } else if (OB_FAIL((this->*(func[i]))(schema_ptrs, info))) {
-        LOG_WARN("failed to get info", KR(ret));
       } else if (OB_FAIL(infos.push_back(info))) {
-        LOG_WARN("failed to push_back", KR(ret), K(info));
       }
     }
     for (int64_t i = 0; i < ARRAYSIZEOF(func_table_column) && OB_SUCC(ret); i++) {
@@ -196,11 +192,8 @@ int ObInnerTableSchemaDumper::get_inner_table_schema_info(ObIArray<ObLoadInnerTa
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("pointer is null", KR(ret));
       } else if (OB_FAIL((this->*(func_table_column[i]))(schema_ptrs, info, info_history))) {
-        LOG_WARN("failed to get all column info", KR(ret));
       } else if (OB_FAIL(infos.push_back(info))) {
-        LOG_WARN("failed to push_back", KR(ret), K(info));
       } else if (OB_FAIL(infos.push_back(info_history))) {
-        LOG_WARN("failed to push_back", KR(ret), K(info_history));
       }
     }
   }
@@ -223,23 +216,17 @@ int ObInnerTableSchemaDumper::get_table_info_(const ObIArray<schema::ObTableSche
       LOG_WARN("pointer is null", KR(ret), KP(table), K(i));
     } else if (OB_FAIL(ObTableSqlService::gen_table_dml_without_check(*table,
             false, dml))) {
-      LOG_WARN("failed to gen_table_dml", KR(ret));
     } else if (is_core_table(table->get_table_id())) {
     } else if (OB_FAIL(constructor.add_lines(table->get_table_id(), dml))) {
-               LOG_WARN("failed to add lines", KR(ret), K(table));
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(dml.add_column("is_deleted", "0"))) {
-        LOG_WARN("failed to add is_deleted", KR(ret));
       } else if (OB_FAIL(constructor_history.add_lines(table->get_table_id(), dml))) {
-        LOG_WARN("failed to add lines", KR(ret), K(table));
       }
     }
   }
   if (FAILEDx(constructor.get_load_info(info))) {
-    LOG_WARN("failed to get load info", KR(ret), K(info));
   } else if (OB_FAIL(constructor_history.get_load_info(info_history))) {
-    LOG_WARN("failed to get load info", KR(ret), K(info_history));
   }
   return ret;
 }
@@ -273,26 +260,20 @@ int ObInnerTableSchemaDumper::get_column_info_(const ObIArray<schema::ObTableSch
           LOG_WARN("pointer is null", KR(ret), KP(iter));
         } else if (OB_FAIL(ObTableSqlService::gen_column_dml_without_check(**iter,
                 lib::Worker::CompatMode::MYSQL, dml))) {
-          LOG_WARN("failed to gen_table_dml", KR(ret));
         } else if (is_core_table(table->get_table_id()) ) {
         } else if (OB_FAIL(constructor.add_lines(table->get_table_id(), dml))) {
-          LOG_WARN("failed to add lines", KR(ret), KPC(table));
         }
 
         if (OB_SUCC(ret)) {
           if (OB_FAIL(dml.add_column("is_deleted", "0"))) {
-            LOG_WARN("failed to add is_deleted", KR(ret));
           } else if (OB_FAIL(constructor_history.add_lines(table->get_table_id(), dml))) {
-            LOG_WARN("failed to add lines", KR(ret), KPC(table));
           }
         }
       }
     }
   }
   if (FAILEDx(constructor.get_load_info(info))) {
-    LOG_WARN("failed to get load info", KR(ret), K(info));
   } else if (OB_FAIL(constructor_history.get_load_info(info_history))) {
-    LOG_WARN("failed to get load info", KR(ret), K(info_history));
   }
   return ret;
 }
@@ -347,11 +328,9 @@ int ObInnerTableSchemaDumper::get_all_ddl_operation_info_(const ObIArray<schema:
       }
     }
     if (FAILEDx(constructor.add_lines(table->get_table_id(), dml))) {
-      LOG_WARN("failed to add lines", KR(ret), K(table));
     }
   }
   if (FAILEDx(constructor.get_load_info(info))) {
-    LOG_WARN("failed to get load info", KR(ret), K(info));
   }
   return ret;
 }
@@ -373,9 +352,7 @@ int ObInnerTableSchemaDumper::get_all_core_table_info_(const ObIArray<schema::Ob
     } else if (!is_core_table(table->get_table_id())) {
     } else if (OB_FAIL(ObTableSqlService::gen_table_dml_without_check(*table,
             false, dml))) {
-      LOG_WARN("failed to gen_table_dml", KR(ret));
     } else if (OB_FAIL(table_constructor.add_lines(table->get_table_id(), dml))) {
-      LOG_WARN("failed to add table", KR(ret), KPC(table));
     } else {
       for (ObTableSchema::const_column_iterator iter = table->column_begin();
           OB_SUCC(ret) && iter != table->column_end(); ++iter) {
@@ -385,19 +362,14 @@ int ObInnerTableSchemaDumper::get_all_core_table_info_(const ObIArray<schema::Ob
           LOG_WARN("pointer is null", KR(ret), KP(iter));
         } else if (OB_FAIL(ObTableSqlService::gen_column_dml_without_check(**iter,
                 lib::Worker::CompatMode::MYSQL, dml))) {
-          LOG_WARN("failed to gen_table_dml", KR(ret));
         } else if (OB_FAIL(column_constructor.add_lines(table->get_table_id(), dml))) {
-          LOG_WARN("failed to add column", KR(ret), KPC(table));
         }
       }
     }
   }
   if (FAILEDx(constructor.add_constructor(table_constructor))) {
-    LOG_WARN("faled to add constructor", KR(ret));
   } else if (OB_FAIL(constructor.add_constructor(column_constructor))) {
-    LOG_WARN("faled to add constructor", KR(ret));
   } else if (OB_FAIL(constructor.get_load_info(info))) {
-    LOG_WARN("failed to get load info", KR(ret));
   }
   return ret;
 }
@@ -409,11 +381,8 @@ int ObLoadInnerTableSchemaInfoConstructor::add_line(const ObString &line,
   ObString tmp_line;
 
   if (FAILEDx(ob_write_string(allocator_, line, tmp_line, true/*c_style*/))) {
-    LOG_WARN("failed to write string", KR(ret), K(line));
   } else if (OB_FAIL(rows_.push_back(tmp_line))) {
-    LOG_WARN("failed to push_back line", KR(ret), K(tmp_line));
   } else if (OB_FAIL(table_ids_.push_back(table_id))) {
-    LOG_WARN("failed to push_back line", KR(ret), K(table_id));
   }
   return ret;
 }
@@ -440,9 +409,7 @@ int ObLoadInnerTableSchemaInfoConstructor::get_load_info(ObLoadInnerTableSchemaI
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("constructor is invalid", KR(ret), K(*this));
   } else if (OB_FAIL(ob_write_string(allocator_, table_name_, table_name, true/*c_style*/))) {
-    LOG_WARN("failed to write string", KR(ret), K_(table_name));
   } else if (OB_FAIL(ob_write_string(allocator_, header_, header, true/*c_style*/))) {
-    LOG_WARN("failed to write string", KR(ret), K_(header));
   } else if (OB_ISNULL(table_id_buf = static_cast<uint64_t *>(allocator_.alloc(sizeof(table_id_buf[0]) * table_ids_.count())))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alloc table_ids_ memory", KR(ret), K(table_ids_.count()));
@@ -474,9 +441,7 @@ int ObNotCoreTableLoadInfoConstructor::add_header(ObDMLSqlSplicer &splicer)
   if (header_.empty()) {
     ObSqlString header;
     if (OB_FAIL(splicer.splice_column_names(header))) {
-      LOG_WARN("failed to get header", KR(ret));
     } else if (OB_FAIL(ob_write_string(allocator_, header.string(), header_, true/*c_style*/))) {
-      LOG_WARN("failed to write header", KR(ret), K(header));
     }
   }
   return ret;
@@ -487,11 +452,8 @@ int ObNotCoreTableLoadInfoConstructor::add_lines(const uint64_t table_id, ObDMLS
   int ret = OB_SUCCESS;
   ObSqlString line;
   if (OB_FAIL(add_header(splicer))) {
-    LOG_WARN("failed to add header", KR(ret));
   } else if (OB_FAIL(splicer.splice_values(line))) {
-    LOG_WARN("failed to get line", KR(ret));
   } else if (OB_FAIL(add_line(line.string(), table_id))) {
-    LOG_WARN("failed to add line", KR(ret), K(line), K(table_id));
   }
   return ret;
 }
@@ -503,7 +465,6 @@ int ObCoreTableLoadInfoConstructor::add_lines(const uint64_t table_id, ObDMLSqlS
   const char *header = "table_name,row_id,column_name,column_value";
   header_ = header;
   if (OB_FAIL(splicer.splice_core_cells(store_cell_, cells))) {
-    LOG_WARN("failed to store core cells", KR(ret));
   } else {
     row_id_++;
     ObSqlString line;
@@ -513,23 +474,19 @@ int ObCoreTableLoadInfoConstructor::add_lines(const uint64_t table_id, ObDMLSqlS
       if (OB_ISNULL(cell.value_.ptr())) {
         if (OB_FAIL(line.assign_fmt("'%.*s', %ld, '%.*s', NULL", core_table_name_.length(),
                 core_table_name_.ptr(), row_id_, cell.name_.length(), cell.name_.ptr()))) {
-          LOG_WARN("failed to assign line", KR(ret), K(cell));
         }
       } else if (cell.is_hex_value_) {
         if (OB_FAIL(line.append_fmt("'%.*s', %ld, '%.*s', %.*s", core_table_name_.length(),
                 core_table_name_.ptr(), row_id_, cell.name_.length(), cell.name_.ptr(),
                 cell.value_.length(), cell.value_.ptr()))) {
-          LOG_WARN("failed to assign line", KR(ret), K(cell));
         }
       } else {
         if (OB_FAIL(line.append_fmt("'%.*s', %ld, '%.*s', '%.*s'", core_table_name_.length(),
                 core_table_name_.ptr(), row_id_, cell.name_.length(), cell.name_.ptr(),
                 cell.value_.length(), cell.value_.ptr()))) {
-          LOG_WARN("failed to assign line", KR(ret), K(cell));
         }
       }
       if (FAILEDx(add_line(line.string(), table_id))) {
-        LOG_WARN("failed to add line", KR(ret), K(line), K(table_id));
       }
     }
   }
@@ -550,9 +507,7 @@ int ObCoreTableLoadInfoConstructor::DumpCoreTableStoreCell::store_cell(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(src));
   } else if (OB_FAIL(store_string(src.name_, dest.name_))) {
-    LOG_WARN("store cell name failed", K(ret), K(src));
   } else if (OB_FAIL(store_string(src.value_, dest.value_))) {
-    LOG_WARN("store cell value failed", K(ret), K(src));
   } else {
     dest.is_hex_value_ = src.is_hex_value_;
   }
@@ -573,9 +528,7 @@ int ObMergeLoadInfoConstructor::add_constructor(ObLoadInnerTableSchemaInfoConstr
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("two construct is not same, cannot merge", KR(ret), KPC(this), K(constructor));
   } else if (OB_FAIL(rows_.push_back(constructor.get_rows()))) {
-    LOG_WARN("failed to push_back rows", KR(ret));
   } else if (OB_FAIL(table_ids_.push_back(constructor.get_table_ids()))) {
-    LOG_WARN("failed to push_back rows", KR(ret));
   } else {
     header_ = constructor.get_header();
   }

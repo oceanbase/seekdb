@@ -35,7 +35,6 @@ int ObKillExecutor::execute(ObExecContext &ctx, ObKillStmt &stmt)
   ObAddr addr;
   ObSQLSessionMgr &session_mgr = OBSERVER.get_sql_session_mgr();
   if (OB_FAIL(arg.init(ctx, stmt))) {
-    LOG_WARN("fail to init kill_session arg", K(ret), K(arg), K(ctx), K(stmt));
   } else {
     // In seekdb single-node mode, always treat as direct mode
     bool direct_mode = true;
@@ -44,9 +43,7 @@ int ObKillExecutor::execute(ObExecContext &ctx, ObKillStmt &stmt)
       if (OB_FAIL(kill_session(arg, session_mgr))) {
         if (OB_ENTRY_NOT_EXIST == ret) {//doesn't find sessid in current server
           if (OB_FAIL(get_remote_session_location(arg, ctx, addr))) {
-            LOG_WARN("fail to get remote session location", K(ret), K(arg), K(ctx), K(addr));
           } else if (OB_FAIL(kill_remote_session(ctx, addr, arg))) {
-            LOG_WARN("fail to kill remote session", K(ret), K(ctx), K(addr), K(arg));
           } else { /*do nothing*/}
         } else {
           LOG_WARN("fail to kill session", K(ret), K(arg));
@@ -57,7 +54,6 @@ int ObKillExecutor::execute(ObExecContext &ctx, ObKillStmt &stmt)
       if (arg.is_query_ == true) {
         // kill query proxy cs id scene
         if (OB_FAIL(kill_query_cs_id(arg, session_mgr, ctx))) {
-          LOG_WARN("Fail to kill query cs id", K(ret), K(arg));
         }
       } else {
         if (OB_FAIL(kill_client_session(arg, session_mgr, ctx))) {
@@ -133,7 +129,6 @@ int ObKillExecutor::kill_query_cs_id(const ObKillSessionArg &arg, ObSQLSessionMg
     }
   }
   if (OB_FAIL(ret)) {
-    LOG_WARN("Fail to Kill Query Client Session", K(ret), K(client_sess_id));
   } else {
     LOG_INFO("Succ to Kill Query Client Session", K(ret), K(client_sess_id));
   }
@@ -182,7 +177,6 @@ int ObKillExecutor::kill_client_session(const ObKillSessionArg &arg, ObSQLSessio
     // 2. If not, return OB_SUCCESS.
     local_session_create_time = sess_info->get_client_create_time();
     if (OB_FAIL(sess_mgr.kill_session(*sess_info))) {
-        LOG_WARN("fail to kill session", K(ret), K(arg));
     } else {
       if (client_sess_id == curr_sess_info->get_client_sid()) {
         ret = OB_ERR_KILL_CLIENT_SESSION;
@@ -199,9 +193,6 @@ int ObKillExecutor::kill_client_session(const ObKillSessionArg &arg, ObSQLSessio
     // If there is no link between proxy and server,
     // unknown client session id will be reported.
     if (OB_FAIL(get_remote_session_location(arg, ctx, cs_addr, true))) {
-      LOG_WARN("fail to get client session location, unknown client sessid",
-              K(ret), K(arg), K(ctx), K(cs_addr));
-      // Obtain the client establishment time for map maintenance.
     } else if (cs_addr != GCTX.self_addr() &&
                OB_FAIL(get_client_session_create_time_and_auth(
                    arg, ctx, cs_addr, create_time))) {
@@ -249,7 +240,6 @@ int ObKillExecutor::kill_client_session(const ObKillSessionArg &arg, ObSQLSessio
       // If it is not completely successful, there is no need to record it, in order
       // to ensure that the recording time is valid.
       if (OB_FAIL(ret)) {
-        LOG_WARN("kill client session not all successful", K(ret), K(cs_arg));
       } else {
         if (NULL != sess_info) {
           // The mark maintained here is used to trigger a link
@@ -299,8 +289,6 @@ int ObKillExecutor::get_client_session_create_time_and_auth(const ObKillSessionA
       if (NULL != session) { GCTX.session_mgr_->revert_session(session); }
       return ret;
     }))) {
-      // rpc fail not kill client session.
-      LOG_WARN("fail to rpc", K(ret));
   } else if (cs_result.is_have_kill_auth() == false) {
     ret = OB_ERR_KILL_DENIED;
     LOG_WARN("no permissions for kill", K(ret), K(arg.sess_id_));
@@ -325,7 +313,6 @@ int ObKillSession::kill_session(const ObKillSessionArg &arg, ObSQLSessionMgr &se
   uint32_t sess_id = arg.sess_id_;
   ObSessionGetterGuard guard(sess_mgr, sess_id);
   if (OB_FAIL(guard.get_session(sess_info))) {
-    LOG_WARN("fail to get session", K(ret), K(sess_id));
   } else if (OB_ISNULL(sess_info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session info is NULL", K(ret), K(arg));
@@ -338,11 +325,9 @@ int ObKillSession::kill_session(const ObKillSessionArg &arg, ObSQLSessionMgr &se
   } else {
     if (arg.is_query_) {
       if (OB_FAIL(sess_mgr.kill_query(*sess_info))) {
-        LOG_WARN("fail to kill query", K(ret), K(arg));
       }
     } else {
       if (OB_FAIL(sess_mgr.kill_session(*sess_info))) {
-        LOG_WARN("fail to kill session", K(ret), K(arg));
       }
     }
   }
@@ -368,9 +353,7 @@ int ObKillExecutor::get_remote_session_location(const ObKillSessionArg &arg,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("sql proxy or session from exec context is NULL", K(ret), K(sql_proxy), K(cur_sess));
     } else if (OB_FAIL(generate_read_sql(arg.sess_id_, read_sql))) {
-      LOG_WARN("fail to generate sql", K(ret), K(read_sql), K(*cur_sess), K(arg));
     } else if (OB_FAIL(sql_proxy->read(res, read_sql.ptr()))) {
-      LOG_WARN("fail to read by sql proxy", K(ret), K(read_sql));
     } else if (OB_ISNULL(result_set = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("result set is NULL", K(ret), K(read_sql));
@@ -382,9 +365,7 @@ int ObKillExecutor::get_remote_session_location(const ObKillSessionArg &arg,
       if (OB_LIKELY(OB_ITER_END == ret)) {
         read_sql.reuse();
         if (OB_FAIL(generate_read_sql_from_session_info(arg.sess_id_, read_sql))) {
-          LOG_WARN("fail to generate sql", K(ret), K(read_sql));
         } else if (OB_FAIL(sql_proxy->read(res, read_sql.ptr()))) {
-          LOG_WARN("fail to read by sql proxy", K(ret), K(read_sql));
         } else if (OB_ISNULL(result_set = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("result set is NULL", K(ret), K(read_sql));
@@ -424,7 +405,6 @@ int ObKillExecutor::generate_read_sql(uint32_t sess_id, ObSqlString &sql)
   const char *sql_str = "select svr_ip, svr_port from oceanbase.__all_virtual_processlist, oceanbase.__all_virtual_server_stat \
               where id = %u";
   if (OB_FAIL(sql.append_fmt(sql_str, sess_id))) {
-    LOG_WARN("fail to append sql", K(ret), K(sess_id));
   }
   return ret;
 }
@@ -435,7 +415,6 @@ int ObKillExecutor::generate_read_sql_from_session_info(uint32_t sess_id, ObSqlS
   const char *sql_str = "select svr_ip, svr_port from oceanbase.__all_virtual_session_info, oceanbase.__all_virtual_server_stat  \
               where id = %u";
   if (OB_FAIL(sql.append_fmt(sql_str, sess_id))) {
-    LOG_WARN("fail to append sql", K(ret), K(sess_id));
   }
   return ret;
 }
@@ -464,7 +443,6 @@ int ObKillExecutor::kill_remote_session(ObExecContext &ctx, const ObAddr &addr, 
       }
       return ret;
     }))) {
-      LOG_WARN("fail to kill remote session", K(ret), K(addr), K(timeout), K(arg));
     } else {/*do nothing*/}
   }
   return ret;

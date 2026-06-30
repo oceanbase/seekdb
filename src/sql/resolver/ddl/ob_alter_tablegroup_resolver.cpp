@@ -83,12 +83,10 @@ int ObAlterTablegroupResolver::resolve(const ParseNode &parser_tree)
           if (OB_FAIL(resolve_table_relation_node(relation_node,
                                                   table_name,
                                                   database_name))) {
-            LOG_WARN("failed to resolve table name", K(ret), K(table_item));
           } else {
             table_item.table_name_ = table_name;
             table_item.database_name_ = database_name;
             if (OB_FAIL(alter_tablegroup_stmt->add_table_item(table_item))) {
-              LOG_WARN("failed to add table item!", K(ret), K(table_item));
             }
           }
         } else {
@@ -98,7 +96,6 @@ int ObAlterTablegroupResolver::resolve(const ParseNode &parser_tree)
       } //end for
     } else if (T_ALTER_TABLEGROUP_ACTION_LIST == node->children_[1]->type_) {
       if (OB_FAIL(resolve_tablegroup_option(alter_tablegroup_stmt, node->children_[1]))) {
-        LOG_WARN("fail to resolve tablegroup option", K(ret));
       } else {
         alter_tablegroup_stmt->set_alter_option_set(get_alter_option_bitset());
       }

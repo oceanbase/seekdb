@@ -33,33 +33,27 @@ static int plugin_init(ObPluginParamPtr plugin)
 {
   int ret = OBP_SUCCESS;
   if (OB_FAIL(ObFTParsePluginData::init_global())) {
-    LOG_WARN("failed to init global ftparse plugin data", K(ret));
   } else if (OB_FAIL(ObPluginHelper::register_builtin_ftparser<ObWhiteSpaceFTParserDesc>(
                  plugin,
                  ObFTSLiteral::PARSER_NAME_SPACE,
                  "This is a default whitespace parser plugin."))) {
-    LOG_WARN("failed to init whitespace builtin ftparser", K(ret));
   } else if (OB_FAIL(ObPluginHelper::register_builtin_ftparser<ObNgramFTParserDesc>(
                  plugin,
                  ObFTSLiteral::PARSER_NAME_NGRAM,
                  "This is a ngram fulltext parser plugin."))) {
-    LOG_WARN("failed to init ngram builtin ftparser", K(ret));
   } else if (OB_FAIL(ObPluginHelper::register_builtin_ftparser<ObBasicEnglishFTParserDesc>(
                  plugin,
                  ObFTSLiteral::PARSER_NAME_BENG,
                  "This is a basic english parser plugin."))) {
-    LOG_WARN("failed to init beng builtin ftparser", K(ret));
   } else if (OB_FAIL(ObPluginHelper::register_builtin_ftparser<ObNgram2FTParserDesc>(
                  plugin,
                  ObFTSLiteral::PARSER_NAME_NGRAM2,
                  "This is a range ngram fulltext parser plugin."
                  "It is used to parse fulltext with range ngram."))) {
-    LOG_WARN("failed to init range ngram builtin ftparser", K(ret));
   } else if (OB_FAIL(ObPluginHelper::register_builtin_ftparser<ObIKFTParserDesc>(
                  plugin,
                  ObFTSLiteral::PARSER_NAME_IK,
                  "This is an ik parser plugin."))) {
-    LOG_WARN("failed to init ik builtin ftparser", K(ret));
   }
   return ret;
 }

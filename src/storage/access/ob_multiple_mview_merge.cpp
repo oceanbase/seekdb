@@ -33,14 +33,11 @@ int ObBaseTableAccessInfo::construct_access_ctx(
   trans_version_range.base_version_ = 0;
   share::SCN tmp_scn;
   if (OB_FAIL(tmp_scn.convert_for_tx(trans_version_range.snapshot_version_))) {
-    LOG_WARN("Failed to convert scn", K(ret), K(trans_version_range));
   } else if (FALSE_IT(store_ctx_.reset())) {
   } else if (OB_FAIL(store_ctx_.init_for_read(ctx.ls_id_, ctx.tablet_id_, INT64_MAX, -1, tmp_scn))) {
-    LOG_WARN("Failed to init store ctx", K(ret), K(ctx));
   } else if (FALSE_IT(store_ctx_.mvcc_acc_ctx_.tx_desc_ = ctx.store_ctx_->mvcc_acc_ctx_.tx_desc_)) {
   } else if (FALSE_IT(access_ctx_.reuse())) {
   } else if (OB_FAIL(access_ctx_.init_for_mview(range_allocator, ctx, store_ctx_))) {
-    LOG_WARN("Failed to init access ctx", K(ret), K(ctx));
   }
   return ret;
 }
@@ -141,7 +138,6 @@ int ObMviewIncrMerge::get_incr_row(
         LOG_WARN("Failed to get merged row", K(ret));
       }
     } else if (OB_FAIL(check_version_fit(param, context, row, version_fit))) {
-      LOG_WARN("Failed to check version fit", K(ret));
     } else if (!version_fit) {
     } else if (FALSE_IT(scan_old_row_ = is_mview_scan_old_row(scan_type) || (is_mview_scan_final_row(scan_type) && row.row_flag_.is_delete()))) {
     } else if (version_include_base && scan_old_row_) {
@@ -154,9 +150,7 @@ int ObMviewIncrMerge::get_incr_row(
       }
     } else {
       if (OB_FAIL(base_rowkey_.assign(row.storage_datums_, param.iter_param_.get_schema_rowkey_count()))) {
-        LOG_WARN("Failed to assign incr rowkey", K(ret));
       } else if (OB_FAIL(open_base_data_merge(param, context, get_table_param, base_rowkey_))) {
-        LOG_WARN("Failed to open base data merge", K(ret));
       } else {
         blocksstable::ObDatumRow &base_row = base_data_merge_->get_unprojected_row();
         base_row.count_ = 0;
@@ -175,7 +169,6 @@ int ObMviewIncrMerge::get_incr_row(
           LOG_DEBUG("[MVIEW QUERY]: get base row", K(ret), K(base_row), K(version_include_base), K_(scan_old_row));
         }
         if (FAILEDx(generate_output_row(param, merge.get_nop_pos(), base_row, row))) {
-          LOG_WARN("Failed to generate row", K(ret));
         } else {
           read_row = row.row_flag_.is_exist_without_delete();
         }
@@ -183,7 +176,6 @@ int ObMviewIncrMerge::get_incr_row(
     }
   }
   if (FAILEDx(set_old_new_row_flag(param, context, row))) {
-    LOG_WARN("Failed to set old new row flag", K(ret));
   } 
   LOG_DEBUG("[MVIEW QUERY]: get next row", K(ret), K(row), K(version_include_base), K_(scan_old_row));
   return ret;
@@ -245,7 +237,6 @@ int ObMviewIncrMerge::generate_output_row(
       final_result = true;
     } else if (has_no_nop_values(param, nop_pos)) {
     } else if (OB_FAIL(ObRowFuse::fuse_row(base_row, row, nop_pos, final_result))) {
-      LOG_WARN("Failed to fuse incr row", K(ret), K(base_row), K(row));
     }
   } else {
     row.row_flag_.set_flag(ObDmlFlag::DF_NOT_EXIST);
@@ -271,9 +262,7 @@ int ObMviewIncrMerge::open_base_data_merge(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("Failed to alloc base data merge", K(ret));
     } else if (OB_FAIL(base_access_info_->construct_access_ctx(&rowkey_allocator_, context))) {
-      LOG_WARN("Failed to cons version range and ctx", K(ret));
     } else if (OB_FAIL(base_data_merge_->init(param, base_access_info_->access_ctx_, get_table_param))) {
-      LOG_WARN("Failed to init base data merge", K(ret));
     } else if (OB_ISNULL(col_descs_ = param.iter_param_.get_out_col_descs())) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(WARN, "Unexpected null out cols", K(ret));
@@ -286,9 +275,7 @@ int ObMviewIncrMerge::open_base_data_merge(
   } else if (is_table_store_refreshed_) {
     LOG_INFO("table store refreshed", K(is_table_store_refreshed_), K(param.iter_param_.tablet_id_));
     if (OB_FAIL(base_access_info_->construct_access_ctx(&rowkey_allocator_, context))) {
-      LOG_WARN("Failed to cons version range and ctx", K(ret));
     } else if (OB_FAIL(base_data_merge_->switch_param(param, base_access_info_->access_ctx_, get_table_param))) {
-      LOG_WARN("Failed to switch param", K(ret));
     } else {
       is_table_store_refreshed_ = false;
     }
@@ -297,9 +284,7 @@ int ObMviewIncrMerge::open_base_data_merge(
   } else if (base_data_merge_->is_empty()) {
     LOG_TRACE("[MVIEW QUERY]: base data is empty", K(ret));
   } else if (OB_FAIL(base_rowkey_.prepare_memtable_readable(*col_descs_, rowkey_allocator_))) {
-    LOG_WARN("Failed to prepare memtable rowkey", K(ret));
   } else if (OB_FAIL(base_data_merge_->open(rowkey))) {
-    LOG_WARN("Failed to open base data merge", K(ret));
   }
   return ret;
 }
@@ -396,7 +381,6 @@ int ObMviewMergeWrapper::alloc_mview_merge(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Failed to alloc mview merge wrapper", K(ret));
   } else if (OB_FAIL(merge_wrapper->get_mview_merge(param, context, get_table_param, table_scan_range, mview_merge))) {
-    LOG_WARN("Failed to get mview merge", K(ret));
   }
   return ret;
 }
@@ -413,7 +397,6 @@ int ObMviewMergeWrapper::get_mview_merge(
   ObMviewMerge *tmp_merge = nullptr;
   version_merge = nullptr;
   if (OB_FAIL(table_scan_range.get_query_iter_type(merge_type))) {
-    LOG_WARN("Failed to get query iter type", K(ret));
   } else if (nullptr == (tmp_merge = merges_[merge_type])) {
     switch (merge_type) {
       case T_SINGLE_GET: {
@@ -443,12 +426,10 @@ int ObMviewMergeWrapper::get_mview_merge(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("Failed to alloc merge", K(ret));
     } else if (OB_FAIL(tmp_merge->init(param, context, get_table_param))) {
-      LOG_WARN("Failed to init merge", K(ret));
     }
     LOG_DEBUG("[MVIEW QUERY]: get version range merge", K(ret), K(merge_type), KP(tmp_merge));
   }
   if (FAILEDx(tmp_merge->open(table_scan_range))) {
-    LOG_WARN("Failed to open mview merge", K(ret));
   } else {
     merges_[merge_type] = tmp_merge;
     version_merge = tmp_merge;

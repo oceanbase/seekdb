@@ -67,7 +67,6 @@ int ObUnit::assign(const ObUnit& that)
   if (this == &that) {
     //skip
   } else if (OB_FAIL(zone_.assign(that.zone_))) {
-    LOG_WARN("zone_ assign failed", KR(ret), K(that.zone_));
   } else {
     unit_id_ = that.unit_id_;
     resource_pool_id_ = that.resource_pool_id_;
@@ -138,7 +137,6 @@ int ObUnitInfo::assign(const ObUnitInfo &other)
   unit_ = other.unit_;
   config_ = other.config_;
   if (OB_FAIL(copy_assign(pool_, other.pool_))) {
-    SHARE_LOG(WARN, "failed to assign pool_", K(ret));
   }
   return ret;
 }
@@ -161,7 +159,6 @@ int ObTenantServers::assign(const ObTenantServers &other)
   int ret = OB_SUCCESS;
   if (this != &other) {
     if (OB_FAIL(servers_.assign(other.servers_))) {
-      LOG_WARN("assign failed", KR(ret), "servers", other.servers_);
     } else {
       renew_time_ = other.renew_time_;
     }
@@ -191,10 +188,8 @@ int ObTenantServers::init_or_insert_server(
   // insert_server will ensure that 
   // there are no duplicates in the servers of tenant_servers
   if (FAILEDx(insert_server_(server))) {
-    LOG_WARN("failed to insert server to tenant_servers", KR(ret), K(server));
   } else if (migrate_server.is_valid()) {
     if (OB_FAIL(insert_server_(migrate_server))) {
-      LOG_WARN("failed to insert migrate_server to tenant_servers", KR(ret), K(migrate_server));
     }
   }
   return ret;
@@ -222,7 +217,6 @@ int ObTenantServers::insert_server_(const common::ObAddr &server)
   } else if (has_exist_in_array(servers_, server)) {
     // server exist
   } else if (OB_FAIL(servers_.push_back(server))) {
-    LOG_WARN("push_back failed", KR(ret), K(server));
   }
   return ret;
 }

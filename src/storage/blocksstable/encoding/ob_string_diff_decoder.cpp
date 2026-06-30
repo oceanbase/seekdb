@@ -60,14 +60,10 @@ int ObStringDiffDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDatum &
         if (OB_FAIL(ObBitStream::get(reinterpret_cast<const unsigned char *>(col_data),
             row_id * ctx.micro_block_header_->extend_value_bit_,
             ctx.micro_block_header_->extend_value_bit_, val))) {
-          LOG_WARN("get extend value failed",
-              K(ret), K(fix_bs), K_(header), K(ctx));
         }
       } else {
         if (OB_FAIL(bs.get(ctx.col_header_->extend_value_index_,
                 ctx.micro_block_header_->extend_value_bit_, val))) {
-          LOG_WARN("get extend value failed",
-              K(ret), K(bs), K_(header), K(ctx));
         }
       }
     }
@@ -85,8 +81,6 @@ int ObStringDiffDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDatum &
     } else {
       if (OB_FAIL(ObRawDecoder::locate_cell_data(cell_data, cell_len, data, len,
               *ctx.micro_block_header_, *ctx.col_header_, *header_))) {
-        LOG_WARN("locate cell data failed", K(ret), K(len),
-            K(ctx), "header", *header_);
       }
     }
 
@@ -163,11 +157,9 @@ int ObStringDiffDecoder::batch_decode(
         data_offset = (data_offset + CHAR_BIT - 1) / CHAR_BIT;
         if (OB_FAIL(set_null_datums_from_fixed_column(
             ctx, row_ids, row_cap, col_data, datums))) {
-          LOG_WARN("Failed to set null datums from fixed data", K(ret), K(ctx));
         }
       } else if (OB_FAIL(set_null_datums_from_var_column(
           ctx, row_index, row_ids, row_cap, datums))) {
-        LOG_WARN("Failed to set null datums from var data", K(ret), K(ctx));
       }
     }
 
@@ -228,10 +220,8 @@ int ObStringDiffDecoder::batch_decode(
         if (ctx.has_extend_value() && datums[i].is_null()) {
           // Do nothing
         } else if (OB_FAIL(locate_row_data(ctx, row_index, row_id, row_data, row_len))) {
-          LOG_WARN("Failed to read data offset from row index", K(ret), KP(row_index));
         } else if (OB_FAIL(ObRawDecoder::locate_cell_data(cell_data, cell_len, row_data, row_len,
             *ctx.micro_block_header_, *ctx.col_header_, *header_))) {
-          LOG_WARN("Failed to locate cell data", K(ret), K(ctx), K(cell_len));
         } else {
           if (header_->is_hex_packing()) {
             ObHexStringUnpacker unpacker(header_->hex_char_array(),
@@ -300,7 +290,6 @@ int ObStringDiffDecoder::decode_vector(
       }
       }
     } else if (OB_FAIL(batch_locate_var_len_row(decoder_ctx, row_index, vector_ctx, has_null))) {
-      LOG_WARN("Failed to batch locate variable length row", K(ret), K(decoder_ctx), K(vector_ctx));
     } else {
       if (has_null) {
         ret = ObIColumnDecoder::batch_locate_cell_data<ObStringDiffHeader, true>(decoder_ctx, *header_,
@@ -310,7 +299,6 @@ int ObStringDiffDecoder::decode_vector(
           vector_ctx.ptr_arr_, vector_ctx.len_arr_, vector_ctx.row_ids_, vector_ctx.row_cap_);
       }
       if (OB_FAIL(ret)) {
-        LOG_WARN("failed to locate cell datas", K(ret));
       } else {
         switch (vector_ctx.get_format()) {
         case VEC_DISCRETE: {
@@ -334,7 +322,6 @@ int ObStringDiffDecoder::decode_vector(
     }
 
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to decode string diff data to vector", K(ret), K(decoder_ctx), K(vector_ctx));
     }
     #undef FILL_VECTOR_FUNC_BY_HEX
     #undef FILL_VECTOR_FUNC

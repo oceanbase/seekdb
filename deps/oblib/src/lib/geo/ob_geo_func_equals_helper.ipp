@@ -161,9 +161,7 @@ private:
       bool is_g1_empty = false;
       bool is_g2_empty = false;
       if (OB_FAIL(ObGeoTypeUtil::check_empty(const_cast<ObGeometry *>(g1), is_g1_empty))) {
-        LOG_WARN("fail to check is geometry empty", K(ret));
       } else if (OB_FAIL(ObGeoTypeUtil::check_empty(const_cast<ObGeometry *>(g2), is_g2_empty))) {
-        LOG_WARN("fail to check is geometry empty", K(ret));
       } else if (is_g1_empty || is_g2_empty) {
         result = is_g1_empty && is_g2_empty;
       } else {
@@ -172,7 +170,6 @@ private:
         typename GcTreeType::sub_mp_type *mpy1 = NULL;
         ObGeometry *geo1 = const_cast<ObGeometry *>(reinterpret_cast<const ObGeometry *>(g1));
         if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<GcTreeType>(context, geo1, mpt1, mls1, mpy1))) {
-          LOG_WARN("failed to prepare gc", K(ret));
         } else if (OB_ISNULL(mpt1) || OB_ISNULL(mls1) || OB_ISNULL(mpy1)) {
           ret = OB_ERR_GIS_INVALID_DATA;
           LOG_WARN("unexpected null geometry collection split", K(ret));
@@ -183,7 +180,6 @@ private:
           typename GcTreeType::sub_mp_type *mpy2 = NULL;
           ObGeometry *geo2 = const_cast<ObGeometry *>(reinterpret_cast<const ObGeometry *>(g2));
           if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<GcTreeType>(context, geo2, mpt2, mls2, mpy2))) {
-            LOG_WARN("failed to prepare gc", K(ret));
           } else if (OB_ISNULL(mpt2) || OB_ISNULL(mls2) || OB_ISNULL(mpt2)) {
             ret = OB_ERR_GIS_INVALID_DATA;
             LOG_WARN("unexpected null geometry collection split", K(ret));
@@ -224,7 +220,6 @@ private:
                 ObGeometry *mpt_bin = NULL;
                 if (OB_FAIL(ObGeoTypeUtil::tree_to_bin(
                         *context.get_allocator(), mpt1, mpt_bin, context.get_srs()))) {
-                  LOG_WARN("failed to convert geo tree to binary", K(ret));
                 } else {
                   ret = wkb_fn(mpt_bin, g2, context, result);
                 }
@@ -239,7 +234,6 @@ private:
                 ObGeometry *mls_bin = NULL;
                 if (OB_FAIL(ObGeoTypeUtil::tree_to_bin(
                         *context.get_allocator(), mls1, mls_bin, context.get_srs()))) {
-                  LOG_WARN("failed to convert geo tree to binary", K(ret));
                 } else {
                   ret = wkb_fn(mls_bin, g2, context, result);
                 }
@@ -254,7 +248,6 @@ private:
                 ObGeometry *mpy_bin = NULL;
                 if (OB_FAIL(ObGeoTypeUtil::tree_to_bin(
                         *context.get_allocator(), mpy1, mpy_bin, context.get_srs()))) {
-                  LOG_WARN("failed to convert geo tree to binary", K(ret));
                 } else {
                   ret = wkb_fn(mpy_bin, g2, context, result);
                 }

@@ -31,7 +31,6 @@ int BlockGCTimerTask::init(PalfEnvImpl *palf_env_impl)
   if (NULL == palf_env_impl) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(TG_CREATE_TENANT(tg_id, tg_id_))) {
-    PALF_LOG(ERROR, "BlockGCTimerTask create failed", K(ret));
   } else {
     palf_env_impl_ = palf_env_impl;
     PALF_LOG(INFO, "BlockGCTimerTask init success", KPC(palf_env_impl), K(tg_id_), K(tg_id));
@@ -46,9 +45,7 @@ int BlockGCTimerTask::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(TG_START(tg_id_))) {
-    PALF_LOG(WARN, "BlockGCTimerTask TG_START failed", K(ret));
   } else if (OB_FAIL(TG_SCHEDULE(tg_id_, *this, BLOCK_GC_TIMER_INTERVAL_MS, true))) {
-    PALF_LOG(WARN, "BlockGCTimerTask TG_SCHEDULE failed", K(ret));
   } else {
     PALF_LOG(INFO, "BlockGCTimerTask start success", K(tg_id_), KPC(palf_env_impl_));
   }
@@ -91,7 +88,6 @@ void BlockGCTimerTask::runTimerTask()
   if (NULL == palf_env_impl_) {
     PALF_LOG(ERROR, "palf_env_impl_ is NULL, unexpected error");
   } else if (OB_FAIL(palf_env_impl_->try_recycle_blocks())) {
-    PALF_LOG(WARN, "PalfEnvImpl try_recycle_blocks failed");
   } else {
     int64_t cost_time_us = ObTimeUtility::current_time() - start_time_us;
     if (cost_time_us >= 1 * 1000) {

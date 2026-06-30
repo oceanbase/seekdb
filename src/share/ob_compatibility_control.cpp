@@ -85,30 +85,25 @@ int ObICompatInfo::print_version_range(common::ObString &range_str, ObIAllocator
   for (; OB_SUCC(ret) && i + 1 < version_num; i += 2) {
     if (i != 0) {
       if (OB_FAIL(str.append(", "))) {
-        LOG_WARN("failed to append", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(str.append("["))) {
-      LOG_WARN("failed to append", K(ret));
     } else if (OB_UNLIKELY(OB_INVALID_INDEX == (len = ObClusterVersion::print_version_str(
         buf, OB_CLUSTER_VERSION_LENGTH, versions[i])))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to print version", KR(ret), K(versions[i]));
     } else if (OB_FAIL(str.append(buf, len))) {
-      LOG_WARN("failed to append start version", K(ret), K(versions[i]));
     } else if (OB_UNLIKELY(OB_INVALID_INDEX == (len = ObClusterVersion::print_version_str(
         buf, OB_CLUSTER_VERSION_LENGTH, versions[i + 1])))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to print version", KR(ret), K(versions[i]));
     } else if (OB_FAIL(str.append_fmt(", %.*s)", static_cast<int>(len), buf))) {
-      LOG_WARN("failed to append end version", K(ret), K(versions[i]));
     }
   }
   if (OB_SUCC(ret)) {
     if (i != 0) {
       if (OB_FAIL(str.append(", "))) {
-        LOG_WARN("failed to append", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -117,9 +112,7 @@ int ObICompatInfo::print_version_range(common::ObString &range_str, ObIAllocator
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to print version", KR(ret), K(versions[i]));
     } else if (OB_FAIL(str.append_fmt("[%.*s, )", static_cast<int>(len), buf))) {
-      LOG_WARN("failed to append last version", K(ret), K(versions[i]));
     } else if (OB_FAIL(ob_write_string(allocator, str.string(), range_str))) {
-      LOG_WARN("failed to deep copy str", K(ret));
     }
   }
   return ret;
@@ -129,7 +122,6 @@ int ObCompatControl::get_compat_version(const ObString &str, uint64_t &version)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObClusterVersion::get_version(str, version))) {
-    LOG_WARN("failed to get version", K(ret), K(str));
   }
   return ret;
 }
@@ -168,9 +160,7 @@ int ObCompatControl::check_compat_version(const uint64_t compat_version)
   uint64_t data_version = 0;
   uint64_t min_data_version = 0;
   if (OB_FAIL(get_data_version_by_cluster_version_(compat_version, data_version))) {
-    LOG_WARN("failed to get data version", K(ret));
   } else if (OB_FAIL(GET_MIN_DATA_VERSION(min_data_version))) {
-    LOG_WARN("failed to get min data version", K(ret));
   } else if (OB_UNLIKELY(data_version > min_data_version)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid data version", K(ret), K(compat_version), K(min_data_version));
@@ -187,7 +177,6 @@ int ObCompatControl::get_version_str(uint64_t version, ObString &str, ObIAllocat
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to print version", KR(ret), K(version));
   } else if (OB_FAIL(ob_write_string(allocator, ObString(len, buf), str))) {
-    LOG_WARN("failed to write version str", K(ret), K(version));
   }
   return ret;
 }

@@ -31,9 +31,7 @@ namespace common
       ret = OB_INVALID_ARGUMENT;
       OB_LOG(WARN, "invalid input", KP(buf), K(ret));
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int2(buf, len, type, pos))){
-      OB_LOG(WARN, "failed to store type", K(type), KP(buf), K(len));
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int4(buf, len, v_len, pos))) {
-      OB_LOG(WARN, "failed to store val", K(ret), KP(buf));
     } else {
       // do nothing
     }
@@ -53,9 +51,7 @@ namespace common
     } else if (len < pos + DBL_SIZE + 6) {
       ret = OB_SIZE_OVERFLOW;
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int2(buf, len, type, pos))){
-      OB_LOG(WARN, "failed to store type", K(type), KP(buf), K(len));
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int4(buf, len, v_len, pos))) {
-      OB_LOG(WARN, "failed to store val", K(ret), KP(buf));
     } else {
       MEMCPY(buf + pos, &val, DBL_SIZE);
       pos += DBL_SIZE;
@@ -72,9 +68,7 @@ namespace common
     } else if (len < pos + str_len + 6) {
         ret = OB_SIZE_OVERFLOW;
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int2(buf, len, type, pos))) {
-      OB_LOG(WARN, "failed to store type", K(type), KP(buf), K(len));
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int4(buf, len, str_len, pos))) {
-      OB_LOG(WARN, "failed to store val", K(ret), KP(buf));
     } else {
       MEMCPY(buf+pos, str, str_len);
       pos += str_len;
@@ -90,11 +84,8 @@ namespace common
       ret = OB_INVALID_ARGUMENT;
       OB_LOG(WARN, "invalid argument", KP(buf), K(ret));
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int2(buf, len, type, pos))){
-      OB_LOG(WARN, "failed to store type", K(v), KP(buf), K(len));
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int4(buf, len, v_len, pos))) {
-      OB_LOG(WARN, "failed to store val", K(ret), KP(buf));
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int1(buf, len, v, pos))) {
-      OB_LOG(WARN, "failed to store val", K(ret), KP(buf));
     } else {
       // do nothing
     }
@@ -114,11 +105,8 @@ namespace common
       ret = OB_INVALID_ARGUMENT;
       OB_LOG(WARN, "invalid argument", KP(buf), K(ret));
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int2(buf, len, type, pos))) {
-      OB_LOG(WARN, "failed to store type", K(v), KP(buf), K(len));
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int4(buf, len, v_len, pos))) {
-      OB_LOG(WARN, "failed to store val", K(ret), KP(buf));
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int8(buf, len, v, pos))) {
-      OB_LOG(WARN, "failed to store val", K(ret), KP(buf));
     } else {
       // do nothing
     }

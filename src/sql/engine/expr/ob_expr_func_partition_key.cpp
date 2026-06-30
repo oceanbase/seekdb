@@ -60,7 +60,6 @@ int ObExprFuncPartKey::calc_partition_key(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("eval param value failed", K(ret));
   } else {
     uint64_t hash_value = 0;
     for (int i = 0; i < expr.arg_cnt_ && OB_SUCC(ret); i++) {
@@ -70,7 +69,6 @@ int ObExprFuncPartKey::calc_partition_key(const ObExpr &expr,
            wide::PartitionHash<ObMurmurHash, ObDatum>::calculate :
            expr.args_[i]->basic_funcs_->murmur_hash_);
       if (OB_FAIL(hash_func(param_datum, hash_value, hash_value))) {
-        LOG_WARN("hash value failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -96,7 +94,6 @@ int ObExprFuncPartKey::calc_partition_key_batch(BATCH_EVAL_FUNC_ARG_DECL)
         wide::PartitionHash<ObMurmurHash, ObDatum>::hash_batch :
         e->basic_funcs_->murmur_hash_batch_;
     if (OB_FAIL(e->eval_batch(ctx, skip, size))) {
-      LOG_WARN("evaluate batch failed", K(ret), K(*e));
     } else {
       const bool is_batch_seed = (i > 0);
       batch_hash_func(hash_values,
@@ -139,7 +136,6 @@ int ObExprFuncPartKey::calc_partition_key_vector(const ObExpr &expr,
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
     if (OB_FAIL(expr.args_[i]->eval_vector(ctx, skip, bound))) {
-      LOG_WARN("failed to eval batch datum", K(ret));
     } else {
       ObIVector *arg_vec = expr.args_[i]->get_vector(ctx);
       ret = arg_vec->murmur_hash(*expr.args_[i], batch_hash_vals, skip, bound,

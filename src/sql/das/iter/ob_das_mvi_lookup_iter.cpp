@@ -54,7 +54,6 @@ int ObDASMVILookupIter::inner_get_next_row()
       }
       case DO_LOOKUP: {
         if (OB_FAIL(do_index_lookup())) {
-          LOG_WARN("failed to do index lookup", K(ret));
         } else {
           state_ = LookupState::OUTPUT_ROWS;
         }
@@ -66,7 +65,6 @@ int ObDASMVILookupIter::inner_get_next_row()
         } else {
           data_table_iter_->clear_evaluated_flag();
           if (OB_FAIL(data_table_iter_->get_next_row())) {
-            LOG_WARN("failed to get next row from data table", K(ret));  
           }
         }
 
@@ -115,14 +113,11 @@ int ObDASMVILookupIter::save_rowkey()
       obj_ptr = new(obj_ptr) ObObj;
 
       if (OB_FAIL(doc_id_datum.to_obj(*obj_ptr, doc_id_expr->obj_meta_, doc_id_expr->obj_datum_map_))) {
-        LOG_WARN("failed to convert datum to obj", K(ret));
       } else {
         ObRowkey aux_table_rowkey(obj_ptr, 1);
         ObNewRange lookup_range;
         if (OB_FAIL(lookup_range.build_range(lookup_ctdef_->ref_table_id_, aux_table_rowkey))) {
-          LOG_WARN("failed to build lookup range", K(ret), K(lookup_ctdef_->ref_table_id_), K(aux_table_rowkey));
         } else if (OB_FAIL(scan_param.key_ranges_.push_back(lookup_range))) {
-          LOG_WARN("failed to push back lookup range", K(ret));
         } else {
           scan_param.is_get_ = true;
         }
@@ -137,7 +132,6 @@ int ObDASMVILookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDASMVILookupIter::inner_get_next_row())) {
-    LOG_WARN("ObDASMVILookupIter failed to get next row", K(ret));
   } else {
     count = 1;
   }
@@ -151,9 +145,7 @@ int ObDASMVILookupIter::do_index_lookup()
   if (OB_NOT_NULL(data_table_iter_) && OB_FAIL(data_table_iter_->reuse())) {
     LOG_WARN("failed to reuse data table iter");
   } else if (OB_FAIL(save_rowkey())) {
-    LOG_WARN("failed to save rowkey", K(ret));
   } else if (OB_FAIL(ObDASLocalLookupIter::do_index_lookup())) {
-    LOG_WARN("failed to do index lookup", K(ret));
   }
 
   return ret;

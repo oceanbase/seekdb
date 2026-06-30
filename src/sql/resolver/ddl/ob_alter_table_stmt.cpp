@@ -56,7 +56,6 @@ int ObAlterTableStmt::add_column(const share::schema::AlterColumnSchema &column_
   share::schema::AlterTableSchema &alter_table_schema =
       get_alter_table_arg().alter_table_schema_;
   if (OB_FAIL(alter_table_schema.add_alter_column(column_schema, true))){
-    SQL_RESV_LOG(WARN, "failed to add column schema to alter table schema", K(ret));
   }
   return ret;
 }
@@ -67,7 +66,6 @@ int ObAlterTableStmt::add_column_group(const ObColumnGroupSchema &column_group)
   share::schema::AlterTableSchema &alter_table_schema =
       get_alter_table_arg().alter_table_schema_;
   if (OB_FAIL(alter_table_schema.add_column_group(column_group))){
-    SQL_RESV_LOG(WARN, "failed to add column schema to alter table schema", K(ret), K(column_group), K(alter_table_schema));
   }
   return ret;
 }
@@ -79,7 +77,6 @@ int ObAlterTableStmt::add_index_arg(obcall::ObIndexArg *index_arg)
     ret = OB_INVALID_ARGUMENT;
     SQL_RESV_LOG(WARN, "index arg should not be null!", K(ret));
   } else if (OB_FAIL(alter_table_arg_.index_arg_list_.push_back(index_arg))) {
-    SQL_RESV_LOG(WARN, "failed to add index arg to alter table arg!", K(ret));
   }
   return ret;
 }
@@ -134,7 +131,6 @@ void ObAlterTableStmt::set_table_id(const uint64_t table_id)
 int ObAlterTableStmt::fill_session_vars(const ObBasicSessionInfo &session) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(alter_table_arg_.local_session_var_.load_session_vars(&session))) {
-    SQL_RESV_LOG(WARN, "load local session vars failed", K(ret));
   }
   return ret;
 }
@@ -143,7 +139,6 @@ int ObAlterTableStmt::set_exchange_partition_arg(const obcall::ObExchangePartiti
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(exchange_partition_arg_.assign(exchange_partition_arg))) {
-    SQL_RESV_LOG(WARN, "failed to assign", K(ret), K(exchange_partition_arg));
   }
   return ret;
 }

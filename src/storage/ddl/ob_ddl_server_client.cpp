@@ -46,25 +46,21 @@ int ObDDLServerClient::create_hidden_table(
 
   while (OB_SUCC(ret)) {
     if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_hidden_table(arg, res); }))) {
-      LOG_WARN("failed to create hidden table", KR(ret), K(arg));
     } else {
       break;
     }
     if (OB_FAIL(ret) && is_ddl_stmt_packet_retry_err(ret)) {
       ob_usleep(retry_interval);
-      if (OB_FAIL(THIS_WORKER.check_status())) { // overwrite ret
-        LOG_WARN("failed to check status", K(ret));
+      if (OB_FAIL(THIS_WORKER.check_status())) {
       }
     }
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(OB_DDL_HEART_BEAT_TASK_CONTAINER.set_register_task_id(res.task_id_))) {
-    LOG_WARN("failed to set register task id", K(ret), K(res));
   } 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(wait_task_reach_pending(res.task_id_, snapshot_version, data_format_version, *GCTX.sql_proxy_, res.is_no_logging_))) {
-      LOG_WARN("failed to wait table lock. remove register task id and abort redef table task.", K(ret), K(arg), K(res));
     }
 #ifdef ERRSIM
     if (OB_SUCC(ret)) {
@@ -79,7 +75,6 @@ int ObDDLServerClient::create_hidden_table(
       
       
       if (OB_TMP_FAIL(abort_redef_table(abort_redef_table_arg, &session))) {
-        LOG_WARN("failed to abort redef table", K(tmp_ret), K(abort_redef_table_arg));
       }
       // abort_redef_table() function last step must remove heart_beat task, so there is no need to call heart_beat_clear()
     }
@@ -109,11 +104,9 @@ int ObDDLServerClient::copy_table_dependents(
     while (OB_SUCC(ret)) {
       int tmp_ret = OB_SUCCESS;
       if (OB_FAIL(check_need_stop())) {
-        LOG_WARN("fail to basic check", K(ret));
       } else if (OB_FAIL(ObDDLExecutorUtil::handle_session_exception(session))) {
         LOG_WARN("fail to handle session exception", K(ret));
         if (OB_TMP_FAIL(ObDDLExecutorUtil::cancel_ddl_task())) {
-          LOG_WARN("cancel ddl task failed", K(tmp_ret));
         }
       } else if (OB_FAIL(GCTX.root_service_->copy_table_dependents(arg))) {
         LOG_WARN("copy table dependents failed", K(ret), K(arg));
@@ -157,7 +150,6 @@ int ObDDLServerClient::abort_redef_table(const obcall::ObAbortRedefTableArg &arg
     while (OB_SUCC(ret)) {
       int tmp_ret = OB_SUCCESS;
       if (OB_FAIL(check_need_stop())) {
-        LOG_WARN("fail to basic check", K(ret));
       } else if (OB_FAIL(GCTX.root_service_->abort_redef_table(arg))) {
         LOG_WARN("abort redef table failed", K(ret), K(arg));
         if (OB_ENTRY_NOT_EXIST == ret) {
@@ -200,7 +192,6 @@ int ObDDLServerClient::abort_redef_table(const obcall::ObAbortRedefTableArg &arg
     }
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(heart_beat_clear(arg.task_id_))) {
-      LOG_WARN("heart beat clear failed", K(tmp_ret), K(arg.task_id_));
     }
   }
 
@@ -229,7 +220,6 @@ int ObDDLServerClient::finish_redef_table(const obcall::ObFinishRedefTableArg &f
     while (OB_SUCC(ret)) {
       int tmp_ret = OB_SUCCESS;
       if (OB_FAIL(check_need_stop())) {
-        LOG_WARN("fail to basic check", K(ret));
       } else if (OB_FAIL(ObDDLExecutorUtil::handle_session_exception(session))) {
         LOG_WARN("session execption happened", K(ret));
         if (OB_TMP_FAIL(ObDDLExecutorUtil::cancel_ddl_task())) {
@@ -255,12 +245,9 @@ int ObDDLServerClient::finish_redef_table(const obcall::ObFinishRedefTableArg &f
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(build_ddl_single_replica_response(build_single_arg))) {
-        LOG_WARN("build ddl single replica response", K(ret), K(build_single_arg));
     } else if (OB_FAIL(sql::ObDDLExecutorUtil::wait_ddl_finish(finish_redef_arg.task_id_, DDL_DIRECT_LOAD, &session))) {
-      LOG_WARN("failed to wait ddl finish", K(ret), K(finish_redef_arg.task_id_));
     }
     if (OB_TMP_FAIL(heart_beat_clear(finish_redef_arg.task_id_))) {
-      LOG_WARN("heart beat clear failed", K(tmp_ret), K(finish_redef_arg.task_id_));
     }
   }
 
@@ -285,7 +272,6 @@ int ObDDLServerClient::build_ddl_single_replica_response(const obcall::ObDDLBuil
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("root service is null", K(ret));
   } else if (OB_FAIL(GCTX.root_service_->build_ddl_single_replica_response(arg))) {
-    LOG_WARN("failed to build ddl single replica response", K(ret), K(arg));
   }
   return ret;
 }
@@ -308,7 +294,6 @@ int ObDDLServerClient::wait_task_reach_pending(const int64_t task_id,
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), K(task_id));
     } else if (OB_FAIL(DDL_SIM(task_id, WAIT_REDEF_TASK_REACH_PENDING_FAILED))) {
-      LOG_WARN("ddl sim failure", K(ret), K(task_id));
     } else {
       while (OB_SUCC(ret)) {
         uint64_t unused_target_object_id = 0;
@@ -349,7 +334,6 @@ int ObDDLServerClient::heart_beat_clear(const int64_t task_id)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(task_id));
   } else if (OB_FAIL(OB_DDL_HEART_BEAT_TASK_CONTAINER.remove_register_task_id(task_id))) {
-    LOG_WARN("failed to remove register task id", K(ret), K(task_id));
   }
   return ret;
 }

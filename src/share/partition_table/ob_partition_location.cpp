@@ -97,7 +97,6 @@ int ObPartitionLocation::assign(const ObPartitionLocation &other)
     sql_renew_time_ = other.sql_renew_time_;
     is_mark_fail_ = other.is_mark_fail_;
     if (OB_FAIL(replica_locations_.assign(other.replica_locations_))) {
-      LOG_WARN("Failed to assign replica locations", K(ret));
     }
   }
 
@@ -122,7 +121,6 @@ int ObPartitionLocation::add(const ObReplicaLocation &replica_location)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid replica location", K(replica_location), K(ret));
   } else if (OB_FAIL(add_with_no_check(replica_location))) {
-    LOG_WARN("fail to do add replica location", K(replica_location), K(ret));
   }
   return ret;
 }
@@ -134,7 +132,6 @@ int ObPartitionLocation::add_with_no_check(const ObReplicaLocation &replica_loca
   if (OB_LIKELY(OB_SUCCESS != (ret = (find(replica_location.get_server(), idx))))) {
     if (OB_LIKELY(OB_ENTRY_NOT_EXIST == ret)) {
       if (OB_FAIL(replica_locations_.push_back(replica_location))) {
-        LOG_WARN("push back replica location failed", K(ret));
       }
     } else {
       LOG_WARN("find server location failed", K(ret), "server", replica_location.get_server());

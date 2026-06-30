@@ -116,10 +116,8 @@ OBP_PUBLIC_API int obp_register_plugin_ftparser(ObPluginParamPtr param,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate ftparser adaptor", K(ret));
   } else if (OB_FAIL(ftparser_desc->init_adaptor(*ftparser, ftparser_sizeof))) {
-    LOG_WARN("failed to init ftparser adaptor", K(ret));
   } else if (OB_FAIL(ObPluginHelper::register_plugin_entry(param, OBP_PLUGIN_TYPE_FT_PARSER, name, version,
                                                            ftparser_desc, description))) {
-    LOG_WARN("failed to register ftparser plugin entry", K(ret));
   }
   return ret;
 }

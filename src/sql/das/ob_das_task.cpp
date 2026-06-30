@@ -162,7 +162,6 @@ int ObIDASTaskOp::end_das_task()
   //release op，then rollback transcation
   if (task_started_) {
     if (OB_SUCCESS != (tmp_ret = release_op())) {
-      LOG_WARN("release das task op failed", K(tmp_ret), K_(errcode));
     }
     ret = COVER_SUCC(tmp_ret);
   }
@@ -176,7 +175,6 @@ int ObIDASTaskOp::init_das_gts_opt_info(transaction::ObTxIsolationLevel isolatio
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(get_das_gts_opt_info().init(isolation_level))) {
-    LOG_WARN("fail to init das gts opt", K(ret), K(isolation_level));
   } else {
     snapshot_ = get_das_gts_opt_info().get_specify_snapshot();
   }
@@ -220,7 +218,6 @@ OB_DEF_DESERIALIZE(ObDASGTSOptInfo)
               serialize_specify_snapshot);
   if (serialize_specify_snapshot) {
     if (OB_FAIL(init(isolation_level_))) {
-      LOG_WARN("fail to init gts_opt_info", K(ret));
     } else {
       OB_UNIS_DECODE(*specify_snapshot_);
     }
@@ -303,11 +300,9 @@ int ObIDASTaskOp::state_advance()
   OB_ASSERT(task_status_ != ObDasTaskStatus::UNSTART);
   if (task_status_ == ObDasTaskStatus::FINISHED) {
     if (OB_FAIL(get_agg_task()->move_to_success_tasks(this))) {
-      LOG_WARN("failed to move task to success tasks", KR(ret));
     }
   } else if (task_status_ == ObDasTaskStatus::FAILED) {
     if (OB_FAIL(get_agg_task()->move_to_failed_tasks(this))) {
-      LOG_WARN("failed to move task to success tasks", KR(ret));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -351,7 +346,6 @@ int ObDASTaskResp::store_warning_msg(const ObWarningBuffer &wb)
     const ObWarningBuffer::WarningItem *item = wb.get_warning_item(idx);
     if (item != NULL) {
       if (OB_FAIL(rcode_.warnings_.push_back(*item))) {
-        RPC_OBCALL_LOG(WARN, "Failed to add warning", K(ret));
       }
     } else {
       not_null = false;
@@ -373,7 +367,6 @@ OB_DEF_SERIALIZE(ObDASTaskResp)
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < op_results_.count(); i ++) {
     if (OB_FAIL(serialization::encode(buf, buf_len, pos, *op_results_.at(i)))) {
-      LOG_WARN("fail to encode item", K(i), K(ret));
     }
   }
   LST_DO_CODE(OB_UNIS_ENCODE,
@@ -403,7 +396,6 @@ OB_DEF_DESERIALIZE(ObDASTaskResp)
   OB_ASSERT(op_results_.count() == count);
   for (int64_t i = 0; OB_SUCC(ret) && i < count; i++) {
     if (OB_FAIL(serialization::decode(buf, data_len, pos, *op_results_.at(i)))) {
-      LOG_WARN("fail to decode array item", K(ret), K(i), K(count));
     }
   }
   LST_DO_CODE(OB_UNIS_DECODE,

@@ -52,7 +52,6 @@ int ObSysVarDefaultValue::inner_get_next_row(ObNewRow *&row)
   } else if (start_to_read_) {
     //do nothing
   } else if (OB_FAIL(add_row())) {
-    SERVER_LOG(WARN, "fail to add row", K(ret));
   } else {
     scanner_it_ = scanner_.begin();
     start_to_read_ = true;

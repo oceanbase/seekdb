@@ -99,7 +99,6 @@ public:
         const ObCompactNumber *r_cnum = reinterpret_cast<const ObCompactNumber *>(agg_cell);
         ret = add_values(*l_cnum, *r_cnum, agg_cell, ObNumber::MAX_CALC_BYTE_LEN);
         if (OB_FAIL(ret)) {
-          SQL_LOG(WARN, "adder number failed", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -154,7 +153,6 @@ public:
       }
       }
       if (OB_FAIL(ret)) {
-        SQL_LOG(WARN, "accumulate number failed", K(ret));
       } else if (OB_LIKELY(!all_skip)) {
         NotNullBitVector &not_nulls = agg_ctx.locate_notnulls_bitmap(agg_col_id, agg_cell);
         not_nulls.set(agg_col_id);
@@ -184,7 +182,6 @@ public:
       }
       }
       if (OB_FAIL(ret)) {
-        SQL_LOG(WARN, "add or sub rows failed", K(ret));
       }
     }
     return ret;
@@ -247,10 +244,8 @@ public:
       ObNumStackOnceAlloc tmp_alloc;
       if (is_trans) {
         if (OB_FAIL(param2.add_v3(param1, res_nmb, tmp_alloc))) {
-          SQL_LOG(WARN, "add number failed", K(ret));
         }
       } else if (OB_FAIL(param2.sub_v3(param1, res_nmb, tmp_alloc))){
-        SQL_LOG(WARN, "sub number failed", K(ret));
       }
       if (OB_SUCC(ret)) {
         res_cnum->desc_ = res_nmb.d_;
@@ -289,7 +284,6 @@ public:
         const ObCompactNumber *rollup_num = reinterpret_cast<const ObCompactNumber *>(rollup_agg_cell);
         ret = add_values(*curr_num, *rollup_num, rollup_agg_cell, ObNumber::MAX_CALC_BYTE_LEN);
         if (OB_FAIL(ret)) {
-          SQL_LOG(WARN, "adder number failed", K(ret));
         }
       }
     } else if (OB_LIKELY(curr_not_nulls.at(agg_col_idx))) {

@@ -67,9 +67,7 @@ int ObCOSSTableRowsFilter::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), KP(block_row_store), KP(context.stmt_allocator_), K(param));
   } else if (OB_FAIL(init_co_sstable(table))) {
-    LOG_WARN("Failed to init co_sstable", K(ret), KP(table));
   } else if (OB_FAIL(pd_filter_info_.init(param, *context.stmt_allocator_))) {
-    LOG_WARN("Fail to init pd filter info", K(ret));
   } else {
     iter_param_ = &param;
     allocator_ = context.stmt_allocator_;
@@ -81,9 +79,7 @@ int ObCOSSTableRowsFilter::init(
       LOG_WARN("Failed to combine sample filter to filter tree", K(ret), KP_(context.sample_filter), KP_(filter));
     } else if (FALSE_IT(depth = nullptr == context.sample_filter_ ? depth : depth + 1)) {
     } else if (OB_FAIL(init_bitmap_buffer(depth))) {
-      LOG_WARN("Failed to init bitmap buffer", K(ret), K(depth));
     } else if (OB_FAIL(filter_tree_can_continuous_filter(filter_, can_continuous_filter_))) {
-      LOG_WARN("failed to filter_tree_can_continuous_filter", K(ret));
     } else if (nullptr != param.pushdown_filter_ && param.enable_pd_filter_reorder()) {
       if (OB_UNLIKELY(nullptr != where_optimizer_)) {
         ret = OB_ERR_UNEXPECTED;
@@ -92,7 +88,6 @@ int ObCOSSTableRowsFilter::init(
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("Failed to alloc memory for ObWhereOptimizer", K(ret));
       } else if (OB_FAIL(where_optimizer_->init(iter_param_, filter_, &filter_iters_, &iter_filter_node_))) {
-        LOG_WARN("Failed to init where optimizer", K(ret), K(iter_param_), KPC_(filter));
       }
     }
   }
@@ -115,12 +110,10 @@ int ObCOSSTableRowsFilter::rewrite_filter(uint32_t &depth)
     // TODO: reorder pushdown filter by filter ratio, io cost, runtime filter(runtime filter
     // should keep last), etc.
     if (OB_FAIL(judge_whether_use_common_cg_iter(filter_))) {
-      LOG_WARN("Failed to judge where use common column group iterator", K(ret), KPC_(filter));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(rewrite_filter_tree(filter_, depth))) {
-      LOG_WARN("Failed to rewrite filter", K(ret), KPC_(filter));
     } else if (OB_UNLIKELY(depth < 1)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Unexpected depth", K(ret), K(depth), KPC_(filter));
@@ -147,7 +140,6 @@ int ObCOSSTableRowsFilter::switch_context(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), KP(block_row_store), KP(context.stmt_allocator_), K(param));
   } else if (OB_FAIL(init_co_sstable(table))) {
-    LOG_WARN("Failed to init co_sstable", K(ret), KP(table));
   } else if (iter_filter_node_.count() != filter_iters_.count()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected state", K(ret), K(iter_filter_node_.count()), K(filter_iters_.count()));
@@ -161,9 +153,7 @@ int ObCOSSTableRowsFilter::switch_context(
       ObICGIterator *&cg_iter = filter_iters_.at(i);
       iter_params.reuse();
       if (OB_FAIL(construct_cg_iter_params(filter, iter_params))) {
-        LOG_WARN("Failed to construct cg scan param", K(ret));
       } else if (OB_FAIL(switch_context_for_cg_iter(false, false, true, co_sstable_, context, iter_params, col_cnt_changed, cg_iter))) {
-        LOG_WARN("Fail to switch context for cg iter", K(ret));
       } else if (ObICGIterator::OB_CG_SCANNER == cg_iter->get_type() &&
                  param.enable_skip_index() &&
                  OB_FAIL(reinterpret_cast<ObCGScanner *>(cg_iter)->build_index_filter(*filter))) {
@@ -175,7 +165,6 @@ int ObCOSSTableRowsFilter::switch_context(
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("Failed to alloc memory for ObWhereOptimizer", K(ret));
       } else if (OB_FAIL(where_optimizer_->init(iter_param_, param.pushdown_filter_, &filter_iters_, &iter_filter_node_))) {
-        LOG_WARN("Failed to init where optimizer", K(ret), K(iter_param_), KPC_(filter));
       }
     }
   }
@@ -242,7 +231,6 @@ int ObCOSSTableRowsFilter::apply(const ObCSRange &range)
   } else if (!prepared_ && OB_FAIL(prepare_apply(range))) {
     LOG_WARN("Failed to prepare apply filter", K(range), KPC(this));
   } else if (OB_FAIL(apply_filter(nullptr, filter_, range, 0))) {
-    LOG_WARN("Failed to apply filter", K(ret), K(range), KPC_(filter));
   } else {
     adjust_batch_size();
     prepared_ = false;
@@ -271,7 +259,6 @@ int ObCOSSTableRowsFilter::prepare_apply(const ObCSRange &range)
   } else if (FALSE_IT(subtree_filter_iter_to_locate_ = 0)) {
   } else if (FALSE_IT(subtree_filter_iter_to_filter_ = 0)) {
   } else if (OB_FAIL(try_locating_cg_iter(0, range))) {
-    LOG_WARN("Failed to try locating cg iter", K(ret), K(range));
   } else {
     prepared_ = true;
   }
@@ -298,13 +285,10 @@ int ObCOSSTableRowsFilter::apply_filter(
   ObCGBitmap *result = nullptr;
   const int64_t iter_idx = filter->get_cg_iter_idx();
   if (OB_FAIL(prepare_bitmap_buffer(range, depth, parent, *filter, result))) {
-    LOG_WARN("Failed to prepare bitmap buffer", K(ret), K(range), K(depth), KP(filter));
-    // Parent prepare_skip_filter can not be called here.
   } else if (filter->is_sample_node()) {
     ObSampleFilterExecutor *sample_executor = static_cast<ObSampleFilterExecutor *>(filter);
     result->set_filter_uncertain();
     if (OB_FAIL(sample_executor->apply_sample_filter(range, *result->get_inner_bitmap()))) {
-      LOG_WARN("Failed to apply sample filter", K(ret), K(range), KP(result), KPC(sample_executor));
     }
   } else if (sql::ObPushdownFilterExecutor::INVALID_CG_ITER_IDX != iter_idx) {
     ObICGIterator *cg_iter = filter_iters_.at(iter_idx);
@@ -315,7 +299,6 @@ int ObCOSSTableRowsFilter::apply_filter(
     pd_filter_info_.disable_bypass_ = where_optimizer_ != nullptr ? where_optimizer_->is_disable_bypass() : false;
     pd_filter_info_.first_batch_ = where_optimizer_ != nullptr ? where_optimizer_->is_first_batch() : false;
     if (OB_FAIL(try_locating_cg_iter(iter_idx, range))) {
-      LOG_WARN("Failed to locate", K(ret), K(range), K(iter_idx));
     } else if (OB_UNLIKELY(iter_idx >= subtree_filter_iter_to_locate_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Should locate befor pushdown filter", K(ret), K(iter_idx),
@@ -326,7 +309,6 @@ int ObCOSSTableRowsFilter::apply_filter(
                 range.get_row_count(),
                 depth == 0 ? nullptr : bitmap_buffer_[depth - 1],
                 *result))) {
-      LOG_WARN("Failed to pushdown filter", K(ret), KP(parent), KP(filter));
     } else {
       subtree_filter_iter_to_filter_ = iter_idx + 1;
     }
@@ -344,17 +326,13 @@ int ObCOSSTableRowsFilter::apply_filter(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Unexpected null child filter", K(ret));
         } else if (OB_FAIL(apply_filter(filter, children[i], range, depth + 1))) {
-          LOG_WARN("Failed to apply filter", K(ret), K(i), KP(children[i]));
         } else if (OB_ISNULL(child_result = get_child_bitmap(depth))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Unexpected get null filter bitmap", K(ret));
         } else if (OB_FAIL(post_apply_filter(*filter, *result, *child_result,
                                              is_skip))) {
-          LOG_WARN("Failed to post apply filter", K(ret), KP(result),
-                   KP(child_result));
         } else if ((filter->is_enable_reorder() && where_optimizer_ != nullptr && where_optimizer_->is_disable_bypass()) || !is_skip) {
           if (OB_FAIL(try_locating_cg_iter(subtree_filter_iter_to_filter_, range))) {
-            LOG_WARN("Failed to locate", K(ret), K(range), K_(subtree_filter_iter_to_filter));
           }
         } else {
           break;
@@ -378,13 +356,11 @@ int ObCOSSTableRowsFilter::post_apply_filter(
   is_skip = false;
   if (filter.is_logic_and_node()) {
     if (OB_FAIL(result.bit_and(child_result))) {
-      LOG_WARN("Failed to merge result bitmap", K(ret));
     } else if (result.is_all_false()) {
       is_skip = true;
     }
   } else  {
     if (OB_FAIL(result.bit_or(child_result))) {
-      LOG_WARN("Failed to merge result bitmap", K(ret));
     } else if (result.is_all_true()) {
       is_skip = true;
     }
@@ -403,8 +379,6 @@ int ObCOSSTableRowsFilter::rewrite_filter_tree(
   depth = 1;
   if (filter->is_filter_node()) {
     if (OB_FAIL(push_cg_iter(filter))) {
-      LOG_WARN("Failed to produce new coulmn group iterator",
-                K(ret), KPC(filter));
     }
   } else if (filter->is_logic_op_node()) {
     if (OB_UNLIKELY(filter->get_child_count() < 2)) {
@@ -413,8 +387,6 @@ int ObCOSSTableRowsFilter::rewrite_filter_tree(
                 K(filter->get_child_count()), KP(filter));
     } else if (!filter->get_cg_idxs().empty()) {
       if (OB_FAIL(push_cg_iter(filter))) {
-        LOG_WARN("Failed to produce new coulmn group iterator",
-                  K(ret), KPC(filter));
       }
     } else {
       sql::ObPushdownFilterExecutor **children = filter->get_childs();
@@ -422,7 +394,6 @@ int ObCOSSTableRowsFilter::rewrite_filter_tree(
       uint32_t sub_tree_depth = 0;
       for (uint32_t i = 0; OB_SUCC(ret) && i < filter->get_child_count(); ++i) {
         if (OB_FAIL(rewrite_filter_tree(children[i], sub_tree_depth))) {
-          LOG_WARN("Failed to rewrite filter", K(ret), K(i), KPC(children[i]));
         } else {
           max_sub_tree_depth = MAX(max_sub_tree_depth, sub_tree_depth);
         }
@@ -449,11 +420,9 @@ int ObCOSSTableRowsFilter::push_cg_iter(
   } else {
     common::ObSEArray<ObTableIterParam*, 8> iter_params;
     if (OB_FAIL(construct_cg_iter_params(filter, iter_params))) {
-      LOG_WARN("Failed to construct cg scan param", K(ret));
     } else if (1 == iter_params.count()) {
       ObICGIterator *cg_scanner = nullptr;
       if (OB_FAIL(co_sstable_->cg_scan(*iter_params.at(0), *access_ctx_, cg_scanner, false, false))) {
-        LOG_WARN("Failed to cg scan", K(ret));
       } else if (ObICGIterator::OB_CG_SCANNER == cg_scanner->get_type() &&
                  iter_params.at(0)->enable_skip_index() &&
                  OB_FAIL(reinterpret_cast<ObCGScanner *>(cg_scanner)->build_index_filter(*filter))) {
@@ -465,16 +434,13 @@ int ObCOSSTableRowsFilter::push_cg_iter(
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("Fail to alloc cg tile scanner", K(ret));
     } else if (OB_FAIL(static_cast<ObCGTileScanner*>(cg_iter)->init(iter_params, false, true, *access_ctx_, co_sstable_))) {
-      LOG_WARN("Fail to init cg tile scanner", K(ret), K(iter_params));
     }
     LOG_DEBUG("[COLUMNSTORE] init one cg iter", K(ret), KPC(cg_iter), K(iter_params));
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(filter_iters_.push_back(cg_iter))) {
-    LOG_WARN("Failed to push cg iter", K(ret), K(filter_iters_), KP(cg_iter));
   } else if (OB_FAIL(iter_filter_node_.push_back(filter))) {
-    LOG_WARN("Failed to push filter node", K(ret));
   } else {
     filter->set_cg_iter_idx(filter_iters_.count() - 1);
   }
@@ -502,9 +468,7 @@ int ObCOSSTableRowsFilter::construct_cg_iter_params(
       LOG_WARN("Unexpected cg col expr", K(ret), K(cg_idx));
     } else if (OB_FAIL(access_ctx_->cg_param_pool_->get_iter_param(cg_idx, *iter_param_,
         is_virtual_cg(cg_idx) ? nullptr : cg_col_exprs->at(col_expr_idx++), cg_param))) {
-      LOG_WARN("Fail to get iter param", K(ret), K(cg_idx), KPC(iter_param_));
     } else if (OB_FAIL(iter_params.push_back(cg_param))) {
-      LOG_WARN("Fail to push back iter param", K(ret), K(cg_param));
     }
     LOG_DEBUG("[COLUMNSTORE] cons one cg param", K(ret), K(cg_idx), K(cg_param));
   }
@@ -540,8 +504,6 @@ int ObCOSSTableRowsFilter::judge_whether_use_common_cg_iter(
       sql::ObPushdownFilterExecutor **children = filter->get_childs();
       for (uint32_t i = 0; OB_SUCC(ret) && i < filter->get_child_count(); ++i) {
         if (OB_FAIL(judge_whether_use_common_cg_iter(children[i]))) {
-          LOG_WARN("Failed to judge where use common column group iter",
-                   K(ret), KPC(filter));
         } else if (0 == i) {
           status = children[i]->get_status();
         } else {
@@ -550,7 +512,6 @@ int ObCOSSTableRowsFilter::judge_whether_use_common_cg_iter(
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(transform_filter_tree(*filter))) {
-          LOG_WARN("Failed to transform filter tree", K(ret), KPC(filter));
         } else if (filter->is_cg_param_valid()) {
           filter->set_status(status);
         }
@@ -578,12 +539,10 @@ int ObCOSSTableRowsFilter::transform_filter_tree(
                                             common_cg_ids,
                                             common_cg_exprs,
                                             base_filter_idx))) {
-      LOG_WARN("Failed to find common sub filter tree", K(ret), K(base_filter_idx));
     } else if (1 < tmp_filter_indexes.count()) {
       if (filter.get_child_count() == tmp_filter_indexes.count()) {
         common_filter_executor = &filter;
       } else if (OB_FAIL(filter.pull_up_common_node(tmp_filter_indexes, common_filter_executor))) {
-        LOG_WARN("Failed to pull up common node", K(ret), K(tmp_filter_indexes));
       }
 
       if (OB_SUCC(ret)) {
@@ -591,8 +550,6 @@ int ObCOSSTableRowsFilter::transform_filter_tree(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Unexpected null common_filter_executor", K(ret));
         } else if (OB_FAIL(common_filter_executor->set_cg_param(common_cg_ids, common_cg_exprs))) {
-          LOG_WARN("Failed to set cg param to filter", K(ret), KPC(common_filter_executor),
-                   K(common_cg_ids), K(common_cg_exprs));
         }
       }
     }
@@ -624,11 +581,9 @@ int ObCOSSTableRowsFilter::find_common_sub_filter_tree(
   const common::ObIArray<sql::ObExpr *> *base_cg_exprs = base_filter->get_cg_col_exprs();
   const uint32_t child_count = filter.get_child_count();
   if (OB_FAIL(common_cg_ids.assign(base_cg_ids))) {
-    LOG_WARN("Failed to assign common cg ids", K(ret));
   } else if (nullptr != base_cg_exprs && OB_FAIL(common_cg_exprs.assign(*base_cg_exprs))) {
     LOG_WARN("Failed to assign common cg exprs", K(ret));
   } else if (OB_FAIL(filter_indexes.push_back(base_filter_idx))) {
-    LOG_WARN("Failed to push back filters", K(ret), K(base_filter_idx), K(filter_indexes));
   } else {
     bool is_common = false;
     for (uint32_t i = base_filter_idx + 1; OB_SUCC(ret) && i < child_count; ++i) {
@@ -639,11 +594,9 @@ int ObCOSSTableRowsFilter::find_common_sub_filter_tree(
                     common_cg_ids,
                     common_cg_exprs,
                     is_common))) {
-          LOG_WARN("Failed to assign common col groups", K(ret), KPC(base_filter), KPC(children_filters[i]));
         } else if (is_common) {
           prev_status = merge_common_filter_tree_status(prev_status, children_filters[i]->get_status());
           if (OB_FAIL(filter_indexes.push_back(i))) {
-            LOG_WARN("Failed to push back filter executor", K(ret), K(filter_indexes));
           }
         }
       }
@@ -677,8 +630,6 @@ int ObCOSSTableRowsFilter::try_locating_cg_iter(
                                       filter_iters_.count());
   for (; OB_SUCC(ret) && subtree_filter_iter_to_locate_ < max_cg_iter_to_locate; ++subtree_filter_iter_to_locate_) {
     if (OB_FAIL(filter_iters_[subtree_filter_iter_to_locate_]->locate(range))) {
-      LOG_WARN("Failed to locate cg iter", K(ret), K(range), K_(subtree_filter_iter_to_locate),
-               KP(filter_iters_[subtree_filter_iter_to_locate_]));
     }
   }
   return ret;
@@ -688,7 +639,6 @@ int ObCOSSTableRowsFilter::init_bitmap_buffer(uint32_t bitmap_buffer_count)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(bitmap_buffer_.reserve(bitmap_buffer_count))) {
-    LOG_WARN("Failed to reserve", K(ret), K(bitmap_buffer_count));
   } else {
     for (uint32_t i = 0; OB_SUCC(ret) && i < bitmap_buffer_count; ++i) {
       ObCGBitmap* filter_bitmap = nullptr;
@@ -698,9 +648,7 @@ int ObCOSSTableRowsFilter::init_bitmap_buffer(uint32_t bitmap_buffer_count)
         LOG_WARN("Failed to alloc memory for filter bitmap", K(ret));
       } else if (FALSE_IT(filter_bitmap = new (buf) ObCGBitmap(*allocator_))) {
       } else if (OB_FAIL(filter_bitmap->init(batch_size_, access_ctx_->query_flag_.is_reverse_scan()))) {
-        LOG_WARN("Failed to init bitmap", K(ret), K_(batch_size));
       } else if (OB_FAIL(bitmap_buffer_.push_back(filter_bitmap))) {
-        LOG_WARN("Failed to push_back filter bitmap", K(ret), KP(filter_bitmap));
       }
       if (OB_FAIL(ret) && nullptr != filter_bitmap) {
         filter_bitmap->~ObCGBitmap();
@@ -728,7 +676,6 @@ int ObCOSSTableRowsFilter::prepare_bitmap_buffer(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Unexpected nullptr filter_bitmap", K(ret), K(depth));
     } else if (OB_FAIL(result->switch_context(range.get_row_count(), access_ctx_->query_flag_.is_reverse_scan()))) {
-      LOG_WARN("Failed to expand size for filter bitmap", K(ret), K(range));
     } else if (0 == depth) {
       result->reuse(range.start_row_id_, filter.is_logic_and_node());
     } else {
@@ -738,7 +685,6 @@ int ObCOSSTableRowsFilter::prepare_bitmap_buffer(
         LOG_WARN("Unexpected filter node or bitmap", K(ret), KP(parent), KP(parent_bitmap));
       } else if (filter.get_type() == parent->get_type()) {
         if (OB_FAIL(result->copy_from(*parent_bitmap))) {
-          LOG_WARN("Fail to copy bitmap", K(ret), KPC(parent_bitmap));
         }
       } else {
         result->reuse(range.start_row_id_, filter.is_logic_and_node());
@@ -770,12 +716,10 @@ int ObCOSSTableRowsFilter::assign_common_col_groups(
     const common::ObIArray<uint32_t> &shorter_array = cur_cg_ids.count() > common_cg_ids.count()
         ? common_cg_ids : cur_cg_ids;
     if (OB_FAIL(common::get_difference(shorter_array, longer_array, tmp_array))) {
-      LOG_WARN("Failed to get difference", K(ret), K(common_cg_ids), K(cur_cg_ids));
     } else if (tmp_array.empty()) {
       is_common = true;
       if (cur_cg_ids.count() > common_cg_ids.count()) {
         if (OB_FAIL(common_cg_ids.assign(cur_cg_ids))) {
-          LOG_WARN("Fail to assign cg ids", K(ret));
         } else if (nullptr != cur_cg_exprs && OB_FAIL(common_cg_exprs.assign(*cur_cg_exprs))) {
           LOG_WARN("Fail to assign cg exprs", K(ret));
         }
@@ -787,7 +731,6 @@ int ObCOSSTableRowsFilter::assign_common_col_groups(
       for (int64_t i = 0; OB_SUCC(ret) && i < cur_cg_ids.count(); i++) {
         if (!is_contain(common_cg_ids, cur_cg_ids.at(i))) {
           if (OB_FAIL(common_cg_ids.push_back(cur_cg_ids.at(i)))) {
-            LOG_WARN("Fail to push back cg idx", K(ret));
           } else if (nullptr != cur_cg_exprs && OB_FAIL(common_cg_exprs.push_back(cur_cg_exprs->at(i)))) {
             LOG_WARN("Fail to push back cg expr", K(ret));
           }
@@ -891,12 +834,10 @@ int ObCOSSTableRowsFilter::switch_context_for_cg_iter(
     } else if (OB_UNLIKELY(col_cnt_changed)) {
       if (FALSE_IT(context.cg_iter_pool_->return_cg_iter(cg_iter, cg_iter->get_cg_idx()))) {
       } else if (OB_FAIL(co_sstable->cg_scan(cg_param, context, cg_iter, is_projector, project_single_row))) {
-        LOG_WARN("Failed to cg scan", K(ret));
       }
     } else if (!is_virtual_cg(cg_param.cg_idx_) && OB_FAIL(co_sstable->fetch_cg_sstable(cg_param.cg_idx_, cg_wrapper))) {
       LOG_WARN("Fail to get cg sstable wrapper", K(ret));
     } else if (OB_FAIL(cg_iter->switch_context(cg_param, context, cg_wrapper))) {
-      LOG_WARN("Failed to switch context for project iter", K(ret));
     } else if (ObICGIterator::OB_CG_ROW_SCANNER == cg_iter->get_type()) {
       static_cast<ObCGRowScanner *>(cg_iter)->set_project_type(is_projector && without_filter);
     }
@@ -905,7 +846,6 @@ int ObCOSSTableRowsFilter::switch_context_for_cg_iter(
     LOG_WARN("Unexpected iter type", K(ret), KPC(cg_iter));
   } else if (OB_FAIL(static_cast<ObCGTileScanner*>(cg_iter)->switch_context(
       cg_params, project_single_row, is_projector && without_filter, context, co_sstable, col_cnt_changed))) {
-    LOG_WARN("Failed to switch context for project iter", K(ret));
   }
   return ret;
 }
@@ -923,7 +863,6 @@ int ObCOSSTableRowsFilter::filter_tree_can_continuous_filter(sql::ObPushdownFilt
       sql::ObPushdownFilterExecutor *child = nullptr;
       (void)filter->get_child(i, child);
       if (OB_FAIL(SMART_CALL(filter_tree_can_continuous_filter(child, can_continuous_filter)))) {
-        LOG_WARN("failed to filter_tree_can_continuous_filter");
       } else if (!can_continuous_filter) {
         break;
       }

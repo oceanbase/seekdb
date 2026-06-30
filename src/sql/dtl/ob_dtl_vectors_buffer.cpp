@@ -60,7 +60,6 @@ int ObDtlVectorsBuffer::init_vector_buffer(void* mem, const int32_t size, ObDtlV
   block->set_block_size(size);
   ObDtlVectorsBuffer* blkbuf = new(block->get_buffer())ObDtlVectorsBuffer;
   if (OB_FAIL(blkbuf->init(static_cast<char *> (mem), size))) {
-    LOG_WARN("init shrink buffer failed", K(ret));
   } else if (block->blk_size_ != blkbuf->capacity() + sizeof(ObDtlVectorsBuffer)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to check buffer state", K(ret), K(block->blk_size_), K(blkbuf->capacity()));
@@ -116,7 +115,6 @@ int ObDtlVectorsBuffer::append_row(const common::ObIArray<ObExpr*> &exprs, const
       ObIVector *vec = exprs.at(i)->get_vector(ctx);
       if (OB_FAIL(alloc_segmant(i, ObVectorSegment::get_real_data_size(*vec, batch_idx),
                                 ObVectorSegment::get_fixed_len(*exprs.at(i), batch_idx), nullptr))) {
-        LOG_WARN("failed to alloc new segment", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -126,9 +124,6 @@ int ObDtlVectorsBuffer::append_row(const common::ObIArray<ObExpr*> &exprs, const
           ObIVector *vec = exprs.at(i)->get_vector(ctx);
           if (OB_FAIL(alloc_segmant(i, ObVectorSegment::get_real_data_size(*vec, batch_idx),
                                     ObVectorSegment::get_fixed_len(*exprs.at(i), batch_idx), seg))) {
-            LOG_WARN("buffer is not enough", K(ret), K(i), K(cur_pos_),
-                                             K(ObVectorSegment::get_real_data_size(*vec, batch_idx)),
-                                             K(ObVectorSegment::get_fixed_len(*exprs.at(i), batch_idx)));
           } else {
             ObVectorSegment *seg = reinterpret_cast<ObVectorSegment *> (data_ + cols_seg_pos_[i]);
             if (OB_FAIL(seg->append_col_in_one_row(*exprs.at(i), exprs.at(i)->is_fixed_length_data_, batch_idx, ctx))) {

@@ -98,10 +98,8 @@ int ObMergeFuser::add_fuse_rows(const T& row, const Args&... args)
   int ret = OB_SUCCESS;
   bool final_result = false;
   if (OB_FAIL(add_fuse_row(row, final_result))) {
-    STORAGE_LOG(WARN, "Failed to fuse row", K(ret));
   } else if (final_result) {
   } else if (OB_FAIL(add_fuse_rows(args...))) {
-    STORAGE_LOG(WARN, "failed to push fuse row", K(ret));
   }
 
   return ret;
@@ -117,12 +115,9 @@ int ObMergeFuser::fuse_rows(const T& row, const Args&... args)
     ret =OB_NOT_INIT;
     STORAGE_LOG(WARN, "ObMergeFuser not init", K(ret));
   } else if (OB_FAIL(preprocess_fuse_row(row, is_need_fuse))) {
-    STORAGE_LOG(WARN, "failed to preprocess_fuse_row", K(ret));
   } else if (!is_need_fuse) {
   } else if (OB_FAIL(add_fuse_rows(row, args...))) {
-    STORAGE_LOG(WARN, "Failed to fuse default row", K(ret));
   } else if (OB_FAIL(end_fuse_row(nop_pos_, result_row_))) {
-    STORAGE_LOG(WARN, "failed to end_fuse_row", K(ret));
   }
   return ret;
 }

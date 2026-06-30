@@ -73,7 +73,6 @@ int ObVritualCoreInnerTable::inner_open()
     ret = OB_NOT_INIT;
     LOG_WARN("not init, allocator is null", KR(ret));
   } else if (OB_FAIL(schema_guard_->get_table_schema( table_id_, table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K_(table_id));
   } else if (NULL == table_schema) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("get_table_schema failed", KT_(table_id), KR(ret));
@@ -84,23 +83,18 @@ int ObVritualCoreInnerTable::inner_open()
       if (!true && false) {
         // user tenant can see its own data
       } else if (OB_FAIL(schema_guard_->get_tenant_info(tenant))) {
-        LOG_WARN("fail to get tenant info", KR(ret));
       } else if (OB_ISNULL(tenant) || !tenant->is_normal()) {
         // skip
       } else {
         ObCoreTableProxy core_table(table_name_, *sql_proxy_);
         if (OB_FAIL(core_table.load())) {
-          LOG_WARN("core_table load failed", KR(ret));
         } else {
           ObArray<Column> columns;
           while (OB_SUCC(ret) && OB_SUCC(core_table.next())) {
             columns.reuse();
             if (OB_FAIL(get_full_row(table_schema, core_table, columns))) {
-              LOG_WARN("get_full_row failed", K(table_schema), KR(ret));
             } else if (OB_FAIL(project_row(columns, cur_row_))) {
-              LOG_WARN("project_row failed", K(columns), KR(ret));
             } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
-              LOG_WARN("add_row failed", K_(cur_row), KR(ret));
             }
           } // end while
           if (OB_ITER_END == ret) {

@@ -334,17 +334,13 @@ TEST(print_utility, print_functions)
       "{num_u64=", num_u64, ", num_i64=", num_i64, ", num_u32=", num_u32, ", num_i32=", num_i32,
       ", num_u16=", num_u16, ", num_i16=", num_i16, ", num_u8=", num_u8, ", num_i8=", num_i8,
       ", ch=", ch, ", num_double=", num_double, ", num_float=", num_float))) {
-    OB_LOG(WARN, "call databuff_print_multi_objs fail", K(buf), K(pos), K(ret));
   } else if (OB_FAIL(databuff_print_multi_objs(buf, buf_len, pos,
       ", flag1=", flag1, ", flag2=", flag2, ", (3 > 1)=", 3 > 1, ", (3 < 1)=", 3 < 1))) {
-    OB_LOG(WARN, "call databuff_print_multi_objs fail", K(buf), K(pos), K(ret));
   } else if (OB_FAIL(databuff_print_multi_objs(buf, buf_len, pos,
       ", ptr_complex_obj=", ptr_complex_obj, ", ptr_nullptr=", ptr_nullptr))) {
-    OB_LOG(WARN, "call databuff_print_multi_objs fail", K(buf), K(pos), K(ret));
   } else if (OB_FAIL(databuff_print_multi_objs(buf, buf_len, pos,
       ", addr1=", addr1, ", addr2=", addr2,
       ", complex_obj_1=", complex_obj_1, ", complex_obj_2=", complex_obj_2, "}"))) {
-    OB_LOG(WARN, "call databuff_print_multi_objs fail", K(buf), K(pos), K(ret));
   } else {
     OB_LOG(INFO, "test databuff_print_multi_objs: ", K(buf), K(pos), K(ret));
   }

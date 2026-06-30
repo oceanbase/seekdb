@@ -37,9 +37,7 @@ int ObDicLock::lock_dic_tables_out_trans(const ObTenantDicLoader &dic_loader,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", K(ret));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-     LOG_WARN("failed to start trans", K(ret));
   } else if (OB_FAIL(lock_dic_tables_out_trans(dic_loader, lock_mode, lock_owner, trans))) {
-    LOG_WARN("fail to lock dic tables", K(ret));
   }
   if (trans.is_started()) {
     int tmp_ret = OB_SUCCESS;
@@ -65,7 +63,6 @@ int ObDicLock::lock_dic_tables_out_trans(const ObTenantDicLoader &dic_loader,
     for (int64_t i = 0; OB_SUCC(ret) && i < dic_tables_info.count(); ++i) {
       const uint64_t table_id = dic_tables_info.at(i).table_id_;
       if (OB_FAIL(do_table_lock(table_id, lock_mode, lock_owner, DEFAULT_TIMEOUT, true/*is_lock*/, trans))) {
-          LOG_WARN("fail to do lock table", K(ret));
       }
     }
   }
@@ -86,7 +83,6 @@ int ObDicLock::unlock_dic_tables(const ObTenantDicLoader &dic_loader,
     for (int64_t i = 0; OB_SUCC(ret) && i < dic_tables_info.count(); ++i) {
       const uint64_t table_id = dic_tables_info.at(i).table_id_;
       if (OB_FAIL(do_table_lock(table_id, lock_mode, lock_owner, DEFAULT_TIMEOUT, false/*is_lock*/, trans))) {
-        LOG_WARN("fail to do unlock table", K(ret));
       }
     }
   }
@@ -112,7 +108,6 @@ int ObDicLock::lock_dic_tables_in_trans(
       const uint64_t table_id = dic_tables_info.at(i).table_id_;
       LOG_INFO("lock table", KR(ret), K(table_id), KPC(conn));
       if (OB_FAIL(transaction::tablelock::ObInnerConnectionLockUtil::lock_table(table_id, lock_mode, DEFAULT_TIMEOUT, conn))) {
-        LOG_WARN("lock dest table failed", KR(ret), K(table_id));
       }
     }
   }

@@ -144,7 +144,6 @@ int ObDomainIdUtils::check_table_need_domain_id_merge(ObDomainIDType type, const
       case ObDomainIDType::EMB_VEC: {
         bool is_aux_table_has_hybrid_column;
         if (OB_FAIL(ObVectorIndexUtil::check_index_table_has_hybrid_vec_column(*ddl_table_schema, is_aux_table_has_hybrid_column))) {
-          LOG_WARN("fail to check the index table has hybrid vec column", K(ret), K(type), KPC(ddl_table_schema));
         } else if (is_aux_table_has_hybrid_column &&
                    (ddl_table_schema->is_vec_index_id_type() || ddl_table_schema->is_vec_index_snapshot_data_type())) {
           res = true;
@@ -180,7 +179,6 @@ int ObDomainIdUtils::check_column_need_domain_id_merge(
         if (expr->is_doc_id_column()) {
           bool has_valid_index = false;
           if (OB_FAIL(ObFtsIndexBuilderUtil::check_has_valid_fts_or_multivalue_index(table_schema, schema_guard, has_valid_index))) {
-            LOG_WARN("failed to check has valid fts or multivalue index", K(ret));
           } else {
             res = has_valid_index;
           }
@@ -240,13 +238,11 @@ int ObDomainIdUtils::get_domain_tid_table_by_type(ObDomainIDType type,
       }
       case ObDomainIDType::VID: {
         if (OB_FAIL(data_table->get_rowkey_vid_tid(domain_id_table_id))) {
-          LOG_WARN("fail to get rowkey vid table id", K(ret), KPC(data_table));
         }
         break;
       }
       case ObDomainIDType::EMB_VEC: {
         if (OB_FAIL(data_table->get_embedded_vec_tid(domain_id_table_id))) {
-          LOG_WARN("fail to get embedded vec table id", K(ret), KPC(data_table));
         }
         break;
       }
@@ -287,35 +283,30 @@ int ObDomainIdUtils::get_domain_tid_table_by_cid(
       }
       case ObDomainIDType::VID: {
         if (OB_FAIL(data_table->get_rowkey_vid_tid(tid))) {
-          LOG_WARN("fail to get rowkey vid table id", K(ret), KPC(data_table));
         }
         break;
       }
       case ObDomainIDType::IVFFLAT_CID: {
         if (OB_FAIL(ObVectorIndexUtil::get_vector_index_tid_check_valid(
             sql_schema_guard, *data_table, INDEX_TYPE_VEC_IVFFLAT_ROWKEY_CID_LOCAL, domain_col_id, tid))) {
-          LOG_WARN("failed to get rowkey cid table", K(ret), KPC(data_table));
         }
         break;
       }
       case ObDomainIDType::IVFSQ_CID: {
         if (OB_FAIL(ObVectorIndexUtil::get_vector_index_tid_check_valid(
             sql_schema_guard, *data_table, INDEX_TYPE_VEC_IVFSQ8_ROWKEY_CID_LOCAL, domain_col_id, tid))) {
-          LOG_WARN("failed to get rowkey cid table", K(ret), KPC(data_table));
         }
         break;
       }
       case ObDomainIDType::IVFPQ_CID: {
         if (OB_FAIL(ObVectorIndexUtil::get_vector_index_tid_check_valid(
             sql_schema_guard, *data_table, INDEX_TYPE_VEC_IVFPQ_ROWKEY_CID_LOCAL, domain_col_id, tid))) {
-          LOG_WARN("failed to get rowkey cid table", K(ret), KPC(data_table));
         }
         break;
       }
       case ObDomainIDType::EMB_VEC: {
         if (OB_FAIL(ObVectorIndexUtil::get_hybrid_embedded_vector_tid_check_valid(
             sql_schema_guard, *data_table, INDEX_TYPE_HYBRID_INDEX_EMBEDDED_LOCAL, domain_col_id, tid))) {
-          LOG_WARN("failed to get hybrid embedded table", K(ret), KPC(data_table));
         }
         break;
       }
@@ -346,28 +337,22 @@ int ObDomainIdUtils::get_domain_id_col(
         uint64_t doc_id_col_id = OB_INVALID_ID;
         uint64_t ft_col_id = OB_INVALID_ID;
         if (OB_FAIL(table->get_fulltext_column_ids(doc_id_col_id, ft_col_id))) {
-          LOG_WARN("fail to get fulltext column ids", K(ret), KPC(table));
         } else if (OB_FAIL(col_id.push_back(doc_id_col_id))) {
-          LOG_WARN("fail to push back col id", K(ret));
         }
         break;
       }
       case ObDomainIDType::VID: {
         uint64_t vec_vid_col_id = OB_INVALID_ID;
         if (OB_FAIL(table->get_vec_index_vid_col_id(vec_vid_col_id))) {
-          LOG_WARN("fail to get vec index column ids", K(ret), KPC(table));
         } else if (OB_FAIL(col_id.push_back(vec_vid_col_id))) {
-          LOG_WARN("fail to push back col id", K(ret));
         }
         break;
       }
       case ObDomainIDType::IVFFLAT_CID:
       case ObDomainIDType::IVFSQ_CID: {
         uint64_t vec_cid_col_id = OB_INVALID_ID;
-        if (OB_FAIL(table->get_vec_index_vid_col_id(vec_cid_col_id, true/*is_cid*/))) { // table schema must be index table here
-          LOG_WARN("fail to get vec index column ids", K(ret), KPC(table));
+        if (OB_FAIL(table->get_vec_index_vid_col_id(vec_cid_col_id, true/*is_cid*/))) {
         } else if (OB_FAIL(col_id.push_back(vec_cid_col_id))) {
-          LOG_WARN("fail to push back col id", K(ret));
         }
         break;
       }
@@ -380,28 +365,21 @@ int ObDomainIdUtils::get_domain_id_col(
         if (OB_ISNULL(schema_guard)) {
           ret = OB_ERR_NULL_VALUE;
           LOG_WARN("pq cids need schema gaurd to fetch table schema", K(ret));
-        } else if (OB_FAIL(table->get_vec_index_vid_col_id(vec_cid_col_id, true/*is_cid*/))) { // table schema must be index table here
-          LOG_WARN("fail to get vec index column ids", K(ret), KPC(table));
+        } else if (OB_FAIL(table->get_vec_index_vid_col_id(vec_cid_col_id, true/*is_cid*/))) {
         } else if (OB_FAIL(schema_guard->get_table_schema(table->get_data_table_id(), data_table_schema))) {
-          LOG_WARN("get table schema failed", K(ret), K(table->get_data_table_id()));
         } else if (OB_ISNULL(data_table_schema)) {
           ret = OB_TABLE_NOT_EXIST;
           LOG_WARN("table not exist", K(ret), K(table->get_data_table_id()));
         } else if (OB_FAIL(get_pq_cids_col_id(*table, *data_table_schema, pq_cids_col_id))) {
-          LOG_WARN("fail to get pq cids col id", K(ret));
         } else if (OB_FAIL(col_id.push_back(vec_cid_col_id))) {
-          LOG_WARN("fail to push back col id", K(ret));
         } else if (OB_FAIL(col_id.push_back(pq_cids_col_id))) {
-          LOG_WARN("fail to push back col id", K(ret));
         } 
         break;
       }
       case ObDomainIDType::EMB_VEC: {
         uint64_t vec_cid_col_id = OB_INVALID_ID;
-        if (OB_FAIL(table->get_hybrid_vec_embedded_column_id(vec_cid_col_id))) { // table schema must be index table here
-          LOG_WARN("fail to get vec index column ids", K(ret), KPC(table));
+        if (OB_FAIL(table->get_hybrid_vec_embedded_column_id(vec_cid_col_id))) {
         } else if (OB_FAIL(col_id.push_back(vec_cid_col_id))) {
-          LOG_WARN("fail to push back col id", K(ret));
         }
         break;
       }
@@ -428,9 +406,7 @@ int ObDomainIdUtils::get_domain_id_cols(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get null table schema ptr", K(ret), K(type), KPC(table));
   } else if (OB_FAIL(ObDomainIdUtils::get_domain_id_col(type, table_schema, domain_id_cids, schema_guard))) {
-    LOG_WARN("fail to get domain id cid", K(ret), KPC(table), K(domain_id_cids));
   } else if (OB_FAIL(append(rowkey_cids, domain_id_cids))) {
-    LOG_WARN("fail to push back domain id col", K(ret));
   }
   return ret;
 }
@@ -486,7 +462,6 @@ int ObDomainIdUtils::check_has_domain_index(const void *table_schema, ObIArray<i
     const ObSimpleTableSchemaV2 *index_schema = NULL;
     
     if (OB_FAIL(table->get_simple_index_infos(simple_index_infos))) {
-      LOG_WARN("get simple_index_infos failed", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); ++i) {
       int64_t domain_type = ObDomainIDType::MAX;
@@ -511,9 +486,7 @@ int ObDomainIdUtils::check_has_domain_index(const void *table_schema, ObIArray<i
       }
       if (OB_SUCC(ret) && (ObDomainIDType::DOC_ID <= domain_type && domain_type < ObDomainIDType::MAX)) {
         if (OB_FAIL(domain_types.push_back(domain_type))) {
-          LOG_WARN("failed to push back domain type", K(ret), K(domain_type));
         } else if (OB_FAIL(domain_tids.push_back(domain_tid))) {
-        LOG_WARN("failed to push back domain tid", K(ret), K(domain_tid));
         }
       }
     }
@@ -540,18 +513,14 @@ int ObDomainIdUtils::get_domain_id_col_by_tid(
         uint64_t doc_id_col_id = OB_INVALID_ID;
         uint64_t ft_col_id = OB_INVALID_ID;
         if (OB_FAIL(table->get_fulltext_column_ids(doc_id_col_id, ft_col_id))) {
-          LOG_WARN("fail to get fulltext column ids", K(ret), KPC(table));
         } else if (OB_FAIL(col_ids.push_back(doc_id_col_id))) {
-          LOG_WARN("fail to push back col id", K(ret));
         }
         break;
       }
       case ObDomainIDType::VID: {
         uint64_t vec_vid_col_id = OB_INVALID_ID;
         if (OB_FAIL(table->get_vec_index_vid_col_id(vec_vid_col_id))) {
-          LOG_WARN("fail to get vec index column ids", K(ret), KPC(table));
         } else if (OB_FAIL(col_ids.push_back(vec_vid_col_id))) {
-          LOG_WARN("fail to push back col id", K(ret));
         }
         break;
       }
@@ -560,14 +529,11 @@ int ObDomainIdUtils::get_domain_id_col_by_tid(
         uint64_t vec_cid_col_id = OB_INVALID_ID;
         const ObTableSchema *rowkey_cid_schema = nullptr;
         if (OB_FAIL(sql_schema_guard->get_table_schema(domain_tid, rowkey_cid_schema))) {
-          LOG_WARN("failed to get table schema", K(ret), K(domain_tid));
         } else if (OB_ISNULL(rowkey_cid_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected nullptr to table schema", K(ret));
         } else if (OB_FAIL(rowkey_cid_schema->get_vec_index_vid_col_id(vec_cid_col_id, true/*is_cid*/))) {
-          LOG_WARN("fail to get domain column id", K(ret));
         } else if (OB_FAIL(col_ids.push_back(vec_cid_col_id))) {
-          LOG_WARN("fail to push back col id", K(ret));
         }
         break;
       }
@@ -578,18 +544,13 @@ int ObDomainIdUtils::get_domain_id_col_by_tid(
         uint64_t pq_cids_col_id = OB_INVALID_ID;
         const ObTableSchema *rowkey_cid_schema = nullptr;
         if (OB_FAIL(sql_schema_guard->get_table_schema(domain_tid, rowkey_cid_schema))) {
-          LOG_WARN("failed to get table schema", K(ret), K(domain_tid));
         } else if (OB_ISNULL(rowkey_cid_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected nullptr to table schema", K(ret));
         } else if (OB_FAIL(rowkey_cid_schema->get_vec_index_vid_col_id(vec_cid_col_id, true/*is_cid*/))) {
-          LOG_WARN("fail to get fulltext column ids", K(ret));
         } else if (OB_FAIL(get_pq_cids_col_id(*rowkey_cid_schema, *table, pq_cids_col_id))) {
-          LOG_WARN("fail to get pq cids col id", K(ret));
         } else if (OB_FAIL(col_ids.push_back(vec_cid_col_id))) {
-          LOG_WARN("fail to push back col id", K(ret));
         } else if (OB_FAIL(col_ids.push_back(pq_cids_col_id))) {
-          LOG_WARN("fail to push back col id", K(ret));
         }
         break;
       }
@@ -597,14 +558,11 @@ int ObDomainIdUtils::get_domain_id_col_by_tid(
         uint64_t embedded_col_id = OB_INVALID_ID;
         const ObTableSchema *embedded_table_schema = nullptr;
         if (OB_FAIL(sql_schema_guard->get_table_schema(domain_tid, embedded_table_schema))) {
-          LOG_WARN("failed to get table schema", K(ret), K(domain_tid));
         } else if (OB_ISNULL(embedded_table_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected nullptr to table schema", K(ret));
         } else if (OB_FAIL(embedded_table_schema->get_hybrid_vec_embedded_column_id(embedded_col_id))) {
-          LOG_WARN("fail to get embedded vector index column ids", K(ret), KPC(embedded_table_schema));
         } else if (OB_FAIL(col_ids.push_back(embedded_col_id))) {
-          LOG_WARN("fail to push back col id", K(ret), K(embedded_col_id));
         }
         break;
       }
@@ -841,9 +799,7 @@ int ObDomainIdUtils::resort_domain_info_by_base_cols(
   ObSEArray<int64_t, 16> tmp_domain_types;
   ObSEArray<uint64_t, 16> tmp_domain_tids;
   if (OB_FAIL(tmp_domain_types.prepare_allocate(base_col_ids.count()))) {
-    LOG_WARN("fail to reserve space", K(ret), K(base_col_ids.count()));
   } else if (OB_FAIL(tmp_domain_tids.prepare_allocate(base_col_ids.count()))) {
-    LOG_WARN("fail to reserve space", K(ret), K(base_col_ids.count()));
   } else {
     for (int i = 0; i < base_col_ids.count(); ++i) {
       tmp_domain_types[i] = -1;
@@ -858,7 +814,6 @@ int ObDomainIdUtils::resort_domain_info_by_base_cols(
     col_ids.reuse();
     ObDomainIdUtils::ObDomainIDType type = static_cast<ObDomainIdUtils::ObDomainIDType>(domain_types.at(i));
     if (OB_FAIL(ObDomainIdUtils::get_domain_id_col_by_tid(type, &table_schema, &sql_schema_guard, domain_tids.at(i), col_ids))) {
-      LOG_WARN("fail to get domain id col id", K(ret), K(type), K(table_schema));
     } else if (is_contain(col_ids, OB_INVALID_ID) || col_ids.count() == 0) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get invalid domain id col id", K(ret), K(type), K(table_schema));

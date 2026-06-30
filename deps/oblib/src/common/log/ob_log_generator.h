@@ -91,13 +91,9 @@ int generate_log(char *buf, const int64_t len, int64_t &pos, ObLogCursor &cursor
     }
   } else if (OB_FAIL(cursor.next_entry(entry, cmd, buf + data_pos,
                                        end_pos - data_pos))) {
-    _OB_LOG(ERROR, "cursor[%s].next_entry()=>%d", cursor.to_str(), ret);
   } else if (OB_FAIL(entry.serialize(buf, new_pos + entry.get_serialize_size(),
                                      new_pos))) {
-    _OB_LOG(ERROR, "serialize_log_entry(buf=%p, len=%ld, entry[id=%ld], data_len=%ld)=>%d",
-            buf, len, entry.seq_, end_pos - data_pos, ret);
   } else if (OB_FAIL(cursor.advance(entry))) {
-    _OB_LOG(ERROR, "cursor[id=%ld].advance(entry.id=%ld)=>%d", cursor.log_id_, entry.seq_, ret);
   } else {
     pos = end_pos;
   }
@@ -111,7 +107,6 @@ int ObLogGenerator::write_log(const LogCommand cmd, T &data)
   if (OB_UNLIKELY(!is_inited())) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(check_state())) {
-    _OB_LOG(ERROR, "check_state()=>%d", ret);
   } else if (is_frozen_) {
     ret = OB_STATE_NOT_MATCH;
     ObCStringHelper helper;

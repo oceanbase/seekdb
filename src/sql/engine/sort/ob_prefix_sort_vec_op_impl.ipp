@@ -84,11 +84,9 @@ int ObPrefixSortVecImpl<Compare, Store_Row, has_addon>::init(ObSortVecOpContext 
     sort_row_count_ = ctx.sort_row_cnt_;
     ctx.base_sk_collations_ = &base_sk_collations_;
     if (OB_SUCCESS != (ret = ObSortVecOpImpl<Compare, Store_Row, has_addon>::init(ctx))) {
-      SQL_ENG_LOG(WARN, "sort impl init failed", K(ret));
     } else if (OB_FAIL(init_temp_row_store(
                  *sk_exprs_, INT64_MAX, batch_size, false, false /*enable dump*/,
                  Store_Row::get_extra_size(true /*is_sort_key*/), NONE_COMPRESSOR, im_sk_store_))) {
-      SQL_ENG_LOG(WARN, "failed to init temp row store", K(ret));
     } else if (ctx.has_addon_
                && OB_FAIL(init_temp_row_store(*addon_exprs_, INT64_MAX, batch_size, false,
                                               false /*enable dump*/,
@@ -107,9 +105,7 @@ int ObPrefixSortVecImpl<Compare, Store_Row, has_addon>::init(ObSortVecOpContext 
         SQL_ENG_LOG(WARN, "allocate memory failed", K(ret), K(batch_size), KP(selector_),
                     KP(im_sk_rows_), KP(im_addon_rows_));
       } else if (OB_FAIL(brs_holder_.init(all_exprs_, *ctx.eval_ctx_))) {
-        SQL_ENG_LOG(WARN, "init batch result holder failed", K(ret));
       } else if (OB_FAIL(fetch_rows_batch())) {
-        SQL_ENG_LOG(WARN, "fetch rows in batch manner failed", K(ret));
       }
     }
   }
@@ -146,7 +142,6 @@ int ObPrefixSortVecImpl<Compare, Store_Row, has_addon>::is_same_prefix(
     r_data = r->get_cell_payload(row_meta, idx);
     if (OB_FAIL(sort_cmp_fun(e->obj_meta_, e->obj_meta_, l_data, l_len, l_null, r_data, r_len,
                              r_null, cmp_ret))) {
-      SQL_ENG_LOG(WARN, "failed to compare", K(ret));
     } else {
       same = (0 == cmp_ret);
     }
@@ -184,7 +179,6 @@ int ObPrefixSortVecImpl<Compare, Store_Row, has_addon>::is_same_prefix(
     r_data = vec->get_payload(r_batch_idx);
     if (OB_FAIL(sort_cmp_fun(e->obj_meta_, e->obj_meta_, l_data, l_len, l_null, r_data, r_len,
                              r_null, cmp_ret))) {
-      SQL_ENG_LOG(WARN, "failed to compare", K(ret));
     } else {
       same = (0 == cmp_ret);
     }
@@ -199,7 +193,6 @@ int ObPrefixSortVecImpl<Compare, Store_Row, has_addon>::add_immediate_prefix(
   int ret = OB_SUCCESS;
   int64_t pos = im_sk_store_.get_row_cnt();
   if (OB_FAIL(add_immediate_prefix_store(pos, selector, row_size))) {
-    SQL_ENG_LOG(WARN, "failed to add immediate prefix store", K(ret));
   } else if (!comp_.is_inited()
              && OB_FAIL(comp_.init(cmp_sk_exprs_, sk_row_meta_, addon_row_meta_,
                                    cmp_sort_collations_, exec_ctx_,
@@ -223,12 +216,9 @@ int ObPrefixSortVecImpl<Compare, Store_Row, has_addon>::add_immediate_prefix_sto
   int ret = OB_SUCCESS;
   if (OB_FAIL(im_sk_store_.add_batch(sk_vec_ptrs_, selector, row_size,
                                      SK_UPCAST_PP(im_sk_rows_ + pos)))) {
-    SQL_ENG_LOG(WARN, "add store row failed", K(ret), K(get_memory_used()), K(get_memory_limit()));
   } else if (has_addon) {
     if (OB_FAIL(im_addon_store_.add_batch(addon_vec_ptrs_, selector, row_size,
                                           SK_UPCAST_PP(im_addon_rows_ + pos)))) {
-      SQL_ENG_LOG(WARN, "add store row failed", K(ret), K(get_memory_used()),
-                  K(get_memory_limit()));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < row_size; i++) {
       SK_DOWNCAST_P(im_sk_rows_[i + pos])
@@ -286,11 +276,9 @@ int ObPrefixSortVecImpl<Compare, Store_Row, has_addon>::fetch_rows_batch()
   ObSortVecOpImpl<Compare, Store_Row, has_addon>::reuse();
   sort_prefix_rows_ = 0;
   if (OB_FAIL(brs_holder_.restore())) {
-    SQL_ENG_LOG(WARN, "restore batch result failed", K(ret));
   } else if (selector_size_ > 0) {
     // next prefix rows in previous fetch_rows_batch().
     if (OB_FAIL(add_batch(*brs_, selector_, selector_size_))) {
-      SQL_ENG_LOG(WARN, "add batch failed", K(ret));
     } else {
       sort_prefix_rows_ += selector_size_;
       prev_row_ = sk_rows_[selector_size_ - 1];
@@ -307,14 +295,12 @@ int ObPrefixSortVecImpl<Compare, Store_Row, has_addon>::fetch_rows_batch()
   while (OB_SUCC(ret) && !found_new_prefix) {
     self_op_->clear_evaluated_flag();
     if (OB_FAIL(child_->get_next_batch(self_op_->get_spec().max_batch_size_, brs_))) {
-      SQL_ENG_LOG(WARN, "get next batch failed", K(ret));
     } else {
       // evaluate all expression and set projected, no need to evaluate any
       // more.
       for (int64_t i = 0; OB_SUCC(ret) && i < all_exprs_.count(); i++) {
         ObExpr *e = all_exprs_.at(i);
         if (OB_FAIL(e->eval_vector(*eval_ctx_, *brs_))) {
-          SQL_ENG_LOG(WARN, "eval batch failed", K(ret));
         } else {
           e->get_eval_info(*eval_ctx_).projected_ = true;
         }
@@ -339,7 +325,6 @@ int ObPrefixSortVecImpl<Compare, Store_Row, has_addon>::fetch_rows_batch()
             if (0 == selector_size_) {
               // do nothing
             } else if (OB_FAIL(add_batch(*brs_, selector_, selector_size_))) {
-              SQL_ENG_LOG(WARN, "add batch failed", K(ret));
             } else {
               sort_prefix_rows_ += selector_size_;
               prev_row_ = sk_rows_[selector_size_ - 1];
@@ -353,10 +338,8 @@ int ObPrefixSortVecImpl<Compare, Store_Row, has_addon>::fetch_rows_batch()
         if (new_prefix >= 0) {
           bool is_same = false;
           if (OB_FAIL(is_same_prefix(*sk_exprs_, new_prefix, i, is_same))) {
-            SQL_ENG_LOG(WARN, "check same prefix failed", K(ret));
           } else if (!is_same) {
             if (OB_FAIL(add_immediate_prefix(selector_, selector_size_))) {
-              SQL_ENG_LOG(WARN, "add immediate prefix failed", K(ret));
             } else {
               new_prefix = i;
               selector_size_ = 1;
@@ -371,7 +354,6 @@ int ObPrefixSortVecImpl<Compare, Store_Row, has_addon>::fetch_rows_batch()
       if (selector_size_ > 0 && OB_SUCC(ret)) {
         if (new_prefix < 0) {
           if (OB_FAIL(add_batch(*brs_, selector_, selector_size_))) {
-            SQL_ENG_LOG(WARN, "add batch failed", K(ret));
           } else {
             sort_prefix_rows_ += selector_size_;
             prev_row_ = sk_rows_[selector_size_ - 1];
@@ -381,7 +363,6 @@ int ObPrefixSortVecImpl<Compare, Store_Row, has_addon>::fetch_rows_batch()
           if (brs_->end_) {
             // add last immediate prefix rows
             if (OB_FAIL(add_immediate_prefix(selector_, selector_size_))) {
-              SQL_ENG_LOG(WARN, "add immediate prefix failed", K(ret));
             }
             selector_size_ = 0;
           }
@@ -432,14 +413,11 @@ int ObPrefixSortVecImpl<Compare, Store_Row, has_addon>::get_next_batch(const int
         attach_im_perfix_store(max_cnt, read_rows);
         if (read_rows > 0) {
           if (OB_FAIL(adjust_topn_read_rows(sk_rows_, read_rows))) {
-            SQL_ENG_LOG(WARN, "adjust read rows with ties failed", K(ret));
           } else if (OB_FAIL(attach_rows(read_rows))) {
-            SQL_ENG_LOG(WARN, "failed to attach rows", K(ret));
           }
         } else {
           if (0 == loop && (nullptr == brs_ || !brs_->end_) && outputted_rows_cnt_ < topn_cnt_) {
             if (OB_FAIL(fetch_rows_batch())) {
-              SQL_ENG_LOG(WARN, "fetch rows in batch manner failed", K(ret));
             }
           } else {
             ret = OB_ITER_END;

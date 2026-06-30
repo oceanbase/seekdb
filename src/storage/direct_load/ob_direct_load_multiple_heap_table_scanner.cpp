@@ -52,10 +52,8 @@ int ObDirectLoadMultipleHeapTableTabletWholeScanner::init(
     tablet_id_ = tablet_id;
     ObDirectLoadMultipleHeapTable *multi_heap_table = static_cast<ObDirectLoadMultipleHeapTable *>(heap_table.get_table());
     if (OB_FAIL(index_scanner_.init(multi_heap_table, tablet_id, table_data_desc))) {
-      LOG_WARN("fail to init index scanner", KR(ret));
     } else if (OB_FAIL(data_block_reader_.init(table_data_desc.sstable_data_block_size_,
                                                table_data_desc.compressor_type_))) {
-      LOG_WARN("fail to init data block reader", KR(ret));
     } else if (OB_FAIL(switch_next_fragment())) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
         LOG_WARN("fail to switch next fragment", KR(ret));
@@ -86,7 +84,6 @@ int ObDirectLoadMultipleHeapTableTabletWholeScanner::switch_next_fragment()
     data_block_reader_.reuse();
     if (OB_FAIL(data_block_reader_.open(data_fragment.file_handle_, tablet_index->offset_,
                                         data_fragment.file_size_ - tablet_index->offset_))) {
-      LOG_WARN("fail to open file", KR(ret));
     }
   }
   return ret;

@@ -87,7 +87,6 @@ int ObTableLoadAutoincNextval::get_input_value(ObStorageDatum &datum,
   } else {
     bool is_zero = false;
     if (OB_FAIL(get_uint_value(datum, is_zero, casted_value, tc))) {
-      LOG_WARN("get casted unsigned int value failed", KR(ret));
     }
     if (OB_SUCC(ret)) {
       if (!(SMO_NO_AUTO_VALUE_ON_ZERO & sql_mode)) {
@@ -120,7 +119,6 @@ int ObTableLoadAutoincNextval::generate_autoinc_value(ObAutoincrementService &au
   } else {
     // sync insert value globally before sync value globally
     if (OB_FAIL(auto_service.sync_insert_value_global(*autoinc_param))) {
-      LOG_WARN("failed to sync insert value globally", KR(ret));
     }
     if (OB_SUCC(ret)) {
       uint64_t value = 0;
@@ -128,7 +126,6 @@ int ObTableLoadAutoincNextval::generate_autoinc_value(ObAutoincrementService &au
       // get cache handle when allocate first auto-increment value
       if (OB_ISNULL(cache_handle)) {
         if (OB_FAIL(auto_service.get_handle(*autoinc_param, cache_handle))) {
-          LOG_WARN("failed to get auto_increment handle", KR(ret));
         } else if (OB_ISNULL(cache_handle)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Error unexpceted", KR(ret), K(cache_handle));
@@ -144,9 +141,7 @@ int ObTableLoadAutoincNextval::generate_autoinc_value(ObAutoincrementService &au
           // invalid cache handle; record count
           ++autoinc_param->autoinc_intervals_count_;
           if (OB_FAIL(auto_service.get_handle(*autoinc_param, cache_handle))) {
-            LOG_WARN("failed to get auto_increment handle", KR(ret));
           } else if (OB_FAIL(cache_handle->next_value(value))) {
-            LOG_WARN("failed to get auto_increment value", KR(ret));
           }
         }
       }
@@ -179,14 +174,12 @@ int ObTableLoadAutoincNextval::eval_nextval(AutoincParam *autoinc_param,
     // sync last user specified value first(compatible with MySQL)
     if (OB_SUCC(ret)) {
       if (OB_FAIL(auto_service.sync_insert_value_local(*autoinc_param))) {
-        LOG_WARN("failed to sync last insert value", KR(ret));
       }
     }
     uint64_t new_val = 0;
     if (OB_SUCC(ret)) {
       // check : to generate auto-increment value or not
       if (OB_FAIL(get_input_value(datum, *autoinc_param, is_to_generate, new_val, tc, sql_mode))) {
-        LOG_WARN("check generation failed", KR(ret));
       } else if (is_to_generate &&
                  OB_FAIL(generate_autoinc_value(auto_service, autoinc_param, new_val))) {
         LOG_WARN("generate autoinc value failed", KR(ret));

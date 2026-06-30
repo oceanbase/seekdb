@@ -49,7 +49,6 @@ void ObQueryEngine::check_cleanout(bool &is_all_cleanout,
                                              true, /*start_exclusive*/
                                              scan_end_key_wrapper,
                                              true  /*end_exclusive*/))) {
-    TRANS_LOG(ERROR, "set key range to btree scan handle fail", KR(ret));
   } else {
     blocksstable::ObRowReader row_reader;
     blocksstable::ObDatumRow datum_row;
@@ -86,7 +85,6 @@ void ObQueryEngine::dump2text(FILE* fd)
                                              true, /*start_exclusive*/
                                              scan_end_key_wrapper,
                                              true  /*end_exclusive*/))) {
-    TRANS_LOG(ERROR, "set key range to btree scan handle fail", KR(ret));
   } else {
     blocksstable::ObRowReader row_reader;
     blocksstable::ObDatumRow datum_row;
@@ -100,7 +98,6 @@ void ObQueryEngine::dump2text(FILE* fd)
           helper.reset();
           fprintf(fd, "\t%s dml=%d size=%ld\n", helper.convert(*node), mtd->dml_flag_, mtd->buf_len_);
           if (OB_FAIL(row_reader.read_row(mtd->buf_, mtd->buf_len_, nullptr, datum_row))) {
-            TRANS_LOG(WARN, "Failed to read datum row", K(ret));
           } else {
             for (int64_t i = 0; OB_SUCC(ret) && i < datum_row.get_column_count(); i++) {
               blocksstable::ObStorageDatum &datum = datum_row.storage_datums_[i];
@@ -172,7 +169,6 @@ int ObQueryEngine::init()
     TRANS_LOG(WARN, "init twice", K(this));
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(keybtree_.init())) {
-    TRANS_LOG(WARN, "keybtree init fail", KR(ret));
   } else {
     is_inited_ = true;
   }
@@ -376,7 +372,6 @@ int ObQueryEngine::sample_rows(Iterator<BtreeRawIterator> *iter,
                                       start_exclude,
                                       scan_end_key_wrapper,
                                       end_exclude))) {
-    TRANS_LOG(WARN, "set key range to btree scan handle failed", KR(ret));
   } else {
     while (OB_SUCC(ret)) {
       if (OB_FAIL(iter->next())) {
@@ -455,7 +450,6 @@ int ObQueryEngine::init_raw_iter_for_estimate(Iterator<BtreeRawIterator>*& iter,
                                         true, /*start_exclusive*/
                                         end_key_wrapper,
                                         true  /*start_exclusive*/))) {
-      TRANS_LOG(WARN, "set key range to btree scan handle failed", K(ret));
     }
   }
 
@@ -516,7 +510,6 @@ int ObQueryEngine::split_range(const ObMemtableKey *start_key,
         ret = OB_ENTRY_NOT_EXIST;
         TRANS_LOG(WARN, "branch fan out less than range count", K(btree_node_count), K(range_count));
       } else if (OB_FAIL(init_raw_iter_for_estimate(iter, start_key, end_key))) {
-        TRANS_LOG(WARN, "init raw iter fail", K(ret), K(*start_key), K(*end_key));
       } else if (NULL == iter) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(iter->get_read_handle().split_range(top_level, btree_node_count, range_count, key_array))) {
@@ -534,7 +527,6 @@ int ObQueryEngine::split_range(const ObMemtableKey *start_key,
           ret = OB_SUCCESS;
         }
       } else if (OB_FAIL(convert_keys_to_store_ranges_(start_key, end_key, range_count, key_array, range_array))) {
-        TRANS_LOG(WARN, "convert keys to store ranges failed", KR(ret), K(range_count), K(key_array));
       } else {
         // split range succeed
       }
@@ -578,7 +570,6 @@ int ObQueryEngine::inner_loop_find_level_(const ObMemtableKey *start_key,
     top_level++;
     btree_node_count = 0;
     if (OB_FAIL(init_raw_iter_for_estimate(iter, start_key, end_key))) {
-      TRANS_LOG(WARN, "init raw iter fail", K(ret), K(*start_key), K(*end_key));
     } else if (OB_ISNULL(iter)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(iter->get_read_handle().estimate_key_count(top_level, btree_node_count, total_rows))) {
@@ -642,7 +633,6 @@ int ObQueryEngine::convert_keys_to_store_ranges_(const ObMemtableKey *start_key,
       merge_range.set_left_open();
       merge_range.set_right_closed();
       if (OB_FAIL(range_array.push_back(merge_range))) {
-        TRANS_LOG(WARN, "Failed to push back the merge range to array", K(ret), K(merge_range));
       }
     }
   }

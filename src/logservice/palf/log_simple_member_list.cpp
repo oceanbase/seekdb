@@ -79,9 +79,7 @@ int LogSimpleMemberList::deep_copy(const common::ObMemberList &member_list)
   ObAddr server;
   for (int64_t i = 0; OB_SUCC(ret) && i < member_list.get_member_number(); ++i) {
     if (OB_FAIL(member_list.get_server_by_index(i, server))) {
-      CLOG_LOG(ERROR, "get_server_by_index failed", K(ret));
     } else if (OB_FAIL(add_server(server))) {
-      CLOG_LOG(ERROR, "add_server failed", K(ret));
     }
   }
   if (OB_SUCC(ret) && get_count() != member_list.get_member_number()) {
@@ -98,7 +96,6 @@ int LogSimpleMemberList::deep_copy_to(common::ObMemberList &member_list)
   member_list.reset();
   for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
     if (OB_FAIL(member_list.add_server(server_[i]))) {
-      CLOG_LOG(ERROR, "add_server failed", K(ret));
     }
   }
   if (OB_SUCC(ret) && get_count() != member_list.get_member_number()) {

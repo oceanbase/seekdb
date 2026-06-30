@@ -114,7 +114,6 @@ int ObLSTxService::get_tx_scheduler(const transaction::ObTransID &tx_id,
     } else {
       scheduler = ctx->get_scheduler();
       if (OB_SUCCESS != (tmp_ret = mgr_->revert_tx_ctx(ctx))) {
-        TRANS_LOG(ERROR, "fail to revert tx", K(ret), K(tmp_ret), K(tx_id), KPC(ctx));
       }
       if (!scheduler.is_valid()) {// follower ctx, not replay commit info yet, this may happed
         ret = OB_TRANS_CTX_NOT_EXIST;
@@ -149,7 +148,6 @@ int ObLSTxService::get_tx_start_session_id(const transaction::ObTransID &tx_id, 
               ? ctx->get_session_id()
               : ctx->get_client_sid();
       if (OB_TMP_FAIL(mgr_->revert_tx_ctx(ctx))) {
-        TRANS_LOG(ERROR, "fail to revert tx", K(ret), K(tmp_ret), K(tx_id), KPC(ctx));
       }
     }
   }
@@ -179,7 +177,6 @@ int ObLSTxService::get_read_store_ctx(const ObTxReadSnapshot &snapshot,
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", K(ret), KP(trans_service_), KP(mgr_));
   } else if (OB_FAIL(mgr_->start_readonly_request())) {
-    TRANS_LOG(WARN, "start readonly request failed", K(ret));
   } else {
     store_ctx.ls_id_ = ls_id_;
     store_ctx.is_read_store_ctx_ = true;
@@ -226,7 +223,6 @@ int ObLSTxService::get_read_store_ctx(const SCN &snapshot,
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", K(ret), KP(trans_service_), KP(mgr_));
   } else if (OB_FAIL(mgr_->start_readonly_request())) {
-    TRANS_LOG(WARN, "start readonly request failed", K(ret));
   } else {
     store_ctx.ls_id_ = ls_id_;
     store_ctx.is_read_store_ctx_ = true;
@@ -277,13 +273,10 @@ int ObLSTxService::revert_store_ctx(storage::ObStoreCtx &store_ctx) const
       TRANS_LOG(ERROR, "src tx guard is valid when src ls handle not valid", K(store_ctx));
       ObLSHandle ls_handle;
       if (OB_TMP_FAIL(share::g_mp->ls_service()->get_ls(src_tx_table_guard.get_ls_id(), ls_handle, ObLSGetMod::TRANS_MOD))) {
-        TRANS_LOG(ERROR, "get_ls failed", KR(tmp_ret), K(src_tx_table_guard));
       } else if (OB_TMP_FAIL(ls_handle.get_ls()->get_tx_svr()->end_request_for_transfer())) {
-        TRANS_LOG(ERROR, "end request for transfer", KR(tmp_ret), K(src_tx_table_guard));
       }
     } else {
       if (OB_TMP_FAIL(src_ls_handle.get_ls()->get_tx_svr()->end_request_for_transfer())) {
-        TRANS_LOG(ERROR, "end request for transfer", KR(tmp_ret), K(src_tx_table_guard));
       }
     }
   }
@@ -381,7 +374,6 @@ int ObLSTxService::block_tx()
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", KR(ret), K_(ls_id));
   } else if (OB_FAIL(mgr_->block_tx(unused_is_all_tx_clean_up))) {
-    TRANS_LOG(WARN, "block rw tx failed", K_(ls_id));
   } else {
     TRANS_LOG(INFO, "block rw tx success", K_(ls_id));
   }
@@ -396,7 +388,6 @@ int ObLSTxService::block_all()
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", KR(ret), K_(ls_id));
   } else if (OB_FAIL(mgr_->block_all(unused_is_all_tx_clean_up))) {
-    TRANS_LOG(WARN, "block all failed", K_(ls_id));
   } else {
     TRANS_LOG(INFO, "block all success", K_(ls_id));
   }
@@ -411,7 +402,6 @@ int ObLSTxService::kill_all_tx(const bool graceful)
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", KR(ret), K_(ls_id));
   } else if (OB_FAIL(mgr_->kill_all_tx(graceful, unused_is_all_tx_clean_up))) {
-    TRANS_LOG(WARN, "kill_all_tx failed", K_(ls_id));
   } else {
     TRANS_LOG(INFO, "kill_all_tx success", K_(ls_id));
   }
@@ -475,9 +465,7 @@ int ObLSTxService::iterate_tx_obj_lock_op(ObLockOpIterator &iter) const
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", KR(ret), K_(ls_id));
   } else if (OB_FAIL(mgr_->iterate_tx_obj_lock_op(iter))) {
-    TRANS_LOG(WARN, "get tx obj lock op iter failed", K(ret));
   } else if (OB_FAIL(iter.set_ready())) {
-    TRANS_LOG(WARN, "iter set ready failed", K(ret));
   } else {
     TRANS_LOG(INFO, "iter set ready success", K(ret));
   }
@@ -491,7 +479,6 @@ int ObLSTxService::iterate_tx_ctx(ObLSTxCtxIterator &iter) const
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", KR(ret), K_(ls_id));
   } else if (OB_FAIL(iter.set_ready(mgr_))) {
-    TRANS_LOG(WARN, "get tx obj lock op iter failed", K(ret), K_(ls_id));
   } else {
     TRANS_LOG(INFO, "iter set ready success", K(ret), K_(ls_id));
   }
@@ -511,12 +498,10 @@ int ObLSTxService::replay(const void *buffer,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid arguments", KP(parent_));
   } else if (OB_FAIL(base_header.deserialize(log_buf, nbytes, tmp_pos))) {
-    LOG_WARN("log base header deserialize error", K(ret));
   } else if (OB_FAIL(ObTxReplayExecutor::execute(parent_, this, log_buf, nbytes,
                                                  tmp_pos, lsn, scn,
                                                  base_header,
                                                  ls_id_))) {
-    LOG_WARN("replay tx log error", K(ret), K(lsn), K(scn));
   }
   return ret;
 }
@@ -537,7 +522,6 @@ int ObLSTxService::replay_start_working_log(const ObTxStartWorkingLog &log, SCN 
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", KR(ret), K(ls_id_));
   } else if (OB_FAIL(mgr_->replay_start_working_log(log, log_ts_ns))) {
-    TRANS_LOG(WARN, "replay start working log failed", KR(ret), K(log), K(ls_id_));
   }
   return ret;
 }
@@ -549,7 +533,6 @@ void ObLSTxService::switch_to_follower_forcedly()
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", KR(ret), K(ls_id_));
   } else if (OB_FAIL(mgr_->switch_to_follower_forcedly())) {
-    TRANS_LOG(ERROR, "switch to follower forcedly failed", KR(ret), K(ls_id_));
   }
   // TRANS_LOG(INFO, "[ObLSTxService] switch_to_follower_forcedly", KR(ret), K(ls_id_));
   return;
@@ -562,7 +545,6 @@ int ObLSTxService::switch_to_leader()
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", KR(ret), K(ls_id_));
   } else if (OB_FAIL(mgr_->switch_to_leader())) {
-    TRANS_LOG(WARN, "switch to leader failed", KR(ret), K(ls_id_));
   }
   // TRANS_LOG(INFO, "[ObLSTxService] switch_to_leader", KR(ret), K(ls_id_));
   return ret;
@@ -575,7 +557,6 @@ int ObLSTxService::switch_to_follower_gracefully()
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", KR(ret), K(ls_id_));
   } else if (OB_FAIL(mgr_->switch_to_follower_gracefully())) {
-    TRANS_LOG(WARN, "switch to follower gracefully failed", KR(ret), K(ls_id_));
   }
   // TRANS_LOG(INFO, "[ObLSTxService] switch_to_follower_gracefully", KR(ret), K(ls_id_));
   return ret;
@@ -588,7 +569,6 @@ int ObLSTxService::resume_leader()
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", KR(ret), K(ls_id_));
   } else if (OB_FAIL(mgr_->resume_leader())) {
-    TRANS_LOG(WARN, "resume leader failed", KR(ret), K(ls_id_));
   }
   // TRANS_LOG(INFO, "[ObLSTxService] resume_leader", KR(ret), K(ls_id_));
   return ret;
@@ -641,19 +621,26 @@ int ObLSTxService::flush(SCN &recycle_scn)
 {
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
+  bool has_gen_diagnose_trace = false;
   RLockGuard guard(rwlock_);
+  int64_t trace_id = INVALID_TRACE_ID;
   for (int i = 1; i < ObCommonCheckpointType::MAX_BASE_TYPE; i++) {
     // only flush the common_checkpoint that whose clog need recycle
     if (OB_NOT_NULL(common_checkpoints_[i])
         && !common_checkpoints_[i]->is_flushing()
         && recycle_scn >= common_checkpoints_[i]->get_rec_scn()) {
+      if (!has_gen_diagnose_trace) {
+        has_gen_diagnose_trace = true;
+        share::g_mp->checkpoint_diagnose_mgr()->acquire_trace_id(ls_id_, trace_id);
+      }
       TRANS_LOG(INFO,
                 "common_checkpoints flush",
                 K(i),
+                K(trace_id),
                 K(ls_id_),
+                K(has_gen_diagnose_trace),
                 K(common_checkpoints_[i]));
-      if (OB_SUCCESS != (tmp_ret = common_checkpoints_[i]->flush(recycle_scn))) {
-        TRANS_LOG(WARN, "obCommonCheckpoint flush failed", K(tmp_ret), K(common_checkpoints_[i]));
+      if (OB_SUCCESS != (tmp_ret = common_checkpoints_[i]->flush(recycle_scn, trace_id))) {
       }
     }
   }
@@ -766,7 +753,7 @@ int ObLSTxService::traversal_flush()
   RLockGuard guard(rwlock_);
   for (int i = 1; i < ObCommonCheckpointType::MAX_BASE_TYPE; i++) {
     if (OB_NOT_NULL(common_checkpoints_[i]) &&
-        OB_SUCCESS != (tmp_ret = common_checkpoints_[i]->flush(SCN::max_scn(), false))) {
+        OB_SUCCESS != (tmp_ret = common_checkpoints_[i]->flush(SCN::max_scn(), checkpoint::INVALID_TRACE_ID, false))) {
       TRANS_LOG(WARN, "obCommonCheckpoint flush failed", K(tmp_ret), KP(common_checkpoints_[i]));
     }
   }
@@ -820,7 +807,6 @@ int ObLSTxService::prepare_offline(const int64_t start_ts)
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", KR(ret), K_(ls_id));
   } else if (OB_FAIL(mgr_->block_all(unused_is_all_tx_clean_up))) {
-    TRANS_LOG(WARN, "block all failed", K_(ls_id));
   } else if (ObTimeUtility::current_time() > start_ts + WAIT_READONLY_REQUEST_US) {
     // dont care readonly request
   } else {
@@ -852,12 +838,9 @@ int ObLSTxService::offline()
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", KR(ret), K_(ls_id));
   } else if (OB_FAIL(mgr_->block_all(unused_is_all_tx_clean_up))) {
-    TRANS_LOG(WARN, "block all failed", K_(ls_id));
   } else if (OB_FAIL(mgr_->kill_all_tx(graceful, unused_is_all_tx_clean_up))) {
-    TRANS_LOG(WARN, "kill_all_tx failed", K_(ls_id));
   } else if (OB_FAIL(share::g_mp->trans_service()->get_ts_mgr()->interrupt_gts_callback_for_ls_offline(
         ls_id_))) {
-    TRANS_LOG(WARN, "interrupt gts callback failed", KR(ret), K_(ls_id));
   } else if (mgr_->get_tx_ctx_count() > 0) {
     ret = OB_EAGAIN;
     if (REACH_TIME_INTERVAL(PRINT_LOG_INTERVAL)) {
@@ -875,7 +858,6 @@ int ObLSTxService::online()
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "not init", KR(ret), K_(ls_id));
   } else if (OB_FAIL(mgr_->online())) {
-    TRANS_LOG(WARN, "ls tx service online failed", K(ret), K_(ls_id));
   } else {
     // do nothing
   }
@@ -966,7 +948,6 @@ int ObLSTxService::filter_tx_need_transfer(ObIArray<ObTabletID> &tablet_list,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(mgr_->filter_tx_need_transfer(tablet_list, data_end_scn, move_tx_ids))) {
-    TRANS_LOG(WARN, "for each tx ctx error", KR(ret));
   }
   return ret;
 }
@@ -978,7 +959,6 @@ int ObLSTxService::transfer_out_tx_op(const ObTransferOutTxParam &param,
   int ret = OB_SUCCESS;
   int64_t start_time = ObTimeUtility::current_time();
   if (OB_FAIL(mgr_->transfer_out_tx_op(param, active_tx_count, op_tx_count))) {
-    TRANS_LOG(WARN, "for each tx ctx error", KR(ret));
   }
   int64_t end_time = ObTimeUtility::current_time();
   LOG_INFO("transfer_out_tx_op", KR(ret), "cost", end_time - start_time, K(active_tx_count), K(op_tx_count));
@@ -990,7 +970,6 @@ int ObLSTxService::wait_tx_write_end(ObTimeoutCtx &timeout_ctx)
   int ret = OB_SUCCESS;
   int64_t start_time = ObTimeUtility::current_time();
   if (OB_FAIL(mgr_->wait_tx_write_end(timeout_ctx))) {
-    TRANS_LOG(WARN, "for each tx ctx error", KR(ret));
   }
   int64_t end_time = ObTimeUtility::current_time();
   LOG_INFO("wait_tx_write_end", KR(ret), "cost", end_time - start_time);
@@ -1007,7 +986,6 @@ int ObLSTxService::collect_tx_ctx(const ObLSID dest_ls_id,
   int ret = OB_SUCCESS;
   int64_t start_time = ObTimeUtility::current_time();
   if (OB_FAIL(mgr_->collect_tx_ctx(dest_ls_id, log_scn, tablet_list, move_tx_ids, collect_count, res))) {
-    TRANS_LOG(WARN, "for each tx ctx error", KR(ret));
   }
   int64_t end_time = ObTimeUtility::current_time();
   LOG_INFO("collect_tx_ctx", KR(ret), K(ls_id_), "cost_us", end_time - start_time, K(collect_count));
@@ -1020,7 +998,6 @@ int ObLSTxService::move_tx_op(const ObTransferMoveTxParam &move_tx_param,
   int ret = OB_SUCCESS;
   int64_t start_time = ObTimeUtility::current_time();
   if (OB_FAIL(mgr_->move_tx_op(move_tx_param, args))) {
-    TRANS_LOG(WARN, "for each tx ctx error", KR(ret));
   }
   int64_t end_time = ObTimeUtility::current_time();
   LOG_INFO("move_tx_ctx", KR(ret), K(ls_id_),"cost_us", end_time - start_time,

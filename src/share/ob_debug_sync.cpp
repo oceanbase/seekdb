@@ -183,7 +183,6 @@ OB_DEF_DESERIALIZE(ObDSActionArray)
     OB_UNIS_DECODE(action);
     if (OB_SUCC(ret) && !is_const_) {
       if (OB_FAIL(add_action(action))) {
-        LOG_WARN("add action failed", K(ret), K(action));
       }
     }
   }
@@ -414,7 +413,6 @@ int ObDSSessionActions::to_thread_local(ObDSActionArray &local) const
   }
   DLIST_FOREACH(it, actions_) {
     if (OB_FAIL(local.add_action(it->action_))) {
-      LOG_WARN("add action failed", K(ret), "action", *it);
     }
   }
   return ret;
@@ -431,7 +429,6 @@ int ObDSSessionActions::get_thread_local_result(const ObDSActionArray &local)
     DLIST_FOREACH_REMOVESAFE(it, actions_) {
       if (local.is_active(it->action_.sync_point_)) {
         if (OB_FAIL(local.copy_action(it->action_.sync_point_, it->action_))) {
-          LOG_WARN("copy action failed", K(ret));
         }
       } else {
         actions_.remove(it);
@@ -556,7 +553,6 @@ int ObDSEventControl::signal(const ObSyncEventName &name)
     ret = OB_CANCELED;
     LOG_WARN("is stopping", K(ret), K(name));
   } else if (OB_FAIL(locate(name, e))) {
-    LOG_WARN("locate event failed", K(ret), K(name));
   } else if (OB_ISNULL(e)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL event", K(ret));
@@ -565,7 +561,6 @@ int ObDSEventControl::signal(const ObSyncEventName &name)
     if (e->waiter_cnt_ > 0) {
       int tmp_ret = cond_.broadcast();
       if (OB_SUCCESS != tmp_ret) {
-        LOG_WARN("condition broadcast failed", K(tmp_ret));
       }
     }
   }
@@ -594,7 +589,6 @@ int ObDSEventControl::broadcast(const ObSyncEventName &name)
     }
 
     if (OB_SUCCESS != (tmp_ret = cond_.broadcast())) {
-      LOG_WARN("condition broadcast failed", K(tmp_ret), K(name));
     }
   }
 
@@ -616,7 +610,6 @@ int ObDSEventControl::wait(const ObSyncEventName &name,
     ret = OB_CANCELED;
     LOG_INFO("is stopping", K(ret), K(name));
   } else if (OB_FAIL(locate(name, e))) {
-    LOG_WARN("locate event failed", K(ret), K(name));
   } else if (OB_ISNULL(e)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL event", K(ret));
@@ -782,7 +775,6 @@ int ObDebugSync::parse_action(const ObString &str_origin,
       } else {
         // TODO baihua: to lower case?
         if (OB_FAIL(name->assign(token))) {
-          LOG_WARN("assign event name failed", K(ret), K(token), K(str_origin));
         } else {
           token = get_token(str);
         }
@@ -800,7 +792,6 @@ int ObDebugSync::parse_action(const ObString &str_origin,
         ret = OB_PARSE_DEBUG_SYNC_ERROR;
         LOG_WARN("no event name", K(ret), K(str_origin));
       } else if (OB_FAIL(action.wait_.assign(token))) {
-        LOG_WARN("assign event name failed", K(ret), K(token), K(str_origin));
       } else {
         token = get_token(str);
       }
@@ -888,7 +879,6 @@ int ObDebugSync::add_debug_sync(const ObString &str, const bool is_global,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("get thread local actions failed", K(ret), K(str));
   } else if (OB_FAIL(parse_action(str, action, clear, reset))) {
-    LOG_WARN("parse debug sync action failed", K(ret), K(str));
   } else {
     if (!is_global) {
       if (clear) {
@@ -903,9 +893,7 @@ int ObDebugSync::add_debug_sync(const ObString &str, const bool is_global,
           ret = OB_PARSE_DEBUG_SYNC_ERROR;
           LOG_WARN("invalid action", K(ret), K(str), K(action));
         } else if (OB_FAIL(local_actions->add_action(action))) {
-          LOG_WARN("add action failed", K(ret), K(action));
         } else if (OB_FAIL(session_actions.add_action(action))) {
-          LOG_WARN("add action failed", K(ret), K(action));
         }
       }
       if (OB_SUCC(ret)) {
@@ -917,7 +905,6 @@ int ObDebugSync::add_debug_sync(const ObString &str, const bool is_global,
       arg.clear_ = clear;
       arg.action_ = action;
       if (OB_FAIL(GCTX.root_service_->broadcast_ds_action(arg))) {
-        LOG_WARN("broadcast debug sync action failed", K(ret), K(arg));
       }
     }
   }
@@ -969,17 +956,14 @@ int ObDebugSync::execute(const ObDebugSyncPoint sync_point)
       LOG_INFO("execute action",K(is_local_action), K(action));
       if (!action.signal_.is_empty()) {
         if (OB_FAIL(event_control_.signal(action.signal_))) {
-          LOG_WARN("signal failed", K(ret), K(action));
         }
       } else if (!action.broadcast_.is_empty()) {
         if (OB_FAIL(event_control_.broadcast(action.broadcast_))) {
-          LOG_WARN("failed to broadcast", K(ret), K(action));
         }
       }
 
       if (OB_SUCC(ret) && !action.wait_.is_empty()) {
         if (OB_FAIL(event_control_.wait(action.wait_, action.timeout_, !action.no_clear_))) {
-          LOG_WARN("wait failed", K(ret), K(action));
         }
       }
     }
@@ -994,7 +978,6 @@ int ObDebugSync::set_thread_local_actions(const ObDSSessionActions &session_acti
   ObDSActionArray *local = thread_local_actions();
   if (NULL != local) {
     if (OB_FAIL(session_actions.to_thread_local(*local))) {
-      LOG_WARN("to thread local actions failed", K(ret));
     }
   }
   return ret;
@@ -1006,7 +989,6 @@ int ObDebugSync::collect_result_actions(ObDSSessionActions &session_actions)
   ObDSActionArray *local = thread_local_actions();
   if (NULL != local) {
     if (OB_FAIL(session_actions.get_thread_local_result(*local))) {
-      LOG_WARN("get thread local actions result failed", K(ret));
     }
   }
   return ret;
@@ -1058,7 +1040,6 @@ int ObDebugSync::set_global_action(const bool reset, const bool clear,
         event_control_.clear_event();
       } else {
         if (OB_FAIL(global_actions_.add_action(action))) {
-          LOG_WARN("add action failed", K(ret), K(action));
         }
       }
     } else {

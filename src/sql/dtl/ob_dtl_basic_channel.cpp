@@ -37,7 +37,6 @@ SendMsgResponse::~SendMsgResponse()
   int ret = OB_SUCCESS;
   if (in_process_) {
     if (OB_FAIL(wait())) {
-      LOG_DEBUG("send dtl message failed", K(ret));
     }
   }
 }
@@ -49,7 +48,6 @@ int SendMsgResponse::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice");
   } else if (OB_FAIL(cond_.init(common::ObWaitEventIds::DEFAULT_COND_WAIT))) {
-    LOG_WARN("thread condition init failed", K(ret));
   } else {
     inited_ = true;
   }
@@ -219,7 +217,6 @@ int ObDtlBasicChannel::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(msg_response_.init())) {
-    LOG_WARN("int message response failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -231,7 +228,6 @@ int ObDtlBasicChannel::wait_response()
   int ret = OB_SUCCESS;
   if (msg_response_.is_in_process()) {
     if (OB_FAIL(msg_response_.wait())) {
-      LOG_WARN("send previous message fail", K(ret));
     }
     if (OB_HASH_NOT_EXIST == ret) {
       if (is_drain()) {
@@ -248,7 +244,6 @@ int ObDtlBasicChannel::clear_response_block()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(wait_response())) {
-    LOG_WARN("failed to wait response", K(ret));
   }
   msg_response_.reset_block();
   return ret;
@@ -350,7 +345,6 @@ int ObDtlBasicChannel::mock_eof_buffer(int64_t timeout_ts)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("alloc buffer failed", K(ret));
     } else if (OB_FAIL(row_store.init_block_buffer(static_cast<void *>(buffer->buf()), buffer->size(), block))) {
-      LOG_WARN("init block buffer failed", K(ret));
     } else {
       buffer->msg_type() = ObDtlMsgType::PX_DATUM_ROW;
       buffer->is_eof() = true;
@@ -361,12 +355,10 @@ int ObDtlBasicChannel::mock_eof_buffer(int64_t timeout_ts)
       buffer->pos() = 0;
       if (use_interm_result_) {
         if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->process_interm_result(buffer, id_))) {
-          LOG_WARN("fail to process internal result", K(ret));
         }
       } else {
         bool inc_recv_buf_cnt = false;
         if (OB_FAIL(attach(buffer, inc_recv_buf_cnt))) {
-          LOG_WARN("fail to attach buffer", K(ret));
         } else {
           free_buffer_count();
         }
@@ -404,9 +396,7 @@ int ObDtlBasicChannel::attach(ObDtlLinkedBuffer *&linked_buffer, bool inc_recv_b
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("can't attach bloom filter message", K(ret));
   } else if (OB_FAIL(block_on_increase_size(linked_buffer->size()))) {
-    LOG_WARN("failed to increase buffer size for dfc", K(ret));
   } else if (OB_FAIL(recv_list_.push(linked_buffer))) {
-    LOG_WARN("push buffer into channel recv list fail", K(ret));
   } else {
     // after push back linked buffer, cannot use the linked buffer again
     // because the buffer may have been released(finished using) by the receiver
@@ -440,9 +430,7 @@ int ObDtlBasicChannel::block_on_increase_size(int64_t size)
     int64_t ch_idx = OB_INVALID_ID;
     // block and unblock may occur during register and unregister, so idx will be dynamically modified
     if (OB_FAIL(dfc_->find(this, ch_idx))) {
-      LOG_WARN("failed to find channel", K(ret));
     } else if (OB_FAIL(dfc_server.block_on_increase_size(dfc_, ch_idx, size))) {
-      LOG_WARN("failed to block channel", K(ret), KP(id_), K(peer_), K(dfc_), K(ch_idx));
     }
   }
   return ret;
@@ -455,9 +443,7 @@ int ObDtlBasicChannel::unblock_on_decrease_size(int64_t size)
     ObDfcServer &dfc_server = DTL.get_dfc_server();
     int64_t ch_idx = OB_INVALID_ID;
     if (OB_FAIL(dfc_->find(this, ch_idx))) {
-      LOG_WARN("failed to find channel", K(ret));
     } else if (OB_FAIL(dfc_server.unblock_on_decrease_size(dfc_, ch_idx, size))) {
-      LOG_WARN("failed to block channel", K(ret), KP(id_), K(peer_), K(dfc_), K(ch_idx));
     }
   }
   return ret;
@@ -474,7 +460,6 @@ int ObDtlBasicChannel::clean_recv_list()
       auto &buffer = process_buffer_;
       LOG_TRACE("free process buffer for dfc", K(buffer->size()), KP(id_), K_(peer), K(ret), K(get_processed_buffer_cnt()), K(get_recv_buffer_cnt()));
       if (OB_FAIL(unblock_on_decrease_size(buffer->size()))) {
-        LOG_WARN("failed to decrease buffer size for dfc", KP(id_), K_(peer), K(ret), K(get_processed_buffer_cnt()), K(get_recv_buffer_cnt()));
       }
       free_buf(buffer);
       process_buffer_ = nullptr;
@@ -486,7 +471,6 @@ int ObDtlBasicChannel::clean_recv_list()
       LOG_TRACE("free recv list buffer for dfc", K(buffer->size()), KP(id_), K_(peer), K(ret),
         K(get_processed_buffer_cnt()), K(get_recv_buffer_cnt()), K(lbt()));
       if (OB_FAIL(unblock_on_decrease_size(buffer->size()))) {
-        LOG_WARN("failed to decrease buffer size for dfc", KP(id_), K_(peer), K(ret), K(get_processed_buffer_cnt()), K(get_recv_buffer_cnt()));
       }
       free_buf(buffer);
       process_buffer_ = nullptr;
@@ -635,14 +619,11 @@ int ObDtlBasicChannel::process1(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("there is no row store in internal result", K(ret));
         } else if (OB_FAIL(DTL_IR_STORE_DO(*result_info, finish_add_row, true))) {
-          LOG_WARN("failed to finish add row", K(ret));
         } else if (!result_info->is_rich_format()) {
           if (OB_FAIL(result_info->datum_store_->begin(datum_iter_))) {
-            LOG_WARN("begin iterator failed", K(ret));
           }
         } else {
           if (OB_FAIL(result_info->get_row_store()->begin(row_iter_))) {
-            LOG_WARN("failed to begin chunk row store.", K(ret));
           }
         }
       }
@@ -703,7 +684,6 @@ int ObDtlBasicChannel::flush(bool force_flush, bool wait_resp)
   if (force_flush == true) {
     if (write_buffer_ != nullptr && write_buffer_->pos() != 0) {
       if (OB_FAIL(push_back_send_list())) {
-        LOG_WARN("failed to push back send list", K(ret));
       }
     }
   }
@@ -733,7 +713,6 @@ int ObDtlBasicChannel::flush(bool force_flush, bool wait_resp)
   }
   if (OB_SUCC(ret) && force_flush && wait_resp) {
     if (OB_FAIL(wait_response())) {
-      LOG_WARN("send previous message fail", K(ret), K(peer_), K(peer_id_), K(lbt()));
     }
   }
   return ret;
@@ -753,7 +732,6 @@ int ObDtlBasicChannel::wait_unblocking_if_blocked()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("channel loop is null", K(ret));
       } else if (OB_FAIL(dfc_->block_channel(this))) {
-        LOG_WARN("failed to set block", K(ret));
       } else {
         // only block this channel, for other channels, it will also set block, or other channel can't be blocked
         LOG_TRACE("set block dfc", K(ret), KP(id_), K(peer_));
@@ -764,7 +742,6 @@ int ObDtlBasicChannel::wait_unblocking_if_blocked()
         K(peer_), K(ret));
       if (dfc_->is_block(this)) {
         if (OB_FAIL(wait_unblocking())) {
-          LOG_WARN("failed to block", K(ret));
         }
       }
     }
@@ -787,7 +764,6 @@ int ObDtlBasicChannel::wait_unblocking()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("timeout is not set", K(ret));
     } else if (OB_FAIL(channel_loop_->find(this, idx))) {
-      LOG_WARN("channel not exists in channel loop", K(ret));
     } else {
       int64_t start_t = ObTimeUtility::current_time();
       int64_t interval_t = 1 * 60 * 1000000; // 1min
@@ -800,7 +776,6 @@ int ObDtlBasicChannel::wait_unblocking()
         if (is_drain()) {
           // if drain,then ignore blocking
           if (OB_FAIL(dfc_->unblock_channel(this))) {
-            LOG_WARN("fail to unblock channel", K(ret), K(dfc_->is_block()), KP(id_), K(peer_));
           }
           break;
         } else if (OB_FAIL(channel_loop_->process_one_if(
@@ -852,7 +827,6 @@ int ObDtlBasicChannel::wait_unblocking()
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("no channel is processed", K(ret), K(got_channel_idx), K(idx));
           } else if (OB_FAIL(dfc_->unblock_channel(this))) {
-            LOG_WARN("fail to unblock channel", K(ret), K(dfc_->is_block()), KP(id_), K(peer_));
           }
         }
       } while (dfc_->is_block(this) && OB_SUCC(ret));
@@ -908,7 +882,6 @@ void ObDtlBasicChannel::free_buf(ObDtlLinkedBuffer *buf)
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("tenant_mem_mgr is null", K(lbt()), K(ret));
     } else if (OB_FAIL(tenant_mem_mgr->free(buf))) {
-      LOG_WARN("failed to free buffer", K(ret), K(lbt()));
     }
     if (nullptr != buf) {
       free_buffer_count();
@@ -942,7 +915,6 @@ int ObDtlBasicChannel::push_back_send_list()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(send_list_.push(write_buffer_))) {
-    LOG_WARN("failed to push back send list", K(ret));
   } else {
     // To clean up the internal write buffer from the last time
     inc_msg_seq_no();
@@ -952,7 +924,6 @@ int ObDtlBasicChannel::push_back_send_list()
       write_buffer_->set_use_interm_result(use_interm_result_);
       write_buffer_->set_enable_channel_sync(enable_channel_sync_);
       if (OB_FAIL(write_buffer_->push_batch_id(batch_id_, msg_writer_->rows()))) {
-        LOG_WARN("push batch id failed", K(ret));
       }
     }
     msg_writer_->reset();
@@ -1026,15 +997,12 @@ int ObDtlBasicChannel::inner_write_msg(const ObDtlMsg &msg, int64_t timeout_ts,
   int64_t need_size = 0;
   bool need_new = false;
   if (OB_FAIL(switch_writer(msg))) {
-    LOG_WARN("fail to switch writer", K(ret));
   } else if (is_eof && OB_FAIL(msg_writer_->handle_eof())) {
     LOG_WARN("fail to handle eof", K(ret));
   } else if (OB_FAIL(msg_writer_->need_new_buffer(msg, eval_ctx, need_size, need_new))) {
-    LOG_WARN("failed to judge need new buffer", K(ret));
   } else if (OB_UNLIKELY(need_new)) {
     if (OB_FAIL(switch_buffer(need_size, is_eof, timeout_ts,
                               eval_ctx))) {
-      LOG_WARN("failed to switch buffer", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -1057,7 +1025,6 @@ int ObDtlBasicChannel::write_msg(const ObDtlMsg &msg, int64_t timeout_ts,
   if (OB_FAIL(inner_write_msg(msg, timeout_ts, eval_ctx, is_eof))) {
     if (OB_BUF_NOT_ENOUGH == ret) {
       if (OB_FAIL(inner_write_msg(msg, timeout_ts, eval_ctx, is_eof))) {
-        LOG_WARN("failed to write msg", K(ret));
       }
     } else {
       LOG_WARN("failed to write msg", K(ret));
@@ -1075,7 +1042,6 @@ int ObDtlBasicChannel::switch_buffer(const int64_t min_size, const bool is_eof,
         && OB_FAIL(msg_writer_->serialize())) {
       LOG_WARN("convert block to copyable failed", K(ret));
     } else if (OB_FAIL(push_back_send_list())) {
-      LOG_WARN("failed to push back send list", K(ret));
     }
   } else if (write_buffer_ != nullptr) {
     /*
@@ -1142,7 +1108,6 @@ int ObDtlBasicChannel::send_buffer(ObDtlLinkedBuffer *&buffer)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(send_list_.push(buffer))) {
-    LOG_WARN("failed to push back send list", K(ret));
   } else {
     inc_msg_seq_no();
     buffer->size() = buffer->pos();
@@ -1156,7 +1121,6 @@ int ObDtlBasicChannel::send_buffer(ObDtlLinkedBuffer *&buffer)
       } else {
         const int64_t row_cnt = buffer->is_batch_info_valid() ? msg_writer_->rows() : 0;
         if (OB_FAIL(buffer->push_batch_id(batch_id_,row_cnt))) {
-          LOG_WARN("push batch id failed", K(ret));
         }
       }
     }
@@ -1170,7 +1134,6 @@ int ObDtlBasicChannel::send_buffer(ObDtlLinkedBuffer *&buffer)
 
   if (OB_SUCC(ret) && !send_list_.is_empty()) {
     if (OB_FAIL(flush(false))) {
-      LOG_WARN("flush fail. ignore. may retry flush again very soon", K(ret));
     }
   }
 
@@ -1186,9 +1149,7 @@ int ObDtlBasicChannel::push_buffer_batch_info()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("msg_writer_ is null", K(ret));
   } else if (OB_FAIL(msg_writer_->handle_eof())) {
-    LOG_WARN("write buffer handle eof failed", K(ret));
   } else if (OB_FAIL(write_buffer_->add_batch_info(batch_id_, msg_writer_->rows()))) {
-    LOG_WARN("linked buffer push batch failed", K(ret));
   }
   return ret;
 }
@@ -1222,7 +1183,6 @@ int ObDtlRowMsgWriter::init(ObDtlLinkedBuffer *buffer)
     reset();
     row_store_.init(0, common::ObCtxIds::DEFAULT_CTX_ID, "SqlDtlRowMsg");
     if (OB_FAIL(row_store_.init_block_buffer(static_cast<void *>(buffer->buf()), buffer->size(), block_))) {
-      LOG_WARN("init shrink buffer failed", K(ret));
     } else {
       row_store_.add_block(block_, false);
       write_buffer_ = buffer;
@@ -1288,7 +1248,6 @@ int ObDtlDatumMsgWriter::init(ObDtlLinkedBuffer *buffer)
     reset();
     if (OB_FAIL(ObChunkDatumStore::init_block_buffer(
         static_cast<void *>(buffer->buf()), buffer->size(), block_))) {
-      LOG_WARN("init shrink buffer failed", K(ret));
     } else {
       write_buffer_ = buffer;
       if (NULL != register_block_ptr_) {
@@ -1319,7 +1278,6 @@ int ObDtlDatumMsgWriter::need_new_buffer(
       need_size = serialize_need_size;
     } else {
       if (OB_FAIL(ObChunkDatumStore::Block::row_store_size(*row, *ctx, serialize_need_size))) {
-        LOG_WARN("failed to calc row store size", K(ret));
       }
       need_size = ObChunkDatumStore::Block::min_buf_size(serialize_need_size);
     }
@@ -1372,7 +1330,6 @@ int ObDtlVectorRowMsgWriter::init(ObDtlLinkedBuffer *buffer)
     reset();
     ObTempBlockStore::Block *blk = NULL;
     if (OB_FAIL(ObTempBlockStore::init_dtl_block_buffer(buffer->buf(), buffer->size(), blk))) {
-      LOG_WARN("fail to init block buffer", K(ret));
     } else {
       block_ = static_cast<ObTempRowStore::DtlRowBlock *>(blk);
       block_buffer_ = static_cast<ObTempBlockStore::ShrinkBuffer *>(
@@ -1401,7 +1358,6 @@ int ObDtlVectorRowMsgWriter::need_new_buffer(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get meta", K(ret));
       } else if (OB_FAIL(ObTempRowStore::RowBlock::calc_row_size(*row, *meta_, *ctx, serialize_need_size))) {
-        LOG_WARN("failed to calc row store size", K(ret));
       }
       need_size = ObTempRowStore::Block::min_blk_size<true>(serialize_need_size);
     }
@@ -1450,7 +1406,6 @@ int ObDtlVectorMsgWriter::init(ObDtlLinkedBuffer *buffer)
     reset();
     if (OB_FAIL(ObDtlVectorsBuffer::init_vector_buffer(
         static_cast<void *>(buffer->buf()), buffer->size(), block_))) {
-      LOG_WARN("init shrink buffer failed", K(ret));
     } else {
       block_buffer_ = block_->get_buffer();
       write_buffer_ = buffer;
@@ -1583,13 +1538,7 @@ int ObDtlControlMsgWriter::write(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, const
   write_buffer_->set_data_msg(false);
   write_buffer_->is_eof() = is_eof;
   if (OB_FAIL(serialization::encode(buf, size, pos, header))) {
-    LOG_WARN(
-        "serialize RPC channel message type fail",
-        K(size), K(pos), K(ret));
   } else if (OB_FAIL(serialization::encode(buf, size, pos, msg))) {
-    LOG_WARN(
-        "serialize RPC channel message fail",
-        K(size), K(pos), K(ret));
   }
   return ret;
 }

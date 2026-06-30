@@ -50,23 +50,16 @@ int ObPlanMonitorNodeList::init()
   if (inited_) {
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(queue_.init(MOD_LABEL, queue_size))) {
-    SERVER_LOG(WARN, "Failed to init ObMySQLRequestQueue", K(ret));
   } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::ReqMemEvict, tg_id_))) {
-    SERVER_LOG(WARN, "create failed", K(ret));
   } else if (OB_FAIL(node_map_.create(queue_size, attr, attr))) {
-    LOG_WARN("failed to create hash map", K(ret));
   } else if (OB_FAIL(TG_START(tg_id_))) {
-    SERVER_LOG(WARN, "init timer fail", K(ret));
   } else if (OB_FAIL(allocator_.init(MONITOR_NODE_PAGE_SIZE,
                                      MOD_LABEL,
                                      INT64_MAX))) {
-    SERVER_LOG(WARN, "failed to init allocator", K(ret));
   } else {
     //check FIFO mem used and sql audit records every 1 seconds
     if (OB_FAIL(task_.init(this))) {
-      SERVER_LOG(WARN, "fail to init sql audit time tast", K(ret));
     } else if (OB_FAIL(TG_SCHEDULE(tg_id_, task_, EVICT_INTERVAL, true))) {
-      SERVER_LOG(WARN, "start eliminate task failed", K(ret));
     } else {
       rt_node_id_ = -1;
       recycle_threshold_ = queue_size * 0.9; // when reach 90% usage, begin to recycle
@@ -99,7 +92,6 @@ int ObPlanMonitorNodeList::mtl_init(ObPlanMonitorNodeList* &node_list)
   int ret = OB_SUCCESS;
   
   if (OB_FAIL(node_list->init())) {
-    LOG_WARN("failed to init event list", K(ret));
   }
   return ret;
 }
@@ -144,7 +136,6 @@ int ObPlanMonitorNodeList::register_monitor_node(ObMonitorNode &node)
   LOG_TRACE("register monitor node", K(key.node_id_), K(&node), K(lbt()));
   node.set_rt_node_id(key.node_id_);
   if (OB_FAIL(node_map_.set_refactored(key, &node))) {
-    LOG_WARN("fail to set moniotr node", K(ret), K(key));
   }
   return ret;
 }
@@ -157,7 +148,6 @@ int ObPlanMonitorNodeList::revert_monitor_node(ObMonitorNode &node)
   ObMonitorNode *node_ptr = NULL;
   LOG_TRACE("revert monitor node", K(key.node_id_), K(&node));
   if (OB_FAIL(node_map_.erase_refactored(key, &node_ptr))) {
-    LOG_WARN("fail to erase moniotr node", K(ret), K(key));
   }
   return ret;
 }
@@ -168,7 +158,6 @@ int ObPlanMonitorNodeList::convert_node_map_2_array(common::ObIArray<ObMonitorNo
   int ret = OB_SUCCESS;
   ObPlanMonitorNodeList::ObMonitorNodeTraverseCall call(array);
   if (OB_FAIL(node_map_.foreach_refactored(call))) {
-    LOG_WARN("fail to traverse node map", K(ret));
   }
   return ret;
 }
@@ -182,7 +171,6 @@ int ObPlanMonitorNodeList::ObMonitorNodeTraverseCall::operator() (
   if (OB_ISNULL(node)) {
     // do nothing
   } else if (OB_FAIL(recursive_add_node_to_array(*node))) {
-    LOG_WARN("fail to recursive add node to array", K(ret), KPC(node));
   }
   return ret;
 }
@@ -202,12 +190,10 @@ int ObPlanMonitorNodeList::ObMonitorNodeTraverseCall::recursive_add_node_to_arra
       LOG_WARN("operator child is nullptr", K(ret), KPC(node.op_), K(i));
     } else if (OB_FAIL(SMART_CALL(
         recursive_add_node_to_array(child_op->get_monitor_info())))) {
-      LOG_WARN("fail to recursive add node to array", K(ret), K(node), K(i));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(node_array_.push_back(node))) {
-      LOG_WARN("fail to push back mointor node", K(ret));
     } else {
       node_array_.at(node_array_.count() - 1).covert_to_static_node();
     }

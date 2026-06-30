@@ -34,7 +34,6 @@ int LogUpdater::init(IPalfEnvImpl *palf_env_impl)
   if (NULL == palf_env_impl) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(TG_CREATE_TENANT(tg_id, tg_id_))) {
-    PALF_LOG(ERROR, "LogUpdater create failed", K(ret));
   } else {
     palf_env_impl_ = palf_env_impl;
     is_inited_ = true;
@@ -49,9 +48,7 @@ int LogUpdater::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(TG_START(tg_id_))) {
-    PALF_LOG(WARN, "LogUpdater TG_START failed", K(ret));
   } else if (OB_FAIL(TG_SCHEDULE(tg_id_, *this, PALF_UPDATE_CACHED_STAT_INTERVAL_US, true))) {
-    PALF_LOG(WARN, "LogUpdater TG_SCHEDULE failed", K(ret));
   } else {
     PALF_LOG(INFO, "LogUpdater start success", K(tg_id_), KPC(palf_env_impl_));
   }

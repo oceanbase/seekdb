@@ -25,7 +25,6 @@ int ObDDLArg::assign(const ObDDLArg &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(based_schema_object_infos_.assign(other.based_schema_object_infos_))) {
-    LOG_WARN("fail to assign based_schema_object_infos", KR(ret));
   } else {
     ddl_stmt_str_ = other.ddl_stmt_str_;
     

@@ -74,10 +74,7 @@ int ObTenantShowCatalogDatabases::inner_open()
     // check privilege
     ObSessionPrivInfo priv_info;
     if (OB_FAIL(session_->get_session_priv_info(priv_info))) {
-      LOG_WARN("fail to get session priv info", K(ret));
     } else if (OB_FAIL(schema_guard_->check_catalog_access(priv_info, session_->get_enable_role_array(), catalog_id_))) {
-      // todo only to check catalog access now
-      LOG_WARN("check catalog priv failed", K(ret));
     }
   }
   return ret;
@@ -88,7 +85,6 @@ int ObTenantShowCatalogDatabases::inner_get_next_row(common::ObNewRow *&row)
   int ret = OB_SUCCESS;
   if (!start_to_read_) {
     if (OB_FAIL(fill_scanner())) {
-      LOG_WARN("fail to fill scanner", K(ret));
     } else {
       start_to_read_ = true;
     }
@@ -116,7 +112,6 @@ int ObTenantShowCatalogDatabases::fill_scanner()
   } else {
     ObCachedCatalogMetaGetter ob_catalog_meta_getter{*schema_guard_, *allocator_};
     if (OB_FAIL(ob_catalog_meta_getter.list_namespace_names(catalog_id_, db_names))) {
-      LOG_WARN("list_namespace_names failed", K(ret), K(catalog_id_));
     }
   }
 

@@ -33,13 +33,9 @@ int ObMajorRefreshMJVPrinter::gen_refresh_dmls(ObIArray<ObDMLStmt*> &dml_stmts)
   ObSelectStmt *validation_stmt = NULL;
   ObSEArray<int64_t, 8> rowkey_sel_pos;
   if (OB_FAIL(get_rowkey_pos_in_select(rowkey_sel_pos))) {
-    LOG_WARN("failed to get rowkey pos in select", K(ret));
   } else if (OB_FAIL(gen_one_refresh_select_for_major_refresh_mjv(rowkey_sel_pos, true, left_delta_stmt))) {
-    LOG_WARN("failed to generate gen left refresh select for major refresh mjv ", K(ret));
   } else if (OB_FAIL(gen_one_refresh_select_for_major_refresh_mjv(rowkey_sel_pos, false, right_delta_stmt))) {
-    LOG_WARN("failed to generate gen right refresh select for major refresh mjv ", K(ret));
   } else if (OB_FAIL(gen_refresh_validation_select_for_major_refresh_mjv(rowkey_sel_pos, validation_stmt))) {
-    LOG_WARN("failed to generate refresh validation select for major refresh mjv ", K(ret));
   } else if (OB_FAIL(dml_stmts.push_back(left_delta_stmt))
              || OB_FAIL(dml_stmts.push_back(right_delta_stmt))
              || OB_FAIL(dml_stmts.push_back(validation_stmt))) {
@@ -88,7 +84,6 @@ int ObMajorRefreshMJVPrinter::get_rowkey_pos_in_select(ObIArray<int64_t> &rowkey
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected rowkey column", K(pos), K(rowkey_column->column_id_));
     } else if (OB_FAIL(rowkey_sel_pos.push_back(pos))) {
-      LOG_WARN("failed to push back", K(ret));
     }
   }
   LOG_TRACE("finish get rowkey pos in select", K(rowkey_sel_pos));
@@ -123,11 +118,8 @@ int ObMajorRefreshMJVPrinter::gen_real_time_view(ObSelectStmt *&sel_stmt)
   ObSelectStmt *access_mv_stmt = NULL;
   ObSelectStmt *delta_left_stmt = NULL;
   if (OB_FAIL(create_simple_stmt(sel_stmt))) {
-    LOG_WARN("failed to create simple stmt", K(ret));
   } else if (OB_FAIL(gen_mr_rt_mv_access_mv_data_stmt(access_mv_stmt))) {
-    LOG_WARN("failed to generate major refresh real time view access mv data stmt", K(ret));
   } else if (OB_FAIL(gen_mr_rt_mv_left_delta_data_stmt(delta_left_stmt))) {
-    LOG_WARN("failed to generate major refresh real time view left delta data stmt", K(ret));
   } else if (OB_FAIL(sel_stmt->get_set_query().push_back(access_mv_stmt))
              || OB_FAIL(sel_stmt->get_set_query().push_back(delta_left_stmt))) {
     LOG_WARN("failed to set set query", K(ret));
@@ -196,7 +188,6 @@ int ObMajorRefreshMJVPrinter::fill_table_partition_name(const TableItem &src_tab
   } else if (OB_INVALID_INDEX == part_idx && OB_INVALID_INDEX == sub_part_idx) {
     /* do nothing */
   } else if (OB_FAIL(ctx_.stmt_factory_.get_query_ctx()->sql_schema_guard_.get_table_schema(src_table.ref_id_, src_schema))) {
-    LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(src_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), K(src_schema));  
@@ -208,18 +199,15 @@ int ObMajorRefreshMJVPrinter::fill_table_partition_name(const TableItem &src_tab
              || OB_ISNULL(part = src_schema->get_part_array()[part_idx])) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected partition", K(ret), K(part_idx), K(part), KPC(src_schema));
-  } else if (OB_FAIL(table.part_ids_.push_back(part_idx))) { // just push a invalid part id to print partition name
-    LOG_WARN("failed to push back", K(ret));
+  } else if (OB_FAIL(table.part_ids_.push_back(part_idx))) {
   } else if (PARTITION_LEVEL_ONE == src_schema->get_part_level()) {
     if (OB_FAIL(table.part_names_.push_back(part->get_part_name()))) {
-      LOG_WARN("failed to push back", K(ret));
     }
   } else if (OB_UNLIKELY(sub_part_idx < 0 || sub_part_idx >= part->get_subpartition_num())
              || OB_ISNULL(subpart = part->get_subpart_array()[sub_part_idx])) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected subpartition", K(ret), K(sub_part_idx), KPC(part), K(subpart), KPC(src_schema));
   } else if (OB_FAIL(table.part_names_.push_back(subpart->get_part_name()))) {
-    LOG_WARN("failed to push back", K(ret));
   }
   return ret;
 }
@@ -251,13 +239,9 @@ int ObMajorRefreshMJVPrinter::append_rowkey_range_filter(const ObIArray<SelectIt
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to create raw expr", K(ret));
   } else if (OB_FAIL(start_col_row->init_param_exprs(range->start_key_.get_obj_cnt()))) {
-    LOG_WARN("failed to init param exprs", K(ret));
   } else if (OB_FAIL(start_const_row->init_param_exprs(range->start_key_.get_obj_cnt()))) {
-    LOG_WARN("failed to init param exprs", K(ret));
   } else if (OB_FAIL(end_col_row->init_param_exprs(range->end_key_.get_obj_cnt()))) {
-    LOG_WARN("failed to init param exprs", K(ret));
   } else if (OB_FAIL(end_const_row->init_param_exprs(range->end_key_.get_obj_cnt()))) {
-    LOG_WARN("failed to init param exprs", K(ret));
   } else {
     ObRawExpr *filter = NULL;
     uint64_t s_cnt = range->start_key_.get_obj_cnt();
@@ -269,7 +253,6 @@ int ObMajorRefreshMJVPrinter::append_rowkey_range_filter(const ObIArray<SelectIt
     ObConstRawExpr *const_expr = NULL;
     for (int64_t i = 0; OB_SUCC(ret) && i < s_cnt && !s_obj[i].is_min_value(); ++i) {
       if (OB_FAIL(ObRawExprUtils::build_const_obj_expr(ctx_.expr_factory_, s_obj[i], const_expr))) {
-        LOG_WARN("failed to build const obj expr", K(ret));
       } else if (OB_FAIL(start_col_row->add_param_expr(select_items.at(i).expr_))
                  || OB_FAIL(start_const_row->add_param_expr(const_expr))) {
         LOG_WARN("failed to add param expr", K(ret));
@@ -277,7 +260,6 @@ int ObMajorRefreshMJVPrinter::append_rowkey_range_filter(const ObIArray<SelectIt
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < e_cnt && !e_obj[i].is_max_value(); ++i) {
       if (OB_FAIL(ObRawExprUtils::build_const_obj_expr(ctx_.expr_factory_, e_obj[i], const_expr))) {
-        LOG_WARN("failed to build const obj expr", K(ret));
       } else if (OB_FAIL(end_col_row->add_param_expr(select_items.at(i).expr_))
                  || OB_FAIL(end_const_row->add_param_expr(const_expr))) {
         LOG_WARN("failed to add param expr", K(ret));
@@ -330,9 +312,7 @@ int ObMajorRefreshMJVPrinter::gen_mr_rt_mv_access_mv_data_stmt(ObSelectStmt *&se
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected params", K(ret), K(mv_def_stmt_.get_table_items()));
   } else if (OB_FAIL(create_simple_stmt(sel_stmt))) {
-    LOG_WARN("failed to create simple stmt", K(ret));
   } else if (OB_FAIL(create_simple_table_item(sel_stmt, mv_schema_.get_table_name(), mv_table, NULL, false))) {
-    LOG_WARN("failed to create simple table item", K(ret));
   } else if (OB_FAIL(create_mr_rt_mv_delta_stmt(*orig_left_table, view_stmt))
              || OB_FAIL(create_simple_table_item(sel_stmt, orig_left_table->get_table_name(), 
                                                  delta_left_table, view_stmt, false))) {
@@ -342,12 +322,10 @@ int ObMajorRefreshMJVPrinter::gen_mr_rt_mv_access_mv_data_stmt(ObSelectStmt *&se
                                                  delta_right_table, view_stmt, false))) {
     LOG_WARN("failed to create delta right table", K(ret));
   } else if (OB_FAIL(create_mr_rt_mv_access_mv_from_table(*sel_stmt, *mv_table, *delta_left_table, *delta_right_table))) {
-    LOG_WARN("failed to create major refresh real time mview access mv from table", K(ret));
   } else if (OB_FAIL(append_old_new_col_filter(*delta_left_table, sel_stmt->get_condition_exprs()))
              || OB_FAIL(append_old_new_col_filter(*delta_right_table, sel_stmt->get_condition_exprs()))) {
     LOG_WARN("failed to build old_new filter", K(ret));
   } else if (OB_FAIL(gen_mr_rt_mv_access_mv_data_select_list(*sel_stmt, *mv_table, *delta_left_table, *delta_right_table))) {
-    LOG_WARN("failed to generate major refresh real time mview access mv select list", K(ret));
   } else {
     mv_table->database_name_ = mv_db_name_;
     mv_table->flashback_query_expr_ = exprs_.last_refresh_scn_;
@@ -366,13 +344,9 @@ int ObMajorRefreshMJVPrinter::create_mr_rt_mv_delta_stmt(const TableItem &orig_t
   TableItem *table = NULL;
   ObSEArray<ColumnItem, 8> column_items;
   if (OB_FAIL(create_simple_stmt(sel_stmt))) {
-    LOG_WARN("failed to create simple stmt", K(ret));
   } else if (OB_FAIL(create_simple_table_item(sel_stmt, orig_table.table_name_, table))) {
-    LOG_WARN("failed to create simple table item", K(ret));
   } else if (OB_FAIL(mv_def_stmt_.get_column_items(orig_table.table_id_, column_items))) {
-    LOG_WARN("failed to get column items", K(ret));
   } else if (OB_FAIL(sel_stmt->get_select_items().prepare_allocate(column_items.count() + 1))) {
-    LOG_WARN("failed to prepare allocate arrays", K(ret));
   } else {
     table->alias_name_ = orig_table.alias_name_;
     table->synonym_name_ = orig_table.synonym_name_;
@@ -387,7 +361,6 @@ int ObMajorRefreshMJVPrinter::create_mr_rt_mv_delta_stmt(const TableItem &orig_t
     for (int64_t i = 0; OB_SUCC(ret) && i < column_items.count(); ++i) {
       if (OB_FAIL(create_simple_column_expr(table->get_table_name(), column_items.at(i).column_name_,
                                             table->table_id_, select_items.at(i).expr_))) {
-        LOG_WARN("failed to create simple column expr", K(ret));
       } else {
         select_items.at(i).is_real_alias_ = true;
         select_items.at(i).alias_name_ = column_items.at(i).column_name_;
@@ -395,7 +368,6 @@ int ObMajorRefreshMJVPrinter::create_mr_rt_mv_delta_stmt(const TableItem &orig_t
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(create_simple_column_expr(table->get_object_name(), OLD_NEW_COL_NAME, table->table_id_, item.expr_))) {
-      LOG_WARN("failed to create old new column", K(ret));
     } else if (OB_FAIL(create_simple_column_expr(table->get_object_name(), ObString("ORA_ROWSCN"), table->table_id_, expr))
                || OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(ctx_.expr_factory_, T_OP_GT, expr, exprs_.last_refresh_scn_, scn_gt))
                || OB_FAIL(sel_stmt->get_condition_exprs().push_back(scn_gt))) {
@@ -433,7 +405,6 @@ int ObMajorRefreshMJVPrinter::create_mr_rt_mv_access_mv_from_table(ObSelectStmt 
              || OB_FAIL(append(all_conds, mv_def_stmt_.get_condition_exprs()))) {
     LOG_WARN("failed to append exprs", K(ret));
   } else if (OB_FAIL(ObRawExprUtils::extract_column_exprs(all_conds, exprs))) {
-    LOG_WARN("failed to extract column exprs", K(ret), K(all_conds));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
     expr = NULL;
@@ -445,7 +416,6 @@ int ObMajorRefreshMJVPrinter::create_mr_rt_mv_access_mv_from_table(ObSelectStmt 
                                             col_expr->get_column_name(),
                                             delta_right_table.table_id_,
                                             expr))) {
-        LOG_WARN("failed to create simple column expr", K(ret));
       }
     } else if (OB_UNLIKELY(col_expr->get_table_id() != orig_left_table->table_id_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -466,20 +436,15 @@ int ObMajorRefreshMJVPrinter::create_mr_rt_mv_access_mv_from_table(ObSelectStmt 
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected NULL", K(ret), K(i), K(exprs));
     } else if (OB_FAIL(copier.add_replaced_expr(col_expr, expr))) {
-      LOG_WARN("failed to add replace pair", K(ret));
     }
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(create_joined_table_item(&sel_stmt, ObJoinType::LEFT_OUTER_JOIN, mv_table, delta_right_table, false, mv_join_delta_right))) {
-    LOG_WARN("failed to create joined table item", K(ret));
   } else if (OB_FAIL(create_joined_table_item(&sel_stmt, ObJoinType::LEFT_OUTER_JOIN, *mv_join_delta_right, delta_left_table, true, mv_join_delta_left))) {
-    LOG_WARN("failed to create joined table item", K(ret));
   } else if (OB_FAIL(copier.copy_on_replace(all_conds, mv_join_delta_right->get_join_conditions()))) {
-    LOG_WARN("failed to copy on replace exprs", K(ret), K(all_conds));
   } else if (OB_FAIL(gen_rowkey_join_conds_for_table(*orig_left_table, delta_left_table,
                                                      mv_table, true, mv_join_delta_left->get_join_conditions()))) {
-    LOG_WARN("failed to generate rowkey join conds for table", K(ret));
   }
   return ret;
 }
@@ -502,9 +467,7 @@ int ObMajorRefreshMJVPrinter::gen_mr_rt_mv_access_mv_data_select_list(ObSelectSt
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected params", K(ret), K(mv_def_stmt_.get_table_items()));
   } else if (OB_FAIL(get_rowkey_pos_in_select(rowkey_sel_pos))) {
-    LOG_WARN("failed to get rowkey pos in select", K(ret));
   } else if (OB_FAIL(sel_stmt.get_select_items().prepare_allocate(orig_select_items.count()))) {
-    LOG_WARN("failed to prepare allocate arrays", K(ret));
   } else if (OB_FAIL(create_simple_column_expr(delta_left_table.get_object_name(), OLD_NEW_COL_NAME, delta_left_table.table_id_, expr))
              || OB_FAIL(ObRawExprUtils::build_is_not_null_expr(ctx_.expr_factory_, expr, false, left_is_null_filter))) {
     LOG_WARN("failed to build left is null expr", K(ret));
@@ -523,7 +486,6 @@ int ObMajorRefreshMJVPrinter::gen_mr_rt_mv_access_mv_data_select_list(ObSelectSt
         LOG_WARN("unexpected NULL", K(ret), K(i), K(orig_select_items));
       } else if (OB_FAIL(create_simple_column_expr(mv_table.get_object_name(), orig_select_items.at(i).alias_name_,
                                                    mv_table.table_id_, select_items.at(i).expr_))) {
-        LOG_WARN("failed to create simple column expr", K(ret));
       } else if (ObOptimizerUtil::find_item(rowkey_sel_pos, i) && col_expr->get_table_id() == orig_left_table->table_id_) {
         /* left table rowkey, use value from mview */
       } else if (col_expr->get_table_id() == orig_left_table->table_id_ && OB_FALSE_IT(table = &delta_left_table)) {
@@ -531,14 +493,12 @@ int ObMajorRefreshMJVPrinter::gen_mr_rt_mv_access_mv_data_select_list(ObSelectSt
                                                    col_expr->get_column_name(),
                                                    table->table_id_,
                                                    expr))) {
-        LOG_WARN("failed to create simple column expr", K(ret));
       } else if (OB_FAIL(ObRawExprUtils::build_case_when_expr(ctx_.expr_factory_,
                                                               (col_expr->get_table_id() == orig_left_table->table_id_
                                                                ? left_is_null_filter : right_is_null_filter),
                                                               select_items.at(i).expr_,
                                                               expr,
                                                               select_items.at(i).expr_))) {
-        LOG_WARN("failed to build case when expr", K(ret));
       }
     }
   }
@@ -558,9 +518,7 @@ int ObMajorRefreshMJVPrinter::gen_mr_rt_mv_left_delta_data_stmt(ObSelectStmt *&s
   ObRawExpr *exists_expr = NULL;
   ObSEArray<int64_t, 1> dummy_array;
   if (OB_FAIL(create_simple_stmt(stmt))) {
-    LOG_WARN("failed to create simple stmt", K(ret));
   } else if (OB_FAIL(prepare_gen_access_delta_data_for_major_refresh_mjv(dummy_array, *stmt))) {
-    LOG_WARN("failed to prepare generate access delta data for major refresh mjv", K(ret));
   } else if (OB_UNLIKELY(2 != stmt->get_table_items().count()
                          || 2 != mv_def_stmt_.get_table_items().count())
              || OB_ISNULL(stmt->get_table_item(0))
@@ -569,10 +527,7 @@ int ObMajorRefreshMJVPrinter::gen_mr_rt_mv_left_delta_data_stmt(ObSelectStmt *&s
     LOG_WARN("unexpected params", K(ret), K(stmt->get_table_items()));
   } else if (OB_FAIL(gen_exists_cond_for_mview(*mv_def_stmt_.get_table_item(0),
                                                *stmt->get_table_item(0), exists_expr))) {
-    LOG_WARN("failed to generate exists filter", K(ret));
   } else if (OB_FAIL(stmt->get_condition_exprs().push_back(exists_expr))) {
-    LOG_WARN("failed to push back", K(ret));
-
   }
   return ret;
 }
@@ -596,16 +551,11 @@ int ObMajorRefreshMJVPrinter::gen_exists_cond_for_mview(const TableItem &source_
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected params", K(ret), K(query_ref_expr), K(exists_op_expr));
   } else if (OB_FAIL(exists_op_expr->set_param_expr(query_ref_expr))) {
-    LOG_WARN("failed to set param expr", K(ret));
   } else if (OB_FAIL(create_simple_stmt(subquery))) {
-    LOG_WARN("failed to create simple stmt", K(ret));
   } else if (OB_FAIL(create_simple_table_item(subquery, mv_schema_.get_table_name(), mv_table))) {
-    LOG_WARN("failed to create simple table item", K(ret));
   } else if (OB_FAIL(subquery->get_select_items().push_back(sel_item))) {
-    LOG_WARN("failed to push back not exists expr", K(ret));
   } else if (OB_FAIL(gen_rowkey_join_conds_for_table(source_table, outer_table,
                                                      *mv_table, true, subquery->get_condition_exprs()))) {
-    LOG_WARN("failed to generate rowkey join conds for table", K(ret));
   } else {
     exists_expr = exists_op_expr;
     mv_table->database_name_ = mv_db_name_;
@@ -663,12 +613,10 @@ int ObMajorRefreshMJVPrinter::gen_one_refresh_select_for_major_refresh_mjv(const
              || OB_FAIL(delta_stmt->get_condition_exprs().push_back(scn_filter))) {
     LOG_WARN("failed to add filter for delta left stmt", K(ret));  
   } else if (OB_FAIL(fill_table_partition_name(*orig_left_table, *left_table))) {
-    LOG_WARN("failed to fill table partition name", K(ret));
   } else if (OB_FAIL(create_simple_column_expr(delta_table->get_table_name(), OLD_NEW_COL_NAME, delta_table->table_id_, sel_item.expr_))
              || OB_FAIL(delta_stmt->get_select_items().push_back(sel_item))) {
     LOG_WARN("failed to add old_new to select items", K(ret));
   } else if (OB_FAIL(gen_refresh_select_hint_for_major_refresh_mjv(*left_table, *right_table, delta_stmt->get_stmt_hint()))) {
-    LOG_WARN("failed to gen refresh select hint for major refresh mjv", K(ret));
   } else {
     left_table->flashback_query_expr_ = exprs_.refresh_scn_;
     left_table->flashback_query_type_ = TableItem::USING_SCN;
@@ -706,16 +654,11 @@ int ObMajorRefreshMJVPrinter::gen_refresh_validation_select_for_major_refresh_mj
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected params", K(ret));
   } else if (OB_FAIL(fill_table_partition_name(*orig_left_table, *left_table))) {
-    LOG_WARN("failed to fill table partition name", K(ret));
   } else if (OB_FAIL(gen_refresh_select_hint_for_major_refresh_mjv(*left_table, *right_table, delta_stmt->get_stmt_hint()))) {
-    LOG_WARN("failed to gen refresh select hint for major refresh mjv", K(ret));
   } else if (OB_FALSE_IT(delta_stmt->get_select_items().reset())) {
   } else if (OB_FAIL(delta_stmt->get_select_items().prepare_allocate(1))) {
-    LOG_WARN("failed to prepare allocate arrays", K(ret));
   } else if (OB_FAIL(ob_write_string(ctx_.alloc_, ObString("CNT"), delta_stmt->get_select_item(0).alias_name_))) {
-    LOG_WARN("ob_write_string failed", K(ret));
   } else if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(T_FUN_COUNT, aggr_expr))) {
-    LOG_WARN("create ObAggFunRawExpr failed", K(ret));
   } else {
     delta_stmt->get_order_items().reset();
     delta_stmt->get_select_item(0).is_real_alias_ = true;
@@ -744,12 +687,10 @@ int ObMajorRefreshMJVPrinter::gen_refresh_select_hint_for_major_refresh_mjv(cons
       OB_FAIL(ObQueryHint::create_hint(&ctx_.alloc_, T_USE_NL, use_nl_right))) {
     LOG_WARN("failed to create hint", K(ret));
   } else if (OB_FAIL(ObQueryHint::create_hint_table(&ctx_.alloc_, leading_left->get_table().table_))) {
-      LOG_WARN("fail to create hint table", K(ret));
   } else if (OB_FALSE_IT(leading_left->get_table().table_->set_table(left_table))) {
   } else if (OB_FALSE_IT(left_full_hint->get_table().set_table(left_table))) {
   } else if (OB_FALSE_IT(right_full_hint->get_table().set_table(right_table))) {
   } else if (OB_FAIL(use_nl_right->get_tables().push_back(ObTableInHint(right_table)))) {
-    LOG_WARN("fail to push back", K(ret));
   } else if (OB_FAIL(stmt_hint.merge_hint(*leading_left, ObHintMergePolicy::HINT_DOMINATED_EQUAL, conflict_hints))
              || OB_FAIL(stmt_hint.merge_hint(*left_full_hint, ObHintMergePolicy::HINT_DOMINATED_EQUAL, conflict_hints))
              || OB_FAIL(stmt_hint.merge_hint(*right_full_hint, ObHintMergePolicy::HINT_DOMINATED_EQUAL, conflict_hints))
@@ -786,9 +727,7 @@ int ObMajorRefreshMJVPrinter::prepare_gen_access_delta_data_for_major_refresh_mj
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret), K(i), K(orig_table_items));
     } else if (OB_FAIL(mv_def_stmt_.get_column_items(orig_table->table_id_, column_items))) {
-      LOG_WARN("failed to get column items", K(ret));
     } else if (OB_FAIL(create_simple_table_item(&base_delta_stmt, orig_table->table_name_, table))) {
-      LOG_WARN("failed to create simple table item", K(ret));
     } else {
       table->alias_name_ = orig_table->alias_name_;
       table->synonym_name_ = orig_table->synonym_name_;
@@ -798,19 +737,14 @@ int ObMajorRefreshMJVPrinter::prepare_gen_access_delta_data_for_major_refresh_mj
     for (int64_t j = 0; OB_SUCC(ret) && j < column_items.count(); ++j) {
       if (OB_FAIL(create_simple_column_expr(table->get_table_name(), column_items.at(j).column_name_,
                                             table->table_id_, expr))) {
-        LOG_WARN("failed to create simple column expr", K(ret));
       } else if (OB_FAIL(copier.add_replaced_expr(column_items.at(j).expr_, expr))) {
-        LOG_WARN("failed to add replace pair", K(ret));
       }
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(base_delta_stmt.deep_copy_join_tables(ctx_.alloc_, copier, mv_def_stmt_))) {
-    LOG_WARN("failed to deep copy join tables", K(ret));
   } else if (OB_FAIL(copier.copy_on_replace(mv_def_stmt_.get_condition_exprs(), base_delta_stmt.get_condition_exprs()))) {
-    LOG_WARN("failed to deep copy where conditions", K(ret));
   } else if (OB_FAIL(base_delta_stmt.get_from_items().assign(mv_def_stmt_.get_from_items()))) {
-    LOG_WARN("failed to assign from items", K(ret));
   }
 
   // for non joined table, adjust table id in from item
@@ -819,7 +753,6 @@ int ObMajorRefreshMJVPrinter::prepare_gen_access_delta_data_for_major_refresh_mj
     if (from_items.at(i).is_joined_) {
       /* do nothing */
     } else if (OB_FAIL(mv_def_stmt_.get_table_item_idx(from_items.at(i).table_id_, idx))) {
-      LOG_WARN("failed to get table item", K(ret));
     } else if (OB_UNLIKELY(idx < 0 || idx >= base_delta_stmt.get_table_size())
                 || OB_ISNULL(base_delta_stmt.get_table_item(idx))) {
       ret = OB_ERR_UNEXPECTED;
@@ -832,7 +765,6 @@ int ObMajorRefreshMJVPrinter::prepare_gen_access_delta_data_for_major_refresh_mj
   } else if (ctx_.for_rt_expand()) {  // for rt-mview access, generate original select list
     for (int64_t i = 0; OB_SUCC(ret) && i < orig_select_items.count(); ++i) {
       if (OB_FAIL(copier.copy_on_replace(orig_select_items.at(i).expr_, select_items.at(i).expr_))) {
-        LOG_WARN("failed to generate group by exprs", K(ret));
       } else {
         select_items.at(i).is_real_alias_ = true;
         select_items.at(i).alias_name_ = orig_select_items.at(i).alias_name_;
@@ -843,7 +775,6 @@ int ObMajorRefreshMJVPrinter::prepare_gen_access_delta_data_for_major_refresh_mj
     int64_t pos = rowkey_sel_pos.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < orig_select_items.count(); ++i) {
       if (OB_FAIL(copier.copy_on_replace(orig_select_items.at(i).expr_, expr))) {
-        LOG_WARN("failed to generate group by exprs", K(ret));
       } else if (ObOptimizerUtil::find_item(rowkey_sel_pos, i, &idx)) {
         order_items.at(idx).expr_ = expr;
         select_items.at(idx).expr_ = expr;

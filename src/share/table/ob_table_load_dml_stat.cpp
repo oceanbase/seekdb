@@ -48,7 +48,6 @@ OB_DEF_DESERIALIZE(ObTableLoadDmlStat)
   for (int64_t i = 0; OB_SUCC(ret) && i < size; ++i) {
     ObOptDmlStat *dml_stat = nullptr;
     if (OB_FAIL(allocate_dml_stat(dml_stat))) {
-      LOG_WARN("fail to allocate dml stat", KR(ret));
     } else {
       OB_UNIS_DECODE(*dml_stat);
     }

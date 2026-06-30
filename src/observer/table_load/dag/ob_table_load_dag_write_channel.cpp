@@ -54,7 +54,6 @@ int ObTableLoadDagWriteChannel::inner_init()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", KR(ret), KP(dag_), KP(flush_task_));
   } else if (OB_FAIL(dag_->alloc_task(flush_task_, this))) {
-    LOG_WARN("fail to alloc task", KR(ret));
   } else {
     is_inited_ = true;
   }
@@ -78,9 +77,7 @@ int ObTableLoadDagWriteChannel::create_writer(ObTableLoadStoreTrans *trans,
   } else {
     ObTableLoadDagChunkWriter *chunk_writer = nullptr;
     if (OB_FAIL(create_writer(chunk_writer, allocator))) {
-      LOG_WARN("fail to create writer", KR(ret));
     } else if (OB_FAIL(chunk_writer->init(this, trans, store_writer, session_id))) {
-      LOG_WARN("fail to init writer", KR(ret));
     } else {
       writer = chunk_writer;
       LOG_INFO("create writer", KR(ret), KP(trans), K(session_id), KP(writer));
@@ -102,7 +99,6 @@ int ObTableLoadDagWriteChannel::flush()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected flush task is null", KR(ret));
   } else if (OB_FAIL(dag_->add_task(*flush_task_))) {
-    LOG_WARN("fail to add task", KR(ret));
   } else {
     flush_task_ = nullptr;
   }
@@ -122,7 +118,6 @@ int ObTableLoadDagWriteChannel::close()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected is closed", KR(ret));
   } else if (OB_FAIL(do_close())) {
-    LOG_WARN("fail to close", KR(ret));
   } else {
     is_closed_ = true;
   }
@@ -136,7 +131,6 @@ int ObTableLoadDagWriteChannel::inner_flush()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected is flushed", KR(ret));
   } else if (OB_FAIL(do_flush())) {
-    LOG_WARN("fail to flush", KR(ret));
   } else {
     is_flushed_ = true;
   }
@@ -165,7 +159,6 @@ int ObTableLoadDagChunkWriter::write(const ObTableLoadTabletObjRowArray &row_arr
         ObTableLoadErrorRowHandler *error_row_handler = dag_->store_ctx_->error_row_handler_;
         LOG_INFO("write row error", K(ret), K(obj_row));
         if (OB_FAIL(error_row_handler->handle_error_row(ret))) {
-          LOG_WARN("fail to handle error row", K(ret), K(obj_row));
         } else {
           ret = OB_SUCCESS;
           continue;
@@ -179,7 +172,6 @@ int ObTableLoadDagChunkWriter::write(const ObTableLoadTabletObjRowArray &row_arr
             ret = OB_SUCCESS;
             ob_usleep(50 * 1000);
             if (OB_FAIL(dag_->check_status())) {
-              LOG_WARN("fail to check status", KR(ret));
             }
           }
         } else {
@@ -208,7 +200,6 @@ int ObTableLoadDagChunkWriter::px_write(ObIVector *tablet_id_vector,
           ret = OB_SUCCESS;
           ob_usleep(50 * 1000);
           if (OB_FAIL(dag_->check_status())) {
-            LOG_WARN("fail to check status", KR(ret));
           }
         }
       }

@@ -248,9 +248,7 @@ int ObRDWFPieceMsgCtx::send_whole_msg(common::ObIArray<ObPxSqcMeta> &sqcs)
   } else {
     auto wf = static_cast<const ObWindowFunctionSpec *>(op_kit->spec_);
     if (OB_FAIL(wf->rd_generate_patch(*this))) {
-      LOG_WARN("calculate range distribution window function final res failed", K(ret));
     } else if (OB_FAIL(formalize_store_row())) {
-      LOG_WARN("formalize store row failed", K(ret));
     } else {
       LOG_DEBUG("after formalize", K(infos_));
     }
@@ -336,7 +334,6 @@ int ObRDWFPieceMsgListener::on_message(ObRDWFPieceMsgCtx &ctx,
 
   if (OB_SUCC(ret) && ctx.received_ == ctx.task_cnt_) {
     if (OB_FAIL(ctx.send_whole_msg(sqcs))) {
-      LOG_WARN("fail to send whole msg", K(ret));
     }
     IGNORE_RETURN ctx.reset_resource();
   }
@@ -492,7 +489,6 @@ RDWinFuncPXPartialInfo *RDWinFuncPXPartialInfo::dup(common::ObArenaAllocator &al
     info->sqc_id_ = sqc_id_;
     info->thread_id_ = thread_id_;
     if (OB_FAIL(info->row_meta_.deep_copy(row_meta_, &alloc))) {
-      LOG_WARN("deep copy row meta failed", K(ret));
     } else if (first_row_ != nullptr) {
       info->first_row_ = dup_store_row(alloc, *first_row_);
       if (OB_ISNULL(info->first_row_)) {
@@ -560,7 +556,6 @@ int RDWinFuncPXPieceMsgCtx::send_whole_msg(common::ObIArray<ObPxSqcMeta> &sqcs)
     ObEvalCtx eval_ctx(exec_ctx_);
     const ObWindowFunctionVecSpec *wf = static_cast<const ObWindowFunctionVecSpec *>(op_kit->spec_);
     if (OB_FAIL(wf->rd_generate_patch(*this, eval_ctx))) {
-      LOG_WARN("generate patch failed", K(ret));
     } else {
       lib::ob_sort(infos_.begin(), infos_.end(), __part_info_cmp_op());
     }
@@ -589,7 +584,6 @@ int RDWinFuncPXPieceMsgCtx::send_whole_msg(common::ObIArray<ObPxSqcMeta> &sqcs)
         msg.op_id_ = op_id_;
         while (OB_SUCC(ret) && it != infos_.end() && (*it)->sqc_id_ == sqc.get_sqc_id()) {
           if (OB_FAIL(msg.infos_.push_back((*it)))) {
-            LOG_WARN("push back element failed", K(ret));
           } else {
             it++;
           }
@@ -599,15 +593,12 @@ int RDWinFuncPXPieceMsgCtx::send_whole_msg(common::ObIArray<ObPxSqcMeta> &sqcs)
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected null channel", K(ret));
         } else if (OB_FAIL(ch->send(msg, timeout_ts_))) {
-          LOG_WARN("send msg failed", K(ret));
         } else if (OB_FAIL(ch->flush(true, false))) {
-          LOG_WARN("flush failed", K(ret));
         }
       }
     } // end for
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObPxChannelUtil::sqcs_channles_asyn_wait(sqcs))) {
-      LOG_WARN("async wait failed", K(ret));
     }
     for (int i = 0; OB_SUCC(ret) && responses != nullptr && i < sqcs.count(); i++) {
       responses[i].~RDWinFuncPXWholeMsg();
@@ -638,7 +629,6 @@ int RDWinFuncPXWholeMsg::assign(const RDWinFuncPXWholeMsg &other)
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("allocate memory failed", K(ret));
       } else if (OB_FAIL(infos_.push_back(dup_info))) {
-        LOG_WARN("push back element failed", K(ret));
       }
     }
   }
@@ -665,10 +655,8 @@ int RDWinFuncPXPieceMsgListener::on_message(RDWinFuncPXPieceMsgCtx &ctx,
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory failed", K(ret));
     } else if (OB_FAIL(ctx.infos_.push_back(info))) {
-      LOG_WARN("push back element failed", K(ret));
     } else if (ctx.received_ == ctx.task_cnt_) {
       if (OB_FAIL(ctx.send_whole_msg(sqcs))) {
-        LOG_WARN("send whole msg failed", K(ret));
       }
       IGNORE_RETURN ctx.reset_resource();
     }

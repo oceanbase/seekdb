@@ -82,7 +82,6 @@ inline int ObChunkRowStore::StoredRow::copy_row(const ObNewRow &r, char *buf,
     for (int64_t i = 0; OB_SUCC(ret) && i < cnt_; ++i) {
       ObObj *obj = new (&cells()[i])ObObj();
       if (OB_FAIL(obj->deep_copy(r.get_cell(i), buf, size, pos))) {
-        LOG_WARN("copy cell failed", K(ret));
       }
     }
   }
@@ -141,10 +140,8 @@ int ObChunkRowStore::Block::add_row(const ObNewRow &row, const int64_t row_size,
     StoredRow *sr = new (buf->head())StoredRow;
     if (OB_FAIL(sr->copy_row(
         row, buf->head() + ROW_HEAD_SIZE, row_size - ROW_HEAD_SIZE, row_size, row_extend_size))) {
-      LOG_WARN("copy row failed", K(ret), K(row), K(row_size));
     } else {
       if (OB_FAIL(buf->advance(row_size))) {
-        LOG_WARN("fill buffer head failed", K(ret), K(buf), K(row_size));
       } else {
         rows_++;
         if (NULL != stored_row) {
@@ -171,7 +168,6 @@ int ObChunkRowStore::Block::copy_row(const StoredRow *stored_row)
     StoredRow *sr = new (buf->head())StoredRow;
     sr->assign(stored_row);
     if (OB_FAIL(buf->advance(row_size))) {
-      LOG_WARN("fill buffer head failed", K(ret), K(buf), K(row_size));
     } else {
       rows_++;
     }
@@ -286,7 +282,6 @@ void ObChunkRowStore::reset()
 
   if (is_file_open()) {
     if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.remove(io_.fd_))) {
-      LOG_WARN("remove file failed", K(ret), K_(io_.fd));
     } else {
       LOG_TRACE("close file success", K(ret), K_(io_.fd));
     }
@@ -414,8 +409,6 @@ bool ObChunkRowStore::shrink_block(int64_t size)
     item = blocks_.remove_first();
     while (OB_SUCC(ret) && NULL != item) {
       if (OB_FAIL(dump_one_block(item->get_buffer()))) {
-        LOG_WARN("dump failed when shrink blk", K(ret), K(item),
-            K(item->get_buffer()->data_size()), K(item->get_buffer()->mem_size()), K(size));
       }
       dumped_row_cnt_ += item->rows();
       // Regardless of success or failure, memory needs to be released
@@ -439,11 +432,8 @@ int ObChunkRowStore::init_block_buffer(void* mem, const int64_t size, Block *&bl
   block = new(mem)Block;
   BlockBuffer* blkbuf = new(static_cast<char *>(mem) + size - sizeof(BlockBuffer))BlockBuffer;
   if (OB_FAIL(blkbuf->init(static_cast<char *>(mem), size))) {
-    LOG_WARN("init shrink buffer failed", K(ret));
   } else {
     if (OB_FAIL(blkbuf->advance(sizeof(Block)))) {
-      LOG_WARN("fill buffer head failed", K(ret), K(static_cast<void*>(blkbuf->data())),
-          K(sizeof(Block)));
     } else {
       block->set_block_size(static_cast<uint32_t>(blkbuf->capacity()));
       block->next_ = NULL;
@@ -497,9 +487,7 @@ inline int ObChunkRowStore::dump_one_block(BlockBuffer *item)
   }
   item->block->magic_ = Block::MAGIC;
   if (OB_FAIL(item->get_block()->unswizzling())) {
-    LOG_WARN("convert block to copyable failed", K(ret));
   } else if (OB_FAIL(write_file(item->data(), item->capacity()))) {
-    LOG_WARN("write block to file failed");
   } else {
     n_block_in_file_++;
     LOG_DEBUG("RowStore Dumpped block", K_(item->block->rows), K_(item->cur_pos), K(item->capacity()));
@@ -609,7 +597,6 @@ int ObChunkRowStore::switch_block(const int64_t min_size)
     }
     if (!can_find) { // need alloc new block
       if (OB_FAIL(alloc_block_buffer(new_block, min_size, false))) {
-        LOG_WARN("alloc block failed", K(ret), K(min_size), K(new_block));
       }
       if (!can_find && OB_SUCC(ret)){
         blocks_.add_last(new_block);
@@ -664,7 +651,6 @@ int ObChunkRowStore::add_row(const common::ObNewRow &row, StoredRow **stored_row
       if (NULL == cur_blk_) {
         Block *new_blk = nullptr;
         if (OB_FAIL(alloc_block_buffer(new_blk, min_buf_size, false))) {
-          LOG_WARN("alloc block failed", K(ret));
         } else {
           use_block(new_blk);
           blocks_.add_last(cur_blk_);
@@ -678,7 +664,6 @@ int ObChunkRowStore::add_row(const common::ObNewRow &row, StoredRow **stored_row
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(cur_blk_->add_row(row, row_size, row_extend_size_, stored_row))) {
-          LOG_WARN("add row to block failed", K(ret), K(row), K(row_size));
         } else {
           row_cnt_++;
           if (0 >= col_count_) {
@@ -727,7 +712,6 @@ int ObChunkRowStore::copy_row(const StoredRow *stored_row, ObChunkRowStore* crs)
       if (NULL == cur_blk_) {
         Block *new_blk = nullptr;
         if (OB_FAIL(alloc_block_buffer(new_blk, min_buf_size, false))) {
-          LOG_WARN("alloc block failed", K(ret));
         } else {
           use_block(new_blk);
           blocks_.add_last(cur_blk_);
@@ -741,7 +725,6 @@ int ObChunkRowStore::copy_row(const StoredRow *stored_row, ObChunkRowStore* crs)
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(cur_blk_->copy_row(stored_row))) {
-          LOG_WARN("add row to block failed", K(ret), K(*stored_row), K(row_size));
         } else {
           row_cnt_++;
           if (col_count_ <= 0) {
@@ -773,7 +756,6 @@ int ObChunkRowStore::finish_add_row(bool need_dump)
     if (need_dump && OB_FAIL(dump(false, true)) && OB_EXCEED_MEM_LIMIT != ret) {
       LOG_WARN("finish_add_row dump error", K(ret));
     } else if (OB_FAIL(get_timeout(timeout_ms))) {
-      LOG_WARN("get timeout failed", K(ret));
     }
   } else {
     LOG_DEBUG("finish_add_row no need to dump", K(ret));
@@ -795,7 +777,6 @@ int ObChunkRowStore::add_block(Block* block, bool need_swizzling, bool *added)
     if (block->rows_ <= 0) {
       need_add = false;
     } else if (OB_FAIL(block->swizzling(&col_cnt))) {
-      LOG_WARN("add block failed", K(block), K(need_swizzling));
     } else if (this->col_count_ != 0 && this->col_count_ != col_cnt) {
       LOG_WARN("add block failed col cnt not match", K(block), K(need_swizzling),
           K(col_cnt), K_(col_count));
@@ -869,7 +850,6 @@ int ObChunkRowStore::load_next_chunk_blocks(ChunkIterator &it)
       if (OB_SUCCESS != (tmp_ret = read_file(
           it.chunk_mem_ + read_off, tmp_read_size, it.cur_iter_pos_,
           it.file_size_, it.cur_iter_pos_, tmp_file_size))) {
-        LOG_WARN("read blk info from file failed", K(tmp_ret), K_(it.cur_iter_pos));
       }
       if (OB_ITER_END != tmp_ret) {
         if (OB_UNLIKELY(OB_SUCCESS == tmp_ret)) {
@@ -884,7 +864,6 @@ int ObChunkRowStore::load_next_chunk_blocks(ChunkIterator &it)
       }
     } else if (OB_FAIL(read_file(it.chunk_mem_ + read_off, read_size, it.cur_iter_pos_,
                                  it.file_size_, it.cur_iter_pos_, tmp_file_size))) {
-      LOG_WARN("read blk info from file failed", K(ret), K_(it.cur_iter_pos));
     } else {
       int64_t cur_pos = 0;
       Block* block = reinterpret_cast<Block *>(it.chunk_mem_);
@@ -903,7 +882,6 @@ int ObChunkRowStore::load_next_chunk_blocks(ChunkIterator &it)
             ret = OB_INNER_STAT_ERROR;
             LOG_WARN("read file failed", K(ret), K(prev_block->blk_size_), K(read_n_blocks), K(cur_pos));
           } else if (OB_FAIL(prev_block->swizzling(NULL))){
-            LOG_WARN("swizzling failed after read block from file", K(ret), K(it), K(read_n_blocks));
           } else {
             it.chunk_n_rows_ += prev_block->rows_;
           }
@@ -960,7 +938,6 @@ int ObChunkRowStore::load_next_block(ChunkIterator &it)
   } else if (is_file_open() && !it.read_file_iter_end()) {
     if (it.chunk_read_size_ > 0 && it.chunk_read_size_ >= this->max_blk_size_) {
       if (OB_FAIL(load_next_chunk_blocks(it))) {
-        LOG_WARN("RowStore iter load next chunk blocks failed", K(ret));
       }
     } else {
       /* read from file:
@@ -982,7 +959,6 @@ int ObChunkRowStore::load_next_block(ChunkIterator &it)
       if (NULL == it.cur_iter_blk_) {
         //for the first time, it.cur_iter_blk_ need to be freed by Iterator
         if (OB_FAIL(alloc_block_buffer(it.cur_iter_blk_, block_size, true))) {
-          LOG_WARN("alloc block failed", K(ret));
         } else {
           it.cur_iter_blk_buf_ = it.cur_iter_blk_->get_buffer();
           LOG_DEBUG("alloc a block for reading", K(ret), K(it.cur_iter_blk_),
@@ -1060,7 +1036,6 @@ int ObChunkRowStore::load_next_block(ChunkIterator &it)
             it.set_read_file_iter_end();
           }
         } else if (OB_FAIL(it.cur_iter_blk_->swizzling(NULL))){
-          LOG_WARN("swizzling failed after read block from file", K(ret), K(it));
         } else if (read_size <= 0
                   || it.cur_iter_blk_->blk_size_ == 0
                   || it.cur_iter_blk_->rows_ == 0) {
@@ -1145,8 +1120,6 @@ int ObChunkRowStore::get_store_row(RowIterator &it, const StoredRow *&sr)
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(it.cur_iter_blk_->get_store_row(it.cur_pos_in_blk_, sr))) {
-          LOG_WARN("get row from block failed", K(ret), K_(it.cur_row_in_blk),
-            K(*it.cur_iter_blk_));
       } else {
         it.cur_row_in_blk_++;
       }
@@ -1269,7 +1242,6 @@ int ObChunkRowStore::ChunkIterator::load_next_chunk(RowIterator& it)
       cur_iter_blk_ = it.cur_iter_blk_;
     }
     if (OB_FAIL(store_->load_next_block(*this))) {
-    LOG_WARN("load block failed", K(ret), K(*this));
     } else {
       it.store_ = store_;
       it.cur_iter_blk_ = cur_iter_blk_;
@@ -1312,7 +1284,6 @@ int ObChunkRowStore::Iterator::get_next_row(ObNewRow &row)
       LOG_WARN("get next stored row failed", K(ret));
     }
   } else if (OB_FAIL((this->*convert_row_with_obj_fun_)(row_it_, row, sr))) {
-    LOG_WARN("convert row failed", K(ret), K_(chunk_it), K_(row_it));
   }
   return ret;
 }
@@ -1326,7 +1297,6 @@ int ObChunkRowStore::Iterator::get_next_row(ObNewRow *&row)
       LOG_WARN("get next stored row failed", K(ret));
     }
   } else if (OB_FAIL((this->*convert_row_fun_)(row_it_, row, sr))) {
-    LOG_WARN("convert row failed", K(ret), K_(chunk_it), K_(row_it));
   }
   return ret;
 }
@@ -1350,7 +1320,6 @@ int ObChunkRowStore::Iterator::get_next_row(const StoredRow *&sr)
           LOG_WARN("Iterator load chunk failed", K(ret));
         }
       } else if (OB_FAIL(row_it_.get_next_row(sr))) {
-        LOG_WARN("get next row failed", K(ret));
       }
     }
   }
@@ -1485,14 +1454,12 @@ int ObChunkRowStore::write_file(void *buf, int64_t size)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(size), KP(buf));
   } else if (OB_FAIL(get_timeout(timeout_ms))) {
-    LOG_WARN("get timeout failed", K(ret));
   } else {
     if (!is_file_open()) {
       if (-1 == io_.dir_id_) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("temp file dir id is not init", K(ret), K(io_.dir_id_));
       } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.open(io_.fd_, io_.dir_id_))) {
-        LOG_WARN("open file failed", K(ret));
       } else {
         file_size_ = 0;
         io_.io_desc_.set_wait_event(ObWaitEventIds::ROW_STORE_DISK_WRITE);
@@ -1505,7 +1472,6 @@ int ObChunkRowStore::write_file(void *buf, int64_t size)
   if (OB_SUCC(ret) && size > 0) {
     set_io(size, static_cast<char *>(buf));
     if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.write(io_))) {
-      LOG_WARN("write to file failed", K(ret), K_(io), K(timeout_ms));
     }
   }
   if (OB_SUCC(ret)) {
@@ -1530,7 +1496,6 @@ int ObChunkRowStore::read_file(void *buf, const int64_t size, const int64_t offs
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(size), K(offset), KP(buf));
   } else if (OB_FAIL(get_timeout(timeout_ms))) {
-    LOG_WARN("get timeout failed", K(ret));
   }
   int64_t read_size = file_size - cur_pos;
   if (OB_FAIL(ret)) {
@@ -1576,7 +1541,6 @@ int ObChunkStoreUtil::alloc_dir_id(int64_t &dir_id)
   int ret = OB_SUCCESS;
   dir_id = 0;
   if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.alloc_dir(dir_id))) {
-    LOG_WARN("allocate file directory failed", K(ret));
   }
   return ret;
 }
@@ -1626,7 +1590,6 @@ OB_DEF_SERIALIZE(ObChunkRowStore)
         if (buf_len - pos < block->blk_size_) {
           ret = OB_SIZE_OVERFLOW;
         } else if (OB_FAIL(block->gen_unswizzling_payload(buf + pos, block->blk_size_))) {
-          LOG_WARN("fail to unswizzling", K(ret));
         } else {
           pos += block->blk_size_;
           block = block->get_next();
@@ -1649,7 +1612,6 @@ OB_DEF_DESERIALIZE(ObChunkRowStore)
   if (!is_inited()) {
     if (OB_FAIL(init(mem_limit_,
                      ctx_id_, "ChunkRowDE", false/*enable_dump*/))) {
-      LOG_WARN("fail to init chunk row store", K(ret));
     }
   }
   LST_DO_CODE(OB_UNIS_DECODE,
@@ -1668,14 +1630,12 @@ OB_DEF_DESERIALIZE(ObChunkRowStore)
       OB_UNIS_DECODE(row_cnt);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(alloc_block_buffer(block, blk_size, false /*for_iterator*/))) {
-        LOG_WARN("alloc block failed", K(ret), K(blk_size), KP(block));
       } else {
         MEMCPY(block->payload_, buf + pos, blk_size);
         block->blk_size_ = blk_size;
         block->rows_ = row_cnt;
         pos += blk_size;
         if (OB_FAIL(add_block(block, true /*+need_swizzling*/))) {
-          LOG_WARN("fail to add block", K(ret));
         }
       }
     }

@@ -66,15 +66,12 @@ int ObLSSyncTabletSeqHandler::replay(const void *buffer,
     ret = OB_NOT_INIT;
     LOG_WARN("ObLSSyncTabletSeqHandler not inited", K(ret));
   } else if (OB_FAIL(base_header.deserialize(log_buf, nbytes, tmp_pos))) {
-    LOG_WARN("log base header deserialize error", K(ret));
   } else if (OB_FAIL(log.deserialize(log_buf, nbytes, tmp_pos))) {
-    LOG_WARN("ObSyncTabletSeqLog deserialize error", K(ret));
   } else if (OB_FAIL(autoinc_seq_handler.replay_update_tablet_autoinc_seq(ls_,
                                                                           log.get_tablet_id(),
                                                                           log.get_autoinc_seq(),
                                                                           base_header.need_pre_replay_barrier(),
                                                                           scn))) {
-    LOG_WARN("failed to update tablet auto inc seq", K(ret), K(log));
   }
   return ret;
 }

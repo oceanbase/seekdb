@@ -43,7 +43,6 @@ int ObQueryDriver::response_query_header(ObResultSet &result,
   if (is_prexecute_) {
     // Two-in-one protocol sends header package, does not send column separately
     if (OB_FAIL(static_cast<ObMPStmtPrexecute&>(sender_).response_query_header(session_, result, need_flush_buffer))) {
-      LOG_WARN("prexecute response query head fail. ", K(ret));
     } 
   } else {
     if (NULL == result.get_field_columns()) {
@@ -54,7 +53,6 @@ int ObQueryDriver::response_query_header(ObResultSet &result,
                                              need_set_ps_out_flag, 
                                              false,
                                              &result))) {
-      LOG_WARN("response query head fail. ", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -80,13 +78,11 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
     LOG_WARN("column cnt is null ", K(fields.count()));
     ret = OB_ERR_BAD_FIELD_ERROR;
   } else if (OB_FAIL(session_.get_autocommit(ac))) {
-    LOG_WARN("fail to get autocommit", K(ret));
   } else if (!(NULL != result && result->get_is_com_filed_list())) {
     // Normal protocol sends cnt value
     OMPKResheader rhp;
     rhp.set_field_count(fields.count());
     if (OB_FAIL(sender_.response_packet(rhp, &session_))) {
-      LOG_WARN("response packet fail", K(ret));
     }
   } else {
     // com field protocol sends nothing here, directly sending field information
@@ -109,13 +105,11 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
       } else {
         if (session_.is_support_new_result_meta_data() || tmp_ret != OB_SUCCESS) {
           if (OB_FAIL(ObMySQLResultSet::to_new_result_field(ob_field, field))) {
-            LOG_WARN("fail to new result field", K(ret), K(ob_field), K(field));
           } else {
             LOG_DEBUG("debug succ to new result field", K(ob_field), K(field));
           }
         } else {
           if (OB_FAIL(ObMySQLResultSet::to_mysql_field(ob_field, field))) {
-            LOG_WARN("fail to old result field", K(ret), K(ob_field), K(field));
           } else {
             LOG_DEBUG("debug succ to old result field", K(ob_field), K(field));
           }
@@ -127,7 +121,6 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
           }
           OMPKField fp(field);
           if (OB_FAIL(sender_.response_packet(fp, &session_))) {
-            LOG_WARN("response packet fail", K(ret));
           }
         }
       }
@@ -153,7 +146,6 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
       // Old protocol ps cursor execute response, only returns field information, so for proxy, an additional OK packet needs to be returned
       // However, since the 2.0 protocol needs to understand the EOF packet situation at the same time as sending an OK packet, this OK packet cannot be extracted to the execute protocol layer for processing
       if (OB_FAIL(sender_.update_last_pkt_pos())) {
-        LOG_WARN("failed to update last packet pos", K(ret));
       } else {
         // in multi-stmt, send extra ok packet in the last stmt(has no more result)
         ObOKPParam ok_param;
@@ -161,12 +153,10 @@ int ObQueryDriver::response_query_header(const ColumnsFieldIArray &fields,
         ok_param.is_partition_hit_ = session_.partition_hit().get_bool();
         ok_param.has_more_result_ = false;
         if (OB_FAIL(sender_.send_ok_packet(session_, ok_param, &eofp))) {
-          LOG_WARN("fail to send ok packt", K(ok_param), K(ret));
         }
       }
     } else {
       if (OB_FAIL(sender_.response_packet(eofp, &session_))) {
-        LOG_WARN("response packet fail", K(ret));
       }
     }
   }
@@ -215,9 +205,7 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
   if (OB_SUCC(ret)) {
     const ObSQLSessionInfo &my_session = result.get_session();
     if (OB_FAIL(my_session.get_ncharacter_set_connection(nchar))) {
-      LOG_WARN("get ncharacter set connection failed", K(ret));
     } else if (OB_FAIL(my_session.get_character_set_results(charset_type))) {
-      LOG_WARN("fail to get result charset", K(ret));
     } 
   }
 
@@ -232,7 +220,6 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
       is_first_row = false;
       can_retry = false; // Already obtained the first row of data, no longer retrying
       if (OB_FAIL(response_query_header(result, has_more_result, false))) {
-        LOG_WARN("fail to response query header", K(ret), K(row_num), K(can_retry));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < row->get_count(); i++) {
@@ -245,8 +232,6 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
                                            cast_ctx,
                                            value,
                                            value))) {
-            LOG_WARN("failed to cast object", K(ret), K(value),
-                     K(value.get_type()), K(fields->at(i).type_.get_type()));
           }
         }
       }
@@ -285,9 +270,6 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
       OMPKRow rp(sm);
       rp.set_is_packed(is_packed);
       if (OB_FAIL(sender_.response_packet(rp, &result.get_session()))) {
-        LOG_WARN("response packet fail", K(ret), KP(row), K(row_num),
-            K(can_retry));
-        // break;
       } else {
         LOG_DEBUG("response row succ", K(*row));
       }
@@ -313,7 +295,6 @@ int ObQueryDriver::response_query_result(ObResultSet &result,
     // If there is no data at all, we still need to reply to the client with field information, and no more retries will be attempted
     can_retry = false;
     if (OB_FAIL(response_query_header(result, has_more_result, false))) {
-      LOG_WARN("fail to response query header", K(ret), K(row_num), K(can_retry));
     }
   }
   if (OB_FAIL(ret) && !can_retry) {
@@ -346,7 +327,6 @@ int ObQueryDriver::convert_field_charset(ObIAllocator& allocator,
           buf,
           buf_len,
           result_len))) {
-    LOG_WARN("charset convert failed", K(ret), K(from_collation), K(dest_collation));
   } else {
     dest_string.assign(buf, static_cast<int32_t>(result_len));
   }
@@ -371,7 +351,6 @@ int ObQueryDriver::convert_string_value_charset(ObObj& value, ObResultSet &resul
       LOG_WARN("invalid collation", K(ret), K(from_collation_type), K(to_collation_type), K(value));
     }
   } else if (OB_FAIL(result.get_exec_context().get_convert_charset_allocator(allocator))) {
-    LOG_WARN("fail to get lob fake allocator", K(ret));
   } else if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lob fake allocator is null.", K(ret), K(value));
@@ -390,14 +369,12 @@ int ObQueryDriver::convert_text_value_charset(common::ObObj& value, sql::ObResul
 
   ObArenaAllocator *allocator = NULL;
   if (OB_FAIL(result.get_exec_context().get_convert_charset_allocator(allocator))) {
-    LOG_WARN("fail to get lob fake allocator", K(ret));
   } else if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("text fake allocator is null.", K(ret), K(value));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(convert_text_value_charset(value, charset_type, *allocator, &my_session, &result.get_exec_context()))) {
-    LOG_WARN("convert lob value fail.", K(ret), K(value));
   }
   return ret;
 }
@@ -414,7 +391,6 @@ int ObQueryDriver::like_match(const char* str, int64_t length_str, int64_t i,
     LOG_WARN("get unexpected error", K(ret), K(str), K(length_str), K(i),
                                      K(pattern), K(length_pat), K(j));
   } else if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
-    LOG_WARN("check stack overflow failed", K(ret));
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recursive", K(ret));
@@ -427,14 +403,12 @@ int ObQueryDriver::like_match(const char* str, int64_t length_str, int64_t i,
     if (OB_FAIL(like_match(str, length_str, i,
                            pattern, length_pat, j,
                            is_match))) {
-      LOG_WARN("failed to match", K(ret));
     } else if (!is_match && i < length_str) {
       ++i;
       --j;
       if (OB_FAIL(like_match(str, length_str, i,
                              pattern, length_pat, j,
                              is_match))) {
-        LOG_WARN("failed to match", K(ret));
       }
     }
   } else if (i < length_str && j < length_pat && pattern[j] == '_') {
@@ -443,7 +417,6 @@ int ObQueryDriver::like_match(const char* str, int64_t length_str, int64_t i,
     if (OB_FAIL(like_match(str, length_str, i,
                            pattern, length_pat, j,
                            is_match))) {
-      LOG_WARN("failed to match", K(ret));
     }
   } else if (i < length_str && j < length_pat && tolower(str[i]) == tolower(pattern[j])) {
     ++i;
@@ -451,7 +424,6 @@ int ObQueryDriver::like_match(const char* str, int64_t length_str, int64_t i,
     if (OB_FAIL(like_match(str, length_str, i,
                            pattern, length_pat, j,
                            is_match))) {
-      LOG_WARN("failed to match", K(ret));
     }
   } else {
     is_match = false;
@@ -475,7 +447,6 @@ int ObQueryDriver::process_lob_locator_results(ObObj& value, sql::ObResultSet &r
   int ret = OB_SUCCESS;
   ObArenaAllocator *allocator = NULL;
   if (OB_FAIL(result.get_exec_context().get_convert_charset_allocator(allocator))) {
-    LOG_WARN("fail to get lob fake allocator", K(ret));
   } else if (OB_ISNULL(allocator)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lob fake allocator is null.", K(ret), K(value));
@@ -485,7 +456,6 @@ int ObQueryDriver::process_lob_locator_results(ObObj& value, sql::ObResultSet &r
                                                  allocator,
                                                  &result.get_session(),
                                                  &result.get_exec_context()))) {
-    LOG_WARN("convert lob to longtext fail.", K(ret), K(value));
   }
   return ret;
 }
@@ -518,9 +488,7 @@ int ObQueryDriver::process_lob_locator_results(ObObj& value,
       ObArenaAllocator tmp_alloc("LobRead", OB_MALLOC_NORMAL_BLOCK_SIZE);
       ObTextStringIter instr_iter(value);
       if (OB_FAIL(ObTextStringHelper::build_text_iter(instr_iter, exec_ctx, session_info, allocator, &tmp_alloc))) {
-        LOG_WARN("init lob str inter failed", K(ret), K(value));
       } else if (OB_FAIL(instr_iter.get_full_data(data))) {
-        LOG_WARN("Lob: init lob str iter failed ", K(value));
       } else {
         ObObjType dst_type = ObLongTextType;
         if (value.is_json()) {
@@ -617,11 +585,8 @@ int ObQueryDriver::convert_text_value_charset(ObObj& value,
           // it's fine that res_allocator and tmp_allocator is same
           // because the final result will be allocated by allocator when convert charset
           if (OB_FAIL(ObTextStringHelper::build_text_iter(str_iter, exec_ctx, session, &tmp_alloc/*res_allocator*/, &tmp_alloc/*tmp_allocator*/))) {
-            LOG_WARN("Lob: init lob str iter failed ", K(ret), K(value));
           } else if (OB_FAIL(str_iter.get_full_data(data_str))) {
-            LOG_WARN("Lob: get full data failed ", K(ret), K(value));
           } else if (OB_FAIL(loc.get_lob_data_byte_len(lob_data_byte_len))) {
-            LOG_WARN("Lob: get lob data byte len failed", K(ret), K(loc));
           }
         } 
         if (OB_SUCC(ret)) {
@@ -633,14 +598,10 @@ int ObQueryDriver::convert_text_value_charset(ObObj& value,
           uint32_t result_len = 0;
           int64_t converted_len = lob_data_byte_len * ObCharset::CharConvertFactorNum;
           if (OB_FAIL(new_tmp_lob.init(converted_len))) {
-            LOG_WARN("Lob: init tmp lob failed", K(ret), K(converted_len));
           } else if (OB_FAIL(new_tmp_lob.get_reserved_buffer(buf, buf_len))) {
-            LOG_WARN("Lob: get empty buffer failed", K(ret), K(converted_len));
           } else if (OB_FAIL(convert_string_charset(data_str, from_collation_type, to_collation_type,
                                                     buf, buf_len, result_len))) {
-            LOG_WARN("Lob: convert string charset failed", K(ret));
           } else if (OB_FAIL(new_tmp_lob.lseek(result_len, 0))) {
-            LOG_WARN("Lob: temp lob lseek failed", K(ret));
           } else {
             ObString lob_loc_str;
             new_tmp_lob.get_result_buffer(lob_loc_str);
@@ -684,7 +645,6 @@ int ObQueryDriver::is_com_filed_list_match_wildcard_str(ObResultSet &result,
                                         from_collation,
                                         result.get_wildcard_string(),
                                         wildcard_str))) {
-        LOG_WARN("failed to convert field charset", K(ret));
       }
     } else {
       wildcard_str = result.get_wildcard_string();
@@ -698,7 +658,6 @@ int ObQueryDriver::is_com_filed_list_match_wildcard_str(ObResultSet &result,
                              wildcard_str.length(),
                              0,
                              is_match))) {
-        LOG_WARN("failed to like match", K(ret));
       } else if (!is_match) {
         is_not_match = true;
       }

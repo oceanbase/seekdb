@@ -26,11 +26,8 @@ int ObGeoWkbVisitor::write_head_info(T *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(write_to_buffer( ObGeoWkbByteOrder::LittleEndian, 1))) {
-    LOG_WARN("failed to write little endian", K(ret));
   } else if (OB_FAIL(write_to_buffer(geo->type(), sizeof(uint32_t)))) {
-    LOG_WARN("failed to write type", K(ret));
   } else if (OB_FAIL(write_to_buffer(geo->size(), sizeof(uint32_t)))) {
-    LOG_WARN("failed to write num value", K(ret));
   }
   return ret;
 }
@@ -39,9 +36,7 @@ int ObGeoWkbVisitor::write_cartesian_point(double x, double y)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(write_to_buffer(x, sizeof(double)))) {
-    LOG_WARN("failed to write x value", K(ret), K(x));
   } else if (OB_FAIL(write_to_buffer(y, sizeof(double)))) {
-    LOG_WARN("failed to write y value", K(ret), K(y));
   }
   return ret;  
 }
@@ -52,13 +47,10 @@ int ObGeoWkbVisitor::write_geograph_point(double x, double y)
   double val_x = x;
   double val_y = y;
   if (OB_FAIL(need_convert_ && srs_->longtitude_convert_from_radians(x, val_x))) {
-    LOG_WARN("failed to convert from longtitude value", K(ret), K(x));
   } else if (OB_FAIL(write_to_buffer(val_x, sizeof(double)))) {
-    LOG_WARN("failed to write point x value", K(ret), K(val_x));
   } else if (need_convert_ && OB_FAIL(srs_->latitude_convert_from_radians(y, val_y))) {
     LOG_WARN("failed to convert from latitude value", K(ret), K(y));
   } else if (OB_FAIL(write_to_buffer(val_y, sizeof(double)))) {
-    LOG_WARN("failed to write point y value", K(ret), K(val_y));
   }
   return ret;
 }
@@ -67,15 +59,11 @@ int ObGeoWkbVisitor::visit(ObPoint *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(write_to_buffer(ObGeoWkbByteOrder::LittleEndian, 1))) {
-    LOG_WARN("failed to write point little endian", K(ret));
   } else if (OB_FAIL(write_to_buffer(geo->type(), sizeof(uint32_t)))) {
-    LOG_WARN("failed to write point type", K(ret));
   } else if (srs_ == NULL || srs_->srs_type() == ObSrsType::PROJECTED_SRS) {
     if (OB_FAIL(write_cartesian_point(geo->x(), geo->y()))) {
-      LOG_WARN("failed to cartesian point value", K(ret));
     }
   } else if (OB_FAIL(write_geograph_point(geo->x(), geo->y()))) {
-    LOG_WARN("failed to geograph point value", K(ret));
   }
   return ret;
 }
@@ -84,11 +72,9 @@ int ObGeoWkbVisitor::visit(ObCartesianLineString *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(write_head_info(geo))) {
-    LOG_WARN("failed to write line string head info", K(ret));
   } else {
     for (uint32_t i = 0; i < geo->size() && OB_SUCC(ret); i++) {
       if (OB_FAIL(write_cartesian_point((*geo)[i].get<0>(), (*geo)[i].get<1>()))) {
-        LOG_WARN("failed to cartesian point value", K(ret), K(i));
       }
     }
   }
@@ -102,11 +88,9 @@ int ObGeoWkbVisitor::visit(ObGeographLineString *geo)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid srs info", K(ret), K(srs_));
   } else if (OB_FAIL(write_head_info(geo))) {
-    LOG_WARN("failed to write line string head info", K(ret));
   } else {
     for (uint32_t i = 0; i < geo->size() && OB_SUCC(ret); i++) {
       if (OB_FAIL(write_geograph_point((*geo)[i].get<0>(), (*geo)[i].get<1>()))) {
-        LOG_WARN("failed to geograph point value", K(ret), K(i));
       }
     }
   }
@@ -120,25 +104,20 @@ int ObGeoWkbVisitor::visit(ObGeographPolygon *geo)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid srs info", K(ret), K(srs_));
   } else if (OB_FAIL(write_head_info(geo))) {
-    LOG_WARN("failed to write polygon head info", K(ret));
   } else {
     const ObGeographLinearring& ring = geo->exterior_ring();
     if (OB_FAIL(write_to_buffer(ring.size(), sizeof(uint32_t)))) {
-      LOG_WARN("failed to write num value", K(ret));
     }    
     for (uint32_t i = 0; i < ring.size() && OB_SUCC(ret); i++) {
       if (OB_FAIL(write_geograph_point(ring[i].get<0>(), ring[i].get<1>()))) {
-        LOG_WARN("failed to geograph point value", K(ret), K(i));
       }
     }
     for (uint32_t i = 0; i < geo->inner_ring_size() && OB_SUCC(ret); i++) {
       const ObGeographLinearring& inner_ring = geo->inner_ring(i);
       if (OB_FAIL(write_to_buffer(inner_ring.size(), sizeof(uint32_t)))) {
-        LOG_WARN("failed to write num value", K(ret));
       }
       for (uint32_t j = 0; j < inner_ring.size() && OB_SUCC(ret); j++) {
         if (OB_FAIL(write_geograph_point(inner_ring[j].get<0>(), inner_ring[j].get<1>()))) {
-          LOG_WARN("failed to geograph point value", K(ret), K(i), K(j));
         }
       }
     }
@@ -150,25 +129,20 @@ int ObGeoWkbVisitor::visit(ObCartesianPolygon *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(write_head_info(geo))) {
-    LOG_WARN("failed to write polygon head info", K(ret));
   } else {
     const ObCartesianLinearring& ring = geo->exterior_ring();
     if (OB_FAIL(write_to_buffer(ring.size(), sizeof(uint32_t)))) {
-      LOG_WARN("failed to write num value", K(ret));
     }
     for (uint32_t i = 0; i < ring.size() && OB_SUCC(ret); i++) {
       if (OB_FAIL(write_cartesian_point(ring[i].get<0>(), ring[i].get<1>()))) {
-        LOG_WARN("failed to cartesian point value", K(ret), K(i));
       }
     }
     for (uint32_t i = 0; i < geo->inner_ring_size() && OB_SUCC(ret); i++) {
       const ObCartesianLinearring& inner_ring = geo->inner_ring(i);
       if (OB_FAIL(write_to_buffer(inner_ring.size(), sizeof(uint32_t)))) {
-        LOG_WARN("failed to write num value", K(ret), K(i));
       }
       for (uint32_t j = 0; j < inner_ring.size() && OB_SUCC(ret); j++) {
         if (OB_FAIL(write_cartesian_point(inner_ring[j].get<0>(), inner_ring[j].get<1>()))) {
-          LOG_WARN("failed to cartesian point value", K(ret), K(i), K(j));
         } 
       }
     }
@@ -180,7 +154,6 @@ int ObGeoWkbVisitor::visit(ObGeometrycollection *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(write_head_info(geo))) {
-    LOG_WARN("failed to write geograph multi point head info", K(ret));
   }
   return ret;
 }

@@ -55,13 +55,11 @@ int ObDLIBatchSet::serialize(char *buf, const int64_t buf_len, int64_t &pos) con
   const int64_t origin_pos = pos;
 
   if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, hash_count))) {
-    TRANS_LOG(WARN, "encode hash count failed", K(ret), K(hash_count), KP(buf), K(buf_len), K(pos));
   } else {
     ObTxDirectLoadBatchSet::const_iterator iter = ObTxDirectLoadBatchSet::begin();
 
     for (; iter != ObTxDirectLoadBatchSet::end() && OB_SUCC(ret); iter++) {
       if (OB_FAIL(iter->first.serialize(buf, buf_len, pos))) {
-        TRANS_LOG(WARN, "serialize log key failed", K(ret), KP(buf), K(buf_len), K(pos));
       }
     }
   }
@@ -86,21 +84,15 @@ int ObDLIBatchSet::deserialize(const char *buf, const int64_t data_len, int64_t 
   if (!created() && OB_FAIL(create(32, mem_attr, mem_attr))) {
     TRANS_LOG(WARN, "create batch hash set failed", K(ret));
   } else if (OB_FAIL(serialization::decode(buf, data_len, pos, hash_count))) {
-    TRANS_LOG(WARN, "decode hash count failed", K(ret), K(hash_count), KP(buf), K(data_len),
-              K(pos));
   } else {
     for (int64_t i = 0; i < hash_count && OB_SUCC(ret); i++) {
       ObTxDirectLoadIncBatchInfo tmp_info;
       if (OB_FAIL(tmp_info.deserialize(buf, data_len, pos))) {
-        TRANS_LOG(WARN, "deserialize direct load inc log key", K(ret), K(hash_count), KP(buf),
-                  K(data_len), K(pos));
       } else if (!tmp_info.get_batch_key().is_valid()) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "invalid deserialized log key", K(ret), K(tmp_info), K(i), K(hash_count),
                   KP(buf), K(data_len), K(pos));
       } else if (OB_FAIL(ObTxDirectLoadBatchSet::set_refactored(tmp_info))) {
-        TRANS_LOG(WARN, "insert into hash set failed", K(ret), K(tmp_info), K(i), K(hash_count),
-                  KP(buf), K(data_len), K(pos));
       }
     }
   }
@@ -169,8 +161,6 @@ int ObDLIBatchSet::before_submit_ddl_start(const ObDDLIncLogBasic &key, const sh
             TRANS_LOG(WARN, "the last ddl end log is logging", K(ret), K(info_in_hashset),
                       K(batch_info), K(start_scn));
           } else if (OB_FAIL(set_refactored(batch_info, 1))) {
-            TRANS_LOG(WARN, "overwrite existed batch_info failed", K(ret), KPC(info_in_hashset),
-                      K(batch_info), K(start_scn));
           }
 
         } else {
@@ -216,8 +206,6 @@ int ObDLIBatchSet::sync_ddl_start_succ(const ObDDLIncLogBasic &key, const share:
     TRANS_LOG(ERROR, "a existed batch_info hasn't found", K(ret), K(batch_info),
               KPC(info_in_hashset), K(start_scn));
   } else if (OB_FAIL(info_in_hashset->set_start_log_synced())) {
-    TRANS_LOG(WARN, "set ddl start synced log failed", K(ret), K(batch_info), K(info_in_hashset),
-              K(start_scn));
   }
   return ret;
 }
@@ -316,8 +304,6 @@ int ObDLIBatchSet::remove_unlog_batch_info(const ObTxDirectLoadBatchKeyArray &ba
 
     ObTxDirectLoadIncBatchInfo batch_info(batch_key_array[i]);
     if (OB_FAIL(erase_refactored(batch_info))) {
-      TRANS_LOG(WARN, "erase from hash set failed", K(ret), K(batch_info), K(i),
-                K(batch_key_array.count()));
     }
   }
   return ret;
@@ -339,7 +325,6 @@ int ObDLIBatchSet::assign(const ObDLIBatchSet &other)
 
     while (iter != other.end() && OB_SUCC(ret)) {
       if (OB_FAIL(set_refactored(iter->first, 1))) {
-        TRANS_LOG(WARN, "overwrite existed batch_info failed", K(ret), K(iter->first));
       }
       iter++;
     }

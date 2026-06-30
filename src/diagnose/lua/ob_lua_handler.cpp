@@ -269,9 +269,7 @@ void ObUnixDomainListener::run1()
             } else if (FALSE_IT(APIRegister::get_instance().set_fd(events[i].data.fd))) {
               // do nothing
             } else if (OB_FAIL(ObLuaHandler::get_instance().process(code_buffer))) {
-              OB_LOG(ERROR, "ObUnixDomainListener process failed", K(ret));
             } else if (OB_FAIL(APIRegister::get_instance().flush())) {
-              OB_LOG(ERROR, "ObUnixDomainListener flush failed", K(ret));
             } else {
               // do nothing
             }

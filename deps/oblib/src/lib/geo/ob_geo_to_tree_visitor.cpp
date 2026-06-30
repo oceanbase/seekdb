@@ -50,7 +50,6 @@ int ObGeoToTreeVisitor::update_root_and_parent(T *geo)
   if (coll_num > 0) {
     ObGeometrycollection *cur = parent_[coll_num - 1];
     if (OB_FAIL(cur->push_back(*static_cast<ObGeometry *>(geo)))) {
-      LOG_WARN("failed to push geo to parent", K(ret));
     }
   }
   return ret;
@@ -62,15 +61,11 @@ int ObGeoToTreeVisitor::create_geo_tree_collection(T_IBIN *i_geo)
   int ret = OB_SUCCESS;
   T* geo = NULL;
   if (OB_FAIL(alloc_geo_tree_obj(geo))) {
-    LOG_WARN("failed to alloc tree geog geo string", K(ret));
   } else {
     geo = new(geo)T(i_geo->get_srid(), *allocator_);
     if (OB_FAIL(geo->reserve(i_geo->size()))) {
-      LOG_WARN("fail to reserve size", K(ret), K(i_geo->size()));
     } else if (OB_FAIL(update_root_and_parent(geo))) {
-      LOG_WARN("failed to update parent", K(ret));
     } else if (OB_FAIL(parent_.push_back(geo))) {
-      LOG_WARN("failed to set self to parent", K(ret));
     }
   }
   return ret;
@@ -87,20 +82,17 @@ int ObGeoToTreeVisitor::create_geo_multi_point(T_TREE *&geo, T_IBIN *geo_ibin)
   } else {
     geo = new(geo)T_TREE(geo_ibin->get_srid(), *allocator_);
     if (OB_FAIL(geo->reserve(geo_bin->size()))) {
-      LOG_WARN("fail to reserve size", K(ret), K(geo_bin->size()));
     }
     typename T_BIN::iterator iter = geo_bin->begin();
     for ( ; iter != geo_bin->end() && OB_SUCC(ret); iter++) {
       T_POINT p(iter->template get<0>(), iter->template get<1>());
       if (OB_FAIL(geo->push_back(p))) {
-        LOG_WARN("failed to add point", K(ret));
       }
     }
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(update_root_and_parent(geo))) {
-      LOG_WARN("failed to update parent", K(ret));
     }    
   } 
   return ret;
@@ -112,13 +104,11 @@ int ObGeoToTreeVisitor::point_visit(T_IBIN *geo)
   int ret = OB_SUCCESS;
   T *point = NULL;
   if (OB_FAIL(alloc_geo_tree_obj(point))) {
-    LOG_WARN("failed to alloc tree Point", K(ret));
   } else {
     point = new(point)T(geo->get_srid(), allocator_);
     point->x(geo->x());
     point->y(geo->y());
     if (OB_FAIL(update_root_and_parent(point))) {
-      LOG_WARN("failed to update parent", K(ret));
     } 
   }
   return ret;
@@ -139,10 +129,8 @@ int ObGeoToTreeVisitor::visit(ObIWkbGeogMultiPoint *geo)
   int ret = OB_SUCCESS;
   ObGeographMultipoint *multi_point = NULL;
   if (OB_FAIL(alloc_geo_tree_obj(multi_point))) {
-    LOG_WARN("failed to alloc tree geog multi_point", K(ret));
   } else if (OB_FAIL((create_geo_multi_point<ObWkbGeogInnerPoint, ObGeographMultipoint,
     ObIWkbGeogMultiPoint, ObWkbGeogMultiPoint>(multi_point, geo)))) {
-    LOG_WARN("failed to create tree geog multi_point", K(ret));
   }
   return ret;
 }
@@ -152,10 +140,8 @@ int ObGeoToTreeVisitor::visit(ObIWkbGeomMultiPoint *geo)
   int ret = OB_SUCCESS;
   ObCartesianMultipoint *multi_point = NULL;
   if (OB_FAIL(alloc_geo_tree_obj(multi_point))) {
-    LOG_WARN("failed to alloc tree cartesian multi_point", K(ret));
   } else if (OB_FAIL((create_geo_multi_point<ObWkbGeomInnerPoint, ObCartesianMultipoint,
     ObIWkbGeomMultiPoint, ObWkbGeomMultiPoint>(multi_point, geo)))) {
-    LOG_WARN("failed to create tree geom multi_point", K(ret));
   }
   return ret;
 }
@@ -191,7 +177,6 @@ int ObGeoToTreeVisitor::polygon_visit(p_ibin_type *geo)
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("geo value is null", K(ret));
   } else if (OB_FAIL(alloc_geo_tree_obj(polygon))) {
-    LOG_WARN("failed to alloc tree polygon", K(ret));
   } else {
     polygon = new(polygon)P_TYPE(geo->get_srid(), *allocator_);
     uint32_t ring_num = polygon_bin->size();
@@ -200,15 +185,12 @@ int ObGeoToTreeVisitor::polygon_visit(p_ibin_type *geo)
       L_TYPE& tree_ext_ring = polygon->exterior_ring();
       const L_BIN_TYPE &ext_ring = polygon_bin->exterior_ring();
       if (OB_FAIL(polygon->reserve(polygon_bin->size()))) {
-        LOG_WARN("fail to reserve size", K(ret), K(polygon_bin->size()));
       } else if (OB_FAIL(tree_ext_ring.reserve(ext_ring.size()))) {
-        LOG_WARN("fail to reserve size", K(ret), K(ext_ring.size()));
       }
       typename L_BIN_TYPE::iterator iter = ext_ring.begin();
       for ( ; iter != ext_ring.end() && OB_SUCC(ret); iter++) {
         POINT_TYPE p(iter->template get<0>(), iter->template get<1>());
         if (OB_FAIL(tree_ext_ring.push_back(p))) {
-          LOG_WARN("failed to push point to ring", K(ret));
         }
       }
       if (OB_SUCC(ret) && ring_num > 1) {
@@ -218,13 +200,11 @@ int ObGeoToTreeVisitor::polygon_visit(p_ibin_type *geo)
         for (; iter != inner_rings.end() && OB_SUCC(ret); iter++) {
           L_TYPE tree_linearring(geo->get_srid(), *allocator_);
           if (OB_FAIL(tree_linearring.reserve(iter->size()))) {
-            LOG_WARN("fail to reserve size", K(ret), K(iter->size()));
           } else {
             typename L_BIN_TYPE::iterator point_iter = iter->begin();
             for ( ; point_iter != iter->end() && OB_SUCC(ret); point_iter++) {
               POINT_TYPE p(point_iter->template get<0>(), point_iter->template get<1>());
               if (OB_FAIL(tree_linearring.push_back(p))) {
-                LOG_WARN("failed to push point to ring", K(ret));
               }       
             }
             if (OB_SUCC(ret) && OB_FAIL(polygon->push_back(tree_linearring))) {
@@ -237,7 +217,6 @@ int ObGeoToTreeVisitor::polygon_visit(p_ibin_type *geo)
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(update_root_and_parent(polygon))) {
-      LOG_WARN("failed to update parent", K(ret));
     } 
   }
   return ret;
@@ -260,10 +239,8 @@ int ObGeoToTreeVisitor::visit(ObIWkbGeogLineString *geo)
   int ret = OB_SUCCESS;
   ObGeographLineString *line = NULL;
   if (OB_FAIL(alloc_geo_tree_obj(line))) {
-    LOG_WARN("failed to alloc tree geog line string", K(ret));
   } else if (OB_FAIL((create_geo_multi_point<ObWkbGeogInnerPoint, ObGeographLineString,
       ObIWkbGeogLineString, ObWkbGeogLineString>(line, geo)))) {
-    LOG_WARN("failed to create tree geog linestring", K(ret));
   }
   return ret;
 }
@@ -273,10 +250,8 @@ int ObGeoToTreeVisitor::visit(ObIWkbGeomLineString *geo)
   int ret = OB_SUCCESS;
   ObCartesianLineString *line = NULL;
   if (OB_FAIL(alloc_geo_tree_obj(line))) {
-    LOG_WARN("failed to alloc tree cartesian line string", K(ret));
   } else if (OB_FAIL((create_geo_multi_point<ObWkbGeomInnerPoint, ObCartesianLineString,
     ObIWkbGeomLineString, ObWkbGeomLineString>(line, geo)))) {
-    LOG_WARN("failed to create tree geom linestring", K(ret));
   }
   return ret;
 }

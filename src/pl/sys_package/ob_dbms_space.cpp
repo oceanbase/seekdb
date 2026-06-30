@@ -70,26 +70,20 @@ int ObDbmsSpace::create_index_cost(sql::ObExecContext &ctx,
     ret = OB_INVALID_ARGUMENT;
     SQL_ENG_LOG(WARN, "param count do not match", K(ret), K(params));
   } else if (OB_FAIL(params.at(0).get_string(ddl_str))) {
-    SQL_ENG_LOG(WARN, "fail to get string", K(ret));
   } else if (OB_FAIL(parse_ddl_sql(ctx, ddl_str, stmt))) {
-    SQL_ENG_LOG(WARN, "fail to parse_ddl_SQL", K(ret));
   } else if (OB_ISNULL(stmt)) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "get unexpected null pointer", K(ret));
   } else if (OB_FAIL(extract_info_from_stmt(ctx,
                                             stmt,
                                             info))) {
-    SQL_ENG_LOG(WARN, "fail extract info from stmt", K(ret));
   } else if (OB_FAIL(get_compressed_ratio(ctx, info))) {
-    SQL_ENG_LOG(WARN, "fail to get compression ratio", K(ret));
   } else if (OB_FAIL(get_optimizer_stats(info,
                                          opt_stats))) {
-    SQL_ENG_LOG(WARN, "fail to get opt stats", K(ret));
   } else if (OB_FAIL(calc_index_size(opt_stats,
                                      info,
                                      params.at(1),
                                      params.at(2)))) {
-    SQL_ENG_LOG(WARN, "fail to calc index size", K(ret));
   }
 
   return ret;
@@ -109,7 +103,6 @@ int ObDbmsSpace::parse_ddl_sql(ObExecContext &ctx,
     ret = OB_INVALID_ARGUMENT;
     SQL_ENG_LOG(WARN, "the args is null", K(ret), KP(session));
   } else if (OB_FAIL(schema_checker.init(*(ctx.get_sql_ctx()->schema_guard_)))) {
-    SQL_ENG_LOG(WARN, "fail to init schema checker", K(ret));
   } else {
     ObParser parser(ctx.get_allocator(), session->get_sql_mode());
     ParseResult parse_result;
@@ -136,12 +129,10 @@ int ObDbmsSpace::parse_ddl_sql(ObExecContext &ctx,
         HEAP_VAR(ObCreateIndexResolver, resolver, resolver_ctx) {
           ParseNode *tree = nullptr;
           if (OB_FAIL(parser.parse(ddl_sql, parse_result))) {
-            SQL_ENG_LOG(WARN, "fail to parse stmt", K(ret));
           } else if (OB_ISNULL(tree = parse_result.result_tree_->children_[0])) {
             ret = OB_ERR_UNEXPECTED;
             SQL_ENG_LOG(WARN, "result tree is null", K(ret));
           } else if (OB_FAIL(resolver.resolve(*tree))) {
-            SQL_ENG_LOG(WARN, "fail to resove parse tree", K(ret));
           } else {         
             stmt = resolver.get_create_index_stmt();
           }
@@ -172,14 +163,11 @@ int ObDbmsSpace::extract_info_from_stmt(ObExecContext &ctx,
   } else if (OB_FAIL(schema_guard->get_table_schema(
                                                     stmt->get_table_id(),
                                                     table_schema))) {
-    SQL_ENG_LOG(WARN, "fail to get table_schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     SQL_ENG_LOG(WARN, "can't find table_schema", K(ret));
   } else if (OB_FAIL(get_svr_info_from_schema(table_schema, info.svr_addr_, info.tablet_ids_))) {
-    SQL_ENG_LOG(WARN, "fail to get info from schema", K(ret));
   } else if (OB_FAIL(get_index_column_ids(table_schema, stmt->get_create_index_arg(), info))) {
-    SQL_ENG_LOG(WARN, "fail to get index column ids", K(ret));
   } else {
     
     info.table_id_ = ObSchemaUtils::get_extract_schema_id(stmt->get_table_id());
@@ -190,7 +178,6 @@ int ObDbmsSpace::extract_info_from_stmt(ObExecContext &ctx,
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(info.part_ids_.push_back(partition_id))) {
-        SQL_ENG_LOG(WARN, "fail to push back partition_id", K(ret));
       } else {
         SQL_ENG_LOG(TRACE, "DBMS_SPACE: finial info is ", K(info));
       }
@@ -224,7 +211,6 @@ int ObDbmsSpace::get_index_column_ids(const share::schema::ObTableSchema *table_
         ret = OB_ERR_COLUMN_NOT_FOUND;
         SQL_ENG_LOG(WARN, "fail to get column schema", K(ret), K(tmp_col_name));
       } else if (OB_FAIL(column_ids.push_back(tmp_col->get_column_id()))) {
-        SQL_ENG_LOG(WARN, "fail to push back column id", K(ret));
       }
     }
   }
@@ -244,12 +230,10 @@ int ObDbmsSpace::get_optimizer_stats(const IndexCostInfo &info,
   if (OB_FAIL(ObOptStatManager::get_instance().get_table_stat(info.table_id_,
                                                               info.part_ids_,
                                                               opt_stats.table_stats_))) {
-    SQL_ENG_LOG(WARN, "fail to get table stat", K(ret));
   } else if (OB_FAIL(ObOptStatManager::get_instance().get_column_stat(info.table_id_,
                                                                       info.part_ids_,
                                                                       info.column_ids_,
                                                                       opt_stats.column_stats_))) {
-    SQL_ENG_LOG(WARN, "fail to get column stats", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -271,7 +255,6 @@ int ObDbmsSpace::get_compressed_ratio(ObExecContext &ctx,
     ret = OB_INVALID_ARGUMENT;
     SQL_ENG_LOG(WARN, "the args is null", K(ret), KP(sql_proxy), KP(session));
   } else if (OB_FAIL(inner_get_compressed_ratio(sql_proxy, info))){
-    SQL_ENG_LOG(WARN, "fail to calc compression ratio", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -293,9 +276,7 @@ int ObDbmsSpace::inner_get_compressed_ratio(ObMySQLProxy *sql_proxy,
     ret = OB_INVALID_ARGUMENT;
     SQL_ENG_LOG(WARN, "the args is null", K(ret), KP(sql_proxy));
   } else if (OB_FAIL(generate_part_key_str(svr_addr_predicate, info.svr_addr_))) {
-    SQL_ENG_LOG(WARN, "fail to get svr_addr_predicate", K(ret));
   } else if (OB_FAIL(generate_tablet_predicate_str(tablet_predicate, info.tablet_ids_))) {
-    SQL_ENG_LOG(WARN, "fail to get tablet_predicate", K(ret));
   } else if (svr_addr_predicate.length() == 0 || tablet_predicate.length() == 0) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "the predicate id unexpected", K(ret));
@@ -304,16 +285,13 @@ int ObDbmsSpace::inner_get_compressed_ratio(ObMySQLProxy *sql_proxy,
       if (OB_FAIL(compression_ratio_sql.assign_fmt(GET_COMPRESSED_INFO_SQL,
                                                    static_cast<int32_t>(tablet_predicate.length()),
                                                    tablet_predicate.ptr()))) {
-        SQL_ENG_LOG(WARN, "fail to construct inner sql", K(ret));
       } else if (OB_FAIL(sql_proxy->read(result, compression_ratio_sql.ptr()))) {
-        SQL_ENG_LOG(WARN, "exec query fail", K(ret));
       } else if (OB_ISNULL(result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         SQL_ENG_LOG(WARN, "get result fail", K(ret));
       } else {
         while (OB_SUCC(ret) && OB_SUCC(result.get_result()->next())) {
           if (OB_FAIL(extract_total_compression_ratio(result.get_result(), info.compression_ratio_))) {
-            SQL_ENG_LOG(WARN, "fail to extract result", K(ret));
           }
         }
         if (OB_ITER_END == ret) {
@@ -344,7 +322,6 @@ int ObDbmsSpace::extract_total_compression_ratio(const sqlclient::ObMySQLResult 
       SQL_ENG_LOG(WARN, "fail to get double from result", K(ret));
     }
   } else if (OB_FAIL(ObDbmsStatsUtils::cast_number_to_double(tmp_comp_ratio, compression_ratio))) {
-    SQL_ENG_LOG(WARN, "fail to cat number to double", K(ret));
   }
 
   return ret;
@@ -369,7 +346,6 @@ int ObDbmsSpace::calc_index_size(OptStats &opt_stats,
                                            info,
                                            dummy_actual_size,
                                            dummy_alloc_size))) {
-    SQL_ENG_LOG(WARN, "fail to calc stat", K(ret));
   } else {
     actual_size.set_uint64(dummy_actual_size);
     alloc_size.set_uint64(dummy_alloc_size);
@@ -451,7 +427,6 @@ int ObDbmsSpace::fill_tablet_infos(const ObTableSchema *table_schema,
     ret = OB_INVALID_ARGUMENT;
     SQL_ENG_LOG(WARN, "the args is null", K(ret), KP(table_schema));
   } else if (OB_FAIL(table_schema->get_all_tablet_and_object_ids(tmp_tablet_id, tmp_partition_id))) {
-    SQL_ENG_LOG(WARN, "fail to get tablet and partition id", K(ret));
   } else if (tmp_tablet_id.count() != tmp_partition_id.count()) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "tablet id and partition id not match", K(ret), K(tmp_tablet_id), K(tmp_partition_id));
@@ -459,14 +434,12 @@ int ObDbmsSpace::fill_tablet_infos(const ObTableSchema *table_schema,
     for (int64_t i = 0; OB_SUCC(ret) && i < tmp_tablet_id.count(); i++) {
       TabletInfo tmp_tablet_info(tmp_tablet_id.at(i), tmp_partition_id.at(i));
       if (OB_FAIL(tablet_infos.push_back(tmp_tablet_info))) {
-        SQL_ENG_LOG(WARN, "tablet id and partition id not match", K(ret), K(tmp_tablet_id), K(tmp_partition_id));
       }
     }
     if (OB_SUCC(ret)) {
       // for partitioned table, we need an item to indicate the global information. The item's tablet_id is 0 and part_id is -1
       // this item is redundant for non-part table.
       if (OB_FAIL(tablet_infos.push_back(TabletInfo(ObTabletID(0), -1)))) {
-        SQL_ENG_LOG(WARN, "fail to push back to tablet info", K(ret)); 
       }
     }
   }
@@ -517,9 +490,7 @@ int ObDbmsSpace::get_each_tablet_size(ObMySQLProxy *sql_proxy,
     ret = OB_INVALID_ARGUMENT;
     SQL_ENG_LOG(WARN, "the args is null", K(ret), KP(sql_proxy));
   } else if (OB_FAIL(generate_part_key_str(svr_addr_predicate, info.svr_addr_))) {
-    SQL_ENG_LOG(WARN, "fail to get svr_addr_predicate", K(ret));
   } else if (OB_FAIL(generate_tablet_predicate_str(tablet_predicate, info.tablet_ids_))) {
-    SQL_ENG_LOG(WARN, "fail to get tablet_predicate", K(ret));
   } else if (svr_addr_predicate.length() == 0 || tablet_predicate.length() == 0) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "the predicate id unexpected", K(ret));
@@ -528,16 +499,13 @@ int ObDbmsSpace::get_each_tablet_size(ObMySQLProxy *sql_proxy,
       if (OB_FAIL(get_tablet_size_sql.assign_fmt(GET_TABLET_INFO_SQL,
                                                  static_cast<int32_t>(tablet_predicate.length()),
                                                  tablet_predicate.ptr()))) {
-        SQL_ENG_LOG(WARN, "fail to construct inner sql", K(ret));
       } else if (OB_FAIL(sql_proxy->read(result, get_tablet_size_sql.ptr()))) {
-        SQL_ENG_LOG(WARN, "exec query fail", K(ret));
       } else if (OB_ISNULL(result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         SQL_ENG_LOG(WARN, "get result fail", K(ret));
       } else {
         while (OB_SUCC(ret) && OB_SUCC(result.get_result()->next())) {
           if (OB_FAIL(extract_tablet_size(result.get_result(), tablet_infos))) {
-            SQL_ENG_LOG(WARN, "fail to extract result", K(ret));
           }
         }
         if (OB_ITER_END == ret) {
@@ -566,11 +534,8 @@ int ObDbmsSpace::get_each_tablet_size(ObMySQLProxy *sql_proxy,
     ret = OB_INVALID_ARGUMENT;
     SQL_ENG_LOG(WARN, "the args is null", K(ret), KP(sql_proxy), KP(table_schema));
   } else if (OB_FAIL(get_svr_info_from_schema(table_schema, svr_addr, tablet_ids))) {
-    SQL_ENG_LOG(WARN, "fail to get svr_info", K(ret));
   } else if (OB_FAIL(generate_part_key_str(svr_addr_predicate, svr_addr))) {
-    SQL_ENG_LOG(WARN, "fail to get svr_addr_predicate", K(ret));
   } else if (OB_FAIL(generate_tablet_predicate_str(tablet_predicate, tablet_ids))) {
-    SQL_ENG_LOG(WARN, "fail to get tablet_predicate", K(ret));
   } else if (svr_addr_predicate.length() == 0 || tablet_predicate.length() == 0) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "the predicate id unexpected", K(ret));
@@ -579,16 +544,13 @@ int ObDbmsSpace::get_each_tablet_size(ObMySQLProxy *sql_proxy,
       if (OB_FAIL(get_tablet_size_sql.assign_fmt(GET_TABLET_SIZE_SQL,
                                                  static_cast<int32_t>(tablet_predicate.length()),
                                                  tablet_predicate.ptr()))) {
-        SQL_ENG_LOG(WARN, "fail to construct inner sql", K(ret));
       } else if (OB_FAIL(sql_proxy->read(result, get_tablet_size_sql.ptr()))) {
-        SQL_ENG_LOG(WARN, "exec query fail", K(ret));
       } else if (OB_ISNULL(result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         SQL_ENG_LOG(WARN, "get result fail", K(ret));
       } else {
         while (OB_SUCC(ret) && OB_SUCC(result.get_result()->next())) {
           if (OB_FAIL(extract_tablet_size(result.get_result(), tablet_size))) {
-            SQL_ENG_LOG(WARN, "fail to extract result", K(ret));
           }
         }
         if (OB_ITER_END == ret) {
@@ -629,11 +591,9 @@ int ObDbmsSpace::extract_tablet_size(const sqlclient::ObMySQLResult *result,
       SQL_ENG_LOG(WARN, "fail to get number from result", K(ret));
     }
   } else if (OB_FAIL(tmp_tablet_size.cast_to_int64(tmp_tablet_size_int))) {
-    SQL_ENG_LOG(WARN, "fail to cast number to int", K(ret));
   } 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(tablet_size.push_back(std::pair<ObTabletID, uint64_t>(ObTabletID(tablet_id), tmp_tablet_size_int)))) {
-      SQL_ENG_LOG(WARN, "fail to push back  tablet size", K(ret));
     }
   }
 
@@ -682,14 +642,10 @@ int ObDbmsSpace::extract_tablet_size(const sqlclient::ObMySQLResult *result,
       SQL_ENG_LOG(WARN, "fail to get double from result", K(ret));
     }
   } else if (OB_FAIL(ObDbmsStatsUtils::cast_number_to_double(row_len, tmp_row_len))) {
-    SQL_ENG_LOG(WARN, "fail to cast number to double", K(ret));
   } else if (OB_FAIL(ObDbmsStatsUtils::cast_number_to_double(compression_ratio, tmp_compression_ratio))) {
-    SQL_ENG_LOG(WARN, "fail to cast number to double", K(ret));
   } else if (OB_FAIL(tmp_row_count.cast_to_int64(tmp_row_count_int))) {
-    SQL_ENG_LOG(WARN, "fail to cast number int", K(ret));
   } else if (OB_FAIL(set_tablet_info_by_tablet_id(ObTabletID(tablet_id), tmp_row_len, tmp_row_count_int, tmp_compression_ratio,
                                           tablet_infos))) {
-    SQL_ENG_LOG(WARN, "fail to set tablet info", K(ret));
   }
   return ret;
 }
@@ -745,12 +701,9 @@ int ObDbmsSpace::estimate_index_table_size(ObMySQLProxy *sql_proxy,
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "unexpected null ptr of table schema", K(ret), K(table_schema));
   } else if (OB_FAIL(get_optimizer_stats(info, opt_stats))) {
-    SQL_ENG_LOG(WARN, "fail to get opt stats", K(ret));
   } else if (OB_FAIL(check_stats_valid(opt_stats, is_valid))) {
-    SQL_ENG_LOG(WARN, "fail to check opt stats", K(ret));
   } else if (is_valid) {
     if (OB_FAIL(estimate_index_table_size_by_opt_stats(sql_proxy, table_schema, opt_stats, info, table_size))) {
-      SQL_ENG_LOG(WARN, "fail to estimate index table size", K(ret));
     }
   } else {
     ret = OB_NOT_SUPPORTED;
@@ -804,7 +757,6 @@ int ObDbmsSpace::estimate_index_table_size_by_opt_stats(ObMySQLProxy *sql_proxy,
   } else if (OB_FAIL(get_svr_info_from_schema(table_schema,
                                               info.svr_addr_,
                                               info.tablet_ids_))) {
-    SQL_ENG_LOG(WARN, "fail to get info from schema", K(ret));
   } else if (OB_FALSE_IT(info.compression_ratio_ = 0.5)) {
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < info.part_ids_.count(); i++) {
@@ -812,11 +764,9 @@ int ObDbmsSpace::estimate_index_table_size_by_opt_stats(ObMySQLProxy *sql_proxy,
       uint64_t actual_size = 0;
       if (OB_FAIL(inner_calc_index_size(opt_stats.table_stats_.at(i), opt_stats.column_stats_, info,
                                         actual_size, dummy_alloc_size))) {
-        SQL_ENG_LOG(WARN, "fail to calc index size", K(ret));
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(table_size.push_back(actual_size))) {
-          SQL_ENG_LOG(WARN, "fail to push back table_size", K(ret), K(actual_size));
         }
       }
     }
@@ -843,7 +793,6 @@ int ObDbmsSpace::inner_calc_index_size_by_default(IndexCostInfo &info,
     } else {
       uint64_t partition_size = info.default_index_len_ * tablet_info->row_count_ * tablet_info->compression_ratio_;
       if (OB_FAIL(table_size.push_back(partition_size))) {
-        SQL_ENG_LOG(WARN, "fail to push back partition size", K(ret));
       }
     }
   }
@@ -935,7 +884,6 @@ int ObDbmsSpace::get_svr_info_from_schema(const ObTableSchema *table_schema,
     ret = OB_INVALID_ARGUMENT;
     SQL_ENG_LOG(WARN, "the arg is null", K(ret), KP(table_schema));
   } else if (OB_FAIL(table_schema->get_tablet_ids(tablet_list))) {
-    SQL_ENG_LOG(WARN, "fail to get tablet_ids", K(ret));
   } else if (tablet_list.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "can't find tablet", K(ret));
@@ -950,9 +898,7 @@ int ObDbmsSpace::get_svr_info_from_schema(const ObTableSchema *table_schema,
                                                     dummy_ls_id,
                                                     leader_addr
                                                     ))) {
-        SQL_ENG_LOG(WARN, "fail to get tablet's leader_addr", K(ret));
       } else if (OB_FAIL(add_var_to_array_no_dup(addr_list, leader_addr))) {
-        SQL_ENG_LOG(WARN, "fail to add add to addr_list", K(ret));
       }
     }
   }
@@ -976,7 +922,6 @@ int ObDbmsSpace::generate_part_key_str(ObSqlString &target_str,
                                               (int)strlen(host),
                                               host,
                                               addr_list.at(i).get_port()))) {
-      SQL_ENG_LOG(WARN, "fail to append fmt.", K(ret));
     }
   }
 
@@ -991,7 +936,6 @@ int ObDbmsSpace::generate_tablet_predicate_str(ObSqlString &target_str,
   for (int64_t i = 0; OB_SUCC(ret) && i < tablet_list.count(); i++) {
     if (OB_FAIL(target_str.append_fmt((i == tablet_list.count() - 1) ? "%lu" : "%lu,",
                                        tablet_list.at(i).id()))) {
-      SQL_ENG_LOG(WARN, "fail to generate tablet predicate", K(ret));
     }
   }
 

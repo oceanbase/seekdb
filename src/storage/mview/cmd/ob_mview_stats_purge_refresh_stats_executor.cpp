@@ -60,7 +60,6 @@ int ObMViewStatsPurgeRefreshStatsExecutor::execute(ObExecContext &ctx,
         ObMViewRefreshStatsParams stats_params;
         if (OB_FAIL(ObMViewRefreshStatsParams::fetch_sys_defaults(*ctx.get_sql_proxy(),
                                                                   stats_params))) {
-          LOG_WARN("fail to fetch sys defaults", KR(ret));
         } else {
           filter_param.set_retention_period(stats_params.get_retention_period());
         }
@@ -69,7 +68,6 @@ int ObMViewStatsPurgeRefreshStatsExecutor::execute(ObExecContext &ctx,
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(purge_refresh_stats(filter_param))) {
-          LOG_WARN("fail to purge refresh stats", KR(ret), K(filter_param));
         }
       }
     } else if (OpType::PURGE_SPECIFY_REFRESH_STATS == op_type_) {
@@ -100,7 +98,6 @@ int ObMViewStatsPurgeRefreshStatsExecutor::execute(ObExecContext &ctx,
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(purge_refresh_stats(filter_param))) {
-            LOG_WARN("fail to purge refresh stats", KR(ret), K(filter_param));
           }
         }
       }
@@ -116,9 +113,7 @@ int ObMViewStatsPurgeRefreshStatsExecutor::resolve_arg(const ObMViewStatsPurgeRe
   ObNameCaseMode case_mode = OB_NAME_CASE_INVALID;
   ObCollationType cs_type = CS_TYPE_INVALID;
   if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
-    LOG_WARN("fail to get name case mode", KR(ret));
   } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-    LOG_WARN("fail to get collation_connection", KR(ret));
   }
   // resolve mv_list
   if (OB_SUCC(ret)) {
@@ -126,7 +121,6 @@ int ObMViewStatsPurgeRefreshStatsExecutor::resolve_arg(const ObMViewStatsPurgeRe
     op_type_ =
       arg.mv_list_.empty() ? OpType::PURGE_ALL_REFRESH_STATS : OpType::PURGE_SPECIFY_REFRESH_STATS;
     if (OB_FAIL(ObMViewExecutorUtil::split_table_list(arg.mv_list_, mview_names))) {
-      LOG_WARN("fail to split table list", KR(ret), K(arg.mv_list_));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < mview_names.count(); ++i) {
       const ObString &mview_name = mview_names.at(i);
@@ -146,12 +140,10 @@ int ObMViewStatsPurgeRefreshStatsExecutor::resolve_arg(const ObMViewStatsPurgeRe
         LOG_WARN("No database selected", KR(ret));
       } else if (OB_FAIL(schema_checker_.get_table_schema_with_synonym(database_name, table_name, false /*is_index_table*/, has_synonym,
                    new_db_name, new_tbl_name, table_schema))) {
-        LOG_WARN("fail to get table schema with synonym", KR(ret), K(database_name), K(table_name));
       } else if (OB_ISNULL(table_schema) || OB_UNLIKELY(!table_schema->is_materialized_view())) {
         ret = OB_ERR_MVIEW_NOT_EXIST;
         LOG_WARN("mview not exist", KR(ret), K(database_name), K(table_name), KPC(table_schema));
       } else if (OB_FAIL(mview_ids_.push_back(table_schema->get_table_id()))) {
-        LOG_WARN("fail to push back", KR(ret));
       }
     }
   }
@@ -170,10 +162,8 @@ int ObMViewStatsPurgeRefreshStatsExecutor::purge_refresh_stats(
   do {
     ObMySQLTransaction trans;
     if (OB_FAIL(trans.start(ctx_->get_sql_proxy()))) {
-      LOG_WARN("fail to start trans", KR(ret));
     } else if (OB_FAIL(ObMViewRefreshStatsPurgeUtil::purge_refresh_stats(
                  trans, filter_param, affected_rows, PURGE_BATCH_COUNT))) {
-      LOG_WARN("fail to purge refresh stats", KR(ret), K(filter_param));
     }
     if (trans.is_started()) {
       int tmp_ret = OB_SUCCESS;

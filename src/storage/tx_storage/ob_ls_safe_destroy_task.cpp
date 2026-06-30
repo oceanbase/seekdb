@@ -48,7 +48,6 @@ bool ObLSSafeDestroyTask::safe_to_destroy()
   if (IS_NOT_INIT) {
     is_safe = true;
   } else if (OB_FAIL(guard.switch_to(false))) {
-    LOG_WARN("switch tenant failed", K(ret));
   } else if (OB_UNLIKELY(!ls_handle_.is_valid())) {
     is_safe = true;
   } else if (OB_ISNULL(ls = ls_handle_.get_ls())) {
@@ -72,8 +71,6 @@ void ObLSSafeDestroyTask::destroy()
     // the ls tablet reset may use some MTL component we must switch to this tenant.
     MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
     if (OB_FAIL(guard.switch_to(false))) {
-      LOG_WARN("switch to tenant failed, we cannot release the ls, because it is may core",
-               K(ret), KPC(this));
     } else {
       ls_handle_.reset();
       ls_service_->dec_ls_safe_destroy_task_cnt();
@@ -93,7 +90,6 @@ int ObLSSafeDestroyTask::get_ls_id(ObLSID &ls_id) const
     ret = OB_NOT_INIT;
     LOG_WARN("task is not inited", K(ret));
   } else if (OB_FAIL(guard.switch_to(false))) {
-    LOG_WARN("switch tenant failed", K(ret));
   } else if (OB_UNLIKELY(!ls_handle_.is_valid())) {
     LOG_WARN("ls handle invalid", K(ret), K_(ls_handle));
   } else if (OB_ISNULL(ls = ls_handle_.get_ls())) {

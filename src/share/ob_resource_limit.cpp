@@ -179,9 +179,7 @@ int ObResourceLimit::load_json(const char *c_str)
   json::Parser parser;
   ObString str(c_str);
   if (OB_FAIL(parser.init(&allocator))) {
-    LOG_WARN("parser init failed", K(ret));
   } else if (OB_FAIL(parser.parse(str.ptr(), str.length(), data))) {
-    LOG_WARN("parse json failed", K(ret), K(str));
   } else if (NULL == data) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("no root value", K(ret));

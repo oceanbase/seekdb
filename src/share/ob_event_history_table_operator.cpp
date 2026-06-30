@@ -53,13 +53,10 @@ void ObEventTableClearTask::runTimerTask()
     LOG_WARN("deadlock_history_operator_ not init", K(ret));
   } else {
     if (OB_TMP_FAIL(rs_event_operator_.async_delete())) {
-      LOG_WARN("async_delete failed", KR(tmp_ret));
     }
     if (OB_TMP_FAIL(server_event_operator_.async_delete())) {
-      LOG_WARN("async_delete failed", KR(tmp_ret));
     }
     if (OB_TMP_FAIL(deadlock_history_operator_.async_delete())) {
-      LOG_WARN("async_delete failed", KR(tmp_ret));
     }
   }
 }
@@ -155,7 +152,6 @@ int ObEventHistoryTableOperator::ObEventTableUpdateTask::process()
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("invalid event task update task", "task", *this, K(ret));
   } else if (OB_FAIL(table_operator_.process_task(sql_, is_delete_, create_time_))) {
-      LOG_WARN("process_task failed", KR(ret), K_(sql), K_(is_delete), K(create_time_));
   }
   return ret;
 }
@@ -183,7 +179,6 @@ int ObEventHistoryTableOperator::init(ObSQLiteConnectionPool *pool, ObEventHisto
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("pool is null", K(ret));
   } else if (OB_FAIL(storage_.init(pool))) {
-    LOG_WARN("failed to init storage", K(ret));
   } else if (event_type == ObEventHistoryType::TENANT && OB_FAIL(tenant_storage_.init(pool))) {
     LOG_WARN("failed to init tenant storage", K(ret));
   } else {
@@ -205,9 +200,6 @@ int ObEventHistoryTableOperator::init(common::ObMySQLProxy &proxy)
     const int64_t queue_size_square_of_2 = 10;
     if (OB_FAIL(event_queue_.init(thread_count, "EvtHisUpdTask", TASK_QUEUE_SIZE, TASK_MAP_SIZE,
         TOTAL_LIMIT, HOLD_LIMIT, ALLOC_PAGE_SIZE))) {
-      LOG_WARN("task_queue_ init failed", K(thread_count), LITERAL_K(TASK_QUEUE_SIZE),
-          LITERAL_K(TASK_MAP_SIZE), LITERAL_K(TOTAL_LIMIT), LITERAL_K(HOLD_LIMIT),
-          LITERAL_K(ALLOC_PAGE_SIZE), K(ret));
     } else if (is_server_event_history_ &&
           OB_FAIL(timer_.init_and_start(thread_count, 5_s, "EventTimer", queue_size_square_of_2))) {
       LOG_WARN("int global event report timer failed", KR(ret));
@@ -271,7 +263,6 @@ int ObEventHistoryTableOperator::default_async_delete()
     const int64_t now = ObTimeUtility::current_time();
     const int64_t delete_timestap = now - GCONF.ob_event_history_recycle_interval;
     if (OB_FAIL(storage_.delete_expired(delete_timestap, 1024))) {
-      SHARE_LOG(WARN, "failed to delete expired events", K(ret));
     }
   }
   return ret;
@@ -294,8 +285,7 @@ int ObEventHistoryTableOperator::add_task(const ObSqlString &sql, const bool is_
     int64_t new_create_time = OB_INVALID_TIMESTAMP == create_time ?
       ObTimeUtility::current_time() : create_time;
     ObEventTableUpdateTask task(*this, is_delete, new_create_time);
-    if (OB_FAIL(task.init(sql.ptr(), sql.length() + 1))) { // extra byte for '\0'
-      LOG_WARN("task init error", K(ret));
+    if (OB_FAIL(task.init(sql.ptr(), sql.length() + 1))) {
     }
     if (FAILEDx(event_queue_.add_task(task))) {
       if (OB_EAGAIN == ret) {
@@ -331,7 +321,6 @@ int ObEventHistoryTableOperator::process_task(const ObString &sql, const bool is
       int64_t affected_rows = 0;
       if (!is_delete) {
         if (OB_FAIL(proxy_->write(sql.ptr(), affected_rows))) {
-          LOG_WARN("execute sql failed", K(sql), K(ret));
         } else if (!is_single_row(affected_rows)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("affected_rows expected to be one", K(affected_rows), K(ret));
@@ -342,7 +331,6 @@ int ObEventHistoryTableOperator::process_task(const ObString &sql, const bool is
         int tmp_ret = OB_SUCCESS;
         while (OB_SUCCESS == ret && !stopped_) {
           if (OB_FAIL(proxy_->write(sql.ptr(), affected_rows))) {
-            LOG_WARN("execute sql failed", K(sql), K(ret));
           } else if (0 == affected_rows) {
             LOG_INFO("finished to delete from event history table", K(sql), K(create_time));
             break;
@@ -358,9 +346,7 @@ int ObEventHistoryTableOperator::process_task(const ObString &sql, const bool is
               ObSqlString new_sql;
               const bool is_delete = true;
               if (OB_TMP_FAIL(new_sql.assign(sql))) {
-                LOG_WARN("failed to assign sql", KR(tmp_ret), K(sql));
               } else if (OB_TMP_FAIL(add_task(new_sql, is_delete, create_time))) {
-                LOG_WARN("failed to add task", KR(tmp_ret), K(new_sql), K(create_time));
               } else {
                 LOG_INFO("has event need delete, add task again", K(new_sql), K(create_time));
               }
@@ -385,9 +371,7 @@ int ObEventHistoryTableOperator::add_event_to_timer_(const common::ObSqlString &
   common::ObMySQLProxy *proxy = proxy_;
   ObUniqueGuard<ObStringHolder> uniq_holder;
   if (OB_FAIL(ob_make_unique(uniq_holder, SET_USE_500("EventReHolder")))) {
-    SHARE_LOG(WARN, "fail to make unique guard");
   } else if (OB_FAIL(uniq_holder->assign(sql.string()))) {
-    SHARE_LOG(WARN, "fail to create unique ownership of string");
   } else if (OB_FAIL(timer_.schedule_task_ignore_handle_repeat_and_immediately(15_s, [retry_times, self_addr, uniq_holder, proxy]() mutable -> bool {
     int ret = OB_SUCCESS;
     bool stop_flag = false;
@@ -423,7 +407,6 @@ int ObEventHistoryTableOperator::add_event_to_timer_(const common::ObSqlString &
     }
     return stop_flag;
   }))) {
-    SHARE_LOG(ERROR, "fail to schedule report event task");
   }
   return ret;
 }

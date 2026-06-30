@@ -79,9 +79,7 @@ int ObRemoteIdentityTaskSpliter::get_next_task(ObTaskInfo *&task)
       task_->set_state(OB_TASK_STATE_NOT_INIT);
       task_->set_root_spec(job_->get_root_spec()); // for static engine
       if (OB_FAIL(task_->init_location_idx_array(1))) {
-        LOG_WARN("init location idx array failed", K(ret));
       } else if (OB_FAIL(task_->add_location_idx(0))) {
-        LOG_WARN("add location index to task failed", K(ret));
       } else {
         // The purpose of making task_ a class member is to ensure that the second call to get_next_task returns OB_ITER_END
         task = task_;

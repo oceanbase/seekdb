@@ -67,7 +67,6 @@ int ObExprPassword::eval_password(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
-    LOG_ERROR("evaluate parameter value failed", K(ret), K(arg));
   } else if (arg->is_null()) {
     expr_datum.set_string("", 0);
   } else if (arg->get_string().empty()) {
@@ -85,20 +84,16 @@ int ObExprPassword::eval_password(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
       ObString str_in_ctx;
       tmp_str.assign_ptr(enc_buf, SHA_PASSWORD_CHAR_LENGTH);
       if (OB_FAIL(ObEncryptedHelper::encrypt_passwd_to_stage2(arg->get_string(), tmp_str))) {
-        LOG_WARN("encrypt password failed", K(ret));
       } else if (OB_FAIL(ObCharset::toupper(ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI,
                                             tmp_str,
                                             upp_str,
                                             alloc_guard.get_allocator()))) {
-        LOG_WARN("convert string to upper failed", K(ret), K(tmp_str));
       } else if (OB_FAIL(ObExprUtil::convert_string_collation(upp_str,
                                                               ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI,
                                                               res_str,
                                                               expr.datum_meta_.cs_type_,
                                                               alloc_guard.get_allocator()))) {
-        LOG_WARN("convert string collation failed", K(ret), K(upp_str));
       } else if (OB_FAIL(ObExprUtil::deep_copy_str(res_str, str_in_ctx, ctx.get_expr_res_alloc()))) {
-        LOG_WARN("failed to cpoy str to context", K(ret));
       } else {
         expr_datum.set_string(str_in_ctx);
         LOG_USER_WARN(OB_ERR_DEPRECATED_SYNTAX_NO_REP, "\'PASSWORD\'");

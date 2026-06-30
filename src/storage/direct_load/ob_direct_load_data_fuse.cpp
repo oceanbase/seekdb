@@ -82,7 +82,6 @@ int ObDirectLoadDataFuse::TwoRowsMerger::compare(const ObDirectLoadDatumRow &fir
   ObDatumRowkey first_key(first_row.storage_datums_, rowkey_column_num_);
   ObDatumRowkey second_key(second_row.storage_datums_, rowkey_column_num_);
   if (OB_FAIL(first_key.compare(second_key, *datum_utils_, cmp_ret))) {
-    LOG_WARN("fail to compare", KR(ret));
   }
   return ret;
 }
@@ -139,7 +138,6 @@ int ObDirectLoadDataFuse::TwoRowsMerger::rebuild()
   if (item_cnt_ == 2) {
     int cmp_ret = 0;
     if (OB_FAIL(compare(*items_[0].datum_row_, *items_[1].datum_row_, cmp_ret))) {
-      LOG_WARN("compare failed", KR(ret));
     } else if (cmp_ret == 0) {
       is_unique_champion_ = false;
     } else if (cmp_ret < 0) {
@@ -176,7 +174,6 @@ int ObDirectLoadDataFuse::init(const ObDirectLoadDataFuseParam &param,
   } else {
     param_ = param;
     if (OB_FAIL(rows_merger_.init(param.table_data_desc_.rowkey_column_num_, param.datum_utils_))) {
-      LOG_WARN("fail to init rows merger", KR(ret));
     } else {
       iters_[ORIGIN_IDX] = origin_iter;
       iters_[LOAD_IDX] = load_iter;
@@ -204,14 +201,12 @@ int ObDirectLoadDataFuse::supply_consume()
     } else {
       item.iter_idx_ = iter_idx;
       if (OB_FAIL(rows_merger_.push(item))) {
-        LOG_WARN("fail to push item", KR(ret));
       }
     }
   }
   if (OB_SUCC(ret)) {
     consumer_cnt_ = 0;
     if (OB_FAIL(rows_merger_.rebuild())) {
-      LOG_WARN("fail to rebuild", KR(ret));
     }
   }
   return ret;
@@ -225,18 +220,15 @@ int ObDirectLoadDataFuse::inner_get_next_row(const ObDirectLoadDatumRow *&datum_
   } else if (rows_merger_.is_unique_champion()) {
     const Item *item = nullptr;
     if (OB_FAIL(rows_merger_.top(item))) {
-      LOG_WARN("fail to rebuild", KR(ret));
     } else {
       datum_row = item->datum_row_;
       consumers_[consumer_cnt_++] = item->iter_idx_;
       if (OB_FAIL(rows_merger_.pop())) {
-        LOG_WARN("fail to pop item", KR(ret));
       } else if (item->iter_idx_ == LOAD_IDX) {
         if (OB_UNLIKELY(datum_row->is_delete_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected delete row", KR(ret), KPC(datum_row));
         } else if (OB_FAIL(param_.dml_row_handler_->handle_insert_row(param_.tablet_id_, *datum_row))) {
-          LOG_WARN("fail to handle insert row", KR(ret), KP(datum_row));
         }
       }
     }
@@ -246,7 +238,6 @@ int ObDirectLoadDataFuse::inner_get_next_row(const ObDirectLoadDatumRow *&datum_
     const ObDirectLoadDatumRow *new_row = nullptr;
     while (OB_SUCC(ret) && !rows_merger_.empty()) {
       if (OB_FAIL(rows_merger_.top(item))) {
-        LOG_WARN("fail to rebuild", KR(ret));
       } else {
         if (item->iter_idx_ == ORIGIN_IDX) {
           old_row = item->datum_row_;
@@ -255,7 +246,6 @@ int ObDirectLoadDataFuse::inner_get_next_row(const ObDirectLoadDatumRow *&datum_
         }
         consumers_[consumer_cnt_++] = item->iter_idx_;
         if (OB_FAIL(rows_merger_.pop())) {
-          LOG_WARN("fail to pop item", KR(ret));
         }
       }
     }
@@ -264,7 +254,6 @@ int ObDirectLoadDataFuse::inner_get_next_row(const ObDirectLoadDatumRow *&datum_
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected delete row", KR(ret), KPC(new_row));
       } else if (OB_FAIL(param_.dml_row_handler_->handle_update_row(param_.tablet_id_, *old_row, *new_row, datum_row))) {
-        LOG_WARN("fail to handle update row", KR(ret), KPC(old_row), KPC(new_row));
       }
     }
   }
@@ -355,23 +344,19 @@ int ObDirectLoadMultipleSSTableDataFuse::init(
     LOG_WARN("Invalid argument", K(ret), K(param), KP(origin_table), K(range));
   } else {
     if (OB_FAIL(range_.assign(param.tablet_id_, range))) {
-      LOG_WARN("fail to assign range", KR(ret));
     }
     // construct iters
     else if (OB_FAIL(origin_table->scan(range, allocator_, origin_scanner_, false/*skip_read_lob*/))) {
-      LOG_WARN("fail to scan origin table", KR(ret));
     } else {
       ObDirectLoadMultipleSSTableScanMergeParam scan_merge_param;
       scan_merge_param.table_data_desc_ = param.table_data_desc_;
       scan_merge_param.datum_utils_ = param.datum_utils_;
       scan_merge_param.dml_row_handler_ = param.dml_row_handler_;
       if (OB_FAIL(scan_merge_.init(scan_merge_param, sstable_array, range_))) {
-        LOG_WARN("fail to init scan merge", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(data_fuse_.init(param, origin_scanner_, &scan_merge_))) {
-        LOG_WARN("fail to init data fuse", KR(ret));
       } else {
         // set parent params
         row_flag_ = param.table_data_desc_.row_flag_;

@@ -79,14 +79,12 @@ int ObSSTableWrapper::get_loaded_column_store_sstable(ObSSTable *&table)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("meta handle is unexpected not valid", K(ret), KPC(sstable_), K(meta_handle_));
   } else if (OB_FAIL(meta_handle_.get_sstable(meta_sstable))) {
-    LOG_WARN("failed to get sstable", K(ret), KPC(this));
   } else if (sstable_->get_key() == meta_sstable->get_key()) {
     table = meta_sstable;
   } else if (OB_UNLIKELY(!sstable_->is_cg_sstable())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected not cg sstable", K(ret), KPC(sstable_), KPC(meta_sstable));
   } else if (OB_FAIL(meta_sstable->get_meta(co_meta_handle))) {
-    LOG_WARN("failed to get co meta handle", K(ret), KPC(meta_sstable), KPC(sstable_));
   } else {
     const ObSSTableArray &cg_sstables = co_meta_handle.get_sstable_meta().get_cg_sstables();
     for (int64_t idx = 0; OB_SUCC(ret) && idx < cg_sstables.count(); ++idx) {
@@ -125,13 +123,9 @@ int ObSSTableWrapper::get_merge_row_cnt(const ObTableIterParam &iter_param, int6
       blocksstable::ObSSTable *cur_sstable = nullptr;
       ObUnitedSliceRowIterator ddl_merge_iter;
       if (OB_FAIL(get_loaded_column_store_sstable(cur_sstable))) {
-        LOG_WARN("fail to get sstable", K(ret), K(*this));
       } else if (OB_FAIL((cur_sstable->get_index_tree_root(root_block)))) {
-        LOG_WARN("fail to get index tree root", K(ret), K(root_block), K(*this));
       } else if (OB_FAIL(ddl_merge_iter.init(root_block, &(iter_param.tablet_handle_->get_obj()->get_rowkey_read_info().get_datum_utils()), &allocator, false/*is_reverse_scan*/, index_iter_param))) {
-        LOG_WARN("fail to init ddl_merge_iter", K(ret), K(root_block), K(index_iter_param));
       } else if (OB_FAIL(ddl_merge_iter.get_index_row_count(range, false/*left border*/, false/*right border*/, index_row_count, data_row_count))) {
-        LOG_WARN("fail to get row cnt", K(ret), K(index_row_count), K(data_row_count));
       } else {
         row_cnt = data_row_count;
       }
@@ -263,13 +257,11 @@ int ObCOSSTableV2::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get invalid arguments", K(ret), K(param), K(allocator));
   } else if (OB_FAIL(ObSSTable::init(param, allocator))) {
-    LOG_WARN("failed to init basic ObSSTable", K(ret), K(param));
   } else if (param.is_co_table_without_cgs()) {
     // current co sstable is empty, or the normal cg is redundant, no need to init cg sstable
     cs_meta_.column_group_cnt_ = param.column_group_cnt(); // other cs meta is zero.
     is_cgs_empty_co_ = true;
     if (OB_FAIL(build_cs_meta_without_cgs())) {
-      LOG_WARN("failed to build cs meta without cgs", K(ret), K(param), KPC(this));
     }
   }
 
@@ -297,9 +289,7 @@ int ObCOSSTableV2::fill_cg_sstables(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("co sstable must be loaded before persist", K(ret), KPC(this));
   } else if (OB_FAIL(meta_->fill_cg_sstables(tmp_allocator_, cg_tables, new_progressive_merge_step))) {
-    LOG_WARN("failed to fill cg sstables to sstable meta", K(ret), KPC(this), KPC(meta_));
   } else if (OB_FAIL(build_cs_meta())) {
-    LOG_WARN("failed to build cs meta", K(ret), KPC(this));
   } else {
     valid_for_cs_reading_ = true;
     FLOG_INFO("success to init co sstable", K(ret), K_(cs_meta), KPC(this)); // tmp debug code
@@ -318,7 +308,6 @@ int ObCOSSTableV2::build_cs_meta_without_cgs()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("co table is unexpected not loaded", K(ret), KPC(this));
   } else if (OB_FAIL(ObSSTable::get_meta(sstable_meta_handle))) {
-    LOG_WARN("failed to get meta handle", K(ret), KPC(this));
   } else {
     const ObSSTableBasicMeta &basic_meta = sstable_meta_handle.get_sstable_meta().get_basic_meta();
     cs_meta_.data_macro_block_cnt_ = basic_meta.data_macro_block_count_;
@@ -362,7 +351,6 @@ int ObCOSSTableV2::build_cs_meta()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("the snapshot version of cg sstables must be equal", K(ret));
       } else if (OB_FAIL(cg_sstable->get_meta(cg_meta_handle))) {
-        LOG_WARN("Failed to get cg sstable meta", K(ret), KPC(cg_sstable));
       } else if (OB_UNLIKELY(cg_meta_handle.get_sstable_meta().get_schema_version() != meta_->get_schema_version())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("the schema version of cg sstables must be equal", K(ret), KPC(meta_), K(cg_meta_handle));
@@ -405,13 +393,9 @@ int ObCOSSTableV2::serialize(char *buf, const int64_t buf_len, int64_t &pos) con
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("argument is invalid", K(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(ObSSTable::serialize(buf, buf_len, pos))) {
-    LOG_WARN("failed to serialize basic ObSSTable", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, base_type_))) {
-    LOG_WARN("failed to serialize base type", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::encode_bool(buf, buf_len, pos, is_cgs_empty_co_))) {
-    LOG_WARN("failed to serialize is empty co", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(cs_meta_.serialize(buf, buf_len, pos))) {
-    LOG_WARN("failed to serialize cs meta", K(ret), KP(buf), K(buf_len), K(pos));
   } else {
     LOG_INFO("succeed to serialize co sstable", K(ret), KPC(this), K(buf_len), K(old_pos), K(pos));
   }
@@ -434,13 +418,9 @@ int ObCOSSTableV2::deserialize(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get invalid arguments.", KP(buf),K(data_len), K(pos), K(ret));
   } else if (OB_FAIL(ObSSTable::deserialize(allocator, buf, data_len, pos))) {
-    LOG_WARN("failed to deserialize basic ObSSTable", K(ret), KP(buf),K(data_len), K(pos));
   } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, reinterpret_cast<int32_t *>(&base_type_)))) {
-    LOG_WARN("failed to decode base type", K(ret), KP(buf),K(data_len), K(pos));
   } else if (OB_FAIL(serialization::decode_bool(buf, data_len, pos, &is_cgs_empty_co_))) {
-    LOG_WARN("failed to decode is empty co", K(ret), KP(buf),K(data_len), K(pos));
   } else if (OB_FAIL(cs_meta_.deserialize(buf, data_len, pos))) {
-    LOG_WARN("failed to deserialize cs meta", K(ret), KP(buf), K(data_len), K(pos));
   } else {
     valid_for_cs_reading_ = true;
     LOG_DEBUG("success to deserialize co sstable", K(ret), KPC(this), K(data_len), K(pos), K(old_pos));
@@ -460,13 +440,9 @@ int ObCOSSTableV2::serialize_full_table(char *buf, const int64_t buf_len, int64_
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("argument is invalid", K(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(ObSSTable::serialize_full_table(buf, buf_len, pos))) {
-    LOG_WARN("failed to serialize full sstable", K(ret));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, base_type_))) {
-    LOG_WARN("failed to serialize base type", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::encode_bool(buf, buf_len, pos, is_cgs_empty_co_))) {
-    LOG_WARN("failed to serialize is empty co", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(cs_meta_.serialize(buf, buf_len, pos))) {
-    LOG_WARN("failed to deserialize cs meta", K(ret), KP(buf), K(buf_len), K(pos));
   } else {
     LOG_INFO("succeed to serialize co sstable", K(ret), KPC(this), K(buf_len), K(old_pos), K(pos));
   }
@@ -504,7 +480,6 @@ int ObCOSSTableV2::deep_copy(char *buf, const int64_t buf_len, ObIStorageMetaObj
     new_co_table->valid_for_reading_ = valid_for_reading_;
     if (is_loaded()) {
       if (OB_FAIL(meta_->deep_copy(buf, buf_len, pos, new_co_table->meta_))) {
-        LOG_WARN("fail to deep copy for tiny memory", K(ret), KP(buf), K(buf_len), K(pos), KPC(meta_));
       }
     }
 
@@ -543,7 +518,6 @@ int ObCOSSTableV2::deep_copy(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory for deep copy sstable", K(ret), K(deep_copy_size));
   } else if (OB_FAIL(deep_copy(buf, deep_copy_size, meta_obj))) {
-    LOG_WARN("failed to deep copy co sstable", K(ret));
   } else {
     new_co_table = static_cast<ObCOSSTableV2 *>(meta_obj);
 
@@ -556,7 +530,6 @@ int ObCOSSTableV2::deep_copy(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null cg table", K(ret), KPC(this));
       } else if (OB_FAIL(cg_table->set_addr(cg_addr))) {
-        LOG_WARN("failed to set cg addr", K(ret));
       }
     }
   }
@@ -579,7 +552,6 @@ int ObCOSSTableV2::fetch_cg_sstable(
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("co sstable is empty, cannot fetch cg sstable", K(ret), K(cg_idx), K(real_cg_idx), KPC(this));
   } else if (OB_FAIL(get_cg_sstable(real_cg_idx, cg_wrapper))) {
-    LOG_WARN("failed to get cg sstable", K(ret));
   } else if (OB_ISNULL(cg_wrapper.sstable_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null cg table", K(ret), K(cg_wrapper));
@@ -588,7 +560,6 @@ int ObCOSSTableV2::fetch_cg_sstable(
   } else if (OB_FAIL(ObCacheSSTableHelper::load_sstable(cg_wrapper.sstable_->get_addr(),
                                                         true/*load_co_sstable*/,
                                                         cg_wrapper.meta_handle_))) {
-    LOG_WARN("failed to load sstable", K(ret), K(cg_wrapper));
   }
   return ret;
 }
@@ -608,7 +579,6 @@ int ObCOSSTableV2::get_cg_sstable(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get invalid arguments", K(ret), K(cg_idx), K(cs_meta_));
   } else if (OB_FAIL(get_meta(co_meta_handle))) {
-    LOG_WARN("failed to get co meta handle", K(ret), KPC(this));
   } else if (cg_idx == key_.get_column_group_id()) {
     cg_wrapper.sstable_ = const_cast<ObCOSSTableV2 *>(this);
   } else if (OB_UNLIKELY(is_cgs_empty_co_)) {
@@ -637,9 +607,7 @@ int ObCOSSTableV2::get_cg_sstable(
   } else if (OB_FAIL(ObCacheSSTableHelper::load_sstable(cg_wrapper.sstable_->get_addr(),
                                                         false/*load_co_sstable*/,
                                                         cg_wrapper.meta_handle_))) {
-    LOG_WARN("failed to load sstable", K(ret), K(cg_wrapper));
-  } else if (OB_FAIL(cg_wrapper.meta_handle_.get_sstable(cg_wrapper.sstable_))) { // should update cg sstable ptr in wrapper after load full cg sstable
-    LOG_WARN("failed to get sstable from meta handle", K(ret), K(cg_idx), K(cg_wrapper));
+  } else if (OB_FAIL(cg_wrapper.meta_handle_.get_sstable(cg_wrapper.sstable_))) {
   }
   return ret;
 }
@@ -656,10 +624,8 @@ int ObCOSSTableV2::get_all_tables(common::ObIArray<ObSSTableWrapper> &table_wrap
     ObSSTableWrapper co_wrapper;
     co_wrapper.sstable_ = const_cast<ObCOSSTableV2 *>(this);
     if (OB_FAIL(table_wrappers.push_back(co_wrapper))) {
-      LOG_WARN("failed to push back", K(ret), K(is_cgs_empty_co_));
     }
   } else if (OB_FAIL(get_meta(meta_handle))) {
-    LOG_WARN("failed to get meta handle", K(ret), KPC(this));
   } else {
     // cg_idx is the offset of column group, not the array index of cg_sstables_. Use <= to cover *this(row key or all cg).
     // By default, row key or all cg is set in the last of cg group, but after adding column group, it will split the offset.
@@ -667,9 +633,7 @@ int ObCOSSTableV2::get_all_tables(common::ObIArray<ObSSTableWrapper> &table_wrap
     for (int64_t cg_idx = 0; OB_SUCC(ret) && cg_idx <= cg_sstables.count(); ++cg_idx) {
       ObSSTableWrapper cg_wrapper;
       if (OB_FAIL(get_cg_sstable(cg_idx, cg_wrapper))) {
-        LOG_WARN("failed to get cg sstable", K(ret), K(cg_idx));
       } else if (OB_FAIL(table_wrappers.push_back(cg_wrapper))) {
-        LOG_WARN("failed to push back", K(ret));
       }
     }
   }
@@ -694,7 +658,6 @@ int ObCOSSTableV2::scan(
     LOG_WARN("Invalid argument", K(ret), K(param), K(context), K(key_range));
   } else if (is_row_store_only_co_table() || (is_all_cg_base() && !param.is_use_column_store())) { // param.is_use_column_store() will core if param.read_info is instance of ObReadInfoStruct
     if (OB_FAIL(ObSSTable::scan(param, context, key_range, row_iter))) {
-      LOG_WARN("Fail to scan in row store sstable", K(ret));
     }
   } else {
     // TODO: check whether use row_store/rowkey sstable when primary keys accessed only
@@ -735,7 +698,6 @@ int ObCOSSTableV2::multi_scan(
     LOG_WARN("Invalid argument", K(ret), K(param), K(context), K(ranges));
   } else if ((!param.is_use_column_store() && is_all_cg_base()) || is_row_store_only_co_table()) {
     if (OB_FAIL(ObSSTable::multi_scan(param, context, ranges, row_iter))) {
-      LOG_WARN("Fail to scan in row store sstable", K(ret));
     }
   } else {
     // TODO: check whether use row_store/rowkey sstable when primary keys accessed only
@@ -803,7 +765,6 @@ int ObCOSSTableV2::cg_scan(
   } else if (is_virtual_cg(param.cg_idx_)) {
     ALLOCATE_CG_ITER(context, param.cg_idx_, ObVirtualCGScanner, cg_scanner);
   } else if (OB_FAIL(fetch_cg_sstable(param.cg_idx_, table_wrapper))) {
-    LOG_WARN("failed to fetch cg table wrapper", K(ret), K(param), KPC(this));
   } else if (project_single_row) {
     if (param.cg_idx_ >= cs_meta_.column_group_cnt_) {
       ALLOCATE_CG_ITER(context, param.cg_idx_, ObDefaultCGScanner, cg_scanner);
@@ -834,10 +795,8 @@ int ObCOSSTableV2::cg_scan(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Unexpected cg scanner", K(ret), K(param.cg_idx_), K(cg_scanner->get_cg_idx()));
       } else if (OB_FAIL(cg_scanner->switch_context(param, context, table_wrapper))) {
-        LOG_WARN("Fail to switch context for cg scanner", K(ret));
       }
     } else if (OB_FAIL(cg_scanner->init(param, context, table_wrapper))) {
-      LOG_WARN("Fail to init cg scanner", K(ret));
     }
     if (OB_SUCC(ret)) {
       cg_iter = cg_scanner;
@@ -866,7 +825,6 @@ int ObCOSSTableV2::get(
     LOG_ERROR("Tablet id is not match", K(ret), K(*this), K(param));
   } else if (param.read_info_->is_access_rowkey_only() || is_all_cg_base()) {
     if (OB_FAIL(ObSSTable::get(param, context, rowkey, row_iter))) {
-      LOG_WARN("Fail to scan in row store sstable", K(ret));
     }
   } else if (OB_UNLIKELY(!context.is_valid() || !rowkey.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
@@ -909,7 +867,6 @@ int ObCOSSTableV2::multi_get(
     LOG_WARN("Invalid argument", K(ret), K(param), K(context), K(rowkeys));
   } else if (param.read_info_->is_access_rowkey_only() || is_all_cg_base()) {
     if (OB_FAIL(ObSSTable::multi_get(param, context, rowkeys, row_iter))) {
-      LOG_WARN("Fail to scan in row store sstable", K(ret));
     }
   } else {
     ObStoreRowIterator *row_getter = nullptr;
@@ -944,14 +901,12 @@ int ObCOSSTableV2::fill_column_ckm_array(
     const int64_t column_count = get_cs_meta().full_column_cnt_;
     for (int64_t i = 0; OB_SUCC(ret) && i < column_count; i++) {
       if (OB_FAIL(column_checksums.push_back(0))) {
-        LOG_WARN("fail to push back column checksum", K(ret), K(i));
       }
     }
 
     common::ObArray<ObSSTableWrapper> cg_tables;
     if (is_empty()) {
     } else if (FAILEDx(get_all_tables(cg_tables))) {
-      LOG_WARN("fail to get_all_tables", K(ret));
     } else {
       ObSSTableMetaHandle cg_table_meta_hdl;
       for (int64_t i = 0; i < cg_tables.count() && OB_SUCC(ret); i++) {
@@ -963,7 +918,6 @@ int ObCOSSTableV2::fill_column_ckm_array(
           const uint32_t cg_idx = cg_sstable->get_key().get_column_group_id();
           const ObStorageColumnGroupSchema &column_group = column_groups.at(cg_idx);
           if (OB_FAIL(cg_sstable->get_meta(cg_table_meta_hdl))) {
-            LOG_WARN("fail to get meta", K(ret), KPC(cg_sstable));
           } else if (OB_UNLIKELY(cg_table_meta_hdl.get_sstable_meta().get_col_checksum_cnt() != column_group.get_column_count())) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected col_checksum_cnt", K(ret),

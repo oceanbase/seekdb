@@ -66,11 +66,9 @@ int ObExprRbCardinality::eval_rb_cardinality(const ObExpr &expr, ObEvalCtx &ctx,
   ObString rb_bin;
   uint64_t cardinality = 0;
   if (OB_FAIL(ObRbExprHelper::get_input_roaringbitmap_bin(ctx, tmp_allocator, rb_arg, rb_bin, is_rb_null))) {
-    LOG_WARN("fail to get input roaringbitmap", K(ret));
   } else if (is_rb_null || rb_bin == nullptr) {
     res.set_null();
   } else if (OB_FAIL(ObRbUtils::get_cardinality(tmp_allocator, rb_bin, cardinality))){
-    LOG_WARN("failed to get cardinality from roaringbitmap binary", K(ret));
   } else {
     res.set_uint(cardinality);
   }

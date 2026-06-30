@@ -41,7 +41,6 @@ int ObMacroDataSeq::serialize(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(buf_len));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, macro_data_seq_))) {
-    LOG_WARN("failed to serialize data seq", K(ret));
   }
   return ret;
 }
@@ -57,7 +56,6 @@ int ObMacroDataSeq::deserialize(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret));
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &macro_data_seq_))) {
-    LOG_WARN("failed to deserialize data seq", K(ret));
   }
   return ret;
 }

@@ -65,9 +65,7 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::init(
     insert_tablet_ctx_ = insert_tablet_ctx;
     dml_row_handler_ = dml_row_handler;
     if (OB_FAIL(row_handler_.init(insert_tablet_ctx_))) {
-      LOG_WARN("fail to init row handler", KR(ret));
     } else if (OB_FAIL(init_batch_rows())) {
-      LOG_WARN("fail to init batch rows", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -91,14 +89,10 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::init_batch_rows()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected column count", KR(ret), KPC(col_descs), K(column_count));
   } else if (OB_FAIL(insert_tablet_ctx_->get_row_info(row_info))) {
-    LOG_WARN("fail to get row info", KR(ret));
   } else if (OB_FAIL(batch_rows_.init(*col_descs, col_nullables, max_batch_size, row_flag))) {
-    LOG_WARN("fail to init batch rows", KR(ret));
   } else if (OB_FAIL(datum_rows_.vectors_.prepare_allocate(column_count + multi_version_col_cnt))) {
-    LOG_WARN("fail to prepare allocate", KR(ret));
   } else if (OB_FAIL(direct_datum_rows_.vectors_.prepare_allocate(column_count +
                                                                   multi_version_col_cnt))) {
-    LOG_WARN("fail to prepare allocate", KR(ret));
   } else {
     // init datum_rows_
     const ObIArray<ObDirectLoadVector *> &vectors = batch_rows_.get_vectors();
@@ -143,7 +137,6 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::append_batch(
     }
     direct_datum_rows_.row_count_ = batch_rows.size();
     if (OB_FAIL(flush_batch(direct_datum_rows_))) {
-      LOG_WARN("fail to flush batch", KR(ret));
     }
   }
   return ret;
@@ -164,7 +157,6 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::append_selective(
     while (OB_SUCC(ret) && remaining > 0) {
       const int64_t append_size = MIN(remaining, batch_rows_.remain_size());
       if (OB_FAIL(batch_rows_.append_selective(batch_rows, selector, append_size))) {
-        LOG_WARN("fail to append selective", KR(ret));
       } else {
         remaining -= append_size;
         selector += append_size;
@@ -186,7 +178,6 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::append_row(
     LOG_WARN("ObDirectLoadDagInsertTableBatchRowDirectWriter not init", KR(ret), KP(this));
   } else {
     if (OB_FAIL(batch_rows_.append_row(datum_row))) {
-      LOG_WARN("fail to append row", KR(ret));
     } else if (batch_rows_.full() && OB_FAIL(flush_buffer())) {
       LOG_WARN("fail to flush buffer", KR(ret));
     }
@@ -208,24 +199,20 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::switch_slice(const bool is_f
   if (OB_FAIL(ret)) {
   } else if (is_final) {
   } else if (OB_FAIL(insert_tablet_ctx_->get_write_ctx(write_ctx_))) {
-    LOG_WARN("fail to get write ctx", KR(ret));
   } else if (OB_FAIL(ObDDLUtil::fill_writer_param(
                tablet_id_, write_ctx_.slice_idx_, -1 /*cg_idx*/, insert_tablet_ctx_->get_dag(),
                insert_tablet_ctx_->get_max_batch_size(), write_param_))) {
-    LOG_WARN("fail to fill writer param", K(ret));
   } else {
     ObITabletSliceWriter *slice_writer = nullptr;
     if (OB_FAIL(ObDDLUtil::alloc_storage_macro_block_writer(write_param_,
                                                             allocator_,
                                                             slice_writer))) {
-      LOG_WARN("fail to alloc storage macro block writer", K(ret), K(write_param_));
     } else {
       slice_writer_ = slice_writer;
     }
   }
   if (OB_SUCC(ret) && !is_final) {
     if (OB_FAIL(row_handler_.switch_slice(write_ctx_.slice_idx_))) {
-      LOG_WARN("fail to switch slice", KR(ret));
     }
   }
   return ret;
@@ -236,7 +223,6 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::flush_buffer()
   int ret = OB_SUCCESS;
   datum_rows_.row_count_ = batch_rows_.size();
   if (OB_FAIL(flush_batch(datum_rows_))) {
-    LOG_WARN("fail to flush batch", KR(ret));
   } else {
     batch_rows_.reuse();
   }
@@ -253,13 +239,9 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::flush_batch(ObBatchDatumRows
   } else if (OB_FAIL(ObDirectLoadVectorUtils::batch_fill_hidden_pk(
                datum_rows.vectors_.at(0), 0 /*start*/, datum_rows.row_count_,
                write_ctx_.pk_interval_))) {
-    LOG_WARN("fail to batch fill hidden pk", KR(ret));
   } else if (OB_FAIL(row_handler_.handle_batch(datum_rows))) {
-    LOG_WARN("fail to handle batch", KR(ret));
   } else if (OB_FAIL(dml_row_handler_->handle_insert_batch(tablet_id_, datum_rows))) {
-    LOG_WARN("fail to handle insert batch", KR(ret));
   } else if (OB_FAIL(slice_writer_->append_batch(datum_rows))) {
-    LOG_WARN("fail to append batch", KR(ret));
   } else {
     row_count_ += datum_rows.row_count_;
   }
@@ -276,9 +258,7 @@ int ObDirectLoadDagInsertTableBatchRowDirectWriter::close()
     if (!batch_rows_.empty() && OB_FAIL(flush_buffer())) {
       LOG_WARN("fail to flush buffer", KR(ret));
     } else if (OB_FAIL(switch_slice(true /*is_final*/))) {
-      LOG_WARN("fail to switch slice", KR(ret));
     } else if (OB_FAIL(row_handler_.close())) {
-      LOG_WARN("fail to close", KR(ret));
     } else {
       if (row_count_ > 0) {
         insert_tablet_ctx_->inc_row_count(row_count_);

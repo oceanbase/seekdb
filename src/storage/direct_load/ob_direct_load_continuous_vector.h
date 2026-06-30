@@ -54,7 +54,6 @@ public:
         ObLobLocatorV2 locator(ObString(len, row_data), true);
         int64_t lob_length = 0;
         if (OB_FAIL(locator.get_lob_data_byte_len(lob_length))) {
-          STORAGE_LOG(WARN, "fail to get lob data byte len", KR(ret), K(locator));
         } else {
           sum_bytes[i] += lob_length + sizeof(ObLobCommon);
         }

@@ -70,9 +70,7 @@ int ObTableLoadDataRowDeleteHandler::handle_delete_row(const ObTabletID &tablet_
       if (!is_local_unique_index_table(index_table_ctx->schema_->index_type_)) {
         ObTableLoadIndexTableBuilder *index_builder = nullptr;
         if (OB_FAIL(index_table_ctx->get_delete_table_builder(index_builder))) {
-          LOG_WARN("fail to get index table builder", KR(ret));
         } else if (OB_FAIL(index_builder->append_delete_row(tablet_id, datum_row))) {
-          LOG_WARN("fail to append delete row", KR(ret), K(tablet_id), K(datum_row));
         }
       }
     }
@@ -81,9 +79,7 @@ int ObTableLoadDataRowDeleteHandler::handle_delete_row(const ObTabletID &tablet_
         store_ctx_->data_store_table_ctx_->lob_table_ctx_;
       ObTableLoadLobTableBuilder *lob_builder = nullptr;
       if (OB_FAIL(lob_table_ctx->get_delete_table_builder(lob_builder))) {
-        LOG_WARN("fail to get lob table builder", KR(ret));
       } else if (OB_FAIL(lob_builder->append_delete_row(tablet_id, datum_row))) {
-        LOG_WARN("fail to append delete row", KR(ret), K(tablet_id), K(datum_row));
       }
     }
   }

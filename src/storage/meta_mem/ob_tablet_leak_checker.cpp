@@ -62,7 +62,6 @@ int ObTabletHandleIndexMap::reset()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tb_map_.destroy())) {
-    LOG_WARN("failed to destroy tb map", K(ret));
   }
   rw_lock_.destroy();
   is_inited_ = false;
@@ -77,9 +76,7 @@ int ObTabletHandleIndexMap::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTabletHandleIndexMap init twice", K(ret), K(is_inited_));
   } else if (OB_FAIL(tb_map_.create(REF_ARRAY_SIZE, "T3MTBMap"))) {
-    LOG_WARN("failed to init tb map", K(ret));
   } else if (OB_FAIL(rw_lock_.init(lib::ObMemAttr("T3MQSyncLock")))) {
-    LOG_WARN("failed to init rw lock", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -114,7 +111,6 @@ int ObTabletHandleIndexMap::register_handle(const char *file, const int line,
     if (OB_FAIL(tb_map_.set_refactored(thf, val, 0 /* is_overwrite */))) {
       if (ret == OB_HASH_EXIST) { // try again
         if (OB_UNLIKELY(OB_FAIL(tb_map_.get_refactored(thf, val)))) {
-          LOG_WARN("fail to re-get from tb_map_", K(ret), K(thf.footprint_), K(val));
         } else {
           // Other thread has registered TabletHandle, no need to set, do nothing
         }
@@ -142,7 +138,6 @@ int ObTabletHandleIndexMap::foreach(PrintToLogTraversal &op)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tb_map_.foreach_refactored(op))) {
-    LOG_WARN("failed to foreach in tb map", K(ret));
   }
   return ret;
 }
@@ -236,7 +231,6 @@ void ObTabletLeakChecker::dump_pinned_tablet_info()
     callback.set_data(i, ref_cnt);
   }
   if (OB_FAIL(ObTabletHandleIndexMap::get_instance()->foreach(callback))) {
-    LOG_WARN("fail to foreach on tb_map_", K(ret));
   } else {
     LOG_INFO("dump pinned tablet info finished");
   }

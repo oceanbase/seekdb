@@ -168,14 +168,10 @@ int ObLoadDataDirectImpl::Logger::create_log_file(const ObString &load_info)
   int ret = OB_SUCCESS;
   ObString file_name;
   if (OB_FAIL(generate_log_file_name(buf_, DEFAULT_BUF_LENGTH, file_name))) {
-    LOG_WARN("fail to generate log file name", KR(ret));
   } else if (OB_FAIL(file_appender_.open(file_name, false, true))) {
-    LOG_WARN("fail to open file", KR(ret), K(file_name));
   } else if (OB_FAIL(file_appender_.append(load_info.ptr(), load_info.length(), true))) {
-    LOG_WARN("fail to append log", KR(ret));
   } else if (OB_FAIL(file_appender_.append(log_file_column_names, strlen(log_file_column_names),
                                             true))) {
-    LOG_WARN("fail to append log", KR(ret));
   }
   return ret;
 }
@@ -226,9 +222,7 @@ int ObLoadDataDirectImpl::Logger::log_error_line(const ObString &file_name, int6
       if (OB_TMP_FAIL(databuff_printf(buf_, DEFAULT_BUF_LENGTH, pos, log_file_row_fmt,
                                       file_name.length(), file_name.ptr(), line_no, err_no,
                                       err_msg))) {
-        LOG_WARN("fail to databuff printf", KR(tmp_ret), K(line_no), K(err_no), K(err_msg));
       } else if (OB_TMP_FAIL(file_appender_.append(buf_, pos, false))) {
-        LOG_WARN("fail to append log", KR(tmp_ret), K(pos), K(line_no), K(err_no), K(err_msg));
       }
     }
     const int64_t error_cnt = inc_error_count();
@@ -269,7 +263,6 @@ int ObLoadDataDirectImpl::DataDescIterator::copy(const ObLoadFileIterator &file_
     DataDesc data_desc;
     int64_t file_idx = 0;
     if (OB_FAIL(copy_file_iter.copy(file_iter))) {
-      LOG_WARN("fail to copy file iter", KR(ret));
     }
     while (OB_SUCC(ret)) {
       data_desc.file_idx_ = file_idx++;
@@ -281,7 +274,6 @@ int ObLoadDataDirectImpl::DataDescIterator::copy(const ObLoadFileIterator &file_
           break;
         }
       } else if (OB_FAIL(data_descs_.push_back(data_desc))) {
-        LOG_WARN("fail to push back", KR(ret));
       }
     }
   }
@@ -295,7 +287,6 @@ int ObLoadDataDirectImpl::DataDescIterator::copy(const DataDescIterator &other)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(other));
   } else if (OB_FAIL(data_descs_.assign(other.data_descs_))) {
-    LOG_WARN("fail to assign data descs", KR(ret));
   } else {
     pos_ = 0;
   }
@@ -306,7 +297,6 @@ int ObLoadDataDirectImpl::DataDescIterator::add_data_desc(const DataDesc &data_d
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(data_descs_.push_back(data_desc))) {
-    LOG_WARN("fail to push back", KR(ret));
   }
   return ret;
 }
@@ -487,13 +477,11 @@ int ObLoadDataDirectImpl::DataReader::init(const DataAccessParam &data_access_pa
     read_raw_ = read_raw;
     if (OB_FAIL(csv_parser_.init(data_access_param.file_format_, data_access_param.file_column_num_,
                                  data_access_param.file_cs_type_))) {
-      LOG_WARN("fail to init csv parser", KR(ret), K(data_access_param));
     }
     if (OB_SUCC(ret) && !read_raw) {
       ObCSVFormats formats;
       formats.init(data_access_param.file_format_);
       if (OB_FAIL(data_trimer_.init(allocator_, formats))) {
-        LOG_WARN("fail to init data trimer", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -512,9 +500,7 @@ int ObLoadDataDirectImpl::DataReader::init(const DataAccessParam &data_access_pa
       file_read_param.timeout_ts_         = THIS_WORKER.get_timeout_ts();
 
       if (OB_FAIL(file_read_param.access_info_.assign(data_access_param.access_info_))) {
-        LOG_WARN("fail to assign access info", KR(ret), K_(data_access_param.access_info));
       } else if (OB_FAIL(ObFileReader::open(file_read_param, allocator_, file_reader_))) {
-        LOG_WARN("failed to open file", KR(ret), K(data_desc));
       } else if (file_reader_->seekable()) {
 
         if (end_offset_ == -1 && OB_FAIL(file_reader_->get_file_size(end_offset_))) {
@@ -549,7 +535,6 @@ int ObLoadDataDirectImpl::DataReader::read_buffer(ObLoadFileBuffer &file_buffer)
     }
 
     if (OB_FAIL(file_reader_->readn(file_buffer.current_ptr(), read_count, read_size))) {
-      LOG_WARN("fail to read file", KR(ret));
     } else if (0 == read_size) {
       LOG_TRACE("read nothing", K(is_end_file()));
     } else {
@@ -581,7 +566,6 @@ int ObLoadDataDirectImpl::DataReader::get_next_buffer(ObLoadFileBuffer &file_buf
     line_count = 0;
     // 1. Restore the data left from the last read in data_trimer
     if (OB_FAIL(data_trimer_.recover_incomplate_data(file_buffer))) {
-      LOG_WARN("fail to recover incomplate data", KR(ret));
     }
     // 2. Read data, then find complete lines from the buffer, and cache the remaining data to data_trimer
     if (OB_SUCC(ret)) {
@@ -589,7 +573,6 @@ int ObLoadDataDirectImpl::DataReader::get_next_buffer(ObLoadFileBuffer &file_buf
       int64_t complete_len = 0;
 
       if (OB_FAIL(read_buffer(file_buffer))) {
-        LOG_WARN("failed to read buffer as there is not enough data to parse", KR(ret));
       } else if (!file_buffer.is_valid()) {
         is_iter_end_ = true;
         ret = OB_ITER_END;
@@ -598,14 +581,12 @@ int ObLoadDataDirectImpl::DataReader::get_next_buffer(ObLoadFileBuffer &file_buf
         int64_t complete_len = 0;
         if (OB_FAIL(ObLoadDataBase::pre_parse_lines(file_buffer, csv_parser_, is_end_file(),
                                                     complete_len, complete_cnt))) {
-          LOG_WARN("fail to fast_lines_parse", KR(ret));
         } else if (OB_UNLIKELY(0 == complete_len)) {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("direct-load does not support big row", KR(ret), "size",
                    file_buffer.get_data_len());
           FORWARD_USER_ERROR_MSG(ret, "direct-load does not support big row, row_size = %ld", file_buffer.get_data_len());
         } else if (OB_FAIL(data_trimer_.backup_incomplate_data(file_buffer, complete_len))) {
-          LOG_WARN("fail to back up data", KR(ret));
         } else {
           line_count = complete_cnt;
           LOG_DEBUG("LOAD DATA backup", "data", data_trimer_.get_incomplate_data_string());
@@ -635,7 +616,6 @@ int ObLoadDataDirectImpl::DataReader::get_next_raw_buffer(DataBuffer &data_buffe
     int64_t read_size = 0;
     if (OB_FAIL(file_reader_->readn(data_buffer.data() + data_buffer.get_data_length(), read_count,
                                   read_size))) {
-      LOG_WARN("fail to read file", KR(ret));
     } else if (read_size > 0) {
       data_buffer.update_data_length(read_size);
       ATOMIC_AAF(&execute_ctx_->job_stat_->read_bytes_, read_size);
@@ -689,9 +669,7 @@ int ObLoadDataDirectImpl::DataParser::init(const DataAccessParam &data_access_pa
   } else {
     if (OB_FAIL(csv_parser_.init(data_access_param.file_format_, data_access_param.file_column_num_,
                                  data_access_param.file_cs_type_))) {
-      LOG_WARN("fail to init csv parser", KR(ret));
     } else if (OB_FAIL(escape_buffer_.init())) {
-      LOG_WARN("fail to init data buffer", KR(ret));
     } else {
       logger_ = &logger;
       is_inited_ = true;
@@ -752,7 +730,6 @@ int ObLoadDataDirectImpl::DataParser::get_next_row(ObNewRow &row)
         escape_buffer_.file_buffer_->begin_ptr() + escape_buffer_.file_buffer_->get_buffer_size(),
         handle_one_line, err_records, data_buffer_->is_end_file_);
       if (OB_FAIL(ret)) {
-        LOG_WARN("fail to scan", KR(ret));
       } else if (0 == nrows) {
         ret = OB_ITER_END;
       } else {
@@ -760,7 +737,6 @@ int ObLoadDataDirectImpl::DataParser::get_next_row(ObNewRow &row)
         data_buffer_->advance(str - data_buffer_->data());
         if (OB_UNLIKELY(!err_records.empty())) {
           if (OB_FAIL(log_error_line(err_records.at(0).err_code, start_line_no_ + pos_))) {
-            LOG_WARN("fail to log error line", KR(ret));
           }
         } else {
           const ObIArray<ObCSVGeneralParser::FieldValue> &field_values_in_file =
@@ -788,7 +764,6 @@ int ObLoadDataDirectImpl::DataParser::log_error_line(int err_ret, int64_t err_li
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(logger_->log_error_line(file_name_, err_line_no, err_ret))) {
-    LOG_WARN("fail to log error line", KR(ret), K(err_ret), K(err_line_no));
   }
   return ret;
 }
@@ -827,7 +802,6 @@ int ObLoadDataDirectImpl::SimpleDataSplitUtils::split(const DataAccessParam &dat
   } else if (1 == count || (ObLoadFileLocation::CLIENT_DISK == data_access_param.file_location_)
              || data_access_param.compression_format_ != ObCSVGeneralFormat::ObCSVCompression::NONE) {
     if (OB_FAIL(data_desc_iter.add_data_desc(data_desc))) {
-      LOG_WARN("fail to push back", KR(ret));
     }
   } else {
     ObArenaAllocator allocator;
@@ -846,12 +820,9 @@ int ObLoadDataDirectImpl::SimpleDataSplitUtils::split(const DataAccessParam &dat
     ObFileReader *file_reader = NULL;
 
     if (OB_FAIL(file_read_param.access_info_.assign(data_access_param.access_info_))) {
-      LOG_WARN("fail to assign access info", KR(ret), K_(data_access_param.access_info));
     } else if (OB_FAIL(ObFileReader::open(file_read_param, allocator, file_reader))) {
-      LOG_WARN("failed to open file.", KR(ret), K(data_desc));
     } else if (!file_reader->seekable()) {
       if (OB_FAIL(data_desc_iter.add_data_desc(data_desc))) {
-        LOG_WARN("fail to push back", KR(ret));
       }
     } else if (-1 == end_offset && OB_FAIL(file_reader->get_file_size(end_offset))) {
       LOG_WARN("fail to get io device file size", KR(ret), K(end_offset));
@@ -860,7 +831,6 @@ int ObLoadDataDirectImpl::SimpleDataSplitUtils::split(const DataAccessParam &dat
       if (file_size < count * ObLoadFileBuffer::MAX_BUFFER_SIZE * 2) {
         // file is too small
         if (OB_FAIL(data_desc_iter.add_data_desc(data_desc))) {
-          LOG_WARN("fail to push back", KR(ret));
         }
       } else {
         const char line_term_char = data_access_param.file_format_.line_term_str_.ptr()[0];
@@ -884,7 +854,6 @@ int ObLoadDataDirectImpl::SimpleDataSplitUtils::split(const DataAccessParam &dat
             read_offset = file_reader->get_offset();
             const int64_t read_count = MIN(end_offset - read_offset, buf_size - 1);
             if (OB_FAIL(file_reader->readn(buf, read_count, read_size))) {
-              LOG_WARN("fail to do read", KR(ret), K(read_offset), K(read_count));
             } else if (OB_UNLIKELY(read_count != read_size)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("unexpected read size", KR(ret), K(read_count), K(read_size));
@@ -900,7 +869,6 @@ int ObLoadDataDirectImpl::SimpleDataSplitUtils::split(const DataAccessParam &dat
             } else {
               data_desc_ret.end_ = read_offset + (found - buf + 1);
               if (OB_FAIL(data_desc_iter.add_data_desc(data_desc_ret))) {
-                LOG_WARN("fail to push back", KR(ret));
               } else {
                 data_desc_ret.start_ = data_desc_ret.end_;
               }
@@ -910,7 +878,6 @@ int ObLoadDataDirectImpl::SimpleDataSplitUtils::split(const DataAccessParam &dat
         if (OB_SUCC(ret)) {
           data_desc_ret.end_ = data_desc.end_;
           if (OB_FAIL(data_desc_iter.add_data_desc(data_desc_ret))) {
-            LOG_WARN("fail to push back", KR(ret));
           }
         }
       }
@@ -977,7 +944,6 @@ int ObLoadDataDirectImpl::FileLoadExecutor::inner_init(const LoadExecuteParam &e
   worker_count_ = worker_count;
   // init task_allocator_
   if (OB_FAIL(task_allocator_.init("TLD_TaskPool"))) {
-    LOG_WARN("fail to init allocator", KR(ret));
   }
   // init task_scheduler_
   else if (OB_ISNULL(task_scheduler_ = OB_NEWx(ObTableLoadTaskThreadPoolScheduler, (execute_ctx_->allocator_),
@@ -988,19 +954,14 @@ int ObLoadDataDirectImpl::FileLoadExecutor::inner_init(const LoadExecuteParam &e
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new ObTableLoadTaskThreadPoolScheduler", KR(ret));
   } else if (OB_FAIL(task_scheduler_->init())) {
-    LOG_WARN("fail to init task scheduler", KR(ret));
   } else if (OB_FAIL(task_scheduler_->start())) {
-    LOG_WARN("fail to start task scheduler", KR(ret));
   }
   // init worker_ctx_array_
   else if (OB_FAIL(init_worker_ctx_array())) {
-    LOG_WARN("fail to init worker ctx array", KR(ret));
   }
   // task ctrl
   else if (OB_FAIL(task_controller_.init(handle_count))) {
-    LOG_WARN("fail to init task controller", KR(ret), K(handle_count));
   } else if (OB_FAIL(handle_reserve_queue_.init(handle_count))) {
-    LOG_WARN("fail to init handle reserve queue", KR(ret), K(handle_count));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < handle_count; ++i) {
     TaskHandle *handle = nullptr;
@@ -1008,11 +969,8 @@ int ObLoadDataDirectImpl::FileLoadExecutor::inner_init(const LoadExecuteParam &e
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to allocate handler", KR(ret));
     } else if (OB_FAIL(handle->data_buffer_.init())) {
-      LOG_WARN("fail to init data buffer", KR(ret));
     } else if (OB_FAIL(handle_reserve_queue_.push_back(handle))) {
-      LOG_WARN("fail to push back handle to queue", KR(ret));
     } else if (OB_FAIL(handle_resource_.push_back(handle))) {
-      LOG_WARN("fail to push back handle to array", KR(ret));
     }
     if (OB_FAIL(ret)) {
       if (nullptr != handle) {
@@ -1037,12 +995,10 @@ int ObLoadDataDirectImpl::FileLoadExecutor::init_worker_ctx_array()
       WorkerContext *worker_ctx = worker_ctx_array_ + i;
       if (OB_FAIL(worker_ctx->data_parser_.init(execute_param_->data_access_param_,
                                                 *execute_ctx_->logger_))) {
-        LOG_WARN("fail to init data parser", KR(ret), K(execute_param_->data_access_param_));
       } else if (OB_FAIL(
                    worker_ctx->objs_.create(execute_param_->data_access_param_.file_column_num_ *
                                               execute_param_->batch_row_count_,
                                             *execute_ctx_->allocator_))) {
-        LOG_WARN("fail to create obj array", KR(ret));
       }
     }
   }
@@ -1057,11 +1013,9 @@ int ObLoadDataDirectImpl::FileLoadExecutor::execute()
     LOG_WARN("ObLoadDataDirectImpl::FileLoadExecutor not init", KR(ret), KP(this));
   } else {
     if (OB_FAIL(prepare_execute())) {
-      LOG_WARN("fail to prepare execute", KR(ret));
     } else if (OB_FAIL(execute_ctx_->direct_loader_->start_trans(trans_ctx_,
                                                                  ObTableLoadInstance::DEFAULT_SEGMENT_ID,
                                                                  allocator_))) {
-      LOG_WARN("fail to start trans", KR(ret));
     }
 
     LOG_TRACE("file load executor prepare execute done", K(ret));
@@ -1077,11 +1031,8 @@ int ObLoadDataDirectImpl::FileLoadExecutor::execute()
       } else {
         ObTableLoadTask *task = nullptr;
         if (OB_FAIL(alloc_task(task))) {
-          LOG_WARN("fail to alloc task", KR(ret));
         } else if (OB_FAIL(fill_task(handle, task))) {
-          LOG_WARN("fail to fill task", KR(ret));
         } else if (OB_FAIL(task_scheduler_->add_task(handle->worker_idx_, task))) {
-          LOG_WARN("fail to add task", KR(ret), K(handle->worker_idx_), KPC(task));
         }
         if (OB_FAIL(ret)) {
           if (nullptr != task) {
@@ -1100,13 +1051,11 @@ int ObLoadDataDirectImpl::FileLoadExecutor::execute()
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(handle_all_task_result())) {
-        LOG_WARN("fail to handle all task result", KR(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(execute_ctx_->direct_loader_->commit_trans(trans_ctx_))) {
-        LOG_WARN("fail to commit trans", KR(ret));
       }
     }
   }
@@ -1149,15 +1098,12 @@ int ObLoadDataDirectImpl::FileLoadExecutor::fetch_task_handle(TaskHandle *&handl
   int ret = OB_SUCCESS;
   handle = nullptr;
   if (OB_FAIL(task_controller_.on_next_task())) {
-    LOG_WARN("fail to on next task", KR(ret));
   } else {
     if (OB_FAIL(handle_reserve_queue_.pop(handle))) {
-      LOG_WARN("fail to pop handle", KR(ret));
     } else if (OB_ISNULL(handle)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null handle", KR(ret));
     } else if (OB_FAIL(handle_task_result(handle->task_id_, handle->result_))) {
-      LOG_WARN("fail to handle task result", KR(ret), KPC(handle));
     }
     if (OB_FAIL(ret)) {
       // Active call on_task_finished, prevent wait_all_task_finished from hanging
@@ -1188,7 +1134,6 @@ int ObLoadDataDirectImpl::FileLoadExecutor::handle_task_result(int64_t task_id, 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(result.ret_)) {
-    LOG_WARN("task result is failed", KR(ret), K(task_id));
   } else {
     total_line_count_ += result.parsed_row_count_;
   }
@@ -1213,12 +1158,10 @@ int ObLoadDataDirectImpl::FileLoadExecutor::handle_all_task_result()
   TaskHandle *handle = nullptr;
   while (OB_SUCC(ret) && handle_reserve_queue_.count() > 0) {
     if (OB_FAIL(handle_reserve_queue_.pop(handle))) {
-      LOG_WARN("fail to pop handle", KR(ret));
     } else if (OB_ISNULL(handle)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null handle", KR(ret));
     } else if (OB_FAIL(handle_task_result(handle->task_id_, handle->result_))) {
-      LOG_WARN("fail to handle task result", KR(ret), KPC(handle));
     }
   }
   return ret;
@@ -1255,7 +1198,6 @@ int ObLoadDataDirectImpl::FileLoadExecutor::process_task_handle(TaskHandle *hand
     bool is_iter_end = false;
     if (OB_FAIL(worker_ctx.data_parser_.parse(handle->data_desc_.filename_, handle->start_line_no_,
                                               handle->data_buffer_))) {
-      LOG_WARN("fail to parse data", KR(ret), KPC(handle));
     } else {
       row.cells_ = worker_ctx.objs_.ptr();
       row.count_ = column_count;
@@ -1266,7 +1208,6 @@ int ObLoadDataDirectImpl::FileLoadExecutor::process_task_handle(TaskHandle *hand
       ObTableLoadObjRowArray obj_rows;
       if (OB_FAIL(ObTableLoadSharedAllocatorHandle::make_handle(
             allocator_handle, "TLD_share_alloc", OB_MALLOC_NORMAL_BLOCK_SIZE))) {
-        LOG_WARN("fail to make allocator handle", KR(ret));
       } else {
         obj_rows.set_allocator(allocator_handle);
       }
@@ -1289,9 +1230,7 @@ int ObLoadDataDirectImpl::FileLoadExecutor::process_task_handle(TaskHandle *hand
           tmp_obj_row.count_ = row.count_;
           ObTableLoadObjRow row;
           if (OB_FAIL(row.deep_copy(tmp_obj_row, allocator_handle))) {
-            LOG_WARN("failed to deep copy add assign to tmp_obj_row", KR(ret));
           } else if (OB_FAIL(obj_rows.push_back(row))) {
-            LOG_WARN("failed to add tmp_obj_row to obj_rows", KR(ret));
           } else {
             ++processed_line_count;
             row.cells_ += column_count;
@@ -1302,7 +1241,6 @@ int ObLoadDataDirectImpl::FileLoadExecutor::process_task_handle(TaskHandle *hand
       if (OB_SUCC(ret) && (processed_line_count > 0)) {
         if (OB_FAIL(execute_ctx_->direct_loader_->write_trans(trans_ctx_, handle->session_id_,
                                                               obj_rows))) {
-          LOG_WARN("fail to write objs", KR(ret));
         } else {
           total_processed_line_count += processed_line_count;
           processed_line_count = 0;
@@ -1370,7 +1308,6 @@ int ObLoadDataDirectImpl::LargeFileLoadTaskProcessor::process()
   handle_->result_.start_process_ts_ = ObTimeUtil::current_time();
   int64_t line_count = 0;
   if (OB_FAIL(file_load_executor_->process_task_handle(handle_, line_count))) {
-    LOG_WARN("fail to process task handle", KR(ret));
   } else if (OB_UNLIKELY(line_count > ObTableLoadSequenceNo::MAX_CHUNK_SEQ_NO)){
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("size is overflow", KR(ret), K(line_count));
@@ -1411,22 +1348,17 @@ int ObLoadDataDirectImpl::LargeFileLoadExecutor::init(const LoadExecuteParam &ex
     DataDesc data_desc;
     if (OB_FAIL(inner_init(execute_param, execute_ctx, execute_param.thread_count_,
                            execute_param.data_mem_usage_limit_))) {
-      LOG_WARN("fail to init inner", KR(ret));
     }
     // data_desc_
     else if (OB_FAIL(copy_data_desc_iter.copy(data_desc_iter))) {
-      LOG_WARN("fail to copy data desc iter", KR(ret));
     } else if (OB_FAIL(copy_data_desc_iter.get_next_data_desc(data_desc, data_id))) {
-      LOG_WARN("fail to get next data desc", KR(ret));
     }
     // expr_buffer_
     else if (OB_FAIL(expr_buffer_.init())) {
-      LOG_WARN("fail to init data buffer", KR(ret));
     }
     // data_reader_
     else if (OB_FAIL(
                data_reader_.init(execute_param_->data_access_param_, *execute_ctx_, data_desc))) {
-      LOG_WARN("fail to init data reader", KR(ret));
     } else {
       data_desc_ = data_desc;
       is_inited_ = true;
@@ -1439,7 +1371,6 @@ int ObLoadDataDirectImpl::LargeFileLoadExecutor::prepare_execute()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(skip_ignore_rows())) {
-    LOG_WARN("fail to skip ignore rows", KR(ret));
   }
   return ret;
 }
@@ -1459,7 +1390,6 @@ int ObLoadDataDirectImpl::LargeFileLoadExecutor::get_next_task_handle(TaskHandle
       LOG_WARN("fail to get next buffer", KR(ret));
     }
   } else if (OB_FAIL(fetch_task_handle(handle))) {
-    LOG_WARN("fail to fetch task handle", KR(ret));
   } else {
     handle->task_id_ = task_controller_.get_next_task_id();
     handle->worker_idx_ = get_worker_idx();
@@ -1481,9 +1411,7 @@ int ObLoadDataDirectImpl::LargeFileLoadExecutor::fill_task(TaskHandle *handle,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(task->set_processor<LargeFileLoadTaskProcessor>(this, handle))) {
-    LOG_WARN("fail to set large file load task processor", KR(ret));
   } else if (OB_FAIL(task->set_callback<FileLoadTaskCallback>(this, handle))) {
-    LOG_WARN("fail to set file load task callback", KR(ret));
   }
   return ret;
 }
@@ -1567,10 +1495,8 @@ int ObLoadDataDirectImpl::MultiFilesLoadTaskProcessor::process()
   int64_t total_line_count = 0;
   if (OB_FAIL(data_reader_.init(execute_param_->data_access_param_, *execute_ctx_,
                                 handle_->data_desc_, true))) {
-    LOG_WARN("fail to init data reader", KR(ret));
   } else if (0 == handle_->data_desc_.start_) {
     if (OB_FAIL(skip_ignore_rows(current_line_count))) {
-      LOG_WARN("fail to skip ignore rows", KR(ret));
     } else if (OB_UNLIKELY(current_line_count < execute_param_->ignore_row_num_)) {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("direct-load does not support ignore rows exceed the first file", KR(ret),
@@ -1581,7 +1507,6 @@ int ObLoadDataDirectImpl::MultiFilesLoadTaskProcessor::process()
       handle_->start_line_no_ = handle_->result_.parsed_row_count_ + 1;
       current_line_count = 0;
       if (OB_FAIL(file_load_executor_->process_task_handle(handle_, current_line_count))) {
-        LOG_WARN("fail to process task handle", KR(ret));
       } else {
         total_line_count += current_line_count;
         if (OB_UNLIKELY(total_line_count > ObTableLoadSequenceNo::MAX_DATA_SEQ_NO)){
@@ -1593,7 +1518,6 @@ int ObLoadDataDirectImpl::MultiFilesLoadTaskProcessor::process()
   }
   while (OB_SUCC(ret) && OB_SUCC(execute_ctx_->exec_ctx_.check_status())) {
     if (OB_FAIL(handle_->data_buffer_.squash())) {
-      LOG_WARN("fail to squash data buffer", KR(ret));
     } else if (OB_FAIL(data_reader_.get_next_raw_buffer(handle_->data_buffer_))) {
       if (OB_UNLIKELY(OB_ITER_END != ret)) {
         LOG_WARN("fail to get next buffer", KR(ret));
@@ -1606,7 +1530,6 @@ int ObLoadDataDirectImpl::MultiFilesLoadTaskProcessor::process()
       handle_->start_line_no_ = handle_->result_.parsed_row_count_ + 1;
       current_line_count = 0;
       if (OB_FAIL(file_load_executor_->process_task_handle(handle_, current_line_count))) {
-        LOG_WARN("fail to process task handle", KR(ret));
       } else if (OB_UNLIKELY(0 == current_line_count)) {
         ret = OB_NOT_SUPPORTED;
         LOG_WARN("direct-load does not support big row", KR(ret), "size",
@@ -1635,7 +1558,6 @@ int ObLoadDataDirectImpl::MultiFilesLoadTaskProcessor::skip_ignore_rows(int64_t 
     data_buffer.reuse();
     while (OB_SUCC(ret) && skip_line_count < ignore_row_num) {
       if (OB_FAIL(data_buffer.squash())) {
-        LOG_WARN("fail to squash data buffer", KR(ret));
       } else if (OB_FAIL(data_reader_.get_next_raw_buffer(data_buffer))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           LOG_WARN("fail to get next buffer", KR(ret));
@@ -1652,7 +1574,6 @@ int ObLoadDataDirectImpl::MultiFilesLoadTaskProcessor::skip_ignore_rows(int64_t 
         if (OB_FAIL(ObLoadDataBase::pre_parse_lines(
               *data_buffer.file_buffer_, data_reader_.get_csv_parser(), data_reader_.is_end_file(),
               complete_len, complete_cnt))) {
-          LOG_WARN("fail to fast_lines_parse", KR(ret));
         } else if (OB_UNLIKELY(0 == complete_len)) {
           ret = OB_NOT_SUPPORTED;
           LOG_WARN("direct-load does not support big row", KR(ret), "size",
@@ -1695,9 +1616,7 @@ int ObLoadDataDirectImpl::MultiFilesLoadExecutor::init(const LoadExecuteParam &e
   } else {
     const int64_t parse_thread_count = MIN(data_desc_iter.count(), execute_param.thread_count_);
     if (OB_FAIL(inner_init(execute_param, execute_ctx, parse_thread_count, parse_thread_count))) {
-      LOG_WARN("fail to init inner", KR(ret));
     } else if (OB_FAIL(data_desc_iter_.copy(data_desc_iter))) {
-      LOG_WARN("fail to copy data desc iter", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -1729,7 +1648,6 @@ int ObLoadDataDirectImpl::MultiFilesLoadExecutor::get_next_task_handle(TaskHandl
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("size is overflow", KR(ret), K(data_id));
   } else if (OB_FAIL(fetch_task_handle(handle))) {
-    LOG_WARN("fail to fetch task handle", KR(ret));
   } else {
     handle->task_id_ = task_controller_.get_next_task_id();
     handle->data_desc_ = data_desc;
@@ -1747,9 +1665,7 @@ int ObLoadDataDirectImpl::MultiFilesLoadExecutor::fill_task(TaskHandle *handle,
   int ret = OB_SUCCESS;
   if (OB_FAIL(task->set_processor<MultiFilesLoadTaskProcessor>(execute_param_, execute_ctx_, this,
                                                                handle))) {
-    LOG_WARN("fail to set multi files load task processor", KR(ret));
   } else if (OB_FAIL(task->set_callback<FileLoadTaskCallback>(this, handle))) {
-    LOG_WARN("fail to set file load task callback", KR(ret));
   }
   return ret;
 }
@@ -1787,24 +1703,19 @@ int ObLoadDataDirectImpl::execute(ObExecContext &ctx, ObLoadDataStmt &load_stmt)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ctx is unexpected", KR(ret), K(ctx));
   } else if (OB_FAIL(plan_.set_vars(ctx.get_stmt_factory()->get_query_ctx()->variables_))) {
-    LOG_WARN("fail to set vars", KR(ret));
   } else if (OB_FAIL(session->set_cur_phy_plan(&plan_))) {
-    LOG_WARN("fail to set cur phy plan", KR(ret));
   } else if (FALSE_IT(ctx.reference_my_plan(&plan_))) {
   } else if (OB_FAIL(ctx.init_phy_op(1))) {
-    LOG_WARN("fail to init phy op", KR(ret));
   }
 
   if (OB_SUCC(ret)) {
     int64_t query_timeout = 0;
     if (OB_FAIL(load_stmt_->get_hints().get_value(ObLoadDataHint::QUERY_TIMEOUT, query_timeout))) {
-      LOG_WARN("fail to get value", K(ret));
     } else if (query_timeout < 0) {
       ret = OB_TIMEOUT;
       LOG_WARN("session is timeout", K(ret));
     } else if (0 == query_timeout) {
       if (OB_FAIL(session->get_query_timeout(query_timeout))) {
-        LOG_WARN("fail to get query timeout", KR(ret));
       } else if (query_timeout <= 0) {
         ret = OB_TIMEOUT;
         LOG_WARN("session is timeout", K(ret));
@@ -1819,9 +1730,7 @@ int ObLoadDataDirectImpl::execute(ObExecContext &ctx, ObLoadDataStmt &load_stmt)
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(init_execute_param())) {
-      LOG_WARN("fail to init execute param", KR(ret), K(ctx), K(load_stmt));
     } else if (OB_FAIL(init_execute_context())) {
-      LOG_WARN("fail to init execute context", KR(ret), K(ctx), K(load_stmt));
     } else {
       LOG_INFO("LOAD DATA init finish", K_(execute_param), "file_path", load_args.file_name_);
       ObLoadDataStat *job_stat = execute_ctx_.job_stat_;
@@ -1841,11 +1750,9 @@ int ObLoadDataDirectImpl::execute(ObExecContext &ctx, ObLoadDataStmt &load_stmt)
       data_desc.filename_ = load_args.file_name_;
       if (OB_FAIL(SimpleDataSplitUtils::split(execute_param_.data_access_param_, data_desc,
                                               execute_param_.thread_count_, data_desc_iter))) {
-        LOG_WARN("fail to split data", KR(ret));
       }
     } else {
       if (OB_FAIL(data_desc_iter.copy(load_args.file_iter_))) {
-        LOG_WARN("fail to copy file iter", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -1867,9 +1774,7 @@ int ObLoadDataDirectImpl::execute(ObExecContext &ctx, ObLoadDataStmt &load_stmt)
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(file_load_executor->init(execute_param_, execute_ctx_, data_desc_iter))) {
-        LOG_WARN("fail to init file load executor", KR(ret));
       } else if (OB_FAIL(file_load_executor->execute())) {
-        LOG_WARN("fail to execute file load", KR(ret));
       } else {
         total_line_count = file_load_executor->get_total_line_count();
       }
@@ -1889,7 +1794,6 @@ int ObLoadDataDirectImpl::execute(ObExecContext &ctx, ObLoadDataStmt &load_stmt)
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(direct_loader_.commit())) {
-      LOG_WARN("fail to commit direct loader", KR(ret));
     } else {
       const ObTableLoadResultInfo &result_info = direct_loader_.get_result_info();
       ObPhysicalPlanCtx *phy_plan_ctx = ctx.get_physical_plan_ctx();
@@ -1934,7 +1838,6 @@ int ObLoadDataDirectImpl::init_execute_param()
   if (OB_FAIL(ObTableLoadSchema::get_table_schema(*schema_guard,
                                                   execute_param_.table_id_,
                                                   table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(execute_param_));
   }
   if (OB_SUCC(ret)) {
     if (OB_ISNULL(optimizer_ctx)) {
@@ -1954,9 +1857,7 @@ int ObLoadDataDirectImpl::init_execute_param()
     ObTenant *tenant = nullptr;
     int64_t hint_parallel = 0;
     if (OB_FAIL(hint.get_value(ObLoadDataHint::PARALLEL_THREADS, hint_parallel))) {
-      LOG_WARN("fail to get value of PARALLEL_THREADS", KR(ret), K(hint));
     } else if (OB_FAIL(GCTX.omt_->get_tenant(tenant))) {
-      LOG_WARN("fail to get tenant handle", KR(ret));
     } else {
       hint_parallel = hint_parallel > 0 ? hint_parallel : DEFAULT_PARALLEL_THREAD_COUNT;
       execute_param_.parallel_ = hint_parallel;
@@ -1966,7 +1867,6 @@ int ObLoadDataDirectImpl::init_execute_param()
   if (OB_SUCC(ret)) {
     int64_t hint_batch_size = 0;
     if (OB_FAIL(hint.get_value(ObLoadDataHint::BATCH_SIZE, hint_batch_size))) {
-      LOG_WARN("fail to get value of BATCH_SIZE", KR(ret), K(hint));
     } else if (hint_batch_size > 0) {
       execute_param_.batch_row_count_ = MIN(hint_batch_size, ObTableLoadParam::MAX_BATCH_SIZE);
     } else {
@@ -1982,9 +1882,7 @@ int ObLoadDataDirectImpl::init_execute_param()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("session is null", KR(ret));
     } else if (OB_FAIL(session->get_sys_variable(SYS_VAR__OPTIMIZER_GATHER_STATS_ON_LOAD, obj))) {
-      LOG_WARN("fail to get sys variable", K(ret));
     } else if (OB_FAIL(hint.get_value(ObLoadDataHint::NO_GATHER_OPTIMIZER_STATISTICS, no_gather_optimizer_statistics))) {
-      LOG_WARN("fail to get value of APPEND", K(ret));
     } else if (no_gather_optimizer_statistics == 0 && obj.get_bool()) {
       execute_param_.online_opt_stat_gather_  = true;
     } else {
@@ -1999,7 +1897,6 @@ int ObLoadDataDirectImpl::init_execute_param()
     data_access_param.file_format_ = load_stmt_->get_data_struct_in_file();
     data_access_param.file_cs_type_ = load_args.file_cs_type_;
     if (OB_FAIL(data_access_param.access_info_.assign(load_args.access_info_))) {
-      LOG_WARN("fail to set access info", KR(ret));
     }
     data_access_param.compression_format_ = load_args.compression_format_;
   }
@@ -2008,7 +1905,6 @@ int ObLoadDataDirectImpl::init_execute_param()
     execute_param_.column_ids_.reset();
     if (load_stmt_->get_default_table_columns()) { // default column import
       if (OB_FAIL(ObTableLoadSchema::get_user_column_ids(table_schema, execute_param_.column_ids_))) {
-        LOG_WARN("fail to get user column ids", KR(ret));
       }
     } else { // Specify column import
       const static uint64_t INVALID_COLUMN_ID = UINT64_MAX;
@@ -2017,7 +1913,6 @@ int ObLoadDataDirectImpl::init_execute_param()
       
       
       if (OB_FAIL(ObTableLoadSchema::get_user_column_id_and_names(table_schema, user_column_ids, user_column_names))) {
-        LOG_WARN("fail to get user column ids and names", KR(ret));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < field_or_var_list.count(); ++i) {
         const ObLoadDataStmt::FieldOrVarStruct &field_or_var_struct = field_or_var_list.at(i);
@@ -2038,7 +1933,6 @@ int ObLoadDataDirectImpl::init_execute_param()
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unknow column", KR(ret), K(user_column_ids), K(field_or_var_struct));
           } else if (OB_FAIL(execute_param_.column_ids_.push_back(column_id))) {
-            LOG_WARN("fail to push back column id", KR(ret));
           } else {
             user_column_ids.at(found_column_idx) = INVALID_COLUMN_ID;
           }
@@ -2050,7 +1944,6 @@ int ObLoadDataDirectImpl::init_execute_param()
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ObDDLUtil::get_temp_store_compress_type(
                  table_schema, execute_param_.parallel_, execute_param_.compressor_type_))) {
-      LOG_WARN("fail to get tmp store compressor type", KR(ret));
     }
   }
   // online_sample_percent_
@@ -2099,9 +1992,7 @@ int ObLoadDataDirectImpl::init_execute_context()
                                   execute_param_.column_ids_,
                                   execute_param_.tablet_ids_,
                                   &execute_ctx_.exec_ctx_))) {
-    LOG_WARN("fail to init direct loader", KR(ret));
   } else if (OB_FAIL(init_logger())) {
-    LOG_WARN("fail to init logger", KR(ret));
   }
   if (OB_SUCC(ret)) {
     execute_ctx_.direct_loader_ = &direct_loader_;
@@ -2161,7 +2052,6 @@ int ObLoadDataDirectImpl::init_logger()
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(logger_.init(load_info, execute_param_.max_error_rows_))) {
-      LOG_WARN("fail to init logger", KR(ret));
     }
   }
   return ret;

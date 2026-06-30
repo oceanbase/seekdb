@@ -55,7 +55,6 @@ int ObSimpleThreadPoolBase<T>::init(
   } else if (thread_num <= 0 || task_num_limit <= 0 || OB_ISNULL(name)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(queue_.init(task_num_limit, name))) {
-    COMMON_LOG(WARN, "task queue init failed", K(ret), K(task_num_limit));
   } else {
     is_inited_ = true;
     stop_ = false;
@@ -68,7 +67,6 @@ int ObSimpleThreadPoolBase<T>::init(
       min_thread_cnt_ = 0;
     }
     if (OB_FAIL(ObSimpleThreadPoolDynamicMgr::get_instance().bind(this))) {
-      COMMON_LOG(WARN, "bind dynamic mgr failed", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -181,7 +179,6 @@ int ObSimpleThreadPoolBase<T>::set_adaptive_thread(
     min_thread_cnt_ = min_thread_num;
     max_thread_cnt_ = max_thread_num;
     if (OB_FAIL(ObSimpleThreadPoolDynamicMgr::get_instance().bind(this))) {
-      COMMON_LOG(WARN, "bind dynamic mgr failed", K(ret));
     }
     COMMON_LOG(INFO, "set adaptive thread success",
                KP(this), K(min_thread_num), K(max_thread_num));
@@ -201,7 +198,6 @@ int ObSimpleThreadPoolBase<T>::set_thread_count(int64_t n_threads)
       min_thread_cnt_ = max_thread_cnt_;
     }
     if (OB_FAIL(ObSimpleThreadPoolDynamicMgr::get_instance().bind(this))) {
-      COMMON_LOG(WARN, "bind dynamic mgr failed", K(ret));
     }
   }
   return ret;

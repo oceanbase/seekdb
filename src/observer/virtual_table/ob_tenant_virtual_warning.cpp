@@ -44,7 +44,6 @@ int ObTenantVirtualWarning::inner_get_next_row(ObNewRow *&row)
   int ret = OB_SUCCESS;
   if (!start_to_read_) {
     if (OB_FAIL(fill_scanner())) {
-      SERVER_LOG(WARN, "fail to fill scanner", K(ret));
     } else {/*do nothing*/}
   }
   if (OB_SUCCESS == ret && start_to_read_) {

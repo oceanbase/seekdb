@@ -56,7 +56,6 @@ int ObExprMul::calc_result_type2(ObExprResType &type,
     // only support vector/array/varchar * vector/array/varchar now // array and varchar need cast to array(float)
     uint16_t res_subschema_id = UINT16_MAX;
     if (OB_FAIL(ObArrayExprUtils::calc_cast_type2(type_, type1, type2, type_ctx, res_subschema_id))) {
-      LOG_WARN("failed to calc cast type", K(ret), K(type1));
     } else if (UINT16_MAX == res_subschema_id) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected result subschema_id", K(ret));
@@ -337,7 +336,6 @@ int ObExprMul::mul_number(ObObj &res,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("allocator is null", K(ret));
   } else if (OB_FAIL(left.get_number().mul_v3(right.get_number(), res_nmb, *allocator))) {
-    LOG_WARN("failed to mul numbers", K(ret), K(left), K(right));
   } else {
     ObObjType res_type = res.get_type();
     if (ObUNumberType == res_type) {
@@ -619,7 +617,6 @@ struct ObNumberMulFunc
     number::ObNumber r_num(r.get_number());
     number::ObNumber res_num;
     if (OB_FAIL(l_num.mul_v3(r_num, res_num, local_alloc))) {
-      LOG_WARN("mul num failed", K(ret), K(l_num), K(r_num));
     } else {
       res.set_number(res_num);
     }
@@ -642,7 +639,6 @@ int ObExprMul::mul_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
   const ObExpr &right = *expr.args_[1];
 
   if (OB_FAIL(binary_operand_batch_eval(expr, ctx, skip, size, false))) {
-    LOG_WARN("number multiply batch evaluation failure", K(ret));
   } else {
     l_datums = left.locate_expr_datumvector(ctx);
     r_datums = right.locate_expr_datumvector(ctx);
@@ -681,7 +677,6 @@ int ObExprMul::mul_number_batch(BATCH_EVAL_FUNC_ARG_DECL)
       } else {
         // normal path: no speedup
         if (OB_FAIL(l_num.mul_v3(r_num, res_num, local_alloc))) {
-          LOG_WARN("mul num failed", K(ret), K(l_num), K(r_num));
         } else {
           results.at(i)->set_number(res_num);
           eval_flags.set(i);
@@ -983,7 +978,6 @@ struct ObDecimalOracleMulFunc
     res_int = res_int * (*reinterpret_cast<const Righ *>(r.ptr_));
     number::ObNumber res_num;
     if (OB_FAIL(wide::to_number(res_int, scale, alloc, res_num))) {
-      LOG_WARN("fail to cast decima int to number", K(ret), K(scale));
     } else {
       res.set_number(res_num);
       alloc.free();  // for batch function reuse alloc
@@ -1004,7 +998,6 @@ struct ObDecimalOracleVectorMulFunc
     res_int = res_int * (*reinterpret_cast<const Righ *>(r_vec.get_payload(idx)));
     number::ObNumber res_num;
     if (OB_FAIL(wide::to_number(res_int, scale, alloc, res_num))) {
-      LOG_WARN("fail to cast decima int to number", K(ret), K(scale));
     } else {
       res_vec.set_number(idx, res_num);
       alloc.free();  // for batch function reuse alloc

@@ -43,7 +43,6 @@ int ObLobLocationUtil::get_ls_leader(ObLobAccessParam& param,
     const int64_t retry_us = 200 * 1000;
     do {
       if (OB_FAIL(GCTX.location_service_->nonblock_get_leader(cluster_id, ls_id, leader))) {
-        LOG_WARN("failed to get location", K(ret), K(ls_id), K(cluster_id));
       } else {
         LOG_DEBUG("get ls leader", K(ls_id), K(leader), K(cluster_id));
       }
@@ -78,13 +77,11 @@ int ObLobLocationUtil::is_remote(ObLobAccessParam& param, bool& is_remote, commo
     if (has_retry_info) {
       ObMemLobRetryInfo *retry_info = nullptr;
       if (OB_FAIL(lob_locator->get_retry_info(retry_info))) {
-        LOG_WARN("fail to get retry info", K(ret), KPC(lob_locator));
       } else {
         dst_addr = retry_info->addr_;
       }
     } else {
       if (OB_FAIL(get_ls_leader(param, param.ls_id_, dst_addr))) {
-        LOG_WARN("failed to get ls leader", K(ret), K(param.ls_id_));
       }
     }
     if (OB_SUCC(ret)) {
@@ -110,16 +107,12 @@ int ObLobLocationUtil::lob_check_tablet_not_exist(ObLobAccessParam &param, uint6
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid schema service", KR(ret), K(GCTX.schema_service_));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    // tenant could be deleted
-    LOG_WARN("get tenant schema guard fail", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
-    LOG_WARN("failed to get table schema", KR(ret));
   } else if (OB_ISNULL(table_schema)) {
     //table could be dropped
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not exist, fast fail das task", K(table_id));
   } else if (OB_FAIL(table_schema->check_if_tablet_exists(param.tablet_id_, tablet_exist))) {
-    LOG_WARN("check if tablet exists failed", K(ret), K(param), K(table_id));
   } else if (!tablet_exist) {
     ret = OB_PARTITION_NOT_EXIST;
     LOG_WARN("partition not exist, maybe dropped by DDL", K(ret), K(param), K(table_id));
@@ -143,10 +136,8 @@ int ObLobLocationUtil::lob_refresh_location(ObLobAccessParam &param, int last_er
   if (!has_retry_info) {
     // do check remote
     if (OB_FAIL(ObLobLocationUtil::get_ls_leader(param))) {
-      LOG_WARN("fail to do check is remote", K(ret));
     }
   } else if (OB_FAIL(ObDASUtils::wait_das_retry(retry_cnt))) {
-    LOG_WARN("wait das retry failed", K(ret), K(last_err), K(retry_cnt));
   } else {
     // do location refresh
     ObArenaAllocator tmp_allocator("LobRefLoc", OB_MALLOC_NORMAL_BLOCK_SIZE);
@@ -160,13 +151,10 @@ int ObLobLocationUtil::lob_refresh_location(ObLobAccessParam &param, int last_er
     if (last_err == OB_TABLET_NOT_EXIST && OB_FAIL(ObLobLocationUtil::lob_check_tablet_not_exist(param, extern_header->table_id_))) {
       LOG_WARN("fail to check tablet not exist", K(ret), K(extern_header->table_id_), K(last_err), K(retry_cnt));
     } else if (OB_FAIL(lob_locator->get_retry_info(retry_info))) {
-      LOG_WARN("fail to get retry info", K(ret), KPC(lob_locator), K(last_err), K(retry_cnt));
     } else if (OB_FAIL(lob_locator->get_location_info(location_info))) {
-      LOG_WARN("failed to get location info", K(ret), KPC(lob_locator), K(last_err), K(retry_cnt));
     } else if (OB_FALSE_IT(loc_meta.select_leader_ = retry_info->is_select_leader_)) {
        // use main tablet id to get location, for lob meta tablet is same location as main tablet
     } else if (OB_FAIL(router.get_tablet_loc(loc_meta, param.tablet_id_, tablet_loc))) {
-      LOG_WARN("fail to refresh location", K(ret), K(last_err), K(retry_cnt));
     } else if (param.tablet_id_ != tablet_loc.tablet_id_ || location_info->tablet_id_ != tablet_loc.tablet_id_.id()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tablet id is changed", K(ret), K(tablet_loc), K(param), KPC(location_info));
@@ -206,7 +194,6 @@ int ObLobLocationUtil::get_ls_leader(ObLobAccessParam& param)
     const int64_t retry_us = 200 * 1000;
     do {
       if (OB_FAIL(GCTX.location_service_->nonblock_get_leader(cluster_id, ls_id, leader_addr))) {
-        LOG_WARN("failed to get location", K(ret), K(ls_id), K(cluster_id), K(renew_count));
       } else {
         LOG_TRACE("[LOB] get ls leader", K(ls_id), K(leader_addr), K(cluster_id), K(renew_count));
       }

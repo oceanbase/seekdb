@@ -88,7 +88,6 @@ int ObUniformVector<IS_CONST, BasicOp>::null_first_mul_cmp(VECTOR_MUL_COMPARE_AR
     if (skip.at(row_idx)) {
       continue;
     } else if (OB_FAIL(null_first_cmp(expr, row_idx, r_null, r_v, r_len, cmp_ret))) {
-      COMMON_LOG(WARN, "failed to compare", K(ret));
     } else if (0 != cmp_ret) {
       diff_row_idx = row_idx;
       break;
@@ -111,7 +110,6 @@ int ObUniformVector<IS_CONST, BasicOp>::null_last_mul_cmp(VECTOR_MUL_COMPARE_ARG
     if (skip.at(row_idx)) {
       continue;
     } else if (OB_FAIL(null_last_cmp(expr, row_idx, r_null, r_v, r_len, cmp_ret))) {
-      COMMON_LOG(WARN, "failed to compare", K(ret));
     } else if (0 != cmp_ret) {
       diff_row_idx = row_idx;
       break;
@@ -139,7 +137,6 @@ int ObUniformVector<IS_CONST, BasicOp>::null_first_cmp_batch_rows(VECTOR_COMPARE
       r_v = rows[i]->payload() + fixed_offset;
       if (OB_FAIL(null_first_cmp(
               expr, batch_idx, rows[i]->is_null(row_col_idx), r_v, r_len, cmp_ret[i]))) {
-        COMMON_LOG(WARN, "failed to compare", K(ret));
       }
     }
   } else {
@@ -148,7 +145,6 @@ int ObUniformVector<IS_CONST, BasicOp>::null_first_cmp_batch_rows(VECTOR_COMPARE
       rows[i]->get_cell_payload(row_meta, row_col_idx, r_v, r_len);
       if (OB_FAIL(null_first_cmp(
               expr, batch_idx, rows[i]->is_null(row_col_idx), r_v, r_len, cmp_ret[i]))) {
-        COMMON_LOG(WARN, "failed to compare", K(ret));
       }
     }
   }
@@ -170,7 +166,6 @@ int ObUniformVector<IS_CONST, BasicOp>::no_null_cmp_batch_rows(VECTOR_COMPARE_BA
       uint16_t batch_idx = sel[i];
       r_v = rows[i]->payload() + fixed_offset;
       if (OB_FAIL(null_first_cmp(expr, batch_idx, false, r_v, r_len, cmp_ret[i]))) {
-        COMMON_LOG(WARN, "failed to compare", K(ret));
       }
     }
   } else {
@@ -178,7 +173,6 @@ int ObUniformVector<IS_CONST, BasicOp>::no_null_cmp_batch_rows(VECTOR_COMPARE_BA
       uint16_t batch_idx = sel[i];
       rows[i]->get_cell_payload(row_meta, row_col_idx, r_v, r_len);
       if (OB_FAIL(null_first_cmp(expr, batch_idx, false, r_v, r_len, cmp_ret[i]))) {
-        COMMON_LOG(WARN, "failed to compare", K(ret));
       }
     }
   }

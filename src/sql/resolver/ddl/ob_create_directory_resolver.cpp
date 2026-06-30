@@ -80,7 +80,6 @@ int ObCreateDirectoryResolver::resolve(const ParseNode &parse_tree)
     } else if (FALSE_IT(directory_name.assign_ptr(child_node->str_value_, static_cast<int32_t>(child_node->str_len_)))) {
       // do nothing
     } else if (OB_FAIL(create_directory_stmt->set_directory_name(directory_name))) {
-      LOG_WARN("set directory name failed", K(ret));
     }
   }
 

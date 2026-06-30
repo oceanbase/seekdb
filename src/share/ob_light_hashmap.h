@@ -328,7 +328,6 @@ public:
     } else {
       ValueArray array;
       if (OB_FAIL(generate_value_arr_(bucket_pos, array))) {
-        SHARE_LOG(WARN, "generate value array error", K(ret));
       } else {
         const int64_t cnt = array.count();
         for (int64_t i = 0; i < cnt; ++i) {
@@ -357,7 +356,6 @@ public:
       }
       array.reset();
       if (OB_FAIL(generate_value_arr_(pos, array))) {
-        SHARE_LOG(WARN, "generate value array error", K(ret));
       } else {
         const int64_t cnt = array.count();
         for (int64_t i = 0; i < cnt; ++i) {

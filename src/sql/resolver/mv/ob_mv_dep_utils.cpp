@@ -53,9 +53,7 @@ int ObMVDepUtils::get_mview_dep_infos(
                                  " WHERE mview_id = %lu ORDER BY p_order",
                                  OB_SYS_DATABASE_NAME, OB_ALL_MVIEW_DEP_TNAME,
                                  mview_table_id))) {
-        LOG_WARN("failed to assign sql", KR(ret));
       } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-        LOG_WARN("failed to execute read", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("result is null", KR(ret), KP(result));
@@ -80,7 +78,6 @@ int ObMVDepUtils::get_mview_dep_infos(
               
               dep_info.mview_id_ = mview_table_id;
               if (OB_FAIL(dep_infos.push_back(dep_info))) {
-                LOG_WARN("failed to add dep info", KR(ret), K(dep_info));
               }
             }
           }
@@ -108,9 +105,7 @@ int ObMVDepUtils::get_all_mview_dep_infos(
       if (OB_FAIL(sql.assign_fmt("SELECT mview_id, p_order, p_obj FROM %s.%s"
                                  " order by mview_id, p_order",
                                  OB_SYS_DATABASE_NAME, OB_ALL_MVIEW_DEP_TNAME))) {
-        LOG_WARN("failed to assign sql", KR(ret));
       } else if (OB_FAIL(sql_proxy->read(res, sql.ptr()))) {
-        LOG_WARN("failed to execute read", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("result is null", KR(ret), KP(result));
@@ -135,7 +130,6 @@ int ObMVDepUtils::get_all_mview_dep_infos(
             if (OB_SUCC(ret)) {
               
               if (OB_FAIL(dep_infos.push_back(dep_info))) {
-                LOG_WARN("failed to add dep info", KR(ret), K(dep_info));
               }
             }
           }
@@ -172,16 +166,13 @@ int ObMVDepUtils::insert_mview_dep_infos(
           || OB_FAIL(dml.add_column("flags", dep_info.flags_))) {
         LOG_WARN("failed to add column", KR(ret), K(dep_info));
       } else if (OB_FAIL(dml.finish_row())) {
-        LOG_WARN("failed to finish dml row", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
       int64_t affected_rows = 0;
       ObSqlString sql;
       if (OB_FAIL(dml.splice_batch_insert_sql(OB_ALL_MVIEW_DEP_TNAME, sql))) {
-        LOG_WARN("failed to splice batch insert sql", KR(ret));
       } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-        LOG_WARN("failed to execute write", KR(ret));
       } else if (affected_rows != dep_infos.count()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected rows does not match the count of dep infos",
@@ -209,10 +200,7 @@ int ObMVDepUtils::delete_mview_dep_infos(
     if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE mview_id = %ld",
                                OB_ALL_MVIEW_DEP_TNAME,
                                mview_table_id))) {
-      LOG_WARN("failed to delete from __all_mview_dep table",
-          KR(ret), K(mview_table_id));
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("failed to execute write", KR(ret), K(sql));
     }
   }
 
@@ -233,7 +221,6 @@ int ObMVDepUtils::convert_to_mview_dep_infos(
     mv_dep.p_obj_ = dep_info.get_ref_obj_id();
     mv_dep.p_type_ = static_cast<int64_t>(dep_info.get_ref_obj_type());
     if (OB_FAIL(mv_deps.push_back(mv_dep))) {
-      LOG_WARN("failed to add mv dep to array", KR(ret), K(mv_dep));
     }
   }
 
@@ -264,9 +251,7 @@ int ObMVDepUtils::get_table_ids_only_referenced_by_given_mv(
                                  OB_ALL_MVIEW_DEP_TNAME,
                                  OB_ALL_MVIEW_DEP_TNAME,
                                  mview_table_id))) {
-        LOG_WARN("failed to assign sql", KR(ret));
       } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-        LOG_WARN("failed to execute read", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("result is null", KR(ret), KP(result));
@@ -284,7 +269,6 @@ int ObMVDepUtils::get_table_ids_only_referenced_by_given_mv(
             EXTRACT_INT_FIELD_MYSQL(*result, "p_obj", ref_table_id, uint64_t);
             if (OB_SUCC(ret)) {
               if (OB_FAIL(ref_table_ids.push_back(ref_table_id))) {
-                LOG_WARN("failed to add ref table id to array", KR(ret), K(ref_table_id));
               }
             }
           }
@@ -323,9 +307,7 @@ int ObMVDepUtils::get_table_ids_only_referenced_by_given_fast_lsm_mv(
               OB_ALL_MVIEW_DEP_TNAME, OB_ALL_MVIEW_TNAME,
               ObMVRefreshMode::MAJOR_COMPACTION,
               mview_table_id))) {
-        LOG_WARN("failed to assign sql", KR(ret));
       } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-        LOG_WARN("failed to execute read", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("result is null", KR(ret), KP(result));
@@ -343,7 +325,6 @@ int ObMVDepUtils::get_table_ids_only_referenced_by_given_fast_lsm_mv(
             EXTRACT_INT_FIELD_MYSQL(*result, "p_obj", ref_table_id, uint64_t);
             if (OB_SUCC(ret)) {
               if (OB_FAIL(ref_table_ids.push_back(ref_table_id))) {
-                LOG_WARN("failed to add ref table id to array", KR(ret), K(ref_table_id));
               }
             }
           }
@@ -365,9 +346,7 @@ int ObMVDepUtils::get_referring_mv_of_base_table(ObISQLClient &sql_client,
     ObMySQLResult *result = nullptr;
     if (OB_FAIL(sql.assign_fmt("SELECT mview_id FROM %s WHERE p_obj = %ld",
                                share::OB_ALL_MVIEW_DEP_TNAME, base_table_id))) {
-      LOG_WARN("fail to assign sql", KR(ret));
     } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-      LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("result is null", KR(ret));
@@ -385,7 +364,6 @@ int ObMVDepUtils::get_referring_mv_of_base_table(ObISQLClient &sql_client,
           EXTRACT_INT_FIELD_MYSQL(*result, "mview_id", mview_id, uint64_t);
           if (OB_SUCC(ret)) {
             if (OB_FAIL(mview_ids.push_back(mview_id))) {
-              LOG_WARN("failed to add ref table id to array", KR(ret), K(mview_id));
             }
           }
         }

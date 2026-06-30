@@ -522,11 +522,8 @@ int map_insert(const ModKey &mod_key, const Value &value,
   const int64_t original_size = map.size();
   const int64_t original_right_size = right_map.size();
   if (OB_FAIL(right_map.set_refactored(mod_key, value, true/*overwrite*/))) {
-    OB_LOG(WARN, "fail to set to hashmap", K(ret), K(mod_key), K(value));
   } else if (OB_FAIL(map.set(mod_key, value, true/*overwrite*/))) {
-    OB_LOG(WARN, "fail to set to cuckoo hashmap", K(ret), K(mod_key), K(value));
   } else if (OB_FAIL(map.get(mod_key, got_value))) {
-    OB_LOG(WARN, "fail to get value", K(ret));
   } else if (value != got_value) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "error unexpected, got value is mismatch", K(value), K(got_value));
@@ -542,9 +539,7 @@ int map_erase(const ModKey &mod_key,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(right_map.erase_refactored(mod_key))) {
-    OB_LOG(WARN, "fail to set to hashmap", K(ret), K(mod_key));
   } else if (OB_FAIL(map.erase(mod_key))) {
-    OB_LOG(WARN, "fail to set to cuckoo hashmap", K(ret), K(mod_key));
   } else if (map.size() != right_map.size()) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "error unexpected, hash map size not match", K(ret), K(map.size()), K(right_map.size()));
@@ -565,7 +560,6 @@ int map_iterator(hash::ObCuckooHashMap<ModKey, Value> &map, hash::ObHashMap<ModK
     for (hash::ObCuckooHashMap<ModKey, Value>::iterator iter = map.begin(); OB_SUCC(ret) && iter != map.end(); ++iter) {
       Value value;
       if (OB_FAIL(right_map.get_refactored(iter->first, value))) {
-        OB_LOG(WARN, "fail to get from right map", K(ret), K(iter->first));
       } else if (iter->second != value) {
         ret = OB_ERR_UNEXPECTED;
         OB_LOG(WARN, "error unexpected, value not match", K(iter->first), K(iter->second), K(value));

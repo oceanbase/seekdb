@@ -52,7 +52,6 @@ void ObTableLoadService::ObGCTask::runTimerTask()
   ObArray<ObTableLoadTableCtx *> table_ctx_array;
   
   if (OB_FAIL(manager.get_all_table_ctx(table_ctx_array))) {
-    LOG_WARN("fail to get all  table ctx", KR(ret));
   }
   for (int64_t i = 0; i < table_ctx_array.count(); ++i) {
     ObTableLoadTableCtx *table_ctx = table_ctx_array.at(i);
@@ -162,7 +161,6 @@ void ObTableLoadService::ObClientTaskAutoAbortTask::runTimerTask()
   ObArray<ObTableLoadClientTask *> client_task_array;
   
   if (OB_FAIL(service_.manager_.get_all_client_task(client_task_array))) {
-    LOG_WARN("fail to get all client task", KR(ret));
   } else {
     for (int64_t i = 0; i < client_task_array.count(); ++i) {
       ObTableLoadClientTask *client_task = client_task_array.at(i);
@@ -197,7 +195,6 @@ int ObTableLoadService::ObClientTaskPurgeTask::add_client_task_brief(
     ObTableLoadUniqueKey key(client_task->get_table_id(), client_task->get_task_id());
     ObTableLoadClientTaskBrief *client_task_brief = nullptr;
     if (OB_FAIL(service_.manager_.acquire_client_task_brief(client_task_brief))) {
-      LOG_WARN("fail to acquire client task brief", KR(ret));
     } else {
       client_task_brief->task_id_ = client_task->get_task_id();
       client_task_brief->table_id_ = client_task->get_table_id();
@@ -205,7 +202,6 @@ int ObTableLoadService::ObClientTaskPurgeTask::add_client_task_brief(
       client_task_brief->result_info_ = client_task->get_result_info();
       client_task_brief->active_time_ = ObTimeUtil::current_time();
       if (OB_FAIL(service_.manager_.add_client_task_brief(key, client_task_brief))) {
-        LOG_WARN("fail to add client task brief", KR(ret));
       }
     }
     if (nullptr != client_task_brief) {
@@ -222,7 +218,6 @@ void ObTableLoadService::ObClientTaskPurgeTask::purge_client_task()
   ObArray<ObTableLoadClientTask *> client_task_array;
   
   if (OB_FAIL(service_.manager_.get_all_client_task(client_task_array))) {
-    LOG_WARN("fail to get all client task", KR(ret));
   }
   for (int64_t i = 0; i < client_task_array.count(); ++i) {
     ObTableLoadClientTask *client_task = client_task_array.at(i);
@@ -234,11 +229,9 @@ void ObTableLoadService::ObClientTaskPurgeTask::purge_client_task()
     }
     // remove client task
     else if (OB_FAIL(service_.manager_.remove_client_task(key, client_task))) {
-      LOG_WARN("fail to remove client task", KR(ret), K(key), KPC(client_task));
     }
     // add client task brief
     else if (OB_FAIL(add_client_task_brief(client_task))) {
-      LOG_WARN("fail to add client task brief", KR(ret));
     }
     service_.manager_.revert_client_task(client_task);
   }
@@ -251,7 +244,6 @@ void ObTableLoadService::ObClientTaskPurgeTask::purge_client_task_brief()
   ObArray<ObTableLoadClientTaskBrief *> client_task_brief_array;
   
   if (OB_FAIL(service_.manager_.get_all_client_task_brief(client_task_brief_array))) {
-    LOG_WARN("fail to get all client task brief", KR(ret));
   }
   for (int64_t i = 0; i < client_task_brief_array.count(); ++i) {
     ObTableLoadClientTaskBrief *brief = client_task_brief_array.at(i);
@@ -260,7 +252,6 @@ void ObTableLoadService::ObClientTaskPurgeTask::purge_client_task_brief()
     } else {
       ObTableLoadUniqueKey key(brief->table_id_, brief->task_id_);
       if (OB_FAIL(service_.manager_.remove_client_task_brief(key, brief))) {
-        LOG_WARN("fail to remove client task brief", KR(ret), K(key), KPC(brief));
       }
     }
     service_.manager_.revert_client_task_brief(brief);
@@ -301,7 +292,6 @@ int ObTableLoadService::check_tenant()
   
   ObTenant *tenant = nullptr;
   if (OB_FAIL(GCTX.omt_->get_tenant(tenant))) {
-    LOG_WARN("fail to get tenant", KR(ret));
   } else if (tenant->get_unit_status() == ObUnitInfoGetter::ObUnitStatus::UNIT_MARK_DELETING
     || tenant->get_unit_status() == ObUnitInfoGetter::ObUnitStatus::UNIT_WAIT_GC_IN_OBSERVER
     || tenant->get_unit_status() == ObUnitInfoGetter::ObUnitStatus::UNIT_DELETING_IN_OBSERVER) {
@@ -333,7 +323,6 @@ int ObTableLoadService::check_support_direct_load(
     const ObTableSchema *table_schema = nullptr;
     if (OB_FAIL(
           ObTableLoadSchema::get_table_schema( table_id, schema_guard, table_schema))) {
-      LOG_WARN("fail to get table schema", KR(ret), K(table_id));
     } else {
       ret = check_support_direct_load(schema_guard, table_schema, method, insert_mode, load_mode, load_level, column_ids);
     }
@@ -357,7 +346,6 @@ int ObTableLoadService::check_support_direct_load(ObSchemaGetterGuard &schema_gu
     
     const ObTableSchema *table_schema = nullptr;
     if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
-      LOG_WARN("fail to get table schema", KR(ret), K(table_id));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("table schema is null", KR(ret));
@@ -430,7 +418,6 @@ int ObTableLoadService::check_support_direct_load(ObSchemaGetterGuard &schema_gu
     }
     // check if the trigger is enabled
     else if (OB_FAIL(table_schema->check_has_trigger_on_table(schema_guard, trigger_enabled))) {
-      LOG_WARN("failed to check has trigger in table", KR(ret));
     } else if (trigger_enabled) {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("direct-load does not support table with trigger enabled", KR(ret), K(trigger_enabled));
@@ -448,15 +435,12 @@ int ObTableLoadService::check_support_direct_load(ObSchemaGetterGuard &schema_gu
     }
     // check for full text search index
     else if (OB_FAIL(check_support_direct_load_for_fts_index(schema_guard, table_schema, method, load_mode))) {
-      LOG_WARN("fail to check support direct load for fts index", KR(ret));
     }
     // check for columns
     else if (OB_FAIL(check_support_direct_load_for_columns(table_schema, method, load_mode))) {
-      LOG_WARN("fail to check support direct load for columns", KR(ret));
     }
     // check for default value
     else if (OB_FAIL(check_support_direct_load_for_default_value(table_schema, column_ids))) {
-      LOG_WARN("fail to check support direct load for default value", KR(ret), K(column_ids));
     }
     // check for partition level
     else if (ObDirectLoadLevel::PARTITION == load_level
@@ -582,7 +566,6 @@ int ObTableLoadService::check_support_direct_load_for_default_value(
   } else {
     ObArray<ObColDesc> column_descs;
     if (OB_FAIL(table_schema->get_column_ids(column_descs, true/*no_virtual*/))) {
-      STORAGE_LOG(WARN, "fail to get column descs", KR(ret), KPC(table_schema));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < column_descs.count(); ++i) {
       const ObColDesc &col_desc = column_descs.at(i);
@@ -637,7 +620,6 @@ int ObTableLoadService::check_support_direct_load_for_partition_level(
   } else if (ObDirectLoadMethod::is_full(method)) {
     if (OB_FAIL(ObPartitionExchange::check_exchange_partition_for_direct_load(
         schema_guard, table_schema))) {
-      LOG_WARN("fail to check exchange partition", KR(ret), KPC(table_schema));
     }
   }
   return ret;
@@ -652,7 +634,6 @@ int ObTableLoadService::check_support_direct_load_for_fts_index(
   int ret = OB_SUCCESS;
   bool has_fts_index = false;
   if (OB_FAIL(table_schema->check_has_fts_index_aux(schema_guard, has_fts_index))) {
-    LOG_WARN("fail to check has fts index aux", KR(ret));
   } else if ((!ObDirectLoadMethod::is_full(method)
               || !ObDirectLoadMode::is_insert_into(load_mode)
              )
@@ -676,7 +657,6 @@ int ObTableLoadService::alloc_ctx(ObTableLoadTableCtx *&table_ctx)
     ret = OB_IN_STOP_STATE;
     LOG_WARN("service is stop", KR(ret));
   } else if (OB_FAIL(service->get_manager().acquire_table_ctx(table_ctx))) {
-    LOG_WARN("fail to acquire table ctx", KR(ret));
   }
   return ret;
 }
@@ -711,17 +691,14 @@ int ObTableLoadService::remove_ctx(ObTableLoadTableCtx *table_ctx)
     
     release_arg.task_key_ = ObTableLoadUniqueKey(table_ctx->param_.table_id_, table_ctx->ddl_param_.task_id_);
     if (OB_FAIL(service->get_manager().remove_table_ctx(release_arg.task_key_, table_ctx))) {
-      LOG_WARN("fail to remove_table_ctx", KR(ret), K(release_arg.task_key_));
     } else {
       if (table_ctx->is_assigned_memory()) {
         if (OB_TMP_FAIL(service->assigned_memory_manager_.recycle_memory(table_ctx->param_.task_need_sort_, table_ctx->param_.avail_memory_))) {
-          LOG_WARN("fail to recycle_memory", KR(tmp_ret), K(release_arg.task_key_));
         }
         table_ctx->reset_assigned_memory();
       } 
       if (table_ctx->is_assigned_resource()) {
         if (OB_TMP_FAIL(ObTableLoadService::delete_assigned_task(release_arg))) {
-          LOG_WARN("fail to delete assigned task", KR(tmp_ret), K(release_arg));
         }
         table_ctx->reset_assigned_resource();
       }
@@ -773,11 +750,8 @@ int ObTableLoadService::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTableLoadService init twice", KR(ret), KP(this));
   } else if (OB_FAIL(manager_.init())) {
-    LOG_WARN("fail to init table ctx manager", KR(ret));
   } else if (OB_FAIL(assigned_memory_manager_.init())) {
-    LOG_WARN("fail to init assigned memory manager", KR(ret));
   } else if (OB_FAIL(assigned_task_manager_.init())) {
-    LOG_WARN("fail to init assigned task manager", KR(ret));
   } else {
     is_inited_ = true;
   }
@@ -792,19 +766,13 @@ int ObTableLoadService::start()
     LOG_WARN("ObTableLoadService not init", KR(ret), KP(this));
   } else {
     if (OB_FAIL(timer_.set_run_wrapper_with_ret(MTL_CTX()))) {
-      LOG_WARN("fail to set gc timer's run wrapper", KR(ret));
     } else if (OB_FAIL(timer_.init("TLD_Timer", ObMemAttr("TLD_TIMER")))) {
-      LOG_WARN("fail to init gc timer", KR(ret));
     } else if (OB_FAIL(timer_.schedule(gc_task_, GC_INTERVAL, true))) {
-      LOG_WARN("fail to schedule gc task", KR(ret));
     } else if (OB_FAIL(timer_.schedule(release_task_, RELEASE_INTERVAL, true))) {
-      LOG_WARN("fail to schedule release task", KR(ret));
     } else if (OB_FAIL(timer_.schedule(client_task_auto_abort_task_,
                                        CLIENT_TASK_AUTO_ABORT_INTERVAL, true))) {
-      LOG_WARN("fail to schedule client task auto abort task", KR(ret));
     } else if (OB_FAIL(
                  timer_.schedule(client_task_purge_task_, CLIENT_TASK_PURGE_INTERVAL, true))) {
-      LOG_WARN("fail to schedule client task purge task", KR(ret));
     }
   }
   return ret;
@@ -836,7 +804,6 @@ void ObTableLoadService::abort_all_client_task(int error_code)
   ObArray<ObTableLoadClientTask *> client_task_array;
   
   if (OB_FAIL(manager_.get_all_client_task(client_task_array))) {
-    LOG_WARN("fail to get all client task", KR(ret));
   } else {
     for (int i = 0; i < client_task_array.count(); ++i) {
       ObTableLoadClientTask *client_task = client_task_array.at(i);
@@ -853,7 +820,6 @@ void ObTableLoadService::fail_all_ctx(int error_code)
   bool is_stopped = false;
   
   if (OB_FAIL(manager_.get_all_table_ctx(table_ctx_array))) {
-    LOG_WARN("fail to get all table ctx list", KR(ret));
   } else {
     for (int i = 0; i < table_ctx_array.count(); ++i) {
       ObTableLoadTableCtx *table_ctx = table_ctx_array.at(i);
@@ -918,16 +884,12 @@ int ObTableLoadService::get_memory_limit(int64_t &memory_limit)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null");
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("get schema guard failed", K(ret));
   } else if (OB_FAIL(schema_guard.get_tenant_system_variable(SYS_VAR_OB_SQL_WORK_AREA_PERCENTAGE, var_schema))) {
-    LOG_WARN("get tenant system variable failed", K(ret));
   } else if (OB_ISNULL(var_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("var_schema is null");
   } else if (OB_FAIL(var_schema->get_value(NULL, NULL, value))) {
-    LOG_WARN("get value from var_schema failed", K(ret), K(*var_schema));
   } else if (OB_FAIL(value.get_int(pctg))) {
-    LOG_WARN("get int from value failed", K(ret), K(value));
   } else {
     memory_limit = lib::get_tenant_memory_limit() * MIN(pctg, LIMIT_SYS_VAR_OB_SQL_WORK_AREA_PERCENTAGE) / 100;
   }
@@ -956,7 +918,6 @@ int ObTableLoadService::delete_assigned_task(ObDirectLoadResourceReleaseArg &arg
     LOG_WARN("null table load service", KR(ret));
   } else {
     if (OB_FAIL(service->assigned_task_manager_.delete_assigned_task(arg.task_key_))) {
-      LOG_WARN("fail to delete_assigned_task", KR(ret), K(arg.task_key_));
     } else if (OB_FAIL(ObTableLoadResourceService::release_resource(arg))) {
       LOG_WARN("fail to release resource", KR(ret));
       ret = OB_SUCCESS;   // Allow failure, the resource management module can reclaim
@@ -1018,7 +979,6 @@ int ObTableLoadService::refresh_and_check_resource(ObDirectLoadResourceCheckArg 
     if (!arg.first_check_ && OB_FAIL(service->assigned_memory_manager_.refresh_avail_memory(arg.avail_memory_))) {
       LOG_WARN("fail to refresh_avail_memory", KR(ret));
     } else if (OB_FAIL(service->assigned_task_manager_.get_assigned_tasks(res.assigned_array_))) {
-      LOG_WARN("fail to get_assigned_tasks", KR(ret));
     }
   }
   return ret;

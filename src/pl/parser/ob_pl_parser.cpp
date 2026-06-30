@@ -30,7 +30,6 @@ int obpl_parser_check_stack_overflow() {
   int ret = OB_SUCCESS;
   bool is_overflow = true;
   if (OB_FAIL(check_stack_overflow(is_overflow))) {
-    LOG_WARN("failed to check stack overflow status", K(ret));
   }
   return is_overflow;
 }
@@ -298,7 +297,6 @@ int ObPLParser::parse_routine_body(const ObString &routine_body,
     parse_ctx.scanner_ctx_.sql_mode_ = sql_mode_;
 
     if (OB_FAIL(parse_stmt_block(parse_ctx, routine_stmt))) {
-      LOG_WARN("failed to parse stmt block", K(ret));
     }
   }
   return ret;
@@ -334,7 +332,6 @@ int ObPLParser::parse_package(const ObString &package,
   parse_ctx.scanner_ctx_.sql_mode_ = sql_mode_;
 
   if (OB_FAIL(parse_stmt_block(parse_ctx, package_stmt))) {
-    LOG_WARN("failed to parse stmt block", K(ret));
   }
   return ret;
 }
@@ -368,7 +365,6 @@ int ObPLParser::parse_stmt_block(ObParseCtx &parse_ctx, ObStmtNodeTree *&multi_s
         ret = OB_ERR_PARSER_INIT;
         LOG_WARN("failed to initialized parser", K(ret));
       } else if (OB_FAIL(obpl_parser_parse(&pre_parse_ctx))) {
-        LOG_WARN("failed to preparse", K(ret));
       } else {
         OX (multi_stmt = pre_parse_ctx.stmt_tree_);
       }

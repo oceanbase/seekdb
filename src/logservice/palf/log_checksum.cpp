@@ -81,7 +81,6 @@ int LogChecksum::verify_accum_checksum(const int64_t data_checksum,
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(verify_accum_checksum(old_verify_checksum, data_checksum, accum_checksum, new_verify_checksum))) {
-    PALF_LOG(ERROR, "verify_accum_checksum failed", K(data_checksum), K(accum_checksum), K(old_verify_checksum));
   } else {
     // Update verify_checksum_ when checking succeeds.
     verify_checksum_ = new_verify_checksum;

@@ -52,7 +52,6 @@ int ObExprFindInSet::calc_result_type2(ObExprResType &type,
     coll_types[0] = type1.get_obj_meta();
     coll_types[1] = type2.get_obj_meta();
     if (OB_FAIL(aggregate_charsets_for_comparison(type.get_calc_meta(), coll_types, 2, type_ctx))) {
-      LOG_WARN("failed to aggregate_charsets_for_comparison", K(ret));
     } else {
       type1.set_calc_type(ObVarcharType);
       type1.set_calc_collation(type);
@@ -260,7 +259,6 @@ int search_with_const_set(const ObExpr &expr,
     if (NULL == (cached_value = static_cast<ObExprFindIntCachedValue *>
                  (ctx.exec_ctx_.get_expr_op_ctx(rt_ctx_id)))) {
       if (OB_FAIL(ctx.exec_ctx_.create_expr_op_ctx(rt_ctx_id, cached_value))) {
-        LOG_WARN("failed to create operator ctx", K(ret));
       } else {
         OZ (build_hashmap(ctx, *cached_value, str_list, cs_type));
       }
@@ -302,7 +300,6 @@ int ObExprFindInSet::calc_find_in_set_expr(const ObExpr &expr, ObEvalCtx &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected arg cnt", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, str, strlist))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else if (str->is_null() || strlist->is_null()) {
     res_datum.set_null();
   } else {
@@ -319,7 +316,6 @@ int ObExprFindInSet::calc_find_in_set_expr(const ObExpr &expr, ObEvalCtx &ctx,
         ret = search(str->get_string(), strlist->get_string(), cs_type, res_pos);
       }
       if (OB_FAIL(ret)) {
-        LOG_WARN("search str in str list failed", K(ret), K(expr.args_[1]->is_static_const_));
       } else {
         res_datum.set_uint(res_pos);
       }
@@ -363,8 +359,6 @@ int ObExprFindInSet::calc_find_in_set_vector_dispatch(
                  strlist = strlist_vec->get_string(idx);
         ret = search_func(str, strlist, cs_type, res_pos);
         if (OB_FAIL(ret)) {
-          LOG_WARN("search str in str list failed", K(ret),
-                   K(expr.args_[1]->is_static_const_));
         } else {
           res_vec->set_uint(idx, res_pos);
           eval_flags.set(idx);
@@ -399,7 +393,6 @@ int ObExprFindInSet::calc_find_in_set_vector_dispatch(VECTOR_EVAL_FUNC_ARG_DECL)
         ObString str = str_vec->get_string(idx), strlist = strlist_vec->get_string(idx);
         ret = search_with_const_set(expr, ctx, str, strlist, cs_type, res_pos);
         if (OB_FAIL(ret)) {
-          LOG_WARN("search str in str list failed", K(ret), K(expr.args_[1]->is_static_const_));
         } else {
           res_vec->set_uint(idx, res_pos);
           eval_flags.set(idx);
@@ -416,9 +409,7 @@ int ObExprFindInSet::calc_find_in_set_vector(VECTOR_EVAL_FUNC_ARG_DECL) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected arg cnt", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval find_in_set param", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval find_in_set param", K(ret));
   } else {
     VectorFormat arg0_format = expr.args_[0]->get_format(ctx);
     VectorFormat arg1_format = expr.args_[1]->get_format(ctx);

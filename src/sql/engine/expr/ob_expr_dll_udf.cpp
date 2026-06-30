@@ -77,7 +77,6 @@ int ObExprDllUdf::calc_result_typeN(ObExprResType &type,
               allocator_, &udf_func_, udf_meta_,
               udf_attributes_, udf_attributes_types_,
               type, types, param_num, type_ctx))) {
-    LOG_WARN("failed to cale udf result type");
   }
   if (OB_SUCC(ret)) {
     type_ctx.set_cast_mode(type_ctx.get_cast_mode() | CM_WARN_ON_FAIL);
@@ -93,9 +92,7 @@ int ObExprDllUdf::deep_copy_udf_meta(share::schema::ObUDFMeta &dst,
   dst.ret_ = src.ret_;
   dst.type_ = src.type_;
   if (OB_FAIL(ob_write_string(alloc, src.name_, dst.name_))) {
-    LOG_WARN("fail to write string", K(src.name_), K(ret));
   } else if (OB_FAIL(ob_write_string(alloc, src.dl_, dst.dl_))) {
-    LOG_WARN("fail to write string", K(src.name_), K(ret));
   } else { }
   LOG_DEBUG("set udf meta", K(src), K(dst));
   return ret;
@@ -147,15 +144,12 @@ int ObExprDllUdf::init_udf(const common::ObIArray<ObRawExpr*> &param_exprs)
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(udf_attributes_.push_back(expr->get_expr_name()))) {
-        LOG_WARN("failed to push back", K(ret));
       } else if (OB_FAIL(udf_attributes_types_.push_back(expr->get_result_type()))) {
-        LOG_WARN("failed to push back", K(ret));
       }
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(udf_func_.init(udf_meta_))) {
-      LOG_WARN("udf function init failed", K(ret));
     }
   }
   return ret;
@@ -176,7 +170,6 @@ OB_DEF_SERIALIZE(ObExprDllUdf)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("expr is null");
     } else if (OB_FAIL(expr->serialize(buf, buf_len, pos))) {
-      LOG_WARN("serialize aggregate column expression failed", K(ret));
     }
   }
   OZ(ObFuncExprOperator::serialize(buf, buf_len, pos));
@@ -193,12 +186,10 @@ OB_DEF_DESERIALIZE(ObExprDllUdf)
   for (int64_t j = 0; j < calculable_results_.count() && OB_SUCC(ret); ++j) {
     ObSqlExpression *sql_expr = nullptr;
     if (OB_FAIL(sql_expression_factory_.alloc(sql_expr))) {
-      LOG_WARN("fail to alloc sql-expr", K(ret));
     } else if (OB_ISNULL(sql_expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("alloc invalid expr", K(ret), K(sql_expr));
     } else if (OB_FAIL(sql_expr->deserialize(buf, data_len, pos))) {
-      LOG_WARN("fail to deserialize expression", K(ret));
     }
   }
   OZ(ObFuncExprOperator::deserialize(buf, data_len, pos));
@@ -275,10 +266,8 @@ int ObExprDllUdf::eval_dll_udf(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res)
   CK(NULL != info);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("evaluate parameters' value failed", K(ret));
   } else if (OB_ISNULL(expr_udf_ctx)) {
     if (OB_FAIL(ctx.exec_ctx_.create_expr_op_ctx(expr.expr_ctx_id_, expr_udf_ctx))) {
-      LOG_WARN("create expr op ctx failed", K(ret));
     } else if (OB_ISNULL(expr_udf_ctx)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("expr udf ctx is NULL", K(ret));

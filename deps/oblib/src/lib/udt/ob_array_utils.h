@@ -50,7 +50,6 @@ public :
     int pos = -1;
     bret = false;
     if (OB_FAIL(position(array, elem, pos))) {
-      OB_LOG(WARN, "array position failed", K(ret));
     } else if (pos >= 0) {
       bret = true;
     }
@@ -89,17 +88,14 @@ public :
       break;
     case ArrayFormat::Binary_Varlen :
       if (OB_FAIL(static_cast<const ObArrayBinary *>(&array)->contains(elem, pos))) {
-        OB_LOG(WARN, "failed to do array contains", K(ret));
       }
       break;
     case ArrayFormat::Vector :
       if (static_cast<ObObjType>(array.get_element_type()) == ObUTinyIntType) {
         if (OB_FAIL(static_cast<const ObVectorU8Data *>(&array)->contains(elem, pos))) {
-          OB_LOG(WARN, "failed to do array contains", K(ret));
         }
       } else if (static_cast<ObObjType>(array.get_element_type()) == ObFloatType) {
         if (OB_FAIL(static_cast<const ObVectorF32Data *>(&array)->contains(elem, pos))) {
-          OB_LOG(WARN, "failed to do array contains", K(ret));
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -108,7 +104,6 @@ public :
       break;
     case ArrayFormat::Nested_Array :
       if (OB_FAIL(static_cast<const ObArrayNested *>(&array)->contains(elem, pos))) {
-        OB_LOG(WARN, "failed to do array contains", K(ret));
       }
       break;
     default:
@@ -154,17 +149,14 @@ public :
       break;
     case ArrayFormat::Binary_Varlen :
       if (OB_FAIL(static_cast<const ObArrayBinary *>(&src_array)->clone_except(alloc, elem, is_null, dst_array))) {
-        OB_LOG(WARN, "failed to do src_array contains", K(ret));
       }
       break;
     case ArrayFormat::Vector :
       if (static_cast<ObObjType>(src_array.get_element_type()) == ObUTinyIntType) {
         if (OB_FAIL(static_cast<const ObVectorU8Data *>(&src_array)->clone_except(alloc, elem, is_null, dst_array))) {
-          OB_LOG(WARN, "failed to do src_array contains", K(ret));
         }
       } else if (static_cast<ObObjType>(src_array.get_element_type()) == ObFloatType) {
         if (OB_FAIL(static_cast<const ObVectorF32Data *>(&src_array)->clone_except(alloc, elem, is_null, dst_array))) {
-          OB_LOG(WARN, "failed to do src_array contains", K(ret));
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -173,7 +165,6 @@ public :
       break;
     case ArrayFormat::Nested_Array :
       if (OB_FAIL(static_cast<const ObArrayNested *>(&src_array)->clone_except(alloc, elem, is_null, dst_array))) {
-        OB_LOG(WARN, "failed to do src_array contains", K(ret));
       }
       break;
     default:

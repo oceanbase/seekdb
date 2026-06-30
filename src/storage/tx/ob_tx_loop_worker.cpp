@@ -50,11 +50,8 @@ int ObTxLoopWorker::start()
 
   TRANS_LOG(INFO, "[Tx Loop Worker] start");
   if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TxLoopWorkerTimer, timer_tg_id_))) {
-    TRANS_LOG(WARN, "[Tx Loop Worker] create timer failed", K(ret), K_(timer_tg_id));
   } else if (OB_FAIL(TG_START(timer_tg_id_))) {
-    TRANS_LOG(WARN, "[Tx Loop Worker] start timer failed", K(ret), K_(timer_tg_id));
   } else if (OB_FAIL(TG_SCHEDULE(timer_tg_id_, *this, LOOP_INTERVAL, true/*is_repeat*/))) {
-    TRANS_LOG(WARN, "[Tx Loop Worker] schedule timer failed", K(ret), K_(timer_tg_id));
   } else {
     stop_flag_ = false;
     // TRANS_LOG(INFO, "[Tx Loop Worker] start keep alive thread succeed", K(ret));
@@ -275,7 +272,6 @@ void ObTxLoopWorker::do_keep_alive_(ObLS *ls_ptr, const SCN &min_start_scn, MinS
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(ls_ptr->get_keep_alive_ls_handler()->try_submit_log(min_start_scn, status))) {
-    TRANS_LOG(WARN, "[Tx Loop Worker] try submit keep alive log failed", K(ret));
   } else if (REACH_TIME_INTERVAL(KEEP_ALIVE_PRINT_INFO_INTERVAL)) {
     ls_ptr->get_keep_alive_ls_handler()->print_stat_info();
   } else {
@@ -310,7 +306,6 @@ void ObTxLoopWorker::do_tx_gc_(ObLS *ls_ptr, SCN &min_start_scn, MinStartScnStat
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(ls_ptr->get_tx_svr()->check_scheduler_status(min_start_scn, status))) {
-    TRANS_LOG(WARN, "[Tx Loop Worker] check tx scheduler failed", K(ret), K(*ls_ptr));
   } else {
     TRANS_LOG(INFO, "[Tx Loop Worker] check tx scheduler success", K(*ls_ptr));
   }
@@ -370,8 +365,6 @@ void ObTxLoopWorker::do_retain_ctx_gc_(ObLS *ls_ptr)
               K(*ls_ptr));
 
   } else if (OB_FAIL(retain_ctx_mgr->try_gc_retain_ctx(ls_ptr))) {
-    TRANS_LOG(WARN, "[Tx Loop Worker] retain_ctx_mgr try to gc retain ctx failed", K(ret),
-              K(*ls_ptr));
   } else {
     TRANS_LOG(DEBUG, "[Tx Loop Worker] retain_ctx_mgr try to gc retain ctx success", K(ret),
               K(*ls_ptr));
@@ -388,7 +381,6 @@ void ObTxLoopWorker::do_start_working_retry_(ObLS *ls_ptr)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(ls_ptr->retry_apply_start_working_log())) {
-    TRANS_LOG(WARN, "retry to apply start working log failed", K(ret), KPC(ls_ptr));
   }
 }
 
@@ -399,13 +391,11 @@ void ObTxLoopWorker::do_log_cb_pool_adjust_(ObLS *ls_ptr, const common::ObRole r
   (void)ls_ptr->get_tx_svr()->get_active_tx_count(active_tx_cnt);
   if (common::is_strong_leader(role)) {
     if (OB_FAIL(ls_ptr->get_tx_svr()->get_log_cb_pool_mgr()->adjust_log_cb_pool(active_tx_cnt))) {
-      TRANS_LOG(WARN, "adjust log cb pool failed", K(ret), K(role), KPC(ls_ptr));
     }
   } else {
     // log handler follower, not tx follower
     if (OB_FAIL(
             ls_ptr->get_tx_svr()->get_log_cb_pool_mgr()->clear_log_cb_pool(false /*for replay*/))) {
-      TRANS_LOG(WARN, "clear log cb pools on a follower  failed", K(ret), K(role), KPC(ls_ptr));
     }
   }
 }

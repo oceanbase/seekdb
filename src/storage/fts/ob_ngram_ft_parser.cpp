@@ -58,7 +58,6 @@ int ObNgramFTParser::init(ObFTParserParam *param)
                                       param->ft_length_,
                                       param->ngram_token_size_,
                                       param->ngram_token_size_))) {
-    LOG_WARN("fail to init ngram impl", K(ret), KPC(param));
   } else {
     is_inited_ = true;
   }
@@ -125,7 +124,6 @@ int ObNgramFTParserDesc::segment(
     LOG_WARN("fail to allocate ngram ft parser", K(ret));
   } else {
     if (OB_FAIL(parser->init(param))) {
-      LOG_WARN("fail to init ngram fulltext parser", K(ret), KPC(param));
     } else {
       iter = parser;
     }

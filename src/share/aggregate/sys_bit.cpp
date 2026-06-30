@@ -64,7 +64,6 @@ int init_sysbit_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
       LOG_WARN("unexpected sysbit operator", K(ret), K(fn_type));
     }
     if (OB_FAIL(ret)) {
-      LOG_WARN("init sysbit functions failed", K(ret));
     }
   }
   return ret;

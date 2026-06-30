@@ -71,17 +71,13 @@ int ObExprRbToString::eval_rb_to_string(const ObExpr &expr,
   ObString rb_str;
 
   if (OB_FAIL(ObRbExprHelper::get_input_roaringbitmap_bin(ctx, tmp_allocator, rb_arg, rb_bin, is_rb_null))) {
-    LOG_WARN("fail to get input roaringbitmap", K(ret));
   } else if (is_rb_null || rb_bin == nullptr) {
     res.set_null();
   } else if (OB_FAIL(ObRbUtils::rb_to_string(tmp_allocator, rb_bin, rb_str))) {
-    LOG_WARN("failed to print roaringbitmap to string", K(ret));
   } else {
     ObTextStringDatumResult str_result(expr.datum_meta_.type_, &expr, &ctx, &res);
     if (OB_FAIL(str_result.init(rb_str.length()))) {
-      LOG_WARN("failed to init result", K(ret), K(rb_str.length()));
     } else if (OB_FAIL(str_result.append(rb_str.ptr(), rb_str.length()))) {
-      LOG_WARN("failed to append realdata", K(ret), K(rb_str));
     } else {
       str_result.set_result();
     }

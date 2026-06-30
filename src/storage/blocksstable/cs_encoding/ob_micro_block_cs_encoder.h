@@ -262,17 +262,14 @@ int ObMicroBlockCSEncoder::do_encode_stream_offsets_(ObIntegerStreamEncoderCtx e
     common::ObSEArray<T, 256> tmp_offsets;
     for (int64_t i = 0; OB_SUCC(ret) && i < stream_cnt; i++) {
       if (OB_FAIL(tmp_offsets.push_back(stream_offsets_.at(i)))) {
-        STORAGE_LOG(WARN, "fail to push back", K(ret), K(i));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(encoder.encode(enc_ctx, &tmp_offsets[0], stream_cnt, data_buffer_))) {
-        STORAGE_LOG(WARN, "fail to encode stream offset", K(ret), K(enc_ctx));
       }
     }
   } else {
     if (OB_FAIL(encoder.encode(enc_ctx, &stream_offsets_[0], stream_cnt, data_buffer_))) {
-      STORAGE_LOG(WARN, "fail to encoder stream offset", K(ret), K(enc_ctx));
     }
   }
 

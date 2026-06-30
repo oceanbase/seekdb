@@ -265,7 +265,6 @@ int ObDDLIndexBlockRowIterator::find_rowkeys_belong_to_same_idx_row(ObMicroIndex
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("null rowkey", K(ret), K(cur_tree_value_), KP(cur_rowkey));
       } else if (OB_FAIL(rowkey.compare(*cur_rowkey, *datum_utils_, cmp_ret, false))) {
-        LOG_WARN("Failed to compare rowkey", K(ret), K(rowkey), KPC(cur_rowkey));
       }
 
       if (OB_FAIL(ret)) {
@@ -364,7 +363,6 @@ int ObDDLIndexBlockRowIterator::get_next(const ObIndexBlockRowHeader *&idx_row_h
     ret = OB_NOT_INIT;
     LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_FAIL(inner_get_current(idx_row_header, endkey, co_sstable_row_offset))) {
-    LOG_WARN("read cur idx row failed", K(ret), KPC(idx_row_header), K(endkey), K(co_sstable_row_offset));
   } else if (OB_UNLIKELY(nullptr == idx_row_header || !endkey.is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected null index block row header/endkey", K(ret), KP(idx_row_header), K(endkey));
@@ -469,7 +467,6 @@ int ObDDLIndexBlockRowIterator::get_index_row_count(const ObDatumRange &range,
                                                     is_reverse_scan_,
                                                     tmp_iter,
                                                     cur_tree_value))) {
-    LOG_WARN("locate rowkey failed", K(ret), K(range), KPC(datum_utils_), KPC(cur_tree_value));
   } else {
     if (OB_NOT_NULL(cur_tree_value)) {
       ++index_row_count; //first
@@ -552,7 +549,6 @@ int ObDDLSStableAllRangeIterator::init(const ObMicroBlockData &idx_block_data,
     ObTablet *cur_tablet = const_cast<ObTablet *>(iter_param.tablet_);
     if (iter_param.sstable_->is_normal_cg_sstable()) {
       if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(rowkey_read_info_))) {
-        LOG_WARN("failed to get index read info from ObTenantCGReadInfoMgr", K(ret));
       }
     } else {
       rowkey_read_info_ = &cur_tablet->get_rowkey_read_info();
@@ -669,7 +665,6 @@ int ObDDLSStableAllRangeIterator::get_next(const ObIndexBlockRowHeader *&idx_row
     ret = OB_NOT_INIT;
     LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_FAIL(index_macro_iter_.get_next_idx_row(idx_row_allocator_, cur_index_info_, row_offset, reach_cursor_end))) {
-    LOG_WARN("fail to get next idx info", K(ret), K(cur_index_info_), K(reach_cursor_end), K(index_macro_iter_));
   } else if (OB_UNLIKELY(nullptr == cur_index_info_.idx_row_header_ || nullptr == cur_index_info_.endkey_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected null index block row endkey", K(ret), K(cur_index_info_));
@@ -720,7 +715,6 @@ int ObDDLSStableAllRangeIterator::get_index_row_count(const ObDatumRange &range,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguement", K(ret), K(range));
   } else if (OB_FAIL(tmp_index_macro_iter.open(*sstable, range, *rowkey_read_info_, macro_iter_allocator_, is_reverse_scan_))) {
-    LOG_WARN("tmp all range iter locate range failed", K(ret), K(range));
   } else {
     bool tmp_reach_cursor_end = false;
     ObMicroIndexRowItem tmp_index_item;
@@ -1048,11 +1042,9 @@ int ObDDLMergeBlockRowIterator::inner_init(const ObMicroBlockData &idx_block_dat
     // init ddl_memtables_
     if (nullptr != ddl_memtables) {
       if (OB_FAIL(ddl_memtables_.assign(*ddl_memtables))) {
-        LOG_WARN("assign ddl memtables failed", K(ret));
       }
     } else {
       if (OB_FAIL(get_readable_ddl_kvs(iter_param, ddl_memtables_))) {
-        LOG_WARN("fail to get readable ddl kvs", K(ret));
       }
     }
 
@@ -1063,14 +1055,12 @@ int ObDDLMergeBlockRowIterator::inner_init(const ObMicroBlockData &idx_block_dat
                                                allocator,
                                                is_reverse_scan,
                                                ddl_memtables_))) {
-      LOG_WARN("fail to init ddl kv index iters", K(ret), K(iters_), K(ddl_memtables));
     } else if (OB_FAIL(init_sstable_index_iter(idx_block_data,
                                            datum_utils,
                                            allocator,
                                            is_reverse_scan,
                                            iter_param,
                                            sst_index_iter))) {
-      LOG_WARN("fail to init sstable index iter", K(ret), K(iters_), KPC(sst_index_iter));
     } else if (iters_.count() > 1) {
       is_single_sstable_ = false;
     }
@@ -1131,7 +1121,6 @@ int ObDDLMergeBlockRowIterator::init_sstable_index_iter(const ObMicroBlockData &
       ObSSTableMetaHandle sstable_meta_handle;
       int64_t real_index_tree_height = 0;
       if (OB_FAIL(iter_param.sstable_->get_meta(sstable_meta_handle))) {
-        LOG_WARN("failed to get sstable meta handle", K(ret));
       } else {
         real_index_tree_height = sstable_meta_handle.get_sstable_meta().get_index_tree_height(false);
         if (real_index_tree_height < 2) {
@@ -1187,9 +1176,7 @@ int ObDDLMergeBlockRowIterator::init_sstable_index_iter(const ObMicroBlockData &
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("iter is null", K(idx_block_data.type_), K(ret));
     } else if (OB_FAIL(sst_index_iter->init(idx_block_data, datum_utils, allocator, is_reverse_scan, iter_param))) {
-      LOG_WARN("fail to init iter", K(ret), K(idx_block_data), KPC(sst_index_iter));
     } else if (OB_FAIL(iters_.push_back(sst_index_iter))) {
-      LOG_WARN("push back sstable iter failed", K(ret));
     }
   }
   LOG_INFO("init ddl merge iter", K(ret), KPC(sst_index_iter), K(iter_param), K(idx_block_data), KPC(iter_param.sstable_));
@@ -1217,7 +1204,6 @@ int ObDDLMergeBlockRowIterator::get_readable_ddl_kvs(const ObIndexBlockIterParam
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("tablet is null", K(ret), KP(cur_tablet));
     } else if (OB_FAIL(cur_tablet->get_ddl_kvs(ddl_kvs))) {
-      LOG_WARN("failed to get ddl kvs array from tablet", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < ddl_kvs.count(); ++i) {
         ObDDLKV *ddl_kv = ddl_kvs.at(i);
@@ -1237,7 +1223,6 @@ int ObDDLMergeBlockRowIterator::get_readable_ddl_kvs(const ObIndexBlockIterParam
             }
             if (!skip) {
               if (OB_FAIL(ddl_memtables.push_back(cur_ddl_memtable))) {
-                LOG_WARN("fail to push back ddl_memtable", K(ret));
               }
             }
           } else {
@@ -1309,9 +1294,7 @@ int ObDDLMergeBlockRowIterator::init_ddl_kv_index_iters(const ObMicroBlockData &
           ObDDLIndexBlockRowIterator *cur_ddl_kv_index_iter = static_cast<ObDDLIndexBlockRowIterator *>(ddl_memtable_iters_.at(i));
           cur_ddl_kv_index_iter->reuse();
           if (OB_FAIL(ddl_memtables.at(i)->init_ddl_index_iterator(datum_utils, is_reverse_scan, cur_ddl_kv_index_iter))) {
-            LOG_WARN("fail to init ddl iter", K(ret), K(datum_utils), KPC(cur_ddl_kv_index_iter));
           } else if (OB_FAIL(iters_.push_back(cur_ddl_kv_index_iter))) {
-            LOG_WARN("push back into iter array failed", K(ret), K(i), KPC(cur_ddl_kv_index_iter));
           }
         }
       }
@@ -1372,9 +1355,7 @@ int ObDDLMergeBlockRowIterator::init_merger()
       LOG_WARN("merger is null", K(ret));
     } else if (FALSE_IT(endkey_merger_->reset())) {
     } else if (OB_FAIL(endkey_merger_->init(MAX_SSTABLE_COUNT, iters_.count(), *allocator_))) {
-      LOG_WARN("fail to init rows merger", K(ret), K(iters_.count()));
     } else if (OB_FAIL(endkey_merger_->open(iters_.count()))) {
-      LOG_WARN("fail to open rows merger", K(ret), K(iters_.count()));
     }
   }
 
@@ -1547,7 +1528,6 @@ int ObDDLMergeBlockRowIterator::get_current(const ObIndexBlockRowHeader *&idx_ro
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid iters count or iter is nll", K(ret), K(iters_));
     } else if (OB_FAIL(iters_.at(0)->get_current(idx_row_header, endkey))) {
-      LOG_WARN("read cur idx row failed", K(ret), KPC(idx_row_header), K(endkey), KPC(iters_.at(0)));
     }
   } else {
     // get next row from loser tree
@@ -1608,7 +1588,6 @@ int ObDDLMergeBlockRowIterator::get_next(const ObIndexBlockRowHeader *&idx_row_h
                                               agg_row_buf,
                                               agg_buf_size,
                                               row_offset))) {
-      LOG_WARN("read cur idx row failed", K(ret), KPC(idx_row_header), K(endkey), KPC(iters_.at(0)));
     }
   } else {
     // get next row from loser tree
@@ -1651,11 +1630,9 @@ int ObDDLMergeBlockRowIterator::supply_consume()
                                           item.agg_row_buf_,
                                           item.agg_buf_size_,
                                           item.row_offset_))) {
-      LOG_WARN("fail to get next row from scanner", K(ret));
     } else {
       item.iter_idx_ = iter_idx;
       if (OB_FAIL(endkey_merger_->push(item))) {
-        LOG_WARN("fail to push to loser tree", K(ret));
       }
     }
   }
@@ -1663,7 +1640,6 @@ int ObDDLMergeBlockRowIterator::supply_consume()
   if (OB_SUCC(ret)) {
     // if no new items pushed, the rebuild will quickly exit
     if (OB_FAIL(endkey_merger_->rebuild())) {
-      LOG_WARN("fail to rebuild loser tree", K(ret), K(consumer_cnt_));
     } else {
       consumer_cnt_ = 0;
     }
@@ -1713,7 +1689,6 @@ int ObDDLMergeBlockRowIterator::inner_get_next(const ObIndexBlockRowHeader *&idx
     }
   } else {
     if (OB_FAIL(supply_consume())) {
-      LOG_WARN("supply consume failed", K(ret));
     } else if (endkey_merger_->empty()) {
       ret = OB_ITER_END;
     }
@@ -1722,7 +1697,6 @@ int ObDDLMergeBlockRowIterator::inner_get_next(const ObIndexBlockRowHeader *&idx
       while (OB_SUCC(ret) && !endkey_merger_->empty() && !endkey.is_valid()) {
         bool skip_iter = false;
         if (OB_FAIL(endkey_merger_->top(top_item))) {
-          LOG_WARN("fail to get top item", K(ret));
         } else if (OB_LIKELY(endkey_merger_->is_unique_champion())) {
           endkey = top_item->end_key_;
           idx_row_header = top_item->header_;
@@ -1749,13 +1723,11 @@ int ObDDLMergeBlockRowIterator::inner_get_next(const ObIndexBlockRowHeader *&idx
           if (OB_SUCC(ret) && !is_reverse_scan_) { // not_reverse_scan can quit early
             int tmp_cmp_ret = 0;
             if (OB_FAIL(endkey.compare(query_range_.get_end_key(), *datum_utils_, tmp_cmp_ret))) {
-              LOG_WARN("fail to cmp rowkey", K(ret), K(query_range_.get_end_key()), K(endkey), KPC(datum_utils_));
             } else if (tmp_cmp_ret >= 0) {
               // reach endkey, stop get_next
               is_iter_finish_ = true;
               while (OB_SUCC(ret) && !endkey_merger_->empty()) {
                 if (OB_FAIL(endkey_merger_->pop())) {
-                  LOG_WARN("fail to pop top item", K(ret));
                 } else {
                   consumer_cnt_ = 0;
                 }
@@ -1769,7 +1741,6 @@ int ObDDLMergeBlockRowIterator::inner_get_next(const ObIndexBlockRowHeader *&idx
 
         if (OB_SUCC(ret) && !endkey_merger_->empty()) {
           if (OB_FAIL(endkey_merger_->pop())) {
-            LOG_WARN("fail to pop top item", K(ret));
           } else if (!skip_iter) {
             consumers_[consumer_cnt_] = cur_iter_idx;
             ++consumer_cnt_;
@@ -1844,7 +1815,6 @@ int ObDDLMergeBlockRowIterator::MergeIndexItem::init(ObIAllocator *allocator,
       LOG_WARN("allocate memory failed", K(ret), K(sizeof(ObDatumRowkey)));
     } else if (FALSE_IT(rowkey_ = new (key_buf) ObDatumRowkey())) {
     } else if (OB_FAIL(endkey.deep_copy(*rowkey_, *allocator))) {
-      LOG_WARN("fail to deep copy rowkey", K(ret), KPC(rowkey_), K(endkey));
     }
 
     if (OB_FAIL(ret)) {
@@ -1899,7 +1869,6 @@ int ObDDLMergeBlockRowIterator::locate_first_endkey()
     ret = OB_NOT_INIT;
     LOG_WARN("Iter not opened yet", K(ret), KPC(this));
   } else if (OB_FAIL(supply_consume())) {
-    LOG_WARN("supply consume failed", K(ret));
   } else {
     if (endkey_merger_->empty()) {
       ret = OB_ITER_END;
@@ -1913,7 +1882,6 @@ int ObDDLMergeBlockRowIterator::locate_first_endkey()
           bool skip_iter = false;
 
           if (OB_FAIL(endkey_merger_->top(top_item))) {
-            LOG_WARN("fail to get top item", K(ret));
           } else if (OB_LIKELY(endkey_merger_->is_unique_champion())) {
             if (OB_UNLIKELY(nullptr == top_item->header_ || !top_item->end_key_.is_valid() || top_item->iter_idx_ >= iters_.count())) {
               ret = OB_ERR_UNEXPECTED;
@@ -1943,7 +1911,6 @@ int ObDDLMergeBlockRowIterator::locate_first_endkey()
                                                top_item->agg_buf_size_,
                                                top_item->row_offset_,
                                                top_item->iter_idx_))) {
-              LOG_WARN("fail to init first_index_item_", K(ret));
             } else if (!endkey_merger_->empty() && OB_FAIL(endkey_merger_->pop())) {
               LOG_WARN("fail to pop top item", K(ret), K(endkey_merger_));
             } else if (!skip_iter) {
@@ -1954,12 +1921,10 @@ int ObDDLMergeBlockRowIterator::locate_first_endkey()
         } else {
           // regular round
           if (OB_FAIL(supply_consume())) {
-            LOG_WARN("supply consume failed", K(ret));
           } else {
             const ObDDLSSTableMergeLoserTreeItem *top_item = nullptr;
             bool skip_iter = false;
             if (OB_FAIL(endkey_merger_->top(top_item))) {
-              LOG_WARN("fail to get top item", K(ret));
             } else if (OB_LIKELY(endkey_merger_->is_unique_champion())) {
               if (OB_UNLIKELY(nullptr == top_item->header_ || !top_item->end_key_.is_valid() || top_item->iter_idx_ >= iters_.count())) {
                 ret = OB_ERR_UNEXPECTED;
@@ -1971,7 +1936,6 @@ int ObDDLMergeBlockRowIterator::locate_first_endkey()
                 int tmp_cmp_ret = 0;
                 // top_item->end_key_ means first_index_item_.start_key
                 if (OB_FAIL(top_item->end_key_.compare(query_range_.get_end_key(), *datum_utils_, tmp_cmp_ret))) {
-                  LOG_WARN("fail to cmp rowkey", K(ret), K(query_range_.get_end_key()), K(top_item->end_key_), KPC(datum_utils_));
                 } else if (tmp_cmp_ret < 0) {
                   find = true; //first_index_item_
                 } else {
@@ -2000,7 +1964,6 @@ int ObDDLMergeBlockRowIterator::locate_first_endkey()
                                                        top_item->agg_buf_size_,
                                                        top_item->row_offset_,
                                                        top_item->iter_idx_))) {
-                      LOG_WARN("fail to init first_index_item_", K(ret));
                     } else if (!endkey_merger_->empty() && OB_FAIL(endkey_merger_->pop())) {
                       LOG_WARN("fail to pop top item", K(ret), K(endkey_merger_));
                     } else if (!skip_iter) {
@@ -2041,7 +2004,6 @@ int ObDDLMergeBlockRowIterator::check_blockscan(const ObDatumRowkey &rowkey, boo
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid iters count or iter is nll", K(ret), K(iters_));
       } else if (OB_FAIL(iters_.at(0)->check_blockscan(rowkey, can_blockscan))) {
-        LOG_WARN("fail to check blockscan", K(ret), KPC(iters_.at(0)), K(rowkey));
       }
     } else {
       // with ddl kvs, cannot blockscan
@@ -2065,7 +2027,6 @@ int ObDDLMergeBlockRowIterator::switch_context(ObStorageDatumUtils *datum_utils)
         ret = OB_NOT_INIT;
         LOG_WARN("not init yet", K(ret), KPC(cur_iter));
       } else if (OB_FAIL(cur_iter->switch_context(datum_utils))) {
-        LOG_WARN("fail to switch context", K(ret), KPC(datum_utils));
       }
     }
     if (OB_SUCC(ret)) {
@@ -2114,7 +2075,6 @@ int ObDDLMergeBlockRowIterator::get_index_row_count(const ObDatumRange &range,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid iters count or iter is nll", K(ret), K(iters_));
     } else if (OB_FAIL(iters_.at(0)->get_index_row_count(range, is_left_border, is_right_border, index_row_count, data_row_count))) {
-      LOG_WARN("fail to check blockscan", K(ret), KPC(iters_.at(0)), K(range));
     } else {
       // the index block iterator of single sstable does NOT set data_row_count within get_index_row_count interface.
       // just get sstable row count from meta cache
@@ -2136,7 +2096,6 @@ int ObDDLMergeBlockRowIterator::get_index_row_count(const ObDatumRange &range,
                                             is_reverse_scan_,
                                             iter_param_,
                                             &ddl_memtables_))) {
-      LOG_WARN("fail to init iter", K(ret), KPC(idx_block_data_), KPC(tmp_merge_iter));
     } else if (OB_FAIL(tmp_merge_iter->locate_range(range, is_left_border, is_right_border, true/*is_normal_cg*/))) {
       if (OB_UNLIKELY(OB_BEYOND_THE_RANGE != ret)) {
         LOG_WARN("Fail to locate range", K(ret), K(range), K(is_left_border), K(is_right_border), KPC(tmp_merge_iter));
@@ -2154,7 +2113,6 @@ int ObDDLMergeBlockRowIterator::get_index_row_count(const ObDatumRange &range,
       bool is_scan_right_border = false;
       while (OB_SUCC(ret)) {
         if (OB_FAIL(tmp_merge_iter->get_next(idx_row_header, endkey, is_scan_left_border, is_scan_right_border, idx_minor_info, agg_row_buf, agg_buf_size, row_offset))) {
-          LOG_WARN("get next idx block row failed", K(ret), KP(idx_row_header), K(endkey), K(is_reverse_scan_));
         } else if (OB_UNLIKELY(nullptr == idx_row_header || !endkey.is_valid())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Unexpected null index block row header/endkey", K(ret), KPC(tmp_merge_iter), KP(idx_row_header), K(endkey));
@@ -2260,7 +2218,6 @@ int ObUnitedSliceRowIterator::init(
     LOG_WARN("invalid arguement", K(ret), K(idx_block_data), KPC(datum_utils), KP(allocator), K(iter_param));
   } else {
     if (OB_FAIL(init_slice_info(iter_param))) {
-      LOG_WARN("init slice info failed", K(ret));
     } else if (iter_param.sstable_->is_normal_cg_sstable() && abs_endkey_.assign(&abs_datum_offset_, 1)) {
       LOG_WARN("assign datum offset failed", K(ret));
     } else if (OB_ISNULL(merge_iter_) && OB_ISNULL(merge_iter_ = OB_NEWx(ObDDLMergeBlockRowIterator, allocator))) {
@@ -2314,14 +2271,11 @@ int ObUnitedSliceRowIterator::init_slice_info(const ObIndexBlockIterParam &iter_
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguement", K(ret), K(iter_param));
   } else if (OB_FAIL(iter_param.tablet_->get_ddl_sstables(ddl_sstable_iter))) {
-    LOG_WARN("get ddl sstable iter failed", K(ret));
   } else if (OB_FAIL(iter_param.tablet_->get_ddl_kvs(ddl_kvs))) {
-    LOG_WARN("failed to get ddl kvs array from tablet", K(ret));
   } else if (0 == ddl_sstable_iter.count() && 0 == ddl_kvs.count()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("both ddl sstables and ddl kv is empty", K(ret), K(ddl_sstable_iter), K(ddl_kvs));
   } else if (OB_FAIL(slice_row_count_map.create(97, ObMemAttr("slice_rc_map")))) {
-    LOG_WARN("create slice row count map failed", K(ret));
   } else {
     cg_idx = iter_param.sstable_->get_column_group_id();
     ObArray<ObSSTable *> cg_slices; // slices for cg idx 0(rowkey cg)
@@ -2341,7 +2295,6 @@ int ObUnitedSliceRowIterator::init_slice_info(const ObIndexBlockIterParam &iter_
       } else if (cur_ddl_sstable->get_column_group_id() != 0) {
         // do nothing, only count rows for cg 0
       } else if (OB_FAIL(cg_slices.push_back(static_cast<ObSSTable *>(cur_ddl_sstable)))) {
-        LOG_WARN("push back cg sstable failed", K(ret), KPC(cur_ddl_sstable));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < ddl_kvs.count(); ++i) {
@@ -2359,7 +2312,6 @@ int ObUnitedSliceRowIterator::init_slice_info(const ObIndexBlockIterParam &iter_
           } else if (cur_ddl_memtable->get_column_group_id() != 0) {
             // do nothing, only count rows for cg 0
           } else if (OB_FAIL(cg_slices.push_back(cur_ddl_memtable))) {
-            LOG_WARN("push back cg sstable failed", K(ret), KPC(cur_ddl_memtable));
           }
         }
       }
@@ -2369,7 +2321,6 @@ int ObUnitedSliceRowIterator::init_slice_info(const ObIndexBlockIterParam &iter_
       ObSSTable *cur_ddl_sstable = cg_slices.at(i);
       ObSSTableMetaHandle sstable_meta_handle;
       if (OB_FAIL(cur_ddl_sstable->get_meta(sstable_meta_handle))) {
-        LOG_WARN("get sstable meta handle failed", K(ret));
       } else {
         int64_t cur_slice_idx = cur_ddl_sstable->get_slice_idx();
         int64_t cur_row_count = sstable_meta_handle.get_sstable_meta().get_row_count();
@@ -2380,7 +2331,6 @@ int ObUnitedSliceRowIterator::init_slice_info(const ObIndexBlockIterParam &iter_
         } else if (OB_FAIL(slice_row_count_map.atomic_refactored(cur_slice_idx, add_op))) {
           if (OB_HASH_NOT_EXIST == ret) {
             if (OB_FAIL(slice_row_count_map.set_refactored(cur_slice_idx, cur_row_count))) {
-              LOG_WARN("set row count into map failed", K(ret), K(cur_slice_idx), K(cur_row_count));
             }
           } else {
             LOG_WARN("get slice idx from map failed", K(ret), K(cur_slice_idx));
@@ -2404,7 +2354,6 @@ int ObUnitedSliceRowIterator::init_slice_info(const ObIndexBlockIterParam &iter_
       for (int64_t i = 0; OB_SUCC(ret) && i < slice_count_; ++i) {
         int64_t cur_slice_row_count = 0;
         if (OB_FAIL(row_offsets_.push_back(accumulate_row_count))) {
-          LOG_WARN("push back row offset failed", K(ret));
         } else if (OB_FAIL(slice_row_count_map.get_refactored(i, cur_slice_row_count))) {
           if (OB_HASH_NOT_EXIST != ret) {
             LOG_WARN("get row count from map failed", K(ret), K(i));
@@ -2483,9 +2432,7 @@ int ObUnitedSliceRowIterator::locate_slice_idx_by_key(const ObDatumRowkey &rowke
       int64_t row_offset = -1;
 
       if (OB_FAIL(prepare_slice_query_param(i, slice_iter_param, slice_ddl_memtables))) {
-        LOG_WARN("prepare slice query param", K(ret), K(i));
       } else if (OB_FAIL(slice_merge_iter.init(slice_root_block_, datum_utils_, allocator_, false/*is_reverse_scan*/, slice_iter_param, slice_ddl_memtables))) {
-        LOG_WARN("init slice merge iter failed", K(ret), K(i));
       } else if (OB_FAIL(slice_merge_iter.locate_key(rowkey))) {
         if (OB_BEYOND_THE_RANGE != ret) {
           LOG_WARN("locate key failed", K(ret), K(rowkey), K(i));
@@ -2563,7 +2510,6 @@ int ObUnitedSliceRowIterator::locate_range(
     if (OB_SUCC(ret) && !range_.get_start_key().is_min_rowkey()) {
       const int64_t abs_start_offset = range.start_key_.get_datum(0).get_int();
       if (OB_FAIL(convert_slice_offset(abs_start_offset, start_slice_idx_, slice_offset))) {
-        LOG_WARN("locate slice offset failed", K(ret), K(abs_start_offset), K(row_offsets_));
       } else {
         start_datum_offset_.set_int(slice_offset);
         range_.start_key_.assign(&start_datum_offset_, 1);
@@ -2573,7 +2519,6 @@ int ObUnitedSliceRowIterator::locate_range(
     if (OB_SUCC(ret) && !range_.get_end_key().is_max_rowkey()) {
       const int64_t abs_end_offset = range.end_key_.get_datum(0).get_int();
       if (OB_FAIL(convert_slice_offset(abs_end_offset, start_slice_idx_, slice_offset))) {
-        LOG_WARN("locate slice offset failed", K(ret), K(abs_end_offset), K(row_offsets_));
       } else {
         end_datum_offset_.set_int(slice_offset);
         range_.end_key_.assign(&start_datum_offset_, 1);
@@ -2608,7 +2553,6 @@ int ObUnitedSliceRowIterator::locate_key(const ObDatumRowkey &rowkey)
     const bool is_right_border = true;
     const bool is_normal_cg = iter_param_.sstable_->is_normal_cg_sstable();
     if (OB_FAIL(locate_range(range_, is_left_border, is_right_border, is_normal_cg))) {
-      LOG_WARN("locate range failed", K(ret), K(range_), K(rowkey), K(is_normal_cg));
     }
   }
   return ret;
@@ -2621,7 +2565,6 @@ int ObUnitedSliceRowIterator::get_current(const ObIndexBlockRowHeader *&idx_row_
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(merge_iter_->get_current(idx_row_header, endkey))) {
-    LOG_WARN("get current failed", K(ret));
   } else if (iter_param_.sstable_->is_normal_cg_sstable()) {
     endkey.set_compact_rowkey(&abs_endkey_);
   }
@@ -2643,9 +2586,7 @@ int ObUnitedSliceRowIterator::prepare_slice_query_param(const int64_t slice_idx,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(slice_idx));
   } else if (OB_FAIL(iter_param_.tablet_->get_ddl_sstables(ddl_sstable_iter))) {
-    LOG_WARN("get ddl sstable iter failed", K(ret));
   } else if (OB_FAIL(iter_param_.tablet_->get_ddl_kvs(ddl_kvs))) {
-    LOG_WARN("failed to get ddl kvs array from tablet", K(ret));
   } else {
     const int64_t cg_idx = iter_param_.sstable_->get_column_group_id();
     // prepare slice iter param
@@ -2668,11 +2609,8 @@ int ObUnitedSliceRowIterator::prepare_slice_query_param(const int64_t slice_idx,
         ObSSTableWrapper cg_sstable_wrapper;
         ObSSTable *cg_sstable = nullptr;
         if (OB_FAIL(co_sstable->fetch_cg_sstable(cg_idx, cg_sstable_wrapper))) {
-          LOG_WARN("get all tables failed", K(ret));
         } else if (OB_FAIL(cg_sstable_wrapper.get_loaded_column_store_sstable(cg_sstable))) {
-          LOG_WARN("get sstable failed", K(ret));
         } else if (OB_FAIL(cg_sstable->get_index_tree_root(slice_root_block_))) {
-          LOG_WARN("get index tree root block failed", K(ret));
         } else {
           slice_sstable_handle_ = cg_sstable_wrapper.get_meta_handle();
           slice_iter_param.sstable_ = cg_sstable;
@@ -2703,7 +2641,6 @@ int ObUnitedSliceRowIterator::prepare_slice_query_param(const int64_t slice_idx,
             LOG_WARN("ddl memtable is null", K(ret), KP(cur_ddl_memtable), K(i), K(j), KPC(cur_ddl_kv));
           } else if (cur_ddl_memtable->get_column_group_id() == cg_idx && cur_ddl_memtable->get_slice_idx() == slice_idx) {
             if (OB_FAIL(slice_ddl_memtables.push_back(cur_ddl_memtable))) {
-              LOG_WARN("push back ddl memtable", K(ret), KPC(cur_ddl_memtable));
             }
           }
         }
@@ -2752,9 +2689,7 @@ int ObUnitedSliceRowIterator::get_next(
         ObIndexBlockIterParam slice_iter_param;
         ObArray<ObDDLMemtable *> slice_ddl_memtables;
         if (OB_FAIL(prepare_slice_query_param(cur_slice_idx_, slice_iter_param, slice_ddl_memtables))) {
-          LOG_WARN("get slice param failed", K(ret), K(cur_slice_idx_));
         } else if (OB_FAIL(merge_iter_->init(slice_root_block_, datum_utils_, allocator_, is_reverse_scan_, slice_iter_param, slice_ddl_memtables))) {
-          LOG_WARN("init merge iter for next slice failed", K(ret), K(slice_iter_param), K(cur_slice_idx_));
         } else if (OB_FAIL(merge_iter_->locate_range(query_range, is_left_border, is_right_border, is_normal_cg))) {
           if (OB_BEYOND_THE_RANGE != ret) {
             LOG_WARN("merge iter locate range failed", K(ret), K(cur_slice_idx_));
@@ -2834,7 +2769,6 @@ int ObUnitedSliceRowIterator::get_index_row_count(
   } else {
     ObUnitedSliceRowIterator tmp_united_iter;
     if (OB_FAIL(tmp_united_iter.init(*idx_block_data_, datum_utils_, allocator_, false/*is_reverse_scan*/, iter_param_))) {
-      LOG_WARN("init united slice iter failed", K(ret));
     } else if (OB_FAIL(tmp_united_iter.locate_range(range, is_left_border, is_right_border, iter_param_.sstable_->is_normal_cg_sstable()))) {
       if (OB_BEYOND_THE_RANGE != ret) {
         LOG_WARN("locate range failed", K(ret));
@@ -2854,9 +2788,7 @@ int ObUnitedSliceRowIterator::get_index_row_count(
         int64_t cur_index_row_count = 0;
         int64_t cur_data_row_count = 0;
         if (OB_FAIL(prepare_slice_query_param(i, slice_iter_param, slice_ddl_memtables))) {
-          LOG_WARN("prepare slice query param failed", K(ret), K(i));
         } else if (OB_FAIL(slice_merge_iter.init(slice_root_block_, datum_utils_, allocator_, is_reverse_scan_, slice_iter_param, slice_ddl_memtables))) {
-          LOG_WARN("init merge iter failed", K(ret), K(i));
         } else if (OB_FAIL(slice_merge_iter.get_index_row_count(range, is_left_border, is_right_border, cur_index_row_count, cur_data_row_count))) {
           if (OB_BEYOND_THE_RANGE != ret) {
             LOG_WARN("get index row count failed", K(ret), K(i), K(range));
@@ -2887,7 +2819,6 @@ int ObUnitedSliceRowIterator::switch_context(ObStorageDatumUtils *datum_utils)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(datum_utils));
   } else if (OB_FAIL(merge_iter_->switch_context(datum_utils))) {
-    LOG_WARN("merge iter switch context failed", K(ret));
   } else {
     datum_utils_ = datum_utils;
   }
