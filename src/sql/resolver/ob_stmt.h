@@ -325,7 +325,6 @@ public:
             // package
             || stmt_type == stmt::T_CREATE_PACKAGE
             || stmt_type == stmt::T_CREATE_PACKAGE_BODY
-            || stmt_type == stmt::T_ALTER_PACKAGE
             || stmt_type == stmt::T_DROP_PACKAGE
 
             // trigger

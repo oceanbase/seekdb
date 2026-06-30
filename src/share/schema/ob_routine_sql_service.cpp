@@ -85,35 +85,6 @@ int ObRoutineSqlService::drop_package(const uint64_t database_id,
   return ret;
 }
 
-int ObRoutineSqlService::alter_package(const ObPackageInfo &package_info,
-                                       common::ObISQLClient *sql_client,
-                                       const common::ObString *ddl_stmt_str)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(sql_client)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("sql_client is NULL, ", K(ret));
-  } else if (!package_info.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    SHARE_SCHEMA_LOG(WARN, "package_info is invalid", K(package_info), K(ret));
-  } else if (OB_FAIL(add_package(*sql_client, package_info, true))) {
-    LOG_WARN("add package failed", K(ret));
-  } else {
-    ObSchemaOperation opt;
-    
-    opt.database_id_ = package_info.get_database_id();
-    opt.table_id_ = package_info.get_package_id();
-    opt.op_type_ = OB_DDL_ALTER_PACKAGE;
-    opt.schema_version_ = package_info.get_schema_version();
-    opt.ddl_stmt_str_ = (NULL != ddl_stmt_str) ? *ddl_stmt_str : ObString();
-    opt.table_name_ = package_info.get_package_name();
-    if (OB_FAIL(log_operation(opt, *sql_client))) {
-      LOG_WARN("Failed to log operation", K(ret));
-    }
-  }
-  return ret;
-}
-
 int ObRoutineSqlService::add_package(common::ObISQLClient &sql_client,
                                      const ObPackageInfo &package_info,
                                      bool is_replace,

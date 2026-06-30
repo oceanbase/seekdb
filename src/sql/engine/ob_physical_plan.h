@@ -585,7 +585,7 @@ private:
   TableLocationFixedArray table_locations_; // ordinary table's table location, participate in plan cache plan selection
   TableLocationFixedArray das_table_locations_; // DAS table's table location, used for calculating DAS partition information
 
-  ObString dummy_string_;  // for compatible with 3.x JIT func_ member
+  ObString dummy_string_;  // for compatibility with the removed 3.x native PL entry member
   PhyRowParamMap row_param_map_;
   bool is_update_uniq_index_;
   // Determine whether the base tables involved in this plan contain a global index

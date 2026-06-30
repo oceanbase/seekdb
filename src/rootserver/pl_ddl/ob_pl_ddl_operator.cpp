@@ -309,63 +309,10 @@ int ObPLDDLOperator::create_package(const ObPackageInfo *old_package_info,
   return ret;
 }
 
-int ObPLDDLOperator::alter_package(ObPackageInfo &package_info,
-                                   ObSchemaGetterGuard &schema_guard,
-                                   ObMySQLTransaction &trans,
-                                   ObIArray<ObRoutineInfo> &public_routine_infos,
-                                   ObErrorInfo &error_info,
-                                   const ObString *ddl_stmt_str)
-{
-  int ret = OB_SUCCESS;
-  UNUSEDx(ddl_stmt_str);
-  ObSchemaService *schema_service_impl = schema_service_.get_schema_service();
-  
-  int64_t new_schema_version = OB_INVALID_VERSION;
-  uint64_t package_id = package_info.get_package_id();
-  uint64_t database_id = package_info.get_database_id();
-  const ObString &package_name = package_info.get_package_name();
-  int64_t compatible_mode = package_info.get_compatibility_mode();
-  OV (OB_NOT_NULL(schema_service_impl), OB_ERR_SYS);
-  OV (OB_INVALID_ID != package_id, OB_INVALID_ARGUMENT);
-  if (OB_SUCC(ret)) {
-    if (public_routine_infos.count() > 0) {
-      bool need_create = false;
-      ObArray<const ObRoutineInfo *> routine_infos;
-      OZ (schema_guard.get_routine_infos_in_package(public_routine_infos.at(0).get_package_id(),
-                                                    routine_infos));
-      OX (need_create = (0 == routine_infos.count()));
-      // update routine route sql
-      ARRAY_FOREACH(public_routine_infos, routine_idx) {
-        ObRoutineInfo &routine_info = public_routine_infos.at(routine_idx);
-        if (need_create) {
-          CK (OB_INVALID_ID == routine_info.get_routine_id());
-          OZ (update_routine_info(routine_info,
-                                  routine_info.get_package_id(),
-                                  routine_info.get_owner_id(),
-                                  routine_info.get_database_id()));
-          OZ (schema_service_impl->get_routine_sql_service().create_routine(routine_info, &trans, NULL));
-        } else {
-          OZ (schema_service_.gen_new_schema_version(new_schema_version));
-          OX (routine_info.set_schema_version(new_schema_version));
-          OZ (schema_service_impl->get_routine_sql_service().update_routine(routine_info, &trans));
-        }
-      }
-    }
-    // if alter package, we need push up schema version, because we need update package state
-    OZ (schema_service_.gen_new_schema_version(new_schema_version));
-    OX (package_info.set_schema_version(new_schema_version));
-    OZ (schema_service_impl->get_routine_sql_service().alter_package(package_info, &trans, ddl_stmt_str));
-  }
-
-  OZ (error_info.handle_error_info(trans, &package_info));
-
-  return ret;
-}
-
 int ObPLDDLOperator::drop_package(const ObPackageInfo &package_info,
-                                ObMySQLTransaction &trans,
-                                ObSchemaGetterGuard &schema_guard,
-                                ObErrorInfo &error_info,
+                                  ObMySQLTransaction &trans,
+                                  ObSchemaGetterGuard &schema_guard,
+                                  ObErrorInfo &error_info,
                                 const ObString *ddl_stmt_str)
 {
   int ret = OB_SUCCESS;

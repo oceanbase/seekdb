@@ -3655,23 +3655,6 @@ int ObRootService::create_package_with_res(const obcall::ObCreatePackageArg &arg
   return ret;
 }
 
-int ObRootService::alter_package(const obcall::ObAlterPackageArg &arg)
-{
-  int ret = OB_SUCCESS;
-  OV (inited_, OB_NOT_INIT);
-  OZ (ObPLDDLService::alter_package(arg, NULL, ddl_service_));
-  return ret;
-}
-
-int ObRootService::alter_package_with_res(const obcall::ObAlterPackageArg &arg,
-                                          obcall::ObRoutineDDLRes &res)
-{
-  int ret = OB_SUCCESS;
-  OV (inited_, OB_NOT_INIT);
-  OZ (ObPLDDLService::alter_package(arg, &res, ddl_service_));
-  return ret;
-}
-
 int ObRootService::drop_package(const obcall::ObDropPackageArg &arg)
 {
   int ret = OB_SUCCESS;

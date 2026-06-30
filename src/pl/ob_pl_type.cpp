@@ -297,8 +297,8 @@ uint64_t ObPLDataType::get_user_type_id() const
   }
   return user_type_id;
 }
-//Basic data types in the global symbol table of LLVM
-//Basic data types in SQL are actually stored as ObObj in the database
+// Basic data types used by the legacy native-code path.
+// Basic data types in SQL are actually stored as ObObj in the database.
 
 
 int ObPLDataType::newx(common::ObIAllocator &allocator, const ObPLINS *ns, int64_t &ptr) const

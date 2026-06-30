@@ -50,8 +50,7 @@ public:
                              ObIAllocator &allocator,
                              const ObTriggerInfo &trigger_info,
                              const ObString &db_name,
-                             ObIArray<ObDependencyInfo> &dep_infos,
-                             bool is_alter_compile);
+                             ObIArray<ObDependencyInfo> &dep_infos);
   static int resolve_has_auto_trans(const ParseNode &declare_node,
                                     share::schema::ObTriggerInfo &trigger_info);       
 private:
@@ -93,8 +92,7 @@ private:
   int resolve_alter_clause(const ParseNode &alter_clause,
                            share::schema::ObTriggerInfo &tg_info,
                            const ObString &db_name,
-                           bool &is_set_status,
-                           bool &is_alter_compile);
+                           bool &is_set_status);
   int fill_package_info(share::schema::ObTriggerInfo &trigger_info);
 
   int resolve_base_object(obcall::ObCreateTriggerArg &trigger_arg, bool search_public_schema);
@@ -112,4 +110,3 @@ private:
 } // namespace oceanbase
 
 #endif // OCEANBASE_SQL_RESOLVER_DDL_OB_TRIGGER_RESOLVER_
-

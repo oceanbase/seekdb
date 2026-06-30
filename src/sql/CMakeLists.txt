@@ -1204,7 +1204,6 @@ ob_set_subtarget(ob_sql resolver_ddl
   resolver/ddl/ob_alter_database_stmt.cpp
   resolver/ddl/ob_alter_location_resolver.cpp
   resolver/ddl/ob_alter_outline_resolver.cpp
-  resolver/ddl/ob_alter_package_resolver.cpp
   resolver/ddl/ob_alter_routine_resolver.cpp
   resolver/ddl/ob_alter_sequence_resolver.cpp
   resolver/ddl/ob_alter_table_resolver.cpp

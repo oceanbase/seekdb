@@ -302,9 +302,6 @@ public:
   int create_package(const obcall::ObCreatePackageArg &arg);
   int create_package_with_res(const obcall::ObCreatePackageArg &arg,
                               obcall::ObRoutineDDLRes &res);
-  int alter_package(const obcall::ObAlterPackageArg &arg);
-  int alter_package_with_res(const obcall::ObAlterPackageArg &arg,
-                              obcall::ObRoutineDDLRes &res);
   int drop_package(const obcall::ObDropPackageArg &arg);
   //----End of functions for managing package----
 

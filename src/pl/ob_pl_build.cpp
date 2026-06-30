@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX PL
 
-#include "pl/ob_pl_compile.h"
+#include "pl/ob_pl_build.h"
 #include "src/sql/resolver/ob_resolver_utils.h"
 #include "sql/code_generator/ob_static_engine_expr_cg.h"
 #include "sql/code_generator/ob_expr_generator_impl.h"
@@ -31,14 +31,14 @@ using namespace schema;
 using namespace sql;
 namespace pl {
 
-ObMutex ObPLCompiler::package_dep_info_lock_;
+ObMutex ObPLBuilder::package_dep_info_lock_;
 
 namespace
 {
 // Prepare the routine/package's runtime ObSqlExpressions and finalize them through
-// the SQL static engine -- the LLVM-free subset of the old ObPLCodeGenerator path
-// that the tree-walking interpreter needs (no IR / JIT).
-int pl_prepare_expressions(ObPLCompileUnitAST &ast, ObPLCompileUnit &unit)
+// the SQL static engine, reusing the expression-preparation subset of the old
+// ObPLCodeGenerator path that the tree-walking interpreter still needs.
+int pl_prepare_expressions(ObPLAstUnit &ast, ObPLExecutableUnit &unit)
 {
   int ret = OB_SUCCESS;
   ObArray<ObSqlExpression *> array;
@@ -61,12 +61,12 @@ int pl_prepare_expressions(ObPLCompileUnitAST &ast, ObPLCompileUnit &unit)
 
 int pl_finalize_expressions(sql::ObSQLSessionInfo &session_info,
                             share::schema::ObSchemaGetterGuard &schema_guard,
-                            ObPLCompileUnitAST &ast,
-                            ObPLCompileUnit &unit)
+                            ObPLAstUnit &ast,
+                            ObPLExecutableUnit &unit)
 {
   int ret = OB_SUCCESS;
-  // obj-access attr getters used to be JIT-compiled; the interpreter does not
-  // support obj-access, so leave the attr-getter address at 0 (no LLVM lookup).
+  // Obj-access attr getters used to be prepared by the native-code path; the
+  // interpreter does not support obj-access, so leave the attr-getter address at 0.
   for (int64_t i = 0; OB_SUCC(ret) && i < ast.get_obj_access_exprs().count(); ++i) {
     ObRawExpr *expr = ast.get_obj_access_expr(i);
     if (OB_ISNULL(expr) || !expr->is_obj_access_expr()) {
@@ -102,7 +102,7 @@ int pl_finalize_expressions(sql::ObSQLSessionInfo &session_info,
       } else if (OB_FAIL(expr_generator.generate(*raw_expr, *expression))) {
         LOG_WARN("generate post_expr error", K(ret), KPC(raw_expr));
       } else {
-        OZ (ObPLCompiler::link_sql_expr_rt(*raw_expr, *expression));
+        OZ (ObPLBuilder::link_sql_expr_rt(*raw_expr, *expression));
       }
     }
     if (OB_SUCC(ret)) {
@@ -115,7 +115,7 @@ int pl_finalize_expressions(sql::ObSQLSessionInfo &session_info,
 
 }
 
-int ObPLCompiler::check_dep_schema(ObSchemaGetterGuard &schema_guard,
+int ObPLBuilder::check_dep_schema(ObSchemaGetterGuard &schema_guard,
                                    const DependenyTableStore &dep_schema_objs)
 {
   int ret = OB_SUCCESS;
@@ -156,7 +156,7 @@ int ObPLCompiler::check_dep_schema(ObSchemaGetterGuard &schema_guard,
 }
 
 
-int ObPLCompiler::init_anonymous_ast(
+int ObPLBuilder::init_anonymous_ast(
   ObPLFunctionAST &func_ast,
   ObIAllocator &allocator,
   ObSQLSessionInfo &session_info,
@@ -267,7 +267,7 @@ int ObPLCompiler::init_anonymous_ast(
 }
 
 //for anonymous
-int ObPLCompiler::compile(
+int ObPLBuilder::compile(
   const ObStmtNodeTree *block,
   const uint64_t stmt_id,
   ObPLFunction &func,
@@ -338,8 +338,8 @@ int ObPLCompiler::compile(
     //Step 3：Code Generator
     if (OB_SUCC(ret)) {
       {
-        lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(OB_PL_CODE_GEN)));
-        // Interpreter path: prepare expressions + copy metadata + retain AST, no LLVM codegen.
+        lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(OB_PL_BUILD)));
+        // Interpreter path: prepare expressions + copy metadata + retain AST, with no native code generation.
         if (OB_FAIL(ObPL::check_session_alive(session_info_))) {
           LOG_WARN("query or session is killed", K(ret));
         } else {
@@ -403,18 +403,18 @@ int ObPLCompiler::compile(
   OX (func.get_stat_for_update().compile_time_ = compile_end - compile_start);
   OX (session_info_.add_plsql_compile_time(compile_end - compile_start));
   FLT_SET_TAG(pl_compile_cg_time, compile_end - resolve_end);
-  LOG_INFO(">>>>>>>>Final Compile Anonymous Block Time: ", K(ret), K(stmt_id), K(compile_end - compile_start));
+  LOG_INFO(">>>>>>>>Final Build Anonymous Block Time: ", K(ret), K(stmt_id), K(compile_end - compile_start));
   return ret;
 }
 
-int ObPLCompiler::link_sql_expr_rt(sql::ObRawExpr &raw_expr, sql::ObSqlExpression &sql_expr)
+int ObPLBuilder::link_sql_expr_rt(sql::ObRawExpr &raw_expr, sql::ObSqlExpression &sql_expr)
 {
-  // ObPLCompiler is a friend of ObRawExpr, so it may read the protected rt_expr_.
+  // ObPLBuilder is a friend of ObRawExpr, so it may read the protected rt_expr_.
   sql_expr.set_expr(raw_expr.rt_expr_);
   return OB_SUCCESS;
 }
 
-int ObPLCompiler::set_profiler_unit_info_recursive(const ObPLCompileUnit &unit)
+int ObPLBuilder::set_profiler_unit_info_recursive(const ObPLExecutableUnit &unit)
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < unit.get_routine_table().count(); ++i) {
@@ -427,7 +427,7 @@ int ObPLCompiler::set_profiler_unit_info_recursive(const ObPLCompileUnit &unit)
 }
 
 //for function/ procedure
-int ObPLCompiler::compile(const uint64_t id, ObPLFunction &func)
+int ObPLBuilder::compile(const uint64_t id, ObPLFunction &func)
 {
   int ret = OB_SUCCESS;
 
@@ -452,13 +452,13 @@ int ObPLCompiler::compile(const uint64_t id, ObPLFunction &func)
   return ret;
 }
 
-int ObPLCompiler::compile(
+int ObPLBuilder::compile(
   const share::schema::ObRoutineInfo &routine, ObPLFunctionAST &func_ast, ObPLFunction &func)
 {
   int ret = OB_SUCCESS;
 
   FLTSpanGuard(pl_compile);
-  ObPLCompilerEnvGuard env_guard(routine, session_info_, schema_guard_, func_ast, ret);
+  ObPLBuilderEnvGuard env_guard(routine, session_info_, schema_guard_, func_ast, ret);
   const share::schema::ObDatabaseSchema *db_schema = NULL;
 
   int64_t init_start = ObTimeUtility::current_time();
@@ -575,11 +575,11 @@ int ObPLCompiler::compile(
   //Step 4: Code Generator
   if (OB_SUCC(ret)) {
     {
-      // Interpreter path: no LLVM codegen / JIT and no persistent DLL. Prepare the
+      // Interpreter path: no native code generation and no persistent DLL. Prepare the
       // routine's ObSqlExpressions + copy AST metadata onto the func; the tree-walking
       // interpreter executes the retained AST (func.set_ast happens in the caller),
       // and func.get_action() stays 0 (unused, ObPLExecState::execute() interprets).
-      lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(OB_PL_CODE_GEN)));
+      lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(OB_PL_BUILD)));
       OZ (pl_prepare_expressions(func_ast, func));
       OZ (pl_finalize_expressions(session_info_, schema_guard_, func_ast, func));
       OZ (func.get_enum_set_ctx().assgin(func_ast.get_enum_set_ctx()));
@@ -606,7 +606,7 @@ int ObPLCompiler::compile(
   LOG_INFO(">>>>>>>>CG Time: ", K(routine.get_routine_id()), K(routine.get_routine_name()), K(cg_end - resolve_end));
   FLT_SET_TAG(pl_compile_cg_time, cg_end - resolve_end);
   int64_t final_end = ObTimeUtility::current_time();
-  LOG_INFO(">>>>>>>>Final Compile Routine Time: ", K(routine.get_routine_id()), K(routine.get_routine_name()), K(final_end - init_start));
+  LOG_INFO(">>>>>>>>Final Build Routine Time: ", K(routine.get_routine_id()), K(routine.get_routine_name()), K(final_end - init_start));
   
   OX (func.get_stat_for_update().compile_time_ = final_end - init_start);
   OX (session_info_.add_plsql_compile_time(final_end - init_start));
@@ -632,7 +632,7 @@ int ObPLCompiler::compile(
   return ret;
 }
 
-int ObPLCompiler::update_schema_object_dep_info(ObIArray<ObSchemaObjVersion> &dp_tbl,
+int ObPLBuilder::update_schema_object_dep_info(ObIArray<ObSchemaObjVersion> &dp_tbl,
                                                 uint64_t owner_id,
                                                 uint64_t dep_obj_id, 
                                                 uint64_t schema_version,
@@ -697,7 +697,7 @@ int ObPLCompiler::update_schema_object_dep_info(ObIArray<ObSchemaObjVersion> &dp
   return ret;
 }
 
-int ObPLCompiler::check_package_body_legal(const ObPLBlockNS *parent_ns,
+int ObPLBuilder::check_package_body_legal(const ObPLBlockNS *parent_ns,
                                            const ObPLPackageAST &package_ast)
 {
   int ret = OB_SUCCESS;
@@ -747,7 +747,7 @@ int ObPLCompiler::check_package_body_legal(const ObPLBlockNS *parent_ns,
   return ret;
 }
 
-int ObPLCompiler::analyze_package(const ObString &source,
+int ObPLBuilder::analyze_package(const ObString &source,
                                   const ObPLBlockNS *parent_ns,
                                   ObPLPackageAST &package_ast,
                                   bool is_for_trigger)
@@ -803,7 +803,7 @@ int ObPLCompiler::analyze_package(const ObString &source,
   return ret;
 }
 
-int ObPLCompiler::generate_package(const ObString &exec_env, ObPLPackageAST &package_ast, ObPLPackage &package)
+int ObPLBuilder::generate_package(const ObString &exec_env, ObPLPackageAST &package_ast, ObPLPackage &package)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(session_info_.get_pl_engine()));
@@ -821,8 +821,8 @@ int ObPLCompiler::generate_package(const ObString &exec_env, ObPLPackageAST &pac
       OZ (generate_package_types(package_ast.get_user_type_table(), package));
       {
         // latch_id = (bucket_id % bucket_cnt_) / 8, so it is needed to multiply 8 to avoid consecutive ids being mapped to the same latch
-        ObBucketHashWLockGuard compile_id_guard(GCTX.pl_engine_->get_jit_lock().first, package.get_id() * 8);
-        ObBucketHashWLockGuard compile_num_guard(GCTX.pl_engine_->get_jit_lock().second, (package.get_id() % GCONF._ob_pl_compile_max_concurrency) * 8);
+        ObBucketHashWLockGuard build_id_guard(GCTX.pl_engine_->get_build_lock().first, package.get_id() * 8);
+        ObBucketHashWLockGuard build_concurrency_guard(GCTX.pl_engine_->get_build_lock().second, (package.get_id() % GCONF._ob_pl_compile_max_concurrency) * 8);
 
         OZ (ObPL::check_session_alive(session_info_));
         OZ (generate_package_routines(exec_env, package_ast.get_routine_table(), package));
@@ -833,7 +833,7 @@ int ObPLCompiler::generate_package(const ObString &exec_env, ObPLPackageAST &pac
   return ret;
 }
 
-int ObPLCompiler::compile_package(const ObPackageInfo &package_info,
+int ObPLBuilder::build_package(const ObPackageInfo &package_info,
                                   const ObPLBlockNS *parent_ns,
                                   ObPLPackageAST &package_ast,
                                   ObPLPackage &package)
@@ -846,7 +846,7 @@ int ObPLCompiler::compile_package(const ObPackageInfo &package_info,
 
   int64_t compile_start = ObTimeUtility::current_time();
 
-  ObPLCompilerEnvGuard guard(package_info, session_info_, schema_guard_, package_ast, ret, parent_ns);
+  ObPLBuilderEnvGuard guard(package_info, session_info_, schema_guard_, package_ast, ret, parent_ns);
   ObPLASHGuard plash_guard(ObPLASHGuard::ObPLASHStatus::IS_PLSQL_COMPILATION);
   session_info_.set_for_trigger_package(package_info.is_for_trigger());
   if (OB_NOT_NULL(parent_ns)) {
@@ -887,8 +887,8 @@ int ObPLCompiler::compile_package(const ObPackageInfo &package_info,
 
   if (OB_SUCC(ret)) {
     {
-      lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(pl::OB_PL_CODE_GEN)));
-      // Interpreter path: prepare the package's expressions only, no LLVM codegen.
+      lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(pl::OB_PL_BUILD)));
+      // Interpreter path: prepare the package's expressions only, with no native code generation.
       OZ (ObPL::check_session_alive(session_info_));
       OZ (pl_prepare_expressions(package_ast, package));
       OZ (pl_finalize_expressions(session_info_, schema_guard_, package_ast, package));
@@ -976,11 +976,11 @@ int ObPLCompiler::compile_package(const ObPackageInfo &package_info,
     OX (package.get_stat_for_update().type_ = ObPLCacheObjectType::PACKAGE_TYPE);
   }
   FLT_SET_TAG(pl_compile_cg_time, compile_end - resolve_end);
-  LOG_INFO(">>>>>>>>Final Compile Package Time: ", K(package.get_id()), K(package.get_name()), K(compile_end - compile_start));
+  LOG_INFO(">>>>>>>>Final Build Package Time: ", K(package.get_id()), K(package.get_name()), K(compile_end - compile_start));
   return ret;
 }
 
-int ObPLCompiler::init_function(const share::schema::ObRoutineInfo *routine, ObPLFunction &func)
+int ObPLBuilder::init_function(const share::schema::ObRoutineInfo *routine, ObPLFunction &func)
 {
   int ret = OB_SUCCESS;
   ObString copy_exec_env;
@@ -1054,7 +1054,7 @@ int ObPLCompiler::init_function(const share::schema::ObRoutineInfo *routine, ObP
   return ret;
 }
 
-int ObPLCompiler::init_function(share::schema::ObSchemaGetterGuard &schema_guard,
+int ObPLBuilder::init_function(share::schema::ObSchemaGetterGuard &schema_guard,
                                 const sql::ObExecEnv &exec_env,
                                 const ObPLRoutineInfo &routine_info,
                                 ObPLFunction &routine)
@@ -1103,7 +1103,7 @@ int ObPLCompiler::init_function(share::schema::ObSchemaGetterGuard &schema_guard
   return ret;
 }
 
-int ObPLCompiler::generate_package_conditions(const ObPLConditionTable &ast_condition_table,
+int ObPLBuilder::generate_package_conditions(const ObPLConditionTable &ast_condition_table,
                                               ObPLPackage &package)
 {
   int ret = OB_SUCCESS;
@@ -1131,7 +1131,7 @@ int ObPLCompiler::generate_package_conditions(const ObPLConditionTable &ast_cond
   return ret;
 }
 
-int ObPLCompiler::generate_package_cursors(
+int ObPLBuilder::generate_package_cursors(
   const ObPLPackageAST &package_ast, const ObPLCursorTable &ast_cursor_table, ObPLPackage &package)
 {
   int ret = OB_SUCCESS;
@@ -1191,7 +1191,7 @@ int ObPLCompiler::generate_package_cursors(
   return ret;
 }
 
-int ObPLCompiler::generate_package_vars(
+int ObPLBuilder::generate_package_vars(
   const ObPLPackageAST &package_ast, const ObPLSymbolTable &ast_var_table, ObPLPackage &package)
 {
   int ret = OB_SUCCESS;
@@ -1222,8 +1222,8 @@ int ObPLCompiler::generate_package_vars(
   return ret;
 }
 
-int ObPLCompiler::compile_types(const ObIArray<const ObUserDefinedType*> &types,
-                                ObPLCompileUnit &unit)
+int ObPLBuilder::compile_types(const ObIArray<const ObUserDefinedType*> &types,
+                                ObPLExecutableUnit &unit)
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < types.count(); ++i) {
@@ -1293,25 +1293,25 @@ int ObPLCompiler::compile_types(const ObIArray<const ObUserDefinedType*> &types,
   return ret;
 }
 
-int ObPLCompiler::compile_type_table(const ObPLUserTypeTable &ast_type_table, ObPLCompileUnit &unit)
+int ObPLBuilder::compile_type_table(const ObPLUserTypeTable &ast_type_table, ObPLExecutableUnit &unit)
 {
   int ret = OB_SUCCESS;
-  OZ (ObPLCompiler::compile_types(ast_type_table.get_types(), unit));
-  OZ (ObPLCompiler::compile_types(ast_type_table.get_external_types(), unit));
+  OZ (ObPLBuilder::compile_types(ast_type_table.get_types(), unit));
+  OZ (ObPLBuilder::compile_types(ast_type_table.get_external_types(), unit));
   return ret;
 }
 
-int ObPLCompiler::generate_package_types(const ObPLUserTypeTable &ast_type_table,
-                                         ObPLCompileUnit &compile_unit)
+int ObPLBuilder::generate_package_types(const ObPLUserTypeTable &ast_type_table,
+                                         ObPLExecutableUnit &compile_unit)
 {
-  return ObPLCompiler::compile_types(ast_type_table.get_types(), compile_unit);
+  return ObPLBuilder::compile_types(ast_type_table.get_types(), compile_unit);
 }
 
-int ObPLCompiler::compile_subprogram_table(common::ObIAllocator &allocator,
+int ObPLBuilder::compile_subprogram_table(common::ObIAllocator &allocator,
                                            sql::ObSQLSessionInfo &session_info,
                                            const sql::ObExecEnv &exec_env,
                                            ObPLRoutineTable &routine_table,
-                                           ObPLCompileUnit &compile_unit,
+                                           ObPLExecutableUnit &compile_unit,
                                            ObSchemaGetterGuard &schema_guard)
 {
   int ret = OB_SUCCESS;
@@ -1346,8 +1346,8 @@ int ObPLCompiler::compile_subprogram_table(common::ObIAllocator &allocator,
         new (routine) ObPLFunction(compile_unit.get_mem_context());
         OZ (init_function(schema_guard, exec_env, *routine_info, *routine));
         if (OB_SUCC(ret)) {
-          lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(pl::OB_PL_CODE_GEN)));
-          // Interpreter path: prepare expressions + copy metadata + retain AST, no LLVM codegen.
+          lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr(GET_PL_MOD_STRING(pl::OB_PL_BUILD)));
+          // Interpreter path: prepare expressions + copy metadata + retain AST, with no native code generation.
           OZ (pl_prepare_expressions(*routine_ast, *routine));
           OZ (pl_finalize_expressions(session_info, schema_guard, *routine_ast, *routine));
           OZ (routine->get_enum_set_ctx().assgin(routine_ast->get_enum_set_ctx()));
@@ -1375,14 +1375,14 @@ int ObPLCompiler::compile_subprogram_table(common::ObIAllocator &allocator,
   return ret;
 }
 
-int ObPLCompiler::generate_package_routines(
+int ObPLBuilder::generate_package_routines(
   const ObString &exec_env, ObPLRoutineTable &routine_table, ObPLPackage &package)
 {
   int ret = OB_SUCCESS;
   sql::ObExecEnv env;
   if (OB_FAIL(env.init(exec_env))) {
     LOG_WARN("failed to init exec env", K(exec_env), K(ret));
-  } else if (OB_FAIL(ObPLCompiler::compile_subprogram_table(allocator_,
+  } else if (OB_FAIL(ObPLBuilder::compile_subprogram_table(allocator_,
       session_info_,
       env,
       routine_table,
@@ -1404,14 +1404,14 @@ int ObPLCompiler::generate_package_routines(
             package_id, package.get_routine_table().at(i)->get_proc_type());
 
         OZ (SMART_CALL(
-              ObPLCompiler::set_profiler_unit_info_recursive(*package.get_routine_table().at(i))));
+              ObPLBuilder::set_profiler_unit_info_recursive(*package.get_routine_table().at(i))));
       }
     }
   }
   return ret;
 }
 
-int ObPLCompiler::format_object_name(ObSchemaGetterGuard &schema_guard,
+int ObPLBuilder::format_object_name(ObSchemaGetterGuard &schema_guard,
                                      const uint64_t db_id,
                                      const uint64_t package_id,
                                      ObString &database_name,
@@ -1437,10 +1437,10 @@ int ObPLCompiler::format_object_name(ObSchemaGetterGuard &schema_guard,
   return ret;
 }
 
-ObPLCompilerEnvGuard::ObPLCompilerEnvGuard(const ObPackageInfo &info,
+ObPLBuilderEnvGuard::ObPLBuilderEnvGuard(const ObPackageInfo &info,
                                            ObSQLSessionInfo &session_info,
                                            share::schema::ObSchemaGetterGuard &schema_guard,
-                                           ObPLCompileUnitAST &compile_unit,
+                                           ObPLAstUnit &compile_unit,
                                            int &ret,
                                            const ObPLBlockNS *parent_ns)
   : ret_(ret), session_info_(session_info)
@@ -1448,10 +1448,10 @@ ObPLCompilerEnvGuard::ObPLCompilerEnvGuard(const ObPackageInfo &info,
   init(info, session_info, schema_guard, compile_unit, ret, parent_ns);
 }
 
-ObPLCompilerEnvGuard::ObPLCompilerEnvGuard(const ObRoutineInfo &info,
+ObPLBuilderEnvGuard::ObPLBuilderEnvGuard(const ObRoutineInfo &info,
                                            ObSQLSessionInfo &session_info,
                                            share::schema::ObSchemaGetterGuard &schema_guard,
-                                           ObPLCompileUnitAST &compile_unit,
+                                           ObPLAstUnit &compile_unit,
                                            int &ret)
   : ret_(ret), session_info_(session_info), allocator_()
 {
@@ -1459,10 +1459,10 @@ ObPLCompilerEnvGuard::ObPLCompilerEnvGuard(const ObRoutineInfo &info,
 }
 
 template<class Info>
-void ObPLCompilerEnvGuard::init(const Info &info,
+void ObPLBuilderEnvGuard::init(const Info &info,
                                 ObSQLSessionInfo &session_info,
                                 share::schema::ObSchemaGetterGuard &schema_guard,
-                                ObPLCompileUnitAST &compile_unit,
+                                ObPLAstUnit &compile_unit,
                                 int &ret,
                                 const ObPLBlockNS *parent_ns)
 {
@@ -1514,7 +1514,7 @@ void ObPLCompilerEnvGuard::init(const Info &info,
   }
 }
 
-ObPLCompilerEnvGuard::~ObPLCompilerEnvGuard()
+ObPLBuilderEnvGuard::~ObPLBuilderEnvGuard()
 {
   int ret = OB_SUCCESS;
   if (need_reset_exec_env_) {

@@ -147,7 +147,7 @@ static bool is_internal_err(int error_code)
 // Does handler condition `action` match raised condition `exception`? Returns the
 // match precedence (the matched ObPLConditionType; INVALID_TYPE == no match).
 // Local mirror of ObPLEH::match_action_value (which is private). `exception` carries
-// the JIT-converted numeric code (MySQL errno in MySQL mode) for the ERROR_CODE
+// the legacy codegen path's numeric code (MySQL errno in MySQL mode) for the ERROR_CODE
 // compare; `ob_err` is the raw OB-internal code, used only to exclude OB-internal
 // errors from SQLEXCEPTION/OTHERS (handler conditions never name internal codes, and
 // some convert to an unmapped -1, so checking the raw code here is strictly correct).
@@ -188,7 +188,7 @@ static int64_t match_condition(const ObPLConditionValue &action, const ObPLCondi
 // Look for a handler in `eh` matching the raised error `err`. The most specific
 // match wins (ObPLConditionType is ordered high-to-low priority; lower enum value
 // == more specific, so we keep the lowest precedence). Reuses ObPLEH's matcher so
-// it agrees with the JIT. If found, runs the handler body and reports whether it
+// it agrees with the legacy codegen path. If found, runs the handler body and reports whether it
 // is an EXIT handler (leave the declaring block) or CONTINUE (resume after).
 // Match the raised condition `exception` against `eh`'s handlers (most-specific wins;
 // innermost-scope on equal precedence) and run the chosen handler body. `mysql_errno`
@@ -226,7 +226,7 @@ static int run_matched_handler(ObPLExecCtx *ctx, const ObPLDeclareHandlerStmt *e
   if (OB_NOT_NULL(chosen)) {
     handled = true;
     is_exit = chosen->is_exit();
-    // Mirror the JIT handler bracket: on entry, snapshot the caught condition's warning
+    // Mirror the legacy handler bracket: on entry, snapshot the caught condition's warning
     // buffer onto the diagnostic stack (spi_get_pl_exception_code) and make its errno the
     // SQLCODE; on normal exit, restore+pop. A native error carries no sqlstate on the
     // buffer, so stamp the caught sqlstate (e.g. 23000) now -- a bare RESIGNAL recovers it
@@ -265,7 +265,7 @@ static int run_matched_handler(ObPLExecCtx *ctx, const ObPLDeclareHandlerStmt *e
         ret = ObSPIService::spi_set_pl_exception_code(ctx, saved_code, true /*pop warning buf*/, level);
       } else {
         // Body re-raised (SIGNAL / RESIGNAL / fresh error): propagate with its own SQLCODE
-        // (the JIT emits restore+pop only on normal fall-through, not the re-raise path).
+        // (the legacy path emits restore+pop only on normal fall-through, not the re-raise path).
         ret = hret;
       }
     }
@@ -293,7 +293,7 @@ static int try_handle(ObPLExecCtx *ctx, const ObPLDeclareHandlerStmt *eh, int er
   is_exit = false;
   if (OB_NOT_NULL(eh)) {
     ObPLConditionValue exception;
-    // Build the raised condition as the JIT does: a numeric handler ("handler for NNNN")
+    // Build the raised condition as the legacy path does: a numeric handler ("handler for NNNN")
     // matches the MySQL error number, so convert err -> ob_mysql_errno(err); when there is
     // no MySQL mapping (-1) match by SQLSTATE. sql_state stays the OB code's sqlstate (the
     // SQLEXCEPTION/SQLWARNING/NOT FOUND class match).
@@ -311,7 +311,7 @@ static int try_handle(ObPLExecCtx *ctx, const ObPLDeclareHandlerStmt *eh, int er
 
 // A raised *warning* (a SIGNAL of a 01xxx/02xxx sqlstate, or a statement that produced a
 // warning) also fires a matching CONTINUE/EXIT handler -- the interpreter is otherwise
-// error-driven and would miss it (the JIT checks the diagnostic area for warnings after
+// error-driven and would miss it (the legacy path checks the diagnostic area for warnings after
 // every statement). Build the condition from the warning's errno + sqlstate and run the
 // same search; is_exit is reported so the caller can unwind.
 static int try_handle_warning(ObPLExecCtx *ctx, const ObPLDeclareHandlerStmt *eh,
@@ -378,7 +378,7 @@ static int exec_block(ObPLExecCtx *ctx, const ObPLStmtBlock *block, CtrlState &c
         // The statement succeeded but may have raised a *warning* (SIGNAL '01000', a
         // truncation, a SELECT..INTO that found nothing). MySQL fires a matching
         // SQLWARNING / NOT FOUND / specific CONTINUE/EXIT handler for it; the interpreter is
-        // otherwise error-driven and the JIT checks the diagnostic area after every statement
+        // otherwise error-driven and the legacy path checks the diagnostic area after every statement
         // -- mirror that here. Only a non-block statement triggers the search: a nested block
         // already ran this check for whichever of its own statements actually raised, so
         // gating on PL_BLOCK fires the search exactly once, at the innermost raising statement.
@@ -581,7 +581,7 @@ static int exec_case(ObPLExecCtx *ctx, const ObPLCaseStmt *s, CtrlState &ctrl)
 // KILL QUERY (what the mysql client sends on Ctrl+C) and query / transaction
 // timeout only set flags on the session; a running loop must poll them or it can
 // never be interrupted. Poll on the first iteration and then every 10000th — the
-// cadence the JIT codegen used (generate_early_exit, EARLY_EXIT_CHECK_CNT) — so
+// cadence the legacy codegen path used (generate_early_exit, EARLY_EXIT_CHECK_CNT) — so
 // the per-iteration cost stays negligible.
 static const int64_t EARLY_EXIT_CHECK_CNT = 10000;
 
@@ -764,7 +764,7 @@ static int exec_sql(ObPLExecCtx *ctx, const ObPLSqlStmt *s)
 //   - copy-back: after the call, spi_convert_objparam(src=storage[i], out_idx_)
 //     converts to the target type and deep-copies onto the caller's exec allocator
 //     (storage[i] points into the callee mem_context, which execute_proc has by
-//     then destroyed -- so the deep copy must happen here, exactly as the JIT does).
+//     then destroyed -- so the deep copy must happen here, exactly as the legacy path does).
 // IN actuals (and out-to-external targets, which this path does not yet copy back)
 // keep the evaluate-into-temp behavior.
 //
@@ -1095,7 +1095,7 @@ static int exec_execute(ObPLExecCtx *ctx, const ObPLExecuteStmt *s)
 
 // PRAGMA INTERFACE(C, <entry>) routine bodies lower to a single PL_INTERFACE stmt.
 // Dispatch to the native C implementation registered under the entry name, mirroring
-// the JIT path (ObPLCodeGenerateVisitor::visit(ObPLInterfaceStmt) -> spi_interface_impl)
+// the legacy codegen path (ObPLCodeGenerateVisitor::visit(ObPLInterfaceStmt) -> spi_interface_impl)
 // and ObPL::interface_execute. The native impl reads its arguments from ctx->params_.
 static int exec_interface(ObPLExecCtx *ctx, const ObPLInterfaceStmt *s)
 {

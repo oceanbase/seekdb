@@ -26,10 +26,10 @@ namespace pl
 class ObPLExecState; // defined in ob_pl.h
 
 // Tree-walking interpreter for PL routines. On this branch it is THE dispatch
-// layer for PL: ObPLExecState::execute() calls it unconditionally (no JIT, no
-// flag). It walks the resolved ObPLStmt tree directly and drives the routine
-// through the same ObSPI (spi_*) runtime the generated code used, so the front
-// end (parser/resolver) and the runtime are shared with the former JIT path.
+// layer for PL: ObPLExecState::execute() calls it unconditionally. It walks the
+// resolved ObPLStmt tree directly and drives the routine through the same ObSPI
+// (spi_*) runtime the generated code used, so the front end (parser/resolver)
+// and the runtime are shared with the legacy codegen path.
 //
 // WIP: execute() currently resolves the routine, walks + logs the ObPLStmt tree,
 // and returns OB_NOT_SUPPORTED. Statement dispatch (real execution) is being

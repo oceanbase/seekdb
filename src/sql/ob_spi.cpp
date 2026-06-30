@@ -2002,7 +2002,7 @@ int ObSPIService::spi_prepare(common::ObIAllocator &allocator,
                               bool is_cursor,
                               pl::ObPLBlockNS *secondary_namespace,
                               ObSPIPrepareResult &prepare_result,
-                              pl::ObPLCompileUnitAST &func)
+                              pl::ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   FLTSpanGuard(pl_spi_prepare);
@@ -2023,7 +2023,7 @@ int ObSPIService::spi_prepare(common::ObIAllocator &allocator,
 }
 
 ObPLPrepareEnvGuard::ObPLPrepareEnvGuard(ObSQLSessionInfo &session_info,
-                                         pl::ObPLCompileUnitAST &func,
+                                         pl::ObPLAstUnit &func,
                                          int &ret)
   : ret_(ret), session_info_(session_info)
 {
@@ -5631,7 +5631,7 @@ int ObSPIService::get_package_var_info_by_expr(const ObSqlExpression *expr,
 }
 
 /***************************************************************************************/
-/* Note: The following code is related to memory arrangement. Any modification here must be done with a thorough understanding of the memory arrangement and lifecycle of various data types on the LLVM side and the SQL side.
+/* Note: The following code is related to memory arrangement. Any modification here must be done with a thorough understanding of the memory arrangement and lifecycle of various data types on the PL runtime side and the SQL side.
  * Implicit assignment (Into/Bulk Collect Into) on the SQL side is relatively simpler than explicit assignment (Assign) because the source data to be stored must be basic data types obtained from query statements,
  * there is no situation where the source is an ADT.
  * For any issues, please contact Ruyan ryan.ly

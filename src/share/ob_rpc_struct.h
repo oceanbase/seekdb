@@ -4689,37 +4689,6 @@ public:
   common::ObSArray<oceanbase::share::schema::ObDependencyInfo> dependency_infos_;
 };
 
-struct ObAlterPackageArg : public ObDDLArg
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObAlterPackageArg()
-    : db_name_(),
-      package_name_(),
-      package_type_(share::schema::INVALID_PACKAGE_TYPE),
-      compatible_mode_(-1),
-      public_routine_infos_(),
-      error_info_(),
-      exec_env_(),
-      dependency_infos_()
-      {}
-  virtual ~ObAlterPackageArg() {}
-  bool is_valid() const;
-  TO_STRING_KV(K_(db_name), K_(package_name), K_(package_type),
-               K_(compatible_mode), K_(public_routine_infos), K_(error_info),
-               K_(exec_env), K_(dependency_infos));
-
-  
-  common::ObString db_name_;
-  common::ObString package_name_;
-  share::schema::ObPackageType package_type_;
-  int64_t compatible_mode_;
-  common::ObSArray<share::schema::ObRoutineInfo> public_routine_infos_;
-  share::schema::ObErrorInfo error_info_;
-  common::ObString exec_env_;
-  common::ObSArray<oceanbase::share::schema::ObDependencyInfo> dependency_infos_;
-};
-
 struct ObDropPackageArg : public ObDDLArg
 {
   OB_UNIS_VERSION(1);
@@ -4849,7 +4818,7 @@ public:
   ObAlterTriggerArg()
       :
       ObDDLArg(), trigger_database_(), trigger_info_(), trigger_infos_(),
-      is_set_status_(false),is_alter_compile_(false)
+      is_set_status_(false)
   {}
   virtual ~ObAlterTriggerArg()
   {}
@@ -4857,15 +4826,13 @@ public:
   TO_STRING_KV(K(trigger_database_),
       K(trigger_info_),
       K(trigger_infos_),
-      K(is_set_status_),
-      K(is_alter_compile_))
+      K(is_set_status_))
   ;
 public:
   common::ObString trigger_database_;           // deprecated
   share::schema::ObTriggerInfo trigger_info_;   // deprecated
   common::ObSArray<share::schema::ObTriggerInfo> trigger_infos_;
   bool is_set_status_;
-  bool is_alter_compile_;
 };
 
 

@@ -495,8 +495,8 @@ public:
     common::ObIAllocator &allocator,
     const char* src, const int64_t src_len, int64_t &src_pos, char *&dst) const;
   // ------ new session serialize/deserialize interface -------
-  //The type stored in LLVM
-  //type stored in sql
+  // Type stored by the legacy native-code path.
+  // Type stored in SQL.
 
 
   virtual int newx(common::ObIAllocator &allocator, const ObPLINS *ns, int64_t &ptr) const;
@@ -732,7 +732,7 @@ public:
                  const ObPLDataType &var_type,
                  int64_t value = 0
                  );
-  //Do not implement the destructor to avoid LLVM mapping trouble
+  // Do not implement the destructor to preserve the expected memory layout.
 
   int deep_copy(common::ObIAllocator &allocator, sql::ObRawExprFactory &expr_factory, const ObObjAccessIdx &src);
   void reset();

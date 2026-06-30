@@ -26,8 +26,8 @@
 #include "pl/ob_pl_package.h"
 #include "sql/engine/expr/ob_expr_column_conv.h"
 #include "src/pl/pl_cache/ob_pl_cache_mgr.h"
-#include "src/pl/ob_pl_compile.h"
-#include "src/pl/ob_pl_compile_utils.h"
+#include "src/pl/ob_pl_build.h"
+#include "src/pl/ob_pl_build_utils.h"
 
 namespace oceanbase
 {
@@ -67,10 +67,10 @@ int ObCreateRoutineExecutor::execute(ObExecContext &ctx, ObCreateRoutineStmt &st
     OZ (ObSPIService::force_refresh_schema(res.store_routine_schema_version_));
     OZ (ctx.get_task_exec_ctx().schema_service_->
       get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
-    OZ (pl::ObPLCompilerUtils::compile(ctx,
+    OZ (pl::ObPLBuildUtils::build(ctx,
                                        database_id,
                                        routine_name,
-                                       pl::ObPLCompilerUtils::get_compile_type(type),
+                                       pl::ObPLBuildUtils::get_pl_unit_type(type),
                                        res.store_routine_schema_version_));
   }
   if(crt_routine_arg.with_if_not_exist_ && ret == OB_ERR_SP_ALREADY_EXISTS) {
@@ -355,10 +355,10 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
       OZ (ObSPIService::force_refresh_schema(res.store_routine_schema_version_));
       OZ (ctx.get_task_exec_ctx().schema_service_->
         get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
-      OZ (pl::ObPLCompilerUtils::compile(ctx,
+      OZ (pl::ObPLBuildUtils::build(ctx,
                                          database_id,
                                          routine_name,
-                                         pl::ObPLCompilerUtils::get_compile_type(type),
+                                         pl::ObPLBuildUtils::get_pl_unit_type(type),
                                          res.store_routine_schema_version_));
     }
   } else {
@@ -396,10 +396,10 @@ int ObAlterRoutineExecutor::execute(ObExecContext &ctx, ObAlterRoutineStmt &stmt
       CK (OB_NOT_NULL(ctx.get_sql_ctx()->schema_guard_));
       OZ (ctx.get_task_exec_ctx().schema_service_->
         get_tenant_schema_guard(*ctx.get_sql_ctx()->schema_guard_));
-      OZ (pl::ObPLCompilerUtils::compile(ctx,
+      OZ (pl::ObPLBuildUtils::build(ctx,
                                          database_id,
                                          routine_name,
-                                         pl::ObPLCompilerUtils::get_compile_type(type),
+                                         pl::ObPLBuildUtils::get_pl_unit_type(type),
                                          routine_info->get_schema_version()));
     }
   }

@@ -1845,7 +1845,7 @@ int ObPLBlockNS::find_sub_attr_by_name(const ObUserDefinedType &user_type,
                                        const ObObjAccessIdent &access_ident,
                                        ObSQLSessionInfo &session_info,
                                        ObRawExprFactory &expr_factory,
-                                       ObPLCompileUnitAST &func,
+                                       ObPLAstUnit &func,
                                        ObObjAccessIdx &access_idx,
                                        ObPLDataType &data_type,
                                        uint64_t &package_id,
@@ -3465,7 +3465,7 @@ int ObPLFetchStmt::replace_questionmark_variable_type(ObPLFunctionAST &func,
   return ret;
 } 
 
-ObPLCompileUnitAST::~ObPLCompileUnitAST()
+ObPLAstUnit::~ObPLAstUnit()
 {
   if (NULL != body_) {
     body_->~ObPLStmtBlock();
@@ -3477,7 +3477,7 @@ ObPLCompileUnitAST::~ObPLCompileUnitAST()
   }
 }
 
-void ObPLCompileUnitAST::process_default_compile_flag()
+void ObPLAstUnit::process_default_compile_flag()
 {
   if (compile_flag_.has_flag()) {
     common::ObIArray<ObPLRoutineInfo *> &routine_infos = routine_table_.get_routine_infos();
@@ -3491,7 +3491,7 @@ void ObPLCompileUnitAST::process_default_compile_flag()
   return ;
 }
 
-int ObPLCompileUnitAST::extract_assoc_index(
+int ObPLAstUnit::extract_assoc_index(
   sql::ObRawExpr &expr, ObIArray<sql::ObRawExpr *> &exprs)
 {
   int ret = OB_SUCCESS;
@@ -3510,7 +3510,7 @@ int ObPLCompileUnitAST::extract_assoc_index(
 }
 
 
-int ObPLCompileUnitAST::add_expr(sql::ObRawExpr* expr, bool is_simple_integer)
+int ObPLAstUnit::add_expr(sql::ObRawExpr* expr, bool is_simple_integer)
 {
   int ret = OB_SUCCESS;
   bool exists = false;
@@ -3528,7 +3528,7 @@ int ObPLCompileUnitAST::add_expr(sql::ObRawExpr* expr, bool is_simple_integer)
 }
 
 
-int ObPLCompileUnitAST::add_exprs(common::ObIArray<sql::ObRawExpr*> &exprs)
+int ObPLAstUnit::add_exprs(common::ObIArray<sql::ObRawExpr*> &exprs)
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
@@ -3539,7 +3539,7 @@ int ObPLCompileUnitAST::add_exprs(common::ObIArray<sql::ObRawExpr*> &exprs)
   return ret;
 }
 
-int ObPLCompileUnitAST::add_sql_exprs(common::ObIArray<sql::ObRawExpr*> &exprs)
+int ObPLAstUnit::add_sql_exprs(common::ObIArray<sql::ObRawExpr*> &exprs)
 {
   int ret = OB_SUCCESS;
   OZ (add_exprs(exprs));
@@ -3550,7 +3550,7 @@ int ObPLCompileUnitAST::add_sql_exprs(common::ObIArray<sql::ObRawExpr*> &exprs)
   return ret;
 }
 
-int ObPLCompileUnitAST::generate_symbol_debuginfo()
+int ObPLAstUnit::generate_symbol_debuginfo()
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < symbol_table_.get_count(); ++i) {

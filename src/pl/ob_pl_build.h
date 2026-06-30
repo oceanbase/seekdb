@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef OCEANBASE_SRC_PL_OB_PL_COMPILE_H_
-#define OCEANBASE_SRC_PL_OB_PL_COMPILE_H_
+#ifndef OCEANBASE_SRC_PL_OB_PL_BUILD_H_
+#define OCEANBASE_SRC_PL_OB_PL_BUILD_H_
 
 #include "ob_pl.h"
 #include "ob_pl_stmt.h"
@@ -49,13 +49,12 @@ class ObRoutinePersistentInfo;
 
 // PL front-end: parses and semantically resolves PL source (anonymous blocks,
 // standalone routines, packages) into an executable AST unit (ObPLFunction /
-// ObPLPackage). It emits no native code -- the interpreter is the back-end that
-// walks the produced AST. "Compile" here means source -> executable AST, as in
-// an interpreter front-end, not JIT/codegen (which has been removed).
-class ObPLCompiler
+// ObPLPackage). It emits no native code; the interpreter is the back-end that
+// walks the produced AST.
+class ObPLBuilder
 {
 public:
-  ObPLCompiler(common::ObIAllocator &allocator,
+  ObPLBuilder(common::ObIAllocator &allocator,
                sql::ObSQLSessionInfo &session_info,
                share::schema::ObSchemaGetterGuard &schema_guard,
                ObPLPackageGuard &package_guard,
@@ -65,7 +64,7 @@ public:
     schema_guard_(schema_guard),
     package_guard_(package_guard),
     sql_proxy_(sql_proxy) {}
-  virtual ~ObPLCompiler() {}
+  virtual ~ObPLBuilder() {}
 
   int compile(const ObStmtNodeTree *block,
               const uint64_t stmt_id,
@@ -79,15 +78,15 @@ public:
   int analyze_package(const ObString &source, const ObPLBlockNS *parent_ns,
                       ObPLPackageAST &package_ast, bool is_for_trigger);
   int generate_package(const ObString &exec_env, ObPLPackageAST &package_ast, ObPLPackage &package);
-  int compile_package(const share::schema::ObPackageInfo &package_info, const ObPLBlockNS *parent_ns,
-                      ObPLPackageAST &package_ast, ObPLPackage &package); //package
+  int build_package(const share::schema::ObPackageInfo &package_info, const ObPLBlockNS *parent_ns,
+                    ObPLPackageAST &package_ast, ObPLPackage &package); //package
   static int compile_subprogram_table(common::ObIAllocator &allocator,
                                  sql::ObSQLSessionInfo &session_info,
                                  const sql::ObExecEnv &exec_env,
                                  ObPLRoutineTable &routine_table,
-                                 ObPLCompileUnit &compile_unit,
+                                 ObPLExecutableUnit &compile_unit,
                                  share::schema::ObSchemaGetterGuard &schema_guard);
-  static int compile_type_table(const ObPLUserTypeTable &ast_type_table, ObPLCompileUnit &unit);
+  static int compile_type_table(const ObPLUserTypeTable &ast_type_table, ObPLExecutableUnit &unit);
   static int check_dep_schema(ObSchemaGetterGuard &schema_guard,
                               const DependenyTableStore &dep_schema_objs);
   static int init_anonymous_ast(ObPLFunctionAST &func_ast,
@@ -121,11 +120,11 @@ private:
                             const ObPLSymbolTable &ast_var_table,
                             ObPLPackage &package);
   int generate_package_types(const ObPLUserTypeTable &ast_type_table,
-                             ObPLCompileUnit &package);
+                             ObPLExecutableUnit &package);
   int generate_package_routines(const ObString &exec_env,
                                 ObPLRoutineTable &routine_table,
                                 ObPLPackage &package);
-  static int compile_types(const ObIArray<const ObUserDefinedType*> &types, ObPLCompileUnit &unit);
+  static int compile_types(const ObIArray<const ObUserDefinedType*> &types, ObPLExecutableUnit &unit);
   static int format_object_name(share::schema::ObSchemaGetterGuard &schema_guard,
                                 const uint64_t db_id,
                                 const uint64_t package_id,
@@ -134,12 +133,12 @@ private:
   int compile(const share::schema::ObRoutineInfo &routine, ObPLFunctionAST &func_ast, ObPLFunction &func);
 public:
   // Bind a resolved raw expr's runtime ObExpr into the PL ObSqlExpression. Relocated off
-  // the deleted LLVM code generator; ObPLCompiler is a friend of ObRawExpr so it may read
+  // the deleted native-code generator; ObPLBuilder is a friend of ObRawExpr so it may read
   // the protected rt_expr_.
   static int link_sql_expr_rt(sql::ObRawExpr &raw_expr, sql::ObSqlExpression &sql_expr);
-  // Propagate a unit's profiler info to all nested routines (LLVM-free; relocated off the
+  // Propagate a unit's profiler info to all nested routines (native-code-generation-free; relocated off the
   // deleted code generator).
-  static int set_profiler_unit_info_recursive(const ObPLCompileUnit &unit);
+  static int set_profiler_unit_info_recursive(const ObPLExecutableUnit &unit);
 private:
   common::ObIAllocator &allocator_;
   sql::ObSQLSessionInfo &session_info_;
@@ -150,30 +149,30 @@ private:
   static ObMutex package_dep_info_lock_;
 };
 
-class ObPLCompilerEnvGuard
+class ObPLBuilderEnvGuard
 {
 public:
-  ObPLCompilerEnvGuard(const ObPackageInfo &info,
+  ObPLBuilderEnvGuard(const ObPackageInfo &info,
                        ObSQLSessionInfo &session_info,
                        share::schema::ObSchemaGetterGuard &schema_guard,
-                       ObPLCompileUnitAST &compile_unit,
+                       ObPLAstUnit &compile_unit,
                        int &ret,
                        const ObPLBlockNS *prarent_ns = nullptr);
   
-  ObPLCompilerEnvGuard(const ObRoutineInfo &info,
+  ObPLBuilderEnvGuard(const ObRoutineInfo &info,
                        ObSQLSessionInfo &session_info,
                        share::schema::ObSchemaGetterGuard &schema_guard,
-                       ObPLCompileUnitAST &compile_unit,
+                       ObPLAstUnit &compile_unit,
                        int &ret);
 
-  ~ObPLCompilerEnvGuard();
+  ~ObPLBuilderEnvGuard();
 
 private:
   template<class Info>
   void init(const Info &info,
             ObSQLSessionInfo &sessionInfo,
             share::schema::ObSchemaGetterGuard &schema_guard,
-            ObPLCompileUnitAST &compile_unit,
+            ObPLAstUnit &compile_unit,
             int &ret,
             const ObPLBlockNS *parent_ns = nullptr);
 
@@ -191,4 +190,4 @@ private:
 }
 }
 
-#endif /* OCEANBASE_SRC_PL_OB_PL_COMPILE_H_ */
+#endif /* OCEANBASE_SRC_PL_OB_PL_BUILD_H_ */

@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX PL_STORAGEROUTINE
 #include "ob_pl_persistent.h"
-#include "ob_pl_compile.h"
+#include "ob_pl_build.h"
 #include "share/ob_version.h"
 
 namespace oceanbase

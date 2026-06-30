@@ -32,7 +32,7 @@
 #include "sql/resolver/expr/ob_raw_expr_part_expr_checker.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "pl/ob_pl_package.h"
-#include "pl/ob_pl_compile.h"
+#include "pl/ob_pl_build.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/resolver/dml/ob_inlist_resolver.h"
@@ -2077,10 +2077,6 @@ stmt::StmtType ObResolverUtils::get_stmt_type_by_item_type(const ObItemType item
       case T_PACKAGE_CREATE_BODY:
       case T_CREATE_WRAPPED_PACKAGE_BODY: {
         type = stmt::T_CREATE_PACKAGE_BODY;
-      }
-      break;
-      case T_PACKAGE_ALTER: {
-        type = stmt::T_ALTER_PACKAGE;
       }
       break;
       case T_PACKAGE_DROP: {
@@ -6225,7 +6221,7 @@ int ObResolverUtils::resolve_external_symbol(common::ObIAllocator &allocator,
                                   params/*param store*/,
                                   extern_param_info);
       HEAP_VAR(pl::ObPLFunctionAST, func_ast, allocator) {
-        if (OB_FAIL(pl::ObPLCompiler::init_anonymous_ast(func_ast,
+        if (OB_FAIL(pl::ObPLBuilder::init_anonymous_ast(func_ast,
                                                         allocator,
                                                         session_info,
                                                         NULL == sql_proxy ? (NULL == ns ? *GCTX.sql_proxy_ : ns->get_external_ns()->get_resolve_ctx().sql_proxy_) : *sql_proxy,

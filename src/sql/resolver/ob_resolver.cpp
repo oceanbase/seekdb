@@ -58,7 +58,6 @@
 #include "ddl/ob_drop_routine_resolver.h"
 #include "ddl/ob_alter_routine_resolver.h"
 #include "sql/resolver/ddl/ob_create_package_resolver.h"
-#include "sql/resolver/ddl/ob_alter_package_resolver.h"
 #include "sql/resolver/ddl/ob_drop_package_resolver.h"
 #include "sql/resolver/ddl/ob_flashback_resolver.h"
 #include "sql/resolver/ddl/ob_purge_resolver.h"
@@ -690,10 +689,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       }
       case T_PACKAGE_CREATE_BODY: {
         REGISTER_STMT_RESOLVER(CreatePackageBody);
-        break;
-      }
-      case T_PACKAGE_ALTER: {
-        REGISTER_STMT_RESOLVER(AlterPackage);
         break;
       }
       case T_PACKAGE_DROP: {

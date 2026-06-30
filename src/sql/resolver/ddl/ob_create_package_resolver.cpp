@@ -18,7 +18,7 @@
 #include "ob_create_package_resolver.h"
 #include "ob_create_package_stmt.h"
 #include "pl/ob_pl_package.h"
-#include "pl/ob_pl_compile.h"
+#include "pl/ob_pl_build.h"
 
 namespace oceanbase
 {
@@ -221,7 +221,7 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
         HEAP_VAR(ObPLPackageAST, package_body_ast, *allocator_) {
           ObPLPackageGuard package_guard{};
           ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_mgr();
-          ObPLCompiler compiler(*params_.allocator_,
+          ObPLBuilder builder(*params_.allocator_,
                                 *params_.session_info_,
                                 *schema_guard,
                                 package_guard,
@@ -247,7 +247,7 @@ int ObCreatePackageResolver::resolve(const ParseNode &parse_tree)
             if (OB_NOT_NULL(package_ast.get_body())) {
               (const_cast<ObPLBlockNS &>(package_ast.get_body()->get_namespace())).set_external_ns(NULL);
             }
-            OZ (compiler.analyze_package(source,
+            OZ (builder.analyze_package(source,
                                          &(package_ast.get_body()->get_namespace()),
                                          package_body_ast,
                                          false));
@@ -570,7 +570,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
           ObString package_body_src(package_body_block_node->str_len_, package_body_block_node->str_value_);
           ObPLPackageGuard package_guard{};
           ObSchemaGetterGuard *schema_guard = schema_checker_->get_schema_mgr();
-          ObPLCompiler compiler(tmp_allocator,
+          ObPLBuilder builder(tmp_allocator,
                                 *params_.session_info_,
                                 *schema_guard,
                                 package_guard,
@@ -601,7 +601,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
 
           OX (source = package_spec_info->get_source());
           OZ (ObSQLUtils::convert_sql_text_from_schema_for_resolve(tmp_allocator, session_info_->get_dtc_params(), source));
-          OZ (compiler.analyze_package(source,NULL, package_spec_ast, false));
+          OZ (builder.analyze_package(source,NULL, package_spec_ast, false));
 
           OZ (package_body_ast.init(db_name,
                                     package_name,
@@ -611,7 +611,7 @@ int ObCreatePackageBodyResolver::resolve(const ParseNode &parse_tree)
                                     OB_INVALID_VERSION,
                                     &package_spec_ast));
 
-          OZ (compiler.analyze_package(package_body_src,
+          OZ (builder.analyze_package(package_body_src,
                                     &(package_spec_ast.get_body()->get_namespace()),
                                     package_body_ast,
                                     false));

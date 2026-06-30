@@ -3673,17 +3673,6 @@ OB_SERIALIZE_MEMBER((ObCreatePackageArg, ObDDLArg), is_replace_,
                     is_editionable_, db_name_, package_info_,
                     public_routine_infos_, error_info_, dependency_infos_);
 
-bool ObAlterPackageArg::is_valid() const
-{
-  return !db_name_.empty()
-      && !package_name_.empty()
-      && INVALID_PACKAGE_TYPE != package_type_;
-}
-
-
-OB_SERIALIZE_MEMBER((ObAlterPackageArg, ObDDLArg), db_name_, package_name_, package_type_,
-                    compatible_mode_, public_routine_infos_, error_info_, exec_env_, dependency_infos_);
-
 bool ObDropPackageArg::is_valid() const
 {
   return !db_name_.empty()
@@ -3735,7 +3724,7 @@ bool ObAlterTriggerArg::is_valid() const
 
 
 OB_SERIALIZE_MEMBER((ObAlterTriggerArg, ObDDLArg), trigger_database_,
-                    trigger_info_, trigger_infos_, is_set_status_, is_alter_compile_);
+                    trigger_info_, trigger_infos_, is_set_status_);
 
 
 

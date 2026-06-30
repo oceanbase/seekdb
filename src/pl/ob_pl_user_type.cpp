@@ -1361,7 +1361,8 @@ int ObPLComposite::assign(ObPLComposite *src, ObIAllocator *allocator)
 }
 
 /*
- * For memory mapping between ObPLComposite and its derived classes and LLVM, this function cannot implement a virtual function
+ * To preserve the expected memory layout between ObPLComposite and its derived
+ * classes, this function cannot be virtual.
  * */
 int64_t ObPLComposite::get_init_size() const
 {

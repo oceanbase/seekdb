@@ -59,9 +59,6 @@ public:
                      common::ObISQLClient *sql_client,
                      bool is_replace,
                      const common::ObString *ddl_stmt_str = NULL);
-  int alter_package(const ObPackageInfo &package_info,
-                    common::ObISQLClient *sql_client,
-                    const common::ObString *ddl_stmt_str);
   int drop_package(const uint64_t database_id,
                    const uint64_t package_id,
                    const int64_t new_schema_version,

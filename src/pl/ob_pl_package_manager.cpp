@@ -26,7 +26,7 @@
 
 #include "ob_pl_package_manager.h"
 #include "pl/ob_pl_package.h"
-#include "pl/ob_pl_compile.h"
+#include "pl/ob_pl_build.h"
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "sql/session/ob_session_val_map.h"
 #include "pl/ob_pl_dependency_util.h"
@@ -702,7 +702,7 @@ int ObPLPackageManager::get_package_expr(const ObPLResolveCtx &resolve_ctx,
   CK (OB_NOT_NULL(package_spec_info));
   CK (package_spec_info->get_package_id() == package_id);
   if (OB_SUCC(ret)) {
-    ObPLCompiler compiler(resolve_ctx.allocator_,
+    ObPLBuilder builder(resolve_ctx.allocator_,
                           resolve_ctx.session_info_,
                           resolve_ctx.schema_guard_,
                           resolve_ctx.package_guard_,
@@ -735,9 +735,9 @@ int ObPLPackageManager::get_package_expr(const ObPLResolveCtx &resolve_ctx,
                                 package_spec_info->get_schema_version(),
                                 NULL));
       {
-        ObPLCompilerEnvGuard guard(
+        ObPLBuilderEnvGuard guard(
           *package_spec_info, resolve_ctx.session_info_, resolve_ctx.schema_guard_, package_spec_ast, ret);
-        OZ (compiler.analyze_package(source, null_parent_ns,
+        OZ (builder.analyze_package(source, null_parent_ns,
                                      package_spec_ast, package_spec_info->is_for_trigger()));
       }
       CK (expr_idx >= 0 && package_spec_ast.get_exprs().count() > expr_idx);
@@ -1069,7 +1069,7 @@ int ObPLPackageManager::load_package_spec(const ObPLResolveCtx &resolve_ctx,
     if (OB_SUCC(ret)) {
       common::ObIAllocator &pkg_alloc = package_spec->get_allocator();
       ObPLPackageAST *package_spec_ast = OB_NEWx(ObPLPackageAST, (&pkg_alloc), pkg_alloc);
-      ObPLCompiler compiler(pkg_alloc,
+      ObPLBuilder builder(pkg_alloc,
                             resolve_ctx.session_info_,
                             resolve_ctx.schema_guard_,
                             resolve_ctx.package_guard_,
@@ -1085,10 +1085,10 @@ int ObPLPackageManager::load_package_spec(const ObPLResolveCtx &resolve_ctx,
       OZ (package_spec->init(*package_spec_ast));
       // Use SMART_CALL_LARGE for PL package compilation
       // Package resolving can consume a lot of stack space when SQL in the package is complex
-      OZ (SMART_CALL_LARGE(compiler.compile_package(package_spec_info,
-                                  null_parent_ns,
-                                  *package_spec_ast,
-                                  *package_spec)));
+      OZ (SMART_CALL_LARGE(builder.build_package(package_spec_info,
+                                null_parent_ns,
+                                *package_spec_ast,
+                                *package_spec)));
       if (OB_SUCC(ret)) {
         if (package_spec->get_can_cached() && resolve_ctx.need_add_pl_cache_
             && OB_FAIL(add_package_to_plan_cache(resolve_ctx, package_spec))) {
@@ -1142,7 +1142,7 @@ int ObPLPackageManager::load_package_body(const ObPLResolveCtx &resolve_ctx,
     CK (OB_NOT_NULL(package_body));
     if (OB_SUCC(ret)) {
       common::ObIAllocator &pkg_alloc = package_body->get_allocator();
-      ObPLCompiler compiler(pkg_alloc,
+      ObPLBuilder builder(pkg_alloc,
                             resolve_ctx.session_info_,
                             resolve_ctx.schema_guard_,
                             resolve_ctx.package_guard_,
@@ -1174,9 +1174,9 @@ int ObPLPackageManager::load_package_body(const ObPLResolveCtx &resolve_ctx,
       OZ (ObSQLUtils::convert_sql_text_from_schema_for_resolve(
             pkg_alloc, resolve_ctx.session_info_.get_dtc_params(), source));
       if (OB_SUCC(ret)) {
-        ObPLCompilerEnvGuard guard(
+        ObPLBuilderEnvGuard guard(
           package_spec_info, resolve_ctx.session_info_, resolve_ctx.schema_guard_, *package_spec_ast, ret);
-        OZ (compiler.analyze_package(source, null_parent_ns,
+        OZ (builder.analyze_package(source, null_parent_ns,
                                      *package_spec_ast, package_spec_info.is_for_trigger()));
       }
       OZ (package_body_ast->init(db_schema->get_database_name_str(),
@@ -1190,10 +1190,10 @@ int ObPLPackageManager::load_package_body(const ObPLResolveCtx &resolve_ctx,
       OZ (ObPLDependencyUtil::add_dependency_objects(&package_body_ast->get_dependency_table(), package_spec_ast->get_dependency_table()));
       // Use SMART_CALL_LARGE for PL package body compilation
       // Package resolving can consume a lot of stack space when SQL in the package is complex
-      OZ (SMART_CALL_LARGE(compiler.compile_package(package_body_info,
-                                  &(package_spec_ast->get_body()->get_namespace()),
-                                  *package_body_ast,
-                                  *package_body)));
+      OZ (SMART_CALL_LARGE(builder.build_package(package_body_info,
+                                &(package_spec_ast->get_body()->get_namespace()),
+                                *package_body_ast,
+                                *package_body)));
       if (OB_SUCC(ret)
           && package_body->get_can_cached() && resolve_ctx.need_add_pl_cache_
           && OB_FAIL(add_package_to_plan_cache(resolve_ctx, package_body))) {
