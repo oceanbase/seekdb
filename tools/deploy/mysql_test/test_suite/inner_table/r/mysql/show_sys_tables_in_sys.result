@@ -2991,7 +2991,7 @@ id	field	type	length	precision	nullable
 59	lc_node_rd	5	0	20	0
 60	lc_node_wr	5	0	20	0
 61	lc_ref_cache_obj_stat	5	0	20	0
-table oceanbase.__all_virtual_plan_stat column_count 73 table_id 11004
+table oceanbase.__all_virtual_plan_stat column_count 72 table_id 11004
 select column_id id, column_name field, data_type type, data_length length, data_precision `precision`, nullable from __all_column where table_id=11004 order by column_id;
 id	field	type	length	precision	nullable
 16	plan_id	5	0	20	0
