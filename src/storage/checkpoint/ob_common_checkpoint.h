@@ -29,9 +29,6 @@ namespace storage
 namespace checkpoint
 {
 
-// Batch id for freeze/flush log correlation (replaces ObCheckpointDiagnoseMgr trace ids).
-static const int64_t INVALID_TRACE_ID = -1;
-
 enum ObCommonCheckpointType
 {
   INVALID_BASE_TYPE = 0,
@@ -96,7 +93,7 @@ class ObCommonCheckpoint
 {
 public:
   virtual share::SCN get_rec_scn() = 0;
-  virtual int flush(share::SCN recycle_scn, const int64_t trace_id, bool need_freeze = true) = 0;
+  virtual int flush(share::SCN recycle_scn, bool need_freeze = true) = 0;
 
   virtual ObTabletID get_tablet_id() const = 0;
   virtual share::SCN get_rec_scn(ObTabletID &tablet_id) {

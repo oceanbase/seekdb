@@ -198,9 +198,8 @@ public:
 public:
   /********************** freeze **********************/
   // freezer interface
-  int logstream_freeze(const int64_t trace_id);
-  int tablet_freeze(const int64_t trace_id,
-                    const ObIArray<ObTabletID> &tablet_ids,
+  int logstream_freeze();
+  int tablet_freeze(const ObIArray<ObTabletID> &tablet_ids,
                     const bool need_rewrite_meta,
                     ObIArray<ObTableHandleV2> &frozen_memtable_handles,
                     ObIArray<ObTabletID> &freeze_failed_tablets);
@@ -214,9 +213,9 @@ public:
   bool is_async_freeze_tablets_empty() const { return async_freeze_tablets_.empty(); }
   void record_async_freeze_tablet(const AsyncFreezeTabletInfo &async_freeze_tablet_info);
   void erase_async_freeze_tablet(const AsyncFreezeTabletInfo &async_freeze_tablet_info);
-  void submit_an_async_freeze_task(const int64_t trace_id, const bool is_ls_freeze);
-  void async_ls_freeze_consumer(const int64_t trace_id);
-  void async_tablet_freeze_consumer(const int64_t trace_id);
+  void submit_an_async_freeze_task(const bool is_ls_freeze);
+  void async_ls_freeze_consumer();
+  void async_tablet_freeze_consumer();
   common::hash::ObHashSet<AsyncFreezeTabletInfo> &get_async_freeze_tablets() { return async_freeze_tablets_; }
   /********************** freeze **********************/
 
@@ -329,8 +328,7 @@ private:
                                const ObITabletMemtable *freeze_memtable = nullptr /* used for tablet freeze */);
   int wait_data_memtable_freeze_finish_(ObITabletMemtable *tablet_memtable);
   int wait_direct_load_memtable_freeze_finish_(ObITabletMemtable *tablet_memtable);
-  int set_tablet_freeze_flag_(const int64_t trace_id,
-                              const ObTabletID tablet_id,
+  int set_tablet_freeze_flag_(const ObTabletID tablet_id,
                               const bool need_rewrite_meta,
                               const SCN freeze_snapshot_version,
                               ObIArray<ObTableHandleV2> &frozen_memtable_handles);
@@ -360,8 +358,7 @@ private:
   void set_ls_freeze_begin_();
   void set_ls_freeze_end_() { ATOMIC_DEC(&high_priority_freeze_cnt_); }
   int check_ls_state(); // must be used under the protection of ls_lock
-  int tablet_freeze_(const int64_t trace_id,
-                     const ObIArray<ObTabletID> &tablet_ids,
+  int tablet_freeze_(const ObIArray<ObTabletID> &tablet_ids,
                      const bool need_rewrite_meta,
                      const share::SCN freeze_snapshot_version,
                      ObIArray<ObTableHandleV2> &frozen_memtable_handles,

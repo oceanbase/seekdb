@@ -49,8 +49,7 @@ ObTenantFreezer::ObTenantFreezer()
     freezer_stat_(),
     freezer_history_(),
     throttle_is_skipping_cache_(),
-    memstore_remain_memory_is_exhausting_cache_(),
-    next_checkpoint_batch_trace_id_(0)
+    memstore_remain_memory_is_exhausting_cache_()
 {
   freezer_stat_.reset();
 }
@@ -69,7 +68,6 @@ void ObTenantFreezer::destroy()
   freezer_history_.reset();
   throttle_is_skipping_cache_.reset();
   memstore_remain_memory_is_exhausting_cache_.reset();
-  ATOMIC_STORE(&next_checkpoint_batch_trace_id_, 0);
 
   is_inited_ = false;
 }
@@ -102,19 +100,6 @@ int ObTenantFreezer::init()
     freezer_stat_.reset();
     freezer_history_.reset();
     is_inited_ = true;
-  }
-  return ret;
-}
-
-int ObTenantFreezer::acquire_checkpoint_batch_trace_id(int64_t &trace_id)
-{
-  int ret = OB_SUCCESS;
-  trace_id = checkpoint::INVALID_TRACE_ID;
-  if (IS_NOT_INIT) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("[TenantFreezer] not inited", KR(ret));
-  } else {
-    trace_id = ATOMIC_AAF(&next_checkpoint_batch_trace_id_, 1);
   }
   return ret;
 }
@@ -294,8 +279,7 @@ int ObTenantFreezer::ls_freeze_data_(ObLS *ls)
   do {
     need_retry = false;
     retry_times++;
-    if (OB_SUCC(ls->logstream_freeze(checkpoint::INVALID_TRACE_ID,
-                                     is_sync,
+    if (OB_SUCC(ls->logstream_freeze(is_sync,
                                      abs_timeout_ts,
                                      ObFreezeSourceFlag::FREEZE_TRIGGER))) {
     } else {

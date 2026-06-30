@@ -192,7 +192,7 @@ int ObSplitPartitionHelper::freeze_split_src_tablet(const ObFreezeSplitSrcTablet
       } else if (OB_UNLIKELY(ObRole::LEADER != role)) {
         ret = OB_NOT_MASTER;
         LOG_WARN("ls not leader", K(ret), K(arg.ls_id_));
-      } else if (OB_FAIL(ls->tablet_freeze(checkpoint::INVALID_TRACE_ID, tablet_ids, true/*is_sync*/, abs_timeout_us,
+      } else if (OB_FAIL(ls->tablet_freeze(tablet_ids, true/*is_sync*/, abs_timeout_us,
               false/*need_rewrite_meta*/, ObFreezeSourceFlag::TABLET_SPLIT))) {
         LOG_WARN("batch tablet freeze failed", K(ret), K(arg));
       } else if (OB_FAIL(ls->check_tablet_no_active_memtable(tablet_ids, has_active_memtable))) {

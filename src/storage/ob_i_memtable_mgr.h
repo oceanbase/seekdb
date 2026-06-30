@@ -23,8 +23,6 @@
 #include "storage/ob_i_table.h"
 #include "storage/checkpoint/ob_common_checkpoint.h"
 
-#include "storage/checkpoint/ob_checkpoint_diagnose.h"
-
 namespace oceanbase
 {
 namespace logservice
@@ -309,7 +307,7 @@ public:
   }
   virtual int reset_storage_recorder() { return common::OB_SUCCESS; }
   virtual int set_frozen_for_all_memtables() { return common::OB_SUCCESS; }
-  virtual int set_is_tablet_freeze_for_active_memtable(ObTableHandleV2 &handle, const int64_t trace_id = checkpoint::INVALID_TRACE_ID) { return OB_NOT_SUPPORTED; }
+  virtual int set_is_tablet_freeze_for_active_memtable(ObTableHandleV2 &handle) { return OB_NOT_SUPPORTED; }
   virtual int get_last_frozen_memtable(ObTableHandleV2 &handle) { return OB_NOT_SUPPORTED; }
   virtual int get_direct_load_memtables_for_write(ObTableHdlArray &handles) { return OB_NOT_SUPPORTED; }
   DECLARE_VIRTUAL_TO_STRING;

@@ -1613,8 +1613,7 @@ void ObDDLKV::print_ready_for_flush()
             KP(this), K(ls_id), K(tablet_id),
             K(ret), K(ready_for_flush),
             K(frozen_memtable_flag), K(write_ref),
-            K(max_decided_scn), K(end_scn),
-            K_(trace_id));
+            K(max_decided_scn), K(end_scn));
 }
 
 void ObDDLKV::set_allow_freeze(const bool allow_freeze)

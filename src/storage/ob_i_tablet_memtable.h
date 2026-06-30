@@ -153,46 +153,6 @@ const static char *TABLET_MEMTABLE_FREEZE_STATE_TO_STR(const int64_t state)
 
 class ObITabletMemtable : public ObIMemtable, public checkpoint::ObFreezeCheckpoint {
 public:
-#define DEF_REPORT_CHEKCPOINT_DIAGNOSE_INFO(function, update_function)                       \
-  struct function {                                                                          \
-  public:                                                                                    \
-    function() {}                                                                            \
-    function(const function &) = delete;                                                     \
-    function &operator=(const function &) = delete;                                          \
-    void operator()(const checkpoint::ObCheckpointDiagnoseParam &param) const                \
-    {                                                                                        \
-      checkpoint::ObCheckpointDiagnoseMgr *cdm = share::g_mp->checkpoint_diagnose_mgr(); \
-      if (OB_NOT_NULL(cdm)) {                                                                \
-        cdm->update_function(param);                                                         \
-      }                                                                                      \
-    }                                                                                        \
-  };
-  DEF_REPORT_CHEKCPOINT_DIAGNOSE_INFO(UpdateStartGCTimeForMemtable, update_start_gc_time_for_memtable)
-  DEF_REPORT_CHEKCPOINT_DIAGNOSE_INFO(AddCheckpointDiagnoseInfoForMemtable,
-                                      add_diagnose_info<checkpoint::ObMemtableDiagnoseInfo>)
-
-  template <class OP>
-  void report_memtable_diagnose_info(const OP &op)
-  {
-    int ret = OB_SUCCESS;
-    // logstream freeze
-    if (!get_is_tablet_freeze()) {
-      share::ObLSID ls_id;
-      if (OB_FAIL(get_ls_id(ls_id))) {
-        TRANS_LOG(WARN, "failed to get ls id", KPC(this));
-      } else {
-        checkpoint::ObCheckpointDiagnoseParam param(ls_id.id(), get_freeze_clock(), get_tablet_id(), (void *)this);
-        op(param);
-      }
-    }
-    // batch tablet freeze
-    else if (checkpoint::INVALID_TRACE_ID != get_trace_id()) {
-      checkpoint::ObCheckpointDiagnoseParam param(trace_id_, get_tablet_id(), (void *)this);
-      op(param);
-    }
-  }
-
-public:
   ObITabletMemtable()
     : freeze_clock_(0),
     init_timestamp_(0),

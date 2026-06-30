@@ -122,7 +122,7 @@ public:
   share::SCN get_active_rec_scn();
   // if min_rec_scn <= the input rec_scn
   // logstream freeze
-  int flush(share::SCN recycle_scn, int64_t trace_id, bool need_freeze = true);
+  int flush(share::SCN recycle_scn, bool need_freeze = true);
   // if min_rec_scn <= the input rec_scn
   // add ls_freeze task
   // logstream freeze optimization
@@ -186,7 +186,7 @@ private:
   void set_ls_freeze_finished_(bool is_finished);
   int get_need_flush_tablets_(const share::SCN recycle_scn,
                               common::ObIArray<ObTabletID> &flush_tablets);
-  int freeze_base_on_needs_(const int64_t trace_id, share::SCN recycle_scn);
+  int freeze_base_on_needs_(share::SCN recycle_scn);
   int decide_freeze_clock_(ObFreezeCheckpoint *ob_freeze_checkpoint);
 
   static const int64_t LOOP_TRAVERSAL_INTERVAL_US = 1000L * 50;  // 50ms

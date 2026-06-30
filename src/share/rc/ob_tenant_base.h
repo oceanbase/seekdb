@@ -88,7 +88,6 @@ class ObTenantMdsService;
   namespace checkpoint {
     class ObCheckPointService;
     class ObTabletGCService;
-    class ObCheckpointDiagnoseMgr;
   }
   class ObLobManager;
   class ObTableScanIterator;

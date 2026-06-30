@@ -811,9 +811,6 @@ int ObMultiTenant::update_tenant_config()
       if (OB_TMP_FAIL(update_throttle_config_())) {
         LOG_WARN("update throttle config failed", K(ret));
       }
-      if (OB_TMP_FAIL(update_checkpoint_diagnose_config())) {
-        LOG_WARN("failed to update tenant ddl config", K(tmp_ret));
-      }
       if (OB_TMP_FAIL(update_tenant_query_response_time_flush_config())) {
         LOG_WARN("failed to update tenant query response time flush config", K(tmp_ret));
       }
@@ -863,20 +860,6 @@ int ObMultiTenant::update_tenant_ddl_config()
   }
 
 #endif
-  return ret;
-}
-
-int ObMultiTenant::update_checkpoint_diagnose_config()
-{
-  int ret = OB_SUCCESS;
-  ObCheckpointDiagnoseMgr *cdm = share::g_mp->checkpoint_diagnose_mgr();
-  const int64_t checkpoint_diagnose_preservation_count = GCONF._checkpoint_diagnose_preservation_count;
-  if (OB_ISNULL(cdm)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("cdm should not be null", K(ret));
-  } else if(OB_FAIL(cdm->update_max_trace_info_size(checkpoint_diagnose_preservation_count))) {
-    LOG_WARN("failed to update_max_trace_info_size", K(ret), K(checkpoint_diagnose_preservation_count));
-  }
   return ret;
 }
 
@@ -1768,7 +1751,6 @@ int ObServer::obs_construct_modules()
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_tablet_memtable_mgr_pool_))) { SERVER_LOG(WARN, "mods_tablet_memtable_mgr_pool_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_m_view_maintenance_service_))) { SERVER_LOG(WARN, "mods_m_view_maintenance_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_resource_limit_calculator_))) { SERVER_LOG(WARN, "mods_resource_limit_calculator_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_checkpoint_diagnose_mgr_))) { SERVER_LOG(WARN, "mods_checkpoint_diagnose_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_global_iterator_pool_))) { SERVER_LOG(WARN, "mods_global_iterator_pool_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_rb_mem_mgr_))) { SERVER_LOG(WARN, "mods_rb_mem_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(mtl_new_default(mods_plugin_vector_index_service_))) { SERVER_LOG(WARN, "mods_plugin_vector_index_service_ fail", KR(ret)); }
@@ -1855,7 +1837,6 @@ int ObServer::obs_init_modules()
   if (OB_SUCC(ret) && OB_FAIL(storage::ObTabletMemtableMgrPool::mtl_init(mods_tablet_memtable_mgr_pool_))) { SERVER_LOG(WARN, "mods_tablet_memtable_mgr_pool_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(rootserver::ObMViewMaintenanceService::mtl_init(mods_m_view_maintenance_service_))) { SERVER_LOG(WARN, "mods_m_view_maintenance_service_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObResourceLimitCalculator::mtl_init(mods_resource_limit_calculator_))) { SERVER_LOG(WARN, "mods_resource_limit_calculator_ fail", KR(ret)); }
-  if (OB_SUCC(ret) && OB_FAIL(ObCheckpointDiagnoseMgr::mtl_init(mods_checkpoint_diagnose_mgr_))) { SERVER_LOG(WARN, "mods_checkpoint_diagnose_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObGlobalIteratorPool::mtl_init(mods_global_iterator_pool_))) { SERVER_LOG(WARN, "mods_global_iterator_pool_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(common::ObRbMemMgr::mtl_init(mods_rb_mem_mgr_))) { SERVER_LOG(WARN, "mods_rb_mem_mgr_ fail", KR(ret)); }
   if (OB_SUCC(ret) && OB_FAIL(ObPluginVectorIndexService::mtl_init(mods_plugin_vector_index_service_))) { SERVER_LOG(WARN, "mods_plugin_vector_index_service_ fail", KR(ret)); }
@@ -2024,7 +2005,6 @@ void ObServer::obs_destroy_modules()
   mtl_destroy_default(mods_plugin_vector_index_service_);
   mtl_destroy_default(mods_rb_mem_mgr_);
   ObGlobalIteratorPool::mtl_destroy(mods_global_iterator_pool_);
-  mtl_destroy_default(mods_checkpoint_diagnose_mgr_);
   mtl_destroy_default(mods_resource_limit_calculator_);
   mtl_destroy_default(mods_m_view_maintenance_service_);
   mtl_destroy_default(mods_tablet_memtable_mgr_pool_);

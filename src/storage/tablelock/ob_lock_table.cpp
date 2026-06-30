@@ -930,7 +930,6 @@ int ObLockTable::flush(share::SCN &scn)
   int ret = OB_SUCCESS;
   ObTableHandleV2 handle;
   ObLockMemtable *memtable = nullptr;
-  int64_t trace_id = storage::checkpoint::INVALID_TRACE_ID;
   const share::ObLSID &ls_id = parent_->get_ls_id();
 
   if (IS_NOT_INIT) {
@@ -940,9 +939,7 @@ int ObLockTable::flush(share::SCN &scn)
     TABLELOCK_LOG(WARN, "get lock memtable failed", K(ret));
   } else if (OB_FAIL(handle.get_lock_memtable(memtable))) {
     TABLELOCK_LOG(ERROR, "get lock memtable from lock handle failed", K(ret));
-  } else if (OB_FAIL(share::g_mp->checkpoint_diagnose_mgr()->acquire_trace_id(ls_id, trace_id))) {
-    TABLELOCK_LOG(WARN, "acquire trace_id failed", K(ret), K(ls_id));
-  } else if (OB_FAIL(memtable->flush(scn, trace_id))) {
+  } else if (OB_FAIL(memtable->flush(scn))) {
     TABLELOCK_LOG(WARN, "ObLockTable::flush failed", K(ret), K(scn));                                    
   }
   return ret;

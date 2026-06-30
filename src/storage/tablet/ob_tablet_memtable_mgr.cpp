@@ -670,9 +670,7 @@ int ObTabletMemtableMgr::unset_logging_blocked_for_active_memtable(ObITabletMemt
   return ret;
 }
 
-int ObTabletMemtableMgr::set_is_tablet_freeze_for_active_memtable(
-    ObTableHandleV2 &handle, 
-    const int64_t trace_id)
+int ObTabletMemtableMgr::set_is_tablet_freeze_for_active_memtable(ObTableHandleV2 &handle)
 {
   handle.reset();
   ObITabletMemtable *active_tablet_memtable = nullptr;
@@ -691,9 +689,6 @@ int ObTabletMemtableMgr::set_is_tablet_freeze_for_active_memtable(
     }
   } else if (active_tablet_memtable->allow_freeze()) {
     active_tablet_memtable->set_is_tablet_freeze();
-    if (checkpoint::INVALID_TRACE_ID != trace_id) {
-      active_tablet_memtable->set_trace_id(trace_id);
-    }
   } else {
     handle.reset();
     ret = OB_MINOR_FREEZE_NOT_ALLOW;

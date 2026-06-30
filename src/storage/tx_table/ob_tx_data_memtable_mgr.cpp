@@ -458,8 +458,7 @@ SCN ObTxDataMemtableMgr::get_rec_scn()
   return rec_scn;
 }
 
-int ObTxDataMemtableMgr::flush_all_frozen_memtables_(ObTableHdlArray &memtable_handles,
-    const int64_t trace_id)
+int ObTxDataMemtableMgr::flush_all_frozen_memtables_(ObTableHdlArray &memtable_handles)
 {
   int ret = OB_SUCCESS;
 
@@ -473,14 +472,14 @@ int ObTxDataMemtableMgr::flush_all_frozen_memtables_(ObTableHdlArray &memtable_h
                && !memtable->ready_for_flush()) {
       // on need return error
       STORAGE_LOG(INFO, "the tx data memtable is not frozen", KPC(memtable));
-    } else if (OB_FAIL(memtable->flush(trace_id))) {
+    } else if (OB_FAIL(memtable->flush())) {
       STORAGE_LOG(WARN, "the tx data memtable flush failed", KR(ret), KPC(memtable));
     }
   }
   return ret;
 }
 
-int ObTxDataMemtableMgr::flush(SCN recycle_scn, const int64_t trace_id, bool need_freeze)
+int ObTxDataMemtableMgr::flush(SCN recycle_scn, bool need_freeze)
 {
   int ret = OB_SUCCESS;
 
@@ -509,7 +508,7 @@ int ObTxDataMemtableMgr::flush(SCN recycle_scn, const int64_t trace_id, bool nee
     STORAGE_LOG(WARN, "get all memtables failed", KR(ret), KP(this));
   } else if (memtable_handles.count() == 0) {
     STORAGE_LOG(INFO, "memtable handles is empty. skip flush once.");
-  } else if (OB_FAIL(flush_all_frozen_memtables_(memtable_handles, trace_id))) {
+  } else if (OB_FAIL(flush_all_frozen_memtables_(memtable_handles))) {
     STORAGE_LOG(WARN, "flush all frozen memtables failed", KR(ret), KP(this));
   } else if (OB_NOT_NULL(tx_data_table_) && OB_FAIL(tx_data_table_->update_memtables_cache())) {
     STORAGE_LOG(WARN, "update memtables cache failed.", KR(ret), KP(this));

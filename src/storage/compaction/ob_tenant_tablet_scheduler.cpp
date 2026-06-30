@@ -1197,8 +1197,7 @@ int ObTenantTabletScheduler::schedule_ls_minor_merge(
     start_time_us = ObClockGenerator::getClock();
     if (need_fast_freeze_tablets.empty()) {
       // empty array. do not need freeze
-    } else if (OB_TMP_FAIL(ls.tablet_freeze(checkpoint::INVALID_TRACE_ID,
-                                            need_fast_freeze_tablets,
+    } else if (OB_TMP_FAIL(ls.tablet_freeze(need_fast_freeze_tablets,
                                             is_sync,
                                             0, /*timeout, useless for async one*/
                                             false, /*need_rewrite_meta*/

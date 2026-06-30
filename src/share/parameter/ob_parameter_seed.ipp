@@ -1912,9 +1912,6 @@ DEF_PARAM(enable_rpc_authentication_bypass, BOOL, OB_CLUSTER_PARAMETER, "True",
         "cluster and provide service when rpc authentication is turned on.",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
-DEF_PARAM(_checkpoint_diagnose_preservation_count, INT, OB_CLUSTER_PARAMETER, "100", "[0,800]",
-        "the count of checkpoint diagnose info preservation",
-        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_preserve_order_for_pagination, BOOL, OB_CLUSTER_PARAMETER, "False",
         "enable preserver order for limit",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));

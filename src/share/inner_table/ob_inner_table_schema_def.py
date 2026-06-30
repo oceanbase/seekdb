@@ -4584,6 +4584,7 @@ def_table_schema(
       ('delayed_px_querys', 'int'),
       ('sessid', 'uint'),
       ('temp_tables', 'longtext', 'false'),
+      ('is_use_jit', 'bool'),
       ('object_type', 'longtext', 'false'),
       ('enable_bf_cache', 'bool'),
       ('bf_filter_cnt', 'int'),
@@ -8173,10 +8174,6 @@ def_table_schema(
 
 # 12435: __all_virtual_clone_job (abandoned)
 # 12436: __all_virtual_clone_job_history (abandoned)
-# 12437: __all_virtual_checkpoint_diagnose_memtable_info (removed)
-# 12438: __all_virtual_checkpoint_diagnose_checkpoint_unit_info (removed)
-# 12439: __all_virtual_checkpoint_diagnose_info (removed)
-
 # 12440: __all_virtual_wr_system_event # removed
 
 # 12441: __all_virtual_wr_event_name # removed
@@ -10071,7 +10068,7 @@ def_table_schema(
     CONCURRENCY_WAIT_TIME,USER_IO_WAIT_TIME,ROWS_PROCESSED,ELAPSED_TIME,CPU_TIME,LARGE_QUERYS,
     DELAYED_LARGE_QUERYS,DELAYED_PX_QUERYS,OUTLINE_VERSION,OUTLINE_ID,OUTLINE_DATA,ACS_SEL_INFO,
     TABLE_SCAN,EVOLUTION, EVO_EXECUTIONS, EVO_CPU_TIME, TIMEOUT_COUNT, PS_STMT_ID, SESSID,
-    TEMP_TABLES, OBJECT_TYPE,HINTS_INFO,HINTS_ALL_WORKED, PL_SCHEMA_ID,
+    TEMP_TABLES, IS_USE_JIT,OBJECT_TYPE,HINTS_INFO,HINTS_ALL_WORKED, PL_SCHEMA_ID,
     IS_BATCHED_MULTI_STMT, RULE_NAME,
     (CASE PLAN_STATUS WHEN 0 THEN 'ACTIVE' ELSE 'INACTIVE' END) AS PLAN_STATUS,
     ADAPTIVE_FEEDBACK_TIMES, FIRST_GET_PLAN_TIME, FIRST_EXE_USEC

@@ -1583,8 +1583,7 @@ int ObLS::replay_get_tablet(
   return ret;
 }
 
-int ObLS::logstream_freeze(const int64_t trace_id,
-                           const bool is_sync,
+int ObLS::logstream_freeze(const bool is_sync,
                            const int64_t input_abs_timeout_ts,
                            const ObFreezeSourceFlag source)
 {
@@ -1601,11 +1600,11 @@ int ObLS::logstream_freeze(const int64_t trace_id,
     if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_meta_.ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
       STORAGE_LOG(WARN, "get ls handle failed. stop async freeze task", KR(ret), K(ls_meta_.ls_id_));
     } else {
-      ret = logstream_freeze_task(trace_id, abs_timeout_ts);
+      ret = logstream_freeze_task(abs_timeout_ts);
     }
   } else {
     const bool is_ls_freeze = true;
-    (void)ls_freezer_.submit_an_async_freeze_task(trace_id, is_ls_freeze);
+    (void)ls_freezer_.submit_an_async_freeze_task(is_ls_freeze);
   }
 
   if (OB_SUCC(ret)) {
@@ -1615,8 +1614,7 @@ int ObLS::logstream_freeze(const int64_t trace_id,
   return ret;
 }
 
-int ObLS::logstream_freeze_task(const int64_t trace_id,
-                                const int64_t abs_timeout_ts)
+int ObLS::logstream_freeze_task(const int64_t abs_timeout_ts)
 {
   int ret = OB_SUCCESS;
   const int64_t start_time = ObClockGenerator::getClock();
@@ -1633,7 +1631,7 @@ int ObLS::logstream_freeze_task(const int64_t trace_id,
     } else if (OB_UNLIKELY(is_offline())) {
       ret = OB_LS_OFFLINE;
       STORAGE_LOG(WARN, "offline ls not allowed freeze", K(ret), K_(ls_meta));
-    } else if (OB_FAIL(ls_freezer_.logstream_freeze(trace_id))) {
+    } else if (OB_FAIL(ls_freezer_.logstream_freeze())) {
       STORAGE_LOG(WARN, "logstream freeze failed", K(ret), K_(ls_meta));
     }
   }
@@ -1648,7 +1646,6 @@ int ObLS::logstream_freeze_task(const int64_t trace_id,
               "[Freezer] logstream freeze task finish",
               K(ret),
               K(ls_freeze_task_spend_time),
-              K(trace_id),
               KTIME(abs_timeout_ts));
   return ret;
 }
@@ -1675,8 +1672,7 @@ int ObLS::tablet_freeze(const ObTabletID &tablet_id,
     if (OB_FAIL(tablet_ids.push_back(tablet_id))) {
       STORAGE_LOG(WARN, "push back tablet id failed", KR(ret), K(tablet_id));
     } else {
-      ret = tablet_freeze(checkpoint::INVALID_TRACE_ID,
-                          tablet_ids,
+      ret = tablet_freeze(tablet_ids,
                           is_sync,
                           input_abs_timeout_ts,
                           need_rewrite_meta,
@@ -1686,8 +1682,7 @@ int ObLS::tablet_freeze(const ObTabletID &tablet_id,
   return ret;
 }
 
-int ObLS::tablet_freeze(const int64_t trace_id,
-                        const ObIArray<ObTabletID> &tablet_ids,
+int ObLS::tablet_freeze(const ObIArray<ObTabletID> &tablet_ids,
                         const bool is_sync,
                         const int64_t input_abs_timeout_ts,
                         const bool need_rewrite_meta,
@@ -1716,7 +1711,7 @@ int ObLS::tablet_freeze(const int64_t trace_id,
     bool is_retry_code = false;
     bool is_not_timeout = false;
     do {
-      ret = tablet_freeze_task(trace_id, tablet_ids, need_rewrite_meta, is_sync, abs_timeout_ts, freeze_epoch);
+      ret = tablet_freeze_task(tablet_ids, need_rewrite_meta, is_sync, abs_timeout_ts, freeze_epoch);
       const int64_t current_time = ObClockGenerator::getClock();
       if (OB_FAIL(ret) &&
           current_time - start_time > 10LL * 1000LL * 1000LL &&
@@ -1731,7 +1726,7 @@ int ObLS::tablet_freeze(const int64_t trace_id,
     //Async tablet freeze. Must record tablet ids before submit task
     const bool is_ls_freeze = false;
     (void)record_async_freeze_tablets_(tablet_ids, freeze_epoch);
-    (void)ls_freezer_.submit_an_async_freeze_task(trace_id, is_ls_freeze);
+    (void)ls_freezer_.submit_an_async_freeze_task(is_ls_freeze);
   }
 
   if (OB_SUCC(ret)) {
@@ -1741,8 +1736,7 @@ int ObLS::tablet_freeze(const int64_t trace_id,
   return ret;
 }
 
-int ObLS::tablet_freeze_task(const int64_t trace_id,
-                             const ObIArray<ObTabletID> &tablet_ids,
+int ObLS::tablet_freeze_task(const ObIArray<ObTabletID> &tablet_ids,
                              const bool need_rewrite_meta,
                              const bool is_sync,
                              const int64_t abs_timeout_ts,
@@ -1768,7 +1762,7 @@ int ObLS::tablet_freeze_task(const int64_t trace_id,
       ret = OB_LS_OFFLINE;
       STORAGE_LOG(WARN, "ls has offlined", K(ret), K_(ls_meta));
     } else if (OB_FAIL(ls_freezer_.tablet_freeze(
-                   trace_id, tablet_ids, need_rewrite_meta, frozen_memtable_handles, freeze_failed_tablets))) {
+                   tablet_ids, need_rewrite_meta, frozen_memtable_handles, freeze_failed_tablets))) {
       if (REACH_TIME_INTERVAL(1LL * 1000LL * 1000LL)) {
         STORAGE_LOG(WARN, "tablet freeze failed", KR(ret), K(ls_meta_.ls_id_), K(tablet_ids), K(freeze_failed_tablets));
       }
@@ -1799,7 +1793,6 @@ int ObLS::tablet_freeze_task(const int64_t trace_id,
                 K(need_rewrite_meta),
                 K(is_sync),
                 K(tablet_freeze_task_spend_time),
-                K(trace_id),
                 KTIME(abs_timeout_ts));
   }
   return ret;

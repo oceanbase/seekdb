@@ -317,7 +317,7 @@ public:  // checkpoint
     return get_min_tx_scn();
   }
 
-  int flush(const int64_t trace_id);
+  int flush();
   /**
    * @brief Because of the random order of clog callbacks, the tx data in a freezing tx data
    * memtable may not completed. We must wait until the max_consequent_callbacked_scn is larger

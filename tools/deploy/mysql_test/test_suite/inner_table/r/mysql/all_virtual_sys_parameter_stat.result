@@ -297,7 +297,6 @@ _backup_task_keep_alive_timeout
 _bloom_filter_enabled
 _bloom_filter_ratio
 _cache_wash_interval
-_checkpoint_diagnose_preservation_count
 _chunk_row_store_mem_limit
 _compaction_prewarm_percentage
 _complex_cbqt_table_num

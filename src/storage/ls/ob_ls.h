@@ -786,19 +786,16 @@ public:
   /**
    * @brief freeze this logstream
    *
-   * @param[in] trace_id
    * @param[in] is_sync if is_sync == true, call logstream_freeze_task directly. Or commit an async task to execute
    * logstream_freeze_task
    * @param[in] abs_timeout_ts only used when is_sync == true, 0 as default, which means retry for
    *            ObFreezer::SYNC_FREEZE_DEFAULT_RETRY_TIME seconds
    * @param[in] source means the input source of the freeze
    */
-  int logstream_freeze(const int64_t trace_id,
-                       const bool is_sync,
+  int logstream_freeze(const bool is_sync,
                        const int64_t abs_timeout_ts = 0,
                        const ObFreezeSourceFlag source = ObFreezeSourceFlag::INVALID_SOURCE);
-  int logstream_freeze_task(const int64_t trace_id,
-                            const int64_t abs_timeout_ts);
+  int logstream_freeze_task(const int64_t abs_timeout_ts);
 
   int tablet_freeze(const ObTabletID &tablet_id,
                     const bool is_sync,
@@ -809,7 +806,6 @@ public:
    * @brief freeze one or multiple tablets. if is_sync is true, retry until timeout. or commit an async task and retry
    * till die
    *
-   * @param[in] trace_id
    * @param[in] tablet_ids
    * @param[in] is_sync if is_sync == true, call tablet_freeze_task directly. Or commit an async task to execute
    * logstream_freeze_task
@@ -818,14 +814,12 @@ public:
    *            ObFreezer::SYNC_FREEZE_DEFAULT_RETRY_TIME seconds
    * @param[in] source means the input source of the freeze
    */
-  int tablet_freeze(const int64_t trace_id,
-                    const ObIArray<ObTabletID> &tablet_ids,
+  int tablet_freeze(const ObIArray<ObTabletID> &tablet_ids,
                     const bool is_sync,
                     const int64_t abs_timeout_ts = 0,
                     const bool need_rewrite_meta = false,
                     const ObFreezeSourceFlag source = ObFreezeSourceFlag::INVALID_SOURCE);
-  int tablet_freeze_task(const int64_t trace_id,
-                         const ObIArray<ObTabletID> &tablet_ids,
+  int tablet_freeze_task(const ObIArray<ObTabletID> &tablet_ids,
                          const bool need_rewrite_meta,
                          const bool is_sync,
                          const int64_t abs_timeout_ts,

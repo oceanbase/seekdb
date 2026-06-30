@@ -118,7 +118,6 @@ public:
   virtual storage::ObTabletMemtableMgrPool * tablet_memtable_mgr_pool() { return nullptr; }
   virtual rootserver::ObMViewMaintenanceService * m_view_maintenance_service() { return nullptr; }
   virtual share::ObResourceLimitCalculator * resource_limit_calculator() { return nullptr; }
-  virtual storage::checkpoint::ObCheckpointDiagnoseMgr * checkpoint_diagnose_mgr() { return nullptr; }
   virtual storage::ObGlobalIteratorPool * global_iterator_pool() { return nullptr; }
   virtual common::ObRbMemMgr * rb_mem_mgr() { return nullptr; }
   virtual share::ObPluginVectorIndexService * plugin_vector_index_service() { return nullptr; }

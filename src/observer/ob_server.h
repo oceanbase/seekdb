@@ -486,7 +486,6 @@ public:
   storage::ObTabletMemtableMgrPool * tablet_memtable_mgr_pool() override { return mods_tablet_memtable_mgr_pool_; }
   rootserver::ObMViewMaintenanceService * m_view_maintenance_service() override { return mods_m_view_maintenance_service_; }
   share::ObResourceLimitCalculator * resource_limit_calculator() override { return mods_resource_limit_calculator_; }
-  storage::checkpoint::ObCheckpointDiagnoseMgr * checkpoint_diagnose_mgr() override { return mods_checkpoint_diagnose_mgr_; }
   storage::ObGlobalIteratorPool * global_iterator_pool() override { return mods_global_iterator_pool_; }
   common::ObRbMemMgr * rb_mem_mgr() override { return mods_rb_mem_mgr_; }
   share::ObPluginVectorIndexService * plugin_vector_index_service() override { return mods_plugin_vector_index_service_; }
@@ -593,7 +592,6 @@ private:
   storage::ObTabletMemtableMgrPool * mods_tablet_memtable_mgr_pool_ = nullptr;
   rootserver::ObMViewMaintenanceService * mods_m_view_maintenance_service_ = nullptr;
   share::ObResourceLimitCalculator * mods_resource_limit_calculator_ = nullptr;
-  storage::checkpoint::ObCheckpointDiagnoseMgr * mods_checkpoint_diagnose_mgr_ = nullptr;
   storage::ObGlobalIteratorPool * mods_global_iterator_pool_ = nullptr;
   common::ObRbMemMgr * mods_rb_mem_mgr_ = nullptr;
   share::ObPluginVectorIndexService * mods_plugin_vector_index_service_ = nullptr;

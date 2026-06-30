@@ -1730,7 +1730,7 @@ void ObMemtable::print_ready_for_flush()
             K(ret), K(bool_ret),
             K(frozen_memtable_flag), K(write_ref),
             K(current_right_boundary), K(end_scn),
-            K(logstream_freeze_clock), K(memtable_freeze_clock), K_(trace_id));
+            K(logstream_freeze_clock), K(memtable_freeze_clock));
 }
 
 // The freeze_snapshot_version is needed for mini merge, which represents that

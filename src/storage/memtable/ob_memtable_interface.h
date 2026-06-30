@@ -30,8 +30,6 @@
 #include "storage/tx/ob_trans_define.h"
 #include "storage/checkpoint/ob_common_checkpoint.h"
 
-#include "storage/checkpoint/ob_checkpoint_diagnose.h"
-
 namespace oceanbase
 {
 namespace common
@@ -115,8 +113,7 @@ class ObIMemtable : public storage::ObITable {
 public:
   ObIMemtable()
     : ls_id_(),
-      snapshot_version_(share::SCN::max_scn()),
-      trace_id_(checkpoint::INVALID_TRACE_ID)
+      snapshot_version_(share::SCN::max_scn())
   {}
   virtual ~ObIMemtable() {}
   void reset()
@@ -124,7 +121,6 @@ public:
     ObITable::reset();
     ls_id_.reset();
     snapshot_version_.set_max();
-    reset_trace_id();
   }
   int get_ls_id(share::ObLSID &ls_id);
   share::ObLSID get_ls_id() const;
@@ -193,31 +189,10 @@ public:
 
   virtual bool is_empty() const override { return false; }
 
-  virtual int64_t dec_ref()
-  {
-    int64_t ref_cnt = ObITable::dec_ref();
-    checkpoint::ObCheckpointDiagnoseMgr *cdm = share::g_mp->checkpoint_diagnose_mgr();
-    if (0 == ref_cnt) {
-      if (get_tablet_id().is_ls_inner_tablet()) {
-        REPORT_CHECKPOINT_DIAGNOSE_INFO(update_start_gc_time_for_checkpoint_unit, this)
-      }
-    }
-    return ref_cnt;
-  }
-
-  void set_trace_id(const int64_t trace_id)
-  {
-    if (checkpoint::INVALID_TRACE_ID != trace_id) {
-      ATOMIC_STORE(&trace_id_, trace_id);
-    }
-  }
-  void reset_trace_id() { ATOMIC_STORE(&trace_id_, checkpoint::INVALID_TRACE_ID); }
-  int64_t get_trace_id() const { return ATOMIC_LOAD(&trace_id_); }
+  virtual int64_t dec_ref() { return ObITable::dec_ref(); }
 protected:
   share::ObLSID ls_id_;
   share::SCN snapshot_version_;
-  // batch id for freeze/flush log correlation
-  int64_t trace_id_;
 };
 }  // namespace storage
 
