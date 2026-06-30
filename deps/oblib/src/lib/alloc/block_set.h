@@ -61,6 +61,15 @@ private:
   void add_free_block(ABlock *block, int nblocks, AChunk *chunk);
   ABlock *get_free_block(const int cls, const ObMemAttr &attr);
   void take_off_free_block(ABlock *block, int nblocks, AChunk *chunk);
+  void add_purged_block(ABlock *block, int nblocks, AChunk *chunk);
+  ABlock *get_purged_block(const int cls, const ObMemAttr &attr);
+  void take_off_purged_block(ABlock *block, int nblocks, AChunk *chunk);
+  int64_t purge_free_blocks(const int64_t wash_size,
+      const int64_t delay_us,
+      const int64_t max_blocks_per_round,
+      bool *has_ignore,
+      int64_t *scanned_blocks = nullptr);
+  void maybe_ordinary_purge();
   AChunk *alloc_chunk(const uint64_t size, const ObMemAttr &attr);
   bool add_chunk(const ObMemAttr &attr);
   void free_chunk(AChunk *const chunk);
@@ -74,12 +83,16 @@ private:
   union {
     ABlock *block_list_[BLOCKS_PER_CHUNK+1];
   };
+  ABlock *purged_block_list_[BLOCKS_PER_CHUNK+1];
   AChunk *clist_;  // using chunk list
   ABitSet avail_bm_;
+  ABitSet purged_avail_bm_;
   char avail_bm_buf_[ABitSet::buf_len(BLOCKS_PER_CHUNK+1)];
+  char purged_avail_bm_buf_[ABitSet::buf_len(BLOCKS_PER_CHUNK+1)];
   uint64_t total_hold_;
   uint64_t total_payload_;
   uint64_t total_used_;
+  int64_t last_ordinary_purge_ts_;
 }; // end of class BlockSet
 
 void BlockSet::lock()

@@ -416,6 +416,11 @@ void AChunkMgr::dec_hold(int64_t bytes)
   IGNORE_RETURN ATOMIC_AAF(&hold_, -bytes);
 }
 
+bool AChunkMgr::try_restore_hold(int64_t bytes, bool high_prio)
+{
+  return bytes <= 0 ? true : try_inc_hold_hard(bytes, high_prio);
+}
+
 bool AChunkMgr::try_inc_hold(int64_t bytes, int64_t limit, bool high_prio)
 {
   bool bret = true;

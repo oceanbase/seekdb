@@ -183,6 +183,65 @@ TEST_F(TestBlockSet, BigBlockOrigin)
   }
 }
 
+TEST_F(TestBlockSet, ReusePurgedBlock)
+{
+  const uint64_t sz = 100L * ABLOCK_SIZE;
+  ABlock *p1 = Malloc(sz);
+  ABlock *p2 = Malloc(sz);
+  check_ptr(p1);
+  check_ptr(p2);
+  ASSERT_NE(p1, p2);
+
+  Free(p1);
+  const uint64_t hold_before_wash = cs_.get_total_hold();
+  const int64_t washed_size = cs_.sync_wash(INT64_MAX);
+  ASSERT_GT(washed_size, 0);
+  ASSERT_LT(cs_.get_total_hold(), hold_before_wash);
+
+  const uint64_t hold_after_wash = cs_.get_total_hold();
+  ABlock *p3 = Malloc(sz);
+  ASSERT_EQ(p1, p3);
+  ASSERT_TRUE(p3->in_use_);
+  ASSERT_FALSE(p3->is_washed_);
+  ASSERT_GT(cs_.get_total_hold(), hold_after_wash);
+
+  Free(p2);
+  Free(p3);
+}
+
+TEST_F(TestBlockSet, SplitPurgedBlock)
+{
+  const uint64_t first_blocks = 100;
+  const uint64_t first_size = first_blocks * ABLOCK_SIZE;
+  const uint64_t second_size = (BLOCKS_PER_CHUNK - first_blocks) * ABLOCK_SIZE;
+  ABlock *p1 = Malloc(first_size);
+  ABlock *p2 = Malloc(second_size);
+  check_ptr(p1);
+  check_ptr(p2);
+  AChunk *chunk = p2->chunk();
+  ASSERT_EQ(chunk, p1->chunk());
+
+  Free(p1);
+  ASSERT_EQ(static_cast<int64_t>(first_size), cs_.sync_wash(INT64_MAX));
+  ASSERT_EQ(first_size, chunk->washed_size_);
+  ASSERT_EQ(1, chunk->washed_blks_);
+
+  const uint64_t split_blocks = 40;
+  ABlock *p3 = Malloc(split_blocks * ABLOCK_SIZE);
+  ASSERT_EQ(p1, p3);
+  ASSERT_EQ((first_blocks - split_blocks) * ABLOCK_SIZE, chunk->washed_size_);
+  ASSERT_EQ(1, chunk->washed_blks_);
+
+  ABlock *p4 = Malloc((first_blocks - split_blocks) * ABLOCK_SIZE);
+  ASSERT_EQ(p1 + split_blocks, p4);
+  ASSERT_EQ(0, chunk->washed_size_);
+  ASSERT_EQ(0, chunk->washed_blks_);
+
+  Free(p2);
+  Free(p3);
+  Free(p4);
+}
+
 TEST_F(TestBlockSet, Single)
 {
   uint64_t sz = INTACT_NORMAL_AOBJECT_SIZE;

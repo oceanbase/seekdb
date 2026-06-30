@@ -17,12 +17,13 @@
 #ifndef _OB_TENANT_CTX_ALLOCATOR_H_
 #define _OB_TENANT_CTX_ALLOCATOR_H_
 
-#include "lib/alloc/ob_iallocator.h"
+#include "lib/allocator/ob_allocator.h"
 #include "lib/queue/ob_link.h"
 #include "lib/alloc/object_mgr.h"
 #include "lib/alloc/alloc_failed_reason.h"
 #include "lib/time/ob_time_utility.h"
 #include "lib/resource/ob_resource_mgr.h"
+#include "lib/allocator/ob_tc_malloc.h"
 #include "lib/alloc/memory_sanity.h"
 #include "lib/alloc/alloc_func.h"
 #include <signal.h>
@@ -81,6 +82,7 @@ public:
   }
   bool resource_handle_valid() const { return resource_handle_.is_valid(); }
   void dec_hold(const int64_t size);
+  bool restore_purged_hold(const int64_t size, const ObMemAttr &attr);
   // statistic related
   int set_tenant_memory_mgr()
   {
@@ -414,6 +416,7 @@ public:
   AChunk *alloc_chunk(const int64_t size, const ObMemAttr &attr);
   void free_chunk(AChunk *chunk, const ObMemAttr &attr);
   void dec_hold(const int64_t size);
+  bool restore_purged_hold(const int64_t size, const ObMemAttr &attr);
   int set_idle(const int64_t size, const bool reserve = false);
   IBlockMgr &get_block_mgr() { return obj_mgr_; }
   IChunkMgr &get_chunk_mgr() { return chunk_mgr_; }

@@ -22,7 +22,7 @@
 #include "lib/alloc/memory_dump.h"
 #include "lib/alloc/memory_sanity.h"
 #include "lib/alloc/ob_malloc_callback.h"
-#include "lib/utility/ob_smart_var.h"
+#include "common/ob_smart_var.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
@@ -278,6 +278,12 @@ void ObTenantCtxAllocator::dec_hold(const int64_t size)
 {
   ctx_allocator_.dec_hold(size);
 }
+
+bool ObTenantCtxAllocator::restore_purged_hold(const int64_t size, const ObMemAttr &attr)
+{
+  return ctx_allocator_.restore_purged_hold(size, attr);
+}
+
 void ObTenantCtxAllocatorV2::dec_hold(const int64_t size)
 {
   if (!resource_handle_.is_valid()) {
@@ -287,6 +293,28 @@ void ObTenantCtxAllocatorV2::dec_hold(const int64_t size)
     resource_handle_.get_memory_mgr()->update_hold(-size, ctx_id_, ObLabel(), reach_ctx_limit);
     AChunkMgr::instance().dec_hold(size);
   }
+}
+
+bool ObTenantCtxAllocatorV2::restore_purged_hold(const int64_t size, const ObMemAttr &attr)
+{
+  bool bret = true;
+  if (size <= 0) {
+    bret = true;
+  } else if (!resource_handle_.is_valid()) {
+    bret = false;
+    LIB_LOG_RET(ERROR, OB_INVALID_ARGUMENT, "resource_handle is invalid", K_(ctx_id));
+  } else {
+    bool reach_ctx_limit = false;
+    const bool high_prio = OB_HIGH_ALLOC == attr.prio_;
+    if (!resource_handle_.get_memory_mgr()->update_hold(size, ctx_id_, ObLabel(), reach_ctx_limit, high_prio)) {
+      bret = false;
+    } else if (!AChunkMgr::instance().try_restore_hold(size, high_prio)) {
+      bool unused_reach_ctx_limit = false;
+      resource_handle_.get_memory_mgr()->update_hold(-size, ctx_id_, ObLabel(), unused_reach_ctx_limit);
+      bret = false;
+    }
+  }
+  return bret;
 }
 
 int ObTenantCtxAllocator::set_idle(const int64_t set_size, const bool reserve/*=false*/)
