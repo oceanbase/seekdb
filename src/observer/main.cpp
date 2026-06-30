@@ -576,7 +576,7 @@ int inner_main(int argc, char *argv[])
   // temporarily unlimited memory before init config
   set_memory_limit(INT_MAX64);
 
-  // LLVM removed: the objit LLVM symbolizer is gone; sanity (ASAN/UBSAN) builds keep
+  // LLVM removed: the LLVM symbolizer is gone; sanity (ASAN/UBSAN) builds keep
   // backtrace_symbolize_func at its default (NULL) -> unsymbolized frames.
 #if defined(_WIN32) || defined(__ANDROID__)
   snprintf(ob_get_tname(), OB_THREAD_NAME_BUF_LEN, "seekdb");

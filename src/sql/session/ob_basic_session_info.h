@@ -1351,12 +1351,6 @@ public:
     }
   }
   void set_current_trace_id(common::ObCurTraceId::TraceId *trace_id);
-  // forbid use jit
-  int get_jit_enabled_mode(ObJITEnableMode &jit_mode) const
-  {
-    jit_mode = ObJITEnableMode::OFF;
-    return common::OB_SUCCESS;
-  }
 
   bool get_enable_exact_mode() const
   {
@@ -1715,7 +1709,6 @@ public:
         ob_enable_transmission_checksum_(false),
         character_set_results_(ObCharsetType::CHARSET_INVALID),
         character_set_connection_(ObCharsetType::CHARSET_INVALID),
-        ob_enable_jit_(ObJITEnableMode::OFF),
         cursor_sharing_mode_(ObCursorSharingMode::FORCE_MODE),
         timestamp_(0),
         tx_isolation_(transaction::ObTxIsolationLevel::INVALID),
@@ -1780,7 +1773,6 @@ public:
       ob_enable_transmission_checksum_ = false;
       character_set_results_ = ObCharsetType::CHARSET_INVALID;
       character_set_connection_ = ObCharsetType::CHARSET_INVALID;
-      ob_enable_jit_ = ObJITEnableMode::OFF;
       cursor_sharing_mode_ = ObCursorSharingMode::FORCE_MODE;
       timestamp_ = 0;
       tx_isolation_ = transaction::ObTxIsolationLevel::INVALID;
@@ -1843,7 +1835,6 @@ public:
             ob_enable_transmission_checksum_ == other.ob_enable_transmission_checksum_ &&
             character_set_results_ == other.character_set_results_ &&
             character_set_connection_ == other.character_set_connection_ &&
-            ob_enable_jit_ == other.ob_enable_jit_ &&
             cursor_sharing_mode_ == other.cursor_sharing_mode_ &&
             timestamp_ == other.timestamp_ &&
             tx_isolation_ == other.tx_isolation_ &&
@@ -2014,7 +2005,6 @@ public:
     bool ob_enable_transmission_checksum_;
     ObCharsetType character_set_results_;
     ObCharsetType character_set_connection_;
-    ObJITEnableMode ob_enable_jit_;
     ObCursorSharingMode cursor_sharing_mode_;
 
     int64_t timestamp_;
@@ -2143,7 +2133,6 @@ private:
     DEF_SYS_VAR_CACHE_FUNCS(bool, ob_enable_transmission_checksum);
     DEF_SYS_VAR_CACHE_FUNCS(ObCharsetType, character_set_results);
     DEF_SYS_VAR_CACHE_FUNCS(ObCharsetType, character_set_connection);
-    DEF_SYS_VAR_CACHE_FUNCS(ObJITEnableMode, ob_enable_jit);
     DEF_SYS_VAR_CACHE_FUNCS(ObCursorSharingMode, cursor_sharing_mode);
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, timestamp);
     DEF_SYS_VAR_CACHE_FUNCS(transaction::ObTxIsolationLevel, tx_isolation);
@@ -2220,7 +2209,7 @@ private:
         bool inc_ob_enable_transmission_checksum_:1;
         bool inc_character_set_results_:1;
         bool inc_character_set_connection_:1;
-        bool inc_ob_enable_jit_:1;
+        bool inc_reserved_:1; // ob_enable_jit
         bool inc_cursor_sharing_mode_:1;
         bool inc_timestamp_:1;
         bool inc_tx_isolation_:1;

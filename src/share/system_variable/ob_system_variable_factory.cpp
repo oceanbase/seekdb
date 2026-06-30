@@ -68,12 +68,6 @@ const char *ObSysVarObRoutePolicy::OB_ROUTE_POLICY_NAMES[] = {
   "FORCE_READONLY_ZONE",
   0
 };
-const char *ObSysVarObEnableJit::OB_ENABLE_JIT_NAMES[] = {
-  "OFF",
-  "AUTO",
-  "FORCE",
-  0
-};
 const char *ObSysVarBlockEncryptionMode::BLOCK_ENCRYPTION_MODE_NAMES[] = {
   "aes-128-ecb",
   "aes-192-ecb",
@@ -1091,7 +1085,6 @@ const char *ObSysVarFactory::SYS_VAR_NAMES_SORTED_BY_NAME[] = {
   "ob_early_lock_release",
   "ob_enable_aggregation_pushdown",
   "ob_enable_index_direct_select",
-  "ob_enable_jit",
   "ob_enable_parameter_anonymous_block",
   "ob_enable_pl_cache",
   "ob_enable_plan_cache",
@@ -1929,7 +1922,6 @@ const ObSysVarClassType ObSysVarFactory::SYS_VAR_IDS_SORTED_BY_NAME[] = {
   SYS_VAR_OB_EARLY_LOCK_RELEASE,
   SYS_VAR_OB_ENABLE_AGGREGATION_PUSHDOWN,
   SYS_VAR_OB_ENABLE_INDEX_DIRECT_SELECT,
-  SYS_VAR_OB_ENABLE_JIT,
   SYS_VAR_OB_ENABLE_PARAMETER_ANONYMOUS_BLOCK,
   SYS_VAR_OB_ENABLE_PL_CACHE,
   SYS_VAR_OB_ENABLE_PLAN_CACHE,
@@ -2373,7 +2365,6 @@ const char *ObSysVarFactory::SYS_VAR_NAMES_SORTED_BY_ID[] = {
   "sql_throttle_network",
   "sql_throttle_logical_reads",
   "auto_increment_cache_size",
-  "ob_enable_jit",
   "ob_temp_tablespace_size_percentage",
   "plugin_dir",
   "optimizer_use_sql_plan_baselines",
@@ -3417,7 +3408,6 @@ int ObSysVarFactory::create_all_sys_vars_()
         + sizeof(ObSysVarSqlThrottleNetwork)
         + sizeof(ObSysVarSqlThrottleLogicalReads)
         + sizeof(ObSysVarAutoIncrementCacheSize)
-        + sizeof(ObSysVarObEnableJit)
         + sizeof(ObSysVarObTempTablespaceSizePercentage)
         + sizeof(ObSysVarPluginDir)
         + sizeof(ObSysVarOptimizerUseSqlPlanBaselines)
@@ -5386,15 +5376,6 @@ int ObSysVarFactory::create_all_sys_vars_()
       } else {
         store_buf_[ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(SYS_VAR_AUTO_INCREMENT_CACHE_SIZE))] = sys_var_ptr;
         ptr = (void *)((char *)ptr + sizeof(ObSysVarAutoIncrementCacheSize));
-      }
-    }
-    if (OB_SUCC(ret)) {
-      if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarObEnableJit())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarObEnableJit", K(ret));
-      } else {
-        store_buf_[ObSysVarsToIdxMap::get_store_idx(static_cast<int64_t>(SYS_VAR_OB_ENABLE_JIT))] = sys_var_ptr;
-        ptr = (void *)((char *)ptr + sizeof(ObSysVarObEnableJit));
       }
     }
     if (OB_SUCC(ret)) {
@@ -13192,17 +13173,6 @@ int ObSysVarFactory::create_sys_var(ObIAllocator &allocator_, ObSysVarClassType 
       } else if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarAutoIncrementCacheSize())) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("fail to new ObSysVarAutoIncrementCacheSize", K(ret));
-      }
-      break;
-    }
-    case SYS_VAR_OB_ENABLE_JIT: {
-      void *ptr = NULL;
-      if (OB_ISNULL(ptr = allocator_.alloc(sizeof(ObSysVarObEnableJit)))) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to alloc memory", K(ret), K(sizeof(ObSysVarObEnableJit)));
-      } else if (OB_ISNULL(sys_var_ptr = new (ptr)ObSysVarObEnableJit())) {
-        ret = OB_ALLOCATE_MEMORY_FAILED;
-        LOG_ERROR("fail to new ObSysVarObEnableJit", K(ret));
       }
       break;
     }

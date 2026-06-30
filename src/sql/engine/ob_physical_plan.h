@@ -404,11 +404,6 @@ public:
     is_late_materialized_ = is_late_mat;
   }
 
-  inline bool is_use_jit() const
-  {
-    return stat_.is_use_jit_;
-  }
-
   inline void set_is_dep_base_table(bool v) { is_dep_base_table_ = v; }
   inline bool is_dep_base_table() const { return is_dep_base_table_; }
 

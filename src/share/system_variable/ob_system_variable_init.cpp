@@ -64,7 +64,6 @@ const ObSysVarClassType ESSENTIAL_SYS_VARS[] = {
   SYS_VAR_OB_ENABLE_AGGREGATION_PUSHDOWN,        // ob_enable_aggregation_pushdown
   SYS_VAR_OB_BNL_JOIN_CACHE_SIZE,        // ob_bnl_join_cache_size
   SYS_VAR_OB_ROUTE_POLICY,        // ob_route_policy
-  SYS_VAR_OB_ENABLE_JIT,        // ob_enable_jit
   SYS_VAR_NLS_DATE_FORMAT,        // nls_date_format
   SYS_VAR_NLS_TIMESTAMP_FORMAT,        // nls_timestamp_format
   SYS_VAR_NLS_TIMESTAMP_TZ_FORMAT,        // nls_timestamp_tz_format
@@ -2105,20 +2104,6 @@ static struct VarsInit{
       ObSysVarsIdToArrayIdx[SYS_VAR_AUTO_INCREMENT_CACHE_SIZE] = 140 ;
       ObSysVars[140].base_value_ = "1000000" ;
     ObSysVars[140].alias_ = "OB_SV_AUTO_INCREMENT_CACHE_SIZE" ;
-    }();
-
-    [&] (){
-      ObSysVars[141].default_value_ = "0" ;
-      ObSysVars[141].info_ = "JIT execution engine mode, default is AUTO" ;
-      ObSysVars[141].name_ = "ob_enable_jit" ;
-      ObSysVars[141].data_type_ = ObIntType ;
-      ObSysVars[141].enum_names_ = "[u'OFF', u'AUTO', u'FORCE']" ;
-      ObSysVars[141].flags_ = ObSysVarFlag::GLOBAL_SCOPE | ObSysVarFlag::SESSION_SCOPE | ObSysVarFlag::NEED_SERIALIZE | ObSysVarFlag::INFLUENCE_PLAN ;
-      ObSysVars[141].id_ = SYS_VAR_OB_ENABLE_JIT ;
-      cur_max_var_id = MAX(cur_max_var_id, static_cast<int64_t>(SYS_VAR_OB_ENABLE_JIT)) ;
-      ObSysVarsIdToArrayIdx[SYS_VAR_OB_ENABLE_JIT] = 141 ;
-      ObSysVars[141].base_value_ = "0" ;
-    ObSysVars[141].alias_ = "OB_SV_ENABLE_JIT" ;
     }();
 
     [&] (){

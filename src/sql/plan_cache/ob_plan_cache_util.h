@@ -645,7 +645,6 @@ struct ObPlanStat
   char plan_tmp_tbl_name_str_[STMT_MAX_LEN];
   int32_t plan_tmp_tbl_name_str_len_;
   // Does plan use jit compiled expression
-  bool is_use_jit_;
   // The following fields are used for storing the self-selection of layer cache access policy
   bool enable_bf_cache_; // indicates whether the bloomfilter cache access is enabled
   bool enable_fuse_row_cache_; // indicates whether the fuse row cache access is enabled
@@ -729,7 +728,6 @@ struct ObPlanStat
       sample_exec_usec_(0),
       sessid_(0),
       plan_tmp_tbl_name_str_len_(0),
-      is_use_jit_(false),
       enable_bf_cache_(true),
       enable_fuse_row_cache_(true),
       enable_row_cache_(true),
@@ -806,7 +804,6 @@ struct ObPlanStat
       sample_exec_usec_(rhs.sample_exec_usec_),
       sessid_(rhs.sessid_),
       plan_tmp_tbl_name_str_len_(rhs.plan_tmp_tbl_name_str_len_),
-      is_use_jit_(rhs.is_use_jit_),
       enable_bf_cache_(rhs.enable_bf_cache_),
       enable_fuse_row_cache_(rhs.enable_fuse_row_cache_),
       enable_row_cache_(rhs.enable_row_cache_),

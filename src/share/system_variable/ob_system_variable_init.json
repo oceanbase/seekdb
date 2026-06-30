@@ -2025,24 +2025,6 @@
     "background_cn": "",
     "ref_url": ""
   },
-  "ob_enable_jit": {
-    "id": 10048,
-    "name": "ob_enable_jit",
-    "default_value": "0",
-    "base_value": "0",
-    "data_type": "enum",
-    "info": "JIT execution engine mode, default is AUTO",
-    "flags": "GLOBAL | SESSION | NEED_SERIALIZE | INFLUENCE_PLAN",
-    "enum_names": [
-      "OFF",
-      "AUTO",
-      "FORCE"
-    ],
-    "publish_version": "",
-    "info_cn": "",
-    "background_cn": "",
-    "ref_url": ""
-  },
   "ob_temp_tablespace_size_percentage": {
     "id": 10049,
     "name": "ob_temp_tablespace_size_percentage",

@@ -2643,12 +2643,6 @@ OB_INLINE int ObBasicSessionInfo::process_session_variable(ObSysVarClassType var
       }
       break;
     }
-    case SYS_VAR_OB_ENABLE_JIT: {
-      int64_t int_val = 0;
-      OZ (val.get_int(int_val), val);
-      OX (sys_vars_cache_.set_ob_enable_jit(static_cast<ObJITEnableMode>(int_val)));
-      break;
-    }
     case SYS_VAR_CURSOR_SHARING: {
       int64_t int_val = 0;
       OZ (val.get_int(int_val), val);
@@ -3240,12 +3234,6 @@ int ObBasicSessionInfo::fill_sys_vars_cache_base_value(
       uint64_t uint_val = 0;
       OZ (val.get_uint64(uint_val), val);
       OX (sys_vars_cache.set_base_security_version(uint_val));
-      break;
-    }
-    case SYS_VAR_OB_ENABLE_JIT: {
-      int64_t int_val = 0;
-      OZ (val.get_int(int_val), val);
-      OX (sys_vars_cache.set_base_ob_enable_jit(static_cast<ObJITEnableMode>(int_val)));
       break;
     }
     case SYS_VAR_CURSOR_SHARING: {

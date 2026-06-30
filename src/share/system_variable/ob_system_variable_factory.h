@@ -1028,15 +1028,6 @@ public:
   inline virtual ObSysVarClassType get_type() const { return SYS_VAR_AUTO_INCREMENT_CACHE_SIZE; }
   inline virtual const common::ObObj &get_global_default_value() const { return ObSysVariables::get_default_value(140); }
 };
-class ObSysVarObEnableJit : public ObEnumSysVar
-{
-public:
-  const static char * OB_ENABLE_JIT_NAMES[];
-public:
-  ObSysVarObEnableJit() : ObEnumSysVar(OB_ENABLE_JIT_NAMES, NULL, NULL, NULL, NULL, NULL) {}
-  inline virtual ObSysVarClassType get_type() const { return SYS_VAR_OB_ENABLE_JIT; }
-  inline virtual const common::ObObj &get_global_default_value() const { return ObSysVariables::get_default_value(141); }
-};
 class ObSysVarObTempTablespaceSizePercentage : public ObIntSysVar
 {
 public:

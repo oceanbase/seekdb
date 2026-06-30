@@ -912,16 +912,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
       }
       break;
     }
-    case share::ALL_VIRTUAL_PLAN_STAT_CDE::IS_USE_JIT: {
-      if (!cache_stat_updated) {
-        cells[i].set_null();
-      } else if (cache_obj->is_sql_crsr()) {
-        cells[i].set_bool(plan->stat_.is_use_jit_);
-      } else {
-        cells[i].set_bool(false);
-      }
-      break;
-    }
     case share::ALL_VIRTUAL_PLAN_STAT_CDE::OBJECT_TYPE: {
       ObString type_name;
       if (NS_PKG == cache_obj->get_ns()) {

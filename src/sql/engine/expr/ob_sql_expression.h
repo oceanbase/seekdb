@@ -121,11 +121,6 @@ public:
 
   inline void set_fast_expr(ObFastExprOperator *fast_expr) { fast_expr_ = fast_expr; }
 
-  bool is_use_jitted_expr() const
-  {
-    return false;
-  }
-
   void set_is_pl_mock_default_expr(bool v) { is_pl_mock_default_expr_ = v; }
   bool get_is_pl_mock_default_expr() const { return is_pl_mock_default_expr_; }
 

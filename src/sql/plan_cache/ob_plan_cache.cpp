@@ -419,7 +419,6 @@ int ObPlanCache::check_after_get_plan(int tmp_ret,
   int ret = tmp_ret;
   ObPhysicalPlan *plan = NULL;
   bool need_late_compilation = false;
-  ObJITEnableMode jit_mode = ObJITEnableMode::OFF;
   ObPlanCacheCtx &pc_ctx = static_cast<ObPlanCacheCtx&>(ctx);
 
   if (cache_obj != NULL && ObLibCacheNameSpace::NS_CRSR == cache_obj->get_ns()) {
@@ -429,18 +428,11 @@ int ObPlanCache::check_after_get_plan(int tmp_ret,
     if (OB_ISNULL(pc_ctx.sql_ctx_.session_info_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null session info", K(ret));
-    } else if (OB_FAIL(pc_ctx.sql_ctx_.session_info_->get_jit_enabled_mode(jit_mode))) {
-      LOG_WARN("failed to get jit mode");
     }
   }
   if (OB_SUCC(ret) && plan != NULL) {
-    if (ObJITEnableMode::AUTO == jit_mode && // only use late compilation when jit_mode is auto
-      OB_FAIL(need_late_compile(plan, need_late_compilation))) {
-      LOG_WARN("failed to check for late compilation", K(ret));
-    } else {
-      // set context's need_late_compile_ for upper layer to proceed
-      pc_ctx.sql_ctx_.need_late_compile_ = need_late_compilation;
-    }
+    // set context's need_late_compile_ for upper layer to proceed
+    pc_ctx.sql_ctx_.need_late_compile_ = need_late_compilation;
   }
   // if schema expired, update pcv set;
   if (OB_OLD_SCHEMA_VERSION == ret
@@ -2190,8 +2182,6 @@ int ObPlanCache::need_late_compile(ObPhysicalPlan *plan,
   if (OB_ISNULL(plan)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(plan));
-  } else if (plan->is_use_jit()) {
-    // do nothing
   } else if (plan->stat_.execute_times_ >= 10) { // after ten times of execution
     uint64_t avg_exec_duration = plan->stat_.cpu_time_ / plan->stat_.execute_times_;
     // for now, hard code the exec duration threshold to be 1s

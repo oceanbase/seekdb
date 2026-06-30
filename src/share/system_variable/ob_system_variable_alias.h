@@ -161,7 +161,6 @@ namespace share
   static const char* const OB_SV_SQL_THROTTLE_NETWORK = "sql_throttle_network";
   static const char* const OB_SV_SQL_THROTTLE_LOGICAL_READS = "sql_throttle_logical_reads";
   static const char* const OB_SV_AUTO_INCREMENT_CACHE_SIZE = "auto_increment_cache_size";
-  static const char* const OB_SV_ENABLE_JIT = "ob_enable_jit";
   static const char* const OB_SV_TEMP_TABLESPACE_SIZE_PERCENTAGE = "ob_temp_tablespace_size_percentage";
   static const char* const OB_SV_PLUGIN_DIR = "plugin_dir";
   static const char* const OB_SV_OPTIMIZER_USE_SQL_PLAN_BASELINES = "optimizer_use_sql_plan_baselines";
