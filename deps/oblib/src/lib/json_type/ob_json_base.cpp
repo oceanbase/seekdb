@@ -7286,5 +7286,8 @@ ObIJsonBase* ObJsonSeekResult::last()
 }
 
 
+template int ObJsonBaseUtil::double_to_number<ObDataBuffer>(double, ObDataBuffer&, number::ObNumber&);
+template int ObJsonBaseUtil::double_to_number<ObIAllocator>(double, ObIAllocator&, number::ObNumber&);
+
 } // namespace common
 } // namespace oceanbase

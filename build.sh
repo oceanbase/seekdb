@@ -23,9 +23,11 @@ MAKE_ARGS=(-j $CPU_CORES)
 NEED_MAKE=false
 NEED_INIT=false
 ANDROID_BUILD=false
+LOG_COMPILE_LEVEL=""
 LLD_OPTION=ON
 ASAN_OPTION=ON
 STATIC_LINK_LGPL_DEPS_OPTION=ON
+ENABLE_BOLT_OPTION=ON
 
 echo "$0 ${ALL_ARGS[@]}"
 
@@ -49,6 +51,8 @@ function usage
     echo -e "\nOPTIONS:"
     echo -e "\tBuildType => debug(default), release, errsim, dissearray, rpm"
     echo -e "\t--android  => Cross-compile for Android NDK (arm64-v8a)"
+    echo -e "\t--log-compile-level=N => Compile-time log level threshold (0-6, default 6=all)"
+    echo -e "\t                         3=keep ERROR+INFO, eliminate WARN/TRACE/DEBUG (lite builds)"
     echo -e "\tMakeOptions => Options to make command, default: -j N"
 
     echo -e "\nExamples:"
@@ -60,6 +64,9 @@ function usage
 
     echo -e "\n\t# Build for Android with release mode."
     echo -e "\t./build.sh release --android --init"
+
+    echo -e "\n\t# Build release with log slimming (eliminate WARN/TRACE/DEBUG logs)."
+    echo -e "\t./build.sh release --log-compile-level=3 --make"
 
     echo -e "\n\t# Build with rpm mode and make with default arguments."
     echo -e "\t./build.sh rpm --make"
@@ -75,6 +82,9 @@ function parse_args
         elif [[ "$i" == "--android" ]]
         then
             ANDROID_BUILD=true
+        elif [[ "$i" == "--log-compile-level="* ]]
+        then
+            LOG_COMPILE_LEVEL="${i#*=}"
         elif [[ "$i" == "--make" ]]
         then
             NEED_MAKE=make
@@ -84,6 +94,7 @@ function parse_args
             MAKE_ARGS=()
         elif [[ "$i" == "-DBUILD_CDC_ONLY=ON" ]]
         then
+            ENABLE_BOLT_OPTION=OFF
             BUILD_ARGS+=("$i")
         elif [[ $NEED_MAKE == false ]]
         then
@@ -198,7 +209,13 @@ function do_build
       echo_log "Android NDK: $ANDROID_NDK_HOME"
     fi
 
-    ${CMAKE_COMMAND} ${TOPDIR} ${ANDROID_CMAKE_ARGS} "$@"
+    LOG_LEVEL_CMAKE_ARGS=""
+    if [[ -n "$LOG_COMPILE_LEVEL" ]]; then
+      LOG_LEVEL_CMAKE_ARGS="-DOB_LOG_COMPILE_LEVEL=$LOG_COMPILE_LEVEL"
+      echo_log "OB_LOG_COMPILE_LEVEL=$LOG_COMPILE_LEVEL (logs with level > $LOG_COMPILE_LEVEL will be eliminated at compile time)"
+    fi
+
+    ${CMAKE_COMMAND} ${TOPDIR} ${ANDROID_CMAKE_ARGS} ${LOG_LEVEL_CMAKE_ARGS} "$@"
     if [ $? -ne 0 ]; then
       echo_err "Failed to generate Makefile"
       exit 1
@@ -215,13 +232,15 @@ function do_clean
 function build_package
 {
     STATIC_LINK_LGPL_DEPS_OPTION=ON
-    do_build "$@" -DOB_BUILD_PACKAGE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_FATAL_ERROR_HANG=OFF -DENABLE_AUTO_FDO=ON -DENABLE_THIN_LTO=ON -DENABLE_HOTFUNC=ON -DOB_STATIC_LINK_LGPL_DEPS=$STATIC_LINK_LGPL_DEPS_OPTION -DDEFAULT_LOG_LEVEL=OB_LOG_LEVEL_DBA_WARN -DDEFAULT_LOG_FILE_SIZE_MB=16
+    ENABLE_BOLT_OPTION=OFF
+    do_build "$@" -DOB_BUILD_PACKAGE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_FATAL_ERROR_HANG=OFF -DENABLE_AUTO_FDO=ON -DENABLE_THIN_LTO=ON -DENABLE_HOTFUNC=ON -DENABLE_BOLT=$ENABLE_BOLT_OPTION -DOB_STATIC_LINK_LGPL_DEPS=$STATIC_LINK_LGPL_DEPS_OPTION -DDEFAULT_LOG_LEVEL=OB_LOG_LEVEL_DBA_WARN -DDEFAULT_LOG_FILE_SIZE_MB=16
 }
 
 function build_package_tgz
 {
     STATIC_LINK_LGPL_DEPS_OPTION=ON
-    do_build "$@" -DOB_BUILD_PACKAGE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_THIN_LTO=ON -DDEFAULT_LOG_LEVEL=OB_LOG_LEVEL_DBA_WARN -DDEFAULT_LOG_FILE_SIZE_MB=16 -DENABLE_FATAL_ERROR_HANG=OFF -DENABLE_AUTO_FDO=OFF -DENABLE_HOTFUNC=OFF -DOB_STATIC_LINK_LGPL_DEPS=$STATIC_LINK_LGPL_DEPS_OPTION
+    ENABLE_BOLT_OPTION=OFF
+    do_build "$@" -DOB_BUILD_PACKAGE=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_USE_LLD=$LLD_OPTION -DENABLE_THIN_LTO=ON -DDEFAULT_LOG_LEVEL=OB_LOG_LEVEL_DBA_WARN -DDEFAULT_LOG_FILE_SIZE_MB=16 -DENABLE_FATAL_ERROR_HANG=OFF -DENABLE_AUTO_FDO=OFF -DENABLE_HOTFUNC=OFF -DOB_ENABLE_BOLT=$ENABLE_BOLT_OPTION -DOB_STATIC_LINK_LGPL_DEPS=$STATIC_LINK_LGPL_DEPS_OPTION
 }
 
 # build - configurate project and prepare to compile, by calling make
@@ -261,10 +280,10 @@ function build
         ln -sf ${TOPDIR}/build_clangd/compile_commands.json ${TOPDIR}/compile_commands.json
         ;;
       xperf)
-        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_AUTO_FDO=ON -DENABLE_THIN_LTO=ON -DOB_USE_LLD=$LLD_OPTION -DENABLE_HOTFUNC=ON -DENABLE_FATAL_ERROR_HANG=OFF
+        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_AUTO_FDO=ON -DENABLE_THIN_LTO=ON -DOB_USE_LLD=$LLD_OPTION -DENABLE_HOTFUNC=ON -DENABLE_BOLT_AUTO=ON -DENABLE_FATAL_ERROR_HANG=OFF
         ;;
       xmac_perf)
-        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_THIN_LTO=ON -DOB_USE_LLD=ON -DENABLE_AUTO_FDO=OFF -DENABLE_HOTFUNC=OFF -DENABLE_FATAL_ERROR_HANG=OFF
+        do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DENABLE_THIN_LTO=ON -DOB_USE_LLD=ON -DENABLE_AUTO_FDO=OFF -DENABLE_HOTFUNC=OFF -DOB_ENABLE_BOLT=OFF -DENABLE_FATAL_ERROR_HANG=OFF
         ;;
       xerrsim)
         do_build "$@" -DCMAKE_BUILD_TYPE=RelWithDebInfo -DOB_ERRSIM=ON -DOB_USE_LLD=$LLD_OPTION
