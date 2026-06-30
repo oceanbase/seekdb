@@ -240,7 +240,6 @@ ob_default_lob_inrow_threshold	8192
 ob_early_lock_release	OFF
 ob_enable_aggregation_pushdown	ON
 ob_enable_index_direct_select	OFF
-ob_enable_jit	OFF
 ob_enable_parameter_anonymous_block	ON
 ob_enable_plan_cache	ON
 ob_enable_pl_cache	ON
@@ -291,7 +290,6 @@ ob_default_lob_inrow_threshold	8192
 ob_early_lock_release	OFF
 ob_enable_aggregation_pushdown	ON
 ob_enable_index_direct_select	OFF
-ob_enable_jit	OFF
 ob_enable_parameter_anonymous_block	ON
 ob_enable_plan_cache	ON
 ob_enable_pl_cache	ON

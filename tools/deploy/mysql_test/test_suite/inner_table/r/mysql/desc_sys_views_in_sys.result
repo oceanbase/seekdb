@@ -344,7 +344,6 @@ TIMEOUT_COUNT	bigint(20)	NO		NULL
 PS_STMT_ID	bigint(20)	NO		NULL	
 SESSID	bigint(20) unsigned	NO		NULL	
 TEMP_TABLES	longtext	NO		NULL	
-IS_USE_JIT	tinyint(4)	NO		NULL	
 OBJECT_TYPE	longtext	NO		NULL	
 HINTS_INFO	longtext	NO		NULL	
 HINTS_ALL_WORKED	tinyint(4)	NO		NULL	
