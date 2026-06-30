@@ -3142,7 +3142,6 @@ int ObSql::generate_plan(ParseResult &parse_result,
     pctx->set_is_ps_protocol(result.is_ps_protocol());
     bool is_restore = false;
     ObOptimizer optimizer(optctx);
-    bool turn_on_jit = sql_ctx.need_late_compile_;
 
     ObLogPlan *logical_plan = NULL;
     ObPhysicalPlan *phy_plan = NULL;

@@ -450,11 +450,6 @@ private:
                                       ObLibCacheNameSpace ns,
                                       ObPlanCacheKey &pc_key,
                                       bool is_weak);
-  /**
-   * @brief wether jit compilation is needed in this sql
-   *
-   */
-  int need_late_compile(ObPhysicalPlan *plan, bool &need_late_compilation);
   int add_stat_for_cache_obj(ObILibCacheCtx &ctx, ObILibCacheObject *cache_obj);
   int create_node_and_add_cache_obj(ObILibCacheKey *key,
                                     ObILibCacheCtx &ctx,

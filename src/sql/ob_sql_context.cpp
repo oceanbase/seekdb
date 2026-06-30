@@ -140,7 +140,6 @@ ObSqlCtx::ObSqlCtx()
     statement_id_(common::OB_INVALID_ID),
     stmt_type_(stmt::T_NONE),
     is_restore_(false),
-    need_late_compile_(false),
     all_plan_const_param_constraints_(nullptr),
     all_possible_const_param_constraints_(nullptr),
     all_equal_param_constraints_(nullptr),
@@ -194,7 +193,6 @@ void ObSqlCtx::reset()
   is_dynamic_sql_ = false;
   is_remote_sql_ = false;
   is_restore_ = false;
-  need_late_compile_ = false;
   all_plan_const_param_constraints_ = nullptr;
   all_possible_const_param_constraints_ = nullptr;
   all_equal_param_constraints_ = nullptr;

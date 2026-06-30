@@ -664,8 +664,6 @@ public:
   // if not found values in this array, just use local server's replica.
   common::ObFixedArray<ObDupTabConstraint, common::ObIAllocator> dup_table_replica_cons_;
 
-  // wether need late compilation
-  bool need_late_compile_;
   // Constants constraints passed from resolver
   // all_possible_const_param_constraints_ indicates all possible constant constraints in this sql
   // all_plan_const_param_constraints_ indicates all constant constraints existing in this sql

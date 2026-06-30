@@ -418,7 +418,6 @@ int ObPlanCache::check_after_get_plan(int tmp_ret,
 {
   int ret = tmp_ret;
   ObPhysicalPlan *plan = NULL;
-  bool need_late_compilation = false;
   ObPlanCacheCtx &pc_ctx = static_cast<ObPlanCacheCtx&>(ctx);
 
   if (cache_obj != NULL && ObLibCacheNameSpace::NS_CRSR == cache_obj->get_ns()) {
@@ -430,13 +429,8 @@ int ObPlanCache::check_after_get_plan(int tmp_ret,
       LOG_WARN("unexpected null session info", K(ret));
     }
   }
-  if (OB_SUCC(ret) && plan != NULL) {
-    // set context's need_late_compile_ for upper layer to proceed
-    pc_ctx.sql_ctx_.need_late_compile_ = need_late_compilation;
-  }
   // if schema expired, update pcv set;
-  if (OB_OLD_SCHEMA_VERSION == ret
-    || need_late_compilation) {
+  if (OB_OLD_SCHEMA_VERSION == ret) {
       if (OB_FAIL(remove_cache_node(pc_ctx.key_))) {
         LOG_WARN("fail to remove pcv set when schema/plan expired", K(ret));
       } else {
@@ -2171,27 +2165,6 @@ OB_INLINE int ObPlanCache::construct_plan_cache_key(ObSQLSessionInfo &session,
   OZ (session.get_sys_var_config_hash_val(pc_key.sys_var_config_hash_val_));
   pc_key.is_weak_read_ = is_weak;
   pc_key.enable_mysql_compatible_dates_ = session.enable_mysql_compatible_dates();
-  return ret;
-}
-
-int ObPlanCache::need_late_compile(ObPhysicalPlan *plan,
-                                   bool &need_late_compilation)
-{
-  int ret = OB_SUCCESS;
-  need_late_compilation = false;
-  if (OB_ISNULL(plan)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(plan));
-  } else if (plan->stat_.execute_times_ >= 10) { // after ten times of execution
-    uint64_t avg_exec_duration = plan->stat_.cpu_time_ / plan->stat_.execute_times_;
-    // for now, hard code the exec duration threshold to be 1s
-    if (avg_exec_duration > 1000000UL) {
-      need_late_compilation = true;
-    } else {
-      need_late_compilation = false;
-    }
-  }
-  LOG_TRACE("will use late compilation", K(need_late_compilation));
   return ret;
 }
 
