@@ -35,6 +35,9 @@ using namespace oceanbase::lib;
 
 namespace
 {
+// Ordinary purge is driven opportunistically by alloc/free paths, not by a
+// background timer. Keep each round bounded so the caller pays a predictable
+// amount of work.
 static const int64_t ORDINARY_PURGE_BUDGET = 4L << 20;
 static const int64_t ORDINARY_PURGE_MIN_INTERVAL_US = 1000L * 1000L;
 static const int64_t ORDINARY_PURGE_DELAY_US = 1000L * 1000L;
@@ -170,15 +173,18 @@ void BlockSet::free_block(ABlock *const block)
       // head won't been NULL,
       if (head != NULL) {
         head->in_use_ = false;
-        // copy a temp
         if (0 == chunk->using_cnt_) {
+          // The whole chunk is leaving BlockSet. Remove every dirty/purged
+          // free-list reference first; after this handoff only chunk-level
+          // cache/direct-free paths can touch it, so block-level purge will
+          // not see this chunk again.
           int offset = 0;
           do {
             ABlock *unused_block = chunk->offset2blk(offset);
             int next_offset = -1;
             bool is_last = chunk->is_last_blk_offset(offset, &next_offset);
             abort_unless(!unused_block->in_use_);
-            // don't allow to take off head twice
+            // head is the newly formed free span and has not been inserted yet.
             if (unused_block->is_washed_) {
               take_off_purged_block(unused_block, chunk->blk_nblocks(unused_block), chunk);
             } else if (head != unused_block) {
@@ -361,6 +367,9 @@ ABlock *BlockSet::merge_with_adjacent_purged_blocks(ABlock *block,
     AChunk *chunk,
     int64_t &merged_blocks)
 {
+  // The current block has already been madvise'd. Neighboring purged spans
+  // were accounted before, so this helper only coalesces list metadata and
+  // reports how many span entries disappeared.
   abort_unless(NULL != block && NULL != chunk && !block->in_use_ && block->is_washed_);
   ABlock *head = block;
   merged_blocks = 0;
@@ -462,6 +471,8 @@ void BlockSet::free_chunk(AChunk *const chunk)
     if (chunk->washed_size_ != 0) {
       tallocator_->update_wash_stat(-1, -chunk->washed_blks_, -chunk->washed_size_);
     }
+    // The chunk manager only caches or frees whole chunks. Cached chunks are
+    // outside BlockSet, so they will not receive block-level purge later.
     chunk_mgr_->free_chunk(chunk, attr_);
   }
 }
@@ -509,8 +520,10 @@ int64_t BlockSet::purge_free_blocks(const int64_t wash_size,
   int64_t related_chunks = 0;
   const int64_t now = delay_us > 0 ? common::ObTimeUtility::fast_current_time() : 0;
   int cls = avail_bm_.nbits() - 1;
+  // Walk the existing dirty free lists by size class. This avoids scanning
+  // every 8K block in every chunk during ordinary allocation/free flows.
   while (washed_size < wash_size && scanned_blks < max_blocks_per_round &&
-	       cls >= 1 && (cls = avail_bm_.find_first_most_significant(cls)) != -1) {
+         cls >= 1 && (cls = avail_bm_.find_first_most_significant(cls)) != -1) {
     const int64_t len = cls * ABLOCK_SIZE;
     if (len < ps) {
       break;
@@ -564,6 +577,9 @@ int64_t BlockSet::purge_free_blocks(const int64_t wash_size,
               }
               take_off_free_block(block, cls, chunk);
               block->is_washed_ = true;
+              // Keep the purged list compact for future large-block reuse.
+              // Only len is newly washed; adjacent purged spans were already
+              // reflected in chunk->washed_size_.
               int merged_nblocks = cls;
               int64_t merged_blocks = 0;
               ABlock *merged_block = merge_with_adjacent_purged_blocks(block,
