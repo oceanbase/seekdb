@@ -461,28 +461,28 @@ else()
 endif()
 config_ccls_flag(ob_main)
 target_link_libraries(ob_main PUBLIC ob_base)
-add_executable(observer_without_bolt)
+add_executable(seekdb)
 if(WIN32)
   # Allow duplicate symbols (weak/selectany ODR) - linker picks first definition
-  target_link_options(observer_without_bolt PRIVATE /FORCE:MULTIPLE)
+  target_link_options(seekdb PRIVATE /FORCE:MULTIPLE)
   # Link compiler-rt builtins for __udivti3 (128-bit int div)
   get_filename_component(CLANG_BIN_DIR ${CMAKE_CXX_COMPILER} DIRECTORY)
   get_filename_component(LLVM_ROOT ${CLANG_BIN_DIR} DIRECTORY)
   file(GLOB CLANG_RT_BUILTINS "${LLVM_ROOT}/lib/clang/*/lib/windows/clang_rt.builtins-x86_64.lib")
   list(GET CLANG_RT_BUILTINS 0 CLANG_RT_BUILTINS_LIB)
   if(CLANG_RT_BUILTINS_LIB)
-    target_link_libraries(observer_without_bolt PRIVATE ${CLANG_RT_BUILTINS_LIB})
+    target_link_libraries(seekdb PRIVATE ${CLANG_RT_BUILTINS_LIB})
     message(STATUS "Linking compiler-rt builtins: ${CLANG_RT_BUILTINS_LIB}")
   else()
     message(WARNING "clang_rt.builtins-x86_64.lib not found, __udivti3 may be undefined")
   endif()
   # oblib_add_extra_objects creates separate .lib files not merged into oblib.lib on Windows
-  target_link_libraries(observer_without_bolt PRIVATE
+  target_link_libraries(seekdb PRIVATE
     ${CMAKE_BINARY_DIR}/deps/oblib/src/lib/compress/zstd_1_3_8/zstd_1_3_8_objs.lib)
   # Itanium ABI _Unwind_* stubs (Windows uses SEH; PL unwinding non-functional)
-  target_sources(observer_without_bolt PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/win32_unwind_stubs.c)
+  target_sources(seekdb PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/win32_unwind_stubs.c)
 endif()
-target_link_libraries(observer_without_bolt
+target_link_libraries(seekdb
   PRIVATE
   $<$<AND:$<NOT:$<PLATFORM_ID:Darwin>>,$<NOT:$<PLATFORM_ID:Windows>>>:-Wl,--start-group>
   ob_main
@@ -501,7 +501,6 @@ target_link_libraries(observer_without_bolt
   $<$<PLATFORM_ID:Linux>:-static-libgcc>
   $<$<PLATFORM_ID:Linux>:-static-libstdc++>
   ${link_malloc_hook}
-  ${BOLT_OPT}
 )
 
 if(WIN32)
@@ -533,29 +532,9 @@ else()
   set(BUILD_FLAGS "${CMAKE_BUILD_TYPE}" CACHE INTERNAL "build flags")
 endif()
 
-if (OB_ENABLE_BOLT)
-  message(STATUS "Using bolt link opt: ${BOLT_OPT}")
-  add_custom_command(
-    OUTPUT fake_observer_bolt
-    COMMAND ${CMAKE_SOURCE_DIR}/cmake/script/do_bolt_opt --build_dir=${CMAKE_BINARY_DIR}
-    DEPENDS observer_without_bolt)
-  add_custom_target(seekdb ALL
-    DEPENDS fake_observer_bolt)
-else()
-  if(WIN32)
-    add_custom_command(
-      OUTPUT fake_observer
-      COMMAND ${CMAKE_COMMAND} -E copy ${CMAKE_BINARY_DIR}/src/observer/observer_without_bolt.exe ${CMAKE_BINARY_DIR}/src/observer/seekdb.exe
-      DEPENDS observer_without_bolt)
-  else()
-    add_custom_command(
-      OUTPUT fake_observer
-      COMMAND mv ${CMAKE_BINARY_DIR}/src/observer/observer_without_bolt ${CMAKE_BINARY_DIR}/src/observer/seekdb
-      DEPENDS observer_without_bolt)
-  endif()
-  add_custom_target(seekdb ALL
-    DEPENDS fake_observer)
-endif()
+# Link straight to `seekdb` (no post-link rename). The old design linked an
+# intermediate observer binary then `mv`-ed it to `seekdb`, deleting the link
+# output every build and forcing a full relink on every incremental make.
 
 # ── Bundle third-party runtime DLLs next to seekdb.exe in the build tree ──
 # Without this, running build/.../seekdb.exe directly requires the user's
