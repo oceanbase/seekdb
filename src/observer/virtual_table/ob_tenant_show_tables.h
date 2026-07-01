@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_TENANT_SHOW_TABLES_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_TENANT_SHOW_TABLES_
 
-#include "observer/virtual_table/ob_virtual_table_iterator.h"
+#include "share/ob_virtual_table_iterator.h"
 #include "common/ob_range.h"
 #include "lib/container/ob_se_array.h"
 #include "lib/ob_define.h"

@@ -18,7 +18,7 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/container/ob_vector.h"
 #include "observer/table_load/ob_table_load_stat.h"
-#include "storage/ob_order_perserving_encoder.h"
+#include "share/ob_order_perserving_encoder.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "sql/engine/sort/ob_sort_op_impl.h"
 #include "storage/direct_load/ob_direct_load_external_scanner.h"

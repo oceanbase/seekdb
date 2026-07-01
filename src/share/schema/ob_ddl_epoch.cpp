@@ -16,26 +16,8 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_ddl_epoch.h"
-
-#include <unistd.h>
-
+#include "observer/ob_inner_sql_connection.h"
 #include "share/ob_global_stat_proxy.h"
-#include "lib/atomic/ob_atomic.h"
-#include "lib/ob_errno.h"
-#include "lib/oblog/ob_log_level.h"
-#include "lib/oblog/ob_log_print_kv.h"
-#include "lib/time/ob_time_utility.h"
-#include "lib/utility/utility.h"
-#include "mysqlclient/ob_mysql_proxy.h"
-#include "mysqlclient/ob_mysql_transaction.h"
-#include "share/ob_errno.h"
-#include "share/schema/ob_multi_version_schema_service.h"
-
-namespace oceanbase {
-namespace observer {
-class ObInnerSQLConnection;
-}  // namespace observer
-}  // namespace oceanbase
 
 namespace oceanbase
 {

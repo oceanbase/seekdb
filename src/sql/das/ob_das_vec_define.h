@@ -19,7 +19,7 @@
 
 #include "ob_das_attach_define.h"
 #include "src/sql/optimizer/ob_join_order.h"
-#include "observer/vector_index/ob_vector_index_param.h"
+#include "share/vector_index/ob_vector_index_param.h"
 #include "src/sql/das/ob_das_ir_define.h"
 
 namespace oceanbase

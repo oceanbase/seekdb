@@ -16,7 +16,6 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/meta_store/ob_server_storage_meta_replayer.h"
-#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind a transitive include
 #include "share/rc/ob_module_provider.h"
 #include "storage/meta_store/ob_storage_meta_io_util.h"
 #include "storage/meta_store/ob_server_storage_meta_persister.h"

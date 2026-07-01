@@ -17,25 +17,7 @@
 #define USING_LOG_PREFIX SHARE_CONFIG
 
 #include "ob_server_config.h"
-
-#include "lib/alloc/alloc_struct.h"
-#include "lib/cpu/ob_cpu_topology.h"
-#include "lib/hash/ob_hashtable.h"
-#include "lib/hash/ob_hashutils.h"
-#include "lib/ob_errno.h"
-#include "lib/oblog/ob_log.h"
-#include "lib/oblog/ob_log_level.h"
-#include "lib/oblog/ob_log_print_kv.h"
-#include "lib/stat/ob_latch_define.h"
-#include "lib/utility/utility.h"
-#include "share/config/ob_config.h"
-#include "share/config/ob_system_config.h"
-#include "share/config/ob_system_config_key.h"
-#include "share/config/ob_tenant_config_mgr.h"
-#include "share/ob_errno.h"
-#include "share/ob_rpc_struct.h"
-#include "share/ob_server_struct.h"
-
+#include "observer/ob_server.h"
 namespace oceanbase
 {
 namespace common
@@ -55,7 +37,6 @@ ObServerConfig::ObServerConfig()
 #undef DEF_PARAM
 #define DEF_PARAM(name, args...) name.update_cb_ = this;
 #include "share/parameter/ob_parameter_seed.ipp"
-
 #undef DEF_PARAM
 }
 
@@ -213,7 +194,7 @@ void ObServerMemoryConfig::check_limit(bool ignore_error)
   int ret = OB_SUCCESS;
   // check unmanaged memory size
   const int64_t UNMANAGED_MEMORY_LIMIT = 2LL<<30;
-  int64_t unmanaged_memory_size = lib::get_unmanaged_memory_size();
+  int64_t unmanaged_memory_size = get_unmanaged_memory_size();
   if (unmanaged_memory_size > UNMANAGED_MEMORY_LIMIT) {
     if (ignore_error) {
       LOG_WARN("unmanaged_memory_size is over the limit", K(unmanaged_memory_size), K(UNMANAGED_MEMORY_LIMIT));
@@ -259,3 +240,7 @@ bool ob_grpc_is_rpc_tls_enabled()
 }
 } // end of namespace obgrpc
 } // end of namespace oceanbase
+
+namespace easy
+{
+};

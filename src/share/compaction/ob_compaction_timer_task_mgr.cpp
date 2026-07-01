@@ -15,7 +15,7 @@
  */
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 #include "share/compaction/ob_compaction_timer_task_mgr.h"
-#include "lib/thread/thread_mgr.h"
+#include "deps/oblib/src/lib/thread/thread_mgr.h"
 namespace oceanbase
 {
 namespace compaction

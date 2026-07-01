@@ -24,7 +24,7 @@
 #include "ob_icolumn_encoder.h"
 #include "ob_integer_array.h"
 #include "ob_encoding_util.h"
-#include "sql/engine/vector/ob_fixed_length_vector.h"
+#include "src/share/vector/ob_fixed_length_vector.h"
 
 namespace oceanbase
 {

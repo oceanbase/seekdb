@@ -18,7 +18,7 @@
 #include "lib/ob_define.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/container/ob_array.h"
-#include "common/datum/ob_datum.h"
+#include "share/datum/ob_datum.h"
 #include "sql/engine/px/ob_px_bloom_filter.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_msg.h"
 #include "sql/engine/px/p2p_datahub/ob_runtime_filter_query_range.h"
@@ -28,7 +28,6 @@ namespace oceanbase
 {
 namespace sql
 {
-class ObDynamicFilterExecutor;
 
 class ObP2PDatahubMsgBase;
 

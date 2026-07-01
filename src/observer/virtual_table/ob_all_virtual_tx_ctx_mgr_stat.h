@@ -17,8 +17,8 @@
 #ifndef OB_ALL_VIRTUAL_TX_CTX_MGR_STAT
 #define OB_ALL_VIRTUAL_TX_CTX_MGR_STAT
 
-#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
-#include "sql/ob_scanner.h"
+#include "share/ob_virtual_table_scanner_iterator.h"
+#include "share/ob_scanner.h"
 #include "common/row/ob_row.h"
 #include "lib/container/ob_se_array.h"
 #include "common/ob_simple_iterator.h"

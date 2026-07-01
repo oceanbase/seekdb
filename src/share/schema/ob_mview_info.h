@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "lib/mysqlclient/ob_mysql_proxy.h"
 #include "share/schema/ob_schema_struct.h"
 
 namespace oceanbase
@@ -101,7 +101,10 @@ public:
                                              int64_t snapshot_for_tx, share::SCN &scn);
   static int contains_major_refresh_mview_in_creation(ObISQLClient &sql_client, bool &contains);
   static int contains_major_refresh_mview(ObISQLClient &sql_client, bool &contains);
-  // moved definition to: update_mview_data_attr -> sql::ObMVDepUtils (sql/resolver/mv/ob_mv_dep_utils)
+  static int update_mview_data_attr(ObISQLClient &sql_client,
+                                    const uint64_t refresh_scn,
+                                    const uint64_t target_data_sync_scn,
+                                    ObMViewInfo &mview_info);
   static int bacth_fetch_mview_infos(ObISQLClient &sql_client,
                                      const uint64_t refresh_scn,
                                      const ObIArray<uint64_t> &mview_ids,

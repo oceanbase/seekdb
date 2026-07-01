@@ -17,7 +17,7 @@
 #pragma once
 #include "lib/ob_define.h"
 #include "lib/container/ob_array.h"
-#include "common/datum/ob_datum.h"
+#include "share/datum/ob_datum.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_msg.h"
 

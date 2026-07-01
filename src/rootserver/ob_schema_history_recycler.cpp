@@ -15,14 +15,8 @@
  */
 
 #define USING_LOG_PREFIX RS
-#include "lib/stat/ob_diagnostic_info_guard.h"
-#include "rootserver/ob_rs_event_history_table_operator.h"
-#include "storage/tablet/ob_batch_create_tablet_arg.h"
-#include "storage/tx/ob_tx_result_struct.h"
-#include "storage/ob_storage_rpc_arg.h"
-#include "share/ob_thread_mgr.h"
 #include "rootserver/ob_schema_history_recycler.h"
-#include "share/ob_ex_rpc.h"
+#include "observer/ob_ex_rpc.h"
 #include "observer/ob_service.h"
 #include "src/share/ob_freeze_info_proxy.h"
 #include "share/ob_global_merge_table_operator.h"
@@ -737,9 +731,10 @@ int ObSchemaHistoryRecycler::try_recycle_schema_history(
     // 3.table_priv/databse_priv
     // 4.udf
     // 5.audit
-    // 6.user-role
-    // 7.PL
-    // 8.ols
+    // 6.dblink
+    // 7.user-role
+    // 8.PL
+    // 9.ols
 
     // ---------------------------- table related ------------------------------------
     RECYCLE_FIRST_SCHEMA(RECYCLE_ONLY, table, OB_ALL_TABLE_HISTORY_TNAME, table_id);

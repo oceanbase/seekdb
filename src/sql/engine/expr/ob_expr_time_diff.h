@@ -16,7 +16,7 @@
 
 #ifndef _OCEANBASE_SQL_OB_EXPR_TIME_DIFF_H_
 #define _OCEANBASE_SQL_OB_EXPR_TIME_DIFF_H_
-#include "common/timezone/ob_time_convert.h"
+#include "lib/timezone/ob_time_convert.h"
 #include "lib/ob_name_def.h"
 #include "share/object/ob_obj_cast.h"
 #include "sql/engine/expr/ob_expr_operator.h"

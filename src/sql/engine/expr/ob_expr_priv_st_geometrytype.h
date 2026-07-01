@@ -18,7 +18,7 @@
 #define OCEANBASE_SQL_OB_EXPR_ST_GEOMETRYTYPE_
 
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "share/geo/ob_geo_utils.h"
+#include "lib/geo/ob_geo_utils.h"
 
 using namespace oceanbase::common;
 

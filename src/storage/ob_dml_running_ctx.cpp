@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/ob_dml_running_ctx.h"
-#include "storage/ob_table_dml_param.h"
+#include "share/schema/ob_table_dml_param.h"
 #include "storage/tablet/ob_tablet.h"
 #include "storage/memtable/ob_memtable_context.h"
 #include "storage/tx/ob_trans_part_ctx.h"

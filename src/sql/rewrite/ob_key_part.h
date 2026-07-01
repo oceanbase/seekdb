@@ -24,7 +24,7 @@
 #include "common/object/ob_object.h"
 #include "sql/engine/expr/ob_expr_res_type.h"
 #include "lib/hash/ob_placement_hashmap.h"
-#include "share/geo/ob_geo_common.h"
+#include "lib/geo/ob_geo_common.h"
 
 namespace oceanbase
 {

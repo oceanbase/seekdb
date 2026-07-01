@@ -15,7 +15,7 @@
  */
 
 #include "test_lighty_queue.h"
-#include "lib/queue/ob_lighty_queue.h"
+#include "deps/oblib/src/lib/queue/ob_lighty_queue.h"
 #include <gtest/gtest.h>
 #include "lib/coro/testing.h"
 

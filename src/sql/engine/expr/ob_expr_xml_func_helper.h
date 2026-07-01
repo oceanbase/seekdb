@@ -20,12 +20,12 @@
 #include "sql/engine/expr/ob_expr_util.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
-#include "common/xml/ob_xml_parser.h"
-#include "common/xml/ob_xpath.h"
-#include "common/xml/ob_xml_tree.h"
-#include "common/xml/ob_xml_util.h"
+#include "lib/xml/ob_xml_parser.h"
+#include "lib/xml/ob_xpath.h"
+#include "lib/xml/ob_xml_tree.h"
+#include "lib/xml/ob_xml_util.h"
 #include "sql/engine/expr/ob_expr_multi_mode_func_helper.h"
-#include "common/xml/ob_binary_aggregate.h"
+#include "lib/xml/ob_binary_aggregate.h"
 
 using namespace oceanbase::common;
 

@@ -15,7 +15,6 @@
  */
 
 #include "log_io_task_cb_thread_pool.h"
-#include "share/ob_thread_mgr.h"  // OB TG IDs, previously hidden behind the tenant_base include chain, make the dependency explicit
 #include "palf_env_impl.h"                    // PalfEnvImpl
 
 namespace oceanbase

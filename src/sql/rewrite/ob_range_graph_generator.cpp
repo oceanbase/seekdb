@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_REWRITE
 #include "sql/rewrite/ob_range_graph_generator.h"
-#include "lib/utility/ob_smart_call.h"
+#include "common/ob_smart_call.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/code_generator/ob_column_index_provider.h"
 #include "sql/optimizer/ob_optimizer_util.h"

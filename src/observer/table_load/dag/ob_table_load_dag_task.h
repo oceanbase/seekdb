@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "share/scheduler/ob_tenant_dag_scheduler.h"
 
 namespace oceanbase
 {

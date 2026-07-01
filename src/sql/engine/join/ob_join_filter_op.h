@@ -35,7 +35,7 @@
 #include "sql/engine/join/ob_join_filter_store_row.h"
 #include "sql/engine/join/ob_join_filter_material_control_info.h"
 #include "sql/engine/px/datahub/components/ob_dh_join_filter_count_row.h"
-#include "lib/utility/ob_hyperloglog.h"
+#include "deps/oblib/src/lib/utility/ob_hyperloglog.h"
 
 
 namespace oceanbase

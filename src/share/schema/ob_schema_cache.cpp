@@ -17,13 +17,13 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_schema_cache.h"
 #include "share/cache/ob_cache_name_define.h"
-#include "share/ob_server_struct.h"
-#include "lib/utility/ob_smart_call.h"
-#include "lib/lock/ob_latch.h"
-#include "lib/stat/ob_latch_define.h"
+#include "observer/ob_server_struct.h"
+#include "common/ob_smart_call.h"
+#include "deps/oblib/src/lib/lock/ob_latch.h"
+#include "deps/oblib/src/lib/stat/ob_latch_define.h"
+#include "lib/stat/ob_diagnostic_info_guard.h"
 namespace oceanbase
 {
 using namespace common;

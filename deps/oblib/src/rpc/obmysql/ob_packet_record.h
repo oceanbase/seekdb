@@ -21,10 +21,11 @@
 
 namespace oceanbase
 {
+namespace observer{
+bool OB_WEAK_SYMBOL enable_proto_dia();
+}
 namespace obmysql
 {
-
-bool enable_proto_dia();
 
 struct ResRecordFlags {
   uint8_t is_send_: 1; // 0-send, 1-receive
@@ -198,7 +199,7 @@ class ObPacketRecordWrapper {
       start_pkt_pos_ = 0;
       cur_pkt_pos_ = 0;
       last_type_ = obmysql::ObMySQLPacketType::INVALID_PKT;
-      enable_proto_dia_ = obmysql::enable_proto_dia();
+      enable_proto_dia_ = observer::enable_proto_dia();
       receiving_file_contents_ = false;
     }
     int64_t to_string(char *buf, int64_t buf_len) const;

@@ -16,7 +16,6 @@
 
 #ifndef OCEANBASE_STORAGE_OB_LOCK_TABLE_H_
 #define OCEANBASE_STORAGE_OB_LOCK_TABLE_H_
-#include "storage/tablet/ob_batch_create_tablet_arg.h"
 #include <stdint.h>
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/task/ob_timer.h"

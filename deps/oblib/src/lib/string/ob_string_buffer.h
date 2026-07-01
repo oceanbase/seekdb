@@ -18,7 +18,7 @@
 #define OCEANBASE_LIB_STRING_OB_STRING_BUFFER_
 
 #include "lib/string/ob_string.h"
-#include "lib/utility/ob_print_utils.h"
+#include "common/object/ob_obj_type.h"
 
 namespace oceanbase {
 namespace common {

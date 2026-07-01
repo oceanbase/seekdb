@@ -22,7 +22,7 @@
 #include "observer/table_load/ob_table_load_table_ctx.h"
 #include "observer/table_load/ob_table_load_task.h"
 #include "observer/table_load/ob_table_load_task_scheduler.h"
-#include "sql/optimizer/stat/ob_dbms_stats_utils.h"
+#include "share/stat/ob_dbms_stats_utils.h"
 #include "share/schema/ob_part_mgr_util.h"
 
 namespace oceanbase

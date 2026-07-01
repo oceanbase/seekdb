@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX RS
 
 #include "rootserver/mview/ob_mview_timer_task.h"
-#include "observer/omt/ob_multi_tenant.h"  // ObSharedTimer complete type, previously hidden behind a transitive include, make the dependency explicit
 #include "share/rc/ob_module_provider.h"
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "share/ob_global_stat_proxy.h"

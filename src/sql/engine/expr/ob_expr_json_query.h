@@ -18,8 +18,8 @@
 #define OCEANBASE_SRC_SQL_ENGINE_EXPR_OB_EXPR_JSON_QUERY_H
 
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "common/json_type/ob_json_tree.h"
-#include "common/json_type/ob_json_base.h"
+#include "lib/json_type/ob_json_tree.h"
+#include "lib/json_type/ob_json_base.h"
 #include "ob_json_param_type.h"
 #include "ob_expr_json_utils.h"
 #include "ob_expr_json_func_helper.h"

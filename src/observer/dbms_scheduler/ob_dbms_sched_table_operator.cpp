@@ -18,7 +18,7 @@
 
 #include "ob_dbms_sched_table_operator.h"
 
-#include "sql/optimizer/stat/ob_dbms_stats_maintenance_window.h"
+#include "share/stat/ob_dbms_stats_maintenance_window.h"
 
 namespace oceanbase
 {

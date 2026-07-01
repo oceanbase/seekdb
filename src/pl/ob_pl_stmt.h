@@ -21,7 +21,6 @@
 #include "pl/ob_pl_user_type.h"
 #include "sql/resolver/ob_stmt_type.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "pl/ob_pl_object_id_util.h"
 
 namespace oceanbase {
 namespace sql {
@@ -378,7 +377,7 @@ public:
       stmt_id_(OB_INVALID_INDEX),
       signal_(false),
       duplicate_(false) {}
-  //Do not implement the destructor to avoid LLVM mapping trouble
+  // Do not implement the destructor to preserve the expected memory layout.
 
   static uint32_t type_offset_bits() { return offsetof(ObPLConditionValue, type_) * 8; }
   static uint32_t error_code_offset_bits() { return offsetof(ObPLConditionValue, error_code_) * 8; }
@@ -1057,7 +1056,7 @@ private:
 };
 
 class ObPLFunctionAST;
-class ObPLCompileUnitAST;
+class ObPLAstUnit;
 class ObPLRoutineTable
 {
 public:
@@ -1139,6 +1138,7 @@ public:
     LOCAL_TYPE,         // local custom type
     PKG_TYPE,           // custom type in the package
     SELF_ATTRIBUTE,
+    DBLINK_PKG_NS,      // dblink package
     UDT_MEMBER_ROUTINE, //
     TRIGGER,            // Trigger
     SEQUENCE            // Sequence
@@ -1414,7 +1414,7 @@ public:
                             const sql::ObObjAccessIdent &access_ident,
                             ObSQLSessionInfo &session_info,
                             ObRawExprFactory &expr_factory,
-                            ObPLCompileUnitAST &func,
+                            ObPLAstUnit &func,
                             ObObjAccessIdx &access_idx,
                             ObPLDataType &data_type,
                             uint64_t &package_id,
@@ -1492,7 +1492,7 @@ class ObPLStmtVisitor;
 class ObPLStmtBlock;
 class ObPLSqlStmt;
 
-class ObPLCompileUnitAST
+class ObPLAstUnit
 {
 public:
   enum UnitType {
@@ -1502,7 +1502,7 @@ public:
     OBJECT_TYPE,
   };
 
-  ObPLCompileUnitAST(common::ObIAllocator &allocator, UnitType type)
+  ObPLAstUnit(common::ObIAllocator &allocator, UnitType type)
      : type_(type),
        body_(NULL),
        obj_access_exprs_(allocator),
@@ -1529,7 +1529,7 @@ public:
     CHAR_CARRAY_INIT(invoker_database_name_);
   }
 
-  virtual ~ObPLCompileUnitAST();
+  virtual ~ObPLAstUnit();
 
   inline UnitType get_type() const { return type_; }
   inline void set_type(UnitType type) { type_ = type; }
@@ -1652,7 +1652,7 @@ protected:
   ObPLSEArray<sql::ObRawExpr*> obj_access_exprs_; // Used ObjAccessRawExpr
   ObPLSEArray<sql::ObRawExpr*> exprs_; // the expressions used, in AST it is ObRawExpr, in ObPLFunction it is ObISqlExpression
   ObPLSEArray<ObPLStmtBlock*> continue_handler_desc_bodys_;
-  ObBitSet<> simple_calc_bitset_; //Indices of expressions that can be calculated using LLVM
+  ObBitSet<> simple_calc_bitset_; // Indices of expressions eligible for static-engine precomputation
   ObPLSEArray<ObPLSqlStmt*> sql_stmts_;
   sql::ObRawExprFactory expr_factory_;
   ObPLSymbolTable symbol_table_;
@@ -1685,14 +1685,14 @@ protected:
     };
   };
 private:
-  DISALLOW_COPY_AND_ASSIGN(ObPLCompileUnitAST);
+  DISALLOW_COPY_AND_ASSIGN(ObPLAstUnit);
 };
 
-class ObPLFunctionAST : public ObPLFunctionBase, public ObPLCompileUnitAST
+class ObPLFunctionAST : public ObPLFunctionBase, public ObPLAstUnit
 {
 public:
   ObPLFunctionAST(common::ObIAllocator &allocator)
-    : ObPLFunctionBase(), ObPLCompileUnitAST(allocator, ROUTINE_TYPE),
+    : ObPLFunctionBase(), ObPLAstUnit(allocator, ROUTINE_TYPE),
       id_(OB_INVALID_ID),
       subprogram_id_(OB_INVALID_ID),
       subprogram_path_(allocator),
@@ -1741,7 +1741,7 @@ public:
   inline void set_has_incomplete_rt_dep_error(bool has_incomplete_rt_dep_error) { has_incomplete_rt_dep_error_ = has_incomplete_rt_dep_error; }
   inline bool has_incomplete_rt_dep_error() { return has_incomplete_rt_dep_error_; }
 
-  INHERIT_TO_STRING_KV("compile", ObPLCompileUnitAST, K(NULL));
+  INHERIT_TO_STRING_KV("ast_unit", ObPLAstUnit, K(NULL));
 private:
   DISALLOW_COPY_AND_ASSIGN(ObPLFunctionAST);
 
@@ -2629,7 +2629,8 @@ public:
         subprogram_path_(allocator),
         params_(allocator),
         nocopy_params_(allocator),
-        route_sql_() {}
+        route_sql_(),
+        dblink_id_(common::OB_INVALID_ID) {}
   virtual ~ObPLCallStmt() {}
 
   int accept(ObPLStmtVisitor &visitor) const;
@@ -2663,7 +2664,8 @@ public:
                K_(is_object_udf),
                K_(params),
                K_(nocopy_params),
-               K_(route_sql));
+               K_(route_sql),
+               K_(dblink_id));
 
 private:
   uint64_t invoker_id_;
@@ -2674,6 +2676,7 @@ private:
   ObPLSEArray<InOutParam> params_;
   ObPLSEArray<int64_t> nocopy_params_;
   common::ObString route_sql_;
+  uint64_t dblink_id_;
 };
 
 class ObPLInnerCallStmt : public ObPLStmt

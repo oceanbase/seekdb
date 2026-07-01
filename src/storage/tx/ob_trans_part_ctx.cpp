@@ -23,7 +23,7 @@
 #define NEED_MDS_REGISTER_DEFINE
 #include "storage/multi_data_source/compile_utility/mds_register.h"
 #undef NEED_MDS_REGISTER_DEFINE
-#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
+#include "share/allocator/ob_shared_memory_allocator_mgr.h"
 #include "logservice/ob_log_service.h"
 #include "storage/ddl/ob_ddl_inc_clog_callback.h"
 #include "storage/tx/ob_tx_log_operator.h"
@@ -488,7 +488,7 @@ int ObPartTransCtx::handle_timeout(const int64_t delay)
           // make scheduler retry commit if clog disk has fatal error
           bool clog_is_full = false;
           bool clog_is_hang = false;
-          if (OB_FAIL(logservice::check_clog_disk_full_or_hang(clog_is_full, clog_is_hang))) {
+          if (OB_FAIL(ObShareUtil::check_clog_disk_full_or_hang(clog_is_full, clog_is_hang))) {
             TRANS_LOG(WARN, "fail to check clog disk status", KR(ret));
           } else if (clog_is_full || clog_is_hang) {
             tmp_ret = post_tx_commit_resp_(OB_NOT_MASTER);

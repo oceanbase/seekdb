@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_row_compactor.h"
 #include "storage/memtable/ob_memtable.h"
 #include "storage/blocksstable/ob_row_writer.h"

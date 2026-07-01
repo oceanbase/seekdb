@@ -20,7 +20,6 @@
 #include "common/object/ob_object.h"
 #include "lib/container/ob_fixed_array.h"
 #include "lib/hash/ob_hashset.h"
-#include "lib/container/ob_tuple.h"  // ObTuple, previously hidden behind a transitive include
 #include "share/schema/ob_multi_version_schema_service.h"
 
 
@@ -50,6 +49,11 @@ class ObMaintainDepInfoTaskQueue;
 namespace obcall
 {
 class ObDependencyObjDDLArg;
+}
+
+namespace rootserver
+{
+class ObDDLOperator;
 }
 
 namespace share
@@ -183,7 +187,18 @@ public:
   static int batch_invalidate_dependents(const common::ObIArray<CriticalDepInfo> &objs,
                                          common::ObMySQLTransaction &trans,
                                          uint64_t ref_obj_id);
-  // DDL-execution methods relocated to rootserver::ObDependencyDDLHelper
+  static int cascading_modify_obj_status(common::ObMySQLTransaction &trans,
+                                         uint64_t obj_id,
+                                         rootserver::ObDDLOperator &ddl_operator,
+                                         share::schema::ObMultiVersionSchemaService &schema_service);
+  static int modify_dep_obj_status(common::ObMySQLTransaction &trans,
+                                   uint64_t obj_id,
+                                   rootserver::ObDDLOperator &ddl_operator,
+                                   share::schema::ObMultiVersionSchemaService &schema_service);
+  static int modify_all_obj_status(const ObIArray<std::pair<uint64_t, share::schema::ObObjectType>> &objs,
+                                   common::ObMySQLTransaction &trans,
+                                   rootserver::ObDDLOperator &ddl_operator,
+                                   share::schema::ObMultiVersionSchemaService &schema_service);
 
   static int insert_dependency_infos(common::ObMySQLTransaction &trans,
                               common::ObIArray<share::schema::ObDependencyInfo> &dep_infos,
@@ -400,7 +415,9 @@ public:
   }
   ~ObReferenceObjTable() { reset(); }
   void reset();
-  // process_reference_obj_table relocated to free fn in sql/executor/ob_maintain_dependency_info_task
+  int process_reference_obj_table(const uint64_t dep_obj_id,
+    const ObTableSchema *view_schema,
+    sql::ObMaintainDepInfoTaskQueue &task_queue);
   int add_ref_obj_version(
     const uint64_t dep_obj_id,
     const uint64_t dep_db_id,
@@ -434,15 +451,26 @@ public:
   { return set_ref_obj_op(dep_obj_id, dep_db_id, dep_obj_type, DELETE_OP, allocator); }
   inline RefObjVersionMap &get_ref_obj_table() { return ref_obj_version_table_; }
   inline const RefObjVersionMap &get_ref_obj_table() const { return ref_obj_version_table_; }
-  // batch_execute_insert_or_update_obj_dependency relocated to rootserver::ObDependencyDDLHelper
+  static int batch_execute_insert_or_update_obj_dependency(const int64_t new_schema_version,
+    const ObReferenceObjTable::DependencyObjKeyItemPairs &dep_objs,
+    ObMySQLTransaction &trans,
+    share::schema::ObSchemaGetterGuard &schema_guard,
+    rootserver::ObDDLOperator &ddl_operator);
   static int batch_execute_delete_obj_dependency(const ObReferenceObjTable::DependencyObjKeyItemPairs &dep_objs,
     ObMySQLTransaction &trans);
-  // update_max_dependency_version relocated to rootserver::ObDependencyDDLHelper
+  static int update_max_dependency_version(const int64_t dep_obj_id,
+    const int64_t max_dependency_version,
+    ObMySQLTransaction &trans,
+    share::schema::ObSchemaGetterGuard &schema_guard,
+    rootserver::ObDDLOperator &ddl_operator);
 
 private:
   static int fill_rowkey_pairs(const ObDependencyObjKey &dep_obj_key,
                                share::ObDMLSqlSplicer &dml);
-  // batch_fill_kv_pairs relocated to rootserver::ObDependencyDDLHelper
+  static int batch_fill_kv_pairs(const ObDependencyObjKey &dep_obj_key,
+                                 const int64_t new_schema_version,
+                                 common::ObIArray<ObDependencyInfo> &dep_infos,
+                                 share::ObDMLSqlSplicer &splicer);
   int get_or_add_def_obj_item(const uint64_t dep_obj_id,
                               const uint64_t dep_db_id,
                               const ObObjectType dep_obj_type,

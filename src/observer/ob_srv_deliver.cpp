@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/ob_srv_deliver.h"
 #include "share/rc/ob_module_provider.h"
 

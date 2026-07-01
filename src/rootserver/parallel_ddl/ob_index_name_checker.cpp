@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 
 #include "rootserver/parallel_ddl/ob_index_name_checker.h"
-#include "observer/schema/ob_schema_service_sql_impl.h"
+#include "share/schema/ob_schema_service_sql_impl.h"
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 using namespace oceanbase::share;

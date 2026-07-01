@@ -26,7 +26,7 @@
 #include "lib/allocator/ob_vslice_alloc.h"
 #include "share/ob_ls_id.h"
 #include "share/ob_occam_timer.h"
-#include "storage/allocator/ob_mds_allocator.h"
+#include "share/allocator/ob_mds_allocator.h"
 #include "storage/tx_storage/ob_ls_handle.h"
 #include "lib/hash/ob_linear_hash_map.h"
 
@@ -47,7 +47,57 @@ namespace mds
 class MdsWriter;
 class MdsTableHandle;
 class ObTenantMdsService;
+/********************FOR MEMORY LEAK DEBUG***************************/
+static constexpr const int64_t TAG_SIZE = 64;
+extern thread_local char __thread_mds_tag__[TAG_SIZE];
+extern TLOCAL(const char *, __thread_mds_alloc_type__);
+extern TLOCAL(const char *, __thread_mds_alloc_file__);
+extern TLOCAL(const char *, __thread_mds_alloc_func__);
+extern TLOCAL(uint32_t, __thread_mds_alloc_line__);
 
+extern void set_mds_mem_check_thread_local_info(const MdsWriter &writer,
+                                                const char *alloc_ctx_type,
+                                                const char *alloc_file = __builtin_FILE(),
+                                                const char *alloc_func = __builtin_FUNCTION(),
+                                                const uint32_t line = __builtin_LINE());
+extern void set_mds_mem_check_thread_local_info(const share::ObLSID &ls_id,
+                                                const ObTabletID &tablet_id,
+                                                const char *data_type,
+                                                const char *alloc_file = __builtin_FILE(),
+                                                const char *alloc_func = __builtin_FUNCTION(),
+                                                const uint32_t line = __builtin_LINE());
+extern void reset_mds_mem_check_thread_local_info();
+/********************************************************************/
+
+struct ObMdsMemoryLeakDebugInfo
+{
+  ObMdsMemoryLeakDebugInfo()
+  : data_type_(nullptr), alloc_file_(nullptr), alloc_func_(nullptr), alloc_line_(0), alloc_ts_(0), tid_(0) {}
+  ObMdsMemoryLeakDebugInfo(const char *tag,
+                           const int64_t tag_size,
+                           const char *type,
+                           const char *alloc_file,
+                           const char *alloc_func,
+                           int64_t line)
+  : data_type_(type),
+  alloc_file_(alloc_file),
+  alloc_func_(alloc_func),
+  alloc_line_(line),
+  alloc_ts_(ObTimeUtility::fast_current_time()),
+  tid_(GETTID()) {
+    memcpy(tag_str_, tag, std::min(TAG_SIZE, tag_size));
+  }
+  ObMdsMemoryLeakDebugInfo(const ObMdsMemoryLeakDebugInfo &rhs) = default;// value sematic copy construction
+  ObMdsMemoryLeakDebugInfo &operator=(const ObMdsMemoryLeakDebugInfo &rhs) = default;// value sematic copy assign
+  TO_STRING_KV(K_(tag_str), K_(data_type), K_(alloc_file), K_(alloc_func), K_(alloc_line), KTIME_(alloc_ts), K_(tid));
+  const char *data_type_;
+  const char *alloc_file_;
+  const char *alloc_func_;
+  int64_t alloc_line_;
+  char tag_str_[TAG_SIZE] = {0};
+  int64_t alloc_ts_;
+  int64_t tid_;
+};
 
 class ObTenantMdsService
 {
@@ -57,6 +107,10 @@ public:
                          recyle_timer_id_(-1),
                          dump_status_timer_id_(-1) {}
   ~ObTenantMdsService() {
+    if (memory_leak_debug_map_.count() != 0) {
+      MDS_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "there are holding items not released when mds allocator released");
+      dump_map_holding_item(0);
+    }
     MDS_LOG_RET(INFO, OB_SUCCESS, "ObTenantMdsAllocator destructed");
   }
   static int mtl_init(ObTenantMdsService* &);
@@ -70,6 +124,28 @@ public:
   share::ObTenantBufferCtxAllocator &get_buffer_ctx_allocator() { return buffer_ctx_allocator_; }
   TO_STRING_KV(KP(this), K_(is_inited))
 public:
+  /*******************debug for memoy leak************************/
+  template <typename OP>
+  void update_mem_leak_debug_info(void *obj, OP &&op) {
+#ifdef ENABLE_DEBUG_MDS_MEM_LEAK
+    int ret = OB_SUCCESS;
+    if (OB_FAIL(memory_leak_debug_map_.operate(ObIntWarp((int64_t)obj), op))) {
+      MDS_LOG(WARN, "fail to update mem check debug info", KR(ret), KP(obj));
+    }
+#else
+    UNUSED(obj);
+    UNUSED(op);
+#endif
+  }
+  void record_alloc_backtrace(void *obj,
+                              const char *tag,
+                              const char *data_type,
+                              const char *alloc_file,
+                              const char *alloc_func,
+                              const int64_t line);
+  void erase_alloc_backtrace(void *obj);
+  void dump_map_holding_item(int64_t check_alive_time_threshold);
+  /***************************************************************/
 public:
   void run_recyle_timer_task();
   static void run_dump_status_timer_task();
@@ -108,6 +184,9 @@ private:
   share::ObTenantBufferCtxAllocator buffer_ctx_allocator_;
   RecyleTimerTask recyle_timer_task_;
   DumpStatusTimerTask dump_status_timer_task_;
+  /*******************debug for memoy leak************************/
+  ObLinearHashMap<ObIntWarp, ObMdsMemoryLeakDebugInfo> memory_leak_debug_map_;
+  /***************************************************************/
 
   int recyle_timer_id_;
   int dump_status_timer_id_;

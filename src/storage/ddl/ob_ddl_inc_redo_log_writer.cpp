@@ -1,4 +1,4 @@
-#include "share/ob_ex_rpc.h"
+#include "observer/ob_ex_rpc.h"
 #include "share/rc/ob_module_provider.h"
 /*
  * Copyright (c) 2025 OceanBase.
@@ -19,8 +19,6 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/ddl/ob_ddl_inc_redo_log_writer.h"
-#include "storage/ob_storage_rpc.h"
-#include "storage/ob_storage_rpc_arg.h"
 #include "storage/tx/ob_trans_part_ctx.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx_storage/ob_ls_service.h"

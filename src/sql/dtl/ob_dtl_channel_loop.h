@@ -25,7 +25,7 @@
 #include "sql/dtl/ob_dtl_channel_watcher.h"
 #include "sql/dtl/ob_dtl_channel.h"
 #include "sql/dtl/ob_dtl_local_channel.h"
-#include "sql/monitor/ob_sql_plan_monitor_node_list.h"
+#include "share/diagnosis/ob_sql_plan_monitor_node_list.h"
 
 namespace oceanbase {
 namespace sql {

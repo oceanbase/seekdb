@@ -19,7 +19,7 @@
 
 #include "share/scn.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
-#include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "share/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/blocksstable/index_block/ob_index_block_builder.h"
 #include "storage/blocksstable/ob_macro_block_struct.h"
 #include "storage/ddl/ob_ddl_struct.h"
@@ -106,7 +106,7 @@ public:
 
   int get_rec_scn(ObDDLTabletMergeDagParamV2 &merge_param) override;
 
-  // partition-level full bypass import fills an empty major for unspecified partitions
+  // 分区级全量旁路导入为未指定分区补空major
   static int set_ddl_complete_for_direct_load(const share::ObLSID &ls_id,
                                               const ObTabletID &tablet_id,
                                               const ObDirectLoadType direct_load_type,

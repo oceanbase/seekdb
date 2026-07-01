@@ -18,12 +18,11 @@
 #define _OB_OPTIMIZER_CONTEXT_H 1
 #include "sql/resolver/expr/ob_raw_expr_util.h"
 #include "share/schema/ob_schema_getter_guard.h"
-#include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
+#include "share/stat/ob_opt_stat_monitor_manager.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/optimizer/ob_table_location.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/optimizer/ob_fd_item.h"
-#include "share/config/ob_tenant_config_mgr.h"
 #include "sql/optimizer/ob_sharding_info.h"
 #include "sql/optimizer/ob_opt_est_cost.h"
 #include "sql/engine/expr/ob_expr_join_filter.h"

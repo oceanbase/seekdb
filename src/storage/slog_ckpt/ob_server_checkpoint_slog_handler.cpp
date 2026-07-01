@@ -16,10 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_server_checkpoint_slog_handler.h"
-#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind a transitive include
-#include "storage/blocksstable/ob_block_manager.h"  // OB_SERVER_BLOCK_MGR, previously hidden behind a transitive include
 #include "share/rc/ob_module_provider.h"
 #include "storage/slog_ckpt/ob_server_checkpoint_reader.h"
 #include "storage/slog_ckpt/ob_server_checkpoint_writer.h"

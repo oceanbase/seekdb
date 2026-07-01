@@ -16,17 +16,16 @@
 
 #define USING_LOG_PREFIX RS
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_root_service.h"
 #include "observer/ob_server.h"
 
 
 
 #include "share/ob_global_stat_proxy.h"
-#include "sql/resolver/ddl/ob_index_builder_util.h"
+#include "share/ob_index_builder_util.h"
 #include "observer/ob_server_event_history_table_operator.h"
-#include "storage/deadlock/ob_deadlock_inner_table_service.h"
-#include "observer/scheduler/ob_partition_auto_split_helper.h"
+#include "share/deadlock/ob_deadlock_inner_table_service.h"
+#include "share/scheduler/ob_partition_auto_split_helper.h"
 
 #include "sql/engine/cmd/ob_user_cmd_executor.h"
 #include "src/sql/engine/px/ob_dfo.h"
@@ -43,7 +42,7 @@
 #include "rootserver/ob_rs_job_table_operator.h"
 #include "share/ob_ddl_sim_point.h"
 #include "rootserver/ob_cluster_event.h"        // CLUSTER_EVENT_ADD_CONTROL
-#include "share/ob_tenant_timezone_mgr.h"
+#include "observer/omt/ob_tenant_timezone_mgr.h"
 
 #include "rootserver/freeze/ob_major_freeze_helper.h"
 #include "share/ob_ddl_common.h" // for ObDDLUtil
@@ -66,9 +65,9 @@
 #include "rootserver/ob_ai_model_ddl_service.h"
 #include "lib/utility/ob_print_utils.h"     // databuff_printf
 #include "share/ob_thread_mgr.h"
-#include "share/ob_ex_rpc.h"
-#include "sql/optimizer/stat/ob_opt_stat_manager.h"
-#include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
+#include "observer/ob_ex_rpc.h"
+#include "share/stat/ob_opt_stat_manager.h"
+#include "share/stat/ob_opt_stat_monitor_manager.h"
 
 namespace oceanbase
 {
@@ -3656,23 +3655,6 @@ int ObRootService::create_package_with_res(const obcall::ObCreatePackageArg &arg
   return ret;
 }
 
-int ObRootService::alter_package(const obcall::ObAlterPackageArg &arg)
-{
-  int ret = OB_SUCCESS;
-  OV (inited_, OB_NOT_INIT);
-  OZ (ObPLDDLService::alter_package(arg, NULL, ddl_service_));
-  return ret;
-}
-
-int ObRootService::alter_package_with_res(const obcall::ObAlterPackageArg &arg,
-                                          obcall::ObRoutineDDLRes &res)
-{
-  int ret = OB_SUCCESS;
-  OV (inited_, OB_NOT_INIT);
-  OZ (ObPLDDLService::alter_package(arg, &res, ddl_service_));
-  return ret;
-}
-
 int ObRootService::drop_package(const obcall::ObDropPackageArg &arg)
 {
   int ret = OB_SUCCESS;
@@ -4290,7 +4272,7 @@ int ObRootService::check_weak_read_version_refresh_interval(int64_t refresh_inte
         LOG_WARN("get value failed", KR(ret), K(obj));
       } else if (OB_FAIL(obj.get_int(session_max_stale_time))) {
         LOG_WARN("get int failed", KR(ret), K(obj));
-      } else if (session_max_stale_time != share::ObSysVarMeta::INVALID_MAX_READ_STALE_TIME
+      } else if (session_max_stale_time != share::ObSysVarFactory::INVALID_MAX_READ_STALE_TIME
                  && refresh_interval > session_max_stale_time) {
         valid = false;
         LOG_USER_ERROR(OB_INVALID_ARGUMENT,

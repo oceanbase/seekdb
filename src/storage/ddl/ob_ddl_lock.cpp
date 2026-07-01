@@ -22,7 +22,7 @@
 #include "storage/tablelock/ob_lock_utils.h"
 #include "lib/string/ob_sql_string.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
-#include "common/mysqlclient/ob_mysql_result.h"
+#include "lib/mysqlclient/ob_mysql_result.h"
 
 using namespace oceanbase::transaction::tablelock;
 using oceanbase::share::ObLSID;

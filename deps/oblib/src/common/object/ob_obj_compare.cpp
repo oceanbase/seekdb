@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "common/object/ob_obj_compare.h"
-#include "common/json_type/ob_json_bin.h" // for ObJsonBin
+#include "lib/json_type/ob_json_bin.h" // for ObJsonBin
 
 namespace oceanbase
 {

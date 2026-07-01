@@ -24,7 +24,7 @@
 #include "share/ob_autoincrement_param.h"
 #include "share/object/ob_obj_cast.h"
 #include "share/schema/ob_column_schema.h"
-#include "observer/table_load/ob_table_load_row_array.h"
+#include "share/table/ob_table_load_row_array.h"
 #include "storage/direct_load/ob_direct_load_datum_row.h"
 #include "storage/direct_load/ob_direct_load_i_table.h"
 

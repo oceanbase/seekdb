@@ -17,8 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_COMPLEMENT_DATA_TASK_H
 #define OCEANBASE_STORAGE_OB_COMPLEMENT_DATA_TASK_H
 
-#include "observer/scheduler/ob_tenant_dag_scheduler.h"
-#include "storage/ob_storage_rpc_arg.h"
+#include "share/scheduler/ob_tenant_dag_scheduler.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/access/ob_table_access_context.h"
 #include "storage/compaction/ob_column_checksum_calculator.h"

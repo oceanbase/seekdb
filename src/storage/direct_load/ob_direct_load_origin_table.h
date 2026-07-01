@@ -15,7 +15,7 @@
  */
 #pragma once
 
-#include "storage/ob_table_dml_param.h"
+#include "share/schema/ob_table_dml_param.h"
 #include "storage/access/ob_multiple_scan_merge.h"
 #include "storage/access/ob_single_merge.h"
 #include "storage/direct_load/ob_direct_load_datum_row.h"

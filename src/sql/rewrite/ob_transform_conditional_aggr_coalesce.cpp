@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_REWRITE
 #include "sql/rewrite/ob_transform_conditional_aggr_coalesce.h"
 #include "sql/rewrite/ob_transform_utils.h"
-#include "sql/optimizer/stat/ob_opt_stat_manager.h"
+#include "share/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/ob_log_plan.h"
 using namespace oceanbase::sql;
 using namespace oceanbase::common;

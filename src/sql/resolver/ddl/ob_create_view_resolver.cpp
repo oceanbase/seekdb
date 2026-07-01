@@ -24,7 +24,6 @@
 #include "sql/rewrite/ob_transformer_impl.h"
 #include "storage/mview/ob_mview_refresh.h"
 #include "share/table/ob_ttl_util.h"
-#include "sql/session/ob_local_session_var.h"
 
 namespace oceanbase
 {
@@ -1553,7 +1552,7 @@ int ObCreateViewResolver::load_mview_dep_session_vars(ObSQLSessionInfo &session_
                                                       ObLocalSessionVar &dep_vars)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObLocalSessionVarHelper::reserve_max_local_vars_capacity(dep_vars))) {
+  if (OB_FAIL(dep_vars.reserve_max_local_vars_capacity())) {
     LOG_WARN("fail to reserve max local vars capacity", K(ret));
   } else if (OB_FAIL(get_dep_session_vars_from_stmt(session_info, stmt, dep_vars))) {
     LOG_WARN("fail to get dep session vars from stmt", K(ret));

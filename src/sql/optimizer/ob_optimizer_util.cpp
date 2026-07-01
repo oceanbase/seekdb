@@ -19,7 +19,7 @@
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/ob_log_table_scan.h"
-#include "storage/ob_order_perserving_encoder.h"
+#include "share/ob_order_perserving_encoder.h"
 #include "sql/rewrite/ob_predicate_deduce.h"
 #include "sql/optimizer/ob_log_join.h"
 

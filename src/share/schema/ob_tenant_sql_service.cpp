@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_tenant_sql_service.h"
+#include "sql/ob_sql_utils.h"
+#include "rootserver/ob_rs_job_table_operator.h"
 
 namespace oceanbase
 {

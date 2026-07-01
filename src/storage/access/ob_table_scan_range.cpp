@@ -15,7 +15,7 @@
  */
 
 #include "ob_table_scan_range.h"
-#include "storage/ob_partition_split_query.h"
+#include "share/ob_partition_split_query.h"
 #include "storage/tablet/ob_tablet.h"
 
 namespace oceanbase

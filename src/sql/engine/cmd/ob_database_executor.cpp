@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX SQL_ENG
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "sql/engine/cmd/ob_database_executor.h"
 #include "rootserver/ob_rs_serial_call.h"
 #include "rootserver/ob_root_service.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
 #include "sql/resolver/ddl/ob_create_database_stmt.h"
-#include "share/ob_ex_rpc.h"
+#include "observer/ob_ex_rpc.h"
 #include "sql/resolver/ddl/ob_use_database_stmt.h"
 #include "sql/resolver/ddl/ob_alter_database_stmt.h"
 #include "sql/resolver/ddl/ob_drop_database_stmt.h"

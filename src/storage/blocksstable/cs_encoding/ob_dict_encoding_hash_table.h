@@ -17,10 +17,10 @@
 #ifndef OCEANBASE_CS_ENCODING_OB_DICT_ENCODING_HASH_TABLE_H_
 #define OCEANBASE_CS_ENCODING_OB_DICT_ENCODING_HASH_TABLE_H_
 
-#include "lib/hash_func/xxhash.h"
+#include "lib/hash/xxhash.h"
 #include <stdlib.h>
 #include "lib/allocator/ob_allocator.h"
-#include "lib/objectpool/ob_pooled_allocator.h"
+#include "lib/allocator/ob_pooled_allocator.h"
 #include "common/object/ob_object.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 

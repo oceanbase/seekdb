@@ -25,7 +25,7 @@
 #include "common/object/ob_object.h"
 #include "sql/executor/ob_slice_id.h"
 #include "share/schema/ob_table_schema.h"
-#include "sql/ob_scanner.h"
+#include "share/ob_scanner.h"
 #include "sql/ob_sql_trans_util.h"
 #include "share/rpc/ob_batch_proxy.h"
 #include "storage/tx/ob_trans_define.h"

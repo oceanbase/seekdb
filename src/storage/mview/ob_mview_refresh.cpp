@@ -21,7 +21,6 @@
 #include "storage/mview/ob_mview_refresh.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
 #include "sql/resolver/mv/ob_mv_provider.h"
-#include "sql/resolver/mv/ob_mv_dep_utils.h"
 #include "storage/mview/ob_mview_refresh_helper.h"
 #include "storage/mview/ob_mview_refresh_stats_collect.h"
 #include "storage/mview/ob_mview_transaction.h"
@@ -724,7 +723,7 @@ int ObMViewRefresher::fast_refresh()
       char trace_id_buf[OB_MAX_TRACE_ID_BUFFER_SIZE] = {'\0'};
       if (OB_FAIL(mview_info.set_last_refresh_trace_id(ObCurTraceId::get_trace_id_str(trace_id_buf, sizeof(trace_id_buf))))) {
         LOG_WARN("fail to set last refresh trace id", KR(ret));
-      } else if (OB_FAIL(sql::ObMVDepUtils::update_mview_data_attr(trans,
+      } else if (OB_FAIL(ObMViewInfo::update_mview_data_attr(trans,
                         last_refresh_scn, target_data_sync_scn_val, mview_info))) {
         LOG_WARN("fail to update mview data scn", KR(ret), K(mview_info), K(last_refresh_scn));
       } else if (OB_FAIL(ObMViewInfo::update_mview_last_refresh_info(trans, mview_info))) {

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/ob_tenant_role.h"
-#include "lib/json/ob_yson.h"
+#include "deps/oblib/src/lib/json/ob_yson.h"
 
 using namespace oceanbase;
 using namespace oceanbase::common;

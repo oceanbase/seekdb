@@ -20,7 +20,7 @@
 #include "share/catalog/ob_external_catalog.h"
 #include "share/schema/ob_column_schema.h"
 #include "share/schema/ob_catalog_schema_struct.h"
-#include "share/schema/ob_schema_getter_guard.h"  // previously hidden behind the external_table include chain
+#include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_table_schema.h"
 
 namespace oceanbase
@@ -28,7 +28,6 @@ namespace oceanbase
 namespace share
 {
 
-using schema::ObSchemaGetterGuard;  // make the transitive using declaration explicit
 class ObCatalogMetaGetter final : public ObICatalogMetaGetter
 {
 public:

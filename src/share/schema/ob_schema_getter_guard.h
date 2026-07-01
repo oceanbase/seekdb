@@ -19,7 +19,7 @@
 #include <stdint.h>
 #include "share/ob_define.h"
 #include "lib/container/ob_se_array.h"
-#include "lib/utility/ob_mod_define.h"
+#include "lib/allocator/ob_mod_define.h"
 #include "lib/allocator/page_arena.h"
 #include "share/schema/ob_schema_mgr_cache.h"
 #include "share/schema/ob_package_info.h"

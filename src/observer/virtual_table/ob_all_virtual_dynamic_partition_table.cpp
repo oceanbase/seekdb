@@ -16,7 +16,7 @@
 
 #include "observer/virtual_table/ob_all_virtual_dynamic_partition_table.h"
 
-#include "rootserver/ob_dynamic_partition_manager.h"
+#include "share/ob_dynamic_partition_manager.h"
 
 namespace oceanbase
 {

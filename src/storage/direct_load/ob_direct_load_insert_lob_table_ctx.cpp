@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "storage/direct_load/ob_direct_load_insert_lob_table_ctx.h"
-#include "storage/ddl/ob_ddl_storage_util.h"
 #include "storage/direct_load/ob_direct_load_insert_data_table_ctx.h"
 
 namespace oceanbase
@@ -67,7 +66,7 @@ int ObDirectLoadInsertLobTabletContext::init(ObDirectLoadInsertLobTableContext *
     if (param_->enable_dag_) {
       slice_idx_ = param_->reserved_parallel_;
     }
-    if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(param_->reserved_parallel_, start_seq_))) {
+    if (OB_FAIL(ObDDLUtil::init_macro_block_seq(param_->reserved_parallel_, start_seq_))) {
       LOG_WARN("fail to init macro block seq", KR(ret), K(param_->reserved_parallel_));
     } else {
       data_tablet_ctx->set_lob_tablet_ctx(this);

@@ -18,7 +18,7 @@
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_MEMORY_INFO_H_
 
 #include "lib/container/ob_array.h"
-#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "share/ob_virtual_table_scanner_iterator.h"
 
 namespace oceanbase
 {

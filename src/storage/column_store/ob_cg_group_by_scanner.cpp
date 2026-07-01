@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX STORAGE
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_cg_group_by_scanner.h"
 #include "storage/access/ob_vector_store.h"
 

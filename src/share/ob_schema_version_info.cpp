@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_schema_version_info.h"
+#include "rootserver/ob_root_utils.h"
 
 namespace oceanbase
 {

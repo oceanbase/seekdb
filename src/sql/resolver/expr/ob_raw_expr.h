@@ -29,7 +29,7 @@
 #include "share/schema/ob_schema_utils.h"
 #include "sql/ob_sql_define.h"
 #include "sql/resolver/expr/ob_expr_info_flag.h"
-#include "sql/session/ob_system_variable.h"
+#include "share/system_variable/ob_system_variable.h"
 #include "share/schema/ob_udf.h"
 #include "lib/worker.h"
 #include "sql/parser/parse_node.h"
@@ -55,7 +55,7 @@ class ObSchemaGetterGuard;
 }
 namespace pl
 {
-class ObPLCompiler;
+class ObPLBuilder;
 }
 namespace sql
 {
@@ -1841,7 +1841,7 @@ class ObRawExpr
 public:
   friend sql::ObExpr *ObStaticEngineExprCG::get_rt_expr(const ObRawExpr &raw_expr);
   friend sql::ObExpr *ObExprOperator::get_rt_expr(const ObRawExpr &raw_expr) const;
-  friend class pl::ObPLCompiler;
+  friend class pl::ObPLBuilder;
   friend class sql::ObCallProcedureInfo;
   friend class sql::ObRTDatumArith;
 

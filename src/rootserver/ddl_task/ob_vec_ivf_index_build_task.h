@@ -18,7 +18,7 @@
 #define OCEANBASE_ROOTSERVER_OB_VEC_IVF_INDEX_BUILD_TASK_H_
 
 #include "share/schema/ob_schema_getter_guard.h"
-#include "rootserver/ob_domain_index_builder_util.h"
+#include "share/ob_domain_index_builder_util.h"
 
 namespace oceanbase
 {

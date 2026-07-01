@@ -18,7 +18,7 @@
 #include "share/rc/ob_module_provider.h"
 #include "storage/multi_data_source/ob_mds_table_merge_task.h"
 #include "storage/multi_data_source/ob_mds_table_merge_dag_param.h"
-#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "share/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tablet/ob_tablet.h"
 

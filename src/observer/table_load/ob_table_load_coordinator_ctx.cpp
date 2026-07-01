@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/table_load/ob_table_load_coordinator_ctx.h"
 #include "observer/table_load/ob_table_load_coordinator_trans.h"
 #include "observer/table_load/ob_table_load_error_row_handler.h"

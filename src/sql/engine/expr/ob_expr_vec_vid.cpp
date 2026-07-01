@@ -18,7 +18,7 @@
 
 #include "sql/engine/expr/ob_expr_vec_vid.h"
 #include "sql/engine/ob_exec_context.h"
-#include "storage/ob_tablet_autoincrement_service.h"
+#include "share/ob_tablet_autoincrement_service.h"
 
 namespace oceanbase
 {

@@ -17,14 +17,11 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "common/ob_store_range.h"
-#include "common/ob_common_types.h"  // ObQueryFlag serialization definition moved to its owner
 
 namespace oceanbase
 {
 namespace common
 {
-
-OB_SERIALIZE_MEMBER(ObQueryFlag, flag_);
 
 int ObStoreRange::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
 {

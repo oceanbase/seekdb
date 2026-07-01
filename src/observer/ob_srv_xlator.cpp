@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/ob_srv_xlator.h"
-#include "share/ob_ex_rpc.h"
+#include "observer/ob_ex_rpc.h"
 
 #include "sql/ob_sql_task.h"
 #include "observer/mysql/obmp_query.h"

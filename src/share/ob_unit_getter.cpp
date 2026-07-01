@@ -19,6 +19,7 @@
 #include "ob_unit_getter.h"
 #include "share/ob_server_struct.h"
 #include "share/unit/ob_unit_config.h"
+#include "logservice/ob_server_log_block_mgr.h"
 
 namespace oceanbase
 {
@@ -433,7 +434,28 @@ int ObUnitInfoGetter::get_pools_of_units(const ObIArray<ObUnit> &units,
   return ret;
 }
 
-// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state)
+int ObUnitInfoGetter::get_configs_of_pools(const ObIArray<ObResourcePool> &pools,
+                                           ObIArray<ObUnitConfig> &configs)
+{
+  int ret = OB_SUCCESS;
+  ObUnitConfig unit_config;
+  configs.reuse();
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else if (pools.count() <= 0) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("pools is empty", K(pools), K(ret));
+  } else if (OB_ISNULL(GCTX.log_block_mgr_)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), KP(GCTX.log_block_mgr_));
+  } else if (OB_FAIL(unit_config.gen_sys_tenant_unit_config(false/*is_hidden_sys*/, GCTX.log_block_mgr_->get_log_disk_size()))) {
+    LOG_WARN("gen sys tenant unit config fail", KR(ret));
+  } else if (OB_FAIL(configs.push_back(unit_config))) {
+    LOG_WARN("fail to push back sys unit config", KR(ret), K(unit_config));
+  }
+  return ret;
+}
 
 int ObUnitInfoGetter::get_pools_of_tenant(ObIArray<ObResourcePool> &pools)
 {

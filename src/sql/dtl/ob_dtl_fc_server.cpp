@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_DTL
 
-#include "observer/omt/ob_multi_tenant.h"
 #include "ob_dtl_fc_server.h"
 #include "share/rc/ob_module_provider.h"
 

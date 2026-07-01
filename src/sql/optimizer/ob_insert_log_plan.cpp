@@ -21,7 +21,7 @@
 #include "sql/optimizer/ob_log_insert.h"
 #include "sql/resolver/dml/ob_del_upd_resolver.h"
 #include "sql/rewrite/ob_transform_utils.h"
-#include "sql/optimizer/stat/ob_dbms_stats_utils.h"
+#include "share/stat/ob_dbms_stats_utils.h"
 using namespace oceanbase;
 using namespace sql;
 using namespace oceanbase::common;

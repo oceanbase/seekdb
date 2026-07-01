@@ -18,13 +18,13 @@
 
 #include "ob_catalog_properties.h"
 
-#include "lib/list/ob_dlist.h"
+#include "deps/oblib/src/lib/list/ob_dlist.h"
 #include "lib/oblog/ob_log_module.h"
-#include "common/ob_hex_utils_base.h"
+#include "lib/string/ob_hex_utils_base.h"
 #include "lib/utility/ob_print_utils.h"
 #include "share/ob_encryption_util.h"
 #include "share/rc/ob_tenant_base.h"
-#include "share/ob_define.h"
+#include "src/share/ob_define.h"
 
 namespace oceanbase
 {
@@ -110,7 +110,36 @@ int ObCatalogProperties::parse_catalog_type(const ObString &str, CatalogType &ty
   return ret;
 }
 
-// moved definition to sql/resolver/ddl/ob_ddl_resolver.cpp(parser vocabulary)
+int ObCatalogProperties::resolve_catalog_type(const ParseNode &node, CatalogType &type)
+{
+  int ret = OB_SUCCESS;
+  type = CatalogType::INVALID_TYPE;
+  const ParseNode *type_node = NULL;
+  bool is_type_set = false;
+  for (int32_t i = 0; OB_SUCC(ret) && !is_type_set && i < node.num_child_; ++i) {
+    if (OB_NOT_NULL(node.children_[i]) && T_EXTERNAL_FILE_FORMAT_TYPE == node.children_[i]->type_) {
+      type_node = node.children_[i];
+      if (type_node->num_child_ != 1 || OB_ISNULL(type_node->children_[0])) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected parse node", K(ret));
+      } else {
+        ObString string_v = ObString(type_node->children_[0]->str_len_, type_node->children_[0]->str_value_).trim_space_only();
+        for (int i = 0; !is_type_set && i < static_cast<int>(CatalogType::MAX_TYPE); i++) {
+          if (0 == string_v.case_compare(CATALOG_TYPE_STR[i])) {
+            type = static_cast<CatalogType>(i);
+            is_type_set = true;
+          }
+        }
+        if (CatalogType::INVALID_TYPE == type) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this catalog type");
+          LOG_WARN("catalog type is not supported yet", K(ret), K(string_v));
+        }
+      }
+    }
+  }
+  return ret;
+}
 
 int ObCatalogProperties::encrypt_str(ObString &src, ObString &dst, ObIAllocator &allocator)
 {
@@ -388,7 +417,71 @@ int ObODPSCatalogProperties::load_from_string(const ObString &str, ObIAllocator 
   return ret;
 }
 
-// moved definition to sql/resolver/ddl/ob_ddl_resolver.cpp(parser vocabulary)
+int ObODPSCatalogProperties::resolve_catalog_properties(const ParseNode &node)
+{
+  int ret = OB_SUCCESS;
+  const ParseNode *child = NULL;
+  const ParseNode *child_value = NULL;
+  for (int32_t i = 0; OB_SUCC(ret) && i < node.num_child_; ++i) {
+    if (OB_ISNULL(child = node.children_[i]) || child->num_child_ != 1
+        || OB_ISNULL(child_value = child->children_[0])) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("invalid parse node", K(ret));
+    } else {
+      switch (child->type_) {
+        case T_EXTERNAL_FILE_FORMAT_TYPE: {
+          // do nothing
+          break;
+        }
+        case T_ACCESSTYPE: {
+          access_type_ = ObString(child_value->str_len_, child_value->str_value_).trim_space_only();
+          break;
+        }
+        case T_ACCESSID: {
+          access_id_ = ObString(child_value->str_len_, child_value->str_value_).trim_space_only();
+          break;
+        }
+        case T_ACCESSKEY: {
+          access_key_ = ObString(child_value->str_len_, child_value->str_value_).trim_space_only();
+          break;
+        }
+        case T_STSTOKEN: {
+          sts_token_ = ObString(child_value->str_len_, child_value->str_value_).trim_space_only();
+          break;
+        }
+        case T_ENDPOINT: {
+          endpoint_ = ObString(child_value->str_len_, child_value->str_value_).trim_space_only();
+          break;
+        }
+        case T_TUNNEL_ENDPOINT: {
+          tunnel_endpoint_ = ObString(child_value->str_len_, child_value->str_value_).trim_space_only();
+          break;
+        }
+        case T_PROJECT: {
+          project_ = ObString(child_value->str_len_, child_value->str_value_).trim_space_only();
+          break;
+        }
+        case T_QUOTA: {
+          quota_ = ObString(child_value->str_len_, child_value->str_value_).trim_space_only();
+          break;
+        }
+        case T_COMPRESSION: {
+          compression_code_ = ObString(child_value->str_len_, child_value->str_value_).trim_space_only();
+          break;
+        }
+        case T_REGION: {
+          region_ = ObString(child_value->str_len_, child_value->str_value_).trim_space_only();
+          break;
+        }
+        default: {
+          ret = OB_INVALID_ARGUMENT;
+          LOG_WARN("invalid catalog option", K(ret), K(child->type_));
+        }
+      }
+    }
+  }
+  return ret;
+}
 
 } // namespace share
 } // namespace oceanbase

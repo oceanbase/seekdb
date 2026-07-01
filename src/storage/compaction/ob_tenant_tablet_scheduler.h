@@ -17,7 +17,7 @@
 #ifndef STORAGE_OB_TENANT_TABLET_SCHEDULER_H_
 #define STORAGE_OB_TENANT_TABLET_SCHEDULER_H_
 
-#include "lib/thread/ob_dedup_queue.h"
+#include "lib/queue/ob_dedup_queue.h"
 #include "share/ob_ls_id.h"
 #include "share/tablet/ob_tablet_info.h"
 #include "storage/ob_i_store.h"

@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_LIB_RESTORE_OB_STORAGE_INFO_H_
 #define OCEANBASE_LIB_RESTORE_OB_STORAGE_INFO_H_
 
-#include "lib/restore/ob_device_common.h"
+#include "common/storage/ob_device_common.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/utility/ob_unify_serialize.h"
 #include <curl/curl.h>

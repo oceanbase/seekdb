@@ -22,7 +22,7 @@
 #include "share/ob_ddl_checksum.h"
 #include "share/tablet/ob_tablet_to_ls_operator.h"
 #include "src/observer/ob_inner_sql_connection.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "share/vector_index/ob_vector_index_util.h"
 #include "lib/utility/serialization.h"
 
 using namespace oceanbase::rootserver;

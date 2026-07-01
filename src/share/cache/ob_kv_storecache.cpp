@@ -15,6 +15,7 @@
  */
 
 #include "lib/utility/ob_macro_utils.h"
+#include "storage/ob_storage_leak_checker.h"
 #define USING_LOG_PREFIX COMMON
 
 #include "share/cache/ob_kv_storecache.h"
@@ -28,6 +29,8 @@ namespace oceanbase
 using namespace lib;
 namespace common
 {
+
+ERRSIM_POINT_DEF(ERRSIM_CACHE_HANDLE_TRACE);
 
 ObKVCacheHandle::ObKVCacheHandle()
   : hazptr_holder_()
@@ -43,8 +46,15 @@ ObKVCacheHandle::~ObKVCacheHandle()
 void ObKVCacheHandle::move_from(ObKVCacheHandle &other)
 {
   if (&other != this) {
+    int ret = OB_SUCCESS;
     reset();
-    hazptr_holder_.move_from(other.hazptr_holder_);
+    if (OB_UNLIKELY(other.is_traced())) {
+      storage::ObStorageLeakChecker::get_instance().handle_reset(&other);
+      hazptr_holder_.move_from(other.hazptr_holder_);
+      storage::ObStorageLeakChecker::get_instance().handle_hold(this, true);
+    } else {
+      hazptr_holder_.move_from(other.hazptr_holder_);
+    }
   }
 }
 
@@ -54,6 +64,8 @@ int ObKVCacheHandle::assign(const ObKVCacheHandle& other)
   reset();
   if (OB_FAIL(this->hazptr_holder_.assign(other.hazptr_holder_))) {
     COMMON_LOG(WARN, "Fail to assign hazptr_holder, ", K(ret));
+  } else {
+    storage::ObStorageLeakChecker::get_instance().handle_hold(this);
   }
   return ret;
 }
@@ -61,9 +73,16 @@ int ObKVCacheHandle::assign(const ObKVCacheHandle& other)
 void ObKVCacheHandle::reset()
 {
   if (hazptr_holder_.is_valid()) {
+    storage::ObStorageLeakChecker::get_instance().handle_reset(this);
     hazptr_holder_.release();
   }
 }
+
+bool ObKVCacheHandle::need_trace() const
+{
+  return is_valid() && OB_SUCCESS != ERRSIM_CACHE_HANDLE_TRACE;
+}
+
 
 /*
  * ----------------------------------------ObKVCacheMapIterator---------------------------------------------------------
@@ -230,6 +249,10 @@ int ObKVGlobalCache::init(
     }
     map_once_replace_num_ = min(MAX_MAP_ONCE_REPLACE_NUM, bucket_num / MAP_ONCE_REPLACE_RATIO);
     inited_ = true;
+    int tmp_ret = OB_SUCCESS;
+    if (OB_TMP_FAIL(set_storage_leak_check_mod(GCONF._storage_leak_check_mod.str()))) {
+      COMMON_LOG(WARN, "[STORAGE-CHECKER] Fail to set check cache name", K(tmp_ret));
+    }
   }
 
   if (OB_UNLIKELY(!inited_)) {
@@ -666,6 +689,12 @@ int ObKVGlobalCache::sync_wash_mbs(const int64_t wash_size,
     }
   }
   return ret;
+}
+
+int ObKVGlobalCache::set_storage_leak_check_mod(const char *check_mod)
+{
+  storage::ObStorageLeakChecker::get_instance().reset();
+  return OB_SUCCESS;
 }
 
 void ObKVGlobalCache::print_all_cache_info()

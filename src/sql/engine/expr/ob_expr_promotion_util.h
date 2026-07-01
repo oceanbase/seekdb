@@ -20,7 +20,7 @@
 //#include "sql/engine/expr/ob_expr_operator.h"
 #include "common/object/ob_obj_type.h"
 //#include "common/expression/ob_expr_string_buf.h"
-//#include "common/timezone/ob_timezone_info.h"
+//#include "lib/timezone/ob_timezone_info.h"
 
 namespace oceanbase
 {

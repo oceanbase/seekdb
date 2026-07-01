@@ -48,7 +48,7 @@
 #include "lib/task/ob_timer.h"
 #include "lib/future/ob_future.h"
 #include "storage/tx/ob_time_wheel.h"
-#include "lib/time/ob_clock_generator.h"
+#include "common/ob_clock_generator.h"
 #include "share/ob_occam_time_guard.h"
 #include "share/ob_delegate.h"
 

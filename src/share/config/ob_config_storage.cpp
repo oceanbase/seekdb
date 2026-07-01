@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_config_storage.h"
-#include "lib/guard/ob_unique_guard.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/time/ob_time_utility.h"

@@ -36,7 +36,7 @@ class ObSQLiteConnection;
 class ObTabletReplicaChecksumTableStorage;
 }
 }
-#include "storage/compaction/ob_tablet_check_info.h"  // uses only ObTabletCheckInfo, use the pure header created in batch 5(L2)
+#include "storage/compaction/ob_tenant_medium_checker.h"
 #include "share/compaction/ob_array_with_map.h"
 
 namespace oceanbase

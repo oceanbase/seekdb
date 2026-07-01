@@ -20,7 +20,7 @@
 #include "sql/engine/cmd/ob_kill_session_arg.h"
 #include "sql/engine/cmd/ob_kill_executor.h"
 #include "observer/ob_server.h"
-#include "share/ob_ex_rpc.h"
+#include "observer/ob_ex_rpc.h"
 namespace oceanbase
 {
 using namespace common;

@@ -32,7 +32,6 @@
 #ifdef OB_BUILD_LOG_STORAGE_COMPRESS
 #include "logservice/ob_log_compression.h"
 #endif
-#include "storage/tx_storage/ob_ls_handle.h"  // ObLSHandle complete type, previously hidden behind a transitive include
 
 namespace oceanbase
 {
@@ -936,7 +935,7 @@ int init_log_iterator(
 
 int __get_log_handler(const ObLSID &ls_id,
                       ObLogHandler *&log_handler,
-                      storage::ObLSHandle &ls_handle);
+                      ObLSHandle &ls_handle);
 
 template<class LogEntryType, class StartPoint>
 int init_log_iterator_(
@@ -947,7 +946,7 @@ int init_log_iterator_(
 {
   int ret = OB_SUCCESS;
   ObLogHandler *log_handler = NULL;
-  storage::ObLSHandle ls_handle;
+  ObLSHandle ls_handle;
   if (OB_FAIL(__get_log_handler(ls_id, log_handler, ls_handle))) {
     CLOG_LOG(WARN, "__get_log_handler failed", K(ls_id));
   } else if (OB_FAIL(init_log_iterator(log_handler, start_point, suggested_read_buf_size, iterator))) {

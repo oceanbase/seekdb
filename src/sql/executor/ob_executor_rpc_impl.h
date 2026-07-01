@@ -20,7 +20,7 @@
 #include "share/ob_define.h"
 #include "lib/container/ob_array.h"
 #include "lib/allocator/ob_allocator.h"
-#include "sql/ob_scanner.h"
+#include "share/ob_scanner.h"
 #include "sql/executor/ob_task.h"
 #include "sql/executor/ob_task_info.h"
 #include "sql/executor/ob_slice_id.h"

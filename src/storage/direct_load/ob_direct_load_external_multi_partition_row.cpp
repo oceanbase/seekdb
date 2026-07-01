@@ -17,7 +17,7 @@
 
 #include "storage/direct_load/ob_direct_load_external_multi_partition_row.h"
 #include "observer/table_load/ob_table_load_stat.h"
-#include "storage/ob_order_perserving_encoder.h"
+#include "share/ob_order_perserving_encoder.h"
 #include "storage/direct_load/ob_direct_load_datum_row.h"
 
 namespace oceanbase

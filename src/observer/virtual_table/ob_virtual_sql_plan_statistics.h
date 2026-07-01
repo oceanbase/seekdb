@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_OB_VIRTUAL_SQL_PLAN_STATISTICS_H
 #define OCEANBASE_OBSERVER_OB_VIRTUAL_SQL_PLAN_STATISTICS_H 1
 
-#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "share/ob_virtual_table_scanner_iterator.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
 #include "lib/container/ob_se_array.h"
 #include "common/ob_range.h"

@@ -16,35 +16,8 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_priv_sql_service.h"
-
-#include <stddef.h>
-
 #include "share/schema/ob_user_sql_service.h"
-#include "lib/allocator/page_arena.h"
-#include "lib/container/ob_array.h"
-#include "lib/container/ob_iarray.h"
-#include "lib/ob_check_macros.h"
-#include "lib/ob_define.h"
-#include "lib/ob_errno.h"
-#include "lib/oblog/ob_log.h"
-#include "lib/oblog/ob_log_level.h"
-#include "lib/oblog/ob_log_print_kv.h"
-#include "lib/string/ob_sql_string.h"
-#include "lib/utility/ob_fast_convert.h"
-#include "lib/utility/ob_smart_var.h"
-#include "lib/utility/utility.h"
-#include "lib/worker.h"
-#include "mysqlclient/ob_isql_client.h"
-#include "mysqlclient/ob_mysql_proxy.h"
-#include "mysqlclient/ob_mysql_result.h"
-#include "object/ob_object.h"
-#include "share/inner_table/ob_inner_table_schema_constants.h"
-#include "share/ob_cluster_version.h"
-#include "share/ob_dml_sql_splicer.h"
-#include "share/schema/ob_objpriv_mysql_schema_struct.h"
-#include "share/schema/ob_schema_getter_guard.h"
-#include "share/schema/ob_schema_struct.h"
-#include "share/schema/ob_schema_utils.h"
+#include "sql/ob_sql_utils.h"
 
 
 namespace oceanbase

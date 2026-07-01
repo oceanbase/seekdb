@@ -20,7 +20,7 @@
 
 #include "lib/allocator/ob_allocator.h"
 #include "lib/string/ob_string.h"
-#include "common/udt/ob_array_utils.h"
+#include "lib/udt/ob_array_utils.h"
 #include "sql/engine/expr/ob_expr.h" // for ObExpr
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/expr/ob_expr_array_map.h"
@@ -70,6 +70,7 @@ public:
                            const char *data = nullptr);
   static int set_array_res(ObIArrayType *arr_obj, const int32_t data_len, ObIAllocator &allocator, common::ObString &res,
                            const char *data = nullptr);
+  static int set_array_obj_res(ObIArrayType *arr_obj, ObObjCastParams *params, ObObj *obj);
   template <typename ResVec>
   static int set_array_res(ObIArrayType *arr_obj, const ObExpr &expr, ObEvalCtx &ctx,
                            ResVec *res_vec, int64_t batch_idx)

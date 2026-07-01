@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "observer/omt/ob_multi_tenant.h"
 #include "ob_table_load_service.h"
 #include "share/rc/ob_module_provider.h"
 #include "observer/omt/ob_tenant.h"

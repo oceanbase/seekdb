@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "lib/mysqlclient/ob_mysql_proxy.h"
 #include "share/schema/ob_mview_refresh_stats.h"
 
 namespace oceanbase

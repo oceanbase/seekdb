@@ -26,7 +26,6 @@
 #include "storage/lob/ob_lob_constants.h"
 #include "storage/lob/ob_lob_iterator.h"
 #include "storage/lob/ob_lob_meta_manager.h"
-#include "share/ob_i_lob_read_service.h"  // implements the lob-read domain port(dependency inversion)
 #include "storage/ob_storage_rpc.h"
 
 namespace oceanbase
@@ -45,7 +44,7 @@ struct ObLobCtx
   TO_STRING_KV(KPC(lob_meta_mngr_), KPC(lob_piece_mngr_));
 };
 
-class ObLobManager : public common::ObILobReadService
+class ObLobManager
 {
 public:
   static const int64_t LOB_AUX_TABLE_COUNT = 2; // lob aux table count for each table
@@ -140,43 +139,6 @@ public:
                       uint64_t len,
                       int64_t timeout,
                       ObLobLocatorV2 &lob);
-
-  // ===== common::ObILobReadService port implementation(lob-read domain, called through share injection via MTL)=====
-  virtual int get_outrow_lob_full_data(common::ObLobTextIterCtx &ctx,
-                                       common::ObCollationType cs_type,
-                                       bool has_lob_header,
-                                       bool is_outrow,
-                                       common::ObIAllocator *tmp_alloc) override;
-  virtual int get_delta_lob_full_data(common::ObLobTextIterCtx &ctx,
-                                      common::ObObjType type,
-                                      common::ObCollationType cs_type,
-                                      common::ObLobLocatorV2 &lob_locator,
-                                      common::ObIAllocator *allocator,
-                                      common::ObString &data_str) override;
-  virtual int get_outrow_prefix_data(common::ObLobTextIterCtx &ctx,
-                                     common::ObCollationType cs_type,
-                                     bool has_lob_header,
-                                     bool is_outrow,
-                                     common::ObIAllocator *tmp_alloc,
-                                     uint32_t prefix_char_len) override;
-  virtual int get_first_block(common::ObLobTextIterCtx &ctx,
-                              common::ObCollationType cs_type,
-                              bool has_lob_header,
-                              bool is_outrow,
-                              common::ObIAllocator *tmp_alloc,
-                              common::ObString &str,
-                              common::ObTextStringIterState &state) override;
-  virtual int get_next_block_inner(common::ObLobTextIterCtx &ctx,
-                                   common::ObCollationType cs_type,
-                                   bool has_lob_header,
-                                   bool is_outrow,
-                                   common::ObString &str,
-                                   common::ObTextStringIterState &state) override;
-  virtual int get_outrow_char_len(common::ObLobTextIterCtx &ctx,
-                                  common::ObCollationType cs_type,
-                                  common::ObIAllocator *tmp_alloc,
-                                  int64_t &char_length) override;
-  virtual void free_lob_query_iter(common::ObLobTextIterCtx &ctx) override;
 
   common::ObIAllocator& get_ext_info_log_allocator() { return ext_info_log_allocator_; }
   inline bool can_write_inrow(uint64_t len, int64_t inrow_threshold) { return len <= inrow_threshold; }

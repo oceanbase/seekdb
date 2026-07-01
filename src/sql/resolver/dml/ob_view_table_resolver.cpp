@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/dml/ob_view_table_resolver.h"
-#include "sql/session/ob_basic_session_info.h"
+#include "share/catalog/ob_catalog_utils.h"
 namespace oceanbase
 {
 using namespace common;

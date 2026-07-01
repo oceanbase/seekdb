@@ -45,7 +45,6 @@ class ObMemtable;
 }
 namespace storage
 {
-class ObITabletMemtable;  // previously hidden behind the ddl_common->block_sstable_struct include chain
 class ObIMemtable;
 class ObLSTxService;
 class ObLSTabletService;

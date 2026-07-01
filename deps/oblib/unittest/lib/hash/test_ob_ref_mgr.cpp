@@ -17,7 +17,6 @@
 #include <gtest/gtest.h>
 #include <thread>
 
-#include "lib/charset/ob_mysql_global.h"
 #include "lib/hash/ob_multi_mod_ref_mgr.h"
 
 using namespace oceanbase;

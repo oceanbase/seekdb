@@ -17,7 +17,7 @@
 #include "alloc_func.h"
 #include "lib/alloc/ob_malloc_allocator.h"
 #include "lib/utility/ob_tracepoint.h"
-#include "lib/errsim_module/ob_errsim_module_interface.h"
+#include "common/errsim_module/ob_errsim_module_interface.h"
 
 using namespace oceanbase;
 using namespace oceanbase::common;

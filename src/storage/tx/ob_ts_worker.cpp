@@ -15,7 +15,6 @@
  */
 
 #include "ob_ts_worker.h"
-#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind a transitive include
 #include "ob_ts_response_handler.h"
 #include "ob_ts_mgr.h"
 #include "observer/omt/ob_tenant.h"

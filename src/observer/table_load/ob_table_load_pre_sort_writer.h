@@ -17,8 +17,8 @@
 #ifndef _OB_TABLE_PRE_SORT_WRITER_
 #define _OB_TABLE_PRE_SORT_WRITER_
 
-#include "observer/table_load/ob_table_load_row_array.h"
-#include "observer/table_load/ob_table_load_row_array.h"
+#include "share/table/ob_table_load_row_array.h"
+#include "src/share/table/ob_table_load_row_array.h"
 #include "storage/direct_load/ob_direct_load_datum_row.h"
 #include "storage/direct_load/ob_direct_load_external_multi_partition_row.h"
 #include "storage/direct_load/ob_direct_load_mem_context.h"

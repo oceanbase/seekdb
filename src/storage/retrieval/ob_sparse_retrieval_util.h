@@ -17,7 +17,7 @@
 #ifndef OB_SPARSE_RETRIEVAL_UTIL_H_
 #define OB_SPARSE_RETRIEVAL_UTIL_H_
 
-#include "common/datum/ob_datum.h"
+#include "share/datum/ob_datum.h"
 #include "share/datum/ob_datum_funcs.h"
 
 namespace oceanbase

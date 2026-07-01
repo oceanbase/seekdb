@@ -19,7 +19,7 @@
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "share/object/ob_array_cast.h"
+#include "sql/engine/expr/ob_array_cast.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_expr_minus.h"
 #include <map>
@@ -418,6 +418,30 @@ template int ObArrayExprUtils::set_array_res<ObVectorBase>(
     ObIArrayType* arr_obj, const ObExpr& expr, ObEvalCtx& ctx,
     ObVectorBase* res_vec, int64_t batch_idx);
 
+int ObArrayExprUtils::set_array_obj_res(ObIArrayType *arr_obj, ObObjCastParams *params, ObObj *obj)
+{
+  int ret = OB_SUCCESS;
+  const bool has_lob_header = true;
+  int32_t res_size = arr_obj->get_raw_binary_len();
+  char *res_buf = nullptr;
+  int64_t res_buf_len = 0;
+  sql::ObTextStringObObjResult text_result(ObCollectionSQLType, params, obj, has_lob_header);
+  if (OB_FAIL(text_result.init(res_size, params->allocator_v2_))) {
+    LOG_WARN("init lob result failed");
+  } else if (OB_FAIL(text_result.get_reserved_buffer(res_buf, res_buf_len))) {
+    LOG_WARN("fail to get reserver buffer", K(ret));
+  } else if (res_buf_len < res_size) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("get invalid res buf len", K(ret), K(res_buf_len), K(res_size));
+  } else if (OB_FAIL(arr_obj->get_raw_binary(res_buf, res_buf_len))) {
+    LOG_WARN("get array raw binary failed", K(ret), K(res_buf_len), K(res_size));
+  } else if (OB_FAIL(text_result.lseek(res_size, 0))) {
+    LOG_WARN("failed to lseek res.", K(ret), K(text_result), K(res_size));
+  } else {
+    text_result.set_result();
+  }
+  return ret;
+}
 
 int ObArrayExprUtils::check_array_type_compatibility(ObExecContext *exec_ctx, uint16_t l_subid, uint16_t r_subid, bool &is_compatiable)
 {

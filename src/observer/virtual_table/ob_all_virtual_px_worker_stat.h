@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_ALL_PX_WORKER_STAT_TABLE_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_ALL_PX_WORKER_STAT_TABLE_
 
-#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "share/ob_virtual_table_scanner_iterator.h"
 #include "lib/net/ob_addr.h"
 #include "sql/engine/px/ob_px_worker_stat.h"
 namespace oceanbase

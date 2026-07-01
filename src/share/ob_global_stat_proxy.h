@@ -19,7 +19,7 @@
 
 #include "lib/list/ob_dlink_node.h"
 #include "lib/list/ob_dlist.h"
-#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "lib/mysqlclient/ob_mysql_proxy.h"
 #include "share/ob_core_table_proxy.h"
 #include "share/scn.h"
 

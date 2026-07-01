@@ -18,7 +18,6 @@
 #define OCEANBASE_SRC_PL_OB_PL_TYPE_H_
 
 #include "share/ob_define.h"
-#include "pl/ob_pl_integer_type.h"
 #include "sql/parser/ob_item_type.h"
 #include "rpc/obmysql/ob_mysql_util.h"
 #include "common/object/ob_object.h"
@@ -26,7 +25,7 @@
 #include "lib/container/ob_se_array.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/utility/ob_print_utils.h"
-#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "lib/mysqlclient/ob_mysql_proxy.h"
 #include "storage/tx/ob_trans_define.h"
 #include "share/schema/ob_schema_struct.h"
 #include "sql/engine/expr/ob_expr_res_type.h"
@@ -120,6 +119,19 @@ enum ObPLOpaqueType
   PL_JSON_TYPE = 3
 };
 
+enum ObPLIntegerType
+{
+  PL_INTEGER_INVALID = 0,
+  PL_PLS_INTEGER,
+  PL_BINARY_INTEGER,
+  PL_NATURAL,
+  PL_NATURALN,
+  PL_POSITIVE,
+  PL_POSITIVEN,
+  PL_SIGNTYPE,
+  PL_SIMPLE_INTEGER,
+  PL_INTEGER_MAX,
+};
 
 enum ObPLGenericType
 {
@@ -186,6 +198,7 @@ enum ObPLTypeFrom
   PL_TYPE_ATTR_ROWTYPE,
   PL_TYPE_ATTR_TYPE,
   PL_TYPE_SYS_REFCURSOR,
+  PL_TYPE_DBLINK,
 };
 
 enum ObPLTypeSize
@@ -482,8 +495,8 @@ public:
     common::ObIAllocator &allocator,
     const char* src, const int64_t src_len, int64_t &src_pos, char *&dst) const;
   // ------ new session serialize/deserialize interface -------
-  //The type stored in LLVM
-  //type stored in sql
+  // Type stored by the legacy native-code path.
+  // Type stored in SQL.
 
 
   virtual int newx(common::ObIAllocator &allocator, const ObPLINS *ns, int64_t &ptr) const;
@@ -542,7 +555,7 @@ public:
 protected:
   ObPLType type_;
   ObPLTypeFrom type_from_;
-  ObPLTypeFrom type_from_origin_; /* valid if type_from is PL_TYPE_ATTR_ROWTYPE or PL_TYPE_ATTR_TYPE */
+  ObPLTypeFrom type_from_origin_; /* valid if type_from is PL_TYPE_ATTR_ROWTYPE or PL_TYPE_ATTR_TYPE or PL_TYPE_DBLINK*/
   common::ObDataType obj_type_;
   union {
     uint64_t user_type_id_;
@@ -699,9 +712,10 @@ public:
     IS_LOCAL_TYPE         = 21,// local custom type
     IS_PKG_TYPE           = 22,// custom type in the package
     IS_SELF_ATTRIBUTE     = 23,// self attribute for udt
-    IS_UDT_MEMBER_ROUTINE = 24,// UDT member routine
-    IS_TRIGGER            = 25,// Trigger
-    IS_SEQUENCE           = 26,// Sequence
+    IS_DBLINK_PKG_NS      = 24,// dblink package
+    IS_UDT_MEMBER_ROUTINE = 25,// UDT member routine
+    IS_TRIGGER            = 26,// Trigger
+    IS_SEQUENCE           = 27,// Sequence
   };
 
   ObObjAccessIdx()
@@ -718,7 +732,7 @@ public:
                  const ObPLDataType &var_type,
                  int64_t value = 0
                  );
-  //Do not implement the destructor to avoid LLVM mapping trouble
+  // Do not implement the destructor to preserve the expected memory layout.
 
   int deep_copy(common::ObIAllocator &allocator, sql::ObRawExprFactory &expr_factory, const ObObjAccessIdx &src);
   void reset();

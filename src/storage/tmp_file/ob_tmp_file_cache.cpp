@@ -15,7 +15,6 @@
  */
 
 #include "storage/tmp_file/ob_tmp_file_cache.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"  // EVENT_INC(previously hidden behind a transitive include)
 #include "share/rc/ob_module_provider.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "storage/tmp_file/ob_tmp_file_global.h"

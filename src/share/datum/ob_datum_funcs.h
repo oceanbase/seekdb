@@ -18,15 +18,9 @@
 #define OCEANBASE_OB_DATUM_FUNCS_H_
 
 #include "common/object/ob_obj_compare.h"
-#include "common/datum/ob_datum.h"  // ObDatum complete type(do not rely on the preceding include chain)
 #include "common/object/ob_obj_type.h"
 #include "lib/charset/ob_charset.h"
-#include "sql/engine/ob_bit_vector.h"  // conf marker base_bitvec L1
-namespace oceanbase { namespace sql {
-struct ObExprBasicFuncs;
-struct ObSerializeFuncTag;
-typedef void (*serializable_function)(ObSerializeFuncTag &);
-} }
+#include "sql/engine/expr/ob_expr.h"
 
 namespace oceanbase {
 namespace common {
@@ -35,21 +29,6 @@ struct ObDatum;
 
 typedef int (*ObDatumCmpFuncType)(const ObDatum &datum1, const ObDatum &datum2, int &cmp_ret);
 typedef int (*ObDatumHashFuncType)(const ObDatum &datum, const uint64_t seed, uint64_t &res);
-
-class ObObjMeta;
-// moved down from sql/engine/expr/ob_expr.h:row comparison/batch hash function pointers,signatures are layer-neutral base vocabulary
-// vocabulary; the peer ObDatumCmpFuncType already lives here。sql keeps the original names through using aliases。
-typedef int (*NullSafeRowCmpFunc) (const ObObjMeta &l_meta, const ObObjMeta &r_meta,
-                                   const void *l_data, const int32_t l_len, const bool l_null,
-                                   const void *r_data, const int32_t r_len, const bool r_null,
-                                   int &cmp_ret);
-typedef void (*ObBatchDatumHashFunc)(uint64_t *hash_values,
-                                     ObDatum *datums,
-                                     const bool is_batch_datum,
-                                     const sql::ObBitVector &skip,
-                                     int64_t size,
-                                     const uint64_t *seeds,
-                                     const bool is_batch_seed);
 
 class ObDatumFuncs {
 public:
@@ -93,7 +72,7 @@ public:
   ObCmpFunc() : cmp_func_(NULL) {}
   union {
     common::ObDatumCmpFuncType cmp_func_;
-    NullSafeRowCmpFunc row_cmp_func_;
+    sql::NullSafeRowCmpFunc row_cmp_func_;
     sql::serializable_function ser_cmp_func_;
   };
   TO_STRING_KV(KP_(cmp_func));
@@ -109,7 +88,7 @@ public:
     sql::serializable_function ser_hash_func_;
   };
   union {
-    ObBatchDatumHashFunc batch_hash_func_;
+    sql::ObBatchDatumHashFunc batch_hash_func_;
     sql::serializable_function ser_batch_hash_func_;
   };
   TO_STRING_KV(K_(hash_func), K_(batch_hash_func));

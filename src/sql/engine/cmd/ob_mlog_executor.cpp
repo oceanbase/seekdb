@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "sql/engine/cmd/ob_mlog_executor.h"
 #include "rootserver/ob_rs_serial_call.h"
 #include "rootserver/ob_root_service.h"

@@ -19,8 +19,8 @@
 
 #include "lib/utility/ob_print_utils.h"
 #include "lib/container/ob_array.h"
-#include "observer/scheduler/ob_tenant_dag_scheduler.h"
-#include "observer/table_load/ob_table_load_row_array.h"
+#include "share/scheduler/ob_tenant_dag_scheduler.h"
+#include "share/table/ob_table_load_row_array.h"
 #include "storage/direct_load/ob_direct_load_batch_datum_rows.h"
 #include "storage/ddl/ob_cg_block_tmp_file.h"
 #include "storage/ddl/ob_cg_row_tmp_file.h"

@@ -19,6 +19,7 @@
 
 #include "lib/list/ob_dlist.h"
 #include "lib/ob_errno.h"
+#include "share/ob_errno.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_unify_serialize.h"
 #include <tuple>

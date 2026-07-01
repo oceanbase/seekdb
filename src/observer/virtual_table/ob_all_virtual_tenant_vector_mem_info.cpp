@@ -15,12 +15,11 @@
  */
 
 #include "ob_all_virtual_tenant_vector_mem_info.h"
-#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind the server_struct include chain, make the dependency explicit
 #include "share/rc/ob_module_provider.h"
 #include "lib/alloc/memory_dump.h"
-#include "observer/vector_index/ob_plugin_vector_index_service.h"
-#include "observer/vector_index/ob_plugin_vector_index_utils.h"
-#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
+#include "share/vector_index/ob_plugin_vector_index_service.h"
+#include "share/vector_index/ob_plugin_vector_index_utils.h"
+#include "share/allocator/ob_shared_memory_allocator_mgr.h"
 
 using namespace oceanbase::common;
 namespace oceanbase

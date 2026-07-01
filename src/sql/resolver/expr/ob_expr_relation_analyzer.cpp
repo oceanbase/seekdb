@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/expr/ob_expr_relation_analyzer.h"
 #include "src/sql/resolver/expr/ob_raw_expr.h"
-#include "lib/utility/ob_smart_call.h"
+#include "common/ob_smart_call.h"
 namespace oceanbase
 {
 using namespace common;

@@ -17,8 +17,8 @@
 #ifndef OCEANBASE_ROOTSERVER_OB_ALL_VIRTUAL_CORE_INNER_TABLE_H_
 #define OCEANBASE_ROOTSERVER_OB_ALL_VIRTUAL_CORE_INNER_TABLE_H_
 
-#include "observer/virtual_table/ob_virtual_table_projector.h"
-#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "share/ob_virtual_table_projector.h"
+#include "lib/mysqlclient/ob_mysql_proxy.h"
 
 namespace oceanbase
 {

@@ -21,7 +21,7 @@
 #include "rootserver/ob_table_creator.h"
 #include "rootserver/freeze/ob_major_freeze_helper.h"
 #include "rootserver/ddl_task/ob_ddl_scheduler.h"
-#include "sql/resolver/ddl/ob_index_builder_util.h"
+#include "share/ob_index_builder_util.h"
 #include "share/ob_rpc_struct.h"
 #include "share/ob_debug_sync_point.h"
 #include "share/schema/ob_multi_version_schema_service.h"

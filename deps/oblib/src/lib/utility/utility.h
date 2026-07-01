@@ -45,7 +45,7 @@ inline int usleep(useconds_t usec) {
 #include "lib/oblog/ob_trace_log.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/allocator/ob_malloc.h"
-#include "lib/time/ob_clock_generator.h"
+#include "common/ob_clock_generator.h"
 
 #ifdef __APPLE__
 #include <sys/types.h>  // includes BSD type definitions

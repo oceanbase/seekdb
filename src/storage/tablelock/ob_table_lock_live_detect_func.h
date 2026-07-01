@@ -16,7 +16,7 @@
 #ifndef OCEANBASE_STORAGE_TABLELOCK_OB_TABLE_LOCK_LIVE_DETECT_FUNC_H
 #define OCEANBASE_STORAGE_TABLELOCK_OB_TABLE_LOCK_LIVE_DETECT_FUNC_H
 #include <cstdint>
-#include "lib/ob_errno.h"
+#include "deps/oblib/src/lib/ob_errno.h"
 namespace oceanbase
 {
 namespace common

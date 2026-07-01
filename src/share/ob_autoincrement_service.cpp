@@ -16,10 +16,8 @@
 
 #define USING_LOG_PREFIX SHARE
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/ob_autoincrement_service.h"
-#include "share/location_cache/ob_location_service.h"  // previously hidden behind a transitive include(free within share)
-#include "share/ob_sql_client_decorator.h"
+#include "observer/ob_sql_client_decorator.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/wait_event/ob_inner_sql_wait_type.h"
 

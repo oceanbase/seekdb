@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_lock_wait_mgr.h"
 #include "share/rc/ob_module_provider.h"
 
@@ -614,7 +613,8 @@ int ObLockWaitMgr::post_lock(const int tmp_ret,
                       client_sid,
                       holder_session_id,
                       tx_id,
-                      holder_tx_id);
+                      holder_tx_id,
+                      ls_id);
             node->set_need_wait();
             advance_tlocal_request_lock_wait_stat(rpc::RequestLockWaitStat::RequestStat::CONFLICTED);
           }
@@ -688,7 +688,8 @@ int ObLockWaitMgr::post_lock(const int tmp_ret,
                   client_sid,
                   holder_session_id,
                   tx_id,
-                  holder_tx_id);
+                  holder_tx_id,
+                  ls_id);
         node->set_need_wait();
         node->set_lock_mode(lock_mode);
         advance_tlocal_request_lock_wait_stat(rpc::RequestLockWaitStat::RequestStat::CONFLICTED);

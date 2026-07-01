@@ -19,7 +19,7 @@
 
 #include "lib/ob_errno.h"
 #include "share/config/ob_server_config.h"
-#include "share/ob_server_struct.h"
+#include "observer/ob_server_struct.h"
 
 namespace oceanbase
 {

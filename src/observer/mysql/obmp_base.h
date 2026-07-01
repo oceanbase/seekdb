@@ -24,7 +24,7 @@
 #include "observer/ob_server_struct.h"
 #include "observer/virtual_table/ob_virtual_table_iterator_factory.h"
 #include "observer/mysql/obmp_packet_sender.h"
-#include "lib/utility/ob_mod_define.h"
+#include "lib/allocator/ob_mod_define.h"
 #include "lib/alloc/ob_malloc_callback.h"
 #include "lib/utility/ob_tracepoint.h"
 

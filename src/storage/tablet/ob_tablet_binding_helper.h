@@ -17,12 +17,10 @@
 #ifndef OCEANBASE_STORAGE_OB_TABLET_BINDING_HELPER
 #define OCEANBASE_STORAGE_OB_TABLET_BINDING_HELPER
 
-#include "storage/tablet/ob_batch_create_tablet_arg.h"
 #include "common/ob_tablet_id.h"
-#include "storage/ob_storage_rpc_arg.h"
 #include "lib/container/ob_array.h"
 #include "lib/container/ob_array_serialization.h"
-#include "common/mysqlclient/ob_mysql_transaction.h"
+#include "lib/mysqlclient/ob_mysql_transaction.h"
 #include "lib/ob_define.h"
 #include "share/ob_ls_id.h"
 #include "storage/tablet/ob_tablet_binding_mds_user_data.h"

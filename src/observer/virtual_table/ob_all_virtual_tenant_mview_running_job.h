@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_TENANT_MVIEW_RUNNING_JOB_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_TENANT_MVIEW_RUNNING_JOB_
 
-#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "share/ob_virtual_table_scanner_iterator.h"
 #include "sql/session/ob_sql_session_mgr.h"
 #include "rootserver/mview/ob_mview_maintenance_service.h"
 namespace oceanbase

@@ -17,8 +17,8 @@
 #ifndef OB_ALL_VIRTUAL_IO_STATUS_H
 #define OB_ALL_VIRTUAL_IO_STATUS_H
 
-#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
-#include "sql/ob_scanner.h"
+#include "share/ob_virtual_table_scanner_iterator.h"
+#include "share/ob_scanner.h"
 #include "common/row/ob_row.h"
 #include "share/io/ob_io_calibration.h"
 #include "share/io/ob_io_struct.h"

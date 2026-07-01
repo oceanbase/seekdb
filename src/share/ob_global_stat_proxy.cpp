@@ -18,8 +18,7 @@
 
 #include "share/ob_global_stat_proxy.h"
 #include "share/ob_dml_sql_splicer.h"
-#include "share/ob_share_util.h" // ObShareUtil::get_rs_default_timeout_ctx
-#include "common/ob_timeout_ctx.h" // ObTimeoutCtx
+#include "rootserver/ob_root_utils.h"
 
 namespace oceanbase
 {
@@ -267,7 +266,57 @@ int ObGlobalStatProxy::get_snapshot_info(int64_t &snapshot_gc_scn,
 
 }
 
-// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state)
+int ObGlobalStatProxy::update(const ObGlobalStatItem::ItemList &list,
+                              const bool is_incremental)
+{
+  int ret = OB_SUCCESS;
+  int64_t affected_rows = 0;
+  ObDMLSqlSplicer dml(ObDMLSqlSplicer::NAKED_VALUE_MODE);
+  ObArray<ObCoreTableProxy::UpdateCell> cells;
+  ObTimeoutCtx ctx;
+  if (!is_valid() || list.is_empty()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), "self valid", is_valid(),
+        "list size", list.get_size());
+  } else if (OB_FAIL(rootserver::ObRootUtils::get_rs_default_timeout_ctx(ctx))) {
+    LOG_WARN("fail to get timeout ctx", KR(ret), K(ctx));
+  } else if (OB_FAIL(core_table_.load_for_update())) {
+    LOG_WARN("core_table_load_for_update failed", K(ret));
+  } else {
+    const ObGlobalStatItem *it = list.get_first();
+    if (NULL == it) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("NULL iterator", K(ret));
+    }
+    while (OB_SUCCESS == ret && it != list.get_header()) {
+      if (OB_FAIL(dml.add_column(it->name_, it->value_))) {
+        LOG_WARN("add column failed", K(ret));
+      } else {
+        it = it->get_next();
+        if (NULL == it) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("NULL iterator", K(ret));
+        }
+      }
+    }
+  }
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(dml.splice_core_cells(core_table_, cells))) {
+    LOG_WARN("splice_core_cells failed", K(ret));
+  } else if (!is_incremental && OB_FAIL(core_table_.replace_row(cells, affected_rows))) {
+    LOG_WARN("replace_row failed", K(ret));
+  } else if (is_incremental && OB_FAIL(core_table_.incremental_replace_row(cells, affected_rows))) {
+    LOG_WARN("replace_row failed", K(ret));
+  } else if (!is_incremental && !is_single_row(affected_rows)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("affected_rows expected to be one", K(ret), K(affected_rows),
+        K_(core_table));
+  } else if (is_incremental && affected_rows >= 2) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("affected row should less than 2", K(ret), K(affected_rows));
+  }
+  return ret;
+}
 
 int ObGlobalStatProxy::get_core_schema_version(int64_t &core_schema_version)
 {
@@ -348,7 +397,62 @@ int ObGlobalStatProxy::get_rootservice_epoch(int64_t &rootservice_epoch)
   return ret;
 }
 
-// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state)
+int ObGlobalStatProxy::get(
+    ObGlobalStatItem::ItemList &list,
+    bool for_update /*= false*/)
+{
+  int ret = OB_SUCCESS;
+  ObTimeoutCtx ctx;
+  if (!is_valid() || list.is_empty()) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), "self valid", is_valid(),
+        "list size", list.get_size());
+  } else if (OB_FAIL(rootserver::ObRootUtils::get_rs_default_timeout_ctx(ctx))) {
+    LOG_WARN("fail to get timeout ctx", KR(ret), K(ctx));
+  } else if (!for_update && OB_FAIL(core_table_.load())) {
+    LOG_WARN("core_table load failed", KR(ret));
+  } else if (for_update && OB_FAIL(core_table_.load_for_update())) {
+    LOG_WARN("core_table load failed", KR(ret));
+  } else {
+    if (OB_FAIL(core_table_.next())) {
+      if (OB_ITER_END == ret) {
+        ret = OB_EMPTY_RESULT;
+        LOG_WARN("no row exist", KR(ret));
+      } else {
+        LOG_WARN("next failed", KR(ret));
+      }
+    } else {
+      ObGlobalStatItem *it = list.get_first();
+      if (NULL == it) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("NULL iterator", KR(ret));
+      }
+      while (OB_SUCCESS == ret && it != list.get_header()) {
+        if (OB_FAIL(core_table_.get_int(it->name_, it->value_))) {
+          LOG_WARN("get int failed", "name", it->name_, KR(ret));
+        } else {
+          it = it->get_next();
+          if (NULL == it) {
+            ret = OB_ERR_UNEXPECTED;
+            LOG_WARN("NULL iterator", KR(ret));
+          }
+        }
+      }
+      if (OB_SUCC(ret)) {
+        ret = core_table_.next();
+        if (OB_ITER_END == ret) {
+          ret = OB_SUCCESS;
+        } else if (OB_SUCC(ret)) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("__all_global_stat table more than one row", KR(ret));
+        } else {
+          LOG_WARN("next failed", KR(ret));
+        }
+      }
+    }
+  }
+  return ret;
+}
 
 int ObGlobalStatProxy::select_snapshot_gc_scn_for_update_nowait(
     common::ObISQLClient &sql_client,
@@ -678,115 +782,6 @@ int ObGlobalStatProxy::get_change_stream_min_dep_lsn(
               min_dep_lsn = val;
             }
           }
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-int ObGlobalStatProxy::update(const ObGlobalStatItem::ItemList &list,
-                              const bool is_incremental)
-{
-  int ret = OB_SUCCESS;
-  int64_t affected_rows = 0;
-  ObDMLSqlSplicer dml(ObDMLSqlSplicer::NAKED_VALUE_MODE);
-  ObArray<ObCoreTableProxy::UpdateCell> cells;
-  ObTimeoutCtx ctx;
-  if (!is_valid() || list.is_empty()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), "self valid", is_valid(),
-        "list size", list.get_size());
-  } else if (OB_FAIL(ObShareUtil::get_rs_default_timeout_ctx(ctx))) {
-    LOG_WARN("fail to get timeout ctx", KR(ret), K(ctx));
-  } else if (OB_FAIL(core_table_.load_for_update())) {
-    LOG_WARN("core_table_load_for_update failed", K(ret));
-  } else {
-    const ObGlobalStatItem *it = list.get_first();
-    if (NULL == it) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("NULL iterator", K(ret));
-    }
-    while (OB_SUCCESS == ret && it != list.get_header()) {
-      if (OB_FAIL(dml.add_column(it->name_, it->value_))) {
-        LOG_WARN("add column failed", K(ret));
-      } else {
-        it = it->get_next();
-        if (NULL == it) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("NULL iterator", K(ret));
-        }
-      }
-    }
-  }
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(dml.splice_core_cells(core_table_, cells))) {
-    LOG_WARN("splice_core_cells failed", K(ret));
-  } else if (!is_incremental && OB_FAIL(core_table_.replace_row(cells, affected_rows))) {
-    LOG_WARN("replace_row failed", K(ret));
-  } else if (is_incremental && OB_FAIL(core_table_.incremental_replace_row(cells, affected_rows))) {
-    LOG_WARN("replace_row failed", K(ret));
-  } else if (!is_incremental && !is_single_row(affected_rows)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("affected_rows expected to be one", K(ret), K(affected_rows),
-        K_(core_table));
-  } else if (is_incremental && affected_rows >= 2) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("affected row should less than 2", K(ret), K(affected_rows));
-  }
-  return ret;
-}
-
-int ObGlobalStatProxy::get(
-    ObGlobalStatItem::ItemList &list,
-    bool for_update /*= false*/)
-{
-  int ret = OB_SUCCESS;
-  ObTimeoutCtx ctx;
-  if (!is_valid() || list.is_empty()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), "self valid", is_valid(),
-        "list size", list.get_size());
-  } else if (OB_FAIL(ObShareUtil::get_rs_default_timeout_ctx(ctx))) {
-    LOG_WARN("fail to get timeout ctx", KR(ret), K(ctx));
-  } else if (!for_update && OB_FAIL(core_table_.load())) {
-    LOG_WARN("core_table load failed", KR(ret));
-  } else if (for_update && OB_FAIL(core_table_.load_for_update())) {
-    LOG_WARN("core_table load failed", KR(ret));
-  } else {
-    if (OB_FAIL(core_table_.next())) {
-      if (OB_ITER_END == ret) {
-        ret = OB_EMPTY_RESULT;
-        LOG_WARN("no row exist", KR(ret));
-      } else {
-        LOG_WARN("next failed", KR(ret));
-      }
-    } else {
-      ObGlobalStatItem *it = list.get_first();
-      if (NULL == it) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("NULL iterator", KR(ret));
-      }
-      while (OB_SUCCESS == ret && it != list.get_header()) {
-        if (OB_FAIL(core_table_.get_int(it->name_, it->value_))) {
-          LOG_WARN("get int failed", "name", it->name_, KR(ret));
-        } else {
-          it = it->get_next();
-          if (NULL == it) {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("NULL iterator", KR(ret));
-          }
-        }
-      }
-      if (OB_SUCC(ret)) {
-        ret = core_table_.next();
-        if (OB_ITER_END == ret) {
-          ret = OB_SUCCESS;
-        } else if (OB_SUCC(ret)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("__all_global_stat table more than one row", KR(ret));
-        } else {
-          LOG_WARN("next failed", KR(ret));
         }
       }
     }

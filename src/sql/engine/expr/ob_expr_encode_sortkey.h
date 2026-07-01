@@ -20,7 +20,7 @@
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/engine/expr/ob_i_expr_extra_info.h"
 #include "sql/ob_sql_define.h"
-#include "storage/ob_order_perserving_encoder.h"
+#include "share/ob_order_perserving_encoder.h"
 namespace oceanbase
 {
 namespace sql

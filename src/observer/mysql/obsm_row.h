@@ -17,7 +17,7 @@
 #ifndef _OCEABASE_COMMON_OBSM_ROW_H_
 #define _OCEABASE_COMMON_OBSM_ROW_H_
 
-#include "common/timezone/ob_time_convert.h"
+#include "lib/timezone/ob_time_convert.h"
 #include "rpc/obmysql/ob_mysql_row.h"
 #include "common/row/ob_row.h"
 #include "common/ob_field.h"

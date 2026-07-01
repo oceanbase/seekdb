@@ -17,9 +17,6 @@
 #ifndef OCEANBASE_ROOTSERVER_OB_SCHEMA_HISTORY_RECYCLER_H_
 #define OCEANBASE_ROOTSERVER_OB_SCHEMA_HISTORY_RECYCLER_H_
 
-#include "storage/tablet/ob_batch_create_tablet_arg.h"
-#include "storage/tx/ob_tx_result_struct.h"
-#include "storage/ob_storage_rpc_arg.h"
 #include "observer/ob_server_struct.h"
 #include "lib/thread/thread_mgr_interface.h"
 //#include "rootserver/ob_freeze_info_manager.h"

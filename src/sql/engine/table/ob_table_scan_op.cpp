@@ -22,7 +22,7 @@
 #include "sql/das/ob_das_attach_define.h"
 #include "sql/das/ob_das_vec_define.h"
 #include "sql/executor/ob_task_spliter.h"
-#include "share/geo/ob_geo_utils.h"
+#include "lib/geo/ob_geo_utils.h"
 #include "share/ob_ddl_checksum.h"
 #include "observer/omt/ob_tenant_srs.h"
 #include "sql/das/iter/ob_das_iter_utils.h"
@@ -4271,42 +4271,3 @@ int ObRandScanProcessor::inner_get_next_batch(const int64_t max_row_cnt)
 
 } // end namespace sql
 } // end namespace oceanbase
-
-// definition moved from share/ob_i_tablet_scan.cpp: printing the sql::ObExpr array needs a complete type, share must not depend upward on sql
-namespace oceanbase
-{
-namespace common
-{
-DEF_TO_STRING(ObVTableScanParam)
-{
-  int64_t pos = 0;
-  J_OBJ_START();
-  J_KV(K_(tablet_id),
-       K_(ls_id),
-       N_COLUMN_IDS, column_ids_,
-       N_INDEX_ID, index_id_,
-       N_KEY_RANGES, key_ranges_,
-       K_(range_array_pos),
-       N_TIMEOUT, timeout_,
-       N_SCAN_FLAG, scan_flag_,
-       N_SQL_MODE, sql_mode_,
-       N_RESERVED_CELL_COUNT, reserved_cell_count_,
-       N_SCHEMA_VERSION, schema_version_,
-       N_QUERY_BEGIN_SCHEMA_VERSION, tenant_schema_version_,
-       N_LIMIT_OFFSET, limit_param_,
-       N_FOR_UPDATE, for_update_,
-       N_WAIT, for_update_wait_timeout_,
-       N_FROZEN_VERSION, frozen_version_,
-       K_(is_get),
-       K_(pd_storage_flag),
-       KPC_(output_exprs),
-       KPC_(op_filters),
-       K_(table_scan_opt),
-       K_(auto_split_filter),
-       K_(auto_split_params),
-       K_(is_tablet_spliting));
-  J_OBJ_END();
-  return pos;
-}
-}  // namespace common
-}  // namespace oceanbase

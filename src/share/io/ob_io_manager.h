@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_LIB_STORAGE_OB_IO_MANAGER_H
 #define OCEANBASE_LIB_STORAGE_OB_IO_MANAGER_H
 
-#include "lib/restore/ob_io_device.h"
+#include "common/storage/ob_io_device.h"
 #include "share/io/io_schedule/ob_io_schedule_v2.h"
 #include "share/io/ob_io_struct.h"
 

@@ -20,7 +20,7 @@
 #include "ob_codecs.h"
 #include "ob_bp_util.h"
 #include "ob_generated_unalign_simd_bp_func.h"
-#include "lib/utility/ob_target_specific.h"
+#include "common/ob_target_specific.h"
 
 namespace oceanbase
 {

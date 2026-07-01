@@ -15,7 +15,7 @@
  */
 
 #include <gtest/gtest.h>
-#include "lib/time/ob_clock_generator.h"
+#include "common/ob_clock_generator.h"
 #include "share/ob_errno.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/random/ob_random.h"

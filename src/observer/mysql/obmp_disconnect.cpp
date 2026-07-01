@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "obmp_disconnect.h"
 
 

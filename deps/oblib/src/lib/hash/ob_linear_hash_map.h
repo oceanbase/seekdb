@@ -142,7 +142,7 @@
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/container/ob_array.h"
 #include "lib/allocator/ob_malloc.h"
-#include "lib/utility/ob_mod_define.h"
+#include "lib/allocator/ob_mod_define.h"
 #include "lib/allocator/ob_small_allocator.h"
 #include "lib/allocator/ob_concurrent_fifo_allocator.h"
 #include "lib/allocator/ob_external_ref.h"

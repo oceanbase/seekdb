@@ -17,7 +17,7 @@
 #ifndef _OCEANBASE_STORAGE_DDL_OB_GROUP_WRTIE_MACRO_BLOCK_TASK_H_
 #define _OCEANBASE_STORAGE_DDL_OB_GROUP_WRTIE_MACRO_BLOCK_TASK_H_
 
-#include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "share/scheduler/ob_tenant_dag_scheduler.h"
 
 namespace oceanbase
 {

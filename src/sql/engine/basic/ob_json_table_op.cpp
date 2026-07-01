@@ -19,10 +19,10 @@
 #include "sql/engine/expr/ob_expr_multi_mode_func_helper.h"
 #include "sql/engine/expr/ob_expr_json_value.h"
 #include "sql/engine/expr/ob_expr_json_query.h"
-#include "common/xml/ob_binary_aggregate.h"
+#include "lib/xml/ob_binary_aggregate.h"
 #include "sql/engine/expr/ob_expr_rb_func_helper.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
-#include "share/roaringbitmap/ob_rb_utils.h"
+#include "lib/roaringbitmap/ob_rb_utils.h"
 
 namespace oceanbase
 {

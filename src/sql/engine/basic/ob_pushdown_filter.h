@@ -22,7 +22,7 @@
 #include "lib/container/ob_se_array.h"
 #include "lib/hash/ob_hashset.h"
 #include "common/object/ob_obj_compare.h"
-#include "common/datum/ob_datum.h"
+#include "share/datum/ob_datum.h"
 #include "share/datum/ob_datum_funcs.h"
 #include "share/semistruct/ob_sub_column_path.h"
 #include "sql/engine/expr/ob_expr.h"

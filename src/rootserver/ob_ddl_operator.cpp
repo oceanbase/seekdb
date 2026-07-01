@@ -17,29 +17,26 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_ddl_operator.h"
-#include "rootserver/ob_dependency_ddl_helper.h"
-#include "observer/schema/ob_schema_service_sql_impl.h"
 #include "lib/encrypt/ob_encrypted_helper.h"
-#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
-#include "sql/resolver/ddl/ob_vec_index_builder_util.h"
-#include "rootserver/ob_sequence_ddl_proxy.h"
+#include "share/ob_fts_index_builder_util.h"
+#include "share/ob_vec_index_builder_util.h"
+#include "share/schema/ob_schema_service_sql_impl.h"
+#include "share/sequence/ob_sequence_ddl_proxy.h"
 #include "rootserver/ob_ddl_sql_generator.h"
 #include "rootserver/ob_root_service.h"
-#include "share/ob_sql_client_decorator.h"
+#include "observer/ob_sql_client_decorator.h"
 #include "rootserver/ob_root_service.h"
 #include "rootserver/ob_tablet_drop.h"
 #include "share/ob_global_merge_table_operator.h"
 #include "share/ob_zone_merge_table_operator.h"
 #include "share/ob_zone_merge_info.h"
-#include "sql/optimizer/stat/ob_dbms_stats_maintenance_window.h"
+#include "share/stat/ob_dbms_stats_maintenance_window.h"
 #include "storage/mview/ob_mview_sched_job_utils.h"
 #include "pl/ob_pl_persistent.h"
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "pl/pl_recompile/ob_pl_recompile_task_helper.h"
-#include "observer/scheduler/ob_scheduled_manage_dynamic_partition.h"
+#include "share/ob_scheduled_manage_dynamic_partition.h"
 #include "share/schema/ob_ccl_rule_sql_service.h"
-#include "share/schema/ob_dependency_info.h"  // relocated-definition owner
-#include "share/schema/ob_multi_version_schema_service.h"  // relocated-definition owner
 
 namespace oceanbase
 {
@@ -4212,7 +4209,8 @@ int ObDDLOperator::drop_table(
 {
   int ret = OB_SUCCESS;
   bool tmp = false;
-  if (OB_FAIL(ObDependencyDDLHelper::modify_dep_obj_status(trans, table_schema.get_table_id(),
+  
+  if (OB_FAIL(ObDependencyInfo::modify_dep_obj_status(trans, table_schema.get_table_id(),
                                                       *this, schema_service_))) {
     LOG_WARN("failed to modify obj status", K(ret));
   } else if (OB_FAIL(drop_table_for_not_dropped_schema(
@@ -4447,7 +4445,7 @@ int ObDDLOperator::drop_table_to_recyclebin(const ObTableSchema &table_schema,
     LOG_WARN("fail to gen new schema_version", K(ret));
   } else if (OB_FAIL(cleanup_autoinc_cache(table_schema))) {
     LOG_WARN("fail cleanup auto inc global cache", K(ret));
-  } else if (OB_FAIL(ObDependencyDDLHelper::modify_dep_obj_status(trans, table_schema.get_table_id(),
+  } else if (OB_FAIL(ObDependencyInfo::modify_dep_obj_status(trans, table_schema.get_table_id(),
                                                              *this, schema_service_))) {
     LOG_WARN("failed to modify dep obj status", K(ret));
   } else if (table_schema.is_view_table()
@@ -8219,100 +8217,3 @@ int ObDDLOperator::init_tenant_scheduled_job(
 
 }//end namespace rootserver
 }//end namespace oceanbase
-
-// modify_all_obj_status / update_max_dependency_version relocated to rootserver::ObDependencyDDLHelper
-
-
-// ===== definition moved from share/schema/ob_multi_version_schema_service.cpp(purge function, ObDDLOperator constructs by value) =====
-namespace oceanbase
-{
-namespace share
-{
-namespace schema
-{
-
-int ObMultiVersionSchemaService::cal_purge_need_timeout(
-    const obcall::ObPurgeRecycleBinArg &purge_recyclebin_arg,
-    int64_t &cal_timeout)
-{
-  int ret = OB_SUCCESS;
-  int64_t tmp_timeout = 0;
-  int64_t total_purge_count = 0;
-  ObArray<ObRecycleObject> recycle_objs;
-  int64_t purge_num = purge_recyclebin_arg.purge_num_;
-  
-  const int64_t expire_time = purge_recyclebin_arg.expire_time_;
-  if (OB_ISNULL(schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema service is NULL", KR(ret));
-  } else if (OB_ISNULL(sql_proxy_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("sql proxy is NULL", KR(ret));
-  } else {
-    rootserver::ObDDLOperator ddl_operator(*this, *sql_proxy_);
-    if (OB_FAIL(ddl_operator.fetch_expire_recycle_objects(expire_time, recycle_objs))) {
-      LOG_WARN("fail to get fetch expire recycle objects", KR(ret), K(purge_recyclebin_arg));
-    }
-    for (int64_t i = 0; OB_SUCC(ret) && i < recycle_objs.count() && total_purge_count < purge_num; i++) {
-      const ObRecycleObject &recycle_obj = recycle_objs.at(i);
-      switch(recycle_obj.get_type()) {
-          case ObRecycleObject::VIEW:
-          case ObRecycleObject::TABLE: {
-            int64_t cal_table_timeout = 0;
-            const uint64_t table_id = recycle_obj.get_table_id();
-            if (OB_FAIL(cal_purge_table_timeout_(table_id, cal_table_timeout, total_purge_count))) {
-              LOG_WARN("fail to cal purge table timeout", KR(ret), K(table_id));
-            } else {
-              tmp_timeout += cal_table_timeout;
-            }
-            break;
-          }
-          case ObRecycleObject::DATABASE: {
-            int64_t cal_database_timeout = 0;
-            const int64_t database_id = recycle_obj.get_database_id();
-            if (OB_FAIL(cal_purge_database_timeout_(database_id, cal_database_timeout, total_purge_count))) {
-              LOG_WARN("fail to cal purge database timeout", KR(ret));
-            } else {
-              tmp_timeout += cal_database_timeout;
-            }
-            break;
-          }
-          case ObRecycleObject::TENANT: {
-            tmp_timeout += GCONF.rpc_timeout;
-            total_purge_count++;
-            break;
-          }
-          case ObRecycleObject::TRIGGER:
-          case ObRecycleObject::INDEX:
-          case ObRecycleObject::AUX_LOB_META:
-          case ObRecycleObject::AUX_LOB_PIECE:
-          case ObRecycleObject::AUX_VP: {
-            continue;
-          }
-          default: {
-            ret = OB_ERR_UNEXPECTED;
-            LOG_WARN("unknown recycle object type", K(recycle_obj));
-          }
-      }
-    }
-  }
-  if (OB_SUCC(ret)) {
-    int64_t high_bound_timeout = 0;
-    int64_t low_bound_timeout = 10 * GCONF.rpc_timeout;
-    if (0 == total_purge_count) {
-      cal_timeout = 0;
-    // if this worker or ctxs' timeout not be set, use ddl timeout as high bound value
-    } else if (OB_FAIL(ObShareUtil::get_ctx_timeout(GCONF._ob_ddl_timeout, high_bound_timeout))) {
-      LOG_WARN("fail to set timeout", KR(ret));
-    } else {
-      // to prevent tmp_timeout is too small, use low_bound_timeout to compare
-      tmp_timeout = std::max(low_bound_timeout, tmp_timeout);
-      cal_timeout = std::min(high_bound_timeout, tmp_timeout);
-    }
-  }
-  return ret;
-}
-
-}  // namespace schema
-}  // namespace share
-}  // namespace oceanbase

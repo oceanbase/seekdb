@@ -22,7 +22,7 @@
 #include "lib/allocator/ob_fifo_allocator.h"
 #include "sql/dtl/ob_dtl_linked_buffer.h"
 #include "lib/atomic/ob_atomic.h"
-#include "lib/utility/ob_mod_define.h"
+#include "lib/allocator/ob_mod_define.h"
 #include "lib/alloc/alloc_func.h"
 #include "share/config/ob_server_config.h"
 #include "src/sql/dtl/ob_dtl_tenant_mem_manager.h"

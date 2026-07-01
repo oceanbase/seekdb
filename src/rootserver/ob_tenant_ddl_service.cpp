@@ -1,5 +1,5 @@
 #include "observer/ob_service.h"
-#include "share/ob_ex_rpc.h"
+#include "observer/ob_ex_rpc.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -28,7 +28,7 @@
 #include "share/ob_schema_status_proxy.h"
 #include "storage/tx/ob_ts_mgr.h"
 #include "sql/resolver/ob_resolver_utils.h"
-#include "share/ob_sql_client_decorator.h"
+#include "observer/ob_sql_client_decorator.h"
 #include "share/ob_zone_merge_info.h"
 #include "share/ob_global_merge_table_operator.h"
 #include "share/ob_zone_merge_table_operator.h"
@@ -47,10 +47,10 @@
 #define SET_TENANT_VARIABLE(sysvar_id, value) \
         if (OB_SUCC(ret)) {\
           int64_t store_idx = OB_INVALID_INDEX; \
-          if (OB_FAIL(share::ObSysVarMeta::calc_sys_var_store_idx(sysvar_id, store_idx))) { \
+          if (OB_FAIL(ObSysVarFactory::calc_sys_var_store_idx(sysvar_id, store_idx))) { \
             LOG_WARN("failed to calc sys var store idx", KR(ret), K(sysvar_id)); \
           } else if (OB_UNLIKELY(store_idx < 0 \
-                     || store_idx >= share::ObSysVarMeta::ALL_SYS_VARS_COUNT)) { \
+                     || store_idx >= ObSysVarFactory::ALL_SYS_VARS_COUNT)) { \
             ret = OB_ERR_UNEXPECTED; \
             LOG_WARN("got store_idx is invalid", K(ret), K(store_idx)); \
           } else if (OB_FAIL(sys_params[store_idx].init( \
@@ -408,11 +408,11 @@ int ObTenantDDLService::init_system_variables(
     ObSysVariableSchema &sys_variable_schema)
 {
   int ret = OB_SUCCESS;
-  const int64_t params_capacity = share::ObSysVarMeta::ALL_SYS_VARS_COUNT;
+  const int64_t params_capacity = ObSysVarFactory::ALL_SYS_VARS_COUNT;
   int64_t var_amount = ObSysVariables::get_amount();
   
   ObMalloc alloc(ObModIds::OB_TEMP_VARIABLES);
-  ObPtrGuard<ObSysParam, share::ObSysVarMeta::ALL_SYS_VARS_COUNT> sys_params_guard(alloc);
+  ObPtrGuard<ObSysParam, ObSysVarFactory::ALL_SYS_VARS_COUNT> sys_params_guard(alloc);
   sys_variable_schema.reset();
   
   ObSysParam *sys_params = NULL;
@@ -570,7 +570,8 @@ int ObTenantDDLService::update_mysql_tenant_sys_var(
     int64_t params_capacity)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(sys_params) || OB_UNLIKELY(params_capacity < share::ObSysVarMeta::ALL_SYS_VARS_COUNT)) {
+  
+  if (OB_ISNULL(sys_params) || OB_UNLIKELY(params_capacity < ObSysVarFactory::ALL_SYS_VARS_COUNT)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", KR(ret), K(sys_params), K(params_capacity));
   } else {
@@ -608,7 +609,8 @@ int ObTenantDDLService::update_special_tenant_sys_var(
     int64_t params_capacity)
 {
   int ret = OB_SUCCESS;
-  if (OB_ISNULL(sys_params) || OB_UNLIKELY(params_capacity < share::ObSysVarMeta::ALL_SYS_VARS_COUNT)) {
+  
+  if (OB_ISNULL(sys_params) || OB_UNLIKELY(params_capacity < ObSysVarFactory::ALL_SYS_VARS_COUNT)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", KR(ret), K(sys_params), K(params_capacity));
   } else {

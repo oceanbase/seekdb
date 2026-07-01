@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STORAGE_BLOCKSSTABLE_OB_OBJECT_RW_INFO_H_
 #define OCEANBASE_STORAGE_BLOCKSSTABLE_OB_OBJECT_RW_INFO_H_
 
-#include "lib/restore/ob_io_device.h"
+#include "common/storage/ob_io_device.h"
 #include "lib/oblog/ob_log_module.h"
 #include "share/io/ob_io_define.h"
 #include "storage/blocksstable/ob_macro_block_id.h"

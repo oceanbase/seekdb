@@ -16,11 +16,11 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 
-#include "share/geo/ob_geo_func_register.h"
+#include "lib/geo/ob_geo_func_register.h"
 #include "ob_expr_st_covers.h"
-#include "share/geo/ob_geo_cache.h"
+#include "lib/geo/ob_geo_cache.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
-#include "share/geo/ob_geo_utils.h"
+#include "lib/geo/ob_geo_utils.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;

@@ -24,7 +24,7 @@
 #include "lib/ob_define.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/utility.h"
-#include "lib/time/ob_clock_generator.h"
+#include "ob_clock_generator.h"
 #include "ob_tablet_id.h"
 #include "share/ob_errno.h"
 #include "share/scn.h"

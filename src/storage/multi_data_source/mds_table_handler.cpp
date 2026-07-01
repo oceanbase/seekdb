@@ -86,6 +86,7 @@ int ObMdsTableHandler::get_mds_table_handle(mds::MdsTableHandle &handle,
         }
       }
       if (OB_SUCC(ret)) {
+        set_mds_mem_check_thread_local_info(ls_id, tablet_id, typeid(mds::NormalMdsTable).name());
         if (MDS_FAIL(mds_table_handle_.init<mds::NormalMdsTable>(mds::MdsAllocator::get_instance(),
                                                                  tablet_id,
                                                                  ls_id,
@@ -96,6 +97,7 @@ int ObMdsTableHandler::get_mds_table_handle(mds::MdsTableHandle &handle,
         } else {
           handle = mds_table_handle_;
         }
+        reset_mds_mem_check_thread_local_info();
       }
     }
   }

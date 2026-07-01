@@ -17,7 +17,7 @@
 #ifndef _OCEANBASE_STORAGE_FTS_DICT_OB_FT_CACHE_H_
 #define _OCEANBASE_STORAGE_FTS_DICT_OB_FT_CACHE_H_
 
-#include "lib/utility/alloc_assist.h"
+#include "lib/alloc/alloc_assist.h"
 #include "lib/hash_func/murmur_hash.h"
 #include "lib/ob_errno.h"
 #include "lib/string/ob_string.h"

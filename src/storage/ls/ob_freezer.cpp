@@ -16,10 +16,9 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_freezer.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"  // previously hidden behind a transitive include
 #include "share/rc/ob_module_provider.h"
 #include "logservice/ob_log_service.h"
-#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
+#include "share/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 

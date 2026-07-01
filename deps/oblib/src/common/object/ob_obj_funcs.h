@@ -17,12 +17,12 @@
 #ifndef OCEANBASE_COMMON_OB_OBJ_FUNCS_
 #define OCEANBASE_COMMON_OB_OBJ_FUNCS_
 
-#include "common/timezone/ob_timezone_info.h"
-#include "common/timezone/ob_time_convert.h"
-#include "common/json_type/ob_json_parse.h"
-#include "common/json_type/ob_json_base.h"
-#include "common/json_type/ob_json_bin.h"
-#include "common/udt/ob_array_type.h"
+#include "lib/timezone/ob_timezone_info.h"
+#include "lib/timezone/ob_time_convert.h"
+#include "lib/json_type/ob_json_parse.h"
+#include "lib/json_type/ob_json_base.h"
+#include "lib/json_type/ob_json_bin.h"
+#include "lib/udt/ob_array_type.h"
 #include "common/object/ob_object.h"
 #include "lib/encode/ob_base64_encode.h"
 

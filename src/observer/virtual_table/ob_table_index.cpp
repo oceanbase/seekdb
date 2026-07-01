@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER
-#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
+#include "share/ob_fts_index_builder_util.h"
 #include "observer/virtual_table/ob_table_index.h"
 
 using namespace oceanbase::common;

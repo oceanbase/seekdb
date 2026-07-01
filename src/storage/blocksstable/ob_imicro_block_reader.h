@@ -22,7 +22,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "common/ob_store_format.h"
 #include "common/ob_store_range.h"
-#include "storage/access/ob_table_param.h"
+#include "share/schema/ob_table_param.h"
 #include "storage/access/ob_table_read_info.h"
 #include "ob_block_sstable_struct.h"
 #include "ob_datum_range.h"

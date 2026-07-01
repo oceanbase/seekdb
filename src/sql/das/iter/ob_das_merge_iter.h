@@ -171,10 +171,10 @@ public:
   bool is_all_local_task() const;
   int rescan_das_task(ObDASScanOp *scan_op);
   bool has_pseudo_part_id_columnref();
-  virtual int get_diagnosis_info(common::ObRowDiagnosisInfo *diagnosis_info) override {
+  virtual int get_diagnosis_info(ObDiagnosisManager* diagnosis_manager) override {
     int ret = OB_SUCCESS;
-    diagnosis_info->set_cur_line_number(diagnosis_mgr_.get_cur_line_number());
-    diagnosis_info->set_cur_file_url(diagnosis_mgr_.get_cur_file_url());
+    diagnosis_manager->set_cur_line_number(diagnosis_mgr_.get_cur_line_number());
+    diagnosis_manager->set_cur_file_url(diagnosis_mgr_.get_cur_file_url());
     return ret;
   };
   /********* DAS REF END *********/

@@ -25,7 +25,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "sql/dtl/ob_dtl_channel.h"
 #include "sql/dtl/ob_dtl_linked_buffer.h"
-#include "sql/ob_scanner.h"
+#include "share/ob_scanner.h"
 #include "observer/ob_server_struct.h"
 #include "sql/dtl/ob_dtl_basic_channel.h"
 #include "sql/dtl/ob_dtl.h"

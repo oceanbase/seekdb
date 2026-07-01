@@ -18,7 +18,7 @@
 #define OB_BATCH_DATUM_ROWS_H_
 
 #include "lib/container/ob_array.h"
-#include "sql/engine/vector/ob_i_vector.h"
+#include "share/vector/ob_i_vector.h"
 #include "storage/blocksstable/ob_datum_row.h"
 
 namespace oceanbase

@@ -21,7 +21,7 @@
 #include "lib/function/ob_function.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/list/ob_list.h"
-#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "lib/mysqlclient/ob_mysql_proxy.h"
 #include "lib/task/ob_timer.h"
 #include "lib/time/ob_time_utility.h"
 #include "share/schema/ob_schema_getter_guard.h"

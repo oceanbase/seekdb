@@ -19,7 +19,7 @@
 #include "common/object/ob_object.h"
 #include "share/schema/ob_column_schema.h"
 #include "share/table/ob_table_load_array.h"
-#include "observer/table_load/ob_table_load_row_array.h"
+#include "share/table/ob_table_load_row_array.h"
 #include "share/table/ob_table_load_define.h"
 #include "sql/optimizer/ob_table_location.h"
 #include "sql/engine/ob_exec_context.h"

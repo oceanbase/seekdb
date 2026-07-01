@@ -18,7 +18,6 @@
 
 #include "share/schema/ob_schema_struct.h"
 #include "storage/blocksstable/index_block/ob_index_block_util.h"
-#include "share/schema/ob_table_schema.h"  // relocated-definition owner
 
 namespace oceanbase
 {
@@ -183,51 +182,6 @@ int get_prefix_for_text_tc_datum(
       MEMCPY(new_lob_data->buffer_, text_data, prefix_len);
       prefix_datum.set_lob_data(*new_lob_data, new_lob_data->get_handle_size(prefix_len));
       prefix_datum.set_has_lob_header();
-    }
-  }
-  return ret;
-}
-
-// demoted from share::schema::ObTableSchema(truly blocksstable-bound: ObSkipIndexColMeta)
-int check_skip_index_valid(const share::schema::ObTableSchema &table_schema)
-{
-  int ret = OB_SUCCESS;
-  int64_t aggregate_row_size = 0;
-  for (int64_t i = 0; OB_SUCC(ret) && i < table_schema.get_column_count(); ++i) {
-    const share::schema::ObColumnSchemaV2 *column_schema = nullptr;
-    int64_t column_agg_maximum_size = 0;
-    if (OB_ISNULL(column_schema = table_schema.column_begin()[i])) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected nul column", K(ret), K(i));
-    } else if (!column_schema->get_skip_index_attr().has_skip_index()) {
-      // skip
-    } else if (OB_UNLIKELY(column_schema->is_virtual_generated_column())) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_USER_ERROR(OB_ERR_UNEXPECTED, "skip index on virtual generated column");
-      LOG_WARN("unexpected skip index on virtual generated column", K(ret), KPC(column_schema));
-    } else if (OB_UNLIKELY(is_skip_index_black_list_type(column_schema->get_meta_type().get_type()))) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "build skip index on invalid type");
-      LOG_WARN("not supported skip index on column with invalid column type", K(ret), KPC(column_schema));
-    } else if (column_schema->get_skip_index_attr().has_sum() &&
-               !can_agg_sum(column_schema->get_meta_type().get_type())) {
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED, "build skip index on invalid type");
-      LOG_WARN("not supported skip index on column with invalid column type", K(ret), KPC(column_schema));
-    } else if (OB_FAIL(blocksstable::ObSkipIndexColMeta::calc_skip_index_maximum_size(
-        column_schema->get_skip_index_attr(),
-        column_schema->get_meta_type().get_type(),
-        column_schema->get_accuracy().get_precision(),
-        column_agg_maximum_size))) {
-      LOG_WARN("failed to calculate maximum store size for skip index aggregate data size",
-          K(ret), KPC(column_schema));
-    } else if (FALSE_IT(aggregate_row_size += column_agg_maximum_size)) {
-    } else if (OB_UNLIKELY(aggregate_row_size > ObSkipIndexColMeta::SKIP_INDEX_ROW_SIZE_LIMIT)) {
-      // TODO: adjust storage format to resolve thie limitation？
-      ret = OB_NOT_SUPPORTED;
-      LOG_USER_ERROR(OB_NOT_SUPPORTED,
-      "current version of oceanbase has a limitation for skip index size in a single table, too many skip index columns");
-      LOG_WARN("skip index row size too large", K(ret), KPC(column_schema), K(aggregate_row_size));
     }
   }
   return ret;

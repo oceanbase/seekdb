@@ -18,30 +18,7 @@
 
 
 #include "ob_schema_mgr.h"
-
-#include <new>
-
-#include "lib/alloc/alloc_struct.h"
-#include "lib/alloc/ob_iallocator.h"
-#include "lib/container/ob_array.h"
-#include "lib/container/ob_array_wrap.h"
-#include "lib/container/ob_iarray.h"
-#include "lib/ob_check_macros.h"
-#include "lib/oblog/ob_log_level.h"
-#include "lib/oblog/ob_log_print_kv.h"
-#include "lib/time/ob_time_utility.h"
-#include "lib/utility/ob_backtrace.h"
-#include "lib/utility/ob_hang_fatal_error.h"
-#include "lib/utility/ob_mod_define.h"
-#include "lib/utility/ob_tracepoint.h"
-#include "lib/utility/utility.h"
-#include "lib/worker.h"
-#include "share/inner_table/ob_inner_table_schema_constants.h"
-#include "share/ob_errno.h"
-#include "share/ob_force_print_log.h"
-#include "share/schema/ob_ccl_schema_struct.h"
-#include "share/schema/ob_location_schema_struct.h"
-#include "share/schema/ob_schema_utils.h"
+#include "src/sql/resolver/expr/ob_raw_expr.h"
 
 namespace oceanbase
 {

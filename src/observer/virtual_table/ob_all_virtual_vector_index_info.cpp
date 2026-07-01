@@ -16,7 +16,7 @@
 
 #include "ob_all_virtual_vector_index_info.h"
 #include "share/rc/ob_module_provider.h"
-#include "observer/vector_index/ob_plugin_vector_index_service.h"
+#include "share/vector_index/ob_plugin_vector_index_service.h"
 
 namespace oceanbase
 {

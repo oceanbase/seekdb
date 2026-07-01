@@ -15,7 +15,6 @@
  */
 
 #include "lib/alloc/alloc_failed_reason.h"
-#include "lib/profile/ob_trace_id.h"
 #ifndef _WIN32
 #include <unistd.h>
 #else
@@ -26,7 +25,7 @@
 #endif
 #include "lib/utility/ob_platform_utils.h"  // Platform compatibility layer
 #include "lib/allocator/ob_tc_malloc.h"
-#include "lib/utility/ob_mod_define.h"
+#include "lib/allocator/ob_mod_define.h"
 #include "lib/alloc/memory_dump.h"
 
 namespace oceanbase

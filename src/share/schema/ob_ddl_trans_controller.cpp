@@ -16,6 +16,8 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_ddl_trans_controller.h"
+#include "rootserver/ob_root_service.h"
+#include "observer/ob_service.h"
 
 
 namespace oceanbase
@@ -38,7 +40,7 @@ int ObDDLTransController::init(share::schema::ObMultiVersionSchemaService *schem
     } else if (OB_ISNULL(schema_service)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("schema_service is null", KR(ret));
-    } else if (OB_FAIL(lib::ThreadPool::start())) {
+    } else if (OB_FAIL(ObThreadPool::start())) {
       LOG_WARN("thread start fail", KR(ret));
     } else {
       schema_service_ = schema_service;
@@ -50,14 +52,14 @@ int ObDDLTransController::init(share::schema::ObMultiVersionSchemaService *schem
 
 void ObDDLTransController::stop()
 {
-  lib::ThreadPool::stop();
+  ObThreadPool::stop();
   wait_cond_.signal();
 }
 
 void ObDDLTransController::wait()
 {
   wait_cond_.signal();
-  lib::ThreadPool::wait();
+  ObThreadPool::wait();
 }
 
 void ObDDLTransController::destroy()
@@ -66,7 +68,7 @@ void ObDDLTransController::destroy()
     inited_ = false;
     stop();
     wait();
-    lib::ThreadPool::destroy();
+    ObThreadPool::destroy();
     tasks_.destroy();
     schema_service_ = NULL;
   }
@@ -77,7 +79,92 @@ ObDDLTransController::~ObDDLTransController()
   destroy();
 }
 
+void ObDDLTransController::run1()
+{
+  ObDIActionGuard ag("DDLService", "DDLTransCtr", "detect task");
+  lib::set_thread_name("DDLTransCtr");
+  while (!has_set_stop()) {
+    bool need_refresh = false;
+    {
+      SpinWLockGuard guard(lock_);
+      need_refresh = need_refresh_;
+      need_refresh_ = false;
+    }
+    if (need_refresh) {
+      int ret = OB_SUCCESS;
+      LOG_INFO("refresh_schema for sys tenant");
+      if (OB_ISNULL(GCTX.root_service_)) {
+        ret = OB_INVALID_ARGUMENT;
+        LOG_WARN("invalid argument", KR(ret), KP(GCTX.root_service_));
+      } else {
+        ObArray<ObAddr> server_list;
+        int64_t refreshed_schema_version = OB_INVALID_VERSION;
+        int64_t start_time = ObTimeUtility::current_time();
+        ObCurTraceId::init(GCONF.self_addr_);
+        ObDIActionGuard(ObDIActionGuard::NS_ACTION, "control tenant[T_1]");
 
+        if (OB_FAIL(server_list.push_back(GCTX.self_addr()))) {
+          LOG_WARN("fail to push self addr", KR(ret));
+        }
+        if (OB_FAIL(GCTX.root_service_->get_ddl_service().publish_schema_and_get_schema_version(server_list, refreshed_schema_version))) {
+          LOG_WARN("fail to publish_schema", KR(ret));
+        } else if (OB_FAIL(broadcast_consensus_version(refreshed_schema_version, server_list))) {
+          LOG_WARN("fail to broadcast consensus version", KR(ret), K(refreshed_schema_version));
+        } else {
+          int64_t end_time = ObTimeUtility::current_time();
+          LOG_INFO("refresh_schema", KR(ret), K(end_time - start_time), K(refreshed_schema_version));
+        }
+      }
+    } else {
+      wait_cond_.wait();
+    }
+  }
+}
+
+int ObDDLTransController::broadcast_consensus_version(const int64_t schema_version,
+                                                      const ObArray<ObAddr> &server_list)
+{
+  int ret = OB_SUCCESS;
+  obcall::ObBroadcastConsensusVersionArg arg;
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("ObDDLTransController", KR(ret));
+  } else if (OB_ISNULL(schema_service_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("ObDDLTransController", KR(ret));
+  } else if (false) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid tenant id", KR(ret));
+  } else if (OB_ISNULL(GCTX.root_service_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("rootservice is null", KR(ret));
+  } else if (OB_INVALID_VERSION == schema_version) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid schema_version", KR(ret), K(schema_version));
+  } else if (OB_FAIL(schema_service_->set_tenant_broadcast_consensus_version(schema_version))) {
+    LOG_WARN("fail to set tenant broadcast consensus_version", KR(ret));
+  } else {
+    
+    arg.set_consensus_version(schema_version);
+    obcall::ObBroadcastConsensusVersionRes result;
+    FOREACH_X(s, server_list, OB_SUCC(ret)) {
+      if (OB_ISNULL(s)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("s is null", KR(ret));
+      } else {
+        // Direct call — seekdb has no remote servers.
+        UNUSED(*s);
+        int tmp_ret = GCTX.ob_service_->broadcast_consensus_version(arg, result);
+        if (OB_SUCCESS != tmp_ret) {
+          LOG_WARN("broadcast consensus version failed", KR(tmp_ret),
+              K(schema_version), K(arg));
+        }
+      }
+    }
+  }
+  LOG_INFO("broadcast consensus version finished", KR(ret), K(schema_version), K(arg), K(server_list));
+  return ret;
+}
 
 int ObDDLTransController::reserve_schema_version(const uint64_t schema_version_count)
 {

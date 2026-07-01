@@ -18,7 +18,7 @@
 #define LIB_JSON_OB_JSON_PRINT_UTILS_
 #include "lib/utility/ob_print_utils.h"
 #include "lib/json/ob_json.h"
-#include "lib/utility/ob_mod_define.h"
+#include "lib/allocator/ob_mod_define.h"
 namespace oceanbase
 {
 namespace json

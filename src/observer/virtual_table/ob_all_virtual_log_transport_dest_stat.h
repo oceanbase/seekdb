@@ -18,8 +18,8 @@
 #define OB_ALL_VIRTUAL_LOG_TRANSPORT_DEST_STAT_H_
 
 #include "observer/omt/ob_multi_tenant.h"
-#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
-#include "sql/ob_scanner.h"
+#include "share/ob_virtual_table_scanner_iterator.h"
+#include "share/ob_scanner.h"
 
 namespace oceanbase
 {

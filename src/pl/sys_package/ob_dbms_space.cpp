@@ -18,8 +18,8 @@
 #include "ob_dbms_space.h"
 #include "sql/parser/ob_parser.h"
 #include "sql/resolver/ddl/ob_create_index_resolver.h"
-#include "sql/optimizer/stat/ob_opt_stat_manager.h"
-#include "sql/optimizer/stat/ob_dbms_stats_utils.h"
+#include "share/stat/ob_opt_stat_manager.h"
+#include "share/stat/ob_dbms_stats_utils.h"
 
 #define GET_COMPRESSED_INFO_SQL "select sum(occupy_size)/sum(original_size) as compression_ratio from oceanbase.__all_virtual_tablet_sstable_macro_info "\
                                 "where tablet_id in (%.*s);"\

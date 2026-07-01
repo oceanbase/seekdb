@@ -21,7 +21,7 @@
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/task/ob_timer.h"
 #include "lib/hash/ob_hashset.h"
-#include "lib/thread/ob_queue_thread.h"
+#include "common/ob_queue_thread.h"
 
 namespace oceanbase
 {

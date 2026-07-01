@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/tablet/ob_tablet_to_ls_iterator.h"
-#include "share/ob_rpc_struct.h"
+#include "src/share/ob_rpc_struct.h"
 
 namespace oceanbase
 {

@@ -55,7 +55,6 @@ class ObTableStmt;
 class ObDDLExecutorUtil final
 {
 public:
-  static int try_check_parallel_ddl_schema_in_sync(const ObTimeoutCtx &ctx, ObSQLSessionInfo *session, const int64_t schema_version, const bool skip_consensus);  // demoted from ObSchemaUtils
   ObDDLExecutorUtil() {}
   virtual ~ObDDLExecutorUtil() {}
   static int wait_ddl_finish(const int64_t task_id,

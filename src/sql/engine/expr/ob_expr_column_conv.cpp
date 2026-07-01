@@ -19,7 +19,7 @@
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/engine/expr/ob_expr_type_to_str.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"
-#include "share/geo/ob_geo_utils.h"
+#include "lib/geo/ob_geo_utils.h"
 
 using namespace oceanbase::common;
 

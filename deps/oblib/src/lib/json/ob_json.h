@@ -37,7 +37,7 @@ static inline size_t regerror(int, const regex_t *, char *buf, size_t len) {
 #include "lib/list/ob_dlist.h"
 #include "lib/string/ob_string.h"
 #include "lib/allocator/page_arena.h"
-#include "lib/utility/data_buffer.h"
+#include "common/data_buffer.h"
 #include "lib/list/ob_list.h"
 class ObJsonTest_token_test_Test;
 class ObJsonTest_basic_test_Test;

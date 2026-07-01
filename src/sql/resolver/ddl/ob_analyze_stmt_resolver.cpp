@@ -18,7 +18,7 @@
 #include "sql/resolver/ddl/ob_analyze_stmt_resolver.h"
 #include "sql/resolver/ddl/ob_analyze_stmt.h"
 #include "share/catalog/ob_catalog_utils.h"
-#include "sql/optimizer/stat/ob_dbms_stats_utils.h"
+#include "share/stat/ob_dbms_stats_utils.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;

@@ -26,7 +26,7 @@
 #include "sql/engine/user_defined_function/ob_user_defined_function.h"
 #include "sql/engine/user_defined_function/ob_udf_registration_types.h"
 #include "sql/engine/expr/ob_expr.h"
-#include "common/mysqlclient/ob_mysql_global.h"
+#include "rpc/obmysql/ob_mysql_global.h"
 #include "sql/engine/expr/ob_expr_res_type.h"
 
 namespace oceanbase

@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_ddl_struct.h"
-#include "storage/ddl/ob_ddl_storage_util.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 #include "storage/ob_i_table.h"
@@ -708,7 +707,7 @@ int ObDDLTableSchema::fill_ddl_table_schema(const uint64_t table_id,
 
     if (OB_FAIL(ddl_table_schema.column_descs_.assign(column_descs))) {
       LOG_WARN("assign column descs failed", K(ret));
-    } else if (OB_FAIL(ObDDLStorageUtil::convert_to_storage_schema(table_schema, allocator, ddl_table_schema.storage_schema_))) {
+    } else if (OB_FAIL(ObDDLUtil::convert_to_storage_schema(table_schema, allocator, ddl_table_schema.storage_schema_))) {
       LOG_WARN("fail to convert to storage schema", KR(ret), KPC(table_schema));
     } else if (OB_INVALID_ID != table_schema->get_aux_lob_meta_tid()) {
       const uint64_t lob_meta_table_id = table_schema->get_aux_lob_meta_tid();
@@ -718,7 +717,7 @@ int ObDDLTableSchema::fill_ddl_table_schema(const uint64_t table_id,
       } else if (OB_ISNULL(lob_meta_table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         LOG_WARN("table not exist", K(ret), K(lob_meta_table_id));
-      } else if (OB_FAIL(ObDDLStorageUtil::convert_to_storage_schema(lob_meta_table_schema, allocator, ddl_table_schema.lob_meta_storage_schema_))) {
+      } else if (OB_FAIL(ObDDLUtil::convert_to_storage_schema(lob_meta_table_schema, allocator, ddl_table_schema.lob_meta_storage_schema_))) {
         LOG_WARN("fail to convert to storage schema", KR(ret), KPC(lob_meta_table_schema));
       }
     }

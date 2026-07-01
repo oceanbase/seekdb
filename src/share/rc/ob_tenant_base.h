@@ -27,7 +27,8 @@
 #include "lib/allocator/ob_malloc.h"
 #include "lib/task/ob_timer_service.h" // ObTimerService
 #include "share/ob_tenant_role.h"//ObTenantRole
-#include "common/mysqlclient/ob_tenant_oci_envs.h"
+#include "lib/mysqlclient/ob_tenant_oci_envs.h"
+#include "observer/mysql/ob_query_response_time.h"
 namespace oceanbase
 {
 namespace common {
@@ -35,7 +36,6 @@ namespace common {
   template<typename T> class ObServerObjectPool;
   class ObOptStatMonitorManager;
   class ObRbMemMgr;
-  class ObILobReadService;
 }
 namespace omt {
  class ObPxPools;
@@ -269,7 +269,6 @@ using ObTableScanIteratorObjPool = common::ObServerObjectPool<oceanbase::storage
       compaction::ObCompactionSuggestionMgr*,        \
       compaction::ObDiagnoseTabletMgr *,             \
       storage::ObLobManager*,                        \
-      common::ObILobReadService*,                    \
       share::ObGlobalAutoIncService*,                \
       share::detector::ObDeadLockDetectorMgr*,       \
       transaction::ObTimestampService*,              \
@@ -781,11 +780,17 @@ inline ObTenantSwitchGuard _make_tenant_switch_guard()
 #define mtl_sop_borrow_checked(type)                                                                                    \
   ({                                                                                                            \
     type *iter = ::oceanbase::share::mtl_obj_pool<type>()->borrow_object();                                       \
+    if (OB_NOT_NULL(iter)) {                                                                                    \
+      storage::ObStorageLeakChecker::get_instance().handle_hold(iter); \
+    }                                                                                                           \
     (iter);                                                                                                     \
   })
 
 #define mtl_sop_return_checked(type, iter)                                                                               \
   do {                                                                                                          \
+    if (OB_NOT_NULL(iter)) {                                                                                    \
+      storage::ObStorageLeakChecker::get_instance().handle_reset(iter); \
+    }                                                                                                           \
     ::oceanbase::share::mtl_obj_pool<type>()->return_object(iter);                                                 \
   } while (false)
 

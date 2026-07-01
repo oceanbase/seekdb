@@ -17,7 +17,7 @@
 #ifndef SRC_STORAGE_COMPACTION_OB_COMPACTION_SUGGESTION_H_
 #define SRC_STORAGE_COMPACTION_OB_COMPACTION_SUGGESTION_H_
 
-#include "observer/scheduler/ob_dag_scheduler_config.h"
+#include "share/scheduler/ob_dag_scheduler_config.h"
 #include "storage/compaction/ob_compaction_util.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/utility/ob_print_utils.h"

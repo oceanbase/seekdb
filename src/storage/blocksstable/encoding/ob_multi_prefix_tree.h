@@ -18,7 +18,7 @@
 #define OCEANBASE_ENCODING_OB_MULTI_PREFIX_TREE_H_
 
 #include "lib/allocator/ob_allocator.h"
-#include "lib/objectpool/ob_pooled_allocator.h"
+#include "lib/allocator/ob_pooled_allocator.h"
 #include "ob_encoding_hash_util.h"
 #include "ob_icolumn_encoder.h"
 #include "common/object/ob_object.h"

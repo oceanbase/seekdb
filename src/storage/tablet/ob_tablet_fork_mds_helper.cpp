@@ -21,7 +21,7 @@
 #include "storage/ob_tablet_autoinc_seq_rpc_handler.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "observer/ob_inner_sql_connection.h"
-#include "common/mysqlclient/ob_isql_connection.h"
+#include "lib/mysqlclient/ob_isql_connection.h"
 #include "storage/tx/ob_multi_data_source.h"
 
 using namespace oceanbase::obcall;

@@ -16,9 +16,8 @@
 
 #define USING_LOG_PREFIX SHARE
 
-#include "lib/lock/ob_mutex.h"
 #include "share/ob_global_autoinc_service.h"
-#include "share/sequence/ob_sequence_cache.h"
+#include "src/share/sequence/ob_sequence_cache.h"
 
 namespace oceanbase
 {
@@ -412,8 +411,35 @@ int ObGlobalAutoIncService::handle_next_sequence_request(
   return sequence_cache->nextval(request.schema_, allocator ,result.nextval_);
 }
 
-// moved definition to storage/tx_storage/ob_ls_service.cpp(ObLS real user)
-// Note: master tenant-elim changed the original body(removed the tenant_id parameter), HOST(ob_ls_service.cpp) must be synced (see routing item)
+int ObGlobalAutoIncService::check_leader_(bool &is_leader)
+{
+  int ret = OB_SUCCESS;
+  is_leader = ATOMIC_LOAD(&is_leader_);
+  if (OB_LIKELY(is_leader)) {
+  } else if (ATOMIC_LOAD(&is_switching_)) {
+    ret = OB_NOT_MASTER;
+    LOG_WARN("service is switching to leader", K(ret), KP(this), K(*this));
+  } else {
+    // try to get role from logstream
+    ObRole role = ObRole::INVALID_ROLE;
+    int64_t proposal_id = 0;
+    ObSpinLockGuard lock(cache_ls_lock_);
+    if (OB_ISNULL(cache_ls_)) {
+      ret = OB_NOT_MASTER;
+      LOG_WARN("cache ls is null", K(ret));
+    } else if (OB_FAIL(cache_ls_->get_log_handler()->get_role(role, proposal_id))) {
+      int tmp_ret = ret;
+      ret = OB_NOT_MASTER;
+      LOG_WARN("get ls role fail", K(ret), K(tmp_ret));
+    } else if (common::ObRole::LEADER == role) {
+      is_leader = true;
+    } else {
+      is_leader = false;
+    }
+  }
+
+  return ret;
+}
 
 int ObGlobalAutoIncService::fetch_next_node_(const ObGAISNextAutoIncValReq &request,
                                              ObAutoIncCacheNode &node)
@@ -494,7 +520,7 @@ int ObGlobalAutoIncService::inner_switch_to_follower()
 {
   int ret = OB_SUCCESS;
   const int64_t start_time_us = ObTimeUtility::current_time();
-  lib::ObMutexGuard lock(switching_mutex_);
+  ObMutexGuard lock(switching_mutex_);
   LOG_INFO("start to switch to follower", KP(this), K(*this));
   ATOMIC_STORE(&is_switching_, true);
   ATOMIC_STORE(&is_leader_, false);
@@ -564,7 +590,7 @@ int ObGlobalAutoIncService::receive_global_autoinc_cache(
     const ObGAISBroadcastAutoIncCacheReq &request)
 {
   int ret = OB_SUCCESS;
-  lib::ObMutexGuard lock(switching_mutex_);
+  ObMutexGuard lock(switching_mutex_);
   ATOMIC_STORE(&is_switching_, true);
   ATOMIC_STORE(&is_leader_, false);
   int64_t pos = 0;

@@ -19,7 +19,7 @@
 #include "lib/ob_define.h"
 // Preserve the transitive include the legacy proxy header provided so that
 // downstream TUs keep seeing obcall types (e.g. obcall::LogMemberGCStat).
-#include "share/ob_server_struct.h"
+#include "observer/ob_server_struct.h"
 
 namespace oceanbase
 {

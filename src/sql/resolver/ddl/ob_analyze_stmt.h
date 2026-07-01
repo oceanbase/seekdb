@@ -18,7 +18,7 @@
 #define SRC_SQL_RESOLVER_DDL_OB_ANALYZE_STMT_H_
 
 #include "ob_ddl_stmt.h"
-#include "sql/optimizer/stat/ob_stat_define.h"
+#include "share/stat/ob_stat_define.h"
 
 namespace oceanbase
 {

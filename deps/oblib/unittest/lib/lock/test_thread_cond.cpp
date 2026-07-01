@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 #include "lib/lock/ob_thread_cond.h"
-#include "lib/thread/threads.h"
+#include "deps/oblib/src/lib/thread/threads.h"
 
 namespace oceanbase
 {

@@ -110,6 +110,8 @@ public:
   ObRootUtils() {}
   virtual ~ObRootUtils() {}
 
+  static int get_rs_default_timeout_ctx(ObTimeoutCtx &ctx);
+
   template<class T>
       static bool is_subset(const common::ObIArray<T> &superset_array,
                             const common::ObIArray<T> &array);

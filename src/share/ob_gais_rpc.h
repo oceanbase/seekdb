@@ -20,7 +20,7 @@
 #include "config/ob_server_config.h"
 #include "lib/utility/ob_unify_serialize.h"
 #include "lib/utility/utility.h"
-#include "share/ob_server_struct.h"
+#include "observer/ob_server_struct.h"
 #include "share/ob_define.h"
 #include "share/ob_rpc_struct.h"
 #include "share/ob_gais_msg.h"

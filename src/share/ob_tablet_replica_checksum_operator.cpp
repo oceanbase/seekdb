@@ -17,11 +17,11 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/ob_tablet_replica_checksum_operator.h"
-#include "share/resource_manager/ob_cgroup_ctrl.h"  // OBCG_DEFAULT, previously hidden behind the scheduler include chain(free within share)
 #include "share/rc/ob_module_provider.h"
+#include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "share/storage/ob_tablet_replica_checksum_table_storage.h"
 #include "share/storage/ob_sqlite_connection.h"
-#include "share/ob_server_struct.h"
+#include "observer/ob_server_struct.h"
 namespace oceanbase
 {
 namespace share
@@ -252,7 +252,7 @@ int ObTabletReplicaReportColumnMeta::set_with_str(
   int ret = OB_SUCCESS;
   share::ObFreezeInfo freeze_info;
   uint64_t compaction_data_version = 0;
-  if (OB_FAIL(share::g_mp->get_lower_bound_freeze_info(compaction_scn_val, freeze_info))) {
+  if (OB_FAIL(share::g_mp->tenant_freeze_info_mgr()->get_lower_bound_freeze_info_before_snapshot_version(compaction_scn_val, freeze_info))) {
     LOG_WARN("failed to get freeze info", K(ret), K(compaction_scn_val));
   } else if (FALSE_IT(compaction_data_version = freeze_info.data_version_)) {
   } else {
@@ -512,7 +512,36 @@ int ObTabletReplicaChecksumItem::verify_column_checksum(const ObTabletReplicaChe
   return ret;
 }
 
-// moved definition to the upper-layer owner cpp(transitional state)
+int ObTabletReplicaChecksumItem::verify_column_checksum_between_diffrent_replica(const ObTabletReplicaChecksumItem &other) const
+{
+  int ret = OB_SUCCESS;
+  ObFreezeInfo boundary_freeze_info;
+  ObFreezeInfo to_check_freeze_info;
+  if (OB_FAIL(share::g_mp->tenant_freeze_info_mgr()->get_lower_bound_freeze_info_before_snapshot_version(compaction_scn_.get_val_for_tx(), boundary_freeze_info))) {
+    if (OB_ENTRY_NOT_EXIST == ret) {
+      ret = OB_SUCCESS;
+    } else {
+      LOG_WARN("failed to get boundary freeze info", K(ret), K_(compaction_scn));
+    }
+  } else if (boundary_freeze_info.is_valid()) {
+    ret = OB_CHECKSUM_ERROR; // it is compacted in lob column checksum fixed version
+    LOG_WARN("failed to check column checksum", K(ret), K(boundary_freeze_info));
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(share::g_mp->tenant_freeze_info_mgr()->get_freeze_info_by_snapshot_version(compaction_scn_.get_val_for_tx(), to_check_freeze_info))) {
+    if (OB_ENTRY_NOT_EXIST == ret) {
+      ret = OB_SUCCESS;
+    } else {
+      LOG_WARN("failed to get freeze info", K(ret), K_(compaction_scn));
+    }
+  } else if (!to_check_freeze_info.is_valid()) {
+  } else {
+    ret = OB_CHECKSUM_ERROR; // it is compacted in lob column checksum fixed version
+    LOG_WARN("failed to check column checksum", K(ret), K(to_check_freeze_info));
+  }
+  return ret;
+}
 
 
 int ObTabletReplicaChecksumItem::assign(const ObTabletReplicaChecksumItem &other)

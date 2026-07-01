@@ -18,7 +18,7 @@
 #define OB_SERVER_SCHEMA_UPDATER_H
 
 #include "share/ob_define.h"
-#include "lib/thread/ob_dedup_queue.h"
+#include "lib/queue/ob_dedup_queue.h"
 #include "lib/net/ob_addr.h"
 #include "share/schema/ob_schema_struct.h"
 #include "ob_uniq_task_queue.h"

@@ -20,8 +20,8 @@
 #include "sql/das/iter/ob_das_iter_define.h"
 #include "sql/das/ob_das_attach_define.h"
 #include "sql/das/ob_das_scan_op.h"
-#include "sql/das/ob_domain_id.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "share/domain_id/ob_domain_id.h"
+#include "share/vector_index/ob_vector_index_util.h"
 
 using namespace oceanbase::common;
 

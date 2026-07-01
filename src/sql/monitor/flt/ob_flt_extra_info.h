@@ -56,8 +56,8 @@ FLT_EXTRA_INFO_DEF(FLT_EXTRA_INFO_END, 65535, EMySQLFieldType::MYSQL_TYPE_NOT_DE
 
 #ifndef __OB_FLT_EXTRA_INFO_H__
 #define __OB_FLT_EXTRA_INFO_H__
-#include "common/mysqlclient/ob_mysql_global.h"
-#include "rpc/obmysql/ob_proto_trans_util.h"
+#include "rpc/obmysql/ob_mysql_global.h"
+#include "lib/utility/ob_proto_trans_util.h"
 #include "common/object/ob_object.h"
 namespace oceanbase {
 namespace sql {

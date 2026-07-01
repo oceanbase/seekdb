@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_cast.h"
-#include "share/geo/ob_geometry_cast.h"
+#include "lib/geo/ob_geometry_cast.h"
 #include "sql/engine/expr/ob_expr_subquery_ref.h"
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
 #include "pl/ob_pl_resolver.h"

@@ -29,15 +29,15 @@
 #include "share/schema/ob_schema_getter_guard.h"
 #include "rootserver/ob_ddl_operator.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
-#include "common/mysqlclient/ob_mysql_transaction.h"
+#include "lib/mysqlclient/ob_mysql_transaction.h"
 #include "lib/container/ob_iarray.h"
 #include "storage/tablet/ob_tablet_binding_helper.h"
 #include "storage/ddl/ob_ddl_clog.h"
 #include "share/ob_lonely_table_clean_rpc_struct.h" // for ObForceDropLonelyLobAuxTableArg
 #include "share/ob_freeze_info_proxy.h"
 #include "share/ob_ddl_common.h"
-#include "rootserver/fork_table/ob_fork_table_util.h"
-#include "lib/utility/ob_common_utility.h"
+#include "share/ob_fork_table_util.h"
+#include "common/ob_common_utility.h"
 #include "share/config/ob_config.h" // ObConfigPairs
 #include "rootserver/parallel_ddl/ob_index_name_checker.h"
 #include "pl_ddl/ob_pl_ddl_service.h"
@@ -295,7 +295,7 @@ public:
       const share::schema::AlterTableSchema &alter_table_schema,
       const common::ObTimeZoneInfoWrap &tz_info_wrap,
       const common::ObString &nls_formats,
-      share::ObLocalSessionVar &local_session_var,
+      sql::ObLocalSessionVar &local_session_var,
       obcall::ObSequenceDDLArg &sequence_ddl_arg,
       common::ObIAllocator &allocator,
       share::schema::ObTableSchema &new_table_schema,
@@ -1696,7 +1696,7 @@ int check_will_be_having_domain_index_operation(
       const share::schema::ObColumnSchemaV2 &orig_column_schema,
       const share::schema::ObTableSchema &origin_table_schema,
       const common::ObTimeZoneInfoWrap &tz_info_wrap,
-      const share::ObLocalSessionVar *local_session_var,
+      const sql::ObLocalSessionVar *local_session_var,
       share::schema::ObTableSchema &new_table_schema,
       const bool need_update_default_value,
       const bool need_update_session_var,
@@ -1712,7 +1712,7 @@ int check_will_be_having_domain_index_operation(
                                         const ObObjType origin_type,
                                         const AlterColumnSchema &new_column_schema,
                                         const ObTableSchema &table_schema,
-                                        const share::ObLocalSessionVar *local_session_var);
+                                        const sql::ObLocalSessionVar *local_session_var);
   int modify_depend_column_type(sql::ObRawExpr *expr,
                                 const ObString &column_name,
                                 const AlterColumnSchema &alter_column_schema,

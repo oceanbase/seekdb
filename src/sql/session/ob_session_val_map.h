@@ -18,7 +18,7 @@
 #define _OB_SESSION_VAL_MAP_H 1
 
 #include "lib/hash/ob_hashmap.h"
-#include "lib/objectpool/ob_pooled_allocator.h"
+#include "lib/allocator/ob_pooled_allocator.h"
 #include "common/ob_string_buf.h"
 
 namespace oceanbase

@@ -40,7 +40,6 @@ namespace sql
 {
 struct ObBoolMask;
 class ObBlackFilterExecutor;
-class ObDynamicFilterExecutor;
 }
 namespace blocksstable
 {

@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_schema_status_proxy.h"
-#include "share/ob_server_struct.h"
+#include "observer/ob_server_struct.h"
 
 namespace oceanbase
 {

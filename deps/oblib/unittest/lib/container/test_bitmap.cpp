@@ -20,7 +20,7 @@
 #include <chrono>
 #define private public
 #define OK(ass) ASSERT_EQ(OB_SUCCESS, (ass))
-#include "lib/utility/ob_target_specific.h"
+#include "common/ob_target_specific.h"
 #include "lib/container/ob_bitmap.h"
 
 namespace oceanbase

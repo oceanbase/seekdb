@@ -24,7 +24,7 @@
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/expr/ob_expr_vector.h"
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "observer/vector_index/ob_plugin_vector_index_utils.h"
+#include "share/vector_index/ob_plugin_vector_index_utils.h"
 #include "sql/das/iter/ob_das_functional_lookup_iter.h"
 #include "sql/das/ob_das_utils.h"
 #include "sql/das/ob_das_ir_define.h"

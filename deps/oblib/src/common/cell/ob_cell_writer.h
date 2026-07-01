@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_COMMON_OB_CELL_WRITER_H_
 #define OCEANBASE_COMMON_OB_CELL_WRITER_H_
 #include "common/object/ob_obj_type.h"
-#include "common/number/ob_number_v2.h"
+#include "lib/number/ob_number_v2.h"
 #include "lib/ob_define.h"
 
 namespace oceanbase

@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_tablet_pointer_map.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/meta_store/ob_storage_meta_io_util.h"

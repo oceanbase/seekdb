@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_ALL_TRACEPOINT_INFO_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_ALL_TRACEPOINT_INFO_
 
-#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "share/ob_virtual_table_scanner_iterator.h"
 #include "lib/net/ob_addr.h"
 #include "lib/utility/ob_tracepoint.h"
 

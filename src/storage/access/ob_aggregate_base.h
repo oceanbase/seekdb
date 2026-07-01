@@ -18,7 +18,7 @@
 #define OCEANBASE_STORAGE_OB_AGGREGATE_BASE_H_
 
 #include <stdint.h>
-#include "sql/engine/aggregate/agg_ctx.h"
+#include "share/aggregate/agg_ctx.h"
 #include "storage/blocksstable/ob_datum_row.h"
 
 namespace oceanbase

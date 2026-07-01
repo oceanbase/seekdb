@@ -19,7 +19,7 @@
 #include "sql/resolver/dcl/ob_grant_resolver.h"
 #include "observer/virtual_table/ob_tenant_all_tables.h"
 #include "storage/tx/ob_xa_define.h"
-#include "sql/printer/ob_schema_printer.h"
+#include "share/schema/ob_schema_printer.h"
 #include "share/catalog/ob_catalog_utils.h"
 
 using namespace oceanbase::common;

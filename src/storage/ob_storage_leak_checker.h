@@ -1,0 +1,125 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#ifndef OCEANBASE_STORAGE_OB_STORAGE_LEAK_CHECKER_H_
+#define OCEANBASE_STORAGE_OB_STORAGE_LEAK_CHECKER_H_
+
+#include "share/cache/ob_kvcache_struct.h"
+#include "share/io/ob_io_define.h"
+#include "storage/ob_storage_checked_object_base.h"
+
+
+namespace oceanbase
+{
+namespace storage
+{
+
+inline bool is_cache(ObStorageCheckID id) {
+  return (int)id > OB_CACHE_INVALID && (int)id <= (int)ObStorageCheckID::ALL_CACHE;
+}
+
+inline bool is_io_handle(ObStorageCheckID id) {
+  return id == ObStorageCheckID::IO_HANDLE;
+}
+
+inline bool is_storage_iter(ObStorageCheckID id) {
+  return id == ObStorageCheckID::STORAGE_ITER;
+}
+
+inline bool is_valid_check_id(ObStorageCheckID id) {
+  return is_cache(id) || is_io_handle(id) || is_storage_iter(id);
+}
+
+struct ObStorageCheckerKey
+{
+public:
+  ObStorageCheckerKey();
+  ObStorageCheckerKey(const void *handle);
+  ~ObStorageCheckerKey() = default;
+  int hash(uint64_t &hash_value) const;
+  OB_INLINE bool is_valid() const { return nullptr != handle_; }
+  bool operator== (const ObStorageCheckerKey &other) const;
+  TO_STRING_KV(KP_(handle));
+  const void *handle_;
+};
+
+
+struct ObStorageCheckerValue
+{
+public:
+  ObStorageCheckerValue();
+  ObStorageCheckerValue(const ObStorageCheckerValue &other);
+  ~ObStorageCheckerValue() = default;
+  int hash(uint64_t &hash_value) const;
+  bool operator== (const ObStorageCheckerValue &other) const;
+  ObStorageCheckerValue & operator= (const ObStorageCheckerValue &other);
+  TO_STRING_KV(K_(check_id), K_(bt));
+  ObStorageCheckID check_id_;
+  char bt_[512];
+};
+
+class ObStorageLeakChecker final
+{
+public:
+  static const char ALL_CACHE_NAME[MAX_CACHE_NAME_LENGTH];
+  static const char IO_HANDLE_CHECKER_NAME[MAX_CACHE_NAME_LENGTH];
+  static const char ITER_CHECKER_NAME[MAX_CACHE_NAME_LENGTH];
+  static constexpr int MEMORY_LIMIT = 128L << 20;
+  static constexpr int MAP_SIZE_LIMIT = MEMORY_LIMIT / sizeof(ObStorageCheckerValue);
+
+  static ObStorageLeakChecker &get_instance() { return instance_; }
+  void reset();
+  // return if is recorded
+  template<typename T>
+  bool handle_hold(T* handle, bool errsim_bypass = false);
+  template<typename T>
+  void handle_reset(T* handle);
+  int get_aggregate_bt_info(hash::ObHashMap<ObStorageCheckerValue, int64_t> &bt_info);
+private:
+  void inner_handle_hold(ObStorageCheckedObjectBase* handle, const ObStorageCheckID type_id);
+  void inner_handle_reset(ObStorageCheckedObjectBase* handle, const ObStorageCheckID type_id);
+  static const int64_t HANDLE_BT_MAP_BUCKET_NUM = 10000;
+
+  ObStorageLeakChecker();
+  ~ObStorageLeakChecker();
+
+  static ObStorageLeakChecker instance_;
+
+  hash::ObHashMap<ObStorageCheckerKey, ObStorageCheckerValue> checker_info_;
+};
+
+template<typename T>
+OB_INLINE bool ObStorageLeakChecker::handle_hold(T* handle, bool errsim_bypass)
+{
+  bool b_ret = false;
+  if (OB_UNLIKELY(handle->need_trace() || errsim_bypass)) {
+    inner_handle_hold(static_cast<ObStorageCheckedObjectBase*>(handle), handle->get_check_id());
+    b_ret = true;
+  }
+  return b_ret;
+}
+
+template<typename T>
+OB_INLINE void ObStorageLeakChecker::handle_reset(T* handle)
+{
+  if (OB_UNLIKELY(handle->is_traced())) {
+    inner_handle_reset(static_cast<ObStorageCheckedObjectBase*>(handle), handle->get_check_id());
+  }
+}
+
+
+}  // storage
+}  // oceanbase
+#endif  // OCEANBASE_STORAGE_OB_STORAGE_LEAK_CHECKER_H_

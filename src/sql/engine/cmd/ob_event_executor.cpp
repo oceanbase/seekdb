@@ -20,7 +20,7 @@
 #include <chrono>
 #include <ctime>
 #include <iomanip>
-#include "common/mysqlclient/ob_mysql_transaction.h"
+#include "lib/mysqlclient/ob_mysql_transaction.h"
 #include "lib/string/ob_sql_string.h"
 #include "sql/resolver/cmd/ob_event_stmt.h"
 #include "sql/engine/ob_exec_context.h"

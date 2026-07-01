@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX RS
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "rootserver/freeze/ob_major_merge_info_manager.h"
 
 #include "share/ob_global_stat_proxy.h"

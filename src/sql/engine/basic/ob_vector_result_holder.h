@@ -19,10 +19,10 @@
 
 #include "lib/container/ob_se_array.h"
 #include "lib/allocator/page_arena.h"
-#include "common/datum/ob_datum.h"
+#include "share/datum/ob_datum.h"
 #include "sql/engine/expr/ob_expr.h"
-#include "sql/engine/vector/type_traits.h"
-#include "sql/engine/vector/ob_i_vector.h"
+#include "share/vector/type_traits.h"
+#include "share/vector/ob_i_vector.h"
 
 namespace oceanbase
 {

@@ -17,9 +17,9 @@
 #ifndef OB_ALL_VIRTUAL_OPT_STAT_GATHER_STAT_H
 #define OB_ALL_VIRTUAL_OPT_STAT_GATHER_STAT_H
 
-#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "share/ob_virtual_table_scanner_iterator.h"
 #include "lib/net/ob_addr.h"
-#include "sql/optimizer/stat/ob_opt_stat_gather_stat.h"
+#include "share/stat/ob_opt_stat_gather_stat.h"
 
 namespace oceanbase
 {

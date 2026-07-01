@@ -21,8 +21,8 @@
 #include "sql/optimizer/ob_log_for_update.h"
 #include "sql/optimizer/ob_log_insert.h"
 #include "sql/optimizer/ob_log_update.h"
-#include "sql/das/ob_domain_id.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "share/domain_id/ob_domain_id.h"
+#include "share/vector_index/ob_vector_index_util.h"
 
 namespace oceanbase
 {

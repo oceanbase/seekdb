@@ -26,11 +26,54 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
+template <typename IN_VECTOR, typename OUT_VECTOR>
+struct _eval_arg_impl
+{
+  static int eval_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
+                         const EvalBound &bound)
+  {
+    int ret = OB_SUCCESS;
+    IN_VECTOR *input_vector = static_cast<IN_VECTOR *>(expr.args_[0]->get_vector(ctx));
+    OUT_VECTOR *output_vector = static_cast<OUT_VECTOR *>(expr.get_vector(ctx));
+    ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
+    const char *src = nullptr;
+    int32_t src_len = 0;
+    if (OB_LIKELY(bound.get_all_rows_active() && eval_flags.accumulate_bit_cnt(bound) == 0)) {
+      if (!input_vector->has_null()) {
+        for (int i = bound.start(); i < bound.end(); i++) {
+          input_vector->get_payload(i, src, src_len);
+          output_vector->set_payload_shallow(i, src, src_len);
+        }
+      } else {
+        for (int i = bound.start(); i < bound.end(); i++) {
+          if (input_vector->is_null(i)) {
+            output_vector->set_null(i);
+          } else {
+            input_vector->get_payload(i, src, src_len);
+            output_vector->set_payload_shallow(i, src, src_len);
+          }
+        }
+      }
+      eval_flags.set_all(bound.start(), bound.end());
+    } else {
+      for (int i = bound.start(); i < bound.end(); i++) {
+        if(eval_flags.at(i) || skip.at(i)) {
+          continue;
+        } else if (input_vector->is_null(i)) {
+          output_vector->set_null(i);
+        } else {
+          input_vector->get_payload(i, src, src_len);
+          output_vector->set_payload_shallow(i, src, src_len);
+        }
+        eval_flags.set(i);
+      }
+    }
+    return ret;
+  }
+};
+
 OB_NOINLINE int _eval_arg_vec_cast(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
                                    const EvalBound &bound);
-OB_NOINLINE int _eval_arg_vec_copy_cast(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
-                                        const EvalBound &bound, const VecValueTypeClass in_tc,
-                                        const VecValueTypeClass out_tc);
 
 template <VecValueTypeClass in_tc, VecValueTypeClass out_tc, bool implicit>
 struct EvalArgCasterImpl
@@ -38,13 +81,8 @@ struct EvalArgCasterImpl
 
 template <VecValueTypeClass in_tc, VecValueTypeClass out_tc>
 struct EvalArgCasterImpl<in_tc, out_tc, IMPLICIT_CAST_FLAG>
-{
-  static int eval_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip,
-                         const EvalBound &bound)
-  {
-    return _eval_arg_vec_copy_cast(expr, ctx, skip, bound, in_tc, out_tc);
-  }
-};
+  : public VecCastFormatWrapper<_eval_arg_impl, in_tc, out_tc>
+{};
 
 template<VecValueTypeClass out_tc>
 struct EvalArgCasterImpl<VEC_TC_NULL, out_tc, IMPLICIT_CAST_FLAG>
@@ -71,48 +109,33 @@ struct EvalArgCasterImpl<in_tc, out_tc, EXPLICIT_CAST_FLAG>
       int warning = OB_SUCCESS;
       switch (out_fmt) {
       case common::VEC_UNIFORM: {
-        if constexpr (is_uniform_vec(out_tc)) {
-          ret = BatchValueRangeChecker<out_tc, ObUniformFormat<false>>::check(
-            expr, ctx, bound, skip, warning);
-        } else {
-          ret = DummyChecker::check(expr, ctx, bound, skip, warning);
-        }
+        ret = std::conditional<is_uniform_vec(out_tc),
+                               BatchValueRangeChecker<out_tc, ObUniformFormat<false>>,
+                               DummyChecker>::type::check(expr, ctx, bound, skip, warning);
         break;
       }
       case common::VEC_UNIFORM_CONST: {
-        if constexpr (is_uniform_vec(out_tc)) {
-          ret = BatchValueRangeChecker<out_tc, ObUniformFormat<true>>::check(
-            expr, ctx, bound, skip, warning);
-        } else {
-          ret = DummyChecker::check(expr, ctx, bound, skip, warning);
-        }
+        ret = std::conditional<is_uniform_vec(out_tc),
+                               BatchValueRangeChecker<out_tc, ObUniformFormat<true>>,
+                               DummyChecker>::type::check(expr, ctx, bound, skip, warning);
         break;
       }
       case common::VEC_FIXED: {
-        if constexpr (is_fixed_length_vec(out_tc)) {
-          ret = BatchValueRangeChecker<out_tc, ObFixedLengthFormat<RTCType<out_tc>>>::check(
-            expr, ctx, bound, skip, warning);
-        } else {
-          ret = DummyChecker::check(expr, ctx, bound, skip, warning);
-        }
+        ret = std::conditional<is_fixed_length_vec(out_tc),
+                               BatchValueRangeChecker<out_tc, ObFixedLengthFormat<RTCType<out_tc>>>,
+                               DummyChecker>::type::check(expr, ctx, bound, skip, warning);
         break;
       }
       case common::VEC_DISCRETE: {
-        if constexpr (is_discrete_vec(out_tc)) {
-          ret = BatchValueRangeChecker<out_tc, ObDiscreteFormat>::check(
-            expr, ctx, bound, skip, warning);
-        } else {
-          ret = DummyChecker::check(expr, ctx, bound, skip, warning);
-        }
+        ret = std::conditional<is_discrete_vec(out_tc),
+                               BatchValueRangeChecker<out_tc, ObDiscreteFormat>,
+                               DummyChecker>::type::check(expr, ctx, bound, skip, warning);
         break;
       }
       case common::VEC_CONTINUOUS: {
-        if constexpr (is_continuous_vec(out_tc)) {
-          ret = BatchValueRangeChecker<out_tc, ObContinuousFormat>::check(
-            expr, ctx, bound, skip, warning);
-        } else {
-          ret = DummyChecker::check(expr, ctx, bound, skip, warning);
-        }
+        ret = std::conditional<is_continuous_vec(out_tc),
+                               BatchValueRangeChecker<out_tc, ObContinuousFormat>,
+                               DummyChecker>::type::check(expr, ctx, bound, skip, warning);
         break;
       }
       default: {
@@ -186,7 +209,19 @@ struct VectorCastFuncInit
 template<int N, int M>
 struct VectorCastFuncInit<N, M, false>
 {
-  static void init_array() {}
+  static void init_array()
+  {
+    constexpr VecValueTypeClass in_tc = static_cast<VecValueTypeClass>(N);
+    constexpr VecValueTypeClass out_tc = static_cast<VecValueTypeClass>(M);
+    VECTOR_CAST_FUNCS[N][M][IMPLICIT_CAST_FLAG] = expr_default_eval_vector_func;
+    VECTOR_CAST_FUNCS[N][M][EXPLICIT_CAST_FLAG] = expr_default_eval_vector_func;
+    // VECTOR_EVAL_ARG_CAST_FUNCS[N][M][IMPLICIT_CAST_FLAG] =
+    //   EvalArgCasterImpl<in_tc, out_tc, IMPLICIT_CAST_FLAG>::eval_vector;
+    // VECTOR_EVAL_ARG_CAST_FUNCS[N][M][EXPLICIT_CAST_FLAG] =
+    //   ValueRangeChecker<out_tc, ObVectorBase>::defined_ ?
+    //     EvalArgCasterImpl<in_tc, out_tc, EXPLICIT_CAST_FLAG>::eval_vector :
+    //     expr_default_eval_vector_func;
+  }
 };
 
 template<int N, int M, bool defined = true>

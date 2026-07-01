@@ -13,12 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "sql/engine/vector/ob_fixed_length_vector.h"
-#include "sql/engine/vector/ob_continuous_vector.h"
-#include "sql/engine/vector/ob_uniform_vector.h"
-#include "sql/engine/vector/ob_discrete_vector.h"
+#include "share/vector/ob_fixed_length_vector.h"
+#include "share/vector/ob_continuous_vector.h"
+#include "share/vector/ob_uniform_vector.h"
+#include "share/vector/ob_discrete_vector.h"
 #include "lib/atomic/ob_atomic.h"
-#include "sql/engine/vector/expr_cmp_func.h"
+#include "share/vector/expr_cmp_func.h"
 
 namespace oceanbase
 {

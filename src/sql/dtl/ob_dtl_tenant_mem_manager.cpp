@@ -17,8 +17,6 @@
 #define USING_LOG_PREFIX SQL_DTL
 
 #include "ob_dtl_tenant_mem_manager.h"
-#include "share/config/ob_tenant_config_mgr.h"
-
 using namespace oceanbase::common;
 using namespace oceanbase::omt;
 using namespace oceanbase::sql;

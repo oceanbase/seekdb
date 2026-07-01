@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX LIB
 #include "worker.h"
-namespace oceanbase { namespace rpc { extern common::ObAddr g_rpc_self_addr; } }  // fwd-decl (reduce deps)
+#include "rpc/ob_req_operator.h"   // rpc::g_rpc_self_addr
 
 using namespace oceanbase::common;
 using namespace oceanbase::lib;

@@ -1,9 +1,4 @@
 oblib_add_library(restore OBJECT
-  ob_fd_simulator.h
-  ob_fd_simulator.cpp
-  ob_io_device.h
-  ob_io_device.cpp
-  ob_device_common.h
   ob_i_storage.h
   ob_i_storage.cpp
   ob_storage.cpp

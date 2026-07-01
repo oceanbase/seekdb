@@ -265,6 +265,7 @@ public:
                          const share::schema::ObRoutineType routine_type,
                          const common::ObIArray<ObRawExpr *> &expr_params,
                          const share::schema::ObRoutineInfo *&routine,
+                         const ObString &dblink_name = ObString(""),
                          ObIAllocator *allocator = NULL);
   static int get_routine(const pl::ObPLResolveCtx &resolve_ctx,
                          const ObString &current_database,
@@ -280,6 +281,7 @@ public:
                                     ObString &db_name,
                                     ObString &package_name,
                                     ObString &routine_name,
+                                    ObString &dblink_name,
                                     ObIArray<ObSchemaObjVersion> *deps = nullptr);
   static int resolve_sp_name(ObSQLSessionInfo &session_info,
                              const ParseNode &sp_name_node,

@@ -15,12 +15,11 @@
  */
 
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_tx_data_table.h"
-#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "share/rc/ob_module_provider.h"
+#include "share/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/tx/ob_ts_mgr.h"
-#include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "share/scheduler/ob_tenant_dag_scheduler.h"
 
 #define USING_LOG_PREFIX STORAGE
 

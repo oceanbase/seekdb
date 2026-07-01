@@ -16,11 +16,11 @@
 #ifndef OCEANBASE_RPC_OB_NET_QUEUE_TRAVER_H
 #define OCEANBASE_RPC_OB_NET_QUEUE_TRAVER_H
 
-#include "lib/queue/ob_link_queue.h"
-#include "lib/queue/ob_priority_queue.h"
-#include "rpc/frame/ob_req_queue_thread.h"
-#include "rpc/obmysql/ob_mysql_packet.h"
-#include "rpc/obmysql/obsm_struct.h"
+#include "deps/oblib/src/lib/queue/ob_link_queue.h"
+#include "deps/oblib/src/lib/queue/ob_priority_queue.h"
+#include "deps/oblib/src/rpc/frame/ob_req_queue_thread.h"
+#include "deps/oblib/src/rpc/obmysql/ob_mysql_packet.h"
+#include "deps/oblib/src/rpc/obmysql/obsm_struct.h"
 #include "share/ob_define.h"
 #include "src/observer/ob_server_struct.h"
 #include "src/observer/omt/ob_multi_tenant.h"

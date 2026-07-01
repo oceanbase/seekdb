@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_direct_load_mgr_v3.h"
-#include "storage/ddl/ob_ddl_storage_util.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/column_store/ob_column_oriented_sstable.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
@@ -27,7 +26,7 @@
 #include "observer/report/ob_tablet_table_updater.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "share/compaction/ob_shared_storage_compaction_util.h"
-#include "storage/ob_tablet_autoincrement_service.h"
+#include "share/ob_tablet_autoincrement_service.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
 #include "observer/ob_server_event_history_table_operator.h"
 using namespace oceanbase;
@@ -82,7 +81,7 @@ int ObTabletDirectLoadMgrV3::get_target_table_type(const ObStorageSchema &storag
       ObDirectLoadType::DIRECT_LOAD_MAX <= direct_load_type) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(direct_load_type), K(storage_schema));
-  } else if (OB_FAIL(ObDDLStorageUtil::need_column_group_store(storage_schema, is_column_group_store))) {
+  } else if (OB_FAIL(ObCODDLUtil::need_column_group_store(storage_schema, is_column_group_store))) {
     LOG_WARN("failed to check need column group store", K(ret), K(storage_schema));
   } else if (DIRECT_LOAD_INCREMENTAL == direct_load_type) {
     if (is_column_group_store) {
@@ -293,7 +292,7 @@ int ObTabletDirectLoadMgrV3::init_v2(const ObTabletDirectLoadInsertParam &build_
     } else if (FALSE_IT(storage_schema_->schema_version_ = build_param.runtime_only_param_.schema_version_)) {
     } else if (OB_FAIL(get_target_table_type(*storage_schema_, build_param.common_param_.direct_load_type_, table_key_.table_type_))) {
       LOG_WARN("failed to get target table type", K(ret), K(storage_schema_), K(build_param));
-    } else if (OB_FAIL(ObDDLStorageUtil::get_base_cg_idx(storage_schema_, base_cg_idx))) {
+    } else if (OB_FAIL(ObCODDLUtil::get_base_cg_idx(storage_schema_, base_cg_idx))) {
       LOG_WARN("failed to get base cg idx", K(ret), K(storage_schema_));
     } else {
       table_key_.tablet_id_ = build_param.common_param_.tablet_id_;
@@ -667,7 +666,7 @@ int ObTabletDirectLoadMgrV3::close()
       ObArray<int64_t> co_column_checksums;
       co_column_checksums.set_attr(ObMemAttr("TblDL_Ccc"));
 
-      if (OB_FAIL(ObDDLStorageUtil::get_co_column_checksums_if_need(new_tablet_handle, first_major_sstable, co_column_checksums))) {
+      if (OB_FAIL(ObCODDLUtil::get_co_column_checksums_if_need(new_tablet_handle, first_major_sstable, co_column_checksums))) {
         LOG_WARN("get column checksum from co sstable failed", K(ret));
       } else {
         for (int64_t retry_cnt = 10; retry_cnt > 0; retry_cnt--) { // overwrite ret

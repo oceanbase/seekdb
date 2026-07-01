@@ -17,12 +17,11 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "storage/direct_load/ob_direct_load_insert_data_table_ctx.h"
-#include "storage/ddl/ob_ddl_storage_util.h"
-#include "storage/ob_tablet_autoincrement_service.h"
 #include "share/rc/ob_module_provider.h"
-#include "sql/optimizer/stat/ob_stat_item.h"
-#include "storage/direct_load/ob_table_load_dml_stat.h"
-#include "storage/direct_load/ob_table_load_sql_statistics.h"
+#include "share/ob_tablet_autoincrement_service.h"
+#include "share/stat/ob_stat_item.h"
+#include "share/table/ob_table_load_dml_stat.h"
+#include "share/table/ob_table_load_sql_statistics.h"
 #include "storage/direct_load/ob_direct_load_batch_rows.h"
 #include "storage/direct_load/ob_direct_load_datum_row.h"
 #include "storage/direct_load/ob_direct_load_table_data_desc.h"
@@ -31,7 +30,6 @@
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_ddl_independent_dag.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
-#include "storage/tx/ob_ts_mgr.h"  // transaction::get_tenant_gts
 
 namespace oceanbase
 {
@@ -94,7 +92,7 @@ int ObDirectLoadInsertDataTabletContext::init(ObDirectLoadInsertDataTableContext
     if (param_->enable_dag_) {
       slice_idx_ = param_->reserved_parallel_;
     }
-    if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(param_->reserved_parallel_, start_seq_))) {
+    if (OB_FAIL(ObDDLUtil::init_macro_block_seq(param_->reserved_parallel_, start_seq_))) {
       LOG_WARN("fail to init macro block seq", KR(ret), K(param_->reserved_parallel_));
     } else {
       is_inited_ = true;
@@ -672,7 +670,7 @@ int ObDirectLoadInsertDataTableContext::init_dag(
     // incremental direct load may generate multiple sstables,
     // the snapshot_version needs be updated each time to avoid duplicated MacroIds
     share::SCN current_scn;
-    if (OB_FAIL(transaction::get_tenant_gts(current_scn))) {
+    if (OB_FAIL(share::ObShareUtil::get_tenant_gts(current_scn))) {
       LOG_WARN("failed to get gts", KR(ret));
     } else {
       init_param.ddl_task_param_.snapshot_version_ = current_scn.get_val_for_tx();

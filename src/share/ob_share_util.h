@@ -80,8 +80,6 @@ class ObShareUtil
 public:
   // priority to set timeout_ctx: ctx > worker > default_timeout
   static int set_default_timeout_ctx(common::ObTimeoutCtx &ctx, const int64_t default_timeout);
-  // moved up from rootserver::ObRootUtils(body uses only GCONF.rpc_timeout + set_default_timeout_ctx, share-clean)
-  static int get_rs_default_timeout_ctx(common::ObTimeoutCtx &ctx);
   // priority to get timeout: ctx > worker > default_timeout
   static int get_abs_timeout(const int64_t default_timeout, int64_t &abs_timeout);
   static int get_ctx_timeout(const int64_t default_timeout, int64_t &timeout);
@@ -110,10 +108,11 @@ public:
   static inline uint64_t compute_server_index(uint64_t server_id) {
     return server_id % (MAX_SERVER_COUNT + 1);
   }
-  // get_sys_ls_readable_scn has been demoted to storage::free function(see end of file storage ns)
-  // check_clog_disk_full_or_hang has been demoted to logservice::free function
-  // get_tenant_gts has been demoted to storage::free function(transaction::get_tenant_gts, see end of file storage/transaction ns and ob_ts_mgr.cpp)
-  // Note: master still keeps ObShareUtil::get_tenant_gts(SCN&) shape and still has callers, changed to transaction::get_tenant_gts (see routing item)
+  static int get_sys_ls_readable_scn(SCN &readable_scn);
+  static int check_clog_disk_full_or_hang(
+             bool &clog_disk_is_full,
+             bool &clog_disk_is_hang);
+  static int get_tenant_gts(SCN &gts_scn);
   static int gen_sys_unit(ObUnit &unit);
   static int gen_sys_resource_pool(ObResourcePool &resource_pool);
   static int gen_default_sys_tenant_schema(schema::ObTenantSchema &tenant_schema);
@@ -121,7 +120,4 @@ public:
 };
 }//end namespace share
 }//end namespace oceanbase
-namespace oceanbase { namespace storage {
-} }
-
 #endif //OCEANBASE_SHARE_OB_SHARE_UTIL_H_

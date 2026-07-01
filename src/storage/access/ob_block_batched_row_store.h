@@ -20,7 +20,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/container/ob_bitmap.h"
-#include "storage/access/ob_table_param.h"
+#include "share/schema/ob_table_param.h"
 #include "storage/blocksstable/ob_datum_row.h"
 #include "ob_block_row_store.h"
 

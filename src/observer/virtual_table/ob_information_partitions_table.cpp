@@ -15,7 +15,7 @@
  */
 
 #include "ob_information_partitions_table.h"
-#include "share/ob_tenant_timezone_mgr.h"
+#include "observer/omt/ob_tenant_timezone_mgr.h"
 #include "share/schema/ob_part_mgr_util.h" // ObPartitionSchemaIter
 
 using namespace oceanbase::common;

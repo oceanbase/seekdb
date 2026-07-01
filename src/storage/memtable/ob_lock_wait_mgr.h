@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_MEMTABLE_OB_LOCK_WAIT_MGR_H_
 #define OCEANBASE_MEMTABLE_OB_LOCK_WAIT_MGR_H_
 
-#include "lib/utility/ob_mod_define.h"
+#include "lib/allocator/ob_mod_define.h"
 #include "lib/allocator/ob_qsync.h"
 #include "lib/hash/ob_linear_hash_map.h"
 #include "lib/hash/ob_link_hashmap.h"
@@ -27,7 +27,7 @@
 #include "observer/ob_server_struct.h"
 #include "rpc/ob_lock_wait_node.h"
 #include "rpc/ob_request.h"
-#include "storage/deadlock/ob_deadlock_detector_common_define.h"
+#include "share/deadlock/ob_deadlock_detector_common_define.h"
 #include "share/ob_thread_pool.h"
 #include "sql/session/ob_sql_session_mgr.h"
 #include "storage/memtable/ob_memtable_context.h"

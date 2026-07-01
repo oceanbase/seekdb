@@ -17,9 +17,8 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/ob_freeze_info_proxy.h"
-#include "share/ob_share_util.h" // ObShareUtil::get_rs_default_timeout_ctx
-#include "common/ob_timeout_ctx.h" // ObTimeoutCtx
 
+#include "rootserver/ob_root_utils.h"
 
 namespace oceanbase
 {
@@ -395,8 +394,6 @@ int ObFreezeInfoProxy::construct_frozen_status_(
 
 ///////////////////////////////////////////////////////////////////////////////
 
-// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state)
-
 int ObFreezeInfoProxy::get_freeze_schema_info(
     ObISQLClient &sql_proxy,
     const SCN &frozen_scn,
@@ -409,7 +406,7 @@ int ObFreezeInfoProxy::get_freeze_schema_info(
       || (!frozen_scn.is_valid()))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K(frozen_scn));
-  } else if (OB_FAIL(ObShareUtil::get_rs_default_timeout_ctx(ctx))) {
+  } else if (OB_FAIL(rootserver::ObRootUtils::get_rs_default_timeout_ctx(ctx))) {
     LOG_WARN("fail to get timeout ctx", KR(ret), K(ctx));
   } else if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE frozen_scn = %ld",
                                     OB_ALL_FREEZE_INFO_TNAME, frozen_scn.get_val_for_inner_table_field()))) {

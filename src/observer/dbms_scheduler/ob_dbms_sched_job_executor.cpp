@@ -22,7 +22,7 @@
 #include "ob_dbms_sched_job_executor.h"
 
 #include "lib/oblog/ob_log.h"
-#include "common/mysqlclient/ob_isql_connection.h"
+#include "lib/mysqlclient/ob_isql_connection.h"
 #include "share/ob_define.h"
 #include "share/ob_errno.h"
 #include "share/schema/ob_schema_getter_guard.h"

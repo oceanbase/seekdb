@@ -16,7 +16,6 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/direct_load/ob_direct_load_batch_rows.h"
-#include "storage/ddl/ob_ddl_struct.h"  // storage::ObColumnSchemaItem(previously hidden behind a transitive include)
 #include "storage/direct_load/ob_direct_load_datum_row.h"
 
 namespace oceanbase

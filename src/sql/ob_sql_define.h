@@ -18,12 +18,12 @@
 #define OCEANBASE_SQL_OB_SQL_DEFINE_H_
 
 #include "lib/container/ob_fixed_array.h"
-#include "common/datum/ob_datum.h"
+#include "share/datum/ob_datum.h"
 #include "common/object/ob_object.h"
 #include "share/ob_define.h"
-#include "lib/container/ob_array.h"
+#include "deps/oblib/src/lib/container/ob_array.h"
 #include "src/share/rc/ob_tenant_base.h"
-#include "lib/container/ob_2d_array.h"
+#include "deps/oblib/src/lib/container/ob_2d_array.h"
 
 namespace oceanbase
 {

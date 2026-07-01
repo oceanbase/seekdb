@@ -17,7 +17,8 @@
 #define USING_LOG_PREFIX SHARE
 #include "ob_sequence_dml_proxy.h"
 #include "share/sequence/ob_sequence_cache.h"
-#include "share/ob_sql_client_decorator.h"
+#include "share/schema/ob_schema_service_sql_impl.h"
+#include "observer/ob_sql_client_decorator.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::common::number;

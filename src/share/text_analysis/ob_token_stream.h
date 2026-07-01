@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SHARE_OB_TOKEN_STREAM_H_
 #define OCEANBASE_SHARE_OB_TOKEN_STREAM_H_
 
-#include "common/datum/ob_datum.h"
+#include "share/datum/ob_datum.h"
 namespace oceanbase
 {
 namespace share

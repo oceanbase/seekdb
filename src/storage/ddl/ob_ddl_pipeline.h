@@ -21,9 +21,9 @@
 #include "storage/ddl/ob_ddl_independent_dag.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "common/ob_tablet_id.h"
-#include "observer/vector_index/ob_vector_index_util.h"
-#include "observer/vector_index/ob_vector_kmeans_ctx.h"
-#include "observer/vector_index/ob_vector_embedding_handler.h"
+#include "share/vector_index/ob_vector_index_util.h"
+#include "share/vector_index/ob_vector_kmeans_ctx.h"
+#include "share/vector_index/ob_vector_embedding_handler.h"
 #include "storage/ddl/ob_hnsw_embedmgr.h"
 #include "lib/lock/ob_spin_lock.h"
 

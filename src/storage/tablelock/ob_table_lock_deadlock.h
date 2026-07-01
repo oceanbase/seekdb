@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STORAGE_TABLELOCK_DEADLOCK_H_
 #define OCEANBASE_STORAGE_TABLELOCK_DEADLOCK_H_
 
-#include "storage/deadlock/ob_deadlock_detector_common_define.h"
+#include "share/deadlock/ob_deadlock_detector_common_define.h"
 #include "share/ob_ls_id.h"
 #include "storage/tablelock/ob_table_lock_common.h"
 #include "storage/tx/ob_trans_define.h"

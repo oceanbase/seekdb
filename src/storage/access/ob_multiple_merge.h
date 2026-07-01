@@ -24,7 +24,7 @@
 #include "storage/ob_i_store.h"
 #include "storage/ob_row_fuse.h"
 #include "ob_store_row_iterator.h"
-#include "storage/access/ob_table_param.h"
+#include "share/schema/ob_table_param.h"
 #include "ob_table_scan_range.h"
 #include "storage/tablet/ob_table_store_util.h"
 #include "ob_table_access_context.h"

@@ -19,9 +19,6 @@
 #include "sql/engine/ob_exec_context.h"
 #include "sql/resolver/ddl/ob_create_table_stmt.h"
 #include "sql/resolver/ddl/ob_create_tablegroup_stmt.h"
-#include "share/schema/ob_schema_struct.h"  // relocated-definition owner
-#include "sql/code_generator/ob_expr_generator_impl.h"  // needed by relocated functions(free within sql)
-#include "sql/resolver/expr/ob_raw_expr_util.h"  // needed by relocated functions(free within sql)
 
 namespace oceanbase
 {
@@ -1382,55 +1379,6 @@ int ObPartitionExecutorUtils::sort_list_paritition_if_need(ObTableSchema &table_
       lib::ob_sort(partition_array,
                 partition_array + array_count,
                 ObBasePartition::list_part_func_layout);
-    }
-  }
-  return ret;
-}
-
-int ObPartitionExecutorUtils::check_interval_partition_table(
-    const ObRowkey &transition_point,
-    const ObRowkey &interval_range)
-{
-  int ret = OB_SUCCESS;
-
-  const stmt::StmtType stmt_type = stmt::T_NONE;
-  SMART_VARS_4((ObExprCtx, expr_ctx),
-               (ObArenaAllocator, local_allocator),
-               (ObExecContext, exec_ctx, local_allocator),
-               (ObSQLSessionInfo, session_info)) {
-
-    OZ (session_info.init(0, &local_allocator, NULL));
-    OX (session_info.set_time_zone(ObString("+8:00"), true, true));
-    OZ (session_info.load_default_sys_variable(false, false));
-    OZ (session_info.load_default_configs_in_pc());
-    OX (exec_ctx.set_my_session(&session_info));
-
-    if (OB_SUCC(ret)) {
-      ObNewRow tmp_row;
-      RowDesc row_desc;
-      ObObj temp_obj;
-      ParamStore dummy_params;
-
-      OZ (ObSQLUtils::wrap_expr_ctx(stmt_type, exec_ctx, exec_ctx.get_allocator(), expr_ctx));
-      ObExprOperatorFactory expr_op_factory(exec_ctx.get_allocator());
-      ObRawExprFactory raw_expr_factory(exec_ctx.get_allocator());
-      ObExprGeneratorImpl expr_gen(expr_op_factory, 0, 0, NULL, row_desc);
-      ObSqlExpression sql_expr(exec_ctx.get_allocator());
-      expr_ctx.cast_mode_ = CM_WARN_ON_FAIL; //always set to WARN_ON_FAIL to allow calculate
-
-      ObConstRawExpr *transition_expr = NULL;
-      ObConstRawExpr *interval_expr = NULL;
-
-      OZ (ObRawExprUtils::build_const_obj_expr(raw_expr_factory, transition_point.get_obj_ptr()[0], transition_expr));
-      OZ (ObRawExprUtils::build_const_obj_expr(raw_expr_factory, interval_range.get_obj_ptr()[0], interval_expr));
-
-      OZ (interval_expr->formalize(exec_ctx.get_my_session()));
-      CK (interval_expr->is_const_expr());
-
-      OZ (sql::ObPartitionExecutorUtils::check_transition_interval_valid(stmt::StmtType::T_NONE,
-                                                          exec_ctx,
-                                                          transition_expr,
-                                                          interval_expr));
     }
   }
   return ret;

@@ -18,7 +18,7 @@
 #define OCEANBASE_SHARE_OB_COLUMN_CHECKSUM_ERROR_OPERATOR_H_
 
 #include "lib/container/ob_iarray.h"
-#include "common/mysqlclient/ob_isql_client.h"
+#include "lib/mysqlclient/ob_isql_client.h"
 #include "common/ob_tablet_id.h"
 #include "share/scn.h"
 #include "share/storage/ob_column_checksum_error_info_table_storage.h"

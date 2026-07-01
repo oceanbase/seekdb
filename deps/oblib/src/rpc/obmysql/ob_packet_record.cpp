@@ -23,14 +23,14 @@ using namespace oceanbase::obmysql;
 
 namespace oceanbase
 {
-namespace obmysql
-{
-
-bool enable_proto_dia()
+namespace observer{
+bool OB_WEAK_SYMBOL enable_proto_dia()
 {
   return false;
 }
-
+}
+namespace obmysql
+{
 static const char* pkt_type_name[14] =
 {
   "INVALID_PKT",

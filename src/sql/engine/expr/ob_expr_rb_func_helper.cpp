@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_rb_func_helper.h"
-#include "share/roaringbitmap/ob_rb_utils.h"
+#include "lib/roaringbitmap/ob_rb_utils.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;

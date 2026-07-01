@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SQL_ENGINE_EXPR_LIKE_
 #define OCEANBASE_SQL_ENGINE_EXPR_LIKE_
 
-#include "lib/utility/ob_target_specific.h"
+#include "common/ob_target_specific.h"
 #include "sql/engine/expr/ob_expr_operator.h"
 
 namespace oceanbase

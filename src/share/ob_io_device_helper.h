@@ -18,7 +18,7 @@
 #define OCEANBASE_STORAGE_OB_IO_DEVICE_HELPER_H_
 
 #include <stdint.h>
-#include "lib/restore/ob_io_device.h"
+#include "common/storage/ob_io_device.h"
 #include "share/ob_local_device.h"
 #include "share/config/ob_server_config.h"
 

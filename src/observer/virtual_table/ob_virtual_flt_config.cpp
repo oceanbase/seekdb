@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 #include "observer/virtual_table/ob_virtual_flt_config.h"
-#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind the server_struct include chain, make the dependency explicit
 
 using namespace oceanbase::common;
 using namespace oceanbase::obmysql;

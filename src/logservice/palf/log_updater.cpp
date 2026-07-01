@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include "share/ob_thread_mgr.h"
 #include "log_updater.h"
 #include "palf_env_impl.h"                    // IPalfEnvImpl
 namespace oceanbase

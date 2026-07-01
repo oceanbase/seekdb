@@ -17,7 +17,7 @@
 #pragma once
 
 #include "lib/allocator/page_arena.h"
-#include "sql/engine/vector/ob_i_vector.h"
+#include "share/vector/ob_i_vector.h"
 
 namespace oceanbase
 {

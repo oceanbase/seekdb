@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 #include "ob_index_usage_info_mgr.h"
-#include "share/ob_server_struct.h"
 #include "share/rc/ob_module_provider.h"
+#include "observer/ob_server_struct.h"
 
 #define USING_LOG_PREFIX SERVER
 using namespace oceanbase::common;
@@ -133,13 +133,72 @@ int ObIndexUsageInfoMgr::init()
   return ret;
 }
 
-// moved definition to observer/omt/ob_multi_tenant.cpp(omt/freezer real user)
+void ObIndexUsageInfoMgr::destroy() 
+{
+  if (is_inited_) {
+    // cancel report task
+    if (report_task_.get_is_inited()) {
+      bool is_exist = true;
+      if (TG_TASK_EXIST(share::g_mp->shared_timer()->get_tg_id(), report_task_, is_exist) == OB_SUCCESS && is_exist) {
+        TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), report_task_);
+        TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), report_task_);
+        report_task_.destroy();
+      }
+    } 
+    if (refresh_conf_task_.get_is_inited()) {
+      bool is_exist = true;
+      if (TG_TASK_EXIST(share::g_mp->shared_timer()->get_tg_id(), refresh_conf_task_, is_exist) == OB_SUCCESS && is_exist) {
+        TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_conf_task_);
+        TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_conf_task_);
+        refresh_conf_task_.destroy();
+      }
+    }
+    is_inited_ = false;
+    is_enabled_ = false;
+    destroy_hash_map();
+    allocator_.reset();
+  }
+}
 
-// moved definition to the upper-layer owner cpp(omt/timer real user)
+int ObIndexUsageInfoMgr::start() 
+{
+  int ret = OB_SUCCESS;
+  if (is_inited_) {
+    // report index usage
+    if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(), report_task_, INDEX_USAGE_REPORT_INTERVAL, true))) {
+      LOG_WARN("failed to schedule index usage report task", K(ret));
+    } else if (OB_FAIL(report_task_.init(this))) {
+      LOG_WARN("fail to init report task", K(ret));
+    } else if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(), refresh_conf_task_, INDEX_USAGE_REFRESH_CONF_INTERVAL, true))) {
+      LOG_WARN("failed to schedule index usage refresh conf task", K(ret));
+    } else if (OB_FAIL(refresh_conf_task_.init((this)))) {
+      LOG_WARN("fail to init refresh conf task", K(ret));
+    } else {
+      LOG_TRACE("success to start ObIndexUsageInfoMgr");
+    }
+  }
+  return ret;
+}
 
-// moved definition to the upper-layer owner cpp(omt/timer real user)
+void ObIndexUsageInfoMgr::stop() 
+{
+  if (OB_LIKELY(report_task_.get_is_inited())) {
+    TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), report_task_);
+  }
+  if (OB_LIKELY(refresh_conf_task_.get_is_inited())) {
+    TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_conf_task_);
+  }
+}
 
-// moved definition to the upper-layer owner cpp(omt/timer real user)
+void ObIndexUsageInfoMgr::wait() 
+{
+  if (OB_LIKELY(report_task_.get_is_inited())) {
+    TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), report_task_);
+  }
+  if (OB_LIKELY(refresh_conf_task_.get_is_inited())) {
+    TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_conf_task_);
+  }
+}
 
 bool ObIndexUsageInfoMgr::sample_filterd(const uint64_t random_num) 
 {

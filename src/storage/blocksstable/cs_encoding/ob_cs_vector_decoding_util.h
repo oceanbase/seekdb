@@ -17,10 +17,10 @@
 #ifndef OCEANBASE_CS_ENCODING_OB_CS_VECTOR_DECODING_UTIL_H_
 #define OCEANBASE_CS_ENCODING_OB_CS_VECTOR_DECODING_UTIL_H_
 
-#include "sql/engine/vector/ob_uniform_vector.h"
-#include "sql/engine/vector/ob_continuous_vector.h"
-#include "sql/engine/vector/ob_discrete_vector.h"
-#include "sql/engine/vector/ob_fixed_length_vector.h"
+#include "src/share/vector/ob_uniform_vector.h"
+#include "src/share/vector/ob_continuous_vector.h"
+#include "src/share/vector/ob_discrete_vector.h"
+#include "src/share/vector/ob_fixed_length_vector.h"
 
 namespace oceanbase
 {

@@ -18,7 +18,7 @@
 #define OCEANBASE_SQL_EXECUTOR_OB_DIRECT_RECEIVE_OP_
 
 #include "sql/engine/px/exchange/ob_receive_op.h"
-#include "sql/ob_scanner.h"
+#include "share/ob_scanner.h"
 namespace oceanbase
 {
 namespace sql

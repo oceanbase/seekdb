@@ -15,7 +15,6 @@
  */
 
 #include "hmac_signature.h"
-#include "lib/utility/ob_sort.h"
 #include "lib/encode/ob_base64_encode.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/container/ob_array_iterator.h"

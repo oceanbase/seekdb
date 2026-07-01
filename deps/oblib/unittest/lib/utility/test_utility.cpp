@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 #include <fstream>
-#include "lib/rc/context.h"
+#include "deps/oblib/src/lib/rc/context.h"
 
 #ifdef __APPLE__
 #define __timezone timezone
@@ -81,15 +81,6 @@ TEST(utility, DISABLED_get_ethernet_speed)
 
   if (OB_FILE_NOT_EXIST == get_ethernet_speed("bond0", speed)) {
     ASSERT_EQ(OB_SUCCESS, get_ethernet_speed("eth0", speed));
-  }
-  // Some hosts (virtualized / bonded NICs) report link speed as -1 (unknown)
-  // in /sys/class/net/<dev>/speed. That is a hardware/OS fact, not a code
-  // defect, so skip the speed-magnitude assertion when no valid speed is
-  // reported instead of failing the test.
-  if (speed <= 0) {
-    fprintf(stderr, "[ SKIPPED  ] NIC reports no valid link speed (%ld); "
-            "/sys/class/net/<dev>/speed unavailable on this host\n", speed);
-    return;
   }
   ASSERT_GE(speed, 1 << 20);
   _OB_LOG(INFO, "speed %ld", speed);

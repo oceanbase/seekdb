@@ -24,7 +24,7 @@
 #include "sql/resolver/dml/ob_select_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_wrap_enum_set.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
-#include "ob_pl_compile.h"
+#include "ob_pl_build.h"
 #include "pl/ob_pl_dependency_util.h"
 #include "pl/ob_pl_package.h"
 #include "pl/parser/parse_stmt_item_type.h"
@@ -1067,7 +1067,7 @@ int ObPLResolver::get_const_number_variable_literal_value(ObRawExpr *expr, int64
 
 
 int ObPLResolver::resolve_sp_composite_type(const ParseNode *sp_data_type_node,
-                                            ObPLCompileUnitAST &func,
+                                            ObPLAstUnit &func,
                                             ObPLDataType &data_type,
                                             ObPLExternTypeInfo *extern_type_info)
 {
@@ -1909,7 +1909,7 @@ bool ObPLResolver::is_data_type_name(const ObString &ident_name)
 }
 
 int ObPLResolver::resolve_sp_row_type(const ParseNode *sp_data_type_node,
-                                      ObPLCompileUnitAST &func,
+                                      ObPLAstUnit &func,
                                       ObPLDataType &pl_type,
                                       ObPLExternTypeInfo *extern_type_info,
                                       bool with_rowid)
@@ -2111,8 +2111,9 @@ int ObPLResolver::resolve_sp_row_type(const ParseNode *sp_data_type_node,
       }
     }
   } else {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("unexpected row type parse node", K(ret), "node_type", sp_data_type_node->type_);
+    // dblink not support
+    ret = OB_NOT_IMPLEMENT;
+    LOG_WARN("dblink not support", K(ret));
   }
   CANCLE_LOG_CHECK_MODE();
   return ret;
@@ -2199,7 +2200,7 @@ int ObPLResolver::adjust_routine_param_type(ObPLDataType &type)
 // whether rowid is actual accessed or not.
 int ObPLResolver::resolve_sp_data_type(const ParseNode *sp_data_type_node,
                                        const ObString &ident_name,
-                                       ObPLCompileUnitAST &func,
+                                       ObPLAstUnit &func,
                                        ObPLDataType &data_type,
                                        ObPLExternTypeInfo *extern_type_info,
                                        bool with_rowid,
@@ -2218,6 +2219,9 @@ int ObPLResolver::resolve_sp_data_type(const ParseNode *sp_data_type_node,
     } else if (T_SP_TYPE == sp_data_type_node->type_
                || T_SP_ROWTYPE == sp_data_type_node->type_) {
       OZ (resolve_sp_row_type(sp_data_type_node, func, data_type, extern_type_info, with_rowid));
+    } else if (T_SP_DBLINK_TYPE == sp_data_type_node->type_) {
+      ret = OB_NOT_IMPLEMENT;
+      LOG_WARN("dblink not support", K(ret));
     } else {
       OX (data_type.set_enum_set_ctx(resolve_ctx_.enum_set_ctx_));
       OZ (resolve_sp_scalar_type(resolve_ctx_.allocator_,
@@ -2268,7 +2272,7 @@ int ObPLResolver::resolve_sp_data_type(const ParseNode *sp_data_type_node,
 int ObPLResolver::resolve_declare_var(const ObStmtNodeTree *parse_tree, ObPLDeclareVarStmt *stmt, ObPLFunctionAST &func)
 {
   int ret = OB_SUCCESS;
-  ObPLCompileUnitAST &unit_ast = static_cast<ObPLCompileUnitAST&>(func);
+  ObPLAstUnit &unit_ast = static_cast<ObPLAstUnit&>(func);
   if (OB_FAIL(check_declare_order(PL_VAR))) {
     LOG_WARN("fail to check decalre order", K(ret));
   } else {
@@ -2280,14 +2284,14 @@ int ObPLResolver::resolve_declare_var(const ObStmtNodeTree *parse_tree, ObPLDecl
 int ObPLResolver::resolve_declare_var(const ObStmtNodeTree *parse_tree, ObPLPackageAST &package_ast)
 {
   int ret = OB_SUCCESS;
-  ObPLCompileUnitAST &unit_ast = static_cast<ObPLCompileUnitAST&>(package_ast);
+  ObPLAstUnit &unit_ast = static_cast<ObPLAstUnit&>(package_ast);
   ret = resolve_declare_var_comm(parse_tree, NULL, unit_ast);
   return ret;
 }
 
 int ObPLResolver::resolve_declare_var_comm(const ObStmtNodeTree *parse_tree,
                                            ObPLDeclareVarStmt *stmt,
-                                           ObPLCompileUnitAST &unit_ast)
+                                           ObPLAstUnit &unit_ast)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(parse_tree));
@@ -3954,7 +3958,7 @@ int ObPLResolver::resolve_declare_cond(const ObStmtNodeTree *parse_tree,
 
 int ObPLResolver::resolve_declare_cond(const ObStmtNodeTree *parse_tree,
                                        ObPLDeclareCondStmt *stmt,
-                                       ObPLCompileUnitAST &func)
+                                       ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   UNUSED(func);
@@ -4372,13 +4376,14 @@ int ObPLResolver::resolve_call(const ObStmtNodeTree *parse_tree, ObPLCallStmt *s
       ObString package_name;
       ObString sp_name;
       ObArray<ObRawExpr *> expr_params;
+      ObString dblink_name;
       ObSEArray<ObSchemaObjVersion, 1> deps;
       if (T_SP_ACCESS_NAME != name_node->type_) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Invalid procedure name node", K(name_node->type_), K(ret));
       } else if (OB_FAIL(ObResolverUtils::resolve_sp_access_name(schema_checker,
                             resolve_ctx_.session_info_.get_database_name(),
-                            *name_node, db_name, package_name, sp_name, &deps))) {
+                            *name_node, db_name, package_name, sp_name, dblink_name, &deps))) {
         LOG_WARN("resolve sp name failed", K(ret));
       }
       OZ (ObPLDependencyUtil::add_dependency_objects(&func.get_dependency_table(), deps));
@@ -4441,7 +4446,7 @@ int ObPLResolver::resolve_cparams_expr(const ParseNode *params_node,
   for (int64_t i = 0; OB_SUCC(ret) && i < params_node->num_child_; ++i) {
     ObRawExpr *expr = NULL;
     CK (params_node->children_[i]);
-    OZ (resolve_expr(params_node->children_[i], static_cast<ObPLCompileUnitAST&>(func), expr,
+    OZ (resolve_expr(params_node->children_[i], static_cast<ObPLAstUnit&>(func), expr,
                      combine_line_and_col(params_node->children_[i]->stmt_loc_), true, NULL));
     CK (OB_NOT_NULL(expr));
     OZ (exprs.push_back(expr));
@@ -5126,7 +5131,7 @@ int ObPLResolver::resolve_cursor_def(const ObString &cursor_name,
                                       ObPLBlockNS &sql_ns,
                                       ObPLDataType &cursor_type,
                                       const ObIArray<int64_t> &formal_params,
-                                      ObPLCompileUnitAST &func,
+                                      ObPLAstUnit &func,
                                       int64_t &cursor_index) // CURSOR index in the symbol table
 {
   int ret = OB_SUCCESS;
@@ -5375,7 +5380,7 @@ int ObPLResolver::resolve_declare_cursor(const ObStmtNodeTree *parse_tree, ObPLP
 }
 
 int ObPLResolver::resolve_declare_cursor(
-  const ObStmtNodeTree *parse_tree, ObPLDeclareCursorStmt *stmt, ObPLCompileUnitAST &func)
+  const ObStmtNodeTree *parse_tree, ObPLDeclareCursorStmt *stmt, ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(parse_tree) || OB_ISNULL(current_block_)) {
@@ -5490,7 +5495,7 @@ int ObPLResolver::resolve_declare_cursor(
 
 int ObPLResolver::resolve_cursor_common(const ObStmtNodeTree *name_node,
                                         const ObStmtNodeTree *type_node,
-                                        ObPLCompileUnitAST &func,
+                                        ObPLAstUnit &func,
                                         ObString &name,
                                         ObPLDataType &return_type)
 {
@@ -5510,7 +5515,7 @@ int ObPLResolver::resolve_cursor_common(const ObStmtNodeTree *name_node,
 }
 
 int ObPLResolver::resolve_cursor_formal_param(
-  const ObStmtNodeTree *param_list, ObPLCompileUnitAST &func, ObIArray<int64_t> &params)
+  const ObStmtNodeTree *param_list, ObPLAstUnit &func, ObIArray<int64_t> &params)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(current_block_) || OB_ISNULL(param_list)) {
@@ -6361,7 +6366,7 @@ int ObPLResolver::build_raw_expr(const ParseNode &node,
 }
 
 int ObPLResolver::build_raw_expr(const ParseNode *node,
-                                 ObPLCompileUnitAST &unit_ast,
+                                 ObPLAstUnit &unit_ast,
                                  ObRawExpr *&expr,
                                  const ObPLDataType *expected_type)
 {
@@ -6721,7 +6726,7 @@ int ObPLResolver::check_access_external_state(ObRawExpr *&expr,
 }
 
 int ObPLResolver::analyze_expr_type(ObRawExpr *&expr,
-                                    ObPLCompileUnitAST &unit_ast)
+                                    ObPLAstUnit &unit_ast)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(expr));
@@ -6761,7 +6766,7 @@ int ObPLResolver::set_udf_expr_line_number(ObRawExpr *expr, uint64_t line_number
 }
 
 int ObPLResolver::resolve_expr(const ParseNode *node,
-                               ObPLCompileUnitAST &unit_ast,
+                               ObPLAstUnit &unit_ast,
                                ObRawExpr *&expr,
                                uint64_t line_number,
                                bool need_add,
@@ -7039,7 +7044,7 @@ int ObPLResolver::check_anonymous_array_compatible (const ObPLINS &ns,
 int ObPLResolver::transform_subquery_expr(const ParseNode *node,
                                           ObRawExpr *&expr,
                                           const ObPLDataType *expected_type,
-                                          ObPLCompileUnitAST &func)
+                                          ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(expr));
@@ -7305,7 +7310,7 @@ int ObPLResolver::replace_to_const_expr_if_need(ObRawExpr *&expr)
   return ret;
 }
 
-int ObPLResolver::resolve_columns(ObRawExpr *&expr, ObArray<ObQualifiedName> &columns, ObPLCompileUnitAST &unit_ast)
+int ObPLResolver::resolve_columns(ObRawExpr *&expr, ObArray<ObQualifiedName> &columns, ObPLAstUnit &unit_ast)
 {
   int ret = OB_SUCCESS;
   ObArray<ObRawExpr*> real_exprs;
@@ -7386,7 +7391,7 @@ int ObPLResolver::resolve_raw_expr(const ParseNode &node,
         }
       }
 
-      OZ (ObPLCompiler::init_anonymous_ast(func_ast,
+      OZ (ObPLBuilder::init_anonymous_ast(func_ast,
                                             *(params.allocator_),
                                             *(params.session_info_),
                                             *(params.sql_proxy_),
@@ -7480,7 +7485,7 @@ int ObPLResolver::resolve_raw_expr(const ParseNode &node,
                                     is_prepare_protocol));
 
         for(int64_t i = 0; OB_SUCC(ret) && i < columns.count(); ++i) {
-          OZ (resolver.resolve_columns(expr, columns, static_cast<ObPLCompileUnitAST &>(func_ast)));
+          OZ (resolver.resolve_columns(expr, columns, static_cast<ObPLAstUnit &>(func_ast)));
         }
         // The call stack for this interface:
         // resolve_into_variable_node -> resolve_external_expr -> resolve_raw_expr
@@ -7576,7 +7581,8 @@ int ObPLResolver::resolve_inner_call(
             if (access_idxs.at(access_idxs.count() - 1).access_type_ == ObObjAccessIdx::IS_DB_NS
                 || access_idxs.at(access_idxs.count() - 1).access_type_ == ObObjAccessIdx::IS_PKG_NS
                 || access_idxs.at(access_idxs.count() - 1).access_type_ == ObObjAccessIdx::IS_LABEL_NS
-                || access_idxs.at(access_idxs.count() - 1).access_type_ == ObObjAccessIdx::IS_UDT_NS) {
+                || access_idxs.at(access_idxs.count() - 1).access_type_ == ObObjAccessIdx::IS_UDT_NS
+                || access_idxs.at(access_idxs.count() - 1).access_type_ == ObObjAccessIdx::IS_DBLINK_PKG_NS) {
               is_routine = true;
             }
           } else {
@@ -7614,8 +7620,9 @@ int ObPLResolver::resolve_inner_call(
         }
       }
     } else {
+      // PLFunction with dblink call statement cannot be added to plan cache
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("unexpected access parse tree", K(ret), "node_type", parse_tree->type_);
+      LOG_WARN("dblink not support", K(ret));
     }
 
     if (OB_SUCC(ret)) {
@@ -7932,7 +7939,7 @@ int ObPLResolver::resolve_obj_access_idents(const ParseNode &node,
 
 int ObPLResolver::resolve_obj_access_idents(const ParseNode &node,
                                             ObIArray<ObObjAccessIdent> &obj_access_idents,
-                                            ObPLCompileUnitAST &func)
+                                            ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   CK (OB_LIKELY(T_SP_OBJ_ACCESS_REF == node.type_));
@@ -8068,7 +8075,7 @@ int ObPLResolver::resolve_obj_access_idents(const ParseNode &node,
 int ObPLResolver::resolve_qualified_identifier(ObQualifiedName &q_name,
                                                ObIArray<ObQualifiedName> &columns,
                                                ObIArray<ObRawExpr*> &real_exprs,
-                                               ObPLCompileUnitAST &unit_ast,
+                                               ObPLAstUnit &unit_ast,
                                                ObRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
@@ -8088,7 +8095,7 @@ int ObPLResolver::resolve_qualified_identifier(ObQualifiedName &q_name,
 }
 
 int ObPLResolver::resolve_sqlcode_or_sqlerrm(ObQualifiedName &q_name,
-                                             ObPLCompileUnitAST &unit_ast,
+                                             ObPLAstUnit &unit_ast,
                                              ObRawExpr *&expr)
 {
   // This point is reached if it is definitely a parameterless SQLCODE or SQLERRM, parameterized SQLERRM has already been handled by is_sysfunc
@@ -8356,7 +8363,7 @@ int ObPLResolver::resolve_associative_array_construct(const ObQualifiedName &q_n
 }
 
 int ObPLResolver::resolve_udf_without_brackets(
-  ObQualifiedName &q_name, ObPLCompileUnitAST &unit_ast, ObRawExpr *&expr)
+  ObQualifiedName &q_name, ObPLAstUnit &unit_ast, ObRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
   ObUDFRawExpr *udf_expr = NULL;
@@ -8442,7 +8449,7 @@ int ObPLResolver::replace_udf_param_expr(
 int ObPLResolver::resolve_qualified_name(ObQualifiedName &q_name,
                                          ObIArray<ObQualifiedName> &columns,
                                          ObIArray<ObRawExpr*> &real_exprs,
-                                         ObPLCompileUnitAST &unit_ast,
+                                         ObPLAstUnit &unit_ast,
                                          ObRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
@@ -8558,7 +8565,7 @@ int ObPLResolver::resolve_qualified_name(ObQualifiedName &q_name,
   return ret;
 }
 
-int ObPLResolver::resolve_var(ObQualifiedName &q_name, ObPLCompileUnitAST &func, ObRawExpr *&expr,
+int ObPLResolver::resolve_var(ObQualifiedName &q_name, ObPLAstUnit &func, ObRawExpr *&expr,
                               bool for_write)
 {
   int ret = OB_SUCCESS;
@@ -8575,7 +8582,7 @@ int ObPLResolver::resolve_var(ObQualifiedName &q_name, ObPLCompileUnitAST &func,
 
 
 int ObPLResolver::resolve_udf_info(
-  ObUDFInfo &udf_info, ObIArray<ObObjAccessIdx> &access_idxs, ObPLCompileUnitAST &func,
+  ObUDFInfo &udf_info, ObIArray<ObObjAccessIdx> &access_idxs, ObPLAstUnit &func,
   const ObIRoutineInfo *routine_info)
 {
   int ret = OB_SUCCESS;
@@ -8585,6 +8592,7 @@ int ObPLResolver::resolve_udf_info(
   ObSchemaChecker schema_checker;
   ObProcType routine_type = STANDALONE_FUNCTION;
   ObSEArray<ObRawExpr*, 4> expr_params;
+  ObString dblink_name;
 
   CK (OB_NOT_NULL(udf_info.ref_expr_));
   CK (OB_NOT_NULL(current_block_));
@@ -9688,7 +9696,7 @@ int ObPLResolver::check_variable_accessible(ObRawExpr *expr, bool for_write)
 
 int ObPLResolver::resolve_var(ObQualifiedName &q_name, ObPLBlockNS &ns,
                               ObRawExprFactory &expr_factory, const ObSQLSessionInfo *session_info,
-                              ObPLCompileUnitAST &func, ObRawExpr *&expr, bool for_write)
+                              ObPLAstUnit &func, ObRawExpr *&expr, bool for_write)
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObObjAccessIdx, 8> access_idxs;
@@ -9945,7 +9953,7 @@ int ObPLResolver::resolve_name(ObQualifiedName &q_name,
                                ObRawExprFactory &expr_factory,
                                const ObSQLSessionInfo *session_info,
                                ObIArray<ObObjAccessIdx> &access_idxs,
-                               ObPLCompileUnitAST &func)
+                               ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(q_name.access_idents_.empty())) {
@@ -10097,7 +10105,8 @@ int ObPLResolver::get_names_by_access_ident(ObObjAccessIdent &access_ident,
     // do nothing ...
   } else if (ObObjAccessIdx::IS_PKG_NS == access_idxs.at(cnt - 1).access_type_
              || ObObjAccessIdx::IS_UDT_NS == access_idxs.at(cnt - 1).access_type_
-             || ObObjAccessIdx::IS_LABEL_NS == access_idxs.at(cnt - 1).access_type_) {
+             || ObObjAccessIdx::IS_LABEL_NS == access_idxs.at(cnt - 1).access_type_
+             || ObObjAccessIdx::IS_DBLINK_PKG_NS == access_idxs.at(cnt-1).access_type_) {
     package_name = access_idxs.at(cnt - 1).var_name_;
     if (cnt >= 2) {
       OV (2 == cnt, OB_ERR_UNEXPECTED, K(cnt));
@@ -10189,7 +10198,7 @@ ObPLMockSelfArg::~ObPLMockSelfArg()
 int ObPLResolver::resolve_routine(ObObjAccessIdent &access_ident,
                                   const ObPLBlockNS &ns,
                                   ObIArray<ObObjAccessIdx> &access_idxs,
-                                  ObPLCompileUnitAST &func)
+                                  ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
 
@@ -10197,6 +10206,10 @@ int ObPLResolver::resolve_routine(ObObjAccessIdent &access_ident,
   const ObIRoutineInfo *routine_info = NULL;
   ObSEArray<ObRawExpr*, 4> expr_params;
   ObProcType routine_type = access_ident.is_pl_udf() ? STANDALONE_FUNCTION : STANDALONE_PROCEDURE;
+  bool is_dblink_pkg_ns = false;
+  if (access_idxs.count() > 0) {
+    is_dblink_pkg_ns = (ObObjAccessIdx::IS_DBLINK_PKG_NS == access_idxs.at(access_idxs.count()-1).access_type_);
+  }
   OZ (get_names_by_access_ident(
     access_ident, access_idxs, database_name, package_name, routine_name));
 
@@ -10226,13 +10239,18 @@ int ObPLResolver::resolve_routine(ObObjAccessIdent &access_ident,
     {
       ObPLMockSelfArg self(access_idxs, expr_params, expr_factory_, resolve_ctx_.session_info_);
       OZ (self.mock());
-      OZ (ns.resolve_routine(resolve_ctx_,
-                            database_name,
-                            package_name,
-                            routine_name,
-                            expr_params,
-                            routine_type,
-                            routine_info));
+      if (!is_dblink_pkg_ns) {
+        OZ (ns.resolve_routine(resolve_ctx_,
+                              database_name,
+                              package_name,
+                              routine_name,
+                              expr_params,
+                              routine_type,
+                              routine_info));
+      } else {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("not support dblink ", K(ret));
+      }
     }
 
     if (OB_FAIL(ret)
@@ -10275,7 +10293,7 @@ int ObPLResolver::resolve_routine(ObObjAccessIdent &access_ident,
 int ObPLResolver::resolve_function(ObObjAccessIdent &access_ident,
                                    ObIArray<ObObjAccessIdx> &access_idxs,
                                    const ObIRoutineInfo *routine_info,
-                                   ObPLCompileUnitAST &func)
+                                   ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
 
@@ -10360,7 +10378,7 @@ int ObPLResolver::resolve_construct(ObObjAccessIdent &access_ident,
                                     const ObPLBlockNS &ns,
                                     ObIArray<ObObjAccessIdx> &access_idxs,
                                     uint64_t user_type_id,
-                                    ObPLCompileUnitAST &func)
+                                    ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   ObQualifiedName q_name;
@@ -10448,7 +10466,7 @@ int ObPLResolver::build_self_access_idx(ObObjAccessIdx &self_access_idx, const O
 int ObPLResolver::resolve_self_element_access(ObObjAccessIdent &access_ident,
                                               const ObPLBlockNS &ns,
                                               ObIArray<ObObjAccessIdx> &access_idxs,
-                                              ObPLCompileUnitAST &func)
+                                              ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   const ObPLBlockNS *udt_routine_ns = ns.get_udt_routine_ns();
@@ -10552,7 +10570,7 @@ int ObPLResolver::build_collection_index_expr(ObObjAccessIdent &access_ident,
                                               const ObPLBlockNS &ns,
                                               ObIArray<ObObjAccessIdx> &access_idxs,
                                               const ObUserDefinedType &user_type,
-                                              ObPLCompileUnitAST &func)
+                                              ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   if (!access_ident.params_.empty()
@@ -10604,7 +10622,7 @@ int ObPLResolver::build_collection_index_expr(ObObjAccessIdent &access_ident,
 int ObPLResolver::resolve_composite_access(ObObjAccessIdent &access_ident,
                                            ObIArray<ObObjAccessIdx> &access_idxs,
                                            const ObPLBlockNS &ns,
-                                           ObPLCompileUnitAST &func)
+                                           ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
 
@@ -10718,7 +10736,7 @@ int ObPLResolver::resolve_access_ident(ObObjAccessIdent &access_ident, // The id
                                        ObRawExprFactory &expr_factory,
                                        const ObSQLSessionInfo *session_info,
                                        ObIArray<ObObjAccessIdx> &access_idxs, // already resolved ident information, as the parent node of the current ident
-                                       ObPLCompileUnitAST &func,
+                                       ObPLAstUnit &func,
                                        bool is_routine,
                                        bool is_resolve_rowtype)
 {
@@ -10741,6 +10759,7 @@ int ObPLResolver::resolve_access_ident(ObObjAccessIdent &access_ident, // The id
       || ObObjAccessIdx::IS_TABLE_NS == access_idxs.at(cnt - 1).access_type_
       || ObObjAccessIdx::IS_LABEL_NS == access_idxs.at(cnt - 1).access_type_
       || ObObjAccessIdx::IS_UDT_NS == access_idxs.at(cnt - 1).access_type_
+      || ObObjAccessIdx::IS_DBLINK_PKG_NS == access_idxs.at(cnt-1).access_type_
       || is_routine) {
     bool label_symbol = false;
     if (cnt != 0) {
@@ -10816,7 +10835,8 @@ int ObPLResolver::resolve_access_ident(ObObjAccessIdent &access_ident, // The id
                || (ObPLExternalNS::TABLE_NS == type && is_routine)
                || (ObPLExternalNS::LABEL_NS == type && is_routine)
                || (ObPLExternalNS::DB_NS == type && is_routine)
-               || (ObPLExternalNS::PKG_NS == type && is_routine)) {
+               || (ObPLExternalNS::PKG_NS == type && is_routine)
+               || (ObPLExternalNS::DBLINK_PKG_NS == type && is_routine)) {
       if (is_routine) {
         if (ObPLExternalNS::UDT_MEMBER_ROUTINE == type && access_idxs.empty()) {
           ObObjAccessIdx self_access_idx;
@@ -10882,7 +10902,7 @@ int ObPLResolver::resolve_access_ident(ObObjAccessIdent &access_ident, // The id
 int ObPLResolver::build_collection_attribute_access(ObRawExprFactory &expr_factory,
                                                     const ObSQLSessionInfo *session_info,
                                                     const ObPLBlockNS &ns,
-                                                    ObPLCompileUnitAST &func,
+                                                    ObPLAstUnit &func,
                                                     const ObUserDefinedType &user_type,
                                                     ObIArray<ObObjAccessIdx> &access_idxs,
                                                     int64_t attr_index,
@@ -10896,7 +10916,7 @@ int ObPLResolver::build_collection_attribute_access(ObRawExprFactory &expr_facto
 
 int ObPLResolver::build_collection_access(ObObjAccessIdent &access_ident,
                                         ObIArray<ObObjAccessIdx> &access_idxs,
-                                        ObPLCompileUnitAST &func,
+                                        ObPLAstUnit &func,
                                         int64_t start_level)
 {
   int ret = OB_SUCCESS;
@@ -10906,7 +10926,7 @@ int ObPLResolver::build_collection_access(ObObjAccessIdent &access_ident,
 
 int ObPLResolver::build_return_access(ObObjAccessIdent &access_ident,
                                           ObIArray<ObObjAccessIdx> &access_idxs,
-                                          ObPLCompileUnitAST &func)
+                                          ObPLAstUnit &func)
 {
   return build_collection_access(access_ident, access_idxs, func, 1/*start level = 1*/);
 }
@@ -11014,7 +11034,7 @@ static ObPredefinedException PREDEFINED_EXCEPTIONS[] =
 int ObPLResolver::resolve_condition(const ObStmtNodeTree *parse_tree,
                                     const ObPLBlockNS &ns,
                                     const ObPLConditionValue **value,
-                                    ObPLCompileUnitAST &func)
+                                    ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(parse_tree));
@@ -11024,6 +11044,7 @@ int ObPLResolver::resolve_condition(const ObStmtNodeTree *parse_tree,
     ObString db_name;
     ObString package_name;
     ObString condition_name;
+    ObString dblink_name;
     ObSEArray<ObSchemaObjVersion, 1> deps;
     OZ (schema_checker.init(resolve_ctx_.schema_guard_, resolve_ctx_.session_info_.get_server_sid()));
     OZ (ObResolverUtils::resolve_sp_access_name(schema_checker,
@@ -11032,6 +11053,7 @@ int ObPLResolver::resolve_condition(const ObStmtNodeTree *parse_tree,
                                                db_name,
                                                package_name,
                                                condition_name,
+                                               dblink_name,
                                                &deps));
     OZ (ObPLDependencyUtil::add_dependency_objects(&func.get_dependency_table(), deps));
     if (OB_FAIL(ret)) {
@@ -11158,7 +11180,7 @@ int ObPLResolver::resolve_condition(const ObString &name, const ObPLBlockNS &ns,
 
 int ObPLResolver::resolve_handler_condition(const ObStmtNodeTree *parse_tree,
                                             ObPLConditionValue &condition,
-                                            ObPLCompileUnitAST &func)
+                                            ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(parse_tree)) {
@@ -11354,7 +11376,7 @@ int ObPLResolver::build_seq_value_expr(ObRawExpr *&expr,
 
 
 int ObPLResolver::resolve_sequence_object(const ObQualifiedName &q_name,
-                                          ObPLCompileUnitAST &unit_ast,
+                                          ObPLAstUnit &unit_ast,
                                           ObRawExpr *&real_ref_expr)
 {
   int ret = OB_SUCCESS;
@@ -11366,6 +11388,7 @@ int ObPLResolver::resolve_sequence_object(const ObQualifiedName &q_name,
       LOG_WARN("init schemachecker failed.");
     } else {
       // check if sequence is created. will also check synonym
+      uint64_t dblink_id = OB_INVALID_ID;
       if (OB_FAIL(ob_sequence_ns_checker_.check_sequence_namespace(q_name,
                                                                   &resolve_ctx_.session_info_,
                                                                   &sc,
@@ -11373,7 +11396,7 @@ int ObPLResolver::resolve_sequence_object(const ObQualifiedName &q_name,
         LOG_WARN_IGNORE_COL_NOTFOUND(ret, "check basic column namespace failed", K(ret), K(q_name));
       } else if(OB_FAIL(build_seq_value_expr(real_ref_expr, q_name, seq_id))) {
         LOG_WARN("failed to resolve seq.", K(ret));
-      } else {
+      } else if (OB_INVALID_ID == dblink_id) {
         int64_t schema_version = OB_INVALID_VERSION;
         ObSchemaObjVersion obj_version;
         
@@ -11385,6 +11408,9 @@ int ObPLResolver::resolve_sequence_object(const ObQualifiedName &q_name,
         OX (obj_version.object_type_ = DEPENDENCY_SEQUENCE);
         OX (obj_version.version_ = schema_version);
         OZ (ObPLDependencyUtil::add_dependency_object_impl(unit_ast.get_dependency_table(), obj_version));
+      } else {
+        ObSequenceRawExpr *seq_expr = static_cast<ObSequenceRawExpr*>(real_ref_expr);
+        unit_ast.set_can_cached(false);
       }
       if (OB_SUCC(ret)) {
         unit_ast.set_has_sequence();
@@ -11548,7 +11574,7 @@ int ObPLResolver::add_external_cursor(ObPLBlockNS &ns,
                                       const ObPLBlockNS *external_ns,
                                       const ObPLCursor &cursor,
                                       int64_t &index,
-                                      ObPLCompileUnitAST &func)
+                                      ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   OX (index = OB_INVALID_INDEX);
@@ -11710,7 +11736,7 @@ int ObPLResolver::resolve_obj_access_ref_for_cursor_node(
 }
 
 int ObPLResolver::resolve_cursor(
-  const ObStmtNodeTree *parse_tree, const ObPLBlockNS &ns, int64_t &index, ObPLCompileUnitAST &func)
+  const ObStmtNodeTree *parse_tree, const ObPLBlockNS &ns, int64_t &index, ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(parse_tree));
@@ -11799,7 +11825,7 @@ int ObPLResolver::resolve_cursor(
 }
 
 int ObPLResolver::resolve_package_cursor(
-  uint64_t package_id, const ObString &cursor_name, int64_t &index, ObPLCompileUnitAST &func)
+  uint64_t package_id, const ObString &cursor_name, int64_t &index, ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   int64_t idx = OB_INVALID_INDEX;
@@ -11886,7 +11912,7 @@ int ObPLResolver::resolve_questionmark_cursor(
 
 int ObPLResolver::resolve_local_cursor(
   const ObString &name, const ObPLBlockNS &ns,
-  int64_t &cursor, ObPLCompileUnitAST &func, bool check_mode, bool for_external_cursor)
+  int64_t &cursor, ObPLAstUnit &func, bool check_mode, bool for_external_cursor)
 {
   int ret = OB_SUCCESS;
   cursor = OB_INVALID_INDEX;
@@ -12297,7 +12323,7 @@ int ObPLResolver::check_param_default_expr_legal(ObRawExpr *expr, bool is_subpro
 }
 
 int ObPLResolver::resolve_routine_decl_param_list(const ParseNode *param_list,
-                                                  ObPLCompileUnitAST &unit_ast,
+                                                  ObPLAstUnit &unit_ast,
                                                   ObPLRoutineInfo &routine_info)
 {
   int ret = OB_SUCCESS;
@@ -12566,7 +12592,7 @@ int ObPLResolver::check_params_legal_in_body_routine(ObPLFunctionAST &routine_as
 }
 
 int ObPLResolver::resolve_routine_decl(const ObStmtNodeTree *parse_tree,
-                                       ObPLCompileUnitAST &unit_ast,
+                                       ObPLAstUnit &unit_ast,
                                        ObPLRoutineInfo *&routine_info,
                                        bool is_udt_routine,
                                        bool resolve_routine_def)
@@ -12897,7 +12923,7 @@ int ObPLResolver::resolve_routine_block(const ObStmtNodeTree *parse_tree,
 }
 
 int ObPLResolver::resolve_routine_def(const ObStmtNodeTree *parse_tree,
-                                      ObPLCompileUnitAST &unit_ast,
+                                      ObPLAstUnit &unit_ast,
                                       bool is_udt_routine)
 {
   int ret = OB_SUCCESS;
@@ -13078,7 +13104,7 @@ int64_t ObPLResolver::combine_line_and_col(const ObStmtLoc &loc)
 }
 
 int ObPLResolver::replace_map_or_order_expr(
-  uint64_t udt_id, ObRawExpr *&expr, ObPLCompileUnitAST &func)
+  uint64_t udt_id, ObRawExpr *&expr, ObPLAstUnit &func)
 {
   int ret = OB_SUCCESS;
   ObSEArray<const ObRoutineInfo *, 2> routine_infos;
@@ -13157,7 +13183,7 @@ int ObPLResolver::replace_map_or_order_expr(
 }
 
 
-int ObPLResolver::replace_object_compare_expr(ObRawExpr *&expr, ObPLCompileUnitAST &unit_ast)
+int ObPLResolver::replace_object_compare_expr(ObRawExpr *&expr, ObPLAstUnit &unit_ast)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(expr));
@@ -13429,7 +13455,7 @@ int ObPLResolver::fast_check_status(uint64_t n) const
 
 ObPLSwitchDatabaseGuard::ObPLSwitchDatabaseGuard(sql::ObSQLSessionInfo &session_info,
                                                  share::schema::ObSchemaGetterGuard &schema_guard,
-                                                 ObPLCompileUnitAST &func,
+                                                 ObPLAstUnit &func,
                                                  int &ret_val,
                                                  bool with_rowid)
   : ret_(ret_val),

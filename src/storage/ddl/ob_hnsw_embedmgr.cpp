@@ -20,7 +20,7 @@
 #include "lib/oblog/ob_log.h"
 #include "storage/ddl/ob_ddl_pipeline.h"
 #include "sql/engine/expr/ob_expr_ai/ob_ai_func_utils.h"
-#include "observer/vector_index/ob_plugin_vector_index_service.h"
+#include "share/vector_index/ob_plugin_vector_index_service.h"
 #include "storage/ddl/ob_hnsw_embedmgr.h"
 
 using namespace oceanbase::storage;

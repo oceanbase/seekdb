@@ -18,7 +18,7 @@
 #define OCEANBASE_SHARE_OB_ZONE_MERGE_TABLE_OPERATOR_
 
 #include "lib/container/ob_iarray.h"
-#include "common/mysqlclient/ob_isql_client.h"
+#include "lib/mysqlclient/ob_isql_client.h"
 #include "common/ob_zone.h"
 #include "share/storage/ob_zone_merge_info_table_storage.h"
 

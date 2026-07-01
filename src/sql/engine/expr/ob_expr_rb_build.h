@@ -18,8 +18,8 @@
 #define OCEANBASE_SQL_OB_EXPR_RB_BUILD
 
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "common/udt/ob_array_type.h"
-#include "share/roaringbitmap/ob_roaringbitmap.h"
+#include "lib/udt/ob_array_type.h"
+#include "lib/roaringbitmap/ob_roaringbitmap.h"
 
 namespace oceanbase
 {

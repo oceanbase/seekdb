@@ -287,56 +287,5 @@ void ObMaintainDepInfoTaskQueue::run2()
   LOG_INFO("async task queue stop");
 }
 
-int process_reference_obj_table(share::schema::ObReferenceObjTable &ref_obj_table,
-                                                     const uint64_t dep_obj_id,
-                                                     const share::schema::ObTableSchema *view_schema,
-                                                     sql::ObMaintainDepInfoTaskQueue &task_queue)
-{
-  int ret = OB_SUCCESS;
-  share::ObTenantRole::Role tenant_role;
-  bool is_standby = false;
-  if (OB_FAIL(share::ObShareUtil::mtl_check_if_tenant_role_is_standby(is_standby))) {
-    LOG_WARN("fail to execute mtl_check_if_tenant_role_is_standby", KR(ret));
-  } else if (OB_UNLIKELY(!ref_obj_table.is_inited() || is_standby)) {
-    if (OB_INVALID_ID != dep_obj_id) {
-      OZ (task_queue.erase_view_id_from_set(dep_obj_id));
-    }
-  } else {
-    SMART_VAR(sql::ObMaintainObjDepInfoTask, task) {
-      share::schema::ObReferenceObjTable::ObGetDependencyObjOp op(&task.get_insert_dep_objs(),
-                              &task.get_update_dep_objs(),
-                              &task.get_delete_dep_objs());
-      if (OB_FAIL(ref_obj_table.get_ref_obj_table().foreach_refactored(op))) {
-        LOG_WARN("traverse ref_obj_version_table_ failed", K(ret));
-      } else if (nullptr != view_schema && OB_FAIL(task.assign_view_schema(*view_schema))) {
-        LOG_WARN("failed to assign view schema", K(ret));
-      } else if (OB_FAIL(op.get_callback_ret())) {
-        LOG_WARN("traverse ref_obj_version_table_ failed", K(ret));
-      } else if (task.is_empty_task()) {
-        if (OB_INVALID_ID != dep_obj_id) {
-          OZ (task_queue.erase_view_id_from_set(dep_obj_id));
-        }
-      } else if (task_queue.is_queue_almost_full()) {
-        ret = OB_SIZE_OVERFLOW;
-      } else if (OB_FAIL(task_queue.push(task))) {
-        if (OB_UNLIKELY(OB_SIZE_OVERFLOW != ret)) {
-          LOG_WARN("push task failed", K(ret));
-        }
-      }
-    }
-  }
-  if (OB_FAIL(ret) && OB_INVALID_ID != dep_obj_id) {
-    int tmp_ret = OB_SUCCESS;
-    if (OB_SUCCESS != (tmp_ret = task_queue.erase_view_id_from_set(dep_obj_id))) {
-      LOG_WARN("failed to erase obj id", K(tmp_ret), K(ret));
-    }
-    if (OB_SIZE_OVERFLOW == ret) {
-      ret = OB_SUCCESS;
-      LOG_TRACE("async queue is full");
-    }
-  }
-  return ret;
-}
-
 }  // namespace sql
 }  // namespace oceanbase

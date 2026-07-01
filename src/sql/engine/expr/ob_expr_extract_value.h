@@ -18,7 +18,7 @@
 #define OCEANBASE_SQL_ENGINE_EXPR_OB_EXPR_EXRACTVALUE_H
 
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "common/xml/ob_xpath.h"
+#include "lib/xml/ob_xpath.h"
 
 namespace oceanbase 
 {

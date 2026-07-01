@@ -23,9 +23,9 @@
 #include "sql/das/ob_group_scan_iter.h"
 #include "sql/das/iter/ob_das_iter.h"
 #include "sql/rewrite/ob_query_range_define.h"
-#include "sql/das/ob_domain_id.h"
+#include "share/domain_id/ob_domain_id.h"
 #include "share/catalog/ob_external_object_ctx.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "share/vector_index/ob_vector_index_util.h"
 
 namespace oceanbase
 {

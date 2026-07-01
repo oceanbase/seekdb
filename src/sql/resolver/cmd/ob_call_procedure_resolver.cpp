@@ -325,6 +325,7 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
   ObString db_name;
   ObString package_name;
   ObString sp_name;
+  ObString dblink_name;
   ObCallProcedureInfo *call_proc_info = NULL;
   const ObRoutineInfo *proc_info = NULL;
   if (OB_ISNULL(schema_checker_) || OB_ISNULL(session_info_)) {
@@ -367,7 +368,7 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
                                                             session_info_->get_database_name(),
                                                             *name_node,
                                                             db_name, package_name, sp_name,
-                                                            nullptr))) {
+                                                            dblink_name))) {
           LOG_WARN("resolve sp name failed", K(ret));
         } else if (db_name.empty() && session_info_->get_database_name().empty()) {
           ret = OB_ERR_NO_DB_SELECTED;
@@ -398,6 +399,7 @@ int ObCallProcedureResolver::resolve(const ParseNode &parse_tree)
                                                       ROUTINE_PROCEDURE_TYPE,
                                                       expr_params,
                                                       proc_info,
+                                                      dblink_name,
                                                       &(call_proc_info->get_allocator())))) {
         LOG_WARN("failed to get routine info", K(ret), K(db_name), K(package_name), K(sp_name));
       } else if (OB_ISNULL(proc_info)) {

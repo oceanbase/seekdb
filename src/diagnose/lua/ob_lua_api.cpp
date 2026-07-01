@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_lua_api.h"
 
 #ifdef __linux__

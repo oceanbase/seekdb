@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STORAGE_DDL_OB_CG_MACRO_BLOCK_WRITE_TASK_H_
 #define OCEANBASE_STORAGE_DDL_OB_CG_MACRO_BLOCK_WRITE_TASK_H_
 
-#include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "share/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/ddl/ob_ddl_pipeline.h"
 #include "storage/ddl/ob_tablet_slice_writer.h"
 #include "storage/ddl/ob_cg_micro_block_write_op.h"

@@ -18,14 +18,13 @@
 #define OCEANBASE_SHARE_IO_OB_IO_CALIBRATION_H
 
 #include "lib/allocator/ob_concurrent_fifo_allocator.h"
-#include "storage/blocksstable/ob_macro_block_handle.h"  // by-value member real user(already conf L2)
-#include "lib/thread/thread_mgr_interface.h"  // TGRunnable base class, previously hidden behind a transitive include(free within lib)
 #include "lib/thread/thread_mgr_interface.h"
 #include "lib/queue/ob_fixed_queue.h"
 #include "lib/container/ob_array_iterator.h"
 #include "lib/container/ob_array_wrap.h"
 #include "lib/lock/ob_drw_lock.h"
 #include "share/io/ob_io_define.h"
+#include "storage/blocksstable/ob_block_manager.h"
 
 namespace oceanbase
 {

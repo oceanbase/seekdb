@@ -19,7 +19,7 @@
 #include "sql/engine/ob_operator.h"
 #include "share/sequence/ob_sequence_cache.h"
 #include "share/schema/ob_schema_struct.h"
-#include "common/mysqlclient/ob_isql_connection_pool.h"
+#include "lib/mysqlclient/ob_isql_connection_pool.h"
 
 namespace oceanbase
 {
@@ -59,6 +59,7 @@ public:
 class ObSequenceExecutor {
   public:
     ObSequenceExecutor()
+      : dblink_id_(OB_INVALID_ID)
     {
       seq_schemas_.set_attr(ObMemAttr("SeqSchema"));
       seq_ids_.set_attr(ObMemAttr("SeqId"));
@@ -69,11 +70,12 @@ class ObSequenceExecutor {
     virtual void destroy() { seq_ids_.reset(); seq_schemas_.reset(); }
     virtual int get_nextval(ObExecContext &ctx)=0;
     int add_sequence_id(uint64_t id) { return seq_ids_.push_back(id); }
-    TO_STRING_KV(K_(seq_ids));
+    TO_STRING_KV(K_(seq_ids), K_(dblink_id));
   protected:
     // schema put into context is to utilize its cache capability
     common::ObSEArray<share::schema::ObSequenceSchema, 1> seq_schemas_;
     common::ObSEArray<uint64_t, 2> seq_ids_;
+    uint64_t dblink_id_;
 };
 
 class ObLocalSequenceExecutor : public ObSequenceExecutor {

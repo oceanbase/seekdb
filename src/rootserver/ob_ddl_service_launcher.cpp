@@ -16,9 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "logservice/ob_log_service.h" // for ObLogService
-#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind the server_struct include chain, make the dependency explicit
 #include "share/rc/ob_module_provider.h"
 #include "lib/lock/ob_spin_rwlock.h" // for SpinRWLock
 #include "ob_ddl_service_launcher.h"

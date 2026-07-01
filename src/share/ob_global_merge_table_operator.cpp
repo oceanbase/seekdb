@@ -21,7 +21,7 @@
 #include "share/ob_zone_merge_info.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "share/storage/ob_merge_info_table_storage.h"
-#include "share/ob_server_struct.h"
+#include "observer/ob_server_struct.h"
 
 namespace oceanbase
 {

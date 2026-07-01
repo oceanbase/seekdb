@@ -17,8 +17,8 @@
 #ifndef OCEANBASE_ENCODING_OB_SEMISTRUCT_JSON_H_
 #define OCEANBASE_ENCODING_OB_SEMISTRUCT_JSON_H_
 
-#include "common/json_type/ob_json_bin.h"
-#include "common/json_type/ob_json_path.h"
+#include "lib/json_type/ob_json_bin.h"
+#include "lib/json_type/ob_json_path.h"
 #include "share/semistruct/ob_sub_column_path.h"
 #include "storage/blocksstable/cs_encoding/ob_dict_encoding_hash_table.h"
 #include "storage/blocksstable/cs_encoding/ob_cs_encoding_allocator.h"

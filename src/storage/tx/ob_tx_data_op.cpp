@@ -15,8 +15,8 @@
  */
 
 #include "ob_tx_data_op.h"
-#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "share/rc/ob_module_provider.h"
+#include "share/allocator/ob_shared_memory_allocator_mgr.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::transaction;

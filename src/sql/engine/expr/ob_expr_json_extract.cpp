@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "ob_expr_json_extract.h"
 #include "ob_expr_json_func_helper.h"
-#include "common/xml/ob_binary_aggregate.h"
+#include "lib/xml/ob_binary_aggregate.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;

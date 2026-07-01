@@ -21,7 +21,7 @@
 #include "sql/resolver/ddl/ob_catalog_stmt.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/ob_rpc_struct.h"
-#include "share/ob_ex_rpc.h"
+#include "observer/ob_ex_rpc.h"
 #include "sql/engine/ob_exec_context.h"
 
 namespace oceanbase

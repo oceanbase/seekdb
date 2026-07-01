@@ -22,7 +22,7 @@
 #include <cstring>
 #include <ostream>
 #include "lib/ob_define.h"
-#include "lib/utility/alloc_assist.h"
+#include "lib/alloc/alloc_assist.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/utility/ob_platform_utils.h"
 

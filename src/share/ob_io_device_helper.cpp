@@ -46,10 +46,10 @@
 #ifndef _WIN32
 #include <sys/statvfs.h>
 #endif
-#include "lib/restore/ob_io_device.h"
+#include "common/storage/ob_io_device.h"
 #include "share/ob_device_manager.h"
 #include "share/ob_io_device_helper.h"
-#include "lib/utility/ob_smart_call.h"
+#include "common/ob_smart_call.h"
 
 using namespace oceanbase::common;
 

@@ -18,7 +18,6 @@
 #define OB_LOG_COMPRESSOR_H_
 
 #include "lib/container/ob_heap.h"
-#include "lib/compress/ob_compress_util.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/thread/thread_mgr_interface.h"
 #include "lib/task/ob_timer_service.h"

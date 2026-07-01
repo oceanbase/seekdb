@@ -20,9 +20,9 @@
 #include "share/rc/ob_module_provider.h"
 #include "storage/access/ob_table_scan_iterator.h"
 #include "ob_lob_persistent_reader.h"
-#include "storage/ob_table_dml_param.h"
+#include "share/schema/ob_table_dml_param.h"
 #include "share/schema/ob_tenant_schema_service.h"
-#include "storage/ob_tablet_autoincrement_service.h"
+#include "share/ob_tablet_autoincrement_service.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase

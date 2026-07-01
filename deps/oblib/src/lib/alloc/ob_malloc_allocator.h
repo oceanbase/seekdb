@@ -17,7 +17,7 @@
 #ifndef _OB_MALLOC_ALLOCATOR_H_
 #define _OB_MALLOC_ALLOCATOR_H_
 
-#include "lib/alloc/ob_iallocator.h"
+#include "lib/allocator/ob_allocator.h"
 #include "lib/alloc/ob_tenant_ctx_allocator.h"
 #include "lib/alloc/alloc_func.h"
 #include "lib/lock/ob_rwlock.h"

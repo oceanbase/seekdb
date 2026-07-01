@@ -17,8 +17,6 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_func_partition_key.h"
 
-#include "sql/engine/expr/ob_wide_integer_partition_hash.h"
-
 namespace oceanbase
 {
 using namespace common;

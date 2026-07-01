@@ -19,7 +19,7 @@
 
 #include "common/ob_tablet_id.h"
 #include "lib/allocator/page_arena.h"
-#include "common/mysqlclient/ob_mysql_transaction.h"
+#include "lib/mysqlclient/ob_mysql_transaction.h"
 #include "share/ob_ls_id.h"
 #include "share/ob_rpc_struct.h"
 #include "share/ob_tablet_autoincrement_param.h"

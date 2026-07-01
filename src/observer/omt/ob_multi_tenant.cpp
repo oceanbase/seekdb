@@ -17,10 +17,7 @@
 #define USING_LOG_PREFIX SERVER_OMT
 
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_multi_tenant.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"  // previously hidden behind the allocator_mgr.h include chain, make the dependency explicit
-#include "logservice/ob_log_service.h"  // ObLogService complete type, previously hidden behind a transitive include, make the dependency explicit
 #include "share/rc/ob_module_provider.h"
 #include "observer/ob_server.h"
 #include "ob_tenant.h"
@@ -29,7 +26,7 @@
 #include "observer/mysql/obsm_conn_callback.h"
 #include "sql/dtl/ob_dtl_fc_server.h"
 #include "sql/das/ob_das_id_service.h"
-#include "storage/allocator/ob_shared_memory_allocator_mgr.h"   // ObSharedMemAllocMgr
+#include "share/allocator/ob_shared_memory_allocator_mgr.h"   // ObSharedMemAllocMgr
 #include "share/ob_global_autoinc_service.h"
 #include "ob_tenant_mtl_helper.h"
 #include "storage/concurrency_control/ob_multi_version_garbage_collector.h"
@@ -49,7 +46,7 @@
 #include "storage/meta_store/ob_tenant_storage_meta_service.h"
 #include "storage/tablelock/ob_table_lock_service.h"
 #include "storage/compaction/ob_sstable_merge_info_mgr.h" // ObTenantSSTableMergeInfoMgr
-#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "share/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/access/ob_table_scan_iterator.h"
 #include "share/ob_ddl_sim_point.h"
 #include "rootserver/freeze/ob_major_freeze_service.h"
@@ -69,23 +66,20 @@
 #endif
 #include "observer/ob_server_event_history_table_operator.h"
 #include "share/index_usage/ob_index_usage_info_mgr.h"
-#include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
+#include "share/stat/ob_opt_stat_monitor_manager.h"
 #include "rootserver/mview/ob_mview_maintenance_service.h"
-#include "observer/vector_index/ob_plugin_vector_index_service.h"
-#include "observer/change_stream/ob_change_stream_mgr.h"
-#include "share/roaringbitmap/ob_rb_memory_mgr.h"
-#include "observer/scheduler/ob_partition_auto_split_helper.h"
+#include "share/vector_index/ob_plugin_vector_index_service.h"
+#include "share/change_stream/ob_change_stream_mgr.h"
+#include "lib/roaringbitmap/ob_rb_memory_mgr.h"
+#include "share/scheduler/ob_partition_auto_split_helper.h"
 #include "observer/mysql/ob_query_response_time.h" //ObTenantQueryRespTimeCollector
 #include "lib/resource/ob_affinity_ctrl.h"
 #include "sql/ob_sql_ccl_rule_manager.h"
 #include "sql/dtl/ob_dtl_interm_result_manager.h"
 #include "observer/omt/ob_tenant_ai_service.h"
-#include "share/resource_manager/ob_resource_plan_manager.h"  // relocated-definition owner
-#include "storage/allocator/ob_memstore_allocator.h"  // relocated-definition owner
-#include "share/io/ob_io_manager.h"  // relocated-definition owner
 // collapsed-from-ObTenantNodeBalancer sys-tenant bring-up/refresh dependencies
 #include "share/unit/ob_unit_config.h"                       // ObUnitConfig::gen_sys_tenant_unit_config
-#include "logservice/ob_tenant_mutil_allocator_mgr.h"        // TMA_MGR_INSTANCE
+#include "share/allocator/ob_tenant_mutil_allocator_mgr.h"   // TMA_MGR_INSTANCE
 #include "share/resource_manager/ob_resource_manager.h"      // G_RES_MGR / ObResourcePlanManager
 #include "logservice/ob_server_log_block_mgr.h"              // GCTX.log_block_mgr_
 #include "common/ob_tenant_data_version_mgr.h"               // ODV_MGR
@@ -100,7 +94,6 @@ using namespace oceanbase::storage;
 using namespace oceanbase::storage::checkpoint;
 using namespace oceanbase::obmysql;
 using namespace oceanbase::sql;
-namespace oceanbase { namespace omt { int refresh_global_background_cpu(share::ObResourcePlanManager &mgr); } }
 using namespace oceanbase::sql::dtl;
 using namespace oceanbase::concurrency_control;
 using namespace oceanbase::transaction;
@@ -215,15 +208,6 @@ static void server_obj_pool_mtl_destroy(common::ObServerObjectPool<T> *&pool)
   using Pool = common::ObServerObjectPool<T>;
   MTL_DELETE(Pool, "TntSrvObjPool", pool);
   pool = nullptr;
-}
-
-// lob-read domain port(common::ObILobReadService) MTL injection:
-// non-owning alias pointer, points at the same tenant's already-created ObLobManager(with its own lifetime),
-// so new/destroy are no-ops。it must be bound after ObLobManager bind to ensure it is bound after, so it is ready during init。
-static int lob_read_service_mtl_new(common::ObILobReadService *&svc)
-{
-  svc = nullptr;
-  return common::OB_SUCCESS;
 }
 
 int ObMultiTenant::init(ObAddr myaddr,
@@ -1485,7 +1469,7 @@ void ObMultiTenant::periodically_check_sys_tenant_()
       locked = true;
     }
   }
-  refresh_global_background_cpu(G_RES_MGR.get_plan_mgr());
+  G_RES_MGR.get_plan_mgr().refresh_global_background_cpu();
   if (locked) {
     tenant->periodically_check();
     IGNORE_RETURN tenant->unlock();
@@ -1688,323 +1672,6 @@ int ObMultiTenant::dec_tenant_ddl_count()
   return ret;
 }
 
-// ===== moved from share::ObResourcePlanManager and demoted to omt free function(truly observer-bound: omt tenant iteration/MTL/cgroup) =====
-namespace oceanbase
-{
-namespace omt
-{
-
-int refresh_global_background_cpu(share::ObResourcePlanManager &mgr)
-{
-  int ret = OB_SUCCESS;
-  if (GCONF.enable_global_background_resource_isolation && GCTX.cgroup_ctrl_->is_valid()) {
-    double cpu = static_cast<double>(GCONF.global_background_cpu_quota);
-    if (cpu <= 0) {
-      cpu = -1;
-    }
-    if (cpu >= 0 && OB_FAIL(GCTX.cgroup_ctrl_->set_cpu_shares(cpu,
-                        OB_INVALID_GROUP_ID,
-                        true /* is_background */))) {
-      LOG_WARN("fail to set background cpu shares", K(ret));
-    }
-    int compare_ret = 0;
-    if (OB_SUCC(ret) && OB_SUCC(GCTX.cgroup_ctrl_->compare_cpu(mgr.get_background_quota(), cpu, compare_ret))) {
-      if (0 == compare_ret) {
-        // do nothing
-      } else if (OB_FAIL(GCTX.cgroup_ctrl_->set_cpu_cfs_quota(cpu,
-                     OB_INVALID_GROUP_ID,
-                     true /* is_background */))) {
-        LOG_WARN("fail to set background cpu cfs quota", K(ret));
-      } else {
-        if (compare_ret < 0) {
-#ifdef _WIN32
-          SYSTEM_INFO si;
-          GetSystemInfo(&si);
-          const int64_t phy_cpu_cnt = static_cast<int64_t>(si.dwNumberOfProcessors);
-#else
-          const int64_t phy_cpu_cnt = sysconf(_SC_NPROCESSORS_ONLN);
-#endif
-          int tmp_ret = OB_SUCCESS;
-          {
-            double target_cpu = -1;
-            {
-              target_cpu = (phy_cpu_cnt <= 4) ? 1.0 : OB_DTL_CPU;
-            }
-            if (OB_TMP_FAIL(GCTX.cgroup_ctrl_->compare_cpu(target_cpu, cpu, compare_ret))) {
-              LOG_WARN_RET(tmp_ret, "compare tenant cpu failed", K(tmp_ret), K(1UL));
-            } else if (compare_ret > 0) {
-              target_cpu = cpu;
-            }
-            if (OB_TMP_FAIL(GCTX.cgroup_ctrl_->set_cpu_cfs_quota(target_cpu, OB_INVALID_GROUP_ID, true /* is_background */))) {
-              LOG_WARN_RET(tmp_ret, "set tenant cpu cfs quota failed", K(tmp_ret), K(1UL));
-            }
-          }
-        }
-      }
-      if (OB_SUCC(ret) && 0 != compare_ret) {
-        mgr.set_background_quota(cpu);
-      }
-    }
-  }
-  return ret;
-}
-
-}  // namespace omt
-}  // namespace oceanbase
-
-// ===== calc_nway file-local helper moved together =====
-namespace oceanbase { namespace share {
-namespace {
-static int64_t calc_nway(int64_t cpu, int64_t mem)
-{
-  return std::min(cpu, mem/20/ObFifoArena::ALLOC_PAGE_SIZE);
-}
-
-}
-} }
-// ===== definition moved from share memstore_allocator/index_usage(omt real user) =====
-namespace oceanbase
-{
-namespace share
-{
-
-int64_t ObMemstoreAllocator::nway_per_group()
-{
-  int ret = OB_SUCCESS;
-
-  double min_cpu = 0;
-  double max_cpu = 0;
-  int64_t max_memory = 0;
-  int64_t min_memory = 0;
-  omt::ObMultiTenant *omt = GCTX.omt_;
-
-  MOD_SCOPE {
-    storage::ObTenantFreezer *freezer = nullptr;
-    if (NULL == omt) {
-      ret = OB_ERR_UNEXPECTED;
-      COMMON_LOG(WARN, "omt should not be null", K(ret));
-    } else if (OB_FAIL(omt->get_tenant_cpu(min_cpu, max_cpu))) {
-      COMMON_LOG(WARN, "get tenant cpu failed", K(ret));
-    } else if (FALSE_IT(freezer = share::g_mp->tenant_freezer())) {
-    } else if (OB_FAIL(freezer->get_tenant_mem_limit(min_memory, max_memory))) {
-      COMMON_LOG(WARN, "get tenant mem limit failed", K(ret));
-    }
-  }
-  return OB_SUCCESS == ret? calc_nway((int64_t)max_cpu, min_memory): 0;
-}
-
-void ObIndexUsageInfoMgr::destroy() 
-{
-  if (is_inited_) {
-    // cancel report task
-    if (report_task_.get_is_inited()) {
-      bool is_exist = true;
-      if (TG_TASK_EXIST(share::g_mp->shared_timer()->get_tg_id(), report_task_, is_exist) == OB_SUCCESS && is_exist) {
-        TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), report_task_);
-        TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), report_task_);
-        report_task_.destroy();
-      }
-    } 
-    if (refresh_conf_task_.get_is_inited()) {
-      bool is_exist = true;
-      if (TG_TASK_EXIST(share::g_mp->shared_timer()->get_tg_id(), refresh_conf_task_, is_exist) == OB_SUCCESS && is_exist) {
-        TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_conf_task_);
-        TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_conf_task_);
-        refresh_conf_task_.destroy();
-      }
-    }
-    is_inited_ = false;
-    is_enabled_ = false;
-    destroy_hash_map();
-    allocator_.reset();
-  }
-}
-
-}  // namespace share
-}  // namespace oceanbase
-
-// ===== definition moved from share index_usage(start/stop/wait)+io_manager(gc/print, omt real user) =====
-namespace oceanbase
-{
-namespace share
-{
-
-int ObIndexUsageInfoMgr::start() 
-{
-  int ret = OB_SUCCESS;
-  if (is_inited_) {
-    // report index usage
-    if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(), report_task_, INDEX_USAGE_REPORT_INTERVAL, true))) {
-      LOG_WARN("failed to schedule index usage report task", K(ret));
-    } else if (OB_FAIL(report_task_.init(this))) {
-      LOG_WARN("fail to init report task", K(ret));
-    } else if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(), refresh_conf_task_, INDEX_USAGE_REFRESH_CONF_INTERVAL, true))) {
-      LOG_WARN("failed to schedule index usage refresh conf task", K(ret));
-    } else if (OB_FAIL(refresh_conf_task_.init((this)))) {
-      LOG_WARN("fail to init refresh conf task", K(ret));
-    } else {
-      LOG_TRACE("success to start ObIndexUsageInfoMgr");
-    }
-  }
-  return ret;
-}
-
-void ObIndexUsageInfoMgr::stop() 
-{
-  if (OB_LIKELY(report_task_.get_is_inited())) {
-    TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), report_task_);
-  }
-  if (OB_LIKELY(refresh_conf_task_.get_is_inited())) {
-    TG_CANCEL_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_conf_task_);
-  }
-}
-
-void ObIndexUsageInfoMgr::wait() 
-{
-  if (OB_LIKELY(report_task_.get_is_inited())) {
-    TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), report_task_);
-  }
-  if (OB_LIKELY(refresh_conf_task_.get_is_inited())) {
-    TG_WAIT_TASK(share::g_mp->shared_timer()->get_tg_id(), refresh_conf_task_);
-  }
-}
-
-}  // namespace share
-namespace common
-{
-
-int ObTrafficControl::gc_tenant_infos()
-{
-  int ret = OB_SUCCESS;
-  if (REACH_TIME_INTERVAL(1 * 60 * 1000L * 1000L)) {  // 60s
-    DRWLock::WRLockGuard guard(rw_lock_);
-    struct GCTenantSharedDeviceInfosV2
-    {
-      GCTenantSharedDeviceInfosV2(
-          const ObVector<uint64_t> &keep_keys, ObSEArray<ObTrafficControl::ObStorageKey, 7> &gc_tenant_infos)
-          : keep_keys_(keep_keys), gc_tenant_infos_(gc_tenant_infos)
-      {}
-      int operator()(hash::HashMapPair<ObTrafficControl::ObStorageKey, ObTrafficControl::ObSharedDeviceControlV2 *> &pair)
-      {
-        bool is_find = false;
-        for (int i = 0; !is_find && i < keep_keys_.size(); ++i) {
-          if (keep_keys_.at(i) == 1UL) {
-            is_find = true;
-          }
-        }
-        if (false == is_find) {
-          gc_tenant_infos_.push_back(pair.first);
-        }
-        return OB_SUCCESS;
-      }
-      const ObVector<uint64_t> &keep_keys_;
-      ObSEArray<ObTrafficControl::ObStorageKey, 7> &gc_tenant_infos_;
-    };
-    struct GCTenantRecordInfos
-    {
-      GCTenantRecordInfos(
-          const ObVector<uint64_t> &keep_keys, ObSEArray<ObTrafficControl::ObIORecordKey, 7> &gc_tenant_infos)
-          : keep_keys_(keep_keys), gc_tenant_infos_(gc_tenant_infos)
-      {}
-      int operator()(hash::HashMapPair<ObTrafficControl::ObIORecordKey, ObTrafficControl::ObSharedDeviceIORecord> &pair)
-      {
-        bool is_find = false;
-        for (int i = 0; !is_find && i < keep_keys_.size(); ++i) {
-          if (keep_keys_.at(i) == 1UL) {
-            is_find = true;
-          }
-        }
-        if (false == is_find) {
-          gc_tenant_infos_.push_back(pair.first);
-        }
-        return OB_SUCCESS;
-      }
-      const ObVector<uint64_t> &keep_keys_;
-      ObSEArray<ObTrafficControl::ObIORecordKey, 7> &gc_tenant_infos_;
-    };
-    ObVector<uint64_t> keep_keys;
-    ObSEArray<ObTrafficControl::ObIORecordKey, 7> gc_tenant_record_infos;
-    ObSEArray<ObTrafficControl::ObStorageKey, 7> gc_tenant_shared_device_infos_v2;
-    GCTenantRecordInfos fn(keep_keys, gc_tenant_record_infos);
-    GCTenantSharedDeviceInfosV2 fn3(keep_keys, gc_tenant_shared_device_infos_v2);
-    if(OB_ISNULL(GCTX.omt_)) {
-    } else if (FALSE_IT((keep_keys.clear(), keep_keys.push_back(1UL)))) {
-    } else if (OB_FAIL(io_record_map_.foreach_refactored(fn))) {
-      LOG_WARN("SSNT:failed to get gc tenant record infos", K(ret));
-    } else if (OB_FAIL(shared_device_map_v2_.foreach_refactored(fn3))) {
-      LOG_WARN("SSNT:failed to get gc tenant shared device infos", K(ret));
-    } else {
-      for (int i = 0; i < gc_tenant_record_infos.count(); ++i) {
-        if (OB_SUCCESS != io_record_map_.erase_refactored(gc_tenant_record_infos.at(i))) {
-          LOG_WARN("SSNT:failed to erase gc tenant record infos", K(ret), K(gc_tenant_record_infos.at(i)));
-        } else {
-          LOG_INFO("SSNT:erase gc tenant record infos", K(ret), K(gc_tenant_record_infos.at(i)));
-        }
-      }
-      for (int i = 0; i < gc_tenant_shared_device_infos_v2.count(); ++i) {
-        int tmp_ret = OB_SUCCESS;
-        ObTrafficControl::ObSharedDeviceControlV2 *val_ptr = nullptr;
-        if (OB_TMP_FAIL(shared_device_map_v2_.erase_refactored(gc_tenant_shared_device_infos_v2.at(i), &val_ptr))) {
-          LOG_WARN("SSNT:failed to erase gc tenant shared device infos", K(tmp_ret), K(gc_tenant_shared_device_infos_v2.at(i)), K(val_ptr));
-        } else if (OB_ISNULL(val_ptr)) {
-          tmp_ret = OB_ERR_UNEXPECTED;
-          LOG_ERROR("SSNT:failed to erase gc tenant shared device infos", K(tmp_ret), K(gc_tenant_shared_device_infos_v2.at(i)), K(val_ptr));
-        } else if (FALSE_IT(val_ptr->destroy())) {
-          LOG_WARN("SSNT:failed to destroy shared device control", K(tmp_ret), K(gc_tenant_shared_device_infos_v2.at(i)), K(val_ptr));
-        } else if (FALSE_IT(ob_delete(val_ptr))) {
-        } else {
-          LOG_INFO("SSNT:erase gc tenant shared device infos succ", K(ret), K(tmp_ret), K(gc_tenant_shared_device_infos_v2.at(i)), K(val_ptr));
-        }
-      }
-    }
-  }
-  return ret;
-}
-
-void ObIOManager::print_tenant_status()
-{
-  int ret = OB_SUCCESS;
-  if (OB_NOT_NULL(GCTX.omt_)) {
-    {
-      ObRefHolder<ObTenantIOManager> tenant_holder;
-      if (OB_FAIL(get_tenant_io_manager(tenant_holder))) {
-        if (OB_HASH_NOT_EXIST != ret) {
-          LOG_WARN("get tenant io manager failed", K(ret), K(1UL));
-        } else {
-          ret = OB_SUCCESS;
-        }
-      } else {
-        tenant_holder.get_ptr()->print_io_status();
-      }
-    }
-  }
-  if (OB_NOT_NULL(server_io_manager_)) {
-    server_io_manager_->print_io_status();
-  }
-}
-
-}  // namespace common
-}  // namespace oceanbase
-
-// the config read endpoint: share must not depend upward on observer
-namespace oceanbase
-{
-namespace share
-{
-namespace schema
-{
-int64_t get_max_schema_slot_num_for_add_schema(const int64_t default_val)
-{
-  int64_t max_schema_slot_num = default_val;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    max_schema_slot_num = tenant_config->_max_schema_slot_num;
-  }
-  return max_schema_slot_num;
-}
-}  // namespace schema
-}  // namespace share
-}  // namespace oceanbase
 
 // ===== ObServer explicit module lifecycle =====
 namespace oceanbase

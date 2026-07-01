@@ -30,7 +30,8 @@
 #include "lib/file/file_directory_utils.h"
 #include "share/io/ob_io_manager.h"
 #include "share/resource_manager/ob_resource_manager.h"
-#include "share/ob_server_struct.h"
+#include "observer/omt/ob_tenant.h"
+#include "src/share/ob_server_struct.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;

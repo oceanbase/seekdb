@@ -20,9 +20,9 @@
 #include "lib/file/ob_file.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/hash_func/murmur_hash.h"
-#include "lib/restore/ob_io_device.h"
+#include "common/storage/ob_io_device.h"
 #include "sql/printer/ob_raw_expr_printer.h"
-#include "lib/utility/ob_smart_call.h"
+#include "common/ob_smart_call.h"
 #include "lib/container/ob_array.h"
 #include <type_traits>
 

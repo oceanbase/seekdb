@@ -20,6 +20,7 @@
 #include "share/datum/ob_datum_funcs.h"
 #include "share/datum/ob_datum_cmp_func_def.h"
 #include "common/object/ob_obj_funcs.h"
+#include "sql/engine/ob_serializable_function.h"
 #include "sql/engine/ob_bit_vector.h"
 #include "share/ob_cluster_version.h"
 #include "share/datum/ob_datum_funcs_impl.h"

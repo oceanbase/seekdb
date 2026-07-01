@@ -20,8 +20,8 @@
 #include "common/ob_range.h"
 #include "lib/function/ob_function.h"
 #include "lib/list/ob_dlist.h"
-#include "common/mysqlclient/ob_isql_client.h"
-#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "lib/mysqlclient/ob_isql_client.h"
+#include "lib/mysqlclient/ob_mysql_proxy.h"
 #include "lib/ob_define.h"
 #include "lib/ob_errno.h"
 #include "lib/utility/ob_print_utils.h"
@@ -31,7 +31,7 @@
 #include "share/ob_errno.h"
 #include "share/ob_ls_id.h"
 #include "share/rc/ob_tenant_base.h"
-#include "share/ob_server_struct.h"
+#include "observer/ob_server_struct.h"
 #include <cstdio>
 #include <cstring>
 #include <type_traits>

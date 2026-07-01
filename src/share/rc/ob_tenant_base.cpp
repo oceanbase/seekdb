@@ -16,11 +16,11 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "ob_tenant_base.h"
-#include "observer/omt/ob_tenant_mtl_helper.h"  // get_mtl_ptr real user(dual MTL framework definitions, header already legalized as conf L2)
 #include "share/rc/ob_module_provider.h"
-#include "share/roaringbitmap/ob_rb_memory_mgr.h"
+#include "lib/roaringbitmap/ob_rb_memory_mgr.h"
 #include "share/resource_manager/ob_cgroup_ctrl.h"
-#include "share/schema/ob_schema_struct.h"
+#include "src/share/schema/ob_schema_struct.h"
+#include "observer/omt/ob_tenant_mtl_helper.h"
 #include "lib/resource/ob_affinity_ctrl.h"
 #include "share/ob_server_struct.h"
 

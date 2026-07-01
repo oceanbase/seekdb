@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX PALF
 #include "log_engine.h"
-#include "logservice/ob_tenant_mutil_allocator.h"  // ObILogAllocator
+#include "share/allocator/ob_tenant_mutil_allocator.h"  // ObILogAllocator
 #include "log_io_worker.h"                              // LogIOWorker
 #include "log_shared_task.h"                            // LogSharedTask
 

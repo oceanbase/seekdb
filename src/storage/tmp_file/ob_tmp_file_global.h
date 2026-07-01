@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_STORAGE_TMP_FILE_OB_TMP_FILE_GLOBAL_H_
 #define OCEANBASE_STORAGE_TMP_FILE_OB_TMP_FILE_GLOBAL_H_
-#include  "lib/ob_define.h"
+#include  "deps/oblib/src/lib/ob_define.h"
 
 namespace oceanbase
 {

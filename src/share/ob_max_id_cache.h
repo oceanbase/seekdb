@@ -17,8 +17,8 @@
 #ifndef OCEANBASE_SHARE_OB_MAX_ID_CACHE_H_
 #define OCEANBASE_SHARE_OB_MAX_ID_CACHE_H_
 
-#include "lib/hash/ob_hashmap.h"
-#include "share/ob_max_id_fetcher.h"
+#include "deps/oblib/src/lib/hash/ob_hashmap.h"
+#include "src/share/ob_max_id_fetcher.h"
 
 namespace oceanbase
 {

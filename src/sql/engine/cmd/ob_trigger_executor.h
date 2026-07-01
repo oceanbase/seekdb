@@ -22,7 +22,7 @@
 #include "sql/resolver/ob_stmt_type.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/ob_rpc_struct.h"
-#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "lib/mysqlclient/ob_mysql_proxy.h"
 
 namespace oceanbase
 {

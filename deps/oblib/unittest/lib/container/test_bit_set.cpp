@@ -17,7 +17,7 @@
 #include <gtest/gtest.h>
 #define private public
 #include "lib/container/ob_bit_set.h"
-#include "lib/thread/ob_test_util.h"
+#include "lib/utility/ob_test_util.h"
 using namespace oceanbase::common;
 class TestBitSet: public ::testing::Test
 {

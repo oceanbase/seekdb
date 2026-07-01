@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SERVER_SCHEMA_SERVICE_H_
 #define OCEANBASE_SERVER_SCHEMA_SERVICE_H_
 
-#include "lib/utility/ob_mod_define.h"
+#include "lib/allocator/ob_mod_define.h"
 #include "lib/hash/ob_hashset.h"
 #include "lib/hash/ob_iteratable_hashmap.h" //ObIteratableHashMap
 #include "lib/hash/ob_hashmap.h"

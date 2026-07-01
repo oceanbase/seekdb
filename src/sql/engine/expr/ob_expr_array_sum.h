@@ -17,10 +17,10 @@
 #ifndef OCEANBASE_SQL_OB_EXPR_ARRAY_SUM
 #define OCEANBASE_SQL_OB_EXPR_ARRAY_SUM
 
-#include "common/udt/ob_array_type.h"
-#include "common/udt/ob_collection_type.h"
-#include "common/datum/ob_datum.h"
-#include "sql/engine/vector/ob_i_vector.h"
+#include "lib/udt/ob_array_type.h"
+#include "lib/udt/ob_collection_type.h"
+#include "share/datum/ob_datum.h"
+#include "share/vector/ob_i_vector.h"
 #include "sql/engine/expr/ob_batch_eval_util.h"
 #include "sql/engine/expr/ob_expr_operator.h"
 

@@ -19,7 +19,7 @@
 #include <regex>
 #include "ob_ai_func.h"
 #include "lib/utility/utility.h"
-#include "common/json_type/ob_json_common.h"
+#include "lib/json_type/ob_json_common.h"
 
 
 using namespace oceanbase::common;

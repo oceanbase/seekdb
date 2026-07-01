@@ -17,14 +17,12 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/catalog/ob_cached_catalog_meta_getter.h"
-#include "share/schema/ob_schema_cache.h"  // previously hidden behind the external_table include chain
 
 namespace oceanbase
 {
 namespace share
 {
 
-using namespace oceanbase::share::schema;  // make the transitive using declaration explicit
 bool ObCatalogSchemaCacheKey::operator==(const ObIKVCacheKey &other) const
 {
   const ObCatalogSchemaCacheKey &other_key = reinterpret_cast<const ObCatalogSchemaCacheKey &>(other);

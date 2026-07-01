@@ -19,7 +19,7 @@
 #include "logservice/palf/log_cache.h"
 #undef private
 #include "logservice/common_util/ob_log_time_utils.h"
-#include "storage/tx_storage/ob_tenant_mem_limit_getter.h"
+#include "share/ob_tenant_mem_limit_getter.h"
 #include "logservice/palf/palf_env_impl.h"
 
 namespace oceanbase

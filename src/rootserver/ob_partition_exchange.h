@@ -22,7 +22,7 @@
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_schema_struct.h"
 #include "storage/tablet/ob_tablet_binding_helper.h"
-#include "sql/optimizer/stat/ob_stat_define.h"
+#include "share/stat/ob_stat_define.h"
 
 namespace oceanbase
 {
@@ -38,7 +38,6 @@ namespace rootserver
 {
 class ObDDLService;
 class ObDDLSQLTransaction;
-class ObDDLOperator;
 
 enum ObPartitionExchangeType {
   PARTITION_EXCHANGE_TYPE_INVALID = 0,

@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_dbms_job_utils.h"
-#include "share/ob_dml_sql_splicer.h"
 
 #include "observer/ob_server_struct.h"
 

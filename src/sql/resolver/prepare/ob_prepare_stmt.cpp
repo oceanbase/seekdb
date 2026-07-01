@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_RESV
 
 #include "ob_prepare_stmt.h"
-#include "lib/container/ob_array.h"
+#include "deps/oblib/src/lib/container/ob_array.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;

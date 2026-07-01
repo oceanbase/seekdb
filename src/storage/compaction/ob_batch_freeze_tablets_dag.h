@@ -15,7 +15,7 @@
  */
 #ifndef OB_STORAGE_COMPACTION_BATCH_FREEZE_TABLETS_DAG_H_
 #define OB_STORAGE_COMPACTION_BATCH_FREEZE_TABLETS_DAG_H_
-#include "storage/compaction/ob_batch_exec_dag.h"
+#include "share/compaction/ob_batch_exec_dag.h"
 namespace oceanbase
 {
 namespace compaction

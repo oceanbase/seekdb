@@ -51,7 +51,7 @@
 #include "storage/tx_storage/ob_tablet_gc_service.h"
 #include "storage/tx_storage/ob_empty_shell_task.h"
 #include "storage/mview/ob_major_mv_merge_info.h"
-#include "observer/vector_index/ob_plugin_vector_index_scheduler.h"
+#include "share/vector_index/ob_plugin_vector_index_scheduler.h"
 #include "storage/ls/ob_freezer_define.h"
 
 namespace oceanbase

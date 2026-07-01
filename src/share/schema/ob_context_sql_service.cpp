@@ -16,21 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_context_sql_service.h"
-
-#include "lib/ob_define.h"
-#include "lib/ob_errno.h"
-#include "lib/oblog/ob_log.h"
-#include "lib/oblog/ob_log_level.h"
-#include "lib/oblog/ob_log_print_kv.h"
-#include "lib/string/ob_sql_string.h"
-#include "lib/string/ob_string.h"
-#include "lib/utility/alloc_assist.h"
-#include "mysqlclient/ob_isql_client.h"
-#include "share/inner_table/ob_inner_table_schema_constants.h"
-#include "share/ob_dml_sql_splicer.h"
-#include "share/schema/ob_schema_service.h"
-#include "share/schema/ob_schema_struct.h"
-#include "share/schema/ob_schema_utils.h"
+#include "observer/ob_srv_network_frame.h"
 
 namespace oceanbase
 {

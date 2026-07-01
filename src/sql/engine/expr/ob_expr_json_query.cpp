@@ -19,7 +19,7 @@
 #include "ob_expr_json_query.h"
 #include "src/sql/resolver/ob_resolver_utils.h"
 #include "ob_expr_json_value.h"
-#include "common/xml/ob_binary_aggregate.h"
+#include "lib/xml/ob_binary_aggregate.h"
 #include "sql/engine/expr/ob_expr_xml_func_helper.h"
 
 // from sql_parser_base.h

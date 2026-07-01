@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OB_INFORMATION_SCHEMA_ENABLE_ROLES_
 #define OCEANBASE_OB_INFORMATION_SCHEMA_ENABLE_ROLES_
 
-#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "share/ob_virtual_table_scanner_iterator.h"
 
 namespace oceanbase
 {

@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_access_service.h"
-#include "storage/tablelock/ob_table_lock_rpc_struct.h"  // ObLockParam(previously hidden behind a transitive include)
 #include "share/rc/ob_module_provider.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include "share/ob_io_device_helper.h" // LOCAL_DEVICE_INSTANCE

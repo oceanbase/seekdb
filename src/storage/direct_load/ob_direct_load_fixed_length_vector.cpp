@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/direct_load/ob_direct_load_fixed_length_vector.h"
-#include "sql/engine/vector/ob_uniform_vector.h"
+#include "share/vector/ob_uniform_vector.h"
 
 namespace oceanbase
 {

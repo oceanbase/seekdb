@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "sql/engine/vector/ob_continuous_base.h"
+#include "share/vector/ob_continuous_base.h"
 #include "storage/direct_load/ob_direct_load_vector.h"
 #include "common/object/ob_object.h"
 

@@ -17,7 +17,7 @@
 #ifndef OB_ALL_VIRTUAL_TENANT_MEMSOTRE_ALLOCATOR_INFO_H_
 #define OB_ALL_VIRTUAL_TENANT_MEMSOTRE_ALLOCATOR_INFO_H_
 
-#include "observer/virtual_table/ob_virtual_table_iterator.h"
+#include "share/ob_virtual_table_iterator.h"
 #include "share/ob_table_range.h"
 #include "src/storage/memtable/ob_memtable.h"
 

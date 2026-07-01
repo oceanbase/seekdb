@@ -33,8 +33,8 @@
 #include "observer/table_load/ob_table_load_task_scheduler.h"
 #include "observer/table_load/ob_table_load_trans_store.h"
 #include "observer/table_load/ob_table_load_utils.h"
-#include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
-#include "storage/direct_load/ob_table_load_dml_stat.h"
+#include "share/stat/ob_opt_stat_monitor_manager.h"
+#include "share/table/ob_table_load_dml_stat.h"
 #include "storage/blocksstable/ob_sstable.h"
 
 namespace oceanbase
@@ -185,7 +185,7 @@ int ObTableLoadStore::confirm_begin()
     LOG_INFO("store confirm begin");
     store_ctx_->heart_beat(); // init heart beat
     if (store_ctx_->enable_dag_) {
-      // wait for write_ctx initialization
+      // 等待write_ctx初始化完成
       while (OB_SUCC(ret)) {
         if (OB_FAIL(store_ctx_->dag_exec_ctx_.dag_->check_status())) {
           LOG_WARN("fail to check status", KR(ret));

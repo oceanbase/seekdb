@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_COMMON_OB_OBJ_COMPARE_
 #define OCEANBASE_COMMON_OB_OBJ_COMPARE_
 
-#include "common/timezone/ob_timezone_info.h"
+#include "lib/timezone/ob_timezone_info.h"
 #include "common/object/ob_object.h"
 
 namespace oceanbase

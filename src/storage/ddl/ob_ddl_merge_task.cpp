@@ -17,11 +17,10 @@
 #define USING_LOG_PREFIX STORAGE_COMPACTION
 
 #include "observer/report/ob_tablet_table_updater.h" // for ObTabletTableUpdater
-#include "storage/ddl/ob_ddl_storage_util.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "share/ob_ddl_checksum.h"
-#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "share/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "share/ob_ddl_sim_point.h"
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
@@ -2229,7 +2228,7 @@ int ObTabletDDLUtil::check_need_replay_column_store(
 {
   int ret = OB_SUCCESS;
   need_replay_column_store = false;
-  if (OB_FAIL(ObDDLStorageUtil::need_column_group_store(storage_schema, need_replay_column_store))) {
+  if (OB_FAIL(ObCODDLUtil::need_column_group_store(storage_schema, need_replay_column_store))) {
     LOG_WARN("failed to check need replay column store", K(ret), K(storage_schema));
   } else if (need_replay_column_store) {
     // if table is row store in F-replica and local ls is cs replica, storage schema in tablet will be column store.

@@ -21,7 +21,7 @@
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "sql/das/ob_das_define.h"
-#include "storage/ob_table_dml_param.h"
+#include "share/schema/ob_table_dml_param.h"
 #include "sql/engine/ob_operator.h"
 #include "sql/resolver/dml/ob_hint.h"
 #include "storage/fts/ob_fts_plugin_helper.h"

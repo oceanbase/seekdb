@@ -18,7 +18,7 @@
 #define OB_CATALOG_SQL_SERVICE_H
 
 #include "ob_ddl_sql_service.h"
-#include "share/ob_dml_sql_splicer.h"
+#include "src/share/ob_dml_sql_splicer.h"
 
 namespace oceanbase
 {

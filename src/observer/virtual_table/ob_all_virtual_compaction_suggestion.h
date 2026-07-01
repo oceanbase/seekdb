@@ -16,7 +16,7 @@
 
 #ifndef OB_ALL_VIRTUAL_COMPACTION_SUGGESTION_H_
 #define OB_ALL_VIRTUAL_COMPACTION_SUGGESTION_H_
-#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "share/ob_virtual_table_scanner_iterator.h"
 #include "lib/container/ob_array.h"
 #include "storage/compaction/ob_compaction_suggestion.h"
 

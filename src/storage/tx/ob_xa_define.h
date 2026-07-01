@@ -38,6 +38,9 @@ extern const int64_t XA_INNER_TABLE_TIMEOUT;
 extern const bool ENABLE_NEW_XA;
 
 static const ObString PL_XA_IMPLICIT_SAVEPOINT = "__PL_XA_IMPLICIT_SAVEPOINT";
+static const ObString DBLINK_DEFAULT_SAVEPOINT = "OB_DBLINK_DEFAULT_SAVEPOINT";
+static const ObString PL_DBLINK_DEFAULT_SAVEPOINT = "OB_PL_DBLINK_DEFAULT_SAVEPOINT";
+const int64_t MAX_DBLINK_SAVEPOINT_NAME_LENGTH = 128;
 class ObXATransState
 {
 public:
@@ -244,6 +247,9 @@ struct ObXAStmtInfo
 typedef common::ObSEArray<ObXABranchInfo, 4> ObXABranchInfoArray;
 typedef common::ObSEArray<ObXAStmtInfo, 1> ObXAStmtInfoArray;
 
+// format id of dblink trans
+// from Oracle
+static const int32_t DBLINK_FORMAT_ID = 830487;
 class ObXADefault
 {
 public:
@@ -272,12 +278,18 @@ public:
   void inc_success_xa_2pc_commit() { ATOMIC_INC(&total_success_xa_2pc_commit_); }
   void inc_failure_xa_2pc_commit() { ATOMIC_INC(&total_failure_xa_2pc_commit_); }
   void inc_xa_rollback() { ATOMIC_INC(&total_xa_rollback_); }
+  void inc_success_dblink_promotion() { ATOMIC_INC(&total_success_dblink_promotion_); }
+  void inc_failure_dblink_promotion() { ATOMIC_INC(&total_failure_dblink_promotion_); }
+  void inc_success_dblink() { ATOMIC_INC(&total_success_dblink_); }
+  void inc_failure_dblink() { ATOMIC_INC(&total_failure_dblink_); }
   TO_STRING_KV(K_(total_active_xa_ctx_count), K_(total_standby_clearup_count),
                K_(total_success_xa_start), K_(total_failure_xa_start),
                K_(total_success_xa_prepare), K_(total_failure_xa_prepare),
                K_(total_success_xa_1pc_commit), K_(total_failure_xa_1pc_commit),
                K_(total_success_xa_2pc_commit), K_(total_failure_xa_2pc_commit),
-               K_(total_xa_rollback));
+               K_(total_xa_rollback),
+               K_(total_success_dblink_promotion), K_(total_failure_dblink_promotion),
+               K_(total_success_dblink), K_(total_failure_dblink));
 
 private:
   DISALLOW_COPY_AND_ASSIGN(ObXAStatistics);
@@ -294,6 +306,10 @@ private:
   int64_t total_success_xa_2pc_commit_;
   int64_t total_failure_xa_2pc_commit_;
   int64_t total_xa_rollback_;
+  int64_t total_success_dblink_promotion_;
+  int64_t total_failure_dblink_promotion_;
+  int64_t total_success_dblink_;
+  int64_t total_failure_dblink_;
 };
 
 }//transaction

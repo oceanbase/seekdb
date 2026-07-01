@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "ob_sequence_cache.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"  // ACTIVE_SESSION_FLAG_SETTER_GUARD(previously hidden behind a transitive include)
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/ob_rpc_struct.h"

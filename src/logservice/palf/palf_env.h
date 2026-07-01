@@ -18,7 +18,7 @@
 #define OCEANBASE_LOGSERVICE_PALF_ENV_
 #include <stdint.h>
 #include "rpc/frame/ob_req_transport.h"
-#include "logservice/ob_tenant_mutil_allocator.h"
+#include "share/allocator/ob_tenant_mutil_allocator.h"
 #include "lib/function/ob_function.h"
 #include "palf_env_impl.h"
 namespace oceanbase

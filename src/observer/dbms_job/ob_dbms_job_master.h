@@ -22,7 +22,7 @@
 #include "lib/ob_define.h"
 #include "lib/net/ob_addr.h"
 #include "lib/allocator/page_arena.h"
-#include "common/mysqlclient/ob_isql_client.h"
+#include "lib/mysqlclient/ob_isql_client.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/thread/ob_simple_thread_pool.h"
 #include "lib/task/ob_timer.h"

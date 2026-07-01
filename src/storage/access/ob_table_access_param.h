@@ -23,7 +23,7 @@
 #include "ob_sstable_index_filter.h"
 #include "common/ob_tablet_id.h"
 #include "share/ob_i_tablet_scan.h"
-#include "storage/access/ob_table_param.h"
+#include "share/schema/ob_table_param.h"
 #include "lib/utility/ob_print_utils.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
 #include "ob_global_iterator_pool.h"

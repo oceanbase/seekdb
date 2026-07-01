@@ -19,7 +19,7 @@
 
 #include "share/ob_define.h"
 #include "lib/objectpool/ob_resource_pool.h"
-#include "lib/utility/data_buffer.h"
+#include "common/data_buffer.h"
 
 namespace oceanbase
 {

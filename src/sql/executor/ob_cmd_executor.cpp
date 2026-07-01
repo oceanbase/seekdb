@@ -16,9 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_cmd_executor.h"
-#include "observer/scheduler/ob_tenant_ddl_count_guard.h"  // ObTenantDDLCountGuard (relocated L9)
 #include "share/ob_cluster_version.h"
 #include "sql/resolver/ddl/ob_drop_index_stmt.h"
 #include "sql/resolver/ddl/ob_drop_table_stmt.h"
@@ -38,7 +36,6 @@
 #include "sql/resolver/ddl/ob_drop_routine_stmt.h"
 #include "sql/resolver/ddl/ob_alter_routine_stmt.h"
 #include "sql/resolver/ddl/ob_create_package_stmt.h"
-#include "sql/resolver/ddl/ob_alter_package_stmt.h"
 #include "sql/resolver/ddl/ob_drop_package_stmt.h"
 #include "sql/resolver/ddl/ob_trigger_stmt.h"
 #include "sql/resolver/ddl/ob_rename_table_stmt.h"
@@ -601,10 +598,6 @@ int ObCmdExecutor::execute(ObExecContext &ctx, ObICmd &cmd)
       }
       case stmt::T_CREATE_PACKAGE: {
         DEFINE_EXECUTE_CMD(ObCreatePackageStmt, ObCreatePackageExecutor);
-        break;
-      }
-      case stmt::T_ALTER_PACKAGE: {
-        DEFINE_EXECUTE_CMD(ObAlterPackageStmt, ObAlterPackageExecutor);
         break;
       }
       case stmt::T_DROP_PACKAGE: {

@@ -33,7 +33,6 @@ namespace rootserver
 {
 class ObDDLSQLTransaction;
 class ObDDLService;
-class ObDDLOperator;
 
 class ObPLDDLService
 {
@@ -54,9 +53,6 @@ public:
   static int create_package(const obcall::ObCreatePackageArg &arg,
                             obcall::ObRoutineDDLRes *res,
                             rootserver::ObDDLService &ddl_service);
-  static int alter_package(const obcall::ObAlterPackageArg &arg,
-                           obcall::ObRoutineDDLRes *res,
-                           rootserver::ObDDLService &ddl_service);
   static int drop_package(const obcall::ObDropPackageArg &arg,
                           rootserver::ObDDLService &ddl_service);
   //----End of functions for managing package----
@@ -143,12 +139,6 @@ private:
                             ObIArray<ObDependencyInfo> &dep_infos,
                             const ObString *ddl_stmt_str,
                             rootserver::ObDDLService &ddl_service);
-  static int alter_package(ObSchemaGetterGuard &schema_guard,
-                           ObPackageInfo &package_info,
-                           ObIArray<ObRoutineInfo> &public_routine_infos,
-                           share::schema::ObErrorInfo &error_info,
-                           const ObString *ddl_stmt_str,
-                           rootserver::ObDDLService &ddl_service);
   static int drop_package(ObSchemaGetterGuard &schema_guard,
                           const ObPackageInfo &package_info,
                           ObErrorInfo &error_info,

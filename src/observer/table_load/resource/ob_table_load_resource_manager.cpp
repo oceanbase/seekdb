@@ -17,7 +17,6 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/table_load/resource/ob_table_load_resource_manager.h"
-#include "observer/omt/ob_multi_tenant.h"  // ObSharedTimer, previously hidden behind a transitive include
 #include "share/rc/ob_module_provider.h"
 #include "observer/table_load/ob_table_load_table_ctx.h"
 #include "observer/omt/ob_tenant.h"

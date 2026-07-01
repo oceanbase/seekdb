@@ -18,7 +18,7 @@
 #define OCEANBASE_SQL_OB_EXPR_JSON_LENGTH_H_
 
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "common/json_type/ob_json_path.h"
+#include "lib/json_type/ob_json_path.h"
 #include "sql/engine/expr/ob_expr_multi_mode_func_helper.h"
 
 using namespace oceanbase::common;

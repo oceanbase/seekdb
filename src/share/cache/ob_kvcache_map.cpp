@@ -15,9 +15,10 @@
  */
 
 #include "ob_kvcache_map.h"
-#include "lib/utility/ob_mod_define.h"
+#include "lib/allocator/ob_mod_define.h"
 #include "lib/ob_running_mode.h"
-#include "lib/time/ob_clock_generator.h"
+#include "common/ob_clock_generator.h"
+#include "storage/blocksstable/ob_micro_block_cache.h"
 
 namespace oceanbase
 {
@@ -142,7 +143,43 @@ void ObKVCacheMap::destroy()
   is_inited_ = false;
 }
 
-// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state)
+int ObKVCacheMap::get_batch_data_block_cache_key(
+  const int bucket_count,
+  ObIArray<blocksstable::ObMicroBlockCacheKey> &keys)
+{
+  int ret = OB_SUCCESS;
+  const int64_t start_pos = bucket_start_pos_;
+  const int64_t end_pos = MIN(bucket_start_pos_ + bucket_count, bucket_num_);
+
+  ObKVCacheHazardGuard hazard_guard(global_hazard_station_);
+  if (OB_FAIL(hazard_guard.get_ret())) {
+    COMMON_LOG(WARN, "Fail to acquire hazard version", K(ret));
+  } else {
+    HazptrHolder holder;
+    bool protect_success;
+    for (int64_t i = start_pos; i < end_pos && OB_SUCC(ret); i++) {
+      Node *iter = get_bucket_node(i);
+      char *buf = nullptr;
+      while (OB_SUCC(ret) && nullptr != iter) {
+        if (!iter->inst_->is_block_cache_) {
+        } else if (OB_FAIL(holder.protect(protect_success, iter->mb_handle_, iter->seq_num_))) {
+          COMMON_LOG(WARN, "protect failed", KP(iter->mb_handle_));
+        } else if (protect_success) {
+          if (OB_FAIL(keys.push_back(*static_cast<const blocksstable::ObMicroBlockCacheKey*>(iter->key_)))) {
+            COMMON_LOG(WARN, "Fail to push back micro data cachekey", K(ret), K(keys.count()), KPC(iter));
+          }
+          holder.reset();
+        }
+        iter = iter->next_;
+      }
+    }
+    if (OB_SUCC(ret)) { 
+      bucket_start_pos_ = end_pos >= bucket_num_ ? 0 : end_pos;
+    }
+  }
+
+  return ret;
+}
 
 int ObKVCacheMap::put(
   ObKVCacheInst &inst,

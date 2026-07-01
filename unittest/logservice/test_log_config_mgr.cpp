@@ -23,7 +23,6 @@
 #include "mock_logservice_container/mock_log_engine.h"
 #include "mock_logservice_container/mock_log_mode_mgr.h"
 #include "mock_logservice_container/mock_log_reconfirm.h"
-#include "share/ob_cluster_version.h"
 #undef private
 namespace oceanbase
 {
@@ -807,7 +806,6 @@ TEST_F(TestLogConfigMgr, test_too_many_learners)
 } // end namespace unittest
 } // end namespace oceanbase
 
-using namespace oceanbase;
 int main(int argc, char **argv)
 {
   const std::string rm_base_dir_cmd = "rm -f test_log_config_mgr.log";

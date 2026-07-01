@@ -313,11 +313,17 @@ inline ObServerObjectPool<T>& get_server_object_pool() {
 #define sop_borrow(type)                                                                                        \
   ({                                                                                                            \
     type *iter = common::get_server_object_pool<type>().borrow_object();                                        \
+    if (OB_NOT_NULL(iter)) {                                                                                    \
+      storage::ObStorageLeakChecker::get_instance().handle_hold(iter); \
+    }                                                                                                           \
     (iter);                                                                                                     \
   })
 
 #define sop_return(type, ptr)                                                                                   \
   do {                                                                                                          \
+    if (OB_NOT_NULL(ptr)) {                                                                                     \
+      storage::ObStorageLeakChecker::get_instance().handle_reset(ptr); \
+    }                                                                                                           \
     common::get_server_object_pool<type>().return_object(ptr);                                                  \
   } while (false)
 

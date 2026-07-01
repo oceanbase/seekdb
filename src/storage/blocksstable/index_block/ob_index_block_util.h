@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_BLOCKSSTABLE_OB_INDEX_BLOCK_UTIL_
 #define OCEANBASE_BLOCKSSTABLE_OB_INDEX_BLOCK_UTIL_
 
-#include "common/datum/ob_datum.h"
+#include "share/datum/ob_datum.h"
 #include "common/ob_version_def.h"
 
 namespace oceanbase
@@ -27,13 +27,10 @@ namespace share
 namespace schema
 {
 struct ObSkipIndexColumnAttr;
-class ObTableSchema;
 }
 }
 namespace blocksstable
 {
-// demoted from share::schema::ObTableSchema(skip-index validation, blocksstable-bound)
-int check_skip_index_valid(const share::schema::ObTableSchema &table_schema);
 // Only MIN_MAX skipping index is supported now.
 enum ObSkipIndexType : uint8_t
 {

@@ -17,7 +17,6 @@
 #ifndef OCEANBASE_MEMTABLE_OB_MEMTABLE_MUTATOR_
 #define OCEANBASE_MEMTABLE_OB_MEMTABLE_MUTATOR_
 
-#include "storage/tablet/ob_batch_create_tablet_arg.h"
 #include "share/ob_define.h"
 
 #include "common/rowkey/ob_rowkey.h"

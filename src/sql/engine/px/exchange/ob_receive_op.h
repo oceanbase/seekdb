@@ -20,7 +20,7 @@
 #include "sql/engine/ob_operator.h"
 #include "sql/executor/ob_task_location.h"
 #include "sql/executor/ob_slice_id.h"
-#include "sql/ob_scanner.h"
+#include "share/ob_scanner.h"
 #include "lib/container/ob_array_serialization.h"
 
 namespace oceanbase

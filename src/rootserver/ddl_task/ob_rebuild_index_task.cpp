@@ -22,8 +22,8 @@
 #include "share/ob_ddl_sim_point.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_root_service.h"
-#include "share/ob_tenant_timezone_mgr.h"               // for OTTZ_MGR
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "observer/omt/ob_tenant_timezone_mgr.h"               // for OTTZ_MGR
+#include "share/vector_index/ob_vector_index_util.h"
 #include "src/storage/ddl/ob_ddl_lock.h"
 #include "share/schema/ob_mlog_info.h"
 #include "share/schema/ob_mview_info.h"

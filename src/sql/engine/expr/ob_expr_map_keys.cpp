@@ -19,7 +19,7 @@
 #include "sql/engine/expr/ob_expr_result_type_util.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/ob_exec_context.h"
-#include "common/udt/ob_map_type.h"
+#include "lib/udt/ob_map_type.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;

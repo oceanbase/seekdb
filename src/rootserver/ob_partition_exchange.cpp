@@ -16,9 +16,9 @@
 
 #define USING_LOG_PREFIX RS
 #include "ob_partition_exchange.h"
-#include "observer/schema/ob_schema_service_sql_impl.h"
 #include "ob_root_service.h"
-#include "share/ob_sql_client_decorator.h" // ObSQLClientRetryWeak
+#include "observer/ob_sql_client_decorator.h" // ObSQLClientRetryWeak
+#include "share/schema/ob_schema_service_sql_impl.h"
 #include "share/tablet/ob_tablet_to_table_history_operator.h" // ObTabletToTableHistoryOperator
 #include "share/tablet/ob_tablet_to_ls_operator.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"

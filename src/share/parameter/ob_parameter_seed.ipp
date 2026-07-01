@@ -196,12 +196,12 @@ DEF_PARAM(rootservice_list, STR_LIST, OB_CLUSTER_PARAMETER, "",
              ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(cluster, STR, OB_CLUSTER_PARAMETER, "obcluster", "Name of the cluster",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
-// During DRC replication, ob_org_cluster_id uses the range [0xffff0000,0xffffffff],
-// while the cluster_id written by user SQL into clog must not fall within [0xffff0000,0xffffffff],
-// because the cluster_id written by user SQL into clog is determined by the cluster_id system config,
-// so the cluster_id system config range is [1, 0xffff0000 - 1], namely [1,4294901759].
-// The default cluser_id is 0, which is outside [1,4294901759], meaning
-// cluster_id must be assigned a value in [1,4294901759] before validating ObServerConfig.
+// drc复制的时候,使用的ob_org_cluster_id的范围是[0xffff0000,0xffffffff],
+// 而用户的sql写入到clog中的cluster_id的范围必须不能在[0xffff0000,0xffffffff]之内,
+// 用户的sql写入到clog中的cluster_id就是由系统配置项中的cluster_id决定的,
+// 因此这里的系统配置项中的cluster_id的范围为[1, 0xffff0000 - 1],也就是[1,4294901759]。
+// cluser_id的默认值为0,不在它的值域[1,4294901759]之内,也就是说,
+// 在检查ObServerConfig对象的合法性之前必须要为cluster_id赋一个[1,4294901759]范围内的值。
 DEF_PARAM(cluster_id, INT, OB_CLUSTER_PARAMETER, "1", "[1,4294901759]", "ID of the cluster",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(obconfig_url, STR, OB_CLUSTER_PARAMETER, "", "URL for OBConfig service",
@@ -1187,13 +1187,13 @@ DEF_PARAM(use_ipv6, BOOL, OB_CLUSTER_PARAMETER, "False",
          "Whether this server uses ipv6 address",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::STATIC_EFFECTIVE));
 
-//DDL timeout
+//ddl 超时时间
 DEF_PARAM(_ob_ddl_timeout, TIME, OB_CLUSTER_PARAMETER, "1000s", "[1s,)",
          "the config parameter of ddl timeout"
          "Range: [1s, +∞)",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 
-// backup and restore config
+// backup 备份恢复相关的配置
 DEF_PARAM(backup_data_file_size, CAP, OB_CLUSTER_PARAMETER, "4G", "[512M,4G]",
         "backup data file size. "
         "Range: [512M, 4G] in integer",
@@ -1623,6 +1623,9 @@ DEF_PARAM(_ob_plan_cache_auto_flush_interval, TIME, OB_CLUSTER_PARAMETER, "0s", 
 DEF_PARAM(_ob_enable_direct_load, BOOL, OB_CLUSTER_PARAMETER, "True",
          "Enable or disable direct path load",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(enable_dblink, BOOL, OB_CLUSTER_PARAMETER, "True",
+         "Enable or disable dblink",
+         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_display_mysql_version, STR_WITH_CHECKER, OB_CLUSTER_PARAMETER, "5.7.25", common::ObMySQLVersionLengthChecker,
         "dynamic mysql version of mysql mode observer",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -1685,8 +1688,14 @@ DEF_PARAM(rpc_server_authentication_method, STR_WITH_CHECKER, OB_CLUSTER_PARAMET
 DEF_PARAM(_enable_backtrace_function, BOOL, OB_CLUSTER_PARAMETER, "True",
          "Decide whether to let the backtrace function take effect",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(_enable_dblink_reuse_connection, BOOL, OB_CLUSTER_PARAMETER, "True",
+         "specifies whether dblink reuse connection in a session",
+         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_with_subquery, INT, OB_CLUSTER_PARAMETER, "0", "[0,2]",
         "WITH subquery transformation,0: optimizer,1: materialize,2: inline",
+        ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(_max_dblink_conn_per_observer, INT, OB_CLUSTER_PARAMETER, "256", "[0,)",
+        "The maximum limit on the number of connections that can be opened simultaneously for a specific observer for any DBLink, default value is 256",
         ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_xsolapi_generate_with_clause, BOOL, OB_CLUSTER_PARAMETER, "True",
         "OLAP API generates WITH clause",
@@ -1767,6 +1776,8 @@ DEF_PARAM(_ob_ddl_temp_file_compress_func, STR_WITH_CHECKER, OB_CLUSTER_PARAMETE
 DEF_PARAM(_enable_prefetch_limiting, BOOL, OB_CLUSTER_PARAMETER, "False",
          "enable limiting memory in prefetch for single query",
          ObParameterAttr(Section::TENANT, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(_storage_leak_check_mod, STR, OB_CLUSTER_PARAMETER, "", "set leak check mod in storage",
+     ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(_ha_tablet_info_batch_count, INT, OB_CLUSTER_PARAMETER, "0", "[0,]",
         "the number of tablet replica info sent by on rpc for ha. Range: [0, +∞) in integer",
         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
@@ -1949,6 +1960,13 @@ DEF_PARAM(strict_check_os_params, BOOL, OB_CLUSTER_PARAMETER, "False",
 DEF_PARAM(_enable_tree_based_io_scheduler, BOOL, OB_CLUSTER_PARAMETER, "True",
          "A switch that allows enabling the tree-based IO scheduler."
          "Value: True: allowed; False: disabled",
+         ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
+DEF_PARAM(clog_io_isolation_mode, INT, OB_CLUSTER_PARAMETER, "1", "[1,2]",
+         "Specifies the I/O isolation mode for Commit Log (clog). "
+         "Values: "
+         "1 - Non-isolation mode (disable I/O isolation), "
+         "2 - Full isolation mode (enable I/O isolation). "
+         "Example: 1=Off, 2=On",
          ObParameterAttr(Section::OBSERVER, Source::DEFAULT, EditLevel::DYNAMIC_EFFECTIVE));
 DEF_PARAM(enable_ob_error_msg_style, BOOL, OB_CLUSTER_PARAMETER, "True",
          "A switch that determines whether to use the ORA-xx or OBE-xx error code format for ORA error codes, with a default value of True to use the OBE-xx format."

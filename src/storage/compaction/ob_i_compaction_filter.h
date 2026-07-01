@@ -18,7 +18,7 @@
 #define OB_STORAGE_COMPACTION_I_COMPACTION_FILTER_H_
 
 #include "lib/utility/ob_print_utils.h"
-#include "storage/access/ob_table_param.h"
+#include "share/schema/ob_table_param.h"
 namespace oceanbase
 {
 namespace blocksstable

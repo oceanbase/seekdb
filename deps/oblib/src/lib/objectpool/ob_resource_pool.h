@@ -25,7 +25,7 @@
 #include "lib/container/ob_id_map.h"
 #include "lib/utility/utility.h"
 #include "lib/allocator/ob_fifo_allocator.h"
-#include "lib/time/ob_clock_generator.h"
+#include "ob_clock_generator.h"
 
 DEFINE_HAS_MEMBER(RP_MAX_FREE_LIST_NUM);
 

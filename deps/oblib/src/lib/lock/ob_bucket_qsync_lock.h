@@ -16,7 +16,7 @@
 #ifndef OCEANBASE_SHARE_LOCK_OB_BUCKET_QSYNC_LOCK_H_
 #define OCEANBASE_SHARE_LOCK_OB_BUCKET_QSYNC_LOCK_H_
 
-#include "lib/time/ob_clock_generator.h"
+#include "common/ob_clock_generator.h"
 #include "lib/alloc/alloc_struct.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_macro_utils.h"

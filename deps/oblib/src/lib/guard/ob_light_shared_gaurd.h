@@ -19,7 +19,7 @@
 #include "lib/allocator/ob_malloc.h"
 #include "lib/ob_errno.h"
 #include "ob_shared_guard.h"
-#include "lib/time/ob_clock_generator.h"
+#include "common/ob_clock_generator.h"
 
 namespace oceanbase
 {

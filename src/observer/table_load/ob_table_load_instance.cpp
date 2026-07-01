@@ -16,10 +16,8 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/table_load/ob_table_load_instance.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/tx/ob_ts_mgr.h"  // transaction::get_tenant_gts
 #include "observer/table_load/ob_table_load_coordinator.h"
 #include "observer/table_load/ob_table_load_index_long_wait.h"
 #include "observer/table_load/ob_table_load_redef_table.h"
@@ -493,7 +491,7 @@ int ObTableLoadInstance::init_ddl_param_for_inc_direct_load()
     LOG_WARN("fail to get table schema", KR(ret), K(table_id));
   } else if (OB_FAIL(ObCommonIDUtils::gen_unique_id_by_rpc( raw_id))) {
     LOG_WARN("failed to gen unique id by rpc", KR(ret));
-  } else if (OB_FAIL(transaction::get_tenant_gts(current_scn))) {
+  } else if (OB_FAIL(share::ObShareUtil::get_tenant_gts(current_scn))) {
     LOG_WARN("failed to get gts", KR(ret));
   } else if (OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_version))) {
     LOG_WARN("failed to get min data version", KR(ret));

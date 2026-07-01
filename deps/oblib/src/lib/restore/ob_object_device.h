@@ -16,10 +16,10 @@
 
 #ifndef SRC_LIBRARY_SRC_LIB_RESTORE_OB_STORAGE_DEVICE_H_
 #define SRC_LIBRARY_SRC_LIB_RESTORE_OB_STORAGE_DEVICE_H_
-#include "lib/restore/ob_io_device.h"
+#include "common/storage/ob_io_device.h"
 #include "lib/restore/ob_storage.h"
-#include "lib/restore/ob_fd_simulator.h"
-#include "lib/objectpool/ob_pooled_allocator.h"
+#include "common/storage/ob_fd_simulator.h"
+#include "lib/allocator/ob_pooled_allocator.h"
 
 namespace oceanbase
 {

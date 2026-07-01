@@ -16,7 +16,7 @@
 
 #ifndef _OB_ALL_VIRTUAL_SYS_VARIABLE_DEFAULT_VALUE_H_
 #define _OB_ALL_VIRTUAL_SYS_VARIABLE_DEFAULT_VALUE_H_
-#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "share/ob_virtual_table_scanner_iterator.h"
 namespace oceanbase
 {
 namespace common

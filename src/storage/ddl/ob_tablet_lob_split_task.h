@@ -17,8 +17,7 @@
 #ifndef STORAGE_AUTO_SPLIT_OB_TABLET_LOB_SPLIT_TASK_H_
 #define STORAGE_AUTO_SPLIT_OB_TABLET_LOB_SPLIT_TASK_H_
 
-#include "observer/scheduler/ob_tenant_dag_scheduler.h"
-#include "storage/ob_storage_rpc_arg.h"
+#include "share/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/ob_i_table.h"
 #include "storage/ob_parallel_external_sort.h"
 #include "storage/ddl/ob_complement_data_task.h"

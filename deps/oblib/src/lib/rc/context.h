@@ -34,7 +34,7 @@
 #include "lib/thread_local/ob_tsi_factory.h"
 #include "lib/list/ob_dlist.h"
 #include "lib/hash/ob_hashmap.h"
-#include "lib/time/ob_clock_generator.h"
+#include "common/ob_clock_generator.h"
 
 #ifdef OB_USE_ASAN
 #include "lib/allocator/ob_asan_allocator.h"

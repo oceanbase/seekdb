@@ -138,6 +138,26 @@ void ObTextStringVectorResult<VectorType>::set_result_null()
 
 using ObTextStringDatumResult = ObTextStringVectorResult<common::ObIVector>;
 
+class ObTextStringObObjResult : public common::ObTextStringResult
+{
+public:
+  ObTextStringObObjResult(const ObObjType type, ObObjCastParams *params, ObObj *res_obj, bool has_header) :
+    common::ObTextStringResult(type, has_header, NULL), params_(params), res_obj_(res_obj)
+  {}
+
+  ~ObTextStringObObjResult(){};
+
+  TO_STRING_KV(KP_(params), KP_(res_obj));
+  int init(int64_t res_len, ObIAllocator *allocator = NULL) override;
+  void set_result();
+
+private:
+  char * buff_alloc (const int64_t size);
+
+private:
+  ObObjCastParams *params_;
+  ObObj *res_obj_;
+};
 
 class ObTextStringHelper
 {

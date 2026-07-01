@@ -16,9 +16,9 @@
 
 #include "storage/fts/ob_fts_parser_property.h"
 
-#include "common/json_type/ob_json_base.h"
-#include "common/json_type/ob_json_parse.h"
-#include "common/json_type/ob_json_tree.h"
+#include "lib/json_type/ob_json_base.h"
+#include "lib/json_type/ob_json_parse.h"
+#include "lib/json_type/ob_json_tree.h"
 #include "lib/list/ob_dlist.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"

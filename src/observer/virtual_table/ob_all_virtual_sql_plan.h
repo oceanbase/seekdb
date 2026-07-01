@@ -17,7 +17,7 @@
 #ifndef SRC_OBSERVER_VIRTUAL_SQL_PLAN_H_
 #define SRC_OBSERVER_VIRTUAL_SQL_PLAN_H_
 
-#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "share/ob_virtual_table_scanner_iterator.h"
 #include "sql/plan_cache/ob_plan_cache.h"
 #include "lib/container/ob_se_array.h"
 #include "common/ob_range.h"

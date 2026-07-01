@@ -33,7 +33,7 @@ int ObStrings::add_string(const ObString &str, int64_t *idx/*=NULL*/)
 {
   int ret = OB_SUCCESS;
   ObString stored_str;
-  if (OB_FAIL(ob_write_string(buf_, str, stored_str))) {
+  if (OB_FAIL(buf_.write_string(str, &stored_str))) {
     LOG_WARN("failed to write string", K(ret), K(str));
   } else if (OB_FAIL(strs_.push_back(stored_str))) {
     LOG_WARN("failed to push into array", K(ret));

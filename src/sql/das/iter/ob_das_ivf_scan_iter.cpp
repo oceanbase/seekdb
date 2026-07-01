@@ -20,12 +20,12 @@
 #include "sql/das/ob_das_scan_op.h"
 #include "storage/tx_storage/ob_access_service.h"
 #include "src/storage/access/ob_table_scan_iterator.h"
-#include "storage/vector_type/ob_vector_common_util.h"
+#include "share/vector_type/ob_vector_common_util.h"
 #include "sql/engine/expr/ob_expr_vec_ivf_sq8_data_vector.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
-#include "sql/resolver/ddl/ob_vec_index_builder_util.h"
+#include "share/ob_vec_index_builder_util.h"
 #include "sql/das/iter/ob_das_vec_scan_utils.h"
-#include "share/roaringbitmap/ob_rb_memory_mgr.h"
+#include "lib/roaringbitmap/ob_rb_memory_mgr.h"
 
 namespace oceanbase
 {

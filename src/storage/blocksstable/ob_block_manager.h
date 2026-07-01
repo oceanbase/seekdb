@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_BLOCKSSTABLE_OB_BLOCK_MANAGER_H_
 #define OCEANBASE_BLOCKSSTABLE_OB_BLOCK_MANAGER_H_
 
-#include "lib/restore/ob_io_device.h"
+#include "common/storage/ob_io_device.h"
 #include "share/io/ob_io_struct.h"
 #include "lib/atomic/ob_atomic.h"
 #include "lib/hash/ob_hashset.h"

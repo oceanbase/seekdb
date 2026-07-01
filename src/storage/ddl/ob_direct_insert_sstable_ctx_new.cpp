@@ -17,9 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_direct_insert_sstable_ctx_new.h"
-#include "storage/ddl/ob_ddl_storage_util.h"
-#include "storage/ob_tablet_autoincrement_service.h"
 #include "share/rc/ob_module_provider.h"
+#include "share/ob_tablet_autoincrement_service.h"
 #include "storage/compaction/ob_schedule_dag_func.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -801,7 +800,7 @@ int ObTenantDirectLoadMgr::check_and_process_finished_tablet(
       int64_t column_count = sst_meta_hdl.get_sstable_meta().get_col_checksum_cnt();
       ObArray<int64_t> co_column_checksums;
       co_column_checksums.set_attr(ObMemAttr("TblDL_Ccc"));
-      if (OB_FAIL(ObDDLStorageUtil::get_co_column_checksums_if_need(tablet_handle, first_major_sstable, co_column_checksums))) {
+      if (OB_FAIL(ObCODDLUtil::get_co_column_checksums_if_need(tablet_handle, first_major_sstable, co_column_checksums))) {
         LOG_WARN("get column checksum from co sstable failed", K(ret));
       } else if (OB_FAIL(ObTabletDDLUtil::report_ddl_checksum(
             ls_id,
@@ -2447,7 +2446,7 @@ int ObTabletFullDirectLoadMgr::update(
     } else if (is_column_group_store && !replay_normal_in_cs_replica) {
       table_key_.table_type_ = ObITable::COLUMN_ORIENTED_SSTABLE;
       int64_t base_cg_idx = -1;
-      if (OB_FAIL(ObDDLStorageUtil::get_base_cg_idx(sqc_build_ctx_.storage_schema_, base_cg_idx))) {
+      if (OB_FAIL(ObCODDLUtil::get_base_cg_idx(sqc_build_ctx_.storage_schema_, base_cg_idx))) {
         LOG_WARN("get base cg idx failed", K(ret));
       } else {
         table_key_.column_group_idx_ = static_cast<uint16_t>(base_cg_idx);
@@ -2678,7 +2677,7 @@ int ObTabletFullDirectLoadMgr::close(const int64_t execution_id, const SCN &star
       }
     #endif
       if (OB_FAIL(ret)) {
-      } else if (OB_FAIL(ObDDLStorageUtil::get_co_column_checksums_if_need(tablet_handle, first_major_sstable, co_column_checksums))) {
+      } else if (OB_FAIL(ObCODDLUtil::get_co_column_checksums_if_need(tablet_handle, first_major_sstable, co_column_checksums))) {
         LOG_WARN("get column checksum from co sstable failed", K(ret));
       } else {
         for (int64_t retry_cnt = 10; retry_cnt > 0; retry_cnt--) { // overwrite ret
@@ -3401,7 +3400,7 @@ int ObTabletFullDirectLoadMgr::check_need_replay_column_store(
 {
   int ret = OB_SUCCESS;
   need_replay_column_store = false;
-  if (OB_FAIL(ObDDLStorageUtil::need_column_group_store(storage_schema, need_replay_column_store))) {
+  if (OB_FAIL(ObCODDLUtil::need_column_group_store(storage_schema, need_replay_column_store))) {
     LOG_WARN("failed to check need replay column store", K(ret), K(storage_schema));
   } else if (!is_ddl_direct_load(direct_load_type) && need_replay_column_store) {
     // if table is row store in F-replica and local ls is cs replica, storage schema in tablet will be column store.

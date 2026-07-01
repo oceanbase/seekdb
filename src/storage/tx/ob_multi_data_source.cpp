@@ -14,13 +14,12 @@
  * limitations under the License.
  */
 
-#include "storage/tablet/ob_batch_create_tablet_arg.h"
 #include "ob_multi_data_source.h"
 #include "storage/tx/ob_trans_part_ctx.h"
 #define NEED_MDS_REGISTER_DEFINE
 #include "storage/multi_data_source/compile_utility/mds_register.h"
 #undef NEED_MDS_REGISTER_DEFINE
-#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
+#include "share/allocator/ob_shared_memory_allocator_mgr.h"
 
 namespace oceanbase
 {

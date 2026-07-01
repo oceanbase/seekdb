@@ -18,7 +18,7 @@
 #include "ob_tablet_meta_table_compaction_operator.h"
 #include "share/tablet/ob_tablet_table_operator.h"
 #include "share/tablet/ob_tablet_meta_table_storage.h"
-#include "share/ob_server_struct.h"
+#include "observer/ob_server_struct.h"
 namespace oceanbase
 {
 using namespace common;

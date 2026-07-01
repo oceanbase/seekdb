@@ -22,8 +22,8 @@
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/resolver/expr/ob_raw_expr_type_demotion.h"
 #include "lib/oblog/ob_log.h"
-#include "common/number/ob_number_v2.h"
-#include "common/wide_integer/ob_wide_integer.h"
+#include "lib/number/ob_number_v2.h"
+#include "lib/wide_integer/ob_wide_integer.h"
 
 namespace oceanbase
 {

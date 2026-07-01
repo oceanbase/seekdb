@@ -18,7 +18,7 @@
 
 #include "io/easy_io.h"
 #include "ob_req_handler.h"
-#include "lib/time/ob_clock_generator.h"
+#include "common/ob_clock_generator.h"
 
 using namespace oceanbase::rpc::frame;
 using namespace oceanbase::common::serialization;

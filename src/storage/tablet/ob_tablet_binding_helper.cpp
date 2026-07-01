@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_binding_helper.h"
-#include "share/ob_ex_rpc.h"
 #include "share/rc/ob_module_provider.h"
+#include "observer/ob_ex_rpc.h"
 #include "storage/tablet/ob_tablet_binding_replay_executor.h"
 #include "share/tablet/ob_tablet_to_ls_operator.h"
 #include "storage/tx_storage/ob_ls_service.h"

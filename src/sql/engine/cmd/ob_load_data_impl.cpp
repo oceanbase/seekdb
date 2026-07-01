@@ -29,11 +29,11 @@
 #include "share/io/ob_backup_io_adapter.h"
 #include "storage/tx_storage/ob_tenant_freezer.h"
 #include "sql/rewrite/ob_transform_utils.h"
-#include "share/ob_tenant_timezone_mgr.h"
+#include "observer/omt/ob_tenant_timezone_mgr.h"
 #include "src/observer/mysql/ob_query_driver.h"
 #include "observer/ob_inner_sql_connection_pool.h"
 #include "share/catalog/ob_catalog_utils.h"
-#include "share/ob_ex_rpc.h"
+#include "observer/ob_ex_rpc.h"
 
 using namespace oceanbase::sql;
 using namespace oceanbase::common;

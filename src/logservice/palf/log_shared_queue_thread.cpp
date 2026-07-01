@@ -15,7 +15,6 @@
  */
 
 #include "log_shared_queue_thread.h"
-#include "share/ob_thread_mgr.h"  // OB TG IDs, previously hidden behind the tenant_base include chain, make the dependency explicit
 #include "log_shared_task.h"
 #include "palf_env_impl.h"                    // PalfEnvImpl
 

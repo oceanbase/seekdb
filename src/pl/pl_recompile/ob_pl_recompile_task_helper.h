@@ -17,7 +17,7 @@
 #define OCEANBASE_SRC_PL_OB_PL_RECOMPILE_TASK_HELPER_H_
 
 #include "share/schema/ob_schema_struct.h"
-#include "common/mysqlclient/ob_mysql_transaction.h"
+#include "lib/mysqlclient/ob_mysql_transaction.h"
 #include "sql/engine/ob_exec_context.h"
 #include "observer/ob_inner_sql_connection_pool.h"
 

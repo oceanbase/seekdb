@@ -22,7 +22,7 @@
 #include "lib/lock/ob_mutex.h"
 #include "lib/lock/ob_spin_rwlock.h"
 #include "lib/alloc/alloc_struct.h"
-#include "lib/utility/ob_mod_define.h"
+#include "lib/allocator/ob_mod_define.h"
 #include "lib/resource/ob_cache_washer.h"
 #include "lib/resource/achunk_mgr.h"
 

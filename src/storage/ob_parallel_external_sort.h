@@ -24,7 +24,7 @@
 #include "lib/container/ob_heap.h"
 #include "lib/container/ob_vector.h"
 #include "share/io/ob_io_manager.h"
-#include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "share/scheduler/ob_tenant_dag_scheduler.h"
 #include "blocksstable/ob_block_sstable_struct.h"
 #include "tmp_file/ob_tmp_file_manager.h"
 #include "share/config/ob_server_config.h"

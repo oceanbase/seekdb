@@ -17,7 +17,7 @@
 #ifndef OB_VIRTUAL_SQL_MONITOR_STATNAME_H_
 #define OB_VIRTUAL_SQL_MONITOR_STATNAME_H_
 
-#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "share/ob_virtual_table_scanner_iterator.h"
 
 namespace oceanbase
 {

@@ -116,6 +116,7 @@ public:
   static bool is_aes_encryption(const ObCipherOpMode opmode);
   static bool is_sm4_encryption(const ObCipherOpMode opmode);
   static bool is_ecb_mode(const ObCipherOpMode opmode);
+  static int get_cipher_op_mode(ObCipherOpMode &op_mode, const sql::ObSQLSessionInfo *session);
 };
 
 struct ObBackupEncryptionMode final

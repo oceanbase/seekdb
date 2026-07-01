@@ -17,7 +17,7 @@
 #pragma once
 
 #include "sql/engine/ob_exec_context.h"
-#include "common/mysqlclient/ob_isql_client.h"
+#include "lib/mysqlclient/ob_isql_client.h"
 
 namespace oceanbase
 {

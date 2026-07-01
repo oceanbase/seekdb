@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_sys_variable_sql_service.h"
-#include "share/ob_server_struct.h"
+#include "observer/ob_server_struct.h"
 
 namespace oceanbase
 {

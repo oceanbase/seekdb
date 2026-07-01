@@ -15,16 +15,12 @@
  */
 
 #define USING_LOG_PREFIX COMMON
-#include "lib/stat/ob_diagnostic_info_guard.h"
-#include "share/unit/ob_unit_config.h"
-#include "share/ob_force_print_log.h"
-#include "lib/ob_define.h"
-#include "share/config/ob_server_config.h"
-#include "share/resource_manager/ob_resource_plan_info.h"
 #include "ob_io_define.h"
 #include "share/io/ob_io_manager.h"
+#include "src/storage/ob_file_system_router.h"
+#include "src/observer/ob_server.h"
+#include "common/storage/ob_fd_simulator.h"
 #include "lib/restore/ob_object_device.h"
-using namespace oceanbase::share;
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 /******************             IOMode              **********************/
@@ -90,6 +86,51 @@ ObIOMode oceanbase::common::get_io_mode_enum(const char *mode_string)
   return mode;
 }
 
+class DiskChecker
+{
+private:
+  DiskChecker() : is_clog_data_in_same_disk_(false)
+  {}
+  ~DiskChecker()
+  {}
+  int get_major_device(const char *path) const
+  {
+    struct stat fileStat;
+    if (stat(path, &fileStat) != 0) {
+      LOG_ERROR_RET(OB_IO_ERROR, "read file stat failed", K(path));
+    }
+    return (fileStat.st_dev >> 8) & 0xFF;
+  }
+  bool is_same_disk(const char *path1, const char *path2)
+  {
+    bool is_same_disk = false;
+    if (OB_ISNULL(path1) || OB_ISNULL(path2)) {
+      LOG_ERROR_RET(OB_INVALID_ARGUMENT, "clog or data path is nullptr", K(path1), K(path2));
+    } else {
+      const int dev1 = get_major_device(path1);
+      const int dev2 = get_major_device(path1);
+      is_same_disk = (dev1 == dev2);
+    }
+    return is_same_disk;
+  }
+public:
+  static DiskChecker &get_instance()
+  {
+    static DiskChecker instance_;
+    return instance_;
+  }
+  bool is_clog_data_in_same_disk()
+  {
+    int ret = OB_SUCCESS;
+    if (REACH_TIME_INTERVAL(60 * 1000L * 1000L)) {
+      is_clog_data_in_same_disk_ = is_same_disk(oceanbase::ObFileSystemRouter::get_instance().get_data_dir(),
+          oceanbase::ObFileSystemRouter::get_instance().get_clog_dir());
+    }
+    return is_clog_data_in_same_disk_;
+  }
+private:
+  bool is_clog_data_in_same_disk_;
+};
 const char *oceanbase::common::get_io_sys_group_name(ObIOModule module)
 {
   const char *ret_name = "UNKNOWN";
@@ -1128,6 +1169,33 @@ oceanbase::share::ObFunctionType ObIORequest::get_func_type() const
   return func_type;
 }
 
+bool ObIORequest::is_local_clog_not_isolated()
+{
+  bool clog_not_isolated = false;
+  const int64_t clog_io_isolation_mode = GCONF.clog_io_isolation_mode;
+  const ObIOGroupKey group_key = get_group_key();
+  const oceanbase::share::ObFunctionType func_type = get_func_type();
+  if (group_key.mode_ != ObIOMode::MAX_MODE) {
+  } else if (clog_io_isolation_mode == 0 || clog_io_isolation_mode > 2) {
+    if ((func_type == ObFunctionType::PRIO_CLOG_HIGH ||
+         func_type == ObFunctionType::PRIO_CLOG_MID ||
+         func_type == ObFunctionType::PRIO_CLOG_LOW)) {
+      clog_not_isolated = !DiskChecker::get_instance().is_clog_data_in_same_disk();
+    }
+  } else if (clog_io_isolation_mode == 1) {
+    if ((func_type == ObFunctionType::PRIO_CLOG_HIGH ||
+         func_type == ObFunctionType::PRIO_CLOG_MID ||
+         func_type == ObFunctionType::PRIO_CLOG_LOW)) {
+      clog_not_isolated = true;
+    }
+  } else if (clog_io_isolation_mode == 2) {
+  }
+  if (REACH_TIME_INTERVAL(60 * 1000L * 1000L)) { // 60s
+    LOG_INFO("clog_not_isolated", K(clog_not_isolated), K(clog_io_isolation_mode), K(group_key), K(func_type));
+  }
+  return clog_not_isolated;
+}
+
 bool ObIORequest::is_sys_module() const
 {
   return nullptr == io_result_ ? false : io_result_->flag_.is_sys_module();
@@ -1554,6 +1622,8 @@ void ObPhyQueue::destroy()
 
 /******************             IOHandle              **********************/
 
+ERRSIM_POINT_DEF(ERRSIM_IO_HANDLE_TRACE);
+
 ObIOHandle::ObIOHandle()
   : result_(nullptr)
 {
@@ -1590,6 +1660,7 @@ int ObIOHandle::set_result(ObIOResult &result)
   result.inc_ref("handle_inc"); // ref for handle
   result.inc_out_ref();
   result_ = &result;
+  storage::ObStorageLeakChecker::get_instance().handle_hold(this);
   return ret;
 }
 
@@ -1777,6 +1848,7 @@ int64_t ObIOHandle::get_rt() const
 void ObIOHandle::reset()
 {
   if (OB_NOT_NULL(result_)) {
+    storage::ObStorageLeakChecker::get_instance().handle_reset(this);
     result_->dec_out_ref();
     result_->dec_ref("handle_dec"); // ref for handle
     result_ = nullptr;
@@ -1798,6 +1870,11 @@ ObIOCallback *ObIOHandle::get_io_callback()
     callback = result_->io_callback_;
   }
   return callback;
+}
+
+bool ObIOHandle::need_trace() const
+{
+  return is_valid() && OB_SUCCESS != ERRSIM_IO_HANDLE_TRACE;
 }
 
 /******************             TenantIOConfig              **********************/
@@ -2120,3 +2197,6 @@ int64_t ObTenantIOConfig::to_string(char* buf, const int64_t buf_len) const
   J_OBJ_END();
   return pos;
 }
+
+
+

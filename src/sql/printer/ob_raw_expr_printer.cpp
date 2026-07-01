@@ -281,6 +281,14 @@ int ObRawExprPrinter::print(ObConstRawExpr *expr)
                OB_FAIL(databuff_printf(buf_, buf_len_, *pos_, "date "))) {
       LOG_WARN("fail to print date string", K(ret));
     } else if (T_BOOL == expr->get_expr_type()) {
+      /**
+       * For SQL like "select * from T1 where C1 = 1 and C1 = 2",
+       * because the where clause is always false, 
+       * the optimizer will replace the filter with startup_filter.
+       * Therefore, dblink needs to handle this special case 
+       * by rewriting startup_filter as "0 = 1" or "1 = 1".
+       * 
+       */
       if (OB_FAIL(databuff_printf(buf_, buf_len_, *pos_, expr->get_value().get_bool() ? "(1 = 1)" : "(0 = 1)"))) {
         LOG_WARN("fail to print startup filter", K(ret));
       }

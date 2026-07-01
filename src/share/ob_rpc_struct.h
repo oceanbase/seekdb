@@ -18,7 +18,6 @@
 #define OCEANBASE_RPC_OB_RPC_STRUCT_H_
 
 #include "common/ob_member.h"
-#include "share/ob_fork_table_info.h"
 #include "common/ob_member_list.h"
 #include "common/ob_role.h"
 #include "common/ob_role_mgr.h"
@@ -28,13 +27,11 @@
 #include "common/ob_store_format.h"
 #include "common/ob_tablet_id.h"
 #include "share/ob_ddl_common.h"
-#include "sql/resolver/ob_stmt_type.h"  // pure enum X-macro header, conf L2(base_stmt_type)
 #include "share/ob_debug_sync.h"
 #include "share/ob_partition_modify.h"
 #include "share/ob_server_status.h"
 #include "share/ob_simple_batch.h"
 #include "share/ob_schema_version_info.h"
-#include "share/session/ob_local_session_var.h"
 #include "share/ob_cluster_role.h"            // ObClusterRole PRIMARY_CLUSTER
 #include "share/ob_cluster_version.h"
 #include "share/schema/ob_error_info.h"
@@ -46,31 +43,42 @@
 #include "share/object_storage/ob_object_storage_struct.h"
 #include "share/ob_storage_format.h"
 #include "share/io/ob_io_calibration.h"  // ObIOBenchResult
+#include "rootserver/ob_rs_job_table_operator.h"
 #include "sql/executor/ob_task_id.h"
 #include "sql/plan_cache/ob_lib_cache_register.h"
-#include "objit/common/ob_item_type.h"
+#include "sql/parser/ob_item_type.h"
 #include "ob_i_tablet_scan.h"
-#include "storage/tablet/ob_tablet_create_delete_mds_user_data.h"  // ObTabletMdsUserDataType
-#include "storage/tablelock/ob_table_lock_priority.h"  // conf L2
-#include "storage/tx/ob_trans_id.h"  // conf L2
+#include "storage/ob_i_table.h"
 #include "share/ob_ls_id.h"
 #include "share/ob_tablet_autoincrement_param.h"
+#include "storage/blocksstable/ob_block_sstable_struct.h"
+#include "storage/ddl/ob_ddl_struct.h"
+#include "storage/tablet/ob_tablet_create_delete_mds_user_data.h"
+#include "storage/tablet/ob_tablet_binding_mds_user_data.h"
+#include "storage/tablet/ob_tablet_create_delete_mds_user_data.h"
+#include "storage/tablet/ob_tablet_split_mds_user_data.h"
+#include "storage/tx/ob_trans_define.h"
+#include "storage/tx/ob_multi_data_source.h"
 #include "share/unit/ob_unit_info.h" //ObUnit*
+#include "logservice/palf/palf_options.h"//access mode
 #include "logservice/palf/palf_base_info.h"//PalfBaseInfo
 #include "logservice/palf/log_define.h"//INVALID_PROPOSAL_ID
 #include "share/config/ob_config.h" // ObConfigArray
+#include "logservice/palf/log_meta_info.h"//LogConfigVersion
 #include "share/scn.h"//SCN
 #include "share/ob_server_status.h"  // ObServerMode
+#include "storage/ddl/ob_ddl_struct.h" // storage::DDLFinishLogInfo
 #include "share/resource_limit_calculator/ob_resource_limit_calculator.h"//ObUserResourceCalculateArg
-#ifdef OB_BUILD_SHARED_STORAGE
-#endif
+#include "storage/tablelock/ob_table_lock_common.h"       //ObTableLockPriority
+#include "storage/tablelock/ob_table_lock_common.h"       //ObTableLockPriority
+#include "storage/mview/ob_major_mv_merge_info.h"       //ObMajorMVMergeInfo
 #include "share/sequence/ob_sequence_cache.h" // ObSeqCleanCacheRes
 #include "share/schema/ob_catalog_schema_struct.h"
 #include "share/schema/ob_ccl_schema_struct.h"
 #include "ob_ddl_args.h"
 #include "ob_mview_args.h"
 #include "share/inner_table/ob_load_inner_table_schema.h"
-#include "share/ai_service/ob_ai_model_info.h"
+#include "share/ai_service/ob_ai_service_struct.h"
 #include "share/schema/ob_location_schema_struct.h"
 #include "share/schema/ob_objpriv_mysql_schema_struct.h"
 
@@ -80,28 +88,8 @@ namespace rootserver
 {
 }
 
-namespace table
-{
-class ObHTableDDLParam;
-}
-
-namespace storage
-{
-class ObCreateTabletSchema;
-}
 namespace obcall
 {
-// restore bare names explicitly after the include chain was cut(enum values only, avoid polluting the obrpc lexical scope with a using-directive)
-using share::schema::CST_FK_VALIDATED;
-using share::schema::GENERATED_TYPE_UNKNOWN;
-using share::schema::ObCstFkValidateFlag;
-using share::schema::ObNameGeneratedType;
-using share::schema::ObTableSchema;
-using share::schema::ObColumnGroupType;
-using share::schema::ObPartitionLevel;
-using share::schema::ObSimpleTableSchemaV2;
-using share::schema::PARTITION_LEVEL_MAX;
-using share::schema::ObMVAvailableFlag;
 typedef common::ObSArray<common::ObAddr> ObServerList;
 static const int64_t MAX_COUNT = 128;
 static const int64_t OB_DEFAULT_ARRAY_SIZE = 8;
@@ -1906,7 +1894,7 @@ public:
   bool foreign_key_checks_;
   bool is_add_to_scheduler_;
   common::ObAddr inner_sql_exec_addr_;
-  share::ObLocalSessionVar local_session_var_;
+  sql::ObLocalSessionVar local_session_var_;
   ObMViewRefreshInfo mview_refresh_info_;
   AlterAlgorithm alter_algorithm_;
   bool alter_auto_partition_attr_;
@@ -2463,7 +2451,7 @@ public:
   ObSQLMode sql_mode_;
   common::ObAddr inner_sql_exec_addr_;
   common::ObArenaAllocator allocator_;
-  share::ObLocalSessionVar local_session_var_;
+  sql::ObLocalSessionVar local_session_var_;
   bool exist_all_column_group_;
   common::ObSEArray<ObIndexColumnGroupItem, 1/*each*/> index_cgs_;
   share::schema::ObVectorIndexRefreshInfo vidx_refresh_info_;
@@ -3082,9 +3070,51 @@ public:
                K_(split_can_reuse_macro_block));
 };
 
-// ObBatchCreateTabletArg moved definition to storage/tablet/ob_batch_create_tablet_arg.h
-// (ObSArray<ObCreateTabletSchema*> virtual to_string requires a complete type, share must not depend upward on storage)
-struct ObBatchCreateTabletArg;
+struct ObBatchCreateTabletArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObBatchCreateTabletArg()
+  { reset(); }
+  ~ObBatchCreateTabletArg() {}
+  bool is_valid() const;
+  bool is_inited() const;
+  void reset();
+  int assign(const ObBatchCreateTabletArg &arg);
+  int init_create_tablet(const share::ObLSID &id_,
+                         const share::SCN &major_frozen_scn,
+                         const bool need_check_tablet_cnt);
+  int64_t get_tablet_count() const;
+  int serialize_for_create_tablet_schemas(char *buf,
+      const int64_t data_len,
+      int64_t &pos) const;
+  int64_t get_serialize_size_for_create_tablet_schemas() const;
+  int deserialize_create_tablet_schemas(const char *buf,
+      const int64_t data_len,
+      int64_t &pos);
+  static int is_old_mds(const char *buf,
+      int64_t data_len,
+      bool &is_old_mds);
+  static int skip_unis_array_len(const char *buf,
+      int64_t data_len,
+      int64_t &pos);
+  bool set_binding_info_outside_create() const;
+  DECLARE_TO_STRING;
+
+public:
+  share::ObLSID id_;
+  share::SCN major_frozen_scn_;
+  common::ObSArray<share::schema::ObTableSchema> table_schemas_;
+  common::ObSArray<ObCreateTabletInfo> tablets_;
+  bool need_check_tablet_cnt_;
+  bool is_old_mds_;
+  common::ObSArray<storage::ObCreateTabletSchema*> create_tablet_schemas_;
+  ObArenaAllocator allocator_;
+  common::ObSArray<ObCreateTabletExtraInfo> tablet_extra_infos_;
+  share::SCN clog_checkpoint_scn_;
+  storage::ObTabletMdsUserDataType create_type_;
+  share::SCN mds_checkpoint_scn_;
+};
 
 struct ObBatchRemoveTabletArg
 {
@@ -3114,7 +3144,23 @@ public:
 
 
 
-// ObCreateTabletBatchInTransRes/ObRemoveTabletsInTransRes moved to storage/tx/ob_tx_result_struct.h(holds ObTxExecResult by value, share must not depend upward on storage/tx)
+struct ObCreateTabletBatchInTransRes
+{
+  OB_UNIS_VERSION(1);
+
+public:
+  ObCreateTabletBatchInTransRes()
+    : ret_(common::OB_SUCCESS), tx_result_() {}
+  ~ObCreateTabletBatchInTransRes() {}
+
+  DECLARE_TO_STRING;
+  int ret_;
+  transaction::ObTxExecResult tx_result_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObCreateTabletBatchInTransRes);
+};
+
+using ObRemoveTabletsInTransRes = ObCreateTabletBatchInTransRes;
 
 struct ObFetchTabletSeqArg
 {
@@ -3248,14 +3294,6 @@ public:
 private:
   DISALLOW_COPY_AND_ASSIGN(ObCalcColumnChecksumResponseArg);
 };
-
-
-
-
-
-
-
-
 
 enum ObReplicaMovingType : int8_t
 {
@@ -4651,37 +4689,6 @@ public:
   common::ObSArray<oceanbase::share::schema::ObDependencyInfo> dependency_infos_;
 };
 
-struct ObAlterPackageArg : public ObDDLArg
-{
-  OB_UNIS_VERSION(1);
-public:
-  ObAlterPackageArg()
-    : db_name_(),
-      package_name_(),
-      package_type_(share::schema::INVALID_PACKAGE_TYPE),
-      compatible_mode_(-1),
-      public_routine_infos_(),
-      error_info_(),
-      exec_env_(),
-      dependency_infos_()
-      {}
-  virtual ~ObAlterPackageArg() {}
-  bool is_valid() const;
-  TO_STRING_KV(K_(db_name), K_(package_name), K_(package_type),
-               K_(compatible_mode), K_(public_routine_infos), K_(error_info),
-               K_(exec_env), K_(dependency_infos));
-
-  
-  common::ObString db_name_;
-  common::ObString package_name_;
-  share::schema::ObPackageType package_type_;
-  int64_t compatible_mode_;
-  common::ObSArray<share::schema::ObRoutineInfo> public_routine_infos_;
-  share::schema::ObErrorInfo error_info_;
-  common::ObString exec_env_;
-  common::ObSArray<oceanbase::share::schema::ObDependencyInfo> dependency_infos_;
-};
-
 struct ObDropPackageArg : public ObDDLArg
 {
   OB_UNIS_VERSION(1);
@@ -4811,7 +4818,7 @@ public:
   ObAlterTriggerArg()
       :
       ObDDLArg(), trigger_database_(), trigger_info_(), trigger_infos_(),
-      is_set_status_(false),is_alter_compile_(false)
+      is_set_status_(false)
   {}
   virtual ~ObAlterTriggerArg()
   {}
@@ -4819,17 +4826,14 @@ public:
   TO_STRING_KV(K(trigger_database_),
       K(trigger_info_),
       K(trigger_infos_),
-      K(is_set_status_),
-      K(is_alter_compile_))
+      K(is_set_status_))
   ;
 public:
   common::ObString trigger_database_;           // deprecated
   share::schema::ObTriggerInfo trigger_info_;   // deprecated
   common::ObSArray<share::schema::ObTriggerInfo> trigger_infos_;
   bool is_set_status_;
-  bool is_alter_compile_;
 };
-
 
 
 struct ObCancelTaskArg : public ObServerZoneArg
@@ -5470,13 +5474,6 @@ private:
   ObZone zone_;
 };
 
-
-
-
-
-
-
-
 struct CheckLeaderRpcIndex
 {
   OB_UNIS_VERSION(1);
@@ -5521,7 +5518,72 @@ public:
 };
 
 
+struct ObDDLBuildSingleReplicaRequestArg final
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObDDLBuildSingleReplicaRequestArg() :
+      rowkey_allocator_("SplitRangeRPC"),
+      ls_id_(), source_tablet_id_(), dest_tablet_id_(),
+      source_table_id_(OB_INVALID_ID), dest_schema_id_(OB_INVALID_ID),
+      schema_version_(0), snapshot_version_(0), ddl_type_(0), task_id_(0), parallelism_(0), execution_id_(-1), tablet_task_id_(0),
+      data_format_version_(0), consumer_group_id_(0), dest_ls_id_(), dest_schema_version_(0),
+      compaction_scn_(0), can_reuse_macro_block_(false), split_sstable_type_(share::ObSplitSSTableType::SPLIT_BOTH),
+      lob_col_idxs_(), parallel_datum_rowkey_list_(), is_no_logging_(false),
+      min_split_start_scn_()
+  {}
+  bool is_valid() const;
+  int assign(const ObDDLBuildSingleReplicaRequestArg &other);
+  TO_STRING_KV(K_(ls_id), K_(source_tablet_id), K_(dest_tablet_id),
+    K_(source_table_id), K_(dest_schema_id), K_(schema_version), K_(snapshot_version), K_(ddl_type),
+    K_(task_id), K_(parallelism), K_(execution_id), K_(tablet_task_id), K_(data_format_version),
+    K_(consumer_group_id), K_(dest_ls_id), K_(dest_schema_version),
+    K_(compaction_scn), K_(can_reuse_macro_block), K_(split_sstable_type), K_(lob_col_idxs),
+    K_(parallel_datum_rowkey_list), K_(is_no_logging), K_(min_split_start_scn));
+public:
+  common::ObArenaAllocator rowkey_allocator_; // alloc buf for datum rowkey.
+  
+  share::ObLSID ls_id_;
+  ObTabletID source_tablet_id_;
+  ObTabletID dest_tablet_id_;
+  int64_t source_table_id_;
+  int64_t dest_schema_id_;
+  int64_t schema_version_;
+  int64_t snapshot_version_;
+  int64_t ddl_type_;
+  int64_t task_id_;
+  int64_t parallelism_;
+  int64_t execution_id_;
+  int64_t tablet_task_id_;
+  uint64_t data_format_version_;
+  int64_t consumer_group_id_;
+  
+  share::ObLSID dest_ls_id_;
+  int64_t dest_schema_version_;
+  int64_t compaction_scn_;
+  bool can_reuse_macro_block_;
+  share::ObSplitSSTableType split_sstable_type_;
+  ObSArray<uint64_t> lob_col_idxs_;
+  common::ObSArray<blocksstable::ObDatumRowkey> parallel_datum_rowkey_list_;
+  bool is_no_logging_;
+  share::SCN min_split_start_scn_;
+};
 
+struct ObDDLBuildSingleReplicaRequestResult final
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObDDLBuildSingleReplicaRequestResult()
+    : ret_code_(OB_SUCCESS), row_inserted_(0), row_scanned_(0), physical_row_count_(0)
+  {}
+  ~ObDDLBuildSingleReplicaRequestResult() = default;
+  TO_STRING_KV(K_(ret_code), K_(row_inserted), K_(row_scanned), K_(physical_row_count))
+public:
+  int64_t ret_code_;
+  int64_t row_inserted_;
+  int64_t row_scanned_;
+  int64_t physical_row_count_;
+};
 
 struct ObDDLBuildSingleReplicaResponseArg final
 {
@@ -5583,12 +5645,146 @@ public:
 };
 
 // === RPC for tablet split start. ===
+struct ObPrepareSplitRangesArg final
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObPrepareSplitRangesArg()
+    : ls_id_(),
+      tablet_id_(),
+      user_parallelism_(0),
+      schema_tablet_size_(0),
+      ddl_type_(share::ObDDLType::DDL_INVALID)
+  {}
+  ~ObPrepareSplitRangesArg() {}
+  bool is_valid() const
+  {
+    return ls_id_.is_valid() && tablet_id_.is_valid() && share::ObDDLType::DDL_INVALID != ddl_type_;
+  }
+  TO_STRING_KV(K(ls_id_), K(tablet_id_), K_(user_parallelism), K_(schema_tablet_size), K_(ddl_type));
+public:
+  share::ObLSID ls_id_;
+  ObTabletID tablet_id_;
+  int64_t user_parallelism_;
+  int64_t schema_tablet_size_;
+  share::ObDDLType ddl_type_;
+DISALLOW_COPY_AND_ASSIGN(ObPrepareSplitRangesArg);
+};
 
+struct ObPrepareSplitRangesRes final
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObPrepareSplitRangesRes()
+    : rowkey_allocator_("SplitRangeRPC"),
+      parallel_datum_rowkey_list_()
+  {}
+  ~ObPrepareSplitRangesRes() = default;
+  TO_STRING_KV(K_(parallel_datum_rowkey_list));
+public:
+  common::ObArenaAllocator rowkey_allocator_; // alloc buf for datum rowkey.
+  common::ObSArray<blocksstable::ObDatumRowkey> parallel_datum_rowkey_list_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObPrepareSplitRangesRes);
+};
 
+struct ObTabletSplitArg final
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObTabletSplitArg()
+    : rowkey_allocator_("SplitRangeRPC"),
+      ls_id_(), table_id_(OB_INVALID_ID), lob_table_id_(OB_INVALID_ID),
+      schema_version_(0), task_id_(0), source_tablet_id_(),
+      dest_tablets_id_(), compaction_scn_(0), data_format_version_(0),
+      consumer_group_id_(0), can_reuse_macro_block_(false), split_sstable_type_(share::ObSplitSSTableType::SPLIT_BOTH),
+      lob_col_idxs_(), parallel_datum_rowkey_list_(), min_split_start_scn_()
+  {}
+  ~ObTabletSplitArg() = default;
+  bool is_valid() const;
+  int assign(const ObTabletSplitArg &other);
+  TO_STRING_KV(K_(ls_id), K_(table_id), K_(lob_table_id),
+               K_(schema_version), K_(task_id), K_(source_tablet_id),
+               K_(dest_tablets_id), K_(compaction_scn), K_(data_format_version),
+               K_(consumer_group_id), K_(can_reuse_macro_block), K_(split_sstable_type),
+               K_(lob_col_idxs), K_(parallel_datum_rowkey_list), K_(min_split_start_scn));
+public:
+  common::ObArenaAllocator rowkey_allocator_; // alloc buf for datum rowkey.
+  share::ObLSID ls_id_;
+  uint64_t table_id_; // scan rows needed.
+  uint64_t lob_table_id_; // scan rows needed.
+  int64_t schema_version_; // report replica build status needed.
+  int64_t task_id_; // report replica build status needed.
+  common::ObTabletID source_tablet_id_;
+  common::ObSArray<common::ObTabletID> dest_tablets_id_;
+  int64_t compaction_scn_;
+  int64_t data_format_version_;
+  uint64_t consumer_group_id_;
+  bool can_reuse_macro_block_;
+  share::ObSplitSSTableType split_sstable_type_;
+  common::ObSEArray<uint64_t, 16> lob_col_idxs_;
+  common::ObSArray<blocksstable::ObDatumRowkey> parallel_datum_rowkey_list_;
+  share::SCN min_split_start_scn_;
+};
 
+struct ObTabletSplitStartArg final
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObTabletSplitStartArg()
+    : split_info_array_()
+    {}
+  ~ObTabletSplitStartArg() = default;
+  bool is_valid() const;
+  TO_STRING_KV(K_(split_info_array));
+public:
+  common::ObSArray<ObTabletSplitArg> split_info_array_;
+};
 
+struct ObTabletSplitStartResult final
+{
+    OB_UNIS_VERSION(1);
+public:
+  ObTabletSplitStartResult()
+    : ret_codes_(), min_split_start_scn_()
+  {}
+  ~ObTabletSplitStartResult() = default;
+  TO_STRING_KV(K_(ret_codes), K_(min_split_start_scn));
+public:
+  common::ObSArray<int> ret_codes_;
+  share::SCN min_split_start_scn_;
+};
 
+struct ObTabletSplitFinishArg final
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObTabletSplitFinishArg()
+    : split_info_array_()
+    {}
+  ~ObTabletSplitFinishArg() = default;
+  bool is_valid() const;
+  TO_STRING_KV(K_(split_info_array));
+public:
+  common::ObSArray<ObTabletSplitArg> split_info_array_;
+};
 
+struct ObTabletSplitFinishResult final
+{
+    OB_UNIS_VERSION(1);
+public:
+  ObTabletSplitFinishResult()
+    : ret_codes_()
+  {}
+  ~ObTabletSplitFinishResult() = default;
+  TO_STRING_KV(K_(ret_codes));
+public:
+  common::ObSArray<int> ret_codes_;
+  
+  share::ObLSID dest_ls_id_;
+  int64_t dest_schema_version_;
+  common::ObAddr server_addr_;
+};
 
 struct ObFreezeSplitSrcTabletArg final
 {
@@ -5706,12 +5902,145 @@ public:
 
 
 
+struct ObCallRemoteWriteDDLRedoLogArg
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObCallRemoteWriteDDLRedoLogArg();
+  ~ObCallRemoteWriteDDLRedoLogArg() = default;
+  int init(const share::ObLSID &ls_id,
+           const storage::ObDDLMacroBlockRedoInfo &redo_info,
+           const int64_t task_id);
+  bool is_valid() const { return 1UL != OB_INVALID_ID && ls_id_.is_valid() && redo_info_.is_valid() && task_id_ != 0; }
+  TO_STRING_KV(K(ls_id_), K_(redo_info), K(task_id_));
+public:
+  
+  share::ObLSID ls_id_;
+  storage::ObDDLMacroBlockRedoInfo redo_info_;
+  int64_t task_id_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObCallRemoteWriteDDLRedoLogArg);
+};
+
+struct ObCallRemoteWriteDDLCommitLogArg final
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObCallRemoteWriteDDLCommitLogArg();
+  ~ObCallRemoteWriteDDLCommitLogArg() = default;
+  int init(const share::ObLSID &ls_id,
+           const storage::ObITable::TableKey &table_key,
+           const share::SCN &start_scn);
+  bool is_valid() const
+  {
+    return 1UL != OB_INVALID_ID && ls_id_.is_valid() && table_key_.is_valid() && start_scn_.is_valid_and_not_min();
+  }
+  TO_STRING_KV(K_(ls_id), K_(table_key), K_(start_scn), K_(table_id),
+               K_(execution_id), K_(ddl_task_id));
+public:
+  
+  share::ObLSID ls_id_;
+  storage::ObITable::TableKey table_key_;
+  share::SCN start_scn_;
+  int64_t table_id_; // depercated
+  int64_t execution_id_; // depercated
+  int64_t ddl_task_id_; // depercated
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObCallRemoteWriteDDLCommitLogArg);
+};
+struct ObCallRemoteWriteDDLIncCommitLogArg final
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObCallRemoteWriteDDLIncCommitLogArg();
+  ~ObCallRemoteWriteDDLIncCommitLogArg();
+  int init(const share::ObLSID &ls_id,
+           const common::ObTabletID tablet_id,
+           const common::ObTabletID lob_meta_tablet_id,
+           transaction::ObTxDesc *tx_desc);
+  int release();
+  bool is_valid() const
+  {
+    return 1UL != OB_INVALID_ID && ls_id_.is_valid() && tablet_id_.is_valid() &&
+           OB_NOT_NULL(tx_desc_) && tx_desc_->is_valid();
+  }
+  TO_STRING_KV(K_(ls_id), K_(tablet_id), K_(lob_meta_tablet_id), KP_(tx_desc));
+public:
+  
+  share::ObLSID ls_id_;
+  common::ObTabletID tablet_id_;
+  common::ObTabletID lob_meta_tablet_id_;
+  transaction::ObTxDesc *tx_desc_;
+  bool need_release_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObCallRemoteWriteDDLIncCommitLogArg);
+};
+
+struct ObCallRemoteWriteDDLIncCommitLogRes final
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObCallRemoteWriteDDLIncCommitLogRes() : tx_result_() {}
+  ~ObCallRemoteWriteDDLIncCommitLogRes() {}
+  TO_STRING_KV(K_(tx_result));
+public:
+  transaction::ObTxExecResult tx_result_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObCallRemoteWriteDDLIncCommitLogRes);
+};
+
+struct ObRegisterTxDataArg
+{
+  OB_UNIS_VERSION(1);
+
+public:
+  ObRegisterTxDataArg();
+  ~ObRegisterTxDataArg() = default;
+  void inc_request_id(const int64_t base_request_id);
+  int init(const transaction::ObTxDesc &tx_desc,
+           const share::ObLSID &ls_id,
+           const transaction::ObTxDataSourceType &type,
+           const common::ObString &buf,
+           const transaction::ObTxSEQ seq_no,
+           const int64_t base_request_id,
+           const transaction::ObRegisterMdsFlag &register_flag);
+  TO_STRING_KV(KPC_(tx_desc),
+               K_(ls_id),
+               K_(type),
+               KP(buf_.length()),
+               K_(seq_no),
+               K_(request_id),
+               K_(register_flag));
+
+public:
+  
+  transaction::ObTxDesc *tx_desc_;
+  share::ObLSID ls_id_;
+  transaction::ObTxDataSourceType type_;
+  common::ObString buf_;
+  transaction::ObTxSEQ seq_no_;
+  int64_t request_id_;
+
+  transaction::ObRegisterMdsFlag register_flag_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObRegisterTxDataArg);
+};
 
 
-
-
-
-// ObRegisterTxDataResult moved to storage/tx/ob_tx_result_struct.h
+struct ObRegisterTxDataResult
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObRegisterTxDataResult() : result_(common::OB_SUCCESS), tx_result_() {}
+  ~ObRegisterTxDataResult() {}
+  void reset();
+  TO_STRING_KV(K_(result), K_(tx_result));
+public:
+  int64_t result_;
+  transaction::ObTxExecResult tx_result_;
+private:
+  DISALLOW_COPY_AND_ASSIGN(ObRegisterTxDataResult);
+};
 
 
 enum LogMemberGCStat
@@ -6039,6 +6368,18 @@ public:
   bool check_committed_;
 };
 
+struct ObBatchGetTabletBindingRes final
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObBatchGetTabletBindingRes() : binding_datas_() {}
+  ~ObBatchGetTabletBindingRes() {}
+public:
+  bool is_valid() const { return binding_datas_.count() > 0; }
+  TO_STRING_KV(K_(binding_datas));
+public:
+  common::ObSArray<ObTabletBindingMdsUserData> binding_datas_;
+};
 
 struct ObBatchGetTabletSplitArg final
 {
@@ -6059,6 +6400,18 @@ public:
   bool check_committed_;
 };
 
+struct ObBatchGetTabletSplitRes final
+{
+  OB_UNIS_VERSION(1);
+public:
+  ObBatchGetTabletSplitRes() : split_datas_() {}
+  ~ObBatchGetTabletSplitRes() {}
+public:
+  bool is_valid() const { return split_datas_.count() > 0; }
+  TO_STRING_KV(K_(split_datas));
+public:
+  common::ObSArray<ObTabletSplitMdsUserData> split_datas_;
+};
 
 
 
@@ -6512,7 +6865,6 @@ public:
   common::ObString task_id_;
   TO_STRING_KV(K(task_id_));
 };
-
 
 
 

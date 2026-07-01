@@ -16,8 +16,8 @@
 
 #pragma once
 
-#include "storage/ob_order_perserving_encoder.h"
-#include "storage/access/ob_table_param.h"
+#include "share/ob_order_perserving_encoder.h"
+#include "share/schema/ob_table_param.h"
 #include "storage/direct_load/ob_direct_load_easy_queue.h"
 #include "storage/direct_load/ob_direct_load_i_table.h"
 #include "storage/direct_load/ob_direct_load_mem_define.h"

@@ -28,7 +28,7 @@
 #include "sql/parser/ob_item_type.h"
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
-#include "sql/session/ob_system_variable.h"
+#include "share/system_variable/ob_system_variable.h"
 namespace oceanbase
 {
 namespace common

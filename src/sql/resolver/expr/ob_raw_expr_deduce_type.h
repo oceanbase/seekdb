@@ -19,7 +19,7 @@
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/resolver/expr/ob_raw_expr_type_demotion.h"
 #include "lib/container/ob_iarray.h"
-#include "common/udt/ob_collection_type.h"
+#include "lib/udt/ob_collection_type.h"
 #include "common/ob_accuracy.h"
 #include "share/ob_i_sql_expression.h"
 #include "ob_raw_expr_util.h"

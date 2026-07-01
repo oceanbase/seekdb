@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_STORAGE_HA_RESTORE_STATUS_H_
 #define OCEANBASE_STORAGE_HA_RESTORE_STATUS_H_
 
+#include "storage/ob_storage_ha_struct.h" // ObMigrationStatus
 
 namespace oceanbase
 {

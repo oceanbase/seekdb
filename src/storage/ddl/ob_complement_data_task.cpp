@@ -1,8 +1,7 @@
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/ob_service.h"
-#include "share/ob_ex_rpc.h"
 #include "share/rc/ob_module_provider.h"
 #include "share/ob_sys_time_zone_util.h"
+#include "observer/ob_ex_rpc.h"
 /*
  * Copyright (c) 2025 OceanBase.
  *
@@ -26,14 +25,14 @@
 #include "share/ob_ddl_checksum.h"
 #include "share/ob_ddl_sim_point.h"
 #include "share/schema/ob_part_mgr_util.h"
-#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "share/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/access/ob_multiple_scan_merge.h"
 #include "storage/ddl/ob_ddl_merge_task.h"
 #include "storage/ddl/ob_tablet_split_task.h"
 #include "observer/ob_server_event_history_table_operator.h"
-#include "share/ob_tenant_timezone_mgr.h"
+#include "observer/omt/ob_tenant_timezone_mgr.h"
 #include "observer/report/ob_tablet_table_updater.h" // for ObTabletTableUpdater
-#include "lib/charset/ob_charset.h"
+#include "deps/oblib/src/lib/charset/ob_charset.h"
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
 #include "storage/ddl/ob_pipeline.h"
 #include "storage/ddl/ob_ddl_merge_task_v2.h"
@@ -1492,7 +1491,7 @@ int ObComplementMergeTask::process()
       const int64_t column_count = sst_meta_hdl.get_sstable_meta().get_col_checksum_cnt();
       ObArray<int64_t> co_column_checksums;
       co_column_checksums.set_attr(ObMemAttr("Comp_Ccc"));
-      if (OB_FAIL(ObDDLStorageUtil::get_co_column_checksums_if_need(tablet_handle, first_major_sstable, co_column_checksums))) {
+      if (OB_FAIL(ObCODDLUtil::get_co_column_checksums_if_need(tablet_handle, first_major_sstable, co_column_checksums))) {
         LOG_WARN("get column checksum from co sstable failed", K(ret));
       } else if (OB_FAIL(ObTabletDDLUtil::report_ddl_checksum(param_->dest_ls_id_,
                                                          param_->dest_tablet_id_,
@@ -1615,7 +1614,7 @@ int ObLocalScan::init(
       STORAGE_LOG(WARN, "Failed to init datum row", K(ret));
     } else {
       tmp_default_row.row_flag_.set_flag(ObDmlFlag::DF_INSERT); // default_row.row_flag_ will be set by deep_copy
-      if (OB_FAIL(storage::get_orig_default_row(hidden_table_schema, org_col_ids, tmp_default_row))) {
+      if (OB_FAIL(hidden_table_schema.get_orig_default_row(org_col_ids, tmp_default_row))) {
         LOG_WARN("fail to get default row from table schema", K(ret));
       } else if (OB_FAIL(default_row_.deep_copy(tmp_default_row, allocator_))) {
         LOG_WARN("failed to deep copy default row", K(ret));

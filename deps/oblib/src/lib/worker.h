@@ -21,7 +21,7 @@
 #include "lib/ob_define.h"
 #include "lib/rc/context.h"
 #include "lib/runtime.h"
-#include "lib/errsim_module/ob_errsim_module_type.h"
+#include "common/errsim_module/ob_errsim_module_type.h"
 
 namespace oceanbase
 {

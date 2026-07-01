@@ -19,7 +19,7 @@
 
 #include "storage/meta_mem/ob_storage_meta_cache.h"
 #include "share/cache/ob_kv_storecache.h"
-#include "share/ob_fork_table_info.h"
+#include "share/ob_fork_table_util.h"
 
 namespace oceanbase
 {

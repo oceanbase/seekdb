@@ -17,7 +17,7 @@
 
 #include "observer/virtual_table/ob_information_columns_table.h"
 #include "observer/virtual_table/ob_table_columns.h"
-#include "share/geo/ob_geo_utils.h"
+#include "lib/geo/ob_geo_utils.h"
 #include "src/sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/ob_sql.h"
 

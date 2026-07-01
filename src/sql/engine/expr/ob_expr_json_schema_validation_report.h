@@ -17,9 +17,9 @@
 #ifndef OCEANBASE_SQL_OB_EXPR_JSON_SCHEMA_VALIDATION_REPORT_H_
 #define OCEANBASE_SQL_OB_EXPR_JSON_SCHEMA_VALIDATION_REPORT_H_
 
-#include "common/json_type/ob_json_tree.h"
-#include "common/json_type/ob_json_bin.h"
-#include "common/json_type/ob_json_schema.h"
+#include "lib/json_type/ob_json_tree.h"
+#include "lib/json_type/ob_json_bin.h"
+#include "lib/json_type/ob_json_schema.h"
 #include "sql/engine/expr/ob_expr_operator.h"
 
 using namespace oceanbase::common;

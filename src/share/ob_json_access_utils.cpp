@@ -19,8 +19,8 @@
 #include "share/ob_json_access_utils.h"
 #include "share/ob_cluster_version.h"
 #include "share/rc/ob_tenant_base.h"
-#include "common/json_type/ob_json_base.h"
-#include "lib/utility/ob_smart_call.h"
+#include "lib/json_type/ob_json_base.h"
+#include "common/ob_smart_call.h"
 namespace oceanbase
 {
 using namespace common;

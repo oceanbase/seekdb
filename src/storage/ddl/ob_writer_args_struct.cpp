@@ -17,11 +17,9 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/ddl/ob_writer_args_struct.h"
-#include "storage/ddl/ob_ddl_storage_util.h"
 #include "storage/ddl/ob_macro_meta_store_manager.h"
 #include "storage/ddl/ob_ddl_inc_redo_log_writer.h"
 #include "storage/ddl/ob_ddl_independent_dag.h"
-#include "storage/ddl/ob_ddl_write_stat_util.h"
 
 namespace oceanbase
 {
@@ -80,7 +78,7 @@ int ObWriterArgs::init(const ObWriteMacroParam &param,
           macro_seq_param_.start_ = param.start_sequence_.macro_data_seq_;
         } else {
           ObMacroDataSeq start_sequence;
-          if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(param.slice_idx_,
+          if (OB_FAIL(ObDDLUtil::init_macro_block_seq(param.slice_idx_,
                                                       start_sequence))) {
             LOG_WARN("fail to initialize start sequence", K(ret), K(param.direct_load_type_),
                                                           K(param.tablet_id_),
@@ -149,7 +147,7 @@ int ObWriterArgs::init(const ObWriteMacroParam &param,
           init_param.macro_meta_store_ = macro_meta_store;
           init_param.is_inc_major_log_ = param.ddl_dag_ ? param.ddl_dag_->is_inc_major_log() : false ;
           ObDDLWriteStat *ddl_write_stat = nullptr;
-          if (OB_FAIL(ObDDLStorageWriteUtil::get_ddl_write_stat(param, cg_table_key, ddl_write_stat))) {
+          if (OB_FAIL(ObDDLUtil::get_ddl_write_stat(param, cg_table_key, ddl_write_stat))) {
             LOG_WARN("get ddl write stat failed", K(ret), K(cg_table_key), K(param), KPC(ddl_write_stat));
           } else {
             init_param.write_stat_ = ddl_write_stat;

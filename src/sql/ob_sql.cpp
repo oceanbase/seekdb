@@ -34,7 +34,7 @@
 #include "sql/plan_cache/ob_values_table_compression.h"
 #include "pl/ob_pl_resolver.h"
 #include "sql/ob_sql_ccl_rule_manager.h"
-#include "lib/utility/ob_smart_call.h"
+#include "common/ob_smart_call.h"
 
 namespace oceanbase
 {
@@ -3142,18 +3142,6 @@ int ObSql::generate_plan(ParseResult &parse_result,
     pctx->set_is_ps_protocol(result.is_ps_protocol());
     bool is_restore = false;
     ObOptimizer optimizer(optctx);
-    bool use_jit = false;
-    bool turn_on_jit = sql_ctx.need_late_compile_;
-    // if (OB_FAIL(ret)) {
-    // } else if (OB_FAIL(need_use_jit(turn_on_jit,
-    //                                 query_hint.use_jit_policy_,
-    //                                 *sql_ctx.session_info_,
-    //                                 use_jit))) {
-    //   use_jit = false;
-    //   LOG_WARN("failed to check for needing jitted expr", K(ret));
-    // } else {
-    //   // do nothing
-    // }
 
     ObLogPlan *logical_plan = NULL;
     ObPhysicalPlan *phy_plan = NULL;
@@ -3174,9 +3162,7 @@ int ObSql::generate_plan(ParseResult &parse_result,
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_ERROR("Failed to alloc physical plan from tc factory", K(ret));
     } else {
-      // update is_use_jit flag
       phy_plan->set_use_rich_format(sql_ctx.session_info_->use_rich_format());
-      phy_plan->stat_.is_use_jit_ = use_jit;
       phy_plan->stat_.enable_early_lock_release_ = sql_ctx.session_info_->get_early_lock_release();
       // if phy_plan's tenant id, which refers the tenant who create this plan,
       // not equal to current effective_tid, plan cache must be invalid
@@ -3620,21 +3606,14 @@ int ObSql::code_generate(
   int64_t last_mem_usage = 0;
   int64_t codegen_mem_usage = 0;
   ObPhysicalPlanCtx *pctx = result.get_exec_context().get_physical_plan_ctx();
-  bool use_jit = false;
   if (OB_ISNULL(stmt) || OB_ISNULL(logical_plan) || OB_ISNULL(stmt->get_query_ctx())
         || OB_ISNULL(phy_plan) || OB_ISNULL(sql_ctx.session_info_)
         || OB_ISNULL(pctx)) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("Logical_plan or phy_plan is NULL", K(ret), K(stmt), K(logical_plan), K(phy_plan),
                "session", sql_ctx.session_info_);
-  //} else if (OB_FAIL(need_use_jit(sql_ctx.need_late_compile_,
-  //                                (stmt->get_stmt_hint().get_query_hint()).use_jit_policy_,
-  //                                *sql_ctx.session_info_,
-  //                                use_jit))) {
-  //  LOG_WARN("failed to check for needing jitted expr", K(ret));
   } else {
-    ObCodeGenerator code_generator(use_jit,
-                                   result.get_exec_context().get_min_cluster_version(),
+    ObCodeGenerator code_generator(result.get_exec_context().get_min_cluster_version(),
                                    &(pctx->get_datum_param_store()));
     phy_plan->set_is_packed(logical_plan->get_optimizer_context().is_packed());
     if (OB_FAIL(code_generator.generate(*logical_plan, *phy_plan))) {
@@ -3643,7 +3622,6 @@ int ObSql::code_generate(
       // session's ignore_stmt status for CG use, needs to be cleared after CG ends
       sql_ctx.session_info_->set_ignore_stmt(false);
       LOG_DEBUG("phy plan", K(*phy_plan));
-      phy_plan->stat_.is_use_jit_ = use_jit;
       phy_plan->set_returning(stmt->is_returning());
       last_mem_usage = phy_plan->get_mem_size();
     }

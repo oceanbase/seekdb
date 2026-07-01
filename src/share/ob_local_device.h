@@ -49,7 +49,7 @@ static inline void io_prep_pread(struct iocb *iocb, int fd, void *buf, size_t co
 #endif // OB_LIBAIO_STUB_DEFINED
 #endif
 #include "lib/allocator/ob_vslice_alloc.h"
-#include "lib/restore/ob_io_device.h"
+#include "common/storage/ob_io_device.h"
 
 namespace oceanbase {
 namespace share {

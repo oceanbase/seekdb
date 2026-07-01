@@ -18,7 +18,7 @@
 #include "ob_virtual_sql_plan_monitor.h"
 #include "share/rc/ob_module_provider.h"
 #include "sql/monitor/ob_phy_plan_monitor_info.h"
-#include "lib/utility/ob_smart_call.h"
+#include "common/ob_smart_call.h"
 
 using namespace oceanbase::observer;
 using namespace oceanbase::common;

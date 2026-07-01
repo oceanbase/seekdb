@@ -23,7 +23,7 @@
 #include "lib/lock/ob_latch.h"
 #include "lib/net/ob_addr.h"
 #include "io/easy_io_struct.h"   // easy_addr_t (RpcGuard); formerly via ob_call_packet.h
-namespace oceanbase { namespace obcall {} }  // fwd obcall ns (reduce deps; replaces rpc/frame header)
+#include "rpc/frame/ob_req_packet_code.h"
 
 // Windows PThreads4W: pthread_t is a struct, not an integer
 #ifdef _WIN32

@@ -35,7 +35,7 @@
 #include "share/rc/ob_tenant_module_init_ctx.h"
 #include "sql/engine/px/ob_px_worker.h"
 #include "lib/resource/ob_affinity_ctrl.h"
-#include "observer/change_stream/ob_change_stream_mgr.h"
+#include "share/change_stream/ob_change_stream_mgr.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;

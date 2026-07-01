@@ -20,9 +20,9 @@
 #include "mds_register.h"
 #undef NEED_MDS_REGISTER_DEFINE
 #include "map_type_index_in_tuple.h"
-#include "common/meta_programming/ob_type_traits.h"
-#include "common/meta_programming/ob_meta_compare.h"
-#include "common/meta_programming/ob_meta_copy.h"
+#include "deps/oblib/src/common/meta_programming/ob_type_traits.h"
+#include "deps/oblib/src/common/meta_programming/ob_meta_compare.h"
+#include "deps/oblib/src/common/meta_programming/ob_meta_copy.h"
 // This file is responsible for generating two compile-time mapping relationships, one from the Helper type and BufferCtx type to ID, as well as the reverse mapping
 // Another is the mapping from Data type to multi-version flags, no reverse mapping needed
 namespace oceanbase

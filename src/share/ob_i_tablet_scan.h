@@ -18,16 +18,16 @@
 #define OCEANBASE_OB_I_TABLET_SCAN_H_
 
 #include "common/ob_common_types.h"
-#include "lib/literals/ob_literals.h"  // _MB literal, previously hidden behind a removed include chain, make the dependency explicit
-#include "sql/engine/cmd/ob_load_data_parser.h"  // ObExternalFileFormat by-value member real user(pure header is already conf L2)
 #include "common/ob_tablet_id.h"
 #include "common/sql_mode/ob_sql_mode.h"
 #include "lib/container/ob_array_array.h"
 #include "lib/container/ob_se_array.h"
-#include "share/geo/ob_s2adapter.h"
+#include "lib/geo/ob_s2adapter.h"
 #include "share/ob_i_sql_expression.h"
 #include "share/ob_ls_id.h"
 #include "share/schema/ob_schema_getter_guard.h"
+#include "storage/tx/ob_trans_define.h"
+#include "share/diagnosis/ob_sql_plan_monitor_node_list.h"
 namespace oceanbase
 {
 namespace share

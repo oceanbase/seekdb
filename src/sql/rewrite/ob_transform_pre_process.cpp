@@ -22,7 +22,7 @@
 #include "sql/rewrite/ob_expand_aggregate_utils.h"
 #include "pl/ob_pl_resolver.h"
 #include "sql/engine/expr/ob_expr_align_date4cmp.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "share/vector_index/ob_vector_index_util.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;

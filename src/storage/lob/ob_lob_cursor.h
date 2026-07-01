@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_LOB_CURSOR_H_
 #define OCEANBASE_STORAGE_OB_LOB_CURSOR_H_
 
-#include "common/lob/ob_lob_base.h"
+#include "lib/lob/ob_lob_base.h"
 #include "storage/lob/ob_lob_util.h"
 #include "storage/lob/ob_lob_persistent_iterator.h"
 

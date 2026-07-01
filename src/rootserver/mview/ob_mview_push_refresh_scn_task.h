@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "common/mysqlclient/ob_mysql_transaction.h"
+#include "lib/mysqlclient/ob_mysql_transaction.h"
 #include "lib/task/ob_timer.h"
 #include "rootserver/mview/ob_mview_timer_task.h"
 #include "lib/container/ob_iarray.h"

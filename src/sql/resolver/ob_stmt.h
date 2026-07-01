@@ -26,7 +26,7 @@
 #include "sql/resolver/expr/ob_raw_expr.h"
 #include "sql/resolver/ob_stmt_type.h"
 #include "share/schema/ob_dependency_info.h"      // ObReferenceObjTable
-#include "lib/objectpool/ob_pooled_allocator.h"
+#include "lib/allocator/ob_pooled_allocator.h"
 namespace oceanbase
 {
 namespace sql
@@ -325,7 +325,6 @@ public:
             // package
             || stmt_type == stmt::T_CREATE_PACKAGE
             || stmt_type == stmt::T_CREATE_PACKAGE_BODY
-            || stmt_type == stmt::T_ALTER_PACKAGE
             || stmt_type == stmt::T_DROP_PACKAGE
 
             // trigger

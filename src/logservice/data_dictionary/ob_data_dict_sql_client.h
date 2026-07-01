@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_DICT_SERVICE_DATA_DICTIONARY_SQL_CLIENT_
 #define OCEANBASE_DICT_SERVICE_DATA_DICTIONARY_SQL_CLIENT_
 
-#include "common/mysqlclient/ob_mysql_result.h"    // ObMySQLResult
+#include "lib/mysqlclient/ob_mysql_result.h"    // ObMySQLResult
 #include "logservice/palf/lsn.h"                // LSN
 #include "share/scn.h"                // SCN
 #include "share/ob_ls_id.h"                     // ObLSArray

@@ -16,8 +16,9 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 
-#include "share/schema/ob_schema_guard_wrapper.h"
+#include "src/share/schema/ob_schema_guard_wrapper.h"
 #include "share/schema/ob_multi_version_schema_service.h"
+#include "src/rootserver/ob_ddl_service.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
@@ -31,7 +32,25 @@ ObSchemaGuardWrapper::ObSchemaGuardWrapper(share::schema::ObMultiVersionSchemaSe
 
 ObSchemaGuardWrapper::~ObSchemaGuardWrapper() {}
 
-// init(ObDDLService*) moved definition to rootserver/ob_ddl_service.cpp(real user ObDDLService complete type, previously hidden behind unity-neighbor table_param.cpp; declaration remains in this class header)
+int ObSchemaGuardWrapper::init(rootserver::ObDDLService *ddl_service)
+{
+  int ret = OB_SUCCESS;
+  if (is_local_guard_) {
+    if (OB_ISNULL(ddl_service)) {
+      ret = OB_INVALID_ARGUMENT;
+      LOG_WARN("ddl_service is null", KR(ret));
+    } else {
+      if (OB_FAIL(ddl_service->get_tenant_schema_guard_with_version_in_inner_table(
+                  local_schema_guard_))) {
+        LOG_WARN("fail to get tenant schema guard with version in inner table",
+                 KR(ret));
+      } else {
+        LOG_INFO("get local schema guard success");
+      }
+    }
+  }
+  return ret;
+}
 
 int ObSchemaGuardWrapper::check_inner_stat_() const
 {

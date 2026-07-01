@@ -27,10 +27,10 @@
 #include "ob_encoding_util.h"
 #include "ob_row_index.h"
 #include "storage/blocksstable/ob_micro_block_header.h"
-#include "sql/engine/vector/ob_uniform_vector.h"
-#include "sql/engine/vector/ob_continuous_vector.h"
-#include "sql/engine/vector/ob_discrete_vector.h"
-#include "sql/engine/vector/ob_fixed_length_vector.h"
+#include "src/share/vector/ob_uniform_vector.h"
+#include "src/share/vector/ob_continuous_vector.h"
+#include "src/share/vector/ob_discrete_vector.h"
+#include "src/share/vector/ob_fixed_length_vector.h"
 
 namespace oceanbase
 {

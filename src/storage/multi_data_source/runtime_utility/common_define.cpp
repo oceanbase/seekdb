@@ -17,7 +17,7 @@
 #include "common_define.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
-#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
+#include "share/allocator/ob_shared_memory_allocator_mgr.h"
 namespace oceanbase
 {
 namespace storage

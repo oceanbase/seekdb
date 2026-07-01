@@ -16,7 +16,7 @@
 
 #ifndef OB_ALL_VIRTUAL_SERVER_COMPACTION_EVENT_HISTORY_H_
 #define OB_ALL_VIRTUAL_SERVER_COMPACTION_EVENT_HISTORY_H_
-#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "share/ob_virtual_table_scanner_iterator.h"
 #include "storage/compaction/ob_server_compaction_event_history.h"
 
 namespace oceanbase

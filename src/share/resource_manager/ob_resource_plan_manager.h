@@ -17,7 +17,7 @@
 #ifndef _OB_SHARE_RESOURCE_PLAN_OB_RESOURCE_PLAN_MANAGER_H_
 #define _OB_SHARE_RESOURCE_PLAN_OB_RESOURCE_PLAN_MANAGER_H_
 
-#include "lib/utility/data_buffer.h"
+#include "common/data_buffer.h"
 #include "lib/string/ob_string.h"
 #include "share/resource_manager/ob_resource_plan_info.h"
 
@@ -36,8 +36,7 @@ public:
   {}
   virtual ~ObResourcePlanManager() = default;
   int init();
-  int32_t get_background_quota() const { return background_quota_; }
-  void set_background_quota(const int32_t v) { background_quota_ = v; }
+  int refresh_global_background_cpu();
   int64_t to_string(char *buf, const int64_t len) const;
 private:
   int32_t background_quota_;

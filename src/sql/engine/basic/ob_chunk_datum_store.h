@@ -24,7 +24,7 @@
 #include "lib/list/ob_dlist.h"
 #include "common/row/ob_row.h"
 #include "common/row/ob_row_iterator.h"
-#include "common/datum/ob_datum.h"
+#include "share/datum/ob_datum.h"
 #include "sql/engine/expr/ob_expr.h"
 #include "storage/tmp_file/ob_tmp_file_manager.h"
 #include "sql/engine/basic/ob_sql_mem_callback.h"

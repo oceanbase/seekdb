@@ -15,7 +15,6 @@
  */
 
 #define USING_LOG_PREFIX STORAGE
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_tablet_split_task.h"
 #include "share/rc/ob_module_provider.h"
 #include "rootserver/ob_root_service.h"
@@ -25,7 +24,7 @@
 #include "storage/tablet/ob_tablet_mds_table_mini_merger.h"
 #include "storage/tablet/ob_tablet_medium_info_reader.h"
 #include "storage/truncate_info/ob_tablet_truncate_info_reader.h"
-#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "share/scheduler/ob_dag_warning_history_mgr.h"
 #include "observer/ob_server_event_history_table_operator.h"
 #include "storage/access/ob_multiple_scan_merge.h"
 #include "storage/ddl/ob_tablet_rebuild_util.h"

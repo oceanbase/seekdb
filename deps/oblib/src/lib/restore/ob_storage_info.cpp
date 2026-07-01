@@ -16,9 +16,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_storage_info.h"
-#include "lib/restore/ob_storage.h"
-#include "lib/restore/ob_i_storage.h"
-#include "lib/restore/ob_object_storage_base.h"
+#include "share/object_storage/ob_object_storage_struct.h"
 #include "lib/json/ob_json.h"
 #include "lib/restore/hmac_signature.h"
 #include "lib/string/ob_string.h"

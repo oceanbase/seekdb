@@ -18,7 +18,7 @@
 #define OCEANBASE_SQL_ENGINE_SORT_SORT_BASIC_INFO_H_
 
 #include "lib/ob_define.h"
-#include "common/datum/ob_datum.h"
+#include "share/datum/ob_datum.h"
 #include "share/datum/ob_datum_funcs.h"
 
 namespace oceanbase

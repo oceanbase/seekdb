@@ -20,7 +20,7 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/thread/ob_simple_thread_pool.h"
 #include "lib/net/ob_addr.h"
-#include "common/timezone/ob_timezone_info.h"
+#include "lib/timezone/ob_timezone_info.h"
 namespace oceanbase
 {
 namespace rootserver

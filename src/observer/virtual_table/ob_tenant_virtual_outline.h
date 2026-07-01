@@ -21,7 +21,7 @@
 #include "lib/container/ob_se_array.h"
 #include "lib/hash/ob_hashmap.h"
 #include "share/schema/ob_schema_struct.h"
-#include "observer/virtual_table/ob_virtual_table_iterator.h"
+#include "share/ob_virtual_table_iterator.h"
 
 using oceanbase::common::OB_APP_MIN_COLUMN_ID;
 namespace oceanbase

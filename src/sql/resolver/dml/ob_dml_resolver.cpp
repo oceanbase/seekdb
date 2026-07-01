@@ -30,19 +30,18 @@
 #include "sql/engine/expr/ob_expr_version.h"
 #include "sql/resolver/dml/ob_insert_resolver.h"
 #include "sql/resolver/dml/ob_inlist_resolver.h"
-#include "sql/session/ob_local_session_var.h"
-#include "sql/session/ob_basic_session_info.h"
 #include "sql/engine/aggregate/ob_aggregate_processor.h"
 #include "sql/optimizer/ob_opt_selectivity.h"
 #include "sql/engine/px/ob_px_util.h"
-#include "sql/das/ob_domain_id.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "share/domain_id/ob_domain_id.h"
+#include "share/vector_index/ob_vector_index_util.h"
 #include "sql/engine/expr/ob_expr_regexp.h"
 #include "share/catalog/ob_catalog_utils.h"
 #include "sql/resolver/dcl/ob_dcl_resolver.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "sql/ob_sql_mock_schema_utils.h"
-#include "sql/hybrid_search/ob_hybrid_search_executor.h"
+#include "share/catalog/ob_catalog_utils.h"
+#include "src/share/hybrid_search/ob_hybrid_search_executor.h"
 
 namespace oceanbase
 {
@@ -5201,7 +5200,7 @@ int ObDMLResolver::expand_view(TableItem &view_item)
   uint64_t database_id = OB_INVALID_ID;
   ObString old_database_name;
   uint64_t old_database_id = OB_INVALID_ID;
-  ObSwitchCatalogHelper switch_catalog_helper;
+  share::ObSwitchCatalogHelper switch_catalog_helper;
   if (OB_ISNULL(params_.schema_checker_) || OB_ISNULL(session_info_)
       || OB_ISNULL(schema_guard = params_.schema_checker_->get_schema_guard())) {
     ret = OB_ERR_UNEXPECTED;
@@ -7614,7 +7613,7 @@ int ObDMLResolver::resolve_generated_column_expr(const ObString &expr_str,
       //do nothing
     } else if (OB_FAIL(local_vars.assign(column_schema->get_local_session_var()))) {
       LOG_WARN("assign local vars failed", K(ret));
-    } else if (OB_FAIL(ObLocalSessionVarHelper::remove_vars_same_with_session(local_vars, session_info))) {
+    } else if (OB_FAIL(local_vars.remove_vars_same_with_session(session_info))) {
       LOG_WARN("remove vars same with session failed", K(ret));
     } else if (0 == local_vars.get_var_count()) {
       //do nothing if all local vars are same with cur session vars
@@ -7633,7 +7632,7 @@ int ObDMLResolver::resolve_generated_column_expr(const ObString &expr_str,
             if (OB_ISNULL(var_array.at(i))) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("unexpected null", K(ret));
-            } else if (OB_FAIL(share::ObSysVarMeta::get_sys_var_name_by_id(var_array.at(i)->type_, var_name))) {
+            } else if (OB_FAIL(ObSysVarFactory::get_sys_var_name_by_id(var_array.at(i)->type_, var_name))) {
               LOG_WARN("get sysvar name failed", K(ret));
             } else if (OB_FAIL(var_array.at(i)->val_.print_sql_literal(val_buf, 100, pos))) {
               LOG_WARN("print value failed", K(ret));

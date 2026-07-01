@@ -19,7 +19,7 @@
 #include "pl/ob_pl_package_manager.h"
 #include "rootserver/ob_tenant_event_def.h"
 #include "sql/engine/ob_exec_context.h"
-#include "rootserver/ob_dynamic_partition_manager.h"
+#include "share/ob_dynamic_partition_manager.h"
 
 namespace oceanbase
 {

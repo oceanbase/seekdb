@@ -22,7 +22,7 @@
 #include "lib/lock/ob_spin_lock.h"
 #include "share/config/ob_server_config.h"
 #include "observer/ob_server_struct.h"
-#include "lib/utility/ob_target_specific.h"
+#include "common/ob_target_specific.h"
 
 #if OB_USE_MULTITARGET_CODE
 #include <emmintrin.h>

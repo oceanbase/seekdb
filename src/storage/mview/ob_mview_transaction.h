@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "common/mysqlclient/ob_single_connection_proxy.h"
+#include "lib/mysqlclient/ob_single_connection_proxy.h"
 #include "sql/session/ob_sql_session_info.h"
 
 namespace oceanbase

@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 #define USING_LOG_PREFIX STORAGE
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_cg_sstable_row_getter.h"
 
 namespace oceanbase

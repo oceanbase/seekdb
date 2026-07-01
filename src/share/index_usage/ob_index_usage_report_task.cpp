@@ -14,9 +14,7 @@
  * limitations under the License.
  */
 #include "ob_index_usage_info_mgr.h"
-#include "share/ob_dml_sql_splicer.h"
-#include "share/ob_server_struct.h"
-#include "share/config/ob_tenant_config_mgr.h"  // TENANT_CONF(this repository keeps it in share, so it is legal)
+#include "observer/ob_server_struct.h"
 
 #define USING_LOG_PREFIX SERVER
 

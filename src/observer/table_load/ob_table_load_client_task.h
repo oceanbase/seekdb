@@ -21,7 +21,7 @@
 #include "observer/table_load/ob_table_load_instance.h"
 #include "observer/table_load/ob_table_load_struct.h"
 #include "share/table/ob_table_load_define.h"
-#include "observer/table_load/ob_table_load_row_array.h"
+#include "share/table/ob_table_load_row_array.h"
 #include "sql/session/ob_sql_session_mgr.h"
 #include "storage/direct_load/ob_direct_load_struct.h"
 

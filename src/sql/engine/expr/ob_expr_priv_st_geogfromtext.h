@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SQL_OB_EXPR_PRIV_ST_GEOGFROMTEXT_
 #define OCEANBASE_SQL_OB_EXPR_PRIV_ST_GEOGFROMTEXT_
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "share/geo/ob_geo_utils.h"
+#include "lib/geo/ob_geo_utils.h"
 
 namespace oceanbase
 {

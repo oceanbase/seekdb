@@ -16,8 +16,8 @@
 
 #include "ob_non_reserved_keywords.h"
 #include <stdio.h>
-#include "lib/utility/alloc_assist.h"
 #include <stdlib.h>
+#include "lib/alloc/alloc_assist.h"
 #include "sql/parser/parse_define.h"
 
 int32_t get_next_id(char c)

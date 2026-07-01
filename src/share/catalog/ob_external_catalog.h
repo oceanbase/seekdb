@@ -17,9 +17,6 @@
 #ifndef __SHARE_OB_EXTERNAL_CATALOG_H__
 #define __SHARE_OB_EXTERNAL_CATALOG_H__
 
-#include "share/schema/ob_schema_struct.h"  // ObDatabaseSchema, previously hidden behind a transitive include(free within share)
-#include "share/schema/ob_table_schema.h"  // ObTableSchema complete type(free within share)
-
 namespace oceanbase
 {
 namespace share

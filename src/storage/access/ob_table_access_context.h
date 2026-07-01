@@ -24,7 +24,7 @@
 #include "share/scn.h"
 #include "storage/access/ob_micro_block_handle_mgr.h"
 #include "storage/column_store/ob_i_cg_iterator.h"
-#include "share/ob_fork_table_info.h"
+#include "share/ob_fork_table_util.h"
 
 namespace oceanbase
 {

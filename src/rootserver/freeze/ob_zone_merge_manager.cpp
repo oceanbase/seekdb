@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX RS_COMPACTION
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_zone_merge_manager.h"
 #include "rootserver/ob_rs_event_history_table_operator.h" // for ROOTSERVICE_EVENT_ADD
 #include "share/ob_zone_merge_table_operator.h"

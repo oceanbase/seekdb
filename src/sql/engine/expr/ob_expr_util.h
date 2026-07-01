@@ -17,7 +17,7 @@
 #ifndef _OB_ENGINE_EXPR_EXPR_UTIL_H_
 #define _OB_ENGINE_EXPR_EXPR_UTIL_H_
 
-#include "common/number/ob_number_v2.h"
+#include "lib/number/ob_number_v2.h"
 #include "sql/engine/expr/ob_expr_operator.h"
 
 namespace oceanbase

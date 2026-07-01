@@ -15,7 +15,6 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_dtl_interm_result_monitor.h"
-#include "observer/omt/ob_multi_tenant.h"  // TenantIdList, previously hidden behind a transitive include
 #include "share/rc/ob_module_provider.h"
 #include "observer/ob_server_utils.h"
 #include "sql/dtl/ob_dtl_interm_result_manager.h"

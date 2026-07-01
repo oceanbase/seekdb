@@ -24,7 +24,6 @@
 #include "sql/engine/cmd/ob_load_data_parser.h"
 #include "sql/resolver/cmd/ob_load_data_stmt.h"
 #include "sql/resolver/ob_resolver_utils.h"
-#include "sql/resolver/cmd/ob_load_data_stmt.h"
 #include "lib/utility/utility.h"
 #include "sql/parser/parse_malloc.h"
 #include "sql/parser/ob_parser.h"
@@ -33,7 +32,7 @@
 #include "sql/resolver/expr/ob_raw_expr_part_expr_checker.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "pl/ob_pl_package.h"
-#include "pl/ob_pl_compile.h"
+#include "pl/ob_pl_build.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/engine/expr/ob_datum_cast.h"
 #include "sql/resolver/dml/ob_inlist_resolver.h"
@@ -1510,6 +1509,7 @@ int ObResolverUtils::get_routine(pl::ObPLPackageGuard &package_guard,
                                  const share::schema::ObRoutineType routine_type,
                                  const common::ObIArray<ObRawExpr *> &expr_params,
                                  const ObRoutineInfo *&routine,
+                                 const ObString &dblink_name,
                                  ObIAllocator *allocator)
 {
   int ret = OB_SUCCESS;
@@ -1532,16 +1532,35 @@ int ObResolverUtils::get_routine(pl::ObPLPackageGuard &package_guard,
     resolve_ctx.params_.secondary_namespace_ = params.secondary_namespace_;
     resolve_ctx.params_.param_list_ = params.param_list_;
     resolve_ctx.params_.is_execute_call_stmt_ = params.is_execute_call_stmt_;
-    OZ (get_routine(resolve_ctx,
-                    current_database,
-                    db_name,
-                    package_name,
-                    routine_name,
-                    routine_type,
-                    expr_params,
-                    tmp_routine_info));
-    if (OB_SUCC(ret)) {
-      routine = tmp_routine_info;
+    if (dblink_name.empty()) {
+      OZ (get_routine(resolve_ctx,
+                      current_database,
+                      db_name,
+                      package_name,
+                      routine_name,
+                      routine_type,
+                      expr_params,
+                      tmp_routine_info));
+      if (OB_SUCC(ret)) {
+        routine = tmp_routine_info;
+      }
+      if (OB_ERR_SP_DOES_NOT_EXIST == ret) {
+        /* Example 1: create or replace synonym test.pkg100_syn for webber.pkg100@oci_link;
+        *    `pkg100` is a package name in remote database `webber`.
+        * Example 2: create or replace synonym test.p101_syn for webber.p101@oci_link;
+        *    `p101` is a procedure name in remote database `webber`.
+        *
+        * If the code executes here, there are the following situations
+        * 1. Only `db_name.empty()` is true , this is not possible;
+        * 2. Only `package_name.empty()` is true, user call statement is `call test.p101_syn(1)`;
+        * 3. `(db_name.empty() && package_name.empty()` is true,  user call statement is `call p101_syn(1)`;
+        * 4. `db_name.empty()` is false and `package_name.empty()` is false,
+        *     user call statement is `call test.pkg100_syn.p1(1)`
+        */
+        // dblink not support
+      }
+    } else {
+      // dblink not support
     }
   }
   return ret;
@@ -1606,6 +1625,7 @@ int ObResolverUtils::resolve_sp_access_name(ObSchemaChecker &schema_checker,
                                             ObString &db_name,
                                             ObString &package_name,
                                             ObString &routine_name,
+                                            ObString &dblink_name,
                                             ObIArray<ObSchemaObjVersion> *deps)
 {
   int ret = OB_SUCCESS;
@@ -1642,6 +1662,7 @@ int ObResolverUtils::resolve_sp_access_name(ObSchemaChecker &schema_checker,
         ObString package_or_db_name;
         uint64_t package_id = OB_INVALID_ID;
         uint64_t database_id = OB_INVALID_ID;
+        bool is_dblink_routine = false;
         if (OB_UNLIKELY(package_or_db_node->type_ != T_IDENT)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("package_or_db_node is invalid", K(package_or_db_node));
@@ -2056,10 +2077,6 @@ stmt::StmtType ObResolverUtils::get_stmt_type_by_item_type(const ObItemType item
       case T_PACKAGE_CREATE_BODY:
       case T_CREATE_WRAPPED_PACKAGE_BODY: {
         type = stmt::T_CREATE_PACKAGE_BODY;
-      }
-      break;
-      case T_PACKAGE_ALTER: {
-        type = stmt::T_ALTER_PACKAGE;
       }
       break;
       case T_PACKAGE_DROP: {
@@ -6204,7 +6221,7 @@ int ObResolverUtils::resolve_external_symbol(common::ObIAllocator &allocator,
                                   params/*param store*/,
                                   extern_param_info);
       HEAP_VAR(pl::ObPLFunctionAST, func_ast, allocator) {
-        if (OB_FAIL(pl::ObPLCompiler::init_anonymous_ast(func_ast,
+        if (OB_FAIL(pl::ObPLBuilder::init_anonymous_ast(func_ast,
                                                         allocator,
                                                         session_info,
                                                         NULL == sql_proxy ? (NULL == ns ? *GCTX.sql_proxy_ : ns->get_external_ns()->get_resolve_ctx().sql_proxy_) : *sql_proxy,

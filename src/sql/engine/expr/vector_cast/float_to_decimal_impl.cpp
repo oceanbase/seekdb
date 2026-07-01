@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 #include "lib/charset/ob_dtoa.h"
-#include "common/wide_integer/ob_wide_integer.h"
-#include "common/wide_integer/ob_wide_integer_helper.h"
+#include "lib/wide_integer/ob_wide_integer.h"
+#include "lib/wide_integer/ob_wide_integer_helper.h"
 #include "share/object/ob_obj_cast.h"
 #include "share/object/ob_obj_cast_util.h"
 #include "sql/engine/expr/ob_datum_cast.h"

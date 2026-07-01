@@ -19,7 +19,7 @@
 
 #include "sql/engine/ob_tenant_sql_memory_manager.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "share/ob_virtual_table_scanner_iterator.h"
 #include "common/row/ob_row.h"
 
 namespace oceanbase

@@ -16,12 +16,12 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "ob_partition_pre_split.h"
-#include "observer/scheduler/ob_partition_auto_split_helper.h"
+#include "share/scheduler/ob_partition_auto_split_helper.h"
 #include "sql/resolver/ob_resolver_utils.h"
-#include "sql/resolver/ddl/ob_index_builder_util.h"
-#include "observer/scheduler/ob_partition_auto_split_helper.h"
+#include "share/ob_index_builder_util.h"
+#include "src/share/scheduler/ob_partition_auto_split_helper.h"
 #include "rootserver/ob_split_partition_helper.h"
-#include "sql/optimizer/stat/ob_opt_stat_manager.h"
+#include "share/stat/ob_opt_stat_manager.h"
 
 
 namespace oceanbase

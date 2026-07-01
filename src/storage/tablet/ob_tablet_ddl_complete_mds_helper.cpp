@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "storage/tablet/ob_tablet_create_mds_helper.h"
 #include "share/rc/ob_module_provider.h"
 #include "common/ob_tablet_id.h"

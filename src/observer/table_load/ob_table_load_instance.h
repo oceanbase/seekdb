@@ -16,9 +16,7 @@
 
 #pragma once
 
-#include "observer/table_load/ob_table_load_row_array.h"
-#include "storage/tablelock/ob_table_lock_rpc_struct.h"  // ObLockTableRequest(previously hidden behind a transitive include)
-#include "observer/table_load/ob_table_load_struct.h"  // ObTableLoadDDLParam(previously hidden behind a transitive include)
+#include "share/table/ob_table_load_row_array.h"
 #include "share/table/ob_table_load_define.h"
 #include "sql/engine/cmd/ob_load_data_utils.h"
 #include "observer/table_load/ob_table_load_struct.h"

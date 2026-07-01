@@ -18,7 +18,7 @@
 #define SRC_LIBRARY_SRC_LIB_RESTORE_OB_STORAGE_H_
 #include "ob_i_storage.h"
 #include "ob_storage_file.h"
-#include "lib/restore/ob_io_device.h"
+#include "common/storage/ob_io_device.h"
 
 namespace oceanbase
 {

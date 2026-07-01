@@ -17,11 +17,11 @@
 #ifndef OCEANBASE_SHARE_OB_DDL_CHECKSUM_H_
 #define OCEANBASE_SHARE_OB_DDL_CHECKSUM_H_
 
-#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "lib/mysqlclient/ob_mysql_proxy.h"
 #include "lib/container/ob_array.h"
 #include "lib/hash/ob_hashmap.h"
 #include "share/ob_dml_sql_splicer.h"
-#include "share/schema/ob_col_desc.h"  // table_param was previously included provider-style, use the pure header
+#include "share/schema/ob_table_param.h"
 
 namespace oceanbase
 {

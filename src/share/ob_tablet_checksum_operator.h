@@ -18,7 +18,7 @@
 #define OCEANBASE_SHARE_OB_TABLET_CHECKSUM_OPERATOR_H_
 
 #include "lib/container/ob_iarray.h"
-#include "common/mysqlclient/ob_isql_client.h"
+#include "lib/mysqlclient/ob_isql_client.h"
 #include "common/ob_zone.h"
 #include "common/ob_tablet_id.h"
 #include "share/ob_tablet_replica_checksum_operator.h"

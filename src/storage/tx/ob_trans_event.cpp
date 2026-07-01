@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_trans_event.h"
 #include "lib/stat/ob_diagnose_info.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"   // EVENT_*

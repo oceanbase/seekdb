@@ -20,7 +20,7 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/ob_define.h"
 #include "ob_tablet_id.h"
-#include "storage/access/ob_table_param.h"
+#include "share/schema/ob_table_param.h"
 
 namespace oceanbase
 {

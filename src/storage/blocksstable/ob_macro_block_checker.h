@@ -19,7 +19,7 @@
 
 #include "lib/utility/ob_macro_utils.h"
 #include "share/ob_define.h"
-#include "storage/access/ob_table_param.h"
+#include "share/schema/ob_table_param.h"
 #include "storage/blocksstable/ob_macro_block_common_header.h"
 #include "storage/blocksstable/ob_block_sstable_struct.h"
 #include "storage/blocksstable/ob_imicro_block_reader.h"

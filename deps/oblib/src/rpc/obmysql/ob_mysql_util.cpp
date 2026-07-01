@@ -17,9 +17,9 @@
 #define USING_LOG_PREFIX RPC_OBMYSQL
 
 #include "rpc/obmysql/ob_mysql_util.h"
-#include "common/json_type/ob_json_bin.h"
-#include "lib/geometry/ob_geo_wkb_define.h"
-#include "common/xml/ob_xml_util.h"
+#include "lib/json_type/ob_json_bin.h"
+#include "lib/geo/ob_geo_bin.h"
+#include "lib/xml/ob_xml_util.h"
 using namespace oceanbase::common;
 
 namespace oceanbase

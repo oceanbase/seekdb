@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_array_sum.h"
-#include "share/object/ob_array_cast.h"
+#include "sql/engine/expr/ob_array_cast.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include "sql/engine/ob_exec_context.h"

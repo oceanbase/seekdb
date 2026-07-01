@@ -16,18 +16,17 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "share/ob_server_struct.h"
 #include "share/table/ob_ttl_util.h"
-#include "share/ob_tenant_timezone_mgr.h"
+#include "observer/omt/ob_tenant_timezone_mgr.h"
 #include "share/location_cache/ob_location_service.h"
 #include "lib/json/ob_json.h"
 #include "share/schema/ob_dependency_info.h"
-#include "share/ob_ex_rpc.h"
+#include "observer/ob_ex_rpc.h"
+#include "observer/ob_server_struct.h"
 #include "share/rc/ob_tenant_base.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::table;
-using namespace oceanbase::share::schema;
 
 namespace oceanbase
 {
@@ -1106,7 +1105,7 @@ int ObTTLUtil::check_kv_attributes(const schema::ObTableSchema &table_schema, bo
 
 int ObTTLUtil::check_kv_attributes(const ObString &kv_attributes,
                                    const schema::ObTableSchema &table_schema,
-                                   share::schema::ObPartitionLevel part_level,
+                                   ObPartitionLevel part_level,
                                    bool by_admin)
 {
   int ret = OB_SUCCESS;

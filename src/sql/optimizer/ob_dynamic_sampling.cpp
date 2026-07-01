@@ -17,10 +17,10 @@
 #define USING_LOG_PREFIX COMMON
 #include "ob_dynamic_sampling.h"
 #include "share/rc/ob_module_provider.h"
-#include "sql/optimizer/stat/ob_dbms_stats_utils.h"
-#include "sql/optimizer/stat/ob_basic_stats_estimator.h"
+#include "share/stat/ob_dbms_stats_utils.h"
+#include "share/stat/ob_basic_stats_estimator.h"
 #include "observer/ob_inner_sql_connection_pool.h"
-#include "sql/optimizer/stat/ob_opt_stat_manager.h"
+#include "share/stat/ob_opt_stat_manager.h"
 #include "sql/optimizer/ob_access_path_estimation.h"
 using namespace oceanbase::common;
 using namespace oceanbase::sql;

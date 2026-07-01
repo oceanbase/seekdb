@@ -23,7 +23,7 @@
 #include "lib/oblog/ob_log_module.h"        // LIB_LOG
 #include "lib/atomic/ob_atomic.h"           // ATOMIC_*
 #include "lib/thread/thread_pool.h"         // lib::ThreadPool
-#include "lib/thread/ob_queue_thread.h"         // ObCond
+#include "common/ob_queue_thread.h"         // ObCond
 
 namespace oceanbase
 {

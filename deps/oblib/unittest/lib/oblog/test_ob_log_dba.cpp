@@ -18,8 +18,7 @@
 
 #include <gtest/gtest.h>
 #include <sys/statvfs.h>
-#include "lib/time/ob_clock_generator.h"
-#include "lib/profile/ob_trace_id.h"
+#include "common/ob_clock_generator.h"
 
 using namespace std;
 namespace oceanbase

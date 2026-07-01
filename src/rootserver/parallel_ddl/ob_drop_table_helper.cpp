@@ -16,13 +16,13 @@
 
 #define USING_LOG_PREFIX RS
 #include "rootserver/parallel_ddl/ob_drop_table_helper.h"
-#include "observer/schema/ob_schema_service_sql_impl.h"
 
 #include "rootserver/ob_snapshot_info_manager.h"
 #include "rootserver/ob_tablet_drop.h"
 #include "share/ob_autoincrement_service.h"
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_table_sql_service.h"
+#include "share/schema/ob_schema_service_sql_impl.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 
 using namespace oceanbase::rootserver;

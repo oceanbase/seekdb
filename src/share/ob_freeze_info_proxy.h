@@ -173,7 +173,6 @@ public:
                             const SCN &frozen_scn,
                             TenantIdAndSchemaVersion &schema_version_info);
 
-
 private:
   int get_min_major_available_and_larger_info_inner_(common::ObISQLClient &sql_proxy,
                                                      const SCN &frozen_scn,

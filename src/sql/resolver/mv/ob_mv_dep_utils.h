@@ -20,8 +20,8 @@
 #include "lib/ob_define.h"
 #include "lib/container/ob_array.h"
 #include "lib/utility/ob_print_utils.h"
-#include "common/mysqlclient/ob_isql_client.h"
-#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "lib/mysqlclient/ob_isql_client.h"
+#include "lib/mysqlclient/ob_mysql_proxy.h"
 
 namespace oceanbase
 {
@@ -30,7 +30,6 @@ namespace share
 namespace schema
 {
 class ObDependencyInfo;
-class ObMViewInfo;
 }
 }
 namespace sql
@@ -61,11 +60,6 @@ public:
 class ObMVDepUtils
 {
 public:
-  // demoted from share::schema::ObMViewInfo(truly sql-bound: ObMVDepUtils/ObMVDepInfo; detached from ObMViewInfo through public getters)
-  static int update_mview_data_attr(common::ObISQLClient &sql_client,
-                                    const uint64_t refresh_scn,
-                                    const uint64_t target_data_sync_scn,
-                                    share::schema::ObMViewInfo &mview_info);
   static int get_mview_dep_infos(common::ObISQLClient &sql_client,
                                  const uint64_t mview_table_id,
                                  common::ObIArray<ObMVDepInfo> &dep_infos);

@@ -21,7 +21,7 @@
 #include "lib/ob_errno.h"
 #include "lib/thread/thread.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "lib/utility/alloc_assist.h"
+#include "lib/alloc/alloc_assist.h"
 #include "lib/lock/ob_spin_rwlock.h"
 
 extern int64_t global_thread_stack_size;

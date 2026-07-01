@@ -19,7 +19,7 @@
 
 #include "share/ob_define.h"
 #include "lib/container/ob_se_array.h"
-#include "observer/virtual_table/ob_virtual_table_iterator.h"
+#include "share/ob_virtual_table_iterator.h"
 #include "share/config/ob_server_config.h"
 #include "sql/engine/table/ob_i_virtual_table_iterator_factory.h"
 

@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include <cstdlib>
 #include <cstddef>
-#include "lib/utility/ob_mod_define.h"
+#include "lib/allocator/ob_mod_define.h"
 #include "lib/oblog/ob_log.h"
 
 namespace oceanbase

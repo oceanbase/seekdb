@@ -16,10 +16,9 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_memtable.h"
 #include "share/rc/ob_module_provider.h"
-#include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
+#include "share/stat/ob_opt_stat_monitor_manager.h"
 #include "storage/memtable/ob_lock_wait_mgr.h"
 #include "storage/memtable/ob_memtable_read_row_util.h"
 #include "storage/memtable/ob_row_conflict_handler.h"
@@ -33,6 +32,7 @@
 #include "storage/ddl/ob_tablet_ddl_kv.h"
 #include "storage/ob_i_table.h"
 #include "storage/ob_i_store.h"
+#include "share/ob_fork_table_util.h"
 #include "lib/hash/ob_hashmap.h"
 
 #include "logservice/ob_log_service.h"

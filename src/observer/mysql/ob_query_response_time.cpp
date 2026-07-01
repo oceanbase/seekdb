@@ -16,8 +16,6 @@
 #define USING_LOG_PREFIX SQL
 #include "ob_query_response_time.h"
 #include "lib/oblog/ob_log.h"
-#include "share/config/ob_tenant_config_mgr.h"
-
 using namespace oceanbase;
 using namespace oceanbase::common;
 using namespace oceanbase::share::schema;

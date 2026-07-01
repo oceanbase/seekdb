@@ -27,7 +27,7 @@
 #include "storage/blocksstable/ob_macro_block_bare_iterator.h"
 #include "storage/blocksstable/encoding/ob_micro_block_decoder.h"
 #include "storage/meta_mem/ob_meta_obj_struct.h"
-#include "storage/blocksstable/ob_kvcache_pre_warmer.h"
+#include "share/cache/ob_kvcache_pre_warmer.h"
 #include "ob_index_block_aggregator.h"
 #include "storage/blocksstable/ob_data_store_desc.h"
 #include "storage/blocksstable/ob_sstable_private_object_cleaner.h"

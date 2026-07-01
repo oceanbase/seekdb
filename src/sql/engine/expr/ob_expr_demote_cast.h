@@ -17,7 +17,7 @@
 #ifndef _OB_EXPR_DEMOTE_CAST_
 #define _OB_EXPR_DEMOTE_CAST_
 
-#include "common/wide_integer/ob_wide_integer.h"
+#include "lib/wide_integer/ob_wide_integer.h"
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/resolver/expr/ob_raw_expr_type_demotion.h"
 

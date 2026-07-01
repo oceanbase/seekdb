@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_CHECK_CONSTRAINTS_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_CHECK_CONSTRAINTS_
-#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "share/ob_virtual_table_scanner_iterator.h"
 
 namespace oceanbase {
 namespace observer {

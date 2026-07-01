@@ -17,9 +17,9 @@
 #ifndef OB_ALL_VIRTUAL_DML_STATS_H
 #define OB_ALL_VIRTUAL_DML_STATS_H
 
-#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
-#include "sql/ob_scanner.h"
-#include "sql/optimizer/stat/ob_opt_stat_monitor_manager.h"
+#include "share/ob_virtual_table_scanner_iterator.h"
+#include "share/ob_scanner.h"
+#include "share/stat/ob_opt_stat_monitor_manager.h"
 
 namespace oceanbase
 {

@@ -18,7 +18,7 @@
 #include "storage/tablelock/ob_table_lock_live_detect_func.h"
 #include "storage/tablelock/ob_table_lock_common.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
-#include "common/mysqlclient/ob_isql_client.h"
+#include "deps/oblib/src/lib/mysqlclient/ob_isql_client.h"
 
 namespace oceanbase
 {

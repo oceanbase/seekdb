@@ -32,7 +32,7 @@ public:
 private:
   int build_isolation_expr(ObRawExpr *&expr, int32_t level);
   int build_access_expr(ObRawExpr *&expr, const bool is_read_only);
-  int scope_resolve(const ParseNode &parse_tree, sql::ObSetVar::SetScopeType &scope);
+  int scope_resolve(const ParseNode &parse_tree, share::ObSetVar::SetScopeType &scope);
   int access_mode_resolve(const ParseNode &parse_tree, bool &is_read_only);
   int transaction_characteristics_resolve(const ParseNode &parse_tree,
                                           bool &is_read_only,

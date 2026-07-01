@@ -29,7 +29,7 @@
 #include "storage/ddl/ob_ddl_lock.h"
 #include "storage/tablelock/ob_lock_utils.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
-#include "common/mysqlclient/ob_mysql_transaction.h"
+#include "lib/mysqlclient/ob_mysql_transaction.h"
 #include "share/ob_share_util.h"
 #include "common/ob_timeout_ctx.h"
 #include "share/tablet/ob_tablet_to_ls_operator.h"

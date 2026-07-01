@@ -15,7 +15,7 @@
  */
 
 #include "lib/string/ob_string.h"
-#include "lib/utility/data_buffer.h"
+#include "common/data_buffer.h"
 
 using namespace oceanbase;
 using namespace common;

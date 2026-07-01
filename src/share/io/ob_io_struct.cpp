@@ -17,11 +17,9 @@
 #define USING_LOG_PREFIX COMMON
 
 #include "ob_io_struct.h"
-#include "share/ob_server_struct.h"  // GCTX, previously hidden behind a transitive include(free within share)
-#include "share/ob_thread_mgr.h"  // TG framework, previously hidden behind a transitive include(free within share)
-#include "share/rc/ob_tenant_base.h"  // MTL_ID, previously hidden behind a transitive include(free within share)
 #include "share/ob_io_device_helper.h"
-#include "lib/restore/ob_fd_simulator.h"
+#include "observer/ob_server.h"
+#include "common/storage/ob_fd_simulator.h"
 
 
 #ifdef _WIN32
@@ -752,7 +750,27 @@ int ObIOTuner::init()
   return ret;
 }
 
-// send_detect_task moved definition to storage/blocksstable/ob_block_manager.cpp(SERVER_BLOCK_MGR real user)
+int ObIOTuner::send_detect_task()
+{
+  int ret = OB_SUCCESS;
+  ObArray<MacroBlockId> macro_ids;
+  macro_ids.set_attr(ObMemAttr("back_io_detect"));
+  if (!OB_SERVER_BLOCK_MGR.is_started() || 0 == OB_SERVER_BLOCK_MGR.get_used_macro_block_count()) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("block manager not init", K(ret));
+  } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.get_limited_iter_macro_ids(macro_ids, 128))) {
+    LOG_WARN("fail to get macro ids", K(ret), K(macro_ids));
+  } else if (OB_UNLIKELY(0 == macro_ids.count())) {
+    // skip
+  } else {
+    MacroBlockId &rand_id = macro_ids.at(ObRandom::rand(0, macro_ids.count() - 1));
+    if (OB_FAIL(
+            OB_IO_MANAGER.get_device_health_detector().record_timing_task(rand_id.first_id(), rand_id.second_id()))) {
+      LOG_WARN("fail to record timing task", K(ret), K(rand_id));
+    }
+  }
+  return ret;
+}
 
 void ObIOTuner::stop()
 {

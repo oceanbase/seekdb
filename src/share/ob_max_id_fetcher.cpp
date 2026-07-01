@@ -18,8 +18,9 @@
 
 #include "share/ob_max_id_fetcher.h"
 
-#include "share/ob_server_struct.h"
-#include "share/ob_sql_client_decorator.h"
+#include "observer/ob_server_struct.h"
+#include "observer/ob_sql_client_decorator.h"
+#include "rootserver/ob_root_service.h"
 #include "share/ob_max_id_cache.h"
 
 namespace oceanbase
@@ -365,8 +366,34 @@ int ObMaxIdFetcher::check_use_max_id_cache_(const ObMaxIdType &max_id_type, bool
   return ret;
 }
 
-// moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in the header, transitional state) -> src/rootserver/ob_root_utils.cpp
-// Note: master tenant-elim changed the original body(removed the tenant_id parameter), HOST(ob_root_utils.cpp) must be synced (see routing item)
+int ObMaxIdFetcher::fetch_max_id_from_cache_(ObMaxIdType id_type,
+      uint64_t &max_id, const uint64_t size)
+{
+  int ret = OB_SUCCESS;
+  uint64_t min_id = OB_INVALID_ID;
+  bool use_cache = false;
+  if (OB_ISNULL(GCTX.root_service_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("pointer is null", KR(ret), KP(GCTX.root_service_));
+  } else if (!GCTX.root_service_->is_full_service()) {
+    ret = OB_RS_SHUTDOWN;
+    LOG_WARN("rs is shutdown", KR(ret));
+  } else if (OB_FAIL(check_use_max_id_cache_(id_type, use_cache))) {
+    LOG_WARN("failed to check use max id cache", KR(ret), K(id_type));
+  } else if (OB_UNLIKELY(!use_cache)) {
+  } else if (OB_FAIL(GCTX.root_service_->get_max_id_cache_mgr().fetch_max_id(id_type,
+          min_id, size))) {
+    LOG_WARN("failed to fetch max id", KR(ret), K(id_type), K(size));
+  } else if (FALSE_IT(max_id = min_id + size - 1)) {
+  } else if (max_id < min_id) {
+    ret = OB_SIZE_OVERFLOW;
+    LOG_WARN("id out of range", KR(ret), K(min_id), K(size), K(max_id));
+  }
+  if (FAILEDx(check_id_valid(id_type, max_id))) {
+    LOG_WARN("invalid max id", KR(ret), K(id_type), K(max_id));
+  }
+  return ret;
+}
 
 int ObMaxIdFetcher::update_max_id(ObISQLClient &sql_client,
                                   ObMaxIdType max_id_type, const uint64_t max_id)

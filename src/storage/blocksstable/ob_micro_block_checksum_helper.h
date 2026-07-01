@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STORAGE_BLOCKSSTABLE_OB_MICRO_BLOCK_CHECKSUM_HELPER_H_
 #define OCEANBASE_STORAGE_BLOCKSSTABLE_OB_MICRO_BLOCK_CHECKSUM_HELPER_H_
 #include "storage/blocksstable/ob_datum_row.h"
-#include "storage/access/ob_table_param.h"
+#include "share/schema/ob_table_param.h"
 #include "storage/compaction/ob_compaction_memory_context.h"
 #include "storage/blocksstable/encoding/ob_encoding_util.h"
 

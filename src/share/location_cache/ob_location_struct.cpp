@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SHARE_LOCATION
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "share/location_cache/ob_location_struct.h"
 #include "share/config/ob_server_config.h" // GCONF
 #include "share/ob_server_struct.h"

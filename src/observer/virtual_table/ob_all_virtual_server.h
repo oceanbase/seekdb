@@ -17,7 +17,7 @@
 #ifndef SRC_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_SERVER_H_
 #define SRC_OBSERVER_VIRTUAL_TABLE_OB_ALL_VIRTUAL_SERVER_H_
 
-#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"  // ObVirtualTableScannerIterator
+#include "share/ob_virtual_table_scanner_iterator.h"  // ObVirtualTableScannerIterator
 
 namespace oceanbase
 {

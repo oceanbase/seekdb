@@ -19,7 +19,7 @@
 
 #include "lib/string/ob_string.h"
 #include "lib/container/ob_array.h"
-#include "lib/allocator/page_arena.h"
+#include "common/ob_string_buf.h"
 
 namespace oceanbase
 {
@@ -43,7 +43,7 @@ public:
   NEED_SERIALIZE_AND_DESERIALIZE;
 
 private:
-  ObArenaAllocator buf_;  // use lib-level arena(ObStringBuf previously contained write_obj/rowkey and depended on the DB-domain layer)
+  ObStringBuf buf_;
   ObArray<ObString> strs_;
 
   DISALLOW_COPY_AND_ASSIGN(ObStrings);

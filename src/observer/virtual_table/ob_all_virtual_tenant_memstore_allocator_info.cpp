@@ -17,7 +17,7 @@
 #include "ob_all_virtual_tenant_memstore_allocator_info.h"
 #include "share/rc/ob_module_provider.h"
 #include "observer/ob_server_utils.h"
-#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
+#include "share/allocator/ob_shared_memory_allocator_mgr.h"
 
 namespace oceanbase
 {

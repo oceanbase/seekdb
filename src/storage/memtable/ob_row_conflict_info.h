@@ -22,7 +22,7 @@
 #include "storage/tx/ob_trans_define.h"
 #include "lib/string/ob_string_holder.h"
 #include "lib/utility/ob_unify_serialize.h"
-#include "common/meta_programming/ob_mover.h"
+#include "deps/oblib/src/common/meta_programming/ob_mover.h"
 #include <utility>
 #include "storage/tx/deadlock_adapter/ob_session_id_pair.h"
 

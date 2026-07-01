@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE_PT
 
 #include "ob_partition_location.h"
+#include "observer/ob_server.h"
 
 
 namespace oceanbase

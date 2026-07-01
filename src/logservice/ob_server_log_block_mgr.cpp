@@ -66,7 +66,6 @@ static int fallocate(int fd, int, int64_t, int64_t len) {
 #include "observer/ob_server.h"                 // OBSERVER
 #include "observer/ob_server_utils.h"           // get_log_disk_info_in_config
 #include "logservice/ob_log_service.h"          // ObLogService
-#include "share/ob_unit_getter.h"  // relocated-definition owner
 
 #define BYTE_TO_MB(byte) (byte+1024*1024-1)/1024/1024
 
@@ -634,35 +633,3 @@ int ObServerLogBlockMgr::scan_ls_dir_(const char *ls_dir,
 }
 } // namespace logservice
 } // namespace oceanbase
-
-// ===== definition moved from src/share/ob_unit_getter.cpp =====
-namespace oceanbase
-{
-namespace share
-{
-
-int ObUnitInfoGetter::get_configs_of_pools(const ObIArray<ObResourcePool> &pools,
-                                           ObIArray<ObUnitConfig> &configs)
-{
-  int ret = OB_SUCCESS;
-  ObUnitConfig unit_config;
-  configs.reuse();
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (pools.count() <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("pools is empty", K(pools), K(ret));
-  } else if (OB_ISNULL(GCTX.log_block_mgr_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", KR(ret), KP(GCTX.log_block_mgr_));
-  } else if (OB_FAIL(unit_config.gen_sys_tenant_unit_config(false/*is_hidden_sys*/, GCTX.log_block_mgr_->get_log_disk_size()))) {
-    LOG_WARN("gen sys tenant unit config fail", KR(ret));
-  } else if (OB_FAIL(configs.push_back(unit_config))) {
-    LOG_WARN("fail to push back sys unit config", KR(ret), K(unit_config));
-  }
-  return ret;
-}
-
-}  // namespace share
-}  // namespace oceanbase

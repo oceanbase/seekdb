@@ -16,12 +16,10 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "rootserver/ob_root_service.h"
-#include "observer/ob_service.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_ddl_executor_util.h"
-#include "share/ob_ex_rpc.h"
+#include "observer/ob_ex_rpc.h"
+#include "observer/ob_service.h"
 #include "observer/ob_server_event_history_table_operator.h"
-#include "share/schema/ob_schema_utils.h"  // relocated-definition owner
 
 namespace oceanbase
 {
@@ -99,7 +97,7 @@ int ObDDLExecutorUtil::wait_ddl_finish(const int64_t task_id,
           int64_t start_time = ObTimeUtility::current_time();
           if (OB_FAIL(ctx.set_timeout(consensus_timeout))) {
             LOG_WARN("fail to set timeout ctx", KR(ret));
-          } else if (OB_FAIL(ObDDLExecutorUtil::try_check_parallel_ddl_schema_in_sync(
+          } else if (OB_FAIL(ObSchemaUtils::try_check_parallel_ddl_schema_in_sync(
                       ctx, session, error_message.consensus_schema_version_, false /*skip_consensus*/))) {
             LOG_WARN("fail to check parallel ddl schema in sync", KR(ret), K_(error_message.consensus_schema_version));
           } else {
@@ -330,7 +328,7 @@ int ObDDLExecutorUtil::execute_pcreate_table(ObSQLSessionInfo *my_session, const
     LOG_WARN("parallel create table failed", KR(ret), "dst", GCTX.self_addr());
   } else {
     int64_t refresh_time = ObTimeUtility::current_time();
-    if (OB_FAIL(ObDDLExecutorUtil::try_check_parallel_ddl_schema_in_sync(
+    if (OB_FAIL(ObSchemaUtils::try_check_parallel_ddl_schema_in_sync(
         ctx, my_session, res.schema_version_, res.do_nothing_))) {
       LOG_WARN("fail to check paralleld ddl schema in sync", KR(ret), K(res));
     }
@@ -345,77 +343,3 @@ int ObDDLExecutorUtil::execute_pcreate_table(ObSQLSessionInfo *my_session, const
 
 } //end namespace sql
 } //end namespace oceanbase
-
-// ===== definition moved from share/schema/ob_schema_utils.cpp =====
-// real user of this module's symbol(previously share->upper-layer inverted include); declaration remains in share header, resolved at link time(transitional state)
-namespace oceanbase
-{
-namespace share
-{
-namespace schema
-{
-
-// try_check_parallel_ddl_schema_in_sync moved to the sql namespace at the end of the file(ObDDLExecutorUtil)
-
-}  // namespace schema
-}  // namespace share
-}  // namespace oceanbase
-
-// from share::schema::ObSchemaUtils demoted(real user sql::ObSQLSessionInfo, A-set)
-namespace oceanbase
-{
-namespace sql
-{
-int ObDDLExecutorUtil::try_check_parallel_ddl_schema_in_sync(
-    const ObTimeoutCtx &ctx,
-    sql::ObSQLSessionInfo *session,
-    const int64_t schema_version,
-    const bool skip_consensus)
-{
-  int ret = OB_SUCCESS;
-  int64_t start_time = ObTimeUtility::current_time();
-  ObMultiVersionSchemaService *schema_service = NULL;
-  int64_t consensus_timeout = 30 * 1000 * 1000L; // 30s
-  bool is_async = false;
-  omt::ObTenantConfigGuard tenant_config(TENANT_CONF());
-  if (tenant_config.is_valid()) {
-    consensus_timeout = tenant_config->_wait_interval_after_parallel_ddl;
-    is_async = (0 == tenant_config->_publish_schema_mode.case_compare(PUBLISH_SCHEMA_MODE_ASYNC));
-  }
-  if (OB_ISNULL(session) || OB_UNLIKELY(false
-      || schema_version <= 0
-      || consensus_timeout < 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), KP(session), K(schema_version), K(consensus_timeout));
-  } else if (OB_ISNULL(schema_service = GCTX.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_service is null", KR(ret));
-  }
-  while (OB_SUCC(ret) && ctx.get_timeout() > 0 && !is_async) {
-    int64_t refreshed_schema_version = OB_INVALID_VERSION;
-    int64_t consensus_schema_version = OB_INVALID_VERSION;
-    if (OB_FAIL(ObDDLExecutorUtil::handle_session_exception(*session))) {
-      LOG_WARN("fail to handle session exception", KR(ret));
-    } else if (OB_FAIL(schema_service->get_tenant_refreshed_schema_version(refreshed_schema_version))) {
-      LOG_WARN("get refreshed schema_version fail", KR(ret));
-    } else if (OB_FAIL(schema_service->get_tenant_broadcast_consensus_version(consensus_schema_version))) {
-      LOG_WARN("get consensus schema_version fail", KR(ret));
-    } else if (refreshed_schema_version >= schema_version
-                && consensus_schema_version >= schema_version) {
-      break;
-    } else if (refreshed_schema_version >= schema_version
-                && (skip_consensus
-                    || ObTimeUtility::current_time() - start_time >= consensus_timeout)) {
-      break;
-    } else {
-      if (REACH_TIME_INTERVAL(1000 * 1000L)) { // 1s
-        LOG_WARN("schema version not sync", K(consensus_timeout),
-                 K(refreshed_schema_version), K(consensus_schema_version), K(schema_version));
-      }
-      ob_usleep(10 * 1000L); // 10ms
-    }
-  }
-  return ret;
-}
-}  // namespace sql
-}  // namespace oceanbase

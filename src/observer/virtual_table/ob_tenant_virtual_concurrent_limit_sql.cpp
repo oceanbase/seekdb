@@ -17,8 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/virtual_table/ob_tenant_virtual_concurrent_limit_sql.h"
-#include "sql/ob_sql_utils.h"
-#include "lib/utility/ob_smart_call.h"
+#include "common/ob_smart_call.h"
 namespace oceanbase
 {
 namespace observer
@@ -231,7 +230,7 @@ int ObTenantVirtualConcurrentLimitSql::fill_cells(const ObOutlineInfo *outline_i
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           } else if (OB_FAIL(outline_info->get_visible_signature(visible_signature))) {
             LOG_WARN("fail to get visibale signature", K(ret));
-          } else if (OB_FAIL(ObSQLUtils::gen_limit_sql(visible_signature, param, *session_, *allocator_, limit_sql))) {
+          } else if (OB_FAIL(ObOutlineInfo::gen_limit_sql(visible_signature, param, *session_, *allocator_, limit_sql))) {
             LOG_WARN("fail to gen limit sql", K(ret), K(visible_signature), KPC(param), K(limit_sql));
           } else {
             cells[cell_idx].set_lob_value(ObLongTextType, limit_sql.ptr(),

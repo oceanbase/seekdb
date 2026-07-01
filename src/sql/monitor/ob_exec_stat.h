@@ -43,7 +43,6 @@ EVENT_INFO(NETWORK_WAIT_TIME, network_wait_time)
 #ifndef OCEANBASE_SQL_OB_EXEC_STAT_H
 #define OCEANBASE_SQL_OB_EXEC_STAT_H
 #include "lib/stat/ob_diagnose_info.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"  // ObLocalDiagnosticInfo(previously hidden behind a transitive include)
 #include "lib/wait_event/ob_wait_event.h"
 #include "lib/statistic_event/ob_stat_event.h"
 #include "lib/net/ob_addr.h"

@@ -16,7 +16,7 @@
 
 #include "share/ob_ls_id.h"
 #include "share/ob_rpc_struct.h"
-#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "deps/oblib/src/lib/mysqlclient/ob_mysql_proxy.h"
 
 #ifndef OB_TABLET_REORGANIZE_HISTORY_TABLE_OPERATOR_H
 #define OB_TABLET_REORGANIZE_HISTORY_TABLE_OPERATOR_H

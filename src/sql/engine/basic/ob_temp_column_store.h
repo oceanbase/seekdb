@@ -20,7 +20,7 @@
 #include "share/ob_define.h"
 #include "sql/engine/basic/ob_temp_block_store.h"
 #include "sql/engine/basic/ob_compact_row.h"
-#include "sql/engine/vector/ob_i_vector.h"
+#include "share/vector/ob_i_vector.h"
 #include "lib/alloc/alloc_struct.h"
 
 namespace oceanbase

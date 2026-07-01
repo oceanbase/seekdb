@@ -21,7 +21,7 @@
 #include "lib/string/ob_string.h"
 #include "lib/container/ob_array.h"
 #include "sql/resolver/ddl/ob_ddl_stmt.h"
-#include "sql/session/ob_system_variable.h"
+#include "share/system_variable/ob_system_variable.h"
 #include "sql/resolver/cmd/ob_variable_set_stmt.h"
 
 namespace oceanbase

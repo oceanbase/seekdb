@@ -16,13 +16,12 @@
 
 #define USING_LOG_PREFIX TABLELOCK
 #include "storage/tablelock/ob_lock_executor.h"
-#include "share/ob_dml_sql_splicer.h"
 #include "share/rc/ob_module_provider.h"
 
-#include "common/mysqlclient/ob_mysql_proxy.h"
-#include "common/mysqlclient/ob_mysql_result.h"
+#include "lib/mysqlclient/ob_mysql_proxy.h"
+#include "lib/mysqlclient/ob_mysql_result.h"
 #include "lib/utility/ob_fast_convert.h"
-#include "lib/utility/alloc_assist.h"
+#include "lib/alloc/alloc_assist.h"
 #include "observer/ob_inner_sql_connection.h"
 #include "share/ob_table_access_helper.h"
 #include "sql/engine/ob_exec_context.h"

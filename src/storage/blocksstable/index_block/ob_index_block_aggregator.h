@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_BLOCKSSTABLE_OB_INDEX_BLOCK_AGGREGATOR_
 #define OCEANBASE_BLOCKSSTABLE_OB_INDEX_BLOCK_AGGREGATOR_
 
-#include "storage/access/ob_table_param.h"
+#include "share/schema/ob_table_param.h"
 #include "ob_index_block_util.h"
 #include "ob_index_block_row_struct.h"
 

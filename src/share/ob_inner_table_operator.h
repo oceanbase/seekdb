@@ -18,8 +18,8 @@
 #define OCEANBASE_SHARE_OB_INNER_TABLE_OPERATOR_H_
 
 #include "share/ob_dml_sql_splicer.h"
-#include "common/mysqlclient/ob_mysql_proxy.h"
-#include "common/mysqlclient/ob_mysql_transaction.h"
+#include "lib/mysqlclient/ob_mysql_proxy.h"
+#include "lib/mysqlclient/ob_mysql_transaction.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/string/ob_string_holder.h"
 

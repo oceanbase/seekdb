@@ -17,9 +17,8 @@
 #define USING_LOG_PREFIX TRANS
 
 #include "ob_ls_tx_service.h"
-#include "storage/throttle/ob_throttle_unit.h"
 #include "share/rc/ob_module_provider.h"
-#include "storage/throttle/ob_throttle_unit.h"
+#include "share/throttle/ob_throttle_unit.h"
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx/ob_tx_replay_executor.h"
 #include "storage/tx/ob_trans_part_ctx.h"

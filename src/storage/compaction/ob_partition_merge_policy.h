@@ -21,7 +21,7 @@
 #include "storage/compaction/ob_tenant_freeze_info_mgr.h"
 #include "storage/compaction/ob_compaction_util.h"
 #include "share/ob_table_range.h"
-#include "observer/scheduler/ob_diagnose_config.h"
+#include "share/scheduler/ob_diagnose_config.h"
 namespace oceanbase
 {
 namespace storage

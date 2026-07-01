@@ -33,6 +33,7 @@
 #include "sql/plan_cache/ob_cache_object_factory.h"
 #include "lib/alloc/ob_malloc_allocator.h"
 #include "share/object/ob_obj_cast.h"
+#include "engine/ob_serializable_function.h"
 
 namespace oceanbase
 {
@@ -83,6 +84,8 @@ inline int init_sql_executor_singletons()
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(ObTaskRunnerNotifierService::build_instance())) {
     SQL_LOG(ERROR, "fail to build ObTaskRunnerNotifierService instance", K(ret));
+  } else {
+    ObFuncSerialization::init();
   }
   if (OB_FAIL(ret)) {
     SQL_LOG(ERROR, "fail to init sql singletons", K(ret));

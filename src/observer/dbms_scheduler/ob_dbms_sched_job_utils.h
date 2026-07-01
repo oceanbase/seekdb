@@ -20,9 +20,9 @@
 #include "lib/ob_define.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_print_utils.h"
-#include "common/mysqlclient/ob_isql_client.h"
+#include "lib/mysqlclient/ob_isql_client.h"
 #include "lib/container/ob_iarray.h"
-#include "common/number/ob_number_v2.h"
+#include "lib/number/ob_number_v2.h"
 
 namespace oceanbase
 {

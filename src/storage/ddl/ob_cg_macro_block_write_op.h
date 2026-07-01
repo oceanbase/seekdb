@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_CG_MACRO_BLOCK_WRITE_OP_H_
 #define OCEANBASE_STORAGE_OB_CG_MACRO_BLOCK_WRITE_OP_H_
 
-#include "observer/scheduler/ob_tenant_dag_scheduler.h"
+#include "share/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/ddl/ob_cg_block_tmp_files_iterator.h"
 #include "storage/ddl/ob_column_clustered_dag.h"
 #include "storage/ddl/ob_pipeline.h"

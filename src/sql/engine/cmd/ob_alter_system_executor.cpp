@@ -19,21 +19,20 @@
 #include "sql/engine/cmd/ob_alter_system_executor.h"
 #include "share/rc/ob_module_provider.h"
 #include "rootserver/ob_rs_serial_call.h"
-#include "share/ob_ex_rpc.h"
+#include "observer/ob_ex_rpc.h"
 #include "share/io/ob_io_manager.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/meta_store/ob_tenant_storage_meta_service.h"
 #include "observer/ob_server.h"
-#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "share/scheduler/ob_dag_warning_history_mgr.h"
 #include "observer/omt/ob_tenant.h" //ObTenant
 #include "rootserver/freeze/ob_major_freeze_helper.h" //ObMajorFreezeHelper
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "sql/plan_cache/ob_ps_cache.h"
 
 #include "rootserver/ob_tenant_event_def.h"
-#include "sql/engine/cmd/ob_redis_importer.h"
-#include "sql/engine/cmd/ob_timezone_importer.h"
-#include "sql/engine/cmd/ob_srs_importer.h"
+#include "share/ob_timezone_importer.h"
+#include "share/ob_srs_importer.h"
 #include "share/ob_internal_table_change_notifier.h"
 
 namespace oceanbase

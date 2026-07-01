@@ -22,7 +22,7 @@
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "sql/engine/cmd/ob_ddl_executor_util.h"
 #include "rootserver/ob_root_service.h"
-#include "observer/vector_index/ob_vector_index_util.h"
+#include "share/vector_index/ob_vector_index_util.h"
 #include "share/ob_ddl_sim_point.h"
 
 using namespace oceanbase::share;

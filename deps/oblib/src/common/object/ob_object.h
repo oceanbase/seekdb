@@ -18,19 +18,18 @@
 #define OCEANBASE_COMMON_OB_OBJECT_H_
 
 #include "lib/ob_define.h"
-#include "common/timezone/ob_time_def.h"
 #include "lib/string/ob_string.h"
 #include "common/ob_action_flag.h"
 #include "common/object/ob_obj_type.h"
 #include "common/ob_accuracy.h"
 #include "lib/checksum/ob_crc64.h"
-#include "common/number/ob_number_v2.h"
+#include "lib/number/ob_number_v2.h"
 #include "lib/charset/ob_charset.h"
-#include "common/timezone/ob_timezone_info.h"
+#include "lib/timezone/ob_timezone_info.h"
 #include "lib/hash/ob_hashutils.h"
 #include "lib/hash_func/ob_hash_func.h"
 #include "lib/charset/ob_dtoa.h"
-#include "common/wide_integer/ob_wide_integer.h"
+#include "lib/wide_integer/ob_wide_integer.h"
 
 namespace oceanbase
 {

@@ -23,7 +23,7 @@
 #include "lib/charset/uca900_ja_data.h"
 #include "lib/charset/ob_ctype_uca_tab.h"
 #include "lib/charset/ob_byteorder.h"
-#include "lib/charset/mb_wc.h"
+#include "deps/oblib/src/lib/charset/mb_wc.h"
 #define OB_UCA_NPAGES 256
 #define OB_UCA_NCHARS 256
 #define OB_UCA_CMASK  255

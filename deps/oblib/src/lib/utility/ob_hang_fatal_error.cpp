@@ -15,8 +15,7 @@
  */
 
 #include "lib/utility/ob_hang_fatal_error.h"
-#include "lib/profile/ob_trace_id.h"
-#include "lib/time/ob_clock_generator.h"
+#include "common/ob_clock_generator.h"
 #include "lib/utility/utility.h"
 
 extern "C" {

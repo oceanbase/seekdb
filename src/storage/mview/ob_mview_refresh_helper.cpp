@@ -23,7 +23,7 @@
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 #include "src/share/schema/ob_mview_info.h"
 #include "observer/ob_inner_sql_connection.h"
-#include "share/ob_ex_rpc.h"
+#include "observer/ob_ex_rpc.h"
 #include "rootserver/mview/ob_mview_maintenance_service.h"
 #include "logservice/ob_log_service.h"
 #include "share/rc/ob_tenant_base.h"

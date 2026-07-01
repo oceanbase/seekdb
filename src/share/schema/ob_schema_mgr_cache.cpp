@@ -19,8 +19,6 @@
 #include "ob_schema_mgr_cache.h"
 #include "share/schema/ob_schema_service.h"
 #include "share/schema/ob_schema_mgr.h"
-#include "share/config/ob_tenant_config_mgr.h"
-
 namespace oceanbase
 {
 using namespace common;

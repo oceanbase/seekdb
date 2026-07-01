@@ -17,9 +17,9 @@
 #define USING_LOG_PREFIX RS
 #include "ob_index_builder.h"
 
-#include "sql/resolver/ddl/ob_index_builder_util.h"
-#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
-#include "sql/resolver/ddl/ob_vec_index_builder_util.h"
+#include "share/ob_index_builder_util.h"
+#include "share/ob_fts_index_builder_util.h"
+#include "share/ob_vec_index_builder_util.h"
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
 #include "ob_root_service.h"
 #include "storage/ddl/ob_ddl_lock.h"

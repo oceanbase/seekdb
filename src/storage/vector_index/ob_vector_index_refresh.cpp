@@ -489,7 +489,7 @@ int ObVectorIndexRefresher::do_refresh() {
         } else if (OB_FAIL(refresh_ctx_->trans_->read(
                        res, select_sql.ptr()))) {
           LOG_WARN("fail to execute select sql", KR(ret),
-                   K(select_sql));  // typo fix: original delete_sql did not exist (not covered by previous compilation); master removed tenant_id
+                   K(delete_sql));
         } else if (OB_ISNULL(result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("result is NULL", K(ret));

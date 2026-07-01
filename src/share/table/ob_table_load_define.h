@@ -23,7 +23,7 @@
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_print_utils.h"
 #include "share/rc/ob_tenant_base.h"
-#include "sql/resolver/cmd/ob_load_dup_action_type.h"
+#include "sql/resolver/cmd/ob_load_data_stmt.h"
 
 namespace oceanbase
 {

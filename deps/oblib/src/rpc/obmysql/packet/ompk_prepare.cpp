@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RPC_OBMYSQL
-#include "rpc/obmysql/packet/ompk_prepare.h"
+#include "deps/oblib/src/rpc/obmysql/packet/ompk_prepare.h"
 #include "rpc/obmysql/ob_mysql_util.h"
 
 namespace oceanbase

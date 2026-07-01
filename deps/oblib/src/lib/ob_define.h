@@ -125,7 +125,7 @@ static inline int ob_win_setsockopt(SOCKET s, int level, int optname,
 // basic headers, do not add other headers here
 #include "lib/coro/co_var.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "lib/utility/alloc_assist.h"
+#include "lib/alloc/alloc_assist.h"
 #include "lib/ob_errno.h"
 
 namespace oceanbase
@@ -411,6 +411,7 @@ const int64_t OB_MAX_TRIGGER_NAME_LENGTH = 128;  // Compatible with Oracle
 const int64_t OB_MAX_WHEN_CONDITION_LENGTH = 4000;  // Compatible with Oracle
 const int64_t OB_MAX_UPDATE_COLUMNS_LENGTH = 4000;  // Compatible with Oracle
 const int64_t OB_MAX_TRIGGER_BODY_LENGTH = 64 * 1024;  // In Oracle, it is the LONG type, but there is a problem with the large object type used in the OB internal table.
+const int64_t OB_MAX_DBLINK_NAME_LENGTH = 128;  // Compatible with Oracle
 const int64_t OB_MAX_DOMIN_NAME_LENGTH = 240;   // max length of domin name, refer to max domin name of oracle
 const int64_t OB_MAX_QB_NAME_LENGTH = 20;  // Compatible with Oracle, hint specifies the length of the maximum qb_name.
 const int64_t OB_MAX_SEQUENCE_NAME_LENGTH = 128; // Compatible with Oracle, error is reported when the logic is greater than
@@ -1564,6 +1565,8 @@ const uint64_t OB_MOCK_TRIGGER_PACKAGE_ID_MASK = 0x4000000000000000;
 const uint64_t OB_MOCK_OBJECT_PACAKGE_ID_MASK = 0x2000000000000000;
 // 64bit : use for mock package spec/body mask, 0 means spec, 1 means body
 const uint64_t OB_MOCK_PACKAGE_BODY_ID_MASK = 0x8000000000000000;
+// 61bit : use for mock dblink udt id
+const uint64_t OB_MOCK_DBLINK_UDT_ID_MASK = 0x1000000000000000;
 /* low 21bits used as package type id */
 #define OB_MOCK_MASK_SHIFT  40
 #define OB_PACKAGE_ID_SHIFT 24
@@ -1571,7 +1574,8 @@ OB_INLINE uint64_t extract_package_id(uint64_t global_type_id)
 {
   uint64_t mask = OB_MOCK_PACKAGE_BODY_ID_MASK |
                   OB_MOCK_TRIGGER_PACKAGE_ID_MASK |
-                  OB_MOCK_OBJECT_PACAKGE_ID_MASK;
+                  OB_MOCK_OBJECT_PACAKGE_ID_MASK |
+                  OB_MOCK_DBLINK_UDT_ID_MASK;
   uint64_t mock_val = global_type_id & (mask >> OB_MOCK_MASK_SHIFT);
   uint64_t package_id = ((int64_t)global_type_id >> OB_PACKAGE_ID_SHIFT) |
                         (mock_val << OB_MOCK_MASK_SHIFT);
@@ -1587,7 +1591,8 @@ OB_INLINE uint64_t combine_pl_type_id(uint64_t package_id, int64_t type_idx)
 {
   uint64_t mask = OB_MOCK_PACKAGE_BODY_ID_MASK |
                   OB_MOCK_TRIGGER_PACKAGE_ID_MASK |
-                  OB_MOCK_OBJECT_PACAKGE_ID_MASK;
+                  OB_MOCK_OBJECT_PACAKGE_ID_MASK |
+                  OB_MOCK_DBLINK_UDT_ID_MASK;
   type_idx |= ((uint64_t)(package_id & mask) >> OB_MOCK_MASK_SHIFT);
   return (package_id << OB_PACKAGE_ID_SHIFT | type_idx);
 }

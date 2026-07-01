@@ -17,7 +17,7 @@
 #ifndef OB_BLOCK_STAT_COLLECTOR_H_
 #define OB_BLOCK_STAT_COLLECTOR_H_
 
-#include "storage/access/ob_table_param.h"
+#include "share/schema/ob_table_param.h"
 #include "storage/blocksstable/ob_datum_row.h"
 #include "storage/blocksstable/index_block/ob_index_block_util.h"
 

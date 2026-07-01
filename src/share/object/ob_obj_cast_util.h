@@ -26,19 +26,6 @@ namespace oceanbase
 namespace common
 {
 
-// moved down from sql ob_expr_json_func_helper.h:binary-json zero-value constant,depends only on ObLobCommon(oblib)
-struct ObJsonZeroVal
-{
-  static const int32_t OB_JSON_ZERO_VAL_LENGTH = sizeof(ObLobCommon) + 2;
-  ObJsonZeroVal() : header_(), json_bin_() {
-    json_bin_[0] = '\0';
-    json_bin_[1] = '\0';
-  }
-  ObLobCommon header_;
-  char json_bin_[4];
-};
-
-
 // check with given lower and upper limit.
 template <typename InType, typename OutType>
 OB_INLINE int numeric_range_check(const InType in_val,

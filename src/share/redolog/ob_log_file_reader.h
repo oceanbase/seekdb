@@ -23,7 +23,7 @@
 #include "lib/lock/ob_mutex.h"
 #include "lib/lock/ob_tc_rwlock.h"
 #include "lib/task/ob_timer.h"
-#include "lib/restore/ob_io_device.h"
+#include "common/storage/ob_io_device.h"
 
 namespace oceanbase
 {

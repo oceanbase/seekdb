@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SQL_EXE
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_task.h"
 #include "sql/engine/px/ob_px_util.h"
 

@@ -15,12 +15,12 @@
  */
 #define USING_LOG_PREFIX RS
 #include "rootserver/parallel_ddl/ob_table_helper.h"
-#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
-#include "sql/resolver/ddl/ob_vec_index_builder_util.h"
+#include "share/ob_fts_index_builder_util.h"
+#include "share/ob_vec_index_builder_util.h"
 #include "rootserver/parallel_ddl/ob_create_table_like_helper.h"
 #include "share/ob_debug_sync_point.h"
 #include "share/schema/ob_multi_version_schema_service.h"
-#include "rootserver/ob_domain_index_builder_util.h"
+#include "share/ob_domain_index_builder_util.h"
 #include "rootserver/ob_lob_meta_builder.h"
 #include "rootserver/ob_lob_piece_builder.h"
 

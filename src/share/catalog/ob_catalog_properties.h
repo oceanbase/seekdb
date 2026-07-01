@@ -17,8 +17,7 @@
 #include "common/object/ob_object.h"
 #include "lib/json/ob_json.h"
 #include "lib/string/ob_string.h"
-struct _ParseNode;
-typedef struct _ParseNode ParseNode;  // fwd: parser node is only used as a referenced parameter
+#include "sql/parser/parse_node.h"
 
 #ifndef _OB_CATALOG_PROPERTIES_H_
 #define _OB_CATALOG_PROPERTIES_H_
@@ -45,7 +44,7 @@ public:
   virtual int to_json_kv_string(char *buf, const int64_t buf_len, int64_t &pos) const = 0;
   virtual int load_from_string(const common::ObString &str, common::ObIAllocator &allocator) = 0;
   static int parse_catalog_type(const common::ObString &str, CatalogType &type);
-  // resolve_catalog_type has been demoted to ObCatalogResolver::(sql; parses ParseNode)
+  static int resolve_catalog_type(const ParseNode &node, CatalogType &type);
   virtual int resolve_catalog_properties(const ParseNode &node) = 0;
   int encrypt_str(common::ObString &src, common::ObString &dst, ObIAllocator &allocator);
   int decrypt_str(common::ObString &src, common::ObString &dst, ObIAllocator &allocator);

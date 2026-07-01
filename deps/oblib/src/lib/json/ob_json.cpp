@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX LIB
 #include "lib/utility/ob_hang_fatal_error.h"
-#include "lib/utility/ob_smart_call.h"
+#include "common/ob_smart_call.h"
 #include "lib/json/ob_json.h"
 using namespace oceanbase::common;
 

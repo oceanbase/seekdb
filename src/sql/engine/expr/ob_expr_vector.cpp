@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_vector.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
-#include "storage/vector_type/ob_vector_norm.h"
+#include "share/vector_type/ob_vector_norm.h"
 
 namespace oceanbase
 {

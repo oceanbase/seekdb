@@ -19,7 +19,7 @@
 
 #include "lib/string/ob_string.h"       // ObString
 #include "lib/time/ob_time_utility.h"   // ObTimeUtility
-#include "lib/time/ob_clock_generator.h"
+#include "common/ob_clock_generator.h"
 #include "share/ob_define.h"
 
 namespace oceanbase

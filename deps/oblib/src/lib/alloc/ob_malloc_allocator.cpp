@@ -18,7 +18,7 @@
 
 #include "ob_malloc_allocator.h"
 #include "lib/allocator/ob_mem_leak_checker.h"
-#include "lib/utility/ob_smart_var.h"
+#include "common/ob_smart_var.h"
 #include "lib/alloc/ob_malloc_sample_struct.h"
 #include "lib/utility/ob_tracepoint.h"
 #include "lib/resource/ob_affinity_ctrl.h"

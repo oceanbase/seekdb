@@ -17,11 +17,11 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 
 #include "ob_server_schema_service.h"
+#include "share/schema/ob_schema_service_sql_impl.h"
 #include "share/ob_schema_status_proxy.h"
-#include "share/ob_server_struct.h"
+#include "observer/ob_server_struct.h"
+#include "observer/ob_server.h"
 #include "share/inner_table/ob_load_inner_table_schema.h"
-#include "lib/statistic_event/ob_stat_event.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
 namespace oceanbase
 {
 namespace share
@@ -49,7 +49,8 @@ int ObServerSchemaService::destroy()
 {
   int ret = OB_SUCCESS;
   if (NULL != schema_service_) {
-    ObSchemaServiceFactory::destroy(schema_service_);
+    ObSchemaServiceSQLImpl *tmp = static_cast<ObSchemaServiceSQLImpl *>(schema_service_);
+    OB_DELETE(ObSchemaServiceSQLImpl, ObModIds::OB_SCHEMA_SERVICE, tmp);
     schema_service_ = NULL;
   }
   // Each map held exactly one entry (sys). Mirror the per-entry
@@ -131,9 +132,10 @@ int ObServerSchemaService::init(ObMySQLProxy *sql_proxy,
         "proxy->pool", (NULL == sql_proxy ? NULL : sql_proxy->get_pool()), KP(config));
   } else if (OB_FAIL(ObSysTableChecker::instance().init())) {
     LOG_WARN("fail to init tenant space table checker", KR(ret));
-  } else if (NULL == (schema_service_ = ObSchemaServiceFactory::create())) {
+  } else if (NULL
+      == (schema_service_ = OB_NEW(ObSchemaServiceSQLImpl, ObModIds::OB_SCHEMA_SERVICE))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_ERROR("create schema service failed (creator registered by observer?), no memory", KR(ret));
+    LOG_ERROR("allocate schema service sql impl failed, no memory", KR(ret));
   } else if (OB_FAIL(schema_service_->init(sql_proxy, this))) {
     LOG_ERROR("fail to init schema service,", KR(ret));
   } else if (FALSE_IT(schema_service_->set_common_config(config))) {

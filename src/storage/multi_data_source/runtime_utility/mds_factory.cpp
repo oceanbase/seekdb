@@ -29,7 +29,10 @@ template <int IDX>
 int deepcopy(const transaction::ObTransID &trans_id,
              const BufferCtx &old_ctx,
              BufferCtx *&new_ctx,
-             ObIAllocator &allocator) {
+             ObIAllocator &allocator,
+             const char *alloc_file,
+             const char *alloc_func,
+             const int64_t line) {
   int ret = OB_SUCCESS;
   ObTenantFreezer *tenant_freezer = share::g_mp->tenant_freezer();
   MDS_TG(1_ms);
@@ -42,6 +45,7 @@ int deepcopy(const transaction::ObTransID &trans_id,
     const ImplType *p_old_impl_ctx = static_cast<const ImplType *>(&old_ctx);
     MDS_ASSERT(OB_NOT_NULL(p_old_impl_ctx));
     const ImplType &old_impl_ctx = *p_old_impl_ctx;
+    set_mds_mem_check_thread_local_info(MdsWriter(trans_id), typeid(ImplType).name(), alloc_file, alloc_func, line);
     // if pre_alloc buffer_ctx use it
     if (OB_NOT_NULL(new_ctx)) {
       ImplType *new_ctx_impl = dynamic_cast<ImplType *>(new_ctx);
@@ -66,8 +70,9 @@ int deepcopy(const transaction::ObTransID &trans_id,
         new_ctx->set_binding_type_id(old_ctx.get_binding_type_id());
       }
     }
+    reset_mds_mem_check_thread_local_info();
   } else {
-    ret = deepcopy<IDX + 1>(trans_id, old_ctx, new_ctx, allocator);
+    ret = deepcopy<IDX + 1>(trans_id, old_ctx, new_ctx, allocator, alloc_file, alloc_func, line);
   }
   return ret;
 }
@@ -76,17 +81,23 @@ template <>
 int deepcopy<BufferCtxTupleHelper::get_element_size()>(const transaction::ObTransID &trans_id,
                                                        const BufferCtx &old_ctx,
                                                        BufferCtx *&new_ctx,
-                                                       ObIAllocator &allocator)
+                                                       ObIAllocator &allocator,
+                                                       const char *alloc_file,
+                                                       const char *alloc_func,
+                                                       const int64_t line)
 {
   int ret = OB_ERR_UNEXPECTED;
-  MDS_LOG(ERROR, "invalid old ctx", K(trans_id), K(old_ctx.get_binding_type_id()));
+  MDS_LOG(ERROR, "invalid old ctx", K(trans_id), K(old_ctx.get_binding_type_id()), K(alloc_file), K(alloc_func), K(line));
   return ret;
 }
 
 int MdsFactory::deep_copy_buffer_ctx(const transaction::ObTransID &trans_id,
                                      const BufferCtx &old_ctx,
                                      BufferCtx *&new_ctx,
-                                     ObIAllocator &allocator)
+                                     ObIAllocator &allocator,
+                                     const char *alloc_file,
+                                     const char *alloc_func,
+                                     const int64_t line)
 {
   int ret = OB_SUCCESS;
   MDS_TG(1_ms);
@@ -94,7 +105,7 @@ int MdsFactory::deep_copy_buffer_ctx(const transaction::ObTransID &trans_id,
     ret = OB_INVALID_ARGUMENT;
     new_ctx = nullptr;// won't copy
     MDS_LOG(WARN, "invalid old_ctx", K(old_ctx.get_binding_type_id()));
-  } else if (MDS_FAIL(deepcopy<0>(trans_id, old_ctx, new_ctx, allocator))) {
+  } else if (MDS_FAIL(deepcopy<0>(trans_id, old_ctx, new_ctx, allocator, alloc_file, alloc_func, line))) {
     MDS_LOG(WARN, "fail to deep copy buffer ctx", K(old_ctx.get_binding_type_id()));
   }
   return ret;
@@ -115,13 +126,17 @@ void try_set_writer(T &ctx, const transaction::ObTransID &trans_id) {
 int MdsFactory::create_buffer_ctx(const transaction::ObTxDataSourceType &data_source_type,
                                   const transaction::ObTransID &trans_id,
                                   BufferCtx *&buffer_ctx,
-                                  ObIAllocator &allocator) {
+                                  ObIAllocator &allocator,
+                                  const char *alloc_file,
+                                  const char *alloc_func,
+                                  const int64_t line) {
   int ret = OB_SUCCESS;
   switch (data_source_type) {
     #define NEED_GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION
     #define _GENERATE_MDS_FRAME_CODE_FOR_TRANSACTION_(HELPER_CLASS, BUFFER_CTX_TYPE, ID, ENUM_NAME) \
     case transaction::ObTxDataSourceType::ENUM_NAME:\
     {\
+      set_mds_mem_check_thread_local_info(MdsWriter(trans_id), typeid(BUFFER_CTX_TYPE).name(), alloc_file, alloc_func, line);\
       int64_t type_id = TupleTypeIdx<BufferCtxTupleHelper, BUFFER_CTX_TYPE>::value;\
       BUFFER_CTX_TYPE *ctx_impl = (BUFFER_CTX_TYPE *)\
                                    allocator.alloc(sizeof(BUFFER_CTX_TYPE),\
@@ -137,6 +152,7 @@ int MdsFactory::create_buffer_ctx(const transaction::ObTxDataSourceType &data_so
         try_set_writer(*ctx_impl, trans_id);\
         buffer_ctx = ctx_impl;\
       }\
+      reset_mds_mem_check_thread_local_info();\
     }\
     break;
     #include "storage/multi_data_source/compile_utility/mds_register.h"

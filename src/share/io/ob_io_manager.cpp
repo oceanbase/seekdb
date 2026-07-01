@@ -16,18 +16,13 @@
 
 #define USING_LOG_PREFIX COMMON
 
-#include "share/resource_limit_calculator/ob_resource_commmon.h"
 #include "ob_io_manager.h"
-#include "share/resource_manager/ob_cgroup_ctrl.h"  // ObCgroupCtrl complete type, previously hidden behind a transitive include(free within share)
-#include "share/ob_share_util.h"  // ObShareUtil, previously hidden behind a transitive include(free within share)
-#include "share/ob_server_struct.h"  // GCTX, previously hidden behind a transitive include(free within share)
 #include "share/errsim_module/ob_errsim_module_interface_imp.h"
-#include "share/io/io_schedule/ob_io_schedule_v2.h"
+#include "observer/ob_server.h"
+#include "src/share/io/io_schedule/ob_io_schedule_v2.h"
 #include "lib/restore/ob_object_device.h"
 #include "share/ob_io_device_helper.h"
 
-using namespace oceanbase::obcall;
-using namespace oceanbase::share;
 using namespace oceanbase::lib;
 using namespace oceanbase::common;
 
@@ -191,7 +186,7 @@ int64_t ObTrafficControl::ObSharedDeviceControlV2::get_limit(const obcall::Resou
 ObTrafficControl::ObTrafficControl()
 {
   int ret = OB_SUCCESS;
-  set_device_bandwidth(common::OB_DEFAULT_ETHERNET_SPEED);
+  set_device_bandwidth(observer::ObServer::DEFAULT_ETHERNET_SPEED);
   if (OB_FAIL(shared_device_map_v2_.create(7, "IO_TC_MAP_V2"))) {
     LOG_WARN("create io share device map v2 failed", K(ret));
   }
@@ -360,7 +355,93 @@ int ObTrafficControl::ObSharedDeviceControlV2::ObSDGroupList::is_group_key_exist
   return ret;
 }
 
-// moved definition to the upper-layer owner cpp(omt/timer real user)
+int ObTrafficControl::gc_tenant_infos()
+{
+  int ret = OB_SUCCESS;
+  if (REACH_TIME_INTERVAL(1 * 60 * 1000L * 1000L)) {  // 60s
+    DRWLock::WRLockGuard guard(rw_lock_);
+    struct GCTenantSharedDeviceInfosV2
+    {
+      GCTenantSharedDeviceInfosV2(
+          const ObVector<uint64_t> &keep_keys, ObSEArray<ObTrafficControl::ObStorageKey, 7> &gc_tenant_infos)
+          : keep_keys_(keep_keys), gc_tenant_infos_(gc_tenant_infos)
+      {}
+      int operator()(hash::HashMapPair<ObTrafficControl::ObStorageKey, ObTrafficControl::ObSharedDeviceControlV2 *> &pair)
+      {
+        bool is_find = false;
+        for (int i = 0; !is_find && i < keep_keys_.size(); ++i) {
+          if (keep_keys_.at(i) == 1UL) {
+            is_find = true;
+          }
+        }
+        if (false == is_find) {
+          gc_tenant_infos_.push_back(pair.first);
+        }
+        return OB_SUCCESS;
+      }
+      const ObVector<uint64_t> &keep_keys_;
+      ObSEArray<ObTrafficControl::ObStorageKey, 7> &gc_tenant_infos_;
+    };
+    struct GCTenantRecordInfos
+    {
+      GCTenantRecordInfos(
+          const ObVector<uint64_t> &keep_keys, ObSEArray<ObTrafficControl::ObIORecordKey, 7> &gc_tenant_infos)
+          : keep_keys_(keep_keys), gc_tenant_infos_(gc_tenant_infos)
+      {}
+      int operator()(hash::HashMapPair<ObTrafficControl::ObIORecordKey, ObTrafficControl::ObSharedDeviceIORecord> &pair)
+      {
+        bool is_find = false;
+        for (int i = 0; !is_find && i < keep_keys_.size(); ++i) {
+          if (keep_keys_.at(i) == 1UL) {
+            is_find = true;
+          }
+        }
+        if (false == is_find) {
+          gc_tenant_infos_.push_back(pair.first);
+        }
+        return OB_SUCCESS;
+      }
+      const ObVector<uint64_t> &keep_keys_;
+      ObSEArray<ObTrafficControl::ObIORecordKey, 7> &gc_tenant_infos_;
+    };
+    ObVector<uint64_t> keep_keys;
+    ObSEArray<ObTrafficControl::ObIORecordKey, 7> gc_tenant_record_infos;
+    ObSEArray<ObTrafficControl::ObStorageKey, 7> gc_tenant_shared_device_infos_v2;
+    GCTenantRecordInfos fn(keep_keys, gc_tenant_record_infos);
+    GCTenantSharedDeviceInfosV2 fn3(keep_keys, gc_tenant_shared_device_infos_v2);
+    if(OB_ISNULL(GCTX.omt_)) {
+    } else if (FALSE_IT((keep_keys.clear(), keep_keys.push_back(1UL)))) {
+    } else if (OB_FAIL(io_record_map_.foreach_refactored(fn))) {
+      LOG_WARN("SSNT:failed to get gc tenant record infos", K(ret));
+    } else if (OB_FAIL(shared_device_map_v2_.foreach_refactored(fn3))) {
+      LOG_WARN("SSNT:failed to get gc tenant shared device infos", K(ret));
+    } else {
+      for (int i = 0; i < gc_tenant_record_infos.count(); ++i) {
+        if (OB_SUCCESS != io_record_map_.erase_refactored(gc_tenant_record_infos.at(i))) {
+          LOG_WARN("SSNT:failed to erase gc tenant record infos", K(ret), K(gc_tenant_record_infos.at(i)));
+        } else {
+          LOG_INFO("SSNT:erase gc tenant record infos", K(ret), K(gc_tenant_record_infos.at(i)));
+        }
+      }
+      for (int i = 0; i < gc_tenant_shared_device_infos_v2.count(); ++i) {
+        int tmp_ret = OB_SUCCESS;
+        ObTrafficControl::ObSharedDeviceControlV2 *val_ptr = nullptr;
+        if (OB_TMP_FAIL(shared_device_map_v2_.erase_refactored(gc_tenant_shared_device_infos_v2.at(i), &val_ptr))) {
+          LOG_WARN("SSNT:failed to erase gc tenant shared device infos", K(tmp_ret), K(gc_tenant_shared_device_infos_v2.at(i)), K(val_ptr));
+        } else if (OB_ISNULL(val_ptr)) {
+          tmp_ret = OB_ERR_UNEXPECTED;
+          LOG_ERROR("SSNT:failed to erase gc tenant shared device infos", K(tmp_ret), K(gc_tenant_shared_device_infos_v2.at(i)), K(val_ptr));
+        } else if (FALSE_IT(val_ptr->destroy())) {
+          LOG_WARN("SSNT:failed to destroy shared device control", K(tmp_ret), K(gc_tenant_shared_device_infos_v2.at(i)), K(val_ptr));
+        } else if (FALSE_IT(ob_delete(val_ptr))) {
+        } else {
+          LOG_INFO("SSNT:erase gc tenant shared device infos succ", K(ret), K(tmp_ret), K(gc_tenant_shared_device_infos_v2.at(i)), K(val_ptr));
+        }
+      }
+    }
+  }
+  return ret;
+}
 
 ObIOManager::ObIOManager()
   : is_inited_(false),
@@ -866,7 +947,27 @@ int ObIOManager::get_tenant_io_manager(ObRefHolder<ObTenantIOManager> &tenant_ho
 }
 
 
-// moved definition to the upper-layer owner cpp(omt/timer real user)
+void ObIOManager::print_tenant_status()
+{
+  int ret = OB_SUCCESS;
+  if (OB_NOT_NULL(GCTX.omt_)) {
+    {
+      ObRefHolder<ObTenantIOManager> tenant_holder;
+      if (OB_FAIL(get_tenant_io_manager(tenant_holder))) {
+        if (OB_HASH_NOT_EXIST != ret) {
+          LOG_WARN("get tenant io manager failed", K(ret), K(1UL));
+        } else {
+          ret = OB_SUCCESS;
+        }
+      } else {
+        tenant_holder.get_ptr()->print_io_status();
+      }
+    }
+  }
+  if (OB_NOT_NULL(server_io_manager_)) {
+    server_io_manager_->print_io_status();
+  }
+}
 
 void ObIOManager::print_channel_status()
 {

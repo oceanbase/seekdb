@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX STORAGE
 #include "storage/ddl/ob_direct_load_mgr_utils.h"
-#include "storage/ddl/ob_ddl_storage_util.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_direct_load_mgr_v3.h"
@@ -386,7 +385,7 @@ int ObDirectLoadMgrUtil::generate_merge_param(const ObTabletDDLCompleteMdsUserDa
       } else if (OB_ISNULL(storage_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("storage schema is null", K(ret));
-      } else if (OB_FAIL(ObDDLStorageUtil::get_base_cg_idx(storage_schema, base_cg_idx))) {
+      } else if (OB_FAIL(ObCODDLUtil::get_base_cg_idx(storage_schema, base_cg_idx))) {
         LOG_WARN("failed to get base cg idx", K(ret), K(storage_schema));
       } else {
         merge_param.table_key_.table_type_ = ObITable::TableType::DDL_DUMP_SSTABLE;

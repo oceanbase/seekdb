@@ -18,7 +18,7 @@
 #define OB_STORAGE_OB_INDEX_TREE_PREFETCHER_H_
 
 #include "share/schema/ob_column_schema.h"
-#include "storage/access/ob_table_param.h"
+#include "share/schema/ob_table_param.h"
 #include "storage/access/ob_store_row_iterator.h"
 #include "storage/access/ob_table_access_context.h"
 #include "storage/blocksstable/index_block/ob_index_block_row_struct.h"

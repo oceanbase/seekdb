@@ -38,7 +38,7 @@
 #include "storage/column_store/ob_column_oriented_sstable.h"
 #include "storage/compaction/ob_sstable_builder.h"
 #include "storage/blocksstable/ob_sstable_private_object_cleaner.h"
-#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "share/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/ls/ob_ls_tablet_service.h"
 #include "storage/tx_storage/ob_tenant_freezer.h"
 #include "storage/ls/ob_freezer_define.h"

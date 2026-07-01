@@ -15,7 +15,6 @@
  */
  
 #include "observer/ob_server_utils.h"
-#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind the server_struct include chain, make the dependency explicit
 #include "share/rc/ob_module_provider.h"
 #include "ob_all_virtual_sql_plan.h"
 

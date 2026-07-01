@@ -18,7 +18,7 @@
 #include "observer/virtual_table/ob_show_create_catalog.h"
 
 #include "share/schema/ob_schema_getter_guard.h"
-#include "sql/printer/ob_schema_printer.h"
+#include "share/schema/ob_schema_printer.h"
 #include "sql/session/ob_sql_session_info.h"
 
 using namespace oceanbase::common;

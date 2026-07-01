@@ -16,7 +16,7 @@
 
 #ifndef OB_ALL_VIRTUAL_TABLET_STORE_STAT_H_
 #define OB_ALL_VIRTUAL_TABLET_STORE_STAT_H_
-#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "share/ob_virtual_table_scanner_iterator.h"
 #include "storage/ob_table_store_stat_mgr.h"
 
 namespace oceanbase

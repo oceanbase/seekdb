@@ -95,7 +95,7 @@ int ObLockTableResolver::resolve_mysql_mode_(const ParseNode &parse_tree)
 
 int ObLockTableResolver::resolve_mysql_lock_node_(const ParseNode &lock_node)
 {
-  // TODO: forbid function table and json table's lock table.
+  // TODO: forbid dblink、function table、json table's lock table.
   int ret = OB_SUCCESS;
   if (lock_node.type_ != T_MYSQL_LOCK_NODE) {
     ret = OB_ERR_UNEXPECTED;

@@ -18,7 +18,7 @@
 #define OCEANBASE_STORAGE_OB_TX_DATA_DEFINE
 
 #include "share/scn.h"
-#include "storage/allocator/ob_tx_data_allocator.h"
+#include "share/allocator/ob_tx_data_allocator.h"
 #include "lib/objectpool/ob_server_object_pool.h"
 #include "storage/tx/ob_committer_define.h"
 #include "storage/tx/ob_trans_define.h"

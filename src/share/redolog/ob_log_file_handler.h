@@ -20,7 +20,7 @@
 #include <stdint.h>
 #include "share/redolog/ob_log_file_group.h"
 #include "share/redolog/ob_log_definition.h"
-#include "lib/restore/ob_io_device.h"
+#include "common/storage/ob_io_device.h"
 #include "share/redolog/ob_log_policy.h"
 #include "share/ob_io_device_helper.h"
 #include "lib/ob_define.h"

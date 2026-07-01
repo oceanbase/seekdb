@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 #include "storage/ddl/ob_cg_macro_block_writer.h"
-#include "storage/ddl/ob_ddl_storage_util.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ob_storage_schema.h"
 #include "storage/ddl/ob_ddl_independent_dag.h"
@@ -22,7 +21,6 @@
 #include "storage/blocksstable/ob_logic_macro_id.h" // for ObMacroDataSeq
 #include "storage/blocksstable/index_block/ob_macro_meta_temp_store.h"
 #include "storage/ddl/ob_macro_meta_store_manager.h"
-#include "storage/ddl/ob_ddl_write_stat_util.h"
 
 #define USING_LOG_PREFIX STORAGE
 
@@ -68,10 +66,10 @@ int ObCgMacroBlockWriter::init(
         || row_offset < 0)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("there are invalid argument", K(ret), K(param), K(start_sequence), K(row_offset));
-  } else if (is_incremental_direct_load(param.direct_load_type_)) { // incremental
+  } else if (is_incremental_direct_load(param.direct_load_type_)) { // 增量
     const ObWriteTabletParam &tablet_param =
       table_key.tablet_id_ != param.tablet_id_ ? param.lob_meta_tablet_param_ : param.tablet_param_;
-    const int64_t parallel_idx = ObDDLStorageUtil::get_parallel_idx(start_sequence);  
+    const int64_t parallel_idx = ObDDLUtil::get_parallel_idx(start_sequence);  
     const ObTxSEQ seq_no = ObTxSEQ::cast_from_int(param.tx_info_.seq_no_);
 
     share::SCN mock_start_scn;
@@ -158,7 +156,7 @@ int ObCgMacroBlockWriter::init(
       LOG_WARN("fail to open macro block writer", KR(ret), K(param), K(table_key), K(data_desc_),
                K(start_sequence), KPC(object_cleaner));
     }
-  } else { // full
+  } else { // 全量
     share::SCN mock_start_scn;
     IGNORE_RETURN mock_start_scn.convert_for_tx(SS_DDL_START_SCN_VAL);
     const ObWriteTabletParam &tablet_param = table_key.tablet_id_ != param.tablet_id_ ?
@@ -211,7 +209,7 @@ int ObCgMacroBlockWriter::init(
     }
 
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(ObDDLStorageWriteUtil::get_ddl_write_stat(param, table_key, ddl_write_stat))) {
+    } else if (OB_FAIL(ObDDLUtil::get_ddl_write_stat(param, table_key, ddl_write_stat))) {
       LOG_WARN("get ddl write stat failed", K(ret), K(table_key), K(with_cs_replica), K(param), KPC(ddl_write_stat));
     } else if (OB_ISNULL(ddl_redo_callback_ = ddl_redo_callback = OB_NEW(
                            ObDDLRedoLogWriterCallback, ObMemAttr("ddl_redo_cb")))) {

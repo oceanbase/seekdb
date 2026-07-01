@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_tx_table.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tx_table/ob_tx_data_cache.h"

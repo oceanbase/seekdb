@@ -17,7 +17,7 @@
 #ifndef _OB_SQL_IO_EVENT_OBSERVER_H_
 #define _OB_SQL_IO_EVENT_OBSERVER_H_
 
-#include "sql/monitor/ob_sql_plan_monitor_node_list.h"
+#include "share/diagnosis/ob_sql_plan_monitor_node_list.h"
 
 namespace oceanbase
 {

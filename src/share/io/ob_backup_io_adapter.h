@@ -17,8 +17,8 @@
 #ifndef SRC_LIBRARY_SRC_LIB_RESTORE_OB_BACKUP_IO_ADAPTER_H_
 #define SRC_LIBRARY_SRC_LIB_RESTORE_OB_BACKUP_IO_ADAPTER_H_
 
-#include "lib/restore/ob_io_device.h"
-#include "lib/restore/ob_device_common.h"
+#include "common/storage/ob_io_device.h"
+#include "common/storage/ob_device_common.h"
 #include "lib/container/ob_array.h"
 #include "share/io/ob_backup_storage_info.h"
 #include "share/io/ob_io_define.h"

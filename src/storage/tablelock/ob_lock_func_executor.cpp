@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX TABLELOCK
 #include "storage/tablelock/ob_lock_func_executor.h"
-#include "share/ob_dml_sql_splicer.h"
 #include "share/rc/ob_module_provider.h"
 
 #include "sql/engine/ob_exec_context.h"

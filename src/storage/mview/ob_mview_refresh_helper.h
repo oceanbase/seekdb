@@ -16,8 +16,8 @@
 
 #pragma once
 
-#include "common/mysqlclient/ob_isql_client.h"
-#include "common/number/ob_number_v2.h"
+#include "lib/mysqlclient/ob_isql_client.h"
+#include "lib/number/ob_number_v2.h"
 #include "lib/ob_define.h"
 #include "share/ob_table_range.h"
 #include "share/schema/ob_schema_getter_guard.h"
@@ -71,13 +71,13 @@ public:
                                                  common::ObISQLClient &sql_proxy,
                                                  bool &satisfy);
   static int get_dep_mviews_from_dep_info(const ObIArray<share::schema::ObDependencyInfo> &dependency_infos,
-                                          share::schema::ObSchemaGetterGuard &schema_guard,
+                                          ObSchemaGetterGuard &schema_guard,
                                           ObIArray<uint64_t> &dep_mview_ids);
   static int collect_deps_and_check_satisfy(const uint64_t mview_id,
                                             const uint64_t target_data_sync_ts,
                                             const uint64_t snapshot_version,
                                             common::ObISQLClient &sql_proxy,
-                                            share::schema::ObSchemaGetterGuard &schema_guard);
+                                            ObSchemaGetterGuard &schema_guard);
   
   static int replace_all_snapshot_zero(const std::string &input,
                                        const uint64_t snapshot_version,

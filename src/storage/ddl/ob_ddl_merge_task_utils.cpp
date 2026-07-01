@@ -18,7 +18,7 @@
 #include "storage/ddl/ob_ddl_merge_task_utils.h"
 #include "share/rc/ob_module_provider.h"
 #include "share/ob_ddl_checksum.h"
-#include "observer/scheduler/ob_dag_warning_history_mgr.h"
+#include "share/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "share/ob_ddl_sim_point.h"
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"

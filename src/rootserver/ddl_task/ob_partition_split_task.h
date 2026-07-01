@@ -18,7 +18,6 @@
 #define OCEANBASE_ROOTSERVER_OB_PARTITION_SPLIT_TASK_H
 
 #include "lib/net/ob_addr.h"
-#include "storage/ob_storage_rpc_arg.h"
 #include "rootserver/ddl_task/ob_ddl_task.h"
 #include "share/ob_rpc_struct.h"
 

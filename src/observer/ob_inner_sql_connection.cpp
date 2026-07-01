@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SERVER
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_inner_sql_connection.h"
 #include "share/rc/ob_module_provider.h"
 #include "share/ob_time_utility2.h"

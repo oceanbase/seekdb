@@ -21,7 +21,7 @@
 #include "share/ob_freeze_info_proxy.h"
 #include "share/location_cache/ob_location_service.h"
 #include "src/observer/ob_srv_network_frame.h"
-#include "share/ob_ex_rpc.h"
+#include "observer/ob_ex_rpc.h"
 #include "rootserver/freeze/ob_major_freeze_service.h"
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 

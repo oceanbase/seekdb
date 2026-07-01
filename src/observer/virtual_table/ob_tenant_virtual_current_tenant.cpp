@@ -15,7 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_tenant_virtual_current_tenant.h"
-#include "sql/printer/ob_schema_printer.h"
+#include "share/schema/ob_schema_printer.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;

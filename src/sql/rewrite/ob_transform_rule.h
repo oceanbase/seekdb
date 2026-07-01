@@ -268,6 +268,7 @@ enum TRANSFORM_TYPE {
   LEFT_JOIN_TO_ANTI             ,  // left join + is null -> anti-join
   COUNT_TO_EXISTS               ,
   SELECT_EXPR_PULLUP            ,
+  PROCESS_DBLINK                ,
   DECORRELATE                   ,
   CONDITIONAL_AGGR_COALESCE     ,
   MV_REWRITE                    ,
@@ -605,3 +606,4 @@ private:
 } /* namespace oceanbase */
 
 #endif /* _OCEANBASE_SQL_REWRITE_RULE_H */
+

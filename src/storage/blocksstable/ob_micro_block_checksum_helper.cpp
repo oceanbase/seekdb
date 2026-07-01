@@ -15,7 +15,7 @@
  */
 
 #include "storage/blocksstable/ob_micro_block_checksum_helper.h"
-#include "lib/utility/ob_target_specific.h"
+#include "common/ob_target_specific.h"
 namespace oceanbase
 {
 namespace blocksstable

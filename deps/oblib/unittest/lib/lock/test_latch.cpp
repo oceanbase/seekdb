@@ -16,7 +16,7 @@
 
 #include "gtest/gtest.h"
 #define private public
-#include "lib/rc/context.h"
+#include "deps/oblib/src/lib/rc/context.h"
 #ifdef __APPLE__
 #define _DARWIN_C_SOURCE
 #include <pthread.h>

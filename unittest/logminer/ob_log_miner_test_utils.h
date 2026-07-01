@@ -18,7 +18,7 @@
 #define OCEANBASE_LOG_MINER_UNITTEST_UTILS_H_
 
 #include "ob_log_miner_br.h"
-#include "common/mysqlclient/ob_mysql_global.h"
+#include "rpc/obmysql/ob_mysql_global.h"
 #include "gtest/gtest.h"
 #define private public
 #include "ob_log_miner_record.h"

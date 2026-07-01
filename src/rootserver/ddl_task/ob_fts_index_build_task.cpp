@@ -18,7 +18,7 @@
 
 #include "rootserver/ddl_task/ob_fts_index_build_task.h"
 #include "rootserver/ob_rs_serial_call.h"
-#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
+#include "share/ob_fts_index_builder_util.h"
 #include "share/ob_ddl_error_message_table_operator.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_ddl_service_launcher.h" // for ObDDLServiceLauncher

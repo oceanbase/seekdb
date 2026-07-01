@@ -18,7 +18,7 @@
 #define OCEANBASE_SRC_SHARE_SCHEMA_OB_AI_MODEL_MGR_H_
 
 #include "share/schema/ob_schema_struct.h"
-#include "share/ai_service/ob_ai_model_info.h"
+#include "share/ai_service/ob_ai_service_struct.h"
  
 namespace oceanbase
 {

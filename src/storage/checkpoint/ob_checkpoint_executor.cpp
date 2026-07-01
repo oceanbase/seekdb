@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX STORAGE
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_checkpoint_executor.h"
 #include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_checkpoint_service.h"

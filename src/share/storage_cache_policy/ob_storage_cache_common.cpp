@@ -17,7 +17,7 @@
 #include "lib/ob_define.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "lib/ob_date_unit_type.h"
-#include "common/timezone/ob_time_convert.h"
+#include "lib/timezone/ob_time_convert.h"
 #include "lib/json/ob_json.h"
 #include "lib/utility/ob_print_utils.h"
 #include "share/schema/ob_multi_version_schema_service.h"

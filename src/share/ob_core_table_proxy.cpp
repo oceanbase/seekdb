@@ -19,7 +19,7 @@
 #include "share/ob_core_table_proxy.h"
 
 #include "lib/container/ob_array_iterator.h"
-#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "lib/mysqlclient/ob_mysql_proxy.h"
 #include "inner_table/ob_inner_table_schema.h"
 #include "share/ob_debug_sync.h"
 #include "share/ob_schema_version_info.h"

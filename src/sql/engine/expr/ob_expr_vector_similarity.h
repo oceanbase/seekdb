@@ -19,10 +19,10 @@
 
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/engine/expr/ob_expr_vector.h"
-#include "common/udt/ob_array_type.h"
-#include "storage/vector_type/ob_vector_l2_similarity.h"
-#include "storage/vector_type/ob_vector_cosine_similarity.h"
-#include "storage/vector_type/ob_vector_ip_similarity.h"
+#include "lib/udt/ob_array_type.h"
+#include "share/vector_type/ob_vector_l2_similarity.h"
+#include "share/vector_type/ob_vector_cosine_similarity.h"
+#include "share/vector_type/ob_vector_ip_similarity.h"
 
 
 namespace oceanbase

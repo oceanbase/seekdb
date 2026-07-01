@@ -69,8 +69,8 @@ public:
   virtual int advance_scan() override;
   virtual void clear_evaluated_flag() override;
 
-  virtual int get_diagnosis_info(common::ObRowDiagnosisInfo *diagnosis_info) override {
-    return result_->get_diagnosis_info(diagnosis_info);
+  virtual int get_diagnosis_info(ObDiagnosisManager* diagnosis_manager) override {
+    return result_->get_diagnosis_info(diagnosis_manager);
   };
   virtual int set_scan_rowkey(ObEvalCtx *eval_ctx,
                               const ObIArray<ObExpr *> &rowkey_exprs,

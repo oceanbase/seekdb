@@ -17,11 +17,9 @@
 #ifndef OCEANBASE_SHARE_TABLE_OB_TABLE_TTL_UTIL_
 #define OCEANBASE_SHARE_TABLE_OB_TABLE_TTL_UTIL_
 
-#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "lib/mysqlclient/ob_mysql_proxy.h"
 #include "rpc/frame/ob_req_transport.h"
 #include "share/ob_rpc_struct.h"
-#include "share/table/ob_redis_data_model.h"
-#include "share/schema/ob_table_schema.h"
 
 #include "lib/json/ob_json.h"
 
@@ -352,8 +350,8 @@ public:
   static int dispatch_ttl_cmd(const ObTTLParam &param);
   static int get_ttl_info(const ObTTLParam &param, ObIArray<ObSimpleTTLInfo> &ttl_info_array);
 
-  static int check_is_normal_ttl_table(const share::schema::ObTableSchema &table_schema, bool &is_ttl_table);
-  static int check_is_rowkey_ttl_table(const share::schema::ObTableSchema &table_schema, bool &is_ttl_table);
+  static int check_is_normal_ttl_table(const ObTableSchema &table_schema, bool &is_ttl_table);
+  static int check_is_rowkey_ttl_table(const ObTableSchema &table_schema, bool &is_ttl_table);
   static int get_tenant_table_ids(common::ObIArray<uint64_t> &table_id_array);
   static int check_task_status_from_sys_table(common::ObISQLClient& proxy,
                                               const uint64_t& task_id, const uint64_t& table_id,
@@ -369,7 +367,7 @@ public:
   static int check_kv_attributes(const share::schema::ObTableSchema &table_schema, bool by_admin = false);
   static int check_kv_attributes(const ObString &kv_attributes,
                                  const share::schema::ObTableSchema &table_schema,
-                                 share::schema::ObPartitionLevel part_level,
+                                 ObPartitionLevel part_level,
                                  bool by_admin = false);
   const static uint64_t TTL_TENNAT_TASK_TABLET_ID = -1;
   const static uint64_t TTL_TENNAT_TASK_TABLE_ID = -1;
@@ -377,7 +375,7 @@ public:
   const static uint64_t TTL_ROWKEY_TASK_TABLE_ID = -2;
   const static uint64_t TTL_THREAD_MAX_SCORE = 100;
  private:
-  static int check_is_htable_ttl_(const share::schema::ObTableSchema &table_schema, bool allow_timeseries_table, bool &is_ttl_table);
+  static int check_is_htable_ttl_(const ObTableSchema &table_schema, bool allow_timeseries_table, bool &is_ttl_table);
 private:
   static bool extract_val(const char* ptr, uint64_t len, int& val);
   static bool valid_digit(const char* ptr, uint64_t len);

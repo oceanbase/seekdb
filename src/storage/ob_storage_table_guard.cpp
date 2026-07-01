@@ -17,9 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_storage_table_guard.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"  // previously hidden behind a transitive include
-#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "share/rc/ob_module_provider.h"
+#include "share/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/tx_storage/ob_ls_service.h"
 
 namespace oceanbase
@@ -83,8 +82,7 @@ void ObStorageTableGuard::throttle_if_needed_()
             (void)TxShareMemThrottleUtil::do_throttle<ObMemstoreAllocator>(for_replay_,
                                                                            store_ctx_.timeout_,
                                                                            share::memstore_throttled_alloc(),
-                                                                           share::g_mp->tenant_freezer()->exist_ls_throttle_is_skipping(),
-                                                                           ls->is_offline(),
+                                                                           *ls,
                                                                            throttle_tool,
                                                                            share_ti_guard,
                                                                            module_ti_guard);

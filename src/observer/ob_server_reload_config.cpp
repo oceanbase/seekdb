@@ -17,15 +17,13 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "ob_server_reload_config.h"
-#include "storage/tx_storage/ob_tenant_freezer.h"  // previously hidden behind the allocator_mgr.h include chain, make the dependency explicit
-#include "share/ob_encryption_util.h"  // ObTdeEncryptEngineLoader(moved from config_manager)
 #include "share/rc/ob_module_provider.h"
 #include "lib/alloc/ob_malloc_sample_struct.h"
 #include "lib/allocator/ob_mem_leak_checker.h"
 #include "share/ob_resource_limit.h"
 #include "observer/ob_server.h"
 #include "observer/ob_server_utils.h"
-#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
+#include "share/allocator/ob_shared_memory_allocator_mgr.h"
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "rpc/frame/ob_net_consts.h"
@@ -195,6 +193,13 @@ int ObServerReloadConfig::operator()()
     }
   }
 
+  {
+    static char last_storage_check_mod[MAX_CACHE_NAME_LENGTH];
+    if (0 != STRNCMP(last_storage_check_mod, GCONF._storage_leak_check_mod.str(), sizeof(last_storage_check_mod))) {
+      ObKVGlobalCache::get_instance().set_storage_leak_check_mod(GCONF._storage_leak_check_mod.str());
+      STRNCPY(last_storage_check_mod, GCONF._storage_leak_check_mod.str(), sizeof(last_storage_check_mod));
+    }
+  }
 #ifndef ENABLE_SANITY
   {
     ObMallocAllocator::get_instance()->force_explict_500_malloc_ =
@@ -277,18 +282,6 @@ int ObServerReloadConfig::operator()()
 
   {
     ObSigFaststack::get_instance().set_min_interval(GCONF._faststack_min_interval.get_value());
-  }
-  // moved from share ObConfigManager::reload_config(share base must not touch observer components;
-  // this function is the original reload_config_func_ call site,order and fail-fast semantics are preserved)
-  if (OB_FAIL(ret)) {
-  } else if (OB_FAIL(OBSERVER.get_net_frame().reload_ssl_config())) {
-    LOG_WARN("reload ssl config for net frame fail", K(ret));
-  } else if (OB_FAIL(OBSERVER.get_net_frame().reload_sql_thread_config())) {
-    LOG_WARN("reload config for mysql login thread count failed", K(ret));
-  } else if (OB_FAIL(ObTdeEncryptEngineLoader::get_instance().reload_config())) {
-    LOG_WARN("reload config for tde encrypt engine fail", K(ret));
-  } else if (OB_FAIL(GCTX.omt_->update_hidden_sys_tenant())) {
-    LOG_WARN("update hidden sys tenant failed", K(ret));
   }
   return ret;
 }

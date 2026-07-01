@@ -20,9 +20,9 @@
 #include "rootserver/fork_table/ob_fork_table_helper.h"
 #include "rootserver/ob_ddl_operator.h"
 #include "rootserver/ob_ddl_service.h"
-#include "observer/change_stream/ob_change_stream_mgr.h"
-#include "rootserver/fork_table/ob_fork_table_util.h"
-#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
+#include "share/change_stream/ob_change_stream_mgr.h"
+#include "share/ob_fork_table_util.h"
+#include "share/ob_fts_index_builder_util.h"
 #include "storage/ddl/ob_ddl_lock.h"
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 

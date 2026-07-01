@@ -33,7 +33,6 @@ namespace oceanbase
 namespace share
 {
 // Single global module set in single-tenant seekdb. Implemented by ObServer.
-struct ObFreezeInfo;
 class ObIModuleProvider
 {
 public:
@@ -70,8 +69,6 @@ public:
   virtual compaction::ObCompactionSuggestionMgr * compaction_suggestion_mgr() { return nullptr; }
   virtual compaction::ObDiagnoseTabletMgr * diagnose_tablet_mgr() { return nullptr; }
   virtual storage::ObLobManager * lob_manager() { return nullptr; }
-  virtual common::ObILobReadService * lob_read_service() { return nullptr; }
-  virtual int get_lower_bound_freeze_info(const int64_t snapshot_version, ObFreezeInfo &freeze_info) { return common::OB_NOT_SUPPORTED; }
   virtual share::ObGlobalAutoIncService * global_auto_inc_service() { return nullptr; }
   virtual share::detector::ObDeadLockDetectorMgr * dead_lock_detector_mgr() { return nullptr; }
   virtual transaction::ObTimestampService * timestamp_service() { return nullptr; }

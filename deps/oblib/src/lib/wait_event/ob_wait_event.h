@@ -173,7 +173,7 @@ WAIT_EVENT_DEF(WAIT_EVENT_DEF_END, 99999, "event end", "", "", "", OTHER, false,
 #define OB_WAIT_EVENT_DEFINE_H_
 
 #include "lib/ob_errno.h"
-#include "lib/utility/alloc_assist.h"
+#include "lib/alloc/alloc_assist.h"
 #include "lib/wait_event/ob_wait_class.h"
 #include <type_traits>
 

@@ -22,7 +22,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/net/ob_addr.h"
 #include "share/ob_tablet_replica_checksum_operator.h"
-#include "share/ob_server_struct.h"
+#include "observer/ob_server_struct.h"
 
 #include "share/storage/ob_sqlite_table_schema.h"
 

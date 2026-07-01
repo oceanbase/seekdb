@@ -15,8 +15,8 @@
  */
 
 #include "ob_multi_data_source_tx_buffer_node.h"
-#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 #include "share/rc/ob_module_provider.h"
+#include "share/allocator/ob_shared_memory_allocator_mgr.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;

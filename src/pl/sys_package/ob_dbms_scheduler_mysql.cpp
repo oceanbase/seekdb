@@ -20,8 +20,8 @@
 #include "observer/dbms_scheduler/ob_dbms_sched_job_executor.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_service.h"
 #include "ob_dbms_scheduler_mysql.h"
-#include "sql/optimizer/stat/ob_dbms_stats_maintenance_window.h"
-#include "observer/scheduler/ob_scheduled_manage_dynamic_partition.h"
+#include "share/stat/ob_dbms_stats_maintenance_window.h"
+#include "share/ob_scheduled_manage_dynamic_partition.h"
 
 namespace oceanbase
 {

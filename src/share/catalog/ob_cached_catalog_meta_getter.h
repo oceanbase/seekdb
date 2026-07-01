@@ -18,7 +18,6 @@
 #define __SHARE_OB_CACHED_CATALOG_META_GETTER_H__
 
 #include "share/catalog/ob_catalog_meta_getter.h"
-#include "share/schema/ob_schema_cache.h"  // previously hidden behind the external_table include chain
 #include "share/catalog/ob_external_catalog.h"
 #include "share/schema/ob_schema_cache.h"
 

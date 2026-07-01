@@ -17,8 +17,7 @@
 #define USING_LOG_PREFIX RS
 
 #include "ob_pl_ddl_service.h"
-#include "rootserver/ob_dependency_ddl_helper.h"
-#include "lib/utility/ob_smart_call.h"
+#include "common/ob_smart_call.h"
 #include "rootserver/ob_ddl_service.h"
 #include "share/schema/ob_error_info.h"
 #include "share/schema/ob_schema_getter_guard.h"
@@ -301,7 +300,7 @@ int ObPLDDLService::alter_routine(const ObRoutineInfo &routine_info,
       LOG_WARN("failed to get tenant schema version", KR(ret));
     } else if (OB_FAIL(trans.start(ddl_service.sql_proxy_, refreshed_schema_version))) {
       LOG_WARN("start transaction failed!", KR(ret), K(refreshed_schema_version));
-    } else if (OB_FAIL(ObDependencyDDLHelper::modify_dep_obj_status(trans,
+    } else if (OB_FAIL(ObDependencyInfo::modify_dep_obj_status(trans,
                                                                 routine_info.get_routine_id(),
                                                                 pl_operator,
                                                                 *ddl_service.schema_service_))) {
@@ -450,7 +449,7 @@ int ObPLDDLService::drop_routine(const ObRoutineInfo &routine_info,
       LOG_WARN("failed to get tenant schema version", KR(ret));
     } else if (OB_FAIL(trans.start(ddl_service.sql_proxy_, refreshed_schema_version))) {
       LOG_WARN("start transaction failed", KR(ret), K(refreshed_schema_version));
-    } else if (OB_FAIL(ObDependencyDDLHelper::modify_dep_obj_status(trans,
+    } else if (OB_FAIL(ObDependencyInfo::modify_dep_obj_status(trans,
                                                                routine_info.get_routine_id(),
                                                                pl_operator,
                                                                *ddl_service.schema_service_))) {
@@ -653,134 +652,6 @@ int ObPLDDLService::create_package(ObSchemaGetterGuard &schema_guard,
                                                    dep_infos,
                                                    ddl_stmt_str))) {
       LOG_WARN("create package failed", K(ret), K(new_package_info));
-    }
-    if (trans.is_started()) {
-      int temp_ret = OB_SUCCESS;
-      if (OB_SUCCESS != (temp_ret = trans.end(OB_SUCC(ret)))) {
-        LOG_WARN("trans end failed", "is_commit", OB_SUCCESS == ret, K(temp_ret));
-        ret = (OB_SUCC(ret)) ? temp_ret : ret;
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(ddl_service.publish_schema())) {
-        LOG_WARN("publish schema failed", K(ret));
-      }
-    }
-  }
-  return ret;
-}
-
-int ObPLDDLService::alter_package(const obcall::ObAlterPackageArg &arg,
-                                 obcall::ObRoutineDDLRes *res,
-                                 rootserver::ObDDLService &ddl_service)
-{
-  int ret = OB_SUCCESS;
-  ObSchemaGetterGuard schema_guard;
-  if (OB_FAIL(check_env_before_ddl(schema_guard, arg, ddl_service))) {
-    LOG_WARN("check env failed", K(arg), K(ret));
-  } else {
-    
-    const ObString &db_name = arg.db_name_;
-    const ObString &package_name = arg.package_name_;
-    ObPackageType package_type = arg.package_type_;
-    int64_t compatible_mode =  arg.compatible_mode_;
-    const ObDatabaseSchema *db_schema = NULL;
-    if (OB_FAIL(schema_guard.get_database_schema( db_name, db_schema))) {
-      LOG_WARN("get database schema failed", K(ret));
-    } else if (NULL == db_schema) {
-      ret = OB_ERR_BAD_DATABASE;
-      LOG_WARN("database id is invalid", K(db_name), K(ret));
-    } else if (db_schema->is_in_recyclebin()) {
-      ret = OB_ERR_OPERATION_ON_RECYCLE_OBJECT;
-      LOG_WARN("Can't not create package of db in recyclebin", K(ret), K(arg), K(*db_schema));
-    }
-    if (OB_SUCC(ret)) {
-      bool exist = false;
-      ObSArray<ObRoutineInfo> &public_routine_infos = const_cast<ObSArray<ObRoutineInfo> &>(arg.public_routine_infos_);
-      if (OB_FAIL(schema_guard.check_package_exist(db_schema->get_database_id(),
-                                                   package_name, package_type, compatible_mode, exist))) {
-        LOG_WARN("failed to check package info exist", K(package_name), K(ret));
-      } else if (exist) {
-        const ObPackageInfo *package_info = NULL;
-        if (OB_FAIL(schema_guard.get_package_info( db_schema->get_database_id(), package_name, package_type,
-                                                  compatible_mode, package_info))) {
-          LOG_WARN("get package info failed", K(ret));
-        } else if (OB_ISNULL(package_info)) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("package info is null", K(db_schema->get_database_id()), K(package_name), K(package_type), K(ret));
-        }
-        if (OB_SUCC(ret)) {
-          ObPackageInfo new_package_info;
-          if (OB_FAIL(new_package_info.assign(*package_info))) {
-            LOG_WARN("failed to copy new package info", K(ret));
-          } else if (OB_FAIL(new_package_info.set_exec_env(arg.exec_env_))) {
-            LOG_WARN("fail to set exec env", K(ret));
-          }
-          if (OB_FAIL(ret)) {
-          } else if (PACKAGE_TYPE == package_type) {
-            if (OB_FAIL(alter_package(schema_guard,
-                                    new_package_info,
-                                    public_routine_infos,
-                                    const_cast<ObErrorInfo &>(arg.error_info_),
-                                    &arg.ddl_stmt_str_,
-                                    ddl_service))) {
-              LOG_WARN("drop package failed", K(ret), K(package_name));
-            }
-          } else {
-            ObSArray<ObDependencyInfo> &dep_infos =
-                               const_cast<ObSArray<ObDependencyInfo> &>(arg.dependency_infos_);
-            if (OB_FAIL(create_package(schema_guard,
-                                       package_info,
-                                       new_package_info,
-                                       public_routine_infos,
-                                       const_cast<ObErrorInfo &>(arg.error_info_),
-                                       dep_infos,
-                                       &arg.ddl_stmt_str_,
-                                       ddl_service))) {
-              LOG_WARN("create package failed", K(ret), K(new_package_info));
-            }
-          }
-          if (OB_SUCC(ret) && OB_NOT_NULL(res)) {
-            res->store_routine_schema_version_ = new_package_info.get_schema_version();
-          }
-        }
-      } else {
-        ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
-        const char *type = (package_type == ObPackageType::PACKAGE_TYPE ? "PACKAGE" : "PACKAGE BODY");
-        LOG_USER_ERROR(OB_ERR_PACKAGE_DOSE_NOT_EXIST, type,
-                       db_schema->get_database_name_str().length(), db_schema->get_database_name(),
-                       package_name.length(), package_name.ptr());
-      }
-    }
-  }
-
-  return ret;
-}
-
-int ObPLDDLService::alter_package(ObSchemaGetterGuard &schema_guard,
-                                ObPackageInfo &package_info,
-                                ObIArray<ObRoutineInfo> &public_routine_infos,
-                                share::schema::ObErrorInfo &error_info,
-                                const ObString *ddl_stmt_str,
-                                rootserver::ObDDLService &ddl_service)
-{
-  int ret = OB_SUCCESS;
-  if (OB_ISNULL(ddl_service.schema_service_) || OB_ISNULL(ddl_service.sql_proxy_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("argument is NULL", K(ret));
-  } else {
-    
-    ObDDLSQLTransaction trans(ddl_service.schema_service_);
-    ObPLDDLOperator pl_operator(*ddl_service.schema_service_, *ddl_service.sql_proxy_);
-    int64_t refreshed_schema_version = 0;
-    if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
-      LOG_WARN("failed to get tenant schema version", KR(ret));
-    } else if (OB_FAIL(trans.start(ddl_service.sql_proxy_, refreshed_schema_version))) {
-      LOG_WARN("start transaction failed", KR(ret), K(refreshed_schema_version));
-    } else if (OB_FAIL(pl_operator.alter_package(package_info, schema_guard, trans, public_routine_infos,
-                                                  error_info, ddl_stmt_str))) {
-      LOG_WARN("alter package failed", K(package_info), K(ret));
     }
     if (trans.is_started()) {
       int temp_ret = OB_SUCCESS;

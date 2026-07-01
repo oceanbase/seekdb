@@ -17,7 +17,7 @@
 #pragma once
 
 #include "observer/table_load/dag/ob_table_load_dag_task.h"
-#include "observer/table_load/ob_table_load_row_array.h"
+#include "share/table/ob_table_load_row_array.h"
 #include "storage/ddl/ob_pipeline.h"
 
 namespace oceanbase
@@ -33,9 +33,9 @@ struct ObTableLoadStoreTrans;
 class ObTableLoadTransStoreWriter;
 class ObTableLoadDagChunkWriter;
 
-// not thread-safe
-// for PX paths, px_write and close are both called synchronously
-// for non-PX paths, the control node checks trans state to confirm background write and close completion
+// 线程不安全
+// 对于px路径, px_write和close都是同步调用的
+// 对于非px路径, 控制节点会通过检查trans状态来确认后台的write和close结束
 class ObTableLoadDagWriter
 {
 public:
@@ -55,7 +55,7 @@ public:
   int create_writer(ObTableLoadStoreTrans *trans, ObTableLoadTransStoreWriter *store_writer,
                     const int32_t session_id, ObTableLoadDagWriter *&writer,
                     ObIAllocator &allocator);
-  // the control node calls flush only after all writers are closed
+  // 控制节点保证所有writer都被close后再调用flush
   int flush();
   int close();
 

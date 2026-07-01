@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SQL_ENGINE_EXPR_OB_EXPR_TABLET_AUTOINC_NEXTVAL
 #define OCEANBASE_SQL_ENGINE_EXPR_OB_EXPR_TABLET_AUTOINC_NEXTVAL
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "storage/ob_tablet_autoincrement_service.h"
+#include "share/ob_tablet_autoincrement_service.h"
 
 namespace oceanbase
 {

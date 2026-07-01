@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "lib/utility/alloc_assist.h"
+#include "lib/alloc/alloc_assist.h"
 #include "lib/ob_errno.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_string.h"

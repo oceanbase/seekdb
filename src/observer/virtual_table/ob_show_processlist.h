@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_SHOW_PROCESSLIST_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_SHOW_PROCESSLIST_
 
-#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "share/ob_virtual_table_scanner_iterator.h"
 #include "sql/session/ob_sql_session_mgr.h"
 namespace oceanbase
 {

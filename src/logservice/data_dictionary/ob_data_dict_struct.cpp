@@ -17,7 +17,7 @@
 #include "ob_data_dict_struct.h"
 
 #include "share/schema/ob_column_schema.h"
-#include "storage/access/ob_table_param.h"
+#include "share/schema/ob_table_param.h"
 
 #define DEFINE_DESERIALIZE_DATA_DICT(TypeName) \
   int TypeName::deserialize(const ObDictMetaHeader &header, const char* buf, const int64_t data_len, int64_t& pos)

@@ -18,7 +18,7 @@
 
 #include "ob_dbms_job_master.h"
 #include "ob_dbms_job_executor.h"
-#include "share/ob_ex_rpc.h"
+#include "observer/ob_ex_rpc.h"
 #ifdef _WIN32
 #include <windows.h>
 #else
