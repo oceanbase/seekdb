@@ -33,9 +33,7 @@ int ObExecStatCollector::add_stat(const T *value)
     LOG_WARN("invalid argument", K(ret), K(value));
   } else if (OB_FAIL(serialization::encode_vi32(
               extend_buf_, MAX_STAT_BUF_COUNT, length_, value->get_type()))) {
-    LOG_WARN("fail to encode type", K(ret), K(value));
   } else if (OB_FAIL(value->serialize(extend_buf_, MAX_STAT_BUF_COUNT, length_))) {
-    LOG_WARN("fail to serialize value", K(ret), K(value));
   }
   return ret;
 }
@@ -58,7 +56,6 @@ int ObExecStatCollector::get_extend_info(ObIAllocator &allocator, ObString &str)
   int ret = OB_SUCCESS;
   const ObString tmp_str(length_, extend_buf_);
   if (OB_FAIL(ob_write_string(allocator, tmp_str, str))) {
-    LOG_WARN("fail to write string", K(tmp_str), K(ret));
   }
   return ret;
 }
@@ -75,16 +72,12 @@ int ObExecStatCollector::collect_plan_monitor_info(uint64_t job_id,
     ObPhyOperatorMonitorInfo *op_info = NULL;
     for (int64_t i = 0; i < monitor_info->get_operator_count() && OB_SUCC(ret); i++) {
       if (OB_FAIL(monitor_info->get_operator_info_by_index(i, op_info))) {
-        SQL_MONITOR_LOG(WARN, "fail to get operator info by index", K(ret), K(i));
       } else if (OB_ISNULL(op_info)) {
         ret = OB_ERR_UNEXPECTED;
         SQL_MONITOR_LOG(WARN, "get invalid op_info", K(ret), K(op_info));
       } else if (OB_FAIL(op_info->set_job_id(job_id))) {
-        SQL_MONITOR_LOG(WARN, "fail to set job id", K(ret), K(job_id));
       } else if (OB_FAIL(op_info->set_task_id(task_id))) {
-        SQL_MONITOR_LOG(WARN, "fail to to set task id", K(ret), K(task_id));
       } else if (OB_FAIL(add_stat<ObPhyOperatorMonitorInfo>(op_info))) {
-        SQL_MONITOR_LOG(WARN, "fail to add value", K(ret), K(i));
       } else {
         LOG_DEBUG("collect plan monitor info", K(*op_info));
       }
@@ -118,7 +111,6 @@ int ObExecStatDispatch::dispatch(bool need_add_monitor,
         {
           ObPhyOperatorMonitorInfo op_info;
           if (OB_FAIL(get_value<ObPhyOperatorMonitorInfo>(&op_info))) {
-            LOG_WARN("fail to get value", K(ret));
           } else if (need_add_monitor && OB_FAIL(monitor_info->add_operator_info(op_info))) {
             LOG_WARN("fail to add operator info", K(ret), K(op_info));
           } else if (need_update_plan && OB_FAIL(plan->op_stats_.add_op_stat(op_info))) {
@@ -145,7 +137,6 @@ int ObExecStatDispatch::get_next_type(StatType &type)
   if (pos_ == stat_str_.length()) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(serialization::decode_vi32(stat_str_.ptr(), stat_str_.length(), pos_, &type_value))) {
-    LOG_WARN("fail to decode type", K(ret), K(pos_));
   } else {
     type = static_cast<StatType>(type_value);
   }
@@ -159,7 +150,6 @@ int ObExecStatDispatch::get_value(T *value)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(value));
   } else if (OB_FAIL(value->deserialize(stat_str_.ptr(), stat_str_.length(), pos_))) {
-    LOG_WARN("fail to deserialize value", K(ret), K(pos_));
   }
   return ret;
 }

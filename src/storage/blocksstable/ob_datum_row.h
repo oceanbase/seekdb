@@ -170,7 +170,6 @@ public:
         if (flag_type_ == DF_TYPE_INSERT_DELETE) {
           flag_type_ = input_flag.flag_type_;
         } else {
-          STORAGE_LOG(DEBUG, "unexpected pure delete row", KPC(this), K(input_flag));
         }
       }
     }
@@ -430,7 +429,6 @@ public:
     int ret = OB_SUCCESS;
     cols_descs_ = &cols_descs;
     if (OB_FAIL(obj_buf_.init(&allocator))) {
-      STORAGE_LOG(WARN, "Failed to init ObObjBufArray", K(ret));
     }
     return ret;
   }

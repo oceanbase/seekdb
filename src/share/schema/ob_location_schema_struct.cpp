@@ -63,11 +63,8 @@ ObLocationSchema &ObLocationSchema::operator=(const ObLocationSchema &other)
     set_name_case_mode(other.name_case_mode_);
 
     if (OB_FAIL(set_location_name(other.location_name_))) {
-      LOG_WARN("Fail to deep copy directory name", K(ret));
     } else if (OB_FAIL(set_location_url(other.location_url_))) {
-      LOG_WARN("Fail to deep copy directory path", K(ret));
     } else if (OB_FAIL(set_location_access_info(other.location_access_info_))) {
-      LOG_WARN("Fail to deep copy location access info", K(ret));
     }
 
     if (OB_FAIL(ret)) {

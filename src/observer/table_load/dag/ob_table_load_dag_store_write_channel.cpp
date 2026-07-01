@@ -60,7 +60,6 @@ int ObTableLoadDagStoreWriteChannel::init(ObTableLoadDag *dag, ObTableLoadStoreW
     dag_ = dag;
     op_ = op;
     if (OB_FAIL(inner_init())) {
-      LOG_WARN("fail to init", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -84,7 +83,6 @@ int ObTableLoadDagStoreWriteChannel::do_close()
   int ret = OB_SUCCESS;
   ObDirectLoadTableStore &table_store = op_->op_ctx_->table_store_;
   if (OB_FAIL(store_ctx_->get_table_store_for_store_write(table_store))) {
-    LOG_WARN("fail to get table store", KR(ret));
   }
   return ret;
 }
@@ -138,10 +136,8 @@ int ObTableLoadDagStoreChunkWriter::init(ObTableLoadDagWriteChannel *write_chann
       (store_ctx_->write_ctx_.is_multiple_mode_ ||
        1 == write_channel_->op_->op_ctx_->store_table_ctx_->ls_partition_ids_.count());
     if (OB_FAIL(table_builder_map_.create(64, "TLD_TB_Map", "TLD_TB_Map"))) {
-      LOG_WARN("fail to create hashmap", KR(ret));
     } else if (OB_FAIL(datum_row_.init(
                  write_channel_->op_->op_ctx_->table_store_.get_table_data_desc().column_count_))) {
-      LOG_WARN("fail to init datum row", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -169,7 +165,6 @@ int ObTableLoadDagStoreChunkWriter::new_table_builder(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadExternalMultiPartitionTableBuilder", KR(ret));
     } else if (OB_FAIL(me_table_builder->init(param))) {
-      LOG_WARN("fail to init table builder", KR(ret));
     }
   } else {
     // 有主键表不排序路径
@@ -186,7 +181,6 @@ int ObTableLoadDagStoreChunkWriter::new_table_builder(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadMultipleSSTableBuilder", KR(ret));
     } else if (OB_FAIL(ms_table_builder->init(param))) {
-      LOG_WARN("fail to init table builder", KR(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -220,11 +214,8 @@ int ObTableLoadDagStoreChunkWriter::get_table_builder(
   if (OB_SUCC(ret) && nullptr == table_builder) {
     // new table builder
     if (OB_FAIL(new_table_builder(tablet_id, table_builder))) {
-      LOG_WARN("fail to new table builder", KR(ret), K(tablet_id));
     } else if (OB_FAIL(table_builder_map_.set_refactored(tablet_id, table_builder))) {
-      LOG_WARN("fail to set refactored", KR(ret), K(tablet_id));
     } else if (OB_FAIL(table_builders_.push_back(table_builder))) {
-      LOG_WARN("fail to push back", KR(ret));
     }
     if (OB_FAIL(ret)) {
       if (nullptr != table_builder) {
@@ -243,21 +234,17 @@ int ObTableLoadDagStoreChunkWriter::inner_append_row(const ObTabletID &tablet_id
   int ret = OB_SUCCESS;
   ObIDirectLoadPartitionTableBuilder *table_builder = nullptr;
   if (OB_FAIL(get_table_builder(tablet_id, table_builder))) {
-    LOG_WARN("fail to get table builder", KR(ret), K(tablet_id));
   } else if (OB_FAIL(table_builder->append_row(tablet_id, datum_row))) {
-    LOG_WARN("fail to append row", KR(ret), K(datum_row));
   }
   if (OB_FAIL(ret)) {
     if (OB_LIKELY(OB_ERR_PRIMARY_KEY_DUPLICATE == ret)) {
       ObDirectLoadDMLRowHandler *dml_row_handler = write_channel_->op_->op_ctx_->dml_row_handler_;
       if (OB_FAIL(dml_row_handler->handle_update_row(tablet_id, datum_row))) {
-        LOG_WARN("fail to handle update row", KR(ret), K(datum_row));
       }
     } else if (OB_LIKELY(OB_ROWKEY_ORDER_ERROR == ret)) {
       ObTableLoadErrorRowHandler *error_row_handler = store_ctx_->error_row_handler_;
       LOG_INFO("rowkey order error", K(tablet_id), K(datum_row));
       if (OB_FAIL(error_row_handler->handle_error_row(ret))) {
-        LOG_WARN("fail to handle error row", KR(ret), K(tablet_id), K(datum_row));
       }
     }
   }
@@ -275,7 +262,6 @@ int ObTableLoadDagStoreChunkWriter::append_row(const ObTabletID &tablet_id,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected is closed", KR(ret));
   } else if (OB_FAIL(inner_append_row(tablet_id, datum_row))) {
-    LOG_WARN("fail to append row", KR(ret));
   }
   return ret;
 }
@@ -299,9 +285,7 @@ int ObTableLoadDagStoreChunkWriter::append_batch(ObIVector *tablet_id_vector,
     for (int64_t i = 0; OB_SUCC(ret) && i < batch_rows.size(); ++i) {
       const ObTabletID tablet_id = ObDirectLoadVectorUtils::get_tablet_id(tablet_id_vector, i);
       if (OB_FAIL(batch_rows.get_datum_row(i, datum_row_))) {
-        LOG_WARN("fail to get datum row", KR(ret), K(i));
       } else if (OB_FAIL(inner_append_row(tablet_id, datum_row_))) {
-        LOG_WARN("fail to append row", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -326,10 +310,8 @@ int ObTableLoadDagStoreChunkWriter::close(ObTableLoadStoreTrans *trans, const in
     for (int64_t i = 0; OB_SUCC(ret) && i < table_builders_.count(); ++i) {
       ObIDirectLoadPartitionTableBuilder *table_builder = table_builders_.at(i);
       if (OB_FAIL(table_builder->close())) {
-        LOG_WARN("fail to close table store", KR(ret));
       } else if (OB_FAIL(table_builder->get_tables(session_store->tables_handle_,
                                                    store_ctx_->table_mgr_))) {
-        LOG_WARN("fail to get tables", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {

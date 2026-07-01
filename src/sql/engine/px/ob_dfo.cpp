@@ -128,31 +128,18 @@ int ObPxSqcMeta::assign(const ObPxSqcMeta &other)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("should only add a new sqc. you are adding an inited one", K(ret));
   } else if (OB_FAIL(access_table_locations_.assign(other.access_table_locations_))) {
-    LOG_WARN("fail assign tscs locations", K(ret));
   } else if (OB_FAIL(extra_access_table_locations_.assign(other.extra_access_table_locations_))) {
-    LOG_WARN("fail assign tscs locations", K(ret));
   } else if (OB_FAIL(transmit_channel_.assign(other.transmit_channel_))) {
-    LOG_WARN("fail assign data channel", K(ret));
   } else if (OB_FAIL(receive_channel_.assign(other.receive_channel_))) {
-    LOG_WARN("fail assign data channel", K(ret));
   } else if (OB_FAIL(serial_receive_channels_.assign(other.serial_receive_channels_))) {
-    LOG_WARN("fail assign serial_receive_channels_", K(ret));
   } else if (OB_FAIL(rescan_batch_params_.assign(other.rescan_batch_params_))) {
-    LOG_WARN("fail to assign batch rescan params", K(ret));
   } else if (OB_FAIL(partition_pruning_table_locations_.assign(other.partition_pruning_table_locations_))) {
-    LOG_WARN("fail to assign table location", K(ret));
   } else if (OB_FAIL(temp_table_ctx_.assign(other.temp_table_ctx_))) {
-    LOG_WARN("failed to assgin to interm result ids.", K(ret));
   } else if (OB_FAIL(access_table_location_keys_.assign(other.access_table_location_keys_))) {
-    LOG_WARN("failed to assgin to table location keys.", K(ret));
   } else if (OB_FAIL(access_table_location_indexes_.assign(other.access_table_location_indexes_))) {
-    LOG_WARN("failed to assgin to table location keys.", K(ret));
   } else if (OB_FAIL(p2p_dh_map_info_.assign(other.p2p_dh_map_info_))) {
-    LOG_WARN("fail to assign p2p dh map info", K(ret));
   } else if (OB_FAIL(monitoring_info_.assign(other.monitoring_info_))) {
-    LOG_WARN("fail to assign qc monitoring info", K(ret));
   } else if (OB_FAIL(locations_order_.assign(other.locations_order_))) {
-    LOG_WARN("fail to assign qc locations order", K(ret));
   } else {
     execution_id_ = other.execution_id_;
     qc_id_ = other.qc_id_;
@@ -195,7 +182,6 @@ int ObPxSqcMeta::add_serial_recieve_channel(const ObPxReceiveDataChannelMsg &cha
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serial_receive_channels_.push_back(channel))) {
-    LOG_WARN("fail to push back msg", K(ret));
   }
   return ret;
 }
@@ -225,7 +211,6 @@ int ObDfo::add_sqc(const ObPxSqcMeta &sqc)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(sqcs_.push_back(sqc))) {
-    LOG_WARN("fail add sqc to dfo", K(sqc), K(ret));
   }
   return ret;
 }
@@ -299,7 +284,6 @@ int ObDfo::prepare_channel_info()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("should at least have one sqc", "count", sqcs_.count(), K(ret));
   } else if (OB_FAIL(calc_total_task_count())) {
-    LOG_WARN("failed to calc total task count", K(ret));
   }
   return ret;
 }
@@ -336,7 +320,6 @@ int ObDfo::get_task_receive_chs(int64_t child_dfo_id,
     for (int64_t i = 0; i < receive_ch_sets.count() && OB_SUCC(ret); ++i) {
       if (filter(receive_ch_sets.at(i))) {
         if (OB_FAIL(ch_sets.push_back(receive_ch_sets.at(i)))) {
-          LOG_WARN("fail push back info", K(ret));
         }
       }
     }
@@ -435,13 +418,10 @@ int ObPxRpcInitSqcArgs::serialize_common_parts_2(
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObPxTreeSerializer::serialize_expr_frame_info<true>(
                 buf, buf_len, pos, *exec_ctx_, *frame_info))) {
-      LOG_WARN("failed to serialize rt expr", K(ret));
     } else if (OB_FAIL(ObPxTreeSerializer::serialize_tree(
                 buf, buf_len, pos, *op_spec_root_, false /* is_fulltree */, sqc_.get_exec_addr(), &seri_ctx))) {
-      LOG_WARN("fail serialize root_op", K(ret), K(buf_len), K(pos));
     } else if (OB_FAIL(ObPxTreeSerializer::serialize_op_input(
                 buf, buf_len, pos, *op_spec_root_, exec_ctx_->get_kit_store()))) {
-      LOG_WARN("failed to deserialize kit store", K(ret));
     }
 
     if (OB_SUCC(ret) && ser_cache.enable_serialize_cache_) {
@@ -492,7 +472,6 @@ OB_DEF_DESERIALIZE(ObPxRpcInitSqcArgs)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Sqc handler cann't be null", K(ret));
   } else if (OB_FAIL(sqc_handler_->copy_sqc_init_arg(pos, buf, data_len))) {
-    LOG_WARN("Failed to assign sqc", K(ret));
   }
   return ret;
 }
@@ -593,14 +572,10 @@ int ObPxRpcInitSqcArgs::do_deserialize(int64_t &pos, const char *net_buf, int64_
         const ObExprFrameInfo *frame_info = &des_phy_plan_->get_expr_frame_info();
         if (OB_FAIL(ObPxTreeSerializer::deserialize_expr_frame_info<true>(
             buf, data_len, pos, *exec_ctx_, *frame_info))) {
-          LOG_WARN("failed to serialize rt expr", K(ret), K(sqc_));
         } else if (OB_FAIL(ObPxTreeSerializer::deserialize_tree(
             buf, data_len, pos, *des_phy_plan_, op_spec_root_, scan_spec_ops_))) {
-          LOG_WARN("fail deserialize tree", K(ret), K(sqc_));
         } else if (OB_FAIL(op_spec_root_->create_op_input(*exec_ctx_))) {
-          LOG_WARN("create operator from spec failed", K(ret));
         } else if (OB_FAIL(ObPxTreeSerializer::deserialize_op_input(buf, data_len, pos, exec_ctx_->get_kit_store()))) {
-          LOG_WARN("failed to deserialize kit store", K(ret));
         } else {
           des_phy_plan_->set_root_op_spec(op_spec_root_);
           exec_ctx_->reference_my_plan(des_phy_plan_);
@@ -671,13 +646,10 @@ OB_DEF_SERIALIZE(ObPxRpcInitTaskArgs)
         LOG_WARN("unexpected status: op root is null", K(ret));
       } else if (OB_FAIL(ObPxTreeSerializer::serialize_expr_frame_info<true>(
           buf, buf_len, pos, *exec_ctx_, *frame_info))) {
-        LOG_WARN("failed to serialize rt expr", K(ret));
       } else if (OB_FAIL(ObPxTreeSerializer::serialize_tree(
                   buf, buf_len, pos, *op_spec_root_, false /* is_fulltree */, task_.get_exec_addr()))) {
-        LOG_WARN("fail serialize root_op", K(ret), K(buf_len), K(pos));
       } else if (OB_FAIL(ObPxTreeSerializer::serialize_op_input(
           buf, buf_len, pos, *op_spec_root_, exec_ctx_->get_kit_store()))) {
-        LOG_WARN("failed to deserialize kit store", K(ret));
       }
     }
   } else {
@@ -695,10 +667,8 @@ OB_DEF_SERIALIZE(ObPxRpcInitTaskArgs)
         LOG_WARN("unexpected status: op root is null", K(ret));
       } else if (OB_FAIL(ObPxTreeSerializer::serialize_expr_frame_info<false>(
           buf, buf_len, pos, *exec_ctx_, frame_info))) {
-        LOG_WARN("fail serialize expr frames", K(ret), K(buf_len), K(pos));
       } else if (OB_FAIL(ObPxTreeSerializer::serialize_op_input(
           buf, buf_len, pos, *op_spec_root_, exec_ctx_->get_kit_store()))) {
-        LOG_WARN("failed to deserialize kit store", K(ret));
       }
     }
   }
@@ -752,14 +722,10 @@ OB_DEF_DESERIALIZE(ObPxRpcInitTaskArgs)
       const ObExprFrameInfo *expr_frame_info = &inner_phy_plan_->get_expr_frame_info();
       if (OB_FAIL(ObPxTreeSerializer::deserialize_expr_frame_info<true>(
           buf, data_len, pos, *exec_ctx_, *const_cast<ObExprFrameInfo*>(expr_frame_info)))) {
-        LOG_WARN("failed to serialize rt expr", K(ret));
       } else if (OB_FAIL(ObPxTreeSerializer::deserialize_tree(
                   buf, data_len, pos, *inner_phy_plan_, inner_op_spec_root_))) {
-        LOG_WARN("fail deserialize tree", K(ret));
       } else if (OB_FAIL(inner_op_spec_root_->create_op_input(*exec_ctx_))) {
-        LOG_WARN("create operator from spec failed", K(ret));
       } else if (OB_FAIL(ObPxTreeSerializer::deserialize_op_input(buf, data_len, pos, exec_ctx_->get_kit_store()))) {
-            LOG_WARN("failed to deserialize kit store", K(ret));
       } else {
         inner_phy_plan_->set_root_op_spec(inner_op_spec_root_);
         exec_ctx_->reference_my_plan(inner_phy_plan_);
@@ -788,11 +754,8 @@ OB_DEF_DESERIALIZE(ObPxRpcInitTaskArgs)
       const ObExprFrameInfo &expr_frame_info = des_phy_plan_->get_expr_frame_info();
       if (OB_FAIL(ObPxTreeSerializer::deserialize_expr_frame_info<false>(
           buf, data_len, pos, *exec_ctx_, expr_frame_info))) {
-        LOG_WARN("failed to deserialize expr frames", K(ret));
       } else if (OB_FAIL(op_spec_root_->create_op_input(*exec_ctx_))) {
-        LOG_WARN("create operator from spec failed", K(ret));
       } else if (OB_FAIL(ObPxTreeSerializer::deserialize_op_input(buf, data_len, pos, exec_ctx_->get_kit_store()))) {
-            LOG_WARN("failed to deserialize kit store", K(ret));
       } else {
         exec_ctx_->reference_my_plan(des_phy_plan_);
       }
@@ -909,9 +872,7 @@ int ObPxRpcInitTaskArgs::deep_copy_assign(ObPxRpcInitTaskArgs &src,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("deserialize args not init", K(ret));
   } else if (OB_FAIL(src.serialize(static_cast<char *>(ser_ptr), ser_arg_len, ser_pos))) {
-    LOG_WARN("fail serialzie init task arg", KP(ser_ptr), K(ser_arg_len), K(ser_pos), K(ret));
   } else if (OB_FAIL(deserialize(static_cast<const char *>(ser_ptr), ser_pos, des_pos))) {
-    LOG_WARN("fail des task arg", KP(ser_ptr), K(ser_pos), K(des_pos), K(ret));
   } else if (ser_pos != des_pos) {
     ret = OB_DESERIALIZE_ERROR;
     LOG_WARN("data_len and pos mismatch", K(ser_arg_len), K(ser_pos), K(des_pos), K(ret));

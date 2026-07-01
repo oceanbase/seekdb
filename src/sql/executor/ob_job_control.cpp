@@ -149,11 +149,9 @@ int ObJobControl::print_status(char *buf, int64_t buf_len,
   int ret = OB_SUCCESS;
   int64_t pos = 0;
   if (OB_FAIL(J_OBJ_START())) {
-    LOG_WARN("fail to print obj start", K(ret));
   } else {
     J_KV(N_JOB_COUNT, jobs_.count());
     if (OB_FAIL(J_COMMA())) {
-      LOG_WARN("fail to print comma", K(ret));
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < jobs_.count(); ++i) {
@@ -162,14 +160,12 @@ int ObJobControl::print_status(char *buf, int64_t buf_len,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("job is NULL", K(ret), K(i));
     } else if (OB_FAIL(job->print_status(buf, buf_len, pos, ignore_normal_state))) {
-      LOG_WARN("fail to print job status", K(ret), K(i), K(*job));
     } else if (i < jobs_.count() - 1 && OB_FAIL(J_COMMA())) {
       LOG_WARN("fail to print comma", K(ret), K(i), K(*job));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(J_OBJ_END())) {
-    LOG_WARN("fail to print obj end", K(ret));
   }
   if (OB_SIZE_OVERFLOW == ret) {
     LOG_WARN("buf overflow, truncate it", K(ret), K(buf_len), K(pos));

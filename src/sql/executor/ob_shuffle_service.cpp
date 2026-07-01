@@ -55,14 +55,12 @@ int ObShuffleService::get_part_id(ObExecContext &exec_ctx,
   int ret = OB_SUCCESS;
   if (table_schema.is_key_part()) {
     if (OB_FAIL(get_key_part_id(exec_ctx, table_schema, row, part_func, part_id))) {
-      LOG_WARN("get key part id failed");
     }
   } else if (table_schema.is_list_part() ||
              table_schema.is_range_part() ||
              table_schema.is_hash_part()) {
     if (OB_FAIL(get_non_key_partition_part_id(exec_ctx, table_schema, row,
                                               repart_columns, part_id))) {
-      LOG_WARN("failed to get non key partition part id", K(ret));
     }
   } else {
     ret = OB_NOT_IMPLEMENT;
@@ -87,14 +85,11 @@ int ObShuffleService::get_key_part_id(ObExecContext &exec_ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("the part num can not be null", K(part_count), K(part_func), K(ret));
   } else if (OB_FAIL(part_func.calc(expr_ctx_, row, func_result))) {
-    LOG_WARN("Failed to calc hash expr", K(ret), K(row));
   } else if (OB_FAIL(func_result.get_int(calc_result))) {
-    LOG_WARN("Fail to get int64 from result", K(func_result), K(ret));
   } else if (calc_result < 0) {
     ret =  OB_INVALID_ARGUMENT;
     LOG_WARN("Input arguments is invalid", K(calc_result), K(part_count), K(ret));
   } else if (OB_FAIL(ObPartitionUtils::calc_hash_part_idx(calc_result, part_count, part_id))) {
-    LOG_WARN("calc_hash_part_idx failed", K(ret));
   }
   return ret;
 }
@@ -120,14 +115,12 @@ int ObShuffleService::get_subpart_id(ObExecContext &exec_ctx,
   if (table_schema.is_key_subpart()) {
     if (OB_FAIL(get_key_subpart_id(exec_ctx, table_schema, row,
                                    part_id, subpart_func, subpart_id))) {
-      LOG_WARN("get key subpart id failed");
     }
   } else if (table_schema.is_list_subpart()
              || table_schema.is_range_subpart()
              || table_schema.is_hash_subpart()) {
     if (OB_FAIL(get_non_key_subpart_id(exec_ctx, table_schema, row, part_id,
                                        repart_sub_columns, subpart_id))) {
-      LOG_WARN("get range or hash subpart id failed");
     }
   } else {
     ret = OB_NOT_IMPLEMENT;
@@ -172,7 +165,6 @@ int ObShuffleService::init_expr_ctx(ObExecContext &exec_ctx)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get tz info pointer failed", K(ret));
   } else if (OB_FAIL(get_tz_offset(tz_info, tz_offset))) {
-    LOG_WARN("get tz offset failed", K(ret));
   } else {
     expr_ctx_.cast_mode_ = CM_WARN_ON_FAIL;
     expr_ctx_.exec_ctx_ = &exec_ctx;

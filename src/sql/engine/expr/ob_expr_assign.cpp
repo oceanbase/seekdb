@@ -117,7 +117,6 @@ int calc_assign_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
         obj_meta.set_has_lob_header();
       }
       if (OB_FAIL(val_res->to_obj(obj, obj_meta))) {
-        LOG_WARN("to_obj failed", K(ret), K(expr), K(obj_meta));
       }
     }
     if (OB_SUCC(ret)) {

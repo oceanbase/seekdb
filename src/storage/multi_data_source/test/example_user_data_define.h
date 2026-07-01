@@ -160,7 +160,6 @@ public:
       alloc_ = rhs.alloc_;
       rhs.alloc_ = nullptr;
       rhs.data_.reset();
-      MDS_LOG(INFO, "call move construction", K(*this));
     }
   }
   TO_STRING_KV(KP(data_.ptr()), K(data_.length()));

@@ -77,7 +77,6 @@ int ObExprSeqNextval::calc_sequence_nextval(const ObExpr &expr, ObEvalCtx &ctx, 
   int ret = OB_SUCCESS;
   ObDatum *arg_datum = nullptr;
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg_datum))) {
-    LOG_WARN("failed to eval expr", K(ret));
   } else {
     ObSQLSessionInfo *session = ctx.exec_ctx_.get_my_session();
     common::number::ObNumber num;
@@ -86,10 +85,7 @@ int ObExprSeqNextval::calc_sequence_nextval(const ObExpr &expr, ObEvalCtx &ctx, 
     int64_t seq_id = arg_datum->get_int();
     ObSequenceValue value;
     if (OB_FAIL(session->get_sequence_value(seq_id, value))) {
-      LOG_WARN("failed to get sequence value from session",
-               K(seq_id), K(ret));
     } else if (OB_FAIL(num.from(value.val(), tmp_alloc))) {
-      LOG_WARN("fail deep copy value", K(ret));
     } else {
       res.set_number(num);
     }

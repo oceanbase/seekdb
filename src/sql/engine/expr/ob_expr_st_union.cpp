@@ -87,13 +87,11 @@ int ObExprSTUnion::process_input_geometry(omt::ObSrsCacheGuard &srs_guard, const
             gis_arg1->datum_meta_,
             gis_arg1->obj_meta_.has_lob_header(),
             wkb1))) {
-      LOG_WARN("fail to get real string data", K(ret), K(wkb1));
     } else if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(allocator,
                    *gis_datum2,
                    gis_arg2->datum_meta_,
                    gis_arg2->obj_meta_.has_lob_header(),
                    wkb2))) {
-      LOG_WARN("fail to get real string data", K(ret), K(wkb2));
     } else if (FALSE_IT(allocator.set_baseline_size(wkb1.length() + wkb2.length()))) {
     } else if (OB_FAIL(ObGeoTypeUtil::get_type_srid_from_wkb(wkb1, type1, srid1))) {
       if (ret == OB_ERR_GIS_INVALID_DATA) {
@@ -111,21 +109,18 @@ int ObExprSTUnion::process_input_geometry(omt::ObSrsCacheGuard &srs_guard, const
       LOG_USER_ERROR(OB_ERR_GIS_DIFFERENT_SRIDS, N_ST_UNION, srid1, srid2);
     } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(
                    ctx, srs_guard, wkb1, srs, true, N_ST_UNION))) {
-      LOG_WARN("fail to get srs item", K(ret), K(wkb1));
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(allocator,
                    wkb1,
                    geo1,
                    srs,
                    N_ST_UNION,
                    ObGeoBuildFlag::GEO_ALLOW_3D_DEFAULT | GEO_RESERVE_3D | GEO_NOT_COPY_WKB))) {
-      LOG_WARN("get first geo by wkb failed", K(ret));
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(allocator,
                    wkb2,
                    geo2,
                    srs,
                    N_ST_UNION,
                    ObGeoBuildFlag::GEO_ALLOW_3D_DEFAULT | GEO_RESERVE_3D | GEO_NOT_COPY_WKB))) {
-      LOG_WARN("get second geo by wkb failed", K(ret));
     }
   }
   return ret;
@@ -148,7 +143,6 @@ int ObExprSTUnion::eval_st_union(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
   bool is_empty_res = false;
   if (OB_FAIL(
           process_input_geometry(srs_guard, expr, ctx, temp_allocator, geo1_3d, geo2_3d, is_null_res, srs))) {
-    LOG_WARN("fail to process input geometry", K(ret));
   } 
   ObGeoBoostAllocGuard guard{};
   lib::MemoryContext *mem_ctx = nullptr;
@@ -163,7 +157,6 @@ int ObExprSTUnion::eval_st_union(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
     } else if (is_3d_geo1) {
       if (OB_FAIL(ObGeoTypeUtil::convert_geometry_3D_to_2D(
               srs, temp_allocator, geo1_3d, ObGeoBuildFlag::GEO_DEFAULT, geo1))) {
-        LOG_WARN("fail to convert 3D geometry to 2D", K(ret));
       }
     } else {
       geo1 = geo1_3d;
@@ -172,14 +165,12 @@ int ObExprSTUnion::eval_st_union(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
     } else if (is_3d_geo2) {
       if (OB_FAIL(ObGeoTypeUtil::convert_geometry_3D_to_2D(
               srs, temp_allocator, geo2_3d, ObGeoBuildFlag::GEO_DEFAULT, geo2))) {
-        LOG_WARN("fail to convert 3D geometry to 2D", K(ret));
       }
     } else {
       geo2 = geo2_3d;
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(guard.init())) {
-      LOG_WARN("fail to init geo allocator guard", K(ret));
     } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
       ret = OB_ERR_NULL_VALUE;
       LOG_WARN("fail to get mem ctx", K(ret));
@@ -192,7 +183,6 @@ int ObExprSTUnion::eval_st_union(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
         LOG_WARN("eval st union failed", K(ret));
         ObGeoExprUtils::geo_func_error_handle(ret, N_ST_UNION);
       } else if (OB_FAIL(ObGeoExprUtils::check_empty(union_res, is_empty_res))) {
-        LOG_WARN("check geo empty failed", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -200,25 +190,17 @@ int ObExprSTUnion::eval_st_union(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
       // 2D return GEOMETRYCOLLECTION EMPTY, 3D return GEOMETRYCOLLECTION Z EMPTY
       if (OB_FAIL(ObGeoExprUtils::create_3D_empty_collection(temp_allocator, geo1->get_srid(), is_3d_geo1, 
                     geo1->crs() == ObGeoCRS::Geographic, union_res))) {
-        LOG_WARN("fail to create 3D empty collection", K(ret));
       }
     } else {
       if (OB_FAIL(ObGeoTypeUtil::remove_duplicate_geo(union_res, *mem_ctx, srs))) {
-        // should not do simplify in symdifference functor, it may affect
-        // ObGeoFuncUtils::ob_geo_gc_union
-        LOG_WARN("fail to simplify result", K(ret));
       } else if (is_3d_geo1) {
         // populate Z coordinates
         ObGeoElevationVisitor visitor(*mem_ctx, srs);
         ObGeometry *union_res_bin = nullptr;
         if (OB_FAIL(visitor.init(*geo1_3d, *geo2_3d))) {
-          LOG_WARN("fail to init elevation visitor", K(ret));
         } else if (OB_FAIL(ObGeoTypeUtil::tree_to_bin(temp_allocator, union_res, union_res_bin, srs))) {
-          LOG_WARN("fail to do tree to bin", K(ret));
         } else if (OB_FAIL(union_res_bin->do_visit(visitor))) {
-          LOG_WARN("fail to do elevation visitor", K(ret));
         } else if (OB_FAIL(visitor.get_geometry_3D(union_res))) {
-          LOG_WARN("failed get geometry 3D", K(ret));
         } 
       }
     }
@@ -230,7 +212,6 @@ int ObExprSTUnion::eval_st_union(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
   } else {
     ObString res_wkb;
     if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*union_res, expr, ctx, srs, res_wkb))) {
-      LOG_WARN("failed to write geometry to wkb", K(ret));
     } else {
       res.set_string(res_wkb);
     }

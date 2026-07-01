@@ -85,14 +85,12 @@ int pad_column(const ObAccuracy accuracy, common::ObIAllocator &padding_alloc, c
     int32_t cell_strlen = 0; // byte or char length
     const ObString space_pattern = get_padding_str(cell.get_collation_type());
     if (OB_FAIL(cell.get_char_length(accuracy, *(reinterpret_cast<int32_t *>(&cell_strlen))))) {
-      STORAGE_LOG(WARN, "Fail to get char length, ", K(ret));
     } else {
       if (cell_strlen < length) {
         uint32_t cell_len = cell.get_val_len();
         const char *ptr = cell.get_string_ptr();
         if (OB_FAIL(pad_on_local_buf(space_pattern, (length - cell_strlen), padding_alloc,
                                      ptr, cell_len))) {
-          STORAGE_LOG(WARN, "Fail to pad on local buf, ", K(ret), K(cell), K(length), K(cell_strlen));
         } else {
           // watch out !!! in order to deep copy an ObObj instance whose type is char or varchar,
           // set_collation_type() should be revoked. But here no need to set collation type
@@ -256,7 +254,6 @@ int pad_on_rich_format_columns(const common::ObAccuracy accuracy,
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(VectorFormat::VEC_DISCRETE != expr.get_format(eval_ctx))) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "Unexpected vector format for padding column", K(expr.get_format(eval_ctx)));
   } else {
     ObDiscreteFormat *discrete_format = static_cast<ObDiscreteFormat *>(expr.get_vector(eval_ctx));
     ObLength *lens = discrete_format->get_lens();
@@ -356,7 +353,6 @@ int fill_datums_lob_locator(
       ObDatum &datum = datums[row_idx];
       if (!datum.is_null() && !datum.get_lob_data().in_row_) {
         if (OB_FAIL(context.lob_locator_helper_->fill_lob_locator_v2(datum, col_param, iter_param, context))) {
-          STORAGE_LOG(WARN, "Failed to fill lob loactor", K(ret), K(row_idx), K(datum), K(context), K(iter_param));
         }
       }
     }
@@ -390,7 +386,6 @@ int fill_exprs_lob_locator(
         datum.len_ = static_cast<uint32_t>(length);
         if (!datum.get_lob_data().in_row_) {
           if (OB_FAIL(context.lob_locator_helper_->fill_lob_locator_v2(datum, col_param, iter_param, context))) {
-            STORAGE_LOG(WARN, "Failed to fill lob loactor", K(ret), K(row_idx), K(datum), K(context), K(iter_param));
           } else {
             discrete_format->set_datum(row_idx, datum);
           }
@@ -429,12 +424,10 @@ int check_skip_by_monotonicity(
         ObStorageDatum &false_datum = is_asc ? max_datum : min_datum;
         ObStorageDatum &true_datum = is_asc ? min_datum : max_datum;
         if (OB_FAIL(filter.filter(false_datum, skip_bit, filtered))) {
-          STORAGE_LOG(WARN, "Failed to compare with false_datum", K(ret), K(false_datum), K(is_asc));
         } else if (filtered) {
           bool_mask.set_always_false();
         } else if (!has_null) {
           if (OB_FAIL(filter.filter(true_datum, skip_bit, filtered))) {
-            STORAGE_LOG(WARN, "Failed to compare with true_datum", K(ret), K(true_datum), K(is_asc));
           } else if (!filtered) {
             bool_mask.set_always_true();
           }
@@ -448,20 +441,16 @@ int check_skip_by_monotonicity(
         bool min_cmp_res = false;
         bool max_cmp_res = false;
         if (OB_FAIL(filter.judge_greater_or_less(min_datum, skip_bit, is_asc, min_cmp_res))) {
-          STORAGE_LOG(WARN, "Failed to judge min_datum", K(ret), K(min_datum));
         } else if (min_cmp_res) {
           bool_mask.set_always_false();
         } else if (OB_FAIL(filter.judge_greater_or_less(max_datum, skip_bit, !is_asc, max_cmp_res))) {
-          STORAGE_LOG(WARN, "Failed to judge max_datum", K(ret), K(max_datum));
         } else if (max_cmp_res) {
           bool_mask.set_always_false();
         } else if (!has_null) {
           if (OB_FAIL(filter.filter(min_datum, skip_bit, min_cmp_res))) {
-            STORAGE_LOG(WARN, "Failed to compare with min_datum", K(ret), K(min_datum));
           } else if (min_cmp_res) {
             // min datum is filtered
           } else if (OB_FAIL(filter.filter(max_datum, skip_bit, max_cmp_res))) {
-            STORAGE_LOG(WARN, "Failed to compare with max_datum", K(ret), K(max_datum));
           } else if (!max_cmp_res) {
             // min datum and max datum are both not filtered
             bool_mask.set_always_true();
@@ -573,13 +562,11 @@ int decimal_or_number_to_int64(const ObDatum &datum,
   if (ObNumberType == ob_type) {
     const number::ObNumber nmb(datum.get_number());
     if (OB_FAIL(nmb.extract_valid_int64_with_trunc(res))) {
-      STORAGE_LOG(WARN, "failed to cast number to int64", K(ret));
     }
   } else if (ObDecimalIntType == ob_type) {
     int32_t int_bytes = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(datum_meta.precision_);
     bool is_valid;
     if (OB_FAIL(wide::check_range_valid_int64(datum.get_decimal_int(), int_bytes, is_valid, res))) {
-      STORAGE_LOG(WARN, "failed to check decimal int", K(int_bytes), K(ret));
     } else if (!is_valid) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "decimal int is not valid int64", K(ret));
@@ -614,7 +601,6 @@ int get_query_begin_version_for_mlog(
       if (nullptr != left &&
           T_ORA_ROWSCN == left->type_ && (right->is_static_const_ || T_FUN_SYS_LAST_REFRESH_SCN == right->type_)) {
         if (OB_FAIL(right->eval(eval_ctx, datum))) {
-          STORAGE_LOG(WARN, "Failed to eval const expr", K(ret));
         } else {
           rowscn = datum->get_int();
         }
@@ -664,7 +650,6 @@ int build_mview_scan_info_if_need(
         if (nullptr != left &&
             T_ORA_ROWSCN == left->type_ && (right->is_static_const_ || T_FUN_SYS_LAST_REFRESH_SCN == right->type_)) {
           if (OB_FAIL(right->eval(eval_ctx, datum))) {
-            STORAGE_LOG(WARN, "Failed to eval const expr", K(ret));
           } else {
             rowscn = datum->get_int();
           }
@@ -683,7 +668,6 @@ int build_mview_scan_info_if_need(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     STORAGE_LOG(WARN, "Failed to alloc memory for mview scan info", K(ret));
   } else if (OB_FAIL(mview_scan_info->init(query_flag.is_mr_mview_refresh_base_scan(), scan_type, begin_version, end_version))) {
-    STORAGE_LOG(WARN, "Failed to init mview scan info", K(ret));
   } else if (OB_UNLIKELY(!mview_scan_info->is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "Invalid mview scan info for mview query", K(ret), KPC(mview_scan_info));

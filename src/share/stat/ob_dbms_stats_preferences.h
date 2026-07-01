@@ -371,7 +371,6 @@ static int new_stat_prefs(ObIAllocator &allocator, ObSQLSessionInfo *session_inf
   void *ptr = NULL;
   if (OB_ISNULL(ptr = allocator.alloc(sizeof(T)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    SQL_LOG(WARN, "failed to allocate memory", K(ptr), K(sizeof(T)));
   } else {
     src = new (ptr) T(&allocator, session_info, opt_value);
   }

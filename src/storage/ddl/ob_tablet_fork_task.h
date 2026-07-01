@@ -159,7 +159,6 @@ public:
     int ret = common::OB_SUCCESS;
     common::ObSpinLockGuard guard(allocator_lock_);
     if (OB_FAIL(ObTabletCreateDeleteHelper::create_sstable<T>(param, allocator_, table_handle))) {
-      STORAGE_LOG(WARN, "failed to create sstable", K(ret), K(param));
     }
     return ret;
   }

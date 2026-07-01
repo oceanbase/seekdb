@@ -123,7 +123,6 @@ inline int ObCSEncodingAllocator<EncodingItem>::alloc(T *&item)
   } else {
     // performance critical, don't check params
     if (OB_FAIL(pools_[T::type_]->alloc(item))) {
-      STORAGE_LOG(WARN, "allocate failed", K(ret));
     }
   }
   return ret;

@@ -56,7 +56,6 @@ int ObFTDATBuilder<DATA_TYPE>::init(ObFTTrie<DATA_TYPE> &trie)
       dat_->check_offset_ = dat_->base_offset_ + base_size;
       map_ = dat_->get_map();
       if (OB_FAIL(map_->init(trie.node_num()))) {
-        LOG_WARN("fail to init map", K(ret));
       }
     }
   }
@@ -186,9 +185,7 @@ int ObFTDATBuilder<DATA_TYPE>::build_from_trie(ObFTTrie<DATA_TYPE> &trie)
     if (OB_FAIL(ret)) {
       // already logged
     } else if (OB_FAIL(trie.get_start_word(dat_->start_word_))) {
-      LOG_WARN("fail to get start word", K(ret));
     } else if (OB_FAIL(trie.get_end_word(dat_->end_word_))) {
-      LOG_WARN("fail to get end word", K(ret));
     }
     LOG_INFO("build dat finished", K(dat_->start_word_.get_word()), K(dat_->end_word_.get_word()));
 
@@ -242,7 +239,6 @@ int ObFTDATBuilder<DATA_TYPE>::encode(const ObString &word, ObFTWordCode &code, 
       code = next_code_++;
       ret = map_->insert(word, code);
       if (OB_SUCCESS != ret) {
-        LOG_WARN("fail to insert word code", K(ret));
       }
     } else {
       // do nothing

@@ -49,7 +49,6 @@ int ObGeoReverseCoordinateVisitor::visit(ObIWkbGeogPoint *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(reverse_point_coordinate(geo))){
-    LOG_WARN("failed to calculate point range", K(ret));
   }
   return ret;
 }

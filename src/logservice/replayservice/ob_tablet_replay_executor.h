@@ -188,7 +188,6 @@ int ObTabletReplayExecutor::replay_to_mds_table_(
     ret = OB_NOT_SUPPORTED;
     CLOG_LOG(WARN, "inner tablets have no mds table", KR(ret));
   } else if (OB_FAIL(tablet->replay(std::forward<T>(mds), ctx, scn))) {
-    CLOG_LOG(WARN, "failed to do tablet replay", KR(ret));
   }
   return ret;
 }
@@ -213,7 +212,6 @@ int ObTabletReplayExecutor::replay_to_mds_table_(
     ret = OB_NOT_SUPPORTED;
     CLOG_LOG(WARN, "inner tablets have no mds table", KR(ret));
   } else if (OB_FAIL(tablet->replay(key, std::forward<V>(value), ctx, scn))) {
-    CLOG_LOG(WARN, "failed to do tablet replay", KR(ret));
   }
   return ret;
 }

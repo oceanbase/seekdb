@@ -98,10 +98,6 @@ public:
       } else {
         const int64_t lock_end_ts = common::ObClockGenerator::getClock();
         if (lock_end_ts - lock_start_ts_ > 5 * 1000 * 1000) {
-          STORAGE_LOG(INFO, "bucket lock handle cost too much time",
-                                            K_(lock_start_ts),
-                                            "cost_us", lock_end_ts - lock_start_ts_,
-                                            KCSTRING(lbt()));
         }
       }
     }
@@ -139,10 +135,6 @@ public:
       } else {
         const int64_t lock_end_ts = common::ObClockGenerator::getClock();
         if (lock_end_ts - lock_start_ts_ > 5 * 1000 * 1000) {
-          STORAGE_LOG(INFO, "bucket lock handle cost too much time",
-                                            K_(lock_start_ts),
-                                            "cost_us", lock_end_ts - lock_start_ts_,
-                                            KCSTRING(lbt()));
         }
       }
     }
@@ -179,10 +171,6 @@ public:
       } else {
         const int64_t lock_end_ts = ObTimeUtility::current_time();
         if (lock_end_ts - lock_start_ts_ > 5 * 1000 * 1000) {
-          STORAGE_LOG(INFO, "bucket lock handle cost too much time",
-                                            K_(lock_start_ts),
-                                            "cost_us", lock_end_ts - lock_start_ts_,
-                                            KCSTRING(lbt()));
         }
       }
     }
@@ -224,10 +212,6 @@ public:
       } else {
         const int64_t lock_end_ts = ObTimeUtility::current_time();
         if (lock_end_ts - lock_start_ts_ > 5 * 1000 * 1000) {
-          STORAGE_LOG(INFO, "bucket lock handle cost too much time",
-                                            K_(lock_start_ts),
-                                            "cost_us", lock_end_ts - lock_start_ts_,
-                                            KCSTRING(lbt()));
         }
       }
     }
@@ -269,10 +253,6 @@ public:
       } else {
         const int64_t lock_end_ts = common::ObClockGenerator::getClock();
         if (lock_end_ts - lock_start_ts_ > 5 * 1000 * 1000) {
-          STORAGE_LOG(INFO, "bucket lock handle cost too much time",
-                                            K_(lock_start_ts),
-                                            "cost_us", lock_end_ts - lock_start_ts_,
-                                            KCSTRING(lbt()));
         }
       }
     }

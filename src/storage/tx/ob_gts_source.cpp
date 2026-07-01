@@ -54,14 +54,6 @@ void ObGtsStatistics::statistics()
   const int64_t last_stat_ts = ATOMIC_LOAD(&last_stat_ts_);
   if (cur_ts - last_stat_ts >= STAT_INTERVAL) {
     if (ATOMIC_BCAS(&last_stat_ts_, last_stat_ts, cur_ts)) {
-      TRANS_LOG(INFO, "gts statistics",
-                      "gts_rpc_cnt", ATOMIC_LOAD(&gts_rpc_cnt_),
-                      "get_gts_cache_cnt", ATOMIC_LOAD(&get_gts_cache_cnt_),
-                      "get_gts_with_stc_cnt", ATOMIC_LOAD(&get_gts_with_stc_cnt_),
-                      "try_get_gts_cache_cnt", ATOMIC_LOAD(&try_get_gts_cache_cnt_),
-                      "try_get_gts_with_stc_cnt", ATOMIC_LOAD(&try_get_gts_with_stc_cnt_),
-                      "wait_gts_elapse_cnt", ATOMIC_LOAD(&wait_gts_elapse_cnt_),
-                      "try_wait_gts_elapse_cnt", ATOMIC_LOAD(&try_wait_gts_elapse_cnt_));
       ATOMIC_STORE(&gts_rpc_cnt_, 0);
       ATOMIC_STORE(&get_gts_cache_cnt_, 0);
       ATOMIC_STORE(&get_gts_with_stc_cnt_, 0);
@@ -110,11 +102,9 @@ int ObGtsSource::init(const ObAddr &server,
     for (int64_t i = 0; OB_SUCCESS == ret && i < TOTAL_GTS_QUEUE_COUNT; ++i) {
       if (i < GET_GTS_QUEUE_COUNT) {
         if (OB_FAIL(queue_[i].init(GET_GTS))) {
-          TRANS_LOG(WARN, "gts queue init error", KR(ret));
         }
       } else if (i < GET_GTS_QUEUE_COUNT + WAIT_GTS_QUEUE_COUNT) {
         if (OB_FAIL(queue_[i].init(WAIT_GTS_ELAPSING))) {
-          TRANS_LOG(WARN, "wait gts elapsing queue init error", KR(ret));
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -128,7 +118,6 @@ int ObGtsSource::init(const ObAddr &server,
       location_adapter_ = location_adapter;
       gts_statistics_.init();
       is_inited_ = true;
-      TRANS_LOG(INFO, "gts source init success", K(server), KP(this));
     }
   }
 
@@ -240,7 +229,6 @@ int ObGtsSource::get_gts(const MonotonicTs stc,
         ret = tmp_ret;
       } else {
         if (EXECUTE_COUNT_PER_SEC(1)) {
-          TRANS_LOG(INFO, "push gts task success", K(*task));
         }
       }
     }
@@ -278,7 +266,6 @@ int ObGtsSource::get_gts_from_local_timestamp_service_(ObAddr &leader,
     if (OB_FAIL(gts_local_cache_.update_gts_and_check_barrier(cur_ts,
                                                               tmp_gts,
                                                               cur_ts))) {
-      TRANS_LOG(WARN, "update gts fail", K(cur_ts), K(gts), K(receive_gts_ts), KR(ret));
     } else {
       // get gts success, need to overwrite the OB_EAGAIN error code to OB_SUCCESS
       gts = tmp_gts;
@@ -373,9 +360,7 @@ int ObGtsSource::wait_gts_elapse(const int64_t ts, ObTsCbTask *task, bool &need_
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(ERROR, "illegal gts queue index", KR(ret), K(index), KP(task));
       } else if (OB_FAIL(queue_[index].push(task))) {
-        TRANS_LOG(ERROR, "wait queue push task failed", KR(ret), KP(task));
       } else {
-        TRANS_LOG(INFO, "wait queue push task success", KP(task));
       }
       if (OB_SUCCESS == ret) {
         // ignore error code
@@ -444,7 +429,6 @@ int ObGtsSource::refresh_gts(const bool need_refresh)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
-    TRANS_LOG(WARN, "not inited");
     ret = OB_NOT_INIT;
   } else {
     ret = refresh_gts_(need_refresh);
@@ -512,7 +496,6 @@ int ObGtsSource::query_gts_(const ObAddr &leader)
   const MonotonicTs srr = MonotonicTs::current_time();
   UNUSED(leader);
   if (OB_FAIL(gts_local_cache_.update_latest_srr(srr))) {
-    TRANS_LOG(WARN, "update latest srr error", KR(ret), K(srr));
   } else {
     MOD_SCOPE {
       if (OB_FAIL(get_gts_from_local_timestamp_service_(local_leader, gts))) {
@@ -552,16 +535,12 @@ int ObGtsSource::update_gts(const MonotonicTs srr,
   int ret = OB_SUCCESS;
 
   if (OB_UNLIKELY(!is_inited_)) {
-    TRANS_LOG(WARN, "not inited");
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!srr.is_valid()) || OB_UNLIKELY(0 >= gts) || OB_UNLIKELY(!receive_gts_ts.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(srr), K(gts), K(receive_gts_ts));
   } else if (OB_FAIL(gts_local_cache_.update_gts(srr, gts, receive_gts_ts, update))) {
-    TRANS_LOG(WARN, "gts local cache update error", KR(ret), K(srr), K(gts),
-              K(receive_gts_ts), K(update));
   } else {
-    TRANS_LOG(DEBUG, "gts local cache update success", K(srr), K(gts));
   }
 
   return ret;
@@ -572,15 +551,12 @@ int ObGtsSource::update_gts(const int64_t gts, bool &update)
   int ret = OB_SUCCESS;
 
   if (OB_UNLIKELY(!is_inited_)) {
-    TRANS_LOG(WARN, "not inited");
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(0 >= gts)) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(gts));
   } else if (OB_FAIL(gts_local_cache_.update_gts(gts, update))) {
-    TRANS_LOG(WARN, "gts local cache update error", KR(ret), K(gts), K(update));
   } else {
-    TRANS_LOG(DEBUG, "gts local cache update success", K(gts));
   }
 
   return ret;
@@ -599,7 +575,6 @@ int ObGtsSource::handle_gts_result(const int64_t queue_index)
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret));
   } else if (OB_FAIL(gts_local_cache_.get_srr_and_gts_safe(srr, gts, receive_gts_ts))) {
-    TRANS_LOG(WARN, "get srr and gts failed", KR(ret));
   } else {
     ObGTSTaskQueue *queue = &(queue_[queue_index]);
     if (OB_FAIL(queue->foreach_task(srr, gts, receive_gts_ts))) {
@@ -608,7 +583,6 @@ int ObGtsSource::handle_gts_result(const int64_t queue_index)
         if (gts_local_cache_.no_rpc_on_road()) {
           int tmp_ret = OB_SUCCESS;
           if (OB_SUCCESS != (tmp_ret = refresh_gts_(false))) {
-            TRANS_LOG(WARN, "refresh gts failed", K(tmp_ret));
           }
         }
       } else {

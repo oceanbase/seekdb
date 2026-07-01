@@ -28,7 +28,6 @@ int ObLogUpdate::get_plan_item_info(PlanText &plan_text,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObLogDelUpd::get_plan_item_info(plan_text, plan_item))) {
-    LOG_WARN("failed to get plan item info", K(ret));
   } else {
     BEGIN_BUF_PRINT; 
     if (OB_FAIL(print_table_infos(ObString::make_string("table_columns"),
@@ -36,16 +35,13 @@ int ObLogUpdate::get_plan_item_info(PlanText &plan_text,
                                   buf_len, 
                                   pos,
                                   type))) {
-      LOG_WARN("failed to print table infos", K(ret));
     } else if (need_barrier()) {
       ret = BUF_PRINTF(", ");
       ret = BUF_PRINTF("with_barrier");
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(BUF_PRINTF(",\n      "))) {
-      LOG_WARN("BUF_PRINTF fails", K(ret));
     } else if (OB_FAIL(BUF_PRINTF("update("))) {
-      LOG_WARN("BUF_PRINTF fails", K(ret));
     } else { /* Do nothing */ }
     bool has_assign = false;
     for (int64_t k = 0; OB_SUCC(ret) && k < get_index_dml_infos().count(); ++k) {
@@ -107,7 +103,6 @@ int ObLogUpdate::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get unexpected null", K(get_plan()), K(ret));
   } else if (OB_FAIL(ObLogDelUpd::inner_get_op_exprs(all_exprs, true))) {
-    LOG_WARN("failed to add parent need expr", K(ret));
   }
   return ret;
 }
@@ -116,7 +111,6 @@ int ObLogUpdate::is_my_fixed_expr(const ObRawExpr *expr, bool &is_fixed)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(is_dml_fixed_expr(expr, get_index_dml_infos(), is_fixed))) {
-    LOG_WARN("failed to check is my fixed expr", K(ret));
   }
   return ret;
 }
@@ -131,7 +125,6 @@ int ObLogUpdate::est_cost()
   } else {
     double op_cost = 0.0;
     if (OB_FAIL(inner_est_cost(child->get_card(), op_cost))) {
-      LOG_WARN("failed to get update cost", K(ret));
     } else {
       set_op_cost(op_cost);
       set_cost(child->get_cost() + get_op_cost());
@@ -152,9 +145,7 @@ int ObLogUpdate::do_re_est_cost(EstimateCostInfo &param, double &card, double &o
     double child_card = child->get_card();
     double child_cost = child->get_cost();
     if (OB_FAIL(SMART_CALL(child->re_est_cost(param, child_card, child_cost)))) {
-      LOG_WARN("failed to re est exchange cost", K(ret));
     } else if (OB_FAIL(inner_est_cost(child_card, op_cost))) {
-      LOG_WARN("failed to get update cost", K(ret));
     } else {
       cost = child_cost + op_cost;
       card = child_card;
@@ -173,7 +164,6 @@ int ObLogUpdate::inner_est_cost(double child_card, double &op_cost)
                                     get_index_dml_infos(),
                                     child_card,
                                     op_cost))) {
-    LOG_WARN("failed to get update cost", K(ret));
   }
   return ret;
 }
@@ -194,7 +184,6 @@ int ObLogUpdate::inner_est_cost(const ObOptimizerContext &opt_ctx,
     LOG_WARN("get unexpected null", K(ret), K(update_dml_info));
   } else if (OB_FALSE_IT(cost_info.constraint_count_ = update_dml_info->ck_cst_exprs_.count())) {
   } else if (OB_FAIL(ObOptEstCost::cost_update(cost_info, op_cost, opt_ctx))) {
-    LOG_WARN("failed to get update cost", K(ret));
   }
   return ret;
 }
@@ -210,9 +199,7 @@ int ObLogUpdate::generate_part_id_expr_for_foreign_key(ObIArray<ObRawExpr*> &all
     } else if (!dml_info->is_primary_index_) {
       // do nothing
     } else if (OB_FAIL(generate_fk_lookup_part_id_expr(*dml_info))) {
-      LOG_WARN("failed to generate lookup part expr for foreign key", K(ret));
     } else if (OB_FAIL(convert_update_new_fk_lookup_part_id_expr(all_exprs, *dml_info))) {
-      LOG_WARN("failed to convert lookup part expr for foreign key", K(ret));
     }
   }
   return ret;
@@ -226,9 +213,7 @@ int ObLogUpdate::generate_multi_part_partition_id_expr()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("index dml info is null", K(ret));
     } else if (OB_FAIL(generate_old_calc_partid_expr(*get_index_dml_infos().at(i)))) {
-      LOG_WARN("failed to generate calc partid expr", K(ret));
     } else if (OB_FAIL(generate_update_new_calc_partid_expr(*get_index_dml_infos().at(i)))) {
-      LOG_WARN("failed to generate new calc partid expr", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;

@@ -49,7 +49,6 @@ int ObBloomFilterMicroBlockWriter::init(const int64_t micro_block_size) {
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid macro block size", K(micro_block_size), K(ret));
   } else if (OB_FAIL(data_buffer_.ensure_space(micro_block_size))) {
-    STORAGE_LOG(WARN, "Failed to ensure space", K(micro_block_size), K(ret));
   } else {
     is_inited_ = true;
   }
@@ -81,8 +80,6 @@ int ObBloomFilterMicroBlockWriter::build_micro_block_header(
         static_cast<int16_t>(rowkey_column_count);
     bf_micro_header_->row_count_ = static_cast<int32_t>(row_count);
     if (OB_FAIL(data_buffer_.advance(bf_micro_header_->header_size_))) {
-      STORAGE_LOG(WARN, "Failed to advance bf data buffer",
-                  K(bf_micro_header_->header_size_), K(ret));
     }
   }
 
@@ -105,10 +102,7 @@ int ObBloomFilterMicroBlockWriter::write(
   } else if (OB_FAIL(
                  build_micro_block_header(bf_cache_value.get_prefix_len(),
                                           bf_cache_value.get_row_count()))) {
-    STORAGE_LOG(WARN, "Failed to build bf micro block header", K(ret));
   } else if (OB_FAIL(data_buffer_.write_serialize(bf_cache_value))) {
-    STORAGE_LOG(WARN, "Failed to serialize bloom filter cache value",
-                K_(data_buffer), K(bf_cache_value), K(ret));
   } else {
     block_buf = data_buffer_.data();
     block_size = data_buffer_.length();
@@ -159,13 +153,9 @@ int ObBloomFilterMacroBlockWriter::init(const ObDataStoreDesc &desc) {
     STORAGE_LOG(WARN, "Major freeze would not build bloomfilter macro data",
                 K(ret));
   } else if (OB_FAIL(data_buffer_.ensure_space(desc.get_macro_block_size()))) {
-    STORAGE_LOG(WARN, "Failed to ensure space", K(desc.get_macro_block_size()),
-                K(ret));
   } else if (OB_FAIL(compressor_.init(desc.get_macro_block_size(),
                                       desc.get_compressor_type()))) {
-    STORAGE_LOG(WARN, "Failed to init compressor", K(ret));
   } else if (OB_FAIL(bf_micro_writer_.init(desc.get_macro_block_size()))) {
-    STORAGE_LOG(WARN, "Failed to init bloomfilter micro writer", K(ret));
   } else {
     if (OB_FAIL(ret)) {
     } else {
@@ -196,24 +186,17 @@ int ObBloomFilterMacroBlockWriter::write(
     int64_t comp_block_size = 0;
     data_buffer_.reuse();
     if (OB_FAIL(init_headers(bf_cache_value.get_row_count()))) {
-      STORAGE_LOG(WARN, "Failed to build bloomfilter macro block header",
-                  K(ret));
     } else if (OB_FAIL(bf_micro_writer_.write(bf_cache_value, block_buf,
                                               block_size))) {
-      STORAGE_LOG(WARN, "Failed to write bloomfilter micro block",
-                  K(bf_cache_value), K(ret));
     } else if (OB_ISNULL(block_buf) || block_size <= 0) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpected micro blcok buf", KP(block_buf),
                   K(block_size), K(ret));
     } else if (OB_FAIL(compressor_.compress(block_buf, block_size,
                                             comp_block_buf, comp_block_size))) {
-      STORAGE_LOG(WARN, "Failed to compress bloomfilter micro block", K(ret));
     } else if (OB_FAIL(write_micro_block(comp_block_buf, comp_block_size,
                                          block_size))) {
-      STORAGE_LOG(WARN, "Failed to write bloomfilter micro block", K(ret));
     } else if (OB_FAIL(flush_macro_block())) {
-      STORAGE_LOG(WARN, "Failed to flush bloomfilter macro block", K(ret));
     }
   }
 
@@ -257,11 +240,7 @@ int ObBloomFilterMacroBlockWriter::write_micro_block(
         ob_crc64_sse42(comp_block_buf, comp_block_size);
     micro_record_header.set_header_checksum();
     if (OB_FAIL(data_buffer_.write_serialize(micro_record_header))) {
-      STORAGE_LOG(WARN, "Failed to serialize bloomfilter micro block header",
-                  K(ret));
     } else if (OB_FAIL(data_buffer_.write(comp_block_buf, comp_block_size))) {
-      STORAGE_LOG(WARN, "Failed to write bloomfilter compress block to buffer",
-                  K(comp_block_size), K(ret));
     } else {
       int64_t payload_size =
           data_buffer_.length() - common_header_.get_serialize_size();
@@ -283,8 +262,6 @@ int ObBloomFilterMacroBlockWriter::write_micro_block(
 
       if (OB_FAIL(common_header_.build_serialized_header(
               data_buffer_.data(), common_header_.get_serialize_size()))) {
-        STORAGE_LOG(WARN, "Failed to serialize macro block common header",
-                    K(ret));
       }
     }
   }
@@ -314,11 +291,7 @@ int ObBloomFilterMacroBlockWriter::init_headers(const int64_t row_count) {
     common_header_.set_payload_checksum(0);
     if (OB_FAIL(common_header_.set_attr(
             ObMacroBlockCommonHeader::BloomFilterData))) {
-      STORAGE_LOG(WARN, "Failed to set type for common header", K(ret),
-                  K(common_header_));
     } else if (OB_FAIL(data_buffer_.advance(common_header_size))) {
-      STORAGE_LOG(WARN, "Failed to advance data buffer for common header",
-                  K(common_header_size), K(ret));
     } else {
       bf_macro_header_ = reinterpret_cast<ObBloomFilterMacroBlockHeader *>(
           data_buffer_.current());
@@ -338,9 +311,6 @@ int ObBloomFilterMacroBlockWriter::init_headers(const int64_t row_count) {
       bf_macro_header_->row_count_ = static_cast<int32_t>(row_count);
       bf_macro_header_->compressor_type_ = desc_->get_compressor_type();
       if (OB_FAIL(data_buffer_.advance(bf_macro_header_size))) {
-        STORAGE_LOG(
-            WARN, "Failed to advance data buffer for bloomfilter macro header",
-            K(bf_macro_header_size), K(ret));
       }
     }
   }
@@ -371,11 +341,8 @@ int ObBloomFilterMacroBlockWriter::flush_macro_block() {
 
     if (OB_FAIL(ObObjectManager::write_object(opt, macro_write_info,
                                               macro_handle))) {
-      STORAGE_LOG(WARN, "Failed to write bloomfilter macro block", K(ret));
     } else if (OB_FAIL(block_write_ctx_.add_macro_block_id(
                    macro_handle.get_macro_id()))) {
-      STORAGE_LOG(WARN, "fail to add macro id", K(ret), "macro id",
-                  macro_handle.get_macro_id());
     } else {
       share::ObTaskController::get().allow_next_syslog();
       STORAGE_LOG(INFO, "Succeed to flush bloomfilter macro block",

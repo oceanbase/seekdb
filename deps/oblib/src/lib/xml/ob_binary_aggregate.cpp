@@ -113,25 +113,20 @@ int ObBinAggSerializer::append_key_and_value(ObString key, ObStringBuffer &value
                         0 : key_info_.at(key_count-1)->offset_ + key_info_.at(key_count-1)->key_len_;
 
     if (OB_FAIL(json_val->get_total_value(value))) {
-      LOG_WARN("get total value failed", K(ret));
     } else if (OB_FAIL(key_.append(key.ptr(), key.length()))) {
-      LOG_WARN("failed to append key into key_", K(ret), K(key));
     } else {
       uint64_t need_size = value_.length() + value.length() + 8;
       if (check_three_allocator() || need_size <= value_.capacity() || need_size < REPLACE_MEMORY_SIZE_THRESHOLD) {
         if (OB_FAIL(value_.append(value.ptr(), value.length(), 0))) {
-          LOG_WARN("failed to append key into key_", K(ret), K(value));
         }
       } else {
         if (first_alloc_flag()) {
           if (OB_FAIL(copy_and_reset(back_allocator_, allocator_, value))) {
-            LOG_WARN("failed to copy and reset.", K(ret));
           } else {
             set_second_alloc();
           }
         } else {
           if (OB_FAIL(copy_and_reset(allocator_, back_allocator_, value))) {
-            LOG_WARN("failed to copy and reset.", K(ret));
           } else {
             set_first_alloc();
           }
@@ -154,26 +149,21 @@ int ObBinAggSerializer::append_key_and_value(ObXmlBin *xml_bin)
   if (is_xml_agg_) {
     if (xml_bin->meta_.is_unparse_) {
       if (OB_FAIL(add_unparsed_xml(xml_bin))) {
-        LOG_WARN("add parsed xml failed", K(ret));
       }
     } else {
       if (OB_FAIL(add_parsed_xml(xml_bin))) {
-        LOG_WARN("add parsed xml failed", K(ret));
       }
     }
   } else {
     ObMulModeNodeType type = xml_bin->type();
     if (type == M_ELEMENT || type == M_INSTRUCT) {
       if (OB_FAIL(add_element_xml(xml_bin))) {
-        LOG_WARN("add element failed", K(ret));
       }
     } else if (type == M_DOCUMENT || type == M_CONTENT) {
       if (OB_FAIL(add_parsed_xml(xml_bin))) {
-        LOG_WARN("add parsed xml failed", K(ret));
       }
     } else {
       if (OB_FAIL(add_single_leaf_xml(xml_bin))) {
-        LOG_WARN("add single leaf xml failed", K(ret));
       }
     }
   }
@@ -200,7 +190,6 @@ int ObBinAggSerializer::add_element_xml(ObXmlBin *xml_bin)
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(xml_bin->get_key(key))) {
-    LOG_WARN("get key failed.", K(ret));
   } else if (OB_FAIL(value_.append(xml_bin->get_element_buffer()))) {
   } else if (OB_ISNULL(key_info = static_cast<ObAggBinKeyInfo*>
                                   (allocator_->alloc(sizeof(ObAggBinKeyInfo))))) {
@@ -218,9 +207,7 @@ int ObBinAggSerializer::add_element_xml(ObXmlBin *xml_bin)
                         0 : key_info_.at(current_count - 1)->offset_ + key_info_.at(current_count -1)->key_len_;
 
     if (OB_FAIL(key_info_.push_back(key_info))) {
-      LOG_WARN("failed to push back key info into array.", K(ret), K(key_info));
     } else if (OB_FAIL(key_.append(key.ptr(), key.length()))) {
-      LOG_WARN("failed to append key into key_", K(ret), K(key));
     }
   }
   
@@ -244,29 +231,23 @@ int ObBinAggSerializer::add_single_leaf_xml(ObXmlBin *xml_bin)
     type = M_TEXT;
     last_is_text_node_ = true;
     if (OB_FAIL(xml_bin->get_value(value))) {
-      LOG_WARN("failed to get value.", K(ret));
     } else if (OB_FAIL(xml_text.append(value.ptr(), value.length()))) {
-      LOG_WARN("failed to append vlaue.", K(ret));
     }
   } else if (type == M_TEXT) {
     last_is_text_node_ = true;
     if (OB_FAIL(xml_bin->get_text_value(value))) {
-      LOG_WARN("failed to get text value", K(ret));
     } else if (OB_FAIL(xml_text.append(value.ptr(), value.length()))) {
-      LOG_WARN("failed to append vlaue.", K(ret));
     }
   } else {
     if (last_is_text_node_ && OB_FAIL(deal_last_unparsed())) {
       LOG_WARN("failed to deal with last unparsed.", K(ret));
     } else if (OB_FAIL(xml_text.append(xml_bin->meta_.data_, xml_bin->meta_.len_))) {
-      LOG_WARN("failed to append xmltext.", K(ret));
     }
   }
   int64_t value_record = value_.length();
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(value_.append(xml_text.ptr(), xml_text.length()))) {
-    LOG_WARN("append failed.", K(xml_text), K(ret));
   } else if (need_to_add_node(key_count, type)) {
     if (OB_ISNULL(key_info = static_cast<ObAggBinKeyInfo*>
                             (allocator_->alloc(sizeof(ObAggBinKeyInfo))))) {
@@ -281,7 +262,6 @@ int ObBinAggSerializer::add_single_leaf_xml(ObXmlBin *xml_bin)
       key_info->value_offset_ = value_record;
       key_info->offset_ = key_.length();
       if (OB_FAIL(key_info_.push_back(key_info))) {
-        LOG_WARN("failed to push back key info into array", K(ret), K(key_info));
       }
     }
   }
@@ -324,11 +304,8 @@ int ObBinAggSerializer::add_parsed_xml(ObXmlBin *xml_bin)
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(xml_bin->get_value_start(bin_value_start))) {
-    LOG_WARN("failed to get value start.", K(ret));
   } else if (OB_FAIL(xml_bin->get_total_value(value, bin_value_start))) {
-    LOG_WARN("failed to get total value.", K(ret));
   } else if (OB_FAIL(value_.append(value.ptr(), value.length(), 0))) {
-    LOG_WARN("failed to append key into key_", K(ret), K(value));
   }
 
   for (int32_t i = 0; OB_SUCC(ret) && i < count; i++) {
@@ -338,9 +315,7 @@ int ObBinAggSerializer::add_parsed_xml(ObXmlBin *xml_bin)
 
     ObString key;
     if (OB_FAIL(xml_bin->get_index_key(key, origin_index, bin_value_offset, i))) {
-      LOG_WARN("get index key failed", K(i));
     } else if (OB_FAIL(xml_bin->get_value_entry_type(type, origin_index))) {
-      LOG_WARN("get value entry type failed", K(ret));
     } else if (type < 0 || type >= M_MAX_TYPE) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get type invalid.", K(ret), K(type));
@@ -360,9 +335,7 @@ int ObBinAggSerializer::add_parsed_xml(ObXmlBin *xml_bin)
                           0 : key_info_.at(current_count - 1)->offset_ + key_info_.at(current_count -1)->key_len_;
 
       if (OB_FAIL(key_info_.push_back(key_info))) {
-        LOG_WARN("failed to push back key info into array", K(ret), K(key_info));
       } else if (OB_FAIL(key_.append(key.ptr(), key.length()))) {
-        LOG_WARN("failed to append key into key_", K(ret), K(key));
       }
     }
   }
@@ -381,19 +354,15 @@ int ObBinAggSerializer::add_unparsed_xml(ObXmlBin *xml_bin)
   ObStringBuffer xml_text(allocator_);
   if (xml_bin->type() == M_ATTRIBUTE) {
     if (OB_FAIL(xml_bin->get_value(value))) {
-      LOG_WARN("failed to get value.", K(ret));
     } else if (OB_FAIL(xml_text.append(value.ptr(), value.length()))){
-      LOG_WARN("failed to append value.", K(ret), K(value));
     }
   } else {
     if (OB_FAIL(xml_bin->print_xml(xml_text, 0, 0, 0))) {
-      LOG_WARN("failed to print xml bin.", K(ret));
     }
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(value_.append(xml_text.ptr(), xml_text.length()))) {
-    LOG_WARN("failed to append value.", K(ret));
   } else if (key_count == 0 || !key_info_.at(key_count - 1)->unparsed_) {
     if (OB_ISNULL(key_info = static_cast<ObAggBinKeyInfo*>
                             (allocator_->alloc(sizeof(ObAggBinKeyInfo))))) {
@@ -408,7 +377,6 @@ int ObBinAggSerializer::add_unparsed_xml(ObXmlBin *xml_bin)
       key_info->value_offset_ = value_record;
       key_info->offset_ = key_.length();
       if (OB_FAIL(key_info_.push_back(key_info))) {
-        LOG_WARN("failed to push back key info into array", K(ret), K(key_info));
       }
     }
   }
@@ -505,7 +473,6 @@ int ObBinAggSerializer::construct_header()
   if (type_ == AGG_XML) {
     buff_length = buff_.length();
     if (OB_FAIL(doc_header_.serialize(doc_header_buff))) {
-      LOG_WARN("failed to serialize doc header.", K(ret));
     }
   }
 
@@ -517,12 +484,9 @@ int ObBinAggSerializer::construct_header()
                                               count_);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(header_serializer.serialize())) {
-    LOG_WARN("header serialize failed.", K(ret));
   } else if (OB_FALSE_IT(header_str = header_serializer.buffer()->string())) {
   } else if (OB_FAIL(buff_.reserve(total_size))) {
-    LOG_WARN("buff reserver failed.", K(ret), K(total_size));
   } else if (OB_FAIL(buff_.append(header_str.ptr(), header_str.length(), 0))) {
-    LOG_WARN("failed to append.", K(header_str));
   } else if (doc_header_buff.length() != 0 && 
               OB_FAIL(buff_.append(doc_header_buff.ptr(), doc_header_buff.length(), 0))) {
     LOG_WARN("failed to append.", K(doc_header_buff));
@@ -572,7 +536,6 @@ int ObBinAggSerializer::set_key(int64_t key_offset, int64_t key_len)
   INIT_SUCC(ret);
   char* write_buf = key_.ptr() + key_offset;
   if (OB_FAIL(buff_.append(write_buf, key_len, 0))) {
-    LOG_WARN("failed to append buff.", K(ret), K(buff_.length()), K(key_len));
   }
   return ret;
 }
@@ -582,7 +545,6 @@ int ObBinAggSerializer::set_value(int64_t value_offset, int64_t value_len)
   INIT_SUCC(ret);
   char* write_buf = value_.ptr() + value_offset;
   if (OB_FAIL(buff_.append(write_buf, value_len, 0))) {
-    LOG_WARN("failed to append buff.", K(ret), K(buff_.length()), K(value_len));
   }
   return ret;
 }
@@ -599,7 +561,6 @@ int ObBinAggSerializer::reserve_meta()
   int64_t pos = buff_.length();
   uint32_t reserve_size = key_start_ - index_start_;
   if (OB_FAIL(buff_.set_length(pos + reserve_size))) {
-    LOG_WARN("failed to set length.", K(ret), K(pos + reserve_size));
   }
   return ret;
 }
@@ -626,7 +587,6 @@ int ObBinAggSerializer::construct_meta()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("key start unexpected.", K(ret), K(key_start_));
   } else if (OB_FAIL(reserve_meta())) {
-    LOG_WARN("failed to reserve meta.", K(ret), K(buff_.length()));
   } else {
     int64_t key_offset = 0;
     int64_t i_offset = 0;
@@ -668,11 +628,9 @@ int ObBinAggSerializer::text_serialize(ObString value, ObStringBuffer &res)
   int64_t ser_len = serialization::encoded_length_vi64(value.length());
 
   if (OB_FAIL(res.reserve(ser_len + header_size + value.length()))) {
-    LOG_WARN("failed to resoerve serialize size for text.", K(ret), K(ser_len));
   } else if (OB_FAIL(ObMulModeVar::set_var(ObMulModeNodeType::M_TEXT, 
                                             ObMulModeBinLenSize::MBL_UINT8, 
                                             res.ptr() + res.length()))) {
-    LOG_WARN("failed to set var.", K(ret));
   } else {
     res.set_length(res.length() + header_size);
   }
@@ -681,11 +639,8 @@ int ObBinAggSerializer::text_serialize(ObString value, ObStringBuffer &res)
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(serialization::encode_vi64(res.ptr(), res.capacity(), pos, value.length()))) {
-    LOG_WARN("failed to encode str.", K(ret), K(pos));
   } else if (OB_FAIL(res.set_length(pos))) {
-    LOG_WARN("failed to update len for res.", K(ret), K(pos));
   } else if (OB_FAIL(res.append(value.ptr(), value.length()))) {
-    LOG_WARN("failed to append value.", K(ret), K(value));
   }
 
   return ret;
@@ -704,18 +659,14 @@ int ObBinAggSerializer::element_serialize(ObIAllocator* allocator, ObString valu
   int64_t total_size = 0;
   ObXmlElementBinHeader element_serializer(true, prefix);
   if (OB_FAIL(element_serializer.serialize(ele_header_buff))) {
-    LOG_WARN("element serialize failed.", K(ret));
   } else {
 
     total_size = ObBinAggSerializer::estimate_total(value.length(), 1, AGG_XML, ele_header_buff.length());
     ObMulBinHeaderSerializer header_serializer(&header_buff, M_ELEMENT, total_size, count);
     if (OB_FAIL(header_serializer.serialize())) {
-      LOG_WARN("header serialize failed.", K(ret));
     } else if (OB_FALSE_IT(header_str = header_serializer.buffer()->string())) {
     } else if (OB_FAIL(res.append(header_str.ptr(), header_str.length()))) {
-      LOG_WARN("failed to append.", K(header_str));
     } else if (OB_FAIL(res.append(ele_header_buff.ptr(), ele_header_buff.length()))) {
-      LOG_WARN("failed to append.", K(ele_header_buff));
     } else {
       int64_t index_start = res.length();
       int64_t key_entry_start = index_start + header_serializer.get_count_var_size();
@@ -723,7 +674,6 @@ int ObBinAggSerializer::element_serialize(ObIAllocator* allocator, ObString valu
       int64_t key_start = value_entry_start + header_serializer.get_entry_var_size() + sizeof(uint8_t);
       uint32_t reserve_size = key_start - index_start;
       if (OB_FAIL(res.reserve(reserve_size))) {
-        LOG_WARN("failed to reserve buffer.", K(ret), K(reserve_size));
       } else {
         res.set_length(index_start + reserve_size);
         char* write_buf = res.ptr() + index_start;
@@ -736,7 +686,6 @@ int ObBinAggSerializer::element_serialize(ObIAllocator* allocator, ObString valu
         *reinterpret_cast<uint8_t*>(write_buf) = M_TEXT; // value_entry type
         ObMulModeVar::set_var(key_start, header_serializer.get_entry_var_size_type(), write_buf + sizeof(uint8_t)); // value_entry offset
         if (OB_FAIL(res.append(value))) {
-          LOG_WARN("failed to append value.", K(ret), K(value));
         }
       }
     }
@@ -763,24 +712,17 @@ int ObBinAggSerializer::deal_last_unparsed()
     if (last_is_unparsed_text_) {
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObBinAggSerializer::text_serialize(value, text_buff))) {
-        LOG_WARN("failed to serialize text.", K(ret), K(value));
       } else if (OB_FAIL(ObBinAggSerializer::element_serialize(allocator_, text_buff.string(), element_buff))) {
-        LOG_WARN("failed to build element serialize.", K(ret), K(value));
       } else if (OB_FAIL(value_.set_length(last_key_info->value_offset_))) {
-        LOG_WARN("set length failed", K(ret));
       } else if (OB_FAIL(value_.append(element_buff.ptr(), element_buff.length()))) {
-        LOG_WARN("failed to append key into key_", K(ret), K(element_buff));
       } else {
         last_is_unparsed_text_ = false;
       }
     } else if (last_is_text_node_) {
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObBinAggSerializer::text_serialize(value, text_buff))) {
-        LOG_WARN("failed to serialize text.", K(ret), K(value));
       } else if (OB_FAIL(value_.set_length(last_key_info->value_offset_))) {
-        LOG_WARN("set length failed", K(ret));
       } else if (OB_FAIL(value_.append(text_buff.ptr(), text_buff.length()))) {
-        LOG_WARN("failed to append key into key_", K(ret), K(text_buff));
       } else {
         last_is_text_node_ = false;
       }
@@ -799,14 +741,12 @@ int ObBinAggSerializer::construct_key_and_value()
       if ((has_unique_flag() && key_info->unparsed_)) {
         // do nothing
       } else if (OB_FAIL(set_key(key_info->offset_, key_info->key_len_))) {
-        LOG_WARN("failed to set key.", K(ret), K(key_info->offset_), K(key_info->key_len_));
       }
     }
   }
 
   if (!has_unique_flag()) {
     if (OB_FAIL(buff_.append(value_.ptr(), value_.length(), 0))) {
-      LOG_WARN("failed to append value into buff_.", K(ret), K(value_.length()));
     }
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < key_info_.count(); i++) {
@@ -814,7 +754,6 @@ int ObBinAggSerializer::construct_key_and_value()
       if (key_info->unparsed_) {
         // do nothing
       } else if (OB_FAIL(set_value(key_info->value_offset_, key_info->value_len_))) {
-        LOG_WARN("failed to set value", K(ret), K(key_info->value_offset_), K(key_info->value_len_));
       }
     }
   }
@@ -834,21 +773,15 @@ int ObBinAggSerializer::copy_and_reset(ObIAllocator* new_allocator,
     ObAggBinKeyArray new_key_info;
 
     if (OB_FAIL(new_value.reserve(value_.length() + add_value.length()))) {
-      LOG_WARN("failed to reserve new value", K(ret), K(value_.length()), K(add_value.length()));
     } else if (OB_FAIL(new_value.append(value_.ptr(), value_.length(), 0))) {
-      LOG_WARN("failed to append value.", K(new_value.length()), K(value_.length()));
     } else if (OB_FAIL(new_value.append(add_value.ptr(), add_value.length(), 0))) {
-      LOG_WARN("failed to append add value.", K(new_value.length()), K(add_value));
     } else if (OB_FAIL(new_key.append(key_.ptr(), key_.length(), 0))) {
-      LOG_WARN("failed to reserve new key", K(ret), K(new_key.length()), K(key_.length()));
     } else {
       key_.reset();
       value_.reset();
       old_allocator->reset();
       if (OB_FAIL(key_.deep_copy(new_allocator, new_key))) {
-        LOG_WARN("failed to copy new key into key", K(key_), K(new_key));
       } else if (OB_FAIL(value_.deep_copy(new_allocator, new_value))) {
-        LOG_WARN("failed to copy new value into value", K(value_), K(new_value));
       }
     }
 
@@ -886,17 +819,13 @@ int ObBinAggSerializer::serialize()
 {
   INIT_SUCC(ret);
 
-  if (OB_FAIL(deal_last_unparsed())) { // unparsed
-    LOG_WARN("failed to deal with last unprased.", K(ret));
+  if (OB_FAIL(deal_last_unparsed())) {
   } else if (is_json_type() && !json_not_sort() && OB_FALSE_IT(do_json_sort())) { // do json sort
   } else if (is_xml_type() && OB_FALSE_IT(do_xml_sort())) { // do xml sort
-  } else if (OB_FAIL(construct_header())) { // calculate header
-    LOG_WARN("failed to construct header.", K(ret));
-  } else if (OB_FAIL(construct_meta())) { // construct meta_
-    LOG_WARN("failed to construct meta.", K(ret));
+  } else if (OB_FAIL(construct_header())) {
+  } else if (OB_FAIL(construct_meta())) {
   } else if (OB_FAIL(construct_key_and_value())) { // merge key_ and value_
-  } else if (OB_FAIL(rewrite_total_size())) { // write total
-    LOG_WARN("failed to rewrite total size.", K(ret));
+  } else if (OB_FAIL(rewrite_total_size())) {
   }
 
   return ret;

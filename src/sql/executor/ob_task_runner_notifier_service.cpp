@@ -57,7 +57,6 @@ ObTaskRunnerNotifierService::Guard::Guard(const ObTaskID &task_id, ObTaskRunnerN
   if (NULL != notifier && NULL != ObTaskRunnerNotifierService::get_instance()) {
     if (OB_FAIL(ObTaskRunnerNotifierService::get_instance()->register_notifier(
         task_id, notifier))) {
-      LOG_WARN("register notifier failed", K(ret), K(task_id));
     }
   }
 }
@@ -67,7 +66,6 @@ ObTaskRunnerNotifierService::Guard::~Guard()
   int ret = OB_SUCCESS;
   if (NULL != ObTaskRunnerNotifierService::get_instance()) {
     if (OB_FAIL(ObTaskRunnerNotifierService::get_instance()->unregister_notifier(task_id_))) {
-      LOG_WARN("delete notifier failed", K(ret), K(task_id_));
     }
   }
 }
@@ -76,7 +74,6 @@ void ObTaskRunnerNotifierService::reset()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(notifier_map_.destroy())) {
-    LOG_ERROR("fail to destroy notifier map", K(ret));
   }
   inited_ = false;
 }
@@ -125,7 +122,6 @@ int ObTaskRunnerNotifierService::register_notifier(const ObTaskID &key,
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("notifier service is NULL", K(ret));
   } else if (OB_FAIL(notifier_service->set_notifier(key, notifier))) {
-    LOG_WARN("fail to set notifier", K(ret));
   } else {}
   return ret;
 }
@@ -139,7 +135,6 @@ int ObTaskRunnerNotifierService::unregister_notifier(const ObTaskID &key)
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("notifier service is NULL", K(ret));
   } else if (OB_FAIL(notifier_service->erase_notifier(key))) {
-    LOG_WARN("fail to erase notifier", K(ret));
   } else {}
   return ret;
 }
@@ -150,7 +145,6 @@ int ObTaskRunnerNotifierService::init()
   int ret = OB_SUCCESS;
   if (OB_FAIL(notifier_map_.create(NOTIFIER_MAP_BUCKET_SIZE,
                                    "TaskRunnerSer"))) {
-    LOG_WARN("fail to create notifier map", K(ret));
   } else {
     inited_ = true;
   }
@@ -167,7 +161,6 @@ int ObTaskRunnerNotifierService::set_notifier(const ObTaskID &key, ObTaskRunnerN
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("notifier is NULL", K(ret));
   } else if (OB_FAIL(notifier_map_.set_refactored(key, notifier))) {
-    LOG_WARN("fail to set notifier into map", K(ret));
   } else {
     ret = OB_SUCCESS;
   }
@@ -181,7 +174,6 @@ int ObTaskRunnerNotifierService::erase_notifier(const ObTaskID &key)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(notifier_map_.erase_refactored(key))) {
-    LOG_WARN("fail to erase notifier from map", K(ret));
   } else {
     ret = OB_SUCCESS;
   }

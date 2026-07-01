@@ -48,14 +48,12 @@ struct MdsFactory
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(create_(p_obj, std::forward<Args>(args)...))) {
-      MDS_LOG(WARN, "fail to create object", KR(ret), K(typeid(T).name()), KP(p_obj), K(lbt()));
     }
     return ret;
   }
   template <typename T>
   static void destroy(T *obj)
   {
-    MDS_LOG(DEBUG, "destroy object", K(typeid(T).name()), KP(obj), K(lbt()));
     if (OB_NOT_NULL(obj)) {
       obj->~T();
       MdsAllocator::get_instance().free(obj);
@@ -96,7 +94,6 @@ private:
         p_obj = temp_obj;
       }
     }
-    MDS_LOG(DEBUG, "create object with init", K(typeid(T).name()), KP(p_obj), K(lbt()));
     return ret;
   }
   // If type T does not have an init function, then construct through the constructor
@@ -112,7 +109,6 @@ private:
       new (temp_obj)T(std::forward<Args>(args)...);
       p_obj = temp_obj;
     }
-    MDS_LOG(DEBUG, "create object with construction", K(typeid(T).name()), KP(p_obj), K(lbt()));
     return ret;
   }
 };

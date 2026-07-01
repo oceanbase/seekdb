@@ -101,16 +101,13 @@ int ObAllVirtualDynamicPartitionTable::inner_get_next_row(common::ObNewRow *&row
           const uint64_t table_id = cur_tenant_table_ids_.at(table_idx_);
 
           if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard))) {
-            SERVER_LOG(WARN, "fail to get tenant schema guard", KR(ret));
           } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
-            SERVER_LOG(WARN, "fail to get table schema", KR(ret), K(table_id));
           } else if (OB_ISNULL(table_schema) || !table_schema->with_dynamic_partition_policy()) {
             // table may be dropped or altered, skip
             SERVER_LOG(INFO, "table is altered, skip", KR(ret), K(table_id));
           } else {
             found_next_table = true;
             if (OB_FAIL(schema_guard.get_schema_version(tenant_schema_version))) {
-              SERVER_LOG(WARN, "fail to get schema version", KR(ret));
             }
           }
         } while (OB_SUCC(ret) && table_idx_ + 1 < cur_tenant_table_ids_.count() && !found_next_table);
@@ -124,7 +121,6 @@ int ObAllVirtualDynamicPartitionTable::inner_get_next_row(common::ObNewRow *&row
       } else if (OB_UNLIKELY(!table_schema->with_dynamic_partition_policy())) {
         SERVER_LOG(WARN, "table schema has no dynamic_partition_policy", KR(ret));
       } else if (OB_FAIL(build_new_row_(tenant_schema_version, *table_schema, row))) {
-        SERVER_LOG(WARN, "fail to build new row", KR(ret), K(table_schema));
       }
     }
   }
@@ -168,9 +164,7 @@ int ObAllVirtualDynamicPartitionTable::next_tenant_()
     ObSchemaGetterGuard schema_guard;
     ObArray<const ObSimpleTableSchemaV2 *> table_schemas;
     if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard))) {
-      SERVER_LOG(WARN, "fail to get tenant schema guard", KR(ret));
     } else if (OB_FAIL(schema_guard.get_table_schemas_in_tenant(table_schemas))) {
-      SERVER_LOG(WARN, "fail to get table schemas in tenant", KR(ret));
     } else {
       // collect dynamic partition table ids
       for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); i++) {
@@ -183,11 +177,9 @@ int ObAllVirtualDynamicPartitionTable::next_tenant_()
             || !table_schema->is_normal_schema()) {
           // skip
         } else if (OB_FAIL(schema_guard.get_database_schema( table_schema->get_database_id(), database_schema))) {
-          SERVER_LOG(WARN, "fail to get database schema", KR(ret), K(table_schema->get_database_id()));
         } else if (OB_ISNULL(database_schema) || database_schema->is_in_recyclebin()) {
           // skip
         } else if (OB_FAIL(cur_tenant_table_ids_.push_back(table_schema->get_table_id()))) {
-          SERVER_LOG(WARN, "fail to push back table_id", KR(ret), K(table_schema->get_table_id()));
         }
       }
     }
@@ -223,9 +215,7 @@ int ObAllVirtualDynamicPartitionTable::build_new_row_(
           ObSchemaGetterGuard schema_guard;
           const ObDatabaseSchema *database_schema = NULL;
           if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard))) {
-            SERVER_LOG(WARN, "fail to get tenant schema guard", KR(ret));
           } else if (OB_FAIL(schema_guard.get_database_schema( table_schema.get_database_id(), database_schema))) {
-            SERVER_LOG(WARN, "fail to get database schema", KR(ret), K(table_schema.get_database_id()));
           } else if (OB_ISNULL(database_schema)) {
             ret = OB_ERR_UNEXPECTED;
             SERVER_LOG(WARN, "database schema is null", KR(ret));
@@ -233,7 +223,6 @@ int ObAllVirtualDynamicPartitionTable::build_new_row_(
             const ObString &tmp_database_name = database_schema->get_database_name_str();
             ObString database_name;
             if (OB_FAIL(ob_write_string(*allocator_, tmp_database_name, database_name))) {
-              SERVER_LOG(WARN, "fail to write string", KR(ret), K(tmp_database_name));
             } else {
               cells[cell_idx].set_varchar(database_name);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -245,7 +234,6 @@ int ObAllVirtualDynamicPartitionTable::build_new_row_(
           const ObString &tmp_table_name = table_schema.get_table_name_str();
           ObString table_name;
           if (OB_FAIL(ob_write_string(*allocator_, tmp_table_name, table_name))) {
-            SERVER_LOG(WARN, "fail to write string", KR(ret), K(tmp_table_name));
           } else {
             cells[cell_idx].set_varchar(table_name);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -282,7 +270,6 @@ int ObAllVirtualDynamicPartitionTable::build_new_row_(
                                                                                pos,
                                                                                false/*print_collation*/,
                                                                                &tz_info))) {
-              SERVER_LOG(WARN, "Failed to convert rowkey to sql text", KR(ret), K(max_high_bound_val));
             } else {
               ObString max_high_bound_val_str;
               max_high_bound_val_str.assign_ptr(buf, pos);
@@ -295,7 +282,6 @@ int ObAllVirtualDynamicPartitionTable::build_new_row_(
         case ENABLE: {
           bool enable = false;
           if (OB_FAIL(share::ObDynamicPartitionManager::get_enable(table_schema, enable))) {
-            SERVER_LOG(WARN, "fail to get dynamic partition enable", KR(ret));
           } else {
             cells[cell_idx].set_varchar(enable ? "TRUE" : "FALSE");
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -305,7 +291,6 @@ int ObAllVirtualDynamicPartitionTable::build_new_row_(
         case TIME_UNIT: {
           ObDateUnitType time_unit = ObDateUnitType::DATE_UNIT_MAX;
           if (OB_FAIL(share::ObDynamicPartitionManager::get_time_unit(table_schema, time_unit))) {
-            SERVER_LOG(WARN, "fail to get dynamic partition time unit", KR(ret));
           } else {
             cells[cell_idx].set_varchar(ob_date_unit_type_str_upper(time_unit));
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -319,7 +304,6 @@ int ObAllVirtualDynamicPartitionTable::build_new_row_(
           const int64_t time_length = 128;
           int64_t pos = 0;
           if (OB_FAIL(share::ObDynamicPartitionManager::get_precreate_time(table_schema, num, time_unit))) {
-            SERVER_LOG(WARN, "fail to get dynamic partition precreate time", KR(ret));
           } else if (OB_ISNULL(buf = static_cast<char *>(allocator_->alloc(time_length)))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
             SERVER_LOG(WARN, "allocate memory failed", KR(ret));
@@ -340,7 +324,6 @@ int ObAllVirtualDynamicPartitionTable::build_new_row_(
           const int64_t time_length = 128;
           int64_t pos = 0;
           if (OB_FAIL(share::ObDynamicPartitionManager::get_expire_time(table_schema, num, time_unit))) {
-            SERVER_LOG(WARN, "fail to get dynamic partition expire time", KR(ret));
           } else if (OB_ISNULL(buf = static_cast<char *>(allocator_->alloc(time_length)))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
             SERVER_LOG(WARN, "allocate memory failed", KR(ret));
@@ -358,9 +341,7 @@ int ObAllVirtualDynamicPartitionTable::build_new_row_(
           ObString tmp_time_zone;
           ObString time_zone;
           if (OB_FAIL(share::ObDynamicPartitionManager::get_time_zone(table_schema, tmp_time_zone))) {
-            SERVER_LOG(WARN, "fail to get dynamic partition time zone", KR(ret));
           } else if (OB_FAIL(ob_write_string(*allocator_, tmp_time_zone, time_zone))) {
-            SERVER_LOG(WARN, "fail to write string", KR(ret), K(tmp_time_zone));
           } else {
             cells[cell_idx].set_varchar(time_zone);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -371,9 +352,7 @@ int ObAllVirtualDynamicPartitionTable::build_new_row_(
           ObString tmp_bigint_precision;
           ObString bigint_precision;
           if (OB_FAIL(share::ObDynamicPartitionManager::get_bigint_precision(table_schema, tmp_bigint_precision))) {
-            SERVER_LOG(WARN, "fail to get dynamic partition bigint precision", KR(ret));
           } else if (OB_FAIL(ob_write_string(*allocator_, tmp_bigint_precision, bigint_precision))) {
-            SERVER_LOG(WARN, "fail to write string", KR(ret), K(tmp_bigint_precision));
           } else {
             cells[cell_idx].set_varchar(bigint_precision);
             cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));

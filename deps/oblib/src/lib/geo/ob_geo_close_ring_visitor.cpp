@@ -27,7 +27,6 @@ int ObGeoCloseRingVisitor::visit_poly(PolyTree *geo)
   int ret = OB_SUCCESS;
   if (geo->front() != geo->back()) {
     if (OB_FAIL(geo->push_back(geo->front()))) {
-      LOG_WARN("fail to push back point", K(ret));
     }
   }
   if (OB_SUCC(ret) && geo->size() < 4) {

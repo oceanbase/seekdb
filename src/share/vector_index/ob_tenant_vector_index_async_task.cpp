@@ -50,9 +50,7 @@ void ObVectorIndexHistoryTask::do_work()
   } else if (!ObVecIndexAsyncTaskUtil::check_can_do_work()) { // skip
   } else if (!ObTTLUtil::check_can_process_tenant_tasks()) { // skip
   } else if (OB_FAIL(move_task_to_history_table())) {
-    LOG_WARN("fail to move task to history table", K(ret));
   } else if (OB_FAIL(clear_history_task())) {
-    LOG_WARN("fail to clear history task", K(ret));
   }
 }
 
@@ -73,9 +71,7 @@ int ObVectorIndexHistoryTask::clear_history_task()
     ret = OB_EAGAIN;
     FLOG_INFO("exit timer task once cuz leader switch", KR(ret));
   } else if (OB_FAIL(trans.start(sql_proxy_))) {
-    LOG_WARN("fail start transaction", KR(ret));
   } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::clear_history_expire_task_record(batch_size, trans, affect_rows))) {
-    LOG_WARN("fail to execute sql", KR(ret), K(sql));
   } else {
     LOG_DEBUG("success to clear_history_task", K(ret), K(sql), K(affect_rows));
   }
@@ -106,9 +102,7 @@ int ObVectorIndexHistoryTask::move_task_to_history_table()
         ret = OB_EAGAIN;
         FLOG_INFO("exit timer task once cuz leader switch", K(ret));
       } else if (OB_FAIL(trans.start(sql_proxy_))) {
-        LOG_WARN("fail start transaction", KR(ret));
       } else if (OB_FAIL(ObVecIndexAsyncTaskUtil::move_task_to_history_table(batch_size, trans, move_rows))) {
-        LOG_WARN("fail to move task to history table", KR(ret));                                      
       }
       if (trans.is_started()) {
         int tmp_ret = OB_SUCCESS;
@@ -158,10 +152,8 @@ int ObTenantVecAsyncTaskScheduler::init(ObMySQLProxy &sql_proxy)
   if (IS_INIT) {
     ret = OB_INIT_TWICE;
     LOG_WARN("tenant ttl mgr init twice", KR(ret));
-  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TenantTTLManager, tg_id_))) {    // generate new timer
-    LOG_WARN("fail to init timer", KR(ret));
-  } else if (OB_FAIL(vec_history_task_.init(sql_proxy))) { // History table cleanup
-    LOG_WARN("fail to init clear history task");
+  } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TenantTTLManager, tg_id_))) {
+  } else if (OB_FAIL(vec_history_task_.init(sql_proxy))) {
   } else {
     is_inited_ = true;
     
@@ -178,9 +170,7 @@ int ObTenantVecAsyncTaskScheduler::start()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
   } else if (OB_FAIL(TG_START(tg_id_))) {
-    LOG_WARN("init ttl scheduler fail", KR(ret));
   } else if (OB_FAIL(TG_SCHEDULE(tg_id_, vec_history_task_, VEC_INDEX_CLEAR_TASK_PERIOD, true))) {
-    LOG_WARN("fail to start vector index clear history task", KR(ret));
   }
   FLOG_INFO("start tenant vector index manager", KR(ret));
 

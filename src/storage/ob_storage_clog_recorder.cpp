@@ -191,12 +191,10 @@ int ObIStorageClogRecorder::try_update_for_leader(
     if (cur_update_version > ATOMIC_LOAD(&max_saved_version_)) {
       // may change cur_update_version in prepare_struct_in_lock
       if (OB_FAIL(prepare_struct_in_lock(cur_update_version, allocator, clog_buf, clog_len))) {
-        LOG_WARN("failed to get struct", K(ret), K(update_version));
       } else if (OB_UNLIKELY(cur_update_version < update_version)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("update version is smaller", K(ret), K(cur_update_version), K(update_version));
       } else if (OB_FAIL(try_update_with_lock(cur_update_version, clog_buf, clog_len, expire_ts))) {
-        LOG_WARN("retry failed", K(ret), KPC(this), K(cur_update_version));
       } else { // sync clog success
         LOG_DEBUG("sync clog success", KPC(this), K(cur_update_version), K(max_saved_version_));
       }
@@ -264,7 +262,6 @@ void ObIStorageClogRecorder::clog_update_succ(
     LOG_WARN("clog ts is invalid", K(ret), K_(clog_scn));
   } else {
     if (OB_FAIL(sync_clog_succ_for_leader(update_version))) {
-      LOG_WARN("failed to save for leader", K(ret), KPC(this));
     } else {
       finish_flag = true;
       ATOMIC_STORE(&max_saved_version_, update_version);
@@ -291,7 +288,6 @@ int ObIStorageClogRecorder::write_clog(
     LOG_WARN("palf handle is null", K(ret), KP(log_handler_));
   } else if (FALSE_IT(ATOMIC_STORE(&logcb_finish_flag_, false))) {
   } else if (OB_FAIL(log_handler_->append(buf, buf_len, share::SCN::min_scn(), need_nonblock, allow_compression, logcb_ptr_, lsn, clog_scn_))) {
-    LOG_WARN("fail to submit log", K(ret), KPC(this));
   }
   return ret;
 }
@@ -304,9 +300,7 @@ int ObIStorageClogRecorder::get_tablet_handle(
   int ret = OB_SUCCESS;
   ObLSHandle ls_handle;
   if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-    LOG_WARN("failed to get log stream", K(ret), K(ls_id));
   } else if (OB_FAIL(ls_handle.get_ls()->get_tablet(tablet_id, tablet_handle))) {
-    LOG_WARN("failed to get tablet", K(ret), K(ls_id), K(tablet_id));
   }
   return ret;
 }
@@ -321,7 +315,6 @@ int ObIStorageClogRecorder::replay_get_tablet_handle(
   ObLSHandle ls_handle;
   const bool is_update_mds_table = false;
   if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-    LOG_WARN("failed to get log stream", K(ret), K(ls_id));
   } else if (OB_FAIL(ls_handle.get_ls()->replay_get_tablet(tablet_id, scn, is_update_mds_table, tablet_handle))) {
     if (OB_OBSOLETE_CLOG_NEED_SKIP == ret) {
       LOG_INFO("clog is obsolete, should skip replay", K(ret), K(ls_id), K(tablet_id), K(scn));

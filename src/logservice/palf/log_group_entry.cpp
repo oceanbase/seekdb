@@ -99,8 +99,6 @@ DEFINE_SERIALIZE(LogGroupEntry)
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(buf),
         K(buf_len));
   } else if (OB_FAIL(header_.serialize(buf, buf_len, new_pos))) {
-    PALF_LOG(ERROR, "LogGroupEntryHeader serialize error",
-        K(ret), K(buf_len), K(new_pos));
   } else if (buf_len  - new_pos < data_len) {
     ret = OB_BUF_NOT_ENOUGH;
     PALF_LOG(ERROR, "LogGroupEntry buffer not enough",
@@ -122,7 +120,6 @@ DEFINE_DESERIALIZE(LogGroupEntry)
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(buf),
         K(data_len));
   } else if (OB_FAIL(header_.deserialize(buf, data_len, new_pos))) {
-    PALF_LOG(TRACE, "LogGroupEntryHeader deserialize failed", K(ret), K(data_len), K(new_pos));
   } else if (data_len  - new_pos < header_.get_data_len()) {
     ret = OB_BUF_NOT_ENOUGH;
     PALF_LOG(TRACE, "LogGroupEntry buffer not enough", K(ret), K(data_len),

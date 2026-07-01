@@ -156,7 +156,7 @@ public:
     ObIMicroBlockWriter::reuse();
     checksum_helper_.reset();
   }
-  virtual void dump_diagnose_info() { STORAGE_LOG(INFO, "IMicroBlockWriter", K(checksum_helper_)); }
+  virtual void dump_diagnose_info() {  }
   virtual int append_hash_index(ObMicroBlockHashIndexBuilder& hash_index_builder)
   {
     int ret = OB_NOT_SUPPORTED;
@@ -243,7 +243,6 @@ protected:
       ++last_rows_count_;
     }
     is_last_row_last_flag_ = row.is_last_multi_version_row();
-    STORAGE_LOG(DEBUG, "cal row stat", K(row), K(row.mvcc_row_flag_), K_(row_count_delta), K_(last_rows_count));
   }
 
   OB_INLINE bool need_cal_row_checksum() const

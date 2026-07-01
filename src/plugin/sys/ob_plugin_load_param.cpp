@@ -70,9 +70,7 @@ int ObPluginLoadParamParser::parse(const ObString &param, ObIArray<ObPluginLoadP
       if (item_str.empty()) {
         // ignore
       } else if (OB_FAIL(parse_item(item_str, plugin_param))) {
-        LOG_WARN("failed to parse plugin load param", K(ret));
       } else if (OB_FAIL(plugin_params.push_back(plugin_param))) {
-        LOG_WARN("failed to push back plugin param", K(plugin_param), K(ret));
       }
     }
 
@@ -80,9 +78,7 @@ int ObPluginLoadParamParser::parse(const ObString &param, ObIArray<ObPluginLoadP
     if (OB_FAIL(ret)) {
     } else if (item_str.empty()) {
     } else if (OB_FAIL(parse_item(item_str, plugin_param))) {
-      LOG_WARN("failed to parse plugin load param", K(ret));
     } else if (OB_FAIL(plugin_params.push_back(plugin_param))) {
-      LOG_WARN("failed to push back plugin param", K(plugin_param), K(ret));
     }
   }
   return ret;

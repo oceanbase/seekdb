@@ -1061,7 +1061,6 @@ inline void ObTablet::inc_ref()
   const int64_t cnt = ATOMIC_AAF(&ref_cnt_, 1);
 #ifdef DEBUG
   const common::ObTabletID tablet_id = tablet_meta_.tablet_id_;
-  STORAGE_LOG(DEBUG, "tablet inc ref", KP(this), K(tablet_id), "ref_cnt", cnt, K(lbt()));
 #endif
 }
 
@@ -1072,7 +1071,6 @@ inline int64_t ObTablet::dec_ref()
 #endif
   const int64_t cnt = ATOMIC_SAF(&ref_cnt_, 1/* just sub 1 */);
 #ifdef DEBUG
-  STORAGE_LOG(DEBUG, "tablet dec ref", KP(this), K(tablet_id), "ref_cnt", cnt, K(lbt()));
 #endif
 
   return cnt;

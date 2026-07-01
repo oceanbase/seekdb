@@ -32,11 +32,9 @@ OB_DEF_SERIALIZE(ObPartitionScanRanges)
   UNF_UNUSED_SER;
   LST_DO_CODE(OB_UNIS_ENCODE, partition_id_);
   if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, ranges_.count()))) {
-    LOG_WARN("fail to encode ranges count", K(ret), K(ranges_.count()));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < ranges_.count(); ++i) {
     if (OB_FAIL(ranges_.at(i).serialize(buf, buf_len, pos))) {
-      LOG_WARN("fail to serialize key range", K(ret), K(i));
     }
   }
   return ret;
@@ -51,7 +49,6 @@ OB_DEF_DESERIALIZE(ObPartitionScanRanges)
     int64_t count = 0;
     ranges_.reset();
     if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
-      LOG_WARN("fail to decode key ranges count", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < count; i ++) {
       if (OB_ISNULL(deserialize_allocator_)) {
@@ -64,11 +61,8 @@ OB_DEF_DESERIALIZE(ObPartitionScanRanges)
         copy_range.start_key_.assign(array, OB_MAX_ROWKEY_COLUMN_NUMBER);
         copy_range.end_key_.assign(array + OB_MAX_ROWKEY_COLUMN_NUMBER, OB_MAX_ROWKEY_COLUMN_NUMBER);
         if (OB_FAIL(copy_range.deserialize(buf, data_len, pos))) {
-          LOG_WARN("fail to deserialize range", K(ret));
         } else if (OB_FAIL(deep_copy_range(*deserialize_allocator_, copy_range, key_range))) {
-          LOG_WARN("fail to deep copy range", K(ret));
         } else if (OB_FAIL(ranges_.push_back(key_range))) {
-          LOG_WARN("fail to add key range to array", K(ret));
         }
       }
     }
@@ -92,11 +86,9 @@ OB_DEF_SERIALIZE(ObMultiPartitionsRangesWarpper)
   int ret = OK_;
   UNF_UNUSED_SER;
   if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, partitions_ranges_.count()))) {
-    LOG_WARN("fail to encode ranges count", K(ret), K(partitions_ranges_.count()));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < partitions_ranges_.count(); ++i) {
     if (OB_FAIL(partitions_ranges_.at(i)->serialize(buf, buf_len, pos))) {
-      LOG_WARN("fail to serialize key range", K(ret), K(i));
     }
   }
   LST_DO_CODE(OB_UNIS_ENCODE, mode_);
@@ -111,16 +103,13 @@ OB_DEF_DESERIALIZE(ObMultiPartitionsRangesWarpper)
     int64_t count = 0;
     partitions_ranges_.reset();
     if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
-      LOG_WARN("fail to decode partition ranges count", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < count; i ++) {
       ObPartitionScanRanges *partition_ranges = nullptr;
       if (OB_FAIL(get_new_partition_ranges(partition_ranges))) {
-        LOG_WARN("Failed to get new partition ranges", K(ret));
       } else {
         partition_ranges->set_des_allocator(&allocator_);
         if (OB_FAIL(partition_ranges->deserialize(buf, data_len, pos))) {
-          LOG_WARN("fail to deserialize range", K(ret));
         }
       }
     }

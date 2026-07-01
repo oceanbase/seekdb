@@ -48,7 +48,6 @@ int ObMVMergeSCNInfoCache::get_ls_info(
 
     if (OB_SUCC(ret) && OB_ISNULL(ls_info)) {
       if (OB_FAIL(arr_.push_back(ObMVMergeSCNInfo(ls_id)))) {
-        LOG_WARN("failed to push_back", KR(ret), K(ls_id));
       } else {
         ls_info = &arr_.at(arr_.count() - 1);
         LOG_INFO("add ls_info", KR(ret), K(ls_id), KPC(ls_info), KPC(this));
@@ -155,17 +154,14 @@ void ObReplicaSafeCheckTask::runTimerTask()
     switch (status_) {
       case StatusType::PUBLISH_SCN:
         if (OB_FAIL(publish_scn())) {
-          LOG_WARN("fail to publish scn", KR(ret), KPC(this));
         }
         break;
       case StatusType::CHECK_END:
         if (OB_FAIL(check_end())) {
-          LOG_WARN("fail to check end", KR(ret), KPC(this));
         }
         break;
       case StatusType::NOTICE_SAFE:
         if (OB_FAIL(notice_safe())) {
-          LOG_WARN("fail to notice safe", KR(ret), KPC(this));
         }
         break;
       default:
@@ -190,7 +186,6 @@ void ObReplicaSafeCheckTask::switch_status(StatusType new_status, int64_t delay)
     status_ = new_status;
     if (in_sched_) {
       if (OB_FAIL(schedule_task(delay, false /*repeat*/))) {
-        LOG_WARN("fail to schedule replica safe check task", KR(ret), KPC(this));
       }
     }
     LOG_INFO("replica safe check task switch_status", KR(ret), K(new_status), K(delay), KPC(this));
@@ -226,9 +221,7 @@ int ObReplicaSafeCheckTask::register_mds_in_trans(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn is NULL", KR(ret));
   } else if (OB_FAIL(arg.serialize(buf, buf_len, pos))) {
-    LOG_WARN("fail to serialize", KR(ret), K(arg));
   } else if (OB_FAIL(conn->register_multi_data_source(arg.ls_id_, type, buf, buf_len))) {
-    LOG_WARN("fail to register_tx_data", KR(ret), K(arg), K(buf_len));
   }
   return ret;
 }
@@ -254,15 +247,12 @@ int ObReplicaSafeCheckTask::do_multi_trans(
     LOG_ERROR("status error", KR(ret), K(buf_len), K(MAX_MULTI_BUF_SIZE), KPC(this));
     ob_abort();
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-    LOG_WARN("failed to start trans", KR(ret), KPC(this));
   } else if (OB_ISNULL(conn = dynamic_cast<observer::ObInnerSQLConnection *>
                        (trans.get_connection()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("conn is NULL", KR(ret), KPC(this));
   } else if (OB_FAIL(arg.serialize(buf, buf_len, pos))) {
-    LOG_WARN("fail to serialize", KR(ret), K(arg));
   } else if (OB_FAIL(conn->register_multi_data_source(arg.ls_id_, type, buf, buf_len))) {
-    LOG_WARN("fail to register_tx_data", KR(ret), K(arg), K(buf_len));
   }
   if (trans.is_started()) {
     int temp_ret = OB_SUCCESS;
@@ -294,7 +284,6 @@ int ObReplicaSafeCheckTask::check_row_empty(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("sql_str is invalid", KR(ret));
     } else if (OB_FAIL(GCTX.sql_proxy_->read(res, sql_str.ptr()))) {
-      LOG_WARN("execute sql failed", KR(ret), K(sql_str));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("result is null", KR(ret));
@@ -316,9 +305,7 @@ int ObReplicaSafeCheckTask::check_end()
   bool no_new_create = false;
   ObSqlString check_new_create_sql;
   if (OB_FAIL(check_new_create_sql.assign_fmt("SELECT 1 FROM %s WHERE last_refresh_scn = 0 AND refresh_mode = %ld limit 1", share::OB_ALL_MVIEW_TNAME, ObMVRefreshMode::MAJOR_COMPACTION))) {
-    LOG_WARN("failed to assign sql", KR(ret), K(check_new_create_sql), KPC(this));
   } else if (OB_FAIL(check_row_empty(check_new_create_sql, no_new_create))) {
-    LOG_WARN("failed to check_row_empty", KR(ret), K(check_new_create_sql), KPC(this));
   } else if (!no_new_create) {
   }
   LOG_INFO("check_end finish", KR(ret), K(no_new_create), KPC(this));
@@ -355,7 +342,6 @@ int ObReplicaSafeCheckTask::notice_safe()
         arg.merge_scn_ = merge_scn_;
         arg.ls_id_ = ls_info.ls_id_;
         if (OB_FAIL(do_multi_trans(transaction::ObTxDataSourceType::MV_NOTICE_SAFE, arg))) {
-          LOG_WARN("failed to do_multi_trans", KR(ret), K(ls_info), K(arg), K(this));
         } else {
           ls_info.major_mv_merge_scn_safe_calc_ = ls_info.major_mv_merge_scn_publish_;
         }
@@ -400,13 +386,9 @@ int ObReplicaSafeCheckTask::create_ls_with_tenant_mv_merge_scn(const share::ObLS
     if (OB_SUCC(ret) && !merge_scn.is_min()) { // skip min merge scn
       ObUpdateMergeScnArg arg;
       if (OB_FAIL(arg.init(ls_id, merge_scn))) {
-        LOG_WARN("failed to init arg", KR(ret), K(ls_id), K(merge_scn));
       } else if (OB_FAIL(register_mds_in_trans(transaction::ObTxDataSourceType::MV_PUBLISH_SCN, arg, trans))) {
-        LOG_WARN("failed to do multi trans", KR(ret), K(arg));
       } else if (OB_FAIL(register_mds_in_trans(transaction::ObTxDataSourceType::MV_NOTICE_SAFE, arg, trans))) {
-        LOG_WARN("failed to do multi trans", KR(ret), K(arg));
       } else if (OB_FAIL(register_mds_in_trans(transaction::ObTxDataSourceType::MV_MERGE_SCN, arg, trans))) {
-        LOG_WARN("failed to do multi trans", KR(ret), K(arg));
       }
     }
   }

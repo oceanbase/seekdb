@@ -41,7 +41,6 @@ int ObLoadFileIterator::add_files(ObString *start, const int64_t count)
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
       if (OB_FAIL(files_.push_back(start[i]))) {
-        LOG_WARN("fail to push back", KR(ret));
       }
     }
   }
@@ -66,7 +65,6 @@ int ObLoadFileIterator::copy(const ObLoadFileIterator &other)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get invalid argument", K(ret), K(other));
   } else if (OB_FAIL(files_.assign(other.files_))) {
-    LOG_WARN("fail to copy array", K(ret));
   }
   return ret;
 }
@@ -74,7 +72,6 @@ int ObLoadFileIterator::copy(const ObLoadFileIterator &other)
 int ObLoadDataStmt::add_column_item(ColumnItem &item) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(column_items_.push_back(item))) {
-    LOG_WARN("push column item failed", K(ret));
   }
   return ret;
 }

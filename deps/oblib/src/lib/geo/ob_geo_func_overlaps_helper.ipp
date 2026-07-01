@@ -149,7 +149,6 @@ private:
       uint8_t dim1 = -1;
       uint8_t dim2 = -1;
       if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<GcTreeType>(context, geo1, mpt1, mls1, mpy1))) {
-        LOG_WARN("failed to prepare gc", K(ret));
       } else if (OB_ISNULL(mpt1) || OB_ISNULL(mls1) || OB_ISNULL(mpy1)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null geometry collection split", K(ret));
@@ -172,7 +171,6 @@ private:
       if (OB_SUCC(ret) && !result.is_null) {
         // bool has_common_interior = false;  // Check that if g1 and g2 has common interior
         if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<GcTreeType>(context, geo2, mpt2, mls2, mpy2))) {
-          LOG_WARN("failed to prepare gc", K(ret));
         } else if (OB_ISNULL(mpt2) || OB_ISNULL(mls2) || OB_ISNULL(mpy2)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected null geometry collection split", K(ret));
@@ -200,15 +198,12 @@ private:
         switch (dim1) {
           case 2:
             if (OB_FAIL(eval_tree_fn(mpy1, mpy2, context, mpy_res))) {
-              LOG_WARN("fail to eval tree binary", K(ret));
             }
           case 1:
             if (OB_FAIL(eval_tree_fn(mls1, mls2, context, mls_res))) {
-              LOG_WARN("fail to eval tree binary", K(ret));
             }
           case 0:
             if (OB_FAIL(eval_tree_fn(mpt1, mpt2, context, mpt_res))) {
-              LOG_WARN("fail to eval tree binary", K(ret));
             }
             break;
           default: {
@@ -236,7 +231,6 @@ private:
     } else if (g2->type() == ObGeoType::GEOMETRYCOLLECTION
                && g1->type() == ObGeoType::GEOMETRYCOLLECTION) {
       if (OB_FAIL(eval_overlaps_gc_gc<GcTreeType>(g1, g2, context, result, eval_tree_fn))) {
-        LOG_WARN("fail to eval overlaps with geometrycollection", K(ret));
       }
     } else if (g2->type() == ObGeoType::GEOMETRYCOLLECTION) {
       ret = eval_overlaps_gc_other<GcTreeType>(g2, g1, context, result, eval_tree_fn);
@@ -250,7 +244,6 @@ private:
       uint8_t dim1 = -1;
       uint8_t dim2 = -1;
       if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<GcTreeType>(context, geo1, mpt1, mls1, mpy1))) {
-        LOG_WARN("failed to prepare gc", K(ret));
       } else if (OB_ISNULL(mpt1) || OB_ISNULL(mls1) || OB_ISNULL(mpy1)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null geometry collection split", K(ret));
@@ -271,7 +264,6 @@ private:
       if (OB_FAIL(ret) || result.is_null) {
         // do nothing
       } else if (OB_FAIL(geo2->do_visit(to_tree))) {
-        LOG_WARN("fail to do visit with ObGeoToTreeVisitor", K(ret));
       } else {
         ObGeometry *g2_tree = to_tree.get_geometry();
         switch (g2_tree->type()) {
@@ -280,7 +272,6 @@ private:
             if (dim1 != 0) {
               result.is_null = true;
             } else if (OB_FAIL(eval_tree_fn(mpt1, g2_tree, context, result))) {
-              LOG_WARN("fail to do eval_tree_binary", K(ret), K(g2_tree->type()));
             }
             break;
           }
@@ -289,7 +280,6 @@ private:
             if (dim1 != 1) {
               result.is_null = true;
             } else if (OB_FAIL(eval_tree_fn(mls1, g2_tree, context, result))) {
-              LOG_WARN("fail to do eval_tree_binary", K(ret), K(g2_tree->type()));
             }
             break;
           }
@@ -298,7 +288,6 @@ private:
             if (dim1 != 2) {
               result.is_null = true;
             } else if (OB_FAIL(eval_tree_fn(mpy1, g2_tree, context, result))) {
-              LOG_WARN("fail to do eval_tree_binary", K(ret), K(g2_tree->type()));
             }
             break;
           }

@@ -56,7 +56,6 @@ int ObServerLocality::assign(const ObServerLocality &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(zone_.assign(other.zone_))) {
-    LOG_WARN("fail to assign zone", K(ret), K(zone_), K(other.zone_));
   } else {
     addr_ = other.addr_;
     zone_type_ = other.zone_type_;
@@ -86,7 +85,6 @@ int ObServerLocality::init(const char *svr_ip,
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("fail to set addr", K(ret), K(svr_ip), K(svr_port));
   } else if (OB_FAIL(zone_.assign(zone))) {
-    LOG_WARN("fail to assign zone", K(ret), K(zone_), K(zone));
   } else {
     zone_type_ = zone_type;
     inited_ = true;
@@ -99,7 +97,6 @@ int ObServerLocality::set_server_status(const char *svr_status)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObServerStatus::str2display_status(svr_status, server_status_))) {
-    LOG_WARN("string to display status failed", K(ret), K(svr_status));
   } else if (server_status_ < 0 || server_status_ >= ObServerStatus::OB_DISPLAY_MAX) {
     ret = OB_INVALID_SERVER_STATUS;
     LOG_WARN("invalid display status", K(svr_status), K(ret));

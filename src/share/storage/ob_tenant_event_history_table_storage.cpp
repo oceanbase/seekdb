@@ -45,7 +45,6 @@ int ObTenantEventHistoryTableStorage::init(ObSQLiteConnectionPool *pool)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid pool", K(ret));
   } else if (OB_FAIL(create_table_if_not_exists())) {
-    LOG_WARN("failed to create table", K(ret));
   }
   if (OB_FAIL(ret)) {
     pool_ = nullptr;
@@ -65,7 +64,6 @@ int ObTenantEventHistoryTableStorage::create_table_if_not_exists()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_EVENT_HISTORY, nullptr))) {
-      LOG_WARN("failed to create table", K(ret));
     }
   }
   return ret;
@@ -115,7 +113,6 @@ int ObTenantEventHistoryTableStorage::insert(const ObTenantEventHistoryEntry &en
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to acquire connection", K(ret));
       } else if (OB_FAIL(guard->execute(insert_sql, binder))) {
-        LOG_WARN("failed to execute insert", K(ret));
       }
     }
   }
@@ -146,7 +143,6 @@ int ObTenantEventHistoryTableStorage::insert_all(const ObIArray<ObTenantEventHis
     } else {
       // Begin transaction for batch insert
       if (OB_FAIL(guard->execute("BEGIN TRANSACTION;", nullptr))) {
-        LOG_WARN("failed to begin transaction", K(ret));
       } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < entries.count(); ++i) {
           const ObTenantEventHistoryEntry &entry = entries.at(i);
@@ -176,19 +172,16 @@ int ObTenantEventHistoryTableStorage::insert_all(const ObIArray<ObTenantEventHis
               return OB_SUCCESS;
             };
             if (OB_FAIL(guard->execute(insert_sql, binder))) {
-              LOG_WARN("failed to execute insert", K(ret), K(i));
             }
           }
         }
 
         if (OB_SUCC(ret)) {
           if (OB_FAIL(guard->execute("COMMIT;", nullptr))) {
-            LOG_WARN("failed to commit transaction", K(ret));
           }
         } else {
           int tmp_ret = OB_SUCCESS;
           if (OB_SUCCESS != (tmp_ret = guard->execute("ROLLBACK;", nullptr))) {
-            LOG_WARN("failed to rollback transaction", K(tmp_ret));
           }
         }
       }
@@ -219,7 +212,6 @@ int ObTenantEventHistoryTableStorage::delete_expired(int64_t gmt_create_before, 
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(delete_sql, binder))) {
-      LOG_WARN("failed to execute delete", K(ret));
     }
   }
   return ret;

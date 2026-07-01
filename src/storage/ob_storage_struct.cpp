@@ -281,9 +281,7 @@ int ObGetMergeTablesResult::assign(const ObGetMergeTablesResult &src)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(src));
   } else if (OB_FAIL(handle_.assign(src.handle_))) {
-    LOG_WARN("failed to assign table handle", K(ret), K(src));
   } else if (OB_FAIL(copy_basic_info(src))) {
-    LOG_WARN("failed to copy basic info", K(ret), K(src));
   }
   return ret;
 }
@@ -378,7 +376,6 @@ int ObCompactionTableStoreParam::assign(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(other));
   } else if (OB_FAIL(major_ckm_info_.assign(other.major_ckm_info_, allocator))) {
-    LOG_WARN("failed to assign major ckm info", KR(ret), K(other));
   } else {
     merge_type_ = other.merge_type_;
     clog_checkpoint_scn_ = other.clog_checkpoint_scn_;
@@ -488,7 +485,6 @@ int ObUpdateTableStoreParam::init_with_compaction_info(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(input_param));
   } else if (OB_FAIL(compaction_info_.assign(input_param))) {
-    LOG_WARN("failed to assign compaction info", KR(ret));
   }
   return ret;
 }

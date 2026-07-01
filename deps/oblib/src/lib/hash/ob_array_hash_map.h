@@ -132,11 +132,9 @@ public:
 
   void print() const
   {
-    COMMON_LOG(INFO, "array_hash dump begin:", K(this));
     for (int64_t i = 0; i < capacity_; i++) {
       Item *pi = items_ + i;
       if (!pi->is_empty()) {
-        COMMON_LOG(INFO, "array_hash", K(i), K(pi->get_key()), K(pi->get_val()));
       }
     }
   }

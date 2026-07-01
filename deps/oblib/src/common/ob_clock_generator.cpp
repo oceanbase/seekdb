@@ -40,13 +40,11 @@ int ObClockGenerator::init()
   int ret = OB_SUCCESS;
 
   if (clock_generator_.inited_) {
-    TRANS_LOG(WARN, "ObClockGenerator inited twice");
     ret = OB_INIT_TWICE;
   } else {
 #ifndef OB_BUILD_EMBED_MODE
     clock_generator_.ready_ = false;
     if (OB_FAIL(clock_generator_.start())) {
-      TRANS_LOG(ERROR, "create thread fail", K(ret));
     } else {
       ret = OB_SUCCESS;
       clock_generator_.cur_ts_ = clock_generator_.get_us();
@@ -54,7 +52,6 @@ int ObClockGenerator::init()
       clock_generator_.inited_ = true;
       clock_generator_.stopped_ = false;
       clock_generator_.ready_ = true;
-      TRANS_LOG(INFO, "clock generator inited success");
     }
 #else
     clock_generator_.inited_ = true;

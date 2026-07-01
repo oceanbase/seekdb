@@ -122,8 +122,6 @@ public:
   {
     CHECK_ENCODE_PARAM;
     if (FAILEDx(do_encode(in, in_len, out, out_len, out_pos))) {
-      LIB_LOG(WARN, "fail to do encode", K(ret), KP(in), K(in_len), KP(out),
-              K(out_len), K(out_pos), KPC(this));
     }
     CHECK_ENCODE_END;
     return ret;
@@ -149,9 +147,6 @@ public:
   {
     CHECK_DECODE_PARAM;
     if (FAILEDx(do_decode(in, in_len, in_pos, uint_count, out, out_len, out_pos))) {
-      LIB_LOG(WARN, "fail to do decode", K(ret), KP(in), K(in_len), K(in_pos),
-              K(uint_count), K(out_len), KP(out), K(out_pos), KPC(this));
-
     }
     CHECK_DECODE_END;
     return ret;
@@ -291,7 +286,6 @@ public:
       }
     }
     if (OB_FAIL(ret)) {
-      LIB_LOG(WARN, "fail to do_encode", K(ret), K(get_uint_bytes()), KPC(this));
     }
     return ret;
   }

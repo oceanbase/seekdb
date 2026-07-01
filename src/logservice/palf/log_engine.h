@@ -427,9 +427,6 @@ public:
     } else if (OB_FAIL(log_net_service_.submit_committed_info_req(
           member_list, msg_proposal_id,
           prev_log_id, prev_log_proposal_id, committed_end_lsn))) {
-      PALF_LOG(ERROR, "LogNetService submit_committed_info_req failed", K(ret),
-          KPC(this), K(member_list),
-          K(prev_log_id), K(prev_log_proposal_id), K(committed_end_lsn));
     } else {
       PALF_LOG(TRACE, "submit_committed_info_req success", K(ret), KPC(this),
           K(member_list), K(msg_proposal_id), K(prev_log_id),

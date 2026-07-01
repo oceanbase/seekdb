@@ -59,9 +59,7 @@ int ObDirectoryMgr::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("init private directory schema manager twice", K(ret));
   } else if (OB_FAIL(directory_name_map_.init())) {
-    LOG_WARN("init directory name map failed", K(ret));
   } else if (OB_FAIL(directory_id_map_.init())) {
-    LOG_WARN("init directory id map failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -87,11 +85,8 @@ int ObDirectoryMgr::assign(const ObDirectoryMgr &other)
     LOG_WARN("directory manager not init", K(ret));
   } else if (this != &other) {
     if (OB_FAIL(directory_name_map_.assign(other.directory_name_map_))) {
-      LOG_WARN("assign directory name map failed", K(ret));
     } else if (OB_FAIL(directory_id_map_.assign(other.directory_id_map_))) {
-      LOG_WARN("assign directory id map failed", K(ret));
     } else if (OB_FAIL(directory_infos_.assign(other.directory_infos_))) {
-      LOG_WARN("assign directory schema vector failed", K(ret));
     }
   }
   return ret;
@@ -112,7 +107,6 @@ int ObDirectoryMgr::deep_copy(const ObDirectoryMgr &other)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", KP(schema), K(ret));
       } else if (OB_FAIL(add_directory(*schema))) {
-        LOG_WARN("add directory failed", K(*schema), K(ret));
       }
     }
   }
@@ -134,7 +128,6 @@ int ObDirectoryMgr::add_directory(const ObDirectorySchema &schema)
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_,
                                                  schema,
                                                  new_schema))) {
-    LOG_WARN("alloc schema failed", K(ret));
   } else if (OB_ISNULL(new_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("alloc schema is a NULL ptr", K(new_schema), K(ret));
@@ -143,15 +136,11 @@ int ObDirectoryMgr::add_directory(const ObDirectorySchema &schema)
                                               schema_compare,
                                               schema_equal,
                                               old_schema))) {
-    LOG_WARN("failed to add directory schema", K(ret));
   } else {
     int over_write = 1;
     ObDirectoryNameHashKey hash_wrapper(new_schema->get_directory_name_str());
     if (OB_FAIL(directory_name_map_.set_refactored(hash_wrapper, new_schema, over_write))) {
-      LOG_WARN("build directory hash map failed", K(ret));
     } else if (OB_FAIL(directory_id_map_.set_refactored(new_schema->get_directory_id(), new_schema, over_write))) {
-      LOG_WARN("build directory id hashmap failed", K(ret),
-               "directory_id", new_schema->get_directory_id());
     }
   }
   if ((directory_infos_.count() != directory_name_map_.item_count()
@@ -162,7 +151,6 @@ int ObDirectoryMgr::add_directory(const ObDirectorySchema &schema)
              K(directory_id_map_.item_count()));
     int rebuild_ret = OB_SUCCESS;
     if (OB_SUCCESS != (rebuild_ret = rebuild_directory_hashmap())) {
-      LOG_WARN("rebuild directory hashmap failed", K(rebuild_ret));
     }
     if (OB_SUCC(ret)) {
       ret = rebuild_ret;
@@ -178,7 +166,6 @@ int ObDirectoryMgr::add_directorys(const common::ObIArray<ObDirectorySchema> &sc
   int ret = OB_SUCCESS;
   for (int64_t i = 0; i < schemas.count() && OB_SUCC(ret); ++i) {
     if (OB_FAIL(add_directory(schemas.at(i)))) {
-      LOG_WARN("push directory failed", K(ret));
     }
   }
   return ret;
@@ -240,7 +227,6 @@ int ObDirectoryMgr::del_directory(const ObTenantDirectoryId &id)
         K(directory_name_map_.item_count()), K(directory_id_map_.item_count()));
     int rebuild_ret = OB_SUCCESS;
     if (OB_SUCCESS != (rebuild_ret = rebuild_directory_hashmap())) {
-      LOG_WARN("rebuild directory hashmap failed", K(rebuild_ret));
     }
     if (OB_SUCC(ret)) {
       ret = rebuild_ret;
@@ -321,7 +307,6 @@ int ObDirectoryMgr::get_directory_schemas_in_tenant(common::ObIArray<const ObDir
     } else if (false) {
       is_stop = true;
     } else if (OB_FAIL(schemas.push_back(schema))) {
-      LOG_WARN("push back directory failed", K(ret));
     }
   }
   return ret;
@@ -385,12 +370,8 @@ int ObDirectoryMgr::rebuild_directory_hashmap()
       // do nothing
     } else if (OB_FAIL(directory_name_map_.set_refactored(hash_wrapper,
         directory_schema, over_write))) {
-      LOG_WARN("build directory name hashmap failed", K(ret),
-          "directory_name", directory_schema->get_directory_name());
     } else if (OB_FAIL(directory_id_map_.set_refactored(directory_schema->get_directory_id(),
         directory_schema, over_write))) {
-      LOG_WARN("build directory id hashmap failed", K(ret),
-          "directory_id", directory_schema->get_directory_id());
     }
   }
   return ret;

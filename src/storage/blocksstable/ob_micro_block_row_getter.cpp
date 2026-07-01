@@ -170,9 +170,7 @@ int ObMicroBlockRowGetter::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid sstable", K(ret), KPC(sstable), K(context.trans_version_range_));
   } else if (OB_FAIL(ObIMicroBlockRowFetcher::init(param, context, sstable))) {
-    LOG_WARN("fail to init micro block row fecher", K(ret));
   } else if (OB_FAIL(row_.init(*long_life_allocator_, param.get_buffered_request_cnt(read_info_)))) {
-    LOG_WARN("Failed to init datum row", K(ret));
   } else if (context.enable_put_row_cache() && param.read_with_same_schema() &&
              OB_FAIL(cache_project_row_.init(*long_life_allocator_, param.get_buffered_request_cnt(read_info_)))) {
     STORAGE_LOG(WARN, "Failed to init cache project row", K(ret));
@@ -203,12 +201,10 @@ int ObMicroBlockRowGetter::switch_context(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid sstable", K(ret), KPC(sstable), K(context.trans_version_range_));
   } else if (OB_FAIL(ObIMicroBlockRowFetcher::switch_context(param, context, sstable))) {
-    LOG_WARN("fail to switch context micro block row fecher, ", K(ret));
   } else {
     if (context.enable_put_row_cache() && param.read_with_same_schema()) {
       if (cache_project_row_.is_valid()) {
       } else if (OB_FAIL(cache_project_row_.init(*long_life_allocator_, param.get_buffered_request_cnt(read_info_)))) {
-        STORAGE_LOG(WARN, "Failed to init cache project row", K(ret));
       }
     }
   }
@@ -231,7 +227,6 @@ int ObMicroBlockRowGetter::get_row(
     switch (read_handle.row_state_) {
       case ObSSTableRowState::NOT_EXIST:
         if (OB_FAIL(get_not_exist_row(read_handle.get_rowkey(), store_row))) {
-          LOG_WARN("fail to get not exist row", K(ret), K(read_handle.get_rowkey()));
         }
         break;
       case ObSSTableRowState::IN_ROW_CACHE:
@@ -239,7 +234,6 @@ int ObMicroBlockRowGetter::get_row(
                     read_handle.get_rowkey(),
                     *read_handle.row_handle_.row_value_,
                     store_row))) {
-          LOG_WARN("fail to get cache row", K(ret), K(read_handle.get_rowkey()));
         }
         break;
       case ObSSTableRowState::IN_BLOCK:
@@ -247,7 +241,6 @@ int ObMicroBlockRowGetter::get_row(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Unexpected null block reader", K(ret), KP(block_reader));
         } else if (OB_FAIL(get_block_row(read_handle, *block_reader, store_row))) {
-          LOG_WARN("Fail to get block row", K(ret));
         }
         break;
       default:
@@ -270,7 +263,6 @@ int ObMicroBlockRowGetter::get_block_row(ObSSTableReadHandle &read_handle,
   int ret = OB_SUCCESS;
   ObMicroBlockData block_data;
   if (OB_FAIL(read_handle.get_block_data(block_reader, block_data))) {
-    LOG_WARN("Fail to get block data", K(ret), K(read_handle));
   } else if (OB_FAIL(inner_get_row(
               read_handle.micro_handle_->macro_block_id_,
               read_handle.get_rowkey(),
@@ -313,10 +305,8 @@ int ObMicroBlockRowGetter::get_cached_row(
   } else if (value.is_row_not_exist()) {
     //not exist row
     if (OB_FAIL(get_not_exist_row(rowkey, row))) {
-      LOG_WARN("Fail to get not exist row", K(ret), K(rowkey));
     }
   } else if (OB_FAIL(project_cache_row(value, row_))) {
-    LOG_WARN("fail to project cache row", K(ret));
   } else {
     row = &row_;
     LOG_DEBUG("success to get cache row", K(ret), K(*row));
@@ -332,7 +322,6 @@ int ObMicroBlockRowGetter::project_cache_row(const ObRowCacheValue &value, ObDat
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null read_info", K(ret), K_(param));
   } else if (OB_FAIL(row.reserve(read_info->get_request_count()))) {
-    LOG_WARN("fail to reserve memory for datum row", K(ret), K(read_info->get_request_count()));
   } else {
     const int64_t request_cnt = read_info->get_request_count();
     const ObColumnIndexArray &cols_index = read_info->get_columns_index();
@@ -366,16 +355,12 @@ int ObMicroBlockRowGetter::inner_get_row(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid read_info", K(ret), KPC_(read_info));
   } else if (OB_FAIL(prepare_reader(block_data.get_store_type()))) {
-    LOG_WARN("failed to prepare reader", K(ret), K(macro_id));
   } else {
     if (OB_FAIL(row_.reserve(read_info_->get_request_count()))) {
-      LOG_WARN("fail to reserve memory for datum row", K(ret), K(read_info_->get_request_count()));
     } else if (OB_FAIL(reader_->get_row(block_data, rowkey, *read_info_, row_))) {
       if (OB_BEYOND_THE_RANGE == ret) {
         if (OB_FAIL(get_not_exist_row(rowkey, row))) {
-          LOG_WARN("Fail to get not exist row", K(ret), K(rowkey), K(macro_id));
         }
-        STORAGE_LOG(DEBUG, "get not exist row", K(rowkey), K(macro_id));
       } else {
         LOG_WARN("Fail to get row", K(ret), K(rowkey), K(block_data), KPC_(read_info),
                  KPC_(param), KPC_(context), K(macro_id));
@@ -398,7 +383,6 @@ int ObMicroBlockRowGetter::inner_get_row(
   } else if (context_->enable_put_row_cache() && param_->read_with_same_schema()) {
     ObRowCacheValue row_cache_value;
     if (OB_FAIL(row_cache_value.init(sstable_->get_key().get_start_scn().get_val_for_tx(), row_))) {
-      LOG_WARN("fail to init row cache value", K(ret), K(row_));
     } else {
       //put row cache, ignore fail
       ObRowCacheKey row_cache_key(
@@ -412,7 +396,6 @@ int ObMicroBlockRowGetter::inner_get_row(
       }
 
       if (OB_FAIL(project_cache_row(row_cache_value, cache_project_row_))) {
-        LOG_WARN("fail to project cache row", K(ret), K(row_cache_value));
       } else {
         row = &cache_project_row_;
         LOG_DEBUG("Success to get row", K(ret), K(rowkey), K(row_), K(row_cache_value), K(macro_id));
@@ -430,7 +413,6 @@ int ObMicroBlockRowGetter::get_not_exist_row(const ObDatumRowkey &rowkey, const 
     LOG_WARN("not init", K(ret));
   } else {
     if (OB_FAIL(row_.reserve(rowkey.get_datum_cnt()))) {
-      LOG_WARN("fail to reserve datum row", K(ret), K(rowkey.get_datum_cnt()));
     } else {
       row_.count_ = rowkey.get_datum_cnt();
       row_.row_flag_.reset();
@@ -458,9 +440,7 @@ int ObMicroBlockCGRowGetter::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIMicroBlockRowFetcher::init(param, context, sstable))) {
-    LOG_WARN("fail to init micro block row fecher", K(ret));
   } else if (OB_FAIL(row_.init(*context.stmt_allocator_, read_info_->get_request_count()))) {
-    LOG_WARN("Failed to init datum row", K(ret));
   }
   return ret;
 }
@@ -475,7 +455,6 @@ int ObMicroBlockCGRowGetter::switch_context(
     ret = OB_NOT_INIT;
     LOG_WARN("ObMicroBlockRowGetter is not inited", K(ret));
   } else if (OB_FAIL(ObIMicroBlockRowFetcher::switch_context(param, context, sstable))) {
-    LOG_WARN("fail to switch context micro block row fecher, ", K(ret));
   }
   return ret;
 }
@@ -497,12 +476,10 @@ int ObMicroBlockCGRowGetter::get_row(
     switch (read_handle.row_state_) {
       case ObSSTableRowState::NOT_EXIST:
         if (OB_FAIL(get_not_exist_row(store_row))) {
-          LOG_WARN("Fail to get not exist row", K(ret));
         }
         break;
       case ObSSTableRowState::IN_BLOCK:
         if (OB_FAIL(get_block_row(read_handle, block_reader, row_idx, store_row))) {
-          LOG_WARN("Fail to get block row", K(ret));
         }
         break;
       default:
@@ -528,13 +505,9 @@ int ObMicroBlockCGRowGetter::get_block_row(
   ObMicroBlockData block_data;
   const MacroBlockId &macro_id = read_handle.micro_handle_->macro_block_id_;
   if (OB_FAIL(read_handle.get_block_data(block_reader, block_data))) {
-    LOG_WARN("Fail to get block data", K(ret), K(read_handle));
   } else if (OB_FAIL(prepare_reader(block_data.get_store_type()))) {
-    LOG_WARN("Failed to prepare reader", K(ret), K(macro_id));
   } else if (OB_FAIL(row_.reserve(read_info_->get_request_count()))) {
-    LOG_WARN("Fail to reserve memory for datum row", K(ret), K(read_info_->get_request_count()));
   } else if (OB_FAIL(reader_->get_row(block_data, *read_info_, row_idx, row_))) {
-    LOG_WARN("Fail to get cs row", K(ret), K(row_idx), K(block_data), KPC_(read_info), K(macro_id));
   } else {
     row = &row_;
     LOG_DEBUG("Success to get row", K(ret), K(row_idx), K(row_), KPC_(read_info), K(macro_id));

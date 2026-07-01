@@ -48,13 +48,11 @@ int ObDirectLoadMemSample::gen_ranges(ObIArray<ChunkType *> &chunks, ObIArray<Ra
     int idx2 = ObRandom::rand(0, chunk->get_size() - 1);
     RowType *row = chunk->get_item(idx2);
     if (OB_FAIL(sample_rows.push_back(row))) {
-      LOG_WARN("fail to push row", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {
     CompareType compare;
     if (OB_FAIL(compare.init(*(mem_ctx_->datum_utils_), mem_ctx_->dup_action_))) {
-      LOG_WARN("fail to init compare", KR(ret));
     } else {
       lib::ob_sort(sample_rows.begin(), sample_rows.end(), compare);
     }
@@ -66,13 +64,11 @@ int ObDirectLoadMemSample::gen_ranges(ObIArray<ChunkType *> &chunks, ObIArray<Ra
   for (int64_t i = 1; OB_SUCC(ret) && i <= range_count_; i ++) {
     if (i != range_count_) {
       if (OB_FAIL(ranges.push_back(RangeType(last_row, sample_rows[i * step])))) {
-        LOG_WARN("fail to push range", KR(ret));
       } else {
         last_row = sample_rows[i * step];
       }
     } else {
       if (OB_FAIL(ranges.push_back(RangeType(last_row, nullptr)))) {
-        LOG_WARN("fail to push range", KR(ret));
       } else {
         last_row = nullptr;
       }
@@ -92,10 +88,8 @@ int ObDirectLoadMemSample::do_work()
   
   mem_ctx_->mem_chunk_queue_.pop_all(chunks);
   if (OB_FAIL(ObTableLoadHandle<ObDirectLoadMemDump::Context>::make_handle(context_ptr, mem_ctx_))) {
-    LOG_WARN("fail to make handle", KR(ret));
   } else if (FALSE_IT(context_ptr->sub_dump_count_ = range_count_)) {
   } else if (OB_FAIL(context_ptr->init())) {
-    LOG_WARN("fail to init context", KR(ret));
   } else if (OB_FAIL(context_ptr->mem_chunk_array_.assign(chunks))) {
     LOG_WARN("fail to assgin chunks", KR(ret));
     // Release chunks after an error
@@ -108,14 +102,12 @@ int ObDirectLoadMemSample::do_work()
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(gen_ranges(chunks, ranges))) {
-      LOG_WARN("fail to gen ranges", KR(ret));
     } else {
       ATOMIC_AAF(&(mem_ctx_->running_dump_task_cnt_), range_count_);
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < range_count_; i ++) {
     if (OB_FAIL(add_dump(i, chunks, ranges[i], context_ptr))) {
-      LOG_WARN("fail to start dump", KR(ret));
     }
   }
 
@@ -134,7 +126,6 @@ int ObDirectLoadMemSample::add_dump(int64_t idx,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate mem dump", KR(ret));
   } else if (OB_FAIL(mem_ctx_->mem_dump_queue_.push(mem_dump))) {
-    LOG_WARN("fail to push mem dump", KR(ret));
   }
   return ret;
 }
@@ -146,12 +137,10 @@ int ObDirectLoadMemSample::do_sample()
     if (mem_ctx_->finish_load_thread_cnt_ >= mem_ctx_->load_thread_cnt_) {
       if (mem_ctx_->mem_chunk_queue_.size() > 0) {
         if (OB_FAIL(do_work())) {
-          LOG_WARN("fail to do work", KR(ret));
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(mem_ctx_->mem_dump_queue_.push(nullptr))) {
-          LOG_WARN("fail to push queue", KR(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -172,7 +161,6 @@ int ObDirectLoadMemSample::do_sample()
         continue;
       }
       if (OB_FAIL(do_work())) {
-        LOG_WARN("fail to do work", KR(ret));
       }
     }
   }

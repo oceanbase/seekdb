@@ -89,7 +89,6 @@ int ObVTOAUtility::get_virtual_addr(const int connfd, bool &is_slb, int64_t &vid
   socklen_t vs_len = sizeof(struct vtoa_get_vs4rds);
 
   if (OB_FAIL(ObVTOAUtility::get_vip4rds(connfd, &vs, &vs_len))) {
-    LOG_DEBUG("fail to get_vip4rds", K(ret), KERRNOMSG(errno));
   } else {
     vid = vs.entrytable.vid;
     vaddr.set_ipv4_addr(ntohl(vs.entrytable.vaddr), ntohs(vs.entrytable.vport));

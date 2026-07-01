@@ -41,7 +41,6 @@ int ObCatalogExecutor::execute(ObExecContext &ctx, ObCatalogStmt &stmt)
   stmt.get_ddl_arg().ddl_stmt_str_ = stmt.get_query_ctx()->get_sql_stmt();
   if (OB_ISNULL(GCTX.root_service_)) { ret = OB_NOT_INIT; LOG_WARN("root_service_ null"); }
   else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->handle_catalog_ddl(stmt.get_ddl_arg()); }))) {
-    LOG_WARN("handle catalog ddl error", K(ret));
   }
   if (OB_SUCC(ret) && OB_DDL_DROP_CATALOG == stmt.get_ddl_arg().ddl_type_) {
     drop_catalog_id = stmt.get_ddl_arg().schema_.get_catalog_id();
@@ -50,13 +49,10 @@ int ObCatalogExecutor::execute(ObExecContext &ctx, ObCatalogStmt &stmt)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret));
     } else if (OB_FAIL(session->get_sys_variable(share::SYS_VAR__CURRENT_DEFAULT_CATALOG, catalog_id))) {
-      LOG_WARN("failed to get current default catalog id", K(ret));
     } else if (catalog_id == drop_catalog_id && OB_INVALID_ID != drop_catalog_id) {
       // drop current default catalog, set catalog null
       if (OB_FAIL(session->update_sys_variable(share::SYS_VAR__CURRENT_DEFAULT_CATALOG, obj))) {
-        LOG_WARN("failed to update sys var", K(ret));
       } else if (OB_FAIL(ctx.get_my_session()->set_default_database(null_string))) {
-        LOG_WARN("failed to set default database", K(ret));
       } else {
         ctx.get_my_session()->set_database_id(OB_INVALID_ID);
       }
@@ -77,9 +73,7 @@ int ObSetCatalogExecutor::execute(ObExecContext &ctx, ObCatalogStmt &stmt)
   } else if (OB_FALSE_IT(obj.set_uint64(stmt.get_ddl_arg().schema_.get_catalog_id()))) {
     // do nothing
   } else if (OB_FAIL(session->update_sys_variable(share::SYS_VAR__CURRENT_DEFAULT_CATALOG, obj))) {
-    LOG_WARN("failed to update sys var", K(ret));
   } else if (OB_FAIL(ctx.get_my_session()->set_default_database(null_string))) {
-    LOG_WARN("failed to set default database", K(ret));
   } else {
     ctx.get_my_session()->set_database_id(OB_INVALID_ID);
   }

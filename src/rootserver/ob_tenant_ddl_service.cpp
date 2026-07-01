@@ -136,12 +136,10 @@ int ObTenantDDLService::init_tenant_sys_stats_(ObMySQLTransaction &trans)
   int64_t start = ObTimeUtility::current_time();
   ObSysStat sys_stat;
   if (OB_FAIL(sys_stat.set_initial_values())) {
-    LOG_WARN("set initial values failed", K(ret));
   } else if (sys_stat.item_list_.is_empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("not system stat item", KR(ret));
   } else if (OB_FAIL(replace_sys_stat(sys_stat, trans))) {
-    LOG_WARN("replace system stat failed", K(ret));
   }
   LOG_INFO("init sys stat", K(ret),
            "cost", ObTimeUtility::current_time() - start);
@@ -159,7 +157,6 @@ int ObTenantDDLService::replace_sys_stat(ObSysStat &sys_stat,
   } else if (OB_FAIL(sql.assign_fmt("INSERT INTO %s "
       "(NAME, DATA_TYPE, VALUE, INFO, gmt_modified) VALUES ",
       OB_ALL_SYS_STAT_TNAME))) {
-    LOG_WARN("sql append failed", K(ret));
   } else {
     DLIST_FOREACH_X(it, sys_stat.item_list_, OB_SUCC(ret)) {
       if (OB_ISNULL(it)) {
@@ -170,19 +167,16 @@ int ObTenantDDLService::replace_sys_stat(ObSysStat &sys_stat,
         int64_t pos = 0;
         if (OB_FAIL(it->value_.print_sql_literal(
                       buf, sizeof(buf), pos))) {
-          LOG_WARN("print obj failed", K(ret), "obj", it->value_);
         } else {
           ObString value(pos, buf);
           uint64_t schema_id = OB_INVALID_ID;
           if (OB_FAIL(ObMaxIdFetcher::str_to_uint(value, schema_id))) {
-            LOG_WARN("fail to convert str to uint", K(ret), K(value));
           } else if (FALSE_IT(schema_id = ObSchemaUtils::get_extract_schema_id(schema_id))) {
           } else if (OB_FAIL(sql.append_fmt("%s('%s', %d, '%ld', '%s', now())",
               (it == sys_stat.item_list_.get_first()) ? "" : ", ",
               it->name_, it->value_.get_type(),
               static_cast<int64_t>(schema_id),
               it->info_))) {
-            LOG_WARN("sql append failed", K(ret));
           }
         }
       }
@@ -191,7 +185,6 @@ int ObTenantDDLService::replace_sys_stat(ObSysStat &sys_stat,
       LOG_INFO("create system stat sql", K(sql));
       int64_t affected_rows = 0;
       if (OB_FAIL(trans.write(sql.ptr(), affected_rows))) {
-        LOG_WARN("execute sql failed", K(ret), K(sql));
       } else if (sys_stat.item_list_.get_size() != affected_rows
           && sys_stat.item_list_.get_size() != affected_rows / 2) {
         ret = OB_ERR_UNEXPECTED;
@@ -211,7 +204,6 @@ int ObTenantDDLService::create_sys_tenant(
   ObDDLSQLTransaction trans(schema_service_, true, false, false, false);
   ObSchemaService *schema_service = NULL;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("variable is not init");
   } else {
     ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
     schema_service = schema_service_->get_schema_service();
@@ -233,24 +225,15 @@ int ObTenantDDLService::create_sys_tenant(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("schema_status_proxy is null", K(ret));
       } else if (OB_FAIL(schema_status_proxy->set_tenant_schema_status(tenant_status))) {
-        LOG_WARN("init tenant create partition status failed", K(ret), K(tenant_status));
       } else if (OB_FAIL(trans.start(sql_proxy_, refreshed_schema_version))) {
-        LOG_WARN("start transaction failed", KR(ret));
       } else if (OB_FAIL(set_tenant_compatibility_(arg, tenant_schema))) {
-        LOG_WARN("failed to set tenant compatibility", KR(ret), K(arg));
       } else if (OB_FAIL(ddl_operator.create_tenant(tenant_schema, trans))) {
-        LOG_WARN("create tenant failed", K(tenant_schema), K(ret));
       } else if (OB_FAIL(init_system_variables(arg, tenant_schema, sys_variable))) {
-        LOG_WARN("fail to init tenant sys params", K(ret), K(tenant_schema));
       } else if (OB_FAIL(ddl_operator.replace_sys_variable(
               sys_variable, tenant_schema.get_schema_version(), trans, operation_type))) {
-        LOG_WARN("fail to replace sys variable", K(ret), K(sys_variable));
       } else if (OB_FAIL(ddl_operator.init_tenant_schemas(tenant_schema, sys_variable, trans))) {
-        LOG_WARN("init tenant env failed", K(tenant_schema), K(ret));
       } else if (OB_FAIL(init_tenant_sys_stats_(trans))) {
-        LOG_WARN("insert default sys stats failed", K(ret));
       } else if (OB_FAIL(insert_tenant_merge_info_(tenant_schema, trans))) {
-        LOG_WARN("fail to insert tenant merge info", KR(ret));
       }
       if (trans.is_started()) {
         int temp_ret = OB_SUCCESS;
@@ -292,7 +275,6 @@ int ObTenantDDLService::gen_tenant_init_config(const uint64_t compatible_version
     LOG_WARN("invalid version", KR(ret), K(compatible_version));
   } else if (FALSE_IT(config_value.assign_ptr(version, len))) {
   } else if (OB_FAIL(tenant_config.add_config(config_name, config_value))) {
-    LOG_WARN("fail to add config", KR(ret), K(config_name), K(config_value));
   }
   return ret;
 }
@@ -307,7 +289,6 @@ int ObTenantDDLService::notify_init_tenant_config(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("init configs count is invalid", KR(ret), K(init_configs));
   } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, DEFAULT_TIMEOUT))) {
-    LOG_WARN("fail to set default timeout", KR(ret));
   } else {
     ObArenaAllocator allocator("InitTenantConf");
     // 1. construct arg
@@ -323,13 +304,11 @@ int ObTenantDDLService::notify_init_tenant_config(
      } else {
        MEMSET(buf, '\0', length);
        if (OB_FAIL(pairs.get_config_str(buf, length))) {
-         LOG_WARN("fail to get config str", KR(ret), K(length), K(pairs));
        } else {
          
          
          config.config_str_.assign_ptr(buf, static_cast<ObString::obstr_size_t>(strlen(buf)));
          if (OB_FAIL(arg.add_tenant_config(config))) {
-           LOG_WARN("fail to add config", KR(ret), K(config));
          }
        }
      }
@@ -364,22 +343,17 @@ int ObTenantDDLService::insert_tenant_merge_info_(
 
 
     if (OB_FAIL(tenant_schema.get_zone_list(zone_list))) {
-      LOG_WARN("fail to get zone list", KR(ret));
     }
 
     if (!zone_list.empty()) {
       if (OB_FAIL(merge_info_array.push_back(tmp_merge_info))) {
-        LOG_WARN("fail to push_back", KR(ret));
       }
     }
     // add zone merge info of current tenant(sys tenant or meta tenant)
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObGlobalMergeTableOperator::insert_global_merge_info(trans, global_info))) {
-        LOG_WARN("fail to insert global merge info of current tenant", KR(ret), K(global_info));
       } else if (OB_FAIL(ObZoneMergeTableOperator::insert_zone_merge_infos(
                  trans, merge_info_array))) {
-        LOG_WARN("fail to insert zone merge infos of current tenant", KR(ret), K(1UL),
-          K(merge_info_array));
       }
     }
   }
@@ -421,7 +395,6 @@ int ObTenantDDLService::init_system_variables(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ptr is null", KR(ret), KP_(schema_service), KP_(sql_proxy));
   } else if (OB_FAIL(sys_params_guard.init())) {
-    LOG_WARN("alloc sys parameters failed", KR(ret));
   } else if (FALSE_IT(sys_params = sys_params_guard.ptr())) {
   } else if (OB_ISNULL(sys_params) || OB_UNLIKELY(var_amount > params_capacity)) {
     ret = OB_INVALID_ARGUMENT;
@@ -445,7 +418,6 @@ int ObTenantDDLService::init_system_variables(
                                        ObSysVariables::get_max(i),
                                        ObSysVariables::get_info(i),
                                        ObSysVariables::get_flags(i)))) {
-          LOG_WARN("fail to init param", KR(ret), K(1UL), K(i));
         }
       }
 
@@ -457,7 +429,6 @@ int ObTenantDDLService::init_system_variables(
       for (int64_t j = 0; OB_SUCC(ret) && j < set_sys_var_count; ++j) {
         ObSysVarIdValue sys_var;
         if (OB_FAIL(arg.sys_var_list_.at(j, sys_var))) {
-          LOG_WARN("failed to get sys var", K(j), K(ret));
         } else {
           const ObString &new_value = sys_var.value_;
           SET_TENANT_VARIABLE(sys_var.sys_id_, new_value);
@@ -535,15 +506,10 @@ int ObTenantDDLService::init_system_variables(
 
       if (FAILEDx(update_mysql_tenant_sys_var(
           tenant_schema, sys_variable_schema, sys_params, params_capacity))) {
-        LOG_WARN("failed to update_mysql_tenant_sys_var",
-                 KR(ret), K(tenant_schema), K(sys_variable_schema));
       } else if (OB_FAIL(update_oracle_tenant_sys_var(
           tenant_schema, sys_variable_schema, sys_params, params_capacity))) {
-        LOG_WARN("failed to update_oracle_tenant_sys_var",
-                 KR(ret), K(tenant_schema), K(sys_variable_schema));
       } else if (OB_FAIL(update_special_tenant_sys_var(
                  sys_variable_schema, sys_params, params_capacity))) {
-        LOG_WARN("failed to update_special_tenant_sys_var", K(ret), K(sys_variable_schema));
       }
 
       // set sys_variable
@@ -552,9 +518,7 @@ int ObTenantDDLService::init_system_variables(
         for (int64_t i = 0; OB_SUCC(ret) && i < var_amount; i++) {
           sysvar_schema.reset();
           if (OB_FAIL(ObSchemaUtils::convert_sys_param_to_sysvar_schema(sys_params[i], sysvar_schema))) {
-            LOG_WARN("convert to sysvar schema failed", K(ret));
           } else if (OB_FAIL(sys_variable_schema.add_sysvar_schema(sysvar_schema))) {
-            LOG_WARN("add system variable failed", K(ret));
           }
         } //end for
       }

@@ -96,12 +96,10 @@ int ObExprPrivSTMakePoint::eval_priv_st_makepoint(
     } else if(ob_is_null(expr.args_[i]->datum_meta_.type_)) {
       is_null_result = true;
     } else if (OB_FAIL(expr.args_[i]->eval(ctx, datum[i]))) {
-      LOG_WARN("fail to eval arg", K(ret), K(expr.args_[i]->datum_meta_.type_));
     } else if (datum[i]->is_null()) {
       is_null_result = true;
     } else if (ob_is_string_type(expr.args_[i]->datum_meta_.type_)) {
       if (OB_FAIL(ObGeoExprUtils::string_to_double(datum[i]->get_string(), expr.args_[i]->datum_meta_.cs_type_, p[i]))) {
-        LOG_WARN("fail to get arg", K(ret), K(expr.args_[i]->datum_meta_.type_));
       }
     } else {
       p[i] = datum[i]->get_double();
@@ -110,19 +108,14 @@ int ObExprPrivSTMakePoint::eval_priv_st_makepoint(
 
   if (OB_FAIL(ret) || is_null_result) {
   } else if (OB_FAIL(res_wkb_buf.append(srid))) {
-    LOG_WARN("fail to append srid to makepoint wkb buf", K(ret), K(srid));
   } else if (OB_FAIL(res_wkb_buf.append(static_cast<char>(ENCODE_GEO_VERSION(GEO_VESION_1))))) {
-    LOG_WARN("fail to append version to makepoint wkb buf", K(ret));
   } else if (OB_FAIL(res_wkb_buf.append(static_cast<char>(ObGeoWkbByteOrder::LittleEndian)))) {
-    LOG_WARN("fail to append little endian byte order to makepoint wkb buf", K(ret));
   } else if (num_args == 2 && OB_FAIL(res_wkb_buf.append(static_cast<uint32_t>(ObGeoType::POINT)))) {
     LOG_WARN("fail to append 2D point type to makepoint wkb buf", K(ret));
   } else if (num_args == 3 && OB_FAIL(res_wkb_buf.append(static_cast<uint32_t>(ObGeoType::POINTZ)))) {
     LOG_WARN("fail to append 3D point type to makepoint wkb buf", K(ret));
   } else if (OB_FAIL(res_wkb_buf.append(p[0]))) {
-    LOG_WARN("fail to append x to makepoint wkb buf", K(ret), K(p[0]));
   } else if (OB_FAIL(res_wkb_buf.append(p[1]))) {
-    LOG_WARN("fail to append y to makepoint wkb buf", K(ret), K(p[1]));
   } else if (num_args > 2 && OB_FAIL(res_wkb_buf.append(p[2]))) {
     LOG_WARN("fail to append z to makepoint wkb buf", K(ret), K(p[2]));
   }
@@ -131,7 +124,6 @@ int ObExprPrivSTMakePoint::eval_priv_st_makepoint(
     if (is_null_result) {
       res.set_null();
     } else if (OB_FAIL(ObGeoExprUtils::pack_geo_res(expr, ctx, res, res_wkb_buf.string()))) {
-      LOG_WARN("fail to pack geo res", K(ret));
     }
   }
 

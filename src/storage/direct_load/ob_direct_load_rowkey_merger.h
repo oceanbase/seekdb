@@ -111,7 +111,6 @@ int ObDirectLoadRowkeyMerger<Rowkey, Compare>::init(const common::ObIArray<Rowke
     compare_.compare_ = compare;
     step_ = step;
     if (OB_FAIL(iters_.assign(iters))) {
-      STORAGE_LOG(WARN, "fail to assign iters", KR(ret));
     } else if (iters_.count() > 1 && OB_FAIL(build_heap())) {
       STORAGE_LOG(WARN, "fail to build heap", KR(ret));
     } else {
@@ -189,9 +188,7 @@ int ObDirectLoadRowkeyMerger<Rowkey, Compare>::build_heap()
         heap_item.item_ = rowkey;
         heap_item.idx_ = i;
         if (OB_FAIL(heap_.push(heap_item))) {
-          STORAGE_LOG(WARN, "fail to push heap", KR(ret), K(i));
         } else if (OB_FAIL(compare_.get_error_code())) {
-          STORAGE_LOG(WARN, "fail to compare items", KR(ret));
         }
       }
     }
@@ -215,11 +212,8 @@ int ObDirectLoadRowkeyMerger<Rowkey, Compare>::heap_get_next_rowkey(const Rowkey
         STORAGE_LOG(WARN, "fail to get next rowkey", KR(ret));
       } else {
         if (OB_FAIL(heap_.pop())) {
-          STORAGE_LOG(WARN, "fail to pop heap item", KR(ret));
         } else if (OB_FAIL(compare_.get_error_code())) {
-          STORAGE_LOG(WARN, "fail to compare items", KR(ret));
         } else {
-          STORAGE_LOG(DEBUG, "pop a heap item");
         }
       }
     } else if (OB_ISNULL(heap_item.item_)) {
@@ -227,11 +221,8 @@ int ObDirectLoadRowkeyMerger<Rowkey, Compare>::heap_get_next_rowkey(const Rowkey
       STORAGE_LOG(WARN, "invalid item", KR(ret), KP(heap_item.item_));
     } else {
       if (OB_FAIL(heap_.replace_top(heap_item))) {
-        STORAGE_LOG(WARN, "fail to replace heap top", KR(ret));
       } else if (OB_FAIL(compare_.get_error_code())) {
-        STORAGE_LOG(WARN, "fail to compare items", KR(ret));
       } else {
-        STORAGE_LOG(DEBUG, "replace heap item", K(*heap_item.item_), K(last_iter_idx_));
       }
     }
     last_iter_idx_ = -1;
@@ -244,9 +235,7 @@ int ObDirectLoadRowkeyMerger<Rowkey, Compare>::heap_get_next_rowkey(const Rowkey
   if (OB_SUCC(ret)) {
     const HeapItem *head_item = nullptr;
     if (OB_FAIL(heap_.top(head_item))) {
-      STORAGE_LOG(WARN, "fail to get heap top item", KR(ret));
     } else if (OB_FAIL(compare_.get_error_code())) {
-      STORAGE_LOG(WARN, "fail to compare items", KR(ret));
     } else if (OB_ISNULL(head_item) || OB_ISNULL(head_item->item_)) {
       ret = common::OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "invalid heap item", KR(ret), KP(head_item));

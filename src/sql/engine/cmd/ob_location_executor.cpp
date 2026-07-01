@@ -36,7 +36,6 @@ int ObCreateLocationExecutor::execute(ObExecContext &ctx, ObCreateLocationStmt &
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "fail to get physical plan ctx", K(ret), K(ctx));
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_location(create_location_arg); }))) {
-    SQL_ENG_LOG(WARN, "create location failed", K(ret), K(create_location_arg));
   } else {
     ctx.get_physical_plan_ctx()->set_affected_rows(1);
   }
@@ -61,7 +60,6 @@ int ObDropLocationExecutor::execute(ObExecContext &ctx, ObDropLocationStmt &stmt
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "fail to get physical plan ctx", K(ret), K(ctx));
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_location(drop_location_arg); }))) {
-    SQL_ENG_LOG(WARN, "drop location failed", K(ret), K(drop_location_arg));
   } else {
     ctx.get_physical_plan_ctx()->set_affected_rows(1);
   }

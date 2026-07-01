@@ -296,8 +296,6 @@ int ObTenantCtxAllocator::set_idle(const int64_t set_size, const bool reserve/*=
   const int64_t size = lower_align(set_size, INTACT_ACHUNK_SIZE);
   if (size > limit || size < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(ERROR, "invalid argument", K_(ctx_id),
-            K(size), K(limit));
   } else if (!ctx_allocator_.get_resource_handle().is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     LIB_LOG(ERROR, "resource_handle is invalid", K(ret), K_(ctx_id));
@@ -389,7 +387,6 @@ int64_t ObTenantCtxAllocator::sync_wash_(int64_t wash_size)
     washed_size = obj_mgr_.sync_wash(wash_size);
   }
   if (washed_size != 0 && REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
-    _OB_LOG(INFO, "[MEM][WASH] ctx_id: %ld, washed_size: %ld", ctx_id_, washed_size);
   }
   return washed_size;
 }

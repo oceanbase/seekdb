@@ -147,9 +147,7 @@ public:
   int assign(const ObP2PDhMapInfo &other) {
     int ret = OB_SUCCESS;
     if (OB_FAIL(p2p_sequence_ids_.assign(other.p2p_sequence_ids_))) {
-      OB_LOG(WARN, "fail to assign other p2p seq id", K(ret));
     } else if (OB_FAIL(target_addrs_.assign(other.target_addrs_))) {
-      OB_LOG(WARN, "fail to assign other target_addrs_", K(ret));
     }
     return ret;
   }

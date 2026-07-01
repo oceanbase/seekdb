@@ -81,8 +81,7 @@ int ObTableGroupResolver::resolve_partition_hash_or_key(ObTablegroupStmt *stmt,
         if (partition_num <= 0) {
           ret = OB_NO_PARTS_ERROR;
           LOG_USER_ERROR(OB_NO_PARTS_ERROR);
-        } else if (OB_FAIL(partition_option->set_part_expr(partition_expr))) {//deep copy
-          LOG_WARN("set partition express string failed", K(ret));
+        } else if (OB_FAIL(partition_option->set_part_expr(partition_expr))) {
         } else {
           partition_option->set_part_func_type(partition_func_type);
           partition_option->set_part_num(partition_num);
@@ -101,12 +100,10 @@ int ObTableGroupResolver::resolve_partition_hash_or_key(ObTablegroupStmt *stmt,
           if (T_RANGE_PARTITION == node->children_[ObTableGroupResolver::HASH_SUBPARTITIOPPN_NODE]->type_ ||
               T_RANGE_COLUMNS_PARTITION == node->children_[ObTableGroupResolver::HASH_SUBPARTITIOPPN_NODE]->type_) {
             if (OB_FAIL(resolve_partition_range(stmt, node->children_[ObTableGroupResolver::HASH_SUBPARTITIOPPN_NODE], true, tablegroup_schema))) {
-              LOG_WARN("resolve partition range or list fail", K(ret));
             }
           } else if (T_LIST_PARTITION == node->children_[ObTableGroupResolver::HASH_SUBPARTITIOPPN_NODE]->type_ ||
                      T_LIST_COLUMNS_PARTITION == node->children_[ObTableGroupResolver::HASH_SUBPARTITIOPPN_NODE]->type_) {
             if (OB_FAIL(resolve_partition_list(stmt, node->children_[ObTableGroupResolver::HASH_SUBPARTITIOPPN_NODE], true, tablegroup_schema))) {
-              LOG_WARN("resolve partition range or list fail", K(ret));
             }
           } else {
             ret = OB_NOT_SUPPORTED;
@@ -141,20 +138,17 @@ int ObTableGroupResolver::resolve_partition_range(ObTablegroupStmt *tablegroup_s
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablegroup_stmt), K(node));
   } else if (OB_FAIL(resolve_partition_range(tablegroup_stmt, node, is_subpartition, tablegroup_schema, part_info))) {
-    LOG_WARN("resolve partition range failed", K(ret));
   } else {
     ObIArray<ObRawExpr *> &range_value_exprs = is_subpartition ? 
       tablegroup_stmt->get_template_subpart_values_exprs() : tablegroup_stmt->get_part_values_exprs();
     tablegroup_schema.set_part_level(part_info.part_level_);
     if (OB_FAIL(range_value_exprs.assign(part_info.range_value_exprs_))) {
-      LOG_WARN("assgin failed", K(ret));
     } else {
       share::schema::ObPartition *part = NULL;
       if (is_subpartition) {
         tablegroup_schema.get_sub_part_option() = part_info.subpart_option_;
         for (int64_t i = 0; i < part_info.subparts_.count(); ++i) {
           if (OB_FAIL(tablegroup_schema.add_def_subpartition(part_info.subparts_.at(i)))) {
-            LOG_WARN("add subpartition failed", K(ret));
           }
         }
       } else {
@@ -163,12 +157,10 @@ int ObTableGroupResolver::resolve_partition_range(ObTablegroupStmt *tablegroup_s
           part = &(part_info.parts_.at(i));
           if (!part->get_part_name().empty()) {
             if (OB_FAIL(tablegroup_schema.check_part_name(*part))) {
-              LOG_WARN("check part name failed", K(ret));
             }
           }
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(tablegroup_schema.add_partition(*part))) {
-            LOG_WARN("add partition failed", K(ret));
           }
         }
       }
@@ -216,7 +208,6 @@ int ObTableGroupResolver::resolve_partition_range(ObTablegroupStmt *tablegroup_s
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObDDLResolver::check_partition_name_duplicate(node->children_[ObTableGroupResolver::RANGE_ELEMENTS_NODE]))) {
-        LOG_WARN("duplicate partition name", K(ret));
       }
     }
     //resolve partition expr num
@@ -262,7 +253,6 @@ int ObTableGroupResolver::resolve_partition_range(ObTablegroupStmt *tablegroup_s
                                                                   part_info.parts_,
                                                                   part_info.subparts_,
                                                                   in_tablegroup))) {
-        LOG_WARN("resolve reange partition elements fail", K(ret));
       }
     }
   }
@@ -274,12 +264,10 @@ int ObTableGroupResolver::resolve_partition_range(ObTablegroupStmt *tablegroup_s
       //only support hash partition now
       if (T_HASH_PARTITION == subpart_node->type_ || T_KEY_PARTITION == subpart_node->type_) {
         if (OB_FAIL(resolve_partition_hash_or_key(tablegroup_stmt, subpart_node, true, tablegroup_schema))) {
-          LOG_WARN("resolve partition hash or key fail", K(ret));
         }
       } else if (T_LIST_PARTITION == node->children_[ObTableGroupResolver::HASH_SUBPARTITIOPPN_NODE]->type_ ||
         T_LIST_COLUMNS_PARTITION == node->children_[ObTableGroupResolver::HASH_SUBPARTITIOPPN_NODE]->type_) {
         if (OB_FAIL(resolve_partition_list(tablegroup_stmt, node->children_[ObTableGroupResolver::HASH_SUBPARTITIOPPN_NODE], true, tablegroup_schema))) {
-          LOG_WARN("resolve partition range or list fail", K(ret));
         }
       } else {
         ret = OB_NOT_IMPLEMENT;
@@ -300,13 +288,11 @@ int ObTableGroupResolver::resolve_partition_list(ObTablegroupStmt *stmt,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(stmt), K(node));
   } else if (OB_FAIL(resolve_partition_list(stmt, node, is_subpartition, tablegroup_schema, part_info))) {
-    LOG_WARN("resolve partition list failed", K(ret));
   } else {
     ObDDLStmt::array_t &list_value_exprs = is_subpartition ?
       stmt->get_template_subpart_values_exprs() : stmt->get_part_values_exprs();
     tablegroup_schema.set_part_level(part_info.part_level_);
     if (OB_FAIL(list_value_exprs.assign(part_info.list_value_exprs_))) {
-      LOG_WARN("fail to push to array", K(ret));
     }
 
     if (OB_FAIL(ret)) {
@@ -317,7 +303,6 @@ int ObTableGroupResolver::resolve_partition_list(ObTablegroupStmt *stmt,
         tablegroup_schema.get_sub_part_option() = part_info.subpart_option_;
         for (int64_t i = 0; i < part_info.subparts_.count(); ++i) {
           if (OB_FAIL(tablegroup_schema.add_def_subpartition(part_info.subparts_.at(i)))) {
-            LOG_WARN("add subpartition failed", K(ret));
           }
         }
       } else {
@@ -326,12 +311,10 @@ int ObTableGroupResolver::resolve_partition_list(ObTablegroupStmt *stmt,
           part = &(part_info.parts_.at(i));
           if (!part->get_part_name().empty()) {
             if (OB_FAIL(tablegroup_schema.check_part_name(*part))) {
-              LOG_WARN("check part name failed", K(ret));
             }
           }
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(tablegroup_schema.add_partition(*part))) {
-            LOG_WARN("add partition failed", K(ret));
           }
         }
       }
@@ -379,7 +362,6 @@ int ObTableGroupResolver::resolve_partition_list(ObTablegroupStmt *tablegroup_st
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObDDLResolver::check_partition_name_duplicate(node->children_[ObTableGroupResolver::LIST_ELEMENTS_NODE]))) {
-        LOG_WARN("duplicate partition name", K(ret));
       }
     }
 
@@ -407,7 +389,6 @@ int ObTableGroupResolver::resolve_partition_list(ObTablegroupStmt *tablegroup_st
                                                                  part_info.parts_,
                                                                  part_info.subparts_,
                                                                  in_tablegroup))) {
-        LOG_WARN("resolve reange partition elements fail", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -446,7 +427,6 @@ int ObTableGroupResolver::resolve_partition_list(ObTablegroupStmt *tablegroup_st
       } else if (T_RANGE_PARTITION == node->children_[ObTableGroupResolver::HASH_SUBPARTITIOPPN_NODE]->type_ ||
         T_RANGE_COLUMNS_PARTITION == node->children_[ObTableGroupResolver::HASH_SUBPARTITIOPPN_NODE]->type_) {
         if (OB_FAIL(resolve_partition_range(tablegroup_stmt, node->children_[ObTableGroupResolver::HASH_SUBPARTITIOPPN_NODE], true, tablegroup_schema))) {
-          LOG_WARN("resolve partition range or list fail", K(ret));
         }
       } else {
         ret = OB_NOT_IMPLEMENT;

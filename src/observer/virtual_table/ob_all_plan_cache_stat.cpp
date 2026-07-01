@@ -100,7 +100,6 @@ int ObAllPlanCacheStat::fill_cells(ObPlanCache &plan_cache)
     case HIT_RATE: {
       if (pc_stat.access_count_ !=0) {
         cells[i].set_int(pc_stat.hit_count_*100/pc_stat.access_count_);
-        SERVER_LOG(DEBUG, "rate:", "hit_count", pc_stat.hit_count_, "access_count", pc_stat.access_count_);
       } else {
         cells[i].set_int(0);
       }
@@ -294,7 +293,6 @@ int ObAllPlanCacheStatI1::get_all_ids(ObIArray<uint64_t> &batch_ids)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(set_ids(key_ranges_, batch_ids))) {
-    LOG_WARN("set tenant ids failed", K(ret));
   }
   return ret;
 }
@@ -304,7 +302,6 @@ int ObAllPlanCacheStat::get_all_ids(ObIArray<uint64_t> &batch_ids)
   int ret = OB_SUCCESS;
   // single sys tenant
   if (OB_FAIL(batch_ids.push_back(1UL))) {
-    SERVER_LOG(WARN, "failed to add tenant id", K(ret));
   }
   return ret;
 }
@@ -315,7 +312,6 @@ int ObAllPlanCacheStat::inner_open()
   // Still drive I1 rowkey validation via get_all_tenants
   ObSEArray<uint64_t, 16> batch_ids;
   if (OB_FAIL(get_all_ids(batch_ids))) {
-    SERVER_LOG(WARN, "fail get all tenant ids", K(ret));
   }
   return ret;
 }
@@ -328,9 +324,7 @@ int ObAllPlanCacheStat::get_row_from_tenants()
     MOD_SCOPE {
       ObPlanCache *plan_cache = share::g_mp->plan_cache(); 
       if (OB_FAIL(fill_cells(*plan_cache))) {
-        SERVER_LOG(WARN, "fail to fill cells", K(ret), K(cur_row_));
       } else {
-        SERVER_LOG(DEBUG, "add plan cache");
       }
       iter_end_ = true;
     }
@@ -363,7 +357,6 @@ int ObAllPlanCacheStatI1::set_ids(const common::ObIArray<common::ObNewRange> &ra
       end_key_obj_ptr = end_key.get_obj_ptr();
       if (OB_ISNULL(start_key_obj_ptr) || OB_ISNULL(end_key_obj_ptr)) {
         ret = OB_INVALID_ARGUMENT;
-        SERVER_LOG(WARN, "invalid args", KP(start_key_obj_ptr), KP(end_key_obj_ptr));
       } else if ((!start_key_obj_ptr[0].is_min_value() || !end_key_obj_ptr[0].is_max_value())
           && start_key_obj_ptr[0] != end_key_obj_ptr[0]) {
         ret = OB_NOT_IMPLEMENT;
@@ -381,7 +374,6 @@ int ObAllPlanCacheStatI1::set_ids(const common::ObIArray<common::ObNewRange> &ra
           (void)(start_key_obj_ptr[0].get_int());
           if (OB_FAIL(add_var_to_array_no_dup(batch_ids,
                                                      static_cast<uint64_t>(1)))) {
-            SERVER_LOG(WARN, "Failed to add id to array no duplicate", K(ret));
           } else { }//do nothing
         }
       }

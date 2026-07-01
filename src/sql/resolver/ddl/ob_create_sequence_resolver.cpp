@@ -84,7 +84,6 @@ int ObCreateSequenceResolver::resolve(const ParseNode &parse_tree)
                                    session_info_,
                                    sequence_name,
                                    db_name))) {
-      LOG_WARN("fail parse sequence name", K(ret));
     } else if (sequence_name.length() > OB_MAX_SEQUENCE_NAME_LENGTH) {
       ret = OB_ERR_TOO_LONG_IDENT;
       LOG_USER_ERROR(OB_ERR_TOO_LONG_IDENT, sequence_name.length(), sequence_name.ptr());
@@ -105,7 +104,6 @@ int ObCreateSequenceResolver::resolve(const ParseNode &parse_tree)
     } else {
       ObSequenceResolver<ObCreateSequenceStmt> resolver;
       if (OB_FAIL(resolver.resolve_sequence_options(mystmt, parse_tree.children_[1]))) {
-        LOG_WARN("resolve sequence options failed", K(ret));
       }
     }
   }

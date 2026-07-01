@@ -82,15 +82,11 @@ int ObDbmsInfo::deep_copy_field_columns(ObIAllocator& allocator,
     // do nothing
     // SELECT * INTO OUTFILE return null field
   } else if (OB_FAIL(dst_fields.reserve(src_fields->count()))) {
-    LOG_WARN("fail to reserve column fields",
-             K(ret), K(dst_fields.count()), K(src_fields->count()));
   } else {
     for (int64_t i = 0 ; OB_SUCC(ret) && i < src_fields->count(); ++i) {
       ObField tmp_field;
       if (OB_FAIL(tmp_field.deep_copy(src_fields->at(i), &allocator))) {
-        LOG_WARN("deep copy field failed", K(ret));
       } else if (OB_FAIL(dst_fields.push_back(tmp_field))) {
-        LOG_WARN("push back field param failed", K(ret));
       } else { }
     }
   }
@@ -158,10 +154,8 @@ int ObDbmsCursorInfo::prepare_entity(sql::ObSQLSessionInfo &session)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObPLCursorInfo::prepare_entity(session, get_dbms_entity()))) {
-    LOG_WARN("prepare dbms info entity fail.", K(ret), K(get_id()));
   } else if (OB_FAIL(
       ObPLCursorInfo::prepare_entity(session, get_cursor_entity()))) {
-    LOG_WARN("prepare cursor entity fail.", K(ret), K(get_id()));
   } else { /* do nothing */ }
   return ret;
 }

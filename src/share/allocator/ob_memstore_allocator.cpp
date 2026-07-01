@@ -89,13 +89,11 @@ void ObMemstoreAllocator::init_handle(AllocHandle& handle)
     hlist_.init_handle(handle);
     arena_.update_nway_per_group(nway);
   }
-  COMMON_LOG(TRACE, "MTALLOC.init", KP(&handle.mt_));
 }
 
 void ObMemstoreAllocator::destroy_handle(AllocHandle& handle)
 {
   ObTimeGuard time_guard("ObMemstoreAllocator::destroy_handle", 100 * 1000);
-  COMMON_LOG(TRACE, "MTALLOC.destroy", KP(&handle.mt_));
   arena_.free(handle.arena_handle_);
   time_guard.click();
   {
@@ -119,7 +117,6 @@ void* ObMemstoreAllocator::alloc(AllocHandle& handle, int64_t size, const int64_
 
   bool is_out_of_mem = false;
   if (!handle.is_id_valid()) {
-    COMMON_LOG(TRACE, "MTALLOC.first_alloc", KP(&handle.mt_));
     LockGuard guard(lock_);
     if (handle.is_frozen()) {
       ret = OB_EAGAIN;
@@ -138,14 +135,12 @@ void* ObMemstoreAllocator::alloc(AllocHandle& handle, int64_t size, const int64_
     storage::ObTenantFreezer *freezer = nullptr;
     if (FALSE_IT(freezer = share::g_mp->tenant_freezer())) {
     } else if (OB_FAIL(freezer->check_memstore_full_internal(is_out_of_mem))) {
-      COMMON_LOG(ERROR, "fail to check tenant out of mem limit", K(ret), K(1UL));
     }
   }
 
   void *res = nullptr;
   if (OB_FAIL(ret) || is_out_of_mem) {
     if (REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
-      STORAGE_LOG(WARN, "this tenant is already out of memstore limit or some thing wrong.", K(1UL));
     }
     res = nullptr;
   } else {
@@ -162,7 +157,6 @@ void* ObMemstoreAllocator::alloc(AllocHandle& handle, int64_t size, const int64_
 
 void ObMemstoreAllocator::set_frozen(AllocHandle& handle)
 {
-  COMMON_LOG(TRACE, "MTALLOC.set_frozen", KP(&handle.mt_));
   LockGuard guard(lock_);
   hlist_.set_frozen(handle);
 }
@@ -188,10 +182,8 @@ int64_t ObMemstoreAllocator::nway_per_group()
       ret = OB_ERR_UNEXPECTED;
       COMMON_LOG(WARN, "omt should not be null", K(ret));
     } else if (OB_FAIL(omt->get_tenant_cpu(min_cpu, max_cpu))) {
-      COMMON_LOG(WARN, "get tenant cpu failed", K(ret));
     } else if (FALSE_IT(freezer = share::g_mp->tenant_freezer())) {
     } else if (OB_FAIL(freezer->get_tenant_mem_limit(min_memory, max_memory))) {
-      COMMON_LOG(WARN, "get tenant mem limit failed", K(ret));
     }
   }
   return OB_SUCCESS == ret? calc_nway((int64_t)max_cpu, min_memory): 0;
@@ -212,7 +204,6 @@ int ObMemstoreAllocator::set_memstore_threshold_without_lock()
   storage::ObTenantFreezer *freezer = nullptr;
   if (FALSE_IT(freezer = share::g_mp->tenant_freezer())) {
   } else if (OB_FAIL(freezer->get_tenant_memstore_limit(memstore_threshold))) {
-    COMMON_LOG(WARN, "failed to get_tenant_memstore_limit", K(ret));
   } else {
     throttle_tool_->set_resource_limit<ObMemstoreAllocator>(memstore_threshold);
   }

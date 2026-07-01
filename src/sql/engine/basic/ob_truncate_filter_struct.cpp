@@ -81,7 +81,6 @@ int ObITruncateFilterExecutor::filter(const ObDatumRow &row, bool &filtered)
           row.storage_datums_[col_idx].set_int(-origin_version);
         }
         if (OB_FAIL(inner_filter(row.storage_datums_, col_count, filtered, &col_idxs))) {
-          LOG_WARN("failed to filter row", K(ret), K(col_count), K(row));
         }
         if (origin_version < 0) {
           row.storage_datums_[col_idx].set_int(origin_version);
@@ -100,7 +99,6 @@ int ObITruncateFilterExecutor::filter(const ObDatumRow &row, bool &filtered)
       }
     }
     if (FAILEDx(inner_filter(row.storage_datums_, col_count, filtered, &col_idxs))) {
-      LOG_WARN("failed to filter row", K(ret), K(col_count), K(row));
     }
   }
   return ret;
@@ -187,7 +185,6 @@ int ObTruncateWhiteFilterExecutor::prepare_truncate_param(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected part key count for whiter filter", K(ret), K(truncate_partition.part_key_idxs_));
   } else if (OB_FAIL(init_array_param(col_idxs_, 1))) {
-    LOG_WARN("failed init col idxs array", K(ret));
   } else {
     int64_t col_idx = -1;
     const bool is_range_part = ObTruncatePartition::is_range_part(truncate_partition.part_type_);
@@ -206,7 +203,6 @@ int ObTruncateWhiteFilterExecutor::prepare_truncate_param(
           col_idx = truncate_partition.part_key_idxs_.at(0);
         }
         if (FAILEDx(init_array_param(datum_params_, 1))) {
-          LOG_WARN("failed init datum params", K(ret));
         }
         break;
       }
@@ -230,13 +226,11 @@ int ObTruncateWhiteFilterExecutor::prepare_truncate_param(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected part col idx", K(col_idx), K(cols_desc));
     } else if (OB_FAIL(col_idxs_.push_back(col_idx))) {
-      LOG_WARN("failed to push back", K(ret));
     } else {
       node.obj_meta_.set_meta(cols_desc.at(col_idx).col_type_);
       cmp_func_ = get_datum_cmp_func(node.obj_meta_, node.obj_meta_);
     }
     if (FAILEDx(prepare_datum_buf(allocator_, 1))) {
-      LOG_WARN("failed to prepare datum buf", K(ret));
     }
   }
   LOG_INFO("[TRUNCATE INFO]", K(ret), K(schema_rowkey_cnt), K(cols_desc), K(truncate_partition), KPC(this));
@@ -258,7 +252,6 @@ int ObTruncateWhiteFilterExecutor::prepare_truncate_value(
       truncate_version_ = truncate_commit_viersion;
       storage_datum_param_.set_int(truncate_version_);
       if (OB_FAIL(datum_params_.push_back(storage_datum_param_))) {
-        LOG_WARN("failed to push back datum", K(ret));
       }
       break;
     }
@@ -277,12 +270,10 @@ int ObTruncateWhiteFilterExecutor::prepare_truncate_value(
       } else if (rowkey.is_min_row() || rowkey.is_max_row()) {
         set_filter_bool_mask(need_flip() ? ObBoolMaskType::ALWAYS_TRUE : ObBoolMaskType::ALWAYS_FALSE);
       } else if (OB_FAIL(storage_datum_param_.from_obj(rowkey.get_obj_ptr()[0]))) {
-        LOG_WARN("failed to from obj", K(ret), K(rowkey));
       } else if (OB_UNLIKELY(is_truncate_value_invalid(storage_datum_param_))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected invalid truncate param value", K(ret), K(rowkey));
       } else if (OB_FAIL(datum_params_.push_back(storage_datum_param_))) {
-        LOG_WARN("failed to push back datum", K(ret));
       }
       break;
     }
@@ -295,7 +286,6 @@ int ObTruncateWhiteFilterExecutor::prepare_truncate_value(
       } else if (ObTruncatePartition::ALL == truncate_partition.part_op_) {
         set_filter_bool_mask(ObBoolMaskType::ALWAYS_FALSE);
       } else if (OB_FAIL(prepare_truncate_list_value(truncate_partition.list_row_values_))) {
-        LOG_WARN("failed to prepare truncate list param", K(ret), K(truncate_partition));
       }
       break;
     }
@@ -325,7 +315,6 @@ int ObTruncateWhiteFilterExecutor::inner_filter(
   } else if (is_filter_always_false()) {
     filtered = true;
   } else if (OB_FAIL(ObIMicroBlockReader::filter_white_filter(*this, datums[col_idx], filtered))) {
-    LOG_WARN("failed to filter white filter", K(ret));
   } else if (OB_UNLIKELY(need_flip())) {
     filtered = !filtered;
   }
@@ -360,9 +349,7 @@ int ObTruncateWhiteFilterExecutor::prepare_truncate_list_value(const ObStorageLi
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid list row values", K(ret), K(truncate_row_cnt), K(list_row_values));
   } else if (OB_FAIL(reserve_storage_datum_space(truncate_row_cnt))) {
-    LOG_WARN("failed to reserve storage datum params space", K(ret), K(truncate_row_cnt));
   } else if (OB_FAIL(init_array_param(datum_params_, truncate_row_cnt))) {
-    LOG_WARN("failed to init in array datums", K(ret), K(truncate_row_cnt));
   } else if (FALSE_IT(param_set_.destroy())) {
   } else if (use_white_eq) {
     node.set_truncate_white_op_type(WHITE_OP_EQ);
@@ -370,16 +357,13 @@ int ObTruncateWhiteFilterExecutor::prepare_truncate_list_value(const ObStorageLi
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected list row values for white filter", K(ret), K(list_row_values));
     } else if (OB_FAIL(storage_datum_param_.from_obj(values[0].get_cell(0)))) {
-      LOG_WARN("failed to from obj", K(ret));
     } else if (OB_UNLIKELY(is_truncate_value_invalid(storage_datum_param_))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected invalid truncate param value", K(ret), K(values[0]));
     } else if (OB_FAIL(datum_params_.push_back(storage_datum_param_))) {
-      LOG_WARN("failed to push back datum", K(ret));
     }
   } else {
     if (OB_FAIL(param_set_.create(truncate_row_cnt * 2))) {
-      LOG_WARN("failed to create in hash set", K(ret), K(truncate_row_cnt));
     } else {
       ObPrecision precision = PRECISION_UNKNOWN_YET;
       if (node.obj_meta_.is_decimal_int()) {
@@ -401,12 +385,10 @@ int ObTruncateWhiteFilterExecutor::prepare_truncate_list_value(const ObStorageLi
           LOG_WARN("invalid list row obj cnt for white fiter", K(ret), K(i), K(list_row_values));
         } else if (FALSE_IT(in_storage_datum_params_[i].reuse())) {
         } else if (OB_FAIL(in_storage_datum_params_[i].from_obj(values[i].get_cell(0)))) {
-          LOG_WARN("failed to from obj", K(ret), K(i), K(list_row_values));
         } else if (OB_UNLIKELY(is_truncate_value_invalid(in_storage_datum_params_[i]))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected invalid truncate param value", K(ret), K(values[i].get_cell(0)));
                 } else if (OB_FAIL(add_to_param_set_and_array(in_storage_datum_params_[i], nullptr))) {
-          LOG_WARN("failed to add to param set and array", K(ret), K(i));
         }
       }
       if (OB_SUCC(ret)) {
@@ -414,7 +396,6 @@ int ObTruncateWhiteFilterExecutor::prepare_truncate_list_value(const ObStorageLi
         ObDatumComparator cmp(cmp_func_, ret, mock_equal);
         lib::ob_sort(datum_params_.begin(), datum_params_.end(), cmp);
         if (OB_FAIL(ret)) {
-          LOG_WARN("failed to sort in datums", K(ret));
         }
       }
     }
@@ -491,15 +472,10 @@ int ObTruncateBlackFilterExecutor::prepare_truncate_param(
         meta_type.set_int();
         truncate_row_cnt_ = row_obj_cnt_ = 1;
         if (OB_FAIL(init_array_param(col_idxs_, 1))) {
-          LOG_WARN("failed init col idxs array", K(ret));
         } else if (OB_FAIL(col_idxs_.push_back(schema_rowkey_cnt))) {
-          LOG_WARN("failed to push back", K(ret));
         } else if (OB_FAIL(obj_metas_.push_back(meta_type))) {
-          LOG_WARN("failed to push back", K(ret));
         } else if (OB_FAIL(cmp_funcs_.push_back(get_datum_cmp_func(meta_type, meta_type)))) {
-          LOG_WARN("failed to push back", K(ret));
         } else if (OB_FAIL(reserve_storage_datum_space(1))) {
-          LOG_WARN("failed to reserve storage datum param space", K(ret));
         }
         break;
       }
@@ -513,9 +489,7 @@ int ObTruncateBlackFilterExecutor::prepare_truncate_param(
           truncate_row_cnt_ = 1;
           row_obj_cnt_ = truncate_partition.part_key_idxs_.count();
           if (OB_FAIL(prepare_metas_and_cmp_funcs(cols_desc, truncate_partition))) {
-            LOG_WARN("failed to prepare metas and cmp funcs", K(ret));
           } else if (OB_FAIL(reserve_storage_datum_space(row_obj_cnt_))) {
-            LOG_WARN("failed to reserve storage datum param space", K(ret), K_(row_obj_cnt));
           }
         }
         break;
@@ -527,7 +501,6 @@ int ObTruncateBlackFilterExecutor::prepare_truncate_param(
           LOG_WARN("unexpected state, filter and truncate info are not matched", K(ret), K(is_range_part),
               K_(truncate_item_type), K(truncate_partition));
         } else if (OB_FAIL(prepare_metas_and_cmp_funcs(cols_desc, truncate_partition))) {
-          LOG_WARN("failed to prepare metas and cmp funcs", K(ret));
         }
         break;
       }
@@ -537,7 +510,6 @@ int ObTruncateBlackFilterExecutor::prepare_truncate_param(
       }
     }
     if (FAILEDx(prepare_datum_buf(allocator_, row_obj_cnt_))) {
-      LOG_WARN("failed to prepare datum buf", K(ret));
     }
   }
   LOG_INFO("[TRUNCATE INFO]", K(ret), K(schema_rowkey_cnt), K(cols_desc), K(truncate_partition), KPC(this));
@@ -573,7 +545,6 @@ int ObTruncateBlackFilterExecutor::prepare_truncate_value(
         for (int64_t i = 0; OB_SUCC(ret) && i < row_obj_cnt_; ++i) {
           storage_datum_params_[i].reuse();
           if (OB_FAIL(storage_datum_params_[i].from_obj(rowkey.get_obj_ptr()[i]))) {
-            LOG_WARN("failed to from obj", K(ret), K(i), K(rowkey));
           } else if (OB_UNLIKELY(is_truncate_value_invalid(storage_datum_params_[i]))) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("unexpected invalid truncate param value", K(ret), K(i), K(rowkey.get_obj_ptr()[i]), K(rowkey));
@@ -591,7 +562,6 @@ int ObTruncateBlackFilterExecutor::prepare_truncate_value(
       } else if (ObTruncatePartition::ALL == truncate_partition.part_op_) {
         set_filter_bool_mask(ObBoolMaskType::ALWAYS_FALSE);
       } else if (OB_FAIL(prepare_truncate_list_value(truncate_partition.list_row_values_))) {
-        LOG_WARN("failed to prepare truncate list param", K(ret), K(truncate_partition));
       }
       break;
     }
@@ -634,7 +604,6 @@ int ObTruncateBlackFilterExecutor::inner_filter(
           if (datums[col_idx].is_null()) {
             cmp_ret = -1;
           } else if (OB_FAIL(cmp_funcs_.at(i)(datums[col_idx], storage_datum_params_[i], cmp_ret))) {
-            LOG_WARN("failed to compare", K(ret), K(i), K(col_idx), K(datums[col_idx]), K(storage_datum_params_[i]));
           }
           LOG_DEBUG("[TRUNCATE INFO]", K(ret), K(i), K(cmp_ret), K(col_idx), K(datums[col_idx]), K(storage_datum_params_[i]),
                     K(cmp_ret), KPC(this));
@@ -664,8 +633,6 @@ int ObTruncateBlackFilterExecutor::inner_filter(
             if (datums[col_idx].is_null() || storage_datum_params_[datum_idx].is_null()) {
               cmp_ret = datums[col_idx].is_null() && storage_datum_params_[datum_idx].is_null() ? 0 : 1;
             } else if (OB_FAIL(cmp_funcs_.at(j)(datums[col_idx], storage_datum_params_[datum_idx], cmp_ret))) {
-              LOG_WARN("failed to compare", K(ret), K(count), K(i), K(j), K(datum_idx), K(datums[col_idx]),
-              K(storage_datum_params_[datum_idx]), KPC(this));
             }
             LOG_DEBUG("[TRUNCATE INFO]", K(ret), K(cmp_ret), K(count), K(i), K(j), K(datum_idx), K(col_idx), K(datums[col_idx]),
                      K(storage_datum_params_[datum_idx]), KPC(this));
@@ -699,7 +666,6 @@ int ObTruncateBlackFilterExecutor::prepare_truncate_list_value(const ObStorageLi
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid list row values", K(ret), K(list_row_values), KP(values));
   } else if (OB_FAIL(reserve_storage_datum_space(truncate_row_cnt_ * row_obj_cnt_))) {
-    LOG_WARN("failed to reserve storage datum params space", K(ret), K_(truncate_row_cnt), K_(row_obj_cnt));
   }
   int64_t datum_idx = 0;
   for (int64_t i = 0; OB_SUCC(ret) && i < truncate_row_cnt_; ++i) {
@@ -710,7 +676,6 @@ int ObTruncateBlackFilterExecutor::prepare_truncate_list_value(const ObStorageLi
     for (int64_t j = 0; OB_SUCC(ret) && j < row_obj_cnt_; ++j) {
       storage_datum_params_[datum_idx].reuse();
       if (OB_FAIL(storage_datum_params_[datum_idx++].from_obj(values[i].get_cell(j)))) {
-        LOG_WARN("failed to from obj", K(ret), K(i), K(list_row_values));
       } else if (OB_UNLIKELY(storage_datum_params_[datum_idx - 1].is_nop_value())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected invalid truncate param value", K(ret), K(i), K(j), K(values[i]));
@@ -726,11 +691,8 @@ int ObTruncateBlackFilterExecutor::prepare_metas_and_cmp_funcs(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_array_param(col_idxs_, row_obj_cnt_))) {
-    LOG_WARN("failed init col idxs array", K(ret));
   } else if (OB_FAIL(init_array_param(obj_metas_, row_obj_cnt_))) {
-    LOG_WARN("failed init obj metas array", K(ret));
   } else if (OB_FAIL(init_array_param(cmp_funcs_, row_obj_cnt_))) {
-    LOG_WARN("failed init cmp funcs array", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < row_obj_cnt_; ++i) {
     const int64_t col_idx = truncate_partition.part_key_idxs_.at(i);
@@ -738,11 +700,8 @@ int ObTruncateBlackFilterExecutor::prepare_metas_and_cmp_funcs(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected part col idx", K(ret), K(col_idx), K(cols_desc));
     } else if (OB_FAIL(col_idxs_.push_back(col_idx))) {
-      LOG_WARN("failed to push back", K(ret));
     } else if (OB_FAIL(obj_metas_.push_back(cols_desc.at(col_idx).col_type_))) {
-      LOG_WARN("failed to push back", K(ret));
     } else if (OB_FAIL(cmp_funcs_.push_back(get_datum_cmp_func(cols_desc.at(col_idx).col_type_, cols_desc.at(col_idx).col_type_)))) {
-      LOG_WARN("failed to push back", K(ret));
     }
   }
   return ret;
@@ -829,7 +788,6 @@ int ObTruncateOrFilterExecutor::filter(const ObDatumRow &row, bool &filtered)
     } else if (child->is_filter_always_false()) {
       filtered = true;
     } else if (OB_FAIL(truncate_executor->filter(row, filtered))) {
-      LOG_WARN("failed to filter", K(ret), K(i), KPC(truncate_executor));
     }
   }
   return ret;
@@ -928,7 +886,6 @@ int ObTruncateAndFilterExecutor::init(
         LOG_WARN("invalid truncate info", KR(ret), K(idx), KPC(truncate_info));
       } else if (OB_FAIL(build_single_truncate_filter(schema_rowkey_cnt, cols_desc, *truncate_info,
                                                       filter_factory, single_truncate_filter))) {
-        LOG_WARN("failed to build single trunate filter", K(ret));
       } else if (OB_ISNULL(single_truncate_filter)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null single truncate filter", K(ret), K(idx), K(truncate_info));
@@ -961,7 +918,6 @@ int ObTruncateAndFilterExecutor::switch_info(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(schema_rowkey_cnt), K(cols_desc), K(truncate_info_array));
   } else if (OB_FAIL(inner_reuse())) {
-    LOG_WARN("failed to inner reuse", K(ret));
   } else {
     ObTruncateOrFilterExecutor *single_truncate_filter = nullptr;
     for (int64_t idx = 0; OB_SUCC(ret) && idx < truncate_info_array.count(); ++idx) {
@@ -971,7 +927,6 @@ int ObTruncateAndFilterExecutor::switch_info(
         ret = OB_INVALID_DATA;
         LOG_WARN("invalid truncate info", KR(ret), K(idx), KPC(truncate_info));
       } else if (OB_FAIL(try_use_cached_filter(schema_rowkey_cnt, cols_desc, *truncate_info, single_truncate_filter))) {
-        LOG_WARN("failed to try use cached filter", K(ret));
       } else if (nullptr == single_truncate_filter &&
                  OB_FAIL(build_single_truncate_filter(schema_rowkey_cnt, cols_desc, *truncate_info,
                                                       filter_factory, single_truncate_filter))) {
@@ -1003,7 +958,6 @@ int ObTruncateAndFilterExecutor::inner_reuse()
       ObIArray<ObTruncateOrFilterExecutor*> &filter_buffer = filter->is_subpart_filter() ?
           subpart_filter_buffer_ : part_filter_buffer_;
       if (OB_FAIL(filter_buffer.push_back(filter))) {
-        LOG_WARN("failed to push back", K(ret));
       }
     }
   }
@@ -1026,7 +980,6 @@ int ObTruncateAndFilterExecutor::try_use_cached_filter(
   if (!filter_buffer.empty()) {
     int64_t part_child_cnt = 0;
     if (OB_FAIL(filter_buffer.pop_back(filter))) {
-      LOG_WARN("failed to pop back filter", K(ret));
     } else if (OB_ISNULL(filter)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null cached filter", K(ret), K(filter_buffer));
@@ -1038,7 +991,6 @@ int ObTruncateAndFilterExecutor::try_use_cached_filter(
     if (FAILEDx(prepare_part_filter_param(schema_rowkey_cnt, truncate_info.commit_version_, cols_desc,
                                           truncate_info.truncate_part_, 0, part_child_cnt - 1,
                                           filter->get_childs(), false))) {
-      LOG_WARN("failed to prepare part filter param", K(ret));
     } else if (part_child_cnt < filter->get_child_count() &&
                OB_FAIL(prepare_part_filter_param(schema_rowkey_cnt, truncate_info.commit_version_, cols_desc,
                                                  truncate_info.truncate_subpart_, part_child_cnt, filter->get_child_count() - 1,
@@ -1062,7 +1014,6 @@ int ObTruncateAndFilterExecutor::filter(const ObDatumRow &row, bool &filtered)
     filtered = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < valid_truncate_filter_cnt_ && !filtered; ++i) {
       if (OB_FAIL(truncate_filters_.at(i)->filter(row, filtered))) {
-        LOG_WARN("failed to filter truncate filter", K(ret), K(i));
       }
     }
   }
@@ -1080,31 +1031,24 @@ int ObTruncateAndFilterExecutor::build_single_truncate_filter(
   int64_t filter_item_cnt = 0;
   int64_t part_filter_item_cnt = 0;
   if (OB_FAIL(ObTruncateFilterFactory::build_scn_filter(op_, filter_factory, item_buffer_[filter_item_cnt++]))) {
-    LOG_WARN("failed to build scn filter", K(ret));
   } else if (OB_FAIL(build_single_part_filter(filter_factory, truncate_info.truncate_part_, filter_item_cnt))) {
-    LOG_WARN("failed to build single part filter", K(ret));
   } else if (OB_FAIL(prepare_part_filter_param(schema_rowkey_cnt, truncate_info.commit_version_, cols_desc,
                                                truncate_info.truncate_part_, 0, filter_item_cnt - 1,
                                                item_buffer_))) {
-    LOG_WARN("failed to prepare part filter param", K(ret));
   } else if (FALSE_IT(part_filter_item_cnt = filter_item_cnt)) {
   } else if (truncate_info.is_sub_part_) {
     const int64_t sub_item_start = filter_item_cnt;
     if (OB_FAIL(build_single_part_filter(filter_factory, truncate_info.truncate_subpart_, filter_item_cnt))) {
-      LOG_WARN("failed to build single sub part filter", K(ret));
     } else if (OB_FAIL(prepare_part_filter_param(schema_rowkey_cnt, truncate_info.commit_version_, cols_desc,
                                                  truncate_info.truncate_subpart_, sub_item_start, filter_item_cnt - 1,
                                                  item_buffer_))) {
-      LOG_WARN("failed to prepare sub part filter param", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     ObPushdownFilterNode *or_node = nullptr;
     ObPushdownFilterExecutor *or_executor = nullptr;
     if (FAILEDx(filter_factory.alloc(TRUNCATE_OR_FILTER, filter_item_cnt, or_node))) {
-      LOG_WARN("failed to alloc truncate and filter node", K(ret));
     } else if (OB_FAIL(filter_factory.alloc(TRUNCATE_OR_FILTER_EXECUTOR, filter_item_cnt, *or_node, or_executor, op_))) {
-      LOG_WARN("failed to alloc truncate and filter executor", K(ret));
     } else {
       for (int64_t i = 0; i < filter_item_cnt; ++i) {
         or_executor->set_child(i, item_buffer_[i]);
@@ -1143,7 +1087,6 @@ int ObTruncateAndFilterExecutor::build_single_part_filter(
       const ObRowkey &high_bound = truncate_partition.high_bound_val_;
       if (OB_FAIL(ObTruncateFilterFactory::build_range_filter(op_, filter_factory, need_black,
                   item_buffer_[filter_item_pos], item_buffer_[filter_item_pos + 1]))) {
-        LOG_WARN("failed to build range filter", K(ret));
       } else {
         filter_item_pos += 2;
       }
@@ -1154,7 +1097,6 @@ int ObTruncateAndFilterExecutor::build_single_part_filter(
         LOG_WARN("invalid argument", K(ret), K(list_row_values));
       } else if (OB_FAIL(ObTruncateFilterFactory::build_list_filter(op_, filter_factory, need_black,
                 item_buffer_[filter_item_pos++]))) {
-        LOG_WARN("failed to build list filter", K(ret));
       }
     }
   }
@@ -1194,7 +1136,6 @@ int ObTruncateAndFilterExecutor::prepare_part_filter_param(
                OB_FAIL(truncate_executor->prepare_truncate_param(schema_rowkey_cnt, cols_desc, truncate_partition))) {
       LOG_WARN("failed to prepare truncate param", K(ret), K(i));
     } else if (OB_FAIL(truncate_executor->prepare_truncate_value(truncate_commit_viersion, truncate_partition))) {
-      LOG_WARN("failed to prepare truncate value", K(ret), K(i));
     }
   }
   return ret;
@@ -1213,12 +1154,10 @@ int ObTruncateAndFilterExecutor::execute_logic_filter(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null child filter", K(ret), K(i));
     } else if (OB_FAIL(truncate_filters_.at(i)->execute(this, filter_info, micro_scanner, use_vectorize))) {
-      LOG_WARN("failed to filter micro block", K(ret), K(i), KP(truncate_filters_.at(i)));
     } else if (OB_ISNULL(child_result = truncate_filters_.at(i)->get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected get null filter bitmap", K(ret));
     } else if (OB_FAIL(result.bit_and(*child_result))) {
-      LOG_WARN("failed to merge result bitmap", K(ret), KP(child_result));
     } else if (result.is_all_false()) {
       break;
     }
@@ -1248,7 +1187,6 @@ int ObTruncateFilterFactory::build_scn_filter(
   scn_filter = nullptr;
   ObPushdownFilterNode *scn_node = nullptr;
   if (OB_FAIL(build_filter(op, filter_factory, false, scn_node, scn_filter))) {
-    LOG_WARN("failed to build scn filter", K(ret));
   } else {
     SET_TRUNCATE_ITEM_TYPE(scn_filter, TRUNCATE_SCN);
     SET_TRUNCATE_WHITE_FILTER_OP_TYPE(scn_node, WHITE_OP_GT);
@@ -1269,9 +1207,7 @@ int ObTruncateFilterFactory::build_range_filter(
   ObPushdownFilterNode *low_node = nullptr;
   ObPushdownFilterNode *high_node = nullptr;
   if (OB_FAIL(build_filter(op, filter_factory, need_black, low_node, low_filter))) {
-    LOG_WARN("failed to build low filter", K(ret));
   } else if (OB_FAIL(build_filter(op, filter_factory, need_black, high_node, high_filter))) {
-    LOG_WARN("failed to build high filter", K(ret));
   } else {
     SET_TRUNCATE_ITEM_TYPE(low_filter, TRUNCATE_RANGE_LEFT);
     SET_TRUNCATE_ITEM_TYPE(high_filter, TRUNCATE_RANGE_RIGHT);
@@ -1297,7 +1233,6 @@ int ObTruncateFilterFactory::build_list_filter(
   list_filter = nullptr;
   ObPushdownFilterNode *list_node = nullptr;
   if (OB_FAIL(build_filter(op, filter_factory, need_black, list_node, list_filter))) {
-    LOG_WARN("failed to build list filter", K(ret));
   } else {
     SET_TRUNCATE_ITEM_TYPE(list_filter, TRUNCATE_LIST);
     if (!need_black) {
@@ -1320,9 +1255,7 @@ int ObTruncateFilterFactory::build_filter(
   const PushdownFilterType node_type = need_black ? TRUNCATE_BLACK_FILTER : TRUNCATE_WHITE_FILTER;
   const PushdownExecutorType executor_type = need_black ? TRUNCATE_BLACK_FILTER_EXECUTOR : TRUNCATE_WHITE_FILTER_EXECUTOR;
   if (OB_FAIL(filter_factory.alloc(node_type, 0, node))) {
-    LOG_WARN("failed to alloc low node", K(ret));
   } else if (OB_FAIL(filter_factory.alloc(executor_type, 0, *node, executor, op))) {
-    LOG_WARN("failed to alloc low executor", K(ret));
   }
   if (OB_FAIL(ret)) {
     RELEASE_TRUNCATE_PTR_WHEN_FAILED(ObPushdownFilterNode, node);

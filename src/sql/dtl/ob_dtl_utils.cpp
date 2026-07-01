@@ -85,9 +85,7 @@ int ObDtlAsynSender::syn_send()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected NULL ptr", K(ret));
     } else if (OB_FAIL(action(ch))) {
-      LOG_WARN("failed to send message", K(ret));
     } else if (OB_FAIL(ch->wait_response())) {
-      LOG_WARN("failed to wait response", K(ret));
     }
   }
   return ret;
@@ -111,7 +109,6 @@ int ObDtlAsynSender::asyn_send()
     //    If max_batch_size equals (will not be greater than max_loop_times) max_loop_times, it indicates that all channel data will be sent in one go
     // Fallback to synchronous send
     if (OB_FAIL(syn_send())) {
-      LOG_WARN("failed to syn send message", K(ret));
     }
     LOG_TRACE("failed to calc batch buffer cnt", K(ret));
   } else {
@@ -128,7 +125,6 @@ int ObDtlAsynSender::asyn_send()
       total_task_cnt = ch_info_->transmit_exec_server_.total_task_cnt_;
     }
     if (OB_FAIL(wait_channels.prepare_allocate(prefix_task_counts->count() * max_batch_size))) {
-      LOG_WARN("fail alloc memory", K(max_batch_size), K(prefix_task_counts->count()), K(ret));
     }
     int64_t send_eof_cnt = 0;
     for (int64_t loop = 0; loop < max_loop_times && OB_SUCC(ret); loop += max_batch_size) {
@@ -191,9 +187,7 @@ int ObTransmitEofAsynSender::action(ObDtlChannel* ch)
   px_eof_row.set_eof_row();
   px_eof_row.set_data_type(type_);
   if (OB_FAIL(ch->send(px_eof_row, timeout_ts_, eval_ctx_, true))) {
-    LOG_WARN("fail send eof row to slice channel", K(px_eof_row), K(ret));
   } else if (OB_FAIL(ch->flush(true, false))) {
-    LOG_WARN("failed to flush send msg", K(px_eof_row), K(ret));
   }
   return ret;
 }
@@ -204,9 +198,7 @@ int ObDfcDrainAsynSender::action(ObDtlChannel* ch)
   ObDtlDrainMsg drain_msg;
   LOG_TRACE("drain channel", K(ret), KP(ch->get_id()), K(ch->get_peer()));
   if (OB_FAIL(ch->send(drain_msg, timeout_ts_))) {
-    LOG_WARN("failed to push data to channel", K(ret), KP(ch->get_id()), K(ch->get_peer()));
   } else if (OB_FAIL(ch->flush(true, false))) {
-    LOG_WARN("failed to drain msg", K(ret));
   }
   return ret;
 }
@@ -215,7 +207,6 @@ int ObDfcUnblockAsynSender::action(ObDtlChannel *ch)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dfc_.notify_channel_unblocking(ch, unblock_cnt_))) {
-    LOG_WARN("failed to notify channel unblocking", K(ret));
   }
   return ret;
 }

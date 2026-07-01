@@ -67,22 +67,12 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < users.count(); i += 4) {
       if (OB_FAIL(users.get_string(i, user_name))) {
-        LOG_WARN("Get string from ObStrings error", "count",
-            users.count(), K(i), K(ret));
       } else if (OB_FAIL(users.get_string(i + 1, host_name))) {
-        LOG_WARN("Get string from ObStrings error", "count",
-            users.count(), K(i), K(ret));
       } else if (OB_FAIL(users.get_string(i + 2, pwd))) {
-        LOG_WARN("Get string from ObStrings error", "count",
-            users.count(), K(i), K(ret));
       } else if (OB_FAIL(users.get_string(i + 3, need_enc))) {
-        LOG_WARN("Get string from ObStrings error", "count",
-            users.count(), K(i), K(ret));
       } else {
         if (OB_FAIL(arg.users_passwd_.push_back(user_name))) {
-          LOG_WARN("failed to add user", K(ret));
         } else if (OB_FAIL(arg.hosts_.push_back(host_name))) {
-          LOG_WARN("failed to add user", K(ret));
         } else if (ObString::make_string("YES") == need_enc) {
           ObString pwd_enc;
           if (pwd.length() > 0) {
@@ -94,16 +84,13 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
                                                                     pwd_enc, 
                                                                     enc_buf, 
                                                                     ENC_BUF_LEN))) {
-              LOG_WARN("Encrypt password failed", K(ret));
             } else { }//do nothing
           }
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(arg.users_passwd_.push_back(pwd_enc))) {
-            LOG_WARN("failed to add password", K(ret));
           } else { }//do nothing
         } else {
           if (OB_FAIL(arg.users_passwd_.push_back(pwd))) {
-            LOG_WARN("failed to add password", K(ret));
           }
         }
       }
@@ -148,17 +135,13 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("failed to get tenant schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
                                                   user_info))) {
-      LOG_WARN("failed to get user info", K(ret));
     } else if (OB_ISNULL(user_info)) {
       // ignore ret
       LOG_WARN("user info is unexpected null", K(ret));
     } else if (OB_FAIL(ob_write_string(allocator, user_info->get_user_name_str(), arg.grantor_))) {
-      LOG_WARN("failed to write string", K(ret));
     } else if (OB_FAIL(ob_write_string(allocator, user_info->get_host_name_str(), arg.grantor_host_))) {
-      LOG_WARN("failed to write string", K(ret));
     }
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(schema_guard.reset())) {
@@ -169,7 +152,6 @@ int ObGrantExecutor::execute(ObExecContext &ctx, ObGrantStmt &stmt)
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->grant(arg); }))) {
-      LOG_WARN("Grant privileges to user error", K(ret), K(arg));
     }
   }
   return ret;
@@ -189,37 +171,31 @@ int ObRevokeExecutor::execute(ObExecContext &ctx, ObRevokeStmt &stmt)
     switch (stmt.get_grant_level()) {
       case OB_PRIV_USER_LEVEL: {
         if (OB_FAIL(revoke_user(stmt))) {
-          LOG_WARN("grant_revoke_user error", K(ret));
         }
         break;
       }
       case OB_PRIV_DB_LEVEL: {
         if (OB_FAIL(revoke_db(stmt))) {
-          LOG_WARN("grant_revoke_db error", K(ret));
         }
         break;
       }
       case OB_PRIV_TABLE_LEVEL: {
         if (OB_FAIL(revoke_table(stmt, ctx))) {
-          LOG_WARN("grant_revoke_table error", K(ret));
         }
         break;
       }
       case OB_PRIV_ROUTINE_LEVEL: {
         if (OB_FAIL(revoke_routine(stmt, ctx))) {
-          LOG_WARN("grant_revoke_routine error", K(ret));
         }
         break;
       }
       case OB_PRIV_CATALOG_LEVEL : {
         if (OB_FAIL(revoke_catalog(stmt))) {
-          LOG_WARN("grant_revoke_catalog error", K(ret));
         }
         break;
       }
       case OB_PRIV_OBJECT_LEVEL: {
         if (OB_FAIL(revoke_object(stmt, ctx))) {
-          LOG_WARN("grant_revoke_object error", K(ret));
         }
         break;
       }
@@ -245,7 +221,6 @@ int ObRevokeExecutor::revoke_user(ObRevokeStmt &stmt)
     for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); ++i) {
       arg.user_id_ = user_ids.at(i);
       if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->revoke_user(arg); }))) {
-        LOG_WARN("revoke user error", K(arg), K(ret));
       }
     }
   } else if (0 == user_ids.count()) {
@@ -257,7 +232,6 @@ int ObRevokeExecutor::revoke_user(ObRevokeStmt &stmt)
     for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
       arg.user_id_ = user_ids.at(i);
       if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->revoke_user(arg); }))) {
-        LOG_WARN("revoke user error", K(arg), K(ret));
       }
     }
   }
@@ -279,7 +253,6 @@ int ObRevokeExecutor::revoke_catalog(ObRevokeStmt &stmt)
     for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
       arg.user_id_ = user_ids.at(i);
       if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->revoke_catalog(arg); }))) {
-        LOG_WARN("revoke user error", K(arg), K(ret));
       }
     }
   }
@@ -301,7 +274,6 @@ int ObRevokeExecutor::revoke_db(ObRevokeStmt &stmt)
     for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
       arg.user_id_ = user_ids.at(i);
       if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->revoke_database(arg); }))) {
-        LOG_WARN("revoke user error", K(arg), K(ret));
       }
     }
   }
@@ -333,7 +305,6 @@ int ObRevokeExecutor::revoke_table(ObRevokeStmt &stmt,
     arg.revoke_all_ora_ = stmt.get_revoke_all_ora();
     arg.based_schema_object_infos_.reset();
     if (OB_FAIL(append(arg.column_names_priv_, stmt.get_column_privs()))) {
-      LOG_WARN("append failed", K(ret));
     } else if (stmt.get_object_type() == ObObjectType::TABLE
             && (arg.column_names_priv_.count() > 0)) {
       if (arg.obj_id_ == OB_INVALID) {
@@ -350,17 +321,13 @@ int ObRevokeExecutor::revoke_table(ObRevokeStmt &stmt,
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("failed to get tenant schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
                                                   user_info))) {
-      LOG_WARN("failed to get user info", K(ret));
     } else if (OB_ISNULL(user_info)) {
       // ignore ret
       LOG_WARN("user info is unexpected null", K(ret));
     } else if (OB_FAIL(ob_write_string(ctx.get_allocator(), user_info->get_user_name_str(), arg.grantor_))) {
-      LOG_WARN("failed to write string", K(ret));
     } else if (OB_FAIL(ob_write_string(ctx.get_allocator(), user_info->get_host_name_str(), arg.grantor_host_))) {
-      LOG_WARN("failed to write string", K(ret));
     }
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(schema_guard.reset())) {
@@ -378,7 +345,6 @@ int ObRevokeExecutor::revoke_table(ObRevokeStmt &stmt,
       for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
         arg.user_id_ = user_ids.at(i);
         if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->revoke_table(arg); }))) {
-          LOG_WARN("revoke user error", K(arg), K(ret));
         }
       }
     }
@@ -408,17 +374,13 @@ int ObRevokeExecutor::revoke_routine(ObRevokeStmt &stmt,
     arg.revoke_all_ora_ = stmt.get_revoke_all_ora();
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("failed to get tenant schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
                                                   user_info))) {
-      LOG_WARN("failed to get user info", K(ret));
     } else if (OB_ISNULL(user_info)) {
       // ignore ret
       LOG_WARN("user info is unexpected null", K(ret));
     } else if (OB_FAIL(ob_write_string(ctx.get_allocator(), user_info->get_user_name_str(), arg.grantor_))) {
-      LOG_WARN("failed to write string", K(ret));
     } else if (OB_FAIL(ob_write_string(ctx.get_allocator(), user_info->get_host_name_str(), arg.grantor_host_))) {
-      LOG_WARN("failed to write string", K(ret));
     }
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(schema_guard.reset())) {
@@ -436,7 +398,6 @@ int ObRevokeExecutor::revoke_routine(ObRevokeStmt &stmt,
       for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
         arg.user_id_ = user_ids.at(i);
         if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->revoke_routine(arg); }))) {
-          LOG_WARN("revoke user error", K(arg), K(ret));
         }
       }
     }
@@ -462,17 +423,13 @@ int ObRevokeExecutor::revoke_object(ObRevokeStmt &stmt,
     arg.obj_type_ = static_cast<uint64_t>(stmt.get_object_type());
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("failed to get tenant schema guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_user_info(session_info->get_priv_user_id(),
                   user_info))) {
-      LOG_WARN("failed to get user info", K(ret));
     } else if (OB_ISNULL(user_info)) {
       // ignore ret
       LOG_WARN("user info is unexpected null", K(ret));
     } else if (OB_FAIL(ob_write_string(ctx.get_allocator(), user_info->get_user_name_str(), arg.grantor_))) {
-      LOG_WARN("failed to write string", K(ret));
     } else if (OB_FAIL(ob_write_string(ctx.get_allocator(), user_info->get_host_name_str(), arg.grantor_host_))) {
-      LOG_WARN("failed to write string", K(ret));
     }
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(schema_guard.reset())) {
@@ -490,7 +447,6 @@ int ObRevokeExecutor::revoke_object(ObRevokeStmt &stmt,
       for (int i = 0; OB_SUCC(ret) && i < user_ids.count(); i++) {
         arg.user_id_ = user_ids.at(i);
         if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->revoke_object(arg); }))) {
-          LOG_WARN("revoke user error", K(arg), K(ret));
         }
       }
     }

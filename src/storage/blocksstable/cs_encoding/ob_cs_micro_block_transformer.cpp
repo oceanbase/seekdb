@@ -117,7 +117,6 @@ int ObCSMicroBlockTransformer::init(const ObMicroBlockHeader *header,
     LOG_WARN("ObCSMicroBlockTransformer has inited", K(ret));
   } else if (OB_FAIL(ObCompressorPool::get_instance().get_compressor(
       static_cast<ObCompressorType>(header->compressor_type_), compressor_))) {
-    LOG_WARN("fail to get compressor", K(ret), KPC(header));
   } else {
     header_ = header;
     payload_buf_ = payload_buf;
@@ -132,13 +131,9 @@ int ObCSMicroBlockTransformer::init(const ObMicroBlockHeader *header,
     ret = OB_INVALID_DATA;
     LOG_WARN("invalid all column header", K(ret), KPC(all_column_header_));
   } else if (OB_FAIL(decode_stream_offsets_(payload_len))) {
-    LOG_WARN("fail to decode_stream_offsets", K(ret));
   } else if (OB_FAIL(build_all_string_data_desc_(payload_len))) {
-    LOG_WARN("fail to build_all_string_data_desc_", K(ret));
   } else if (OB_FAIL(build_original_transform_desc_(store_ids, store_ids_cnt))) {
-    LOG_WARN("fail to build transform desc", K(ret));
   } else if (OB_FAIL(build_stream_decoder_ctx_())) {
-    LOG_WARN("fail to build stream decoding ctx", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -172,7 +167,6 @@ int ObCSMicroBlockTransformer::decode_stream_offsets_(const int64_t payload_len)
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObIntegerStreamDecoder::build_decoder_ctx(
         data, stream_count, (ObCompressorType)header_->compressor_type_, ctx, offset_stream_meta_len))) {
-      LOG_WARN("fail to decode header for stream offsets stream", K(ret), K(data), KPC_(all_column_header));
     } else if (ctx.meta_.is_use_base()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("stream offsets encoding must has no base", K(ctx));
@@ -185,7 +179,6 @@ int ObCSMicroBlockTransformer::decode_stream_offsets_(const int64_t payload_len)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("width_size of stream offsets is unexpected", K(ctx), K(width_size));
       } else if (OB_FAIL(ObIntegerStreamDecoder::transform_to_raw_array(offset_stream_data, ctx, (char*)stream_offsets_arr_, allocator_))) {
-        LOG_WARN("fail to decode stream offset to array", K(ret), K(ctx), K(offset_stream_data));
       } else if (width_size != sizeof(uint32_t)) {
         uint32_t tmp = 0;
         // copy from end to start to make memory safe
@@ -233,8 +226,6 @@ int ObCSMicroBlockTransformer::build_original_transform_desc_(
       K(stream_meta_len_arr_size));
   } else if (OB_FAIL(original_desc_.deserialize(
                col_count, stream_count, orig_desc_buf_, orig_desc_buf_size_, pos))) {
-    LOG_WARN("fail to deserialize desc", K(ret), K(col_count), K(stream_count),
-        KP(orig_desc_buf_), K(orig_desc_buf_size_));
   } else {
     // reseted stream_desc_attr means is_string_stream and not_need_part_tranform and
     // not_in_part_transform_buf
@@ -339,8 +330,6 @@ int ObCSMicroBlockTransformer::build_original_transform_desc_(
         }
       } else if (ObCSColumnHeader::Type::SEMISTRUCT == column_header.type_) {
         if (OB_FAIL(build_semistruct_column_stream_(i, first_stream_begin_offset, stream_idx, pre_streams_len))) {
-          LOG_WARN("build_semistruct_column_stream fail", K(ret), K(i), K(column_header),
-              K(first_stream_begin_offset), K(stream_idx), K(pre_streams_len));
         }
       }
     }
@@ -429,7 +418,6 @@ int ObCSMicroBlockTransformer::build_semistruct_column_stream_(
   if (OB_FAIL(semistrcut_meta_desc.deserialize(column_header, header_->row_count_,
       payload_buf_ + original_desc_.column_meta_pos_arr_[column_idx].offset_,
       semistruct_header->header_len_, pos))) {
-    LOG_WARN("deserialize semistruct meta fail", K(ret), K(column_idx), K(column_header));
   } else {
     original_desc_.column_first_stream_idx_arr_[column_idx] = stream_idx + 1;
     original_desc_.column_meta_pos_arr_[column_idx].offset_ = column_meta_begin_offset_ + pre_streams_len;
@@ -445,19 +433,15 @@ int ObCSMicroBlockTransformer::build_semistruct_column_stream_(
         LOG_WARN("invalid column header", K(ret), K(sub_column_header), K(column_idx), K(j));
       } else if (ObCSColumnHeader::Type::INTEGER == sub_column_header.type_) {
         if (OB_FAIL(build_integer_sub_column_stream_(first_stream_begin_offset, sub_column_header, sub_col_meta_ptr, stream_idx, pre_streams_len))) {
-          LOG_WARN("build_integer_sub_column_stream fail", K(ret), K(j), K(sub_column_header), K((sub_col_meta_ptr - payload_buf_)), K(stream_idx), K(pre_streams_len));
         }
       } else if (ObCSColumnHeader::Type::STRING == sub_column_header.type_) {
         if (OB_FAIL(build_string_sub_column_stream_(first_stream_begin_offset, sub_column_header, sub_col_meta_ptr, stream_idx, pre_streams_len))) {
-          LOG_WARN("build_string_sub_column_stream fail", K(ret), K(j), K(sub_column_header), K((sub_col_meta_ptr - payload_buf_)), K(stream_idx), K(pre_streams_len));
         }
       } else if (ObCSColumnHeader::Type::INT_DICT == sub_column_header.type_) {
         if (OB_FAIL(build_integer_dict_sub_column_stream_(first_stream_begin_offset, sub_column_header, sub_col_meta_ptr, stream_idx, pre_streams_len))) {
-          LOG_WARN("build_integer_dict_sub_column_stream fail", K(ret), K(j), K(sub_column_header), K((sub_col_meta_ptr - payload_buf_)), K(stream_idx), K(pre_streams_len));
         }
       } else if (ObCSColumnHeader::Type::STR_DICT == sub_column_header.type_) {
         if (OB_FAIL(build_string_dict_sub_column_stream_(first_stream_begin_offset, sub_column_header, sub_col_meta_ptr, stream_idx, pre_streams_len))) {
-          LOG_WARN("build_string_dict_sub_column_stream fail", K(ret), K(j), K(sub_column_header), K((sub_col_meta_ptr - payload_buf_)), K(stream_idx), K(pre_streams_len));
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -619,7 +603,6 @@ int ObCSMicroBlockTransformer::build_stream_decoder_ctx_()
                               original_desc_.stream_data_pos_arr_[stream_idx].len_);
           if (OB_FAIL(ObIntegerStreamDecoder::build_decoder_ctx(int_data, stream_row_cnt_arr_[stream_idx],
               (ObCompressorType)header_->compressor_type_, *ctx, stream_meta_len_arr_[stream_idx]))) {
-            LOG_WARN("fail to build decoding ctx", K(ret), K(stream_row_cnt_arr_[stream_idx]));
           } else {
             buf += sizeof(ObIntegerStreamDecoderCtx);
             LOG_DEBUG("build integer stream decoding ctx", K(stream_idx),
@@ -634,7 +617,6 @@ int ObCSMicroBlockTransformer::build_stream_decoder_ctx_()
           ObStreamData str_data(payload_buf_ + original_desc_.stream_data_pos_arr_[stream_idx].offset_,
                               original_desc_.stream_data_pos_arr_[stream_idx].len_);
           if (OB_FAIL(ObStringStreamDecoder::build_decoder_ctx(str_data, *ctx, stream_meta_len_arr_[stream_idx]))) {
-            LOG_WARN("fail to build decoding ctx", K(ret), K(stream_idx));
           } else {
             // update the offset to the offset in all_string_data
             original_desc_.stream_data_pos_arr_[stream_idx].offset_ = all_string_uncompress_len_;
@@ -717,7 +699,6 @@ int ObCSMicroBlockTransformer::full_transform(char *buf, const int64_t buf_len, 
     LOG_WARN("must be not part tranform", K(ret), K(is_part_tranform_));
   // <1> micro_block_header
   } else if (OB_FAIL(header_->deep_copy(buf, buf_len, tmp_pos, copied_micro_header))) {
-    LOG_WARN("fail to serialize micro block header", K(ret));
   }
 
   const int32_t col_cnt = header_->column_count_;
@@ -743,7 +724,6 @@ int ObCSMicroBlockTransformer::full_transform(char *buf, const int64_t buf_len, 
     int64_t dst_desc_buf_pos = 0;
     if (OB_FAIL(dst_desc.deserialize(
           col_cnt, stream_cnt, dst_desc_buf, orig_desc_buf_size_, dst_desc_buf_pos))) {
-      LOG_WARN("fail to deserialize ObMicroBlockTransformDesc", K(ret), K(orig_desc_buf_size_));
     } else if (OB_UNLIKELY(tmp_pos + orig_desc_buf_size_ > buf_len)) {
       ret = OB_BUF_NOT_ENOUGH;
       LOG_WARN("buf not enough", K(ret), K(tmp_pos), K(buf_len), K(orig_desc_buf_size_));
@@ -810,8 +790,6 @@ int ObCSMicroBlockTransformer::full_transform(char *buf, const int64_t buf_len, 
     int64_t real_decomp_size = 0;
     if (OB_FAIL(compressor_->decompress(payload_buf_ + all_string_data_offset_,
         all_string_data_len, buf + tmp_pos, all_string_uncompress_len_, real_decomp_size))) {
-      LOG_WARN("fail to decompress all string data", K(ret),
-          K(all_string_data_offset_), K(all_string_data_len), K(all_string_uncompress_len_));
     } else if (OB_UNLIKELY(real_decomp_size != all_string_uncompress_len_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("size mismatch", KR(ret), K(all_string_uncompress_len_), K(real_decomp_size));
@@ -853,7 +831,6 @@ int ObCSMicroBlockTransformer::full_transform(char *buf, const int64_t buf_len, 
           ret = OB_BUF_NOT_ENOUGH;
           LOG_WARN( "buf not enough", K(ret), K(pos), K(buf_len), K(arr_size), KPC(ctx));
         } else if (OB_FAIL(ObIntegerStreamDecoder::transform_to_raw_array(orig_stream_data, *ctx, buf + tmp_pos, allocator_))) {
-          LOG_WARN("fail to transform_to_raw_array", K(ret), K(orig_stream_data), KPC(ctx), K(tmp_pos));
         } else {
           dst_desc.stream_data_pos_arr_[stream_idx].offset_ = tmp_pos;
           dst_desc.stream_data_pos_arr_[stream_idx].len_ = arr_size;
@@ -950,7 +927,6 @@ int ObCSMicroBlockTransformer::part_transform(char *buf, const int64_t buf_len, 
     int64_t dst_desc_buf_pos = 0;
     if (OB_FAIL(dst_desc.deserialize(
           col_cnt, stream_cnt, dst_desc_buf, orig_desc_buf_size_, dst_desc_buf_pos))) {
-      LOG_WARN("fail to deserialize ObMicroBlockTransformDesc", K(ret), K(orig_desc_buf_size_));
     } else if (OB_UNLIKELY(tmp_pos + orig_desc_buf_size_ > buf_len)) {
       ret = OB_BUF_NOT_ENOUGH;
       LOG_WARN("buf not enough", K(ret), K(tmp_pos), K(buf_len), K(orig_desc_buf_size_));
@@ -1026,7 +1002,6 @@ int ObCSMicroBlockTransformer::part_transform(char *buf, const int64_t buf_len, 
       int64_t real_decomp_size = 0;
       if (OB_FAIL(compressor_->decompress(payload_buf_ + all_string_data_offset_,
           all_string_data_len, buf + tmp_pos, all_string_uncompress_len_, real_decomp_size))) {
-        LOG_WARN("fail to decompress all string data", K(ret));
       } else if (OB_UNLIKELY(real_decomp_size != all_string_uncompress_len_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("size mismatch", KR(ret), K(all_string_uncompress_len_), K(real_decomp_size));
@@ -1058,7 +1033,6 @@ int ObCSMicroBlockTransformer::part_transform(char *buf, const int64_t buf_len, 
               ret = OB_BUF_NOT_ENOUGH;
               LOG_WARN( "buf not enough", K(ret), K(pos), K(buf_len), K(arr_size), KPC(ctx));
             } else if (OB_FAIL(ObIntegerStreamDecoder::transform_to_raw_array(orig_stream_data, *ctx, buf + tmp_pos, allocator_))) {
-              LOG_WARN("fail to tranform_to_raw_array", K(ret), K(orig_stream_data), KPC(ctx), K(tmp_pos));
             } else {
               dst_desc.set_stream_in_part_transfrom_buf(stream_idx);
               dst_desc.stream_data_pos_arr_[stream_idx].offset_ = tmp_pos;
@@ -1141,14 +1115,11 @@ int ObCSMicroBlockTransformer::full_transform_block_data(const ObMicroBlockHeade
   int64_t pos = 0;
   ObCSMicroBlockTransformer transformer;
   if (OB_FAIL(transformer.init(&header, payload_buf, payload_size))) {
-    LOG_WARN("fail to init cs micro block transformer", K(ret), K(header));
   } else if (OB_FAIL(transformer.calc_full_transform_size(dst_buf_size))) {
-    LOG_WARN("fail to calc transformed size", K(ret), K(transformer));
   } else if (OB_ISNULL(dst_block_buf = static_cast<const char *>(allocator->alloc(dst_buf_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc", K(ret), K(dst_buf_size));
   } else if (OB_FAIL(transformer.full_transform(const_cast<char *&>(dst_block_buf), dst_buf_size, pos))) {
-    LOG_WARN("fail to transfrom cs encoding mirco blcok", K(ret));
   } else if (OB_UNLIKELY(pos != dst_buf_size)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("pos should equal to buf_size", K(ret), K(pos), K(dst_buf_size));
@@ -1247,7 +1218,6 @@ int ObCSMicroBlockTransformHelper::init(common::ObIAllocator *allocator,
       ret = OB_INVALID_DATA;
       LOG_WARN("invalid micro block header", K(ret), KPC(header_));
     } else if (OB_FAIL(build_tranform_desc_(store_ids, store_ids_cnt))) {
-      LOG_WARN("fail to build transform desc", K(ret), KP(store_ids), K(store_ids_cnt));
     } else {
       is_inited_ = true;
       LOG_DEBUG("finish init ObCSMicroBlockTransformHelper", KPC(all_col_header_),
@@ -1269,7 +1239,6 @@ int ObCSMicroBlockTransformHelper::build_tranform_desc_(
       sizeof(ObCSColumnHeader) * header_->column_count_;
     if (OB_FAIL(transform_desc_.deserialize(header_->column_count_, all_col_header_->stream_count_,
           const_cast<char *>(block_data_.get_buf()), block_data_.get_buf_size(), pos))) {
-      LOG_WARN("failc to deserialize ObMicroBlockTransformDesc", K(ret));
     }
   } else {
     ObCSMicroBlockTransformer transformer;
@@ -1278,9 +1247,7 @@ int ObCSMicroBlockTransformHelper::build_tranform_desc_(
                                  block_data_.get_buf() + header_->header_size_,
                                  block_data_.get_buf_size() - header_->header_size_,
                                  true/*is_part_transform*/, store_ids, store_ids_cnt))) {
-      LOG_WARN("fail to init ObCSMicroBlockTransformer", K(ret), K_(block_data), K(transformer));
     } else if (OB_FAIL(transformer.calc_part_transform_size(part_transform_size))) {
-      LOG_WARN("fail to calc_part_transform_size", K(ret), K(transformer));
     }
 
     if (OB_SUCC(ret)) {
@@ -1295,7 +1262,6 @@ int ObCSMicroBlockTransformHelper::build_tranform_desc_(
     if (OB_SUCC(ret)) {
       int64_t pos = 0;
       if (OB_FAIL(transformer.part_transform(part_transform_buf_, part_transform_size, pos))) {
-        LOG_WARN("fail to part transform", K(ret), K(transformer));
       } else if (OB_UNLIKELY(pos != part_transform_size)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("pos must be equal to part_transform_size",
@@ -1306,7 +1272,6 @@ int ObCSMicroBlockTransformHelper::build_tranform_desc_(
       int64_t pos = 0;
       if (OB_FAIL(transform_desc_.deserialize(header_->column_count_,
             all_col_header_->stream_count_, part_transform_buf_, part_transform_size, pos))) {
-        LOG_WARN("fail to deserialize ObMicroBlockTransformDesc", K(ret), K(transformer));
       }
     }
   }
@@ -1339,45 +1304,30 @@ int ObCSMicroBlockTransformHelper::build_column_decoder_ctx(
       case ObCSColumnHeader::Type::INTEGER : {
         if (OB_FAIL(build_integer_column_decoder_ctx_(obj_meta, col_first_stream_idx,
             col_end_stream_idx, col_idx, decoder_ctx.integer_ctx_))) {
-          LOG_WARN("fail to build_integer_decoder_ctx", K(ret), K(col_first_stream_idx),
-              K(col_end_stream_idx), K(col_idx),
-              "transform_desc", ObMicroBlockTransformDescPrinter(col_cnt, stream_cnt, transform_desc_));
         }
         break;
       }
       case ObCSColumnHeader::Type::STRING : {
         if (OB_FAIL(build_string_column_decoder_ctx_(obj_meta, col_first_stream_idx,
             col_end_stream_idx, col_idx, decoder_ctx.string_ctx_))) {
-          LOG_WARN("fail to build_integer_decoder_ctx",
-              K(ret), K(col_first_stream_idx), K(col_end_stream_idx), K(col_idx),
-              "transform_desc", ObMicroBlockTransformDescPrinter(col_cnt, stream_cnt, transform_desc_));
         }
         break;
       }
       case ObCSColumnHeader::Type::INT_DICT : {
         if (OB_FAIL(build_integer_dict_decoder_ctx_(obj_meta, col_first_stream_idx,
             col_end_stream_idx, col_idx, decoder_ctx.dict_ctx_))) {
-          LOG_WARN("fail to build_integer_dict_decoder_ctx",
-              K(ret), K(col_first_stream_idx), K(col_end_stream_idx), K(col_idx),
-              "transform_desc", ObMicroBlockTransformDescPrinter(col_cnt, stream_cnt, transform_desc_));
         }
         break;
       }
       case ObCSColumnHeader::Type::STR_DICT : {
         if (OB_FAIL(build_string_dict_decoder_ctx_(obj_meta, col_first_stream_idx,
             col_end_stream_idx, col_idx, decoder_ctx.dict_ctx_))) {
-          LOG_WARN("fail to build_string_dict_decoder_ctx",
-              K(ret), K(col_first_stream_idx), K(col_end_stream_idx), K(col_idx),
-              "transform_desc", ObMicroBlockTransformDescPrinter(col_cnt, stream_cnt, transform_desc_));
         }
         break;
       }
       case ObCSColumnHeader::Type::SEMISTRUCT : {
         if (OB_FAIL(build_semistruct_column_decoder_ctx_(obj_meta, col_first_stream_idx,
             col_end_stream_idx, col_idx, decoder_ctx.semistruct_ctx_))) {
-          LOG_WARN("fail to build_semistruct_column_decoder_ctx",
-              K(ret), K(obj_meta), K(col_first_stream_idx), K(col_end_stream_idx), K(col_idx),
-              "transform_desc", ObMicroBlockTransformDescPrinter(col_cnt, stream_cnt, transform_desc_));
         }
         break;
       }
@@ -1681,7 +1631,6 @@ int ObCSMicroBlockTransformHelper::build_semistruct_column_decoder_ctx_(
   if (OB_FAIL(semistrcut_meta_desc.deserialize(col_header, header_->row_count_,
       block_data_.get_buf() + transform_desc_.column_meta_pos_arr_[col_idx].offset_,
       ctx.semistruct_header_->header_len_, pos))) {
-    LOG_WARN("deserialize semistruct meta fail", K(ret), K(col_idx), K(col_header));
   } else { 
     ctx.sub_col_headers_ = semistrcut_meta_desc.sub_col_headers_;
     ctx.sub_schema_data_ptr_ = semistrcut_meta_desc.sub_schema_data_ptr_;
@@ -1719,36 +1668,24 @@ int ObCSMicroBlockTransformHelper::build_semistruct_column_decoder_ctx_(
         case ObCSColumnHeader::Type::INTEGER : {
           if (OB_FAIL(build_integer_sub_column_decoder_ctx_(sub_col_type, sub_col_header,
               col_idx, i, sub_col_meta_ptr, stream_idx, stream_offset, decoder_ctx.integer_ctx_))) {
-            LOG_WARN("fail to build_integer_sub_column_decoder_ctx", K(ret),
-                K(col_idx), K(i), K(stream_idx), K(stream_offset), K(col_first_stream_idx), K(col_end_stream_idx),
-                "transform_desc", ObMicroBlockTransformDescPrinter(col_cnt, stream_cnt, transform_desc_));
           }
           break;
         }
         case ObCSColumnHeader::Type::STRING : {
           if (OB_FAIL(build_string_sub_column_decoder_ctx_(sub_col_type, sub_col_header,
               col_idx, i, sub_col_meta_ptr, stream_idx, stream_offset, decoder_ctx.string_ctx_))) {
-            LOG_WARN("fail to build_string_sub_column_decoder_ctx", K(ret),
-                K(col_idx), K(i), K(stream_idx), K(stream_offset), K(col_first_stream_idx), K(col_end_stream_idx),
-                "transform_desc", ObMicroBlockTransformDescPrinter(col_cnt, stream_cnt, transform_desc_));
           }
           break;
         }
         case ObCSColumnHeader::Type::INT_DICT : {
           if (OB_FAIL(build_integer_dict_sub_decoder_ctx_(sub_col_type, sub_col_header,
               i, sub_col_meta_ptr, stream_idx, stream_offset, decoder_ctx.dict_ctx_))) {
-            LOG_WARN("fail to build_string_sub_column_decoder_ctx", K(ret),
-                K(col_idx), K(i), K(stream_idx), K(stream_offset), K(col_first_stream_idx), K(col_end_stream_idx),
-                "transform_desc", ObMicroBlockTransformDescPrinter(col_cnt, stream_cnt, transform_desc_));
           }
           break;
         }
         case ObCSColumnHeader::Type::STR_DICT : {
           if (OB_FAIL(build_string_dict_sub_decoder_ctx_(sub_col_type, sub_col_header,
               i, sub_col_meta_ptr, stream_idx, stream_offset, decoder_ctx.dict_ctx_))) {
-            LOG_WARN("fail to build_string_sub_column_decoder_ctx", K(ret),
-                K(col_idx), K(i), K(stream_idx), K(stream_offset), K(col_first_stream_idx), K(col_end_stream_idx),
-                "transform_desc", ObMicroBlockTransformDescPrinter(col_cnt, stream_cnt, transform_desc_));
           }
           break;
         }

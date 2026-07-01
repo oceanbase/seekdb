@@ -49,7 +49,6 @@ int ObCOSSTableRowMultiScanner::init_row_scanner(
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(row_scanner_->init(param, context, table, query_range))) {
-    LOG_WARN("Fail to init row scanner", K(ret), K(param), KPC(table));
   } else {
     ranges_ = static_cast<const common::ObIArray<blocksstable::ObDatumRange> *>(query_range);
   }

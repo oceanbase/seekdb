@@ -30,7 +30,6 @@ int ObTenantSnapshotID::serialize(char* buf, const int64_t buf_len, int64_t& pos
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, id_))) {
-    LOG_WARN("serialize tenant snapshot id failed", KR(ret), KP(buf), K(buf_len), K(pos));
   }
   return ret;
 }
@@ -42,7 +41,6 @@ int ObTenantSnapshotID::deserialize(const char* buf, const int64_t data_len, int
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KP(buf), K(data_len));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &id_))) {
-    LOG_WARN("deserialize tenant snapshot id failed", KR(ret), KP(buf), K(data_len), K(pos));
   }
   return ret;
 }

@@ -71,7 +71,6 @@ int ObSingleLogReader::open(const uint64_t file_id, const uint64_t last_log_seq/
       log_buffer_.get_position() = 0;
       log_buffer_.get_limit() = 0;
       if (OB_SUCC(file_.open(ObString(fn_len, fn_len, file_name_), dio_))) {
-        SHARE_LOG(INFO, "open log file success", KCSTRING(file_name_), K(file_id));
       } else if (OB_FILE_NOT_EXIST == ret) {
         SHARE_LOG(DEBUG, "log file not found", K(ret), KCSTRING(file_name_), K(file_id));
       } else {
@@ -87,14 +86,11 @@ int ObSingleLogReader::close()
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited_)) {
-    SHARE_LOG(ERROR, "single log reader not init");
     ret = OB_NOT_INIT;
   } else {
     file_.close();
     if (last_log_seq_ == 0) {
-      SHARE_LOG(INFO, "close file, read no data from this log", KCSTRING(file_name_));
     } else {
-      SHARE_LOG(INFO, "close file successfully", KCSTRING(file_name_), K(last_log_seq_));
     }
   }
   return ret;
@@ -127,7 +123,6 @@ int ObSingleLogReader::read_log_()
     SHARE_LOG(DEBUG, "pread", K(ret), K(pread_pos_), K(read_size), "buf_pos", log_buffer_.get_position(),
               "buf_limit", log_buffer_.get_limit());
     if (OB_FAIL(ret)) {
-      SHARE_LOG(ERROR, "read log file error", K(ret), K(file_id_));
     } else {
       // comment this log due to too frequent invoke by replay thread
       // SHARE_LOG(DEBUG, "read data from log file", K(ret), K(file_id_), K(log_fd_));

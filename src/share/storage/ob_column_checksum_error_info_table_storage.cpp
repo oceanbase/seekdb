@@ -44,7 +44,6 @@ int ObColumnChecksumErrorInfoTableStorage::init(ObSQLiteConnectionPool *pool)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid pool", K(ret));
   } else if (OB_FAIL(create_table_if_not_exists())) {
-    LOG_WARN("failed to create table", K(ret));
   }
   if (OB_FAIL(ret)) {
     pool_ = NULL;
@@ -64,7 +63,6 @@ int ObColumnChecksumErrorInfoTableStorage::create_table_if_not_exists()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_COLUMN_CHECKSUM_ERROR_INFO, nullptr))) {
-      LOG_WARN("failed to create table", K(ret));
     }
   }
   return ret;
@@ -101,7 +99,6 @@ int ObColumnChecksumErrorInfoTableStorage::insert(const ObColumnChecksumErrorInf
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(insert_sql, binder))) {
-      LOG_WARN("failed to execute insert", K(ret));
     }
   }
   return ret;
@@ -129,11 +126,9 @@ int ObColumnChecksumErrorInfoTableStorage::insert_all(const ObIArray<ObColumnChe
     } else {
       // Begin transaction for batch insert
       if (OB_FAIL(guard->begin_transaction())) {
-        LOG_WARN("failed to begin transaction", K(ret));
       } else {
         ObSQLiteStmt *stmt = nullptr;
         if (OB_FAIL(guard->prepare_execute(insert_sql, stmt))) {
-          LOG_WARN("failed to prepare execute", K(ret));
         } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < error_infos.count(); ++i) {
             const ObColumnChecksumErrorInfo &error_info = error_infos.at(i);
@@ -151,7 +146,6 @@ int ObColumnChecksumErrorInfoTableStorage::insert_all(const ObIArray<ObColumnChe
             };
 
             if (OB_FAIL(guard->step_execute(stmt, binder))) {
-              LOG_WARN("failed to step execute", K(ret), K(i));
             }
           }
 
@@ -162,11 +156,9 @@ int ObColumnChecksumErrorInfoTableStorage::insert_all(const ObIArray<ObColumnChe
           if (OB_FAIL(ret)) {
             int rollback_ret = guard->rollback();
             if (OB_SUCCESS != rollback_ret) {
-              LOG_WARN("failed to rollback", K(rollback_ret));
             }
           } else {
             if (OB_FAIL(guard->commit())) {
-              LOG_WARN("failed to commit", K(ret));
             }
           }
         }
@@ -233,7 +225,6 @@ int ObColumnChecksumErrorInfoTableStorage::get(
       error_info.index_column_checksum_ = index_column_checksum_val;
 
       if (OB_FAIL(error_infos.push_back(error_info))) {
-        LOG_WARN("failed to push back error info", K(ret));
       }
       return ret;
     };
@@ -272,14 +263,12 @@ int ObColumnChecksumErrorInfoTableStorage::delete_expired(
                                 "  LIMIT %ld"
                                 ")",
                                 frozen_scn_before.get_val_for_inner_table_field(), limit))) {
-      LOG_WARN("failed to format sql", K(ret));
     } else {
       ObSQLiteConnectionGuard guard(pool_);
       if (!guard) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to acquire connection", K(ret));
       } else if (OB_FAIL(guard->execute(sql.ptr(), nullptr))) {
-        LOG_WARN("failed to execute delete", K(ret));
       }
     }
   }

@@ -44,9 +44,7 @@ int ObDDLRedoLogReplayer::init(ObLS *ls)
     ret = OB_INIT_TWICE;
     LOG_WARN("ObDDLRedoLogReplayer has been inited twice", K(ret));
   } else if (OB_FAIL(allocator_.init(TOTAL_LIMIT, HOLD_LIMIT, OB_MALLOC_NORMAL_BLOCK_SIZE))) {
-    LOG_WARN("fail to init allocator", K(ret));
   } else if (OB_FAIL(bucket_lock_.init(DEFAULT_HASH_BUCKET_COUNT, ObLatchIds::DEFAULT_BUCKET_LOCK, attr))) {
-    LOG_WARN("fail to init bucket lock", K(ret));
   } else {
     ls_ = ls;
     is_inited_ = true;
@@ -62,7 +60,6 @@ int ObDDLRedoLogReplayer::replay_start(const ObDDLStartLog &log, const SCN &scn)
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLRedoLogReplayer has not been inited", K(ret));
   } else if (OB_FAIL(replay_executor.init(ls_, log, scn))) {
-    LOG_WARN("failed to init ddl start log replay executor", K(ret));
   } else if (OB_FAIL(replay_executor.execute(scn, ls_->get_ls_id(), log.get_table_key().tablet_id_))) {
     if (OB_NO_NEED_UPDATE == ret) {
       ret = OB_SUCCESS;
@@ -85,7 +82,6 @@ int ObDDLRedoLogReplayer::replay_redo(const ObDDLRedoLog &log, const SCN &scn)
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLRedoLogReplayer has not been inited", K(ret));
   } else if (OB_FAIL(replay_executor.init(ls_, log, scn))) {
-    LOG_WARN("failed to init ddl redo log replay executor", K(ret));
   } else if (OB_FAIL(replay_executor.execute(scn, ls_->get_ls_id(), log.get_redo_info().table_key_.tablet_id_))) {
     if (OB_NO_NEED_UPDATE == ret) {
       ret = OB_SUCCESS;
@@ -107,9 +103,7 @@ int ObDDLRedoLogReplayer::replay_commit(const ObDDLCommitLog &log, const SCN &sc
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLRedoLogReplayer has not been inited", K(ret));
   } else if (OB_FAIL(replay_executor.init(ls_, log, scn))) {
-    LOG_WARN("init replay executor failed", K(ret));
   } else if (OB_FAIL(replay_executor.execute(scn, ls_->get_ls_id(), log.get_table_key().tablet_id_))) {
-    LOG_WARN("execute replay execute failed", K(ret));
   }
   return ret;
 }
@@ -122,7 +116,6 @@ int ObDDLRedoLogReplayer::replay_split_start(const ObTabletSplitStartLog &log, c
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLRedoLogReplayer has not been inited", K(ret));
   } else if (OB_FAIL(replay_executor.init(ls_, log, scn))) {
-    LOG_WARN("failed to init ddl commit log replay executor", K(ret));
   } else if (OB_FAIL(replay_executor.execute(scn, ls_->get_ls_id(), log.basic_info_.source_tablet_id_))) {
     if (OB_NO_NEED_UPDATE == ret || OB_TASK_EXPIRED == ret) {
       ret = OB_SUCCESS;
@@ -144,7 +137,6 @@ int ObDDLRedoLogReplayer::replay_inc_start(const ObDDLIncStartLog &log, const sh
     ObTabletID lob_meta_tablet_id = log.get_log_basic().get_lob_meta_tablet_id();
 
     if (OB_FAIL(do_replay_inc_start<ObDDLIncMinorStartReplayExecutor>(tablet_id, scn))) {
-      LOG_WARN("failed to do replay inc minor start", KR(ret), K(tablet_id), K(scn));
     } else if (lob_meta_tablet_id.is_valid()
         && OB_FAIL(do_replay_inc_start<ObDDLIncMinorStartReplayExecutor>(lob_meta_tablet_id, scn))) {
       LOG_WARN("failed to do replay inc minor start for lob", KR(ret), K(lob_meta_tablet_id), K(scn));
@@ -162,7 +154,6 @@ int ObDDLRedoLogReplayer::replay_split_finish(const ObTabletSplitFinishLog &log,
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLRedoLogReplayer has not been inited", K(ret));
   } else if (OB_FAIL(replay_executor.init(ls_, log, scn))) {
-    LOG_WARN("failed to init ddl commit log replay executor", K(ret));
   } else if (OB_FAIL(replay_executor.execute(scn, ls_->get_ls_id(), log.basic_info_.source_tablet_id_))) {
     if (OB_NO_NEED_UPDATE == ret || OB_TASK_EXPIRED == ret) {
       ret = OB_SUCCESS;
@@ -182,7 +173,6 @@ int ObDDLRedoLogReplayer::replay_tablet_freeze(const ObTabletFreezeLog &log, con
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLRedoLogReplayer has not been inited", K(ret));
   } else if (OB_FAIL(replay_executor.init(ls_, log, scn))) {
-    LOG_WARN("failed to init tablet freeze log replay executor", K(ret));
   } else if (OB_FAIL(replay_executor.execute(scn, ls_->get_ls_id(), log.tablet_id_))) {
     if (OB_NO_NEED_UPDATE == ret || OB_TASK_EXPIRED == ret) {
       ret = OB_SUCCESS;
@@ -202,7 +192,6 @@ int ObDDLRedoLogReplayer::replay_table_fork_freeze(const ObTableForkFreezeLog &l
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLRedoLogReplayer has not been inited", K(ret));
   } else if (OB_FAIL(replay_executor.init(ls_, log, scn))) {
-    LOG_WARN("failed to init table fork freeze log replay executor", K(ret));
   } else {
     const ObSArray<ObTabletID> &tablet_ids = log.tablet_ids_;
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
@@ -229,7 +218,6 @@ int ObDDLRedoLogReplayer::replay_table_fork_start(const ObTableForkStartLog &log
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLRedoLogReplayer has not been inited", K(ret));
   } else if (OB_FAIL(replay_executor.init(ls_, log, scn))) {
-    LOG_WARN("failed to init table fork start log replay executor", K(ret));
   } else {
     const ObSEArray<ObTabletID, 4> &source_tablet_ids = log.fork_info_.source_tablet_ids_;
     for (int64_t i = 0; OB_SUCC(ret) && i < source_tablet_ids.count(); ++i) {
@@ -255,7 +243,6 @@ int ObDDLRedoLogReplayer::replay_table_fork_finish(const ObTableForkFinishLog &l
     ret = OB_NOT_INIT;
     LOG_WARN("ObDDLRedoLogReplayer has not been inited", K(ret));
   } else if (OB_FAIL(replay_executor.init(ls_, log, scn))) {
-    LOG_WARN("failed to init table fork finish log replay executor", K(ret));
   } else {
     const ObSEArray<ObTabletID, 4> &source_tablet_ids = log.fork_info_.source_tablet_ids_;
     for (int64_t i = 0; OB_SUCC(ret) && i < source_tablet_ids.count(); ++i) {
@@ -285,7 +272,6 @@ int ObDDLRedoLogReplayer::replay_inc_commit(
     ObTabletID lob_meta_tablet_id = log.get_log_basic().get_lob_meta_tablet_id();
 
     if (OB_FAIL(do_replay_inc_minor_commit(tablet_id, scn))) {
-      LOG_WARN("failed to do replay inc minor commit", KR(ret), K(tablet_id), K(scn));
     } else if (lob_meta_tablet_id.is_valid()
         && OB_FAIL(do_replay_inc_minor_commit(lob_meta_tablet_id, scn))) {
       LOG_WARN("failed to do replay inc minor commit for lob", KR(ret), K(lob_meta_tablet_id), K(scn));
@@ -307,7 +293,6 @@ int ObDDLRedoLogReplayer::do_replay_inc_start(const ObTabletID &tablet_id, const
   int ret = OB_SUCCESS;
   IncType replay_executor;
   if (OB_FAIL(replay_executor.init(ls_, tablet_id, scn, std::forward<Args>(args)...))) {
-    STORAGE_LOG(WARN, "failed to init ddl inc major start log replay executor", KR(ret), K(tablet_id), K(scn));
   } else if (OB_FAIL(replay_executor.execute(scn, ls_->get_ls_id(), tablet_id))) {
     if (OB_TABLET_NOT_EXIST == ret || OB_NO_NEED_UPDATE == ret) {
       FLOG_INFO("no need to replay ddl inc major start log", KR(ret));
@@ -327,7 +312,6 @@ int ObDDLRedoLogReplayer::do_replay_inc_minor_commit(
   int ret = OB_SUCCESS;
   ObDDLIncMinorCommitReplayExecutor replay_executor;
   if (OB_FAIL(replay_executor.init(ls_, tablet_id, scn))) {
-    STORAGE_LOG(WARN, "failed to init ddl inc minor commit log replay executor", KR(ret), K(tablet_id), K(scn));
   } else if (OB_FAIL(replay_executor.execute(scn, ls_->get_ls_id(), tablet_id))) {
     if (OB_TABLET_NOT_EXIST == ret || OB_NO_NEED_UPDATE == ret) {
       FLOG_INFO("no need to replay ddl inc minor commit log", KR(ret));

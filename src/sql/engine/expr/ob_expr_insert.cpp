@@ -52,11 +52,8 @@ int ObExprInsert::calc_result_typeN(ObExprResType &type,
     coll3.set_collation_type(types_array[3].get_collation_type());
     coll3.set_collation_level(types_array[3].get_collation_level());
     if (OB_FAIL(coll_types.push_back(coll0))) {
-      LOG_WARN("fail push col", K(coll0), K(ret));
     } else if (OB_FAIL(coll_types.push_back(coll3))) {
-      LOG_WARN("fail push col", K(coll3), K(ret));
     } else if (OB_FAIL(aggregate_charsets_for_string_result(type, &coll_types.at(0), 2, type_ctx))) {
-      LOG_WARN("aggregate cahrset for string result failed", K(ret));
     } else {
       types_array[0].set_calc_type(ObVarcharType);
       types_array[1].set_calc_type(ObIntType);
@@ -84,7 +81,6 @@ int ObExprInsert::calc_result(ObObj &result,
                    replace_text,
                    expr_ctx,
                    result_type_.get_collation_type()))) {
-    OB_LOG(WARN, "fail to calc function concat", K(ret));
   }
   if (OB_SUCC(ret) && OB_LIKELY(!result.is_null())) {
     result.set_collation(result_type_);
@@ -122,7 +118,6 @@ int ObExprInsert::calc(ObObj &result,
     ObString str_res;
     if (OB_FAIL(calc(str_res, str_val, start_pos_val, length_val,
                str_rep_val, *expr_ctx.calc_buf_, cs_type))) {
-      LOG_WARN("calc insert expr failed", K(ret));
     } else {
       result.set_varchar(str_res);
     }
@@ -183,8 +178,6 @@ int ObExprInsert::calc(ObString &result, const ObString &text, const int64_t sta
                                                              + rep_text_len_char + start_char));
         if (OB_ISNULL(buf)) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
-          _OB_LOG(ERROR, "alloc memory failed. size=%d", static_cast<int>(text_len_char
-                                                                         - res_length + rep_text_len_char + start_char));
         } else {
           if (0 == rep_text_len) {
             MEMCPY(buf, origin_text.ptr(), start_char);
@@ -242,7 +235,6 @@ int ObExprInsert::calc_expr_insert(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("int2ip expr eval param value failed", K(ret));
   } else {
     ObDatum &text = expr.locate_param_datum(ctx, 0);
     ObDatum &start_pos = expr.locate_param_datum(ctx, 1);
@@ -259,7 +251,6 @@ int ObExprInsert::calc_expr_insert(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       ObExprStrResAlloc res_alloc(expr, ctx);
       if (OB_FAIL(calc(result, str_val, start_pos_val, length_val,
                        str_rep_val, res_alloc, expr.datum_meta_.cs_type_))) {
-        LOG_WARN("calc insert expr failed", K(ret));
       } else {
         expr_datum.set_string(result);
       }

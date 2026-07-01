@@ -57,7 +57,6 @@ int ObFdSimulator::init_manager_array(FdSlot* second_array)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(second_array)) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "second array is null!");
   } else {
     /*when first slot id is 0, it means it is the first init, should init the first array*/
     if (0 == second_array_num_) {
@@ -94,19 +93,15 @@ int ObFdSimulator::init()
 
   if (is_init_) {
     ret = OB_INIT_TWICE;
-    OB_LOG(WARN, "fd simulator has inited!");
   } else {
     //alloc mem
     first_array_ = static_cast<FirstArray*>(allocator_.alloc(sizeof(FirstArray)*array_size_));
     second_array = static_cast<FdSlot*>(allocator_.alloc(sizeof(FdSlot)*array_size_));
     if (OB_ISNULL(first_array_)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      OB_LOG(WARN, "fail to alloc mem for init fd management(first stage)!");
     } else if (OB_ISNULL(second_array)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      OB_LOG(WARN, "fail to alloc mem for init fd management(second stage)!");
     } else if (OB_FAIL(init_manager_array(second_array))) {
-      OB_LOG(WARN, "fail to init fd mng!");
     } else {
       is_init_ = true;
     }
@@ -119,7 +114,6 @@ int ObFdSimulator::extend_second_array()
 {
   int ret = OB_SUCCESS;
   if (second_array_num_ == array_size_) {
-    OB_LOG(WARN, "can not alloc second arraym, first array is full!", K(second_array_num_));
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     FdSlot *second_array_p = static_cast<FdSlot*>(allocator_.alloc(sizeof(FdSlot)*array_size_));
@@ -127,7 +121,6 @@ int ObFdSimulator::extend_second_array()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       OB_LOG(WARN, "fail to extend second array for fd mng!", K(second_array_num_), K(ret));
     } else if (OB_FAIL(init_manager_array(second_array_p))) {
-      OB_LOG(WARN, "fail to init extend second array for fd mng!", K(second_array_num_), K(ret));
     }
   }
   return ret;
@@ -158,7 +151,6 @@ int try_get_fd_inner(ObFdSimulator::FirstArray* first_array, int32_t second_arra
   }
 
   if (i >= second_array_num) {
-      OB_LOG(WARN, "no enough fd entry, maybe need extend!", K(second_array_num));
       ret = OB_BUF_NOT_ENOUGH ;
   }
   return ret;
@@ -177,21 +169,16 @@ int ObFdSimulator::get_fd(void* ctx, const int device_type, const int flag, ObIO
     ret = OB_NOT_INIT;
     OB_LOG(WARN, "fd simulater is not init!", K(ret));
   } else if (OB_ISNULL(ctx)) {
-    OB_LOG(WARN, "fail to alloc fd with empty ctx!");
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(try_get_fd_inner(first_array_, second_array_num_, ctx, fd))) {
-    OB_LOG(WARN, "fail to alloc fd, maybe need extend second array!");
     /*after the first fail, try to extend*/
     if (OB_FAIL(extend_second_array())) {
-      OB_LOG(WARN, "fail to extand second fd array, it is full!", K(second_array_num_));
     } else if (OB_FAIL(try_get_fd_inner(first_array_, second_array_num_, ctx, fd))) {
-      OB_LOG(WARN, "fail to alloc fd, it is impossible!");
     }
   }
 
   if (OB_SUCCESS == ret && validate_fd(fd, true)) {
     //format some info into first fd
-    OB_LOG(DEBUG, "success get fd!", K(fd), K(ctx));
     set_fd_device_type(fd, device_type);
     set_fd_flag(fd, flag);
     used_fd_cnt_++;
@@ -252,17 +239,13 @@ bool ObFdSimulator::validate_fd(const ObIOFd& fd, bool expect)
   if (first_id >= array_size_ || second_id >= array_size_ ||
       first_id < 0 || second_id < 0) {
     if (expect) {
-      OB_LOG(WARN, "invaild fd, fd first/second id is wrong!", K(first_id), K(second_id));
     }
   } else {
     FdSlot *second_array = first_array_[first_id].second_array_p;
     if (OB_ISNULL(second_array)) {
       // ignore ret
-      OB_LOG(WARN, "fd maybe wrong, second fd array is null!", K(first_id), K(second_id), K(total_fd_cnt_), K(used_fd_cnt_));
     } else if (second_array[second_id].slot_version != fd.slot_version_){
       // ignore ret
-      OB_LOG(WARN, "fd slot_version is invalid, maybe double free!", K(first_id), K(fd.slot_version_),
-                    K(second_array[second_id].slot_version));
     } else {
       valid = true;
     }
@@ -283,12 +266,10 @@ int ObFdSimulator::fd_to_ctx(const ObIOFd& fd, void*& ctx)
     ret = OB_NOT_INIT;
     OB_LOG(WARN, "fd simulater is not init!", K(ret));
   } else if (!validate_fd(fd, true)) {
-    OB_LOG(WARN, "fail to get fd ctx, since fd is invalid!", K(first_id), K(second_id));
   } else {
     FdSlot *second_array = first_array_[first_id].second_array_p;
     ctx = second_array[second_id].pointer.ctx_pointer;
     if (OB_ISNULL(ctx)) {
-      OB_LOG(WARN, "fail to get fd ctx, it is null!", K(first_id), K(second_id));
       ret = OB_INVALID_ARGUMENT;
     }
   }
@@ -308,7 +289,6 @@ int ObFdSimulator::release_fd(const ObIOFd& fd)
     ret = OB_NOT_INIT;
     OB_LOG(WARN, "fd simulater is not init!", K(ret));
   } else if (!validate_fd(fd, true)) {
-    OB_LOG(WARN, "fail to get fd ctx, since fd is invalid!", K(first_id), K(second_id));
     ret = OB_NOT_INIT;
   } else {
     FdSlot *second_array = first_array_[first_id].second_array_p;

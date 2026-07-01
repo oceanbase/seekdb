@@ -51,7 +51,6 @@ int ObTableLoadDirectWriteOpTask::process()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new ObTableLoadDagDirectWriteChannel", KR(ret));
   } else if (OB_FAIL(op->write_channel_->init(dag_, op))) {
-    LOG_WARN("fail to init write channel", KR(ret));
   }
   // init write_ctx_
   else {
@@ -65,27 +64,18 @@ int ObTableLoadDirectWriteOpTask::process()
     ObTableLoadDirectWriteOpFinishTask *op_finish_task = nullptr;
     ObTableLoadDagStartMergeTask *start_merge_task = nullptr;
     if (OB_FAIL(dag_->alloc_task(write_finish_task, op->write_channel_))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     } else if (OB_FAIL(dag_->alloc_task(op_finish_task, dag_, op_))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     } else if (OB_FAIL(dag_->alloc_task(start_merge_task, dag_))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     }
     // 建立依赖关系: write_finish_task -> op_finish_task -> start_merge_task -> [next_op_task]
     else if (OB_FAIL(write_finish_task->add_child(*op_finish_task))) {
-      LOG_WARN("fail to add child", KR(ret));
     } else if (OB_FAIL(op_finish_task->add_child(*start_merge_task))) {
-      LOG_WARN("fail to add child", KR(ret));
     } else if (OB_FAIL(start_merge_task->deep_copy_children(get_child_nodes()))) {
-      LOG_WARN("fail to deep copy children", KR(ret));
     }
     // 添加task
     else if (OB_FAIL(dag_->add_task(*start_merge_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     } else if (OB_FAIL(dag_->add_task(*op_finish_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     } else if (OB_FAIL(dag_->add_task(*write_finish_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     }
   }
   return ret;
@@ -106,7 +96,6 @@ int ObTableLoadDirectWriteOpFinishTask::process()
   int ret = OB_SUCCESS;
   ObTableLoadDirectWriteOp *op = static_cast<ObTableLoadDirectWriteOp *>(op_);
   if (OB_FAIL(op->write_channel_->close())) {
-    LOG_WARN("fail to close write channel", KR(ret));
   }
 
   op->end_time_ = ObTimeUtil::current_time();

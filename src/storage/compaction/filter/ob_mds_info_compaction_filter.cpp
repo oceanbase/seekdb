@@ -37,7 +37,6 @@ int ObMdsInfoCompactionFilter::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid or empty mds filter info", KR(ret), K(truncate_info_mgr));
   } else if (OB_FAIL(truncate_filter_.init(schema_rowkey_cnt, cols_desc, nullptr, truncate_info_mgr))) {
-    LOG_WARN("failed to init truncate filter", KR(ret), K(tablet_id), K(schema_rowkey_cnt), K(cols_desc));
   } else {
     is_inited_ = true;
   }
@@ -54,7 +53,6 @@ int ObMdsInfoCompactionFilter::filter(
     ret = OB_NOT_INIT;
     LOG_WARN("not inited", KR(ret));
   } else if (OB_FAIL(truncate_filter_.filter(row, filtered))) {
-    LOG_WARN("failed to check row in truncate filter", KR(ret), K(row));
   } else if (filtered) {
     filter_ret = FILTER_RET_REMOVE;
     LOG_TRACE("[TRUNCATE_INFO] filter row", KR(ret), K(row), K(filtered)); // for debug, remove later

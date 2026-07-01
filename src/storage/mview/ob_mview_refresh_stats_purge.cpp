@@ -39,10 +39,8 @@ int ObMViewRefreshStatsPurgeUtil::purge_refresh_stats(
     ObArray<ObMViewRefreshStatsRecordId> record_ids;
     ObHashMap<int64_t /*refresh_id*/, int64_t /*dec_val*/, NoPthreadDefendMode> dec_val_map;
     if (OB_FAIL(dec_val_map.create(1024, "MVStatsPurge", "MVStatsPurge"))) {
-      LOG_WARN("fail to init hashmap", KR(ret));
     } else if (OB_FAIL(ObMViewRefreshStats::collect_record_ids(sql_client, filter_param,
                                                                record_ids, limit))) {
-      LOG_WARN("fail to collect record ids", KR(ret), K(filter_param));
     }
     ARRAY_FOREACH_N(record_ids, i, cnt)
     {
@@ -50,16 +48,12 @@ int ObMViewRefreshStatsPurgeUtil::purge_refresh_stats(
       int64_t *dec_val = nullptr;
       if (OB_FAIL(
             ObMViewRefreshStats::drop_refresh_stats_record(sql_client, record_id))) {
-        LOG_WARN("fail to drop refresh stats record", KR(ret), K(record_id));
       } else if (OB_FAIL(ObMViewRefreshChangeStats::drop_change_stats_record(sql_client,
                                                                              record_id))) {
-        LOG_WARN("fail to drop change stats record", KR(ret), K(record_id));
       } else if (OB_FAIL(ObMViewRefreshStmtStats::drop_stmt_stats_record(sql_client,
                                                                          record_id))) {
-        LOG_WARN("fail to drop stmt stats record", KR(ret), K(record_id));
       } else if (OB_ISNULL(dec_val = dec_val_map.get(record_id.refresh_id_))) {
         if (OB_FAIL(dec_val_map.set_refactored(record_id.refresh_id_, 1))) {
-          LOG_WARN("fail to create", KR(ret));
         }
       } else {
         *dec_val += 1;
@@ -72,13 +66,11 @@ int ObMViewRefreshStatsPurgeUtil::purge_refresh_stats(
       const int64_t dec_val = iter->second;
       if (OB_FAIL(ObMViewRefreshRunStats::dec_num_mvs_current(sql_client, refresh_id,
                                                               dec_val))) {
-        LOG_WARN("fail to drop empty run stats", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(
             ObMViewRefreshRunStats::drop_empty_run_stats(sql_client, affected_rows))) {
-        LOG_WARN("fail to drop empty run stats", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {

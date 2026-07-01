@@ -175,7 +175,6 @@ public:
       ret = OB_INVALID_ARGUMENT;
       TRANS_LOG(WARN, "tx_table cannot be NULL", KR(ret), KPC(this));
     } else if (OB_FAIL(tx_table_guards_.tx_table_guard_.init(tx_table))) {
-      TRANS_LOG(WARN, "tx_table_guard init fail", KR(ret), KPC(this));
     } else {
       type_ = is_weak_read ? T::WEAK_READ : T::STRONG_READ;
       tx_ctx_ = tx_ctx;
@@ -218,7 +217,6 @@ public:
       ret = OB_INVALID_ARGUMENT;
       TRANS_LOG(WARN, "tx_table cannot be NULL", KR(ret), KPC(this));
     } else if (OB_FAIL(tx_table_guards_.tx_table_guard_.init(tx_table))) {
-      TRANS_LOG(WARN, "tx_table_guard init fail", KR(ret), KPC(this));
     } else {
       type_ = T::WRITE;
       tx_ctx_ = &tx_ctx;

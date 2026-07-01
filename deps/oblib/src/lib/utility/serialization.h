@@ -1334,7 +1334,6 @@ inline int encode_decimal_type(char *buf, const int64_t buf_len, int64_t &pos, b
     }
   }
   if (OB_SUCCESS != ret) {
-    _OB_LOG(WARN, "fail to encode decimal. ret = %d", ret);
   }
   return ret;
 }
@@ -1596,13 +1595,10 @@ inline int encode_createtime_type(char *buf, const int64_t buf_len, int64_t &pos
   int ret = OB_SIZE_OVERFLOW;
   if (NULL == buf || buf_len - pos <= 0 || val < 0) {
     ret = OB_SIZE_OVERFLOW;
-    _OB_LOG(WARN, "fail to encode_createtime_type: buf[%p], buf_len[%ld], pos[%ld] val[%ld]",
-              buf, buf_len, pos, val);
   } else {
     int8_t first_byte = OB_CREATETIME_TYPE;
     ret = __encode_time_type(buf, buf_len, first_byte, pos, val);
     if (OB_FAIL(ret)) {
-      _OB_LOG(WARN, "fail to __encode_time_type: ret = %d", ret);
     }
   }
   return ret;

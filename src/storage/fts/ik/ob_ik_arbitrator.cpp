@@ -48,15 +48,12 @@ int ObIKArbitrator::process(TokenizeContext &ctx)
       ObIKToken token = tokens.get_first();
       bool is_add = false;
       if (OB_FAIL(tokens.pop_front())) {
-        LOG_WARN("pop_front failed", K(ret));
       } else if (OB_FAIL(chain_need_arbitrate->add_token_if_conflict(token, is_add))) {
-        LOG_WARN("add token if conflict failed", K(ret));
       } else if (!is_add) {
         ObFTSortList::CellIter iter = chain_need_arbitrate->list().tokens().begin();
         ObIKTokenChain *judge_result = nullptr;
         if (chain_need_arbitrate->list().tokens().size() == 1 || !use_smart) {
           if (OB_FAIL(add_chain(chain_need_arbitrate))) {
-            LOG_WARN("Add a chain failed", K(ret));
           } else {
             // add ok
           }
@@ -65,9 +62,7 @@ int ObIKArbitrator::process(TokenizeContext &ctx)
                                     iter,
                                     chain_need_arbitrate->offset_len(),
                                     judge_result))) {
-          LOG_WARN("Failed to optimize chain.", K(ret));
         } else if (OB_FAIL(add_chain(judge_result))) {
-          LOG_WARN("Failed to add chain", K(ret));
         } else {
           // add best chain and delete origin chain
           OB_DELETEx(ObIKTokenChain, &alloc_, chain_need_arbitrate);
@@ -79,7 +74,6 @@ int ObIKArbitrator::process(TokenizeContext &ctx)
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("alloc memory failed");
         } else if (OB_FAIL(chain_need_arbitrate->add_token_if_conflict(token, is_add))) {
-          LOG_WARN("add token if conflict failed", K(ret));
         } else {
           // Add first, it should be added.
         }
@@ -93,7 +87,6 @@ int ObIKArbitrator::process(TokenizeContext &ctx)
     if (OB_FAIL(ret)) {
     } else if (chain_need_arbitrate->list().tokens().size() == 1 || !use_smart) {
       if (OB_FAIL(add_chain(chain_need_arbitrate))) {
-        LOG_WARN("Failed to add last chain", K(ret));
       }
     } else if (OB_FAIL(optimize(ctx,
                                 chain_need_arbitrate,
@@ -128,12 +121,10 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
                                             ctx.fulltext() + current,
                                             ctx.fulltext_len() - current,
                                             char_len))) {
-      LOG_WARN("Failed to get next valid char", K(ret));
     } else if (OB_FAIL(ObFTCharUtil::classify_first_char(ctx.collation(),
                                                          ctx.fulltext() + current,
                                                          char_len,
                                                          type))) {
-      LOG_WARN("Failed to classify first char", K(ret));
     } else if (ObFTCharUtil::CharType::USELESS == type) {
       current += char_len; // skip useless char
     } else if (OB_FAIL(chains_.get_refactored(current, chain)) && OB_HASH_NOT_EXIST != ret) {
@@ -153,14 +144,12 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
         if (ObFTCharUtil::CharType::CHINESE == type) {
           token.type_ = ObIKTokenType::IK_CHINESE_TOKEN;
           if (OB_FAIL(ctx.result_list().push_back(token))) {
-            LOG_WARN("Failed to output result to ctx", K(ret));
           }
         } else if (ObFTCharUtil::CharType::OTHER_CJK == type) {
           if (OB_FAIL(ObFTCharUtil::is_ignore_single_cjk(ctx.collation(),
                                                          ctx.fulltext() + current,
                                                          char_len,
                                                          is_ignore))) {
-            LOG_WARN("Failed to check ignore", K(ret));
           } else if (!is_ignore && !FALSE_IT(token.type_ = ObIKTokenType::IK_OTHER_CJK_TOKEN)
                      && OB_FAIL(ctx.result_list().push_back(token))) {
             LOG_WARN("Failed to add token to ctx result", K(ret));
@@ -201,7 +190,6 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
                                                                ctx.fulltext() + current,
                                                                char_len,
                                                                is_ignore))) {
-                  LOG_WARN("Failed to check ignore", K(ret));
                 } else if (!is_ignore) {
                   token.type_ = ObIKTokenType::IK_OTHER_CJK_TOKEN;
                   ctx.result_list().push_back(token);
@@ -215,7 +203,6 @@ int ObIKArbitrator::output_result(TokenizeContext &ctx)
 
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(ctx.result_list().push_back(token))) {
-          LOG_WARN("Failed to add token to ctx result", K(ret));
         } else
           // output the token
           current = token.offset_ + token.length_;
@@ -246,27 +233,22 @@ int ObIKArbitrator::optimize(TokenizeContext &ctx,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc memory failed");
   } else if (OB_FAIL(try_add_next_words(chain, iter, option, true, conflict_stack))) {
-    LOG_WARN("Failed to add chain and record conflict token.", K(ret));
   } else if (OB_ISNULL(best = OB_NEWx(ObIKTokenChain, &alloc_, alloc_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("Alloc memory failed");
   } else if (OB_FAIL(best->copy(option))) {
-    LOG_WARN("Copy best option failed", K(ret));
   } else {
     while (OB_SUCC(ret) && !conflict_stack.empty()) {
       ObFTSortList::CellIter iter = conflict_stack.get_last();
       conflict_stack.pop_back();
       if (OB_FAIL(remove_conflict(*iter, option))) {
-        LOG_WARN("Failed to remove conflict", K(ret));
       } else if (OB_FAIL(try_add_next_words(chain, iter, option, false, conflict_stack))) {
-        LOG_WARN("Failed to add next words", K(ret));
       } else if (option->better_than(*best)) {
         OB_DELETEx(ObIKTokenChain, &alloc_, best);
         if (OB_ISNULL(best = OB_NEWx(ObIKTokenChain, &alloc_, alloc_))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("Alloc memory failed");
         } else if (OB_FAIL(best->copy(option))) {
-          LOG_WARN("Copy best option failed", K(ret));
         } else {
           // best option is copied
         }
@@ -300,7 +282,6 @@ int ObIKArbitrator::try_add_next_words(ObIKTokenChain *chain,
   while (OB_SUCC(ret) && iter != chain->list().tokens().end()) {
     bool is_add = false;
     if (OB_FAIL(option->add_token_if_no_conflict(*iter, is_add))) {
-      LOG_WARN("Failed to add token", K(ret));
     } else if (!is_add && need_conflict && OB_FAIL(conflict_stack.push_back(iter))) {
       LOG_WARN("push_back failed", K(ret));
     } else {
@@ -318,7 +299,6 @@ int ObIKArbitrator::remove_conflict(const ObIKToken &token, ObIKTokenChain *opti
   ObIKToken tmp;
   while (OB_SUCC(ret) && option->check_conflict(token)) {
     if (OB_FAIL(option->pop_back(tmp))) {
-      LOG_WARN("Failed to pop back token", K(ret));
     }
   }
   return ret;
@@ -331,7 +311,6 @@ int ObIKArbitrator::prepare(TokenizeContext &ctx)
   int cal_bucket_num = MAX(ctx.fulltext_len() / 100, 10);
   cal_bucket_num = MIN(cal_bucket_num, 100);
   if (OB_FAIL(chains_.create(cal_bucket_num, ObMemAttr("IK ARBITRATE")))) {
-    LOG_WARN("create chain map failed", K(ret));
   }
   return ret;
 }
@@ -347,7 +326,6 @@ int ObIKArbitrator::add_chain(ObIKTokenChain *chain)
   } else if (chain->list().is_empty()) {
     // no need to add empty chain
   } else if (OB_FAIL(chains_.set_refactored(chain->min_offset(), chain))) {
-    LOG_WARN("Failed to add chain to map", K(ret));
   }
   return ret;
 }

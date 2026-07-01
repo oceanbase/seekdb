@@ -32,13 +32,9 @@ DEFINE_SERIALIZE(ObIntegerStreamMeta)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::encode_i8(buf, buf_len, pos, version_))) {
-    LOG_WARN("fail to encode version", K(ret));
   } else if (OB_FAIL(serialization::encode_i8(buf, buf_len, pos, attr_))) {
-    LOG_WARN("fail to encode attr", K(ret));
   } else if (OB_FAIL(serialization::encode_i8(buf, buf_len, pos, type_))) {
-    LOG_WARN("fail to encode type", K(ret));
   } else if (OB_FAIL(serialization::encode_i8(buf, buf_len, pos, width_))) {
-    LOG_WARN("fail to encode width", K(ret));
   } else if (is_use_base() && OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, base_value_))) {
     LOG_WARN("fail to encode base_value_", K(ret));
   } else if (is_use_null_replace_value() && OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, null_replaced_value_))) {
@@ -55,13 +51,9 @@ DEFINE_DESERIALIZE(ObIntegerStreamMeta)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::decode_i8(buf, data_len, pos, (int8_t*)&version_))) {
-    LOG_WARN("fail to decode version", K(ret));
   } else if (OB_FAIL(serialization::decode_i8(buf, data_len, pos, (int8_t*)&attr_))) {
-    LOG_WARN("fail to decode attr", K(ret));
   } else if (OB_FAIL(serialization::decode_i8(buf, data_len, pos, (int8_t*)&type_))) {
-    LOG_WARN("fail to encode type", K(ret));
   } else if (OB_FAIL(serialization::decode_i8(buf, data_len, pos, (int8_t*)&width_))) {
-    LOG_WARN("fail to encode width", K(ret));
   } else if (is_use_base() && OB_FAIL(serialization::decode_vi64(buf, data_len, pos, (int64_t*)&base_value_))) {
     LOG_WARN("fail to decode base_value_", K(ret));
   } else if (is_use_null_replace_value() && OB_FAIL(serialization::decode_vi64(buf, data_len, pos, (int64_t*)&null_replaced_value_))) {
@@ -74,7 +66,6 @@ DEFINE_DESERIALIZE(ObIntegerStreamMeta)
     if (version_ == OB_INTEGER_STREAM_META_V1) {
       pfor_packing_type_ = ObCodec::CPU_ARCH_DEPENDANT;
     } else if (OB_FAIL(serialization::decode(buf, data_len, pos, pfor_packing_type_))) {
-      LOG_WARN("fail to decode pfor_packing_type_", K(ret));
     }
   }
   return ret;
@@ -131,14 +122,12 @@ int ObIntegerStreamEncoderCtx::build_signed_stream_meta(
       range = max - min;
       meta_.set_base_value((uint64_t)min);
       if (OB_FAIL(meta_.set_uint_width_size(get_byte_packed_int_size(range)))) {
-        LOG_WARN("fail to set_uint_width_size", K(ret));
       }
     } else {  // min >= 0 then max must be > 0
       range = max;
       int64_t int_max_byte_size = get_byte_packed_int_size(max);
       // not use base when there is no negative value
       if (OB_FAIL(meta_.set_uint_width_size(int_max_byte_size))) {
-        LOG_WARN("fail to set_uint_width_size", K(ret));
       }
     }
   }
@@ -167,7 +156,6 @@ int ObIntegerStreamEncoderCtx::build_unsigned_stream_meta(const uint64_t min,
     int64_t uint_max_byte_size = get_byte_packed_int_size(max);
     // not use base when there is no negative value
     if (OB_FAIL(meta_.set_uint_width_size(uint_max_byte_size))) {
-      LOG_WARN("fail to set_uint_width_size", K(ret));
     }
   }
 
@@ -185,7 +173,6 @@ int ObIntegerStreamEncoderCtx::build_offset_array_stream_meta(const uint64_t end
   info_.is_monotonic_inc_ = true;
   int64_t width_size = get_byte_packed_int_size(end_offset);
   if (OB_FAIL(meta_.set_uint_width_size(width_size))) {
-    LOG_WARN("fail to set_uint_width_size", KR(ret), K(width_size));
   }
 
   return ret;
@@ -239,11 +226,8 @@ DEFINE_SERIALIZE(ObStringStreamMeta)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::encode_i8(buf, buf_len, pos, version_))) {
-    LOG_WARN("fail to encode version", K(ret));
   } else if (OB_FAIL(serialization::encode_i8(buf, buf_len, pos, attr_))) {
-    LOG_WARN("fail to encode attr", K(ret));
   } else if (OB_FAIL(serialization::encode_vi32(buf, buf_len, pos, uncompressed_len_))) {
-    LOG_WARN("fail to encode uncompressed_len_", K(ret));
   } else if (is_fixed_len_string() && OB_FAIL(serialization::encode_vi32(buf, buf_len, pos, fixed_str_len_))) {
     LOG_WARN("fail to encode fixed_str_len_", K(ret));
   }
@@ -254,11 +238,8 @@ DEFINE_DESERIALIZE(ObStringStreamMeta)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialization::decode_i8(buf, data_len, pos, (int8_t*)&version_))) {
-    LOG_WARN("fail to decode version", K(ret));
   } else if (OB_FAIL(serialization::decode_i8(buf, data_len, pos, (int8_t*)&attr_))) {
-    LOG_WARN("fail to decode attr", K(ret));
   } else if (OB_FAIL(serialization::decode_vi32(buf, data_len, pos, (int32_t*)&uncompressed_len_))) {
-    LOG_WARN("fail to decode uncompressed_len_", K(ret));
   } else if (is_fixed_len_string() && OB_FAIL(serialization::decode_vi32(buf, data_len, pos, (int32_t*)&fixed_str_len_))) {
     LOG_WARN("fail to decode fixed_str_len_", K(ret));
   }

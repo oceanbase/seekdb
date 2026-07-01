@@ -85,8 +85,6 @@ int ObPLDependencyUtil::add_dependency_objects(ObPLDependencyTable &dep_tbl,
       if (OB_INVALID_ID == package_id || ObTriggerInfo::is_trigger_package_id(package_id)) {
         // do nothing, may inside package of ddl stage
       } else if (OB_FAIL(resolve_ctx.schema_guard_.get_simple_package_info( package_id, package_info))) {
-        LOG_WARN("failed to get_simple_package_info",
-                 K(ret), K(type), K(package_id), KPC(package_info));
       } else if (OB_ISNULL(package_info)) {
         ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
         LOG_WARN("unexpected NULL pacakge info", K(ret), K(type), K(package_id));
@@ -96,7 +94,6 @@ int ObPLDependencyUtil::add_dependency_objects(ObPLDependencyTable &dep_tbl,
         obj_version.version_ = package_info->get_schema_version();
 
         if (OB_FAIL(add_dependency_object_impl(dep_tbl, obj_version))) {
-          LOG_WARN("failed to add_dependency_object", K(ret), K(type), KPC(package_info), K(obj_version));
         }
       }
     } else if (type.is_rowtype_type()) {
@@ -105,14 +102,12 @@ int ObPLDependencyUtil::add_dependency_objects(ObPLDependencyTable &dep_tbl,
       
 
       if (OB_FAIL(resolve_ctx.schema_guard_.get_simple_table_schema( table_id, table_schema))) {
-        LOG_WARN("failed to get_simple_table_schema", K(ret), K(type), K(table_id), KPC(table_schema));
       } else if (OB_NOT_NULL(table_schema)) {
         obj_version.object_id_ = table_id;
         obj_version.object_type_ = DEPENDENCY_TABLE;
         obj_version.version_ = table_schema->get_schema_version();
 
         if (OB_FAIL(add_dependency_object_impl(dep_tbl, obj_version))) {
-          LOG_WARN("failed to add_dependency_object", K(ret), K(type), KPC(table_schema), K(obj_version));
         }
       }
     } else {

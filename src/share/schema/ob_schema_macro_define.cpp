@@ -47,7 +47,6 @@ int ADD_COLUMN_SCHEMA_FULL(share::schema::ObTableSchema &table_schema,
     ret = column.set_column_name(col_name);
   } else {
     ret = OB_SIZE_OVERFLOW;
-    SHARE_SCHEMA_LOG(WARN, "col name is too long, ", K(col_name_len));
   }
 
   if (OB_SUCC(ret)) {
@@ -123,14 +122,12 @@ int ADD_COLUMN_SCHEMA_FULL(share::schema::ObTableSchema &table_schema,
     orig_default_value.set_null();
     ret = column.set_orig_default_value(orig_default_value);
     if (OB_FAIL(ret)) {
-      SHARE_SCHEMA_LOG(WARN, "set orig default value failed", K(ret));
     }
   }
  
   if(OB_SUCC(ret)) {
     ret = table_schema.add_column(column);
     if (OB_FAIL(ret)) {
-      SHARE_SCHEMA_LOG(WARN, "add column failed, ", K(ret)); 
     }
   }
   return ret;
@@ -162,7 +159,6 @@ int ADD_COLUMN_SCHEMA_WITH_DEFAULT_VALUE(share::schema::ObTableSchema &table_sch
     ret = column.set_column_name(col_name);
   } else {
     ret = OB_SIZE_OVERFLOW;
-    SHARE_SCHEMA_LOG(WARN, "col name is too long", K(col_name_len));
   }
  
   if(OB_SUCC(ret)) {
@@ -232,17 +228,13 @@ int ADD_COLUMN_SCHEMA_WITH_DEFAULT_VALUE(share::schema::ObTableSchema &table_sch
     orig_default_value.set_collation_type(column.get_collation_type());
     cur_default_value.set_collation_type(column.get_collation_type());
     if (OB_FAIL(column.set_orig_default_value(orig_default_value))) {
-      SHARE_SCHEMA_LOG(WARN, "Fail to set original default value, ", K(ret));
-    // Internal tables only support constant default values.
     } else if (OB_FAIL(column.set_cur_default_value(cur_default_value, false))) {
-      SHARE_SCHEMA_LOG(WARN, "Fail to set cur default value, ", K(ret));
     }
   }
  
   if(OB_SUCC(ret)) {
     ret = table_schema.add_column(column);
     if (OB_FAIL(ret)) {
-      SHARE_SCHEMA_LOG(WARN, "add column failed, ", K(ret));
     }
   }
   return ret;
@@ -275,7 +267,6 @@ int ADD_COLUMN_SCHEMA_TS_WITH_DEFAULT_VALUE(share::schema::ObTableSchema &table_
     ret = column.set_column_name(col_name);
   } else {
     ret = OB_SIZE_OVERFLOW;
-    SHARE_SCHEMA_LOG(WARN, "col name is too long", K(col_name_len));
   }
  
   if(OB_SUCC(ret)) {
@@ -343,17 +334,13 @@ int ADD_COLUMN_SCHEMA_TS_WITH_DEFAULT_VALUE(share::schema::ObTableSchema &table_
     orig_default_value.set_collation_type(column.get_collation_type());
     cur_default_value.set_collation_type(column.get_collation_type());
     if (OB_FAIL(column.set_orig_default_value(orig_default_value))) {
-      SHARE_SCHEMA_LOG(WARN, "Fail to set original default value, ", K(ret));
-    // Internal tables only support constant default values.
     } else if (OB_FAIL(column.set_cur_default_value(cur_default_value, false))) {
-      SHARE_SCHEMA_LOG(WARN, "Fail to set cur default value, ", K(ret));
     }
   }
  
   if(OB_SUCC(ret)) {
     ret = table_schema.add_column(column);
     if (OB_FAIL(ret)) {
-      SHARE_SCHEMA_LOG(WARN, "add column failed, ", K(ret));
     }
   }                                                                  
   return ret;
@@ -384,7 +371,6 @@ int ADD_COLUMN_SCHEMA_TS_FULL(share::schema::ObTableSchema &table_schema,
     ret = column.set_column_name(col_name);
   } else {
     ret = OB_SIZE_OVERFLOW;
-    SHARE_SCHEMA_LOG(WARN, "col name is too long, ", K(col_name_len));
   }
  
   if(OB_SUCC(ret)) {
@@ -453,14 +439,12 @@ int ADD_COLUMN_SCHEMA_TS_FULL(share::schema::ObTableSchema &table_schema,
     orig_default_value.set_null();
     ret = column.set_orig_default_value(orig_default_value);
     if (OB_FAIL(ret)) {
-      SHARE_SCHEMA_LOG(WARN, "set orig default value failed", K(ret));
     }
   }
  
   if(OB_SUCC(ret)) {
     ret = table_schema.add_column(column);
     if (OB_FAIL(ret)) {
-      SHARE_SCHEMA_LOG(WARN, "add column failed, ", K(ret)); 
     }
   }
   return ret;

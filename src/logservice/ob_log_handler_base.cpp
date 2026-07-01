@@ -40,7 +40,6 @@ int ObLogHandlerBase::prepare_switch_role(common::ObRole &curr_role,
   int ret = OB_SUCCESS;
   RLockGuard guard(lock_);
   if (OB_FAIL(palf_handle_.get_role(new_role, new_proposal_id, is_pending_state))) {
-    PALF_LOG(WARN, "PalfHandle get_role failed", K(ret), K_(id), K(curr_role), K(curr_proposal_id));
   } else {
     curr_role = role_;
     curr_proposal_id = proposal_id_;
@@ -62,7 +61,6 @@ int ObLogHandlerBase::change_leader_to(const common::ObAddr &dst_addr)
   int ret = OB_SUCCESS;
   RLockGuard guard(lock_);
   if (OB_FAIL(palf_handle_.change_leader_to(dst_addr))) {
-    PALF_LOG(WARN, "palf change_leader failed", K(ret), K(dst_addr), K(palf_handle_));
   } else {
     PALF_LOG(INFO, "ObLogHandler change_laeder success", K(ret), K(dst_addr), K(palf_handle_));
   }
@@ -87,7 +85,6 @@ int ObLogHandlerBase::get_role(common::ObRole &role, int64_t &proposal_id) const
     role = FOLLOWER;
     proposal_id = saved_proposal_id;
   } else if (OB_FAIL(palf_handle_.get_role(curr_palf_role, curr_palf_proposal_id, is_pending_state))) {
-    CLOG_LOG(WARN, "get_role failed", K(ret));
   } else if (curr_palf_proposal_id != saved_proposal_id) {
     // palf's proposal_id has changed, return FOLLOWER
     role = FOLLOWER;

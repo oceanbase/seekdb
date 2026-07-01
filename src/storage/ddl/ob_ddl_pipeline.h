@@ -436,9 +436,7 @@ int ObVectorIndexAppendPipeline<AppendOP>::init(ObDDLSlice *ddl_slice)
   } else {
     ddl_slice_ = ddl_slice;
     if (OB_FAIL(append_op_.init(ddl_slice->get_tablet_id()))) {
-      STORAGE_LOG(WARN, "init write operator failed", K(ret));
     } else if (OB_FAIL(add_op(&append_op_))) {
-      STORAGE_LOG(WARN, "add op failed", K(ret));
     }
   }
   return ret;
@@ -471,13 +469,9 @@ int ObVectorIndexBuildAndWritePipeline<BuildOp, WriteOp>::init(const ObTabletID 
   int ret = OB_SUCCESS;
   tablet_id_ = tablet_id;
   if (OB_FAIL(build_op_.init(tablet_id))) {
-    STORAGE_LOG(WARN, "init build operator failed", K(ret), K(tablet_id));
   } else if (OB_FAIL(write_op_.init(tablet_id))) {
-    STORAGE_LOG(WARN, "init write operator failed", K(ret), K(tablet_id));
   } else if (OB_FAIL(add_op(&build_op_))) {
-    STORAGE_LOG(WARN, "add operator failed", K(ret));
   } else if (OB_FAIL(add_op(&write_op_))) {
-    STORAGE_LOG(WARN, "add operator failed", K(ret));
   }
   return ret;
 }
@@ -499,7 +493,6 @@ int ObVectorIndexBuildAndWritePipeline<BuildOp, WriteOp>::get_next_chunk(ObChunk
       STORAGE_LOG(WARN, "get dag failed", K(ret));
     } else if (OB_FALSE_IT(dag = static_cast<ObDDLIndependentDag *>(get_dag()))) {
     } else if (OB_FAIL(dag->get_tablet_context(tablet_id_, tablet_context))) {
-      STORAGE_LOG(WARN, "get tablet context failed", K(ret));
     } else {
       chunk_.data_ptr_ = tablet_context;
       next_chunk = &chunk_;
@@ -852,13 +845,9 @@ public:
     } else {
       ddl_slice_ = ddl_slice;
       if (OB_FAIL(embedding_buffer_op_.init(ddl_slice->get_tablet_id()))) {
-        STORAGE_LOG(WARN, "init embedding buffer operator failed", K(ret));
       } else if (OB_FAIL(embedding_write_op_.init(ddl_slice->get_tablet_id(), ddl_slice->get_slice_idx()))) {
-        STORAGE_LOG(WARN, "init embedding write operator failed", K(ret));
       } else if (OB_FAIL(add_op(&embedding_buffer_op_))) {
-        STORAGE_LOG(WARN, "add embedding buffer op failed", K(ret));
       } else if (OB_FAIL(add_op(&embedding_write_op_))) {
-        STORAGE_LOG(WARN, "add embedding write op failed", K(ret));
       }
     }
     return ret;

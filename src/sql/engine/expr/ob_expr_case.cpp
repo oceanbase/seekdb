@@ -74,7 +74,6 @@ int ObExprCase::calc_result_typeN(ObExprResType &type,
                   type_ctx,
                   true, false,
                   is_called_in_sql_))) {
-      LOG_WARN("failed to aggregate result type");
     } else {
       ObExprOperator::calc_result_flagN(type, types_stack + cond_type_count, val_type_count);
     }
@@ -169,12 +168,9 @@ int ObExprCase::calc_case_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_
   int64_t expr_idx = 0;
   for ( ; OB_SUCC(ret) && !match_when && expr_idx < loop; expr_idx += 2) {
     if (OB_FAIL(expr.args_[expr_idx]->eval(ctx, when_datum))) {
-      LOG_WARN("eval when expr failed", K(ret), K(expr_idx));
     } else if (OB_FAIL(check_is_match(*when_datum, match_when))) {
-      LOG_WARN("check is when expr match failed", K(ret), K(expr_idx));
     } else if (match_when) {
       if (OB_FAIL(expr.args_[expr_idx+1]->eval(ctx, then_datum))) {
-        LOG_WARN("eval then expr failed", K(ret), K(expr_idx+1));
       } else {
         has_result = true;
       }
@@ -184,7 +180,6 @@ int ObExprCase::calc_case_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_
     if (!match_when) {
       if (has_else) {
         if (OB_FAIL(expr.args_[expr.arg_cnt_-1]->eval(ctx, then_datum))) {
-          LOG_WARN("eval else expr failed for case when", K(ret));
         } else {
           has_result = true;
         }
@@ -261,7 +256,6 @@ int ObExprCase::eval_case_batch(const ObExpr &expr,
     //    calc else branch and put matching result(then_datums) into output datums
     for (int64_t expr_idx = 0; OB_SUCC(ret) && expr_idx < loop; expr_idx += 2) {
       if (OB_FAIL(expr.args_[expr_idx]->eval_batch(ctx, *case_when_match, batch_size))) {
-        LOG_WARN("failed to eval batch", K(ret), K(expr_idx));
       } else {
         ObDatumVector when_datums = expr.args_[expr_idx]->locate_expr_datumvector(ctx);
         //first eval when datums
@@ -270,7 +264,6 @@ int ObExprCase::eval_case_batch(const ObExpr &expr,
             continue;
           }
           if (OB_FAIL(check_is_match(*when_datums.at(j), match_when))) {
-            LOG_WARN("check is when expr match failed", K(ret), K(j));
           } else if (match_when) {
             case_when_match->set(j);
           } else {
@@ -281,7 +274,6 @@ int ObExprCase::eval_case_batch(const ObExpr &expr,
         //now eval then datums
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(expr.args_[expr_idx + 1]->eval_batch(ctx, *case_not_match, batch_size))) {
-          LOG_WARN("failed to eval batch", K(ret), K(expr_idx + 1));
         } else {
           ObDatumVector then_datums = expr.args_[expr_idx + 1]->locate_expr_datumvector(ctx);
           for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
@@ -302,7 +294,6 @@ int ObExprCase::eval_case_batch(const ObExpr &expr,
     if (OB_SUCC(ret)) {
       if (has_else) {
         if (OB_FAIL(expr.args_[expr.arg_cnt_ - 1]->eval_batch(ctx, *case_when_match, batch_size))) {
-          LOG_WARN("failed to eval batch", K(ret));
         } else {
           ObDatumVector else_datums = expr.args_[expr.arg_cnt_ - 1]->locate_expr_datumvector(ctx);
           for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
@@ -498,10 +489,7 @@ static int inner_eval_case_vector(const ObExpr &expr,
         my_bound.set_all_row_active(false);
       }
       if (OB_FAIL(expr.args_[expr_idx]->eval_vector(ctx, *case_when_match, my_bound))) {
-        LOG_WARN("failed to eval vector", K(ret), K(expr_idx));
-      // first eval when datums
       } else if (OB_FAIL(dispatch_check_when_is_match(expr, ctx, *case_when_match, my_bound, expr_idx))) {
-        LOG_WARN("failed to dispatch_check_is_match", K(ret), K(expr_idx));
       } else {  // now eval then datums
         // Reverse case_when_match for use with case_not_match.
         case_when_match->bit_calculate(*case_when_match, *before_case_when_match, my_bound,
@@ -512,9 +500,7 @@ static int inner_eval_case_vector(const ObExpr &expr,
             my_bound.set_all_row_active(false);
           }
           if (OB_FAIL(expr.args_[expr_idx + 1]->eval_vector(ctx, *case_when_match, my_bound))) {
-            LOG_WARN("failed to eval vector", K(ret), K(expr_idx + 1));
           } else if (OB_FAIL(dispatch_eval_match_then<ResVec>(expr, ctx, *case_when_match, my_bound, expr_idx + 1))) {
-            LOG_WARN("failed to dispatch_eval_match_then", K(ret), K(expr_idx + 1));
           }
         }
         // Reverse case_when_match to be used again as case_when_match.
@@ -535,10 +521,7 @@ static int inner_eval_case_vector(const ObExpr &expr,
           my_bound.set_all_row_active(false);
         }
         if (OB_FAIL(expr.args_[expr.arg_cnt_ - 1]->eval_vector(ctx, *case_when_match, my_bound))) {
-          LOG_WARN("failed to eval batch", K(ret));
-          // The calculation method of "else" is consistent with "then".
         } else if (OB_FAIL(dispatch_eval_match_then<ResVec>(expr, ctx, *case_when_match, my_bound, expr.arg_cnt_ - 1))) {
-          LOG_WARN("failed to dispatch_eval_match_else", K(ret), K(expr.arg_cnt_ - 1));
         }
       } else {
         for (int64_t j = my_bound.start(); OB_SUCC(ret) && j < my_bound.end(); ++j) {

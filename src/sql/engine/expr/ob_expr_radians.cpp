@@ -58,7 +58,6 @@ int ObExprRadians::calc_radians_expr(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
-    LOG_WARN("eval arg failed", K(ret), K(expr));
   } else if (arg->is_null()) {
     res_datum.set_null();
   } else {

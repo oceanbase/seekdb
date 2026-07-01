@@ -60,9 +60,7 @@ int ObCommonSqlProxy::read(ReadResult &result, const char *sql, const int32_t gr
   int ret = OB_SUCCESS;
   ObISQLConnection *conn = NULL;
   if (OB_FAIL(acquire(conn, group_id))) {
-    LOG_WARN("acquire connection failed", K(ret), K(conn));
   } else if (OB_FAIL(read(conn, result, sql))) {
-    LOG_WARN("read failed", K(ret));
   }
   close(conn, ret);
   return ret;
@@ -76,9 +74,7 @@ int ObCommonSqlProxy::read(ReadResult &result, const char *sql, const common::Ob
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("read with typically exec addr failed", K(ret), K(exec_sql_addr));
   } else if (OB_FAIL(acquire(conn, 0/*group_id*/))) {
-    LOG_WARN("acquire connection failed", K(ret), K(conn));
   } else if (OB_FAIL(read(conn, result, sql, exec_sql_addr))) {
-    LOG_WARN("read failed", K(ret));
   }
   close(conn, ret);
   return ret;
@@ -89,19 +85,16 @@ int ObCommonSqlProxy::read(ReadResult &result, const char *sql, const ObSessionP
   int ret = OB_SUCCESS;
   ObISQLConnection *conn = NULL;
   if (OB_FAIL(acquire(conn, 0/*group_id*/))) {
-    LOG_WARN("acquire connection failed", K(ret), K(conn));
   } else if (nullptr != session_param) {
     conn->set_ddl_info(&session_param->ddl_info_);
     conn->set_use_external_session(session_param->use_external_session_);
     conn->set_group_id(session_param->consumer_group_id_);
     if (nullptr != session_param->sql_mode_) {
       if (OB_FAIL(conn->set_session_variable("sql_mode", *session_param->sql_mode_))) {
-        LOG_WARN("set inner connection sql mode failed", K(ret));
       }
     }
     if (OB_SUCC(ret) && nullptr != session_param && nullptr != session_param->tz_info_wrap_) {
       if (OB_FAIL(conn->set_tz_info_wrap(*session_param->tz_info_wrap_))) {
-        LOG_WARN("fail to set time zone info wrap", K(ret));
       }
     }
 
@@ -113,7 +106,6 @@ int ObCommonSqlProxy::read(ReadResult &result, const char *sql, const ObSessionP
   if (OB_FAIL(ret)) {
   } else if (FALSE_IT(conn->set_user_timeout(user_set_timeout))) {
   } else if (OB_FAIL(read(conn, result, sql))) {
-    LOG_WARN("read failed", K(ret));
   }
   close(conn, ret);
   return ret;
@@ -132,7 +124,6 @@ int ObCommonSqlProxy::read(ObISQLConnection *conn, ReadResult &result, const cha
     LOG_WARN("in active sql client", K(ret), KCSTRING(sql));
   } else {
     if (OB_FAIL(conn->execute_read(sql, result, exec_sql_addr))) {
-      LOG_WARN("query failed", K(ret), K(conn), K(start), KCSTRING(sql));
     }
   }
   LOG_TRACE("execute sql", KCSTRING(sql), K(ret));
@@ -148,7 +139,6 @@ int ObCommonSqlProxy::write(const char *sql, const int32_t group_id, int64_t &af
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("empty sql");
   } else if (OB_FAIL(acquire(conn, group_id))) {
-    LOG_WARN("acquire connection failed", K(ret), K(conn));
   } else if (OB_ISNULL(conn)) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("connection can not be NULL");
@@ -157,7 +147,6 @@ int ObCommonSqlProxy::write(const char *sql, const int32_t group_id, int64_t &af
     LOG_WARN("in active sql client", K(ret), KCSTRING(sql));
   } else {
     if (OB_FAIL(conn->execute_write(sql, affected_rows))) {
-      LOG_WARN("execute sql failed", K(ret), K(conn), K(start), KCSTRING(sql));
     }
   }
   close(conn, ret);
@@ -178,7 +167,6 @@ int ObCommonSqlProxy::write(const ObString sql,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("empty sql");
   } else if (OB_FAIL(acquire(conn, 0/*group_id*/))) {
-    LOG_WARN("acquire connection failed", K(ret), K(conn));
   } else if (OB_ISNULL(conn)) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("connection can not be NULL");
@@ -190,7 +178,6 @@ int ObCommonSqlProxy::write(const ObString sql,
   int64_t old_sql_mode = 0;
   if (OB_SUCC(ret)) {
     if (OB_FAIL(conn->get_session_variable("ob_compatibility_mode", old_compatibility_mode))) {
-      LOG_WARN("fail to get inner connection compatibility mode", K(ret));
     } else if (old_compatibility_mode != compatibility_mode
                && OB_FAIL(conn->set_session_variable("ob_compatibility_mode", compatibility_mode))) {
       LOG_WARN("fail to set inner connection compatibility mode", K(ret), K(compatibility_mode));
@@ -208,7 +195,6 @@ int ObCommonSqlProxy::write(const ObString sql,
       is_user_sql = true;
     }
     if (OB_FAIL(conn->set_ddl_info(&param->ddl_info_))) {
-      LOG_WARN("fail to set ddl info", K(ret));
     }
     if (param->ddl_info_.is_ddl()) {
       conn->set_force_remote_exec(true);
@@ -223,17 +209,14 @@ int ObCommonSqlProxy::write(const ObString sql,
     /*if (OB_FAIL(conn->get_session_variable("sql_mode", old_sql_mode))) {
       LOG_WARN("get inner connection sql mode", K(ret));
     } else*/ if (OB_FAIL(conn->set_session_variable("sql_mode", *param->sql_mode_))) {
-      LOG_WARN("set inner connection sql mode failed", K(ret));
     }
   }
   if (OB_SUCC(ret) && nullptr != param && nullptr != param->tz_info_wrap_) {
     if (OB_FAIL(conn->set_tz_info_wrap(*param->tz_info_wrap_))) {
-      LOG_WARN("fail to set time zone info wrap", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(conn->execute_write(sql, affected_rows, is_user_sql, sql_exec_addr))) {
-      LOG_WARN("execute sql failed", K(ret), K(conn), K(start), K(sql));
     } else if (old_compatibility_mode != compatibility_mode
                && OB_FAIL(conn->set_session_variable("ob_compatibility_mode", old_compatibility_mode))) {
       LOG_WARN("fail to recover inner connection sql mode", K(ret));
@@ -256,7 +239,6 @@ int ObCommonSqlProxy::close(ObISQLConnection *conn, const int succ)
   if (conn != NULL) {
     ret = pool_->release(conn, OB_SUCCESS == succ);
     if (OB_FAIL(ret)) {
-      LOG_WARN("release connection failed", K(ret), K(conn));
     }
   }
   return ret;
@@ -270,9 +252,6 @@ int ObCommonSqlProxy::escape(const char *from, const int64_t from_size,
     ret = OB_NOT_INIT;
     LOG_WARN("mysql proxy not inited");
   } else if (OB_FAIL(pool_->escape(from, from_size, to, to_size, out_size))) {
-    LOG_WARN("escape string failed",
-        "from", ObString(from_size, from), K(from_size),
-        "to", static_cast<void *>(to), K(to_size));
   }
   return ret;
 }
@@ -285,7 +264,6 @@ int ObCommonSqlProxy::acquire(sqlclient::ObISQLConnection *&conn, const int32_t 
     ret = OB_NOT_INIT;
     LOG_WARN("mysql proxy not inited", K(ret));
   } else if (OB_FAIL(pool_->acquire(conn, this, group_id))) {
-    LOG_WARN("acquire connection failed", K(ret), K(conn));
   } else if (OB_ISNULL(conn)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("connection must not be null", K(ret), K(conn));
@@ -309,7 +287,6 @@ int ObCommonSqlProxy::read(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("empty sql");
   } else if (OB_FAIL(acquire(conn, 0/*group_id*/))) {
-    LOG_WARN("acquire connection failed", K(ret), K(conn));
   } else if (NULL == conn) {
     ret = OB_INNER_STAT_ERROR;
     LOG_WARN("connection can not be NULL");
@@ -318,7 +295,6 @@ int ObCommonSqlProxy::read(
     LOG_WARN("in active sql client", K(ret), KCSTRING(sql));
   } else {
     if (OB_FAIL(conn->execute_read(cluster_id, sql, result))) {
-      LOG_WARN("query failed", K(ret), K(conn), K(start), KCSTRING(sql), K(cluster_id));
     }
   }
   close(conn, ret);

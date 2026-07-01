@@ -63,7 +63,6 @@ int ObErrLogOp::inner_get_next_row()
 
       if (OB_SUCCESS != err_log_rt_def_.first_err_ret_ && OB_SUCC(ret)) {
         if (OB_FAIL(record_err_log())) {
-          LOG_WARN("fail to record_err_log", K(ret));
         } else {
           err_log_rt_def_.curr_err_log_record_num_++;
           err_log_rt_def_.reset();
@@ -86,7 +85,6 @@ int ObErrLogOp::record_err_log()
                                                             MY_SPEC.err_log_ct_def_,
                                                             err_log_rt_def_,
                                                             MY_SPEC.type_))) {
-    LOG_WARN("fail to insert error logging table", K(ret));
   }
 
   return ret;

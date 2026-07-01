@@ -42,7 +42,6 @@ int ObDirectLoadResourceApplyExecutor::process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableLoadResourceService::local_apply_resource(arg_, res_))) {
-    LOG_WARN("fail to apply resource", KR(ret));
   }
 
   return ret;
@@ -67,7 +66,6 @@ int ObDirectLoadResourceReleaseExecutor::process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableLoadResourceService::local_release_resource(arg_))) {
-    LOG_WARN("fail to release resource", KR(ret));
   }
   
   return ret;
@@ -92,7 +90,6 @@ int ObDirectLoadResourceUpdateExecutor::process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableLoadResourceService::local_update_resource(arg_))) {
-    LOG_WARN("fail to update resource", KR(ret));
   }
   
   return ret;
@@ -117,7 +114,6 @@ int ObDirectLoadResourceCheckExecutor::process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableLoadService::refresh_and_check_resource(arg_, res_))) {
-    LOG_WARN("fail to refresh_and_check_resource", KR(ret));
   }
   
   return ret;

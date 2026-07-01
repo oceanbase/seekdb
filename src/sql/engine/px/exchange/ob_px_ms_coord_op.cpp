@@ -49,7 +49,6 @@ int ObPxMSCoordOp::ObPxMSCoordOpEventListener::on_root_data_channel_setup()
   // But px coord inner_get_next_row logic must start to run, i.e., must receive control msg etc.,
   // So data channel is a bit lagging
   if (OB_FAIL(px_coord_op_.init_row_heap(cnt))) {
-    LOG_WARN("failed to init row heap", K(ret), K(cnt));
   } else {
     LOG_TRACE("px coord setup", K(cnt), K(px_coord_op_.msg_loop_.get_channel_count()));
   }
@@ -128,9 +127,7 @@ int ObPxMSCoordOp::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObPxCoordOp::inner_open())) {
-    LOG_WARN("fail close op", K(MY_SPEC.id_), K(ret));
   } else if (OB_FAIL(setup_loop_proc())) {
-    LOG_WARN("fail setup loop proc", K(ret));
   } else {
     if (use_serial_scheduler_) {
       msg_proc_.set_scheduler(&serial_scheduler_);
@@ -198,7 +195,6 @@ int ObPxMSCoordOp::init_store_rows(int64_t n_ways)
       ObChunkDatumStore::LastStoredRow *store_row = new(buf)ObChunkDatumStore::LastStoredRow(alloc_);
       store_row->reuse_ = true;
       if (OB_FAIL(store_rows_.push_back(store_row))) {
-        LOG_WARN("failed to push back", K(ret));
       }
     }
   }
@@ -209,11 +205,9 @@ int ObPxMSCoordOp::init_row_heap(int64_t n_ways)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init_store_rows(n_ways))) {
-    LOG_WARN("failed to init store rows", K(ret));
   } else if (OB_FAIL(row_heap_.init(n_ways,
       &MY_SPEC.sort_collations_,
       &MY_SPEC.sort_cmp_funs_))) {
-    LOG_WARN("fail init row heap for root dfo", "heap", row_heap_, K(ret));
   }
   return ret;
 }
@@ -302,7 +296,6 @@ int ObPxMSCoordOp::inner_close()
   finish_ch_cnt_ = 0;
   all_rows_finish_ = false;
   if (OB_FAIL(ObPxCoordOp::inner_close())) {
-    LOG_WARN("fail close op", K(MY_SPEC.id_), K(ret));
   }
   destroy_readers();
   int tmp_ret = OB_SUCCESS;
@@ -328,7 +321,6 @@ int ObPxMSCoordOp::inner_get_next_row()
   } else if (OB_UNLIKELY(!first_row_fetched_)) {
     // Drive initial DFO distribution
     if (OB_FAIL(msg_proc_.startup_msg_loop(ctx_))) {
-      LOG_WARN("initial dfos NOT dispatched successfully", K(ret));
     }
     first_row_fetched_ = true; // control no longer actively calling startup_msg_loop, subsequent loops are message triggered
   }
@@ -355,7 +347,6 @@ int ObPxMSCoordOp::inner_get_next_row()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("reader or channel is NULL");
       } else if (OB_FAIL(ctx_.fast_check_status())) {
-        LOG_WARN("failed to check status", K(ret));
       } else {
         if (reader->has_more() || ch->is_eof()) {
           ret = next_row(*reader, wait_next_msg);
@@ -389,7 +380,6 @@ int ObPxMSCoordOp::inner_get_next_row()
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ctx_.fast_check_status())) {
-      LOG_WARN("fail check status, maybe px query timeout", K(ret));
     } else if (OB_FAIL(msg_loop_.process_one_if(&receive_order_, nth_channel))) {
       if (OB_DTL_WAIT_EAGAIN == ret) {
         LOG_TRACE("no message, try again", K(ret));
@@ -399,14 +389,12 @@ int ObPxMSCoordOp::inner_get_next_row()
         if (0 < row_heap_.capacity() && first_row_sent_) {
           if (MY_SPEC.is_old_unblock_mode_) {
             if (OB_FAIL(msg_loop_.unblock_channels(receive_order_.get_data_channel_start_idx()))) {
-              LOG_WARN("failed to unblock channels", K(ret));
             } else {
               LOG_DEBUG("debug old unblock_channels", K(ret));
             }
           } else {
             if (OB_FAIL(msg_loop_.unblock_channel(receive_order_.get_data_channel_start_idx(),
                                                   row_heap_.writable_channel_idx()))) {
-              LOG_WARN("failed to unblock channels", K(ret));
             } else {
               LOG_DEBUG("debug old unblock_channel", K(ret));
             }
@@ -500,18 +488,13 @@ int ObPxMSCoordOp::next_row(ObReceiveRowReader &reader, bool &wait_next_msg)
   } else if (OB_SUCCESS == ret) {
     if (nullptr != last_pop_row_) {
       if (OB_FAIL(last_pop_row_->save_store_row(MY_SPEC.all_exprs_, eval_ctx_, 0))) {
-        LOG_WARN("failed to save store row", K(ret));
       } else if (OB_FAIL(row_heap_.push(last_pop_row_))) {
-        LOG_WARN("fail push row to heap", K(ret));
       }
     } else {
       ObChunkDatumStore::LastStoredRow *cur_row = nullptr;
       if (OB_FAIL(store_rows_.at(row_heap_.writable_channel_idx(), cur_row))) {
-        LOG_WARN("failed to get store row", K(ret), K(row_heap_.writable_channel_idx()));
       } else if (OB_FAIL(cur_row->save_store_row(MY_SPEC.all_exprs_, eval_ctx_, 0))) {
-        LOG_WARN("failed to save store row", K(ret));
       } else if (OB_FAIL(row_heap_.push(cur_row))) {
-        LOG_WARN("fail push row to heap", K(ret));
       }
     }
   } else {
@@ -529,9 +512,7 @@ int ObPxMSCoordOp::next_row(ObReceiveRowReader &reader, bool &wait_next_msg)
     } else if (row_heap_.capacity() == row_heap_.count()) {
       const ObChunkDatumStore::LastStoredRow *pop_row = nullptr;
       if (OB_FAIL(row_heap_.pop(pop_row))) {
-        LOG_WARN("failed to pop row", K(ret));
       } else if (OB_FAIL(pop_row->store_row_->to_expr(MY_SPEC.all_exprs_, eval_ctx_))) {
-        LOG_WARN("failed to to exprs", K(ret));
       } else {
         wait_next_msg = false;
         last_pop_row_ = const_cast<ObChunkDatumStore::LastStoredRow*>(pop_row);

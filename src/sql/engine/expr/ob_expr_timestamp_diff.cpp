@@ -146,9 +146,7 @@ int ObExprTimeStampDiff::calc_month_diff(const int64_t &left,
   ObTime ot_left;
   ObTime ot_right;
   if(OB_FAIL(ObTimeConverter::datetime_to_ob_time(left, tz_info, ot_left))) {
-    LOG_WARN("failed to cast to ob_time", K(ret), K(left));
   } else if(OB_FAIL(ObTimeConverter::datetime_to_ob_time(right, tz_info, ot_right))) {
-    LOG_WARN("failed to cast to ob_time", K(ret), K(right));
   } else {
     int64_t month_right = (ot_right.parts_[DT_YEAR]) * MONS_PER_YEAR + ot_right.parts_[DT_MON];
     int64_t month_left = (ot_left.parts_[DT_YEAR]) * MONS_PER_YEAR + ot_left.parts_[DT_MON];
@@ -188,9 +186,7 @@ int ObExprTimeStampDiff::eval_timestamp_diff(const ObExpr &expr, ObEvalCtx &ctx,
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
   const common::ObTimeZoneInfo *tz_info = NULL;
   if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
-    LOG_WARN("get tz info failed", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, u, l, r))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else if (u->is_null()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unit cannot be null", K(ret));
@@ -201,7 +197,6 @@ int ObExprTimeStampDiff::eval_timestamp_diff(const ObExpr &expr, ObEvalCtx &ctx,
     bool is_null = false;
     if (OB_FAIL(calc(res_int, is_null, u->get_int(), l->get_datetime(),
                      r->get_datetime(), tz_info))) {
-      LOG_WARN("calc failed", K(ret));
     } else if (is_null) {
       res.set_null();
     } else {
@@ -251,7 +246,6 @@ int ObExprTimeStampDiff::vector_timestamp_diff(const ObExpr &expr,
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
   const common::ObTimeZoneInfo *tz_info = NULL;
   if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
-    LOG_WARN("get tz info failed", K(ret));
   } else {
     for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {
       if (skip.at(idx) || eval_flags.at(idx)) {
@@ -267,7 +261,6 @@ int ObExprTimeStampDiff::vector_timestamp_diff(const ObExpr &expr,
       if (OB_FAIL(calc(res_int, is_null, unit_vec->get_int(idx),
                        left_arg_vec->get_datetime(idx),
                        right_arg_vec->get_datetime(idx), tz_info))) {
-        LOG_WARN("calc failed", K(ret));
       } else if (is_null) {
         res_vec->set_null(idx);
       } else {
@@ -283,11 +276,8 @@ int ObExprTimeStampDiff::eval_timestamp_diff_vector(const ObExpr &expr, ObEvalCt
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval l param", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval l param", K(ret));
   } else if (OB_FAIL(expr.args_[2]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval r param", K(ret));
   } else {
     VectorFormat unit_format = expr.args_[0]->get_format(ctx);
     VectorFormat left_arg_format = expr.args_[1]->get_format(ctx);
@@ -351,7 +341,6 @@ int ObExprTimeStampDiff::eval_timestamp_diff_vector(const ObExpr &expr, ObEvalCt
 #undef DEF_TIMESTAMP_DIFF_VECTOR
 
     if (OB_FAIL(ret)) {
-      LOG_WARN("expr calculation failed", K(ret));
     }
   }
 

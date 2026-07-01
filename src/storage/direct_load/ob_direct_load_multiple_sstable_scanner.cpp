@@ -61,10 +61,8 @@ int ObDirectLoadMultipleSSTableScanner::init(ObDirectLoadMultipleSSTable *sstabl
     range_ = &range;
     datum_utils_ = datum_utils;
     if (OB_FAIL(data_block_scanner_.init(sstable, table_data_desc, range, datum_utils))) {
-      LOG_WARN("fail to init data block scanner", KR(ret));
     } else if (OB_FAIL(data_block_reader_.init(table_data_desc.sstable_data_block_size_,
                                                table_data_desc.compressor_type_))) {
-      LOG_WARN("fail to init data block reader", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -85,7 +83,6 @@ int ObDirectLoadMultipleSSTableScanner::switch_next_fragment()
     data_block_reader_.reuse();
     if (OB_FAIL(data_block_reader_.open(fragment.data_file_handle_, data_block_desc_.offset_,
                                         data_block_desc_.size_))) {
-      LOG_WARN("fail to open data file", KR(ret));
     }
   }
   return ret;
@@ -119,7 +116,6 @@ int ObDirectLoadMultipleSSTableScanner::get_next_row(const ObDirectLoadMultipleD
         if (!is_iter_start_) {
           int cmp_ret = 0;
           if (OB_FAIL(datum_row->rowkey_.compare(range_->start_key_, *datum_utils_, cmp_ret))) {
-            LOG_WARN("fail to compare rowkey", KR(ret));
           } else if (cmp_ret < 0 || (cmp_ret == 0 && range_->is_left_open())) {
             datum_row = nullptr;
           } else {
@@ -130,7 +126,6 @@ int ObDirectLoadMultipleSSTableScanner::get_next_row(const ObDirectLoadMultipleD
             data_block_reader_.get_block_count() == data_block_desc_.block_count_) {
           int cmp_ret = 0;
           if (OB_FAIL(datum_row->rowkey_.compare(range_->end_key_, *datum_utils_, cmp_ret))) {
-            LOG_WARN("fail to compare rowkey", KR(ret));
           } else if (cmp_ret > 0 || (cmp_ret == 0 && range_->is_right_open())) {
             datum_row = nullptr;
             ret = OB_ITER_END;

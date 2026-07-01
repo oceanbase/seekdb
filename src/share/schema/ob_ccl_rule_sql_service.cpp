@@ -44,9 +44,7 @@ int ObCCLRuleSqlService::insert_ccl_rule(const ObCCLRuleSchema &ccl_rule_schema,
   }
   for (int64_t i = THE_SYS_TABLE_IDX; OB_SUCC(ret) && i < ARRAYSIZEOF(CCL_RULE_TABLES); ++i) {
     if (OB_FAIL(sql.assign_fmt("INSERT INTO %s(", CCL_RULE_TABLES[i]))) {
-      STORAGE_LOG(WARN, "append table name failed", K(ret));
     } else if (OB_FAIL(gen_sql(sql, values, ccl_rule_schema))) {
-      LOG_WARN("fail to gen sql", K(ret));
     } else if (i == THE_HISTORY_TABLE_IDX) {
       SQL_COL_APPEND_VALUE(sql, values, 0, "is_deleted", "%d");
       SQL_COL_APPEND_VALUE(sql, values, ccl_rule_schema.get_schema_version(), "schema_version", "%ld");
@@ -55,9 +53,7 @@ int ObCCLRuleSqlService::insert_ccl_rule(const ObCCLRuleSchema &ccl_rule_schema,
       if (OB_FAIL(sql.append_fmt(", gmt_modified) VALUES (%.*s, now(6))",
                                  static_cast<int32_t>(values.length()),
                                  values.ptr()))) {
-        LOG_WARN("append sql failed, ", K(ret));
       } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-        LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected value", K(affected_rows), K(sql), K(ret));
@@ -75,7 +71,6 @@ int ObCCLRuleSqlService::insert_ccl_rule(const ObCCLRuleSchema &ccl_rule_schema,
     opt.schema_version_ = ccl_rule_schema.get_schema_version();
     opt.ddl_stmt_str_ = (NULL != ddl_stmt_str) ? *ddl_stmt_str : ObString();
     if (OB_FAIL(log_operation(opt, sql_client))) {
-      LOG_WARN("Failed to log operation", K(ret));
     }
   }
 
@@ -140,9 +135,7 @@ int ObCCLRuleSqlService::delete_ccl_rule(const ObCCLRuleSchema &ccl_rule_schema,
           "DELETE FROM %s WHERE ccl_rule_id = %lu",
           CCL_RULE_TABLES[THE_SYS_TABLE_IDX],
           ObSchemaUtils::get_extract_schema_id(ccl_rule_schema.get_ccl_rule_id())))) {
-      LOG_WARN("fail to assign sql format", K(ret));
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", K(sql), K(ret));
     } else if (!is_single_row(affected_rows)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected value", K(affected_rows), K(sql), K(ret));
@@ -150,9 +143,7 @@ int ObCCLRuleSqlService::delete_ccl_rule(const ObCCLRuleSchema &ccl_rule_schema,
   }
   for (int64_t i = THE_HISTORY_TABLE_IDX; OB_SUCC(ret) && i < ARRAYSIZEOF(CCL_RULE_TABLES); ++i) {
     if (OB_FAIL(sql.assign_fmt("INSERT INTO %s(", CCL_RULE_TABLES[i]))) {
-      STORAGE_LOG(WARN, "append table name failed", K(ret));
     } else if (OB_FAIL(gen_sql(sql, values, ccl_rule_schema))) {
-      LOG_WARN("fail to gen sql", K(ret));
     } else if (i == THE_HISTORY_TABLE_IDX) {
       SQL_COL_APPEND_VALUE(sql, values, 1, "is_deleted", "%d");
       SQL_COL_APPEND_VALUE(sql, values, new_schema_version, "schema_version", "%ld");
@@ -160,9 +151,7 @@ int ObCCLRuleSqlService::delete_ccl_rule(const ObCCLRuleSchema &ccl_rule_schema,
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sql.append_fmt(", gmt_modified) VALUES (%.*s, now(6))",
                                  static_cast<int32_t>(values.length()), values.ptr()))) {
-        LOG_WARN("append sql failed, ", K(ret));
       } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-        LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected value", K(affected_rows), K(sql), K(ret));
@@ -179,7 +168,6 @@ int ObCCLRuleSqlService::delete_ccl_rule(const ObCCLRuleSchema &ccl_rule_schema,
     opt.schema_version_ = new_schema_version;
     opt.ddl_stmt_str_ = (NULL != ddl_stmt_str) ? *ddl_stmt_str : ObString();
     if (OB_FAIL(log_operation(opt, sql_client))) {
-      LOG_WARN("Failed to log operation", K(ret));
     }
   }
 

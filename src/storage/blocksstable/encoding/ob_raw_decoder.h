@@ -376,7 +376,6 @@ int ObRawDecoder::locate_cell_data(const char *&cell_data, int64_t &cell_len,
         var_data += sizeof(col_idx_byte);
         ObIntegerArrayGenerator gen;
         if (OB_FAIL(gen.init(var_data, col_idx_byte))) {
-          STORAGE_LOG(WARN, "init integer array generator failed", K(ret), K(header));
         } else {
           var_data += (micro_block_header.var_column_count_ - 1) * col_idx_byte;
           int64_t offset = 0;
@@ -434,7 +433,6 @@ int ObRawDecoder::batch_locate_cell_data(
             col_idx_byte = *var_data;
             var_data += sizeof(col_idx_byte);
             if (OB_FAIL(gen.init(var_data - col_idx_byte, col_idx_byte))) {
-              STORAGE_LOG(WARN, "init integer array generator failed", K(ret), K(header));
             } else {
               var_data += (micro_block_header_.var_column_count_ - 1) * col_idx_byte;
               // 0 if header.length_ == 0
@@ -455,7 +453,6 @@ int ObRawDecoder::batch_locate_cell_data(
             col_idx_byte = *var_data;
             var_data += sizeof(col_idx_byte);
             if (OB_FAIL(gen.init(var_data - col_idx_byte, col_idx_byte))) {
-              STORAGE_LOG(WARN, "init integer array generator failed", K(ret), K(header));
             } else {
               var_data += (micro_block_header_.var_column_count_ - 1) * col_idx_byte;
               // 0 if header.length_ == 0

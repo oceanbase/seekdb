@@ -72,12 +72,10 @@ int ObGlobalVariables::inner_get_next_row(ObNewRow *&row)
           const common::ObDataTypeCastParams dtc_params
                     = ObBasicSessionInfo::create_dtc_params(session_);
           if (SYS_VAR_INVALID == var_id) {
-            SERVER_LOG(INFO, "system variable maybe come from diff version", K(*sysvar_schema));
           } else if (OB_FAIL(sys_var_fac.create_sys_var(var_id, sysvar)) || OB_ISNULL(sysvar)) {
             ret = COVER_SUCC(OB_ERR_UNEXPECTED);
             SERVER_LOG(WARN, "create system variable failed", K(ret), K(var_id));
           } else if (OB_FAIL(sysvar_schema->get_value(allocator_, dtc_params, value))) {
-            SERVER_LOG(WARN, "get value of sysvar schema failed", K(ret));
           } else {
             sysvar->set_value(value);
             sysvar->set_data_type(sysvar_schema->get_data_type());
@@ -117,7 +115,6 @@ int ObGlobalVariables::inner_get_next_row(ObNewRow *&row)
                   } else {
                     ObString show_str;
                     if (OB_FAIL(sysvar->to_show_str(*allocator_, *session_, show_str))) {
-                      SERVER_LOG(WARN, "convert to show str failed", K(ret));
                     } else {
                       cells[cell_idx].set_varchar(show_str);
                     }

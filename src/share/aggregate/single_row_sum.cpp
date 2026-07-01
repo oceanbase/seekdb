@@ -225,7 +225,6 @@ int init_single_row_sum_agg(VecValueTypeClass in_tc, VecValueTypeClass out_tc,
   }
   }
   if (OB_FAIL(ret)) {
-    SQL_LOG(WARN, "init fast single aggregate failed", K(in_tc), K(out_tc));
   }
   return ret;
 }
@@ -241,7 +240,6 @@ int init_single_row_sum_aggregate(RuntimeContext &agg_ctx, const int col_id, ObI
     ret = init_single_row_sum_agg(param_vec, aggr_info.expr_->get_vec_value_tc(), agg_ctx, col_id, allocator, agg);
   }
   if (OB_FAIL(ret)) {
-    SQL_LOG(WARN, "init count aggregate failed", K(ret));
   }
   return ret;
 }

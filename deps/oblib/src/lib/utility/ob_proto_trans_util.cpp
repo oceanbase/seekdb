@@ -31,9 +31,7 @@ namespace common
       ret = OB_INVALID_ARGUMENT;
       OB_LOG(WARN, "invalid input", KP(buf), K(ret));
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int2(buf, len, type, pos))){
-      OB_LOG(WARN, "failed to store type", K(type), KP(buf), K(len));
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int4(buf, len, v_len, pos))) {
-      OB_LOG(WARN, "failed to store val", K(ret), KP(buf));
     } else {
       // do nothing
     }
@@ -53,9 +51,7 @@ namespace common
     } else if (len < pos + DBL_SIZE + 6) {
       ret = OB_SIZE_OVERFLOW;
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int2(buf, len, type, pos))){
-      OB_LOG(WARN, "failed to store type", K(type), KP(buf), K(len));
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int4(buf, len, v_len, pos))) {
-      OB_LOG(WARN, "failed to store val", K(ret), KP(buf));
     } else {
       MEMCPY(buf + pos, &val, DBL_SIZE);
       pos += DBL_SIZE;
@@ -72,9 +68,7 @@ namespace common
     } else if (len < pos + str_len + 6) {
         ret = OB_SIZE_OVERFLOW;
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int2(buf, len, type, pos))) {
-      OB_LOG(WARN, "failed to store type", K(type), KP(buf), K(len));
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int4(buf, len, str_len, pos))) {
-      OB_LOG(WARN, "failed to store val", K(ret), KP(buf));
     } else {
       MEMCPY(buf+pos, str, str_len);
       pos += str_len;
@@ -90,11 +84,8 @@ namespace common
       ret = OB_INVALID_ARGUMENT;
       OB_LOG(WARN, "invalid argument", KP(buf), K(ret));
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int2(buf, len, type, pos))){
-      OB_LOG(WARN, "failed to store type", K(v), KP(buf), K(len));
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int4(buf, len, v_len, pos))) {
-      OB_LOG(WARN, "failed to store val", K(ret), KP(buf));
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int1(buf, len, v, pos))) {
-      OB_LOG(WARN, "failed to store val", K(ret), KP(buf));
     } else {
       // do nothing
     }
@@ -114,11 +105,8 @@ namespace common
       ret = OB_INVALID_ARGUMENT;
       OB_LOG(WARN, "invalid argument", KP(buf), K(ret));
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int2(buf, len, type, pos))) {
-      OB_LOG(WARN, "failed to store type", K(v), KP(buf), K(len));
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int4(buf, len, v_len, pos))) {
-      OB_LOG(WARN, "failed to store val", K(ret), KP(buf));
     } else if (OB_FAIL(obmysql::ObMySQLUtil::store_int8(buf, len, v, pos))) {
-      OB_LOG(WARN, "failed to store val", K(ret), KP(buf));
     } else {
       // do nothing
     }
@@ -130,10 +118,8 @@ namespace common
     int ret = OB_SUCCESS;
     if (OB_ISNULL(buf)){
       ret = OB_INVALID_ARGUMENT;
-      OB_LOG(WARN, "invalid argument", KP(buf));
     } else if (pos + 6 > len) {
       ret = OB_INVALID_ARGUMENT;
-      OB_LOG(WARN, "invalid input", K(pos), K(len));
     } else {
       const char * data_type = buf + pos;
       obmysql::ObMySQLUtil::get_int2(data_type, type);
@@ -152,10 +138,8 @@ namespace common
     int ret = OB_SUCCESS;
     if (OB_ISNULL(buf)){
       ret = OB_INVALID_ARGUMENT;
-      OB_LOG(WARN, "invalid argument", KP(buf));
     } else if (pos + v_len > len || v_len != sizeof(int8_t)) {
       ret = OB_INVALID_ARGUMENT;
-      OB_LOG(WARN, "invalid input", K(pos), K(v_len), K(len));
     } else {
       const char * data = buf + pos;
       obmysql::ObMySQLUtil::get_int1(data, val);
@@ -169,10 +153,8 @@ namespace common
     int ret = OB_SUCCESS;
     if (OB_ISNULL(buf)){
       ret = OB_INVALID_ARGUMENT;
-      OB_LOG(WARN, "invalid argument", KP(buf));
     } else if (pos + v_len > len || v_len != 4) {
       ret = OB_INVALID_ARGUMENT;
-      OB_LOG(WARN, "invalid input", K(pos), K(v_len), K(len));
     } else {
       const char * data = buf + pos;
       obmysql::ObMySQLUtil::get_int4(data, val);
@@ -185,10 +167,8 @@ namespace common
     int ret = OB_SUCCESS;
     if (OB_ISNULL(buf)){
       ret = OB_INVALID_ARGUMENT;
-      OB_LOG(WARN, "invalid argument", KP(buf));
     } else if (pos + v_len > len || v_len != 8) {
       ret = OB_INVALID_ARGUMENT;
-      OB_LOG(WARN, "invalid input", K(pos), K(v_len), K(len));
     } else {
       const char * data = buf + pos;
       obmysql::ObMySQLUtil::get_int8(data, val);
@@ -201,10 +181,8 @@ namespace common
     int ret = OB_SUCCESS;
     if (OB_ISNULL(buf)){
       ret = OB_INVALID_ARGUMENT;
-      OB_LOG(WARN, "invalid argument", KP(buf));
     } else if (pos + v_len > len || v_len != sizeof(double)) {
       ret = OB_INVALID_ARGUMENT;
-      OB_LOG(WARN, "invalid input", K(pos), K(v_len), K(len));
     } else {
       val = (*((double *)(buf + pos)));
       buf+=8;
@@ -218,10 +196,8 @@ namespace common
     int ret = OB_SUCCESS;
     if (OB_ISNULL(buf)){
       ret = OB_INVALID_ARGUMENT;
-      OB_LOG(WARN, "invalid argument", KP(buf));
     } else if (pos + str_len > len) {
       ret = OB_INVALID_ARGUMENT;
-      OB_LOG(WARN, "invalid input", K(pos), K(str_len), K(len));
     } else {
       str = (char *)(buf + pos);
       buf += str_len;
@@ -240,10 +216,8 @@ namespace common
     int ret = OB_SUCCESS;
     if (OB_ISNULL(buf)){
       ret = OB_INVALID_ARGUMENT;
-      OB_LOG(WARN, "invalid argument", KP(buf));
     } else if (pos + 2 > len) {
       ret = OB_INVALID_ARGUMENT;
-      OB_LOG(WARN, "invalid input", K(pos), K(len));
     } else {
       const char * data_type = buf + pos;
       obmysql::ObMySQLUtil::get_int2(data_type, type);

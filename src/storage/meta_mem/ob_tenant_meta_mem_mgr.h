@@ -697,7 +697,6 @@ int ObTenantMetaMemMgr::get_obj_pool_info(
     mem_status.total_size_ = obj_pool.total();
     mem_status.used_size_ = obj_pool.used();
     if (OB_FAIL(info.push_back(mem_status))) {
-      STORAGE_LOG(WARN, "fail to push mem status to info array", K(ret), K(mem_status));
     }
   }
 

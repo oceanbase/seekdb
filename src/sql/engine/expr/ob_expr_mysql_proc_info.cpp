@@ -69,9 +69,7 @@ int ObExprMysqlProcInfo::set_return_result(const ObExpr &expr,
 
   ObTextStringDatumResult str_result(expr.datum_meta_.type_, &expr, &ctx, &expr_datum);
   if (OB_FAIL(str_result.init(value_str.length()))) {
-    LOG_WARN("init lob result failed", K(ret));
   } else if (OB_FAIL(str_result.append(value_str.ptr(), value_str.length()))) {
-    LOG_WARN("append lob result failed");
   } else {
     str_result.set_result();
   }
@@ -94,8 +92,6 @@ int ObExprMysqlProcInfo::extract_create_node_from_routine_info(ObIAllocator &all
   char *stmt_buf = static_cast<char *>(alloc.alloc(buf_sz));
   if (OB_ISNULL(stmt_buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    SERVER_LOG(WARN, "failed to allocate memory for routine body buffer",
-               K(buf_sz));
   } else {
     MEMCPY(stmt_buf, prefix, prefix_len);
     MEMCPY(stmt_buf + prefix_len, routine_body.ptr(), routine_body.length());
@@ -105,8 +101,6 @@ int ObExprMysqlProcInfo::extract_create_node_from_routine_info(ObIAllocator &all
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(parser.parse(routine_stmt, routine_stmt, parse_result, true))) {
-    SERVER_LOG(WARN, "failed to parse mysql routine body",
-               K(ret), K(routine_info), K(routine_body));
   }
 
   if OB_SUCC(ret) {
@@ -117,7 +111,6 @@ int ObExprMysqlProcInfo::extract_create_node_from_routine_info(ObIAllocator &all
     } else {
       create_node = nullptr;
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "unexpected parse node of mysql routine body", K(routine_info), K(routine_body), K(parse_result.result_tree_));
     }
   }
 
@@ -138,8 +131,6 @@ int ObExprMysqlProcInfo::extract_create_node_from_routine_info(ObIAllocator &all
   char *stmt_buf = static_cast<char *>(alloc.alloc(buf_sz));
   if (OB_ISNULL(stmt_buf)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    SERVER_LOG(WARN, "failed to allocate memory for routine body buffer",
-               K(buf_sz));
   } else {
     MEMCPY(stmt_buf, prefix, prefix_len);
     MEMCPY(stmt_buf + prefix_len, routine_body.ptr(), routine_body.length());
@@ -149,8 +140,6 @@ int ObExprMysqlProcInfo::extract_create_node_from_routine_info(ObIAllocator &all
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(parser.parse(routine_stmt, routine_stmt, parse_result, true))) {
-    SERVER_LOG(WARN, "failed to parse mysql routine body",
-               K(ret), K(routine_body));
   }
 
   if OB_SUCC(ret) {
@@ -161,7 +150,6 @@ int ObExprMysqlProcInfo::extract_create_node_from_routine_info(ObIAllocator &all
     } else {
       create_node = nullptr;
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "unexpected parse node of mysql routine body", K(routine_body), K(parse_result.result_tree_));
     }
   }
 
@@ -213,8 +201,6 @@ int ObExprMysqlProcInfo::get_param_list_info(const ObExpr &expr,
               || routine_info->get_routine_body().prefix_match_ci("function")) {
     if (OB_FAIL(extract_create_node_from_routine_info(
                   calc_alloc, *routine_info, exec_env, create_node))) {
-      SERVER_LOG(WARN, "failed to extract create node from routine info",
-                  K(ret), K(*routine_info), K(exec_env), K(create_node));
     }
   }
 
@@ -222,7 +208,6 @@ int ObExprMysqlProcInfo::get_param_list_info(const ObExpr &expr,
   } else if (nullptr != create_node) {
     if (T_SP_CREATE != create_node->type_ && T_SF_CREATE != create_node->type_ && OB_ISNULL(create_node->children_[2])) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "unexpected parse node type of routine body", K(create_node->type_));
     } else {
       ParseNode *param_node = create_node->children_[2];
       ObString value_str;
@@ -232,11 +217,6 @@ int ObExprMysqlProcInfo::get_param_list_info(const ObExpr &expr,
                         ObString(min(OB_MAX_VARCHAR_LENGTH, param_node->str_len_),
                         param_node->str_value_),
                         value_str))) {
-          SERVER_LOG(WARN, "failed to ob_write_string",
-                      K(ret),
-                      K(param_node->str_len_),
-                      K(param_node->str_value_),
-                      K(value_str));
         }
       }
       if (OB_SUCC(ret)) {
@@ -257,7 +237,6 @@ int ObExprMysqlProcInfo::get_param_list_info(const ObExpr &expr,
                                                                    OB_MAX_VARCHAR_LENGTH,
                                                                    pos,
                                                                    TZ_INFO(session)))) {
-        LOG_WARN("failed to print routine definition param", K(ret));                                                      
       } else {
         ObString value_str(static_cast<int32_t>(pos), static_cast<int32_t>(pos), param_list_buf);
         OZ (set_return_result(expr, ctx, expr_datum, value_str));
@@ -288,8 +267,6 @@ int ObExprMysqlProcInfo::get_param_list_info(const ObExpr &expr,
               || routine_body.prefix_match_ci("function")) {
     if (OB_FAIL(extract_create_node_from_routine_info(
                   calc_alloc, routine_body, exec_env, create_node))) {
-      SERVER_LOG(WARN, "failed to extract create node from routine info",
-                  K(ret), K(routine_body), K(exec_env), K(create_node));
     }
   }
 
@@ -297,7 +274,6 @@ int ObExprMysqlProcInfo::get_param_list_info(const ObExpr &expr,
   } else if (nullptr != create_node) {
     if (T_SP_CREATE != create_node->type_ && T_SF_CREATE != create_node->type_ && OB_ISNULL(create_node->children_[2])) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "unexpected parse node type of routine body", K(create_node->type_));
     } else {
       ParseNode *param_node = create_node->children_[2];
       ObString value_str;
@@ -307,11 +283,6 @@ int ObExprMysqlProcInfo::get_param_list_info(const ObExpr &expr,
                         ObString(min(OB_MAX_VARCHAR_LENGTH, param_node->str_len_),
                         param_node->str_value_),
                         value_str))) {
-          SERVER_LOG(WARN, "failed to ob_write_string",
-                      K(ret),
-                      K(param_node->str_len_),
-                      K(param_node->str_value_),
-                      K(value_str));
         }
       }
       if (OB_SUCC(ret)) {
@@ -343,7 +314,6 @@ int ObExprMysqlProcInfo::get_param_list_info(const ObExpr &expr,
                                                                     OB_MAX_VARCHAR_LENGTH,
                                                                     pos,
                                                                     TZ_INFO(session)))) {
-          LOG_WARN("failed to print routine definition param", K(ret));                                                      
         } else {
           ObString value_str(static_cast<int32_t>(pos), static_cast<int32_t>(pos), param_list_buf);
           OZ (set_return_result(expr, ctx, expr_datum, value_str));
@@ -387,7 +357,6 @@ int ObExprMysqlProcInfo::get_returns_info(const ObExpr &expr,
                                             routine_info->get_ret_type()->get_scale(),
                                             routine_info->get_ret_type()->get_collation_type(),
                                             *routine_info->get_ret_type_info()))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to get data type str with coll", KPC(routine_info->get_ret_type()));
       }
     } else {
       // proc no returns, fill empty.
@@ -427,12 +396,8 @@ int ObExprMysqlProcInfo::get_returns_info(const ObExpr &expr,
     sql::ObExecEnv exec_env;
     ParseNode *create_node = nullptr;
     if OB_FAIL(exec_env.init(exec_env_str)) {
-      SERVER_LOG(WARN, "failed to exec enc init",
-                 K(ret), K(routine_body), K(exec_env));
     } else if (OB_FAIL(extract_create_node_from_routine_info(
                calc_alloc, routine_body, exec_env, create_node))) {
-      SERVER_LOG(WARN, "failed to extract create node from routine info",
-                 K(ret), K(routine_body), K(exec_env), K(create_node));
     }
     if (OB_SUCC(ret)) {
       if(!OB_ISNULL(create_node) && !OB_ISNULL(create_node->children_[3])) {
@@ -445,7 +410,6 @@ int ObExprMysqlProcInfo::get_returns_info(const ObExpr &expr,
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "unexpected parse node type of routine body", K(create_node->type_));
       }
     }
   }
@@ -465,7 +429,6 @@ int ObExprMysqlProcInfo::get_returns_info(const ObExpr &expr,
                                           static_cast<ObCollationType>(param_coll_type),
                                           extended_type_info,
                                           sub_type))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to get data type str with coll", K(ret), K(param_type), K(param_length), K(param_precision), K(param_scale), K(param_coll_type));
     }
 
     if (OB_SUCC(ret)) {
@@ -499,8 +462,6 @@ int ObExprMysqlProcInfo::get_body_info(const ObExpr &expr,
               || routine_info->get_routine_body().prefix_match_ci("function")) {
     if (OB_FAIL(extract_create_node_from_routine_info(
                   calc_alloc, *routine_info, exec_env, create_node))) {
-      SERVER_LOG(WARN, "failed to extract create node from routine info",
-                  K(ret), K(*routine_info), K(exec_env), K(create_node));
     }
   }
 
@@ -509,18 +470,15 @@ int ObExprMysqlProcInfo::get_body_info(const ObExpr &expr,
     ParseNode *body_node = nullptr;
     if (T_SP_CREATE != create_node->type_ && T_SF_CREATE != create_node->type_) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "unexpected parse node type of routine body", K(create_node->type_));
     } else if (FALSE_IT(body_node = create_node->type_ == T_SP_CREATE ? create_node->children_[4] : create_node->children_[5])) {
       // do nothing
     } else if (OB_ISNULL(body_node) || OB_ISNULL(body_node->raw_text_)) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "unexpected empty routine body", K(routine_info->get_routine_body()));
     } else {
       ObString value_str;
       if (OB_FAIL(ob_write_string(calc_alloc,
                                   ObString(min(OB_MAX_VARCHAR_LENGTH, body_node->text_len_), body_node->raw_text_),
                                   value_str))) {
-        SERVER_LOG(WARN, "failed to ob_write_string", K(ret), K(ObString(body_node->text_len_, body_node->raw_text_)));
       } else {
         OZ (set_return_result(expr, ctx, expr_datum, value_str));
       }
@@ -554,8 +512,6 @@ int ObExprMysqlProcInfo::get_body_info(const ObExpr &expr,
               || routine_body.prefix_match_ci("function")) {
     if (OB_FAIL(extract_create_node_from_routine_info(
                   calc_alloc, routine_body, exec_env, create_node))) {
-      SERVER_LOG(WARN, "failed to extract create node from routine info",
-                  K(ret), K(routine_body), K(exec_env), K(create_node));
     }
   }
 
@@ -564,18 +520,15 @@ int ObExprMysqlProcInfo::get_body_info(const ObExpr &expr,
     ParseNode *body_node = nullptr;
     if (T_SP_CREATE != create_node->type_ && T_SF_CREATE != create_node->type_) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "unexpected parse node type of routine body", K(create_node->type_));
     } else if (FALSE_IT(body_node = create_node->type_ == T_SP_CREATE ? create_node->children_[4] : create_node->children_[5])) {
       // do nothing
     } else if (OB_ISNULL(body_node) || OB_ISNULL(body_node->raw_text_)) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "unexpected empty routine body", K(routine_body));
     } else {
       ObString value_str;
       if (OB_FAIL(ob_write_string(calc_alloc,
                                   ObString(min(OB_MAX_VARCHAR_LENGTH, body_node->text_len_), body_node->raw_text_),
                                   value_str))) {
-        SERVER_LOG(WARN, "failed to ob_write_string", K(ret), K(ObString(body_node->text_len_, body_node->raw_text_)));
       } else {
         OZ (set_return_result(expr, ctx, expr_datum, value_str));
       }
@@ -610,7 +563,6 @@ int ObExprMysqlProcInfo::get_info_by_field_id(const ObExpr &expr,
         ObObj str_value;
         int_value.set_int(exec_env.get_sql_mode());
         if (OB_FAIL(ob_sql_mode_to_str(int_value, str_value, &ctx.get_expr_res_alloc()))) {
-          LOG_WARN("fail to convert sqlmode to string", K(int_value), K(ret));
         } else {
           value_str = str_value.get_string();
           OZ (set_return_result(expr, ctx, expr_datum, value_str));
@@ -688,7 +640,6 @@ int ObExprMysqlProcInfo::get_info_by_field_id(const ObExpr &expr,
         ObObj str_value;
         int_value.set_int(exec_env.get_sql_mode());
         if (OB_FAIL(ob_sql_mode_to_str(int_value, str_value, &ctx.get_expr_res_alloc()))) {
-          LOG_WARN("fail to convert sqlmode to string", K(int_value), K(ret));
         } else {
           value_str = str_value.get_string();
           OZ (set_return_result(expr, ctx, expr_datum, value_str));
@@ -730,7 +681,6 @@ int ObExprMysqlProcInfo::calc_mysql_proc_info_arg_cnt_2(const ObExpr &expr,
   ObString info_name;
   
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg1))) {
-    LOG_WARN("eval arg1 failed", K(ret));
   } else if (arg1->is_null()) {
     expr_datum.set_null();
   } else {
@@ -739,7 +689,6 @@ int ObExprMysqlProcInfo::calc_mysql_proc_info_arg_cnt_2(const ObExpr &expr,
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, arg2))) {
-    LOG_WARN("eval arg2 failed", K(ret));
   } else if (arg2->is_null()) {
     expr_datum.set_null();
   } else {
@@ -750,35 +699,27 @@ int ObExprMysqlProcInfo::calc_mysql_proc_info_arg_cnt_2(const ObExpr &expr,
     // do nothing
   } else if (0 == info_name.case_compare("PARAM_LIST")) {
     if (OB_FAIL(get_param_list_info(expr, ctx, expr_datum, routine_id))) {
-      LOG_WARN("get param_list info failed", K(ret), K(routine_id));
     }
   } else if (0 == info_name.case_compare("RETURNS")) {
     if (OB_FAIL(get_returns_info(expr, ctx, expr_datum, routine_id))) {
-      LOG_WARN("get returns info failed", K(ret), K(routine_id));
     }
   } else if (0 == info_name.case_compare("BODY")) {
     if (OB_FAIL(get_body_info(expr, ctx, expr_datum, routine_id))) {
-      LOG_WARN("get body info failed", K(ret), K(routine_id));
     }
   } else if (0 == info_name.case_compare("SQL_MODE")) {
     if (OB_FAIL(get_info_by_field_id(expr, ctx, expr_datum, routine_id, SQL_MODE))) {
-      LOG_WARN("get sql_mode info failed", K(ret), K(routine_id));
     }
   } else if (0 == info_name.case_compare("CHARACTER_SET_CLIENT")) {
     if (OB_FAIL(get_info_by_field_id(expr, ctx, expr_datum, routine_id, CHARACTER_SET_CLIENT))) {
-      LOG_WARN("get character_set_client info failed", K(ret), K(routine_id));
     }
   } else if (0 == info_name.case_compare("COLLATION_CONNECTION")) {
     if (OB_FAIL(get_info_by_field_id(expr, ctx, expr_datum, routine_id, COLLATION_CONNECTION))) {
-      LOG_WARN("get collation_connection info failed", K(ret), K(routine_id));
     }
   } else if (0 == info_name.case_compare("DB_COLLATION")) {
     if (OB_FAIL(get_info_by_field_id(expr, ctx, expr_datum, routine_id, DB_COLLATION))) {
-      LOG_WARN("get db_collation info failed", K(ret), K(routine_id));
     }
   } else if (0 == info_name.case_compare("NAME")) {
     if (OB_FAIL(get_sys_package_name_info(expr, ctx, expr_datum, routine_id))) {
-      LOG_WARN("get name info failed", K(ret), K(routine_id));
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
@@ -814,7 +755,6 @@ int ObExprMysqlProcInfo::calc_mysql_proc_info_arg_cnt_9(const ObExpr &expr,
   ObObj   obj_routine_body;
   
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg0))) {
-    LOG_WARN("eval arg0 failed", K(ret));
   } else if (arg0->is_null()) {
     expr_datum.set_null();
   } else {
@@ -823,7 +763,6 @@ int ObExprMysqlProcInfo::calc_mysql_proc_info_arg_cnt_9(const ObExpr &expr,
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, arg1))) {
-    LOG_WARN("eval arg1 failed", K(ret));
   } else if (arg1->is_null()) {
     expr_datum.set_null();
   } else {
@@ -833,7 +772,6 @@ int ObExprMysqlProcInfo::calc_mysql_proc_info_arg_cnt_9(const ObExpr &expr,
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(expr.args_[2]->eval(ctx, arg2))) {
-    LOG_WARN("eval arg2 failed", K(ret));
   } else if (arg2->is_null()) {
     expr_datum.set_null();
   } else {
@@ -842,42 +780,36 @@ int ObExprMysqlProcInfo::calc_mysql_proc_info_arg_cnt_9(const ObExpr &expr,
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(expr.args_[3]->eval(ctx, arg3))) {
-    LOG_WARN("eval arg3 failed", K(ret));
   } else if (!arg3->is_null()) {
     routine_id = arg3->get_uint();
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(expr.args_[4]->eval(ctx, arg4))) {
-    LOG_WARN("eval arg4 failed", K(ret));
   } else if (!arg4->is_null()) {
     param_type = arg4->get_int();
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(expr.args_[5]->eval(ctx, arg5))) {
-    LOG_WARN("eval arg5 failed", K(ret));
   } else if (!arg5->is_null()) {
     param_length = arg5->get_int();
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(expr.args_[6]->eval(ctx, arg6))) {
-    LOG_WARN("eval arg6 failed", K(ret));
   } else if (!arg6->is_null()) {
     param_precision = arg6->get_int();
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(expr.args_[7]->eval(ctx, arg7))) {
-    LOG_WARN("eval arg7 failed", K(ret));
   } else if (!arg7->is_null()) {
     param_scale = arg7->get_int();
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(expr.args_[8]->eval(ctx, arg8))) {
-    LOG_WARN("eval arg8 failed", K(ret));
   } else if (!arg8->is_null()) {
     param_coll_type = arg8->get_int();
   }
@@ -886,31 +818,24 @@ int ObExprMysqlProcInfo::calc_mysql_proc_info_arg_cnt_9(const ObExpr &expr,
     // do nothing
   } else if (0 == info_name.case_compare("PARAM_LIST")) {
     if (OB_FAIL(get_param_list_info(expr, ctx, expr_datum, routine_body, exec_env, routine_id))) {
-      LOG_WARN("get param_list info failed", K(ret), K(routine_body), K(exec_env));
     }
   } else if (0 == info_name.case_compare("RETURNS")) {
     if (OB_FAIL(get_returns_info(expr, ctx, expr_datum, param_type, param_length, param_precision, param_scale, param_coll_type, exec_env, routine_body))) {
-      LOG_WARN("get returns info failed", K(ret), K(param_type), K(param_length), K(param_precision), K(param_scale), K(param_coll_type));
     }
   } else if (0 == info_name.case_compare("BODY")) {
     if (OB_FAIL(get_body_info(expr, ctx, expr_datum, routine_body, exec_env))) {
-      LOG_WARN("get body info failed", K(ret), K(routine_body), K(exec_env));
     }
   } else if (0 == info_name.case_compare("SQL_MODE")) {
     if (OB_FAIL(get_info_by_field_id(expr, ctx, expr_datum, exec_env, SQL_MODE))) {
-      LOG_WARN("get sql_mode info failed", K(ret), K(exec_env));
     }
   } else if (0 == info_name.case_compare("CHARACTER_SET_CLIENT")) {
     if (OB_FAIL(get_info_by_field_id(expr, ctx, expr_datum, exec_env, CHARACTER_SET_CLIENT))) {
-      LOG_WARN("get character_set_client info failed", K(ret), K(exec_env));
     }
   } else if (0 == info_name.case_compare("COLLATION_CONNECTION")) {
     if (OB_FAIL(get_info_by_field_id(expr, ctx, expr_datum, exec_env, COLLATION_CONNECTION))) {
-      LOG_WARN("get collation_connection info failed", K(ret), K(exec_env));
     }
   } else if (0 == info_name.case_compare("DB_COLLATION")) {
     if (OB_FAIL(get_info_by_field_id(expr, ctx, expr_datum, exec_env, DB_COLLATION))) {
-      LOG_WARN("get db_collation info failed", K(ret), K(exec_env));
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
@@ -927,11 +852,9 @@ int ObExprMysqlProcInfo::eval_mysql_proc_info(const ObExpr &expr,
   int ret = OB_SUCCESS;
   if (2 == expr.arg_cnt_) {
     if (OB_FAIL(calc_mysql_proc_info_arg_cnt_2(expr, ctx, expr_datum))) {
-      LOG_WARN("eval mysql_proc_info_arg_cnt_2 failed", K(ret));
     }
   } else if (9 == expr.arg_cnt_) {
     if (OB_FAIL(calc_mysql_proc_info_arg_cnt_9(expr, ctx, expr_datum))) {
-      LOG_WARN("eval mysql_proc_info_arg_cnt_9 failed", K(ret));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;

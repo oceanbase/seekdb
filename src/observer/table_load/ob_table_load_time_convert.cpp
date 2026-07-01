@@ -47,9 +47,7 @@ int ObTableLoadTimeConverter::init(const ObString &format)
       ob_time.mode_ |= DT_TYPE_ORACLE;
     }
     if (OB_FAIL(ObDFMUtil::parse_datetime_format_string(format, dfm_elems_))) {
-      LOG_WARN("fail to parse oracle datetime format string", KR(ret), K(format));
     } else if (OB_FAIL(ObDFMUtil::check_semantic(dfm_elems_, elem_flags_, ob_time.mode_))) {
-      LOG_WARN("check semantic of format string failed", KR(ret), K(format));
     } else {
       is_inited_ = true;
     }
@@ -70,9 +68,7 @@ int ObTableLoadTimeConverter::str_to_datetime_oracle(const ObString &str,
     ObDateTime result_value = 0;
     ObScale scale = 0; // not used
     if (OB_FAIL(str_to_ob_time(str, cvrt_ctx, ObDateTimeType, ob_time, scale))) {
-      LOG_WARN("failed to convert str to ob_time", K(str), K(cvrt_ctx.oracle_nls_format_));
     } else if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ob_time, cvrt_ctx, result_value))) {
-      LOG_WARN("convert ob_time to datetime failed", K(ret), K(ob_time));
     } else {
       value = result_value;
     }
@@ -100,7 +96,6 @@ int ObTableLoadTimeConverter::str_to_ob_time(const ObString &str, const ObTimeCo
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ObTimeConverter::str_to_ob_time_by_dfm_elems(str, dfm_elems_, elem_flags_, cvrt_ctx,
                                                              target_type, ob_time, scale))) {
-      LOG_WARN("fail to str to ob time by dfm elements", KR(ret));
     }
   }
   return ret;

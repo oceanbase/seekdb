@@ -57,7 +57,6 @@ int ObExprTimeFormat::time_to_str_format(const int64_t &time_value, const ObStri
   int ret = OB_SUCCESS;
   ObTime ob_time;
   if (OB_FAIL(ObTimeConverter::time_to_ob_time(time_value, ob_time))) {
-    LOG_WARN("time to ob time failed", K(ret), K(time_value));
   } else if (OB_ISNULL(format.ptr()) || OB_ISNULL(buf)
             || OB_UNLIKELY(format.length() <= 0 || buf_len <= 0)) {
     ret = OB_ERR_UNEXPECTED;
@@ -233,7 +232,6 @@ int ObExprTimeFormat::calc_time_format(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   ObDatum *format = NULL;
   bool res_null = false;
   if (OB_FAIL(expr.eval_param_value(ctx, time, format))) {
-    LOG_WARN("calc param failed", K(ret));
   } else if (time->is_null() || format->is_null()) {
     expr_datum.set_null();
   } else if (OB_UNLIKELY(format->get_string().empty())) {
@@ -249,7 +247,6 @@ int ObExprTimeFormat::calc_time_format(const ObExpr &expr, ObEvalCtx &ctx, ObDat
                                           buf_len,
                                           pos,
                                           res_null))) {
-      LOG_WARN("failed to convert ob time to str with format");
     } else if (res_null) {
       expr_datum.set_null();
     } else {
@@ -258,9 +255,7 @@ int ObExprTimeFormat::calc_time_format(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   } else { // text tc
     ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &expr_datum);
     if (OB_FAIL(output_result.init(buf_len))) {
-      LOG_WARN("init lob result failed", K(ret), K(buf_len));
     } else if (OB_FAIL(output_result.get_reserved_buffer(buf, buf_len))) {
-      LOG_WARN("get reserved buffer for blob failed", K(ret), K(buf_len));
     } else if (OB_ISNULL(buf)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_ERROR("no more memory to alloc for buf", K(ret), K(buf_len));
@@ -270,11 +265,9 @@ int ObExprTimeFormat::calc_time_format(const ObExpr &expr, ObEvalCtx &ctx, ObDat
                                           buf_len,
                                           pos,
                                           res_null))) {
-      LOG_WARN("failed to convert ob time to lob str with format");
     } else if (res_null) {
       expr_datum.set_null();
     } else if (OB_FAIL(output_result.lseek(pos, 0))){
-      LOG_WARN("lseek text or string result failed", K(ret), K(pos));
     } else {
       output_result.set_result();
     }

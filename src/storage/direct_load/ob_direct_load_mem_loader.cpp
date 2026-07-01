@@ -52,7 +52,6 @@ int ObDirectLoadMemLoader::add_table(const ObDirectLoadTableHandle &table_handle
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("external table should have at least one fragment", KR(ret), KPC(external_table));
     } else if (OB_FAIL(fragments_.push_back(external_table->get_fragments()))) {
-      LOG_WARN("fail to push back", KR(ret));
     }
   }
   return ret;
@@ -70,9 +69,7 @@ int ObDirectLoadMemLoader::work()
     ExternalReader external_reader;
     if (OB_FAIL(external_reader.init(mem_ctx_->table_data_desc_.external_data_block_size_,
                                      mem_ctx_->table_data_desc_.compressor_type_))) {
-      LOG_WARN("fail to init external reader", KR(ret));
     } else if (OB_FAIL(external_reader.open(fragment.file_handle_, 0, fragment.file_size_))) {
-      LOG_WARN("fail to open file", KR(ret));
     }
     while (OB_SUCC(ret) && OB_LIKELY(!mem_ctx_->has_error_)) {
       if (external_row == nullptr && OB_FAIL(external_reader.get_next_item(external_row))) {
@@ -93,7 +90,6 @@ int ObDirectLoadMemLoader::work()
           } else {
             ret = OB_SUCCESS;
             if (OB_FAIL(close_chunk(chunk))) {
-              LOG_WARN("fail to close chunk", KR(ret));
             }
           }
         } else {
@@ -125,11 +121,8 @@ int ObDirectLoadMemLoader::close_chunk(ChunkType *&chunk)
   int ret = OB_SUCCESS;
   CompareType compare;
   if (OB_FAIL(compare.init(*(mem_ctx_->datum_utils_), mem_ctx_->dup_action_))) {
-    LOG_WARN("fail to init compare", KR(ret));
   } else if (OB_FAIL(chunk->sort(compare, mem_ctx_->enc_params_))) {
-    LOG_WARN("fail to sort chunk", KR(ret));
   } else if (OB_FAIL(mem_ctx_->mem_chunk_queue_.push(chunk))) {
-    LOG_WARN("fail to push", KR(ret));
   } else {
     chunk = nullptr;
   }

@@ -142,7 +142,6 @@ int ObGAISRequestRpc::next_autoinc_val(const ObAddr &server,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("global autoinc service is null", K(ret));
       } else if (OB_FAIL(gais->handle_next_autoinc_request(msg, rpc_result))) {
-        LOG_WARN("post local gais require autoinc request failed", KR(ret), K(server), K(msg));
       } else if (!rpc_result.is_valid()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("post local gais require autoinc and gais_rpc_result is invalid", KR(ret), K(server),
@@ -175,7 +174,6 @@ int ObGAISRequestRpc::curr_autoinc_val(const ObAddr &server,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("global autoinc service is null", K(ret));
       } else if (OB_FAIL(gais->handle_curr_autoinc_request(msg, rpc_result))) {
-        LOG_WARN("post local gais get autoinc request failed", KR(ret), K(server), K(msg));
       } else {
         LOG_TRACE("post local get autoinc request success", K(msg), K(rpc_result));
       }
@@ -204,7 +202,6 @@ int ObGAISRequestRpc::push_autoinc_val(const ObAddr &server,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("global autoinc service is null", K(ret));
       } else if (OB_FAIL(gais->handle_push_autoinc_request(msg, sync_value))) {
-        LOG_WARN("post local gais push global request failed", KR(ret), K(server), K(msg));
       } else {
         LOG_TRACE("post local gais push global request request success", K(msg), K(sync_value));
       }
@@ -231,7 +228,6 @@ int ObGAISRequestRpc::clear_autoinc_cache(const ObAddr &server, const ObGAISAuto
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("global autoinc service is null", K(ret));
       } else if (OB_FAIL(gais->handle_clear_autoinc_cache_request(msg))) {
-        LOG_WARN("post local gais clear autoinc cache failed", KR(ret), K(server), K(msg));
       } else {
         LOG_TRACE("clear autoinc cache success", K(server), K(msg));
       }
@@ -275,7 +271,6 @@ int ObGAISRequestRpc::next_sequence_val(const common::ObAddr &server,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("global autoinc service is null", K(ret));
       } else if (OB_FAIL(gais->handle_next_sequence_request(msg, rpc_result))) {
-        LOG_WARN("post local gais require autoinc request failed", KR(ret), K(server), K(msg));
       } else {
         LOG_TRACE("post local require autoinc request success", K(msg), K(rpc_result));
       }

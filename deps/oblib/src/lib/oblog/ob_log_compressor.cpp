@@ -97,9 +97,7 @@ int ObLogCompressor::init()
     strncpy(syslog_dir_, OB_SYSLOG_DIR, strlen(OB_SYSLOG_DIR));
     stopped_ = false;
     if (OB_FAIL(TG_START(TGDefIDs::SYSLOG_COMPRESS))) {
-      LOG_ERROR("failed to start log compression timer", K(ret));
     } else if (OB_FAIL(TG_SCHEDULE(TGDefIDs::SYSLOG_COMPRESS, timer_task_, loop_interval_, true/*repeat*/, true/*immediate*/))) {
-      LOG_WARN("failed to add timer for syslog compress", K(ret));
     }else {
       is_inited_ = true;
     }
@@ -196,7 +194,6 @@ int ObLogCompressor::set_compress_func(const char *compress_func_ptr)
     if (new_compress_func != compress_func_) {
       LOG_INFO("modify log compress func", K(compress_func_), K(new_compress_func));
       if (OB_FAIL(set_next_compressor_(new_compress_func))) {
-        LOG_ERROR("fail to modify log compress func", K(ret), K(compress_func_), K(new_compress_func));
       } else if (compress_func_ == NONE_COMPRESSOR && new_compress_func != NONE_COMPRESSOR) {
         compress_func_ = new_compress_func;
         // from disable to enanble, awake compress thread
@@ -244,7 +241,6 @@ bool ObLogCompressor::is_compressed_file(const char *file)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argumet for file is null", K(ret));
   } else if (OB_FAIL(regcomp(&regex, OB_COMPRESSED_SYSLOG_FILE_PATTERN, REG_EXTENDED))) {
-    LOG_ERROR("failed to compile regex pattern", K(ret));
   } else {
     if (regexec(&regex, file, 0, NULL, 0) == 0) {
       is_compressed = true;
@@ -381,7 +377,6 @@ void ObLogCompressor::run_timer_task()
             if (log_file_count[i] > min_uncompressed_count_) {
               int64_t file_size = get_file_size_(compress_files[i]);
               if (OB_FAIL(compress_single_file_(compress_files[i], src_buf, dest_buf))) {
-                LOG_WARN("failed to compress file", K(ret), K(compress_files[i]));
               } else {
                 // estimated value
                 total_size -= file_size;
@@ -473,7 +468,6 @@ int ObLogCompressor::compress_single_block_(
   int ret = OB_SUCCESS;
   int64_t size = -1;
   if (OB_FAIL(((ObCompressor *)compressor_)->compress(src, src_size, dest, dest_size, size))) {
-    LOG_ERROR("failed to compress single block", K(ret));
   } else {
     return_size = size;
   }
@@ -499,7 +493,6 @@ int ObLogCompressor::compress_single_file_(const char *file_name, char *src_buf,
     time_t last_modified_time = st.st_mtime;
 
     if (OB_FAIL(get_compressed_file_name_(file_name, compressed_file_name))) {
-      LOG_ERROR("failed to get compressed file name", K(ret), K(file_name));
     } else if (strlen(compressed_file_name) < strlen(file_name)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("failed to get compressed file name", K(ret), K(file_name));
@@ -517,7 +510,6 @@ int ObLogCompressor::compress_single_file_(const char *file_name, char *src_buf,
       while (OB_SUCC(ret) && !feof(input_file)) {
         if ((read_size = fread(src_buf, 1, src_size, input_file)) > 0) {
           if (OB_FAIL(compress_single_block_(dest_buf, dest_size, src_buf, read_size, write_size))) {
-            LOG_ERROR("failed to compress syslog block", K(ret));
           } else if (write_size != fwrite(dest_buf, 1, write_size, output_file)) {
             ret = OB_FILE_NOT_EXIST;
             LOG_WARN("failed to write file", K(ret), K(errno), K(compressed_file_name));
@@ -561,7 +553,6 @@ int ObLogCompressor::set_next_compressor_(ObCompressorType compress_func) {
   if (compress_func == NONE_COMPRESSOR) {
     next_compressor_ = NULL;
   } else if (OB_FAIL(ObCompressorPool::get_instance().get_compressor(compress_func, compressor))) {
-    LOG_ERROR("Fail to get_compressor", K(ret), K(compress_func));
   } else {
     next_compressor_ = compressor;
     if (OB_ISNULL(compressor_)) {

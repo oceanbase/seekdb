@@ -47,7 +47,6 @@ int ObExprRandstr::calc_result_type2(ObExprResType &type,
     if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(
                 common::ObCharset::get_default_collation(common::ObCharset::get_default_charset()), mbmaxlen))) {
       ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "fail to get mbmaxlen");
     } else if (0 == mbmaxlen){
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("mb maxlen invalid");
@@ -73,9 +72,7 @@ int ObExprRandstr::calc_random_str(const ObExpr &expr,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected arg_cnt", K(ret), K(expr.arg_cnt_));
   } else if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("expr.eval_param_value failed", K(ret));
   } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_max_allowed_packet(max_size))) {
-    LOG_WARN("get max length failed", K(ret));
   } else {
     int64_t rand_res = 0;
     ObDatum &len = expr.locate_param_datum(ctx, 0);

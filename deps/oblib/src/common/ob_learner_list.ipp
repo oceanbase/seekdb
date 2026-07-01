@@ -148,7 +148,6 @@ int BaseLearnerList<MAX_SIZE, T>::add_learner(const T &learner)
   } else if (OB_UNLIKELY(contains(learner))) {
     ret = OB_ENTRY_EXIST;
   } else if (OB_FAIL(learner_array_.push_back(learner))) {
-    COMMON_LOG(ERROR, "learner_array_ push back failed", K(ret), K(learner));
   } else {
     // For replication and migration of columnar replicas,
     // learner_list should keep the order of learners as they had been added into.
@@ -166,7 +165,6 @@ int BaseLearnerList<MAX_SIZE, T>::remove_learner(const T &learner)
   } else if (-1 == (idx = get_index_by_learner(learner))) {
     ret = OB_ENTRY_NOT_EXIST;
   } else if (OB_FAIL(learner_array_.remove(idx))) {
-    COMMON_LOG(ERROR, "learner_array_ remove failed", K(ret), K(idx));
   }
   return ret;
 }
@@ -181,7 +179,6 @@ int BaseLearnerList<MAX_SIZE, T>::remove_learner(const common::ObAddr &server)
   } else if (-1 == (idx = get_index_by_addr(server))) {
     ret = OB_ENTRY_NOT_EXIST;
   } else if (OB_FAIL(learner_array_.remove(idx))) {
-    COMMON_LOG(ERROR, "learner_array_ remove failed", K(ret), K(idx));
   }
   return ret;
 }
@@ -199,7 +196,6 @@ int BaseLearnerList<MAX_SIZE, T>::get_learner(const int64_t idx, T &learner) con
   if (idx < 0 || idx >= learner_array_.count()) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(learner_array_.at(idx, learner))) {
-    COMMON_LOG(ERROR, "SEArray.at() failed", K_(learner_array), K(idx));
   }
   return ret;
 }
@@ -272,9 +268,7 @@ int BaseLearnerList<MAX_SIZE, T>::append(const BaseLearnerList<MAX_SIZE, T> &lea
   for (int64_t i = 0; OB_SUCC(ret) && i < learner_list.get_member_number(); ++i) {
     T learner;
     if (OB_FAIL(learner_list.get_learner(i, learner))) {
-      COMMON_LOG(WARN, "get_learner failed", K(ret), K(i));
     } else if (OB_FAIL(this->add_learner(learner))) {
-      COMMON_LOG(WARN, "add_learner failed", K(ret));
     }
   }
   return ret;
@@ -290,13 +284,10 @@ int BaseLearnerList<MAX_SIZE, T>::deep_copy_to(BaseLearnerList<ARG_MAX_SIZE, com
   for (int64_t idx = 0; idx < number && OB_SUCC(ret); ++idx) {
     common::ObAddr server;
     if (OB_FAIL(get_server_by_index(idx, server))) {
-      COMMON_LOG(WARN, "get_server_by_index failed", K(ret), K(idx));
     } else if (OB_FAIL(learner_list.add_learner(ObMember(server, 1)))) {
-      COMMON_LOG(WARN, "add_learner failed", K(ret), K(server));
     }
   }
   if (OB_FAIL(ret)) {
-    COMMON_LOG(WARN, "BaseLearnerList deep_copy_to failed", K(ret));
   }
   return ret;
 }
@@ -309,7 +300,6 @@ int BaseLearnerList<MAX_SIZE, T>::serialize(SERIAL_PARAMS) const
   if (OB_ISNULL(buf) || pos < 0 || pos > buf_len) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(learner_array_.serialize(buf, buf_len, new_pos))) {
-        COMMON_LOG(WARN, "serialize learner failed", K(ret));
   } else {
     pos = new_pos;
   }
@@ -325,7 +315,6 @@ int BaseLearnerList<MAX_SIZE, T>::deserialize(DESERIAL_PARAMS)
   if (OB_ISNULL(buf) || pos < 0 || pos > data_len) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(learner_array_.deserialize(buf, data_len, new_pos))) {
-    COMMON_LOG(WARN, "learner_array_ deserialize failed", K(ret));
   } else {
     pos = new_pos;
   }
@@ -359,11 +348,9 @@ int BaseLearnerList<MAX_SIZE, T>::transform_to_string(
       if (OB_FAIL(get_member_by_index(i, learner))) {
         COMMON_LOG(WARN, "failed to get learner from learner list", K(ret), K(i));
       } else if (OB_FAIL(learner.get_server().ip_port_to_string(ip_port, sizeof(ip_port)))) {
-        COMMON_LOG(WARN, "convert server to string failed", K(ret), K(learner));
       } else if (need_comma && OB_FAIL(output_string.append(","))) {
         COMMON_LOG(WARN, "failed to append comma to string", K(ret));
       } else if (OB_FAIL(output_string.append_fmt("%.*s:%ld:%ld", static_cast<int>(sizeof(ip_port)), ip_port, learner.get_timestamp(), learner.get_flag()))) {
-        COMMON_LOG(WARN, "failed to append ip_port to string", K(ret), K(learner));
       } else {
         need_comma = true;
       }
@@ -383,11 +370,9 @@ int BaseLearnerList<MAX_SIZE, T>::get_addr_array(ObIArray<common::ObAddr> &addr_
     if (OB_FAIL(get_server_by_index(idx, server))) {
       COMMON_LOG(WARN, "get_server_by_index failed", K(ret), K(idx));
     } else if (OB_FAIL(addr_array.push_back(server))) {
-      COMMON_LOG(WARN, "add addr array failed", K(ret), K(server));
     }
   }
   if (OB_FAIL(ret)) {
-    COMMON_LOG(WARN, "BaseLearnerList get_addr_array failed", K(ret));
   }
   return ret;
 }

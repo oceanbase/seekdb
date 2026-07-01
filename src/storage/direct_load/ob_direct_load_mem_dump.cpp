@@ -63,9 +63,7 @@ int ObDirectLoadMemDump::Context::add_table(const ObTabletID &tablet_id, int64_t
   int ret = OB_SUCCESS;
   lib::ObMutexGuard guard(mutex_);
   if (OB_FAIL(all_tables_.add(table))) {
-    LOG_WARN("fail to push table", KR(ret));
   } else if (OB_FAIL(tables_.add(tablet_id, std::make_pair(range_idx, table)))) {
-    LOG_WARN("fail to add table", KR(ret));
   }
   return ret;
 }
@@ -121,7 +119,6 @@ int ObDirectLoadMemDump::new_sstable_builder(const ObTabletID &tablet_id,
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to allocate sstable builder", KR(ret));
     } else if (OB_FAIL(sstable_builder->init(sstable_build_param))) {
-      LOG_WARN("fail to init sstable builder", KR(ret));
     } else {
       table_builder = sstable_builder;
     }
@@ -153,7 +150,6 @@ int ObDirectLoadMemDump::new_external_table_builder(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate external table builder", KR(ret));
   } else if (OB_FAIL(external_table_builder->init(external_build_param))) {
-    LOG_WARN("fail to init external table builder", KR(ret));
   } else {
     table_builder = external_table_builder;
   }
@@ -179,21 +175,17 @@ int ObDirectLoadMemDump::close_table_builder(ObIDirectLoadPartitionTableBuilder 
     if (need_close && table_builder->get_row_count() > 0) { // temporarily because simple file has a problem
       ObDirectLoadTableHandleArray table_array;
       if (OB_FAIL(table_builder->close())) {
-        LOG_WARN("fail to close sstable builder", KR(ret));
       } else if (OB_FAIL(table_builder->get_tables(table_array, mem_ctx_->table_mgr_))) {
-        LOG_WARN("fail to get tables", KR(ret));
       } else if (OB_UNLIKELY(1 != table_array.count())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected table count not equal 1", KR(ret));
       } else {
         ObDirectLoadTableHandle table_handle;
         if (OB_FAIL(table_array.get_table(0, table_handle))) {
-          LOG_WARN("fail to get table", KR(ret));
         } else if (!table_handle.is_valid()) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected table handle", KR(ret));
         } else if (OB_FAIL(context_ptr_->add_table(table_handle.get_table()->get_tablet_id(), range_idx_, table_handle))) {
-          LOG_WARN("fail to add table", K(tablet_id), K(range_idx_), KR(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -230,28 +222,22 @@ int ObDirectLoadMemDump::dump_tables()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to allocate memory", KR(ret));
   } else if (OB_FAIL(compare.init(*(mem_ctx_->datum_utils_), mem_ctx_->dup_action_))) {
-    LOG_WARN("fail to init compare", KR(ret));
   } else if (OB_FAIL(compare1.init(*(mem_ctx_->datum_utils_), mem_ctx_->dup_action_, true))) {
-    LOG_WARN("fail to init compare1", KR(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < context_ptr_->mem_chunk_array_.count(); i++) {
     ChunkType *chunk = context_ptr_->mem_chunk_array_[i];
     auto iter = chunk->scan(range_.start_, range_.end_, compare1);
     if (OB_FAIL(chunk_iters.push_back(iter))) {
-      LOG_WARN("fail to push iter", KR(ret));
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < chunk_iters.size(); i++) {
     if (OB_FAIL(iters.push_back(&(chunk_iters[i])))) {
-      LOG_WARN("fail to push iters", KR(ret));
     }
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(merger.init(iters, &compare))) {
-      LOG_WARN("fail to init merger", KR(ret));
     } else if (OB_FAIL(datum_row.init(mem_ctx_->table_data_desc_.column_count_))) {
-      LOG_WARN("fail to init datum row", KR(ret));
     }
   }
   ObTabletID last_tablet_id;
@@ -268,18 +254,15 @@ int ObDirectLoadMemDump::dump_tables()
           OB_FAIL(close_table_builder(table_builder, last_tablet_id, false /*is_final*/))) {
         LOG_WARN("fail to close table builder", KR(ret));
       } else if (OB_FAIL(new_table_builder(external_row->tablet_id_, table_builder))) {
-        LOG_WARN("fail to new table builder", KR(ret));
       } else {
         last_tablet_id = external_row->tablet_id_;
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(external_row->to_datum_row(datum_row))) {
-        LOG_WARN("fail to transfer dataum row", KR(ret));
       } else if (OB_FAIL(table_builder->append_row(external_row->tablet_id_, datum_row))) {
         if (OB_LIKELY(OB_ERR_PRIMARY_KEY_DUPLICATE == ret)) {
           if (OB_FAIL(mem_ctx_->dml_row_handler_->handle_update_row(external_row->tablet_id_, datum_row))) {
-            LOG_WARN("fail to handle update row", KR(ret), K(datum_row));
           }
         } else {
           LOG_WARN("fail to append row", KR(ret), K(datum_row));
@@ -331,7 +314,6 @@ int ObDirectLoadMemDump::new_sstable_compactor(const ObTabletID &tablet_id,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new ObDirectLoadMultipleSSTableCompactor", KR(ret));
   } else if (OB_FAIL(sstable_compactor->init(param))) {
-    LOG_WARN("fail to init compactor", KR(ret));
   } else {
     compactor = sstable_compactor;
   }
@@ -357,7 +339,6 @@ int ObDirectLoadMemDump::new_external_table_compactor(const ObTabletID &tablet_i
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new ObDirectLoadExternalTableCompactor", KR(ret));
   } else if (OB_FAIL(external_table_compactor->init(param))) {
-    LOG_WARN("fail to init compactor", KR(ret));
   } else {
     compactor = external_table_compactor;
   }
@@ -376,11 +357,9 @@ int ObDirectLoadMemDump::compact_tables()
   ObArray<ObTabletID> keys;
   
   if (OB_FAIL(context_ptr_->tables_.get_all_key(keys))) {
-    LOG_WARN("fail to get all keys", KR(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < keys.count(); i++) {
     if (OB_FAIL(compact_tablet_tables(keys.at(i)))) {
-      LOG_WARN("fail to compact tablet tables", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -397,7 +376,6 @@ int ObDirectLoadMemDump::compact_tablet_tables(const ObTabletID &tablet_id)
   ObArray<std::pair<int64_t, ObDirectLoadTableHandle >> table_array;
   
   if (OB_FAIL(context_ptr_->tables_.get(tablet_id, table_array))) {
-    LOG_WARN("fail to get table array", K(tablet_id), KR(ret));
   } else {
     struct
     {
@@ -412,21 +390,17 @@ int ObDirectLoadMemDump::compact_tablet_tables(const ObTabletID &tablet_id)
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(new_table_compactor(tablet_id, compactor))) {
-      LOG_WARN("fail to new table compactor", KR(ret));
     }
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < table_array.count(); i++) {
     if (OB_FAIL(compactor->add_table(table_array[i].second))) {
-      LOG_WARN("fail to add table", KR(ret));
     }
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(compactor->compact())) {
-      LOG_WARN("fail to compact tables", KR(ret));
     } else if (OB_FAIL(mem_ctx_->add_tables_from_table_compactor(*compactor))) {
-      LOG_WARN("fail to add tables from table compactor", KR(ret));
     }
   }
 
@@ -446,12 +420,10 @@ int ObDirectLoadMemDump::do_dump()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dump_tables())) {
-    LOG_WARN("fail to dump tables", KR(ret));
   } else {
     int64_t finished = ATOMIC_AAF(&(context_ptr_->finished_sub_dump_count_), 1);
     if (finished == context_ptr_->sub_dump_count_) {
       if (OB_FAIL(compact_tables())) {
-        LOG_WARN("fail to compact tables", KR(ret));
       }
     }
   }

@@ -81,10 +81,9 @@ public:
     // invoke when get a valid packet on protocol level, but can't decode it.
     virtual void on_invalid() {
       int ret = err_;
-      RPC_FRAME_LOG(ERROR, "rpc response decode failed, tenant oom or deserialization failed", K_(pcode), K_(dst));
     }
     // invoke when can't get a valid or completed packet.
-    virtual void on_timeout() { RPC_FRAME_LOG(DEBUG, "packet timeout"); }
+    virtual void on_timeout() {  }
     virtual int on_error(int err);
     void set_error(int err) { err_ = err; }
     int get_error() const { return err_; }

@@ -50,16 +50,13 @@ int SchedOrderGenerator::generate(
   for (int64_t i = 0; OB_SUCC(ret) && i < root.get_child_count(); ++i) {
     DfoInfo *child = NULL;
     if (OB_FAIL(root.get_child(i, child))) {
-      LOG_WARN("fail get child dfo", K(i), K(root), K(ret));
     } else if (OB_ISNULL(child)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(generate(*child, edges))) {
-      LOG_WARN("fail do generate edge", K(*child), K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(edges.push_back(&root))) {
-      LOG_WARN("fail add edge to array", K(ret));
     }
   }
   return ret;
@@ -88,12 +85,10 @@ int LogRuntimeFilterDependencyInfo::describe_dependency(DfoInfo *root_dfo)
       const ObLogicalOperator *ancestor_op = nullptr;
       DfoInfo *op_dfo = nullptr;;
       if (OB_FAIL(LogLowestCommonAncestorFinder::find_op_common_ancestor(create_op, use_op, ancestor_op))) {
-        LOG_WARN("failed to find op common ancestor");
       } else if (OB_ISNULL(ancestor_op)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("op common ancestor not found");
       } else if (OB_FAIL(LogLowestCommonAncestorFinder::get_op_dfo(ancestor_op, root_dfo, op_dfo))) {
-        LOG_WARN("failed to find op common ancestor");
       } else if (OB_ISNULL(op_dfo)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("the dfo of ancestor_op not found");
@@ -116,7 +111,6 @@ int DfoInfo::add_child(DfoInfo *child)
   if (OB_ISNULL(child)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(child_dfos_.push_back(child))) {
-    LOG_WARN("fail push back child to array", K(ret));
   }
   return ret;
 }
@@ -128,7 +122,6 @@ int DfoInfo::get_child(int64_t idx, DfoInfo *&child)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("child idx unexpected", K(idx), "cnt", child_dfos_.count(), K(ret));
   } else if (OB_FAIL(child_dfos_.at(idx, child))) {
-    LOG_WARN("fail get element", K(idx), "cnt", child_dfos_.count(), K(ret));
   }
   return ret;
 }
@@ -177,12 +170,10 @@ int ObPxResourceAnalyzer::analyze(
     max_parallel_thread_count = 0;
     max_parallel_group_count = 0;
   } else if (OB_FAIL(convert_log_plan_to_nested_px_tree(root_op))) {
-    LOG_WARN("fail convert log plan to nested px tree", K(ret));
   } else if (OB_FAIL(walk_through_logical_plan(root_op, max_parallel_thread_count,
                                                 max_parallel_group_count,
                                                 max_parallel_thread_map,
                                                 max_parallel_group_map))) {
-    LOG_WARN("walk through logical plan failed", K(ret));
   }
   for (int64_t i = 0; i < px_trees_.count(); ++i) {
     if (OB_NOT_NULL(px_trees_.at(i))) {
@@ -202,20 +193,16 @@ int ObPxResourceAnalyzer::append_px(OPEN_PX_RESOURCE_ANALYZE_DECLARE_ARG, PxInfo
   if (!append_map) {
     // only increase current parallel count.
   } else if (OB_FAIL(px_tree_append<true>(cur_parallel_thread_map, px_info.thread_map_))) {
-    LOG_WARN("px tree append failed", K(ret));
   } else if (OB_FAIL(px_tree_append<true>(cur_parallel_group_map, px_info.group_map_))) {
-    LOG_WARN("px tree append failed", K(ret));
   } else {
     max_parallel_thread_count = max(max_parallel_thread_count, cur_parallel_thread_count);
     max_parallel_group_count = max(max_parallel_group_count, cur_parallel_group_count);
     FOREACH_X(iter, cur_parallel_thread_map, OB_SUCC(ret)) {
       if (OB_FAIL(update_parallel_map_one_addr(max_parallel_thread_map, iter->first, iter->second, false /*append*/))) {
-        LOG_WARN("update parallel map one addr failed", K(ret));
       }
     }
     FOREACH_X(iter, cur_parallel_group_map, OB_SUCC(ret)) {
       if (OB_FAIL(update_parallel_map_one_addr(max_parallel_group_map, iter->first, iter->second, false /*append*/))) {
-        LOG_WARN("update parallel map one addr failed", K(ret));
       }
     }
   }
@@ -230,9 +217,7 @@ int ObPxResourceAnalyzer::remove_px(CLOSE_PX_RESOURCE_ANALYZE_DECLARE_ARG, PxInf
   if (!append_map) {
     // only decrease current parallel count.
   } else if (OB_FAIL(px_tree_append<false>(cur_parallel_thread_map, px_info.thread_map_))) {
-    LOG_WARN("px tree append failed", K(ret));
   } else if (OB_FAIL(px_tree_append<false>(cur_parallel_group_map, px_info.group_map_))) {
-    LOG_WARN("px tree append failed", K(ret));
   }
   return ret;
 
@@ -249,7 +234,6 @@ int ObPxResourceAnalyzer::convert_log_plan_to_nested_px_tree(ObLogicalOperator &
   // Specifically, doing two things in one process is simpler
   bool is_stack_overflow = false;
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
-    LOG_WARN("failed to check stack overflow", K(ret));
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("stack overflow, maybe too deep recursive", K(ret));
@@ -257,7 +241,6 @@ int ObPxResourceAnalyzer::convert_log_plan_to_nested_px_tree(ObLogicalOperator &
       static_cast<const ObLogExchange *>(&root_op)->is_px_consumer()) {
     // The current exchange is a QC, abstract all the sub-plans below into a dfo tree
     if (OB_FAIL(create_dfo_tree(static_cast<ObLogExchange &>(root_op)))) {
-      LOG_WARN("fail create dfo tree", K(ret));
     }
   } else {
     int64_t num = root_op.get_num_of_child();
@@ -267,7 +250,6 @@ int ObPxResourceAnalyzer::convert_log_plan_to_nested_px_tree(ObLogicalOperator &
         LOG_WARN("unexpected null ptr", K(child_idx), K(num), K(ret));
       } else if (OB_FAIL(SMART_CALL(convert_log_plan_to_nested_px_tree(
                   *root_op.get_child(child_idx))))) {
-        LOG_WARN("fail split px tree", K(child_idx), K(num), K(ret));
       }
     }
   }
@@ -294,7 +276,6 @@ int ObPxResourceAnalyzer::create_dfo_tree(ObLogExchange &root_op)
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(px_trees_.push_back(px_info))) {
-    LOG_WARN("push back failed", K(ret));
   } else if (OB_ISNULL(child)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("exchange out op should always has a child",
@@ -304,7 +285,6 @@ int ObPxResourceAnalyzer::create_dfo_tree(ObLogExchange &root_op)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expect a px producer below qc op", "type", root_op.get_type(), K(ret));
   } else if (OB_FAIL(do_split(*px_info, *child, NULL /*root_dfo*/))) {
-    LOG_WARN("fail split dfo for current dfo tree", K(ret));
   } else {
     (static_cast<ObLogExchange &>(root_op)).set_px_info(px_info);
   }
@@ -329,7 +309,6 @@ int ObPxResourceAnalyzer::do_split(
   // 2. Each qc calculates the parallelism (zigzag, left-deep, right-deep, bushy)
   bool is_stack_overflow = false;
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
-    LOG_WARN("failed to check stack overflow", K(ret));
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("stack overflow, maybe too deep recursive", K(ret));
@@ -340,7 +319,6 @@ int ObPxResourceAnalyzer::do_split(
       parent_dfo->has_nested_px_ = true;
     }
     if (OB_FAIL(convert_log_plan_to_nested_px_tree(root_op))) {
-      LOG_WARN("fail create qc for rescan op", K(ret));
     }
   } else {
     if (OB_FAIL(ret)) {
@@ -354,10 +332,8 @@ int ObPxResourceAnalyzer::do_split(
                && static_cast<const ObLogExchange &>(root_op).is_px_producer()) {
       DfoInfo *dfo = nullptr;
       if (OB_FAIL(create_dfo(dfo, root_op))) {
-        LOG_WARN("fail create dfo", K(ret));
       } else {
         if (OB_FAIL(dfo->location_addr_.create(hash::cal_next_prime(10), "PxResourceBucket", "PxResourceNode"))) {
-          LOG_WARN("fail to create hash set", K(ret));
         } else if (OB_FAIL(get_dfo_addr_set(root_op, dfo->location_addr_))) {
           LOG_WARN("get addr_set failed", K(ret));
           dfo->destroy();
@@ -383,24 +359,20 @@ int ObPxResourceAnalyzer::do_split(
                     px_info,
                     *root_op.get_child(child_idx),
                     parent_dfo)))) {
-          LOG_WARN("fail split px tree", K(child_idx), K(num), K(ret));
         }
       }
       if (parent_dfo->location_addr_.size() == 0) {
         if (parent_dfo->has_child()) {
           DfoInfo *child_dfo = nullptr;
           if (OB_FAIL(parent_dfo->get_child(0, child_dfo))) {
-            LOG_WARN("get child dfo failed", K(ret));
           } else {
             for (ObHashSet<ObAddr>::const_iterator it = child_dfo->location_addr_.begin();
                 OB_SUCC(ret) && it != child_dfo->location_addr_.end(); ++it) {
               if (OB_FAIL(parent_dfo->location_addr_.set_refactored(it->first))){
-                LOG_WARN("set refactored failed", K(ret), K(it->first));
               }
             }
           }
         } else if (OB_FAIL(parent_dfo->location_addr_.set_refactored(GCTX.self_addr()))){
-          LOG_WARN("set refactored failed", K(ret), K(GCTX.self_addr()));
         }
       }
     }
@@ -450,9 +422,7 @@ int ObPxResourceAnalyzer::get_dfo_addr_set(const ObLogicalOperator &root_op, ObH
       for (int64_t i = 0; i < phy_part_loc_info_arr.count() && OB_SUCC(ret); ++i) {
         share::ObLSReplicaLocation replica_loc;
         if (OB_FAIL(phy_part_loc_info_arr.at(i).get_selected_replica(replica_loc))) {
-          LOG_WARN("get selected replica failed", K(ret));
         } else if (OB_FAIL(addr_set.set_refactored(replica_loc.get_server(), 1))) {
-          LOG_WARN("addr set refactored failed");
         } else {
           LOG_DEBUG("resource analyzer", K(root_op.get_type()),
                                          K(root_op.get_operator_id()),
@@ -471,7 +441,6 @@ int ObPxResourceAnalyzer::get_dfo_addr_set(const ObLogicalOperator &root_op, ObH
                  static_cast<const ObLogExchange*>(child_op)->is_px_consumer()) {
         // do nothing
       } else if (OB_FAIL(SMART_CALL(get_dfo_addr_set(*child_op, addr_set)))) {
-        LOG_WARN("get addr_set failed", K(ret));
       }
     }
   }
@@ -498,21 +467,17 @@ int ObPxResourceAnalyzer::walk_through_logical_plan(
   ObHashMap<ObAddr, int64_t> cur_parallel_group_map;
   if (OB_FAIL(cur_parallel_thread_map.create(bucket_size, ObModIds::OB_SQL_PX,
                                               ObModIds::OB_SQL_PX))){
-    LOG_WARN("create hash map failed", K(ret));
   } else if (OB_FAIL(cur_parallel_group_map.create(bucket_size, ObModIds::OB_SQL_PX,
                                                     ObModIds::OB_SQL_PX))){
-    LOG_WARN("create hash map failed", K(ret));
   } else if (max_parallel_thread_map.created()) {
     max_parallel_thread_map.clear();
     max_parallel_group_map.clear();
   } else if (OB_FAIL(max_parallel_thread_map.create(bucket_size,
                                                     ObModIds::OB_SQL_PX,
                                                     ObModIds::OB_SQL_PX))){
-    LOG_WARN("create hash map failed", K(ret));
   } else if (OB_FAIL(max_parallel_group_map.create(bucket_size,
                                                    ObModIds::OB_SQL_PX,
                                                    ObModIds::OB_SQL_PX))){
-    LOG_WARN("create hash map failed", K(ret));
   }
   ObPxResourceAnalyzer &px_res_analyzer = *this;
   bool append_map = true;
@@ -531,14 +496,10 @@ int ObPxResourceAnalyzer::recursive_walk_through_px_tree(PxInfo &px_tree)
     px_tree.group_cnt_ = 0;
     int64_t bucket_size = cal_next_prime(10);
     if (OB_FAIL(px_tree.thread_map_.create(bucket_size, ObModIds::OB_SQL_PX, ObModIds::OB_SQL_PX))){
-      LOG_WARN("create hash map failed", K(ret));
     } else if (OB_FAIL(px_tree.group_map_.create(bucket_size, ObModIds::OB_SQL_PX, ObModIds::OB_SQL_PX))){
-      LOG_WARN("create hash map failed", K(ret));
     } else if (OB_FAIL(px_tree.rf_dpd_info_.describe_dependency(px_tree.root_dfo_))) {
-      LOG_WARN("failed to describe dependency");
     } else if (OB_FAIL(walk_through_dfo_tree(px_tree, px_tree.threads_cnt_, px_tree.group_cnt_,
                                             px_tree.thread_map_, px_tree.group_map_))) {
-      LOG_WARN("fail calc px thread group count", K(ret));
     } else {
       int64_t op_id = OB_ISNULL(px_tree.root_op_) ? OB_INVALID_ID : px_tree.root_op_->get_op_id();
       LOG_TRACE("after walk_through_dfo_tree", K(op_id), K(px_tree));
@@ -590,13 +551,10 @@ int ObPxResourceAnalyzer::walk_through_dfo_tree(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret));
   } else if (OB_FAIL(DfoTreeNormalizer<DfoInfo>::normalize(*px_root.root_dfo_))) {
-    LOG_WARN("fail normalize px tree", K(ret));
   } else if (OB_FAIL(sched_order_gen.generate(*px_root.root_dfo_, edges))) {
-    LOG_WARN("fail generate sched order", K(ret));
   } else if (OB_FAIL(current_thread_map.create(bucket_size,
                                                ObModIds::OB_SQL_PX,
                                                ObModIds::OB_SQL_PX))){
-    LOG_WARN("create hash map failed", K(ret));
   } else if (OB_FAIL(current_group_map.create(bucket_size,
                                               ObModIds::OB_SQL_PX,
                                               ObModIds::OB_SQL_PX))){
@@ -615,7 +573,6 @@ int ObPxResourceAnalyzer::walk_through_dfo_tree(
     DfoInfo &child = *edges.at(i);
     // schedule child if not scheduled.
     if (OB_FAIL(schedule_dfo(child, threads, groups, current_thread_map, current_group_map))) {
-      LOG_WARN("schedule dfo failed", K(ret));
     } else if (child.has_parent() && OB_FAIL(schedule_dfo(*child.parent_, threads, groups,
                                                           current_thread_map, current_group_map))) {
       LOG_WARN("schedule parent dfo failed", K(ret));
@@ -627,15 +584,12 @@ int ObPxResourceAnalyzer::walk_through_dfo_tree(
           LOG_WARN("sibling must be leaf node", K(ret));
         } else if (OB_FAIL(schedule_dfo(*sibling, threads, groups, current_thread_map,
                                         current_group_map))) {
-          LOG_WARN("schedule sibling failed", K(ret));
         } else if (OB_FAIL(update_max_thead_group_info(threads, groups,
                     current_thread_map, current_group_map,
                     max_threads, max_groups,
                     max_parallel_thread_map, max_parallel_group_map))) {
-          LOG_WARN("update max_thead group info failed", K(ret));
         } else if (OB_FAIL(finish_dfo(*sibling, threads, groups, current_thread_map,
                                         current_group_map))) {
-          LOG_WARN("finish sibling failed", K(ret));
         } else {
           sibling = sibling->depend_sibling_;
         }
@@ -645,13 +599,11 @@ int ObPxResourceAnalyzer::walk_through_dfo_tree(
                     current_thread_map, current_group_map,
                     max_threads, max_groups,
                     max_parallel_thread_map, max_parallel_group_map))) {
-        LOG_WARN("update max_thead group info failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(finish_dfo(child, threads, groups, current_thread_map,
                                         current_group_map))) {
-        LOG_WARN("finish sibling failed", K(ret));
       }
     }
 
@@ -690,7 +642,6 @@ int ObPxResourceAnalyzer::px_tree_append(ObHashMap<ObAddr, int64_t> &max_paralle
     if (OB_SUCC(ret)) {
       dop += append ? it->second : -(it->second);
       if (OB_FAIL(max_parallel_count.set_refactored(it->first, dop, is_exist))){
-        LOG_WARN("set refactored failed", K(ret), K(it->first), K(dop), K(is_exist));
       }
     }
   }
@@ -715,9 +666,7 @@ int ObPxResourceAnalyzer::schedule_dfo(
     // this may not true. but we can't decide the real count for each sqc. just let it be for now
     const int64_t dop_per_addr = 0 == addr_set.size() ? dfo.get_dop() : (dfo.get_dop() + addr_set.size() - 1) / addr_set.size();
     if (OB_FAIL(update_parallel_map(current_thread_map, addr_set, dop_per_addr))) {
-      LOG_WARN("increase current thread map failed", K(ret));
     } else if (OB_FAIL(update_parallel_map(current_group_map, addr_set, group))) {
-      LOG_WARN("increase current group map failed", K(ret));
     } else if (dfo.has_nested_px_) {
       ObLogicalOperator *root_op = NULL;
       ObLogicalOperator *child = NULL;
@@ -729,15 +678,12 @@ int ObPxResourceAnalyzer::schedule_dfo(
       // calculate px usage of nested px coord.
       } else if (OB_FAIL(walk_through_logical_plan(*child, dfo.nested_px_thread_cnt_, dfo.nested_px_group_cnt_,
                                                   dfo.nested_px_thread_map_, dfo.nested_px_group_map_))) {
-        LOG_WARN("walk through logical plan", K(ret));
       } else {
         // append px usage of nested px coord to the dfo.
         threads += dfo.nested_px_thread_cnt_;
         groups += dfo.nested_px_group_cnt_;
         if (OB_FAIL(px_tree_append<true>(current_thread_map, dfo.nested_px_thread_map_))) {
-          LOG_WARN("px tree append failed", K(ret));
         } else if (OB_FAIL(px_tree_append<true>(current_group_map, dfo.nested_px_group_map_))) {
-          LOG_WARN("px tree append failed", K(ret));
         }
       }
     }
@@ -764,16 +710,12 @@ int ObPxResourceAnalyzer::finish_dfo(
     ObHashSet<ObAddr> &addr_set = dfo.location_addr_;
     const int64_t dop_per_addr = 0 == addr_set.size() ? dfo.get_dop() : (dfo.get_dop() + addr_set.size() - 1) / addr_set.size();
     if (OB_FAIL(update_parallel_map(current_thread_map, addr_set, -dop_per_addr))) {
-      LOG_WARN("decrease current thread map failed", K(ret));
     } else if (OB_FAIL(update_parallel_map(current_group_map, addr_set, -group))) {
-      LOG_WARN("decrease current group map failed", K(ret));
     } else if (dfo.has_nested_px_) {
       threads -= dfo.nested_px_thread_cnt_;
       groups -= dfo.nested_px_group_cnt_;
       if (OB_FAIL(px_tree_append<false>(current_thread_map, dfo.nested_px_thread_map_))) {
-        LOG_WARN("px tree append failed", K(ret));
       } else if (OB_FAIL(px_tree_append<false>(current_group_map, dfo.nested_px_group_map_))) {
-        LOG_WARN("px tree append failed", K(ret));
       }
     }
     LOG_TRACE("[PxResAnaly] finish dfo", K(dfo.dop_), K(dfo.has_nested_px_),
@@ -792,7 +734,6 @@ int ObPxResourceAnalyzer::update_parallel_map(
   for (hash::ObHashSet<ObAddr>::const_iterator it = addr_set.begin();
         OB_SUCC(ret) && it != addr_set.end(); it++) {
     if (OB_FAIL(update_parallel_map_one_addr(parallel_map, it->first, count, true))) {
-      LOG_WARN("update parallel map one addr failed", K(ret));
     }
   }
   return ret;
@@ -825,7 +766,6 @@ int ObPxResourceAnalyzer::update_parallel_map_one_addr(
       origin_count = max(origin_count, count);
     }
     if (OB_FAIL(parallel_map.set_refactored(addr, origin_count, is_exist))){
-      LOG_WARN("set refactored failed", K(ret), K(addr), K(origin_count), K(is_exist));
     }
   }
   return ret;
@@ -847,13 +787,11 @@ int ObPxResourceAnalyzer::update_max_thead_group_info(
   for (ObHashMap<ObAddr, int64_t>::const_iterator it = current_thread_map.begin();
       OB_SUCC(ret) && it != current_thread_map.end(); ++it) {
     if (OB_FAIL(update_parallel_map_one_addr(max_parallel_thread_map, it->first, it->second, false))) {
-      LOG_WARN("update parallel map one addr failed", K(ret));
     }
   }
   for (ObHashMap<ObAddr, int64_t>::const_iterator it = current_group_map.begin();
       OB_SUCC(ret) && it != current_group_map.end(); ++it) {
     if (OB_FAIL(update_parallel_map_one_addr(max_parallel_group_map, it->first, it->second, false))) {
-      LOG_WARN("update parallel map one addr failed", K(ret));
     }
   }
   return ret;
@@ -868,7 +806,6 @@ int LogLowestCommonAncestorFinder::find_op_common_ancestor(
   const ObLogicalOperator *parent = left;
   while (OB_NOT_NULL(parent) && OB_SUCC(ret)) {
     if (OB_FAIL(ancestors.push_back(parent))) {
-      LOG_WARN("failed to push back");
     } else {
       parent = parent->get_parent();
     }
@@ -908,7 +845,6 @@ int LogLowestCommonAncestorFinder::get_op_dfo(const ObLogicalOperator *op, DfoIn
   ObSEArray<DfoInfo *, 16> dfo_queue;
   int64_t cur_que_front = 0;
   if (OB_FAIL(dfo_queue.push_back(root_dfo))) {
-    LOG_WARN("failed to push back");
   }
 
   while (cur_que_front < dfo_queue.count() && !find && OB_SUCC(ret)) {
@@ -923,7 +859,6 @@ int LogLowestCommonAncestorFinder::get_op_dfo(const ObLogicalOperator *op, DfoIn
         // push child into the queue
         for (int64_t child_idx = 0; OB_SUCC(ret) && child_idx < dfo->get_child_count(); ++child_idx) {
           if (OB_FAIL(dfo_queue.push_back(dfo->child_dfos_.at(child_idx)))) {
-            LOG_WARN("failed to push back child dfo");
           }
         }
       }

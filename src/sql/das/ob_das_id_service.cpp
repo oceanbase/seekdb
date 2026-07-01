@@ -45,11 +45,9 @@ int ObDASIDService::handle_request(const ObDASIDRequest &request, obcall::ObDASI
     int64_t start_id = 0;
     int64_t end_id = 0;
     if (OB_FAIL(get_number(range, 0, start_id, end_id))) {
-      LOG_WARN("get das id failed", KR(ret));
     }
     // overwrite ret
     if (OB_FAIL(result.init(ret, start_id, end_id))) {
-      LOG_WARN("das id result init failed", KR(ret), K(request));
     }
   }
   // overwrite ret

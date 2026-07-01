@@ -70,8 +70,6 @@ inline int ObExprSubstringIndex::calc_result_type3(ObExprResType &type,
     types[0] = str;
     types[1] = delim;
     if (OB_FAIL(aggregate_charsets_for_string_result_with_comparison(type, types, 2, type_ctx))) {
-      LOG_WARN("aggregate_charsets_for_string_result_with_comparison failed", K(ret));
-
     } else {
       str.set_calc_collation_type(type.get_collation_type());
       str.set_calc_collation_level(type.get_collation_level());
@@ -123,7 +121,6 @@ int ObExprSubstringIndex::eval_substring_index(
   ObDatum &delim = expr.locate_param_datum(ctx, 1);
   ObDatum &count = expr.locate_param_datum(ctx, 2);
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("evaluate parameters failed", K(ret));
   } else if (OB_UNLIKELY(str.is_null() || delim.is_null() || count.is_null())) {
     expr_datum.set_null();
   } else if (0 == str.len_ || 0 == delim.len_) {
@@ -140,11 +137,8 @@ int ObExprSubstringIndex::eval_substring_index(
     ObExprKMPSearchCtx *kmp_ctx = NULL;
     const uint64_t op_id = static_cast<uint64_t>(expr.expr_ctx_id_);
     if (OB_FAIL(ObExprKMPSearchCtx::get_kmp_ctx_from_exec_ctx(ctx.exec_ctx_, op_id, kmp_ctx))) {
-      LOG_WARN("get kmp ctx failed", K(ret));
     } else if (OB_FAIL(kmp_ctx->init(m_delim, count_val < 0, ctx.exec_ctx_.get_allocator()))) {
-      LOG_WARN("init kmp ctx failed", K(ret), K(m_delim));
     } else if (OB_FAIL(kmp_ctx->substring_index_search(str.get_string(), count_val, res_str))) {
-      LOG_WARN("string search failed", K(ret));
     } else {
       expr_datum.set_string(res_str);
     }
@@ -162,14 +156,10 @@ int ObExprSubstringIndex::eval_substring_index_batch(const ObExpr &expr,
   ObExprKMPSearchCtx *kmp_ctx = NULL;
   const uint64_t op_id = static_cast<uint64_t>(expr.expr_ctx_id_);
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval args_0 failed", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval args_1 failed", K(ret));
   } else if (OB_FAIL(expr.args_[2]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval args_2 failed", K(ret));
   } else if (OB_FAIL(ObExprKMPSearchCtx::get_kmp_ctx_from_exec_ctx(ctx.exec_ctx_,
                                                                    op_id, kmp_ctx))) {
-    LOG_WARN("get kmp ctx failed", K(ret));
   } else {
     ObDatum *res = expr.locate_batch_datums(ctx);
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
@@ -192,9 +182,7 @@ int ObExprSubstringIndex::eval_substring_index_batch(const ObExpr &expr,
         res[i].len_ = 0;
       } else if (OB_FAIL(kmp_ctx->init(delim.get_string(),
                                        count_val < 0, ctx.exec_ctx_.get_allocator()))) {
-        LOG_WARN("init kmp ctx failed", K(ret), K(delim));
       } else if (OB_FAIL(kmp_ctx->substring_index_search(text.get_string(), count_val, res_str))) {
-        LOG_WARN("string search failed", K(ret));
       } else {
         res[i].set_string(res_str);
       }

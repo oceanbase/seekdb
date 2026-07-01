@@ -40,7 +40,6 @@ int ObTableLoadUniqueIndexToDeleteDataTableChannel::create_row_projector()
   } else if (OB_FAIL(row_projector_->init(
                up_table_op_->op_ctx_->store_table_ctx_->schema_->table_id_,
                down_table_op_->op_ctx_->store_table_ctx_->schema_->table_id_))) {
-    LOG_WARN("fail to init row projector", KR(ret));
   }
   return ret;
 }
@@ -82,16 +81,13 @@ int ObTableLoadUniqueIndexToDeleteDataTableChannel::handle_update_row(
   } else {
     ObTableLoadTableBuilder *table_builder = nullptr;
     if (OB_FAIL(table_builder_mgr_.get_table_builder(table_builder))) {
-      LOG_WARN("fail to get table builder", KR(ret));
     } else {
       ObDirectLoadDatumRow &delete_datum_row = table_builder->get_delete_datum_row();
       delete_datum_row.seq_no_ = datum_row.seq_no_;
       ObTabletID data_tablet_id;
       if (OB_FAIL(
             row_projector_->projector(tablet_id, datum_row, data_tablet_id, delete_datum_row))) {
-        LOG_WARN("fail to project row", KR(ret));
       } else if (OB_FAIL(table_builder->append_row(data_tablet_id, delete_datum_row))) {
-        LOG_WARN("fail to append row", KR(ret));
       }
     }
   }
@@ -112,14 +108,12 @@ int ObTableLoadUniqueIndexToDeleteDataTableChannel::handle_update_row(
   } else {
     ObTableLoadTableBuilder *table_builder = nullptr;
     if (OB_FAIL(table_builder_mgr_.get_table_builder(table_builder))) {
-      LOG_WARN("fail to get table builder", KR(ret));
     } else {
       ObDirectLoadDatumRow &delete_datum_row = table_builder->get_delete_datum_row();
       ObTabletID data_tablet_id;
       ObDirectLoadDatumRow index_row;
       if (OB_FAIL(index_row.init(
             up_table_op_->op_ctx_->store_table_ctx_->schema_->store_column_count_))) {
-        LOG_WARN("fail to init delete datum row", KR(ret));
       }
       // 删除其他行
       for (int64_t i = 0; OB_SUCC(ret) && i < rows.count(); i++) {
@@ -127,12 +121,9 @@ int ObTableLoadUniqueIndexToDeleteDataTableChannel::handle_update_row(
         delete_datum_row.seq_no_ = row->seq_no_;
         if (row == result_row) {
         } else if (OB_FAIL(row->to_datum_row(index_row))) {
-          LOG_WARN("fail to to datum row", KR(ret));
         } else if (OB_FAIL(row_projector_->projector(tablet_id, index_row, data_tablet_id,
                                                      delete_datum_row))) {
-          LOG_WARN("fail to project row", KR(ret));
         } else if (OB_FAIL(table_builder->append_row(data_tablet_id, delete_datum_row))) {
-          LOG_WARN("fail to append delete row", KR(ret), KPC(row));
         }
       }
     }
@@ -154,14 +145,12 @@ int ObTableLoadUniqueIndexToDeleteDataTableChannel::handle_update_row(
   } else {
     ObTableLoadTableBuilder *table_builder = nullptr;
     if (OB_FAIL(table_builder_mgr_.get_table_builder(table_builder))) {
-      LOG_WARN("fail to get table builder", KR(ret));
     } else {
       ObDirectLoadDatumRow &delete_datum_row = table_builder->get_delete_datum_row();
       ObTabletID data_tablet_id;
       ObDirectLoadDatumRow index_row;
       if (OB_FAIL(index_row.init(
             up_table_op_->op_ctx_->store_table_ctx_->schema_->store_column_count_))) {
-        LOG_WARN("fail to init delete datum row", KR(ret));
       }
       // 删除其他行
       for (int64_t i = 0; OB_SUCC(ret) && i < rows.count(); i++) {
@@ -169,12 +158,9 @@ int ObTableLoadUniqueIndexToDeleteDataTableChannel::handle_update_row(
         delete_datum_row.seq_no_ = row->seq_no_;
         if (row == result_row) {
         } else if (OB_FAIL(row->to_datum_row(index_row))) {
-          LOG_WARN("fail to to datum row", KR(ret));
         } else if (OB_FAIL(row_projector_->projector(row->rowkey_.tablet_id_, index_row,
                                                      data_tablet_id, delete_datum_row))) {
-          LOG_WARN("fail to project row", KR(ret));
         } else if (OB_FAIL(table_builder->append_row(data_tablet_id, delete_datum_row))) {
-          LOG_WARN("fail to append delete row", KR(ret), KPC(row));
         }
       }
     }
@@ -196,7 +182,6 @@ int ObTableLoadUniqueIndexToDeleteDataTableChannel::handle_update_row(
   } else {
     ObTableLoadTableBuilder *table_builder = nullptr;
     if (OB_FAIL(table_builder_mgr_.get_table_builder(table_builder))) {
-      LOG_WARN("fail to get table builder", KR(ret));
     } else {
       if (result_row == &old_row) {
         ObDirectLoadDatumRow &delete_datum_row = table_builder->get_delete_datum_row();
@@ -204,9 +189,7 @@ int ObTableLoadUniqueIndexToDeleteDataTableChannel::handle_update_row(
         ObTabletID data_tablet_id;
         if (OB_FAIL(
               row_projector_->projector(tablet_id, new_row, data_tablet_id, delete_datum_row))) {
-          LOG_WARN("fail to project row", KR(ret));
         } else if (OB_FAIL(table_builder->append_row(data_tablet_id, delete_datum_row))) {
-          LOG_WARN("fail to append row", KR(ret));
         }
       } else {
         ObDirectLoadDatumRow &delete_datum_row = table_builder->get_delete_datum_row();
@@ -214,9 +197,7 @@ int ObTableLoadUniqueIndexToDeleteDataTableChannel::handle_update_row(
         ObTabletID data_tablet_id;
         if (OB_FAIL(
               row_projector_->projector(tablet_id, old_row, data_tablet_id, delete_datum_row))) {
-          LOG_WARN("fail to project row", KR(ret));
         } else if (OB_FAIL(table_builder->append_row(data_tablet_id, delete_datum_row))) {
-          LOG_WARN("fail to append row", KR(ret));
         }
       }
     }

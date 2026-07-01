@@ -88,13 +88,11 @@ int ObEnumSetMeta::deep_copy(ObIAllocator &allocator, ObEnumSetMeta *&dst) const
     void *array_ptr = static_cast<char*>(mem) + sizeof(ObEnumSetMeta);
     str_values = new(array_ptr) ObFixedArray<ObString, ObIAllocator>(allocator);
     if (OB_FAIL(str_values->init(str_values_->count()))) {
-      LOG_WARN("fail to init array", K(ret));
     } else {
       // deep copy string
       for (int64_t i = 0; OB_SUCC(ret) && i < str_values_->count(); ++i) {
         ObString dst_str;
         if (OB_FAIL(ob_write_string(allocator, str_values_->at(i), dst_str))) {
-          LOG_WARN("fail to deep copying string", K(ret));
         } else if (OB_FAIL(str_values->push_back(dst_str))) {
           LOG_WARN("push_back failed", K(ret));
           // free memory avoid memory leak

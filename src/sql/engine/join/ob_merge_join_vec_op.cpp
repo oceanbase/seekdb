@@ -82,7 +82,6 @@ int ObMergeJoinVecOp::ObCommonJoinTracker::fill_match_pair(int64_t max_pair_cnt,
     group_boundary_row_id_array_idx_ = 0;
     trace_group_idx_ = cur_group_idx_;
     if (OB_FAIL(set_group_end_row_id(cur_left_group_->end_))) {
-      LOG_WARN("set group end row id failed", K(ret));
     }
   }
   while (OB_SUCC(ret) && filled_row_cnt < max_pair_cnt) {
@@ -128,7 +127,6 @@ int ObMergeJoinVecOp::ObCommonJoinTracker::fill_match_pair(int64_t max_pair_cnt,
         next_group_pair();
         if (need_trace_) {
           if (OB_FAIL(set_group_end_row_id(cur_left_group_->end_))) {
-            LOG_WARN("set group end row id failed", K(ret));
           }
         }
       } else {
@@ -145,13 +143,9 @@ int ObMergeJoinVecOp::ObCommonJoinTracker::fill_match_pair(int64_t max_pair_cnt,
       if (OB_FAIL(right_match_cursor_->flat_group(
               cur_right_group_->cur_, row_cnt,
               filled_row_cnt, right_row_id_array_))) {
-        LOG_WARN("right_match_cursor_ scan store rows failed", K(ret),
-                 K(row_cnt));
       } else if (OB_FAIL(left_match_cursor_->duplicate_store_row_ptr(
                      cur_left_group_->cur_, filled_row_cnt, row_cnt,
                      left_row_id_array_))) {
-        LOG_WARN("left_match_cursor_ duplicate cur store row failed", K(ret),
-                 K(row_cnt));
       } else {
         filled_row_cnt += row_cnt;
         cur_right_group_->cur_ += row_cnt;
@@ -162,7 +156,6 @@ int ObMergeJoinVecOp::ObCommonJoinTracker::fill_match_pair(int64_t max_pair_cnt,
   } else if (need_trace_ && filled_row_cnt == 0) {
     if (!last_left_row_matched_ && last_left_row_id_ != -1) {
       if (OB_FAIL(output_cache_.push_back(RowPair(last_left_row_id_, -1)))) {
-          LOG_WARN("push back group row to output_cache_ failed", K(ret));
       } else {
         last_left_row_matched_ = true;
       }
@@ -189,7 +182,6 @@ int ObMergeJoinVecOp::ObCommonJoinTracker::init_match_flags()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expand_match_flags_if_necessary(cur_right_group_->count()))) {
-    LOG_WARN("expand group flags failed", K(ret));
   }
   return ret;
 }
@@ -236,7 +228,6 @@ int ObMergeJoinVecOp::ObCommonJoinTracker::match_proc(ObBatchRows &brs)
       // left outer/right outer/full outer join add non-matchinged left row to output
       if (!last_left_row_matched_ && last_left_row_id_ != -1) {
         if (OB_FAIL(output_cache_.push_back(RowPair(last_left_row_id_, -1)))) {
-          LOG_WARN("push back group row to output_cache_ failed", K(ret));
         }
       }
       last_left_row_matched_ = false;
@@ -258,7 +249,6 @@ int ObMergeJoinVecOp::ObCommonJoinTracker::match_proc(ObBatchRows &brs)
       } else if (++trace_group_idx_ < group_pairs_.count()) {
         RowGroup &new_right_match = group_pairs_.at(trace_group_idx_).second;
         if (OB_FAIL(expand_match_flags_if_necessary(new_right_match.count()))) {
-          LOG_WARN("expand group flags failed", K(ret));
         }
       }
     }
@@ -267,7 +257,6 @@ int ObMergeJoinVecOp::ObCommonJoinTracker::match_proc(ObBatchRows &brs)
     } else if (right_row_id_array_[i] == -1 || left_row_id_array_[i] == -1) {
       last_left_row_matched_ = true;
       if (OB_FAIL(output_cache_.push_back(RowPair(left_row_id_array_[i], right_row_id_array_[i])))) {
-        LOG_WARN("push back group row to output_cache_ failed", K(ret));
       } else if (join_type_ == FULL_OUTER_JOIN && right_row_id_array_[i] != -1) {
         RowGroup &right_group = group_pairs_.at(trace_group_idx_).second;
         rj_match_vec_->set(right_row_id_array_[i] - right_group.start_);
@@ -276,7 +265,6 @@ int ObMergeJoinVecOp::ObCommonJoinTracker::match_proc(ObBatchRows &brs)
       if (!brs.skip_->at(i)) {
         last_left_row_matched_ = true;
         if (OB_FAIL(output_cache_.push_back(RowPair(left_row_id_array_[i], right_row_id_array_[i])))) {
-          LOG_WARN("push back group row to output_cache_ failed", K(ret));
         } else if (join_type_ == FULL_OUTER_JOIN && right_row_id_array_[i] != -1) {
           RowGroup &right_group = group_pairs_.at(trace_group_idx_).second;
           rj_match_vec_->set(right_row_id_array_[i] - right_group.start_);
@@ -339,13 +327,11 @@ int ObMergeJoinVecOp::ObSemiAntiJoinTracker::SemiAntiMatchPair::next_row_pair(
     } else if (tracker_->cur_left_group_->iter_end()) {
       need_next_group = true;
     } else if (OB_FAIL(next_left_row(vec_idx))) {
-      LOG_WARN("iter next left row failed", K(ret), K(vec_idx));
     }
   } else if (right_group_.is_empty()) {
     if (tracker_->cur_left_group_->iter_end()) {
       need_next_group = true;
     } else if (OB_FAIL(next_left_row(vec_idx))) {
-      LOG_WARN("iter next left row failed", K(ret), K(vec_idx));
     }
   } else if (right_group_.iter_end()) {
     if (right_group_.cur_ == right_group_.end_) {
@@ -359,7 +345,6 @@ int ObMergeJoinVecOp::ObSemiAntiJoinTracker::SemiAntiMatchPair::next_row_pair(
     if (OB_SUCC(ret) && tracker_->cur_left_group_->iter_end()) {
       need_next_group = true;
     } else if (OB_FAIL(next_left_row(vec_idx))) {
-      LOG_WARN("iter next left row failed", K(ret), K(vec_idx));
     }
   }
   
@@ -373,7 +358,6 @@ int ObMergeJoinVecOp::ObSemiAntiJoinTracker::SemiAntiMatchPair::next_row_pair(
         iter_end = true;
       }
     } else if (OB_FAIL(next_left_row(vec_idx))) {
-      LOG_WARN("iter next left row failed", K(ret), K(vec_idx));
     }
   }
   if (OB_SUCC(ret) && !calc_skip) {
@@ -381,7 +365,6 @@ int ObMergeJoinVecOp::ObSemiAntiJoinTracker::SemiAntiMatchPair::next_row_pair(
       calc_skip = true;
       ++cur_left_group_->calced_size_;
       if (OB_FAIL(tracker_->intermediate_cache_.push_back(left_row_id_))) {
-        LOG_WARN("push back non-matching left side row to intermediate_cache_ failed", K(ret));
       }
     }
   }
@@ -420,9 +403,7 @@ int ObMergeJoinVecOp::ObSemiAntiJoinTracker::reorder_output_rows()
       int64_t &row_id = intermediate_cache_.at(idx);
       if (row_id < max_row_id) {
         if (OB_FAIL(intermediate_cache_.remove(idx))) {
-          LOG_WARN("remove RowPair from intermediate_cache_ failed", K(ret), K(idx), K(row_id));
         } else if (OB_FAIL(output_cache_.push_back(RowPair(row_id, -1)))) {
-          LOG_WARN("push back RowPair to output_cache_ failed", K(ret), K(row_id));
         }
       } else {
         break;
@@ -443,7 +424,6 @@ int ObMergeJoinVecOp::ObSemiAntiJoinTracker::fill_match_pair(int64_t max_pair_cn
   int64_t idx = 0;
   for (int64_t i = 0; OB_SUCC(ret) && i < match_pair_cnt_; ++i) {
     if (OB_FAIL(semi_anti_match_pair_ptr_array_[i]->next_row_pair(true, i, calc_skip, iter_end))) {
-      LOG_WARN("semi or anti match pair get next pair failed", K(ret), K(i));
     } else if (!iter_end) {
       if (calc_skip) { brs.set_skip(idx); }
       semi_anti_match_pair_ptr_array_[idx++] = semi_anti_match_pair_ptr_array_[i];
@@ -457,13 +437,9 @@ int ObMergeJoinVecOp::ObSemiAntiJoinTracker::fill_match_pair(int64_t max_pair_cn
                 ? -1
                 : semi_anti_match_pair_ptr_array_[i]->left_row_id_,
             i, 1, nullptr))) {
-      LOG_WARN("left_match_cursor_ duplicate cur store row failed", K(ret),
-               K(semi_anti_match_pair_ptr_array_[i]->left_row_id_), K(i));
     } else if (OB_FAIL(right_match_cursor_->duplicate_store_row_ptr(
                    semi_anti_match_pair_ptr_array_[i]->right_group_.cur_++, i,
                    1, nullptr))) {
-      LOG_WARN("right_match_cursor_ duplicate cur store row failed", K(ret),
-               K(semi_anti_match_pair_ptr_array_[i]->right_group_.cur_), K(i));
     }
   }
   if (OB_FAIL(ret)) {
@@ -481,7 +457,6 @@ int ObMergeJoinVecOp::ObSemiAntiJoinTracker::match_proc(ObBatchRows &brs)
     }
   }
   if (OB_FAIL(reorder_output_rows())) {
-    LOG_WARN("semi join or anti join reorder output rows failed", K(ret));
   }
   return ret;
 }
@@ -507,15 +482,11 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::init(bool is_left, ObOperator *child,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("allocator is NULL", K(ret));
   } else if (OB_FAIL(init_row_store(io_event_observer))) {
-    LOG_WARN("init temp row store failed", K(ret));
   } else if (OB_FAIL(result_hldr_.init(*all_exprs, eval_ctx_))) {
-    LOG_WARN("init result holder failed!", K(ret));
   } else if (OB_FAIL(init_stored_batch_rows())) {
-    LOG_WARN("init stored batch rows failed!", K(ret));
   } else {
     if (OB_ISNULL(equal_keys) || OB_ISNULL(key_idx)) {
       if (OB_FAIL(init_equal_key_exprs(is_left, equal_cond_infos))) {
-        LOG_WARN("init equal key exprs failed", K(ret));
       } else {
         equal_key_exprs_arry_ptr_ = &equal_key_exprs_;
         equal_key_idx_arry_ptr_ = &equal_key_idx_;
@@ -535,10 +506,8 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::init_equal_key_exprs(bool is_left,
   int ret = OB_SUCCESS;
   if (OB_FALSE_IT(equal_key_idx_.set_allocator(allocator_))) {
   } else if (OB_FAIL(equal_key_idx_.init(equal_cond_infos.count()))) {
-    LOG_WARN("init equal param idx failed", K(ret), K(equal_cond_infos.count()));
   } else if (OB_FALSE_IT(equal_key_exprs_.set_allocator(allocator_))) {
   } else if (OB_FAIL(equal_key_exprs_.init(equal_cond_infos.count()))) {
-    LOG_WARN("init equal_key_exprs_ failed", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < equal_cond_infos.count(); ++i) {
     const ObMergeJoinVecSpec::EqualConditionInfo &equal_cond = equal_cond_infos.at(i);
@@ -549,7 +518,6 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::init_equal_key_exprs(bool is_left,
       key_expr = equal_cond.expr_->args_[1];
     }
     if (OB_FAIL(equal_key_exprs_.push_back(key_expr))) {
-      LOG_WARN("push back equal key expr failed", K(ret));
     }
     int64_t idx = -1;
     for (int64_t j = 0; j < all_exprs_->count() && idx < 0; j++) {
@@ -562,7 +530,6 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::init_equal_key_exprs(bool is_left,
       LOG_WARN("equal cond param not found in child output", K(ret), K(i), K(equal_cond),
                 KPC(key_expr), K(is_left));
     } else if (OB_FAIL(equal_key_idx_.push_back(idx))) {
-      LOG_WARN("push back failed", K(ret));
     }
   }
   return ret;
@@ -605,7 +572,6 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::init_row_store(ObIOEventObserver &io_ev
   if (OB_FAIL(row_store_.init(*all_exprs_, max_batch_size_, attr,
                             INT64_MAX /*set mem_limit later*/,
                             true, 0, common::NONE_COMPRESSOR))) {
-    LOG_WARN("init temp row store failed", K(ret));
   } else {
     row_store_.set_mem_stat(&mj_op_.sql_mem_processor_);
     row_store_.set_dir_id(mj_op_.sql_mem_processor_.get_dir_id());
@@ -657,7 +623,6 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::eval_all_exprs()
   for (int64_t i = 0; OB_SUCC(ret) && i < all_exprs_->count(); ++i) {
     ObExpr *expr = all_exprs_->at(i);
     if (OB_FAIL(expr->eval_vector(eval_ctx_, *cur_brs_))) {
-      LOG_WARN("eval vector failed", K(ret), K(i), K(expr));
     }
   }
   return ret;
@@ -711,7 +676,6 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::find_small_group(
                         : compare(other, merge_directions, cmp);
         cmp = need_flip ? -1 * cmp : cmp;
         if (OB_FAIL(ret)) {
-          LOG_WARN("compare failed", K(ret));
         } else if (cmp < 0) {
           if (need_store_uneuqal) {
             store_brs_.skip_->unset(cur_batch_idx_);
@@ -731,9 +695,7 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::find_small_group(
     if (OB_SUCC(ret) && !all_find) {
       int64_t stored_rows_cnt = 0;
       if (OB_FAIL(store_rows_of_cur_batch(stored_rows_cnt))) {
-        LOG_WARN("store cur batch rows failed", K(ret), K(need_store_uneuqal), K(stored_rows_cnt));
       } else if (OB_FAIL(get_next_valid_batch())) {
-        LOG_WARN("get next batch from source failed", K(ret));
       } else if (reach_end_) {
         all_find = true;
       } else if (mj_op_.has_enough_match_rows()) {
@@ -767,7 +729,6 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::get_next_batch_from_source(int64_t batc
   } else if (cur_brs_->end_) {
     reach_end_ = true;
   } else if (OB_FAIL(eval_all_exprs())) {
-    LOG_WARN("eval all exprs failed", K(ret), K(*all_exprs_));
   } else {  
     saved_ = false;
     restored_ = true;
@@ -806,7 +767,6 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::compare(
       if (OB_FAIL((*(equal_cond.ns_cmp_func_))(
         l_expr->obj_meta_, r_expr->obj_meta_, l_data, l_len, l_null, r_data,
         r_len, r_null, cmp))) {
-        LOG_WARN("compare left and right cursor failed", K(ret));
       }
     }
     cmp = merge_directions.at(i) * cmp;
@@ -851,7 +811,6 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::get_equal_group_end_idx_in_cur_batch(
               if (OB_FAIL((*expr->basic_funcs_->row_null_first_cmp_)(
                 expr->obj_meta_, expr->obj_meta_, ori_data, ori_len, ori_null,
                 data, len, null, cmp))) {
-                LOG_WARN("compare left and right cursor failed", K(ret));
               }
             }
             if (OB_SUCC(ret) && cmp != 0) {
@@ -904,7 +863,6 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::get_equal_group_end_idx_with_store_row(
               if (OB_FAIL((*expr->basic_funcs_->row_null_first_cmp_)(
                 expr->obj_meta_, expr->obj_meta_, ori_data, ori_len, ori_null,
                 data, len, null, cmp))) {
-                LOG_WARN("compare left and right cursor failed", K(ret));
               }
             }
             if (OB_SUCC(ret) && cmp != 0) {
@@ -940,11 +898,9 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::get_equal_group(RowGroup &group)
     int64_t cur_batch_equal_rows_cnt = 0;
     if (!next_batch) {
       if (OB_FAIL(get_equal_group_end_idx_in_cur_batch(equal_end_idx, all_find))) {
-        LOG_WARN("get equal group in cur batch failed", K(ret));
       }
     } else {
       if (OB_FAIL(get_equal_group_end_idx_with_store_row(stored_row, equal_end_idx, all_find))) {
-        LOG_WARN("get equal group end idx failed", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -966,7 +922,6 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::get_equal_group(RowGroup &group)
       if (!all_find) {
         int64_t stored_rows_cnt = 0;
         if (OB_FAIL(store_rows_of_cur_batch(stored_rows_cnt))) {
-          LOG_WARN("store rows of cur_batch failed", K(ret));
         } else {
           if (need_store_equal_group) {
             if ((stored_rows_cnt < 1 || OB_ISNULL(stored_row = store_rows_[stored_rows_cnt-1]))) {
@@ -977,7 +932,6 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::get_equal_group(RowGroup &group)
             if (OB_ISNULL(stored_row)) {
               ++next_stored_row_id_;
               if (OB_FAIL(store_one_row(cur_batch_idx_, stored_row))) {
-                LOG_WARN("store cur row failed", K(ret), K(cur_batch_idx_));
               } else if (OB_ISNULL(stored_row)) {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("store_row is NULL", K(ret));
@@ -987,7 +941,6 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::get_equal_group(RowGroup &group)
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL((get_next_valid_batch()))) {
-          LOG_WARN("get next batch from source failed", K(ret));
         } else if (reach_end_) {
           all_find = true;
           equal_end_idx = cur_brs_->size_;
@@ -1034,7 +987,6 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::update_store_mem_bound()
               allocator_,
               checker,
               updated))) {
-    LOG_WARN("failed to update max available memory size periodically", K(ret));
   } else {
     int64_t t_mem_bound = mj_op_.sql_mem_processor_.get_mem_bound();
     int64_t c_mem_bound = static_cast<int64_t>(mem_bound_raito_ * t_mem_bound);
@@ -1055,10 +1007,8 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::store_rows_of_cur_batch(int64_t &stored
     MEMSET(store_rows_, NULL, sizeof(ObCompactRow *) * max_batch_size_);
     stored_row_cnt = 0;
     if (OB_FAIL(update_store_mem_bound())) {
-      LOG_WARN("update memory bound failed", K(ret));
     } else if (OB_FAIL(row_store_.add_batch(*all_exprs_, eval_ctx_, store_brs_,
                                             stored_row_cnt, store_rows_))) {
-      LOG_WARN("row_store_ add batch failed", K(ret));
     } else {
       store_brs_.skip_->set_all(store_brs_.size_);
     }
@@ -1077,9 +1027,7 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::store_one_row(int64_t batch_idx, ObComp
   int ret = OB_SUCCESS;
   MEMSET(store_rows_, NULL, sizeof(ObCompactRow *) * max_batch_size_);
   if (OB_FAIL(update_store_mem_bound())) {
-      LOG_WARN("update memory bound failed", K(ret));
   } else if (OB_FAIL(row_store_.add_row(*all_exprs_, batch_idx, eval_ctx_, stored_row))) {
-    LOG_WARN("row_store_ add batch failed", K(ret));
   } else if (next_stored_row_id_ != row_store_.get_row_cnt()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN(
@@ -1095,7 +1043,6 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::init_ouput_vectors(int64_t max_vec_size
   for (int i = 0; OB_SUCC(ret) && i < all_exprs_->count(); ++i) {
     ObExpr *e = all_exprs_->at(i);
     if (OB_FAIL(e->init_vector_default(eval_ctx_, max_vec_size))) {
-      LOG_WARN("init right side output vector failed", K(ret));
     }
   }
   return ret;
@@ -1109,9 +1056,6 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::flat_group(
   for (int64_t i = 0; OB_SUCC(ret) && i < cnt; ++i) {
     const ObCompactRow *stored_row = nullptr;
     if (OB_FAIL(row_store_reader_.get_row(start_id + i, stored_row))) {
-      LOG_WARN("row_store_reader_ get next batch failed", K(ret),
-               K(start_id + i), K(cnt),
-               K(row_ptr_idx), K(get_stored_row_cnt()));
     } else {
       store_rows_[row_ptr_idx + i] = const_cast<ObCompactRow *>(stored_row);
       if (OB_NOT_NULL(row_id_array)) {
@@ -1131,8 +1075,6 @@ int ObMergeJoinVecOp::ObMergeJoinCursor::duplicate_store_row_ptr(
   if (stored_row_id == -1) {
     stored_row = mocked_null_row_;
   } else if (OB_FAIL(row_store_reader_.get_row(stored_row_id, stored_row))) {
-    LOG_WARN("row_store_reader_ get next batch failed", K(ret),
-             K(get_stored_row_cnt()), K(stored_row_id));
   }
   if (OB_SUCC(ret)) {
     for (int64_t i = 0; i < dup_cnt; ++i) {
@@ -1213,9 +1155,7 @@ ObMergeJoinVecOp::ObMergeJoinVecOp(ObExecContext &exec_ctx,
 int ObMergeJoinVecOp::inner_open() {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObJoinVecOp::inner_open())) {
-    LOG_WARN("failed to open in base class", K(ret));
   } else if (OB_FAIL(init_mem_context())) {
-    LOG_WARN("fail to init memory context", K(ret));
   } else {
     ObJoinType join_type = MY_SPEC.join_type_;
     bool is_right_drive = RIGHT_ANTI_JOIN == join_type ||
@@ -1245,19 +1185,16 @@ int ObMergeJoinVecOp::inner_open() {
     if (OB_FAIL(sql_mem_processor_.init(allocator_,
                                         std::max(static_cast<int64_t>(2L << 20), cache_size),
                                         MY_SPEC.type_, MY_SPEC.id_, &ctx_))) {
-      LOG_WARN("failed to init sql memory manager processor", K(ret));
     } else if (OB_FAIL(left_cursor_.init(true, left_, &(MY_SPEC.left_child_fetcher_all_exprs_),
                    &(MY_SPEC.left_child_fetcher_equal_keys_),
                    &(MY_SPEC.left_child_fetcher_equal_keys_idx_),
                    MY_SPEC.equal_cond_infos_,
                    io_event_observer_, left_mem_bound_ratio))) {
-      LOG_WARN("init left batch fetcher failed", K(ret));
     } else if (OB_FAIL(right_cursor_.init(false, right_, &(MY_SPEC.right_child_fetcher_all_exprs_),
                    &(MY_SPEC.right_child_fetcher_equal_keys_),
                    &(MY_SPEC.right_child_fetcher_equal_keys_idx_),
                    MY_SPEC.equal_cond_infos_,
                    io_event_observer_, 1.0 - left_mem_bound_ratio))) {
-      LOG_WARN("init right batch fetcher failed", K(ret));
     } else if (join_type >= LEFT_SEMI_JOIN && join_type <= RIGHT_ANTI_JOIN &&
                MY_SPEC.other_join_conds_.count() > 0) {
       ObMergeJoinVecOp::ObSemiAntiJoinTracker *tracker = nullptr;
@@ -1270,7 +1207,6 @@ int ObMergeJoinVecOp::inner_open() {
         LOG_WARN("alloc ObSemiAntiJoinTracker failed", K(ret));
       } else if (OB_FALSE_IT(tracker_ = tracker)) {
       } else if (OB_FAIL(tracker->init(MY_SPEC.max_batch_size_))) {
-        LOG_WARN("ObSemiAntiJoinTracker init failed", K(ret));
       }
     } else {
       bool need_trace = join_type != INNER_JOIN && MY_SPEC.other_join_conds_.count() != 0;
@@ -1284,7 +1220,6 @@ int ObMergeJoinVecOp::inner_open() {
         LOG_WARN("alloc ObCommonJoinTracker failed", K(ret));
       } else if (OB_FALSE_IT(tracker_ = tracker)) {
       } else if (OB_FAIL(tracker->init(MY_SPEC.max_batch_size_))) {
-        LOG_WARN("ObCommonJoinTracker init failed", K(ret));
       }
     }
     LOG_TRACE("trace init sql mem mgr for merge join",
@@ -1303,7 +1238,6 @@ int ObMergeJoinVecOp::init_mem_context() {
                       ObCtxIds::WORK_AREA)
          .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
-      LOG_WARN("create entity failed", K(ret));
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null memory entity returned", K(ret));
@@ -1315,13 +1249,11 @@ int ObMergeJoinVecOp::init_mem_context() {
 int ObMergeJoinVecOp::join_begin() {
   int ret = OB_SUCCESS;
   if (OB_FAIL(left_cursor_.get_next_valid_batch())) {
-    LOG_WARN("left cursor start iter failed", K(ret));
   } else if (!left_cursor_.has_next_row()) {
     if (MY_SPEC.join_type_ == RIGHT_OUTER_JOIN ||
         MY_SPEC.join_type_ == FULL_OUTER_JOIN ||
         MY_SPEC.join_type_ == RIGHT_ANTI_JOIN) {
       if (OB_FAIL(right_cursor_.get_next_valid_batch())) {
-        LOG_WARN("right cursor start iter failed", K(ret));
       } else {
         join_state_ = right_cursor_.has_next_row() ? OUTPUT_RIGHT_UNTIL_END : JOIN_END;
       }
@@ -1329,7 +1261,6 @@ int ObMergeJoinVecOp::join_begin() {
       join_state_ = JOIN_END;
     }
   } else if (OB_FAIL(right_cursor_.get_next_valid_batch())) {
-    LOG_WARN("right cursor start iter failed", K(ret));
   } else if (!right_cursor_.has_next_row()) {
     if (MY_SPEC.join_type_ == LEFT_OUTER_JOIN ||
         MY_SPEC.join_type_ == FULL_OUTER_JOIN ||
@@ -1343,17 +1274,11 @@ int ObMergeJoinVecOp::join_begin() {
   }
   if (OB_SUCC(ret) && join_state_ != JOIN_END) {
     if (OB_FAIL(left_cursor_.init_store_rows_array())) {
-      LOG_WARN("left_cursor_ init store_rows_ failed", K(ret));
     } else if (OB_FAIL(right_cursor_.init_store_rows_array())) {
-      LOG_WARN("right_cursor_ init store_rows_ failed", K(ret));
     } else if (OB_FAIL(left_cursor_.init_col_equal_group_boundary())) {
-      LOG_WARN("left_cursor_ init col_equal_group_boundary_ failed", K(ret));
     } else if (OB_FAIL(right_cursor_.init_col_equal_group_boundary())) {
-      LOG_WARN("right_cursor_ init col_equal_group_boundary_ failed", K(ret));
     } else if (OB_FAIL(left_cursor_.init_mocked_null_row())) {
-      LOG_WARN("left_cursor_ init mocked null row failed!", K(ret));
     } else if (OB_FAIL(right_cursor_.init_mocked_null_row())) {
-      LOG_WARN("right_cursor_ init mocked null row failed!", K(ret));
     }
   }
   return ret;
@@ -1373,13 +1298,9 @@ int ObMergeJoinVecOp::join_both() {
   tracker_->reuse();
   int cmp = 0;
   if (OB_FAIL(left_cursor_.restore_cur_batch())) {
-    LOG_WARN("left_cursor_ restore current batch failed", K(ret));
   } else if (OB_FAIL(left_cursor_.eval_all_exprs())) {
-    LOG_WARN("left_cursor_ eval all exprs failed", K(ret));
   } else if (OB_FAIL(right_cursor_.restore_cur_batch())) {
-    LOG_WARN("right_cursor_ restore current batch failed", K(ret));
   } else if (OB_FAIL(right_cursor_.eval_all_exprs())) {
-    LOG_WARN("right_cursor_ eval all exprs failed", K(ret));
   } else {
     while (OB_SUCC(ret) && !has_enough_match_rows() && join_state_ == JOIN_BOTH) {
       if (!left_cursor_.has_next_row()) {
@@ -1399,7 +1320,6 @@ int ObMergeJoinVecOp::join_both() {
                                 ? OUTPUT_LEFT_UNTIL_END
                                 : JOIN_END);
       } else if (OB_FAIL(left_cursor_.compare(right_cursor_, MY_SPEC.merge_directions_, cmp))) {
-        LOG_WARN("left side compare to right side failed", K(ret));
       } else {
         if (cmp < 0 &&
             OB_SUCCESS != (ret = left_cursor_.find_small_group<need_store_left_unequal_group, false>(
@@ -1409,7 +1329,6 @@ int ObMergeJoinVecOp::join_both() {
         if (need_store_left_unequal_group && OB_SUCC(ret) && !left_cursor_.is_small_group_empty()) {
           if (OB_FAIL(group_pairs_.push_back(std::make_pair(
                   left_cursor_.get_small_group(), RowGroup())))) {
-            LOG_WARN("push back group group into group_pairs_ failed", K(ret));
           }
           left_cursor_.reset_small_row_group();
         }
@@ -1423,8 +1342,6 @@ int ObMergeJoinVecOp::join_both() {
               !right_cursor_.is_small_group_empty()) {
             if (OB_FAIL(group_pairs_.push_back(std::make_pair(
                     RowGroup(), right_cursor_.get_small_group())))) {
-              LOG_WARN("push back group group into group_pairs_ failed",
-                       K(ret));
             }
             right_cursor_.reset_small_row_group();
           }
@@ -1432,11 +1349,9 @@ int ObMergeJoinVecOp::join_both() {
         if (OB_SUCC(ret) && cmp == 0) {
           RowGroup left_group, right_group;
           if (OB_FAIL(left_cursor_.get_equal_group<need_store_left_equal_group>(left_group))) {
-            LOG_WARN("left cursor get equal group failed", K(ret));
           } else if (OB_FAIL(right_cursor_
                                  .get_equal_group<need_store_right_equal_group>(
                                      right_group))) {
-            LOG_WARN("right cursor get equal group failed", K(ret));
           } else if ((need_store_left_equal_group ||
                       need_store_right_equal_group) &&
                      OB_FAIL(group_pairs_.push_back(
@@ -1451,13 +1366,9 @@ int ObMergeJoinVecOp::join_both() {
       int64_t stored_rows_cnt = 0;
       join_state_ = MATCH_GROUP_PROCESS;
       if (OB_FAIL(left_cursor_.store_rows_of_cur_batch(stored_rows_cnt))) {
-        LOG_WARN("left_cursor_ store rows of cur batch failed", K(ret));
       } else if (OB_FAIL(right_cursor_.store_rows_of_cur_batch(stored_rows_cnt))) {
-        LOG_WARN("right_cursor_ store rows of cur batch failed", K(ret));
       } else if (OB_FAIL(left_cursor_.save_cur_batch())) {
-        LOG_WARN("left_cursor_ save cur batch failed", K(ret));
       } else if (OB_FAIL(right_cursor_.save_cur_batch())) {
-        LOG_WARN("right_cursor_ save cur batch failed", K(ret));
       } else {
         left_cursor_.row_store_finish_add();
         right_cursor_.row_store_finish_add();
@@ -1470,7 +1381,6 @@ int ObMergeJoinVecOp::join_both() {
     if (join_type == FULL_OUTER_JOIN && MY_SPEC.other_join_conds_.count() > 0) {
       ObCommonJoinTracker *common_tracker = static_cast<ObCommonJoinTracker *>(tracker_);
       if (OB_FAIL(common_tracker->init_match_flags())) {
-        LOG_WARN("expand group flags failed", K(ret));
       }
     }  
   }
@@ -1486,7 +1396,6 @@ int ObMergeJoinVecOp::output_one_side_until_end(
     // Process the unconsumed rows in the current batch.
     int64_t output_row_cnt = std::min(max_output_cnt_, cursor.cur_brs_->size_ - cursor.cur_batch_idx_);
     if (OB_FAIL(brs_.copy(cursor.cur_brs_))) {
-      LOG_WARN("copy ObBatchRows failed", K(ret));
     } else {
       for (int64_t i = cursor.cur_batch_idx_ + output_row_cnt; i < brs_.size_; ++i) {
         brs_.set_skip(i);
@@ -1498,9 +1407,7 @@ int ObMergeJoinVecOp::output_one_side_until_end(
     cursor.cur_batch_idx_ += output_row_cnt;
   } else {
     if (OB_FAIL(cursor.get_next_batch_from_source(max_output_cnt_))) {
-      LOG_WARN("get next batch from source failed", K(ret));
     } else if (OB_FAIL(brs_.copy(cursor.cur_brs_))) {
-      LOG_WARN("copy ObBatchRows failed", K(ret));
     } else {
       cursor.cur_batch_idx_ = cursor.cur_brs_->size_;
     }
@@ -1527,7 +1434,6 @@ int ObMergeJoinVecOp::output_cached_rows()
     } else {
       if (OB_FAIL(left_match_cursor_->flat_group(
               pair.first, 1, output_cnt, nullptr))) {
-        LOG_WARN("left_match_cursor_ get matching rows failed", K(ret), K(pair.first));
       }
     }
     if (OB_FAIL(ret)) {
@@ -1536,7 +1442,6 @@ int ObMergeJoinVecOp::output_cached_rows()
     } else {
       if (OB_FAIL(right_match_cursor_->flat_group(
               pair.second, 1, output_cnt, nullptr))) {
-        LOG_WARN("right_match_cursor_ get matching rows failed", K(ret), K(pair.second));
       }
     }
     ++output_cache_idx_;
@@ -1547,11 +1452,8 @@ int ObMergeJoinVecOp::output_cached_rows()
     clear_evaluated_flag();
     if (output_cnt == 0) {
     } else if (OB_FAIL(init_output_vector(output_cnt))) {
-      LOG_WARN("init output vector failed", K(ret), K(output_cnt));
     } else if (OB_FAIL(left_match_cursor_->fill_vec_with_stored_rows(output_cnt))) {
-      LOG_WARN("left_match_cursor_ fill vector failed", K(ret));
     } else if (OB_FAIL(right_match_cursor_->fill_vec_with_stored_rows(output_cnt))) {
-      LOG_WARN("right_match_cursor_ fill vector failed", K(ret));
     }
     brs_.size_ = output_cnt;
     brs_.reset_skip(output_cnt);
@@ -1651,7 +1553,6 @@ int ObMergeJoinVecOp::inner_rescan() {
   int ret = OB_SUCCESS;
   reset();
   if (OB_FAIL(ObJoinVecOp::inner_rescan())) {
-    LOG_WARN("failed to rescan ObJoin", K(ret));
   }
   return ret;
 }
@@ -1673,16 +1574,12 @@ int ObMergeJoinVecOp::flat_group_pair_and_project_onto_vec(ObBatchRows &brs)
   brs.reset_skip(max_output_cnt_);
   set_row_store_it_age(&rows_it_age_);
   if (OB_FAIL(tracker_->fill_match_pair(max_output_cnt_, brs))) {
-    LOG_WARN("semi join fill match pair failed", K(ret));
   }
   set_row_store_it_age(nullptr);
   if (OB_FAIL(ret) || brs.size_ == 0) {
   } else if (OB_FAIL(init_output_vector(brs.size_))) {
-    LOG_WARN("init output vector failed", K(ret), K(brs.size_));
   } else if (OB_FAIL(right_match_cursor_->fill_vec_with_stored_rows(brs.size_))) {
-    LOG_WARN("right_match_cursor_ fill vector failed", K(ret));
   } else if (OB_FAIL(left_match_cursor_->fill_vec_with_stored_rows(brs.size_))) {
-    LOG_WARN("left_match_cursor_ row fill vector failed", K(ret));
   }
   return ret;
 }
@@ -1694,14 +1591,12 @@ int ObMergeJoinVecOp::calc_other_cond_and_output_directly(bool &can_output)
   bool can_ret = false;
   while (OB_SUCC(ret) && !can_ret) {
     if (OB_FAIL(flat_group_pair_and_project_onto_vec(brs_))) {
-      LOG_WARN("fill output vector failed", K(ret));
     } else if (brs_.size_ == 0) {
       join_state_ = JOIN_BOTH;
       can_ret = true;
     } else {
       clear_evaluated_flag();
       if (OB_FAIL(batch_calc_other_conds(brs_))) {
-        LOG_WARN("batch calc other conditions failed", K(ret));
       } else {
         can_ret = !brs_.skip_->is_all_true(brs_.size_);
         can_output = can_ret;
@@ -1718,16 +1613,13 @@ int ObMergeJoinVecOp::calc_other_cond_and_cache_rows()
   bool can_ret = false;
   while (OB_SUCC(ret) && !can_ret) {
     if (OB_FAIL(flat_group_pair_and_project_onto_vec(brs_))) {
-      LOG_WARN("fill output vector failed", K(ret));
     } else if (brs_.size_ == 0) {
       join_state_ = output_cache_.count() > 0 ? OUTPUT_CACHED_ROWS : JOIN_BOTH;
       can_ret = true;
     } else {
       clear_evaluated_flag();
       if (OB_FAIL(batch_calc_other_conds(brs_))) {
-        LOG_WARN("batch calc other conditions failed", K(ret), K(brs_.size_));
       } else if (OB_FAIL(tracker_->match_proc(brs_))) {
-        LOG_WARN("match process failed", K(ret));
       } else if (output_cache_.count() >= max_output_cnt_) {
         join_state_ = OUTPUT_CACHED_ROWS;
         can_ret = true;
@@ -1742,9 +1634,7 @@ int ObMergeJoinVecOp::init_output_vector(int64_t size)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(left_cursor_.init_ouput_vectors(size))) {
-    LOG_WARN("init left side output vector failed", K(ret), K(size));
   } else if (OB_FAIL(right_cursor_.init_ouput_vectors(size))) {
-    LOG_WARN("init right side output vector failed", K(ret), K(size));
   }
   return ret;
 }
@@ -1757,10 +1647,8 @@ int ObMergeJoinVecOp::match_process(bool &can_output)
       (MY_SPEC.other_join_conds_.count() == 0 &&
        (join_type >= LEFT_OUTER_JOIN && join_type <= RIGHT_ANTI_JOIN))) {
     if (OB_FAIL(calc_other_cond_and_output_directly(can_output))) {
-      LOG_WARN("common calc other cond failed", K(ret), K(join_type));
     }
   } else if (OB_FAIL(calc_other_cond_and_cache_rows())) {
-    LOG_WARN("outer calc other cond failed", K(ret), K(join_type));
   }
   return ret;
 }

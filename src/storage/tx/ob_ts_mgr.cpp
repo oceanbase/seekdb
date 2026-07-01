@@ -41,21 +41,16 @@ int ObTsMgr::init(const ObAddr &server,
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(server));
   } else if (OB_FAIL(location_adapter_def_.init(&schema_service, &location_service))) {
-    TRANS_LOG(ERROR, "location adapter init error", KR(ret));
   } else if (OB_ISNULL(gts_request_rpc_ = ObGtsRequestRpcFactory::alloc())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "alloc gts_reqeust_rpc fail", KR(ret));
   } else if (OB_FAIL(ts_worker_.init(this, true))) {
-    TRANS_LOG(WARN, "ts worker init failed", KR(ret));
   } else if (OB_FAIL(gts_request_rpc_->init(server, this, &ts_worker_))) {
-    TRANS_LOG(WARN, "response rpc init failed", KR(ret), K(server));
   } else if (FALSE_IT(location_adapter_ = &location_adapter_def_)) {
   } else if (OB_FAIL(ts_source_.init(server, gts_request_rpc_, location_adapter_))) {
-    TRANS_LOG(WARN, "ts source init failed", KR(ret));
   } else {
     server_ = server;
     is_inited_ = true;
-    TRANS_LOG(INFO, "ObTsMgr inited success", KP(this), K(server));
   }
 
   if (OB_FAIL(ret)) {
@@ -89,13 +84,9 @@ int ObTsMgr::start()
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "ObTsMgr is already running", KR(ret));
   } else if (OB_FAIL(gts_request_rpc_->start())) {
-    TRANS_LOG(WARN, "gts request rpc start", KR(ret));
-    // Start gts task refresh thread
   } else if (OB_FAIL(share::ObThreadPool::start())) {
-    TRANS_LOG(ERROR, "GTS local cache manager refresh worker thread start error", KR(ret));
   } else {
     is_running_ = true;
-    TRANS_LOG(INFO, "ObTsMgr start success");
   }
   return ret;
 }
@@ -108,12 +99,10 @@ void ObTsMgr::stop()
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "ObTsMgr is not inited", KR(ret));
   } else if (OB_FAIL(gts_request_rpc_->stop())) {
-    TRANS_LOG(WARN, "gts request rpc stop", KR(ret));
   } else {
     (void)share::ObThreadPool::stop();
     (void)ts_worker_.stop();
     is_running_ = false;
-    TRANS_LOG(INFO, "ObTsMgr stop success");
   }
 }
 
@@ -128,11 +117,9 @@ void ObTsMgr::wait()
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "ObTsMgr is running", KR(ret));
   } else if (OB_FAIL(gts_request_rpc_->wait())) {
-    TRANS_LOG(WARN, "gts request rpc wait", KR(ret));
   } else {
     (void)share::ObThreadPool::wait();
     (void)ts_worker_.wait();
-    TRANS_LOG(INFO, "ObTsMgr wait success");
   }
 }
 
@@ -151,7 +138,6 @@ void ObTsMgr::destroy()
     location_adapter_ = NULL;
     is_running_ = false;
     is_inited_ = false;
-    TRANS_LOG(INFO, "ObTsMgr destroyed");
   }
   if (NULL != gts_request_rpc_) {
     ObGtsRequestRpcFactory::release(gts_request_rpc_);
@@ -194,7 +180,6 @@ int ObTsMgr::handle_gts_err_response(const ObGtsErrResponse &msg)
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(msg));
   } else if (OB_FAIL(ts_source_.handle_gts_err_response(msg))) {
-    TRANS_LOG(WARN, "handle gts err response error", KR(ret), K(msg));
   } else {
     // do nothing
   }
@@ -214,7 +199,6 @@ int ObTsMgr::refresh_gts_location()
     ret = OB_NOT_RUNNING;
     TRANS_LOG(WARN, "ObTsMgr is not running", K(ret));
   } else if (OB_FAIL(ts_source_.refresh_gts_location())) {
-    TRANS_LOG(WARN, "refresh gts location error", K(ret));
   } else {
     // do nothing
   }
@@ -232,7 +216,6 @@ int ObTsMgr::handle_gts_result(const int64_t queue_index, const int ts_type)
     ret = OB_NOT_RUNNING;
     TRANS_LOG(WARN, "ObTsMgr is not running", K(ret));
   } else if (OB_FAIL(ts_source_.handle_gts_result(queue_index))) {
-    TRANS_LOG(WARN, "handle gts result error", KR(ret));
   } else {
     // do nothing
   }
@@ -257,7 +240,6 @@ int ObTsMgr::update_gts(const MonotonicTs srr,
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(srr), K(gts));
   } else if (OB_FAIL(ts_source_.update_gts(srr, gts, receive_gts_ts, update))) {
-    TRANS_LOG(WARN, "update gts cache failed", KR(ret), K(srr), K(gts));
   } else {
     // do nothing
   }
@@ -279,9 +261,7 @@ int ObTsMgr::interrupt_gts_callbacks()
       ret = ts_source_.gts_callback_interrupted(OB_TENANT_NOT_EXIST, ls_id);
     }
     if (OB_SUCCESS != ret) {
-      TRANS_LOG(WARN, "interrupt gts callbacks failed", KR(ret), K(ls_id));
     } else {
-      TRANS_LOG(INFO, "interrupt gts callbacks success", K(ls_id));
     }
   }
   return ret;
@@ -302,7 +282,6 @@ int ObTsMgr::update_gts(const int64_t gts, bool &update)
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(gts));
   } else if (OB_FAIL(ts_source_.update_gts(gts, update))) {
-    TRANS_LOG(WARN, "update gts cache failed", K(ret), K(gts));
   }
 
   return ret;
@@ -326,7 +305,6 @@ int ObTsMgr::get_gts(ObTsCbTask *task, SCN &scn)
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(scn.convert_for_gts(gts))) {
-      TRANS_LOG(WARN, "failed to convert_for_gts", K(ret), K(gts));
     }
   }
 
@@ -358,7 +336,6 @@ int ObTsMgr::get_gts(const MonotonicTs stc,
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(scn.convert_for_gts(gts))) {
-      TRANS_LOG(WARN, "failed to convert_for_gts", K(ret), K(gts));
     }
   }
   return ret;
@@ -471,7 +448,6 @@ int ObTsMgr::wait_gts_elapse(const SCN &scn,
   } else {
     const int64_t ts = scn.get_val_for_gts();
     if (OB_FAIL(ts_source_.wait_gts_elapse(ts, task, need_wait))) {
-      TRANS_LOG(WARN, "wait gts elapse failed", K(ret), K(ts), KP(task));
     }
   }
   return ret;
@@ -530,9 +506,7 @@ int ObTsMgr::interrupt_gts_callback_for_ls_offline(const share::ObLSID ls_id)
     }
 
     if (OB_SUCCESS != ret) {
-      TRANS_LOG(WARN, "interrupt gts callback failed", KR(ret), K(ls_id));
     } else {
-      TRANS_LOG(INFO, "interrupt gts callback success", K(ls_id));
     }
   }
   return ret;

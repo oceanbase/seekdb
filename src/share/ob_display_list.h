@@ -69,7 +69,6 @@ int list_to_display_str(Allocator &allocator, const common::ObIArray<Type> &list
           }
         }
         if (FAILEDx(data->to_display_str(buf, len, pos))) {
-          COMMON_LOG(WARN, "to display str failed", KR(ret), KPC(data), K(len), K(pos));
         }
       }
     }
@@ -102,7 +101,6 @@ int display_str_to_list(const common::ObString &str, common::ObIArray<Type> &lis
   if (OB_UNLIKELY(str.empty())) {
     // do nothing
   } else if (OB_FAIL(ob_write_string(allocator, str, tmp_str, true/*c_style*/))) {
-    COMMON_LOG(WARN, "fail to write string", KR(ret), K(str));
   } else {
     char *data_str = NULL;
     char *save_ptr = NULL;
@@ -111,9 +109,7 @@ int display_str_to_list(const common::ObString &str, common::ObIArray<Type> &lis
       data_str = strtok_r((NULL == data_str ? tmp_str.ptr() : NULL), ",", &save_ptr);
       if (NULL != data_str) {
         if (OB_FAIL(data.parse_from_display_str(ObString::make_string(data_str)))) {
-          COMMON_LOG(WARN, "fail to parse from display str", KR(ret), K(data_str), K(data));
         } else if (OB_FAIL(list.push_back(data))) {
-          COMMON_LOG(WARN, "fail to push back into list", KR(ret), K(data), K(list));
         }
       } else {
         break;

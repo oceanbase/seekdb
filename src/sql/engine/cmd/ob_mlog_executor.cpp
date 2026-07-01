@@ -54,7 +54,6 @@ int ObCreateMLogExecutor::execute(ObExecContext &ctx, ObCreateMLogStmt &stmt)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get my session", KR(ret), K(ctx));
   } else if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
-    LOG_WARN("failed to get first statement", KR(ret));
   } else if (OB_FALSE_IT(create_mlog_arg.ddl_stmt_str_ = first_stmt)) {
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
@@ -63,9 +62,7 @@ int ObCreateMLogExecutor::execute(ObExecContext &ctx, ObCreateMLogStmt &stmt)
              && FALSE_IT(create_mlog_arg.session_id_ = my_session->get_sessid_for_table())) {
     //impossible
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_mlog(create_mlog_arg, create_mlog_res); }))) {
-    LOG_WARN("failed to create mlog", KR(ret), K(create_mlog_arg));
   } else if (OB_FAIL(ObResolverUtils::check_sync_ddl_user(my_session, is_sync_ddl_user))) {
-    LOG_WARN("failed to check sync ddl user", KR(ret));
   } else if (!is_sync_ddl_user) {
     if (OB_UNLIKELY(OB_INVALID_ID == create_mlog_res.mlog_table_id_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -74,7 +71,6 @@ int ObCreateMLogExecutor::execute(ObExecContext &ctx, ObCreateMLogStmt &stmt)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected schema version", KR(ret), K(create_mlog_res));
     } else if (OB_FAIL(ObDDLExecutorUtil::wait_ddl_finish(create_mlog_res.task_id_, false/*do not need retry at executor*/, my_session))) {
-      LOG_WARN("failed to wait ddl finish", KR(ret));
     }
   }
 
@@ -105,7 +101,6 @@ int ObDropMLogExecutor::execute(ObExecContext &ctx, ObDropMLogStmt &stmt)
     ret = OB_NOT_INIT;
     LOG_WARN("failed to get task executor context");
   } else if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
-    LOG_WARN("failed to get first statement", KR(ret));
   } else if (OB_FALSE_IT(drop_index_arg.ddl_stmt_str_ = first_stmt)) {
   }  else if ((OB_INVALID_ID == drop_index_arg.session_id_)
       && FALSE_IT(drop_index_arg.session_id_ = my_session->get_sessid_for_table())) {
@@ -113,10 +108,8 @@ int ObDropMLogExecutor::execute(ObExecContext &ctx, ObDropMLogStmt &stmt)
   } else if (FALSE_IT(drop_index_arg.consumer_group_id_ = THIS_WORKER.get_group_id())) {
   } else if (FALSE_IT(drop_index_arg.is_add_to_scheduler_ = true)) {
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_index(drop_index_arg, drop_index_res); }))) {
-    LOG_WARN("rpc proxy drop index failed", "dst", GCTX.self_addr(), KR(ret));
   } else if (OB_FAIL(ObDropIndexExecutor::wait_drop_index_finish(drop_index_res.task_id_,
                                                                  *my_session))) {
-    LOG_WARN("failed to wait drop index finish", KR(ret));
   }
   SERVER_EVENT_ADD("ddl", "drop mlog execute finish",
     "ret", ret,

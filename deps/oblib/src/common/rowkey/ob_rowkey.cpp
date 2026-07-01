@@ -134,9 +134,7 @@ int ObRowkey::equal(const ObRowkey &rhs, bool &is_equal) const
             ret = OB_ERR_UNEXPECTED;
             COMMON_LOG(WARN, "not supported outrow lob", K(ret), K(obj), K(rhs_obj));
           } else if (OB_FAIL(obj.get_string(str))) {
-            COMMON_LOG(WARN, "Lob: get inrow string failed", K(ret), K(obj));
           } else if (OB_FAIL(rhs_obj.get_string(rhs_str))) {
-            COMMON_LOG(WARN, "Lob: get inrow string failed", K(ret), K(rhs_obj));
           } else if (str.length() != rhs_str.length() || 0 != str.compare(rhs_str)) {
             is_equal = (ObCharset::strcmpsp(obj.get_collation_type(), str.ptr(), str.length(),
               rhs_str.ptr(), rhs_str.length(), false/*cmp_padding_space*/) == 0);
@@ -169,7 +167,6 @@ bool ObRowkey::simple_equal(const ObRowkey &rhs) const
       const ObObj &rhs_obj = rhs.obj_ptr_[i];
       tc = obj.get_type_class();
       if (ObMaxTC <= tc) {
-        COMMON_LOG(WARN, "invalid type class", K(tc));
         common::right_to_die_or_duty_to_live();
       } else if (tc != rhs_obj.get_type_class()) {
         ret = false;
@@ -239,7 +236,6 @@ bool ObRowkey::simple_equal(const ObRowkey &rhs) const
           break;
         }
         default:
-          COMMON_LOG(WARN, "not_supported type class", K(tc));
           common::right_to_die_or_duty_to_live();
           break;
         }
@@ -261,11 +257,7 @@ int ObRowkey::serialize(char *buf, const int64_t buf_len, int64_t &pos) const
     COMMON_LOG(WARN, "illegal rowkey.",
                KP_(obj_ptr), K_(obj_cnt), K(ret));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, obj_cnt_))) {
-    COMMON_LOG(WARN, "encode object count failed.",
-               KP(buf), K(buf_len), K(pos), K_(obj_cnt), K(ret));
   } else if (OB_FAIL(serialize_objs(buf, buf_len, pos))) {
-    COMMON_LOG(WARN, "serialize objects failed.",
-               KP(buf), K(buf_len), K(pos), K_(obj_cnt), K(ret));
   }
   return ret;
 }
@@ -279,8 +271,6 @@ int ObRowkey::deserialize(const char *buf, const int64_t buf_len, int64_t &pos, 
     COMMON_LOG(WARN, "invalid arguments.",
                KP(buf), K(buf_len), K(ret));
   } else if (OB_FAIL(serialization::decode_vi64(buf, buf_len, pos, &obj_cnt))) {
-    COMMON_LOG(WARN, "decode object count failed.",
-               KP(buf), K(buf_len), K(pos), K(obj_cnt), K(ret));
   } else if (obj_cnt > 0) {
     // If there is no assign external ptr, then dynamically assign
     if (NULL == obj_ptr_) {
@@ -296,7 +286,6 @@ int ObRowkey::deserialize(const char *buf, const int64_t buf_len, int64_t &pos, 
     }
     // Otherwise, check whether the number of reserved primary keys meets the requirements
     else if (obj_cnt_ < obj_cnt) {
-      COMMON_LOG(ERROR, "preserved obj count is not enough", K(obj_cnt_), K(obj_cnt), K(obj_ptr_));
       ret = OB_BUF_NOT_ENOUGH;
     } else {
       // Use the reserved obj array
@@ -304,8 +293,6 @@ int ObRowkey::deserialize(const char *buf, const int64_t buf_len, int64_t &pos, 
     if (OB_SUCC(ret)) {
       obj_cnt_ = obj_cnt;
       if (OB_FAIL(deserialize_objs(buf, buf_len, pos))) {
-        COMMON_LOG(WARN, "decode objects failed.",
-                   KP(buf), K(buf_len), K(pos), K(obj_cnt), K(ret));
       }
     }
   } else if (check_zero && obj_cnt == 0) {
@@ -335,8 +322,6 @@ int ObRowkey::serialize_objs(char *buf, const int64_t buf_len, int64_t &pos) con
   }
   for (int64_t i = 0; i < obj_cnt_ && OB_SUCCESS == ret; ++i) {
     if (OB_FAIL(obj_ptr_[i].serialize(buf, buf_len, pos))) {
-      COMMON_LOG(WARN, "serialize object failed.",
-                 K(i), KP(buf), K(buf_len), K(pos), K(ret));
     }
   }
 
@@ -361,8 +346,6 @@ int ObRowkey::deserialize_objs(const char *buf, const int64_t buf_len, int64_t &
   } else {
     for (int64_t i = 0; i < obj_cnt_ && OB_SUCCESS == ret; ++i) {
       if (OB_FAIL(obj_ptr_[i].deserialize(buf, buf_len, pos))) {
-        COMMON_LOG(WARN, "deserialize object failed.",
-                   K(i), KP(buf), K(buf_len), K(pos), K(ret));
       }
     }
   }
@@ -468,21 +451,17 @@ int64_t ObRowkey::to_format_string(char *buffer, const int64_t length) const
     if (pos < length) {
       if (!obj_ptr_[i].is_max_value() && !obj_ptr_[i].is_min_value()) {
         if (OB_FAIL(obj_ptr_[i].print_format(buffer, length, pos))) {
-          COMMON_LOG(WARN, "Failed to print", K(obj_ptr_[i]), K(ret));
         }
       } else if (obj_ptr_[i].is_min_value()) {
         if (OB_FAIL(databuff_printf(buffer, length, pos, "MIN"))) {
-          COMMON_LOG(WARN, "Failed to print", K(obj_ptr_[i]), K(ret));
         }
       } else {
         if (OB_FAIL(databuff_printf(buffer, length, pos, "MAX"))) {
-          COMMON_LOG(WARN, "Failed to print", K(obj_ptr_[i]), K(ret));
         }
       }
       if (OB_SUCC(ret)) {
         if (i < obj_cnt_ - 1) {
           if (OB_FAIL(databuff_printf(buffer, length, pos, " "))) {
-            COMMON_LOG(WARN, "Failed to print", K(ret));
           }
         }
       }
@@ -506,21 +485,17 @@ int64_t ObRowkey::to_plain_string(char *buffer, const int64_t length) const
     if (pos < length) {
       if (!obj_ptr_[i].is_max_value() && !obj_ptr_[i].is_min_value()) {
         if (OB_FAIL(obj_ptr_[i].print_plain_str_literal(buffer, length, pos, print_params))) {
-          COMMON_LOG(WARN, "Failed to print", K(obj_ptr_[i]), K(ret));
         }
       } else if (obj_ptr_[i].is_min_value()) {
         if (OB_FAIL(databuff_printf(buffer, length, pos, "MIN"))) {
-          COMMON_LOG(WARN, "Failed to print", K(obj_ptr_[i]), K(ret));
         }
       } else {
         if (OB_FAIL(databuff_printf(buffer, length, pos, "MAX"))) {
-          COMMON_LOG(WARN, "Failed to print", K(obj_ptr_[i]), K(ret));
         }
       }
       if (OB_SUCC(ret)) {
         if (i < obj_cnt_ - 1) {
           if (OB_FAIL(databuff_printf(buffer, length, pos, ","))) {
-            COMMON_LOG(WARN, "Failed to print", K(ret));
           }
         }
       }

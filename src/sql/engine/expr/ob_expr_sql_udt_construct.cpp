@@ -79,7 +79,6 @@ int ObExprUdtConstruct::calc_result_typeN(ObExprResType &type,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("need context to search subschema mapping", K(ret), K(udt_id_));
     } else if (OB_FAIL(exec_ctx->get_subschema_id_by_udt_id(udt_id_, subschema_id))) {
-      LOG_WARN("failed to get sub schema id", K(ret), K(udt_id_));
     } else {
       type.set_sql_udt(subschema_id);
     }
@@ -128,14 +127,11 @@ int ObExprUdtConstruct::fill_sub_udt_nested_bitmap(ObSqlUDT &udt_obj, ObObj &nes
   int64_t pos = 0;
   ObArenaAllocator temp_allocator;
   if (OB_FAIL(ObObjUDTUtil::ob_udt_obj_value_get_serialize_size(nested_udt_bitmap_obj, obj_size))) {
-    LOG_WARN("Failed to calculate serialize object size", K(ret));
   } else if (OB_ISNULL(buf = static_cast<char *>(temp_allocator.alloc(obj_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alloc memory", K(ret), K(obj_size));
   } else if (OB_FAIL(ObObjUDTUtil::ob_udt_obj_value_serialize(nested_udt_bitmap_obj, buf, obj_size, pos))) {
-    LOG_WARN("Failed to serialize object value", K(ret), K(nested_udt_bitmap_obj));
   } else if (OB_FAIL(udt_obj.append_attribute(0, ObString(pos, buf)))) {
-    LOG_WARN("update attribute failed", K(ret), K(pos));
   }
   return ret;
 }
@@ -145,13 +141,11 @@ int ObExprUdtConstruct::fill_udt_res_values(const ObExpr &expr, ObEvalCtx &ctx, 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(udt_obj.init_null_bitmap())) {
-    LOG_WARN("init null bitmap failed", K(ret), K(expr.arg_cnt_));
   }
   for (int64_t i = 0; i < expr.arg_cnt_ && OB_SUCC(ret); ++i) {
     ObDatum &param = expr.locate_param_datum(ctx, i);
     if (i == 0 && is_sub_udt) {
       if (OB_FAIL(fill_sub_udt_nested_bitmap(udt_obj, nested_udt_bitmap_obj))) {
-        LOG_WARN("Failed to fill sub udt nested bitmap", K(ret), K(nested_udt_bitmap_obj));
       }
     } else if (!param.is_null() && expr.args_[i]->datum_meta_.type_ == ObNumberType) {
       char num_buf[common::number::ObNumber::MAX_NUMBER_ALLOC_BUFF_SIZE] = {0};
@@ -160,12 +154,9 @@ int ObExprUdtConstruct::fill_udt_res_values(const ObExpr &expr, ObEvalCtx &ctx, 
       obj.set_meta_type(expr.args_[i]->obj_meta_);
       obj.set_number(param.get_number_desc(), const_cast<uint32_t *>(param.get_number_digits()));
       if (OB_FAIL(ObObjUDTUtil::ob_udt_obj_value_serialize(obj, num_buf, common::number::ObNumber::MAX_NUMBER_ALLOC_BUFF_SIZE, pos))) {
-        LOG_WARN("Failed to serialize object value", K(ret), K(obj));
       } else if (OB_FAIL(udt_obj.append_attribute(i, ObString(pos, num_buf)))) {
-        LOG_WARN("update attribute failed", K(ret), K(expr.arg_cnt_), K(i));
       }
     } else if (OB_FAIL(udt_obj.append_attribute(i, param.is_null() ? ObString() : param.get_string()))) {
-      LOG_WARN("update attribute failed", K(ret), K(expr.arg_cnt_), K(i));
     }
   }
   return ret;
@@ -187,7 +178,6 @@ int ObExprUdtConstruct::eval_udt_construct(const ObExpr &expr, ObEvalCtx &ctx, O
     ret = OB_ERR_CALL_WRONG_ARG;
     LOG_WARN("invalid params cnt", K(ret), K(expr.arg_cnt_));
   } else if (OB_FAIL(temp_allocator.eval_arg(expr.args_[0], ctx, null_bit))) {
-    LOG_WARN("eval null bitmap failed", K(ret));
   } else if (null_bit->is_null()) {
     is_null = true;
     res.set_null();
@@ -196,10 +186,8 @@ int ObExprUdtConstruct::eval_udt_construct(const ObExpr &expr, ObEvalCtx &ctx, O
     if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&temp_allocator, ObLongTextType,
                                                                  CS_TYPE_BINARY, true,
                                                                  raw_data))) {
-      LOG_WARN("failed to get udt raw data", K(ret), K(info->udt_id_));
     } else if (FALSE_IT(temp_allocator.set_baseline_size(raw_data.length()))) {
     } else if (OB_FAIL(eval_sdo_geom_udt_access(temp_allocator, expr, ctx, raw_data, info->udt_id_, res))) {
-      LOG_WARN("failed to eval sdo_geom udt access", K(ret), K(info->udt_id_));
     }
   } else if (is_sub_udt) {
     // access sub udt
@@ -215,19 +203,15 @@ int ObExprUdtConstruct::eval_udt_construct(const ObExpr &expr, ObEvalCtx &ctx, O
                                                            null_bit->get_string().ptr(),
                                                            null_bit->get_string().length(),
                                                            buf_pos))) {
-      LOG_WARN("Failed to serialize object value", K(ret), K(ser_element_data));
     } else if (OB_FAIL(ObSqlUDT::get_null_bitmap_pos(udt_null_bitmap.get_string().ptr(),
                                                      udt_null_bitmap.get_string().length(),
                                                      info->attr_pos_,
                                                      is_null))) {
-      LOG_WARN("Failed to get root null bit", K(ret));
     } else if (is_null) {
       res.set_null();
     } else if (FALSE_IT(nested_bitmap.set_bitmap(udt_null_bitmap.get_string().ptr(), udt_null_bitmap.get_string().length()))) {
     } else if (OB_FAIL(ctx.exec_ctx_.get_subschema_id_by_udt_id(info->udt_id_, subschema_id))) {
-      LOG_WARN("find subschema_id failed", K(ret), K(subschema_id));
     } else if (OB_FAIL(ctx.exec_ctx_.get_sqludt_meta_by_subschema_id(subschema_id, sub_udt_meta))) {
-      LOG_WARN("get udt meta failed", K(ret), K(subschema_id));
     } else {
       uint32_t nested_udt_count = sub_udt_meta.nested_udt_number_ + 1;
       uint32_t nested_udt_bitmap_len = ObSqlUDT::get_null_bitmap_len(nested_udt_count);
@@ -240,7 +224,6 @@ int ObExprUdtConstruct::eval_udt_construct(const ObExpr &expr, ObEvalCtx &ctx, O
         sub_nested_bitmap.set_bitmap(bitmap_buffer, nested_udt_bitmap_len);
         // bitmap is preorder traversal, sub attr of udt is adjacent
         if (OB_FAIL(sub_nested_bitmap.assign(nested_bitmap, info->attr_pos_, nested_udt_count))) {
-          LOG_WARN("failed to assign sub udt bitmap", K(ret), K(info->attr_pos_), K(info->udt_id_));
         }
       }
     }
@@ -257,9 +240,7 @@ int ObExprUdtConstruct::eval_udt_construct(const ObExpr &expr, ObEvalCtx &ctx, O
     if (is_sub_udt && OB_FAIL(ObSqlUdtUtils::ob_udt_build_nested_udt_bitmap_obj(nested_udt_bitmap_obj, sub_nested_bitmap))) {
       LOG_WARN("failed to build nested udt bitmap object", K(ret));
     } else if (OB_FAIL(blob_res.init(res_len))) {
-      LOG_WARN("fail to init result", K(ret), K(res_len));
     } else if (OB_FAIL(blob_res.get_reserved_buffer(res_buf, res_buf_len))) {
-      LOG_WARN("failed to get reserved_buffer");
     } else if (res_buf_len < res_len) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get invalid res buf len", K(ret), K(res_buf_len), K(res_len));
@@ -270,9 +251,7 @@ int ObExprUdtConstruct::eval_udt_construct(const ObExpr &expr, ObEvalCtx &ctx, O
       udt_obj.set_udt_meta(sql_udt_meta);
       udt_obj.set_data(ObString(res_len, 0, res_buf));
       if (OB_FAIL(fill_udt_res_values(expr, ctx, udt_obj, is_sub_udt, nested_udt_bitmap_obj))) {
-        LOG_WARN("fill udt value failed", K(ret), K(res_buf_len), K(res_len));
       } else if (OB_FAIL(blob_res.lseek(res_len, 0))) {
-        LOG_WARN("set result length failed", K(ret), K(res_buf_len), K(res_len));
       } else {
         ObString tmp;
         blob_res.get_result_buffer(tmp);

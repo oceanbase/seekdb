@@ -55,14 +55,12 @@ int ObSystemConfig::update_value(const ObSystemConfigKey &key, const ObSystemCon
       void *ptr = allocator_.alloc(sizeof(ObSystemConfigValue));
       if (OB_ISNULL(ptr)) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        SHARE_LOG(WARN, "alloc memory failed");
       } else {
         sys_value = new (ptr) ObSystemConfigValue();
         sys_value->set_value(value.value());
         hash_ret = map_.set_refactored(key, sys_value);
         if (OB_SUCCESS != hash_ret) {
           if (OB_HASH_EXIST == hash_ret) {
-            SHARE_LOG(WARN, "sys config insert repeatly", "name", key.name(), K(hash_ret));
           } else {
             ret = hash_ret;
             SHARE_LOG(WARN, "sys config map set failed", "name", key.name(), K(ret));
@@ -91,11 +89,8 @@ int ObSystemConfig::read_int64(const ObSystemConfigKey &key,
   if (OB_SUCC(find(key, pvalue)) && OB_LIKELY(NULL != pvalue)) {
     value = strtoll(pvalue->value(), &p, 0);
     if (p == pvalue->value()) {
-      SHARE_LOG(ERROR, "config is not integer", "name", key.name(), "value", p);
     } else if (OB_ISNULL(p) || OB_UNLIKELY('\0' != *p)) {
-      SHARE_LOG(WARN, "config was truncated", "name", key.name(), "value", p);
     } else {
-      SHARE_LOG(INFO, "use internal config", "name", key.name(), K(value));
     }
   } else {
     value = def;
@@ -118,8 +113,6 @@ int ObSystemConfig::read_config(
       ret = OB_ERR_UNEXPECTED;
     } else if (!item.set_value_unsafe(pvalue->value())) {
       // without set ret
-      SHARE_LOG(WARN, "set config item value failed",
-                K(key.name()), K(pvalue->value()));
     }
   }
   return ret;

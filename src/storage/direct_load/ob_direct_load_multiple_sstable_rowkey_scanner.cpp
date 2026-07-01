@@ -55,7 +55,6 @@ int ObDirectLoadMultipleSSTableRowkeyScanner::init(
   } else {
     if (OB_FAIL(data_block_reader_.init(table_data_desc.sstable_data_block_size_,
                                         table_data_desc.compressor_type_))) {
-      LOG_WARN("fail to data block reader", KR(ret));
     } else {
       sstable_ = sstable;
       is_inited_ = true;
@@ -137,7 +136,6 @@ int ObDirectLoadSSTableRowkeyScanner::init(ObDirectLoadMultipleSSTable *sstable,
     LOG_WARN("invalid args", KR(ret), KPC(sstable), K(table_data_desc));
   } else {
     if (OB_FAIL(scanner_.init(sstable, table_data_desc))) {
-      LOG_WARN("fail to data block reader", KR(ret));
     } else {
       sstable_ = sstable;
       is_inited_ = true;
@@ -163,7 +161,6 @@ int ObDirectLoadSSTableRowkeyScanner::get_next_rowkey(const ObDatumRowkey *&rowk
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected multiple rowkey", KR(ret), KPC(sstable_), KPC(multiple_rowkey));
     } else if (OB_FAIL(multiple_rowkey->get_rowkey(rowkey_))) {
-      LOG_WARN("fail to get rowkey", KR(ret));
     } else {
       rowkey = &rowkey_;
     }

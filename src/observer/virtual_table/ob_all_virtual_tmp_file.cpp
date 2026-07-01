@@ -65,7 +65,6 @@ int ObAllVirtualTmpFileInfo::get_next_tmp_file_info_(tmp_file::ObTmpFileInfo *tm
            && !has_get) {
       if (fd_idx_ >= fd_arr_.count()) {
         ret = OB_ITER_END;
-        SERVER_LOG(INFO, "iterate current tenant reach end", K(fd_idx_), K(fd_arr_.count()));
       } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.get_tmp_file_info(fd_arr_.at(fd_idx_), tmp_file_info))) {
         if (OB_ENTRY_NOT_EXIST == ret || OB_TIMEOUT == ret) {
           SERVER_LOG(INFO, "tmp file does not exist or is locked by others", KR(ret), K(fd_arr_.at(fd_idx_)));
@@ -220,7 +219,6 @@ int ObAllVirtualTmpFileInfo::fill_columns_(tmp_file::ObTmpFileInfo *tmp_file_inf
         case PAGE_FLUSH_CNT: {
             tmp_file::ObSNTmpFileInfo *sn_tmp_file_info = static_cast<tmp_file::ObSNTmpFileInfo *>(tmp_file_info);
             if (OB_FAIL(fill_sn_column_(i, sn_tmp_file_info))) {
-              SERVER_LOG(WARN, "fail to fill sn column", KR(ret), K(i), KPC(sn_tmp_file_info));
             }
           }
           break;
@@ -306,7 +304,6 @@ int ObAllVirtualTmpFileInfo::inner_get_next_row(common::ObNewRow *&row)
         SERVER_LOG(WARN, "fail to get next tmp file info", KR(ret));
       }
     } else if (OB_FAIL(fill_columns_(tmp_file_info))) {
-      SERVER_LOG(WARN, "fail to fill columns", KR(ret));
     }
 
     if (OB_NOT_NULL(tmp_file_info)) {

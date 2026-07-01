@@ -1098,8 +1098,6 @@ int ObDictTableMeta::build_index_info_(const schema::ObTableSchema &table_schema
       ObAuxTableMetaInfo index_table_info;
       if (OB_FAIL(simple_index_infos.at(i, index_table_info))) {
       } else if (! ObTableSchema::is_unique_index(index_table_info.index_type_)) {
-        DDLOG(DEBUG, "TableMeta ignore non-unique-index table for unique_index_tid_arr",
-            K(index_table_info), K_(table_id));
       } else if (OB_FAIL(unique_index_tid_arr_.push_back(index_table_info.table_id_))) {
         DDLOG(WARN, "failed to push_back index_table_id into unique_index_tid_arr",
             KR(ret), K(i), K(simple_index_infos), K_(unique_index_tid_arr), KPC(this));
@@ -1114,7 +1112,6 @@ int ObDictTableMeta::build_index_info_(const schema::ObTableSchema &table_schema
       ret = OB_ERR_UNEXPECTED;
       DDLOG(WARN, "invalid allocator_", KR(ret));
     } else if (index_column_count_ <= 0) {
-      DDLOG(TRACE, "not found index_cols_, skip", KPC(this));
     } else if (OB_ISNULL(index_cols_ = static_cast<ObIndexColumn*>(allocator_->alloc(alloc_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       DDLOG(WARN, "alloc for index_cols_ failed", KR(ret), K(alloc_size), KPC(this));
@@ -1159,7 +1156,6 @@ int ObDictTableMeta::build_index_info_(const ObDictTableMeta &src_table_meta)
       ret = OB_ERR_UNEXPECTED;
       DDLOG(WARN, "invalid allocator_", KR(ret));
     } else if (index_column_count_ <= 0) {
-      DDLOG(TRACE, "not found index_cols_, skip", KPC(this));
     } else if (OB_ISNULL(index_cols_ = static_cast<ObIndexColumn*>(allocator_->alloc(alloc_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       DDLOG(WARN, "alloc for index_cols_ failed", KR(ret), K(alloc_size), KPC(this));
@@ -1197,7 +1193,6 @@ int ObDictTableMeta::build_rowkey_info_(const schema::ObTableSchema &table_schem
     const int64_t alloc_size = sizeof(common::ObRowkeyColumn) * rowkey_column_count_;
 
     if (rowkey_column_count_ <= 0) {
-      DDLOG(TRACE, "not found rowkey cols, skip", KPC(this));
     } else if (OB_ISNULL(rowkey_cols_ = static_cast<ObRowkeyColumn*>(allocator_->alloc(alloc_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       DDLOG(WARN, "alloc for rowkey_cols_ failed", KR(ret), K(alloc_size), KPC(this));
@@ -1229,7 +1224,6 @@ int ObDictTableMeta::build_rowkey_info_(const ObDictTableMeta &src_table_meta)
   const int64_t alloc_size = sizeof(common::ObRowkeyColumn) * rowkey_column_count_;
 
   if (rowkey_column_count_ <= 0) {
-    DDLOG(TRACE, "not found rowkey cols, skip", KPC(this));
   } else if (OB_ISNULL(rowkey_cols_ = static_cast<ObRowkeyColumn*>(allocator_->alloc(alloc_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     DDLOG(WARN, "alloc for rowkey_cols_ failed", KR(ret), K(alloc_size), KPC(this));
@@ -1318,7 +1312,6 @@ int ObDictTableMeta::build_column_info_(const ObDictTableMeta &src_table_meta)
     const int64_t alloc_size = sizeof(ObDictColumnMeta) * column_count_;
 
     if (column_count_ <= 0) {
-      DDLOG(TRACE, "table don't have columns, skip", KPC(this));
     } else if (OB_ISNULL(col_metas_ = static_cast<ObDictColumnMeta*>(allocator_->alloc(alloc_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       DDLOG(WARN, "alloc for col_metas_ failed", KR(ret), K(alloc_size), KPC(this));
@@ -1349,7 +1342,6 @@ int ObDictTableMeta::build_column_id_arr_(const share::schema::ObTableSchema &ta
   int ret = OB_SUCCESS;
   column_id_arr_order_by_table_def_.reset();
   if (table_schema.is_view_table() && !table_schema.is_materialized_view()) {
-    DDLOG(DEBUG, "build_column_id_arr_ skip view", KPC(this));
   } else {
     ObColumnIterByPrevNextID pre_next_id_iter(table_schema);
 
@@ -1526,7 +1518,6 @@ int ObDictTableMeta::get_column_ids(ObIArray<ObColDesc> &column_ids, bool no_vir
 
     if (column_meta.is_rowkey_column()
         || (no_virtual && column_meta.is_virtual_generated_column())) {
-      DDLOG(INFO, "skip non-rowkey_column and virtual_generate_column", K(no_virtual), K(column_meta), KPC(this));
     } else {
       ObColDesc col_desc;
       col_desc.col_id_ = column_meta.get_column_id();

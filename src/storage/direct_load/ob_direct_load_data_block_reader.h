@@ -135,7 +135,6 @@ int ObDirectLoadDataBlockReader<Header, T, align>::init(int64_t data_block_size,
     STORAGE_LOG(WARN, "invalid args", KR(ret), K(data_block_size), K(compressor_type));
   } else {
     if (OB_FAIL(data_block_reader_.init(data_block_size, compressor_type))) {
-      STORAGE_LOG(WARN, "fail to init data block reader", KR(ret));
     } else {
       data_block_size_ = data_block_size;
       io_timeout_ms_ = std::max(GCONF._data_storage_io_timeout / 1000, DEFAULT_IO_WAIT_TIME_MS);
@@ -164,9 +163,7 @@ int ObDirectLoadDataBlockReader<Header, T, align>::open(
     offset_ = offset;
     read_size_ = size;
     if (OB_FAIL(file_io_handle_.open(file_handle))) {
-      STORAGE_LOG(WARN, "fail to open file handle", KR(ret));
     } else if (OB_FAIL(switch_next_block())) {
-      STORAGE_LOG(WARN, "fail to switch next block", KR(ret), K(offset), K(size));
     } else {
       is_opened_ = true;
     }
@@ -191,7 +188,6 @@ int ObDirectLoadDataBlockReader<Header, T, align>::read_next_buffer()
     // read buffer
     const int64_t read_size = MIN(buf_capacity_ - buf_size_, read_size_);
     if (OB_FAIL(file_io_handle_.pread(buf_ + buf_size_, read_size, offset_))) {
-      STORAGE_LOG(WARN, "fail to do pread from tmp file", KR(ret));
     } else {
       buf_size_ += read_size;
       offset_ += read_size;
@@ -234,7 +230,6 @@ int ObDirectLoadDataBlockReader<Header, T, align>::switch_next_block()
   int ret = common::OB_SUCCESS;
   int64_t data_size = 0;
   if (OB_FAIL(realloc_buf(data_block_size_))) {
-    STORAGE_LOG(WARN, "fail to realloc buf", K(data_block_size_), KR(ret));
   } else if (buf_size_ - buf_pos_ <= data_block_reader_.get_header_size() &&
              OB_FAIL(read_next_buffer())) {
     if (OB_UNLIKELY(common::OB_ITER_END != ret)) {
@@ -248,18 +243,14 @@ int ObDirectLoadDataBlockReader<Header, T, align>::switch_next_block()
       ret = OB_SUCCESS;
       if (data_size > buf_capacity_) {
         if (OB_FAIL(realloc_buf(data_size))) {
-          STORAGE_LOG(WARN, "fail to alloc buf", KR(ret));
         }
       }
 
       if (OB_FAIL(ret)) {
         // pass
       } else if (OB_FAIL(read_next_buffer())) {
-        STORAGE_LOG(WARN, "fail to read next buffer", KR(ret));
       } else if (OB_FAIL(data_block_reader_.prepare_data_block(buf_ + buf_pos_,
                                                                buf_size_ - buf_pos_, data_size))) {
-        STORAGE_LOG(WARN, "fail to prepare data block", KR(ret), K(buf_pos_), K(buf_size_),
-                    K(data_size));
       }
     }
   }
@@ -268,7 +259,6 @@ int ObDirectLoadDataBlockReader<Header, T, align>::switch_next_block()
     buf_pos_ += data_block_size;
     ++block_count_;
     if (OB_FAIL(prepare_read_block())) {
-      STORAGE_LOG(WARN, "fail to prepare read block", KR(ret));
     }
   }
   return ret;
@@ -293,7 +283,6 @@ int ObDirectLoadDataBlockReader<Header, T, align>::get_next_item(const T *&item)
             STORAGE_LOG(WARN, "fail to switch next block", KR(ret));
           }
         } else if (OB_FAIL(data_block_reader_.read_next_item(curr_item_))) {
-          STORAGE_LOG(WARN, "fail to read item", KR(ret));
         }
       }
     }

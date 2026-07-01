@@ -79,7 +79,6 @@ int ObFIFOAllocator::init(ObIAllocator *allocator,
     // reserve
     if (init_size > 0) {
       if (OB_FAIL(sync_idle(init_size, max_size))) {
-        LOG_WARN("sync idle failed", K(init_size), K(ret));
       } else if (normal_total() < init_size) {
         ret = OB_INIT_FAIL;
         LOG_WARN("reserve failed", "normal total", normal_total(), K(init_size), K(ret));
@@ -107,7 +106,6 @@ int ObFIFOAllocator::set_idle(const int64_t idle_size, const bool sync)
     idle_size_ = idle_size;
     if (sync) {
       if (OB_FAIL(sync_idle(idle_size_, max_size_))) {
-        LOG_WARN("sync idle failed", K(idle_size_), K(max_size_));
       }
     }
   }

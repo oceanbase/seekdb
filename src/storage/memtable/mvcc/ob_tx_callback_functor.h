@@ -137,7 +137,6 @@ public:
         && OB_FAIL(callback->calc_checksum(checksum_scn_, checksumer_))) {
       TRANS_LOG(WARN, "calc checksum callback failed", K(ret), K(*callback));
     } else if (OB_FAIL(callback->checkpoint_callback())) {
-      TRANS_LOG(ERROR, "row remove callback failed", K(ret), K(*callback));
     } else {
       need_remove_callback_ = true;
       --need_remove_count_;
@@ -245,7 +244,6 @@ public:
       TRANS_LOG(ERROR, "remove synced will never go here", K(ret), KPC(callback));
     } else if (need_checksum_ && callback->get_scn() >= checksum_scn_ ) {
       if (OB_FAIL(callback->calc_checksum(checksum_scn_, checksumer_))) {
-      TRANS_LOG(WARN, "row remove callback failed", K(ret), K(*callback));
       } else if (FALSE_IT(checksum_last_scn_ = callback->get_scn())) {
       }
     }
@@ -311,7 +309,6 @@ public:
 
     if (NULL == callback) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "unexpected callback", KP(callback));
     } else if (callback->need_submit_log()) {
       // Case 1: callback has not been proposed to paxos
       if (cond_for_remove(callback, ret)) {
@@ -402,19 +399,15 @@ public:
 
     if (NULL == callback) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "unexpected callback", KP(callback));
     } else if (is_commit_ && callback->get_scn().is_max()) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "callback has not submitted log yet when commit callback", KP(callback));
 #ifdef ENABLE_DEBUG_LOG
       ob_abort();
 #endif
     } else if (is_commit_
                && OB_FAIL(callback->trans_commit())) {
-      TRANS_LOG(ERROR, "trans commit failed", KPC(callback));
     } else if (!is_commit_
                && OB_FAIL(callback->trans_abort())) {
-      TRANS_LOG(ERROR, "trans abort failed", KPC(callback));
     } else {
       need_remove_callback_ = true;
       print_callback_if_logging_block_(callback);
@@ -461,7 +454,6 @@ public:
 
     if (NULL == callback) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "unexpected callback", KP(callback));
     } else if (callback->need_submit_log()) {
       if (before_remove_) {
         before_remove_->operator()();
@@ -488,11 +480,8 @@ public:
 
     if (NULL == callback) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "unexpected callback", KP(callback));
     } else if (!callback->need_submit_log()) { // log has been submitted out
       if (OB_FAIL(callback->log_sync_fail_cb(max_committed_scn_))) {
-        // log_sync_fail_cb will never report error
-        TRANS_LOG(ERROR, "log sync fail cb report error", K(ret));
       } else {
         need_remove_callback_ = true;
       }
@@ -559,7 +548,6 @@ public:
     int ret = OB_SUCCESS;
 
     if (OB_FAIL(callback->merge_memtable_key(memtable_key_arr_))) {
-      TRANS_LOG(WARN, "fail to merge memtable key", K(ret));
     }
 
     return ret;

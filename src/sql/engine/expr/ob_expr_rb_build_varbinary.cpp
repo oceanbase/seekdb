@@ -73,11 +73,9 @@ int ObExprRbBuildVarbinary::eval_rb_build_varbinary(const ObExpr &expr,
   ObString res_rb_bin;
 
   if (OB_FAIL(ObRbExprHelper::get_input_roaringbitmap_bin(ctx, tmp_allocator, rb_arg, rb_bin, is_rb_null))) {
-    LOG_WARN("fail to get input roaringbitmap", K(ret));
   } else if (is_rb_null || rb_bin == nullptr) {
     res.set_null();
   } else if (OB_FAIL(ObRbExprHelper::pack_rb_res(expr, ctx, res, rb_bin))) {
-    LOG_WARN("fail to pack roaringbitmap res", K(ret));
   }
 
   return ret;

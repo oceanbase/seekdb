@@ -55,11 +55,8 @@ int ObMPSetOption::process()
   const ObMySQLRawPacket &mysql_pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
 
   if (OB_FAIL(packet_sender_.alloc_ezbuf())) {
-    LOG_WARN("failed to alloc easy buf", K(ret));
   } else if (OB_FAIL(packet_sender_.update_last_pkt_pos())) {
-    LOG_WARN("failed to update last packet pos", K(ret));
   } else if (OB_FAIL(get_session(session))) {
-    LOG_WARN("get session  fail", K(ret));
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null pointer");
@@ -68,7 +65,6 @@ int ObMPSetOption::process()
     LOG_WARN("get connection fail", K(conn), K(ret));
   } else {
     if (OB_FAIL(process_extra_info(*session, mysql_pkt, need_response_error))) {
-      LOG_WARN("fail get process extra info", K(ret));
     }
   }
 
@@ -102,9 +98,7 @@ int ObMPSetOption::process()
     if (OB_FAIL(ret)) {
         // do nothing
     } else if (OB_FAIL(send_ok_packet(*session, ok_param))) {
-      LOG_WARN("fail to send ok pakcet in statistic response", K(ok_param), K(ret));
     } else if (OB_FAIL(revert_session(session))) {
-      LOG_ERROR("failed to revert session", K(ret));
     } else {
       // do nothing
     }
@@ -114,8 +108,7 @@ int ObMPSetOption::process()
     if (need_disconnect && is_conn_valid()) {
       force_disconnect();
       LOG_WARN("disconnect connection when process query", K(ret));
-    } else  if (OB_FAIL(send_error_packet(ret, NULL))) { // override ret, no need to throw further
-      LOG_WARN("failed to send error packet", K(ret));
+    } else  if (OB_FAIL(send_error_packet(ret, NULL))) {
     }
   }
 

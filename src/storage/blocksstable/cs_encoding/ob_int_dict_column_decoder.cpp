@@ -78,7 +78,6 @@ int ObIntDictColumnDecoder::decode_and_aggregate(
     } else if (bitmap.test(datum.pack_)) {
       // has been evaluated.
     } else if (OB_FAIL(bitmap.set(datum.pack_))) {
-      LOG_WARN("Failed to set bitmap", KR(ret), K(datum.pack_));
     } else {
       ConvertUnitToDatumFunc convert_func = convert_uint_to_datum_funcs
           [dict_ctx.int_ctx_->meta_.width_]               /*val_store_width_V*/
@@ -127,7 +126,6 @@ int ObIntDictColumnDecoder::batch_decode(const ObColumnCSDecoderCtx &ctx, const 
         int64_t unused_null_cnt = 0;
         if (OB_FAIL(extract_ref_and_null_count_(
             ref_desc, dict_ctx.dict_meta_->distinct_val_cnt_, row_ids, row_cap, datums, unused_null_cnt))) {
-          LOG_WARN("fail to extract_ref_and_null_count_", K(ret), K(dict_ctx));
         } else {
           ConvertUnitToDatumFunc convert_func = convert_uint_to_datum_funcs
               [dict_ctx.int_ctx_->meta_.width_]           /*val_store_width_V*/
@@ -164,7 +162,6 @@ int ObIntDictColumnDecoder::decode_vector(
   if (OB_UNLIKELY(0 == dict_ctx.dict_meta_->distinct_val_cnt_)) { // empty dict, all datum is null
     if (OB_FAIL(ObCSVectorDecodingUtil::decode_all_null_vector(
          vector_ctx.row_ids_, vector_ctx.row_cap_, vector_ctx.vec_header_, vector_ctx.vec_offset_))) {
-      LOG_WARN("fail to decode_all_null_vector", K(ret));
     }
   } else {
      const char *ref_arr = nullptr;
@@ -183,7 +180,6 @@ int ObIntDictColumnDecoder::decode_vector(
         }
       } else if (OB_FAIL(extract_ref_and_null_count_(ref_desc, dict_ctx.dict_meta_->distinct_val_cnt_,
           vector_ctx.row_ids_, vector_ctx.row_cap_, nullptr, unused_null_cnt, temp_ref_arr))) {
-        LOG_WARN("fail to extract_ref_and_null_count_", K(ret), K(dict_ctx));
       }
     } else {  // not const encoding ref
       ref_arr = dict_ctx.ref_data_;
@@ -192,7 +188,6 @@ int ObIntDictColumnDecoder::decode_vector(
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObIntegerStreamVecDecoder::decode_vector(
           dict_ctx, dict_ctx.int_data_, *dict_ctx.int_ctx_, ref_arr, ref_width, vector_ctx))) {
-        LOG_WARN("fail to decode_vector", K(ret), K(dict_ctx), K(vector_ctx));
       }
     }
   }

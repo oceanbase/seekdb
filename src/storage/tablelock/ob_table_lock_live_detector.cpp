@@ -99,7 +99,6 @@ int ObTableLockDetectFuncList::do_session_alive_detect()
   ObArenaAllocator allocator;
 
   if (OB_FAIL(get_owner_id_list_from_table_(allocator, owner_ids))) {
-    LOG_WARN("get owner_id_list from table failed", K(ret));
   } else {
     for (int64_t i = 0; i < owner_ids.count() && OB_SUCC(ret); i++) {
       client_session_alive = true;
@@ -108,10 +107,8 @@ int ObTableLockDetectFuncList::do_session_alive_detect()
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("owner_id is invalid", K(ret), K(owner_id));
       } else if (OB_FAIL(owner_id.convert_to_sessid(client_session_id))) {
-        LOG_WARN("get client_sesion_id failed", K(ret), K(owner_id));
       } else if (OB_FAIL(do_session_alive_detect_for_a_client_session_(client_session_id,
                                                                        client_session_alive))) {
-        LOG_WARN("do session alive detect for a client_session failed", K(client_session_id));
       } else if (!client_session_alive) {
         LOG_INFO(
           "find client session is not alive, we will clean all recodrs of it later", K(ret), K(client_session_id), K(owner_id));
@@ -138,7 +135,6 @@ int ObTableLockDetectFuncList::do_session_alive_detect_for_a_client_session_(con
   ObArray<ObTuple<ObAddr, int64_t>> server_session_list;
   all_alive = true;
   if (OB_FAIL(get_active_server_session_list_(client_session_id, server_session_list, all_alive))) {
-    LOG_WARN("get server address list failed", K(client_session_id));
   } else if (all_alive) {
     for (int64_t i = 0; i < server_session_list.count() && OB_SUCC(ret) && all_alive; i++) {
       bool server_session_is_alive = true;
@@ -183,9 +179,7 @@ int ObTableLockDetectFuncList::get_active_server_session_list_(const int64_t &cl
                               "%s.%s",
                               OB_SYS_DATABASE_NAME,
                               OB_ALL_CLIENT_TO_SERVER_SESSION_INFO_TNAME))) {
-    LOG_WARN("generate full table_name failed", K(OB_SYS_DATABASE_NAME), K(OB_ALL_CLIENT_TO_SERVER_SESSION_INFO_TNAME));
   } else if (OB_FAIL(databuff_printf(where_cond, 128, "WHERE client_session_id = %ld", client_session_id))) {
-    LOG_WARN("generate where condition failed", K(client_session_id));
   } else if (OB_FAIL(ObTableAccessHelper::read_multi_row(
                                                          {"server_session_id"},
                                                          full_table_name,
@@ -204,7 +198,6 @@ int ObTableLockDetectFuncList::get_active_server_session_list_(const int64_t &cl
       // This branch treats all records as local sessions and checks liveness via local session_mgr.
       // (In this repo, location service for vtable/ls is simplified to local-only.)
       if (OB_FAIL(server_session_list.push_back(ObTuple<ObAddr, int64_t>(self_addr, session_id)))) {
-        LOG_WARN("add server_session_id into list failed", K(ret), K(self_addr), K(session_id));
       }
     }
   }
@@ -228,7 +221,6 @@ int ObTableLockDetectFuncList::get_owner_id_list_from_table_(ObIAllocator &alloc
   ObTableLockOwnerID *new_owner_id = nullptr;
 
   if (OB_FAIL(ObTableLockDetector::get_table_name(table_name))) {
-    LOG_WARN("generate full table_name failed");
   } else {
     ObArray<ObTuple<int64_t, int64_t>> tmp_owner_ids;
     if (OB_FAIL(ObTableAccessHelper::read_multi_row({"owner_type", "owner_id"}, table_name, where_cond, tmp_owner_ids))) {
@@ -244,7 +236,6 @@ int ObTableLockDetectFuncList::get_owner_id_list_from_table_(ObIAllocator &alloc
           LOG_WARN("allocate memory for ObTableLockOwnerID failed", K(ret), K(owner_ids.at(i)));
         } else if (FALSE_IT(new_owner_id = new (ptr) ObTableLockOwnerID(static_cast<unsigned char>(tmp_owner_ids.at(i).element<0>()), tmp_owner_ids.at(i).element<1>()))) {
         } else if (OB_FAIL(owner_ids.push_back(new_owner_id))) {
-          LOG_WARN("add owner_id into list failed", K(ret), K(new_owner_id));
         }
         if (OB_FAIL(ret) && OB_NOT_NULL(new_owner_id)) {
           new_owner_id->~ObTableLockOwnerID();
@@ -281,7 +272,6 @@ int ObTableLockDetector::record_detect_info_to_inner_table(sql::ObSQLSessionInfo
     LOG_INFO("there is no inner connection in the session, we will try to create one", K(session_info->get_server_sid()));
 
     if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session_info, GCTX.sql_proxy_, inner_conn))) {
-      LOG_WARN("get inner connection failed", K(session_info->get_server_sid()));
     } else {
       need_release_conn = true;
     }
@@ -301,7 +291,6 @@ int ObTableLockDetector::record_detect_info_to_inner_table(sql::ObSQLSessionInfo
     need_record_to_lock_table = false;
   } else if (OB_FAIL(record_detect_info_to_inner_table_(
                inner_conn, task_type, lock_req, need_record_to_lock_table))) {
-    LOG_WARN("record_detect_info_to_inner_table_ failed", K(ret), K(task_type), K(lock_req));
   }
 
   if (need_release_conn && OB_NOT_NULL(inner_conn)) {
@@ -329,7 +318,6 @@ int ObTableLockDetector::remove_detect_info_from_inner_table(sql::ObSQLSessionIn
   if (OB_ISNULL(inner_conn = static_cast<observer::ObInnerSQLConnection *>(session_info->get_inner_conn()))) {
     LOG_INFO("there is no inner connection in the session, we will try to create one", K(session_info->get_server_sid()));
     if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session_info, GCTX.sql_proxy_, inner_conn))) {
-      LOG_WARN("get inner connection failed", K(session_info->get_server_sid()));
     } else {
       need_release_conn = true;
     }
@@ -340,27 +328,17 @@ int ObTableLockDetector::remove_detect_info_from_inner_table(sql::ObSQLSessionIn
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("inner connection is null", K(ret), K(session_info->get_server_sid()));
   } else if (OB_FAIL(get_cnt_of_lock_(inner_conn, task_type, lock_req, cnt))) {
-    LOG_WARN("get_cnt_of_lock_ for remove_detect_info_from_inner_table failed",
-             KR(ret),
-             K(task_type),
-             K(lock_req));
   } else if (OB_FAIL(
                get_table_name_and_dml_with_pk_column_(task_type, lock_req, full_table_name, dml))) {
-    LOG_WARN("get_table_name_and_dml_with_pk_column_ for remove_detect_info_from_inner_table failed",
-             K(ret),
-             K(task_type),
-             K(lock_req));
   } else if (cnt <= 1) {
     if (cnt <= 0) {
       LOG_WARN("the reocrd in __all_detect_lock_info didn't remove before", K(lock_req));
     } else if (OB_FAIL(delete_record_(full_table_name, inner_conn, dml))) {
-      LOG_WARN("delete record failed", KR(ret), K(full_table_name), K(task_type), K(lock_req), K(cnt));
     } else {
       need_remove_from_lock_table = true;
     }
   } else {
     if (OB_FAIL(update_cnt_of_lock_(full_table_name, inner_conn, dml))) {
-      LOG_WARN("update the cnt of record failed", KR(ret), K(full_table_name), K(task_type), K(lock_req), K(cnt));
     } else {
       need_remove_from_lock_table = false;
     }
@@ -389,7 +367,6 @@ int ObTableLockDetector::remove_detect_info_from_inner_table(sql::ObSQLSessionIn
   if (OB_ISNULL(inner_conn = static_cast<observer::ObInnerSQLConnection *>(session_info->get_inner_conn()))) {
     LOG_INFO("there is no inner connection in the session, we will try to create one", K(session_info->get_server_sid()));
     if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session_info, GCTX.sql_proxy_, inner_conn))) {
-      LOG_WARN("get inner connection failed", K(session_info->get_server_sid()));
     } else {
       need_release_conn = true;
     }
@@ -400,9 +377,7 @@ int ObTableLockDetector::remove_detect_info_from_inner_table(sql::ObSQLSessionIn
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("inner connection is null", K(ret), K(session_info->get_server_sid()));
   } else if (OB_FAIL(get_cnt_of_lock_(inner_conn, task_type, lock_req, cnt_in_new_table))) {
-    LOG_WARN("get_cnt_of_lock_ for remove_detect_info_from_inner_table failed", KR(ret), K(task_type), K(lock_req));
   } else if (OB_FAIL(remove_detect_info_from_table_(inner_conn, task_type, lock_req, cnt_in_new_table, cnt))) {
-    LOG_WARN("remove_detect_info_from_table_ failed", K(ret), K(task_type), K(lock_req));
   }
   if (need_release_conn && OB_NOT_NULL(inner_conn)) {
     GCTX.sql_proxy_->close(inner_conn, ret);
@@ -414,7 +389,6 @@ int ObTableLockDetector::do_detect_and_clear()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(func1.call_function_directly())) {
-    LOG_WARN("do session_alive detect failed", K(ret));
   }
   remove_expired_lock_id();
 
@@ -426,7 +400,6 @@ int ObTableLockDetector::remove_lock_by_owner_id(const ObTableLockOwnerID &owner
   int ret = OB_SUCCESS;
   ObUnLockExecutor executor;
   if (OB_FAIL(executor.execute(owner_id))) {
-    LOG_WARN("remove lock by owner_id failed", K(owner_id));
   }
   return ret;
 }
@@ -476,7 +449,6 @@ int ObTableLockDetector::check_lock_id_exist_in_inner_table(sql::ObSQLSessionInf
   if (OB_ISNULL(inner_conn = static_cast<observer::ObInnerSQLConnection *>(session_info->get_inner_conn()))) {
     LOG_INFO("there is no inner connection in the session, we will try to create one", K(session_info->get_server_sid()));
     if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session_info, GCTX.sql_proxy_, inner_conn))) {
-      LOG_WARN("get inner connection failed", K(session_info->get_server_sid()));
     } else {
       need_release_conn = true;
     }
@@ -486,9 +458,7 @@ int ObTableLockDetector::check_lock_id_exist_in_inner_table(sql::ObSQLSessionInf
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("inner connection is null", K(ret), K(session_info->get_server_sid()));
   } else if (OB_FAIL(where_cond.assign_fmt("obj_id = %" PRIu64 " AND obj_type = %d", obj_id, static_cast<int>(obj_type)))) {
-    LOG_WARN("fail to assign fmt", KR(ret));
   } else if (OB_FAIL(check_lock_exist_(inner_conn, where_cond, exist))) {
-    LOG_WARN("check lock exist failed", K(ret));
   }
 
   if (need_release_conn && OB_NOT_NULL(inner_conn)) {
@@ -510,7 +480,6 @@ int ObTableLockDetector::check_lock_owner_exist_in_inner_table(sql::ObSQLSession
   if (OB_ISNULL(inner_conn = static_cast<observer::ObInnerSQLConnection *>(session_info->get_inner_conn()))) {
     LOG_INFO("there is no inner connection in the session, we will try to create one", K(session_info->get_server_sid()));
     if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session_info, GCTX.sql_proxy_, inner_conn))) {
-      LOG_WARN("get inner connection failed", K(session_info->get_server_sid()));
     } else {
       need_release_conn = true;
     }
@@ -550,7 +519,6 @@ int ObTableLockDetector::check_lock_exist_in_inner_table(sql::ObSQLSessionInfo *
   if (OB_ISNULL(inner_conn = static_cast<observer::ObInnerSQLConnection *>(session_info->get_inner_conn()))) {
     LOG_INFO("there is no inner connection in the session, we will try to create one", K(session_info->get_server_sid()));
     if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session_info, GCTX.sql_proxy_, inner_conn))) {
-      LOG_WARN("get inner connection failed", K(session_info->get_server_sid()));
     } else {
       need_release_conn = true;
     }
@@ -577,9 +545,7 @@ int ObTableLockDetector::check_lock_exist_in_inner_table(sql::ObSQLSessionInfo *
                                            static_cast<int>(task_type),
                                            obj_type,
                                            obj_id))) {
-    LOG_WARN("make where_cond of select sql failed", K(ret), K(task_type), K(lock_req));
   } else if (OB_FAIL(check_lock_exist_(inner_conn, where_cond, lock_req.owner_id_, exist))) {
-    LOG_WARN("check_lock_exist_ failed", K(ret), K(task_type), K(lock_req));
   }
 
   if (need_release_conn && OB_NOT_NULL(inner_conn)) {
@@ -626,7 +592,6 @@ int ObTableLockDetector::get_unlock_request_list(sql::ObSQLSessionInfo *session,
   if (OB_ISNULL(inner_conn = static_cast<observer::ObInnerSQLConnection *>(session->get_inner_conn()))) {
     LOG_INFO("there is no inner connection in the session, we will try to create one", K(session->get_server_sid()));
     if (OB_FAIL(ObInnerConnectionLockUtil::create_inner_conn(session, GCTX.sql_proxy_, inner_conn))) {
-      LOG_WARN("get inner connection failed", K(session->get_server_sid()));
     } else {
       need_release_conn = true;
     }
@@ -637,20 +602,16 @@ int ObTableLockDetector::get_unlock_request_list(sql::ObSQLSessionInfo *session,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("inner connection is null", K(ret), K(session->get_server_sid()));
   } else if (OB_FAIL(generate_get_unlock_request_sql_(owner_id, task_type, sql))) {
-    LOG_WARN("generate get_unlock_request sql failed", K(ret), K(owner_id), K(task_type), K(sql));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res)
     {
       common::sqlclient::ObMySQLResult *result = NULL;
       if (OB_FAIL(ObInnerConnectionLockUtil::execute_read_sql(inner_conn, sql, res))) {
-        LOG_WARN("execute sql failed", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get result", KR(ret));
       } else if (OB_FAIL(get_unlock_request_list_(result, allocator, arg_list))) {
-        LOG_WARN("get unlock_reuqest list failed", KR(ret));
       } else if (OB_FAIL(fill_owner_id_for_unlock_request_(owner_id, arg_list))) {
-        LOG_WARN("fill unlock_reuqest list with owner_id failed", K(owner_id), K(arg_list));
       }
     }  // end SMART_VAR
   }
@@ -698,9 +659,7 @@ int ObTableLockDetector::check_lock_exist_in_table_(observer::ObInnerSQLConnecti
     ObSqlString sql;
     common::sqlclient::ObMySQLResult *result = NULL;
     if (OB_FAIL(sql.assign_fmt("SELECT owner_id FROM %s WHERE %s", table_name, where_cond.ptr()))) {
-      LOG_WARN("fail to assign fmt", KR(ret));
     } else if (OB_FAIL(ObInnerConnectionLockUtil::execute_read_sql(inner_conn, sql, res))) {
-      LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get result", KR(ret));
@@ -751,15 +710,10 @@ int ObTableLockDetector::record_detect_info_to_inner_table_(observer::ObInnerSQL
   char table_name[OB_MAX_TABLE_NAME_BUF_LENGTH];
 
   if (OB_FAIL(get_table_name(table_name))) {
-    LOG_WARN("generate full table_name failed", K(task_type), K(lock_req));
   } else if (OB_FAIL(generate_insert_dml_(task_type, lock_req, dml))) {
-    LOG_WARN("generate insert dml failed", K(ret));
   } else if (OB_FAIL(dml.splice_insert_sql(table_name, insert_sql))) {
-    LOG_WARN("generate insert sql failed", K(ret), K(table_name));
   } else if (OB_FAIL(insert_sql.append(" ON DUPLICATE  KEY UPDATE cnt = cnt + 1"))) {
-    LOG_WARN("append 'cnt = cnt + 1' to the insert_sql failed", K(ret), K(insert_sql));
   } else if (OB_FAIL(ObInnerConnectionLockUtil::execute_write_sql(inner_conn, insert_sql, affected_rows))) {
-    LOG_WARN("execute insert sql failed", K(ret), K(insert_sql));
   } else if (affected_rows == 2) {
     need_record_to_lock_table = false;
     LOG_INFO("there's the same lock in __all_detect_lock_info table, no need to record it to the lock table",
@@ -782,9 +736,7 @@ int ObTableLockDetector::generate_insert_dml_(const ObTableLockTaskType &task_ty
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("do not support detect task type", K(ret), K(task_type));
   } else if (OB_FAIL(add_pk_column_to_dml_(task_type, lock_req, dml))) {
-    LOG_WARN("add_pk_column_to_dml_ for generate_insert_dml_ failed", KR(ret), K(task_type), K(lock_req));
   } else if (OB_FAIL(dml.add_column("cnt", cnt))) {
-    LOG_WARN("add column for insert dml failed", K(ret));
   } else {
     switch (task_type) {
     case LOCK_OBJECT: {
@@ -861,7 +813,6 @@ int ObTableLockDetector::add_pk_column_to_dml_(const ObTableLockTaskType &task_t
     LOG_WARN("add pk column to dml failed", K(ret), K(lock_req));
   } else {
     if (OB_FAIL(dml.add_pk_column("owner_type", lock_req.owner_id_.type()))) {
-      LOG_WARN("add owner_type failed", K(ret), K(lock_req));
     }
   }
   return ret;
@@ -873,9 +824,7 @@ int ObTableLockDetector::generate_update_sql_(const char *table_name,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(sql.append_fmt("UPDATE %s SET cnt = cnt - 1 WHERE ", table_name))) {
-    LOG_WARN("append prefix for update sql failed", KR(ret), K(table_name));
   } else if (OB_FAIL(dml.splice_predicates(sql))) {
-    LOG_WARN("splice_predicates for update sql failed", KR(ret), K(table_name));
   }
   return ret;
 }
@@ -886,9 +835,7 @@ int ObTableLockDetector::generate_select_sql_(const char *table_name,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(sql.append_fmt("SELECT cnt FROM %s WHERE ", table_name))) {
-    LOG_WARN("append prefix for select sql failed", KR(ret), K(table_name));
   } else if (OB_FAIL(dml.splice_predicates(sql))) {
-    LOG_WARN("splice_predicates for select sql failed", KR(ret), K(table_name));
   }
   return ret;
 }
@@ -901,9 +848,7 @@ int ObTableLockDetector::delete_record_(const char *table_name,
   ObSqlString sql;
   int64_t affected_rows = 0;
   if (OB_FAIL(dml.splice_delete_sql(table_name, sql))) {
-    LOG_WARN("splice_delete_sql for delete_record_ failed", KR(ret), K(table_name));
   } else if (OB_FAIL(ObInnerConnectionLockUtil::execute_write_sql(conn, sql, affected_rows))) {
-    LOG_WARN("execute_write_sql for delete_record_ failed", KR(ret), K(sql));
   } else if (affected_rows != 1) {
     LOG_WARN("do not delete the record", KR(ret), K(sql), K(affected_rows));
   }
@@ -921,7 +866,6 @@ int ObTableLockDetector::update_cnt_of_lock_(const char *table_name,
   int64_t affected_rows = 0;
   if (OB_FAIL(generate_update_sql_(table_name, dml, sql))) {
   } else if (OB_FAIL(ObInnerConnectionLockUtil::execute_write_sql(conn, sql, affected_rows))) {
-    LOG_WARN("execute_write_sql for update_cnt_of_lock_ failed", KR(ret), K(sql));
   } else if (affected_rows != 1) {
     LOG_WARN("do not update the record", K(sql));
   }
@@ -937,7 +881,6 @@ int ObTableLockDetector::get_cnt_of_lock_(observer::ObInnerSQLConnection *conn,
 
   cnt = 0;
   if (OB_FAIL(get_lock_cnt_in_table_(conn, task_type, lock_req, cnt))) {
-    LOG_WARN("get lock_cnt in new table failed", K(ret), K(task_type), K(lock_req));
   }
 
   LOG_DEBUG("lock_live_detector debug: get_cnt_of_lock_",
@@ -957,9 +900,7 @@ int ObTableLockDetector::get_lock_cnt_in_table_(observer::ObInnerSQLConnection *
   share::ObDMLSqlSplicer dml;
 
   if (OB_FAIL(get_table_name_and_dml_with_pk_column_(task_type, lock_req, table_name, dml))) {
-    LOG_WARN("get_table_name_and_dml_with_pk_column_ for get_lock_cnt_in_table_ failed", K(task_type), K(lock_req));
   } else if (OB_FAIL(get_lock_cnt_in_table_(conn, table_name, dml, cnt))) {
-    LOG_WARN("get_lock_cnt_in_table_ failed", K(ret));
   }
   return ret;
 }
@@ -975,9 +916,7 @@ int ObTableLockDetector::get_lock_cnt_in_table_(observer::ObInnerSQLConnection *
     ObSqlString sql;
     common::sqlclient::ObMySQLResult *result = nullptr;
     if (OB_FAIL(generate_select_sql_(table_name, dml, sql))) {
-      LOG_WARN("generate_select_sql_ for get_lock_cnt_in_table_ failed", KR(ret), K(table_name));
     } else if (OB_FAIL(ObInnerConnectionLockUtil::execute_read_sql(conn, sql, res))) {
-      LOG_WARN("execute_read_sql for get_lock_cnt_in_table_ failed", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get result", KR(ret), K(sql));
@@ -1060,12 +999,10 @@ int ObTableLockDetector::get_unlock_request_list_(common::sqlclient::ObMySQLResu
 
   while (OB_SUCC(ret) && OB_SUCC(res->next())) {
     if (OB_FAIL(parse_unlock_request_(*res, allocator, unlock_arg))) {
-      LOG_WARN("parse lock request failed", K(ret));
     } else if (OB_ISNULL(unlock_arg)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("parse unlock request failed", K(ret));
     } else if (OB_FAIL(arg_list.push_back(unlock_arg))) {
-      LOG_WARN("add unlock arg to the list failed", K(ret), K(unlock_arg));
     }
     if (OB_FAIL(ret) && OB_NOT_NULL(unlock_arg)) {
       unlock_arg->~ObLockRequest();
@@ -1154,9 +1091,7 @@ int ObTableLockDetector::parse_unlock_request_(common::sqlclient::ObMySQLResult 
           LOG_WARN("get unlock request failed", K(ret));
         } else if (FALSE_IT(unlock_arg = new (ptr) ObUnLockObjsRequest())) {
         } else if (OB_FAIL(lock_id.set(static_cast<ObLockOBJType>(obj_type), obj_id))) {
-          LOG_WARN("get lock id failed", K(ret), K(obj_type), K(obj_id));
         } else if (OB_FAIL(unlock_arg->objs_.push_back(lock_id))) {
-          LOG_WARN("get unlock argument failed", K(ret), K(lock_id));
         } else {
           arg = unlock_arg;
         }

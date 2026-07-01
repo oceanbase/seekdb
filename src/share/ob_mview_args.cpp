@@ -109,7 +109,6 @@ OB_DEF_DESERIALIZE(ObMViewCompleteRefreshArg)
     OB_UNIS_DECODE_ARRAY(nls_formats, nls_formats_count);
     for (int64_t i = 0; OB_SUCC(ret) && i < nls_formats_count; i++) {
       if (OB_FAIL(ob_write_string(allocator_, nls_formats[i], nls_formats_[i]))) {
-        LOG_WARN("fail to deep copy nls format", KR(ret), K(i), K(nls_formats[i]));
       }
     }
   }

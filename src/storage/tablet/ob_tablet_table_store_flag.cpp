@@ -53,7 +53,6 @@ int ObTabletTableStoreFlag::serialize(char *buf, const int64_t len, int64_t &pos
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(buf), K(len), K(pos));
   } else if (OB_FAIL(serialization::encode_i64(buf, len, new_pos, status_))) {
-    LOG_WARN("serialize ha status failed.", K(ret), K(new_pos), K(len), K_(status), K(*this));
   } else {
     pos = new_pos;
   }
@@ -69,7 +68,6 @@ int ObTabletTableStoreFlag::deserialize(const char *buf, const int64_t len, int6
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(buf), K(len), K(pos));
   } else if (OB_FAIL(serialization::decode_i64(buf, len, new_pos, &status_))) {
-    LOG_WARN("failed to deserialize ha status", K(ret), K(len), K(new_pos));
   } else {
     pos = new_pos;
   }

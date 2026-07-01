@@ -58,7 +58,6 @@ copy_bitmap_null_base(const ObBitmapNullVectorBase &vec,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(copy_vector_base(vec))) {
-    LOG_WARN("failed to copy vector base", K(ret));
   } else if (nullptr == frame_nulls_) {
     void *buffer = nullptr;
     if (OB_ISNULL(buffer = alloc.alloc(sql::ObBitVector::memory_size(max_row_cnt_)))) {
@@ -86,7 +85,6 @@ copy_fixed_base(const ObFixedLengthBase &vec,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(copy_bitmap_null_base(vec, alloc, batch_size, eval_ctx))) {
-    LOG_WARN("failed to copy bitmap null base", K(ret));
   } else if (nullptr == frame_data_) {
     len_ = vec.get_length();
     if (OB_ISNULL(frame_data_ = static_cast<char *> (alloc.alloc(len_ * max_row_cnt_)))) {
@@ -110,7 +108,6 @@ copy_discrete_base(const ObDiscreteBase &vec,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(copy_bitmap_null_base(vec, alloc, batch_size, eval_ctx))) {
-    LOG_WARN("failed to copy bitmap null base", K(ret));
   } else if (nullptr == frame_lens_) {
     if (OB_ISNULL(frame_lens_
                   = static_cast<ObLength *> (alloc.alloc(sizeof(ObLength) * max_row_cnt_)))) {
@@ -140,7 +137,6 @@ copy_continuous_base(const ObContinuousBase &vec,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(copy_bitmap_null_base(vec, alloc, batch_size, eval_ctx))) {
-    LOG_WARN("failed to copy bitmap null base", K(ret));
   } else if (nullptr == frame_offsets_) {
     if (OB_ISNULL(frame_offsets_
                   = static_cast<uint32_t *> (alloc.alloc(sizeof(uint32_t) * (max_row_cnt_ + 1))))) {
@@ -168,7 +164,6 @@ int ObVectorsResultHolder::ObColResultHolder::copy_uniform_base(
                            (expr->is_fixed_length_data_ ||
                            ObNumberTC == ob_obj_type_class(expr->datum_meta_.get_type()));
   if (OB_FAIL(copy_vector_base(vec))) {
-    LOG_WARN("failed to copy vector base", K(ret));
   } else {
     if (nullptr == frame_datums_) {
       if (OB_ISNULL(frame_datums_ = static_cast<ObDatum *>(
@@ -557,9 +552,7 @@ int ObVectorsResultHolder::save(const int64_t batch_size)
     ObIAllocator &alloc = (tmp_alloc_ != nullptr ? *tmp_alloc_ : eval_ctx_->exec_ctx_.get_allocator());
     for (int64_t i = 0; OB_SUCC(ret) && i < exprs_->count(); ++i) {
       if (OB_FAIL(backup_cols_[i].header_.assign(exprs_->at(i)->get_vector_header(*eval_ctx_)))) {
-        LOG_WARN("failed to assign vector", K(ret));
       } else if (OB_FAIL(backup_cols_[i].save(alloc, batch_size, eval_ctx_))) {
-        LOG_WARN("failed to backup col", K(ret), K(i));
       }
     }
   }
@@ -576,9 +569,7 @@ int ObVectorsResultHolder::restore() const
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < exprs_->count(); ++i) {
       if (OB_FAIL(exprs_->at(i)->get_vector_header(*eval_ctx_).assign(backup_cols_[i].header_))) {
-        LOG_WARN("failed to assign vector", K(ret));
       } else if (OB_FAIL(backup_cols_[i].restore(saved_size_, eval_ctx_))) {
-        LOG_WARN("failed to restore col", K(ret), K(saved_size_), K(i));
       }
     }
   }
@@ -675,7 +666,6 @@ int ObVectorsResultHolder::drive_row_extended(int64_t from_idx, int64_t start_ds
       LOG_DEBUG("drive row extended for NLJ_VEC_2, and backup format is", K(i), K(backup_format));
       VectorFormat extend_format = get_single_row_restore_format(backup_cols_[i].header_.get_format(), exprs_->at(i));
       if (OB_FAIL(exprs_->at(i)->init_vector(*eval_ctx_, extend_format, eval_ctx_->max_batch_size_))) {
-        LOG_WARN("failed to init vector for backup expr", K(i), K(backup_cols_[i].header_.get_format()), K(ret));
       } else {
         switch(backup_format) {
           case VEC_FIXED:
@@ -721,7 +711,6 @@ int ObVectorsResultHolder::restore_single_row(int64_t from_idx, int64_t to_idx) 
     for (int64_t i = 0; OB_SUCC(ret) && i < exprs_->count(); ++i) {
       VectorFormat extend_format = get_single_row_restore_format(backup_cols_[i].header_.get_format(), exprs_->at(i));
       if (OB_FAIL(exprs_->at(i)->init_vector(*eval_ctx_, extend_format, eval_ctx_->max_batch_size_))) {
-        LOG_WARN("failed to init vector for backup expr", K(i), K(backup_cols_[i].header_.get_format()), K(ret));
       } else {
         VectorFormat format = backup_cols_[i].header_.format_;
         LOG_DEBUG("vector format is", K(format));

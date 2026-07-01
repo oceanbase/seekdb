@@ -61,11 +61,9 @@ int ObCreateCCLRuleResolver::resolve(const ParseNode &parse_tree)
     bool perserve_lettercase = false;
     ObCollationType cs_type = CS_TYPE_INVALID;
     if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
-      LOG_WARN("fail to get name case mode", K(mode), K(ret));
     } else {
       perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
       if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-        LOG_WARN("fail to get collation_connection", K(ret));
       }
     }
 
@@ -137,7 +135,6 @@ int ObCreateCCLRuleResolver::resolve(const ParseNode &parse_tree)
             static_cast<int32_t>(dbname_and_table_name_node->children_[0]->str_len_));
           if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(cs_type, perserve_lettercase,
                                                             database_name))) {
-            LOG_WARN("fail to check and convert database name", K(database_name), K(ret));
           } else {
             create_ccl_rule_stmt->set_affect_database(database_name);
           }
@@ -153,7 +150,6 @@ int ObCreateCCLRuleResolver::resolve(const ParseNode &parse_tree)
             static_cast<int32_t>(dbname_and_table_name_node->children_[1]->str_len_));
           if (OB_FAIL(ObSQLUtils::check_and_convert_table_name(cs_type, perserve_lettercase,
                                                                table_name))) {
-            LOG_WARN("fail to check and convert table name", K(table_name), K(ret));
           } else {
             create_ccl_rule_stmt->set_affect_table(table_name);
           }
@@ -225,7 +221,6 @@ int ObCreateCCLRuleResolver::resolve(const ParseNode &parse_tree)
           // constructe keywords 
           ObString ccl_keywords;
           if (OB_FAIL(merge_strings_with_escape(*ccl_filter_option_node, ';', '\\', ccl_keywords))) {
-            LOG_WARN("fail to construct ccl keywords from parse node", K(ret));
           } else if (ccl_keywords.size() > OB_MAX_VARCHAR_LENGTH) {
             ret = OB_ERR_TOO_LONG_COLUMN_LENGTH;
             LOG_WARN("key word is too much or too long", K(ccl_keywords.size()), K(OB_MAX_VARCHAR_LENGTH));
@@ -237,7 +232,6 @@ int ObCreateCCLRuleResolver::resolve(const ParseNode &parse_tree)
           ObResolver resolver(params_);
           if (OB_FAIL(
                        resolver.resolve(ObResolver::IS_NOT_PREPARED_STMT, *node, filter_sql_stmt))) {
-            LOG_WARN("fail to resolve", K(ret));
           } else if (OB_ISNULL(filter_sql_stmt)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("invalid outline_stmt is NULL", K(ret));
@@ -282,18 +276,13 @@ int ObCreateCCLRuleResolver::escape_string(const ObString &original_string,
     char c = original_string[i];
     if (c == separator) {
       if (OB_FAIL(escaped_sql_string.append(&escape_char, 1))) {
-        LOG_WARN("fail to append ", K(ret), K(escape_char), K(escaped_sql_string));
       } else if (OB_FAIL(escaped_sql_string.append(&separator, 1))) {
-        LOG_WARN("fail to append ", K(ret), K(separator), K(escaped_sql_string));
       }
     } else if (c == escape_char) {
       if (OB_FAIL(escaped_sql_string.append(&escape_char, 1))) {
-        LOG_WARN("fail to append ", K(ret), K(escape_char), K(escaped_sql_string));
       } else if (OB_FAIL(escaped_sql_string.append(&escape_char, 1))) {
-        LOG_WARN("fail to append ", K(ret), K(escape_char), K(escaped_sql_string));
       }
     } else if (OB_FAIL(escaped_sql_string.append(&c, 1))) {
-      LOG_WARN("fail to append ", K(ret), K(c), K(escaped_sql_string));
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(ob_write_string(*allocator_, escaped_sql_string.string(), after_escape_string))) {
@@ -319,9 +308,7 @@ int ObCreateCCLRuleResolver::merge_strings_with_escape(const ParseNode &ccl_filt
       original_string.assign_ptr(ccl_filter_option_node.children_[i]->str_value_,
                      ccl_filter_option_node.children_[i]->str_len_);
       if (OB_FAIL(escape_string(original_string, separator, escape_char, after_escape_string))) {
-        LOG_WARN("fail to escape_string", K(ret), K(original_string));
       } else if (OB_FAIL(ccl_keywords_sql.append(after_escape_string))) {
-        LOG_WARN("fail to append after_escape_string", K(ret), K(after_escape_string));
       } else if (i < ccl_filter_option_node.num_child_ - 1) {
         // not last string, need add separator
         ccl_keywords_sql.append(&separator, 1);

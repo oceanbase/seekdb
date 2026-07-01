@@ -56,7 +56,6 @@ int ObFtsEvalNode::fts_boolean_eval(ObFtsEvalNode *node, const common::ObIArray<
     for (size_t i = 0; OB_SUCC(ret) && i < size; i++) {
       double relevence = 0;
       if (OB_FAIL(fts_boolean_eval(node->child_nodes_[i], relevences, relevence))) {
-        LOG_WARN("failed to get relevence", K(ret));
       } else {
         switch (node->child_flags_[i])
         {
@@ -132,11 +131,8 @@ int ObFtsEvalNode::fts_boolean_node_create(
         break;
       }
       if (OB_FAIL(parant_node->child_flags_.push_back(flag))) {
-        LOG_WARN("failed to append flag", K(ret));
       } else if (OB_FAIL(fts_boolean_node_create(node, tail, cs_type, allocator, tokens, tokens_map, has_duplicate_tokens))) {
-        LOG_WARN("failed to create fts compute node", K(ret));
       } else if (OB_FAIL(parant_node->child_nodes_.push_back(node))) {
-        LOG_WARN("failed to append node", K(ret));
       } else {
         node = nullptr;
       }
@@ -164,11 +160,8 @@ int ObFtsEvalNode::fts_boolean_node_create(
       feak_head = feak_head->next;
       if (FTS_NODE_TERM == feak_head->type) {
         if (OB_FAIL(re_node->child_flags_.push_back(NO_OPERATOR))) {
-          LOG_WARN("failed to append flag", K(ret));
         } else if (OB_FAIL(fts_boolean_node_create(node, feak_head, cs_type, allocator, tokens, tokens_map, has_duplicate_tokens))) {
-          LOG_WARN("failed to create fts compute node", K(ret));
         } else if (OB_FAIL(re_node->child_nodes_.push_back(node))) {
-          LOG_WARN("failed to append node", K(ret));
         } else {
           node = nullptr;
         }
@@ -188,7 +181,6 @@ int ObFtsEvalNode::fts_boolean_node_create(
           break;
         }
         if (OB_FAIL(re_node->child_flags_.push_back(flag))) {
-          LOG_WARN("failed to append flag", K(ret));
         } else {
           feak_head = feak_head->next;
           if (OB_SUCC(ret) && feak_head != tail) {
@@ -199,9 +191,7 @@ int ObFtsEvalNode::fts_boolean_node_create(
             LOG_WARN("unexpected fts compute node type", K(feak_head->type));
           } else if (FTS_NODE_TERM == feak_head->type || FTS_NODE_SUBEXP_LIST == feak_head->type) {
             if (OB_FAIL(fts_boolean_node_create(node, feak_head, cs_type, allocator, tokens, tokens_map, has_duplicate_tokens))) {
-              LOG_WARN("failed to create fts compute node", K(ret));
             } else if (OB_FAIL(re_node->child_nodes_.push_back(node))) {
-              LOG_WARN("failed to append node", K(ret));
             } else {
               node = nullptr;
             }
@@ -212,17 +202,13 @@ int ObFtsEvalNode::fts_boolean_node_create(
         }
       } else if (FTS_NODE_SUBEXP_LIST == feak_head->type || FTS_NODE_SUBEXP_LIST == cur_node->type) {
         if (OB_FAIL(fts_boolean_node_create(node, feak_head, cs_type, allocator, tokens, tokens_map, has_duplicate_tokens))) {
-          LOG_WARN("failed to create fts compute node", K(ret));
         } else if (OB_FAIL(re_node->child_flags_.push_back(OR))) {
-          LOG_WARN("failed to append flag", K(ret));
         } else if (OB_FAIL(re_node->child_nodes_.push_back(node))) {
-          LOG_WARN("failed to append node", K(ret));
         } else {
           node = nullptr;
         }
       } else if (FTS_NODE_LIST == feak_head->type) {
         if (OB_FAIL(fts_boolean_node_create(re_node, feak_head, cs_type, allocator, tokens, tokens_map, has_duplicate_tokens))) {
-          LOG_WARN("failed to create fts compute node", K(ret));
         } else {
           node = nullptr;
         }
@@ -244,7 +230,6 @@ int ObFtsEvalNode::fts_boolean_node_create(
     ObString token_string;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(common::ObCharset::charset_convert(allocator, tmp_string, ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI, cs_type, token_string, common::ObCharset::CONVERT_FLAG::COPY_STRING_ON_SAME_CHARSET))) {
-      LOG_WARN("failed to convert string", K(ret), K(cs_type), K(tmp_string));
     } else {
       int32_t token_idx = 0;
       int32_t map_size = tokens_map.size();
@@ -252,9 +237,7 @@ int ObFtsEvalNode::fts_boolean_node_create(
         if (OB_HASH_NOT_EXIST != ret) {
           LOG_WARN("fail to get relevance", K(ret), K(token_idx));
         } else if (OB_FAIL(tokens_map.set_refactored(token_string, map_size, 1/*overwrite*/))) {
-          LOG_WARN("failed to push data", K(ret), K(token_string));
         } else if (OB_FAIL(tokens.push_back(token_string))) {
-          LOG_WARN("failed to append query token", K(ret));
         } else {
           token_idx = map_size;
           ret = OB_SUCCESS;

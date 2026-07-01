@@ -119,7 +119,6 @@ int ObDASTCB::init(int64_t task_id, const ObDASScanRtDef *scan_rtdef,
                                               0, /*row_extra_size*/
                                               NONE_COMPRESSOR,
                                               false/*reorder_fixed_expr*/))) {
-          LOG_WARN("init vec row store failed", K(ret));
       } else {
         vec_row_store_->set_dir_id(sql_mem_processor.get_dir_id());
         vec_row_store_->set_allocator(allocator);
@@ -136,7 +135,6 @@ int ObDASTCB::init(int64_t task_id, const ObDASScanRtDef *scan_rtdef,
                                             common::ObCtxIds::WORK_AREA,
                                             "DASTaskResMgr",
                                             true))) {
-        LOG_WARN("init datum store failed", KR(ret));
       } else if (FALSE_IT(datum_store_->set_dir_id(sql_mem_processor.get_dir_id()))) {
         // replaces alloc_dir_id in the datum store.
       } else if (FALSE_IT(datum_store_->set_allocator(allocator))) {
@@ -208,7 +206,6 @@ int ObDASTCB::register_reading()
   int ret = OB_SUCCESS;
   ObSpinLockGuard guard(tcb_lock_);
   if (OB_FAIL(guard.get_ret())) {
-    LOG_WARN("acquire tcb lock failed", KR(ret), K(task_id_));
   } else if (OB_UNLIKELY(is_exiting_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("das tcb is exiting", KR(ret), K(task_id_));
@@ -226,7 +223,6 @@ int ObDASTCB::unregister_reading()
   int ret = OB_SUCCESS;
   ObSpinLockGuard guard(tcb_lock_);
   if (OB_FAIL(guard.get_ret())) {
-    LOG_WARN("acquire tcb lock failed", KR(ret), K(task_id_));
   } else if (OB_UNLIKELY(is_exiting_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("das tcb is exiting", KR(ret), K(task_id_));
@@ -244,7 +240,6 @@ int ObDASTCB::register_exiting(bool &is_already_exiting)
   int ret = OB_SUCCESS;
   ObSpinLockGuard guard(tcb_lock_);
   if (OB_FAIL(guard.get_ret())) {
-    LOG_WARN("acquire tcb lock failed", KR(ret), K(task_id_));
   } else if (OB_UNLIKELY(is_reading_)) {
     ret = OB_EAGAIN;
     LOG_TRACE("someone else is reading tcb, try again later", KR(ret), K(task_id_));
@@ -278,10 +273,8 @@ int ObDASTaskResultMgr::init()
   ObMemAttr mem_profile_hash_buck_attr("DASMemHashBuck");
 
   if (OB_FAIL(tcb_map_.init())) {
-    LOG_WARN("init tcb map failed", KR(ret));
   } else if (OB_FAIL(mem_profile_map_.create(static_cast<int64_t>(MTL_CPU_COUNT() * cpu_quota_concurrency * 2),
                                              mem_profile_hash_buck_attr, mem_profile_hash_buck_attr))) {
-    LOG_WARN("create mem profile hash table failed", K(ret));
   } else {
     gc_.task_result_mgr_ = this;
   }
@@ -296,7 +289,6 @@ void ObDASTaskResultMgr::destory()
   ObDASTaskResultErase tcb_erase(this);
   while(OB_SUCC(ret) && tcb_map_.size() != 0) {
     if (OB_FAIL(tcb_map_.remove_if(tcb_erase))) {
-      LOG_WARN("tcb map remove if failed", KR(ret));
     } else if (tcb_erase.ret_ == OB_EAGAIN) {
       tcb_erase.ret_ = OB_SUCCESS;
       if (REACH_TIME_INTERVAL(5 * 1000 * 1000L)) {
@@ -338,8 +330,6 @@ void ObDASTaskResultMgr::destory()
         if (!it_end) {
           ObDASMemProfileInfo *info = NULL;
           if (OB_FAIL(mem_profile_map_.erase_refactored(key, &info))) {
-            // may lead to a dead loop
-            LOG_WARN("erase mem profile failed", K(ret), K(key), K(mem_profile_map_.size()));
           } else if (OB_ISNULL(info)) {
             // ignore ret
             LOG_WARN("[DAS TASK RESULT MGR] Exception mem profile is null", K(key));
@@ -398,9 +388,7 @@ int ObDASTaskResultMgr::save_task_result(int64_t task_id,
       LOG_WARN("check contains key failed", KR(ret), K(task_id));
     } else if (FALSE_IT(ret = OB_SUCCESS)) {
     } else if (OB_FAIL(check_mem_profile_key(mem_profile_key))) {
-      LOG_WARN("check mem profile key failed", K(ret), K(mem_profile_key));
     } else if (OB_FAIL(get_mem_profile(mem_profile_key, mem_profile_info, &eval_ctx->exec_ctx_, scan_rtdef))) {
-      LOG_WARN("check contains key failed", KR(ret), K(task_id), K(mem_profile_key));
     } else if (OB_ISNULL(mem_profile_info)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("mem profile info is null", KR(ret), K(task_id), K(mem_profile_key));
@@ -413,11 +401,9 @@ int ObDASTaskResultMgr::save_task_result(int64_t task_id,
 
         int tmp_ret = OB_SUCCESS;
         if (OB_TMP_FAIL(dec_mem_profile_ref_count(mem_profile_key, mem_profile_info))) {
-          LOG_WARN("dec mem profile info ref count failed", K(tmp_ret), K(mem_profile_key));
         }
       } else if (OB_FAIL(tcb->init(task_id, scan_rtdef, scan_ctdef, output_exprs, mem_profile_key,
                                    mem_profile_info, interrupt_info))) {
-        LOG_WARN("tcb init failed", KR(ret));
       } else if (enable_rich_format) {
         OZ(save_task_result_by_vector(read_rows, output_exprs, eval_ctx,
                                           tcb, result, scan_rtdef, mem_profile_info));
@@ -448,9 +434,7 @@ int ObDASTaskResultMgr::save_task_result(int64_t task_id,
           need to make sure that the resources are cleaned up.
         */
         if (OB_FAIL(check_interrupt())) {
-          LOG_WARN("interrupted before inserting result map", K(ret));
         } else if (OB_FAIL(tcb_map_.insert_and_get(tcb_info, tcb))) {
-          LOG_WARN("insert das tcb failed", K(ret));
         } else if (FALSE_IT(tcb_map_.revert(tcb))) {
         } else if (OB_FAIL(check_interrupt())) {
           LOG_WARN("interrupted after inserting result map", K(ret));
@@ -458,7 +442,6 @@ int ObDASTaskResultMgr::save_task_result(int64_t task_id,
           // the tcb is already in the map, concurrency needs to be considered
           int tmp_ret =  OB_SUCCESS;
           if (OB_TMP_FAIL(erase_task_result(task_id, false))) {
-            LOG_WARN("erase task result failed", KR(tmp_ret), K(task_id));
           }
           tcb = NULL;
         }
@@ -474,7 +457,6 @@ int ObDASTaskResultMgr::save_task_result(int64_t task_id,
 
         int tmp_ret = OB_SUCCESS;
         if (OB_TMP_FAIL(dec_mem_profile_ref_count(mem_profile_key, mem_profile_info))) {
-          LOG_WARN("dec mem profile info ref count failed", K(tmp_ret), K(mem_profile_key));
         }
       }
     }
@@ -518,7 +500,6 @@ int ObDASTaskResultMgr::save_task_result_by_normal(int64_t &read_rows,
                                           eval_ctx,
                                           INT64_MAX,
                                           added))) {
-        LOG_WARN("try add row to datum store failed", KR(ret));
       } else if (!added) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("row wasn't added to datum store", KR(ret));
@@ -529,7 +510,6 @@ int ObDASTaskResultMgr::save_task_result_by_normal(int64_t &read_rows,
                                             read_rows,
                                             INT64_MAX,
                                             added))) {
-        LOG_WARN("try add batch to datum store failed", KR(ret));
       } else if (!added) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("batch wasn't added to datum store", KR(ret));
@@ -569,15 +549,12 @@ int ObDASTaskResultMgr::save_task_result_by_normal(int64_t &read_rows,
                                                 eval_ctx,
                                                 mem_limit,
                                                 added))) {
-              LOG_WARN("try add row to datum store failed", KR(ret));
             } else if (!added) {
               if (OB_FAIL(process_dump(tcb, mem_profile_info))) {
-                LOG_WARN("process dump failed", K(ret), K(tcb));
               } else if (OB_FAIL(datum_store.try_add_row(*output_exprs,
                                                          eval_ctx,
                                                          INT64_MAX,
                                                          added))) {
-                LOG_WARN("try add row to datum store failed", KR(ret));
               } else if (!added) {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("row wasn't added to datum store", KR(ret));
@@ -603,16 +580,13 @@ int ObDASTaskResultMgr::save_task_result_by_normal(int64_t &read_rows,
                                                        read_rows,
                                                        mem_limit,
                                                        added))) {
-            LOG_WARN("try add batch to datum store failed", KR(ret));
           } else if (!added) {
             if (OB_FAIL(process_dump(tcb, mem_profile_info))) {
-              LOG_WARN("process dump failed", K(ret), K(tcb));
             } else if (OB_FAIL(datum_store.try_add_batch(*output_exprs,
                                                          eval_ctx,
                                                          read_rows,
                                                          INT64_MAX,
                                                          added))) {
-              LOG_WARN("try add batch to datum store failed", KR(ret));
             } else if (!added) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("batch wasn't added to datum store", KR(ret));
@@ -628,11 +602,9 @@ int ObDASTaskResultMgr::save_task_result_by_normal(int64_t &read_rows,
     if (OB_SUCC(ret)) {
       row_count_in_memory_before = datum_store.get_row_cnt_in_memory();
       if (OB_FAIL(process_dump(tcb, mem_profile_info))) {
-        LOG_WARN("process dump failed");
       } else if (!sql_mem_processor.is_auto_mgr() && OB_FAIL(datum_store.finish_add_row())) {
         LOG_WARN("datum store finish add row failed", KR(ret));
       } else if (OB_FAIL(tcb->result_iter_.init(&datum_store))) {
-        LOG_WARN("init das tcb result iter failed", KR(ret));
       }
       mem_profile_info->update_row_count(datum_store.get_row_cnt_in_memory() - row_count_in_memory_before);
     }
@@ -675,7 +647,6 @@ int ObDASTaskResultMgr::save_task_result_by_vector(int64_t &read_rows,
                                                     read_rows,
                                                     INT64_MAX,
                                                     added))) {
-      LOG_WARN("try add batch to datum store failed", KR(ret));
     } else if (!added) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("batch wasn't added to datum store", KR(ret));
@@ -723,16 +694,13 @@ int ObDASTaskResultMgr::save_task_result_by_vector(int64_t &read_rows,
                                                        read_rows,
                                                        mem_limit,
                                                        added))) {
-          LOG_WARN("try add batch to datum store failed", KR(ret));
         } else if (!added) {
           if (OB_FAIL(process_dump(tcb, mem_profile_info))) {
-            LOG_WARN("process dump failed", K(ret), K(tcb));
           } else if (OB_FAIL(vec_row_store.try_add_batch(*output_exprs,
                                                          eval_ctx,
                                                          read_rows,
                                                          INT64_MAX,
                                                          added))) {
-            LOG_WARN("try add batch to datum store failed", KR(ret));
           } else if (!added) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("batch wasn't added to datum store", KR(ret));
@@ -747,11 +715,9 @@ int ObDASTaskResultMgr::save_task_result_by_vector(int64_t &read_rows,
     if (OB_SUCC(ret)) {
       row_count_in_memory_before = vec_row_store.get_row_cnt_in_memory();
       if (OB_FAIL(process_dump(tcb, mem_profile_info))) {
-        LOG_WARN("process dump failed");
       } else if (!sql_mem_processor.is_auto_mgr() && OB_FAIL(vec_row_store.finish_add_row())) {
         LOG_WARN("datum store finish add row failed", KR(ret));
       } else if (OB_FAIL(tcb->vec_result_iter_.init(&vec_row_store))) {
-        LOG_WARN("init das tcb result iter failed", KR(ret));
       }
       mem_profile_info->update_row_count(vec_row_store.get_row_cnt_in_memory() - row_count_in_memory_before);
     }
@@ -782,7 +748,6 @@ int ObDASTaskResultMgr::erase_task_result(int64_t task_id, bool need_unreg_dm)
   } else {
     bool is_already_exiting = false;
     if (OB_FAIL(tcb->register_exiting(is_already_exiting))) {
-      LOG_WARN("register exiting failed", KR(ret), K(task_id));
     } else {
       if (!is_already_exiting) {
         ObDASTCBMemProfileKey &mem_profile_key = tcb->mem_profile_key_;
@@ -792,7 +757,6 @@ int ObDASTaskResultMgr::erase_task_result(int64_t task_id, bool need_unreg_dm)
           LOG_WARN("mem profile key is invalid when destory tcb, it should not happen", K(ret), K(mem_profile_key), KPC(tcb));
         } else if (OB_FAIL(mem_profile_map_.get_refactored(mem_profile_key,
                                                            mem_profile_info))) {
-          LOG_WARN("get mem_profile failed", K(ret), K(mem_profile_key), KPC(tcb));
         } else if (OB_ISNULL(mem_profile_info)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("mem profile is null when destory tcb, it should not happen", K(ret), K(mem_profile_key), KPC(tcb));
@@ -800,9 +764,7 @@ int ObDASTaskResultMgr::erase_task_result(int64_t task_id, bool need_unreg_dm)
           // we have registered exiting flag for the first time, need to reset tcb
           tcb->destory(mem_profile_info);
           if (OB_FAIL(dec_mem_profile_ref_count(mem_profile_key, mem_profile_info))) {
-            LOG_WARN("dec mem profile info ref count failed", K(ret), K(mem_profile_key), KPC(tcb));
           } else if (OB_FAIL(tcb_map_.del(tcb_info))) {
-            LOG_WARN("delete tcb failed", KR(ret), K(task_id), KPC(tcb));
           }
         }
       } else {
@@ -819,7 +781,6 @@ int ObDASTaskResultMgr::erase_task_result(int64_t task_id, bool need_unreg_dm)
                                "Task Result Mgr interrupt das task of reading");
       int64_t tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(ObGlobalInterruptManager::getInstance()->interrupt(tcb->interrupt_info_.interrupt_id_, int_code))) {
-        LOG_WARN("interrupt reading failed", K(tmp_ret), K(ret), KPC(tcb));
       }
     }
     tcb_map_.revert(tcb);
@@ -839,7 +800,6 @@ int ObDASTaskResultMgr::iterator_task_result(ObDASDataFetchRes &res,
   DASTCBInfo tcb_info(task_id);
   ObDASTCB *tcb = NULL;
   if (OB_FAIL(tcb_map_.get(tcb_info, tcb))) {
-    LOG_WARN("get das tcb failed", KR(ret), K(task_id));
   } else if (OB_ISNULL(tcb)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("das tcb is null", KR(ret), K(task_id));
@@ -860,7 +820,6 @@ int ObDASTaskResultMgr::iterator_task_result(ObDASDataFetchRes &res,
 
     if (OB_LIKELY(tcb->interrupt_info_.interrupt_id_.first_ != 0 || tcb->interrupt_info_.interrupt_id_.last_ != 0)) {
       if (OB_FAIL(SET_INTERRUPTABLE(tcb->interrupt_info_.interrupt_id_))) {
-        LOG_WARN("register interrupt failed", KR(ret));
       } else {
         need_unset_interrupt = true;
       }
@@ -868,13 +827,11 @@ int ObDASTaskResultMgr::iterator_task_result(ObDASDataFetchRes &res,
     
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(tcb->register_reading())) {
-      LOG_WARN("unregister reading tcb failed", KR(ret), K(task_id));
     } else if (OB_UNLIKELY(!mem_profile_key.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("mem profile key is invalid when fetch tcb result, it should not happen", K(ret), K(mem_profile_key));
     } else if (OB_FAIL(mem_profile_map_.get_refactored(mem_profile_key,
                                                        mem_profile_info))) {
-      LOG_WARN("get mem_profile failed", K(ret), K(mem_profile_key));
     } else if (OB_ISNULL(mem_profile_info)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("mem profile is null when fetch tcb result, it should not happen", K(ret), K(mem_profile_key));
@@ -899,11 +856,9 @@ int ObDASTaskResultMgr::iterator_task_result(ObDASDataFetchRes &res,
       }
       int save_ret = ret;
       if (OB_FAIL(tcb->unregister_reading())) {
-        LOG_WARN("unregister tcb reading failed", KR(ret), K(task_id));
       } else if (!has_more || OB_FAIL(check_interrupt())) {
         ret = OB_SUCCESS;
         if (OB_FAIL(erase_task_result(task_id, true))) {
-          LOG_WARN("erase task result failed", KR(ret), K(task_id));
         }
       }
       ret = save_ret;
@@ -973,7 +928,6 @@ int ObDASTaskResultMgr::fetch_result_by_normal(ObDASTCB *tcb,
           if (OB_FAIL(ret)) {
             // do nothing
           } else if (OB_FAIL(datum_store.try_add_row(*sr, memory_limit, added))) {
-            LOG_WARN("try add row to datum store failed", KR(ret), K(task_id));
           } else if (!added) {
             has_more = true;
             // sr is saved at tcb->stored_row_, and will be included in next RPC.
@@ -1002,7 +956,6 @@ int ObDASTaskResultMgr::fetch_result_by_normal(ObDASTCB *tcb,
                                                       read_rows,
                                                       memory_limit,
                                                       added))) {
-            LOG_WARN("try add batch to datum store failed", KR(ret), K(task_id));
           } else if (!added) {
             has_more = true;
           } else {
@@ -1076,7 +1029,6 @@ int ObDASTaskResultMgr::fetch_result_by_vector(ObDASTCB *tcb,
                                                       read_rows,
                                                       memory_limit,
                                                       added))) {
-          LOG_WARN("try add batch to datum store failed", KR(ret), K(task_id));
         } else if (!added) {
           has_more = true;
         } else {
@@ -1098,7 +1050,6 @@ int ObDASTaskResultMgr::remove_expired_results()
   int ret = OB_SUCCESS;
   gc_.set_current_time();
   if (OB_FAIL(tcb_map_.remove_if(gc_))) {
-    LOG_WARN("remove expired results from tcb map failed", KR(ret));
   }
   return ret;
 }
@@ -1114,13 +1065,11 @@ int ObDASTaskResultMgr::get_mem_profile(ObDASTCBMemProfileKey &key, ObDASMemProf
     if (ret == OB_HASH_NOT_EXIST) {
       ret = OB_SUCCESS;
       if (OB_FAIL(init_mem_profile(key, info, exec_ctx, scan_rtdef))) {
-        LOG_WARN("init mem_profile failed", K(ret), K(key));
       }
     } else {
       LOG_WARN("atomic get mem profile from mem profile map failed", K(ret), K(key));
     }
   } else if (OB_FAIL(call.ret_)) {
-    LOG_WARN("atomic get mem profile from mem profile map failed", K(call.ret_), K(key));
   } else {
     info = call.mem_profile_info_;
   }
@@ -1190,9 +1139,7 @@ int ObDASTaskResultMgr::init_mem_profile(ObDASTCBMemProfileKey &key, ObDASMemPro
                                                     PHY_TABLE_SCAN,
                                                     op_id,
                                                     profile_exec_info))) {
-            LOG_WARN("init sql memory manager processor failed", K(ret));
           } else if (OB_FAIL(mem_profile_map_.set_refactored(key, info))) {
-            LOG_WARN("set mem profile in map failed", K(ret));
           } else {
             inc_mem_profile_ref_count(info);
           }
@@ -1204,7 +1151,6 @@ int ObDASTaskResultMgr::init_mem_profile(ObDASTCBMemProfileKey &key, ObDASMemPro
         LOG_WARN("atomic get mem profile from mem profile map failed", K(ret), K(key));
       }
     } else if (OB_FAIL(call.ret_)) {
-      LOG_WARN("atomic get mem profile from mem profile map failed", K(call.ret_), K(key));
     } else {
       info = call.mem_profile_info_;
     }
@@ -1252,7 +1198,6 @@ int ObDASTaskResultMgr::dec_mem_profile_ref_count(const ObDASTCBMemProfileKey &k
     } else if (ref_count == 0) {
       lib::ObMutexGuard guard(mem_map_mutex_);
       if (OB_FAIL(destroy_mem_profile(key))) {
-        LOG_WARN("destroy mem_profile failed", K(ret), K(key));
       }
     }
   }
@@ -1307,7 +1252,6 @@ int ObDASTaskResultMgr::process_dump(ObDASTCB *tcb, ObDASMemProfileInfo *info)
       if (OB_FAIL(sql_mem_processor.update_max_available_mem_size_periodically(&allocator,
                                                                                check_update,
                                                                                updated))) {
-        LOG_WARN("update max available memory size periodically failed", K(ret));
       } else if (need_dump(info) &&
                  OB_FAIL(sql_mem_processor.extend_max_memory_size(&allocator,
                                                                   check_dump,
@@ -1329,9 +1273,7 @@ int ObDASTaskResultMgr::process_dump(ObDASTCB *tcb, ObDASMemProfileInfo *info)
           LOG_WARN("vec row store is null");
         } else {
           if (OB_FAIL(vec_row_store->dump(true))) {
-            LOG_WARN("dump row store failed", K(ret));
           } else if (OB_FAIL(vec_row_store->finish_add_row())) {
-            LOG_WARN("finish add row in store failed", K(ret));
           } else {
             info->set_number_pass(1);
           }
@@ -1343,9 +1285,7 @@ int ObDASTaskResultMgr::process_dump(ObDASTCB *tcb, ObDASMemProfileInfo *info)
           LOG_WARN("datum store is null");
         } else {
           if (OB_FAIL(datum_store->dump(false, true))) {
-            LOG_WARN("dump row store failed", K(ret));
           } else if (OB_FAIL(datum_store->finish_add_row())) {
-            LOG_WARN("finish add row in store failed", K(ret));
           } else {
             info->set_number_pass(1);
           }
@@ -1422,7 +1362,6 @@ int ObDASTaskResultGCRunner::schedule_timer_task()
   ObDASTaskResultGCRunner& gc_runner = get_instance();
   if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::ServerGTimer, gc_runner,
                           ObDASTaskResultGCRunner::REFRESH_INTERVAL, true))) {
-    LOG_WARN("schedule das task result gc runner failed", K(ret));
   }
   return ret;
 }
@@ -1433,14 +1372,12 @@ void ObDASTaskResultGCRunner::runTimerTask()
   {
     MAKE_TENANT_SWITCH_SCOPE_GUARD(guard);
     if (OB_FAIL(guard.switch_to())) {
-      LOG_WARN("tenant switch failed during das task result gc", KR(ret), K(1UL));
     } else {
       ObDataAccessService * das = NULL;
       if (OB_ISNULL(das = share::g_mp->data_access_service())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("das is null", K(ret), KP(das));
       } else if (OB_FAIL(das->get_task_res_mgr().remove_expired_results())) {
-        LOG_WARN("remove expired results failed", KR(ret), K(1UL));
       }
     }
   }

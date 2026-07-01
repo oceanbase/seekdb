@@ -109,7 +109,6 @@ public:
                                                : das_ctdef_->old_row_projector_),
                                 mode);
         if (OB_FAIL(domain_iter_->rewind())) {
-          LOG_WARN("fail to rewind for domain iterator", K(ret));
         }
       } else {
         // need to reset domain iter
@@ -157,15 +156,12 @@ int ObDASUpdIterator::get_next_row(blocksstable::ObDatumRow *&row)
     got_old_row_ = true;
     if (OB_ISNULL(old_row_)) {
       if (OB_FAIL(blocksstable::ObDatumRowUtils::ob_create_row(allocator_, das_ctdef_->old_row_projector_.count(), old_row_))) {
-        LOG_WARN("create row buffer failed", K(ret), K(das_ctdef_->old_row_projector_.count()));
       } else if (OB_FAIL(write_buffer_.begin(result_iter_))) {
-        LOG_WARN("begin datum result iterator failed", K(ret));
       }
     }
 
     if (OB_SUCC(ret) && OB_ISNULL(new_row_)) {
       if (OB_FAIL(blocksstable::ObDatumRowUtils::ob_create_row(allocator_, das_ctdef_->new_row_projector_.count(), new_row_))) {
-        LOG_WARN("create row buffer failed", K(ret), K(das_ctdef_->new_row_projector_.count()));
       }
     }
 
@@ -179,13 +175,11 @@ int ObDASUpdIterator::get_next_row(blocksstable::ObDatumRow *&row)
                                                          das_ctdef_->old_row_projector_,
                                                          allocator_,
                                                          *old_row_))) {
-        LOG_WARN("project old storage row failed", K(ret));
       } else if (OB_FAIL(ObDASUtils::project_storage_row(*das_ctdef_,
                                                          *sr,
                                                          das_ctdef_->new_row_projector_,
                                                          allocator_,
                                                          *new_row_))) {
-        LOG_WARN("project new storage row failed", K(ret));
       } else {
         row = old_row_;
         LOG_DEBUG("DAS update get old row",
@@ -228,21 +222,17 @@ int ObDASUpdIterator::get_next_rows(blocksstable::ObDatumRow *&rows, int64_t &ro
     }
   } else if (is_domain_index) {
     if (OB_FAIL(get_next_domain_index_rows(rows, row_count))) {
-      LOG_WARN("fail to get next domain index rows", K(ret));
     }
   } else if (!got_old_row_) {
     got_old_row_ = true;
     if (OB_ISNULL(old_rows_)) {
       if (OB_FAIL(blocksstable::ObDatumRowUtils::ob_create_rows(allocator_, batch_size_, das_ctdef_->old_row_projector_.count(), old_rows_))) {
-        LOG_WARN("create old rows buffer failed", K(ret), K(das_ctdef_->old_row_projector_.count()));
       } else if (OB_FAIL(write_buffer_.begin(result_iter_))) {
-        LOG_WARN("begin datum result iterator failed", K(ret));
       }
     }
 
     if (OB_SUCC(ret) && OB_ISNULL(new_rows_)) {
       if (OB_FAIL(blocksstable::ObDatumRowUtils::ob_create_rows(allocator_, batch_size_, das_ctdef_->new_row_projector_.count(), new_rows_))) {
-        LOG_WARN("create new rows buffer failed", K(ret), K(das_ctdef_->new_row_projector_.count()));
       }
     }
     while (OB_SUCC(ret) && row_count < batch_size_) {
@@ -255,13 +245,11 @@ int ObDASUpdIterator::get_next_rows(blocksstable::ObDatumRow *&rows, int64_t &ro
                                                          das_ctdef_->old_row_projector_,
                                                          allocator_,
                                                          old_rows_[row_count]))) {
-        LOG_WARN("project old storage row failed", K(ret));
       } else if (OB_FAIL(ObDASUtils::project_storage_row(*das_ctdef_,
                                                          *sr,
                                                          das_ctdef_->new_row_projector_,
                                                          allocator_,
                                                          new_rows_[row_count]))) {
-        LOG_WARN("project new storage row failed", K(ret));
       } else {
         LOG_DEBUG("DAS update get row", K_(das_ctdef_->old_row_projector), K_(das_ctdef_->new_row_projector),
                   "table_id", das_ctdef_->table_id_, "index_tid", das_ctdef_->index_tid_,
@@ -305,7 +293,6 @@ int ObDASUpdIterator::get_next_domain_index_row(ObDatumRow *&row)
   int ret = OB_SUCCESS;
   if (!iter_has_built_) {
     if (OB_FAIL(write_buffer_.begin(result_iter_))) {
-      LOG_WARN("begin write iterator failed", K(ret));
     } else {
       iter_has_built_ = true;
     }
@@ -319,7 +306,6 @@ int ObDASUpdIterator::get_next_domain_index_row(ObDatumRow *&row)
         param.ft_doc_word_info_ = ft_doc_word_info_;
       }
       if (OB_FAIL(ObDomainDMLIterator::create_domain_dml_iterator(param, domain_iter_))) {
-        LOG_WARN("fail to create domain index dml iterator", K(ret));
       }
     }
     if (FAILEDx(domain_iter_->get_next_domain_row(row))) {
@@ -335,7 +321,6 @@ int ObDASUpdIterator::get_next_domain_index_row(ObDatumRow *&row)
           tmp_iter->is_old_row_ = false;
         }
         if (OB_FAIL(domain_iter_->change_domain_dml_mode(ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT))) {
-          LOG_WARN("fail to change domain dml mode", K(ret));
         } else {
           ret = OB_ITER_END;
         }
@@ -352,7 +337,6 @@ int ObDASUpdIterator::get_next_domain_index_rows(ObDatumRow *&rows, int64_t &row
   int ret = OB_SUCCESS;
   if (!iter_has_built_) {
     if (OB_FAIL(write_buffer_.begin(result_iter_))) {
-      LOG_WARN("begin write iterator failed", K(ret));
     } else {
       iter_has_built_ = true;
     }
@@ -366,7 +350,6 @@ int ObDASUpdIterator::get_next_domain_index_rows(ObDatumRow *&rows, int64_t &row
         param.ft_doc_word_info_ = ft_doc_word_info_;
       }
       if (OB_FAIL(ObDomainDMLIterator::create_domain_dml_iterator(param, domain_iter_))) {
-        LOG_WARN("fail to create domain index dml iterator", K(ret));
       }
     }
     if (FAILEDx(domain_iter_->get_next_domain_rows(rows, row_count))) {
@@ -382,7 +365,6 @@ int ObDASUpdIterator::get_next_domain_index_rows(ObDatumRow *&rows, int64_t &row
           tmp_iter->is_old_row_ = false;
         }
         if (OB_FAIL(domain_iter_->change_domain_dml_mode(ObDomainDMLMode::DOMAIN_DML_MODE_DEFAULT))) {
-          LOG_WARN("fail to change domain dml mode", K(ret));
         } else {
           ret = OB_ITER_END;
         }
@@ -492,8 +474,6 @@ int ObDASUpdateOp::open_op()
   upd_adaptor.ft_doc_word_infos_ = &doc_word_infos;
   if (OB_FAIL(ObDASDomainUtils::build_ft_doc_word_infos(ls_id_, trans_desc_, snapshot_, related_ctdefs_, related_tablet_ids_,
           upd_ctdef_->is_main_table_in_fts_ddl_, doc_word_infos))) {
-    LOG_WARN("fail to build fulltext doc word infos", K(ret), K(ls_id_), KPC(snapshot_), K(related_ctdefs_),
-        K(related_tablet_ids_));
   } else if (OB_FAIL(upd_adaptor.write_tablet(upd_iter, affected_rows))) {
     if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
       LOG_WARN("update row to partition storage failed", K(ret));
@@ -573,7 +553,6 @@ int ObDASUpdateOp::swizzling_remote_task(ObDASRemoteInfo *remote_info)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObIDASTaskOp::swizzling_remote_task(remote_info))) {
-    LOG_WARN("fail to swizzling remote task", K(ret));
   } else if (remote_info != nullptr) {
     //DAS update is executed remotely
     trans_desc_ = remote_info->trans_desc_;
@@ -590,7 +569,6 @@ int ObDASUpdateOp::write_row(const ExprFixedArray &row,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("buffer not inited", K(ret));
   } else if (OB_FAIL(write_buffer_.add_row(row, &eval_ctx, stored_row, true))) {
-    LOG_WARN("add row to write buffer failed", K(ret), K(row), K(write_buffer_));
   }
   return ret;
 }

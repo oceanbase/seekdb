@@ -29,10 +29,8 @@ int ObTransTimeoutTask::init(ObTransCtx *ctx)
   int ret = OB_SUCCESS;
 
   if (is_inited_) {
-    TRANS_LOG(WARN, "ObTransTimeoutTask inited twice");
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(ctx)) {
-    TRANS_LOG(WARN, "invalid argument", KP(ctx));
     ret = OB_INVALID_ARGUMENT;
   } else {
     is_inited_ = true;
@@ -107,10 +105,8 @@ int ObTxTimeoutTask::init(ObTxDesc *tx_desc, ObTransService* txs)
   int ret = OB_SUCCESS;
 
   if (is_inited_) {
-    TRANS_LOG(WARN, "ObTransTimeoutTask inited twice");
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(tx_desc) || OB_ISNULL(txs)) {
-    TRANS_LOG(WARN, "invalid argument", KP(tx_desc));
     ret = OB_INVALID_ARGUMENT;
   } else {
     is_inited_ = true;
@@ -150,13 +146,10 @@ void ObTxTimeoutTask::runTimerTask()
 {
   int ret = OB_SUCCESS;
   if (!is_inited_) {
-    TRANS_LOG(WARN, "ObTxTimeoutTask not inited", KPC(this));
   } else if (OB_ISNULL(tx_desc_)) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "ctx is null, unexpected error", KPC(this));
   } else if (OB_ISNULL(txs_)) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "txs_ is null, unexpected error", KPC(this));
   } else {
     // NOTE: save tx_desc_/txs_ is required
     // because the handle_tx_commit_timeout may cause tx terminate
@@ -167,11 +160,9 @@ void ObTxTimeoutTask::runTimerTask()
     DEFER({ txs->release_tx_ref(*tx_desc); });
     if (tx_desc_->is_xa_trans() && tx_desc_->is_sub2pc()) {
       if (OB_FAIL(txs_->handle_timeout_for_xa(*tx_desc_, delay_))) {
-        TRANS_LOG(WARN, "fail to handle timeout", K(ret), KPC_(tx_desc));
       }
     } else {
       if (OB_FAIL(txs_->handle_tx_commit_timeout(*tx_desc_, delay_))) {
-        TRANS_LOG(WARN, "handle timeout fail", K(ret), KPC_(tx_desc));
       }
     }
   }
@@ -185,12 +176,9 @@ int ObTransTimer::init(const char *timer_name)
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", K(ret));
   } else if (is_inited_) {
-    TRANS_LOG(WARN, "ObTransTimer inited twice");
     ret = OB_INIT_TWICE;
   } else if (OB_FAIL(tw_.init(TRANS_TIMEOUT_TASK_PRECISION_US, get_thread_num_(), timer_name))) {
-    TRANS_LOG(ERROR, "transaction timer init error", KR(ret));
   } else {
-    TRANS_LOG(INFO, "transaction timer inited success");
     is_inited_ = true;
   }
 
@@ -202,16 +190,12 @@ int ObTransTimer::start()
   int ret = OB_SUCCESS;
 
   if (!is_inited_) {
-    TRANS_LOG(WARN, "ObTransTimer is not inited");
     ret = OB_NOT_INIT;
   } else if (is_running_) {
-    TRANS_LOG(WARN, "ObTransTimer is already running");
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(tw_.start())) {
-    TRANS_LOG(WARN, "ObTimeWheel start error", KR(ret));
   } else {
     is_running_ = true;
-    TRANS_LOG(INFO, "ObTransTimer start success");
   }
 
   return ret;
@@ -222,16 +206,12 @@ int ObTransTimer::stop()
   int ret = OB_SUCCESS;
 
   if (!is_inited_) {
-    TRANS_LOG(WARN, "ObTransTimer is not inited");
     ret = OB_NOT_INIT;
   } else if (!is_running_) {
-    TRANS_LOG(WARN, "ObTransTimer already has stopped");
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(tw_.stop())) {
-    TRANS_LOG(WARN, "ObTimeWheel stop error", KR(ret));
   } else {
     is_running_ = false;
-    TRANS_LOG(INFO, "ObTransTimer stop success");
   }
 
   return ret;
@@ -242,15 +222,11 @@ int ObTransTimer::wait()
   int ret = OB_SUCCESS;
 
   if (!is_inited_) {
-    TRANS_LOG(WARN, "ObTransTimer is not inited");
     ret = OB_NOT_INIT;
   } else if (is_running_) {
-    TRANS_LOG(WARN, "ObTransTimer is already running");
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(tw_.wait())) {
-    TRANS_LOG(WARN, "ObTimeWheel wait error", KR(ret));
   } else {
-    TRANS_LOG(INFO, "ObTransTimer wait success");
   }
 
   return ret;
@@ -272,7 +248,6 @@ void ObTransTimer::destroy()
     }
     is_inited_ = false;
     tw_.destroy();
-    TRANS_LOG(INFO, "ObTransTimer destroyed");
   }
 }
 
@@ -283,18 +258,14 @@ int ObTransTimer::register_timeout_task(ObITimeoutTask &task,
   int ret = OB_SUCCESS;
 
   if (!is_inited_) {
-    TRANS_LOG(WARN, "ObTransTimer not been inited");
     ret = OB_NOT_INIT;
   } else if (!is_running_) {
-    TRANS_LOG(WARN, "ObTransTimer is not running");
     ret = OB_NOT_RUNNING;
   } else if (delay < 0) {
-    TRANS_LOG(WARN, "invalid argument", K(delay));
     ret = OB_INVALID_ARGUMENT;
   } else if (task.is_registered()) {
     ret = OB_TIMER_TASK_HAS_SCHEDULED;
   } else if (OB_FAIL(tw_.schedule(&task, delay))) {
-    TRANS_LOG(WARN, "register timeout task error", KR(ret), K(task));
   } else {
     task.set_registered(true);
     task.set_delay(delay);
@@ -308,7 +279,6 @@ int ObTransTimer::unregister_timeout_task(ObITimeoutTask &task)
   int ret = OB_SUCCESS;
 
   if (!is_inited_) {
-    TRANS_LOG(WARN, "ObTransTimer not been inited");
     ret = OB_NOT_INIT;
   // do not check transaction timer is running or not
   // we can unregister timeout task successful always

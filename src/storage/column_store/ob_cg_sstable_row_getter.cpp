@@ -66,7 +66,6 @@ int ObCGGetter::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument to init ObCGGetter", K(ret), K(wrapper), K(iter_param));
   } else if (OB_FAIL(wrapper.get_loaded_column_store_sstable(sstable))) {
-    LOG_WARN("fail to get sstable", K(ret), K(wrapper));
   } else {
     is_same_data_block_ = false;
     table_wrapper_ = wrapper;
@@ -77,7 +76,6 @@ int ObCGGetter::init(
                   iter_param,
                   access_ctx,
                   nullptr))) {
-        LOG_WARN("Fail to init prefetcher", K(ret));
       }
     } else {
       if (OB_FAIL(prefetcher_.switch_context(
@@ -86,7 +84,6 @@ int ObCGGetter::init(
                   iter_param,
                   access_ctx,
                   nullptr))) {
-        LOG_WARN("Fail to switch context for prefetcher", K(ret));
       } else {
         ObMicroBlockDataHandle &micro_handle = prefetcher_.get_last_data_handle();
         is_same_data_block_ =
@@ -111,7 +108,6 @@ int ObCGGetter::init(
         read_handle_.range_idx_ = 0;
         read_handle_.is_get_ = true;
         if (OB_FAIL(prefetcher_.single_prefetch(read_handle_))) {
-          LOG_WARN("ObCGGetter prefetch failed ", K(ret));
         }
       }
     }
@@ -141,10 +137,8 @@ int ObCGGetter::get_next_row(ObMacroBlockReader &block_reader, const blocksstabl
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("Fail to allocate micro block row getter", K(ret));
     } else if (OB_FAIL(micro_getter_->init(*iter_param_, *access_ctx_, sstable_))) {
-      LOG_WARN("Fail to init micro block row getter", K(ret));
     }
   } else if (OB_FAIL(micro_getter_->switch_context(*iter_param_, *access_ctx_, sstable_))) {
-    LOG_WARN("Fail to switch context", K(ret));
   }
   LOG_DEBUG("start to fetch row", KPC_(read_handle_.rowkey), K_(read_handle));
 
@@ -158,7 +152,6 @@ int ObCGGetter::get_next_row(ObMacroBlockReader &block_reader, const blocksstabl
                 block_reader,
                 row_idx - read_handle_.index_block_info_.get_row_range().start_row_id_,
                 store_row))) {
-      LOG_WARN("Fail to get row", K(ret), K(row_idx), "macro_id", read_handle_.micro_handle_->macro_block_id_);
     }
   }
   return ret;
@@ -224,24 +217,19 @@ int ObCGSSTableRowGetter::init(
     ObSSTable *sstable = static_cast<ObSSTable *>(table);
     int64_t access_col_cnt = iter_param.get_out_col_cnt();
     if (OB_FAIL(row_getters_.prepare_reallocate(access_col_cnt))) {
-      LOG_WARN("Failed to init row getters", K(ret), K(access_col_cnt));
     } else if (!row_.is_valid()) {
       if (OB_FAIL(row_.init(*access_ctx.stmt_allocator_, access_col_cnt))) {
-        LOG_WARN("Failed to init storage datum row", K(ret), K(access_col_cnt));
       }
     } else if (OB_FAIL(row_.reserve(access_col_cnt))) {
-      LOG_WARN("Failed to reserve datum row", K(ret), K(access_col_cnt));
     }
 
     if (OB_FAIL(ret)) {
     } else if (!prefetcher.is_valid()) {
       if (OB_FAIL(prefetcher.init(
                   type_, *sstable, iter_param, access_ctx, query_range))) {
-        LOG_WARN("Fail to init prefetcher", K(ret));
       }
     } else if (OB_FAIL(prefetcher.switch_context(
                 type_, *sstable, iter_param, access_ctx, query_range))) {
-      LOG_WARN("Fail to switch context for prefetcher", K(ret));
     }
   }
   return ret;
@@ -302,9 +290,7 @@ int ObCGSSTableRowGetter::get_row_id(ObSSTableReadHandle &read_handle, ObCSRowId
     int64_t cursor = -1;
     ObMicroBlockData block_data;
     if (OB_FAIL(read_handle.get_block_data(macro_block_reader_, block_data))) {
-      LOG_WARN("Fail to get block data", K(ret), K(read_handle));
     } else if (OB_FAIL(prepare_reader(block_data.get_store_type()))) {
-      LOG_WARN("Fail to prepare reader", K(ret), K(read_handle.micro_handle_->macro_block_id_));
     } else if (OB_FAIL(reader_->get_row_id(block_data, *read_handle.rowkey_, *iter_param_->get_read_info(), cursor))) {
       if (OB_BEYOND_THE_RANGE == ret) {
         row_id = OB_INVALID_CS_ROW_ID;
@@ -367,13 +353,9 @@ int ObCGSSTableRowGetter::prepare_cg_row_getter(const ObCSRowId row_id, const Ob
         }
         row_getters_[col_pos].reuse();
         if (OB_FAIL(cg_param_pool_->get_iter_param(cg_idx, *iter_param_, expr, cg_param))) {
-          LOG_WARN("Fail to get cg iter param", K(ret), K(cg_idx), K(access_idx), KPC_(iter_param));
         } else if (OB_FAIL(co_sstable_->fetch_cg_sstable(cg_idx, table_wrapper))) {
-          LOG_WARN("Fail to get cg sstable", K(ret), K(cg_idx), KPC_(co_sstable));
         } else if (OB_FAIL(row_getters_[col_pos].init(*cg_param, *access_ctx_, table_wrapper, row_idx_key_))) {
-          LOG_WARN("Fail to init cg row getter", K(ret));
         } else if (OB_FAIL(project_idxs.push_back(col_pos))) {
-          LOG_WARN("Fail to push back expr idx", K(ret));
         }
       }
     }
@@ -390,24 +372,18 @@ int ObCGSSTableRowGetter::fetch_row(ObSSTableReadHandle &read_handle, const ObNo
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(get_row_id(read_handle, row_id))) {
-    LOG_WARN("Fail to get row id", K(ret));
   } else if (OB_INVALID_CS_ROW_ID == row_id) {
     // not found
     if (OB_FAIL(get_not_exist_row(*read_handle.rowkey_, row_))){
-      LOG_WARN("Fail to get not exist row", K(ret));
     }
   } else if (OB_FAIL(row_.reserve(iter_param_->get_out_col_cnt()))) {
-    LOG_WARN("Failed to reserve row", K(ret));
   } else if (OB_FAIL(init_cg_param_pool(*access_ctx_))) {
-    LOG_WARN("Fail to init cg param pool", K(ret));
   } else if (OB_FAIL(prepare_cg_row_getter(row_id, nop_pos, project_idxs))) {
-    LOG_WARN("Fail to prepare cg row getter", K(ret), K(row_id));
   } else {
     const blocksstable::ObDatumRow *cg_row = nullptr;
     for (int64_t i = 0; OB_SUCC(ret) && i < project_idxs.count(); i++) {
       int32_t project_idx = project_idxs.at(i);
       if (OB_FAIL(row_getters_[project_idx].get_next_row(macro_block_reader_, cg_row))) {
-        LOG_WARN("Fail to get next cg row", K(ret), K(project_idx));
       } else if (OB_UNLIKELY(nullptr == cg_row || cg_row->row_flag_.is_not_exist())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Unexpected cg row", K(ret), KPC(cg_row), K(project_idx), K(row_id));
@@ -418,9 +394,7 @@ int ObCGSSTableRowGetter::fetch_row(ObSSTableReadHandle &read_handle, const ObNo
     }
     if (OB_SUCC(ret) && iter_param_->need_scn_) {
       if (OB_FAIL(fetch_rowkey_row(read_handle, store_row))) {
-        LOG_WARN("Fail to fetch row", K(ret));
       } else if (OB_FAIL(set_row_scn(access_ctx_->use_fuse_row_cache_, *iter_param_, store_row))) {
-        LOG_WARN("failed to set row scn", K(ret));
       } else {
         int64_t trans_idx = iter_param_->get_read_info()->get_trans_col_index();
         row_.storage_datums_[trans_idx] = store_row->storage_datums_[trans_idx];
@@ -453,10 +427,8 @@ int ObCGSSTableRowGetter::fetch_rowkey_row(ObSSTableReadHandle &read_handle, con
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("Fail to allocate micro block row getter", K(ret));
     } else if (OB_FAIL(micro_getter_->init(*iter_param_, *access_ctx_, static_cast<ObSSTable *>(co_sstable_)))) {
-      LOG_WARN("Fail to init micro block row getter", K(ret));
     }
   } else if (OB_FAIL(micro_getter_->switch_context(*iter_param_, *access_ctx_, static_cast<ObSSTable *>(co_sstable_)))) {
-    LOG_WARN("Fail to switch context", K(ret));
   }
   LOG_DEBUG("start to fetch row", KPC_(read_handle.rowkey), K(read_handle));
 
@@ -465,7 +437,6 @@ int ObCGSSTableRowGetter::fetch_rowkey_row(ObSSTableReadHandle &read_handle, con
               read_handle,
               store_row,
               &macro_block_reader_))) {
-    LOG_WARN("Fail to get row", K(ret));
   }
   return ret;
 }
@@ -474,7 +445,6 @@ int ObCGSSTableRowGetter::get_not_exist_row(const ObDatumRowkey &rowkey, ObDatum
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(row.reserve(rowkey.get_datum_cnt()))) {
-    LOG_WARN("fail to reserve datum row", K(ret), K(rowkey.get_datum_cnt()));
   } else {
     row.row_flag_.reset();
     row_.mvcc_row_flag_.reset();

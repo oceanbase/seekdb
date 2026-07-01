@@ -45,7 +45,6 @@ int ObKVStorage::init(ObSQLiteConnectionPool *pool)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid pool", K(ret));
   } else if (OB_FAIL(create_table_if_not_exists())) {
-    LOG_WARN("failed to create table", K(ret));
   }
   if (OB_FAIL(ret)) {
     pool_ = NULL;
@@ -65,7 +64,6 @@ int ObKVStorage::create_table_if_not_exists()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_KV_TABLE, nullptr))) {
-      LOG_WARN("failed to create table", K(ret));
     }
   }
   return ret;
@@ -148,7 +146,6 @@ int ObKVStorage::set(const common::ObString &key, const common::ObString &value)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(upsert_sql, binder))) {
-      LOG_WARN("failed to execute upsert", K(ret), K(key));
     } else {
       LOG_DEBUG("set kv success", K(key));
     }
@@ -177,7 +174,6 @@ int ObKVStorage::del(const common::ObString &key)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(delete_sql, binder))) {
-      LOG_WARN("failed to execute delete", K(ret), K(key));
     } else {
       LOG_DEBUG("delete kv success", K(key));
     }

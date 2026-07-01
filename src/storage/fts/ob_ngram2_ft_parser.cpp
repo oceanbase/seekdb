@@ -55,7 +55,6 @@ int ObNgram2FTParser::init(ObFTParserParam *param)
                                       param->ft_length_,
                                       param->min_ngram_size_,
                                       param->max_ngram_size_))) {
-    LOG_WARN("fail to init ngram impl", K(ret), KPC(param));
   } else {
     is_inited_ = true;
   }

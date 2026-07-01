@@ -41,7 +41,6 @@ int ObBasicNestedLoopJoinOp::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObJoinOp::inner_open())) {
-    LOG_WARN("failed to inner open join", K(ret));
   }
   return ret;
 }
@@ -50,7 +49,6 @@ int ObBasicNestedLoopJoinOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObJoinOp::inner_rescan())) {
-    LOG_WARN("failed to call parent rescan", K(ret));
   }
   return ret;
 }
@@ -89,7 +87,6 @@ int ObBasicNestedLoopJoinOp::prepare_rescan_params(bool is_group)
   for (int64_t i = 0; OB_SUCC(ret) && i < param_cnt; ++i) {
     const ObDynamicParamSetter &rescan_param = get_spec().rescan_params_.at(i);
     if (OB_FAIL(rescan_param.set_dynamic_param(eval_ctx_, param))) {
-      LOG_WARN("fail to set dynamic param", K(ret));
     } else if (NULL != batch_rescan_ctl) {
       if (OB_ISNULL(param)) {
         ret = OB_ERR_UNEXPECTED;
@@ -117,7 +114,6 @@ int ObBasicNestedLoopJoinOp::prepare_rescan_params(bool is_group)
   if (OB_SUCC(ret) && !get_spec().enable_px_batch_rescan_ && get_spec().enable_gi_partition_pruning_) {
     ObDatum *datum = nullptr;
     if (OB_FAIL(get_spec().gi_partition_id_expr_->eval(eval_ctx_, datum))) {
-      LOG_WARN("fail eval value", K(ret));
     } else {
       // NOTE: If the right side corresponds to multiple tables, the logic here is also correct
       // Like A REPART TO NLJ (B JOIN C) scenario

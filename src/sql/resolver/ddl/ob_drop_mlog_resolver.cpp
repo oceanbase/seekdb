@@ -73,8 +73,6 @@ int ObDropMLogResolver::resolve(const ParseNode &parse_tree)
     } else if (OB_FAIL(resolve_table_relation_node(parse_tree.children_[ENUM_TABLE_NAME],
                                                    data_table_name,
                                                    database_name))) {
-      LOG_WARN("failed to resolve table name",
-          KR(ret), K(data_table_name), K(database_name));
     } else if (OB_FAIL(schema_checker_->get_table_schema_with_synonym(database_name,
         data_table_name,
         false/*is index table*/,
@@ -97,9 +95,7 @@ int ObDropMLogResolver::resolve(const ParseNode &parse_tree)
       ObString tmp_new_tbl_name;
       // related issue : 
       if (OB_FAIL(deep_copy_str(new_db_name, tmp_new_db_name))) {
-        LOG_WARN("failed to deep copy new_db_name", KR(ret));
       } else if (OB_FAIL(deep_copy_str(new_tbl_name, tmp_new_tbl_name))) {
-        LOG_WARN("failed to deep copy new_tbl_name", KR(ret));
       } else {
         database_name = tmp_new_db_name;
         data_table_name = tmp_new_tbl_name;
@@ -112,7 +108,6 @@ int ObDropMLogResolver::resolve(const ParseNode &parse_tree)
       if (data_table_schema->is_materialized_view()) {
         const ObTableSchema *container_table_schema = nullptr;
         if (OB_FAIL(schema_checker_->get_table_schema( data_table_schema->get_data_table_id(), container_table_schema))) {
-          LOG_WARN("failed to get table schema", KR(ret));
         } else if (OB_ISNULL(container_table_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected null container table schema", KR(ret), KP(container_table_schema));
@@ -132,7 +127,6 @@ int ObDropMLogResolver::resolve(const ParseNode &parse_tree)
                                                            mlog_table_id,
                                                            mlog_table_schema,
                                                            false /*is_link*/))) {
-        LOG_WARN("failed to get table schema", KR(ret), K(mlog_table_id));
       } else if (OB_ISNULL(mlog_table_schema)) {
         ret = OB_ERR_TABLE_NO_MLOG;
         LOG_WARN("mlog table schema is null", KR(ret));
@@ -141,7 +135,6 @@ int ObDropMLogResolver::resolve(const ParseNode &parse_tree)
         LOG_WARN("table is not materialized view log",
             KR(ret), K(mlog_table_schema->get_table_type()));
       } else if (OB_FAIL(deep_copy_str(mlog_table_schema->get_table_name_str(), mlog_name))) {
-        LOG_WARN("failed to deep copy mlog name", KR(ret));
       }
     }
 

@@ -67,7 +67,6 @@ int ObExprAIComplete::calc_result_typeN(ObExprResType &type,
     } else if (param_num == 3) {
       ObObjType in_type = types_stack[CONFIG_IDX].get_type();
       if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(types_stack, CONFIG_IDX, N_AI_COMPLETE))) {
-        LOG_WARN("wrong type for json config.", K(ret), K(types_stack[CONFIG_IDX].get_type()));
       } else if (ob_is_string_type(in_type) && types_stack[CONFIG_IDX].get_collation_type() != CS_TYPE_BINARY) {
         if (types_stack[CONFIG_IDX].get_charset_type() != CHARSET_UTF8MB4) {
           types_stack[CONFIG_IDX].set_calc_collation_type(CS_TYPE_UTF8MB4_BIN);
@@ -93,7 +92,6 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
   ObDatum *arg_prompt = nullptr;
   ObDatum *arg_config = nullptr;
   if (OB_FAIL(expr.eval_param_value(ctx, arg_model_id, arg_prompt, arg_config))) {
-    LOG_WARN("evaluate parameters failed", K(ret));
   } else if (arg_model_id->is_null() || arg_prompt->is_null()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parameters is null", K(ret));
@@ -121,7 +119,6 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
       ObJsonObject *prompt_object = nullptr;
       bool is_null = false;
       if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, PROMPT_IDX, j_base, is_null))) {
-        LOG_WARN("get_json_doc failed", K(ret));
       } else if (j_base->json_type() != ObJsonNodeType::J_OBJECT) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("j_base is not json object", K(ret));
@@ -136,18 +133,14 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
         LOG_WARN("prompt object is not support", K(ret));
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "prompt object is not support");
       } else if (OB_FAIL(ObAIFuncPromptObjectUtils::replace_all_str_args_in_template(temp_allocator, prompt_object, prompt))) {
-        LOG_WARN("fail to replace all str args in template", K(ret));
       }
     } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *arg_prompt, expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), prompt))) {
-      LOG_WARN("fail to get real string data", K(ret));
     }
 
     if (OB_FAIL(ret)) {
     } else if (OB_NOT_NULL(arg_config)) {
       if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, *arg_config, expr.args_[2]->datum_meta_, expr.args_[2]->obj_meta_.has_lob_header(), config_str))) {
-        LOG_WARN("fail to get real string data", K(ret));
       } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_object_form_str(temp_allocator, config_str, config))) {
-        LOG_WARN("fail to get json object", K(ret));
       }
     }
 
@@ -161,14 +154,11 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
 
     if (OB_FAIL(ret)){
     } else if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(temp_allocator, model_id, info))) {
-      LOG_WARN("fail to get ai func info", K(ret));
     } else if (OB_ISNULL(ai_service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ai service is null", K(ret));
     } else if (OB_FAIL(ai_service->get_ai_service_guard(ai_service_guard))) {
-      LOG_WARN("failed to get ai service guard", K(ret));
     } else if (OB_FAIL(ai_service_guard.get_ai_endpoint_by_ai_model_name(model_id, endpoint_info))) {
-      LOG_WARN("failed to get endpoint info", K(ret), K(model_id));
     } else if (OB_ISNULL(endpoint_info)) {
       ret = OB_ERR_UNEXPECTED;  
       LOG_WARN("endpoint info is null", K(ret));
@@ -176,9 +166,7 @@ int ObExprAIComplete::eval_ai_complete(const ObExpr &expr,
       ObAIFuncModel model(temp_allocator, *info, *endpoint_info);
       ObString result;
       if (OB_FAIL(model.call_completion(prompt, config, result))) {
-        LOG_WARN("fail to call completion", K(ret));
       } else if (OB_FAIL(ObAIFuncUtils::set_string_result(expr, ctx, res, result))) {
-        LOG_WARN("fail to set string result", K(ret));
       }
     }
   }
@@ -201,10 +189,8 @@ int ObExprAIComplete::get_prompt_object_from_str(ObIAllocator &allocator,
     ObJsonObject *prompt_object = nullptr;
     if (OB_FAIL(ObJsonBaseFactory::get_json_base(&allocator, prompt, j_in_type,
                                                     expect_type, j_base, 0))) {
-      LOG_WARN("fail to get json base", K(ret), K(j_in_type));
     } else if (OB_FALSE_IT(prompt_object = static_cast<ObJsonObject *>(j_base))) {
     } else if (OB_FAIL(prompt_objects.push_back(prompt_object))) {
-      LOG_WARN("fail to push back prompt object", K(ret));
     } else if (!is_all_str && ObAIFuncJsonUtils::ob_is_json_array_all_str(static_cast<ObJsonArray *>(prompt_object->get_value(ObAIFuncPromptObjectUtils::prompt_args_key)))) {
       is_all_str = true;
     }
@@ -221,9 +207,7 @@ int ObExprAIComplete::transform_prompt_object_to_str(ObIAllocator &allocator,
     ObJsonObject *prompt_object = prompt_objects.at(i);
     ObString prompt;
     if (OB_FAIL(ObAIFuncPromptObjectUtils::replace_all_str_args_in_template(allocator, prompt_object, prompt))) {
-      LOG_WARN("fail to replace all str args in template", K(ret));
     } else if (OB_FAIL(prompts.push_back(prompt))) {
-      LOG_WARN("fail to push back prompt", K(ret), K(i));
     }
   }
   return ret;
@@ -239,11 +223,8 @@ int ObExprAIComplete::get_vector_params(const ObExpr &expr,
 {
   INIT_SUCC(ret);
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval source array failed", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval delimiter string failed", K(ret));
   } else if (OB_FAIL(expr.arg_cnt_ > 2 && expr.args_[2]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval null string failed", K(ret));
   } else {
     ObIVector *model_vec = expr.args_[0]->get_vector(ctx);
     ObIVector *prompt_vec = expr.args_[1]->get_vector(ctx);
@@ -262,7 +243,6 @@ int ObExprAIComplete::get_vector_params(const ObExpr &expr,
           expr.args_[0]->obj_meta_.has_lob_header(),
           model_id,
           0))) {
-      LOG_WARN("fail to get real string data", K(ret), K(model_id));
     } else if (OB_NOT_NULL(config_vec)) {
       if (OB_FAIL(ObTextStringHelper::read_real_string_data(
         temp_allocator,
@@ -271,9 +251,7 @@ int ObExprAIComplete::get_vector_params(const ObExpr &expr,
         expr.args_[2]->obj_meta_.has_lob_header(),
         config_str,
         0))) {
-        LOG_WARN("fail to get real string data", K(ret), K(config_str));
       } else if (OB_FAIL(ObAIFuncJsonUtils::get_json_object_form_str(temp_allocator, config_str, config))) {
-        LOG_WARN("fail to get json object", K(ret), K(config_str));
       }
     }
     if (OB_SUCC(ret)) {
@@ -291,14 +269,12 @@ int ObExprAIComplete::get_vector_params(const ObExpr &expr,
                 expr.args_[1]->obj_meta_.has_lob_header(),
                 prompt,
                 idx))) {
-            LOG_WARN("fail to get real string data", K(ret), K(prompt));
           } else if (prompt.empty()) {
             ret = OB_INVALID_ARGUMENT;
             LOG_WARN("input is empty", K(ret));
             LOG_USER_ERROR(OB_INVALID_ARGUMENT, "ai_complete, input is empty");
             res_vec->set_null(idx);
           } else if (OB_FAIL(prompts.push_back(prompt))) {
-            LOG_WARN("fail to push back prompt", K(ret), K(idx));
           }
         }
         eval_flags.set(idx);
@@ -329,16 +305,13 @@ int ObExprAIComplete::pack_json_array_to_res_vector(const ObExpr &expr,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("response_obj is null", K(ret), K(i));
     } else if (OB_FAIL(ObAIFuncUtils::parse_complete_output(allocator, endpoint_info, response_obj, output))) {
-      LOG_WARN("fail to parse output", K(ret), K(i));
     } else if (OB_ISNULL(output)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("output is null", K(ret), K(i));
     } else if (output->json_type() == ObJsonNodeType::J_STRING) {
       ObString raw_str;
       if (OB_FAIL(ObAIFuncJsonUtils::print_json_to_str(allocator, output, raw_str))) {
-        LOG_WARN("fail to print json to str", K(ret));
       } else if (OB_FAIL(ObAIFuncJsonUtils::inner_pack_raw_str_to_res(raw_str, expr, ctx, res_vec, idx))) {
-        LOG_WARN("fail to pack json result", K(ret));
       }
       eval_flags.set(idx);
       idx++;
@@ -379,14 +352,12 @@ int ObExprAIComplete::pack_json_string_to_res_vector(const ObExpr &expr,
     ObJsonBuffer j_buf(&allocator);
     ObString response_str;
     if (OB_FAIL(response->print(j_buf, 0))) {
-      LOG_WARN("fail to print response", K(ret));
     } else if (OB_ISNULL(response_str = j_buf.string())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to get response string value", K(ret));
     } else {
       ObJsonObject *response_obj = nullptr;
       if (OB_FAIL(ObAIFuncJsonUtils::get_json_object_form_str(allocator, response_str, response_obj))) {
-        LOG_WARN("fail to get json object", K(ret));
       } else {
         ObJsonNode *response_node = response_obj->get_value("item");
         if (OB_ISNULL(response_node)) {
@@ -403,9 +374,7 @@ int ObExprAIComplete::pack_json_string_to_res_vector(const ObExpr &expr,
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("item is null", K(ret));
               } else if (OB_FAIL(ObAIFuncJsonUtils::print_json_to_str(allocator, item, raw_str))) {
-                LOG_WARN("fail to print json to str", K(ret));
               } else if (OB_FAIL(ObAIFuncJsonUtils::inner_pack_raw_str_to_res(raw_str, expr, ctx, res_vec, idx))) {
-                LOG_WARN("fail to pack json result", K(ret));
               }
               eval_flags.set(idx);
               idx++;
@@ -432,7 +401,6 @@ int ObExprAIComplete::eval_ai_complete_vector(const ObExpr &expr, ObEvalCtx &ctx
   ObIVector *res_vec = expr.get_vector(ctx);
   ObExpr *arg_expr_prompt = expr.args_[1];
   if (OB_FAIL(get_vector_params(expr, ctx, skip, bound, model_id, prompts, config))) {
-    LOG_WARN("fail to get vector params", K(ret));
   } else {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     
@@ -451,11 +419,9 @@ int ObExprAIComplete::eval_ai_complete_vector(const ObExpr &expr, ObEvalCtx &ctx
       ObArray<ObJsonObject *> prompt_objects;
       bool is_all_str = false;
       if (OB_FAIL(get_prompt_object_from_str(temp_allocator, arg_expr_prompt->datum_meta_, prompts, prompt_objects, is_all_str))) {
-        LOG_WARN("fail to get prompt object from str", K(ret));
       } else if (is_all_str) {
         prompts.reset();
         if (OB_FAIL(transform_prompt_object_to_str(temp_allocator, prompt_objects, prompts))) {
-          LOG_WARN("fail to transform prompt object to str", K(ret));
         }
       } else {
         ret = OB_NOT_SUPPORTED;
@@ -464,36 +430,27 @@ int ObExprAIComplete::eval_ai_complete_vector(const ObExpr &expr, ObEvalCtx &ctx
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(temp_allocator, model_id, info))) {
-      LOG_WARN("fail to get ai func info", K(ret));
     } else if (OB_ISNULL(ai_service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ai service is null", K(ret));
     } else if (OB_FAIL(ai_service->get_ai_service_guard(ai_service_guard))) {
-      LOG_WARN("failed to get ai service guard", K(ret));
     } else if (OB_FAIL(ai_service_guard.get_ai_endpoint_by_ai_model_name(model_id, endpoint_info))) {
-      LOG_WARN("failed to get endpoint info", K(ret), K(model_id));
     } else if (OB_ISNULL(endpoint_info)) {
       ret = OB_ERR_UNEXPECTED;  
       LOG_WARN("endpoint info is null", K(ret));
     } else if (OB_FAIL(ObAIFuncUtils::check_info_type_completion(info))) {
-      LOG_WARN("model type must be COMPLETION", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < prompts.count(); ++i) {
         if (OB_FAIL(ObAIFuncUtils::get_complete_body(temp_allocator, *info, *endpoint_info, prompt,
                                                      prompts.at(i), config, body))) {
-          LOG_WARN("fail to get body", K(ret), K(i));
         } else if (OB_FAIL(bodies.push_back(body))) {
-          LOG_WARN("fail to append body", K(ret), K(i));
         }
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObAIFuncUtils::get_header(temp_allocator, *info, *endpoint_info, header_array))) {
-        LOG_WARN("fail to get header", K(ret));
       } else if (OB_FAIL(ai_client.send_post_batch(temp_allocator, endpoint_info->get_url(), header_array, bodies, responses))) {
-        LOG_WARN("fail to send batch request", K(ret));
       } else if (OB_FAIL(pack_json_array_to_res_vector(expr, ctx, temp_allocator, responses, skip, bound, *endpoint_info, res_vec))) {
-        LOG_WARN("fail to pack json to res", K(ret));
       }
     }
   }
@@ -511,11 +468,8 @@ int ObExprAIComplete::get_prompt_and_contents_contact_str(ObIAllocator &allocato
   ObString tuples_meta_prompt(TUPLES_META_PROMPT);
   ObString body_str;
   if (OB_FAIL(construct_tuple_str(allocator, contents, body_str))) {
-    LOG_WARN("fail to construct tuple str", K(ret));
   } else if (OB_FAIL(ObAIFuncPromptUtils::replace_meta_prompt(allocator, meta_prompt, prompt_meta_prompt, prompt, prompt_and_contents))) {
-    LOG_WARN("fail to replace meta prompt", K(ret));
   } else if (OB_FAIL(ObAIFuncPromptUtils::replace_meta_prompt(allocator, prompt_and_contents, tuples_meta_prompt, body_str, prompt_and_contents))) {
-    LOG_WARN("fail to replace meta prompt", K(ret));
   }
   return ret;
 }
@@ -525,11 +479,8 @@ int ObExprAIComplete::get_tuple_str(ObIAllocator &allocator, ObString &content, 
   INIT_SUCC(ret);
   ObStringBuffer tuple_buffer(&allocator);
   if (OB_FAIL(tuple_buffer.append("{\"tuple\":\""))) {
-    LOG_WARN("fail to append tuple", K(ret));
   } else if (OB_FAIL(tuple_buffer.append(content.ptr(), content.length()))) {
-    LOG_WARN("fail to append content", K(ret));
   } else if (OB_FAIL(tuple_buffer.append("\"}"))) {
-    LOG_WARN("fail to append \"", K(ret));
   } else {
     tuple_str = tuple_buffer.string();
   }
@@ -541,24 +492,19 @@ int ObExprAIComplete::construct_tuple_str(ObIAllocator &allocator, ObArray<ObStr
   INIT_SUCC(ret);
   ObStringBuffer content_buffer(&allocator);
   if (OB_FAIL(content_buffer.append("["))) {
-    LOG_WARN("fail to append [", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < contents.count(); ++i) {      
       ObString tuple_str;
       if (OB_FAIL(get_tuple_str(allocator, contents.at(i), tuple_str))) {
-        LOG_WARN("fail to get tuple str", K(ret));
       } else if (OB_FAIL(content_buffer.append(tuple_str.ptr(), tuple_str.length()))) {
-        LOG_WARN("fail to append tuple str", K(ret));
       } else if (i < contents.count() - 1) {
         if (OB_FAIL(content_buffer.append(","))) {
-          LOG_WARN("fail to append ,", K(ret));
         }
       }
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(content_buffer.append("]"))) {
-      LOG_WARN("fail to append ]", K(ret));
     } else if (OB_ISNULL(content_str = content_buffer.string())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to get string", K(ret));
@@ -577,7 +523,6 @@ int ObExprAIComplete::eval_ai_complete_vector_v2(const ObExpr &expr, ObEvalCtx &
   ObJsonObject *config = nullptr;
   ObIVector *res_vec = expr.get_vector(ctx);
   if (OB_FAIL(get_vector_params(expr, ctx, skip, bound, model_id, prompts, config))) {
-    LOG_WARN("fail to get vector params", K(ret));
   } else {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     
@@ -596,41 +541,29 @@ int ObExprAIComplete::eval_ai_complete_vector_v2(const ObExpr &expr, ObEvalCtx &
     ObString prompt_and_contents;
     ObIJsonBase *output = nullptr;
     if (OB_FAIL(ObAIFuncUtils::get_ai_func_info(temp_allocator, model_id, info))) {
-      LOG_WARN("fail to get ai func info", K(ret));
     } else if (OB_ISNULL(ai_service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ai service is null", K(ret));
     } else if (OB_FAIL(ai_service->get_ai_service_guard(ai_service_guard))) {
-      LOG_WARN("failed to get ai service guard", K(ret));
     } else if (OB_FAIL(ai_service_guard.get_ai_endpoint_by_ai_model_name(model_id, endpoint_info))) {
-      LOG_WARN("failed to get endpoint info", K(ret), K(model_id));
     } else if (OB_ISNULL(endpoint_info)) {
       ret = OB_ERR_UNEXPECTED;  
       LOG_WARN("endpoint info is null", K(ret));
     } else if (OB_FAIL(ObAIFuncUtils::check_info_type_completion(info))) {
-      LOG_WARN("model type must be COMPLETION", K(ret));
     } else if (OB_FAIL(get_prompt_and_contents_contact_str(temp_allocator, prompt, prompts, prompt_and_contents))) {
-      LOG_WARN("fail to get prompt and contents contact str", K(ret));
     } else if (OB_FAIL(ObAIFuncUtils::set_json_format_config(temp_allocator, endpoint_info->get_provider(), &json_format_config))) {
-      LOG_WARN("fail to get json format config", K(ret));
     } else {
       if (OB_ISNULL(config)) {
         config = &json_format_config;
       } else if (OB_FAIL(ObAIFuncJsonUtils::compact_json_object(temp_allocator, &json_format_config, config))) {
-        LOG_WARN("fail to compact json object", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObAIFuncUtils::get_header(temp_allocator, *info, *endpoint_info, header_array))) {
-        LOG_WARN("fail to get header", K(ret));
       } else if (OB_FAIL(ObAIFuncUtils::get_complete_body(temp_allocator, *info, *endpoint_info, no_prompt, prompt_and_contents, config, body))) {
-        LOG_WARN("fail to get body", K(ret));
       } else if (OB_FAIL(ai_client.send_post(temp_allocator, endpoint_info->get_url(), header_array, body, response))) {
-        LOG_WARN("fail to send batch request", K(ret));
       } else if (OB_FAIL(ObAIFuncUtils::parse_complete_output(temp_allocator, *endpoint_info, response, output))) {
-        LOG_WARN("fail to parse output", K(ret));
       } else if (OB_FAIL(pack_json_string_to_res_vector(expr, ctx, temp_allocator, output, skip, bound, res_vec))) {
-        LOG_WARN("fail to pack json to res", K(ret));
       }
     }
   }

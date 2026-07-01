@@ -151,9 +151,7 @@ int ObRbUtils::build_empty_binary(ObIAllocator &allocator, ObString &res_rb_bin)
   ObRbBinType bin_type = ObRbBinType::EMPTY;
   ObStringBuffer res_buf(&allocator);
   if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&version), RB_VERSION_SIZE))) {
-    LOG_WARN("failed to append version", K(ret));
   } else if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&bin_type), RB_BIN_TYPE_SIZE))) {
-    LOG_WARN("failed to append bin_type", K(ret));
   } else {
     res_rb_bin.assign_ptr(res_buf.ptr(), res_buf.length());
   }
@@ -171,11 +169,8 @@ int ObRbUtils::to_roaring64_bin(ObIAllocator &allocator, ObRbBinType rb_type, Ob
     uint32_t high32 = 0;
     ObStringBuffer bin_buf(&allocator);
     if (OB_FAIL(bin_buf.append(reinterpret_cast<const char*>(&map_size), sizeof(uint64_t)))) {
-      LOG_WARN("failed to append map size", K(ret));
     } else if (OB_FAIL(bin_buf.append(reinterpret_cast<const char*>(&high32), sizeof(uint32_t)))) {
-      LOG_WARN("failed to append map prefix", K(ret));
     } else if (OB_FAIL(bin_buf.append(rb_bin.ptr() + offset, rb_bin.length() - offset))) {
-      LOG_WARN("failed to append serialized string", K(ret), K(rb_bin));
     } else {
       roaring64_bin.assign_ptr(bin_buf.ptr(), bin_buf.length());
     }
@@ -193,7 +188,6 @@ int ObRbUtils::get_cardinality(ObIAllocator &allocator, const ObString &rb_bin, 
   ObRbBinType bin_type;
   uint32_t offset = RB_VERSION_SIZE + RB_BIN_TYPE_SIZE;
   if (OB_FAIL(get_bin_type(rb_bin, bin_type))) {
-    LOG_WARN("failed to get binary type", K(ret));
   } else if (bin_type == ObRbBinType::EMPTY) {
     // do nothing
   } else if (bin_type == ObRbBinType::SINGLE_32 || bin_type == ObRbBinType::SINGLE_64) {
@@ -209,9 +203,7 @@ int ObRbUtils::get_cardinality(ObIAllocator &allocator, const ObString &rb_bin, 
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc memory for ObRoaringBin", K(ret));
     } else if (OB_FAIL(roaring_bin->init())) {
-      LOG_WARN("failed to init ObRoaringBin", K(ret), K(binary_str));
     } else if (OB_FAIL(roaring_bin->get_cardinality(cardinality))) {
-      LOG_WARN("failed to get roaring card", K(ret), K(binary_str));
     }
   } else if (bin_type == ObRbBinType::BITMAP_64) {
     ObString binary_str;
@@ -221,9 +213,7 @@ int ObRbUtils::get_cardinality(ObIAllocator &allocator, const ObString &rb_bin, 
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc memory for ObRoaring64Bin", K(ret));
     } else if (OB_FAIL(roaring64_bin->init())) {
-      LOG_WARN("failed to init ObRoaring64Bin", K(ret), K(binary_str));
     } else if (OB_FAIL(roaring64_bin->get_cardinality(cardinality))) {
-      LOG_WARN("failed to get roaring card", K(ret), K(binary_str));
     }
   }
   return ret;
@@ -238,33 +228,27 @@ int ObRbUtils::get_calc_cardinality(ObIAllocator &allocator, ObString &rb1_bin, 
   uint64_t rb2_card = 0;
   uint64_t and_card = 0;
   if (OB_FAIL(get_bin_type(rb1_bin, rb1_type))) {
-    LOG_WARN("invalid left roaringbitmap binary string", K(ret));
   } else if (OB_FAIL(get_bin_type(rb2_bin, rb2_type))) {
-    LOG_WARN("invalid right roaringbitmap binary string", K(ret));
   } else if (op == ObRbOperation::AND) {
     rb1_card = 1; // no need to calculate rb1 cardinality
     rb2_card = 1; // no need to calculate rb2 cardinality
     if (OB_FAIL(get_and_cardinality(allocator, rb1_bin, rb1_type, rb2_bin, rb2_type, and_card, rb1_card, rb2_card))) {
-      LOG_WARN("failed to calculate and cardinality", K(ret));
     } else {
       cardinality = and_card;
     }
   } else if (op == ObRbOperation::OR) {
     if (OB_FAIL(get_and_cardinality(allocator, rb1_bin, rb1_type, rb2_bin, rb2_type, and_card, rb1_card, rb2_card))) {
-      LOG_WARN("failed to calculate and cardinality", K(ret));
     } else {
       cardinality = rb1_card + rb2_card - and_card;
     }
   } else if (op == ObRbOperation::XOR) {
     if (OB_FAIL(get_and_cardinality(allocator, rb1_bin, rb1_type, rb2_bin, rb2_type, and_card, rb1_card, rb2_card))) {
-      LOG_WARN("failed to calculate and cardinality", K(ret));
     } else {
       cardinality = rb1_card + rb2_card - 2 * and_card;
     }
   } else if (op == ObRbOperation::ANDNOT) {
     rb2_card = 1; // no need to calculate rb2 cardinality
     if (OB_FAIL(get_and_cardinality(allocator, rb1_bin, rb1_type, rb2_bin, rb2_type, and_card, rb1_card, rb2_card))) {
-      LOG_WARN("failed to calculate and cardinality", K(ret));
     } else {
       cardinality = rb1_card - and_card;
     }
@@ -290,9 +274,7 @@ int ObRbUtils::get_and_cardinality(ObIAllocator &allocator,
     ObRoaringBitmap *rb1 = nullptr;
     ObRoaringBitmap *rb2 = nullptr;
     if (OB_FAIL(rb_deserialize(allocator, rb1_bin, rb1))) {
-      LOG_WARN("failed to deserialize left roaringbitmap", K(ret));
     } else if (OB_FAIL(rb_deserialize(allocator, rb2_bin, rb2))) {
-      LOG_WARN("failed to deserialize right roaringbitmap", K(ret));
     } else if (rb2->is_empty_type()) {
       cardinality = 0;
     } else if (rb2->is_single_type()) {
@@ -321,20 +303,16 @@ int ObRbUtils::get_and_cardinality(ObIAllocator &allocator,
     ObRoaring64Bin *rb1 = nullptr;
     ObRoaringBitmap *rb2 = nullptr;
     if (OB_FAIL(to_roaring64_bin(allocator, rb1_type, rb1_bin, rb1_roaring64_bin))) {
-      LOG_WARN("failed to get roaring64 binary string from left roaringbitmap", K(ret), K(rb1_type));
     } else if (OB_ISNULL(rb1 = OB_NEWx(ObRoaring64Bin, &allocator, &allocator, rb1_roaring64_bin))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc memory for left ObRoaring64Bin", K(ret));
     } else if (OB_FAIL(rb1->init())) {
-      LOG_WARN("failed to init left ObRoaring64Bin", K(ret));
     } else if (OB_FAIL(rb_deserialize(allocator, rb2_bin, rb2))) {
-      LOG_WARN("failed to deserialize right roaringbitmap", K(ret));
     } else if (rb2->is_empty_type()) {
       cardinality = 0;
     } else if (rb2->is_single_type()) {
       bool is_contains = false;
       if (OB_FAIL(rb1->contains(rb2->get_single_value(), is_contains))) {
-        LOG_WARN("failed to check value is_contains", K(ret), K(rb2->get_single_value()));
       } else {
         cardinality = is_contains? 1 : 0;
       }
@@ -345,7 +323,6 @@ int ObRbUtils::get_and_cardinality(ObIAllocator &allocator,
       for (iter = set->begin(); iter != set->end(); iter++) {
         bool is_contains = false;
         if (OB_FAIL(rb1->contains(iter->first, is_contains))) {
-          LOG_WARN("failed to check value is_contains", K(ret), K(iter->first));
         } else if (is_contains) {
           cardinality += 1;
         }
@@ -360,7 +337,6 @@ int ObRbUtils::get_and_cardinality(ObIAllocator &allocator,
   } else if (!is_bitmap_bin(rb1_type) && is_bitmap_bin(rb2_type)) {
     // switch position of rb1 and rb2
     if (OB_FAIL(get_and_cardinality(allocator, rb2_bin, rb2_type, rb1_bin, rb1_type, cardinality, rb2_card, rb1_card))) {
-      LOG_WARN("failed to calculate and cardinality", K(ret));
     }
   } else if (is_bitmap_bin(rb1_type) && is_bitmap_bin(rb2_type)) {
     // no deserialize for roaringbitmap
@@ -369,21 +345,16 @@ int ObRbUtils::get_and_cardinality(ObIAllocator &allocator,
     ObString rb1_roaring64_bin;
     ObString rb2_roaring64_bin;
     if (OB_FAIL(to_roaring64_bin(allocator, rb1_type, rb1_bin, rb1_roaring64_bin))) {
-      LOG_WARN("failed to get roaring64 binary string from left roaringbitmap", K(ret), K(rb1_type));
     } else if (OB_ISNULL(rb1 = OB_NEWx(ObRoaring64Bin, &allocator, &allocator, rb1_roaring64_bin))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc memory for left ObRoaring64Bin", K(ret));
     } else if (OB_FAIL(rb1->init())) {
-      LOG_WARN("failed to init left ObRoaring64Bin", K(ret));
     } else if (OB_FAIL(to_roaring64_bin(allocator, rb2_type, rb2_bin, rb2_roaring64_bin))) {
-      LOG_WARN("failed to get roaring64 binary string from right roaringbitmap", K(ret), K(rb2_type));
     } else if (OB_ISNULL(rb2 = OB_NEWx(ObRoaring64Bin, &allocator, &allocator, rb2_roaring64_bin))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc memory for right ObRoaring64Bin", K(ret));
     } else if (OB_FAIL(rb2->init())) {
-      LOG_WARN("failed to init right ObRoaring64Bin", K(ret));
     } else if (OB_FAIL(rb1->calc_and_cardinality(rb2, cardinality))) {
-      LOG_WARN("failed to calculate and cardinality", K(ret));
     }
     if (OB_FAIL(ret)) {
     } else if (rb1_card == 0 && OB_FAIL(rb1->get_cardinality(rb1_card))) {
@@ -405,9 +376,7 @@ int ObRbUtils::binary_calc(ObIAllocator &allocator, ObString &rb1_bin, ObString 
     ret = OB_INVALID_DATA;
     LOG_WARN("roaringbitmap binary is empty", K(ret), K(rb1_bin), K(rb2_bin));
   } else if (OB_FAIL(get_bin_type(rb1_bin, rb1_bin_type))) {
-    LOG_WARN("failed to get binary type", K(ret));
   } else if (OB_FAIL(get_bin_type(rb2_bin, rb2_bin_type))) {
-    LOG_WARN("failed to get binary type", K(ret));
   } else if (op != ObRbOperation::AND && op != ObRbOperation::ANDNOT) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("operaration for roaringbitmap binary calculation except AND and ANDNOT is not supported", K(ret), K(op));
@@ -429,13 +398,9 @@ int ObRbUtils::binary_calc(ObIAllocator &allocator, ObString &rb1_bin, ObString 
     ObRoaringBitmap *rb1 = nullptr;
     ObRoaringBitmap *rb2 = nullptr;
     if (OB_FAIL(rb_deserialize(allocator, rb1_bin, rb1))) {
-      LOG_WARN("failed to deserialize roaringbitmap rb1", K(ret), K(rb1_bin));
     } else if (OB_FAIL(rb_deserialize(allocator, rb2_bin, rb2))) {
-      LOG_WARN("failed to deserialize roaringbitmap rb2", K(ret), K(rb2_bin));
     } else if (OB_FAIL(calc_inplace(rb1, rb2, op))) {
-      LOG_WARN("failed to calcutlate roaringbitmap inplace", K(ret), K(op), K(rb1), K(rb2));
     } else if (OB_FAIL(rb_serialize(allocator, res_rb_bin, rb1))) {
-      LOG_WARN("failed to serialize roaringbitmap", K(ret));
     }
     rb_destroy(rb1);
     rb_destroy(rb2);
@@ -451,27 +416,19 @@ int ObRbUtils::binary_calc(ObIAllocator &allocator, ObString &rb1_bin, ObString 
     ObRbBinType res_bin_type = ObRbBinType::BITMAP_64;
     uint64_t res_card = 0;
     if (OB_FAIL(convert_to_bitmap_binary(allocator, rb1_bin, rb1_bitmap_bin, rb1_bin_type))) {
-      LOG_WARN("failed to convert rb1_bin to bitmap binary", K(ret));
     } else if (OB_FAIL(to_roaring64_bin(allocator, rb1_bin_type, rb1_bitmap_bin, rb1_roaring64_bin))) {
-      LOG_WARN("failed to get roaring64 binary string from rb1 roaringbitmap", K(ret), K(rb1_bin_type));
     } else if (OB_ISNULL(rb1 = OB_NEWx(ObRoaring64Bin, &allocator, &allocator, rb1_roaring64_bin))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc memory for rb1 ObRoaring64Bin", K(ret));
     } else if (OB_FAIL(rb1->init())) {
-      LOG_WARN("failed to init rb1 ObRoaring64Bin", K(ret));
     } else if (OB_FAIL(convert_to_bitmap_binary(allocator, rb2_bin, rb2_bitmap_bin, rb2_bin_type))) {
-      LOG_WARN("failed to convert rb2_bin to bitmap binary", K(ret));
     } else if (OB_FAIL(to_roaring64_bin(allocator, rb2_bin_type, rb2_bitmap_bin, rb2_roaring64_bin))) {
-      LOG_WARN("failed to get roaring64 binary string from rb2 roaringbitmap", K(ret), K(rb2_bin_type));
     } else if (OB_ISNULL(rb2 = OB_NEWx(ObRoaring64Bin, &allocator, &allocator, rb2_roaring64_bin))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc memory for rb2 ObRoaring64Bin", K(ret));
     } else if (OB_FAIL(rb2->init())) {
-      LOG_WARN("failed to init rb2 ObRoaring64Bin", K(ret));
     } else if (OB_FAIL(res_buf.append(rb1_bitmap_bin.ptr(), RB_VERSION_SIZE))) {
-      LOG_WARN("failed to append version", K(ret));
     } else if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&res_bin_type), RB_BIN_TYPE_SIZE))) {
-      LOG_WARN("failed to append res_bin_type", K(ret));
     } else if (op == ObRbOperation::AND && OB_FAIL(rb1->calc_and(rb2, res_buf, res_card))) {
         LOG_WARN("failed to calculate and", K(ret));
     } else if (op == ObRbOperation::ANDNOT && OB_FAIL(rb1->calc_andnot(rb2, res_buf, res_card))) {
@@ -481,9 +438,7 @@ int ObRbUtils::binary_calc(ObIAllocator &allocator, ObString &rb1_bin, ObString 
     // convert to smaller bintype
       ObRoaringBitmap *rb = NULL;
       if (OB_FAIL(rb_deserialize(allocator, res_rb_bin, rb))) {
-        LOG_WARN("failed to deserialize roaringbitmap", K(ret));
       } else if OB_FAIL(rb_serialize(allocator, res_rb_bin, rb)) {
-        LOG_WARN("failed to serialize roaringbitmap", K(ret));
       }
       rb_destroy(rb);
     }
@@ -499,19 +454,15 @@ int ObRbUtils::calc_inplace(ObRoaringBitmap *&rb1, ObRoaringBitmap *&rb2, ObRbOp
     LOG_WARN("roaringbitmap is null", K(ret), K(rb1), K(rb2));
   } else if (op == ObRbOperation::AND) {
     if (OB_FAIL(rb1->value_and(rb2))) {
-      LOG_WARN("failed to calculate value and", K(ret), K(op));
     }
   } else if (op == ObRbOperation::OR) {
     if (OB_FAIL(rb1->value_or(rb2))) {
-      LOG_WARN("failed to calculate value or", K(ret), K(op));
     }
   } else if (op == ObRbOperation::XOR) {
     if (OB_FAIL(rb1->value_xor(rb2))) {
-      LOG_WARN("failed to calculate value xor", K(ret), K(op));
     }
   } else if (op == ObRbOperation::ANDNOT) {
     if (OB_FAIL(rb1->value_andnot(rb2))) {
-      LOG_WARN("failed to calculate value andnot", K(ret), K(op));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -535,7 +486,6 @@ int ObRbUtils::rb_deserialize(ObIAllocator &allocator, const ObString &rb_bin, O
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to create alloc memory to roaringbitmap", K(ret));
   } else if (OB_FAIL(rb->deserialize(rb_bin, need_validate))) {
-    LOG_WARN("failed to deserialize roaringbitmap", K(ret));
   }
   return ret;
 }
@@ -545,9 +495,7 @@ int ObRbUtils::rb_serialize(ObIAllocator &allocator, ObString &res_rb_bin, ObRoa
   int ret = OB_SUCCESS;
   ObStringBuffer res_buf(&allocator);
   if (OB_FAIL(rb->optimize())) {
-    LOG_WARN("failed to optimize the roaringbitmap", K(ret));
   } else if (OB_FAIL(rb->serialize(res_buf))) {
-    LOG_WARN("failed to serialize the roaringbitmap");
   } else {
     res_rb_bin.assign_ptr(res_buf.ptr(), res_buf.length());
   }
@@ -561,11 +509,8 @@ int ObRbUtils::build_binary(ObIAllocator &allocator, ObString &rb_bin, ObString 
   bool need_validate = true;
   // binary_check -> deserialize -> serialize
   if (OB_FAIL(check_binary(rb_bin))) {
-    LOG_WARN("invalid roaringbitmap binary string", K(ret));
   } else if (OB_FAIL(rb_deserialize(allocator, rb_bin, rb, need_validate))) {
-    LOG_WARN("failed to deserialize roaringbitmap", K(ret));
   } else if OB_FAIL(rb_serialize(allocator, res_rb_bin, rb)) {
-    LOG_WARN("failed to serialize roaringbitmap", K(ret));
   }
   rb_destroy(rb);
   return ret;
@@ -575,7 +520,6 @@ int ObRbUtils::convert_to_bitmap_binary(ObIAllocator &allocator, const ObString 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(get_bin_type(rb_bin, bin_type))) {
-    LOG_WARN("failed to get binary type", K(ret));
   } else if (bin_type == ObRbBinType::BITMAP_32 || bin_type == ObRbBinType::BITMAP_64) {
     // no need to convert
     bitmap_bin.assign_ptr(rb_bin.ptr(), rb_bin.length());
@@ -588,11 +532,8 @@ int ObRbUtils::convert_to_bitmap_binary(ObIAllocator &allocator, const ObString 
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to create alloc memory to roaringbitmap", K(ret));
     } else if (OB_FAIL(rb->deserialize(rb_bin))) {
-      LOG_WARN("failed to deserialize roaringbitmap", K(ret));
     } else if (OB_FAIL(rb->convert_to_bitmap())) {
-      LOG_WARN("failed to convert roaringbitmap to bitmap type", K(ret));
     } else if (OB_FAIL(rb->serialize(res_buf))) {
-      LOG_WARN("failed to serialize the roaringbitmap");
     } else if (OB_FALSE_IT(bitmap_bin.assign_ptr(res_buf.ptr(), res_buf.length()))) {
     } else if(get_bin_type(bitmap_bin, bin_type)) {
       LOG_WARN("failed to get binary type", K(ret));
@@ -610,7 +551,6 @@ int ObRbUtils::binary_format_convert(ObIAllocator &allocator, const ObString &rb
   if (rb_bin.empty()) {
     binary_str.assign_ptr(rb_bin.ptr(), rb_bin.length());
   } else if (OB_FAIL(convert_to_bitmap_binary(allocator, rb_bin, bitmap_bin, bin_type))) {
-    LOG_WARN("failed to convert rb_bin to bitmap binary", K(ret), K(rb_bin));
   } else if (bin_type == ObRbBinType::BITMAP_32) {
     binary_str.assign_ptr(bitmap_bin.ptr(), bitmap_bin.length());
   } else if (bin_type == ObRbBinType::BITMAP_64) {
@@ -632,13 +572,9 @@ int ObRbUtils::binary_format_convert(ObIAllocator &allocator, const ObString &rb
         uint32_t roaring32_cookie = roaring::internal::SERIAL_COOKIE_NO_RUNCONTAINER;
         uint32_t container_num = 0;
         if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&version), RB_VERSION_SIZE))) {
-          LOG_WARN("failed to append version", K(ret));
         } else if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&bin_type), RB_BIN_TYPE_SIZE))) {
-          LOG_WARN("failed to append bin_type", K(ret));
         } else if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&roaring32_cookie), sizeof(uint32_t)))) {
-          LOG_WARN("failed to append roaring32_cookie", K(ret));
         } else if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&container_num), sizeof(uint32_t)))) {
-          LOG_WARN("failed to append container_num", K(ret));
         } else {
           binary_str.assign_ptr(res_buf.ptr(), res_buf.length());
         }
@@ -656,11 +592,8 @@ int ObRbUtils::binary_format_convert(ObIAllocator &allocator, const ObString &rb
             uint8_t version = *(bitmap_bin.ptr());
             bin_type = ObRbBinType::BITMAP_32;
             if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&version), RB_VERSION_SIZE))) {
-              LOG_WARN("failed to append version", K(ret));
             } else if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&bin_type), RB_BIN_TYPE_SIZE))) {
-              LOG_WARN("failed to append bin_type", K(ret));
             } else if (OB_FAIL(res_buf.append(bitmap_bin.ptr() + offset, bitmap_bin.length() - offset))) {
-              LOG_WARN("failed to append roaring binary string" ,K(ret));
             } else {
               binary_str.assign_ptr(res_buf.ptr(), res_buf.length());
             }
@@ -709,12 +642,10 @@ int ObRbUtils::rb_from_string(ObIAllocator &allocator, ObString &rb_str, ObRoari
         ret = OB_INVALID_DATA;
         LOG_WARN("no value string after the comma", K(ret));
       } else if (OB_FAIL(str_read_value_(str, str_end - str, value_end, value))) {
-        LOG_WARN("failed to transfer value string", K(ret), K(str));
       } else if (str == value_end) {
         ret = OB_INVALID_DATA;
         LOG_WARN("invalid roaringbitmap string", K(ret), K(*str));
       } else if (OB_FAIL(rb->value_add(value))) {
-        LOG_WARN("failed to add value to roaringbtimap", K(ret), K(value));
       } else {
         str = value_end;
         str_skip_space_(str, str_end);
@@ -731,7 +662,6 @@ int ObRbUtils::rb_to_string(ObIAllocator &allocator, ObString &rb_bin, ObString 
   uint32_t offset = RB_VERSION_SIZE + RB_BIN_TYPE_SIZE;
   ObStringBuffer res_buf(&allocator);
   if (OB_FAIL(get_bin_type(rb_bin, bin_type))) {
-    LOG_WARN("invalid roaringbitmap binary string", K(ret));
   } else {
     switch(bin_type) {
       case ObRbBinType::EMPTY: {
@@ -742,7 +672,6 @@ int ObRbUtils::rb_to_string(ObIAllocator &allocator, ObString &rb_bin, ObString 
         uint32_t value_32 = *reinterpret_cast<const uint32_t*>(rb_bin.ptr() + offset);
         ObFastFormatInt ffi(value_32);
         if (OB_FAIL(res_buf.append(ffi.ptr(), ffi.length(), 0))) {
-          LOG_WARN("failed to append res_buf", K(ret), K(value_32), K(ffi.ptr()), K(ffi.length()));
         }
         break;
       }
@@ -750,7 +679,6 @@ int ObRbUtils::rb_to_string(ObIAllocator &allocator, ObString &rb_bin, ObString 
         uint64_t value_64 = *reinterpret_cast<const uint64_t*>(rb_bin.ptr() + offset);
         ObFastFormatInt ffi(value_64);
         if (OB_FAIL(res_buf.append(ffi.ptr(), ffi.length(), 0))) {
-          LOG_WARN("failed to append res_buf", K(ret), K(value_64), K(ffi.ptr()), K(ffi.length()));
         }
         break;
       }
@@ -769,7 +697,6 @@ int ObRbUtils::rb_to_string(ObIAllocator &allocator, ObString &rb_bin, ObString 
               LOG_WARN("failed to append res_buf", K(ret));
             } else if (is_first && OB_FALSE_IT(is_first = false)) {
             } else if (OB_FAIL(res_buf.append(ffi.ptr(), ffi.length(), 0))) {
-              LOG_WARN("failed to append res_buf", K(ret), K(value_32), K(ffi.ptr()), K(ffi.length()));
             }
           }
         }
@@ -790,7 +717,6 @@ int ObRbUtils::rb_to_string(ObIAllocator &allocator, ObString &rb_bin, ObString 
               LOG_WARN("failed to append res_buf", K(ret));
             } else if (is_first && OB_FALSE_IT(is_first = false)) {
             } else if (OB_FAIL(res_buf.append(ffi.ptr(), ffi.length(), 0))) {
-              LOG_WARN("failed to append res_buf", K(ret), K(value_64), K(ffi.ptr()), K(ffi.length()));
             }
           }
         }
@@ -821,7 +747,6 @@ int ObRbUtils::rb_to_string(ObIAllocator &allocator, ObString &rb_bin, ObString 
                 LOG_WARN("failed to append res_buf", K(ret));
               } else if (is_first && OB_FALSE_IT(is_first = false)) {
               } else if (OB_FAIL(res_buf.append(ffi.ptr(), ffi.length(), 0))) {
-                LOG_WARN("failed to append res_buf", K(ret), K(iter->current_value), K(ffi.ptr()), K(ffi.length()));
               }
             } while (OB_SUCC(ret) && roaring::api::roaring_uint32_iterator_advance(iter));
           }
@@ -861,7 +786,6 @@ int ObRbUtils::rb_to_string(ObIAllocator &allocator, ObString &rb_bin, ObString 
                 LOG_WARN("failed to append res_buf", K(ret));
               } else if (is_first && OB_FALSE_IT(is_first = false)) {
               } else if (OB_FAIL(res_buf.append(ffi.ptr(), ffi.length(), 0))) {
-                LOG_WARN("failed to append res_buf", K(ret), K(roaring::api::roaring64_iterator_value(iter)), K(ffi.ptr()), K(ffi.length()));
               }
             } while (OB_SUCC(ret) && roaring::api::roaring64_iterator_advance(iter));
           }
@@ -960,7 +884,6 @@ int ObRbAggCell::add_values(const ObArray<uint64_t> &values)
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i< values.count(); ++i) {
     if (OB_FAIL(rb_->value_add(values.at(i)))) {
-      LOG_WARN("add value fail", K(ret), K(i));
     }
   }
   return ret;
@@ -974,15 +897,12 @@ int ObRbAggCell::value_add(const uint64_t val)
     LOG_WARN("is serialized, can not add value", K(ret), KPC(this));
   } else if (cached_value_.count() < max_cache_count_) {
     if (OB_FAIL(cached_value_.push_back(val))) {
-      LOG_WARN("push back fail");
     }
   } else if (OB_ISNULL(rb_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("rb is null", K(ret));
   } else if (OB_FAIL(rb_->value_add(val))) {
-    LOG_WARN("add value fail", K(ret), K(val));
   } else if (OB_FAIL(add_values(cached_value_))) {
-    LOG_WARN("add value fail", K(ret), K(val));
   } else {
     cached_value_.reuse();
   }
@@ -1000,9 +920,7 @@ int ObRbAggCell::value_calc(const ObString rb_bin, ObItemType func_type, bool ne
   } else if (func_type == T_FUN_SYS_RB_OR_AGG) {
     is_new_ = false;
     if (OB_FAIL(ObRbUtils::rb_deserialize(allocator_, rb_bin, value_rb, need_validate))) {
-      LOG_WARN("failed to deserialize roaringbitmap", K(ret));
     } else if (OB_FAIL(rb_->value_or(value_rb))) {
-      LOG_WARN("failed to calculate value or", K(ret));
     }
   } else if (func_type == T_FUN_SYS_RB_AND_AGG) {
     ObRbBinType bin_type;
@@ -1010,22 +928,16 @@ int ObRbAggCell::value_calc(const ObString rb_bin, ObItemType func_type, bool ne
       // for the first roaringbitmap, use "OR" to insert
       is_new_ = false;
       if (OB_FAIL(ObRbUtils::rb_deserialize(allocator_, rb_bin, value_rb, need_validate))) {
-        LOG_WARN("failed to deserialize roaringbitmap", K(ret));
       } else if (OB_FAIL(rb_->value_or(value_rb))) {
-        LOG_WARN("failed to calculate value or", K(ret));
       }
     } else if (OB_FAIL(rb_->optimize())) {
-      LOG_WARN("failed to optimize", K(ret));
     } else if (rb_->is_empty_type()) {
       // do nothing
     } else if (OB_FAIL(ObRbUtils::get_bin_type(rb_bin, bin_type))) {
-      LOG_WARN("invalid value roaringbitmap binary string", K(ret));
     } else if (rb_->is_bitmap_type() || !ObRbUtils::is_bitmap_bin(bin_type)) {
       // deserialize the value binary to execute "AND"
       if (OB_FAIL(ObRbUtils::rb_deserialize(allocator_, rb_bin, value_rb, need_validate))) {
-        LOG_WARN("failed to deserialize roaringbitmap", K(ret));
       } else if (OB_FAIL(rb_->value_and(value_rb))) {
-        LOG_WARN("failed to calculate value and", K(ret));
       }
     } else {
       // no deserializing the value binary, check the existen of each value from the rb_ in the value binary
@@ -1038,9 +950,7 @@ int ObRbAggCell::value_calc(const ObString rb_bin, ObItemType func_type, bool ne
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("failed to alloc memory for ObRoaringBin", K(ret));
         } else if (OB_FAIL(roaring_bin->init())) {
-          LOG_WARN("failed to init ObRoaringBin", K(ret), K(binary_str));
         } else if (OB_FAIL(rb_->value_and(roaring_bin))) {
-          LOG_WARN("failed to calculate value and", K(ret));
         }
       } else if (bin_type == ObRbBinType::BITMAP_64) {
         ObRoaring64Bin *roaring64_bin = NULL;
@@ -1048,9 +958,7 @@ int ObRbAggCell::value_calc(const ObString rb_bin, ObItemType func_type, bool ne
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("failed to alloc memory for ObRoaring64Bin", K(ret));
         } else if (OB_FAIL(roaring64_bin->init())) {
-          LOG_WARN("failed to init ObRoaring64Bin", K(ret), K(binary_str));
         } else if (OB_FAIL(rb_->value_and(roaring64_bin))) {
-          LOG_WARN("failed to calculate value and", K(ret));
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -1080,9 +988,7 @@ int ObRbAggCell::rollup(const ObRbAggCell *other, ObItemType func_type)
     LOG_WARN("other rb is null", K(ret));
   } else if (func_type == T_FUN_SYS_RB_BUILD_AGG) {
     if (OB_FAIL(add_values(cached_value_))) {
-      LOG_WARN("add value fail", K(ret));
     } else if (OB_FAIL(add_values(other->cached_value_))) {
-      LOG_WARN("add value fail", K(ret));
     } else if (OB_NOT_NULL(other->rb_) && OB_FAIL(rb_->value_or(other->rb_))) {
       LOG_WARN("or value fail", K(ret));
     } else {
@@ -1134,9 +1040,7 @@ int ObRbAggCell::serialize()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("serialize rb is null", K(ret));
   } else if (OB_FAIL(add_values(cached_value_))) {
-    LOG_WARN("add values fail", K(ret));
   } else if (OB_FAIL(ObRbUtils::rb_serialize(allocator_, rb_bin_, rb_))) {
-    LOG_WARN("rb_serialize fail", K(ret));
   } else {
     cached_value_.reset();
     ObRbUtils::rb_destroy(rb_);
@@ -1151,7 +1055,6 @@ int ObRbAggAllocator::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(alloced_rb_.create(10, lib::ObMemAttr("RbAggAlloc")))) {
-    LOG_WARN("failed to create set", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -1177,7 +1080,6 @@ void ObRbAggAllocator::free(ObRbAggCell *rb)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(rb)) {
   } else if (OB_FAIL(alloced_rb_.erase_refactored(reinterpret_cast<uint64_t>(rb)))) {
-    LOG_WARN("failed to erase from the set", K(ret), KPC(rb));
   } else {
     rb->destroy();
   }
@@ -1198,7 +1100,6 @@ ObRbAggCell *ObRbAggAllocator::alloc()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate cell memory failed", K(ret), "size", sizeof(ObRbAggCell));
   } else if (OB_FAIL(alloced_rb_.set_refactored(reinterpret_cast<uint64_t>(rb_cell)))) {
-    LOG_WARN("push back failed", K(ret));
   } else {
     res_ptr = rb_cell;
   }
@@ -1212,7 +1113,6 @@ int ObRbAggAllocator::rb_serialize(ObString &rb_bin, ObRbAggCell *rb)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("rb is null", K(ret));
   } else if (OB_FAIL(rb->serialize(rb_bin))) {
-    LOG_WARN("serialize failed", K(ret));
   }
   return ret;
 }
@@ -1224,7 +1124,6 @@ int ObRbAggAllocator::rb_serialize(ObRbAggCell *rb)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("rb is null", K(ret));
   } else if (OB_FAIL(rb->serialize())) {
-    LOG_WARN("serialize failed", K(ret));
   }
   return ret;
 }

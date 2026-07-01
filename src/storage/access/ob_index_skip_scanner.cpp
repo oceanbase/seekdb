@@ -76,7 +76,6 @@ int ObAdvanceSkipScanner::init(
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("reverse scan is not supported", KR(ret), K(is_reverse_scan));
   } else if (OB_FAIL(complete_range_.deep_copy(scan_range, range_alloc_))) {
-    LOG_WARN("failed to deep copy scan range", KR(ret));
   } else {
     read_info_ = &read_info;
     stmt_alloc_ = &stmt_allocator;
@@ -104,7 +103,6 @@ int ObAdvanceSkipScanner::switch_info(
     LOG_WARN("unexpected argument in rescan", KR(ret),
              KP_(read_info), KP(&read_info), KP_(stmt_alloc), KP(&stmt_allocator), K(lbt()));
   } else if (OB_FAIL(complete_range_.deep_copy(scan_range, range_alloc_))) {
-    LOG_WARN("failed to deep copy scan range", KR(ret));
   } else {
     LOG_TRACE("[INDEX SKIP SCAN] success to switch info", KR(ret), K(*this));
   }
@@ -119,18 +117,15 @@ int ObAdvanceSkipScanner::advance_scan(const ObDatumRange &scan_range)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret), KP(this), K(lbt()));
   } else if (OB_FAIL(scan_range.end_key_.compare(complete_range_.end_key_, datum_utils_, cmp_ret, false/*compare_datum_cnt*/))) {
-    LOG_WARN("failed to compare end_key_", KR(ret), K(scan_range), K_(complete_range));
   } else if (cmp_ret != 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("endkey is not same", KR(ret), K(cmp_ret), K(scan_range), K_(complete_range));
   } else if (OB_FAIL(scan_range.start_key_.compare(complete_range_.start_key_, datum_utils_, cmp_ret))) {
-    LOG_WARN("failed to compare start_key_", KR(ret), K(scan_range), K_(complete_range));
   } else if (cmp_ret <= 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("new startkey is not greater", KR(ret), K(cmp_ret), K(scan_range), K_(complete_range));
   } else if (FALSE_IT(range_alloc_.reuse())) {
   } else if (OB_FAIL(complete_range_.deep_copy(scan_range, range_alloc_))) {
-    LOG_WARN("failed to deep copy scan range", KR(ret));
   } else {
     left_border_reached_ = false;
   }
@@ -158,7 +153,6 @@ int ObAdvanceSkipScanner::skip(ObMicroIndexInfo &index_info, ObIndexSkipState &p
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected complete range", KR(ret), K(prev_state), K(state), K_(complete_range), K(endkey), KPC(this));
     } else if (OB_FAIL(endkey.compare(left_border, datum_utils_, left_cmp_ret, cmp_datum_cnt))) {
-      LOG_WARN("failed to compare left border", KR(ret), K(prev_state), K(state), K(endkey), K_(complete_range), KPC(this));
     } else if (left_cmp_ret < 0 || (0 == left_cmp_ret && !border_flag.inclusive_start())) {
       state_determined = true;
       // CASE:1.1 in forward scan
@@ -219,7 +213,6 @@ int ObAdvanceSkipScanner::skip(
     bool range_covered = false;
     if (OB_FAIL(micro_scanner.skip_to_range(micro_start_, micro_last_, complete_range_, is_left_border, is_right_border,
                                             micro_current_, has_data, range_covered))) {
-      LOG_WARN("failed to skip to next prefix range", KR(ret), K(micro_scanner), KPC(this));
     } else if (has_data) {
       micro_start_ = MAX(micro_start_, micro_current_);
       left_border_reached_ = true;
@@ -251,13 +244,11 @@ int ObIndexSkipScanFactory::build_index_skip_scanner(
     LOG_WARN("invalid argument to build index skip scanner", KPC(range), KP(read_info));
   } else if (nullptr != skip_scanner) {
     if (OB_FAIL(skip_scanner->switch_info(is_reverse_scan, *range, *read_info, stmt_allocator))) {
-      LOG_WARN("failed to switch index skip scanner", KR(ret));
     }
   } else if (OB_ISNULL(skip_scanner = OB_NEWx(ObAdvanceSkipScanner, &stmt_allocator, read_info->get_datum_utils()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alloc index skip scanner", KR(ret));
   } else if (OB_FAIL(skip_scanner->init(is_reverse_scan, *range, *read_info, stmt_allocator))) {
-    LOG_WARN("failed to init index skip scanner", KR(ret));
   }
   if (OB_FAIL(ret) && nullptr != skip_scanner) {
     skip_scanner->~ObAdvanceSkipScanner();

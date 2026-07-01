@@ -79,7 +79,6 @@ int ObTableLoadPreSorter::ChunkSorter::work()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("chunk mgr is nullptr", KR(ret));
   } else if (OB_FAIL(chunk_mgr_->close_chunk(chunk_node_id_))) {
-    LOG_WARN("fail to sort chunk", KR(ret), K(chunk_node_id_));
   } else if (0 == pre_sorter_->dec_sort_chunk_task_cnt()
              && ATOMIC_LOAD(&pre_sorter_->all_trans_finished_)) {
     mem_ctx_->load_thread_cnt_ = 0; // used to let the sample thread exit
@@ -143,11 +142,8 @@ int ObTableLoadPreSorter::init()
     LOG_WARN("ObTableLoadPreSorter init twice", KR(ret), KP(this));
   } else {
     if (OB_FAIL(init_mem_ctx())) {
-      LOG_WARN("fail to init mem ctx", KR(ret));
     } else if (OB_FAIL(init_chunks_manager())) {
-      LOG_WARN("fail to init chunks manager", KR(ret));
     } else if (OB_FAIL(init_sample_task_scheduler())) {
-      LOG_WARN("fail to init sample task scheduler", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -175,9 +171,7 @@ int ObTableLoadPreSorter::init_mem_ctx()
   mem_ctx_.dump_thread_cnt_ = mem_ctx_.total_thread_cnt_;
   mem_ctx_.load_thread_cnt_ = mem_ctx_.total_thread_cnt_;
   if (OB_FAIL(mem_ctx_.init())) {
-    LOG_WARN("fail to init mem ctx", KR(ret));
   } else if (OB_FAIL(mem_ctx_.init_enc_params(store_ctx_->ctx_->param_.dup_action_, ctx_->schema_.column_descs_))) {
-    LOG_WARN("fail to init enc params", KR(ret));
   }
   return ret;
 }
@@ -189,7 +183,6 @@ int ObTableLoadPreSorter::init_chunks_manager()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new chunks_manager_", KR(ret));
   } else if (OB_FAIL(chunks_manager_->init(store_ctx_, &mem_ctx_))) {
-    LOG_WARN("fail to init chunks manager", KR(ret));
   }
   return ret;
 }
@@ -203,9 +196,7 @@ int ObTableLoadPreSorter::init_sample_task_scheduler()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new sample task scheduler", KR(ret));
   } else if (OB_FAIL(sample_task_scheduler_->init())) {
-    LOG_WARN("fail to init sample task scheduler", KR(ret));
   } else if (OB_FAIL(sample_task_scheduler_->start())) {
-    LOG_WARN("fail to start sample task scheduler", KR(ret));
   }
   return ret;
 }
@@ -217,9 +208,7 @@ int ObTableLoadPreSorter::start()
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadPreSorter not init", KR(ret));
   } else if (OB_FAIL(start_sample())) {
-    LOG_WARN("fail to start sample", KR(ret));
   } else if (OB_FAIL(start_dump())) {
-    LOG_WARN("fail to start dump", KR(ret));
   }
   return ret;
 }
@@ -232,13 +221,11 @@ int ObTableLoadPreSorter::close()
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadPreSorter not init", KR(ret));
   } else if (OB_FAIL(chunks_manager_->get_unclosed_chunks(unclosed_chunk_ids))) {
-    LOG_WARN("fail to get unclosed chunks", KR(ret));
   } else {
     inc_sort_chunk_task_cnt();
     ATOMIC_SET(&all_trans_finished_, true);
     for (int64_t i = 0; OB_SUCC(ret) && i < unclosed_chunk_ids.count(); i++) {
       if (OB_FAIL(close_chunk(unclosed_chunk_ids.at(i)))) {
-        LOG_WARN("fail to close chunk", KR(ret), K(i),K(unclosed_chunk_ids.at(i)));
       }
     }
     if (0 == dec_sort_chunk_task_cnt()) {
@@ -267,7 +254,6 @@ int ObTableLoadPreSorter::close_chunk(int64_t chunk_node_id)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ChunkSorter", KR(ret));
     } else if (OB_FAIL(mem_ctx_.mem_dump_queue_.push(chunk_sorter))) {
-      LOG_WARN("fail to push sort chunk task", KR(ret));
     }
     if (OB_FAIL(ret) && OB_NOT_NULL(chunk_sorter)) {
       chunk_sorter->~ChunkSorter();
@@ -282,13 +268,9 @@ int ObTableLoadPreSorter::start_sample()
   int ret = OB_SUCCESS;
   ObTableLoadTask *task = nullptr;
   if (OB_FAIL(ctx_->alloc_task(task))) {
-    LOG_WARN("fail to alloc task", KR(ret));
   } else if (OB_FAIL(task->set_processor<SampleTaskProcessor>(ctx_, &mem_ctx_))) {
-    LOG_WARN("fail to set sample task processor", KR(ret));
   } else if (OB_FAIL(task->set_callback<PreSortTaskCallback>(ctx_, this))) {
-    LOG_WARN("fail to set pre sort task callback", KR(ret));
   } else if (OB_FAIL(sample_task_scheduler_->add_task(0, task))) {
-    LOG_WARN("fail to add task", KR(ret), KPC(task));
   }
   if (OB_FAIL(ret)) {
     if (OB_NOT_NULL(task)) {
@@ -304,13 +286,9 @@ int ObTableLoadPreSorter::start_dump()
   for (int64_t i = 0; OB_SUCC(ret) && i < mem_ctx_.dump_thread_cnt_; ++i) {
     ObTableLoadTask *task = nullptr;
     if (OB_FAIL(ctx_->alloc_task(task))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     } else if (OB_FAIL(task->set_processor<DumpTaskProcessor>(ctx_, &mem_ctx_))) {
-      LOG_WARN("fail to set dump task processor", KR(ret));
     } else if (OB_FAIL(task->set_callback<PreSortTaskCallback>(ctx_, this))) {
-      LOG_WARN("fail to set pre sort task callback", KR(ret));
     } else if (OB_FAIL(store_ctx_->task_scheduler_->add_task(i, task))) {
-      LOG_WARN("fail to add task", KR(ret), KPC(task));
     }
     if (OB_FAIL(ret)) {
       if (OB_NOT_NULL(task)) {
@@ -327,19 +305,15 @@ int ObTableLoadPreSorter::start_finish()
   ObTableLoadTask *task = nullptr;
   // 1. assign task
   if (OB_FAIL(ctx_->alloc_task(task))) {
-    LOG_WARN("fail to alloc task", KR(ret));
   }
   // 2. Set processor
   else if (OB_FAIL(task->set_processor<FinishTaskProcessor>(ctx_, this))) {
-    LOG_WARN("fail to set finish task processor", KR(ret));
   }
   // 3. Set callback
   else if (OB_FAIL(task->set_callback<FinishTaskCallback>(ctx_))) {
-    LOG_WARN("fail to set finish task callback", KR(ret));
   }
   // 4. Put task into scheduler
   else if (OB_FAIL(store_ctx_->task_scheduler_->add_task(0, task))) {
-    LOG_WARN("fail to add task", KR(ret), KPC(task));
   }
   if (OB_FAIL(ret)) {
     if (nullptr != task) {
@@ -390,12 +364,10 @@ int ObTableLoadPreSorter::finish()
   table_store.set_table_data_desc(mem_ctx_.table_data_desc_);
   table_store.set_multiple_sstable();
   if (OB_FAIL(table_store.add_tables(mem_ctx_.tables_handle_))) {
-    LOG_WARN("fail to add tables", KR(ret));
   } else {
     mem_ctx_.reset();
     sample_task_scheduler_->stop();
     if (OB_FAIL(store_ctx_->handle_pre_sort_success())) {
-      LOG_WARN("fail to handle pre sort success", KR(ret));
     }
   }
   return ret;
@@ -420,7 +392,6 @@ public:
     int ret = OB_SUCCESS;
     ObDirectLoadMemSample sample(ctx_, mem_ctx_);
     if (OB_FAIL(sample.do_sample())) {
-      LOG_WARN("fail to do sample", KR(ret));
     }
     return ret;
   }
@@ -449,18 +420,15 @@ public:
     void *tmp = nullptr;
     while (OB_SUCC(ret) && OB_LIKELY(!mem_ctx_->has_error_)) {
       if (OB_FAIL(mem_ctx_->mem_dump_queue_.pop(tmp))) {
-        LOG_WARN("fail to pop", KR(ret));
       } else {
         if (OB_NOT_NULL(tmp)) {
           ObDirectLoadMemWorker *worker = static_cast<ObDirectLoadMemWorker *>(tmp);
           if (OB_FAIL(worker->work())) {
-            LOG_WARN("fail to do dump", KR(ret));
           }
           worker->~ObDirectLoadMemWorker();
           ob_free(worker);
         } else {
           if (OB_FAIL(mem_ctx_->mem_dump_queue_.push(nullptr))) {
-            LOG_WARN("fail to push nullptr", KR(ret));
           } else {
             break;
           }
@@ -491,7 +459,6 @@ public:
     int ret = ret_code;
     if (OB_SUCC(ret)) {
       if (OB_FAIL(pre_sorter_->handle_pre_sort_thread_finish())) {
-        LOG_WARN("fail to handle pre sort thread finish", KR(ret));
       }
     }
     if (OB_FAIL(ret)) {

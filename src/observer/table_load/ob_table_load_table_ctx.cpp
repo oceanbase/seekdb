@@ -68,9 +68,7 @@ int ObTableLoadTableCtx::new_exec_ctx(const ObString &des_exec_ctx_serialized_st
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to deserialize exe ctx", KR(ret));
     } else if (OB_FAIL(ob_write_string(allocator_, des_exec_ctx_serialized_str, tmp_str))) {
-      LOG_WARN("fail to copy string", KR(ret));
     } else if (OB_FAIL(des_exec_ctx_->deserialize(tmp_str.ptr(), tmp_str.length(), pos))) {
-      LOG_WARN("fail to deserialize exec ctx", KR(ret));
     }
   }
   return ret;
@@ -97,20 +95,12 @@ int ObTableLoadTableCtx::init(const ObTableLoadParam &param,
     param_ = param;
     ddl_param_ = ddl_param;
     if (OB_FAIL(schema_.init(param_.table_id_, ddl_param.schema_version_))) {
-      LOG_WARN("fail to init table load schema", KR(ret),
-               K(param_.table_id_), K(ddl_param.schema_version_));
     } else if (OB_FAIL(task_allocator_.init("TLD_TaskPool"))) {
-      LOG_WARN("fail to init allocator", KR(ret));
     } else if (OB_FAIL(trans_ctx_allocator_.init("TLD_TCtxPool"))) {
-      LOG_WARN("fail to init allocator", KR(ret));
     } else if (OB_FAIL(register_job_stat())) {
-      LOG_WARN("fail to register job stat", KR(ret));
     } else if (OB_FAIL(ObTableLoadUtils::create_session_info(session_info_, free_session_ctx_))) {
-      LOG_WARN("fail to create session info", KR(ret));
     } else if (OB_FAIL(ObTableLoadUtils::deep_copy(*session_info, *session_info_, allocator_))) {
-      LOG_WARN("fail to deep copy", KR(ret));
     } else if (OB_FAIL(new_exec_ctx(des_exec_ctx_serialized_str))) {
-      LOG_WARN("fail to new exec ctx", KR(ret));
     }
   }
 
@@ -148,9 +138,7 @@ int ObTableLoadTableCtx::register_job_stat()
     
     if (OB_FAIL(ObTableLoadUtils::deep_copy(schema_.table_name_, job_stat->table_name_,
                                             job_stat->allocator_))) {
-      LOG_WARN("fail to deep copy table name", KR(ret));
     } else if (OB_FAIL(ObGlobalLoadDataStatMap::getInstance()->register_job(temp_gid, job_stat))) {
-      LOG_WARN("fail to register job stat", KR(ret));
     } else {
       gid_ = temp_gid;
       job_stat_ = job_stat;
@@ -175,7 +163,6 @@ void ObTableLoadTableCtx::unregister_job_stat()
   if (gid_.is_valid()) {
     ObLoadDataStat *job_stat = nullptr;
     if (OB_FAIL(ObGlobalLoadDataStatMap::getInstance()->unregister_job(gid_, job_stat))) {
-      LOG_ERROR("fail to unregister job stat", KR(ret), K_(gid));
     } else if (OB_ISNULL(job_stat)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("unexpected null job stat", KR(ret), K_(gid));
@@ -215,9 +202,7 @@ int ObTableLoadTableCtx::init_coordinator_ctx(const ObIArray<uint64_t> &column_i
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObTableLoadCoordinatorCtx", KR(ret));
     } else if (OB_FAIL(coordinator_ctx->init(column_ids, tablet_ids, exec_ctx))) {
-      LOG_WARN("fail to init coordinator ctx", KR(ret));
     } else if (OB_FAIL(coordinator_ctx->set_status_inited())) {
-      LOG_WARN("fail to set coordinator status inited", KR(ret));
     } else {
       coordinator_ctx_ = coordinator_ctx;
     }
@@ -249,9 +234,7 @@ int ObTableLoadTableCtx::init_store_ctx(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObTableLoadStoreCtx", KR(ret));
     } else if (OB_FAIL(store_ctx->init(partition_id_array, target_partition_id_array))) {
-      LOG_WARN("fail to init store ctx", KR(ret));
     } else if (OB_FAIL(store_ctx->set_status_inited())) {
-      LOG_WARN("fail to set store status inited", KR(ret));
     } else {
       store_ctx_ = store_ctx;
     }

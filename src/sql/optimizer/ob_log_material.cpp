@@ -63,7 +63,6 @@ int ObLogMaterial::do_re_est_cost(EstimateCostInfo &param, double &card, double 
     LOG_WARN("get unexpected parallel degree", K(parallel), K(ret));
   } else if (OB_FALSE_IT(param.need_row_count_ = -1)) {
   } else if (OB_FAIL(SMART_CALL(child->re_est_cost(param, child_card, child_cost)))) {
-    LOG_WARN("failed to re est cost", K(ret));
   } else {
     ObOptimizerContext &opt_ctx = get_plan()->get_optimizer_context();
     op_cost = ObOptEstCost::cost_material(child_card / parallel, 

@@ -48,7 +48,6 @@ int ObIMicroBlockReader::locate_range(
     if (!is_left_border || range.get_start_key().is_min_rowkey()) {
       begin_idx = 0;
     } else if (OB_FAIL(find_bound(range, 0, begin_idx, equal, end_key_begin_idx, end_key_end_idx))) {
-      LOG_WARN("fail to get lower bound start key", K(ret));
     } else if (begin_idx == row_count_) {
       ret = OB_BEYOND_THE_RANGE;
     } else if (!range.get_border_flag().inclusive_start()) {
@@ -75,7 +74,6 @@ int ObIMicroBlockReader::locate_range(
                                end_key_begin_idx > begin_idx ? end_key_begin_idx : begin_idx,
                                end_idx,
                                equal))) {
-          LOG_WARN("fail to get lower bound endkey", K(ret));
         } else if (end_idx == row_count_) {
           --end_idx;
         } else if (is_index_block && !(equal && range.get_border_flag().inclusive_end() && is_percise_rowkey)) {
@@ -115,7 +113,6 @@ int ObIMicroBlockReader::locate_border_row_id(
   } else if (rowkey.is_max_rowkey()) {
     border_row_idx = end_idx;
   } else if (OB_FAIL(find_bound(rowkey, true, begin_idx, end_idx, border_row_idx, is_equal))) {
-    LOG_WARN("fail to get lower bound border key", K(ret), K(begin_idx), K(end_idx), K(rowkey));
   }
   LOG_DEBUG("locate border key row id", K(ret), K(rowkey), K(begin_idx), K(end_idx), K(border_row_idx), K(is_equal));
   return ret;
@@ -191,8 +188,6 @@ int ObIMicroBlockReader::filter_white_filter(
                    cmp_func,
                    sql::ObPushdownWhiteFilterNode::WHITE_OP_TO_CMP_OP[filter.get_op_type()],
                    cmp_ret))) {
-          LOG_WARN("Failed to compare datum", K(ret), K(datum), K(ref_datums.at(0)),
-              K(sql::ObPushdownWhiteFilterNode::WHITE_OP_TO_CMP_OP[filter.get_op_type()]));
         } else if (cmp_ret) {
           filtered = false;
         }
@@ -207,10 +202,8 @@ int ObIMicroBlockReader::filter_white_filter(
         } else if (datum.is_null()) {
           // Result of compare with null is null
         } else if (OB_FAIL(cmp_func(datum, ref_datums.at(0), cmp_ret_0))) {
-          LOG_WARN("Failed to compare datum", K(ret), K(datum), K(ref_datums.at(0)));
         } else if (cmp_ret_0 < 0) {
         } else if (OB_FAIL(cmp_func(datum, ref_datums.at(1), cmp_ret_1))) {
-          LOG_WARN("Failed to compare datum", K(ret), K(datum), K(ref_datums.at(0)));
         } else if (cmp_ret_1 <= 0) {
           //cmp_ret_0 >= 0 && cmp_ret_1 <= 0
           filtered = false;
@@ -220,7 +213,6 @@ int ObIMicroBlockReader::filter_white_filter(
       case sql::WHITE_OP_IN: {
         bool is_existed = false;
         if (OB_FAIL(filter.exist_in_set(datum, is_existed))) {
-          LOG_WARN("Failed to check object in hashset", K(ret), K(datum));
         } else if (is_existed) {
           filtered = false;
         }

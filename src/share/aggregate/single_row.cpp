@@ -55,7 +55,6 @@ int init_single_row_aggregates(RuntimeContext &agg_ctx, ObIAllocator &allocator,
       ret = init_agg_func<SingleRowAggregate<T_FUN_COUNT, VEC_TC_INTEGER, VEC_TC_INTEGER>>(
         agg_ctx, i, allocator, agg);
       if (OB_FAIL(ret)) {
-        LOG_WARN("init single row aggregate failed", K(ret));
       }
     } else if (aggr_info.is_implicit_first_aggr()) {// do nothing
     } else {
@@ -95,7 +94,6 @@ int init_single_row_aggregates(RuntimeContext &agg_ctx, ObIAllocator &allocator,
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(aggregates.push_back(agg))) {
-      SQL_LOG(WARN, "push back element failed", K(ret));
     }
   } // end for
   return ret;

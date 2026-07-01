@@ -94,11 +94,9 @@ OB_DEF_SERIALIZE(ObTempTableAccessVecOpInput)
   LST_DO_CODE(OB_UNIS_ENCODE, unfinished_count_ptr_);
   if (OB_SUCC(ret)) {
     if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, interm_result_ids_.count()))) {
-      LOG_WARN("fail to encode key ranges count", K(ret), K(interm_result_ids_));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < interm_result_ids_.count(); ++i) {
       if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, interm_result_ids_.at(i)))) {
-        LOG_WARN("fail to serialize key range", K(ret), K(i));
       }
     }
   }
@@ -115,7 +113,6 @@ OB_DEF_DESERIALIZE(ObTempTableAccessVecOpInput)
     int64_t count = 0;
     interm_result_ids_.reset();
     if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
-      LOG_WARN("fail to decode key ranges count", K(ret));
     } else { /*do nothing.*/ }
     for (int64_t i = 0; OB_SUCC(ret) && i < count; i ++) {
       int64_t interm_result_id = 0;
@@ -123,9 +120,7 @@ OB_DEF_DESERIALIZE(ObTempTableAccessVecOpInput)
         ret = OB_NOT_INIT;
         LOG_WARN("deserialize allocator is NULL", K(ret));
       } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &interm_result_id))) {
-        LOG_WARN("failed to decode vi64.", K(ret));
       } else if (OB_FAIL(interm_result_ids_.push_back(interm_result_id))) {
-        LOG_WARN("failed to push back into interm result ids.", K(ret));
       } else { /*do nothing.*/ }
     }
   }
@@ -176,23 +171,18 @@ int ObTempTableAccessVecOp::inner_rescan()
   if (!MY_SPEC.is_distributed_) {
     interm_result_ids_.reuse();
     if (OB_FAIL(get_local_interm_result_id(result_id))) {
-      LOG_WARN("failed to get local result id", K(ret));
     } else if (OB_FAIL(interm_result_ids_.push_back(result_id))) {
-      LOG_WARN("failed to push back result id", K(ret));
     }
   } else {
     int64_t index = 0;
     bool is_end = false;
     while (!is_end && OB_SUCC(ret)) {
       if (OB_FAIL(check_status())) {
-        LOG_WARN("check status failed", K(ret));
       } else 
       if (OB_FAIL(MY_INPUT.check_finish(is_end, index))) {
-        LOG_WARN("failed to check finish.", K(ret));
       } else if (!is_end) {
         result_id = MY_INPUT.interm_result_ids_.at(index);
         if (OB_FAIL(interm_result_ids_.push_back(result_id))) {
-          LOG_WARN("failed to push back result id", K(ret));
         }
       }
     }
@@ -247,7 +237,6 @@ int ObTempTableAccessVecOp::inner_get_next_batch(const int64_t max_row_cnt)
     LOG_WARN("failed to locate next interm result.", K(ret));
   } else if (OB_UNLIKELY(output_exprs_.empty() && !is_end)) {
     if (OB_FAIL(output_exprs_.prepare_allocate(col_store_it_.get_col_cnt()))) {
-      LOG_WARN("fail to init output_exprs_", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < MY_SPEC.output_indexs_.count(); ++i) {
         int64_t expr_idx = MY_SPEC.output_indexs_.at(i);
@@ -263,7 +252,6 @@ int ObTempTableAccessVecOp::inner_get_next_batch(const int64_t max_row_cnt)
       if (OB_ITER_END != ret) {
         LOG_WARN("failed to get next row", K(ret));
       } else if (OB_FAIL(locate_next_interm_result(is_end))) {
-        LOG_WARN("failed to locate next interm result.", K(ret));
       }
     } else {
       break;
@@ -295,7 +283,6 @@ int ObTempTableAccessVecOp::locate_next_interm_result(bool &is_end)
       result_id = interm_result_ids_.at(cur_idx_);
       ++cur_idx_;
       if (OB_FAIL(locate_interm_result(result_id))) {
-        LOG_WARN("failed to get interm reuslt", K(ret));
       }
     }
   } else if (!MY_SPEC.is_distributed_) {
@@ -303,23 +290,17 @@ int ObTempTableAccessVecOp::locate_next_interm_result(bool &is_end)
     if (is_started_) {
       is_end = true;
     } else if (OB_FAIL(get_local_interm_result_id(result_id))) {
-      LOG_WARN("failed to get local result id", K(ret));
     } else if (OB_FAIL(locate_interm_result(result_id))) {
-      LOG_WARN("failed to get interm reuslt", K(ret));
     } else if (OB_FAIL(interm_result_ids_.push_back(result_id))) {
-      LOG_WARN("failed to push back result id", K(ret));
     }
   } else {
     // Preempt the result id from the task pool for distributed result set and cache it.
     int64_t index = 0;
     if (OB_FAIL(MY_INPUT.check_finish(is_end, index))) {
-      LOG_WARN("failed to check finish.", K(ret));
     } else if (!is_end) {
       result_id = MY_INPUT.interm_result_ids_.at(index);
       if (OB_FAIL(locate_interm_result(result_id))) {
-        LOG_WARN("failed to get interm reuslt", K(ret));
       } else if (OB_FAIL(interm_result_ids_.push_back(result_id))) {
-        LOG_WARN("failed to push back result id", K(ret));
       }
     }
   }
@@ -344,7 +325,6 @@ int ObTempTableAccessVecOp::locate_interm_result(int64_t result_id)
   // are mutually exclusive
   if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->atomic_get_interm_result_info(
        dtl_int_key, result_info_guard_))) {
-    LOG_WARN("failed to create row store.", K(ret));
   } else if (FALSE_IT(result_info = result_info_guard_.result_info_)) {
   // After getting the intermediate result, need to judge whether the result is readable.
   } else if (OB_SUCCESS != result_info->ret_) {
@@ -360,7 +340,6 @@ int ObTempTableAccessVecOp::locate_interm_result(int64_t result_id)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("row store is null.", K(ret));
   } else if (OB_FAIL(result_info->get_column_store()->begin(col_store_it_))) {
-    LOG_WARN("failed to begin chunk row store.", K(ret));
   } else { /*do nothing.*/ }
   return ret;
 }

@@ -58,7 +58,6 @@ int ObCreateContextResolver::resolve(const ParseNode &parse_tree)
                                     K(allocator_), K(session_info_),
                                     K(params_.query_ctx_));
   } else if (OB_FAIL(ObResolverUtils::check_sync_ddl_user(session_info_, is_sync_ddl_user))) {
-    LOG_WARN("Failed to check sync_dll_user", K(ret));
   } else if (OB_UNLIKELY(NULL == (stmt = create_stmt<ObCreateContextStmt>()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("create context stmt failed", K(ret));
@@ -80,18 +79,14 @@ int ObCreateContextResolver::resolve(const ParseNode &parse_tree)
       schema_name = session_info_->get_database_name();
     } else if (OB_FAIL(resolve_context_namespace(*parse_tree.children_[TRUSTED_PACKAGE_NAME]->children_[0],
                                                   schema_name))) {
-      LOG_WARN("failed to resolve database name", K(ret));
     }
     // check namesapce && package_name
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(resolve_context_namespace(*parse_tree.children_[CONTEXT_NAMESPACE],
                                                   ctx_namespace))) {
-      LOG_WARN("failed to resolve namespace", K(ret));
     } else if (OB_FAIL(resolve_context_namespace(*parse_tree.children_[TRUSTED_PACKAGE_NAME]->children_[1],
                                                   package_name))) {
-      LOG_WARN("failed to resolve package name", K(ret));
     } else if (OB_FAIL(check_context_namespace(ctx_namespace))) {
-      LOG_WARN("failed to check ctx name", K(ret));
     } else if (OB_FAIL(ctx_schema.set_namespace(ctx_namespace))
                || OB_FAIL(ctx_schema.set_trusted_package(package_name))
                || OB_FAIL(ctx_schema.set_schema_name(schema_name))) {
@@ -120,9 +115,7 @@ int ObCreateContextResolver::resolve_context_namespace(const ParseNode &namespac
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL", K(ret));
   } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-    LOG_WARN("fail to get collation_connection", K(ret));
   } else if (OB_FAIL(ObSQLUtils::check_and_convert_context_namespace(cs_type, ctx_namespace))) {
-    LOG_WARN("failed to check ctx namespace", K(ret));
   }
   return ret;
 }
@@ -140,25 +133,21 @@ int ObCreateContextResolver::check_context_namespace(const ObString &ctx_namespa
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL", K(ret));
   } else if (OB_FAIL(session_info_->get_collation_connection(dst_cs))) {
-    LOG_WARN("fail to get collation_connection", K(ret));
   } else if (OB_FAIL(sql::ObExprUtil::convert_string_collation(in_str1, src_cs,
                                                                out_str, dst_cs,
                                                                *allocator_))) {
-    LOG_WARN("failed to convert string to target collation", K(ret));
   } else if (0 == out_str.case_compare(ctx_namespace)) {
     ret = OB_OBJ_ALREADY_EXIST;
     LOG_USER_ERROR(OB_OBJ_ALREADY_EXIST);
   } else if (OB_FAIL(sql::ObExprUtil::convert_string_collation(in_str2, src_cs,
                                                                out_str, dst_cs,
                                                                *allocator_))) {
-    LOG_WARN("failed to convert string to target collation", K(ret));
   } else if (0 == out_str.case_compare(ctx_namespace)) {
     ret = OB_ERR_INVALID_NAMESPACE_VALUE;
     LOG_USER_ERROR(OB_ERR_INVALID_NAMESPACE_VALUE);
   } else if (OB_FAIL(sql::ObExprUtil::convert_string_collation(in_str3, src_cs,
                                                                out_str, dst_cs,
                                                                *allocator_))) {
-    LOG_WARN("failed to convert string to target collation", K(ret));
   } else if (out_str.length() <= ctx_namespace.length()) {
     ObString head(out_str.length(), ctx_namespace.ptr());
     if (0 == out_str.case_compare(head)) {

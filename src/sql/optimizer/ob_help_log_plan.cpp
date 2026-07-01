@@ -34,21 +34,18 @@ int ObHelpLogPlan::generate_normal_raw_plan()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(get_stmt()), K(ret));
   } else if (OB_FAIL(allocate_values_as_top(top))) {
-    LOG_WARN("failed to allocate expr values as top", K(ret));
   } else if (OB_ISNULL(values = static_cast<ObLogValues *>(top)) 
              || OB_UNLIKELY(LOG_VALUES != top->get_type())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(top), K(ret));
   } else if (OB_FAIL(values->set_row_store(
                      static_cast<const ObHelpStmt*>(get_stmt())->get_row_store()))) {
-    LOG_WARN("failed to set row store", K(ret));
   } else {
     top->mark_is_plan_root();
     set_plan_root(top);
     get_optimizer_context().get_all_exprs().reuse();
     for (int64_t i = 0; OB_SUCC(ret) && i < values->get_col_count(); ++i) {
       if (OB_FAIL(allocate_output_expr_for_values_op(*values))) {
-        LOG_WARN("failed to allocate output expr", K(ret));
       }
     }
   }

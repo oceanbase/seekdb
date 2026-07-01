@@ -77,9 +77,7 @@ int ObDirectLoadLobBuilder::init(ObDirectLoadInsertTabletContext *insert_tablet_
     extra_rowkey_cnt_ = ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt();
     lob_inrow_threshold_ = insert_tablet_ctx->get_lob_inrow_threshold();
     if (OB_FAIL(insert_tablet_ctx->get_ddl_agent(tmp_ddl_agent_))) {
-      LOG_WARN("fail to get ddl_agent", K(ret));
     } else if (OB_FAIL(init_sstable_slice_ctx())) {
-      LOG_WARN("fail to init sstable slice ctx", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -91,12 +89,10 @@ int ObDirectLoadLobBuilder::init_sstable_slice_ctx()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(insert_lob_tablet_ctx_->get_write_ctx(write_ctx_))) {
-    LOG_WARN("fail to get write ctx", KR(ret));
   } else if (OB_FAIL(insert_lob_tablet_ctx_->open_sstable_slice(write_ctx_.start_seq_,
                                                                 0/*slice_idx*/,
                                                                 current_lob_slice_id_,
                                                                 tmp_ddl_agent_))) {
-    LOG_WARN("fail to construct sstable slice", KR(ret));
   }
   return ret;
 }
@@ -105,9 +101,7 @@ int ObDirectLoadLobBuilder::switch_sstable_slice()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(insert_lob_tablet_ctx_->close_sstable_slice(current_lob_slice_id_, 0/*slice_idx*/, tmp_ddl_agent_))) {
-    LOG_WARN("fail to close sstable slice", KR(ret));
   } else if (OB_FAIL(init_sstable_slice_ctx())) {
-    LOG_WARN("fail to init sstable slice ctx", KR(ret));
   }
   return ret;
 }
@@ -135,7 +129,6 @@ int ObDirectLoadLobBuilder::check_can_skip(const ObDatumRow &datum_row, bool &ca
     const ObDatum &datum = datum_row.storage_datums_[column_idx];
     if (datum.is_null()) {
     } else if (OB_FAIL(check_can_skip(const_cast<char *>(datum.ptr_), datum.len_, can_skip))) {
-      LOG_WARN("fail to check lob can skip", KR(ret), K(column_idx), K(datum));
     }
   }
   return ret;
@@ -160,8 +153,6 @@ int ObDirectLoadLobBuilder::check_can_skip(const ObBatchDatumRows &datum_rows, b
           for (int64_t j = 0; OB_SUCC(ret) && can_skip && j < datum_rows.row_count_; ++j) {
             if (nulls->at(j)) {
             } else if (OB_FAIL(check_can_skip(data + offsets[j], offsets[j + 1] - offsets[j], can_skip))) {
-              LOG_WARN("fail to check lob can skip", KR(ret), K(column_idx), K(j), KP(data),
-                       K(offsets[j]), K(offsets[j + 1]));
             }
           }
         }
@@ -176,8 +167,6 @@ int ObDirectLoadLobBuilder::check_can_skip(const ObBatchDatumRows &datum_rows, b
           for (int64_t j = 0; OB_SUCC(ret) && can_skip && j < datum_rows.row_count_; ++j) {
             if (nulls->at(j)) {
             } else if (OB_FAIL(check_can_skip(ptrs[j], lens[j], can_skip))) {
-              LOG_WARN("fail to check lob can skip", KR(ret), K(column_idx), K(j), KP(ptrs[j]),
-                       K(lens[j]));
             }
           }
         }
@@ -190,7 +179,6 @@ int ObDirectLoadLobBuilder::check_can_skip(const ObBatchDatumRows &datum_rows, b
           const ObDatum &datum = datums[j];
           if (datum.is_null()) {
           } else if (OB_FAIL(check_can_skip(const_cast<char *>(datum.ptr_), datum.len_, can_skip))) {
-            LOG_WARN("fail to check lob can skip", KR(ret), K(column_idx), K(j), K(datum));
           }
         }
         break;
@@ -200,7 +188,6 @@ int ObDirectLoadLobBuilder::check_can_skip(const ObBatchDatumRows &datum_rows, b
         const ObDatum &datum = uniform_vec->get_datums()[0];
         if (datum.is_null()) {
         } else if (OB_FAIL(check_can_skip(const_cast<char *>(datum.ptr_), datum.len_, can_skip))) {
-          LOG_WARN("fail to check lob can skip", KR(ret), K(column_idx), K(datum));
         }
         break;
       }
@@ -234,8 +221,6 @@ int ObDirectLoadLobBuilder::check_can_skip(const ObDirectLoadBatchRows &batch_ro
           if (nulls->at(row_idx)) {
           } else if (OB_FAIL(check_can_skip(data + offsets[row_idx],
                                             offsets[row_idx + 1] - offsets[row_idx], can_skip))) {
-            LOG_WARN("fail to check lob can skip", KR(ret), K(column_idx), K(j), K(row_idx),
-                     KP(data), K(offsets[row_idx]), K(offsets[row_idx + 1]));
           }
         }
         break;
@@ -249,8 +234,6 @@ int ObDirectLoadLobBuilder::check_can_skip(const ObDirectLoadBatchRows &batch_ro
           const uint16_t row_idx = selector[j];
           if (nulls->at(row_idx)) {
           } else if (OB_FAIL(check_can_skip(ptrs[row_idx], lens[row_idx], can_skip))) {
-            LOG_WARN("fail to check lob can skip", KR(ret), K(column_idx), K(j), K(row_idx),
-                     KP(ptrs[row_idx]), K(lens[row_idx]));
           }
         }
         break;
@@ -270,7 +253,6 @@ int ObDirectLoadLobBuilder::append_row(ObDatumRow &datum_row)
   bool can_skip = false;
   lob_allocator_->reuse();
   if (OB_FAIL(check_can_skip(datum_row, can_skip))) {
-    LOG_WARN("fail to check can skip", KR(ret), K(datum_row));
   } else if (can_skip) {
     // do nothing
   } else if (write_ctx_.pk_interval_.remain_count() < lob_column_cnt_ &&
@@ -281,8 +263,6 @@ int ObDirectLoadLobBuilder::append_row(ObDatumRow &datum_row)
                                                                 write_ctx_.pk_interval_,
                                                                 datum_row,
                                                                 tmp_ddl_agent_))) {
-    LOG_WARN("fail to fill lob sstable slice", K(ret), KP(insert_lob_tablet_ctx_),
-             K(current_lob_slice_id_), K(write_ctx_.pk_interval_), K(datum_row));
   }
   return ret;
 }
@@ -294,7 +274,6 @@ int ObDirectLoadLobBuilder::append_batch(ObBatchDatumRows &datum_rows)
   bool can_skip = false;
   lob_allocator_->reuse();
   if (OB_FAIL(check_can_skip(datum_rows, can_skip))) {
-    LOG_WARN("fail to check can skip", KR(ret), K(datum_rows));
   } else if (can_skip) {
     // do nothing
   } else if (write_ctx_.pk_interval_.remain_count() < lob_cnt && OB_FAIL(switch_sstable_slice())) {
@@ -304,8 +283,6 @@ int ObDirectLoadLobBuilder::append_batch(ObBatchDatumRows &datum_rows)
                                                                 write_ctx_.pk_interval_,
                                                                 datum_rows,
                                                                 tmp_ddl_agent_))) {
-    LOG_WARN("fail to fill lob sstable slice batch", K(ret), KP(insert_lob_tablet_ctx_),
-             K(current_lob_slice_id_), K(write_ctx_.pk_interval_), K(datum_rows));
   }
   return ret;
 }
@@ -320,7 +297,6 @@ int ObDirectLoadLobBuilder::append_lob(ObDatumRow &datum_row)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lob builder is closed", KR(ret));
   } else if (OB_FAIL(append_row(datum_row))) {
-    LOG_WARN("fail to append row", KR(ret), K(datum_row));
   }
   return ret;
 }
@@ -335,7 +311,6 @@ int ObDirectLoadLobBuilder::append_lob(ObBatchDatumRows &datum_rows)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lob builder is closed", KR(ret));
   } else if (OB_FAIL(append_batch(datum_rows))) {
-    LOG_WARN("fail to append batch", KR(ret), K(datum_rows));
   }
   return ret;
 }
@@ -382,11 +357,8 @@ int ObDirectLoadLobBuilder::append_lob(ObDirectLoadDatumRow &datum_row,
     LOG_WARN("fail to init datum row", KR(ret));
   } else {
     if (OB_FAIL(fill_into_datum_row(datum_row, row_flag))) {
-      LOG_WARN("fail to fill into datum row", KR(ret));
     } else if (OB_FAIL(append_row(datum_row_))) {
-      LOG_WARN("fail to append row", KR(ret), K(datum_row_));
     } else if (OB_FAIL(fetch_from_datum_row(datum_row, row_flag))) {
-      LOG_WARN("fail to fetch from datum row", KR(ret));
     }
   }
   return ret;
@@ -404,7 +376,6 @@ int ObDirectLoadLobBuilder::fill_into_datum_row(const ObDirectLoadBatchRows &bat
     ObDirectLoadVector *vector = batch_rows.get_vectors().at(src_column_idx);
     ObDatum &datum = datum_row_.storage_datums_[dest_column_idx];
     if (OB_FAIL(vector->get_datum(row_idx, datum))) {
-      LOG_WARN("fail to get datum", KR(ret));
     }
   }
   return ret;
@@ -422,7 +393,6 @@ int ObDirectLoadLobBuilder::fetch_from_datum_row(const ObDirectLoadBatchRows &ba
     ObDirectLoadVector *vector = batch_rows.get_vectors().at(src_column_idx);
     const ObDatum &datum = datum_row_.storage_datums_[dest_column_idx];
     if (OB_FAIL(vector->set_datum(row_idx, datum))) {
-      LOG_WARN("fail to set datum", KR(ret));
     }
   }
   return ret;
@@ -444,18 +414,14 @@ int ObDirectLoadLobBuilder::append_lob(const ObDirectLoadBatchRows &batch_rows,
   } else {
     bool can_skip = false;
     if (OB_FAIL(check_can_skip(batch_rows, selector, size, can_skip))) {
-      LOG_WARN("fail to check can skip", KR(ret));
     } else if (can_skip) {
     } else {
       // Do not change the ddl interface for now, here we process it line by line
       for (int64_t i = 0; OB_SUCC(ret) && i < size; ++i) {
         const int64_t row_idx = selector[i];
         if (OB_FAIL(fill_into_datum_row(batch_rows, row_idx))) {
-          LOG_WARN("fail to fill into datum row", KR(ret));
         } else if (OB_FAIL(append_row(datum_row_))) {
-          LOG_WARN("fail to append row", KR(ret), K(datum_row_));
         } else if (OB_FAIL(fetch_from_datum_row(batch_rows, row_idx))) {
-          LOG_WARN("fail to fetch from datum row", KR(ret));
         }
       }
     }
@@ -474,7 +440,6 @@ int ObDirectLoadLobBuilder::close()
     LOG_WARN("tablet lob builder is closed", KR(ret));
   } else {
     if (OB_FAIL(insert_lob_tablet_ctx_->close_sstable_slice(current_lob_slice_id_, 0/*slice_idx*/, tmp_ddl_agent_))) {
-      LOG_WARN("fail to close sstable slice ", KR(ret));
     } else {
       current_lob_slice_id_ = 0;
       is_closed_ = true;

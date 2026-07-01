@@ -124,9 +124,7 @@ int ObLogMonitor::record_access_mode_change_event(const int64_t palf_id,
   char prev_access_mode_str[MAX_BUF_LEN] = {'\0'};
   char curr_access_mode_str[MAX_BUF_LEN] = {'\0'};
   if (OB_FAIL(palf::access_mode_to_string(prev_access_mode, prev_access_mode_str, sizeof(prev_access_mode_str)))) {
-    PALF_LOG(WARN, "access_mode_to_string failed", K(prev_access_mode));
   } else if (OB_FAIL(palf::access_mode_to_string(curr_access_mode, curr_access_mode_str, sizeof(curr_access_mode_str)))) {
-    PALF_LOG(WARN, "access_mode_to_string failed", K(prev_access_mode));
   } else if (OB_NOT_NULL(extra_info)) {
     SERVER_EVENT_ADD_WITH_RETRY(LOG_MONITOR_EVENT_FMT_PREFIX,
         "PREV_MODE_VERSION", prev_mode_version,

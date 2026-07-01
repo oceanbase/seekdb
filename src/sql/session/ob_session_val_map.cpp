@@ -74,7 +74,6 @@ int ObSessionValMap::init(int64_t free_threshold,
 
   if (OB_FAIL(map_.create(bucket_num, &var_name_val_map_allocer_,
                                        &bucket_allocator_wrapper_))) {
-    _OB_LOG(WARN, "fail to create hashmap:ret[%d]", ret);
   }
   return ret;
 }
@@ -108,17 +107,11 @@ int ObSessionValMap::set_refactored(const common::ObString &name, const ObSessio
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid internal args", KP(str_buf_[current_buf_index_]), K(name), K(sess_var));
   } else if (OB_FAIL(free_mem())) {
-    LOG_WARN("fail to free mem", K(ret));
   } else if (OB_FAIL(str_buf_[current_buf_index_]->write_string(name, &tmp_name))) {
-    LOG_WARN("fail to write name to string_buf", K(ret), K(current_buf_index_),
-             K(name), K(sess_var));
   } else if (OB_FAIL(str_buf_[current_buf_index_]->write_obj(sess_var.value_,
                                                              &tmp_sess_var.value_))) {
-    LOG_WARN("fail to write obj to string_buf", K(ret), K(current_buf_index_),
-             K(name), K(sess_var));
   } else if (FALSE_IT(tmp_sess_var.meta_ = sess_var.meta_)) {
   } else if (OB_FAIL(map_.set_refactored(tmp_name, tmp_sess_var, 1))) {
-    LOG_WARN("fail to add item to hash", K(ret), K(tmp_name), K(tmp_sess_var));
   }
   return ret;
 }
@@ -163,8 +156,6 @@ int ObSessionValMap::free_mem()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid internal args", KP(str_buf_[current_buf_index_]));
   } else if (str_buf_[current_buf_index_]->used() > next_free_mem_point_) {
-    _OB_LOG(DEBUG, "string buf[%d] is large[%ld], switch string buf", current_buf_index_,
-              str_buf_[current_buf_index_]->used());
     int32_t next_index = (current_buf_index_ == 0 ? 1 : 0);
 
     int64_t count = 0;
@@ -173,19 +164,15 @@ int ObSessionValMap::free_mem()
       for (iter = map_.begin(); OB_SUCC(ret) && iter != map_.end(); ++ iter) {
         count ++;
         if (OB_FAIL(str_buf_[next_index]->write_string(iter->first, &(iter->first)))) {
-          _OB_LOG(WARN, "fail to write string:ret[%d]", ret);
         } else if (OB_FAIL(str_buf_[next_index]->write_obj(iter->second.value_,
                                                            &(iter->second.value_)))) {
-          _OB_LOG(WARN, "fail to write obj:ret[%d]", ret);
         }
       }
     }
-    _OB_LOG(DEBUG, "[%ld] val migrate", count);
     if (OB_SUCC(ret)) {
       str_buf_[current_buf_index_]->reuse();
       current_buf_index_ = next_index;
       next_free_mem_point_ = std::max(2 * str_buf_[next_index]->used(), str_buf_free_threshold_);
-      _OB_LOG(DEBUG, "next_free_mem_point_[%ld]", next_free_mem_point_);
     }
   }
   return ret;
@@ -219,7 +206,6 @@ DEFINE_DESERIALIZE(ObSessionValMap)
   ObSessionVariable value;
   if (num_of_entries > 0 && !map_.created()) {
     if (OB_FAIL(init(256 * 1024, 64, NULL))) {
-      SQL_ENG_LOG(WARN, "init map failed", K(ret));
     }
   }
   for (int64_t i = 0; (OB_SUCC(ret)) && (i < num_of_entries); ++i) {
@@ -230,7 +216,6 @@ DEFINE_DESERIALIZE(ObSessionValMap)
     OB_UNIS_DECODE(value.value_);
     ret = this->set_refactored(key,value);
     if (OB_FAIL(ret)) {
-      SQL_ENG_LOG(WARN, "Insert value into map failed", K(ret));
     }
   }
   return ret;

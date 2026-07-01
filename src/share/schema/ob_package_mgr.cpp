@@ -39,7 +39,6 @@ ObSimplePackageSchema &ObSimplePackageSchema::operator =(const ObSimplePackageSc
     type_ = other.get_type();
     comp_flag_ = other.get_comp_flag();
     if (OB_FAIL(deep_copy_str(other.package_name_, package_name_))) {
-      LOG_WARN("Fail to deep copy package name", K(ret));
     }
     if (OB_FAIL(ret)) {
       error_ret_ = ret;
@@ -86,9 +85,7 @@ int ObPackageMgr::init()
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(package_id_map_.init())) {
-    LOG_WARN("init package id map failed", K(ret));
   } else if (OB_FAIL(package_name_map_.init())) {
-    LOG_WARN("init package name map failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -152,7 +149,6 @@ int ObPackageMgr::deep_copy(const ObPackageMgr &other)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", K(package), K(ret));
       } else if (OB_FAIL(add_package(*package))) {
-        LOG_WARN("add package failed", K(*package), K(ret));
       }
     }
   }
@@ -190,7 +186,6 @@ int ObPackageMgr::add_packages(const ObIArray<ObSimplePackageSchema> &package_sc
   } else {
     FOREACH_CNT_X(package_schema, package_schemas, OB_SUCC(ret)) {
       if (OB_FAIL(add_package(*package_schema))) {
-        LOG_WARN("add package failed", K(ret), "package_schema", *package_schema);
       }
     }
   }
@@ -214,7 +209,6 @@ int ObPackageMgr::add_package(const ObSimplePackageSchema &package_schema)
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_,
                                                  package_schema,
                                                  new_package_schema))) {
-    LOG_WARN("alloc schema failed", K(ret));
   } else if (OB_ISNULL(new_package_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret), K(new_package_schema));
@@ -223,7 +217,6 @@ int ObPackageMgr::add_package(const ObSimplePackageSchema &package_schema)
                                            compare_package,
                                            equal_package,
                                            replaced_package))) {
-    LOG_WARN("failed to add package schema", K(ret));
   } else {
     int over_write = 1;
     int hash_ret = package_id_map_.set_refactored(new_package_schema->get_package_id(),
@@ -267,7 +260,6 @@ int ObPackageMgr::del_package(const ObTenantPackageId &package_id)
   } else if (OB_FAIL(package_infos_.remove_if(package_id, compare_with_tenant_package_id,
                                                 equal_with_tenant_package_id,
                                                 schema_to_del))) {
-    LOG_WARN("failed to remove package schema, ", K(package_id), K(ret));
   } else if (OB_ISNULL(schema_to_del)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("removed package schema return NULL, ", K(package_id), K(ret));
@@ -374,7 +366,6 @@ int ObPackageMgr::get_package_schemas_in_tenant(ObIArray<const ObSimplePackageSc
     } else if (false) {
       is_stop = true;
     } else if (OB_FAIL(package_schemas.push_back(package))) {
-      LOG_WARN("push back package failed", K(ret));
     }
   }
 
@@ -401,7 +392,6 @@ int ObPackageMgr::get_package_schemas_in_database(uint64_t database_id,
     } else if (package->get_database_id() != database_id) {
       // do-nothing
     } else if (OB_FAIL(package_schemas.push_back(package))) {
-      LOG_WARN("push back package failed", K(ret));
     }
   }
 

@@ -74,7 +74,6 @@ int ObAggGroupVec::eval(blocksstable::ObStorageDatum &datum, const int64_t row_c
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Unexpected null agg cell", K(ret), K(i), KP(agg_cell));
     } else if (OB_FAIL(agg_cell->eval(datum, row_count))) {
-      LOG_WARN("Failed to aggregate one datum", K(ret), K(datum), K(row_count));
     }
   }
   return ret;
@@ -104,7 +103,6 @@ int ObAggGroupVec::eval_batch(
     } else if (agg_cell->is_agg_finish(pd_row_id_ctx)) {
       LOG_DEBUG("aggregate has been pushdown to decoder", K(pd_row_id_ctx), K(agg_cell->get_agg_row_id()));
     } else if (OB_FAIL(agg_cell->eval_batch(reader, col_offset, pd_row_id_ctx.row_ids_, pd_row_id_ctx.get_row_count()))) {
-      LOG_WARN("Failed to aggregate batch rows", K(ret), K(pd_row_id_ctx));
     }
   }
   return ret;
@@ -119,7 +117,6 @@ int ObAggGroupVec::fill_index_info(const blocksstable::ObMicroIndexInfo &index_i
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Unexpected null agg cell", K(ret), K(i), KP(agg_cell));
     } else if (OB_FAIL(agg_cell->eval_index_info(index_info, is_cg))) {
-      LOG_WARN("Failed to eval index info", K(ret), K(i), K(index_info), K(is_cg), KPC(this));
     }
   }
   return ret;
@@ -144,7 +141,6 @@ int ObAggGroupVec::agg_pushdown_decoder(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Unexpected null agg cell", K(ret), K(i), KP(agg_cell));
       } else if (OB_FAIL(agg_cell->agg_pushdown_decoder(reader, col_offset, pd_row_id_ctx))) {
-        LOG_WARN("Failed to pushdown aggregate to decoder", K(ret), K(i), K(col_offset), KP(reader), K(pd_row_id_ctx));
       } else if (!pd_row_id_ctx.is_reverse_) {
         agg_row_id_ = i == 0 ? agg_cell->get_agg_row_id() : MIN(agg_row_id_, agg_cell->get_agg_row_id());
       } else {
@@ -161,7 +157,6 @@ int ObAggGroupVec::collect_result()
   for (int64_t i = 0; OB_SUCC(ret) && i < agg_cells_.count(); ++i) {
     ObAggCellVec *agg_cell = agg_cells_.at(i);
     if (OB_FAIL(agg_cell->collect_result(true/*fill_output*/))) {
-      LOG_WARN("Failed to collect results in aggr cell", K(ret));
     }
   }
   return ret;
@@ -174,7 +169,6 @@ int ObAggGroupVec::can_use_index_info(const blocksstable::ObMicroIndexInfo &inde
   for (int64_t i = 0; OB_SUCC(ret) && can_agg && i < agg_cells_.count(); ++i) {
     ObAggCellVec *agg_cell = agg_cells_.at(i);
     if (OB_FAIL(agg_cell->can_use_index_info(index_info, col_index, can_agg))) {
-      LOG_WARN("Failed to collect results in aggr cell", K(ret));
     }
   }
   return ret;
@@ -312,13 +306,9 @@ int ObAggregatedStoreVec::init(const ObTableAccessParam &param, common::hash::Ob
         K(param.iter_param_.out_cols_project_->count()),
         K(param.aggregate_exprs_->count()), K(param.iter_param_.agg_cols_project_->count()));
   } else if (OB_FAIL(pd_agg_ctx_.init(param, 1))) {
-    LOG_WARN("Failed to init pushdown agg ctx", K(ret), K(param));
   } else if (OB_FAIL(init_agg_groups(param))) {
-    LOG_WARN("Failed to init aggregate groups", K(ret));
   } else if (OB_FAIL(check_agg_store_valid())) {
-    LOG_WARN("Invalid aggregate store status", K(ret));
   } else if (OB_FAIL(ObVectorStore::init(param, &col_mask_set_))) {
-    LOG_WARN("Failed to init ObVectorStore", K(ret));
   }
   return ret;
 }
@@ -344,7 +334,6 @@ int ObAggregatedStoreVec::init_agg_groups(const ObTableAccessParam &param)
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("Faile to alloc memory for ObAggrGroupVec", K(ret));
       } else if (OB_FAIL(agg_groups_.push_back(agg_group))) {
-        LOG_WARN("Failed to push aggr_group", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -362,17 +351,14 @@ int ObAggregatedStoreVec::init_agg_groups(const ObTableAccessParam &param)
                                        col_offset, col_param, is_pad_char_to_full_length(context_.sql_mode_));
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(pd_agg_factory_.alloc_cell(basic_info, agg_cell, agg_idx, exclude_null))) {
-        LOG_WARN("Failed to alloc aggregate cell", K(ret));
       } else if (OB_COUNT_AGG_PD_COLUMN_ID == col_offset) { // COUNT(*) is added to the first agg_group
         ObAggGroupVec *first_agg_group = nullptr;
         if (OB_ISNULL(first_agg_group = agg_groups_.at(0))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Unexpected null agg group", K(ret));
         } else if (OB_FAIL(first_agg_group->agg_cells_.push_back(agg_cell))) {
-          LOG_WARN("Failed to push agg cell", K(ret));
         }
       } else if (OB_FAIL(agg_group->agg_cells_.push_back(agg_cell))) {
-        LOG_WARN("Failed to push agg cell", K(ret));
       } else {
         pre_offset = col_offset;
       }
@@ -386,7 +372,6 @@ int ObAggregatedStoreVec::check_agg_store_valid()
   int ret = OB_SUCCESS;
   ObMemAttr attr(common::ObModIds::OB_HASH_BUCKET);
   if (OB_FAIL(col_mask_set_.create(agg_groups_.count() * 2, attr))) {
-    LOG_WARN("Failed to create mask column set", K(ret), K(agg_groups_.count()));
   }
   for (int i = 0; OB_SUCC(ret) && i < agg_groups_.count(); ++i) {
     ObAggGroupVec *agg_group = agg_groups_.at(i);
@@ -396,7 +381,6 @@ int ObAggregatedStoreVec::check_agg_store_valid()
       agg_group->need_access_data_ |= agg_cell->need_access_data();
       agg_group->need_get_row_ids_ |= agg_cell->need_get_row_ids();
       if (OB_FAIL(agg_group->set_agg_type_flag(agg_type))) {
-        LOG_WARN("Failed to set agg_type_flag", K(ret), K(agg_type));
       }
     }
     if (OB_FAIL(ret)) {
@@ -434,7 +418,6 @@ int ObAggregatedStoreVec::can_use_index_info(const blocksstable::ObMicroIndexInf
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Unexpected null aggregate group", K(ret), KP(agg_group));
       } else if (OB_FAIL(agg_group->can_use_index_info(index_info, agg_group->col_index_, can_agg))) {
-        LOG_WARN("Failed to judge whether agg_group can agg index info", K(ret));
       }
     }
   }
@@ -455,7 +438,6 @@ int ObAggregatedStoreVec::fill_index_info(const blocksstable::ObMicroIndexInfo &
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Unexpected null aggregate group", K(ret), KP(agg_group));
       } else if (OB_FAIL(agg_group->fill_index_info(index_info, is_cg))) {
-        LOG_WARN("Failed to fill index info in aggr_group", K(ret), K(i));
       }
     }
   }
@@ -488,7 +470,6 @@ int ObAggregatedStoreVec::fill_rows(
       LOG_WARN("Unexpected null reader", K(ret), K(reader));
     } else if (FALSE_IT(reader->reserve_reader_memory(false))) {
     } else if (OB_FAIL(reader->get_row_count(micro_row_count))) {
-      LOG_WARN("Failed to get micro row count", K(ret));
     } else if (!need_access_data_) {
       if (need_get_row_ids_ || micro_row_count != covered_row_count) {
         if (OB_FAIL(get_row_ids(reader, begin_index, end_index, count_, false, res))) {
@@ -507,7 +488,6 @@ int ObAggregatedStoreVec::fill_rows(
                                                        res,
                                                        false/*not set_end()*/,
                                                        !filter_is_null()))) {
-      LOG_WARN("Failed to project rows in aggregate pushdown", K(ret), K(begin_index), K(end_index), K(res));
     }
     if (OB_SUCC(ret) && OB_FAIL(do_aggregate(reader, need_access_data_))) {
       LOG_WARN("Failed to aggregate rows", K(ret), KP(reader));
@@ -543,7 +523,6 @@ int ObAggregatedStoreVec::fill_row(blocksstable::ObDatumRow &row)
     count_++;
     eval_ctx_.set_batch_idx(count_);
     if (OB_FAIL(do_aggregate(nullptr/*reader*/, false/*reserve_memory*/))) {
-      LOG_WARN("Failed to aggregate rows", K(ret));
     }
   }
   return ret;
@@ -565,7 +544,6 @@ int ObAggregatedStoreVec::do_aggregate(blocksstable::ObIMicroBlockReader *reader
                                                reader, 
                                                pd_row_id_ctx,
                                                reserve_memory))) {
-        LOG_WARN("Failed to eval batch", K(ret), KPC(agg_group), K_(need_access_data), K_(need_get_row_ids));
       }
     }
     if (OB_SUCC(ret)) {
@@ -584,7 +562,6 @@ int ObAggregatedStoreVec::collect_aggregated_result()
   } else if (OB_FAIL(storage::init_exprs_vector_header(iter_param_->aggregate_exprs_, 
                                                        eval_ctx_,
                                                        eval_ctx_.max_batch_size_))) {
-    LOG_WARN("Failed to init vector", K(ret), K_(eval_ctx_.max_batch_size));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < agg_groups_.count(); ++i) {
       ObAggGroupVec *agg_group = agg_groups_.at(i);
@@ -592,7 +569,6 @@ int ObAggregatedStoreVec::collect_aggregated_result()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Unexpected null aggregate group", K(ret), KP(agg_group));
       } else if (OB_FAIL(agg_group->collect_result())) {
-        LOG_WARN("Failed to collect results in aggr group", K(ret));
       }
     }
   }

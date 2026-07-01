@@ -74,7 +74,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(ObDDLArg::assign(other))) {
-      SHARE_LOG(WARN, "fail to assign ddl arg", KR(ret));
     } else {
       
       data_table_id_ = other.data_table_id_;

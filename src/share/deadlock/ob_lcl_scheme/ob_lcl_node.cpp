@@ -901,14 +901,11 @@ void ObLCLNode::PushStateTask::runTimerTask()
                               lcl_node_.timeout_ts_ + 10_min :
                               lcl_node_.created_time_ + 1_hour;
   if (current_ts > warn_threshold_ts) {
-    DETECT_LOG(WARN, "long lived lcl node, maybe leaked", K(*this));
   }
   if (false == ATOMIC_LOAD(&lcl_node_.is_timer_task_canceled_)) {
     if (expected_executed_ts > current_ts) {
-      DETECT_LOG(WARN, "schedule error", K(current_ts), K(expected_executed_ts));
     } else if (current_ts - expected_executed_ts > 100 * 1000) {// 100ms
       if (REACH_TIME_INTERVAL(100 * 1000)) {// 100ms
-        DETECT_LOG(WARN, "task scheduled out of range", K(current_ts), K(expected_executed_ts));
       }
     }
     

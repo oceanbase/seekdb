@@ -43,15 +43,10 @@ int OMPKError::serialize(char *buffer, int64_t len, int64_t &pos) const
     LOG_WARN("invalid argument", K(len), K(pos), "need_size", get_serialize_size());
   } else {
     if (OB_FAIL(ObMySQLUtil::store_int1(buffer, len, field_count_, pos))) {
-      LOG_WARN("store fail", KP(buffer), K(len), K(field_count_), K(ret));
     } else if (OB_FAIL(ObMySQLUtil::store_int2(buffer, len, errcode_, pos))) {
-      LOG_WARN("store fail", KP(buffer), K(len), K(errcode_), K(ret));
     } else if (OB_FAIL(ObMySQLUtil::store_int1(buffer, len, MARKER, pos))) {
-      LOG_WARN("store fail", KP(buffer), K(len), K(ret));
     } else if (OB_FAIL(ObMySQLUtil::store_obstr_nzt(buffer, len, sqlstate_, pos))) {
-      LOG_WARN("store fail", KP(buffer), K(len), K(ret));
     } else if (OB_FAIL(ObMySQLUtil::store_obstr_nzt(buffer, len, message_, pos))) {
-      LOG_WARN("store fail", KP(buffer), K(len), K(ret));
     }
   }
   return ret;

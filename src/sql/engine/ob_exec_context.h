@@ -958,7 +958,6 @@ inline ObIExtraStatusCheck::Guard::Guard(ObExecContext &ctx, ObIExtraStatusCheck
 {
   int ret = ctx.add_extra_check(checker);
   if (OB_SUCCESS != ret) {
-    SQL_ENG_LOG(ERROR, "add extra checker failed", K(ret));
   }
 }
 

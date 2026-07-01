@@ -153,9 +153,7 @@ int ObDirectLoadMultipleHeapTableCompactor::add_table(const ObDirectLoadTableHan
     int cmp_ret = 0;
     ObDirectLoadMultipleHeapTable *heap_table = static_cast<ObDirectLoadMultipleHeapTable*>(table_handle.get_table());
     if (OB_FAIL(check_table_compactable(heap_table))) {
-      LOG_WARN("fail to check table compactable", KR(ret), KPC(heap_table));
     } else if (OB_FAIL(construct_index_scanner(heap_table))) {
-      LOG_WARN("fail to construct index scanner", KR(ret), KPC(heap_table));
     } else {
       const ObDirectLoadMultipleHeapTableMeta &table_meta = heap_table->get_meta();
       const ObIArray<ObDirectLoadMultipleHeapTableDataFragment> &data_fragments =
@@ -166,11 +164,9 @@ int ObDirectLoadMultipleHeapTableCompactor::add_table(const ObDirectLoadTableHan
       row_count_ += table_meta.row_count_;
       max_data_block_size_ = MAX(max_data_block_size_, table_meta.max_data_block_size_);
       if (OB_FAIL(base_data_fragment_idxs_.push_back(data_fragments_.count()))) {
-        LOG_WARN("fail to push back index fragment", KR(ret));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < data_fragments.count(); ++i) {
         if (OB_FAIL(data_fragments_.push_back(data_fragments.at(i)))) {
-          LOG_WARN("fail to push back data fragment", KR(ret));
         }
       }
     }
@@ -210,9 +206,7 @@ int ObDirectLoadMultipleHeapTableCompactor::construct_index_scanner(
   } else if (OB_FAIL(index_whole_scanner->init(heap_table->get_index_file_handle(),
                                                heap_table->get_meta().index_file_size_,
                                                param_.table_data_desc_))) {
-    LOG_WARN("fail to init index whole scanner", KR(ret));
   } else if (OB_FAIL(index_scanners_.push_back(index_whole_scanner))) {
-    LOG_WARN("fail to push back", KR(ret));
   }
   if (OB_FAIL(ret)) {
     if (nullptr != index_whole_scanner) {
@@ -239,14 +233,10 @@ int ObDirectLoadMultipleHeapTableCompactor::compact()
     ObDirectLoadMultipleHeapTableIndexBlockWriter index_block_writer;
     int64_t index_entry_count = 0;
     if (OB_FAIL(param_.file_mgr_->alloc_file(param_.index_dir_id_, compacted_index_file_handle_))) {
-      LOG_WARN("fail to alloc file", KR(ret));
     } else if (OB_FAIL(index_block_writer.init(param_.table_data_desc_.sstable_index_block_size_,
                                                param_.table_data_desc_.compressor_type_))) {
-      LOG_WARN("fail to init index block writer", KR(ret));
     } else if (OB_FAIL(index_block_writer.open(compacted_index_file_handle_))) {
-      LOG_WARN("fail to open file", KR(ret));
     } else if (OB_FAIL(scan_merge.init(index_scanners_))) {
-      LOG_WARN("fail to init scan merge", KR(ret));
     }
     while (OB_SUCC(ret)) {
       if (OB_UNLIKELY(is_stop_)) {
@@ -278,7 +268,6 @@ int ObDirectLoadMultipleHeapTableCompactor::compact()
         compacted_tablet_index.fragment_idx_ = base_data_fragment_idx + tablet_index->fragment_idx_;
         compacted_tablet_index.offset_ = tablet_index->offset_;
         if (OB_FAIL(index_block_writer.append_index(compacted_tablet_index))) {
-          LOG_WARN("fail to append index", KR(ret));
         } else {
           ++index_entry_count;
         }
@@ -286,7 +275,6 @@ int ObDirectLoadMultipleHeapTableCompactor::compact()
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(index_block_writer.close())) {
-        LOG_WARN("fail to close index block writer", KR(ret));
       } else if (OB_UNLIKELY(index_entry_count != index_entry_count_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected index entry count", KR(ret), K(index_entry_count_),
@@ -320,9 +308,7 @@ int ObDirectLoadMultipleHeapTableCompactor::get_table(ObDirectLoadTableHandle &t
     create_param.row_count_ = row_count_;
     create_param.max_data_block_size_ = max_data_block_size_;
     if (OB_FAIL(create_param.index_file_handle_.assign(compacted_index_file_handle_))) {
-      LOG_WARN("fail to assign file handle", KR(ret));
     } else if (OB_FAIL(create_param.data_fragments_.assign(data_fragments_))) {
-      LOG_WARN("fail to assign data fragments", KR(ret));
     }
     if (OB_SUCC(ret)) {
       ObDirectLoadTableHandle heap_table_handle;
@@ -330,10 +316,8 @@ int ObDirectLoadMultipleHeapTableCompactor::get_table(ObDirectLoadTableHandle &t
       ObDirectLoadMultipleHeapTable *heap_table = nullptr;
       
       if (OB_FAIL(table_mgr->alloc_multiple_heap_table(heap_table_handle))) {
-        LOG_WARN("fail to alloc multiple heap table table", KR(ret));
       } else if (FALSE_IT(heap_table = static_cast<ObDirectLoadMultipleHeapTable*>(heap_table_handle.get_table()))){
       } else if (OB_FAIL(heap_table->init(create_param))) {
-        LOG_WARN("fail to init multiple heap table table", KR(ret));
       } else if (FALSE_IT(table = heap_table_handle)) {
       }
     }

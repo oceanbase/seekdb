@@ -268,7 +268,6 @@ int ObIHashPartInfrastructure::rewind()
         ret = OB_ERR_UNEXPECTED;
         SQL_ENG_LOG(ERROR, "unexpected status: part it not match", K(ret), K(part), K(tmp_part));
       } else if (OB_FAIL(left_part_map_.set_refactored(tmp_part->part_key_, tmp_part))) {
-        SQL_ENG_LOG(WARN, "failed to push into hash table", K(ret), K(tmp_part->part_key_));
       } else {
         left_part_list_.add_last(tmp_part);
       }
@@ -292,7 +291,6 @@ int ObIHashPartInfrastructure::init_default_part(
     ObMemAttr attr("HashPartInfra", ObCtxIds::WORK_AREA);
     if (OB_FAIL(part->store_.init(*exprs_, max_batch_size_, attr, limit, true, /*enable_dump*/
                                   ObHashPartItem::get_extra_size(), compressor_type_))) {
-      SQL_ENG_LOG(WARN, "failed to init row store", K(ret));
     } else if (OB_ISNULL(sql_mem_processor_)) {
       ret = OB_ERR_UNEXPECTED;
       SQL_ENG_LOG(WARN, "sql_mem_processor_ is null", K(ret));
@@ -315,7 +313,6 @@ int ObIHashPartInfrastructure::start_round()
   } else {
     if (need_pre_part_ && !is_inited_pre_part_) {
       if (OB_FAIL((this->*init_part_func_)(&preprocess_part_, 0, INT64_MAX, 0))) {
-        SQL_ENG_LOG(WARN, "failed to init preprocess part", K(ret));
       }
     }
     cur_left_part_ = nullptr;
@@ -346,8 +343,6 @@ int ObIHashPartInfrastructure::append_dumped_parts(
       if (dumped_parts[i]->store_.has_dumped()) {
         if (InputSide::LEFT == input_side) {
           if (OB_FAIL(left_part_map_.set_refactored(dumped_parts[i]->part_key_, dumped_parts[i]))) {
-            SQL_ENG_LOG(WARN, "failed to push into hash table", K(ret), K(i),
-              K(dumped_parts[i]->part_key_));
           } else {
             left_part_list_.add_last(dumped_parts[i]);
             dumped_parts[i] = nullptr;
@@ -355,8 +350,6 @@ int ObIHashPartInfrastructure::append_dumped_parts(
         } else {
           if (OB_FAIL(right_part_map_.set_refactored(
               dumped_parts[i]->part_key_, dumped_parts[i]))) {
-            SQL_ENG_LOG(WARN, "failed to push into hash table", K(ret), K(i),
-              K(dumped_parts[i]->part_key_));
           } else {
             right_part_list_.add_last(dumped_parts[i]);
             dumped_parts[i] = nullptr;
@@ -399,9 +392,7 @@ int ObIHashPartInfrastructure::append_all_dump_parts()
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(append_dumped_parts(InputSide::LEFT))) {
-    SQL_ENG_LOG(WARN, "failed to append dumped parts", K(ret));
   } else if (OB_FAIL(append_dumped_parts(InputSide::RIGHT))) {
-    SQL_ENG_LOG(WARN, "failed to append dumped parts", K(ret));
   } else {
     left_dumped_parts_ = nullptr;
     right_dumped_parts_ = nullptr;
@@ -417,7 +408,6 @@ int ObIHashPartInfrastructure::end_round()
     SQL_ENG_LOG(WARN, "cur left or right part is not null", K(ret),
       K(cur_left_part_), K(cur_right_part_));
   } else if (OB_FAIL(append_all_dump_parts())) {
-    SQL_ENG_LOG(WARN, "failed to append all dumped parts", K(ret));
   } else {
     left_row_store_iter_.reset();
     right_row_store_iter_.reset();
@@ -536,7 +526,6 @@ insert_batch_on_partitions(const common::ObIArray<ObExpr *> &exprs,
         ObCompactRow *srow = nullptr;
         int64_t part_idx = get_part_idx(hash_values[idx]);
         if (OB_FAIL(cur_dumped_parts_[part_idx]->store_.add_batch(vector_ptrs_, &batch_idx, 1, &srow))) {
-          SQL_ENG_LOG(WARN, "failed to add row", K(ret));
         } else {
           ObHashPartItem *store_row = static_cast<ObHashPartItem *>(srow);
           store_row->set_hash_value(hash_values[idx], cur_dumped_parts_[part_idx]->store_.get_row_meta());
@@ -564,10 +553,8 @@ int ObIHashPartInfrastructure::create_dumped_partitions(
     has_create_part_map_ = true;
     if (OB_FAIL(left_part_map_.create(
         512, "HashInfraOp", "HashInfraOp"))) {
-      SQL_ENG_LOG(WARN, "failed to create hash map", K(ret));
     } else if (OB_FAIL(right_part_map_.create(
         512, "HashInfraOp", "HashInfraOp"))) {
-      SQL_ENG_LOG(WARN, "failed to create hash map", K(ret));
     }
   }
   has_cur_part_dumped_ = true;
@@ -589,7 +576,6 @@ int ObIHashPartInfrastructure::create_dumped_partitions(
         cur_dumped_parts_[i] = new (mem) ObIntraPartition();
         ObIntraPartition *part = cur_dumped_parts_[i];
         if (OB_FAIL((this->*init_part_func_)(part, cur_part_start_id_ + i, 1, delta_shift))) {
-          SQL_ENG_LOG(WARN, "failed to create part", K(ret));
         }
       }
     }
@@ -650,7 +636,6 @@ int ObIHashPartInfrastructure::calc_hash_value_for_batch(const common::ObIArray<
     for (int64_t j = start_idx; OB_SUCC(ret) && j < sort_collations_->count(); ++j) {
       const int64_t idx = sort_collations_->at(j).field_idx_;
       if (OB_FAIL(exprs.at(idx)->eval_vector(*eval_ctx_, skip, size, all_rows_active))) {
-        SQL_ENG_LOG(WARN, "failed to eval batch", K(ret), K(j));
       }
     }
     if (OB_SUCC(ret)) {
@@ -665,7 +650,6 @@ int ObIHashPartInfrastructure::calc_hash_value_for_batch(const common::ObIArray<
         if (OB_FAIL(col_vec->murmur_hash_v3(
               *expr, hash_values_for_batch, skip, EvalBound(size, all_rows_active),
               is_batch_seed ? hash_values_for_batch : &default_hash_value, is_batch_seed))) {
-          SQL_ENG_LOG(WARN, "failed to calc hash value", K(ret));
         }
       }
     }
@@ -681,7 +665,6 @@ int ObIHashPartInfrastructure::update_mem_status_periodically()
                     alloc_,
                     [&](int64_t cur_cnt){ return period_row_cnt_ > cur_cnt; },
                     updated))) {
-    SQL_ENG_LOG(WARN, "failed to update usable memory size periodically", K(ret));
   } else if (updated) {
     int64_t total_mem_used = get_mem_used();
     if (total_mem_used_func_) {
@@ -716,18 +699,13 @@ do_insert_batch_with_unique_hash_table(const common::ObIArray<ObExpr *> &exprs,
       bool dummy_full_by_pass = false; // unused
       if (OB_FAIL(set_distinct_batch(exprs, hash_values_for_batch, batch_size,
                                            skip, *my_skip_))) {
-        SQL_ENG_LOG(WARN, "failed to set distinct values into hash table", K(ret));
       } else if (OB_FAIL(update_mem_status_periodically())) {
-        SQL_ENG_LOG(WARN, "failed to update memory status periodically", K(ret));
       } else if (OB_FAIL(process_dump(dummy_is_block, dummy_full_by_pass))) {
-        SQL_ENG_LOG(WARN, "failed to process dump", K(ret));
       }
     } else if (OB_FAIL(probe_batch(hash_values_for_batch, batch_size,
                                    skip, *my_skip_))) {
-      SQL_ENG_LOG(WARN, "failed to probe distinct values for batch", K(ret));
     } else if (OB_FAIL(insert_batch_on_partitions(exprs, *my_skip_,
                                             batch_size, hash_values_for_batch))) {
-      SQL_ENG_LOG(WARN, "failed to insert batch on partitions", K(ret));
     } else if (FALSE_IT(my_skip_->set_all(batch_size))) {
     }
   }
@@ -760,7 +738,6 @@ do_insert_batch_with_unique_hash_table_by_pass(const common::ObIArray<ObExpr *> 
     if (!has_cur_part_dumped_) {
       if (!can_insert) {
        if (OB_FAIL(probe_batch(hash_values_for_batch, batch_size,skip, *my_skip_))) {
-         SQL_ENG_LOG(WARN, "failed to probe batch for pass by", K(ret));
        } else {
          int64_t init_skip_cnt = nullptr == skip ? 0 : skip->accumulate_bit_cnt(batch_size);
          exists = (batch_size - init_skip_cnt)
@@ -769,19 +746,14 @@ do_insert_batch_with_unique_hash_table_by_pass(const common::ObIArray<ObExpr *> 
       } else {
         if (OB_FAIL(set_distinct_batch(exprs, hash_values_for_batch, batch_size,
                                             skip, *my_skip_))) {
-          SQL_ENG_LOG(WARN, "failed to set distinct values into hash table", K(ret));
         } else if (OB_FAIL(update_mem_status_periodically())) {
-          SQL_ENG_LOG(WARN, "failed to update memory status periodically", K(ret));
         } else if (OB_FAIL(process_dump(is_block, full_by_pass))) {
-          SQL_ENG_LOG(WARN, "failed to process dump", K(ret));
         }
       }
     } else if (OB_FAIL(probe_batch(hash_values_for_batch, batch_size,
                                    skip, *my_skip_))) {
-      SQL_ENG_LOG(WARN, "failed to probe distinct values for batch", K(ret));
     } else if (OB_FAIL(insert_batch_on_partitions(exprs, *my_skip_,
                                             batch_size, hash_values_for_batch))) {
-      SQL_ENG_LOG(WARN, "failed to insert batch on partitions", K(ret));
     } else if (FALSE_IT(my_skip_->set_all(batch_size))) {
     }
   }
@@ -802,7 +774,6 @@ insert_row_for_batch(const common::ObIArray<ObExpr *> &batch_exprs,
                                                   batch_size,
                                                   skip,
                                                   output_vec))) {
-    SQL_ENG_LOG(WARN, "failed to insert batch", K(ret));
   }
   return ret;
 }
@@ -816,14 +787,8 @@ int ObIHashPartInfrastructure::finish_insert_row()
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(cur_dumped_parts_)) {
     for (int64_t i = 0; i < est_part_cnt_ && OB_SUCC(ret); ++i) {
-      SQL_ENG_LOG(TRACE, "trace dumped partition",
-        K(cur_dumped_parts_[i]->store_.get_row_cnt_in_memory()),
-        K(cur_dumped_parts_[i]->store_.get_row_cnt_on_disk()),
-        K(i), K(est_part_cnt_), K(cur_dumped_parts_[i]->part_key_));
       if (OB_FAIL(cur_dumped_parts_[i]->store_.dump(true))) {
-        SQL_ENG_LOG(WARN, "failed to dump row store", K(ret));
       } else if (OB_FAIL(cur_dumped_parts_[i]->store_.finish_add_row(true))) {
-        SQL_ENG_LOG(WARN, "failed to finish add row", K(ret));
       }
     }
     cur_dumped_parts_ = nullptr;
@@ -837,7 +802,6 @@ bool ObIHashPartInfrastructure::is_equal_hash_infras(
   bool is_equal = true;
   if (OB_ISNULL(exprs_)) {
     is_equal = false;
-    SQL_ENG_LOG(TRACE, "exprs is null");
   } else if (exprs_->count() != compare_exprs.count()) {
     is_equal = false;
   } else {
@@ -857,7 +821,6 @@ int ObIHashPartInfrastructure::get_next_left_partition()
   if (OB_NOT_NULL(cur_left_part_)) {
     ObIntraPartition *tmp_part = nullptr;
     if (OB_FAIL(left_part_map_.erase_refactored(cur_left_part_->part_key_, &tmp_part))) {
-      SQL_ENG_LOG(WARN, "failed to remove part from map", K(ret), K(cur_left_part_->part_key_));
     } else if (cur_left_part_ != tmp_part) {
       ret = OB_ERR_UNEXPECTED;
       SQL_ENG_LOG(WARN, "unexepcted status: part is not match", K(ret),
@@ -872,12 +835,10 @@ int ObIHashPartInfrastructure::get_next_left_partition()
 int ObIHashPartInfrastructure::get_next_right_partition()
 {
   int ret = OB_SUCCESS;
-  SQL_ENG_LOG(TRACE, "trace right part count", K(right_part_list_.get_size()));
   cur_right_part_ = right_part_list_.remove_last();
   if (OB_NOT_NULL(cur_right_part_)) {
     ObIntraPartition *tmp_part = nullptr;
     if (OB_FAIL(right_part_map_.erase_refactored(cur_right_part_->part_key_, &tmp_part))) {
-      SQL_ENG_LOG(WARN, "failed to remove part from map", K(ret), K(cur_right_part_->part_key_));
     } else if (cur_right_part_ != tmp_part) {
       ret = OB_ERR_UNEXPECTED;
       SQL_ENG_LOG(WARN, "unexepcted status: part is not match",
@@ -938,7 +899,6 @@ int ObIHashPartInfrastructure::open_hash_table_part()
   if (has_dump_preprocess_part_) {
     // do nothing
   } else if (OB_FAIL(hash_table_row_store_iter_.init(&preprocess_part_.store_))) {
-    SQL_ENG_LOG(WARN, "failed to init row store iterator", K(ret));
   }
   return ret;
 }
@@ -955,7 +915,6 @@ int ObIHashPartInfrastructure::open_cur_part(InputSide input_side)
     SQL_ENG_LOG(WARN, "cur part is null", K(ret), K(input_side));
   } else if (InputSide::LEFT == input_side) {
     if (OB_FAIL(left_row_store_iter_.init(&cur_left_part_->store_))) {
-      SQL_ENG_LOG(WARN, "failed to init row store iterator", K(ret));
     } else {
       cur_side_ = input_side;
       cur_level_ = cur_left_part_->part_key_.level_;
@@ -966,7 +925,6 @@ int ObIHashPartInfrastructure::open_cur_part(InputSide input_side)
     }
   } else if (InputSide::RIGHT == input_side) {
     if (OB_FAIL(right_row_store_iter_.init(&cur_right_part_->store_))) {
-      SQL_ENG_LOG(WARN, "failed to init row store iterator", K(ret));
     } else {
       cur_side_ = input_side;
       cur_level_ = cur_right_part_->part_key_.level_;
@@ -1036,7 +994,6 @@ int ObIHashPartInfrastructure::get_next_partition(InputSide input_side)
   } else if (is_left()) {
     if (OB_FAIL(get_next_left_partition())) {
       if (OB_ITER_END != ret) {
-        SQL_ENG_LOG(WARN, "failed to get next left partition");
       }
     } else if (OB_ISNULL(cur_left_part_)
         || InputSide::LEFT != cur_left_part_->part_key_.nth_way_) {
@@ -1048,7 +1005,6 @@ int ObIHashPartInfrastructure::get_next_partition(InputSide input_side)
   } else {
     if (OB_FAIL(get_next_right_partition())) {
       if (OB_ITER_END != ret) {
-        SQL_ENG_LOG(WARN, "failed to get next right partition");
       }
     } else if (OB_ISNULL(cur_right_part_)
         || InputSide::RIGHT != cur_right_part_->part_key_.nth_way_) {
@@ -1109,7 +1065,6 @@ int ObIHashPartInfrastructure::get_left_next_batch(
     SQL_ENG_LOG(WARN, "hash values vector is not init", K(ret));
   } else if (OB_ISNULL(cur_left_part_) || OB_ISNULL(eval_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_ENG_LOG(WARN, "unexpected status: current partition is null", K(cur_left_part_));
   } else if (OB_FAIL(left_row_store_iter_.get_next_batch(exprs,
                                                          *eval_ctx_,
                                                          max_row_cnt,
@@ -1137,7 +1092,6 @@ int ObIHashPartInfrastructure::get_right_next_batch(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(cur_right_part_) || OB_ISNULL(eval_ctx_)) {
     ret = OB_ERR_UNEXPECTED;
-    SQL_ENG_LOG(WARN, "unexpected status: current partition is null", K(cur_right_part_));
   } else if (OB_FAIL(right_row_store_iter_.get_next_batch(exprs, *eval_ctx_, max_row_cnt, read_rows))) {
     if (OB_ITER_END != ret) {
       SQL_ENG_LOG(WARN, "failed to get next row", K(ret));
@@ -1181,14 +1135,12 @@ int ObIHashPartInfrastructure::process_dump(bool is_block, bool &full_by_pass)
         [&](int64_t max_memory_size)
         { UNUSED(max_memory_size); return need_dump(); },
         dumped, get_each_slice_avg_size(sql_mem_processor_->get_data_size())))) {
-      SQL_ENG_LOG(WARN, "failed to extend max memory size", K(ret));
     } else if (dumped) {
       full_by_pass = true;
       if (!is_push_down_ || is_block) {
         if (enable_sql_dumped_) {
           has_cur_part_dumped_ = true;
           if (OB_FAIL(create_dumped_partitions(cur_side_))) {
-            SQL_ENG_LOG(WARN, "failed to create dumped partitions", K(ret), K(est_part_cnt_));
           }
         } else {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -1248,7 +1200,6 @@ int ObHashPartInfrastructureVecImpl::init_mem_context()
                     common::ObCtxIds::WORK_AREA)
       .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
-      SQL_ENG_LOG(WARN, "create entity failed", K(ret));
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
       SQL_ENG_LOG(WARN, "mem entity is null", K(ret));
@@ -1316,8 +1267,6 @@ int ObHashPartInfrastructureVecImpl::init_hp_infras(const common::ObIArray<ObExp
   if (hp_infras_ != nullptr) {
     // do nothing
   } else if (OB_FAIL(decide_hp_infras_type(exprs, bkt_type_, payload_len))) {
-    SQL_ENG_LOG(WARN, "failed to decide hash part infras type", K(ret), K(bkt_type_),
-                K(payload_len));
   } else {
     //TODO open inline bkt when compact row is optimal
     bkt_type_ = TYPE_GENERAL;
@@ -1325,29 +1274,21 @@ int ObHashPartInfrastructureVecImpl::init_hp_infras(const common::ObIArray<ObExp
     case TYPE_GENERAL:
       bkt_size_ = sizeof(HPInfrasBktGeneral);
       if (OB_FAIL(alloc_hp_infras_impl_instance<HPInfrasBktGeneral>(hp_infras_))) {
-        SQL_ENG_LOG(WARN, "failed to alloc hash part infras instance", K(ret), K(bkt_type_),
-                    K(payload_len));
       }
       break;
     case BYTE_TYPE_48:
       bkt_size_ = sizeof(HPInfrasFixedBktByte48);
       if (OB_FAIL(alloc_hp_infras_impl_instance<HPInfrasFixedBktByte48>(hp_infras_))) {
-        SQL_ENG_LOG(WARN, "failed to alloc hash part infras instance", K(ret), K(bkt_type_),
-                    K(payload_len));
       }
       break;
     case BYTE_TYPE_56:
       bkt_size_ = sizeof(HPInfrasFixedBktByte56);
       if (OB_FAIL(alloc_hp_infras_impl_instance<HPInfrasFixedBktByte56>(hp_infras_))) {
-        SQL_ENG_LOG(WARN, "failed to alloc hash part infras instance", K(ret), K(bkt_type_),
-                    K(payload_len));
       }
       break;
     case BYTE_TYPE_64:
       bkt_size_ = sizeof(HPInfrasFixedBktByte64);
       if (OB_FAIL(alloc_hp_infras_impl_instance<HPInfrasFixedBktByte64>(hp_infras_))) {
-        SQL_ENG_LOG(WARN, "failed to alloc hash part infras instance", K(ret), K(bkt_type_),
-                    K(payload_len));
       }
       break;
     default:
@@ -1374,9 +1315,7 @@ int ObHashPartInfrastructureVecImpl::init(bool enable_sql_dumped, bool unique, b
     ret = OB_INIT_TWICE;
     LOG_WARN("failed to init", K(ret));
   } else if (OB_FAIL(init_mem_context())) {
-    LOG_WARN("failed to init mem context", K(ret));
   } else if (OB_FAIL(init_hp_infras(exprs, hp_infras_))) {
-    LOG_WARN("failed to init hash part infras instance", K(ret));
   } else if (OB_FAIL(hp_infras_->init(enable_sql_dumped, unique,
     need_pre_part, ways, max_batch_size, exprs, sql_mem_processor, compressor_type, need_rewind))) {
     LOG_WARN("failed to init hash part infras", K(ret));
@@ -1465,7 +1404,6 @@ int ObHashPartInfrastructureVecImpl::get_right_next_batch(
   HP_INFRAS_STATUS_CHECK
   {
     if (OB_FAIL(hp_infras_->get_right_next_batch(exprs, max_row_cnt, read_rows))) {
-      LOG_WARN("failed to end round", K(ret));
     }
   }
   return ret;
@@ -1479,7 +1417,6 @@ int ObHashPartInfrastructureVecImpl::exists_batch(
   HP_INFRAS_STATUS_CHECK
   {
     if (OB_FAIL(hp_infras_->exists_batch(exprs, brs, skip, hash_values_for_batch))) {
-      LOG_WARN("failed to end round", K(ret));
     }
   }
   return ret;

@@ -72,9 +72,7 @@ int ObTableLoadMergeRescanOp::switch_next_op(bool is_parent_called)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObTableLoadParallelMerger", KR(ret));
     } else if (OB_FAIL(parallel_merger_->init_rescan_task(this))) {
-      LOG_WARN("fail to init rescan task", KR(ret));
     } else if (OB_FAIL(parallel_merger_->start())) {
-      LOG_WARN("fail to start parallel merge", KR(ret));
     }
   }
   return ret;
@@ -85,7 +83,6 @@ int ObTableLoadMergeRescanOp::on_success()
   int ret = OB_SUCCESS;
   FLOG_INFO("LOAD RESCAN COMPLETED");
   if (OB_FAIL(switch_parent_op())) {
-    LOG_WARN("fail to switch parent op", KR(ret));
   }
   return ret;
 }

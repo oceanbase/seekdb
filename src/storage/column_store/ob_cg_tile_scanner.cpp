@@ -39,7 +39,6 @@ int ObCGTileScanner::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), K(iter_params.count()), K(access_ctx), KPC(table));
   } else if (OB_FAIL(cg_scanners_.reserve(iter_params.count()))) {
-    LOG_WARN("Fail to reserve cg scanners", K(ret), K(iter_params.count()));
   } else if (project_single_row && OB_FAIL(datum_row_.init(iter_params.count()))) {
     LOG_WARN("Failed to init datum row", K(ret), K(iter_params.count()));
   } else {
@@ -54,12 +53,10 @@ int ObCGTileScanner::init(
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("Invalid argument, cg's iter param is null", K(ret), K(i));
       } else if (OB_FAIL(co_sstable->cg_scan(*iter_param, access_ctx, cg_scanner, true, project_single_row))) {
-        LOG_WARN("Fail to cg scan", K(ret), K(i), KPC(iter_param));
       } else if (OB_UNLIKELY(!ObICGIterator::is_valid_cg_projector(cg_scanner->get_type(), project_single_row))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Unexpected cg scanner", K(ret), K(cg_scanner->get_type()));
       } else if (OB_FAIL(cg_scanners_.push_back(cg_scanner))) {
-        LOG_WARN("Fail to push back cg scanner", K(ret), K(i), KPC(iter_param));
       } else if (ObICGIterator::OB_CG_ROW_SCANNER == cg_scanner->get_type() ||
                  ObICGIterator::OB_CG_GROUP_BY_SCANNER == cg_scanner->get_type()) {
         static_cast<ObCGRowScanner *>(cg_scanner)->set_project_type(project_without_filter);
@@ -108,13 +105,11 @@ int ObCGTileScanner::switch_context(
       } else if (OB_UNLIKELY(col_cnt_changed)) {
         if (FALSE_IT(access_ctx.cg_iter_pool_->return_cg_iter(cg_scanner, cg_scanner->get_cg_idx()))) {
         } else if (OB_FAIL(co_sstable->cg_scan(cg_param, access_ctx, cg_scanner, true, project_single_row))) {
-          LOG_WARN("Failed to cg scan", K(ret));
         }
       } else if (!is_virtual_cg(cg_param.cg_idx_) && OB_FAIL(co_sstable->fetch_cg_sstable(cg_param.cg_idx_, cg_wrapper))) {
         LOG_WARN("Fail to get cg sstable", K(ret));
       } else if (OB_FAIL(cg_scanner->switch_context(
           cg_param, access_ctx, cg_wrapper))) {
-        LOG_WARN("Fail to switch context for cg iter", K(ret));
       } else if (ObICGIterator::OB_CG_ROW_SCANNER == cg_scanner->get_type() ||
                  ObICGIterator::OB_CG_GROUP_BY_SCANNER == cg_scanner->get_type()) {
         static_cast<ObCGRowScanner *>(cg_scanner)->set_project_type(project_without_filter);
@@ -165,7 +160,6 @@ int ObCGTileScanner::locate(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Unexpected null cg scanner", K(ret));
       } else if (OB_FAIL(cg_scanner->locate(range, bitmap))) {
-        LOG_WARN("Fail to locate cg scanner", K(ret), K(i), K(range));
       }
     }
   }
@@ -211,19 +205,15 @@ int ObCGTileScanner::apply_filter(
           } else {
             common::ObBitmap *parent_result = nullptr;
             if (OB_FAIL(parent->init_bitmap(batch_row_count, parent_result))) {
-              LOG_WARN("Failed to get parent bitmap", K(ret), K(batch_row_count));
             } else if (OB_FAIL(parent_bitmap->set_bitmap(row_range.start_row_id_, batch_row_count, is_reverse_scan_, *parent_result))) {
-              LOG_WARN("Fail go get bitmap", K(ret));
             }
           }
         }
         if (can_skip_subtree) {
         } else if (OB_FAIL(filter_info.filter_->execute(parent, filter_info, nullptr, true))) {
-          LOG_WARN("Failed to filter batch rows", K(ret), K(batch_row_count));
         } else if (OB_FAIL(result_bitmap.append_bitmap(*(filter_info.filter_->get_result()),
                                                        static_cast<uint32_t>(row_count - remained_rows),
                                                        is_reverse_scan_))) {
-          LOG_WARN("Failed to append result bitmap", K(ret), K(remained_rows), K_(is_reverse_scan));
         }
         if (OB_SUCC(ret)) {
           remained_rows -= batch_row_count;
@@ -329,7 +319,6 @@ int ObCGTileScanner::get_next_aligned_rows(ObCGRowScanner *cg_scanner, const uin
         // do not need deep copy the last rows
       } else {
         if (OB_FAIL(cg_scanner->deep_copy_projected_rows(datum_offset, read_row_count))) {
-          LOG_WARN("Fail to deep copy projected rows", K(ret), K(datum_offset), K(read_row_count), KP(cg_scanner));
         } else {
           datum_offset += read_row_count;
         }
@@ -354,7 +343,6 @@ int ObCGTileScanner::get_current_row_id(ObCSRowId& current_row_id) const
   bool found = false;
   for (int i = 0; OB_SUCC(ret) && i < cg_scanners_.count(); ++i) {
     if (OB_FAIL(cg_scanners_.at(i, cg_iter))) {
-      LOG_WARN("failed to get cg scanner", K(ret), K(i), K(cg_scanners_));
     } else if (OB_ISNULL(cg_iter)) {
       ret = OB_BAD_NULL_ERROR;
       LOG_WARN("cg scanner is null", K(ret));

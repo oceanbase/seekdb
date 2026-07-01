@@ -200,7 +200,6 @@ int ObUniqueIndexRowTransformerV2<T>::convert_to_unique_index_row(
       const int64_t idx = NULL == projector ? i : projector->at(i);
       if (idx >= cell_cnt) {
         ret = common::OB_ERR_UNEXPECTED;
-        SHARE_LOG(WARN, "error unexpected, idx is not valid", K(idx), K(row));
       } else {
         if (!need_shadow_columns) {
           row.get_cell(i).set_null();

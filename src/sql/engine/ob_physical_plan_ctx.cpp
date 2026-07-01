@@ -137,12 +137,10 @@ int ObPhysicalPlanCtx::reserve_param_space(int64_t param_count)
   int ret = OB_SUCCESS;
   ObObjParam null_obj;
   if (OB_FAIL(param_store_.reserve(param_count))) {
-    LOG_WARN("reserve param store failed", K(ret));
   }
   int64_t N = param_count - param_store_.count();
   for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
     if (OB_SUCCESS != (ret = param_store_.push_back(null_obj))) {
-      LOG_WARN("failed to add param", K(ret), K(i), K(N));
     }
   }
   return ret;
@@ -156,7 +154,6 @@ int ObPhysicalPlanCtx::init_datum_param_store()
   param_frame_ptrs_.reuse();
   param_frame_capacity_ = 0;
   if (OB_FAIL(datum_param_store_.prepare_allocate(param_store_.count()))) {
-    LOG_WARN("fail to prepare allocate", K(ret), K(param_store_.count()));
   }
   // Through param_store, generate datum_param_store
   for (int64_t i = 0; OB_SUCC(ret) && i < param_store_.count(); i++) {
@@ -164,16 +161,13 @@ int ObPhysicalPlanCtx::init_datum_param_store()
     if (OB_FAIL(datum_param.alloc_datum_reserved_buff(param_store_.at(i).meta_,
                                                       param_store_.at(i).get_precision(),
                                                       allocator_))) {
-      LOG_WARN("alloc datum reserved buffer failed", K(ret));
     } else if (OB_FAIL(datum_param.from_objparam(param_store_.at(i), &allocator_))) {
-      LOG_WARN("fail to convert obj param", K(ret), K(param_store_.at(i)));
     }
   }
   // Allocate param frame memory, and set param datum
   if (OB_SUCC(ret)) {
     const int64_t old_size = 0;
     if (OB_FAIL(extend_param_frame(old_size))) {
-      LOG_WARN("failed to extend param frame", K(ret));
     }
   }
   LOG_DEBUG("inited datum param store", K(datum_param_store_), K(param_store_));
@@ -189,7 +183,6 @@ int ObPhysicalPlanCtx::sync_last_value_local()
   for (int64_t i = 0; OB_SUCC(ret) && i < autoinc_params.count(); ++i) {
     AutoincParam &autoinc_param = autoinc_params.at(i);
     if (OB_FAIL(auto_service.sync_insert_value_local(autoinc_param))) {
-      LOG_WARN("failed to sync last insert value locally", K(ret));
     }
   }
 	return ret;
@@ -203,7 +196,6 @@ int ObPhysicalPlanCtx::sync_last_value_global()
   for (int64_t i = 0; OB_SUCC(ret) && i < autoinc_params.count(); ++i) {
     AutoincParam &autoinc_param = autoinc_params.at(i);
     if (OB_FAIL(auto_service.sync_insert_value_global(autoinc_param))) {
-      LOG_WARN("failed to sync last insert value globally", K(ret));
     }
   }
   return ret;
@@ -226,7 +218,6 @@ int ObPhysicalPlanCtx::set_row_matched_count(int64_t row_count)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(row_count < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "invalid argument", K(row_count));
   } else {
     row_matched_count_ = row_count;
   }
@@ -238,7 +229,6 @@ int ObPhysicalPlanCtx::set_row_duplicated_count(int64_t row_count)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(row_count < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "invalid argument", K(row_count));
   } else {
     row_duplicated_count_ = row_count;
   }
@@ -250,7 +240,6 @@ int ObPhysicalPlanCtx::set_row_deleted_count(int64_t row_count)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(row_count < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "invalid argument", K(row_count));
   } else {
     row_deleted_count_ = row_count;
   }
@@ -290,8 +279,6 @@ int ObPhysicalPlanCtx::merge_implicit_cursor_info(const ObImplicitCursorInfo &im
              K(implicit_cursor), K(implicit_cursor_infos_.count()));
   } else if (OB_FAIL(implicit_cursor_infos_.at(implicit_cursor.stmt_id_).
                      merge_cursor(implicit_cursor))) {
-    LOG_WARN("merge implicit cursor info failed", K(ret),
-             K(implicit_cursor), K(implicit_cursor_infos_));
   }
   LOG_DEBUG("merge implicit cursor info", K(ret), K(implicit_cursor), K(lbt()));
   return ret;
@@ -307,8 +294,6 @@ int ObPhysicalPlanCtx::replace_implicit_cursor_info(const ObImplicitCursorInfo &
              K(implicit_cursor), K(implicit_cursor_infos_.count()));
   } else if (OB_FAIL(implicit_cursor_infos_.at(implicit_cursor.stmt_id_).
       replace_cursor(implicit_cursor))) {
-    LOG_WARN("merge implicit cursor info failed", K(ret),
-             K(implicit_cursor), K(implicit_cursor_infos_.count()), K(implicit_cursor));
   }
   LOG_DEBUG("merge implicit cursor info", K(ret), K(implicit_cursor), K(lbt()));
   return ret;
@@ -443,7 +428,6 @@ int ObPhysicalPlanCtx::extend_param_frame(const int64_t old_size)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(old_size));
   } else if (OB_FAIL(reserve_param_frame(datum_param_store_.count()))) {
-    LOG_WARN("reserve param frame failed", K(ret));
   } else {
     for (int64_t i = old_size; i < datum_param_store_.count(); i++) {
       ObDatum *datum = nullptr;
@@ -622,7 +606,6 @@ OB_DEF_SERIALIZE(ObPhysicalPlanCtx)
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(serialization::encode_i32(buf, buf_len, seri_param_cnt_pos, real_param_cnt))) {
-        LOG_WARN("encode int32_t failed", K(buf_len), K(seri_param_cnt_pos), K(real_param_cnt), K(ret));
       }
     }
   } else {
@@ -802,9 +785,7 @@ OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
   OB_UNIS_DECODE(param_cnt);
   if (OB_SUCC(ret) && param_cnt > 0) {
     if (OB_FAIL(param_store_.prepare_allocate(param_cnt))) {
-      LOG_WARN("prepare_allocate param store failed", K(ret), K(param_cnt));
     } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &real_param_cnt))) {
-      LOG_WARN("decode int32_t failed", K(data_len), K(pos), K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < real_param_cnt; ++i) {
       OB_UNIS_DECODE(param_idx);
@@ -814,7 +795,6 @@ OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid param idx", K(param_idx), K(param_cnt));
       } else if (OB_FAIL(deep_copy_obj(allocator_, param_obj, tmp))) {
-        LOG_WARN("deep copy object failed", K(ret), K(param_obj));
       } else {
         param_store_.at(param_idx) = tmp;
         param_store_.at(param_idx).set_param_meta();
@@ -828,7 +808,6 @@ OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
   	  const ObObjParam &objpara = param_store_.at(i);
       ObObjParam tmp = objpara;
       if (OB_FAIL(deep_copy_obj(allocator_, objpara, tmp))) {
-      	LOG_WARN("deep copy obj failed", K(ret));
       } else {
         param_store_.at(i) = tmp;
         param_store_.at(i).set_param_meta();
@@ -841,7 +820,6 @@ OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
   OB_UNIS_DECODE(cursor_count);
   if (OB_SUCC(ret) && cursor_count > 0) {
     if (OB_FAIL(implicit_cursor_infos_.prepare_allocate(cursor_count))) {
-      LOG_WARN("init implicit cursor infos failed", K(ret));
     }
   }
   OB_UNIS_DECODE(plan_start_time_);
@@ -859,7 +837,6 @@ OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
       ObArrayParamGroup array_p_group;
       OB_UNIS_DECODE(array_p_group);
       if (OB_FAIL(array_param_groups_.push_back(array_p_group))) {
-        LOG_WARN("failed to push back");
       }
     }
   }
@@ -867,7 +844,6 @@ OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
   OB_UNIS_DECODE(local_var_array_cnt);
   if (OB_SUCC(ret)) {
     if (OB_FAIL(all_local_session_vars_.reserve(local_var_array_cnt))) {
-      LOG_WARN("reserve local session vars failed", K(ret));
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < local_var_array_cnt; ++i) {
@@ -876,7 +852,6 @@ OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("alloc local var failed", K(ret));
     } else if (OB_FAIL(all_local_session_vars_.push_back(ObSolidifiedVarsContext(local_vars, &allocator_)))) {
-      LOG_WARN("push back local session var array failed", K(ret));
     } else {
       local_vars->set_allocator(&allocator_);
       OB_UNIS_DECODE(*local_vars);
@@ -887,7 +862,6 @@ OB_DEF_DESERIALIZE(ObPhysicalPlanCtx)
       datum_param_store_.count() == 0 &&
       datum_param_store_.count() != param_store_.count()) {
     if (OB_FAIL(init_param_store_after_deserialize())) {
-      LOG_WARN("failed to deserialize param store", K(ret));
     }
   }
   OB_UNIS_DECODE(mview_ids_);
@@ -941,7 +915,6 @@ int ObPhysicalPlanCtx::get_sqludt_meta_by_subschema_id(uint16_t subschema_id, Ob
     LOG_WARN("invalid subschema id", K(ret), K(subschema_id), K(lbt()));
   } else {
     if (OB_FAIL(subschema_ctx_.get_subschema(subschema_id, value))) {
-      LOG_WARN("failed to get subschema", K(ret), K(subschema_id));
     } else if (value.type_ >= OB_SUBSCHEMA_MAX_TYPE) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid subschema type", K(ret), K(value));
@@ -978,7 +951,6 @@ int ObPhysicalPlanCtx::get_sqludt_meta_by_subschema_id(uint16_t subschema_id, Ob
       LOG_WARN("invalid subschema id", K(ret), K(subschema_id), K(lbt()));
     } else {
       if (OB_FAIL(subschema_ctx_.get_subschema(subschema_id, sub_meta))) {
-        LOG_WARN("failed to get subschema", K(ret), K(subschema_id));
       } else if (sub_meta.type_ >= OB_SUBSCHEMA_MAX_TYPE) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid subschema type", K(ret), K(sub_meta));
@@ -1013,7 +985,6 @@ int ObPhysicalPlanCtx::get_enumset_meta_by_subschema_id(uint16_t subschema_id,
     LOG_WARN("invalid subschema id", K(ret), K(subschema_id), K(lbt()));
   } else {
     if (OB_FAIL(subschema_ctx_.get_subschema(subschema_id, value))) {
-      LOG_WARN("failed to get subschema", K(ret), K(subschema_id));
     } else if (value.type_ >= OB_SUBSCHEMA_MAX_TYPE) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid subschema type", K(ret), K(value));
@@ -1076,9 +1047,7 @@ int ObPhysicalPlanCtx::get_subschema_id_by_udt_id(uint64_t udt_type_id,
                                                                           allocator_,
                                                                           udt_type_id,
                                                                           *udt_meta))) {
-        LOG_WARN("generate udt_meta failed", K(ret), K(1UL), K(udt_type_id));
       } else if (OB_FAIL(subschema_ctx_.get_subschema_id_from_fields(udt_type_id, new_subschema_id))) {
-        LOG_WARN("failed to get subschema id from result fields", K(ret), K(1UL), K(udt_type_id));
       } else if (new_subschema_id == ObInvalidSqlType // not get from fields, generate new
                  && OB_FAIL(subschema_ctx_.get_new_subschema_id(new_subschema_id))) {
         LOG_WARN("failed to get new subschema id", K(ret), K(1UL), K(udt_type_id));
@@ -1087,7 +1056,6 @@ int ObPhysicalPlanCtx::get_subschema_id_by_udt_id(uint64_t udt_type_id,
         value.signature_ = udt_type_id;
         value.value_ = static_cast<void *>(udt_meta);
         if (OB_FAIL(subschema_ctx_.set_subschema(new_subschema_id, value))) {
-          LOG_WARN("failed to set new subschema", K(ret), K(new_subschema_id), K(udt_type_id), K(value));
         } else {
           subschema_id = new_subschema_id;
         }
@@ -1112,7 +1080,6 @@ int ObPhysicalPlanCtx::get_subschema_id_by_collection_elem_type(ObNestedType col
     } else if (OB_FAIL(phy_plan_->get_subschema_ctx().get_subschema_id_by_typedef(coll_type,
                                                                                              elem_type,
                                                                                              subschema_id))) {
-      LOG_WARN("failed to get subschema id", K(ret), K(elem_type));
     } 
   // no phy plan
   }
@@ -1120,7 +1087,6 @@ int ObPhysicalPlanCtx::get_subschema_id_by_collection_elem_type(ObNestedType col
     if (!subschema_ctx_.is_inited() && OB_FAIL(subschema_ctx_.init())) {
       LOG_WARN("subschema ctx init failed", K(ret));
     } else if (OB_FAIL(subschema_ctx_.get_subschema_id_by_typedef(coll_type, elem_type, subschema_id))) {
-      LOG_WARN("failed to get subschema id", K(ret), K(elem_type));
     }
   }
   return ret;
@@ -1135,7 +1101,6 @@ int ObPhysicalPlanCtx::get_subschema_id_by_type_string(const ObString &type_stri
       LOG_INFO("plan with empty subschema mapping", K(lbt()), K(phy_plan_->get_subschema_ctx()));
       is_subschema_inited_in_plan = false;
     } else if (OB_FAIL(phy_plan_->get_subschema_ctx().get_subschema_id_by_typedef(type_string, subschema_id))) {
-      LOG_WARN("failed to get subschema id", K(ret));
     } 
   // no phy plan
   } 
@@ -1144,7 +1109,6 @@ int ObPhysicalPlanCtx::get_subschema_id_by_type_string(const ObString &type_stri
     if (!subschema_ctx_.is_inited() && OB_FAIL(subschema_ctx_.init())) {
       LOG_WARN("subschema ctx init failed", K(ret));
     } else if (OB_FAIL(subschema_ctx_.get_subschema_id_by_typedef(type_string, subschema_id))) {
-      LOG_WARN("failed to get subschema id", K(ret));
     }
   }
   return ret;
@@ -1167,15 +1131,12 @@ int ObPhysicalPlanCtx::get_subschema_id_by_type_info(const ObObjMeta &obj_meta,
       ObSubSchemaValue value;
       ObEnumSetMeta *dst_meta = NULL;
       if (OB_FAIL(src_meta.deep_copy(allocator_, dst_meta))) {
-        LOG_WARN("fail to deep copy enumset meta", K(ret));
       } else if (OB_FAIL(subschema_ctx_.get_new_subschema_id(new_subschema_id))) {
-        LOG_WARN("failed to get new subschema id", K(ret), K(1UL));
       } else {
         value.type_ = OB_SUBSCHEMA_ENUM_SET_TYPE;
         value.signature_ = dst_meta->get_signature();
         value.value_ = static_cast<void *>(dst_meta);
         if (OB_FAIL(subschema_ctx_.set_subschema(new_subschema_id, value))) {
-          LOG_WARN("failed to set new subschema", K(ret), K(new_subschema_id), K(value));
         } else {
           subschema_id = new_subschema_id;
         }
@@ -1217,11 +1178,9 @@ int ObPhysicalPlanCtx::set_all_local_session_vars(ObIArray<ObLocalSessionVar> &a
   }
   if (!all_local_session_vars.empty()) {
     if (OB_FAIL(all_local_session_vars_.reserve(all_local_session_vars.count()))) {
-      LOG_WARN("reserve for local_session_vars failed", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < all_local_session_vars.count(); ++i) {
         if (OB_FAIL(all_local_session_vars_.push_back(ObSolidifiedVarsContext(&all_local_session_vars.at(i), &allocator_)))) {
-          LOG_WARN("push back local session var failed", K(ret));
         }
       }
     }
@@ -1277,7 +1236,6 @@ int ObPhysicalPlanCtx::build_subschema_ctx_by_param_store(share::schema::ObSchem
       if (!subschema_ctx_.is_inited() && OB_FAIL(subschema_ctx_.init())) {
         LOG_WARN("subschema ctx init failed", K(ret));
       } else if(OB_FAIL(get_subschema_id_by_udt_id(udt_id, subschema_id, schema_guard))) {
-        LOG_WARN("failed to get subschema id", K(ret), K(param), K(udt_id));
       } else if (subschema_id == ObMaxSystemUDTSqlType) {
         LOG_WARN("failed to get subschema id", K(ret), K(param), K(udt_id));
       } else {
@@ -1309,7 +1267,6 @@ int ObPhysicalPlanCtx::init_param_store_after_deserialize()
   int ret = OB_SUCCESS;
   datum_param_store_.reuse();
   if (OB_FAIL(datum_param_store_.prepare_allocate(param_store_.count()))) {
-    LOG_WARN("fail to prepare allocate", K(ret), K(param_store_.count()));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < param_store_.count(); i++) {
     ObObjParam &obj_param = param_store_.at(i);
@@ -1320,7 +1277,6 @@ int ObPhysicalPlanCtx::init_param_store_after_deserialize()
                                                      reinterpret_cast<char *>(obj_param.get_ext()),
                                                      obj_param.get_val_len(),
                                                      array_obj))) {
-        LOG_WARN("failed to alloc array_obj after decode", K(ret));
       } else {
         obj_param.set_extend(reinterpret_cast<int64_t>(array_obj), T_EXT_SQL_ARRAY);
       }
@@ -1329,9 +1285,7 @@ int ObPhysicalPlanCtx::init_param_store_after_deserialize()
       if (OB_FAIL(datum_param.alloc_datum_reserved_buff(obj_param.meta_,
                                                         obj_param.get_precision(),
                                                         allocator_))) {
-        LOG_WARN("alloc datum reserved buffer failed", K(ret));
       } else if (OB_FAIL(datum_param.from_objparam(obj_param, &allocator_))) {
-        LOG_WARN("fail to convert obj param", K(ret), K(obj_param));
       }
     }
   }

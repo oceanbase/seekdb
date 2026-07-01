@@ -78,7 +78,6 @@ public:
   {}
   int operator()(ObITransCallback *iter)
   {
-    TRANS_LOG(DEBUG, "fill_redo_for_callback", KPC(iter));
     int ret = OB_SUCCESS;
     if (iter->get_epoch() > ctx_.epoch_to_) {
       ret = OB_ITER_END;
@@ -155,7 +154,6 @@ private:
     } else {
       ObMemtable *memtable = static_cast<memtable::ObMemtable *>(riter->get_memtable());
       if (OB_ISNULL(memtable)) {
-        TRANS_LOG(ERROR, "memtable is null", K(riter));
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(mmw_.append_row_kv(mem_ctx_->get_max_table_version(),
                                             redo,
@@ -175,7 +173,6 @@ private:
     if (ctx_.skip_lock_node_ && !titer->must_log()) {
       fake_fill = true;
     } else if (OB_FAIL(titer->get_redo(redo))) {
-      TRANS_LOG(ERROR, "get_redo failed.", K(ret));
     } else if (OB_FAIL(mmw_.append_table_lock_kv(mem_ctx_->get_max_table_version(), redo))) {
       if (OB_BUF_NOT_ENOUGH != ret) {
         TRANS_LOG(WARN, "fill table lock redo fail", K(ret));
@@ -238,7 +235,6 @@ int ObRedoLogGenerator::fill_redo_log(ObTxFillRedoCtx &ctx)
     ret = OB_NOT_INIT;
   } else if (OB_ISNULL(ctx.buf_) || ctx.buf_len_ < 0) {
     ret = OB_INVALID_ARGUMENT;
-    TRANS_LOG(WARN, "invalid_argument", KP(ctx.buf_), K(ctx.buf_len_));
   } else {
     // prepare the global varibles
     ObMutatorWriter mmw;
@@ -277,7 +273,6 @@ int ObRedoLogGenerator::log_submitted(const ObCallbackScopeArray &callbacks_arr,
     ret = OB_NOT_INIT;
     TRANS_LOG(ERROR, "not init", K(ret));
   } else if (OB_FAIL(callback_mgr_->log_submitted(callbacks_arr, scn, submitted_cnt))) {
-    TRANS_LOG(ERROR, "log submitted callback fail", K(ret));
   }
   ATOMIC_AAF(&redo_filled_cnt_, submitted_cnt);
   return ret;
@@ -289,7 +284,6 @@ int ObRedoLogGenerator::sync_log_succ(const ObCallbackScopeArray &callbacks_arr,
   int ret = OB_SUCCESS;
   int64_t sync_cnt = 0;
   if (OB_FAIL(callback_mgr_->log_sync_succ(callbacks_arr, scn, sync_cnt))) {
-    TRANS_LOG(ERROR, "sync succ fail", K(ret));
   } else {
     redo_sync_succ_cnt_ += sync_cnt;
   }
@@ -306,7 +300,6 @@ void ObRedoLogGenerator::sync_log_fail(const ObCallbackScopeArray &callbacks,
     ret = OB_NOT_INIT;
     TRANS_LOG(ERROR, "not init", K(ret));
   } else if (OB_FAIL(callback_mgr_->log_sync_fail(callbacks, max_applied_scn, removed_cnt))) {
-    TRANS_LOG(ERROR, "sync log failed", K(ret));
   } else {
     redo_sync_fail_cnt_ += removed_cnt;
   }

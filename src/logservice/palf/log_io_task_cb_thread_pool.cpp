@@ -45,7 +45,6 @@ int LogIOTaskCbThreadPool::init(const int64_t log_io_cb_num,
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), KPC(palf_env_impl));
   } else if (OB_FAIL(TG_CREATE_TENANT(tg_id, tg_id_, log_io_cb_num))) {
-    PALF_LOG(WARN, "LogIOTaskCbThreadPool TG_CREATE failed", K(ret));
   } else {
     palf_env_impl_ = palf_env_impl;
     is_inited_ = true;
@@ -65,7 +64,6 @@ int LogIOTaskCbThreadPool::start()
     ret = OB_NOT_INIT;
     PALF_LOG(ERROR, "LogIOTaskCbThreadPool not inited!!!", K(ret));
   } else if (OB_FAIL(TG_SET_HANDLER_AND_START(tg_id_, *this))) {
-    PALF_LOG(ERROR, "start LogIOTaskCbThreadPool failed", K(ret));
   } else {
     PALF_LOG(INFO, "start LogIOTaskCbThreadPool success", K(ret),
         K(tg_id_));
@@ -81,7 +79,6 @@ int LogIOTaskCbThreadPool::stop()
     PALF_LOG(WARN, "LogIOTaskCbThreadPool not inited!!!", K(ret));
   } else {
     TG_STOP(tg_id_);
-    PALF_LOG(INFO, "stop LogIOTaskCbThreadPool success", K(tg_id_));
   }
   return ret;
 }
@@ -94,7 +91,6 @@ int LogIOTaskCbThreadPool::wait()
     PALF_LOG(WARN, "LogIOTaskCbThreadPool not inited!!!", K(ret));
   } else {
     TG_WAIT(tg_id_);
-    PALF_LOG(INFO, "wait LogIOTaskCbThreadPool success", K(tg_id_));
   }
   return ret;
 }
@@ -108,7 +104,6 @@ void LogIOTaskCbThreadPool::destroy()
     TG_DESTROY(tg_id_);
   }
   tg_id_ = -1;
-  PALF_LOG(INFO, "destroy LogIOTaskCbThreadPool success", K(tg_id_));
 }
 
 void LogIOTaskCbThreadPool::handle(common::LinkTask *task)
@@ -122,9 +117,7 @@ void LogIOTaskCbThreadPool::handle(common::LinkTask *task)
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(log_io_task));
   } else if (OB_FAIL(log_io_task->after_consume(palf_env_impl_))) {
-    PALF_LOG(WARN, "LogIOTask after_consume failed", K(ret), KP(log_io_task));
   } else {
-    PALF_LOG(TRACE, "LogIOTaskCbThreadPool handle success");
   }
   if (OB_NOT_NULL(log_io_task)) {
     log_io_task->free_this(palf_env_impl_);

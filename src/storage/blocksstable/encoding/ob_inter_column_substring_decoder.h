@@ -94,7 +94,6 @@ OB_INLINE int ObInterColSubStrDecoder::init(
   } else {
     meta += column_header.offset_;
     meta_header_ = reinterpret_cast<const ObInterColSubStrMetaHeader *>(meta);
-    STORAGE_LOG(DEBUG, "decoder meta", K(*meta_header_));
   }
   return ret;
 }

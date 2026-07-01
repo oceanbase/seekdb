@@ -73,13 +73,11 @@ int ObGroupWriteMacroBlockTask::process()
     LOG_WARN("ddl dag is null", K(ret), KP(ddl_dag_));
   } else if (tablet_id_.is_valid()) {
     if (OB_FAIL(group_write_macro_block(tablet_id_))) {
-      LOG_WARN("group write macro block failed", K(ret));
     }
   } else {
     const ObIArray<std::pair<ObLSID, ObTabletID>> &ls_tablet_ids = ddl_dag_->get_ls_tablet_ids();
     for (int64_t i = 0; OB_SUCC(ret) && i < ls_tablet_ids.count(); ++i) {
       if (OB_FAIL(group_write_macro_block(ls_tablet_ids.at(i).second))) {
-        LOG_WARN("group write macro block failed", K(ret), K(i), "tablet_id", ls_tablet_ids.at(i).second);
       }
     }
   }
@@ -107,9 +105,7 @@ int ObGroupWriteMacroBlockTask::group_write_macro_block(const ObTabletID &tablet
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invlaid argument", K(ret), K(tablet_id));
   } else if (OB_FAIL(ddl_dag_->get_tablet_context(tablet_id, tablet_context))) {
-    LOG_WARN("get ddl tablet context failed", K(ret), K(tablet_id));
   } else if (OB_FAIL(tablet_context->get_all_slices(ddl_slices))) {
-    LOG_WARN("get all slices failed", K(ret));
   } else {
     struct {
       bool operator() (ObDDLSlice *left, ObDDLSlice *right) {
@@ -134,7 +130,6 @@ int ObGroupWriteMacroBlockTask::group_write_macro_block(const ObTabletID &tablet
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("current ddl slice is nul", K(ret), K(j), KP(ddl_slices.at(j)));
         } else if (OB_FAIL(ddl_slices.at(j)->get_remain_block(cg_idx, curr_slice_remain))) {
-          LOG_WARN("get remain block failed", K(ret), K(tablet_id), K(cg_idx));
         } else if (OB_UNLIKELY(!curr_slice_remain.is_valid())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("current remain block is invalid", K(ret), K(tablet_id), K(cg_idx), K(j), K(curr_slice_remain), KPC(ddl_slices.at(j)));
@@ -149,7 +144,6 @@ int ObGroupWriteMacroBlockTask::group_write_macro_block(const ObTabletID &tablet
             free_cg_block_file(curr_slice_remain.block_file_);
           } else if (data_size >= OB_DEFAULT_MACRO_BLOCK_SIZE) {
             if (OB_FAIL(schedule_write_task(tablet_id, start_slice_idx, cg_idx, group_files))) {
-              LOG_WARN("schedule write task failed", K(ret), K(tablet_id), K(cg_idx));
             } else {
               data_size = 0;
               group_files.reuse();
@@ -159,7 +153,6 @@ int ObGroupWriteMacroBlockTask::group_write_macro_block(const ObTabletID &tablet
         } else if (curr_slice_remain.has_flushed_macro_block_) { // slice flushed, data not continue
           if (data_size > 0) {
             if (OB_FAIL(schedule_write_task(tablet_id, start_slice_idx, cg_idx, group_files))) {
-              LOG_WARN("schedule write task failed", K(ret), K(tablet_id), K(cg_idx));
             } else {
               data_size = 0;
               group_files.reuse();
@@ -173,7 +166,6 @@ int ObGroupWriteMacroBlockTask::group_write_macro_block(const ObTabletID &tablet
       }
       if (OB_SUCC(ret) && data_size > 0) {
         if (OB_FAIL(schedule_write_task(tablet_id, start_slice_idx, cg_idx, group_files))) {
-          LOG_WARN("schedule write task failed", K(ret), K(tablet_id), K(cg_idx));
         } else {
           data_size = 0;
           group_files.reuse();
@@ -189,7 +181,6 @@ int ObGroupWriteMacroBlockTask::group_write_macro_block(const ObTabletID &tablet
     }
     if (OB_SUCC(ret) && group_write_tasks_.count() > 0) {
       if (OB_FAIL(ddl_dag_->batch_add_task(group_write_tasks_))) {
-        LOG_WARN("batch add task failed", K(ret), K(group_write_tasks_.count()));
       } else {
         LOG_TRACE("batch add group write task success", K(ret), K(tablet_id), K(group_write_tasks_.count()));
       }
@@ -207,13 +198,9 @@ int ObGroupWriteMacroBlockTask::schedule_write_task(const ObTabletID &tablet_id,
   } else {
     ObGroupCGBlockFileWriteTask *write_task = nullptr;
     if (OB_FAIL(ddl_dag_->alloc_task(write_task))) {
-      LOG_WARN("alloc write task failed", K(ret));
     } else if (OB_FAIL(write_task->init(ddl_dag_, tablet_id, slice_idx, cg_idx, group_files))) {
-      LOG_WARN("init group write task failed", K(ret), K(tablet_id), K(slice_idx), K(cg_idx), K(group_files));
     } else if (OB_FAIL(copy_children_to(*write_task))) {
-      LOG_WARN("add child failed", K(ret));
     } else if (OB_FAIL(group_write_tasks_.push_back(write_task))) {
-      LOG_WARN("push back task failed", K(ret));
     }
   }
   return ret;
@@ -265,7 +252,6 @@ int ObGroupCGBlockFileWriteTask::init(ObDDLIndependentDag *ddl_dag, const ObTabl
     // TODO@youchuan.yc using cg block file handl to manage the cg block file ptr
     const int64_t cg_row_file_count = group_files.count();
     if (OB_FAIL(block_files_.prepare_allocate(cg_row_file_count))) {
-      LOG_WARN("fail to prepare allocate", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < cg_row_file_count; ++i) {
       block_files_.at(i) = group_files.at(i);
@@ -289,14 +275,9 @@ int ObGroupCGBlockFileWriteTask::process()
     ObWriteMacroParam write_param;
     HEAP_VAR(ObDAGCGMacroBlockWriter, cg_writer) {
     if (OB_FAIL(ObDDLUtil::fill_writer_param(tablet_id_, slice_idx_, cg_idx_, ddl_dag_, 0/*max_batch_size*/, write_param))) {
-      LOG_WARN("fill write param failed", K(ret));
     } else if (OB_FAIL(ObDDLUtil::init_macro_block_seq(slice_idx_,
                                                        write_param.start_sequence_))) {
-      LOG_WARN("fail to initialize macro block seq", K(ret), K(write_param.direct_load_type_),
-                                                     K(write_param.tablet_id_),
-                                                     K(write_param.start_sequence_));
     } else if (OB_FAIL(cg_writer.open(write_param))) {
-      LOG_WARN("dag cg writer open failed", K(ret), K(write_param));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < block_files_.count(); ++i) {
       ObCGBlockFile *cur_block_file = block_files_.at(i);
@@ -318,11 +299,9 @@ int ObGroupCGBlockFileWriteTask::process()
             // flush, reopen and append again
             ret = OB_SUCCESS;
             if (OB_FAIL(cur_block_file->put_cg_block_back(cg_block))) {
-              LOG_WARN("fail to put cg block back", K(ret), K(cg_block));
             } else {
               row_offset += cg_writer.get_written_row_count();
               if (OB_FAIL(cg_writer.close())) {
-                LOG_WARN("dag cg writer close failed", K(ret));
               } else {
                 write_param.row_offset_ = row_offset;
                 write_param.start_sequence_ = cg_writer.get_last_macro_seq();
@@ -330,7 +309,6 @@ int ObGroupCGBlockFileWriteTask::process()
               } 
             }
             if (FAILEDx(cg_writer.open(write_param))) {
-              LOG_WARN("dag cg writer open failed", K(ret), K(write_param));
             }
           } else {
             LOG_WARN("append cg block failed", K(ret), K(cg_block));
@@ -340,7 +318,6 @@ int ObGroupCGBlockFileWriteTask::process()
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(cg_writer.close())) {
-        LOG_WARN("dag cg writer close failed", K(ret));
       }
     }
     } // HEAP_VAR

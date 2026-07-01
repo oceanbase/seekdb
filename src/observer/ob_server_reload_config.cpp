@@ -46,7 +46,6 @@ int set_cluster_name_hash(const ObString &cluster_name)
   uint64_t cluster_name_hash = 0/*INVALID_CLUSTER_NAME_HASH*/;
 
   if (OB_FAIL(calc_cluster_name_hash(cluster_name, cluster_name_hash))) {
-    LOG_WARN("failed to calc_cluster_name_hash", KR(ret), K(cluster_name));
   } else {
     rpc::frame::ObNetConsts::CLUSTER_NAME_HASH = cluster_name_hash;
     LOG_INFO("set cluster_name_hash", KR(ret), K(cluster_name), K(cluster_name_hash));
@@ -92,27 +91,20 @@ int ObServerReloadConfig::operator()()
     LOG_WARN("gctx not init", "gctx inited", gctx_.is_inited(), K(tmp_ret));
   } else {
     if (OB_TMP_FAIL(ObReloadConfig::operator()())) {
-      LOG_WARN("ObReloadConfig operator() failed", K(tmp_ret));
     }
     if (OB_TMP_FAIL(ObClusterVersion::get_instance().reload_config())) {
-      LOG_WARN("cluster version reload config failed", K(tmp_ret));
     }
 
     if (OB_TMP_FAIL(OBSERVER.reload_config())) {
-      LOG_WARN("reload configuration for ob service fail", K(tmp_ret));
     }
     if (OB_TMP_FAIL(OBSERVER.get_net_frame().reload_config())) {
-      LOG_WARN("reload configuration for net frame fail", K(tmp_ret));
     }
     if (OB_TMP_FAIL(OBSERVER.get_net_frame().reload_ssl_config())) {
-      LOG_WARN("reload ssl config for net frame fail", K(tmp_ret));
     }
 
     if (OB_TMP_FAIL(ObTdeEncryptEngineLoader::get_instance().reload_config())) {
-      LOG_WARN("reload config for tde encrypt engine fail", K(tmp_ret));
     }
     if (OB_TMP_FAIL(ObSrvNetworkFrame::reload_rpc_auth_method())) {
-      LOG_WARN("reload config for rpc auth method fail", K(tmp_ret));
     }
 
   }
@@ -122,7 +114,6 @@ int ObServerReloadConfig::operator()()
     OB_LOGGER.set_info_as_wdiag(false);
     // reload log config again after get MIN_CLUSTER_VERSION
     if (OB_TMP_FAIL(ObReloadConfig::operator()())) {
-      LOG_WARN("ObReloadConfig operator() failed", K(tmp_ret));
     }
     const int64_t reserved_memory = GCONF.cache_wash_threshold;
     LOG_INFO("set reserved memory", K(reserved_memory));
@@ -145,7 +136,6 @@ int ObServerReloadConfig::operator()()
       io_config.data_storage_io_timeout_ms_ = GCONF._data_storage_io_timeout / 1000L;
       io_config.data_storage_warning_tolerance_time_ = GCONF.data_storage_warning_tolerance_time;
       if (OB_TMP_FAIL(ObIOManager::get_instance().set_io_config(io_config))) {
-        LOG_WARN("reload io manager config fail, ", K(tmp_ret));
       }
 
       (void)reload_diagnose_info_config(GCONF.enable_perf_event);
@@ -171,8 +161,6 @@ int ObServerReloadConfig::operator()()
 
     // Refresh cluster_name_hash for non arbitration mode
     if (FAILEDx(set_cluster_name_hash(GCONF.cluster.str()))) {
-      LOG_WARN("failed to set_cluster_name_hash", KR(ret), "cluster_name", GCONF.cluster.str(),
-                                                "cluster_name_len", strlen(GCONF.cluster.str()));
     }
 
   // reset mem leak
@@ -216,7 +204,6 @@ int ObServerReloadConfig::operator()()
     ObResourceLimit rl;
     int tmp_ret = rl.load_config(GCONF._resource_limit_spec.str());
     if (OB_SUCCESS != tmp_ret) {
-      LOG_WARN("load _resource_limit_spec failed", K(tmp_ret), K(GCONF._resource_limit_spec.str()));
     } else {
       LOG_INFO("load _resource_limit_spec succeed", "origin", RL_CONF, "current", rl,
                K(GCONF._resource_limit_spec.str()));
@@ -257,15 +244,11 @@ int ObServerReloadConfig::operator()()
     int64_t reserved_size = 0;
     if (OB_TMP_FAIL(ObServerUtils::get_data_disk_info_in_config(data_disk_size,
                                                                 data_disk_percentage))) {
-      LOG_ERROR("cal_all_part_disk_size failed", KR(tmp_ret));
     } else if (OB_TMP_FAIL(SERVER_STORAGE_META_SERVICE.get_reserved_size(reserved_size))) {
-      LOG_WARN("fail to get reserved size", KR(tmp_ret), K(reserved_size));
     } else if (OB_TMP_FAIL(OB_STORAGE_OBJECT_MGR.resize_local_device(
         OB_STORAGE_OBJECT_MGR.get_total_macro_block_count()
             * OB_STORAGE_OBJECT_MGR.get_macro_block_size(),
         data_disk_size, data_disk_percentage, reserved_size))) {
-      LOG_WARN("fail to resize file", KR(tmp_ret),
-          K(data_disk_size), K(data_disk_percentage), K(reserved_size));
     }
 
   {

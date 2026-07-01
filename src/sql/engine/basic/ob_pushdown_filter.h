@@ -779,7 +779,6 @@ public:
     int ret = common::OB_SUCCESS;
     if (nth_child >= n_child_) {
       ret = common::OB_ERR_UNEXPECTED;
-      SQL_ENG_LOG(WARN, "invalid child", K(nth_child), K(n_child_));
     } else {
       filter_executor = childs_[nth_child];
     }
@@ -974,7 +973,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL((*hash_func_)(*datum_, seed, seed))) {
-      STORAGE_LOG(WARN, "Failed to do hash for datum", K_(datum));
     } else {
       hash_val = seed;
     }
@@ -1076,7 +1074,6 @@ public:
     int ret = OB_SUCCESS;
     uint64_t hash_val;
     if (OB_FAIL(hash_func_(datum, 0, hash_val))) {
-      STORAGE_LOG(WARN, "Failed to do hash for datum", K(datum));
     } else {
       ret = set_.insert_hash(hash_val);
     }
@@ -1087,7 +1084,6 @@ public:
     int ret = OB_SUCCESS;
     uint64_t hash_val;
     if (OB_FAIL(hash_func_(datum, 0, hash_val))) {
-      STORAGE_LOG(WARN, "Failed to do hash for datum", K(datum));
     } else {
       is_exist = set_.test_hash(hash_val);
     }
@@ -1556,7 +1552,6 @@ int ObPushdownFilterExecutor::init_array_param(common::ObFixedArray<T, common::O
     } else {
       param.reset();
       if (OB_FAIL(param.init(size))) {
-        STORAGE_LOG(WARN, "Failed to init params", K(ret), K(size));
       }
     }
   }

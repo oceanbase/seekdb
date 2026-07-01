@@ -121,7 +121,6 @@ int ObTableLoadObjCaster::cast_obj(ObTableLoadCastObjCtx &cast_obj_ctx,
     }
   } else {
     if (OB_FAIL(convert_obj(expect_type, src, convert_src_obj))) {
-      LOG_WARN("fail to convert obj", KR(ret));
     }
   }
   if (OB_SUCC(ret) && convert_src_obj != nullptr) {
@@ -132,17 +131,14 @@ int ObTableLoadObjCaster::cast_obj(ObTableLoadCastObjCtx &cast_obj_ctx,
     if (OB_FAIL(ret)) {
     } else if (column_schema->is_enum_or_set()) {
       if (OB_FAIL(handle_string_to_enum_set(cast_obj_ctx, column_schema, src, dst))) {
-        LOG_WARN("fail to convert string to enum or set", KR(ret), K(src), K(dst));
       }
     } else {
       if (OB_FAIL(to_type(expect_type, column_schema, cast_obj_ctx, accuracy, *convert_src_obj, dst))) {
-        LOG_WARN("fail to do to type", KR(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(pad_obj(cast_obj_ctx, column_schema, dst))) {
-        LOG_WARN("fail to pad obj", KR(ret));
       }
     }
 
@@ -182,7 +178,6 @@ int ObTableLoadObjCaster::handle_string_to_collection(ObTableLoadCastObjCtx &cas
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected type name", K(ret), K(extended_type_info.count()));
   } else if (OB_FAIL(cast_obj_ctx.cast_ctx_->exec_ctx_->get_subschema_id_by_type_string(extended_type_info.at(0), subschema_id))) {
-    LOG_WARN("failed to get array type subschema id", K(ret));
   } else {
     dst.meta_.set_collection(subschema_id);
   }
@@ -205,14 +200,12 @@ int ObTableLoadObjCaster::handle_string_to_enum_set(ObTableLoadCastObjCtx &cast_
   } else if (expect_type == ObEnumType) {
     if (OB_FAIL(string_to_enum(*(cast_obj_ctx.cast_ctx_->allocator_v2_), src, collation_type,
                                cast_mode, type_infos, warning, output_value))) {
-      LOG_WARN("fail to convert string to enum", KR(ret), K(src), K(type_infos), K(output_value));
     } else {
       dst.set_enum(output_value);
     }
   } else if (expect_type == ObSetType) {
     if (OB_FAIL(string_to_set(*(cast_obj_ctx.cast_ctx_->allocator_v2_), src, collation_type,
                               cast_mode, type_infos, warning, output_value))) {
-      LOG_WARN("fail to convert string to set", KR(ret), K(src), K(type_infos), K(output_value));
     } else {
       dst.set_set(output_value);
     }
@@ -238,8 +231,6 @@ int ObTableLoadObjCaster::string_to_enum(ObIAllocator &alloc, const ObObj &src,
   ObString no_sp_val(0, static_cast<ObString::obstr_size_t>(no_sp_len), in_str.ptr());
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(find_type(str_values, cs_type, no_sp_val, pos))) {
-    LOG_WARN("fail to find type", K(str_values), K(cs_type), K(no_sp_val), K(in_str), K(pos),
-             K(ret));
   } else if (OB_UNLIKELY(pos < 0)) {
     // Bug30666903: check implicit cast logic to handle number cases
     if (!in_str.is_numeric()) {
@@ -296,14 +287,12 @@ int ObTableLoadObjCaster::string_to_set(ObIAllocator &alloc, const ObObj &src,
         is_last_value = true;
         val_str.assign_ptr(remain, remain_len);
         if (OB_FAIL(find_type(str_values, cs_type, val_str, pos))) {
-          LOG_WARN("fail to find type", K(str_values), K(cs_type), K(in_str), K(pos), K(ret));
         }
       } else {
         val_str.assign_ptr(remain, static_cast<ObString::obstr_size_t>(sep_loc - remain));
         remain_len = remain_len - (sep_loc - remain + sep.length());
         remain = sep_loc + sep.length();
         if (OB_FAIL(find_type(str_values, cs_type, val_str, pos))) {
-          LOG_WARN("fail to find type", K(str_values), K(cs_type), K(val_str), K(pos), K(ret));
         }
       }
 
@@ -373,12 +362,10 @@ int ObTableLoadObjCaster::to_type(const ObObjType &expect_type, const share::sch
     cast_obj_ctx.number_fast_ctx_.reset();
     ObString tmp_str;
     if (OB_FAIL(src.get_varchar(tmp_str))) {
-      LOG_WARN("fail to get varchar", KR(ret), K(src));
     } else if (OB_FAIL(number_fast_from(tmp_str.ptr(), tmp_str.length(), cast_ctx.allocator_v2_, d,
                                         digits, accuracy, cast_obj_ctx.number_fast_ctx_))) {
       if (ret == OB_EAGAIN) {
         if (OB_FAIL(ObObjCaster::to_type(expect_type, cast_ctx, src, dst))) {
-          LOG_WARN("fail to cast ObObj", KR(ret), K(src), K(expect_type));
         }
       } else {
         LOG_WARN("fail to cast ObObj", KR(ret), K(src), K(expect_type));
@@ -401,7 +388,6 @@ int ObTableLoadObjCaster::to_type(const ObObjType &expect_type, const share::sch
       cast_ctx.res_accuracy_ = &res_acc;
     }
     if (OB_FAIL(ObObjCaster::to_type(expect_type, cast_ctx, src, dst))) {
-      LOG_WARN("fail to cast ObObj", KR(ret), K(src), K(expect_type));
     }
   }
   return ret;
@@ -421,14 +407,11 @@ int ObTableLoadObjCaster::cast_obj_check(ObTableLoadCastObjCtx &cast_obj_ctx,
     ret = OB_BAD_NULL_ERROR;
     LOG_USER_ERROR(OB_BAD_NULL_ERROR, column_name.length(), column_name.ptr());
   } else if (OB_FAIL(obj_collation_check(true, collation_type, *const_cast<ObObj *>(res_obj)))) {
-    LOG_WARN("failed to check collation", KR(ret), K(collation_type), KPC(res_obj));
   } else if ((expect_type == ObNumberType || expect_type == ObUNumberType) && is_fast_number) {
     if (OB_FAIL(number_fast_cast_check(cast_obj_ctx.number_fast_ctx_, obj, accuracy))) {
       if (ret == OB_EAGAIN) {
         if (OB_FAIL(obj_accuracy_check(*cast_obj_ctx.cast_ctx_, accuracy, collation_type, *res_obj,
                                        obj, res_obj))) {
-          LOG_WARN("failed to check accuracy", KR(ret), K(accuracy), K(collation_type),
-                   KPC(res_obj));
         }
       } else {
         LOG_WARN("failed to check accuracy", KR(ret), K(obj), K(expect_type));
@@ -436,7 +419,6 @@ int ObTableLoadObjCaster::cast_obj_check(ObTableLoadCastObjCtx &cast_obj_ctx,
     }
   } else if (OB_FAIL(obj_accuracy_check(*cast_obj_ctx.cast_ctx_, accuracy, collation_type, *res_obj,
                                         obj, res_obj))) {
-    LOG_WARN("failed to check accuracy", KR(ret), K(accuracy), K(collation_type), KPC(res_obj));
   }
   return ret;
 }
@@ -459,13 +441,11 @@ int ObTableLoadObjCaster::string_datetime_oracle(const ObObjType expect_type,
   } else if (OB_FAIL(ObExprUtil::convert_string_collation(
                in.get_string(), in.get_collation_type(), utf8_string,
                ObCharset::get_system_collation(), *params.allocator_v2_))) {
-    LOG_WARN("fail to convert string collation", K(ret));
   } else {
     int64_t value = 0;
     ObTimeConvertCtx cvrt_ctx(params.dtc_params_.tz_info_, ObTimestampType == expect_type);
     cvrt_ctx.oracle_nls_format_ = params.dtc_params_.get_nls_format(ObDateTimeType);
     if (OB_FAIL(time_cvrt.str_to_datetime_oracle(utf8_string, cvrt_ctx, value))) {
-      LOG_WARN("fail to convert str to date in oracle mode", KR(ret), K(utf8_string), K(value));
     } else if (CM_IS_ERROR_ON_SCALE_OVER(cast_mode) &&
                (value == ObTimeConverter::ZERO_DATE || value == ObTimeConverter::ZERO_DATETIME)) {
       ret = OB_INVALID_DATE_VALUE;

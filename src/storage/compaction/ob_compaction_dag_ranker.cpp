@@ -166,13 +166,9 @@ int ObMiniCompactionRankHelper::get_rank_weighed_score(
       param.score_ = 0; // the greater score, the lower priority
 
       if (OB_FAIL(CALCULATE_NORMALIZED_RANK_SCORE(occupy_size, param.occupy_size_, SIZE_WEIGHT, param.score_))) {
-        LOG_WARN("failed to calculate rank score for occupy size", K(ret), K(param));
       } else if (OB_FAIL(CALCULATE_NORMALIZED_RANK_SCORE(replay_interval, param.replay_interval_, REPLAY_WEIGHT, param.score_))) {
-        LOG_WARN("failed to calculate rank score for replay interval", K(ret), K(param));
       } else if (OB_FAIL(CALCULATE_NORMALIZED_RANK_SCORE(wait_time, rank_time_ - param.add_time_, FIFO_WIEGHT, param.score_))) {
-        LOG_WARN("failed to calculate rank score for wait time", K(ret), K(param));
       } else if (OB_FAIL(CALCULATE_NORMALIZED_RANK_SCORE(sstable_cnt, param.sstable_cnt_, SSTABLE_CNT_WEIGHT, param.score_))) {
-        LOG_WARN("failed to calculate rank score for sstable cnt", K(ret), K(param));
       }
     }
   }
@@ -244,13 +240,9 @@ int ObMinorCompactionRankHelper::get_rank_weighed_score(
       param.score_ = 0; // the greater score, the lower priority
 
       if (OB_FAIL(CALCULATE_NORMALIZED_RANK_SCORE(occupy_size, param.occupy_size_, SIZE_WEIGHT, param.score_))) {
-        LOG_WARN("failed to calculate rank score for occupy size", K(ret));
       } else if (OB_FAIL(CALCULATE_NORMALIZED_RANK_SCORE(sstable_cnt, param.sstable_cnt_, SSTABLE_CNT_WEIGHT, param.score_))) {
-        LOG_WARN("failed to calculate rank score for sstable cnt", K(ret));
       } else if (OB_FAIL(CALCULATE_NORMALIZED_RANK_SCORE(parallel_dag_cnt, param.parallel_dag_cnt_, PARALLEL_DAG_CNT_WEIGHT, param.score_))) {
-        LOG_WARN("failed to calculate rank score for parallel dag cnt", K(ret));
       } else if (OB_FAIL(CALCULATE_NORMALIZED_RANK_SCORE(wait_time, rank_time_ - param.add_time_, FIFO_WIEGHT, param.score_))) {
-        LOG_WARN("failed to calculate rank score for wait time", K(ret));
       } else {
         param.score_ += param.parallel_sstable_cnt_ * 10000 / param.sstable_cnt_ * PARALLEL_SSTABLE_CNT_WEIGHT;
       }
@@ -337,11 +329,9 @@ int ObCompactionDagRanker::init(
     LOG_WARN("get invalid argument", K(ret), K(priority));    
   } else if (ObDagPrio::DAG_PRIO_COMPACTION_HIGH == priority) {
     if (OB_FAIL(create_rank_helper<ObMiniCompactionRankHelper>(rank_time, rank_helper_))) {
-      LOG_WARN("failed to create rank helper", K(ret), K(priority));
     }
   } else {
     if (OB_FAIL(create_rank_helper<ObMinorCompactionRankHelper>(rank_time, rank_helper_))) {
-      LOG_WARN("failed to create rank helper", K(ret), K(priority));
     }
   }
 
@@ -389,7 +379,6 @@ int ObCompactionDagRanker::sort(
   } else if (!rank_helper_->check_need_rank()) {
     // no need to sort
   } else if (OB_FAIL(rank_helper_->get_rank_weighed_score(dags))) {
-    LOG_WARN("failed to get rank weighed score", K(ret), KPC(rank_helper_), K(dags));
   } else {
     ObCompactionRankScoreCompare comp(ret);
     lib::ob_sort(dags.begin(), dags.end(), comp);

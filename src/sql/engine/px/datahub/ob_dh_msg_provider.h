@@ -72,12 +72,10 @@ public:
     {
       ObThreadCondGuard guard(sqc_level_sync_cond_);
       if (OB_FAIL(whole_msg_.aggregate_piece(piece))) {
-        SQL_ENG_LOG(WARN, "failed to aggregate_piece");
       } else {
         ++dh_msg_cnt_;
         whole_msg_set_ = (dh_msg_cnt_ == task_cnt);
         if (whole_msg_set_ && OB_FAIL(whole_msg_.after_aggregate_piece())) {
-          SQL_ENG_LOG(WARN, "fail to do some work after whole msg aggregate piece msg");
         }
       }
     }
@@ -87,7 +85,6 @@ public:
       // because the whole message will be ready once all local piece gathered.
       // While for rpc datahub message, there is a wait_whole_msg action outside to wait rpc back.
     } else if ((need_sync || need_wait_whole_msg) && OB_FAIL(sync_wait(timeout_ts, task_cnt))) {
-      SQL_ENG_LOG(WARN, "failed to sync_wait");
     } else if (need_wait_whole_msg) {
       whole = &whole_msg_;
     }
@@ -103,7 +100,6 @@ public:
     {
       ObThreadCondGuard guard(sqc_level_sync_cond_);
       if (OB_FAIL(sqc_piece_msg_.aggregate_piece(piece))) {
-        SQL_ENG_LOG(WARN, "failed to aggregate_piece");
       } else {
         ++dh_msg_cnt_;
       }
@@ -116,7 +112,6 @@ public:
 
     if (OB_FAIL(ret)) {
     } else if ((need_sync) && OB_FAIL(sync_wait(timeout_ts, task_cnt))) {
-      SQL_ENG_LOG(WARN, "failed to sync_wait");
     }
     return ret;
   }
@@ -137,7 +132,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(whole_msg_.assign(msg))) {
-      SQL_ENG_LOG(WARN,"fail assign msg", K(msg), K(ret));
     } else {
       whole_msg_set_ = true;
     }

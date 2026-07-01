@@ -62,7 +62,6 @@ int ObExprArrayExtreme::calc_result_type1(ObExprResType &type,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(type1.get_type()));
   } else if (OB_FAIL(exec_ctx->get_sqludt_meta_by_subschema_id(type1.get_subschema_id(), arr_meta))) {
-    LOG_WARN("failed to get elem meta.", K(ret), K(type1.get_subschema_id()));
   } else if (OB_ISNULL(coll_info = reinterpret_cast<const ObSqlCollectionInfo *>(arr_meta.value_))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ObSqlCollectionInfo is null", K(ret));
@@ -109,7 +108,6 @@ int ObExprArrayExtreme::calc_extreme(ObIArrayType* src_arr, ObObj &res_obj, bool
       if (src_arr->is_null(i)) {
         // do nothing
       } else if (OB_FAIL(src_arr->elem_at(i, elem_obj))) {
-        LOG_WARN("failed to get element", K(ret), K(i));
       } else if (res_obj.is_null()) {
         res_obj = elem_obj;
       } else if (elem_obj.is_varchar()) {
@@ -142,13 +140,10 @@ int ObExprArrayExtreme::eval_array_extreme(const ObExpr &expr, ObEvalCtx &ctx, O
   ObObj res_obj;
 
   if (OB_FAIL(expr.args_[0]->eval(ctx, arr_datum))) {
-    LOG_WARN("failed to eval source array arg", K(ret));
   } else if (arr_datum->is_null()) {
     res.set_null();
-  } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_datum->get_string(), src_arr))) { 
-    LOG_WARN("construct array obj failed", K(ret));
+  } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_datum->get_string(), src_arr))) {
   } else if (OB_FAIL(calc_extreme(src_arr, res_obj, is_max))) {
-    LOG_WARN("calc array extreme value failed", K(ret));
   } else {
     res.from_obj(res_obj);
     if (res_obj.is_string_type() && OB_FAIL(res.deep_copy(res, res_alloc))) {
@@ -173,7 +168,6 @@ int ObExprArrayExtreme::eval_array_extreme_batch(const ObExpr &expr, ObEvalCtx &
   ObObj res_obj;
 
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval source array failed", K(ret));
   } else {
     ObDatumVector arr_array = expr.args_[0]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
@@ -184,10 +178,8 @@ int ObExprArrayExtreme::eval_array_extreme_batch(const ObExpr &expr, ObEvalCtx &
       eval_flags.set(j);
       if (arr_array.at(j)->is_null()) {
         res_datum.at(j)->set_null();
-      } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_array.at(j)->get_string(), src_arr))) { 
-        LOG_WARN("construct array obj failed", K(ret));
+      } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_array.at(j)->get_string(), src_arr))) {
       } else if (OB_FAIL(calc_extreme(src_arr, res_obj, is_max))) {
-        LOG_WARN("calc array extreme value failed", K(ret));
       } else {
         res_datum.at(j)->from_obj(res_obj);
         if (res_obj.is_string_type() && OB_FAIL(res_datum.at(j)->deep_copy(*res_datum.at(j), res_alloc))) {
@@ -211,7 +203,6 @@ int ObExprArrayExtreme::eval_array_extreme_vector(const ObExpr &expr, ObEvalCtx 
   ObIArrayType *src_arr = NULL;
 
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval source array failed", K(ret));
   } else {
     ObIVector *arr_vec = expr.args_[0]->get_vector(ctx);
     VectorFormat arr_format = arr_vec->get_format();
@@ -230,16 +221,13 @@ int ObExprArrayExtreme::eval_array_extreme_vector(const ObExpr &expr, ObEvalCtx 
       } else {
         ObString arr_str = arr_vec->get_string(idx);
         if (OB_FAIL(ObNestedVectorFunc::construct_param(tmp_allocator, ctx, subschema_id, arr_str, src_arr))) {
-          LOG_WARN("construct array obj failed", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (is_null_res) {
         res_vec->set_null(idx);
       } else if (OB_FAIL(calc_extreme(src_arr, res_obj, is_max))) {
-        LOG_WARN("calc array extreme value failed", K(ret));
       } else if (OB_FAIL(ObArrayExprUtils::set_obj_to_vector(res_vec, idx, res_obj, res_alloc))) {
-        LOG_WARN("failed to set object value to result vector", K(ret), K(idx), K(res_obj));
       }
     } // end for
   }

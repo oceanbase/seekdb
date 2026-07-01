@@ -418,7 +418,6 @@ int ObStringStreamDecoder::decode_stream_meta_(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid agrument", KR(ret), K(str_data));
   } else if (OB_FAIL(ctx.meta_.deserialize(buf, len, pos))) {
-    LOG_WARN("fail to deserialize", K(ret), KP(buf), K(len));
   } else {
     str_meta_size = pos;
     LOG_DEBUG("after decode string stream meta", K(ctx), K(str_meta_size));

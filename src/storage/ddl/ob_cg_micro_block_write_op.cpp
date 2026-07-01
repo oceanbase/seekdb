@@ -47,9 +47,7 @@ int ObCGMicroBlockWriter::open(const ObWriteMacroParam &param,
     LOG_WARN("cg block file is not opened", K(ret));
   } else {
     if (OB_FAIL(cg_block_file_writer_.init(cg_block_file))) {
-      LOG_WARN("fail to initialize cg block file", K(ret), KPC(cg_block_file));
     } else if (OB_FAIL(writer_args_.init(param, ObWriterType::CG_MICRO_BLOCK_WRITER_TYPE))) {
-      LOG_WARN("fail to initialize writer args", K(ret), K(param));
     } else if (OB_UNLIKELY(nullptr == writer_args_.object_cleaner_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("object cleaner is null", K(ret));
@@ -58,7 +56,6 @@ int ObCGMicroBlockWriter::open(const ObWriteMacroParam &param,
                                                    writer_args_.macro_seq_param_,
                                                    *writer_args_.object_cleaner_,
                                                    &cg_block_file_writer_))) {
-      LOG_WARN("fail to open macro block writer", K(ret), K(writer_args_), K(cg_block_file_writer_));
     } else {
       is_inited_ = true;
     }
@@ -73,7 +70,6 @@ int ObCGMicroBlockWriter::close()
     ret = OB_NOT_INIT;
     LOG_WARN("cg micro block writer has not been initialized", K(ret));
   } else if (OB_FAIL(cg_micro_block_writer_.close())) {
-    LOG_WARN("fail to close cg macro block writer", K(ret), K(writer_args_));
   }
   return ret;
 }
@@ -94,7 +90,6 @@ int ObCGMicroBlockWriter::append_row(const ObDatumRow &row,
     ret = OB_NOT_INIT;
     LOG_WARN("cg micro block writer has not been initialized", K(ret));
   } else if (OB_FAIL(cg_micro_block_writer_.append_row(row, curr_macro_desc))) {
-    LOG_WARN("fail to append batch", K(ret));
   }
   return ret;
 }
@@ -108,7 +103,6 @@ int ObCGMicroBlockWriter::append_batch(const ObBatchDatumRows &datum_rows,
     LOG_WARN("cg micro block writer has not been initialized", K(ret));
   } else if (OB_FAIL(cg_micro_block_writer_.append_batch(datum_rows,
                                                          curr_macro_desc))) {
-    LOG_WARN("fail to append batch", K(ret));
   }
   return ret;
 }
@@ -145,7 +139,6 @@ int ObCGMicroBlockWriteOp::init(const ObTabletID &tablet_id, const int64_t slice
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("ddl dag is null", K(ret));
       } else if (OB_FAIL(ddl_dag->get_tablet_context(tablet_id_, tablet_context))) {
-        LOG_WARN("fail to get tablet context", K(ret), K(tablet_id_));
       } else if (OB_UNLIKELY(nullptr == tablet_context)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("tablet context is null", K(ret));
@@ -166,7 +159,6 @@ int ObCGMicroBlockWriteOp::init(const ObTabletID &tablet_id, const int64_t slice
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("cg count is invalid", K(ret), K(cg_count));
           } else if (OB_FAIL(cg_block_file_arr_.prepare_allocate(cg_count))) {
-            LOG_WARN("fail to prepare allocate cg block files", K(ret), K(cg_count));
           } else {
             for (int i = 0; i < cg_count; ++i) {
               cg_block_file_arr_.at(i) = nullptr;
@@ -255,7 +247,6 @@ int ObCGMicroBlockWriteOp::execute(const ObChunk &input_chunk,
               ret = OB_ALLOCATE_MEMORY_FAILED;
               LOG_WARN("fail to new cg block file", K(ret));
             } else if (OB_FAIL(cg_block_file->open(tablet_id_, slice_idx_, 0/*scan_idx*/, cg_idx))) {
-              LOG_WARN("fail to open cg block file", K(ret), K(tablet_id_), K(slice_idx_), K(cg_idx));
             } else {
               cg_block_file_arr_.at(cg_idx) = cg_block_file;
             }
@@ -271,15 +262,11 @@ int ObCGMicroBlockWriteOp::execute(const ObChunk &input_chunk,
                                                    ddl_dag,
                                                    0/*max_batch_size*/,
                                                    write_macro_param))) {
-            LOG_WARN("fail to fill write macro param",
-                K(ret), KPC(ddl_dag), K(tablet_id_), K(slice_idx_), K(cg_idx));
           } else if (OB_FAIL(cg_micro_block_writer_.open(write_macro_param, cg_block_file))) {
-            LOG_WARN("fail to initialize cg macro block writer", K(ret), K(write_macro_param), KPC(cg_block_file));
           }
         }
       }
       if (FAILEDx(append_cg_row_file_to_writer(cg_row_file))) {
-        LOG_WARN("fail to append cg row file to writer", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -294,7 +281,6 @@ int ObCGMicroBlockWriteOp::execute(const ObChunk &input_chunk,
     }
   }
   if (FAILEDx(try_generate_output_chunk(input_chunk, result_state, output_chunk))) {
-    LOG_WARN("fail to try generate output chunk", K(ret));
   }
   return ret;
 }
@@ -313,7 +299,6 @@ int ObCGMicroBlockWriteOp::append_cg_row_file_to_writer(ObCGRowFile *&cg_row_fil
       if (OB_ITER_END == ret) {
         ret = OB_SUCCESS;
         if (OB_FAIL(cg_row_file->close())) {
-          LOG_WARN("fail to close cg row file", K(ret), KPC(cg_row_file));
         } else {
           cg_row_file->~ObCGRowFile();
           ob_free(cg_row_file);
@@ -338,7 +323,6 @@ int ObCGMicroBlockWriteOp::append_cg_row_file_to_writer(ObCGRowFile *&cg_row_fil
     }
   }
   if (FAILEDx(cg_micro_block_writer_.close())) {
-    LOG_WARN("fail to close cg macro block writer", K(ret));
   } else {
     cg_micro_block_writer_.reset();
   }
@@ -357,7 +341,6 @@ int ObCGMicroBlockWriteOp::try_generate_output_chunk(
     if (nullptr != cg_block_file &&
         (input_chunk.is_end_chunk() || cg_block_file->get_data_size() >= WRITE_MACRO_THRESHOLD)) {
       if (OB_FAIL(output_data_->push_back(cg_block_file))) {
-        LOG_WARN("fail to push back cg block files", K(ret), KPC(cg_block_file));
       } else {
         cg_block_file = nullptr;
       }

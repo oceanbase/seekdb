@@ -72,9 +72,7 @@ int ObTableLoadTableOp::add_dependency(ObTableLoadTableOp *dependency,
       // 业务依赖, 只添加dependency关系
       case ObTableLoadDependencyType::BUSINESS_DEPENDENCY: {
         if (OB_FAIL(dependencies_.push_back(dependency))) {
-          LOG_WARN("fail to push back", KR(ret));
         } else if (OB_FAIL(dependency->dependees_.push_back(this))) {
-          LOG_WARN("fail to push back", KR(ret));
         }
         break;
       }
@@ -85,15 +83,10 @@ int ObTableLoadTableOp::add_dependency(ObTableLoadTableOp *dependency,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected input type", KR(ret), K(input_type_));
         } else if (OB_FAIL(plan_->alloc_channel(dependency, this, table_channel))) {
-          LOG_WARN("fail to alloc channel", KR(ret));
         } else if (OB_FAIL(input_channels_.push_back(table_channel))) {
-          LOG_WARN("fail to push back", KR(ret));
         } else if (OB_FAIL(dependency->output_channels_.push_back(table_channel))) {
-          LOG_WARN("fail to push back", KR(ret));
         } else if (OB_FAIL(dependencies_.push_back(dependency))) {
-          LOG_WARN("fail to push back", KR(ret));
         } else if (OB_FAIL(dependency->dependees_.push_back(this))) {
-          LOG_WARN("fail to push back", KR(ret));
         }
         break;
       }
@@ -104,11 +97,8 @@ int ObTableLoadTableOp::add_dependency(ObTableLoadTableOp *dependency,
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected input type", KR(ret), K(input_type_));
         } else if (OB_FAIL(plan_->alloc_channel(dependency, this, table_channel))) {
-          LOG_WARN("fail to alloc channel", KR(ret));
         } else if (OB_FAIL(input_channels_.push_back(table_channel))) {
-          LOG_WARN("fail to push back", KR(ret));
         } else if (OB_FAIL(dependency->output_channels_.push_back(table_channel))) {
-          LOG_WARN("fail to push back", KR(ret));
         }
         break;
       }

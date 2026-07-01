@@ -52,7 +52,6 @@ int ObMergeSetVecOp::inner_open()
   } else {
     const ObMergeSetVecSpec &spec = static_cast<const ObMergeSetVecSpec&>(get_spec());
     if (OB_FAIL(cmp_.init(&spec.sort_collations_, &spec.sort_cmp_funs_))) {
-      LOG_WARN("failed to init compare function", K(ret));
     }
   }
   return ret;
@@ -71,7 +70,6 @@ int ObMergeSetVecOp::inner_rescan()
   need_skip_init_row_ = false;
   last_row_idx_ = -1;
   if (OB_FAIL(ObOperator::inner_rescan())) {
-    LOG_WARN("failed to rescan", K(ret));
   }
   return ret;
 }
@@ -118,7 +116,6 @@ int ObMergeSetVecOp::Compare::operator() (const common::ObIArray<ObExpr*> &l,
     if (sort_collations_->at(i).null_pos_ == NULL_LAST) {
       if (OB_FAIL(lvec->null_last_cmp(*l.at(idx), l_idx, r_isnull, rvec->get_payload(r_idx),
           rvec->get_length(r_idx), cmp))) {
-        LOG_WARN("failed to compare", K(ret), K(idx));
       } else if (0 != cmp) {
         cmp = sort_collations_->at(i).is_ascending_ ? cmp : -cmp;
         break;
@@ -126,7 +123,6 @@ int ObMergeSetVecOp::Compare::operator() (const common::ObIArray<ObExpr*> &l,
     } else if (sort_collations_->at(i).null_pos_ == NULL_FIRST) {
       if (OB_FAIL(lvec->null_first_cmp(*l.at(idx), l_idx, r_isnull, rvec->get_payload(r_idx),
           rvec->get_length(r_idx), cmp))) {
-        LOG_WARN("failed to compare", K(ret), K(idx));
       } else if (0 != cmp) {
         cmp = sort_collations_->at(i).is_ascending_ ? cmp : -cmp;
         break;
@@ -157,7 +153,6 @@ int ObMergeSetVecOp::Compare::operator() (const ObCompactRow &l_store_rows,
     l_store_rows.get_cell_payload(meta, idx, l_v, l_len);
     if (sort_collations_->at(i).null_pos_ == NULL_LAST) {
       if (OB_FAIL(rvec->null_last_cmp(*r.at(idx), r_idx, l_isnull, l_v, l_len, cmp))) {
-        LOG_WARN("failed to compare", K(ret), K(idx));
       } else if (0 != cmp) {
         // here cmp right to left, so cmp result is different with the result of (cmp left to right)
         // the sort_collations meaning is to decide which is cand op?
@@ -166,7 +161,6 @@ int ObMergeSetVecOp::Compare::operator() (const ObCompactRow &l_store_rows,
       }
     } else if (sort_collations_->at(i).null_pos_ == NULL_FIRST) {
       if (OB_FAIL(rvec->null_first_cmp(*r.at(idx), r_idx, l_isnull, l_v, l_len, cmp))) {
-        LOG_WARN("failed to compare", K(ret), K(idx));
       } else if (0 != cmp) {
         // here cmp right to left, so cmp result is different with the result of (cmp left to right)
         // the sort_collations meaning is to decide which is cand op?
@@ -197,7 +191,6 @@ int ObMergeSetVecOp::convert_batch(const common::ObIArray<ObExpr*> &src_exprs,
       ObExpr *from = src_exprs.at(i);
       ObExpr *to = dst_exprs.at(i);
       if (OB_FAIL(from->eval_vector(eval_ctx_, brs_))) {
-        LOG_WARN("eval batch failed", K(ret));
       } else {
         VectorHeader &from_vec_header = from->get_vector_header(eval_ctx_);
         VectorHeader &to_vec_header = to->get_vector_header(eval_ctx_);
@@ -219,7 +212,6 @@ int ObMergeSetVecOp::convert_batch(const common::ObIArray<ObExpr*> &src_exprs,
           }
           OZ(to->init_vector(eval_ctx_, VEC_UNIFORM, brs_.size_));
         } else if (OB_FAIL(to_vec_header.assign(from_vec_header))) {
-          LOG_WARN("assign vector header failed", K(ret));
         }
         // init eval info
         if (OB_SUCC(ret)) {
@@ -268,7 +260,6 @@ int ObMergeSetVecOp::locate_next_right(ObOperator &child_op,
   //first batch
   if (OB_ISNULL(child_brs) || child_brs->size_ == curr_idx/*last row in batch*/) {
     if (OB_FAIL(child_op.get_next_batch(batch_size, child_brs))) {
-      LOG_WARN("failed to get next batch", K(ret));
     } else if (child_brs->end_ && 0 == child_brs->size_) {
       ret = OB_ITER_END;
     } else {
@@ -290,7 +281,6 @@ int ObMergeSetVecOp::locate_next_right(ObOperator &child_op,
     }
     if (curr_idx == child_brs->size_) {
       if (OB_FAIL(child_op.get_next_batch(batch_size, child_brs))) {
-        LOG_WARN("failed to get next batch", K(ret));
       } else if (child_brs->end_ && 0 == child_brs->size_) {
         ret = OB_ITER_END;
       } else {
@@ -343,12 +333,10 @@ int ObMergeSetVecOp::distinct_for_batch(ObOperator &child_op, const ObBatchRows 
       if (OB_FAIL(cmp_(*last_row_.compact_row_, *last_row_.ref_row_meta_,
                       child_op.get_spec().output_,
                       curr_idx, eval_ctx_, last_row_cmp_ret))) {
-        LOG_WARN("failed to compare row", K(ret));
       } 
     } else if (compare_idx >= 0) {
       if (OB_FAIL(cmp_(compare_expr, child_op.get_spec().output_,
                       compare_idx, curr_idx, eval_ctx_, last_row_cmp_ret))) {
-        LOG_WARN("failed to compare row", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -384,12 +372,10 @@ int ObMergeSetVecOp::distinct_for_batch(ObOperator &child_op, const ObBatchRows 
               static_cast<ObFixedLengthVector<int64_t, VectorBasicOp<VEC_TC_INTEGER>> *> (vec);
             if (OB_FAIL(compare_in_column_with_format<FixedLengthVectorBigInt>(fixed_vec, &row_brs,
                 first_active_idx, col_idx, last_idx, col_expr, result_brs))) {
-              LOG_WARN("compare in column with format failed", K(ret));
             }
           } else {
             if (OB_FAIL(compare_in_column_with_format<ObIVector>(vec, &row_brs, first_active_idx,
                 col_idx, last_idx, col_expr, result_brs))) {
-              LOG_WARN("compare in column with format failed", K(ret));
             }
           }
           break;
@@ -400,12 +386,10 @@ int ObMergeSetVecOp::distinct_for_batch(ObOperator &child_op, const ObBatchRows 
               static_cast<ObDiscreteVector<VectorBasicOp<VEC_TC_STRING>> *> (vec);
             if (OB_FAIL(compare_in_column_with_format<DiscreteVectorString>(string_vec, &row_brs,
                 first_active_idx, col_idx, last_idx, col_expr, result_brs))) {
-              LOG_WARN("compare in column with format failed", K(ret));
             }
           } else {
             if (OB_FAIL(compare_in_column_with_format<ObIVector>(vec, &row_brs, first_active_idx,
                 col_idx, last_idx, col_expr, result_brs))) {
-              LOG_WARN("compare in column with format failed", K(ret));
             }
           }
           break;
@@ -413,7 +397,6 @@ int ObMergeSetVecOp::distinct_for_batch(ObOperator &child_op, const ObBatchRows 
         default : {
           if (OB_FAIL(compare_in_column_with_format<ObIVector>(vec, &row_brs, first_active_idx,
               col_idx, last_idx, col_expr, result_brs))) {
-            LOG_WARN("compare in column with format failed", K(ret));
           }
         }
       }
@@ -458,11 +441,9 @@ int ObMergeSetVecOp::compare_in_column(InputVec * vec, int64_t first_active_idx,
     if (HAS_NULL) {
       if (OB_FAIL(vec->null_last_cmp(col_expr, curr_idx, vec->is_null(last_cmp_idx),
                                     vec->get_payload(last_cmp_idx), vec->get_length(last_cmp_idx), cmp_ret))) {
-        LOG_WARN("null_last_cmp failed", K(curr_idx), K(last_cmp_idx), K(cmp_ret), K(ret));
       }
     } else {
       if (OB_FAIL(vec->no_null_cmp(col_expr, curr_idx, last_cmp_idx, cmp_ret))) {
-        LOG_WARN("no_null_cmp failed", K(curr_idx), K(last_cmp_idx), K(cmp_ret), K(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -489,44 +470,36 @@ int ObMergeSetVecOp::compare_in_column_with_format(InputVec *vec, const ObBatchR
     if (child_brs->all_rows_active_ && col_idx == 0) {
       if (OB_FAIL((compare_in_column<InputVec, true, true, true>)(vec, first_active_idx,
           child_brs, last_idx, col_expr, result_brs))) {
-        LOG_WARN("failed to cmp compare in column", K(ret), K(col_idx));
       }
     } else if (child_brs->all_rows_active_ && col_idx != 0) {
       if (OB_FAIL((compare_in_column<InputVec, true, false, true>)(vec, first_active_idx,
           child_brs, last_idx, col_expr, result_brs))) {
-        LOG_WARN("failed to cmp compare in column", K(ret), K(col_idx));
       }
     } else if (!child_brs->all_rows_active_ && col_idx == 0) {
       if (OB_FAIL((compare_in_column<InputVec, false, true, true>)(vec, first_active_idx,
           child_brs, last_idx, col_expr, result_brs))) {
-        LOG_WARN("failed to cmp compare in column", K(ret), K(col_idx));
       }
     } else if (!child_brs->all_rows_active_ && col_idx != 0) {
       if (OB_FAIL((compare_in_column<InputVec, false, false, true>)(vec, first_active_idx,
           child_brs, last_idx, col_expr, result_brs))) {
-        LOG_WARN("failed to cmp compare in column", K(ret), K(col_idx));
       }
     }
   } else {
     if (child_brs->all_rows_active_ && col_idx == 0) {
       if (OB_FAIL((compare_in_column<InputVec, true, true, false>)(vec, first_active_idx,
           child_brs, last_idx, col_expr, result_brs))) {
-        LOG_WARN("failed to cmp compare in column", K(ret), K(col_idx));
       }
     } else if (child_brs->all_rows_active_ && col_idx != 0) {
       if (OB_FAIL((compare_in_column<InputVec, true, false, false>)(vec, first_active_idx,
           child_brs, last_idx, col_expr, result_brs))) {
-        LOG_WARN("failed to cmp compare in column", K(ret), K(col_idx));
       }
     } else if (!child_brs->all_rows_active_ && col_idx == 0) {
       if (OB_FAIL((compare_in_column<InputVec, false, true, false>)(vec, first_active_idx,
           child_brs, last_idx, col_expr, result_brs))) {
-        LOG_WARN("failed to cmp compare in column", K(ret), K(col_idx));
       }
     } else if (!child_brs->all_rows_active_ && col_idx != 0) {
       if (OB_FAIL((compare_in_column<InputVec, false, false, false>)(vec, first_active_idx,
           child_brs, last_idx, col_expr, result_brs))) {
-        LOG_WARN("failed to cmp compare in column", K(ret), K(col_idx));
       }
     }
   }

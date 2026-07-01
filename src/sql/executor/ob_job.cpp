@@ -65,7 +65,6 @@ int ObJob::prepare_task_control(const ObExecContext &exec_ctx)
       if (OB_SUCC(ret)) {
         int64_t stmt_parallel_degree = 1;
         if (OB_FAIL(task_control_.prepare(stmt_parallel_degree))) {
-          LOG_WARN("fail to prepare task control", K(ret), K(stmt_parallel_degree));
         } else {
           task_splited_ = true;
         }
@@ -91,7 +90,6 @@ int ObJob::get_task_control(const ObExecContext &exec_ctx, ObTaskControl *&task_
   int ret = OB_SUCCESS;
   if (!task_splited_) {
     if (OB_FAIL(prepare_task_control(exec_ctx))) {
-      LOG_WARN("fail prepare task control", K(ret));
     }
   }
   task_control = &task_control_;
@@ -105,7 +103,6 @@ int ObJob::print_status(char *buf, int64_t buf_len, int64_t &pos,
   int ret = OB_SUCCESS;
   ObArray<ObTaskInfo *> all_task_infos;
   if (OB_FAIL(task_control_.get_all_tasks(all_task_infos))) {
-    LOG_WARN("fail to get all task infos", K(ret));
   } else {
     int64_t state_not_init_count = 0;
     int64_t state_inited_count = 0;
@@ -115,11 +112,9 @@ int ObJob::print_status(char *buf, int64_t buf_len, int64_t &pos,
     int64_t state_failed_count = 0;
     bool is_normal_state = false;
     if (OB_FAIL(J_OBJ_START())) {
-      LOG_WARN("fail to print obj start", K(ret));
     } else {
       J_KV(N_TASK_COUNT, all_task_infos.count());
       if (OB_FAIL(J_COMMA())) {
-        LOG_WARN("fail to print comma", K(ret));
       }
     }
     for (int64_t i = 0, print_count = 0; OB_SUCC(ret) && i < all_task_infos.count(); ++i) {
@@ -207,7 +202,6 @@ int ObJob::print_status(char *buf, int64_t buf_len, int64_t &pos,
       }
       BUF_PRINTF("}");
       if (OB_FAIL(J_OBJ_END())) {
-        LOG_WARN("fail to print obj end", K(ret));
       }
     }
   }

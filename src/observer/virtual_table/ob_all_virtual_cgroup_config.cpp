@@ -88,7 +88,6 @@ int ObAllVirtualCgroupConfig::check_cgroup_dir_exist_(const char *cgroup_path)
     ret = OB_INVALID_ARGUMENT;
     SERVER_LOG(WARN, "invalid arguments.", K(cgroup_path), K(ret));
   } else if (OB_FAIL(FileDirectoryUtils::is_exists(cgroup_path, exist_cgroup))) {
-    SERVER_LOG(WARN, "fail check file exist", K(cgroup_path), K(ret));
   } else if (!exist_cgroup) {
     ret = OB_FILE_NOT_EXIST;
     SERVER_LOG(WARN, "no cgroup directory found. disable cgroup support", K(cgroup_path), K(ret));
@@ -112,7 +111,6 @@ int ObAllVirtualCgroupConfig::read_cgroup_path_dir_(const char *cgroup_path)
 #else
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_cgroup_dir_exist_(cgroup_path))) {
-    SERVER_LOG(WARN, "cgroup config file not exist : ", K(ret), K(cgroup_path));
   } else {
     char *dir[] = {cgroup_origin_path_, NULL};
     FTS *ftsp = fts_open(dir, FTS_NOCHDIR, NULL);
@@ -126,7 +124,6 @@ int ObAllVirtualCgroupConfig::read_cgroup_path_dir_(const char *cgroup_path)
       fts_close(ftsp);
     }
     if (OB_FAIL(ret)) {
-      SERVER_LOG(WARN, "cgroup config read : ", K(ret), K(cgroup_origin_path_));
     }
   }
   return ret;

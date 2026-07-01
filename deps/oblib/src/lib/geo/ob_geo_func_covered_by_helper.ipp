@@ -99,7 +99,6 @@ public:
         ret = EvalWkbBiGeog<PointType, GCType>::eval(&i_point, g2, context, result);
       }
       if (OB_FAIL(ret)) {
-        LOG_WARN("failed to do point_gc covered by functor", K(ret));
       } else if (!result) {
         break;
       }

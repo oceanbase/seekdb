@@ -85,7 +85,6 @@ int ObReplayHandler::replay(const ObLogBaseType &type,
     CLOG_LOG(WARN, "invalid arguments", K(ret), K(type));
   } else if (OB_ISNULL(handlers_[type])) {
     ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(ERROR, "invalid base_log_type", K(type));
   } else {
     ret = handlers_[type]->replay(buffer, nbytes, lsn, scn);
   }

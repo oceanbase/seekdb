@@ -107,7 +107,6 @@ int ObThWorker::init()
     ret = OB_INIT_TWICE;
     LOG_ERROR("the ObThWorker has been inited, ", K(ret));
   } else if (OB_FAIL(run_cond_.init(ObWaitEventIds::TH_WORKER_COND_WAIT))) {
-    LOG_ERROR("init run cond fail, ", K(ret));
   } else {
     set_is_th_worker(true);
     is_inited_ = true;
@@ -224,7 +223,6 @@ inline void ObThWorker::process_request(rpc::ObRequest &req)
   share::g_mp->lock_wait_mgr()->setup(req.get_lock_wait_node(), req.get_receive_timestamp());
   memtable::advance_tlocal_request_lock_wait_stat(rpc::RequestLockWaitStat::RequestStat::EXECUTE);
   if (OB_FAIL(procor_.process(req))) {
-    LOG_WARN("process request fail", K(ret));
   }
   bool wait_succ = share::g_mp->lock_wait_mgr()->post_process(need_retry_, need_wait_lock);
   if (OB_LIKELY(wait_succ)) {
@@ -237,7 +235,6 @@ inline void ObThWorker::process_request(rpc::ObRequest &req)
     if (need_wait_lock) {
       if (!wait_succ) {
         if (OB_FAIL(tenant_->recv_request(req))) {
-          LOG_WARN("tenant receive retry_on_lock request fail, retry with current worker", K(ret));
         }
       }
     } else if (retry_times) {
@@ -248,19 +245,14 @@ inline void ObThWorker::process_request(rpc::ObRequest &req)
       uint64_t delta_us = curr_timestamp - req.get_receive_timestamp();
       uint64_t timestamp = curr_timestamp + min(delta_us, 100 * 1000UL);
       if (OB_FAIL(tenant_->push_retry_queue(req, timestamp))) {
-        LOG_WARN("tenant schedule retry_on_lock request fail, retry with current worker","tenant", tenant_->id(), K(ret));
       }
     } else {
       // first retry, do not put the req to retry_queue
       if (req.large_retry_flag()) {
         if (OB_FAIL(tenant_->recv_request(req))) {
-          LOG_WARN("tenant receive large request fail, "
-              "retry with current worker", "tenant", tenant_->id(), K(ret));
         }
       } else {
         if (OB_FAIL(tenant_->recv_request(req))) {
-          LOG_WARN("tenant receive request fail, "
-              "retry with current worker", "tenant", tenant_->id(), K(ret));
         }
       }
     }
@@ -269,7 +261,6 @@ inline void ObThWorker::process_request(rpc::ObRequest &req)
       can_retry_ = false;
       need_retry_ = false;
       if (OB_FAIL(procor_.process(req))) {
-        LOG_WARN("request retry with current worker fail", K(ret));
       }
     }
   }

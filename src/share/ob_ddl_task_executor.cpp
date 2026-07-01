@@ -69,9 +69,7 @@ int ObDDLTaskQueue::init(const int64_t bucket_num, const int64_t total_mem_limit
     STORAGE_LOG(WARN, "invalid argument", K(ret), K(bucket_num), K(total_mem_limit),
         K(hold_mem_limit), K(page_size));
   } else if (OB_FAIL(task_set_.create(bucket_num))) {
-    STORAGE_LOG(WARN, "fail to create task set", K(ret), K(bucket_num));
   } else if (OB_FAIL(allocator_.init(total_mem_limit, hold_mem_limit, page_size))) {
-    STORAGE_LOG(WARN, "fail to init allocator", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -108,7 +106,6 @@ int ObDDLTaskQueue::push_task(const ObIDDLTask &task)
         STORAGE_LOG(WARN, "fail to set task to task set", K(ret));
       }
     } else {
-      STORAGE_LOG(INFO, "add task", K(*task_copy), KP(task_copy), K(common::lbt()));
     }
   }
   if (OB_FAIL(ret) && NULL != buf) {
@@ -153,9 +150,7 @@ int ObDDLTaskQueue::remove_task(ObIDDLTask *task)
     ret = common::OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid argument", K(ret), KP(task));
   } else if (OB_FAIL(task_set_.erase_refactored(task))) {
-    STORAGE_LOG(WARN, "fail to erase from task set", K(ret));
   } else {
-    STORAGE_LOG(INFO, "succ to remove task", K(*task), KP(task));
   }
   if (NULL != task) {
     allocator_.free(task);
@@ -217,7 +212,6 @@ void ObDDLTaskExecutor::run1()
       } else if (task == first_retry_task) {
         // add the task back to the queue
         if (OB_FAIL(task_queue_.add_task_to_last(task))) {
-          STORAGE_LOG(ERROR, "fail to add task to last, which should not happen", K(ret), K(*task));
         }
         break;
       } else {
@@ -226,12 +220,10 @@ void ObDDLTaskExecutor::run1()
         ++executed_task_count;
         if (task->need_retry()) {
           if (OB_FAIL(task_queue_.add_task_to_last(task))) {
-            STORAGE_LOG(ERROR, "fail to add task to last, which should not happen", K(ret), K(*task));
           }
           first_retry_task = task;
         } else {
           if (OB_FAIL(task_queue_.remove_task(task))) {
-            STORAGE_LOG(WARN, "fail to remove task, which should not happen", K(ret), K(*task), KP(task));
           }
         }
       }
@@ -268,9 +260,7 @@ int ObDDLReplicaBuilder::init()
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("ddl replica builder thread is already started", KR(ret), K(is_thread_started_));
   } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::DdlBuild, tg_id_))) {
-    LOG_ERROR("create tg failed", KR(ret));
   } else if (OB_FAIL(TG_START(tg_id_))) {
-    LOG_WARN("index build thread start failed", KR(ret));
   } else {
     is_thread_started_ = true;
     is_stopped_ = true;
@@ -355,7 +345,6 @@ int ObDDLReplicaBuilder::push_task(ObAsyncTask &task)
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("ddl builder has stopped", KR(ret), K(is_stopped_), K(tg_id_));
   } else if (OB_FAIL(TG_PUSH_TASK(tg_id_, task))) {
-    LOG_WARN("add task to queue failed", KR(ret));
   }
   return ret;
 }

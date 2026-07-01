@@ -527,13 +527,11 @@ private:
 inline void ObITable::inc_ref()
 {
   int64_t cnt = ATOMIC_AAF(&ref_cnt_, 1);
-  STORAGE_LOG(DEBUG, "table inc ref", KP(this), "table_key", key_, "ref_cnt", cnt, K(lbt()));
 }
 
 inline int64_t ObITable::dec_ref()
 {
   int64_t cnt = ATOMIC_SAF(&ref_cnt_, 1 /* just sub 1 */);
-  STORAGE_LOG(DEBUG, "table dec ref", KP(this), "table_key", key_, "ref_cnt", cnt, K(lbt()));
 
   return cnt;
 }

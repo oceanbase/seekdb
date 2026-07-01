@@ -82,9 +82,7 @@ int ObDirectLoadSSTableFragment::assign(const ObDirectLoadSSTableFragment &other
     reset();
     meta_ = other.meta_;
     if (OB_FAIL(index_file_handle_.assign(other.index_file_handle_))) {
-      LOG_WARN("fail to assign index file", KR(ret));
     } else if (OB_FAIL(data_file_handle_.assign(other.data_file_handle_))) {
-      LOG_WARN("fail to assign data file", KR(ret));
     }
   }
   return ret;
@@ -150,11 +148,8 @@ int ObDirectLoadSSTable::init(ObDirectLoadSSTableCreateParam &param)
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid args", KR(ret), K(param));
       } else if (OB_FAIL(param.start_key_.deep_copy(start_key_, allocator_))) {
-        LOG_WARN("fail to deep copy start key", KR(ret));
       } else if (OB_FAIL(param.end_key_.deep_copy(end_key_, allocator_))) {
-        LOG_WARN("fail to deep copy start key", KR(ret));
       } else if (OB_FAIL(fragments_.assign(param.fragments_))) {
-        LOG_WARN("fail to assign fragments", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -182,7 +177,6 @@ int ObDirectLoadSSTable::scan_index_block_meta(ObIAllocator &allocator,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Unexpected null pointer of secondary meta iterator", K(ret));
     } else if (OB_FAIL(iter->init(this))) {
-      LOG_WARN("Fail to open index block meta iterator", K(ret));
     } else {
       meta_iter = iter;
     }
@@ -224,7 +218,6 @@ int ObDirectLoadSSTable::scan(const ObDirectLoadTableDataDesc &table_data_desc,
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadSSTableScanner", KR(ret));
     } else if (OB_FAIL(scanner->init(this, table_data_desc, key_range, datum_utils))) {
-      LOG_WARN("fail to init sstable scanner", KR(ret));
     }
     if (OB_FAIL(ret)) {
       if (nullptr != scanner) {
@@ -265,7 +258,6 @@ int ObDirectLoadSSTableFragmentOperator::get_fragment(
     ret = OB_OPERATE_OVERFLOW;
     LOG_WARN("no fragment", K(ret), K(idx), K(sstable_->get_fragment_array().count()));
   } else if (OB_FAIL(fragment.assign(sstable_->get_fragment_array().at(idx)))) {
-    LOG_WARN("fail to assign fragment", K(ret));
   }
   return ret;
 }
@@ -279,7 +271,6 @@ int ObDirectLoadSSTableFragmentOperator::get_next_fragment(
     LOG_WARN("no next fragment", K(ret), K(curr_fragment_idx),
              K(sstable_->get_fragment_array().count()));
   } else if (OB_FAIL(fragment.assign(sstable_->get_fragment_array().at(curr_fragment_idx + 1)))) {
-    LOG_WARN("fail to assign fragment", K(ret));
   } else {
     curr_fragment_idx++;
   }

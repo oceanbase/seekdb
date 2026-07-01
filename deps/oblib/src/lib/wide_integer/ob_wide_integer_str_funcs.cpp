@@ -367,7 +367,6 @@ int from_string(const char *buf, const int64_t length, ObIAllocator &allocator,
           // if arrived here, we have 'pos >= buf_len', no need to parse anymore.
           ret = OB_INVALID_NUMERIC;
         } else if (OB_FAIL(parse_sci_exp(buf, buf_len, pos, sci_exp))) {
-          COMMON_LOG(WARN, "parse sci exp failed", K(ret));
         } else {
           parse_end = true;
         }
@@ -387,7 +386,6 @@ int from_string(const char *buf, const int64_t length, ObIAllocator &allocator,
         }
       } else {
         ret = OB_INVALID_NUMERIC;
-        COMMON_LOG(WARN, "unexpected char", K(buf[pos]));
       }
     } // for end
     tmp_res = tmp_res * pows[i] + tmp_sum;

@@ -191,7 +191,6 @@ int ObExprMod::mod_number(ObObj &res,
   } else if (OB_UNLIKELY(right.is_zero())) {
     res.set_null();
   } else if (OB_FAIL(left.get_number().rem_v3(right.get_number(), res_nmb, *allocator))) {
-    LOG_WARN("failed to rem numbers", K(ret), K(left), K(right));
   } else {
     res.set_number(res_nmb);
   }
@@ -206,7 +205,6 @@ int ObExprMod::mod_int_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
   ObDatum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
-    LOG_WARN("get_arith_operand failed", K(ret));
   } else if (is_finish) {
     //do nothing
   } else {
@@ -236,7 +234,6 @@ int ObExprMod::mod_int_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
   ObDatum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
-    LOG_WARN("get_arith_operand failed", K(ret));
   } else if (is_finish) {
     //do nothing
   } else {
@@ -266,7 +263,6 @@ int ObExprMod::mod_uint_int(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
   ObDatum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
-    LOG_WARN("get_arith_operand failed", K(ret));
   } else if (is_finish) {
     //do nothing
   } else {
@@ -292,7 +288,6 @@ int ObExprMod::mod_uint_uint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
   ObDatum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
-    LOG_WARN("get_arith_operand failed", K(ret));
   } else if (is_finish) {
     //do nothing
   } else {
@@ -327,7 +322,6 @@ int ObExprMod::mod_double(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
   ObDatum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
-    LOG_WARN("get_arith_operand failed", K(ret));
   } else if (is_finish) {
     //do nothing
   } else {
@@ -354,7 +348,6 @@ int ObExprMod::mod_number(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
   ObDatum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
-    LOG_WARN("get_arith_operand failed", K(ret));
   } else if (is_finish) {
     //do nothing
   } else {
@@ -371,7 +364,6 @@ int ObExprMod::mod_number(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum)
       ObDataBuffer local_alloc(local_buff, number::ObNumber::MAX_BYTE_LEN);
       number::ObNumber result;
       if (OB_FAIL(lnum.rem_v3(rnum, result, local_alloc))) {
-        LOG_WARN("failed to rem numbers", K(lnum), K(rnum), K(ret));
       } else {
         datum.set_number(result);
       }
@@ -395,7 +387,6 @@ int ObExprMod::mod_decimalint(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &datum
   ObDatum *right = NULL;
   bool is_finish = false;
   if (OB_FAIL(get_arith_operand(expr, ctx, left, right, datum, is_finish))) {
-    LOG_WARN("get_arith_operand failed", K(ret));
   } else if (is_finish) {
     //do nothing
   } else {

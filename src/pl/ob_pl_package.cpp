@@ -60,7 +60,6 @@ int ObPLPackageAST::init(const ObString &db_name,
     user_type_table_.set_type_start_gen_id(parent_user_type_table->get_type_start_gen_id());
   }
   if (OB_FAIL(routine_table_.init(parent_routine_table))) {
-    LOG_WARN("routine info table init failed", K(ret));
   }
   if (OB_NOT_NULL(parent_condition_table)) {
     OZ (condition_table_.init(*parent_condition_table));
@@ -75,7 +74,6 @@ int ObPLPackageAST::init(const ObString &db_name,
     obj_version.version_ = parent_package_ast->get_version();
     obj_version.object_type_ = DEPENDENCY_PACKAGE;
     if (OB_FAIL(ObPLDependencyUtil::add_dependency_object_impl(dependency_table_, obj_version))) {
-      LOG_WARN("add dependency table failed", K(ret));
     }
   }
 
@@ -94,7 +92,6 @@ int ObPLPackageAST::init(const ObString &db_name,
     }
     obj_version.version_ = package_version;
     if (OB_FAIL(ObPLDependencyUtil::add_dependency_object_impl(dependency_table_, obj_version))) {
-      LOG_WARN("add dependency table failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -166,9 +163,7 @@ int ObPLPackage::init(const ObPLPackageAST &package_ast)
   package_type_ = package_ast.get_package_type();
   serially_reusable_ = package_ast.get_serially_reusable();
   if (OB_FAIL(ob_write_string(get_allocator(), const_cast<ObString &>(package_ast.get_db_name()), db_name_))) {
-    LOG_WARN("copy db name failed", "db name", package_ast.get_db_name(), K(ret));
   } else if (OB_FAIL(ob_write_string(get_allocator(), const_cast<ObString &>(package_ast.get_name()), name_))) {
-    LOG_WARN("copy package name failed", "package name", package_ast.get_name(), K(ret));
   } else {
     inited_ = true;
   }
@@ -211,7 +206,6 @@ int ObPLPackage::instantiate_package_state(const ObPLResolveCtx &resolve_ctx,
                                                  (var->is_formal_param()) ? NULL : get_default_expr(var->get_default()),
                                                  var->is_default_construct(),
                                                  value))) {
-      LOG_WARN("init sesssion var failed", K(ret));
     } else if (value.is_null_oracle() && var_type.is_not_null()) {
       ret = OB_ERR_NUMERIC_OR_VALUE_ERROR;
       LOG_WARN("cannot assign null to var with not null attribution", K(ret));
@@ -232,36 +226,28 @@ int ObPLPackage::instantiate_package_state(const ObPLResolveCtx &resolve_ctx,
     ObPackageStateVersion state_version(OB_INVALID_VERSION, OB_INVALID_VERSION);
     bool valid = false;
     if (OB_FAIL(package_state.encode_pkg_var_key(resolve_ctx.allocator_, key))) {
-      LOG_WARN("fail to encode pkg var key", K(ret));
     } else if (OB_ISNULL(cur_ser_val = exec_ctx.get_my_session()->get_user_variable_value(key))) {
       // do nothing
     } else if (cur_ser_val->is_null()) {
       // do nothing
     } else if (OB_FAIL(ObPLPackageState::is_oversize_value(*cur_ser_val, is_oversize_value))) {
-      LOG_WARN("fail to check value oversize", K(ret));
     } else if (is_oversize_value) {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("package serialize value is oversize", K(ret));
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "package sync oversize value");
     } else if (OB_FAIL(value_map.create(4, ObModIds::OB_PL_TEMP, ObModIds::OB_HASH_NODE))) {
-      LOG_WARN("fail to create hash map", K(ret));
     } else if (OB_FAIL(ObPLPackageState::decode_pkg_var_value(*cur_ser_val, state_version, value_map))) {
-      LOG_WARN("fail to decode pkg var value", K(ret));
     } else if (OB_FAIL(package_state.check_version(package_state.get_state_version(),
                                                    state_version,
                                                    resolve_ctx.schema_guard_,
                                                    *spec,
                                                    body,
                                                    valid))) {
-      LOG_WARN("fail to check package state version",
-                  K(ret), KPC(cur_ser_val), K(package_state.get_state_version()), K(state_version));
     } else if (!valid) {
       // discard user var value
       LOG_INFO("===henry:invalid user var===", K(package_state.get_state_version()), K(state_version));
       if (OB_FAIL(value_map.clear())) {
-        LOG_WARN("fail to clear hash map", K(ret));
       } else if (OB_FAIL(ObPLPackageState::disable_expired_user_variables(*exec_ctx.get_my_session(), key))) {
-        LOG_WARN("fail to disable expired user var", K(ret));
       }
     }
     ARRAY_FOREACH(var_table_, var_idx) {
@@ -280,20 +266,17 @@ int ObPLPackage::instantiate_package_state(const ObPLResolveCtx &resolve_ctx,
         ser_value = &(pkg_var_info->encode_value_);
         need_deserialize = true;
       } else if (OB_FAIL(package_state.make_pkg_var_kv_key(resolve_ctx.allocator_, var_idx, VARIABLE, key))) {
-        LOG_WARN("make package var name failed", K(ret));
       } else if (OB_ISNULL(ser_value = resolve_ctx.session_info_.get_user_variable_value(key))) {
         // do nothing
       } else if (ser_value->is_null()) {
         // do nothing
       } else if (OB_FAIL(ObPLPackageState::is_invalid_value(*ser_value, is_invalid))) {
-        LOG_WARN("fail to check value validation", K(ret));
       } else if (!is_invalid) {
         need_deserialize = true;
       }
       if (OB_FAIL(ret)) {
       } else if (need_deserialize) {
         if (OB_FAIL(package_state.get_package_var_val(var_idx, value))) {
-          LOG_WARN("failt to get package var", K(ret), K(var_idx));
         } else {
           if (var_type.is_cursor_type()) {
             OV (ser_value->is_tinyint() || ser_value->is_number() || ser_value->is_decimal_int(),
@@ -354,7 +337,6 @@ int ObPLPackage::instantiate_package_state(const ObPLResolveCtx &resolve_ctx,
   }
   if (OB_SUCC(ret) && !resolve_ctx.is_sync_package_var_) {
     if (OB_FAIL(execute_init_routine(resolve_ctx.allocator_, exec_ctx))) {
-      LOG_WARN("execute init routine failed", K(ret));
     }
   }
   return ret;

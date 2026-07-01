@@ -100,7 +100,6 @@ int ObDirectLoadExternalTable::init(const ObDirectLoadExternalTableCreateParam &
     meta_.row_count_ = param.row_count_;
     meta_.max_data_block_size_ = param.max_data_block_size_;
     if (OB_FAIL(fragments_.assign(param.fragments_))) {
-      LOG_WARN("fail to assign fragments", KR(ret));
     } else {
       is_inited_ = true;
     }

@@ -35,7 +35,6 @@ int OBLCKeyCreator::create_cache_key(ObLibCacheNameSpace ns,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("out of the max type", K(ret), K(ns));
   } else if (OB_FAIL(LC_CK_ALLOC[ns](allocator, key))) {
-    LOG_WARN("failed to create lib cache node", K(ret), K(ns));
   }
   return ret;
 }

@@ -37,7 +37,6 @@ int ObOptDSStat::assign(const ObOptDSStat& other)
   ds_degree_ = other.ds_degree_;
   stat_expired_time_ = other.stat_expired_time_;
   if (OB_FAIL(col_stats_.assign(other.col_stats_))) {
-    LOG_WARN("failed to assign", K(ret));
   }
   return ret;
 }
@@ -69,7 +68,6 @@ int ObOptDSStat::deep_copy(char *buf, const int64_t buf_len, ObIKVCacheValue *&v
     ObOptDSStat *stat = new (buf) ObOptDSStat();
     int64_t pos = sizeof(*this);
     if (OB_FAIL(stat->deep_copy(*this, buf, buf_len, pos))) {
-      COMMON_LOG(WARN, "deep copy ds stat failed.", K(ret));
     } else {
       value = stat;
     }
@@ -121,7 +119,6 @@ int ObOptDSStat::deep_copy(ObIAllocator &allocate, ObOptDSStat *&ds_stat) const
     ObOptDSStat *stat = new (buf) ObOptDSStat();
     int64_t pos = sizeof(*this);
     if (OB_FAIL(stat->deep_copy(*this, buf, buf_len, pos))) {
-      COMMON_LOG(WARN, "deep copy ds stat failed.", K(ret));
     } else {
       ds_stat = stat;
     }

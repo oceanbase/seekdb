@@ -54,7 +54,6 @@ OB_DEF_DESERIALIZE(ObDirectLoadControlResult)
                 tmp_res_content);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ob_write_string(*allocator_, tmp_res_content, res_content_))) {
-      LOG_WARN("fail to copy string", K(ret));
     }
   }
   return ret;
@@ -102,7 +101,6 @@ int ObDirectLoadControlPreBeginArg::set_exec_ctx_serialized_str(const sql::ObExe
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc buf", KR(ret), K(size));
   } else if (OB_FAIL(exec_ctx.serialize(buf, size, pos))) {
-    LOG_WARN("fail to serialize exec ctx", KR(ret));
   } else {
     exec_ctx_serialized_str_.assign(buf, pos);
   }
@@ -159,7 +157,6 @@ OB_DEF_DESERIALIZE(ObDirectLoadControlPreBeginArg)
               target_partition_id_array_);
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ObTableLoadUtils::create_session_info(session_info_, free_session_ctx_))) {
-      LOG_WARN("fail to init session info", KR(ret));
     } else {
       OB_UNIS_DECODE(*session_info_);
     }
@@ -177,7 +174,6 @@ OB_DEF_DESERIALIZE(ObDirectLoadControlPreBeginArg)
   
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ob_write_string(allocator_, exec_ctx_serialized_str_, exec_ctx_serialized_str_))) {
-      LOG_WARN("fail to copy string", KR(ret));
     }
   }
   return ret;

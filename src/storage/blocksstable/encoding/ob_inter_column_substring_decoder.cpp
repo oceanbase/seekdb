@@ -54,7 +54,6 @@ int ObInterColSubStrDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDat
           ctx.is_bit_packing(), row_id,
           ctx.col_header_->length_ - sizeof(ObInterColSubStrMetaHeader),
           ref, datum, ctx.col_header_->get_store_obj_type()))) {
-        LOG_WARN("meta_reader_ read failed", K(ret), K(row_id));
       }
     }
 
@@ -62,8 +61,6 @@ int ObInterColSubStrDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDat
     if (OB_SUCC(ret) && -1 == ref) {
       ObDatum ref_datum;
       if (OB_FAIL(ctx.ref_decoder_->decode(*ctx.ref_ctx_, ref_datum, row_id, bs, data, len))) {
-        LOG_WARN("ref_decoder decode failed", K(ret),
-            K(row_id), KP(data), K(len));
       } else if (ref_datum.is_null()) {
         datum.set_null();
       } else if (ref_datum.is_nop()) {
@@ -164,10 +161,7 @@ int ObInterColSubStrDecoder::inner_decode_vector(
               ptr_arr, len_arr, row_id_arr, row_cap, vec_offset, vector_ctx.vec_header_);
           if (OB_FAIL(decoder_ctx.ref_decoder_->decode_vector(
               *decoder_ctx.ref_ctx_, row_index, ref_range_vector_ctx))) {
-            LOG_WARN("Failed to decode vector from referenced column", K(ret),
-                K(decoder_ctx), K(col_ref_start_idx), K(col_ref_end_idx));
           } else if (OB_FAIL(rearrange_sub_str_column_len<VectorType>(decoder_ctx, ref_range_vector_ctx))) {
-            LOG_WARN("Failed to rearrange substr column len", K(ret));
           }
         }
         if (OB_SUCC(ret)) {
@@ -176,7 +170,6 @@ int ObInterColSubStrDecoder::inner_decode_vector(
           const int64_t exc_buf_len = decoder_ctx.col_header_->length_ - sizeof(ObInterColSubStrMetaHeader);
           if (OB_FAIL(decode_exception_vector(
               decoder_ctx, ref, exc_buf, exc_buf_len, vector_ctx.vec_offset_ + i, vector_ctx.vec_header_))) {
-            LOG_WARN("Failed to decode exception to vector", K(ret), K(i), K(decoder_ctx), K(vector_ctx));
           }
         }
       }
@@ -197,10 +190,7 @@ int ObInterColSubStrDecoder::inner_decode_vector(
         ptr_arr, len_arr, row_id_arr, row_cap, vec_offset, vector_ctx.vec_header_);
     if (OB_FAIL(decoder_ctx.ref_decoder_->decode_vector(
         *decoder_ctx.ref_ctx_, row_index, ref_range_vector_ctx))) {
-      LOG_WARN("Failed to decode vector from referenced column", K(ret),
-          K(decoder_ctx), K(col_ref_start_idx), K(col_ref_end_idx));
     } else if (OB_FAIL(rearrange_sub_str_column_len<VectorType>(decoder_ctx, ref_range_vector_ctx))) {
-      LOG_WARN("Failed to rearrange substr column len", K(ret));
     }
   }
   return ret;

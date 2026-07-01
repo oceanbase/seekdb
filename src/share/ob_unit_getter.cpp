@@ -75,7 +75,6 @@ int ObUnitInfoGetter::ObTenantConfig::init(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(config_.assign(config))) {
-    LOG_WARN("fail to assign config", KR(ret), K(config));
   } else {
     
     unit_id_ = unit_id;
@@ -102,12 +101,10 @@ int ObUnitInfoGetter::ObTenantConfig::divide_meta_tenant(ObTenantConfig& meta_te
     ret = OB_NOT_INIT;
     LOG_WARN("not valid tenant config, can't divide meta tenant", KR(ret), KPC(this));
   } else if (OB_FAIL(self_resource.divide_meta_tenant(meta_resource))) {
-    LOG_WARN("divide meta tenant resource fail", KR(ret), K(config_));
   } else if (OB_FAIL(meta_config.init(
       config_.unit_config_id(),
       config_.name(),
       meta_resource))) {
-    LOG_WARN("init meta config fail", KR(ret), K(config_), K(meta_resource));
   } else if (OB_FAIL(meta_tenant_config.init(
       unit_id_,
       unit_status_,
@@ -118,11 +115,9 @@ int ObUnitInfoGetter::ObTenantConfig::divide_meta_tenant(ObTenantConfig& meta_te
       is_removed_,
       hidden_sys_data_disk_config_size_,
       ObUnitResource::gen_meta_tenant_data_disk_size(actual_data_disk_size_)))) {
-    LOG_WARN("init meta tenant config fail", KR(ret), KPC(this), K(meta_config));
   }
   // update self unit resource
   else if (OB_FAIL(config_.update_unit_resource(self_resource))) {
-    LOG_WARN("update unit resource fail", KR(ret), K(self_resource), K(config_));
   } else {
     actual_data_disk_size_ = actual_data_disk_size_ - meta_tenant_config.actual_data_disk_size_;
   }
@@ -163,7 +158,6 @@ int ObUnitInfoGetter::ObTenantConfig::assign(const ObUnitInfoGetter::ObTenantCon
   if (this == &other) {
     // skip
   } else if (OB_FAIL(config_.assign(other.config_))) {
-    LOG_WARN("fail to assign config", KR(ret), K(other));
   } else {
     
     unit_id_ = other.unit_id_;
@@ -212,7 +206,6 @@ int ObUnitInfoGetter::get_tenants(common::ObIArray<uint64_t> &tenants)
   int ret = OB_SUCCESS;
   // single-tenant: one logical tenant slot; value is a non-tenant slot marker (unconsumed)
   if (OB_FAIL(tenants.push_back(0/*slot marker*/))) {
-    LOG_WARN("fail to push back tenant slot marker", K(ret));
   }
   return ret;
 }
@@ -251,7 +244,6 @@ int ObUnitInfoGetter::get_server_tenant_configs(const common::ObAddr &server,
     } else {
       log_disk_size = GCTX.config_->log_disk_size;
       if (OB_FAIL(unit_config.gen_sys_tenant_unit_config(false /*is_hidden_sys*/, log_disk_size))) {
-        LOG_WARN("gen_sys_tenant_unit_config failed", KR(ret), K(log_disk_size));
       } else if (OB_FAIL(tenant_config.init(unit_id,
                                              ObUnitInfoGetter::ObUnitStatus::UNIT_NORMAL,
                                              unit_config,
@@ -261,9 +253,7 @@ int ObUnitInfoGetter::get_server_tenant_configs(const common::ObAddr &server,
                                              false /*is_removed*/,
                                              hidden_sys_data_disk_config_size,
                                              tenant_config.gen_init_actual_data_disk_size(unit_config)))) {
-        LOG_WARN("tenant_config init failed", KR(ret), K(unit_config));
       } else if (OB_FAIL(tenant_configs.push_back(tenant_config))) {
-        LOG_WARN("push_back failed", KR(ret));
       } else {
         LOG_INFO("get_server_tenant_configs (mocked for single sys tenant)",
                  K(server), K(tenant_config), K(unit_config));
@@ -289,13 +279,9 @@ int ObUnitInfoGetter::get_tenant_server_configs(ObIArray<ObServerConfig> &server
     // don't need to set ret, just return empty result
     LOG_DEBUG("tenant doesn't own any pool");
   } else if (OB_FAIL(get_pools_of_tenant(pools))) {
-    LOG_WARN("get_pools_of_tenant failed", K(ret));
   } else if (OB_FAIL(get_units_of_pools(pools, units))) {
-    LOG_WARN("get_units_of_pools failed", K(pools), K(ret));
   } else if (OB_FAIL(get_configs_of_pools(pools, configs))) {
-    LOG_WARN("get_configs_of_pools failed", K(pools), K(ret));
   } else if (OB_FAIL(build_unit_infos(units, configs, pools, unit_infos))) {
-    LOG_WARN("build_unit_infos failed", K(units), K(configs), K(pools), K(ret));
   } else {
     ObServerConfig server_config;
     ObServerConfig migrate_from_server_config;
@@ -304,14 +290,12 @@ int ObUnitInfoGetter::get_tenant_server_configs(ObIArray<ObServerConfig> &server
       server_config.server_ = unit_infos.at(i).unit_.server_;
       server_config.config_ = unit_infos.at(i).config_;
       if (OB_FAIL(add_server_config(server_config, server_configs))) {
-        LOG_WARN("add_server_config failed", K(server_config), K(ret));
       } else {
         if (unit_infos.at(i).unit_.migrate_from_server_.is_valid()) {
           migrate_from_server_config.reset();
           migrate_from_server_config.server_ = unit_infos.at(i).unit_.migrate_from_server_;
           migrate_from_server_config.config_ = unit_infos.at(i).config_;
           if (OB_FAIL(add_server_config(migrate_from_server_config, server_configs))) {
-            LOG_WARN("add_server_config failed", K(migrate_from_server_config), K(ret));
           }
         }
       }
@@ -333,16 +317,13 @@ int ObUnitInfoGetter::get_tenant_servers(ObIArray<ObAddr> &servers)
     // don't need to set ret, just return empty result
     LOG_WARN("tenant doesn't own any pool");
   } else if (OB_FAIL(get_pools_of_tenant(pools))) {
-    LOG_WARN("get_pools_of_tenant failed", K(ret));
   } else if (OB_FAIL(get_units_of_pools(pools, units))) {
-    LOG_WARN("get_units_of_pools failed", K(pools), K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < units.count(); ++i) {
       const ObUnit &unit = units.at(i);
       bool server_exist = has_exist_in_array(servers, unit.server_);
       if (!server_exist) {
         if (OB_FAIL(servers.push_back(unit.server_))) {
-          LOG_WARN("push_back failed", K(ret));
         }
       }
 
@@ -350,7 +331,6 @@ int ObUnitInfoGetter::get_tenant_servers(ObIArray<ObAddr> &servers)
         server_exist = has_exist_in_array(servers, unit.migrate_from_server_);
         if (!server_exist) {
           if (OB_FAIL(servers.push_back(unit.migrate_from_server_))) {
-            LOG_WARN("push_back failed", K(ret));
           }
         }
       }
@@ -369,7 +349,6 @@ int ObUnitInfoGetter::check_tenant_small(bool &small_tenant)
   } else {
     ObArray<ObResourcePool> pools;
     if (OB_FAIL(get_pools_of_tenant(pools))) {
-      LOG_WARN("get_pools_of_tenant failed", K(ret));
     } else if (pools.count() <= 0) {
       ret = OB_TENANT_NOT_EXIST;
       LOG_WARN("pools of tenant not exist", K(ret));
@@ -407,9 +386,7 @@ int ObUnitInfoGetter::get_units_of_server(const ObAddr &server,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid server", K(server), K(ret));
   } else if (OB_FAIL(ObShareUtil::gen_sys_unit(unit))) {
-    LOG_WARN("fail to generate sys unit", KR(ret));
   } else if (OB_FAIL(units.push_back(unit))) {
-    LOG_WARN("fail to push back unit", KR(ret), K(unit));
   }
   return ret;
 }
@@ -427,9 +404,7 @@ int ObUnitInfoGetter::get_pools_of_units(const ObIArray<ObUnit> &units,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("units is empty", K(units), K(ret));
   } else if (OB_FAIL(ObShareUtil::gen_sys_resource_pool(resource_pool))) {
-    LOG_WARN("fail to generate sys resource pool", KR(ret));
   } else if (OB_FAIL(pools.push_back(resource_pool))) {
-    LOG_WARN("fail to push back resource pool", KR(ret), K(resource_pool));
   }
   return ret;
 }
@@ -450,9 +425,7 @@ int ObUnitInfoGetter::get_configs_of_pools(const ObIArray<ObResourcePool> &pools
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.log_block_mgr_));
   } else if (OB_FAIL(unit_config.gen_sys_tenant_unit_config(false/*is_hidden_sys*/, GCTX.log_block_mgr_->get_log_disk_size()))) {
-    LOG_WARN("gen sys tenant unit config fail", KR(ret));
   } else if (OB_FAIL(configs.push_back(unit_config))) {
-    LOG_WARN("fail to push back sys unit config", KR(ret), K(unit_config));
   }
   return ret;
 }
@@ -466,9 +439,7 @@ int ObUnitInfoGetter::get_pools_of_tenant(ObIArray<ObResourcePool> &pools)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ObShareUtil::gen_sys_resource_pool(resource_pool))) {
-    LOG_WARN("fail to generate sys resource pool", KR(ret));
   } else if (OB_FAIL(pools.push_back(resource_pool))) {
-    LOG_WARN("fail to push back resource pool", KR(ret), K(resource_pool));
   }
   return ret;
 }
@@ -486,9 +457,7 @@ int ObUnitInfoGetter::get_units_of_pools(const ObIArray<ObResourcePool> &pools,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("pools is empty", K(pools), K(ret));
   } else if (OB_FAIL(ObShareUtil::gen_sys_unit(unit))) {
-    LOG_WARN("fail to generate sys unit", KR(ret));
   } else if (OB_FAIL(units.push_back(unit))) {
-    LOG_WARN("fail to push back unit", KR(ret), K(unit));
   }
   return ret;
 }
@@ -512,15 +481,11 @@ int ObUnitInfoGetter::build_unit_infos(const ObIArray<ObUnit> &units,
       int64_t pool_index = OB_INVALID_INDEX;
       int64_t config_index = OB_INVALID_INDEX;
       if (OB_FAIL(find_pool_idx(pools, units.at(i).resource_pool_id_, pool_index))) {
-        LOG_WARN("find_pool_idx failed", K(pools), "resource_pool_id",
-            units.at(i).resource_pool_id_, K(ret));
       } else if (OB_INVALID_INDEX == pool_index) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("pool_index is invalid", K(pool_index), K(ret));
       } else if (OB_FAIL(find_config_idx(configs,
           pools.at(pool_index).unit_config_id_, config_index))) {
-        LOG_WARN("find_config_idx", K(configs), "unit_config_id",
-            pools.at(pool_index).unit_config_id_, K(ret));
       } else if (OB_INVALID_INDEX == config_index) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("config_index is invalid", K(config_index), K(ret));
@@ -532,9 +497,7 @@ int ObUnitInfoGetter::build_unit_infos(const ObIArray<ObUnit> &units,
         info.unit_ = units.at(i);
         info.config_ = configs.at(config_index);
         if (OB_FAIL(info.pool_.assign(pools.at(pool_index)))) {
-          LOG_WARN("failed to assign info.pool_", K(ret));
         } else if (OB_FAIL(unit_infos.push_back(info))) {
-          LOG_WARN("push_back failed", K(ret));
         }
       }
     }
@@ -560,7 +523,6 @@ int ObUnitInfoGetter::add_server_config(const ObServerConfig &server_config,
     } else {
       ret = OB_SUCCESS;
       if (OB_FAIL(server_configs.push_back(server_config))) {
-        LOG_WARN("push_back failed", K(ret));
       }
     }
   } else if (OB_INVALID_INDEX == idx) {

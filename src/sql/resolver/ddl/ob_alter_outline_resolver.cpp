@@ -51,7 +51,6 @@ int ObAlterOutlineResolver::resolve(const ParseNode &parse_tree)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to create alter_outline_stmt", K(ret));
   } else if (OB_FAIL(GET_MIN_DATA_VERSION(compat_version))) {
-    LOG_WARN("fail to get data version", KR(ret));
   } else {
     stmt_ = alter_outline_stmt;
 
@@ -71,7 +70,6 @@ int ObAlterOutlineResolver::resolve(const ParseNode &parse_tree)
       ObString db_name;
       ObString outline_name;
       if (OB_FAIL(resolve_outline_name(node->children_[0], db_name, outline_name))) {
-        LOG_WARN("fail to resolve outline name", K(ret));
       } else {
         alter_outline_stmt->set_database_name(db_name);
         alter_outline_stmt->set_outline_name(outline_name);
@@ -93,7 +91,6 @@ int ObAlterOutlineResolver::resolve(const ParseNode &parse_tree)
     //set outline_target
     if (OB_SUCC(ret)) {
       if (OB_FAIL(resolve_outline_target(node->children_[2], alter_outline_stmt->get_target_sql()))) {
-        LOG_WARN("fail to resolve outline target", K(ret));
       }
     }
   }

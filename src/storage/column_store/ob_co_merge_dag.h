@@ -390,15 +390,12 @@ int ObCOMergeDagNet::create_dag(
     basic_param_.start_cg_idx_ = start_cg_idx;
     basic_param_.end_cg_idx_ = end_cg_idx;
     if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->alloc_dag(dag))) {
-      STORAGE_LOG(WARN, "fail to alloc dag", K(ret));
     } else if (OB_FAIL(dag->init_by_param(&basic_param_))) {
-      STORAGE_LOG(WARN, "Fail to init prepare dag", K(ret));
     } else if (nullptr != parent && OB_FAIL(parent->add_child(*dag))) {
       STORAGE_LOG(WARN, "failed to add child", K(ret), KPC(parent), KPC(dag));
     } else if (nullptr == parent && OB_FAIL(add_dag_into_dag_net(*dag))) {
       STORAGE_LOG(WARN, "fail to add dag into dag_net", K(ret));
     } else if (OB_FAIL(dag->create_first_task())) {
-      STORAGE_LOG(WARN, "failed to create first task", K(ret), KPC(dag));
     } else if (share::ObDagType::DAG_TYPE_CO_MERGE_BATCH_EXECUTE == dag->get_type()) {
 #ifdef ERRSIM
       dag->set_max_retry_times(30);
@@ -412,7 +409,6 @@ int ObCOMergeDagNet::create_dag(
     }
     if (OB_FAIL(ret) || !add_scheduler_flag) {
     } else if (OB_FAIL(share::g_mp->tenant_dag_scheduler()->add_dag(dag))) {
-      STORAGE_LOG(WARN, "Fail to add dag into dag_scheduler", K(ret));
     }
   }
   if (OB_FAIL(ret) && nullptr != dag) {

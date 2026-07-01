@@ -44,7 +44,6 @@ inline int serial_call(F &&fn)
 {
   int ret = rs_serial_mutex().lock(THIS_WORKER.get_timeout_ts());
   if (OB_SUCCESS != ret) {
-    RS_LOG(WARN, "fail to acquire RS serial lock before its deadline", K(ret));
   } else {
     struct Unlock { ~Unlock() { rs_serial_mutex().unlock(); } } guard;
     ret = fn();

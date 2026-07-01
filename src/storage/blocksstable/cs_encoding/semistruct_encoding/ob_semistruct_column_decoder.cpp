@@ -55,12 +55,10 @@ int ObSemiStructColumnDecoder::decode(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("sub column decoder is null", K(ret), K(row_id), K(i), K(sub_col_header));
       } else if (OB_FAIL(decoder->decode(sub_col_ctx, row_id, sub_datum))) {
-        LOG_WARN("decode sub column fail", K(ret), K(row_id), K(i), K(sub_col_header));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(handler->serialize(sub_row, result))) {
-      LOG_WARN("reassemble fail", K(ret), K(sub_row));
     } else {
       datum.set_string(result);
     }
@@ -76,7 +74,6 @@ int ObSemiStructColumnDecoder::batch_decode(const ObColumnCSDecoderCtx &ctx,
   for (int32_t i = 0; OB_SUCC(ret) && i < row_cap; ++i) {
     int32_t row_id = row_ids[i];
     if (OB_FAIL(decode(ctx, row_id, datums[i]))) {
-      LOG_WARN("decode fail", K(ret), K(i), K(row_id), K(row_cap));
     }
   }
   return ret;
@@ -104,7 +101,6 @@ int ObSemiStructColumnDecoder::decode_vector(
           const int64_t curr_vec_offset = vector_ctx.vec_offset_ + i;
           ObDatum datum;
           if (OB_FAIL(decode(ctx, row_id, datum))) {
-            LOG_WARN("decode fail", K(ret), K(i), K(row_id), K(vector_ctx));
           } else if (datum.is_null()) {
             disc_vec->set_null(curr_vec_offset);
           } else {
@@ -125,7 +121,6 @@ int ObSemiStructColumnDecoder::decode_vector(
           const int64_t curr_vec_offset = vector_ctx.vec_offset_ + i;
           ObDatum &datum = uni_vec->get_datum(curr_vec_offset);
           if (OB_FAIL(decode(ctx, row_id, datum))) {
-            LOG_WARN("decode fail", K(ret), K(i), K(row_id), K(vector_ctx));
           } else if (datum.is_null()) {
             uni_vec->set_null(curr_vec_offset);
           }
@@ -190,7 +185,6 @@ int ObSemiStructColumnDecoder::pushdown_operator(
     bool can_pushdown = false;
     int64_t sub_col_idx = -1;
     if (OB_FAIL(handler->check_can_pushdown(semistruct_node, can_pushdown, sub_col_idx))) {
-      LOG_WARN("check_can_pushdown fail", K(ret), K(semistruct_node), KPC(handler));
     } else if (OB_UNLIKELY(! can_pushdown)) {
       ret = OB_NOT_SUPPORTED;
       LOG_INFO("pushdown not support for current filter", K(semistruct_node), KPC(handler));
@@ -201,7 +195,6 @@ int ObSemiStructColumnDecoder::pushdown_operator(
       const ObIColumnCSDecoder *sub_decoder = semistruct_ctx.sub_col_decoders_[sub_col_idx];
       ObColumnCSDecoderCtx &sub_col_ctx =  semistruct_ctx.sub_col_ctxs_[sub_col_idx];
       if (OB_FAIL(sub_decoder->pushdown_operator(parent, sub_col_ctx, filter, pd_filter_info, result_bitmap))) {
-        LOG_WARN("pushdown filter to sub column fail", K(ret), K(sub_col_ctx), K(semistruct_node), KPC(handler));
       }
     }
   }

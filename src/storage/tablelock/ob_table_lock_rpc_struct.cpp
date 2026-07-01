@@ -143,7 +143,6 @@ OB_DEF_DESERIALIZE(ObTableLockTaskRequest)
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(TxDescHelper::deserialize_tx_desc(buf, data_len, pos, tx_desc_))) {
-    LOG_WARN("acquire tx by deserialize fail", K(data_len), K(pos), K(ret));
   } else {
     need_release_tx_ = true;
     LOG_TRACE("deserialize txDesc", KPC_(tx_desc));
@@ -208,7 +207,6 @@ OB_DEF_DESERIALIZE(ObReplaceAllLocksRequest)
   ObUnLockRequest unlock_req;
 
   if (OB_FAIL(common::serialization::decode(buf, data_len, tmp_pos, lock_req))) {
-    LOG_WARN("deserialize lock_req failed", K(ret), K(data_len), K(tmp_pos), KPHEX(buf, data_len));
   } else {
     switch(lock_req.type_) {
     case ObLockRequest::ObLockMsgType::LOCK_OBJ_REQ: {
@@ -250,7 +248,6 @@ OB_DEF_DESERIALIZE(ObReplaceAllLocksRequest)
       tmp_pos = pos;
       ObLockRequest *unlock_req_ptr = nullptr;
       if (OB_FAIL(common::serialization::decode(buf, data_len, tmp_pos, unlock_req))) {
-        LOG_WARN("deserialize lock_req failed", K(ret));
       } else {
         switch (unlock_req.type_) {
         case ObLockRequest::ObLockMsgType::UNLOCK_OBJ_REQ: {
@@ -303,7 +300,6 @@ int TxDescHelper::deserialize_tx_desc(DESERIAL_PARAMS, ObTxDesc *&tx_desc)
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ObTransService is null");
   } else if (OB_FAIL(txs->acquire_tx(buf, data_len, pos, tx_desc))) {
-    LOG_WARN("acquire tx by deserialize fail", K(data_len), K(pos), K(ret));
   }
   return ret;
 }
@@ -316,7 +312,6 @@ int TxDescHelper::release_tx_desc(ObTxDesc &tx_desc)
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ObTransService is null");
   } else if (OB_FAIL(txs->release_tx(tx_desc))) {
-    LOG_WARN("acquire tx by deserialize fail", K(ret));
   }
   return ret;
 }
@@ -514,9 +509,7 @@ int ObLockObjsRequest::assign(const ObLockObjRequest &arg)
   timeout_us_ = arg.timeout_us_;
   is_from_sql_ = arg.is_from_sql_;
   if (OB_FAIL(lock_id.set(arg.obj_type_, arg.obj_id_))) {
-    LOG_WARN("set lock_id failed", K(ret), K(arg));
   } else if (OB_FAIL(objs_.push_back(lock_id))) {
-    LOG_WARN("append lock_id into array failed", K(ret), K(arg));
   }
   return ret;
 }
@@ -653,7 +646,6 @@ int ObLockTabletsRequest::assign(const ObLockTabletRequest &arg)
   timeout_us_ = arg.timeout_us_;
   is_from_sql_ = arg.is_from_sql_;
   if (OB_FAIL(tablet_ids_.push_back(arg.tablet_id_))) {
-    LOG_WARN("append tablet_id into array failed", K(arg), K(ret));
   }
   return ret;
 }

@@ -101,7 +101,6 @@ int ObExprRepeat::calc_result_type2(ObExprResType &type,
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(aggregate_charsets_for_string_result(type, &text, 1, type_ctx))) {
-      LOG_WARN("failed to aggregate charsets for string result", K(ret));
     } else {
       text.set_calc_collation_level(type.get_collation_level());
       text.set_calc_collation_type(type.get_collation_type());
@@ -171,7 +170,6 @@ int ObExprRepeat::repeat_text(ObObjType res_type,
   if (count <= 0 || text.length() <= 0 || max_result_size <= 0) { // Notice: result is "", not null.
     ObTextStringResult result_buffer(res_type, has_lob_header, &allocator);
     if (OB_FAIL(result_buffer.init(0))) {
-      LOG_WARN("init stringtextbuffer failed", K(ret));
     } else {
       result_buffer.get_result_buffer(output);
     }
@@ -192,12 +190,10 @@ int ObExprRepeat::repeat_text(ObObjType res_type,
       }
       ObTextStringResult result_buffer(res_type, has_lob_header, &allocator);
       if (OB_FAIL(result_buffer.init(tot_length))) {
-        LOG_WARN("init result failed", K(ret), K(tot_length));
       } else {
         int64_t tmp_count = count;
         while (tmp_count-- && (OB_SUCC(ret))) {
           if (OB_FAIL(result_buffer.append(text))) {
-            LOG_WARN("append result failed", K(ret), K(result_buffer), K(text));
           }
         }
         if (OB_SUCC(ret)) {
@@ -234,7 +230,6 @@ int ObExprRepeat::calc(ObObj &result,
                       text, count, *allocator, max_result_size);
   }
   if (OB_FAIL(ret)) {
-    LOG_WARN("do repeat failed", K(ret));
   } else {
     if (is_null) {
       result.set_null();
@@ -272,10 +267,8 @@ int ObExprRepeat::eval_repeat(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_
   } else if (text->is_null() || count->is_null()) {
     expr_datum.set_null();
   } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_max_allowed_packet(max_size))) {
-    LOG_WARN("get max length failed", K(ret));
   } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator, *text,
                      expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), text_str))) {
-    LOG_WARN("fail to get real data.", K(ret), K(text_str));
   } else {
     ObExprStrResAlloc expr_res_alloc(expr, ctx);
     bool is_null = false;
@@ -289,7 +282,6 @@ int ObExprRepeat::eval_repeat(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_
                         text_str, count->get_int(), expr_res_alloc, max_size);
     }
     if (OB_FAIL(ret)) {
-      LOG_WARN("do repeat failed", K(ret));
     } else {
       if (is_null) {
         expr_datum.set_null();
@@ -311,7 +303,6 @@ int ObExprRepeat::repeat_vector(VECTOR_EVAL_FUNC_ARG_DECL)
   int64_t max_size = 0; // used for limit size of result
 
   if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_max_allowed_packet(max_size))) {
-    LOG_WARN("get max size failed", K(ret));
   } else {
     const Arg0Vec *arg0_vec = static_cast<const Arg0Vec *>(expr.args_[0]->get_vector(ctx));
     const Arg1Vec *arg1_vec = static_cast<const Arg1Vec *>(expr.args_[1]->get_vector(ctx));
@@ -343,7 +334,6 @@ int ObExprRepeat::repeat_vector(VECTOR_EVAL_FUNC_ARG_DECL)
         if (OB_FAIL(ObTextStringHelper::read_real_string_data(
                 tmp_allocator, arg0_vec, expr.args_[0]->datum_meta_,
                 expr.args_[0]->obj_meta_.has_lob_header(), text, idx))) {
-          LOG_WARN("failed to read text", K(ret), K(text));
         } else if (!ob_is_text_tc(expr.datum_meta_.type_)) {
           // 2.1 deal with string tc
           ret = repeat(output, is_null, text, count, calc_alloc, max_size);
@@ -354,7 +344,6 @@ int ObExprRepeat::repeat_vector(VECTOR_EVAL_FUNC_ARG_DECL)
                             text, count, calc_alloc, max_size);
         }
         if (OB_FAIL(ret)) {
-          LOG_WARN("do repeat in vector failed", K(ret));
         } else {
           if (is_null) {
             res_vec->set_null(idx);

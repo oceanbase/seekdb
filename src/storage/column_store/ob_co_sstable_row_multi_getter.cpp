@@ -42,10 +42,8 @@ int ObCOSSTableRowMultiGetter::inner_open(
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObCGSSTableRowGetter::init(
               iter_param, access_ctx, prefetcher_, table, query_range))) {
-    LOG_WARN("Fail to init sstable cg getter", K(ret));
   } else {
     if (OB_FAIL(prefetcher_.multi_prefetch())) {
-      LOG_WARN("Fail to multi prefetch data", K(ret));
     } else {
       is_inited_ = true;
     }
@@ -66,7 +64,6 @@ int ObCOSSTableRowMultiGetter::inner_get_next_row(const blocksstable::ObDatumRow
   } else {
     while (OB_SUCC(ret)) {
       if (OB_FAIL(prefetcher_.multi_prefetch())) {
-        LOG_WARN("Fail to prefetch micro block", K(ret), K_(prefetcher));
       } else if (prefetcher_.fetch_rowkey_idx_ >= prefetcher_.prefetch_rowkey_idx_) {
         if (OB_LIKELY(prefetcher_.is_prefetch_end())) {
           ret = OB_ITER_END;

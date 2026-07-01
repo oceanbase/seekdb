@@ -220,7 +220,6 @@ public:
     {
       int ret = 0;
       if (OB_ISNULL(that)) {
-        COMMON_LOG(ERROR, "node compare error, null node", K(lbt()));
       } else if (this->hash_ > that->hash_) {
         ret = 1;
       } else if (this->hash_ < that->hash_) {
@@ -394,7 +393,6 @@ public:
       } else if (0 != (ret = get_from_list(pre, target.set(key), ret_node))) {
       } else {
         if (OB_ISNULL(ret_node)) {
-          COMMON_LOG(ERROR, "get null node", KP(ret_node), K(lbt()));
           ret = -EINVAL;
         } else {
           val = ret_node->val_;
@@ -431,7 +429,6 @@ public:
         ret = -ENOENT;
       } else if (0 == (ret = del_from_list(pre, target.set(key), ret_node))) {
         if (OB_ISNULL(ret_node)) {
-          COMMON_LOG(ERROR, "get null node", KP(ret_node), K(lbt()));
           ret = -EINVAL;
         } else {
           ret_node->set_deleted();
@@ -764,7 +761,6 @@ public:
 private:
   void clean_retire_list()
   {
-    LIB_LOG(INFO, "clean retire list");
     RetireList::RetireNodeIterator iter(&retire_list_);
     Node *node = NULL;
     while (NULL != (node = static_cast<Node *>(iter.get_next()))) {

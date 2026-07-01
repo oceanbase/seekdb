@@ -53,9 +53,7 @@ public:
     for (uint32_t i = start; i < elements.size() && OB_SUCC(ret); i++) {
       ObCartesianBox box;
       if (OB_FAIL(elements[i].get_box(box))) {
-        LOG_WARN("failed to get segment box", K(ret));
       } else if (OB_FAIL(rtree_nodes.push_back(std::make_pair(box, &elements[i])))) {
-        LOG_WARN("failed to record rtree node", K(ret));
       }
     }
 

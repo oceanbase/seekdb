@@ -36,7 +36,6 @@ int ObLobMetaScanIter::open_local(ObLobAccessParam &param, ObPersistentLobApator
   cur_pos_ = 0;
   cur_byte_pos_ = 0;
   if (OB_FAIL(lob_adatper->scan_lob_meta(param, meta_iter_))) {
-    LOG_WARN("failed to open iter", K(ret));
   }
   return ret;
 }
@@ -55,7 +54,6 @@ int ObLobMetaScanIter::open_remote(ObLobAccessParam &param)
   cur_byte_pos_ = 0;
   is_remote_ = true;
   if (OB_FAIL(ObLobRemoteUtil::query(param, ObLobQueryArg::QueryType::READ, param.addr_, remote_ctx_))) {
-    LOG_WARN("fail to init remote query ctx", K(ret));
   }
   return ret;
 }
@@ -119,7 +117,6 @@ int ObLobMetaScanIter::get_next_row_local(ObLobMetaInfo &row)
         if (OB_SUCC(ret) && ! not_need_last_info() && cur_byte_pos_ == byte_size_) {
           ObLobMetaInfo info = cur_info_;
           if (OB_FAIL(cur_info_.deep_copy(*allocator_, info))) {
-            LOG_WARN("fail to do deep copy for cur info", K(info), K(row), KPC(this));
           } else {
             LOG_DEBUG("deep_copy last info", K(cur_info_));
           }
@@ -137,7 +134,6 @@ int ObLobMetaScanIter::get_next_row_local(ObLobMetaScanResult &result)
   ret = get_next_row_local(result.info_);
   if (ret == OB_ITER_END) {
   } else if (OB_FAIL(ret)) {
-    LOG_WARN("failed to get next row.", K(ret));
   } else {
     uint32_t cur_len = is_char ? result.info_.char_len_ : result.info_.byte_len_;
     if (cur_len > cur_pos_) {
@@ -346,17 +342,11 @@ int ObLobMetaUtil::transform_from_row_to_info(const blocksstable::ObDatumRow *ro
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid lob meta row.", K(ret), KPC(row), K(expcect_row_cnt));
   } else if (OB_FAIL(transform_lob_id(row, info))) {
-    LOG_WARN("transform lob id failed", K(ret));
   } else if (OB_FAIL(transform_seq_id(row, info))) {
-    LOG_WARN("transform seq id failed", K(ret));
   } else if (OB_FAIL(transform_byte_len(row, info, with_extra_rowkey))) {
-    LOG_WARN("transform byte len failed", K(ret));
   } else if (OB_FAIL(transform_char_len(row, info, with_extra_rowkey))) {
-    LOG_WARN("transform char len failed", K(ret));
   } else if (OB_FAIL(transform_piece_id(row, info, with_extra_rowkey))) {
-    LOG_WARN("transform piece id failed", K(ret));
   } else if (OB_FAIL(transform_lob_data(row, info, with_extra_rowkey))) {
-    LOG_WARN("transform lob data failed", K(ret));
   }
   return ret;
 }
@@ -458,17 +448,11 @@ int ObLobMetaUtil::transform_from_info_to_row(ObLobMetaInfo &info, blocksstable:
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid lob meta row.", K(ret), K(info), K(with_extra_rowkey));
   } else if (OB_FAIL(transform_lob_id(info, row))) {
-    LOG_WARN("get lob id from row failed.", K(ret), K(info));
   } else if (OB_FAIL(transform_seq_id(info, row))) {
-    LOG_WARN("get seq id from row failed.", K(ret), K(info));
   } else if (OB_FAIL(transform_byte_len(info, row, with_extra_rowkey))) {
-    LOG_WARN("get byte len from row failed.", K(ret), K(info));
   } else if (OB_FAIL(transform_char_len(info, row, with_extra_rowkey))) {
-    LOG_WARN("get char len from row failed.", K(ret), K(info));
   } else if (OB_FAIL(transform_piece_id(info, row, with_extra_rowkey))) {
-    LOG_WARN("get macro id from row failed.", K(ret), K(info));
   } else if (OB_FAIL(transform_lob_data(info, row, with_extra_rowkey))) {
-    LOG_WARN("get macro id from row failed.", K(ret), K(info));
   }
   return ret;
 }
@@ -591,7 +575,6 @@ int ObLobMetaWriteIter::get_last_meta_info(ObLobAccessParam &param, ObLobMetaMan
   if (OB_ISNULL(meta_manager)) {
     LOG_DEBUG("not scan last info", K(ret), K(param));
   } else if (OB_FAIL(meta_manager->scan(param, scan_iter_))) {
-    LOG_WARN("do lob meta scan failed.", K(ret), K(param));
   } else {
     ObLobMetaScanResult scan_res;
     if (OB_FAIL(scan_iter_.get_next_row(scan_res))) {
@@ -635,7 +618,6 @@ int ObLobMetaWriteIter::open(ObLobAccessParam &param,
   seq_id_end_.set_allocator(allocator_);
 
   if (OB_FAIL(get_last_meta_info(param, meta_manager))) {
-    LOG_WARN("get_last_meta_info fail", K(ret), K(param));
   } else if (0 == padding_size_ && post_data_.empty() && remain_buf_.empty() && last_info_.byte_len_ > 0) {
     // need concat data, so alloc buffer
     char *buf = reinterpret_cast<char*>(allocator_->alloc(piece_block_size_));
@@ -684,7 +666,6 @@ int ObLobMetaWriteIter::open(ObLobAccessParam &param,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("read buffer is not enough", K(ret), K(piece_block_size_), K(read_buf.length()), K(read_buf.size()));
     } else if (OB_FAIL(get_last_meta_info(param, meta_manager))) {
-      LOG_WARN("get_last_meta_info fail", K(ret), K(param));
     } else if (OB_ISNULL(buf = reinterpret_cast<char*>(allocator_->alloc(piece_block_size_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("alloc buffer failed.", K(piece_block_size_));
@@ -725,7 +706,6 @@ int ObLobMetaWriteIter::open(ObLobAccessParam &param,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(iter), KP(read_param), KP(lob_common_));
   } else if (OB_FAIL(open(param, iter, read_buf, 0/*padding_size*/, post_data, remain_buf, seq_id_st, seq_id_end, nullptr))) {
-    LOG_WARN("open fail", K(ret), K(param), KP(read_param));
   }
   return ret;
 }
@@ -764,7 +744,6 @@ int ObLobMetaWriteIter::try_fill_data(ObLobWriteBuffer &write_buffer, ObLobQuery
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("inner_buffer_ length not equal piece_block_size", K(ret), K(piece_block_size_), "inner_buffer_length", inner_buffer_.length());
     } else if (OB_FAIL(write_buffer.set_buffer(inner_buffer_.ptr(), piece_block_size_))) {
-      LOG_WARN("set_buffer fail", K(ret));
     }
   }
 
@@ -772,7 +751,6 @@ int ObLobMetaWriteIter::try_fill_data(ObLobWriteBuffer &write_buffer, ObLobQuery
   if (OB_FAIL(ret)) {
   } else if (iter->is_end()) {
   } else if (OB_FAIL(write_buffer.append(data.ptr(), data.length(), by_len))) {
-    LOG_WARN("set buffer data fail", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -804,7 +782,6 @@ int ObLobMetaWriteIter::try_fill_data(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("inner_buffer_ length not equal piece_block_size", K(ret), K(piece_block_size_), "inner_buffer_length", inner_buffer_.length());
     } else if (OB_FAIL(write_buffer.set_buffer(inner_buffer_.ptr(), piece_block_size_))) {
-      LOG_WARN("set_buffer fail", K(ret));
     }
   }
 
@@ -813,10 +790,8 @@ int ObLobMetaWriteIter::try_fill_data(
   } else if (is_padding) {
     // there is a trouble if charset is utf16
     if (OB_FAIL(write_buffer.padding(left_size, by_len))) {
-      LOG_WARN("padding fail", K(ret), K(left_size));
     }
   } else if (OB_FAIL(write_buffer.append(data.ptr() + offset, left_size, by_len))) {
-    LOG_WARN("set buffer data fail", K(ret), K(left_size));
   }
 
   if (OB_SUCC(ret)) {
@@ -840,9 +815,7 @@ int ObLobMetaWriteIter::try_update_last_info(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("inner_buffer_ length not equal piece_block_size", K(ret), K(piece_block_size_), "inner_buffer_length", inner_buffer_.length());
       } else if (OB_FAIL(write_buffer.set_buffer(inner_buffer_.ptr(), piece_block_size_))) {
-        LOG_WARN("set_buffer fail", K(ret));
       } else if (OB_FAIL(write_buffer.append(last_info_.lob_data_.ptr(), last_info_.lob_data_.length(), by_len))) {
-        LOG_WARN("set buffer data fail", K(ret), K(last_info_), K(write_buffer));
       } else if (by_len != last_info_.lob_data_.length()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("should write all data", K(ret), K(by_len), K(last_info_), K(write_buffer));
@@ -870,7 +843,6 @@ int ObLobMetaWriteIter::get_next_row(ObLobMetaWriteResult &row)
   if (is_end_) {
     ret = OB_ITER_END; // mock for inrow situation
   } else if (OB_FAIL(try_update_last_info(row, write_buffer))) {
-    LOG_WARN("fail to do try update last info.", K(ret));
   } else if (!row.is_update_) {
     // 1. init common info for ObLobMetaWriteResult
     row.need_alloc_macro_id_ = false;
@@ -884,12 +856,10 @@ int ObLobMetaWriteIter::get_next_row(ObLobMetaWriteResult &row)
     if (OB_ISNULL(end_seq_id.ptr())) {
       // not set end
       if (OB_FAIL(seq_id_.get_next_seq_id(row.info_.seq_id_))) {
-        LOG_WARN("failed to next seq id.", K(ret));
       }
     } else {
       // has set seq end
       if (OB_FAIL(seq_id_.get_next_seq_id(row.info_.seq_id_, seq_id_end_))) {
-        LOG_WARN("failed to next seq id.", K(ret));
       }
     }
   }
@@ -930,7 +900,6 @@ int ObLobMetaWriteIter::get_next_row(ObLobMetaWriteResult &row)
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(write_buffer.to_lob_meta_info(row.info_))) {
-        LOG_WARN("to_lob_meta_info fail", K(ret));
       } else if (row.info_.lob_data_.length() == 0
           || row.info_.lob_data_.length() > piece_block_size_ 
           || row.info_.lob_data_.length() != row.info_.byte_len_) {
@@ -944,7 +913,6 @@ int ObLobMetaWriteIter::get_next_row(ObLobMetaWriteResult &row)
 
     if (OB_SUCC(ret) && OB_NOT_NULL(lob_common_)) {
       if (OB_FAIL(update_disk_lob_locator(row))) {
-        LOG_WARN("update_disk_lob_locator fail", K(ret), KPC(this));
       }
     }
   }
@@ -1059,7 +1027,6 @@ int ObInRowLobDataSpliter::split(ObCollationType cs_type, const int64_t chunk_si
   ObLobMetaInfo info;
   while(OB_SUCC(ret) && OB_SUCC(get_next_row(info))) {
     if (OB_FAIL(lob_meta_list_.push_back(info))) {
-      LOG_WARN("push back fail", K(ret), "count", lob_meta_list_.count());
     }
   }
   if (OB_ITER_END == ret) {

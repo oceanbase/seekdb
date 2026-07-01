@@ -30,7 +30,6 @@ int ObTenantTmpFileManager::mtl_init(ObTenantTmpFileManager *&manager)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to mtl init tmp file manager, null pointer argument", KR(ret), KP(manager));
   } else if (OB_FAIL(manager->init())) {
-    LOG_WARN("fail to init ObTenantTmpFileManager", KR(ret));
   }
   return ret;
 }
@@ -43,7 +42,6 @@ int ObTenantTmpFileManager::init()
     LOG_WARN("ObTenantTmpFileManager init twice", K(ret), K(is_inited_));
   } else {
     if (OB_FAIL(get_sn_file_manager().init())) {
-      LOG_WARN("fail to init sn tmp file manager", KR(ret));
     }
   }
 
@@ -62,7 +60,6 @@ int ObTenantTmpFileManager::start()
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().start())) {
-      LOG_WARN("fail to start sn tmp file manager", KR(ret));
     }
   }
   LOG_INFO("ObTenantTmpFileManager start success", KR(ret), K(GCTX.is_shared_storage_mode()));
@@ -100,7 +97,6 @@ int ObTenantTmpFileManager::alloc_dir(int64_t &dir_id)
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().alloc_dir(dir_id))) {
-      LOG_WARN("fail to alloc dir in sn tmp file manager", KR(ret), K(dir_id));
     }
   }
   return ret;
@@ -114,7 +110,6 @@ int ObTenantTmpFileManager::open(int64_t &fd, const int64_t &dir_id, const char*
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().open(fd, dir_id, label))) {
-      LOG_WARN("fail to open file in sn tmp file manager", KR(ret), K(fd), K(dir_id), KP(label));
     }
   }
   return ret;
@@ -128,7 +123,6 @@ int ObTenantTmpFileManager::remove(const int64_t fd)
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().remove(fd))) {
-      LOG_WARN("fail to remove file in sn tmp file manager", KR(ret), K(fd));
     }
   }
   return ret;
@@ -143,7 +137,6 @@ int ObTenantTmpFileManager::aio_read(const ObTmpFileIOInfo &io_info,
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().aio_read(io_info, io_handle))) {
-      LOG_WARN("fail to read file in sn tmp file manager", KR(ret), K(io_info));
     }
   }
   return ret;
@@ -158,7 +151,6 @@ int ObTenantTmpFileManager::aio_pread(const ObTmpFileIOInfo &io_info,
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().aio_pread(io_info, offset, io_handle))) {
-      LOG_WARN("fail to read file in sn tmp file manager", KR(ret), K(io_info), K(offset));
     }
   }
   return ret;
@@ -173,7 +165,6 @@ int ObTenantTmpFileManager::read(const ObTmpFileIOInfo &io_info,
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().read(io_info, io_handle))) {
-      LOG_WARN("fail to read file in sn tmp file manager", KR(ret), K(io_info));
     }
   }
   return ret;
@@ -188,7 +179,6 @@ int ObTenantTmpFileManager::pread(const ObTmpFileIOInfo &io_info,
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().pread(io_info, offset, io_handle))) {
-      LOG_WARN("fail to read file in sn tmp file manager", KR(ret), K(io_info), K(offset));
     }
   }
   return ret;
@@ -203,7 +193,6 @@ int ObTenantTmpFileManager::aio_write(const ObTmpFileIOInfo &io_info,
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().aio_write(io_info, io_handle))) {
-      LOG_WARN("fail to write file in sn tmp file manager", KR(ret), K(io_info));
     }
   }
   return ret;
@@ -217,7 +206,6 @@ int ObTenantTmpFileManager::write(const ObTmpFileIOInfo &io_info)
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().write(io_info))) {
-      LOG_WARN("fail to write file in sn tmp file manager", KR(ret), K(io_info));
     }
   }
   return ret;
@@ -231,7 +219,6 @@ int ObTenantTmpFileManager::truncate(const int64_t fd, const int64_t offset)
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().truncate(fd, offset))) {
-      LOG_WARN("fail to truncate file in sn tmp file manager", KR(ret), K(fd), K(offset));
     }
   }
   return ret;
@@ -245,7 +232,6 @@ int ObTenantTmpFileManager::seal(const int64_t fd)
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(sn_file_manager_.seal(fd))) {
-      LOG_WARN("fail to seal file in sn tmp file manager", KR(ret), K(fd));
     }
   }
   return ret;
@@ -259,7 +245,6 @@ int ObTenantTmpFileManager::get_tmp_file_size(const int64_t fd, int64_t &file_si
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().get_tmp_file_size(fd, file_size))) {
-      LOG_WARN("fail to get tmp file size in sn tmp file manager", KR(ret), K(fd));
     }
   }
   return ret;
@@ -273,7 +258,6 @@ int ObTenantTmpFileManager::get_tmp_file(const int64_t fd, ObITmpFileHandle &han
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().ObITenantTmpFileManager::get_tmp_file(fd, handle))) {
-      LOG_WARN("fail to get tmp file in sn tmp file manager", KR(ret), K(fd));
     }
   }
   return ret;
@@ -287,8 +271,6 @@ int ObTenantTmpFileManager::get_tmp_file_disk_usage(int64_t &disk_data_size, int
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().get_tmp_file_disk_usage(disk_data_size, occupied_disk_size))) {
-      LOG_WARN("fail to get tmp file disk usage in sn tmp file manager",
-               KR(ret), K(disk_data_size), K(occupied_disk_size));
     }
   }
 
@@ -303,7 +285,6 @@ int ObTenantTmpFileManager::get_tmp_file_fds(ObIArray<int64_t> &fd_arr)
     LOG_WARN("ObTenantTmpFileManager has not been inited", KR(ret));
   } else {
     if (OB_FAIL(get_sn_file_manager().get_tmp_file_fds(fd_arr))) {
-      LOG_WARN("fail to get tmp file fds in sn tmp file manager", KR(ret), K(fd_arr));
     }
   }
 
@@ -322,7 +303,6 @@ int ObTenantTmpFileManager::get_tmp_file_info(const int64_t fd, ObTmpFileInfo *t
     LOG_WARN("invalid argument", KR(ret), K(fd), KP(tmp_file_info));
   } else {
     if (OB_FAIL(get_sn_file_manager().get_tmp_file_info(fd, *tmp_file_info))) {
-      LOG_WARN("fail to get tmp file info in sn tmp file manager", KR(ret), K(fd));
     }
   }
   return ret;
@@ -350,7 +330,6 @@ int ObTenantTmpFileManagerWithMTLSwitch::alloc_dir(int64_t &dir_id)
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("tmp file manager is null", KR(ret));
     } else if (OB_FAIL(tmp_file_mgr->alloc_dir(dir_id))) {
-      LOG_WARN("fail to alloc dir", KR(ret));
     }
   }
   return ret;
@@ -373,7 +352,6 @@ int ObTenantTmpFileManagerWithMTLSwitch::open(int64_t &fd,
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("tmp file manager is null", KR(ret));
     } else if (OB_FAIL(tmp_file_mgr->open(fd, dir_id, label))) {
-      LOG_WARN("fail to open", KR(ret), K(fd), K(dir_id), KP(label));
     }
   }
   return ret;
@@ -394,7 +372,6 @@ int ObTenantTmpFileManagerWithMTLSwitch::remove(const int64_t fd)
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("tmp file manager is null", KR(ret));
     } else if (OB_FAIL(tmp_file_mgr->remove(fd))) {
-      LOG_WARN("fail to remove", KR(ret));
     }
   }
   return ret;
@@ -415,7 +392,6 @@ int ObTenantTmpFileManagerWithMTLSwitch::aio_read(const ObTmpFileIOInfo &io_info
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("tmp file manager is null", KR(ret));
     } else if (OB_FAIL(tmp_file_mgr->aio_read(io_info, io_handle))) {
-      LOG_WARN("fail to aio read", KR(ret), K(io_info));
     }
   }
   return ret;
@@ -437,7 +413,6 @@ int ObTenantTmpFileManagerWithMTLSwitch::aio_pread(const ObTmpFileIOInfo &io_inf
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("tmp file manager is null", KR(ret));
     } else if (OB_FAIL(tmp_file_mgr->aio_pread(io_info, offset, io_handle))) {
-      LOG_WARN("fail to aio pread", KR(ret), K(io_info), K(offset));
     }
   }
   return ret;
@@ -458,7 +433,6 @@ int ObTenantTmpFileManagerWithMTLSwitch::pread(const ObTmpFileIOInfo &io_info, c
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("tmp file manager is null", KR(ret));
     } else if (OB_FAIL(tmp_file_mgr->pread(io_info, offset, io_handle))) {
-      LOG_WARN("fail to pread", KR(ret), K(io_info), K(offset));
     }
   }
   return ret;
@@ -479,7 +453,6 @@ int ObTenantTmpFileManagerWithMTLSwitch::aio_write(const ObTmpFileIOInfo &io_inf
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("tmp file manager is null", KR(ret));
     } else if (OB_FAIL(tmp_file_mgr->aio_write(io_info, io_handle))) {
-      LOG_WARN("fail to aio write", KR(ret), K(io_info));
     }
   }
   return ret;
@@ -500,7 +473,6 @@ int ObTenantTmpFileManagerWithMTLSwitch::write(const ObTmpFileIOInfo &io_info)
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("tmp file manager is null", KR(ret));
     } else if (OB_FAIL(tmp_file_mgr->write(io_info))) {
-      LOG_WARN("fail to write", KR(ret), K(io_info));
     }
   }
   return ret;
@@ -521,7 +493,6 @@ int ObTenantTmpFileManagerWithMTLSwitch::truncate(const int64_t fd, const int64_
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("tmp file manager is null", KR(ret));
     } else if (OB_FAIL(tmp_file_mgr->truncate(fd, offset))) {
-      LOG_WARN("fail to truncate", KR(ret), K(fd), K(offset));
     }
   }
   return ret;
@@ -542,7 +513,6 @@ int ObTenantTmpFileManagerWithMTLSwitch::seal(const int64_t fd)
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("tmp file manager is null", KR(ret));
     } else if (OB_FAIL(tmp_file_mgr->seal(fd))) {
-      LOG_WARN("fail to seal", KR(ret), K(fd));
     }
   }
   return ret;
@@ -563,7 +533,6 @@ int ObTenantTmpFileManagerWithMTLSwitch::get_tmp_file_size(const int64_t fd, int
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("tmp file manager is null", KR(ret));
     } else if (OB_FAIL(tmp_file_mgr->get_tmp_file_size(fd, file_size))) {
-      LOG_WARN("fail to get tmp file size", KR(ret), K(fd));
     }
   }
   return ret;
@@ -584,7 +553,6 @@ int ObTenantTmpFileManagerWithMTLSwitch::get_tmp_file_fds(ObIArray<int64_t> &fd_
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("tmp file manager is null", KR(ret));
     } else if (OB_FAIL(tmp_file_mgr->get_tmp_file_fds(fd_arr))) {
-      LOG_WARN("fail to get tmp file fds", KR(ret));
     }
   }
   return ret;
@@ -608,7 +576,6 @@ int ObTenantTmpFileManagerWithMTLSwitch::get_tmp_file_info(const int64_t fd, ObT
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("tmp file manager is null", KR(ret));
     } else if (OB_FAIL(tmp_file_mgr->get_tmp_file_info(fd, tmp_file_info))) {
-      LOG_WARN("fail to get tmp file info", KR(ret), K(fd));
     }
   }
   return ret;

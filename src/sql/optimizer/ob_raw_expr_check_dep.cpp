@@ -32,7 +32,6 @@ int ObRawExprCheckDep::check_expr(const ObRawExpr &expr, bool &found)
       LOG_WARN("dep_indices_ is NULL", K(ret));
     } else if (!dep_indices_->has_member(idx)) {
       if (OB_FAIL(dep_indices_->add_member(idx))) {
-        LOG_WARN("failed to add member", K(ret));
       }
     } else {}
     // mark as found
@@ -47,7 +46,6 @@ int ObRawExprCheckDep::check(const ObRawExpr &expr)
   bool found = false;
   bool is_stack_overflow = false;
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
-    LOG_WARN("check stack overflow failed", K(ret));
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recursive", K(ret));
@@ -59,13 +57,11 @@ int ObRawExprCheckDep::check(const ObRawExpr &expr)
     case ObRawExpr::EXPR_OP_PSEUDO_COLUMN:
     case ObRawExpr::EXPR_MATCH_AGAINST: {
       if (OB_FAIL(check_expr(expr, found))) {
-        LOG_WARN("failed to check expr", K(expr), K(ret));
       }
       break;
     }
     case ObRawExpr::EXPR_COLUMN_REF: {
       if (OB_FAIL(check_expr(expr, found))) {
-        LOG_WARN("failed to check expr", K(expr), K(ret));
       } else if (found && !is_access_) {
         /*do nothing*/
       } else {
@@ -75,7 +71,6 @@ int ObRawExprCheckDep::check(const ObRawExpr &expr)
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("virtual generated column has NULL dependant expr", K(expr), K(ret));
           } else if (OB_FAIL(SMART_CALL(check(*column->get_dependant_expr())))) {
-            LOG_WARN("failed to check expr", K(expr), K(ret));
           } else { /*do nothing*/ }
         }
       }
@@ -90,7 +85,6 @@ int ObRawExprCheckDep::check(const ObRawExpr &expr)
     case ObRawExpr::EXPR_CASE_OPERATOR:
     case ObRawExpr::EXPR_WINDOW: {
       if (OB_FAIL(check_expr(expr, found))) {
-        LOG_WARN("failed to check expr", K(expr), K(ret));
       } else if (!found) {
         /*
          * We only need to check child exprs if the parent cannot be produced directly
@@ -100,7 +94,6 @@ int ObRawExprCheckDep::check(const ObRawExpr &expr)
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("get_param_expr is NULL", K(i), K(ret));
           } else if (OB_FAIL(SMART_CALL(check(*expr.get_param_expr(i))))) {
-            LOG_WARN("failed to check expr", K(*expr.get_param_expr(i)), K(ret));
           } else {}
         }
       }
@@ -121,7 +114,6 @@ int ObRawExprCheckDep::check(const ObIArray<ObRawExpr *> &exprs)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("expr is null", K(ret));
     } else if (OB_FAIL(check(*exprs.at(i)))) {
-      LOG_WARN("failed to check exprs", K(ret));
     }
   }
   return ret;

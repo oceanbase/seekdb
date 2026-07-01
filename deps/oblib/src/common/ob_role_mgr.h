@@ -99,9 +99,7 @@ ObRoleMgr::Role ObRoleMgr::get_role() const
 /// @brief modify Role
 void ObRoleMgr::set_role(const ObRoleMgr::Role role)
 {
-  COMMON_LOG(INFO, "before", K(get_role_str()), K(get_state_str()));
   (void)ATOMIC_TAS(reinterpret_cast<volatile uint32_t *>(&role_), role);
-  COMMON_LOG(INFO, "after", K(get_role_str()), K(get_state_str()));
 }
 
 const char *ObRoleMgr::get_role_str() const
@@ -131,9 +129,7 @@ ObRoleMgr::State ObRoleMgr::get_state() const
 
 void ObRoleMgr::set_state(const State state)
 {
-  COMMON_LOG(INFO, "before", K(get_state_str()), K(get_role_str()));
   (void)ATOMIC_TAS(reinterpret_cast<volatile uint32_t *>(&state_), state);
-  COMMON_LOG(INFO, "after", K(get_state_str()), K(get_role_str()));
 }
 
 const char *ObRoleMgr::get_state_str() const

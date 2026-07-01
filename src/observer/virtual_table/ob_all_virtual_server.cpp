@@ -83,10 +83,8 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(ERROR, "ob_service_ is NULL", KR(ret), KP(GCTX.ob_service_), KP(config_));
   } else if (OB_FAIL(GCTX.ob_service_->get_server_resource_info(resource_info))) {
-    SERVER_LOG(ERROR, "fail to get_server_resource_info", KR(ret));
   } else if (OB_FAIL(ObIOManager::get_instance().get_device_health_status(dhs,
       data_disk_abnormal_time))) {
-    SERVER_LOG(WARN, "get device health status fail", KR(ret));
   } else {
     const int64_t col_count = output_column_ids_.count();
     const double hard_limit = GCONF.resource_hard_limit;
@@ -141,7 +139,6 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "unexpected", K(ret));
     } else if (OB_FAIL(ls_svr->get_ls(sys_ls_id, ls_handle, storage::ObLSGetMod::OBSERVER_MOD))){
-      SERVER_LOG(WARN, "get ls failed", K(ret));
     } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "ls is NULL", K(ret));
@@ -149,9 +146,7 @@ int ObAllVirtualServer::inner_get_next_row(ObNewRow *&row)
       share::SCN sync_scn;
       share::SCN readable_scn;
       if (OB_FAIL(ls->get_end_scn(sync_scn))) {
-        SERVER_LOG(WARN, "get end scn failed", K(ret));
       } else if (OB_FAIL(ls->get_max_decided_scn(readable_scn))) {
-        SERVER_LOG(WARN, "get decided scn failed", K(ret));
       } else {
         sync_scn_val = sync_scn.get_val_for_inner_table_field();
         readable_scn_val = readable_scn.get_val_for_inner_table_field();

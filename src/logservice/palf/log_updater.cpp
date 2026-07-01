@@ -34,11 +34,9 @@ int LogUpdater::init(IPalfEnvImpl *palf_env_impl)
   if (NULL == palf_env_impl) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(TG_CREATE_TENANT(tg_id, tg_id_))) {
-    PALF_LOG(ERROR, "LogUpdater create failed", K(ret));
   } else {
     palf_env_impl_ = palf_env_impl;
     is_inited_ = true;
-    PALF_LOG(INFO, "LogUpdater init success", KPC(palf_env_impl), K(tg_id_), K(tg_id));
   }
   return ret;
 }
@@ -49,11 +47,8 @@ int LogUpdater::start()
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(TG_START(tg_id_))) {
-    PALF_LOG(WARN, "LogUpdater TG_START failed", K(ret));
   } else if (OB_FAIL(TG_SCHEDULE(tg_id_, *this, PALF_UPDATE_CACHED_STAT_INTERVAL_US, true))) {
-    PALF_LOG(WARN, "LogUpdater TG_SCHEDULE failed", K(ret));
   } else {
-    PALF_LOG(INFO, "LogUpdater start success", K(tg_id_), KPC(palf_env_impl_));
   }
   return ret;
 }
@@ -61,24 +56,19 @@ int LogUpdater::start()
 void LogUpdater::stop()
 {
   if (-1 != tg_id_) {
-    PALF_LOG(INFO, "LogUpdater stop start", K(tg_id_), KPC(palf_env_impl_));
     TG_STOP(tg_id_);
-    PALF_LOG(INFO, "LogUpdater stop finished", K(tg_id_), KPC(palf_env_impl_));
   }
 }
 
 void LogUpdater::wait()
 {
   if (-1 != tg_id_) {
-    PALF_LOG(INFO, "LogUpdater wait start", K(tg_id_), KPC(palf_env_impl_));
     TG_WAIT(tg_id_);
-    PALF_LOG(INFO, "LogUpdater wait finished", K(tg_id_), KPC(palf_env_impl_));
   }
 }
 
 void LogUpdater::destroy()
 {
-  PALF_LOG(INFO, "LogUpdater destroy start", K(tg_id_), KPC(palf_env_impl_));
   is_inited_ = false;
   if (-1 != tg_id_) {
     TG_STOP(tg_id_);
@@ -87,7 +77,6 @@ void LogUpdater::destroy()
   }
   tg_id_ = -1;
   palf_env_impl_ = NULL;
-  PALF_LOG(INFO, "LogUpdater destroy finish", K(tg_id_), KPC(palf_env_impl_));
 }
 
 void LogUpdater::runTimerTask()
@@ -95,7 +84,6 @@ void LogUpdater::runTimerTask()
   int64_t start_time_us = ObTimeUtility::current_time();
   int ret = OB_SUCCESS;
   if (NULL == palf_env_impl_) {
-    PALF_LOG(ERROR, "palf_env_impl_ is NULL, unexpected error");
   } else {
     IPalfHandleImpl *handle = nullptr;
     if (OB_SUCCESS == palf_env_impl_->get_palf_handle_impl(SYS_PALF_ID, handle)) {

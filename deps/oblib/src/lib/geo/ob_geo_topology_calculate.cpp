@@ -165,7 +165,6 @@ int ObGeoTopology::calculate_line_segments_intersect(const ObLineSegment& seg1, 
   int ret = OB_SUCCESS;
   bool is_stack_overflow = false;
   if (OB_FAIL(check_stack_overflow(is_stack_overflow))) {
-    LOG_WARN("failed to check stack overflow", K(ret));
   } else if (is_stack_overflow) {
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("too deep recursive", K(ret), K(is_stack_overflow));
@@ -175,7 +174,6 @@ int ObGeoTopology::calculate_line_segments_intersect(const ObLineSegment& seg1, 
     if (OB_FAIL(calculate_segment_intersect((*seg1.verts)[seg1.begin], (*seg1.verts)[seg1.end],
                                             (*seg2.verts)[seg2.begin], (*seg2.verts)[seg2.end],
                                             res))) {
-      LOG_WARN("get segment intersect result failed", K(ret));
     }
   } else {
     uint32_t middle1 = (seg1.begin + seg1.end) / 2;
@@ -187,14 +185,12 @@ int ObGeoTopology::calculate_line_segments_intersect(const ObLineSegment& seg1, 
         ObLineSegment forward_seg2 = seg2;
         forward_seg2.end = middle2;
         if (OB_FAIL(calculate_line_segments_intersect(forward_seg1, forward_seg2, res))) {
-          LOG_WARN("calculate_line_segments_intersect failed", K(ret));
         }
       }
       if (OB_SUCC(ret) && middle2 < seg2.end) {
         ObLineSegment back_seg2 = seg2;
         back_seg2.begin = middle2;
         if (OB_FAIL(calculate_line_segments_intersect(forward_seg1, back_seg2, res))) {
-          LOG_WARN("calculate_line_segments_intersect failed", K(ret));
         }
       }
     }
@@ -206,14 +202,12 @@ int ObGeoTopology::calculate_line_segments_intersect(const ObLineSegment& seg1, 
         ObLineSegment forward_seg2 = seg2;
         forward_seg2.end = middle2;
         if (OB_FAIL(calculate_line_segments_intersect(back_seg1, forward_seg2, res))) {
-          LOG_WARN("calculate_line_segments_intersect failed", K(ret));
         }
       }
       if (OB_SUCC(ret) && middle2 < seg2.end) {
         ObLineSegment back_seg2 = seg2;
         back_seg2.begin = middle2;
         if (OB_FAIL(calculate_line_segments_intersect(back_seg1, back_seg2, res))) {
-          LOG_WARN("calculate_line_segments_intersect failed", K(ret));
         }
       }
     }

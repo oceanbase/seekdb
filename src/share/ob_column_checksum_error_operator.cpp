@@ -39,7 +39,6 @@ int ObColumnChecksumErrorOperator::init()
     ret = OB_NOT_INIT;
     LOG_WARN("meta_db_pool_ not initialized", K(ret));
   } else if (OB_FAIL(storage_.init(GCTX.meta_db_pool_))) {
-    LOG_WARN("failed to init storage", K(ret));
   }
   return ret;
 }
@@ -66,7 +65,6 @@ int ObColumnChecksumErrorOperator::insert_column_checksum_err_info(
   } else {
     ret = storage_.insert(info);
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to insert column checksum error info", K(ret), K(info));
     }
   }
   return ret;
@@ -86,7 +84,6 @@ int ObColumnChecksumErrorOperator::delete_column_checksum_err_info(
   } else {
     ret = storage_.delete_expired(min_frozen_scn, INT64_MAX);
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to delete expired column checksum error info", K(ret), K(min_frozen_scn));
     }
   }
   return ret;
@@ -119,7 +116,6 @@ int ObColumnChecksumErrorOperator::delete_column_checksum_err_info_by_scn(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(delete_sql, binder))) {
-      LOG_WARN("failed to execute delete", K(ret), K(compaction_scn));
     }
   }
   return ret;
@@ -156,7 +152,6 @@ int ObColumnChecksumErrorOperator::check_exist_ckm_error_table(const int64_t com
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->query(select_sql, binder, row_processor))) {
-      LOG_WARN("failed to query", K(ret), K(compaction_scn));
     } else if (count > 0) {
       exist = true;
       LOG_INFO("exist ckm error info", K(count), K(compaction_scn));

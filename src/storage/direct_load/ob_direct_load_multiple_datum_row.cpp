@@ -86,12 +86,10 @@ int ObDirectLoadMultipleDatumRow::from_datum_row(const ObTabletID &tablet_id,
     is_delete_ = datum_row.is_delete_;
     is_ack_ = datum_row.is_ack_;
     if (OB_FAIL(rowkey_.assign(tablet_id, datum_row.storage_datums_, rowkey_column_count))) {
-      LOG_WARN("fail to assign rowkey", KR(ret));
     } else if (datum_row.count_ > rowkey_column_count) {
       ObDirectLoadDatumArray serialize_datum_array;
       if (OB_FAIL(serialize_datum_array.assign(datum_row.storage_datums_ + rowkey_column_count,
                                                datum_row.count_ - rowkey_column_count))) {
-        LOG_WARN("fail to assign datum array", KR(ret));
       } else {
         const int64_t buf_size = serialize_datum_array.get_serialize_size();
         char *buf = nullptr;
@@ -100,7 +98,6 @@ int ObDirectLoadMultipleDatumRow::from_datum_row(const ObTabletID &tablet_id,
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to alloc memory", KR(ret), K(buf_size));
         } else if (OB_FAIL(serialize_datum_array.serialize(buf, buf_size, pos))) {
-          LOG_WARN("fail to serialize datum array", KR(ret));
         } else {
           buf_size_ = buf_size;
           buf_ = buf;
@@ -138,9 +135,7 @@ int ObDirectLoadMultipleDatumRow::to_datum_row(ObDirectLoadDatumRow &datum_row) 
       if (OB_FAIL(
             deserialize_datum_array.assign(datum_row.storage_datums_ + rowkey_.datum_array_.count_,
                                            datum_row.count_ - rowkey_.datum_array_.count_))) {
-        LOG_WARN("fail to assign datum array", KR(ret));
       } else if (OB_FAIL(deserialize_datum_array.deserialize(buf_, buf_size_, pos))) {
-        LOG_WARN("fail to deserialize datum array", KR(ret));
       } else if (OB_UNLIKELY(rowkey_.datum_array_.count_ + deserialize_datum_array.count_ !=
                              datum_row.count_)) {
         ret = OB_ERR_UNEXPECTED;

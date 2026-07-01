@@ -58,7 +58,6 @@ struct FixedVectorCmp
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(eval_cmp_operands(expr, ctx, skip, bound))) {
-      LOG_WARN("eval cmp operands failed", K(ret));
     } else {
       const ObExpr &left = *expr.args_[0];
       const ObExpr &right = *expr.args_[1];

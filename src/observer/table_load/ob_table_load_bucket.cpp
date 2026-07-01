@@ -54,7 +54,6 @@ int ObTableLoadBucket::add_row(const ObTabletID &tablet_id,
   tablet_obj_row.obj_row_ = obj_row;
   flag = false;
   if (OB_FAIL(row_array_.push_back(tablet_obj_row))) {
-    LOG_WARN("fail to add row", KR(ret));
   } else {
     row_size_ += tablet_obj_row.get_serialize_size();
     flag = (row_array_.count() >= batch_size || row_size_ >= row_size);

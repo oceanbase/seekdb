@@ -47,22 +47,17 @@ int ObMPPing::process()
   bool need_response_error = true; //temporary placeholder
   const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
   if (OB_FAIL(get_session(session))) {
-    LOG_WARN("get session fail", K(ret));
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql session info is null", K(ret));
   } else if (OB_FAIL(process_kill_client_session(*session))) {
-    LOG_WARN("client session has been killed", K(ret));
   } else if (OB_FAIL(process_extra_info(*session, pkt, need_response_error))) {
-    LOG_WARN("fail get process extra info", K(ret));
   } else if (OB_FAIL(update_transmission_checksum_flag(*session))) {
-    LOG_WARN("update transmisson checksum flag failed", K(ret));
   } else if (FALSE_IT(session->update_last_active_time())) {
     // COM_PING used for keepping connection alive
   } else {
     ObOKPParam ok_param; // use default values
     if (OB_FAIL(send_ok_packet(*session, ok_param))) {
-      LOG_WARN("fail to send ok pakcet in ping response", K(ok_param), K(ret));
     }
   }
   if (OB_LIKELY(NULL != session)) {

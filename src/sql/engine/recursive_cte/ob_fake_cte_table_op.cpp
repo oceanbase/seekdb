@@ -33,7 +33,6 @@ int ObFakeCTETableOp::inner_get_next_row()
   int ret = OB_SUCCESS;
   clear_evaluated_flag();
   if (OB_FAIL(try_check_status())) {
-    LOG_WARN("Fail to check physical plan status", K(ret));
   } else if (empty_) {
     ret = OB_ITER_END;
   } else if (!MY_SPEC.is_bulk_search_ && OB_FAIL(get_next_single_row())) {
@@ -74,7 +73,6 @@ int ObFakeCTETableOp::get_next_bulk_row()
     LOG_WARN("Current bulk row is null or out of range", K(read_bluk_cnt_), K(ret));
   } else if (OB_FAIL(to_expr(MY_SPEC.column_involved_exprs_, MY_SPEC.column_involved_offset_,
                              bulk_rows_.at(read_bluk_cnt_), eval_ctx_))) {
-    LOG_WARN("Stored row to expr not in recursive bulk failed", K(ret));
   }
   if (OB_SUCC(ret)) {
     read_bluk_cnt_++;
@@ -91,7 +89,6 @@ int ObFakeCTETableOp::inner_get_next_batch(const int64_t max_row_cnt)
   int ret = OB_SUCCESS;
   clear_evaluated_flag();
   if (OB_FAIL(try_check_status())) {
-    LOG_WARN("Fail to check physical plan status", K(ret));
   } else if (empty_) {
     brs_.end_ = true;
     brs_.size_ = 0;
@@ -138,7 +135,6 @@ int ObFakeCTETableOp::get_next_bulk_batch(const int64_t max_row_cnt)
   } else if (FALSE_IT(read_rows = std::min(batch_size, bulk_rows_.count() - read_bluk_cnt_))) {
   } else if (OB_FAIL(attach_rows(MY_SPEC.column_involved_exprs_, MY_SPEC.column_involved_offset_,
                                  bulk_rows_, read_bluk_cnt_, eval_ctx_, read_rows))) {
-    LOG_WARN("Failed to attach rows", K(ret));
   }
   if (OB_SUCC(ret)) {
     brs_.size_ = read_rows;
@@ -189,7 +185,6 @@ int ObFakeCTETableOp::add_single_row(ObChunkDatumStore::StoredRow *row)
     LOG_WARN("Fake cte table add nullptr row", KPC(row));
   } else if (OB_FAIL(deep_copy_row(row, new_row, MY_SPEC.column_involved_offset_,
                                     ObSearchMethodOp::ROW_EXTRA_SIZE, *allocator_))) {
-    LOG_WARN("Fail to deep copy stored row", K(ret));
   } else {
     old_row = const_cast<ObChunkDatumStore::StoredRow *>(pump_row_);
     pump_row_ = new_row;
@@ -223,7 +218,6 @@ int ObFakeCTETableOp::inner_open()
     lib::ContextParam param;
     param.set_mem_attr("FakeCteTable", ObCtxIds::WORK_AREA);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
-      LOG_WARN("create entity failed", K(ret));
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null memory entity returned", K(ret));
@@ -263,8 +257,6 @@ int ObFakeCTETableOp::copy_datums(ObChunkDatumStore::StoredRow *row, common::ObD
       } else {
         ObDatum *datum = new (&row->cells()[i])ObDatum();
         if (OB_FAIL(datum->deep_copy(datums[idx], buf, size, pos))) {
-          LOG_WARN("failed to copy datum", K(ret), K(i), K(pos),
-            K(size), K(row_size), K(datums[idx]), K(datums[idx].len_));
         }
       }
     }
@@ -312,7 +304,6 @@ int ObFakeCTETableOp::deep_copy_row(const ObChunkDatumStore::StoredRow *src_row,
       } else if (OB_FAIL(copy_datums(new_row, const_cast<ObDatum *>(src_row->cells()),
                                     src_row->cnt_, chosen_index, buf + pos,
                                     buffer_len - head_size, row_size, extra_size))) {
-        LOG_WARN("failed to deep copy row", K(ret), K(buffer_len), K(row_size));
       } else {
         dst_row = new_row;
       }

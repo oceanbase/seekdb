@@ -67,7 +67,6 @@ int ObMPStmtPrepare::before_process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObMPBase::before_process())) {
-    LOG_WARN("failed to pre processing packet", K(ret));
   } else if (0 == sql_.case_compare("call dbms_output.get_line(?, ?)")) {
     // do nothing
   } else if (!GCONF._ob_enable_prepared_statement) {
@@ -158,12 +157,10 @@ int ObMPStmtPrepare::process()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid tenant", K_(sql), K(conn->tenant_), K(ret));
   } else if (OB_FAIL(get_session(sess))) {
-    LOG_WARN("get session fail", K_(sql), K(ret));
   } else if (OB_ISNULL(sess)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL or invalid", K_(sql), K(sess), K(ret));
   } else if (OB_FAIL(update_transmission_checksum_flag(*sess))) {
-    LOG_WARN("update transmisson checksum flag failed", K(ret));
   } else {
     ObSQLSessionInfo &session = *sess;
     THIS_WORKER.set_session(sess);
@@ -184,25 +181,20 @@ int ObMPStmtPrepare::process()
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("invalid session", K_(sql), K(ret));
     } else if (OB_FAIL(process_kill_client_session(session))) {
-      LOG_WARN("client session has been killed", K(ret));
     } else if (OB_UNLIKELY(session.is_zombie())) {
       ret = OB_ERR_SESSION_INTERRUPTED;
       LOG_WARN("session has been killed", K(session.get_session_state()), K_(sql),
                K(session.get_server_sid()), K(ret));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
-      LOG_WARN("fail to get query timeout", K_(sql), K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
                 tenant_version))) {
-      LOG_WARN("fail get tenant broadcast version", K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
                 sys_version))) {
-      LOG_WARN("fail get tenant broadcast version", K(ret));
     } else if (pkt.exist_trace_info()
                && OB_FAIL(session.update_sys_variable(SYS_VAR_OB_TRACE_INFO,
                                                       pkt.get_trace_info()))) {
       LOG_WARN("fail to update trace info", K(ret));
     } else if (OB_FAIL(process_extra_info(session, pkt, need_response_error))) {
-      LOG_WARN("fail get process extra info", K(ret));
     } else if (OB_UNLIKELY(packet_len > session.get_max_packet_size())) {
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
       need_disconnect = false;
@@ -213,7 +205,6 @@ int ObMPStmtPrepare::process()
     } else if (OB_FAIL(sql::ObFLTUtils::init_flt_info(pkt.get_extra_info(), session,
                             conn->proxy_cap_flags_.is_full_link_trace_support(),
                             enable_flt))) {
-      LOG_WARN("failed to init flt extra info", K(ret));
     } else {
       FLTSpanGuardIfEnable(ps_prepare, enable_flt);
       if (enable_flt) {
@@ -289,13 +280,10 @@ int ObMPStmtPrepare::process_prepare_stmt(const ObMultiStmtItem &multi_stmt_item
   setup_wb(session);
 
   if (OB_FAIL(init_process_var(ctx_, multi_stmt_item, session))) {
-    LOG_WARN("init process var faield.", K(ret), K(multi_stmt_item));
   } else {
     ObThreadLogLevelUtils::init(session.get_log_id_level_map());
     if (OB_FAIL(check_and_refresh_schema())) {
-      LOG_WARN("failed to check_and_refresh_schema", K(ret));
     } else if (OB_FAIL(session.update_timezone_info())) {
-      LOG_WARN("fail to update time zone info", K(ret));
     } else {
       ctx_.self_add_plan_ = false;
       ctx_.is_prepare_protocol_ = true; //set to prepare protocol
@@ -309,13 +297,10 @@ int ObMPStmtPrepare::process_prepare_stmt(const ObMultiStmtItem &multi_stmt_item
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(
                     schema_guard))) {
-          LOG_WARN("get schema guard failed", K(ret));
         } else if (OB_FAIL(schema_guard.get_schema_version(
                     tenant_version))) {
-          LOG_WARN("fail get schema version", K(ret));
         } else if (OB_FAIL(schema_guard.get_schema_version(
                     sys_version))) {
-          LOG_WARN("fail get sys schema version", K(ret));
         } else {
           ctx_.schema_guard_ = &schema_guard;
           retry_ctrl_.set_tenant_local_schema_version(tenant_version);
@@ -366,13 +351,10 @@ int ObMPStmtPrepare::check_and_refresh_schema()
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid session info", K(ret), K(ctx_.session_info_));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_refreshed_schema_version(local_version))) {
-      LOG_WARN("fail to get tenant refreshed schema version", K(ret));
     } else if (OB_FAIL(ctx_.session_info_->get_ob_last_schema_version(last_version))) {
-      LOG_WARN("failed to get_sys_variable", K(OB_SV_LAST_SCHEMA_VERSION));
     } else if (local_version >= last_version) {
       // skip
     } else if (OB_FAIL(gctx_.schema_service_->async_refresh_schema(last_version))) {
-      LOG_WARN("failed to refresh schema", K(ret), K(1UL), K(last_version));
     }
   }
   return ret;
@@ -424,14 +406,12 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("newest schema is NULL", K(ret));
         } else if (OB_FAIL(result.init())) {
-          LOG_WARN("result set init failed", K(ret));
         } else if (OB_ISNULL(gctx_.sql_engine_)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_ERROR("invalid sql engine", K(ret), K(gctx_));
         } else if (FALSE_IT(execution_id = gctx_.sql_engine_->get_execution_id())) {
           //nothing to do
         } else if (OB_FAIL(set_session_active(sql, session, ObTimeUtil::current_time(), obmysql::ObMySQLCmd::COM_STMT_PREPARE))) {
-          LOG_WARN("fail to set session active", K(ret));
         } else if (OB_FAIL(gctx_.sql_engine_->stmt_prepare(sql, ctx_, result, false/*is_inner_sql*/))) {
           exec_start_timestamp_ = ObTimeUtility::current_time();
           int cli_ret = OB_SUCCESS;
@@ -531,8 +511,7 @@ int ObMPStmtPrepare::do_process(ObSQLSessionInfo &session,
         // May cause the client to hang waiting for a response.
         bool is_partition_hit = session.get_err_final_partition_hit(ret);
         int err = send_error_packet(ret, NULL, is_partition_hit);
-        if (OB_SUCCESS != err) {  // send error packet
-          LOG_WARN("send error packet failed", K(ret), K(err));
+        if (OB_SUCCESS != err) {
         }
       }
     }
@@ -559,11 +538,8 @@ int ObMPStmtPrepare::response_result(
   UNUSED(async_resp_used);
 //  const ObMySQLRawPacket &packet = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
   if (OB_FAIL(send_prepare_packet(result))) {
-    LOG_WARN("send prepare packet failed", K(ret));
   } else if (OB_FAIL(send_param_packet(session, result))) {
-    LOG_WARN("send param packet failed", K(ret));
   } else if (OB_FAIL(send_column_packet(session, result))) {
-    LOG_WARN("send column packet failed", K(ret));
   }
   return ret;
 }
@@ -597,7 +573,6 @@ int ObMPStmtPrepare::send_prepare_packet(const ObMySQLResultSet &result)
   if (OB_SUCC(ret) && need_send_extra_ok_packet() && columns->count() == 0 && params->count() == 0) {
     ObOKPParam ok_param;
     if (OB_FAIL(send_ok_packet(*(const_cast<ObSQLSessionInfo *>(&result.get_session())), ok_param))) {
-      LOG_WARN("fail to send ok packet", K(ret));
     }
   }
   return ret;
@@ -617,7 +592,6 @@ int ObMPStmtPrepare::send_column_packet(const ObSQLSessionInfo &session,
     while (OB_SUCC(ret)) {
       OMPKField fp(field);
       if (OB_FAIL(response_packet(fp, const_cast<ObSQLSessionInfo *>(&session)))) {
-        LOG_WARN("response packet fail", K(ret));
       } else {
         LOG_DEBUG("response field succ", K(field));
         ret = result.next_field(field);
@@ -628,16 +602,13 @@ int ObMPStmtPrepare::send_column_packet(const ObSQLSessionInfo &session,
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(packet_sender_.update_last_pkt_pos())) {
-        LOG_WARN("failed to update last packet pos", K(ret));
       } else {
         if (need_send_extra_ok_packet()) {
           ObOKPParam ok_param;
           if (OB_FAIL(send_eof_packet(session, result, &ok_param))) {
-            LOG_WARN("send eof field failed", K(ret));
           }
         } else {
           if (OB_FAIL(send_eof_packet(session, result))) {
-            LOG_WARN("send eof field failed", K(ret));
           }
         }
       }
@@ -661,7 +632,6 @@ int ObMPStmtPrepare::send_param_packet(const ObSQLSessionInfo &session,
     while (OB_SUCC(ret)) {
       OMPKField fp(field);
       if (OB_FAIL(response_packet(fp, const_cast<ObSQLSessionInfo *>(&session)))) {
-        LOG_DEBUG("response packet fail", K(ret));
       } else {
 //        LOG_INFO("response field succ", K(field));
         ret = result.next_param(field);
@@ -674,11 +644,9 @@ int ObMPStmtPrepare::send_param_packet(const ObSQLSessionInfo &session,
       if (need_send_extra_ok_packet() && columns->count() == 0) {
         ObOKPParam ok_param;
         if (OB_FAIL(send_eof_packet(session, result, &ok_param))) {
-          LOG_WARN("send eof field failed", K(ret));
         }
       } else {
         if (OB_FAIL(send_eof_packet(session, result))) {
-          LOG_WARN("send eof field failed", K(ret));
         }
       }
     }

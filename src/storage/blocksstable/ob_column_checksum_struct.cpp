@@ -144,7 +144,6 @@ int ObColumnCkmStruct::get_column_checksums(ObIArray<int64_t> &column_checksums)
   } else {
     for (int64_t idx = 0; OB_SUCC(ret) && idx < count_; ++idx) {
       if (OB_FAIL(column_checksums.push_back(column_checksums_[idx]))) {
-        LOG_WARN("failed to push column checksum", K(ret), K(idx), K(column_checksums_[idx]));
       }
     }
   }

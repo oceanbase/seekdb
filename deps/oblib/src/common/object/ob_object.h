@@ -1693,7 +1693,6 @@ public:
     int ret = OB_SUCCESS;
     ObString inrow_data;
     if (val_len_ == 0 || !has_lob_header()) {
-      COMMON_LOG(DEBUG, "Lob: get string of null text obj", K(*this));
       inrow_data.assign_ptr(v_.string_, val_len_);
     } else {
       ObLobLocatorV2 loc(reinterpret_cast<char *>(v_.ptr_), val_len_, has_lob_header());
@@ -1702,7 +1701,6 @@ public:
       } else if (!loc.has_inrow_data()) {
         inrow_data.assign_ptr("outrow", 6);
       } else if (OB_FAIL(loc.get_inrow_data(inrow_data))) {
-        COMMON_LOG(WARN, "Lob: get inrow data failed in obobj", K(*this));
       } else {
         inrow_data.assign_ptr(inrow_data.ptr(), MIN(inrow_data.length(), max_len));
       }
@@ -1719,7 +1717,6 @@ public:
     if (!bret) {
       // if it called in log params, like K(json), it maybe a json with disk lob header only
       // cannot judge here is a plain json data or json data with disk lob header
-      COMMON_LOG(DEBUG, "Lob: get json data without mem lob header", K(*this));
     } else {
       ObLobLocatorV2 loc(reinterpret_cast<char *>(v_.ptr_), val_len_, bret);
       if (OB_UNLIKELY(!loc.is_valid(false))) {
@@ -1727,11 +1724,9 @@ public:
         COMMON_LOG(WARN, "Lob: invalid json lob", K(ret), K(json_data));
       } else if (!loc.has_inrow_data()) {
         if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%s", "'outrow json'"))) {
-          COMMON_LOG(WARN, "Lob: fail to print \"\'outrow json\'\"", K(ret), K(buf_len), K(pos));
         }
         ret = OB_INVALID_ARGUMENT;
       } else if (OB_FAIL(loc.get_inrow_data(json_data))) {
-        COMMON_LOG(WARN, "Lob: get inrow data failed in obobj", K(*this));
       }
     }
     return ret;
@@ -1747,11 +1742,9 @@ public:
         COMMON_LOG(WARN, "Lob: invalid udt lob", K(ret), K(udt_data));
       } else if (!loc.is_inrow()) {
         if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%s", "'outrow udt'"))) {
-          COMMON_LOG(WARN, "Lob: fail to print \"\'outrow json\'\"", K(ret), K(buf_len), K(pos));
         }
         ret = OB_INVALID_ARGUMENT;
       } else if (OB_FAIL(loc.get_inrow_data(udt_data))) {
-        COMMON_LOG(WARN, "Lob: get inrow data failed in obobj", K(*this));
       }
     }
     return ret;
@@ -3132,15 +3125,12 @@ inline int ObObj::get_string(ObString &v) const
   if (meta_.is_string_or_lob_locator_type() || is_lob_storage()) {
     if (is_lob_storage()) {
       if (val_len_ == 0) {
-        OB_LOG(DEBUG, "Lob: get string of null text obj", K(*this));
         v.assign_ptr(v_.string_, val_len_);
       } else {
         ObLobLocatorV2 loc(reinterpret_cast<char *>(v_.ptr_), val_len_, has_lob_header());
         if (OB_UNLIKELY(!loc.is_valid())) {
           ret = OB_ERR_UNEXPECTED;
-          OB_LOG(WARN, "Unexpected invalid lob locator", K(*this), K(loc));
         } else if (OB_FAIL(loc.get_inrow_data(v))) {
-          OB_LOG(WARN, "Lob: get inrow data failed", K(*this), K(loc));
         }
       }
     } else {
@@ -3206,7 +3196,6 @@ inline int ObObj::get_print_string(ObString &v) const
 {
   int ret = OB_OBJ_TYPE_ERROR;
   if (meta_.is_lob()) {
-    OB_LOG(WARN, "Lob: using get_print_string for text types", K(*this), K(lbt()));
   }
   if (meta_.is_string_type()) {
     v.assign_ptr(v_.string_, MIN(val_len_, OB_MAX_VARCHAR_LENGTH));
@@ -3606,7 +3595,6 @@ template <typename AllocatorT>
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LIB_LOG(WARN, "allocate memory failed", K(ret), K(deep_copy_size));
     } else if (OB_FAIL(dst.deep_copy(src, buf, deep_copy_size, pos))) {
-      LIB_LOG(WARN, "deep copy src obj failed", K(ret), K(deep_copy_size), K(pos));
     }
   } else {
     dst = src;

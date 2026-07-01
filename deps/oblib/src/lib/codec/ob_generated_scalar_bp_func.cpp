@@ -11039,7 +11039,6 @@ void scalar_fastpackwithoutmask_8_32_count(const uint8_t *__restrict__ in, uint3
   } 
   default: {
     int ret = OB_ERR_UNEXPECTED;
-    LIB_LOG(ERROR, "unexpected", KP(in), KP(out), K(bit)); 
     break;
   }
   }
@@ -11110,7 +11109,6 @@ void scalar_fastunpack_8_32_count(const uint32_t *__restrict__ _in, uint8_t *__r
   } 
   default: {
     int ret = OB_ERR_UNEXPECTED;
-    LIB_LOG(ERROR, "unexpected", KP(in), KP(out), K(bit)); 
     break;
   }
   }
@@ -11205,7 +11203,6 @@ void scalar_fastpackwithoutmask_16_32_count(const uint16_t *__restrict__ in, uin
   } 
   default: {
     int ret = OB_ERR_UNEXPECTED;
-    LIB_LOG(ERROR, "unexpected", KP(in), KP(out), K(bit)); 
     break;
   }
   }
@@ -11300,7 +11297,6 @@ void scalar_fastunpack_16_32_count(const uint32_t *__restrict__ _in, uint16_t *_
   } 
   default: {
     int ret = OB_ERR_UNEXPECTED;
-    LIB_LOG(ERROR, "unexpected", KP(in), KP(out), K(bit)); 
     break;
   }
   }
@@ -11441,7 +11437,6 @@ void scalar_fastpackwithoutmask_32(const uint32_t *__restrict__ in, uint32_t *__
   } 
   default: {
     int ret = OB_ERR_UNEXPECTED;
-    LIB_LOG(ERROR, "unexpected", KP(in), KP(out), K(bit)); 
     break;
   }
   }
@@ -11583,7 +11578,6 @@ void scalar_fastunpack_32(const uint32 *__restrict__ in, uint32_t *__restrict__ 
   } 
   default: {
     int ret = OB_ERR_UNEXPECTED;
-    LIB_LOG(ERROR, "unexpected", KP(in), KP(out), K(bit)); 
     break;
   }
   }

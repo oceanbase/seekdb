@@ -51,7 +51,6 @@ int ObResourcePlanManager::refresh_global_background_cpu()
       } else if (OB_FAIL(GCTX.cgroup_ctrl_->set_cpu_cfs_quota(cpu,
                      OB_INVALID_GROUP_ID,
                      true /* is_background */))) {
-        LOG_WARN("fail to set background cpu cfs quota", K(ret));
       } else {
         if (compare_ret < 0) {
 #ifdef _WIN32

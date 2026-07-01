@@ -78,7 +78,6 @@ int ObLockTableResolver::resolve_mysql_mode_(const ParseNode &parse_tree)
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("lock node is null");
         } else if (OB_FAIL(resolve_mysql_lock_node_(*lock_node))) {
-          LOG_WARN("resolve mysql lock node failed", K(ret));
         }
       }
     }
@@ -112,7 +111,6 @@ int ObLockTableResolver::resolve_mysql_lock_node_(const ParseNode &lock_node)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table node is null");
     } else if (OB_FAIL(ObDMLResolver::resolve_table(*table_node, table_item))) {
-      LOG_WARN("failed to resolve table", K(ret));
     } else if (table_item->is_function_table() || table_item->is_json_table()) {//compatible with oracle behavior
       ret = OB_WRONG_TABLE_NAME;
       LOG_WARN("invalid table name", K(ret));
@@ -121,7 +119,6 @@ int ObLockTableResolver::resolve_mysql_lock_node_(const ParseNode &lock_node)
       node.table_item_ = table_item;
       node.lock_mode_ = lock_type->value_;
       if (OB_FAIL(static_cast<ObLockTableStmt *>(stmt_)->add_mysql_lock_node(node))) {
-        LOG_WARN("add mysql lock node failed", K(ret), K(node));
       } else {
         LOG_DEBUG("succ to add lock table item", K(node));
       }
@@ -150,9 +147,7 @@ int ObLockTableResolver::resolve_oracle_mode_(const ParseNode &parse_tree)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid parse tree", K(ret));
   } else if (OB_FAIL(resolve_oracle_table_list_(*table_node))) {
-    LOG_WARN("resolve table failed", K(ret));
   } else if (OB_FAIL(resolve_oracle_lock_mode_(*parse_tree.children_[LOCK_MODE]))) {
-    LOG_WARN("resolve lock mode failed", K(ret));
   } else if (OB_NOT_NULL(parse_tree.children_[WAIT])
              && OB_FAIL(resolve_oracle_wait_lock_(*parse_tree.children_[WAIT]))) {
     // this node maybe null if user didn't input opt about wait
@@ -191,7 +186,6 @@ int ObLockTableResolver::resolve_oracle_table_list_(const ParseNode &table_list)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("table node is null");
     } else if (OB_FAIL(ObDMLResolver::resolve_table(*table_node, table_item))) {
-      LOG_WARN("failed to resolve table", K(ret));
     } else if (table_item->is_function_table() || table_item->is_json_table()) {//compatible with oracle behavior
       ret = OB_WRONG_TABLE_NAME;
       LOG_WARN("invalid table name", K(ret));

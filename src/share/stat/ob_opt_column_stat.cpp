@@ -29,7 +29,6 @@ int ObHistBucket::deep_copy(const ObHistBucket &src,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(endpoint_value_.deep_copy(src.endpoint_value_, buf, buf_len, pos))) {
-    LOG_WARN("deep copy obobj failed", K(ret));
   } else {
     endpoint_repeat_count_ = src.endpoint_repeat_count_;
     endpoint_num_ = src.endpoint_num_;
@@ -41,7 +40,6 @@ int ObHistBucket::deep_copy(ObIAllocator &alloc, const ObHistBucket &src)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ob_write_obj(alloc, src.endpoint_value_, endpoint_value_))) {
-    LOG_WARN("failed to write obj");
   } else {
     endpoint_repeat_count_ = src.endpoint_repeat_count_;
     endpoint_num_ = src.endpoint_num_;
@@ -99,7 +97,6 @@ int ObHistogram::deep_copy(const ObHistogram &src, char *buf, const int64_t buf_
     pos += sizeof(ObHistBucket) * src.buckets_.count();
     for (int64_t i = 0; OB_SUCC(ret) && i < buckets_.count(); ++i) {
       if (OB_FAIL(buckets_.at(i).deep_copy(src.buckets_.at(i), buf, buf_len, pos))) {
-        LOG_WARN("deep copy bucket failed", K(ret), K(buf_len), K(pos));
       }
     }
   }
@@ -122,7 +119,6 @@ int ObHistogram::deep_copy(ObIAllocator &allocator, const ObHistogram &src)
     ObHistBucket *new_buckets = new (ptr) ObHistBucket[src.buckets_.count()];
     for (int64_t i = 0; OB_SUCC(ret) && i < src.buckets_.count(); ++i) {
       if (OB_FAIL(new_buckets[i].deep_copy(allocator, src.buckets_.at(i)))) {
-        LOG_WARN("deep copy bucket failed");
       }
     }
     buckets_ = ObArrayWrap<ObHistBucket>(new_buckets, src.buckets_.count());
@@ -134,7 +130,6 @@ int ObHistogram::prepare_allocate_buckets(ObIAllocator &allocator, const int64_t
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(buckets_.allocate_array(allocator, bucket_size))) {
-    LOG_WARN("failed to prepare allocate buckets", K(ret));
   }
   return ret;
 }
@@ -283,7 +278,6 @@ int ObOptColumnStat::deep_copy(char *buf, const int64_t buf_len, ObIKVCacheValue
     ObOptColumnStat *stat = new (buf) ObOptColumnStat();
     int64_t pos = sizeof(*this);
     if (OB_FAIL(stat->deep_copy(*this, buf, buf_len, pos))) {
-      COMMON_LOG(WARN, "deep copy column stat failed.", K(ret));
     } else {
       value = stat;
     }
@@ -311,11 +305,8 @@ int ObOptColumnStat::deep_copy(const ObOptColumnStat &src)
   cg_micro_blk_cnt_ = src.cg_micro_blk_cnt_;
   cg_skip_rate_ = src.cg_skip_rate_;
   if (OB_FAIL(ob_write_obj(allocator_, src.min_value_, min_value_))) {
-    LOG_WARN("deep copy min_value_ failed.", K_(src.min_value), K(ret));
   } else if (OB_FAIL(ob_write_obj(allocator_, src.max_value_, max_value_))) {
-    LOG_WARN("deep copy max_value_ failed.", K_(src.max_value), K(ret));
   } else if (OB_FAIL(histogram_.deep_copy(allocator_, src.histogram_))) {
-    LOG_WARN("failed to deep copy histogram", K(ret));
   } else if (src.llc_bitmap_size_ != 0 && src.llc_bitmap_ != NULL) {
     char* ptr = static_cast<char*>(allocator_.alloc(src.llc_bitmap_size_));
     if (OB_ISNULL(ptr)) {
@@ -348,7 +339,6 @@ int ObOptColumnStat::deep_copy_histogram(const ObHistogram &hist)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(histogram_.deep_copy(allocator_, hist))) {
-    LOG_WARN("failed to deep copy histogram", K(ret));
   }
   return ret;
 }
@@ -376,11 +366,8 @@ int ObOptColumnStat::deep_copy(const ObOptColumnStat &src, char *buf, const int6
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments.", K(src), KP(buf), K(size), K(ret));
   } else if (OB_FAIL(min_value_.deep_copy(src.min_value_, buf, size, pos))) {
-    LOG_WARN("deep copy min_value_ failed.", K_(src.min_value), K(ret));
   } else if (OB_FAIL(max_value_.deep_copy(src.max_value_, buf, size, pos))) {
-    LOG_WARN("deep copy max_value_ failed.", K_(src.max_value), K(ret));
   } else if (OB_FAIL(histogram_.deep_copy(src.histogram_, buf, size, pos))) {
-    LOG_WARN("failed to deep copy histogram", K(ret));
   } else if (pos + src.llc_bitmap_size_ > size) {
     ret = OB_BUF_NOT_ENOUGH;
     LOG_WARN("llc bitmap size overflow", K(ret), K(pos), K(src.llc_bitmap_size_), K(size));
@@ -410,7 +397,6 @@ int ObOptColumnStat::assign(const ObOptColumnStat &other)
   llc_bitmap_size_ = other.llc_bitmap_size_;
   llc_bitmap_ = other.llc_bitmap_;
   if (OB_FAIL(histogram_.assign(other.histogram_))) {
-    LOG_WARN("failed to assign", K(ret));
   } else {
     last_analyzed_ = other.last_analyzed_;
     cs_type_ = other.cs_type_;
@@ -454,9 +440,7 @@ int ObOptColumnStat::merge_column_stat(const ObOptColumnStat &other)
     const ObObj &other_min = other.get_min_value();
     const ObObj &other_max = other.get_max_value();
     if (OB_FAIL(merge_min_max(min_value_, other_min, true))) {
-      LOG_WARN("failed to merge min value", K(other_min), K(min_value_));
     } else if (OB_FAIL(merge_min_max(max_value_, other_max, false))) {
-      LOG_WARN("failed to merge max value", K(other_max), K(max_value_));
     } else {
       add_num_null(other.get_num_null());
       add_num_not_null(other.get_num_not_null());
@@ -486,7 +470,6 @@ int ObOptColumnStat::merge_min_max(ObObj &cur, const ObObj &other, bool is_cmp_m
     ret = ob_write_obj(allocator_, other, cur);
   } else if (!other.is_null()) {
     if (OB_FAIL(other.compare(cur, cmp))) {
-      LOG_WARN("failed to compare", K(other), K(cur), K(cmp));
     } else if (is_cmp_min) {
       if (cmp < 0) {
         ret = ob_write_obj(allocator_, other, cur);

@@ -43,14 +43,12 @@ int ObWinbufPieceMsgListener::on_message(
         UNLIMITED_MEM, common::ObCtxIds::WORK_AREA, "PXDhWinbuf", false))) {
       LOG_WARN("fail to init row store", K(ret));
     } else if (OB_FAIL(ctx.whole_msg_.datum_store_.add_row(*pkt.datum_row_))) {
-      LOG_WARN("fail to add row", K(ret));
     }
   } else {
     if (!ctx.whole_msg_.row_store_.is_inited() && OB_FAIL(ctx.whole_msg_.row_store_.init(
          UNLIMITED_MEM, common::ObCtxIds::WORK_AREA, "PXDhWinbuf", false))) {
       LOG_WARN("fail to init row store", K(ret));
     } else if (OB_FAIL(ctx.whole_msg_.row_store_.add_row(pkt.row_))) {
-      LOG_WARN("fail to add row", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -61,7 +59,6 @@ int ObWinbufPieceMsgListener::on_message(
   // Each sqc broadcasts to its respective task
   if (OB_SUCC(ret) && ctx.received_ == ctx.task_cnt_) {
     if (OB_FAIL(ctx.send_whole_msg(sqcs))) {
-      LOG_WARN("fail to send whole msg", K(ret));
     }
     IGNORE_RETURN ctx.reset_resource();
   }
@@ -103,9 +100,7 @@ int ObWinbufPieceMsgCtx::send_whole_msg(common::ObIArray<ObPxSqcMeta> &sqcs)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null expected", K(ret));
     } else if (OB_FAIL(ch->send(whole_msg_, timeout_ts_))) {
-      LOG_WARN("fail push data to channel", K(ret));
     } else if (OB_FAIL(ch->flush(true, false))) {
-      LOG_WARN("fail flush dtl data", K(ret));
     } else {
       LOG_DEBUG("dispatched winbuf whole msg",
                   K(idx), K(cnt), K(whole_msg_), K(*ch));
@@ -322,9 +317,7 @@ int ObWinbufWholeMsg::assign(const ObWinbufWholeMsg &other, common::ObIAllocator
       int64_t ctx_id = other.datum_store_.get_mem_ctx_id();
       const char *label = other.datum_store_.get_label();
       if (OB_FAIL(datum_store_.init(mem_limit, ctx_id, label, false))) {
-        LOG_WARN("init datum store failed", K(ret));
       } else if (OB_FAIL(datum_store_.append_datum_store(other.datum_store_))) {
-        LOG_WARN("append store failed", K(ret));
       }
     } else {
       ser_len = other.row_store_.get_serialize_size();
@@ -333,10 +326,8 @@ int ObWinbufWholeMsg::assign(const ObWinbufWholeMsg &other, common::ObIAllocator
         LOG_WARN("fail alloc memory", K(ser_len), KP(ser_ptr), K(ret));
       } else if (OB_FAIL(other.row_store_.serialize(static_cast<char *>(ser_ptr),
             ser_len, ser_pos))) {
-        LOG_WARN("fail serialzie init task arg", KP(ser_ptr), K(ser_len), K(ser_pos), K(ret));
       } else if (OB_FAIL(row_store_.deserialize(static_cast<const char *>(ser_ptr),
            ser_pos, des_pos))) {
-        LOG_WARN("fail des task arg", KP(ser_ptr), K(ser_pos), K(des_pos), K(ret));
       } else if (ser_pos != des_pos) {
         ret = OB_DESERIALIZE_ERROR;
         LOG_WARN("data_len and pos mismatch", K(ser_len), K(ser_pos), K(des_pos), K(ret));
@@ -392,9 +383,7 @@ int SPWinFuncPXPieceMsgCtx::send_whole_msg(common::ObIArray<ObPxSqcMeta> &sqcs)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null channel", K(ret), K(ch));
     } else if (OB_FAIL(ch->send(whole_msg_, timeout_ts_))) {
-      LOG_WARN("send data failed", K(ret));
     } else if (OB_FAIL(ch->flush(true, false))) {
-      LOG_WARN("flush dtl data failed", K(ret));
     } else {
       LOG_DEBUG("dispatched sp_winfunc_px_whole_msg", K(idx), K(cnt), K(whole_msg_), K(*ch));
     }
@@ -424,17 +413,14 @@ int SPWinFuncPXPieceMsgListener::on_message(SPWinFuncPXPieceMsgCtx &ctx,
       common::ObMemAttr attr(ObModIds::OB_SQL_WINDOW_LOCAL, ObCtxIds::WORK_AREA);
       if (OB_FAIL(
             ctx.whole_msg_.row_meta_.deep_copy(pkt.row_meta_, &ctx.whole_msg_.assign_allocator_))) {
-        LOG_WARN("deep copy row meta failed", K(ret));
       } else if (OB_FAIL(ctx.whole_msg_.row_store_.init(ctx.whole_msg_.row_meta_,
                                                         ctx.max_batch_size_, attr, 0, false,
                                                         NONE_COMPRESSOR))) {
-        LOG_WARN("init row store failed", K(ret));
       }
     }
     ObCompactRow *sr = nullptr;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ctx.whole_msg_.row_store_.add_row(pkt.row_, sr))) {
-      LOG_WARN("add row failed", K(ret));
     } else {
     }
   }
@@ -444,7 +430,6 @@ int SPWinFuncPXPieceMsgListener::on_message(SPWinFuncPXPieceMsgCtx &ctx,
              K(ctx.whole_msg_), K(pkt.thread_id_));
     if (ctx.received_ == ctx.task_cnt_) {
       if (OB_FAIL(ctx.send_whole_msg(sqcs))) {
-        LOG_WARN("send whole msg failed", K(ret));
       } else {
         IGNORE_RETURN ctx.reset_resource();
       }
@@ -462,7 +447,6 @@ int SPWinFuncPXWholeMsg::assign(const SPWinFuncPXWholeMsg &other, common::ObIAll
   row_meta_.set_allocator(allocator);
   is_empty_ = other.is_empty_;
   if (OB_FAIL(row_meta_.deep_copy(other.row_meta_, allocator))) {
-    LOG_WARN("deep copy row meta failed", K(ret));
   } else if (!is_empty_) {
     // deep copy row store by ser/deser
     int64_t ser_len = 0, ser_pos = 0, des_pos = 0;
@@ -477,9 +461,7 @@ int SPWinFuncPXWholeMsg::assign(const SPWinFuncPXWholeMsg &other, common::ObIAll
     if (OB_FAIL(row_store_.init(other.row_store_.get_row_meta(),
                                 other.row_store_.get_max_batch_size(),
                                 other.row_store_.get_mem_attr(), 0, false, NONE_COMPRESSOR))) {
-      LOG_WARN("init temp row store failed", K(ret));
     } else if (OB_FAIL(other_it.init(&copying_store))) {
-      LOG_WARN("init row store iterator failed", K(ret));
     }
     while (OB_SUCC(ret)) {
       if (OB_FAIL(other_it.get_next_batch(read_batch, read_rows, stored_rows))) {
@@ -497,7 +479,6 @@ int SPWinFuncPXWholeMsg::assign(const SPWinFuncPXWholeMsg &other, common::ObIAll
       ObCompactRow *sr_row = nullptr;
       for (int i = 0; OB_SUCC(ret) && i < read_rows; i++) {
         if (OB_FAIL(row_store_.add_row(stored_rows[i], sr_row))) {
-          LOG_WARN("add row failed", K(ret));
         }
       }
     }
@@ -509,7 +490,6 @@ OB_DEF_SERIALIZE(SPWinFuncPXPieceMsg)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDatahubPieceMsg::serialize(buf, buf_len, pos))) {
-    LOG_WARN("datahub ser failed", K(ret));
   } else {
     OB_UNIS_ENCODE(is_empty_);
     OB_UNIS_ENCODE(row_meta_);
@@ -528,7 +508,6 @@ OB_DEF_DESERIALIZE(SPWinFuncPXPieceMsg)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDatahubPieceMsg::deserialize(buf, data_len, pos))) {
-    LOG_WARN("datahub deser failed", K(ret));
   } else {
     OB_UNIS_DECODE(is_empty_);
     OB_UNIS_DECODE(row_meta_);
@@ -572,7 +551,6 @@ OB_DEF_SERIALIZE(SPWinFuncPXWholeMsg)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDatahubWholeMsg::serialize(buf, buf_len, pos))) {
-    LOG_WARN("whole msg ser failed", K(ret));
   } else {
     OB_UNIS_ENCODE(is_empty_);
     OB_UNIS_ENCODE(row_meta_);
@@ -587,7 +565,6 @@ OB_DEF_DESERIALIZE(SPWinFuncPXWholeMsg)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDatahubWholeMsg::deserialize(buf, data_len, pos))) {
-    LOG_WARN("whole msg deser failed", K(ret));
   } else {
     OB_UNIS_DECODE(is_empty_);
     OB_UNIS_DECODE(row_meta_);

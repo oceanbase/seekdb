@@ -100,7 +100,6 @@ int ObDASIDRequestRpc::fetch_new_range(const ObDASIDRequest &msg,
     
     
     if (OB_FAIL(res.init(OB_SUCCESS, start_id, end_id))) {
-      LOG_WARN("init das id result failed", KR(ret), K(start_id), K(end_id));
     } else {
       LOG_TRACE("fetch new DAS ID range from local counter", K(msg), K(res));
     }

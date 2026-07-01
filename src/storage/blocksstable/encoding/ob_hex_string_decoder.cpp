@@ -57,14 +57,11 @@ int ObHexStringDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDatum &d
         if (OB_FAIL(ObBitStream::get(reinterpret_cast<const unsigned char *>(col_data),
             row_id * ctx.micro_block_header_->extend_value_bit_,
             ctx.micro_block_header_->extend_value_bit_, val))) {
-          LOG_WARN("get extend value failed", K(ret), K(ctx));
         }
       } else {
         if (OB_FAIL(bs.get(ctx.col_header_->extend_value_index_,
                            ctx.micro_block_header_->extend_value_bit_,
                            val))) {
-          LOG_WARN("get extend value failed",
-              K(ret), K(bs), K(ctx));
         }
       }
     }
@@ -82,8 +79,6 @@ int ObHexStringDecoder::decode(const ObColumnDecoderCtx &ctx, common::ObDatum &d
     } else {
       if (OB_FAIL(ObRawDecoder::locate_cell_data(cell_data, cell_len, data, len,
               *ctx.micro_block_header_, *ctx.col_header_, *header_))) {
-        LOG_WARN("locate cell data failed", K(ret), K(len),
-            K(ctx), "header", *header_);
       }
     }
 
@@ -173,11 +168,9 @@ int ObHexStringDecoder::batch_decode(
           fix_data_offset = (fix_data_offset + CHAR_BIT - 1) / CHAR_BIT;
           if (OB_FAIL(set_null_datums_from_fixed_column(
               ctx, row_ids, row_cap, col_data, datums))) {
-            LOG_WARN("Failed to set null datums from fixed data", K(ret), K(ctx));
           }
         } else if (OB_FAIL(set_null_datums_from_var_column(
             ctx, row_index, row_ids, row_cap, datums))) {
-          LOG_WARN("Failed to set null datums from var data", K(ret), K(ctx));
         }
       }
 
@@ -213,11 +206,8 @@ int ObHexStringDecoder::batch_decode(
           } else {
             row_id = row_ids[i];
             if (OB_FAIL(locate_row_data(ctx, row_index, row_id, row_data, row_len))) {
-              LOG_WARN("Failed to read row data from row index", K(ret), KP(row_index), K(row_id));
             } else if (OB_FAIL(ObRawDecoder::locate_cell_data(cell_data, cell_len,
                 row_data, row_len, *ctx.micro_block_header_, *ctx.col_header_, *header_))) {
-              LOG_WARN("Failed to locate cell data",
-                  K(ret), K(row_len), KP(row_data), K(i), K(ctx));
             } else {
               cell_header = reinterpret_cast<const ObVarHexCellHeader *>(cell_data);
               cell_data += sizeof(*cell_header);
@@ -268,7 +258,6 @@ int ObHexStringDecoder::decode_vector(
     }
     }
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to decode hex packing data to vector", K(ret), K(decoder_ctx), K(vector_ctx));
     }
   }
   return ret;
@@ -318,7 +307,6 @@ int ObHexStringDecoder::inner_decode_vector(
   } else {
     bool has_null = false;
     if (OB_FAIL(batch_locate_var_len_row(decoder_ctx, row_index, vector_ctx, has_null))) {
-      LOG_WARN("Failed to batch locate var len row", K(ret), K(decoder_ctx), K(vector_ctx));
     } else if (has_null) {
       ret = ObIColumnDecoder::batch_locate_cell_data<ObHexStringHeader, true>(decoder_ctx, *header_,
           vector_ctx.ptr_arr_, vector_ctx.len_arr_, vector_ctx.row_ids_, vector_ctx.row_cap_);
@@ -328,7 +316,6 @@ int ObHexStringDecoder::inner_decode_vector(
     }
 
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to locate cell datas", K(ret));
     } else {
       for (int64_t i = 0; i < vector_ctx.row_cap_; ++i) {
         const char *cell_data = vector_ctx.ptr_arr_[i];
@@ -373,11 +360,9 @@ int ObHexStringDecoder::pushdown_operator(
     LOG_WARN("Invalid op type for pushed dow white filter", K(ret), K(op_type));
   } else if (col_ctx.is_fix_length() || col_ctx.is_bit_packing()) {
     if (OB_FAIL(get_is_null_bitmap_from_fixed_column(col_ctx, col_u_data, pd_filter_info, result_bitmap))) {
-      LOG_WARN("Failed to get isnull bitmap from fixed column", K(ret));
     }
   } else {
     if (OB_FAIL(get_is_null_bitmap_from_var_column(col_ctx, row_index, pd_filter_info, result_bitmap))) {
-      LOG_WARN("Failed to get isnull bitmap from variable column", K(ret));
     }
   }
 
@@ -388,7 +373,6 @@ int ObHexStringDecoder::pushdown_operator(
       }
       case sql::WHITE_OP_NN: {
         if (OB_FAIL(result_bitmap.bit_not())) {
-          LOG_WARN("Failed to flip bits for result bitmap", K(ret), K(result_bitmap.size()));
         }
         break;
       }

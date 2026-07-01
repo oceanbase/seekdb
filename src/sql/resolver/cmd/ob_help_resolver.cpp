@@ -46,38 +46,26 @@ int ObHelpResolver::resolve(const ParseNode &parse_tree)
     like_pattern.assign(const_cast<char *>(parse_tree.children_[0]->str_value_), size);
     if (NULL == (help_stmt = create_stmt<ObHelpStmt>())) {
       ret = OB_SQL_RESOLVER_NO_MEMORY;
-      SQL_RESV_LOG(WARN, "failed to create help stmt");
     } else {
       stmt_ = help_stmt;
-      if (OB_FAIL(create_topic_sql(like_pattern, sql))) {//search for topic
-        SQL_RESV_LOG(WARN, "failed to create topic sql", K(sql), K(like_pattern));
+      if (OB_FAIL(create_topic_sql(like_pattern, sql))) {
       } else if (OB_FAIL(search_topic(help_stmt, sql, topic_count))) {
-        SQL_RESV_LOG(WARN,"search topic failed",K(like_pattern), K(topic_count));
       } else {/* do nothing */}
       if (OB_SUCCESS == ret && 0 == topic_count) {
-        if (OB_FAIL(create_keyword_sql(like_pattern, sql))) {//search for keyword
-          SQL_RESV_LOG(WARN, "failed to keyword create sql", K(sql), K(like_pattern));
+        if (OB_FAIL(create_keyword_sql(like_pattern, sql))) {
         } else if (OB_FAIL(search_topic(help_stmt, sql, topic_count))) {
-          SQL_RESV_LOG(WARN,"search keyword failed",K(like_pattern), K(topic_count));
         } else {/* do nothing */}
       }
       if (OB_SUCCESS == ret &&  0 == topic_count) {
-        if (OB_FAIL(create_category_sql(like_pattern, sql))) {//search for category
-          SQL_RESV_LOG(WARN, "failed to category create sql", K(sql), K(like_pattern));
+        if (OB_FAIL(create_category_sql(like_pattern, sql))) {
         } else if (OB_FAIL(search_category(help_stmt, sql, category_count, category_name))) {
-          SQL_RESV_LOG(WARN,"search category failed",K(like_pattern), K(category_count));
         } else {
           if (1 == category_count) {//if category count is 1, then search topic and category whose parent category is category_name;
             if (OB_FAIL(help_stmt->clear_row_store())) {
-              SQL_RESV_LOG(WARN, "fail to clear row store", K(ret));
-            } else if (OB_FAIL(create_category_topic_sql(like_pattern, sql))) {//ceate sql
-              SQL_RESV_LOG(WARN,"create category topic sql failed", K(sql), K(like_pattern));
-            } else if (OB_FAIL(search_topic(help_stmt, sql, count, category_name))) {//seach topic whose parent category is category_name
-              SQL_RESV_LOG(WARN,"search keyword failed",K(like_pattern), K(count));
-            } else if (OB_FAIL(create_category_child_sql(like_pattern, sql))) {//create sql
-              SQL_RESV_LOG(WARN,"create category child sql failed", K(sql), K(like_pattern));
-            } else if (OB_FAIL(search_category(help_stmt, sql, count, name, category_name))) {//seach category  whose parent category is category_name
-              SQL_RESV_LOG(WARN,"search keyword failed",K(like_pattern), K(count));
+            } else if (OB_FAIL(create_category_topic_sql(like_pattern, sql))) {
+            } else if (OB_FAIL(search_topic(help_stmt, sql, count, category_name))) {
+            } else if (OB_FAIL(create_category_child_sql(like_pattern, sql))) {
+            } else if (OB_FAIL(search_category(help_stmt, sql, count, name, category_name))) {
             } else {/* do nothing */}
           }
         }
@@ -85,42 +73,29 @@ int ObHelpResolver::resolve(const ParseNode &parse_tree)
       if (OB_SUCC(ret)) {
         if (1 == topic_count) {//seach topic only
           if (OB_FAIL(help_stmt->add_col_name(ObString::make_string("name")))) {
-            SQL_RESV_LOG(WARN, "fail to add column name", K(ret));
           } else if (OB_FAIL(help_stmt->add_col_name(ObString::make_string("description")))) {
-            SQL_RESV_LOG(WARN, "fail to add column name", K(ret));
           } else if (OB_FAIL(help_stmt->add_col_name(ObString::make_string("example")))) {
-            SQL_RESV_LOG(WARN, "fail to add column name", K(ret));
           } else {/*do nothing*/}
         } else if (0 == topic_count) {
           if (category_count > 1) {
             if (OB_FAIL(help_stmt->add_col_name(ObString::make_string("name")))) {
-              SQL_RESV_LOG(WARN, "fail to add column name", K(ret));
             } else if (OB_FAIL(help_stmt->add_col_name(ObString::make_string("is_it_category")))) {
-              SQL_RESV_LOG(WARN, "fail to add column name", K(ret));
             } else {/*do nothing*/}
           } else {
             if (OB_FAIL(help_stmt->add_col_name(ObString::make_string("source_category_name")))) {
-              SQL_RESV_LOG(WARN, "fail to add column name", K(ret));
             } else if (OB_FAIL(help_stmt->add_col_name(ObString::make_string("name")))) {
-              SQL_RESV_LOG(WARN, "fail to add column name", K(ret));
             } else if (OB_FAIL(help_stmt->add_col_name(ObString::make_string("is_it_category")))) {
-              SQL_RESV_LOG(WARN, "fail to add column name", K(ret));
             } else {/*do nothing*/}
             if (OB_SUCC(ret) && 0 == category_count){
               if (OB_FAIL(help_stmt->set_col_count(3))) {
-                SQL_RESV_LOG(WARN, "failed to set help stmt rowstor column count");
               }
             }
           }
         } else {//topic_count > 1
           if (OB_FAIL(help_stmt->add_col_name(ObString::make_string("name")))) {
-              SQL_RESV_LOG(WARN, "fail to add column name", K(ret));
           } else if (OB_FAIL(help_stmt->add_col_name(ObString::make_string("is_it_category")))) {
-              SQL_RESV_LOG(WARN, "fail to add column name", K(ret));
           } else if (OB_FAIL(create_category_sql(like_pattern, sql))) {
-            SQL_RESV_LOG(WARN, "failed to category create sql", K(sql), K(like_pattern));
           } else if (OB_FAIL(search_category(help_stmt, sql, category_count, name))) {
-            SQL_RESV_LOG(WARN,"search category failed",K(like_pattern), K(category_count));
           } else {/* do nothing */}
         }
       }
@@ -149,17 +124,14 @@ int ObHelpResolver::search_topic(ObHelpStmt *help_stmt,
       ret = OB_NOT_INIT;
       SQL_RESV_LOG(WARN, "parameter or class member is not init", K(ret), K(sql_proxy_), K(help_stmt));
     } else if (OB_FAIL(sql_proxy_->read(res, sql.ptr()))) {
-      SQL_RESV_LOG(WARN, "execute sql failed", K(ret), K(sql));
     } else if (NULL == (result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "failed to get result", K(sql));
     } else {
       ObString last_name;
       while (OB_SUCCESS == ret && OB_SUCCESS == (ret = result->next())) {
         if ( 0 != source_category.compare("None")) {//search topic for the category
           col_count = 3;
           if (OB_FAIL(GET_COL_IGNORE_NULL(result->get_varchar, "name", col2))) {
-            SQL_REWRITE_LOG(WARN, "fail to get name column", K(ret), K(col2));
           } else {
             cells[0].set_varchar(source_category);
             cells[1].set_varchar(col2);
@@ -169,11 +141,8 @@ int ObHelpResolver::search_topic(ObHelpStmt *help_stmt,
           if (0 == row_count) {
             col_count = 3;
             if (OB_FAIL(GET_COL_IGNORE_NULL(result->get_varchar, "name", col1))) {
-              SQL_REWRITE_LOG(WARN, "fail to get name column", K(ret), K(col1));
             } else if (OB_FAIL(GET_COL_IGNORE_NULL(result->get_varchar, "description", col2))) {
-              SQL_REWRITE_LOG(WARN, "fail to get description column", K(ret), K(col2));
             } else if (OB_FAIL(GET_COL_IGNORE_NULL(result->get_varchar, "example", col3))) {
-              SQL_REWRITE_LOG(WARN, "fail to get example column", K(ret), K(col3));
             } else {
               cells[0].set_varchar(col1);
               cells[1].set_varchar(col2);
@@ -184,7 +153,6 @@ int ObHelpResolver::search_topic(ObHelpStmt *help_stmt,
             col_count = 2;
             if (1 == row_count && 0 == source_category.compare("None")) {//clear rowstore and add the first row again according to the columns
               if (OB_FAIL(help_stmt->clear_row_store())) {
-                SQL_RESV_LOG(WARN, "fail to clear row store", K(ret));
               } else {
                 cells[0].set_varchar(last_name);
                 cells[1].set_varchar(ObString::make_string("N"));
@@ -195,7 +163,6 @@ int ObHelpResolver::search_topic(ObHelpStmt *help_stmt,
             }
             if (OB_FAIL(ret)) {
             } else if (OB_FAIL(GET_COL_IGNORE_NULL(result->get_varchar, "name", col1))) {
-              SQL_REWRITE_LOG(WARN, "fail to get name column", K(ret), K(col1));
             } else {
               cells[0].set_varchar(col1);
               cells[1].set_varchar(ObString::make_string("N"));
@@ -208,7 +175,6 @@ int ObHelpResolver::search_topic(ObHelpStmt *help_stmt,
         row_count++;
       }
       if (OB_UNLIKELY(OB_SUCCESS != ret && OB_ITER_END != ret)) {
-        SQL_RESV_LOG(WARN,"get result failed");
       } else {
         topic_count = row_count;
         ret = OB_SUCCESS;
@@ -240,7 +206,6 @@ int ObHelpResolver::search_category(ObHelpStmt *help_stmt,
       SQL_RESV_LOG(WARN,
                    "parameter or class member is not init", K(ret), K(sql_proxy_), K(help_stmt), K(allocator_));
     } else if (OB_FAIL(sql_proxy_->read(res, sql.ptr()))) {
-      SQL_RESV_LOG(WARN, "execute sql failed", K(ret), K(sql));
     } else if (OB_UNLIKELY(NULL == (result = res.get_result()))) {
       ret = OB_ERR_UNEXPECTED;
       SQL_RESV_LOG(WARN, "failed to get result", K(ret), K(sql));
@@ -251,11 +216,9 @@ int ObHelpResolver::search_category(ObHelpStmt *help_stmt,
         col_count = 2;
       }
       if (OB_FAIL(help_stmt->set_col_count(col_count))) {
-        SQL_RESV_LOG(WARN, "failed to set help stmt rowstor column count");
       } else {
         while (OB_SUCCESS == ret && OB_SUCCESS == (ret = result->next())) {
           if (OB_FAIL(GET_COL_IGNORE_NULL(result->get_varchar, "name", name))) {
-            SQL_REWRITE_LOG(WARN, "fail to get name column", K(ret), K(name));
           } else if (OB_UNLIKELY(NULL == name.ptr()
                                  || name.length() <= 0)) {
             ret = OB_ERR_UNEXPECTED;
@@ -283,7 +246,6 @@ int ObHelpResolver::search_category(ObHelpStmt *help_stmt,
           }
         }
         if (OB_UNLIKELY(OB_SUCCESS != ret && OB_ITER_END != ret)) {
-          SQL_RESV_LOG(WARN,"get result failed");
         } else {
           category_count = row_count;
           ret = OB_SUCCESS;
@@ -305,7 +267,6 @@ int ObHelpResolver::create_keyword_sql(const ObString &like_pattern, ObSqlString
                              OB_HELP_RELATION_TNAME,
                              OB_HELP_TOPIC_TNAME,
                              like_pattern.ptr()))) {
-    SQL_RESV_LOG(WARN, "assign sql failed", K(ret), K(sql));
   }
   return ret;
 }
@@ -317,7 +278,6 @@ int ObHelpResolver::create_topic_sql(const ObString &like_pattern, ObSqlString &
                              "FROM mysql.%s WHERE name like '%s' ",
                              OB_HELP_TOPIC_TNAME,
                              like_pattern.ptr()))) {
-    SQL_RESV_LOG(WARN, "assign sql failed", K(ret), K(sql));
   }
   return ret;
 }
@@ -329,7 +289,6 @@ int ObHelpResolver::create_category_sql(const ObString &like_pattern, ObSqlStrin
                              "FROM mysql.%s WHERE name like '%s' ",
                              OB_HELP_CATEGORY_TNAME,
                              like_pattern.ptr()))) {
-    SQL_RESV_LOG(WARN, "assign sql failed", K(ret), K(sql));
   }
   return ret;
 }
@@ -343,7 +302,6 @@ int ObHelpResolver::create_category_topic_sql(const ObString &like_pattern, ObSq
                              OB_HELP_TOPIC_TNAME,
                              OB_HELP_CATEGORY_TNAME,
                              like_pattern.ptr()))) {
-    SQL_RESV_LOG(WARN, "assign sql failed", K(ret), K(sql));
   }
   return ret;
 }
@@ -357,7 +315,6 @@ int ObHelpResolver::create_category_child_sql(const ObString &like_pattern, ObSq
                              OB_HELP_CATEGORY_TNAME,
                              OB_HELP_CATEGORY_TNAME,
                              like_pattern.ptr()))) {
-    SQL_RESV_LOG(WARN, "assign sql failed", K(ret), K(sql));
   }
   return ret;
 }

@@ -103,11 +103,9 @@ int ObGlobalAutoIncService::init(const ObAddr &addr, ObMySQLProxy *mysql_proxy)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(mysql_proxy));
   } else if (OB_FAIL(inner_table_proxy_.init(mysql_proxy))) {
-    LOG_WARN("init inner table proxy failed", K(ret));
   } else if (OB_FAIL(autoinc_map_.create(ObGlobalAutoIncService::INIT_HASHMAP_SIZE,
                                          attr,
                                          attr))) {
-    LOG_WARN("init autoinc_map_ failed", K(ret));
   } else if (OB_ISNULL(gais_request_rpc_ =
       ObAutoincrementService::get_instance().get_gais_request_rpc())) {
     ret = OB_ERR_UNEXPECTED;
@@ -168,12 +166,10 @@ int ObGlobalAutoIncService::handle_next_autoinc_request(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(request));
   } else if (OB_FAIL(check_leader_( is_leader))) {
-    LOG_WARN("check leader failed", K(ret), K(request.sender_), K(self_));
   } else if (OB_UNLIKELY(!is_leader)) {
     ret = OB_NOT_MASTER;
     LOG_WARN("gais service is not leader", K(ret));
   } else if (OB_FAIL(mutex.lock())) {
-    LOG_WARN("fail to get lock", K(ret));
   } else {
     ObAutoIncCacheNode cache_node;
     int err = autoinc_map_.get_refactored(key.table_id_, cache_node);
@@ -220,10 +216,8 @@ int ObGlobalAutoIncService::handle_next_autoinc_request(
             // the cache node is run out
             cache_node.reset();
           } else if (OB_FAIL(cache_node.with_new_start(end_inclusive + 1))) {
-            LOG_WARN("fail to update sequence value", K(ret), K(cache_node), K(end_inclusive));
           }
         } else if (OB_FAIL(cache_node.with_new_start(max_value))) {
-          LOG_WARN("fail to update sequence value", K(ret), K(cache_node), K(max_value));
         } else {
           end_inclusive = max_value;
         }
@@ -233,9 +227,7 @@ int ObGlobalAutoIncService::handle_next_autoinc_request(
             sync_value = request.base_value_ - 1;
           }
           if (OB_FAIL(result.init(start_inclusive, end_inclusive, sync_value))) {
-            LOG_WARN("init result failed", K(ret), K(cache_node));
           } else if (OB_FAIL(autoinc_map_.set_refactored(key.table_id_, cache_node, 1))) {
-            LOG_WARN("set autoinc_map_ failed", K(ret));
           }
         }
         LOG_TRACE("after handle req autoinc request", K(request), K(cache_node));
@@ -262,9 +254,7 @@ int ObGlobalAutoIncService::handle_curr_autoinc_request(const ObGAISAutoIncKeyAr
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(request));
   } else if (OB_FAIL(check_leader_( is_leader))) {
-    LOG_WARN("check leader failed", K(ret), K(request.sender_), K(self_));
   } else if (OB_FAIL(mutex.lock())) {
-    LOG_WARN("fail to get lock", K(ret));
   } else {
     ObAutoIncCacheNode cache_node;
     
@@ -284,15 +274,12 @@ int ObGlobalAutoIncService::handle_curr_autoinc_request(const ObGAISAutoIncKeyAr
       // read value from inner table
     } else if (OB_FAIL(read_value_from_inner_table_(key, request_version, sequence_value,
                                                     sync_value))) {
-      LOG_WARN("fail to read value from inner table", KR(ret), K_(key.table_id));
     } else if (OB_UNLIKELY(cache_node.is_received()) && (sequence_value - 1 == cache_node.end_)) {
       sequence_value = cache_node.start_;
       sync_value = cache_node.sync_value_;
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(result.init(sequence_value, sync_value))) {
-        LOG_WARN("failed to init result", KR(ret), K_(key.table_id),
-                  K(request_version), K(cache_node));
       }
     }
     mutex.unlock();
@@ -315,12 +302,10 @@ int ObGlobalAutoIncService::handle_push_autoinc_request(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(request));
   } else if (OB_FAIL(check_leader_( is_leader))) {
-    LOG_WARN("check leader failed", K(ret), K(request.sender_), K(self_));
   } else if (OB_UNLIKELY(!is_leader)) {
     ret = OB_NOT_MASTER;
     LOG_WARN("gais service is not leader", K(ret));
   } else if (OB_FAIL(mutex.lock())) {
-    LOG_WARN("fail to get lock", K(ret));
   } else {
     ObAutoIncCacheNode cache_node;
     
@@ -338,9 +323,7 @@ int ObGlobalAutoIncService::handle_push_autoinc_request(
                         || (request_version > cache_node.autoinc_version_))) {
       cache_node.reset();
       if (OB_FAIL(sync_value_to_inner_table_(request, cache_node, sync_value))) {
-        LOG_WARN("sync to inner table failed", K(ret));
       } else if (OB_FAIL(autoinc_map_.set_refactored(key.table_id_, cache_node, 1))) {
-        LOG_WARN("set autoinc_map_ failed", K(ret));
       }
     // old request just ignore
     } else if (OB_UNLIKELY(request_version < cache_node.autoinc_version_)) {
@@ -382,16 +365,13 @@ int ObGlobalAutoIncService::handle_clear_autoinc_cache_request(const ObGAISAutoI
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(request));
   } else if (OB_FAIL(check_leader_( is_leader))) {
-    LOG_WARN("check leader failed", K(ret), K(request.sender_), K(self_));
   } else if (OB_UNLIKELY(!is_leader)) {
     ret = OB_NOT_MASTER;
     LOG_WARN("gais service is not leader", K(ret));
   } else if (OB_FAIL(mutex.lock())) {
-    LOG_WARN("fail to get lock", K(ret));
   } else {
     LOG_TRACE("start clear autoinc cache request", K(request));
     if (OB_FAIL(autoinc_map_.erase_refactored(key.table_id_))) {
-      LOG_WARN("fail to erase autoinc cache map key", K(ret));
     }
     if (ret == OB_HASH_NOT_EXIST) {
       ret = OB_SUCCESS;
@@ -460,15 +440,12 @@ int ObGlobalAutoIncService::fetch_next_node_(const ObGAISNextAutoIncValReq &requ
                                                     start_inclusive,
                                                     end_inclusive,
                                                     sync_value))) {
-    LOG_WARN("fail to require autoinc value from inner table", K(ret));
   } else if (OB_LIKELY(node.is_valid() && (node.end_ == start_inclusive - request.increment_))) {
     if (OB_FAIL(node.with_new_end(end_inclusive))) {
-      LOG_WARN("fail to update available value", K(ret), K(node), K(end_inclusive));
     } else {
       LOG_TRACE("fetch next node done", K(request), K(node));
     }
   } else if (OB_FAIL(node.init(start_inclusive, end_inclusive, sync_value, autoinc_version))){
-    LOG_WARN("fail to init node", K(ret), K(start_inclusive), K(end_inclusive), K(sync_value));
   } else {
     LOG_TRACE("fetch next node done", K(request), K(node));
   }
@@ -500,11 +477,9 @@ int ObGlobalAutoIncService::sync_value_to_inner_table_(
                                                     autoinc_version,
                                                     seq_value,
                                                     sync_value))) {
-    LOG_WARN("fail to sync autoinc value to inner table", K(ret));
   } else if (insert_value == request.max_value_) {
     if (OB_FAIL(node.init(request.max_value_, request.max_value_,
                           request.max_value_, autoinc_version))) {
-      LOG_WARN("fail to init node", K(ret), K(request.max_value_));
     }
   } else {
     // updates directly without checking, this node may be invalid.
@@ -528,7 +503,6 @@ int ObGlobalAutoIncService::inner_switch_to_follower()
     ret = OB_NOT_INIT;
     LOG_WARN("global service is not init", K(ret));
   } else if (OB_FAIL(broadcast_global_autoinc_cache())) {
-    LOG_WARN("fail to broadcast global autoinc cache", K(ret));
   }
   if (OB_SUCC(ret)) {
     // If the broadcast is successful, all cache nodes will be updated to is_received,
@@ -537,7 +511,6 @@ int ObGlobalAutoIncService::inner_switch_to_follower()
     // ob failed
     int tmp_ret = clear();
     if (tmp_ret != OB_SUCCESS) {
-      LOG_WARN("fail to clear auto inc map", K(ret), K(tmp_ret), K(autoinc_map_.size()));
     }
   }
   ATOMIC_STORE(&is_switching_, false);
@@ -551,7 +524,6 @@ int ObGlobalAutoIncService::broadcast_global_autoinc_cache()
   int ret = OB_SUCCESS;
   if (autoinc_map_.size() > 0) {
     if (OB_FAIL(wait_all_requests_to_finish())) {
-      LOG_WARN("fail to wait all requests to finish", K(ret));
     } else if (autoinc_map_.size() > 0) {
       const int64_t size = serialize_size_autoinc_cache();
       
@@ -563,9 +535,7 @@ int ObGlobalAutoIncService::broadcast_global_autoinc_cache()
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to alloc cache buffer", K(ret), K(size));
       } else if (OB_FAIL(serialize_autoinc_cache(buffer, size, pos))) {
-        LOG_WARN("fail to serialize global autoinc cache", K(ret));
       } else if (OB_FAIL(msg.init(buffer, pos))) {
-        LOG_WARN("fail to init msg", K(ret), K(buffer), K(pos));
       } else if (OB_UNLIKELY(!msg.is_valid())) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid argument", K(ret), K(msg));
@@ -573,7 +543,6 @@ int ObGlobalAutoIncService::broadcast_global_autoinc_cache()
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("global service request rpc is not init", K(ret));
       } else if (OB_FAIL(gais_request_rpc_->broadcast_global_autoinc_cache(msg))) {
-        LOG_WARN("broadcast gais request failed", K(ret), K(msg));
       } else {
         LOG_INFO("succ to broadcast global autoinc cache", K(msg));
       }
@@ -601,9 +570,7 @@ int ObGlobalAutoIncService::receive_global_autoinc_cache(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(request));
   } else if (OB_FAIL(wait_all_requests_to_finish())) {
-    LOG_WARN("fail to wait all requests to finish", K(ret));
   } else if (OB_FAIL(deserialize_autoinc_cache(request.buf_, request.buf_size_, pos))) {
-    LOG_WARN("fail to deserialize global auto inc cache", K(ret), K(request));
   }
   ATOMIC_STORE(&is_switching_, false);
   return ret;
@@ -667,7 +634,6 @@ int ObGlobalAutoIncService::wait_all_requests_to_finish()
   for (int64_t i = 0; OB_SUCC(ret) && i < MUTEX_NUM; i++) {
     // wait for all working threads to finish
     if (OB_FAIL(op_mutex_[i].lock(abs_timeout_us))) {
-      LOG_WARN("fail to lock mutex", K(ret), K(i));
     } else {
       op_mutex_[i].unlock();
     }
@@ -689,11 +655,9 @@ int ObGlobalAutoIncService::read_and_push_inner_table(const AutoincKey &key,
                                                              received_node.autoinc_version_,
                                                              is_valid,
                                                              new_end))) {
-      LOG_WARN("fail to read and push inner table", K(ret), K(key), K(received_node));
     } else if (!is_valid) {
       received_node.reset();
     } else if (OB_FAIL(received_node.with_new_end(new_end))) {
-      LOG_WARN("fail to update node end", K(ret), K(new_end), K(received_node));
     } else {
       received_node.is_received_ = false;
     }

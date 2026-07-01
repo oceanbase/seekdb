@@ -38,14 +38,12 @@ int ObIKSurrogateProcessor::do_process(TokenizeContext &ctx,
     low_offset_ = ctx.get_end_cursor();
     if (OB_FAIL(ctx.add_token(
             ctx.fulltext(), high_offset_, low_offset_ - high_offset_, 1, ObIKTokenType::IK_SURROGATE_TOKEN))) {
-      LOG_WARN("Fail to add token", K(ret));
     }
     reset();
   } else if (has_high()) { // so char is not surrogate
     // add high as the single char token
     if (OB_FAIL(ctx.add_token(
             ctx.fulltext(), high_offset_, low_offset_ - high_offset_, 1, ObIKTokenType::IK_SURROGATE_TOKEN))) {
-      LOG_WARN("Fail to add token", K(ret));
     }
     reset();
   } else if (ObFTCharUtil::CharType::SURROGATE_LOW == type) { // only a low surrogate, ignore

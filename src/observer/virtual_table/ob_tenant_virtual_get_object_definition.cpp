@@ -85,14 +85,10 @@ int ObGetObjectDefinition::inner_get_next_row(common::ObNewRow *&row)
                     K(ret), K(cur_row_.count_), K(output_column_ids_.count()));
     } else if (OB_FAIL(get_object_type_and_name(object_type, object_name, ob_schema,
                                                 version, model, transform))) {
-      SERVER_LOG(WARN, "fail to get object type and name", K(ret));
     } else if (OB_FAIL(get_ddl_creation_str(ddl_str, object_type, object_name, ob_schema))) {
-      SERVER_LOG(WARN, "fail to get ddl creation string", K(ret));
     } else if (OB_FAIL(fill_row_cells(ddl_str, object_type, object_name,
                                       ob_schema, version, model, transform))) {
-      SERVER_LOG(WARN, "fail to fill row cells", K(ret));
     } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
-      SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
     } else {
       scanner_it_ = scanner_.begin();
       start_to_read_ = true;
@@ -320,7 +316,6 @@ int ObGetObjectDefinition::get_constraint_definition(ObString &ddl_str,
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema guard is NULL", K(ret), K(schema_guard_));
   } else if (OB_FAIL(schema_guard_->get_database_schema( db_name, database_schema))) {
-    LOG_WARN("get database schema failed", K(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = print_error_log(object_type, db_name, constraint_name);
     LOG_WARN("database not found", K(db_name));
@@ -329,16 +324,12 @@ int ObGetObjectDefinition::get_constraint_definition(ObString &ddl_str,
                                                         database_id,
                                                         constraint_name,
                                                         constraint_info))) {
-    LOG_WARN("get constraint info failed", K(ret),
-              K(database_id), K(constraint_name));
   } else if (OB_INVALID_ID == (constraint_id = constraint_info.constraint_id_)) {
     // The unique constraint is mocked by a unique index.
     // If other types of constraint is not exist, we will try to find if the uk exists.
     // bool is_unique_constraint_exist = false;
     if (OB_FAIL(schema_guard_->get_idx_schema_by_origin_idx_name(
                 database_id, constraint_name, unique_index_table_schema))) {
-      LOG_WARN("fail to get idx_schema by origin_idx_name",
-               K(ret), K(database_id), K(constraint_name));
     } else if (OB_NOT_NULL(unique_index_table_schema)
                && unique_index_table_schema->is_unique_index()
                && !unique_index_table_schema->is_partitioned_table()) {
@@ -369,14 +360,12 @@ int ObGetObjectDefinition::get_constraint_definition(ObString &ddl_str,
       int64_t pos = 0;
       if (is_unique_cst && OB_FAIL(schema_printer.print_unique_cst_definition(*database_schema,
           *table_schema, *unique_index_table_schema, cons_def_buf, cons_def_buf_size, pos))) {
-        SERVER_LOG(WARN, "Generate unique constraint definition failed");
       } else if (!is_unique_cst && OB_FAIL(schema_printer.print_constraint_definition(*database_schema,
                                                               *table_schema,
                                                               constraint_id,
                                                               cons_def_buf,
                                                               cons_def_buf_size,
                                                               pos))) {
-        SERVER_LOG(WARN, "Generate constraint definition failed");
       } else {
         ddl_str.assign(cons_def_buf, pos);
       }
@@ -401,7 +390,6 @@ int ObGetObjectDefinition::get_foreign_key_definition(ObString &ddl_str,
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema guard is NULL", K(ret), K(schema_guard_));
   } else if (OB_FAIL(schema_guard_->get_database_schema( db_name, database_schema))) {
-    LOG_WARN("get database schema failed", K(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = print_error_log(object_type, db_name, foreign_key_name);
     LOG_WARN("database not found", K(db_name));
@@ -410,8 +398,6 @@ int ObGetObjectDefinition::get_foreign_key_definition(ObString &ddl_str,
                                                         database_id,
                                                         foreign_key_name,
                                                         foreign_key_info))) {
-    LOG_WARN("get foreign key info failed", K(ret),
-              K(database_id), K(foreign_key_name));
   } else if (OB_INVALID_ID == (foreign_key_id = foreign_key_info.foreign_key_id_)) {
     ret = print_error_log(object_type, db_name, foreign_key_name);
     LOG_WARN("foreign key not found", K(ret), K(foreign_key_name));
@@ -447,7 +433,6 @@ int ObGetObjectDefinition::get_foreign_key_definition(ObString &ddl_str,
                                                               forkey_def_buf,
                                                               forkey_def_buf_size,
                                                               pos))) {
-        LOG_WARN("print foreign key definition failed");
       } else {
         ddl_str.assign(forkey_def_buf, pos);
       }
@@ -470,14 +455,12 @@ int ObGetObjectDefinition::get_sequence_definition(ObString &ddl_str,
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema guard is NULL", K(ret), K(schema_guard_));
   } else if (OB_FAIL(schema_guard_->get_database_schema( db_name, database_schema))) {
-    LOG_WARN("get database schema failed", K(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = print_error_log(object_type, db_name, sequence_name);
     LOG_WARN("database not found", K(db_name));
   } else if (FALSE_IT(database_id = database_schema->get_database_id())) {
   } else if (OB_FAIL(schema_guard_->get_sequence_schema_with_name(database_id,
                                                     sequence_name, sequence_schema))) {
-    LOG_WARN("get sequence schema failed", K(ret), K(sequence_name));
   } else if (OB_ISNULL(sequence_schema)) {
     ret = print_error_log(object_type, db_name, sequence_name);
     LOG_WARN("sequence not found", K(ret));
@@ -496,7 +479,6 @@ int ObGetObjectDefinition::get_sequence_definition(ObString &ddl_str,
                                                           sequence_def_buf_size,
                                                           pos,
                                                           true))) {
-        SERVER_LOG(WARN, "Generate sequence definition failed");
       } else {
         ddl_str.assign(sequence_def_buf, pos);
       }
@@ -519,14 +501,12 @@ int ObGetObjectDefinition::get_trigger_definition(ObString &ddl_str,
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema guard is NULL", K(ret), K(schema_guard_));
   } else if (OB_FAIL(schema_guard_->get_database_schema( db_name, database_schema))) {
-    LOG_WARN("get database schema failed", K(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = print_error_log(object_type, db_name, trigger_name);
     LOG_WARN("database not found", K(db_name));
   } else if (FALSE_IT(database_id = database_schema->get_database_id())) {
   } else if (OB_FAIL(schema_guard_->get_trigger_info( database_id, trigger_name,
                                                      trigger_info))) {
-    LOG_WARN("get trigger info failed", K(ret), K(trigger_name));
   } else if (OB_ISNULL(trigger_info)) {
     ret = print_error_log(object_type, db_name, trigger_name);
     LOG_WARN("trigger not found", K(ret));
@@ -544,7 +524,6 @@ int ObGetObjectDefinition::get_trigger_definition(ObString &ddl_str,
                                                           trigger_def_buf,
                                                           trigger_def_buf_size,
                                                           pos, true))) {
-        SERVER_LOG(WARN, "Generate trigger definition failed");
       } else {
         ddl_str.assign(trigger_def_buf, pos);
       }
@@ -585,7 +564,6 @@ int ObGetObjectDefinition::get_routine_definition(ObString &ddl_str,
     ret = print_error_log(object_type, db_name, routine_name);
     LOG_WARN("routine not found", K(ret));
   } else if (OB_FAIL(exec_env.init(routine_info->get_exec_env()))) {
-    SERVER_LOG(ERROR, "fail to load exec env", K(ret));
   } else {
     char *routine_def_buf = NULL;
     uint64_t routine_id = routine_info->get_routine_id();
@@ -603,7 +581,6 @@ int ObGetObjectDefinition::get_routine_definition(ObString &ddl_str,
                                                           routine_def_buf_size,
                                                           pos,
                                                           TZ_INFO(session_)))) {
-        SERVER_LOG(WARN, "Generate routine definition failed");
       } else {
         ddl_str.assign(routine_def_buf, pos);
       }
@@ -626,7 +603,6 @@ int ObGetObjectDefinition::get_user_definition(ObString &ddl_str,
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema guard is NULL", K(ret), K(schema_guard_));
   } else if (OB_FAIL(schema_guard_->get_user_info(user_name, users_info))) {
-    LOG_WARN("get user info with name failed", K(ret), K(user_name));
   } else if (users_info.empty()) {
     ret = print_error_log(object_type, db_name, user_name);
     LOG_WARN("user not found", K(ret));
@@ -656,7 +632,6 @@ int ObGetObjectDefinition::get_user_definition(ObString &ddl_str,
                                                       user_def_buf_size,
                                                       pos,
                                                       is_role))) {
-        SERVER_LOG(WARN, "Generate user definition failed");
       } else {
         ddl_str.assign(user_def_buf, pos);
       }
@@ -674,7 +649,6 @@ int ObGetObjectDefinition::get_database_id(const ObString db_name,
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema guard is NULL", K(ret), K(schema_guard_));
   } else if (OB_FAIL(schema_guard_->get_database_schema( db_name, database_schema))) {
-    LOG_WARN("get database schema failed", K(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_OBJECT_NOT_FOUND;
     LOG_WARN("database not found", K(db_name));
@@ -770,7 +744,6 @@ int ObGetObjectDefinition::get_package_definition(ObString &ddl_str,
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "schema guard is NULL", K(ret), K(schema_guard_));
   } else if (OB_FAIL(schema_guard_->get_database_schema( db_name, database_schema))) {
-    LOG_WARN("get database schema failed", K(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = print_error_log(object_type, db_name, package_name);
     LOG_WARN("database not found", K(db_name));
@@ -781,7 +754,6 @@ int ObGetObjectDefinition::get_package_definition(ObString &ddl_str,
                                                       package_type,
                                                       compatible_mode,
                                                       package_info))){
-    LOG_WARN("get package info failed", K(ret), K(database_id), K(package_name));
   } else if (OB_ISNULL(package_info) && 0 == db_name.case_compare(OB_ORA_SYS_SCHEMA_NAME) &&
              OB_FAIL(schema_guard_->get_package_info(
                                                      OB_SYS_DATABASE_ID,
@@ -808,7 +780,6 @@ int ObGetObjectDefinition::get_package_definition(ObString &ddl_str,
                                                           pkg_def_buf,
                                                           pkg_def_buf_size,
                                                           pos))) {
-        SERVER_LOG(WARN, "Generate package definition failed");
       } else {
         ddl_str.assign_buffer(pkg_def_buf, pkg_def_buf_size);
         ddl_str.set_length(pos);

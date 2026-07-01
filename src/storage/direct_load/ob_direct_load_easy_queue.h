@@ -36,7 +36,6 @@ public:
     int ret = OB_SUCCESS;
     lib::ObMutexGuard guard(mutex_);
     if (OB_FAIL(queue_.push_back(e))) {
-      SERVER_LOG(WARN, "fail to push back queue", KR(ret));
     }
     return ret;
   }

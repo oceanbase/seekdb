@@ -73,11 +73,8 @@ int ObDynamicThreadPool::init(const char* thread_name)
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "cannot init twice", K(ret));
   } else if (OB_FAIL(task_queue_.init(MAX_TASK_NUM))) {
-    COMMON_LOG(WARN, "failed to init task queue", K(ret));
   } else if (OB_FAIL(cond_.init(ObWaitEventIds::DYNAMIC_THREAD_POOL_COND_WAIT))) {
-    STORAGE_LOG(WARN, "failed to init cond", K(ret));
   } else if (OB_FAIL(task_thread_cond_.init(ObWaitEventIds::DYNAMIC_THREAD_POOL_COND_WAIT))) {
-    STORAGE_LOG(WARN, "failed to init cond", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -106,7 +103,6 @@ int ObDynamicThreadPool::set_task_thread_num(const int64_t thread_num)
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid thread num", K(ret), K(thread_num));
   } else if (cur_thread_num != thread_num) {
-    COMMON_LOG(INFO, "set dynamic thread pool thread num", K(cur_thread_num), K(thread_num));
     ATOMIC_STORE(&thread_num_ , thread_num);
     wakeup();
   }
@@ -120,7 +116,6 @@ void ObDynamicThreadPool::destroy()
     stop();
     wait();
     is_inited_ = false;
-    COMMON_LOG(INFO, "thread pool is destroyed", K(*this));
   }
 }
 
@@ -189,13 +184,11 @@ int ObDynamicThreadPool::check_thread_status()
     if (i < thread_num) {
       if (!thread_info.is_alive_) {
         if (OB_SUCCESS != (tmp_ret = start_thread(thread_info))) {
-          COMMON_LOG(WARN, "failed to start thread", K(tmp_ret));
         }
       }
     } else {
       if (thread_info.is_alive_) {
         if (OB_SUCCESS != (tmp_ret = stop_thread(thread_info))) {
-          COMMON_LOG(WARN, "failed to start thread", K(tmp_ret));
         }
       }
     }
@@ -209,7 +202,6 @@ int ObDynamicThreadPool::stop_all_threads()
   int tmp_ret = OB_SUCCESS;
   int64_t start_ts = ObTimeUtility::current_time();
 
-  COMMON_LOG(INFO, "start stop all thread", KP(this));
   for (int64_t i = 0; OB_SUCC(ret) && i < MAX_THREAD_NUM; ++i) {
     ObDynamicThreadInfo &thread_info = thread_infos_[i];
     thread_info.is_stop_ = true;
@@ -228,7 +220,6 @@ int ObDynamicThreadPool::stop_all_threads()
 
   int64_t cost_ts = ObTimeUtility::current_time() - start_ts;
 
-  COMMON_LOG(INFO, "finish stop all thread", KP(this), K(cost_ts));
   return ret;
 }
 
@@ -253,7 +244,6 @@ int ObDynamicThreadPool::start_thread(ObDynamicThreadInfo &thread_info)
     } else {
       thread_info.is_alive_ = true;
       ++start_thread_num_;
-      COMMON_LOG(INFO, "succeed to start thread", K(thread_info));
     }
   }
 
@@ -276,7 +266,6 @@ int ObDynamicThreadPool::stop_thread(ObDynamicThreadInfo &thread_info)
     ob_pthread_join(thread_info.tid_);
     thread_info.is_alive_ = false;
     ++stop_thread_num_;
-    COMMON_LOG(INFO, "succeed to stop thread", K(thread_info));
   }
 
   return ret;
@@ -312,7 +301,6 @@ int ObDynamicThreadPool::add_task(ObDynamicThreadTask *task)
     ret = OB_IN_STOP_STATE;
     COMMON_LOG(WARN, "thread pool is stopped", K(ret));
   } else if (OB_FAIL(task_queue_.push(task))) {
-    COMMON_LOG(WARN, "failed to push task", K(ret));
   } else {
     ObThreadCondGuard guard(task_thread_cond_);
     task_thread_cond_.signal();
@@ -349,7 +337,6 @@ void *ObDynamicThreadPool::task_thread_func(void *data)
         }
       }
     }
-    COMMON_LOG(INFO, "task thread exits", K(*thread_info));
   }
   return NULL;
 }
@@ -368,7 +355,6 @@ int ObSimpleThreadPoolDynamicMgr::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(TG_SET_RUNNABLE_AND_START(lib::TGDefIDs::QUEUE_THREAD_MANAGER, *this))) {
-    COMMON_LOG(WARN, "start thread failed");
   } else {
     is_inited_ = true;
   }
@@ -425,10 +411,8 @@ int ObSimpleThreadPoolDynamicMgr::bind(ObSimpleDynamicThreadPool *pool)
   } else {
     SpinWLockGuard guard(pool_list_lock_);
     if (OB_FAIL(pool_list_.push_back(pool))) {
-      COMMON_LOG(WARN, "bind simple thread pool failed", KP(pool));
     } else {
       pool->has_bind_ = true;
-      COMMON_LOG(INFO, "bind simple thread pool success", K(*pool));
     }
   }
   return ret;
@@ -439,7 +423,6 @@ int ObSimpleThreadPoolDynamicMgr::unbind(ObSimpleDynamicThreadPool *pool)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(NULL == pool)) {
     ret = OB_INVALID_ARGUMENT;
-    COMMON_LOG(WARN, "unbind pool failed");
   } else if (!pool->has_bind_) {
     // do-nothing
   } else {
@@ -454,7 +437,6 @@ int ObSimpleThreadPoolDynamicMgr::unbind(ObSimpleDynamicThreadPool *pool)
       COMMON_LOG(WARN, "failed to remove pool from mgr list", K(ret), K(idx), KP(pool));
     } else {
       pool->has_bind_ = false;
-      COMMON_LOG(INFO, "unbind simple thread pool", K(*pool), K(idx));
     }
   }
   return ret;

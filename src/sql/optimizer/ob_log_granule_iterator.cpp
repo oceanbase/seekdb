@@ -58,7 +58,6 @@ int ObLogGranuleIterator::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
-    LOG_WARN("failed to get exprs", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -79,7 +78,6 @@ int ObLogGranuleIterator::get_plan_item_info(PlanText &plan_text,
         force_partition_granule(), slave_mapping_granule(),
         desc_order(), asc_order() };
   if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
-    LOG_WARN("failed to get plan item info", K(ret));
   }
   BEGIN_BUF_PRINT;
   for (int64_t i = 0; OB_SUCC(ret) && i < FLAG_NEED_PRINT_COUNT; ++i) {
@@ -90,7 +88,6 @@ int ObLogGranuleIterator::get_plan_item_info(PlanText &plan_text,
     } else if (OB_FAIL(BUF_PRINTF("%.*s", 
                                   MAX_GI_FLAG_NAME_LENGTH, 
                                   gi_flag_name[i]))) {
-      LOG_WARN("BUF_PRINTF fails", K(ret));
     } else {
       has_first = true;
     }
@@ -102,7 +99,6 @@ int ObLogGranuleIterator::get_plan_item_info(PlanText &plan_text,
       OB_INVALID_ID != get_join_filter_info().filter_id_) {
     BEGIN_BUF_PRINT;
     if (OB_FAIL(BUF_PRINTF(":RF%04ld", get_join_filter_info().filter_id_))) {
-      LOG_WARN("failed to print str", K(ret));
     }
     END_BUF_PRINT(plan_item.object_alias_, 
                   plan_item.object_alias_len_);
@@ -114,7 +110,6 @@ int ObLogGranuleIterator::allocate_expr_post(ObAllocExprContext &ctx)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObLogicalOperator::allocate_expr_post(ctx))) {
-    LOG_WARN("failed to allocate expr post", K(ret));
   } else if (NULL != tablet_id_expr_ &&
             OB_FAIL(get_plan()->get_optimizer_context().get_all_exprs().append(tablet_id_expr_))) {
     LOG_WARN("failed to append expr", K(ret));
@@ -130,7 +125,6 @@ int ObLogGranuleIterator::compute_op_ordering()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::compute_op_ordering())) {
-    LOG_WARN("failed to compute ordering info", K(ret));
   } else if (!child->is_exchange_allocated() && child->get_is_range_order() &&
              OB_FAIL(set_range_order())) {
     LOG_WARN("failed to set partition order", K(ret));
@@ -168,7 +162,6 @@ int ObLogGranuleIterator::set_range_order()
     bool is_asc_order = is_ascending_direction(op_ordering.at(0).order_type_);
     bool used = true;
     if (OB_FAIL(check_op_orderding_used_by_parent(used))) {
-      LOG_WARN("failed to check op ordering used by parent", K(ret));
     } else if (!used) {
       //do nothing
     } else if (is_asc_order) {
@@ -226,7 +219,6 @@ int ObLogGranuleIterator::check_adaptive_task_splitting(ObLogTableScan *tsc)
     // for rescanable gi, we can not handle the rescan process among all workers since gi task
     // changes cross several rescan tasks
   } else if (OB_FAIL(check_exist_deadlock_condition(this, exist_deadlock_condition))) {
-    LOG_WARN("failed to check_exist_deadlock_condition");
   } else if (exist_deadlock_condition) {
     // adaptive task splitting will add a synchronize point which may cause deadlock with other
     // synchronize point so disable this feature in some cases
@@ -314,7 +306,6 @@ int ObLogGranuleIterator::branch_has_exchange(const ObLogicalOperator *op, bool 
   } else {
     for (int64_t i = 0; i < op->get_num_of_child() && OB_SUCC(ret) && !has_exchange; ++i) {
       if (OB_FAIL(SMART_CALL(branch_has_exchange(op->get_child(i), has_exchange)))) {
-        LOG_WARN("failed to branch_has_exchange");
       }
     }
   }
@@ -341,7 +332,6 @@ int ObLogGranuleIterator::check_exist_deadlock_condition(const ObLogicalOperator
     // no crossing dfo search
   } else if (parent_op->get_num_of_child() == 1) {
     if (OB_FAIL(SMART_CALL(check_exist_deadlock_condition(parent_op, exist)))) {
-      LOG_WARN("failed to check_exist_deadlock_condition");
     }
   } else {
     bool continue_check = true;
@@ -361,7 +351,6 @@ int ObLogGranuleIterator::check_exist_deadlock_condition(const ObLogicalOperator
       bool has_exchange = false;
       for (int64_t i = this_child_idx + 1; i < parent_op->get_num_of_child() && OB_SUCC(ret); ++i) {
         if (OB_FAIL(branch_has_exchange(parent_op->get_child(i), has_exchange))) {
-          LOG_WARN("failed to branch_has_exchange");
         } else if (has_exchange) {
           exist = true;
           break;
@@ -371,7 +360,6 @@ int ObLogGranuleIterator::check_exist_deadlock_condition(const ObLogicalOperator
     if (OB_FAIL(ret)) {
     } else if (exist || !continue_check) {
     } else if (OB_FAIL(SMART_CALL(check_exist_deadlock_condition(parent_op, exist)))) {
-      LOG_WARN("failed to check_exist_deadlock_condition");
     }
   }
   return ret;

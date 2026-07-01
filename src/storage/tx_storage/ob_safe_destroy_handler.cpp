@@ -85,7 +85,6 @@ int ObSafeDestroyTaskQueue::init(int queue_capacity)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(queue_.init(queue_capacity))) {
-    LOG_WARN("init queue failed", K(ret));
   }
   return ret;
 }
@@ -104,7 +103,6 @@ int ObSafeDestroyTaskQueue::push(ObSafeDestroyTask *task)
   } else {
     task->set_receive_timestamp(ObTimeUtility::current_time());
     if (OB_FAIL(queue_.push(task))) {
-      LOG_WARN("push into queue failed", K(ret));
     }
   }
   return ret;
@@ -138,7 +136,6 @@ void ObSafeDestroyTaskQueue::loop()
   }
   ObSafeDestroyProcessFunctor fn;
   if (OB_FAIL(for_each(fn))) {
-    LOG_WARN("loop failed", K(ret));
   }
   if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {
     LOG_INFO("ObSafeDestroyTaskQueue::loop finish", K(ret), K(queue_.size()));

@@ -40,9 +40,7 @@ int ObTxTable::init(ObLS *ls)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(ret), KP(ls));
   } else if (OB_FAIL(tx_data_table_.init(ls, &tx_ctx_table_))) {
-    LOG_WARN("tx data table init failed", K(ret));
   } else if (OB_FAIL(tx_ctx_table_.init(ls->get_ls_id()))) {
-    LOG_WARN("tx ctx table init failed", K(ret));
   } else {
     ls_ = ls;
     ls_id_ = ls->get_ls_id();
@@ -74,7 +72,6 @@ int ObTxTable::prepare_offline()
 {
   int ret = OB_SUCCESS;
   ATOMIC_STORE(&state_, TxTableState::PREPARE_OFFLINE);
-  TRANS_LOG(INFO, "tx table prepare offline succeed", KPC(this));
   return ret;
 }
 
@@ -96,9 +93,7 @@ int ObTxTable::offline_tx_ctx_table_()
     }
   } else if (FALSE_IT(tablet = handle.get_obj())) {
   } else if (OB_FAIL(tablet->release_memtables())) {
-    LOG_WARN("failed to release memtables", K(ret), KPC(ls_));
   } else if (OB_FAIL(tx_ctx_table_.offline())) {
-    LOG_WARN("failed to offline tx ctx table", K(ret), KPC(ls_));
   } else {
     // do nothing
   }
@@ -113,7 +108,6 @@ int ObTxTable::offline_tx_data_table_()
     ret = OB_NOT_INIT;
     STORAGE_LOG(WARN, "tx table is not init", KR(ret));
   } else if (OB_FAIL(tx_data_table_.offline())) {
-    STORAGE_LOG(WARN, "tx data table offline failed", KR(ret), K(ls_id_));
   }
   return ret;
 }
@@ -129,9 +123,7 @@ int ObTxTable::offline()
     ret = OB_NOT_INIT;
     LOG_WARN("tx table is not init.", KR(ret));
   } else if (OB_FAIL(offline_tx_ctx_table_())) {
-    LOG_WARN("offline tx ctx table failed", K(ret));
   } else if (OB_FAIL(offline_tx_data_table_())) {
-    LOG_WARN("offline tx data table failed", K(ret));
   } else {
     recycle_record_.reset();
     (void)disable_upper_trans_calculation();
@@ -153,9 +145,7 @@ int ObTxTable::online()
     ret = OB_NOT_INIT;
     LOG_WARN("tx table is not init.", KR(ret));
   } else if (OB_FAIL(tx_data_table_.online())) {
-    LOG_WARN("failed to online tx data table", K(ret));
   } else if (OB_FAIL(load_tx_ctx_table_())) {
-    LOG_WARN("failed to load tx ctx table", K(ret));
   } else {
     recycle_record_.reset();
     (void)reset_ctx_min_start_scn_info_();
@@ -171,7 +161,6 @@ int ObTxTable::prepare_for_safe_destroy()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tx_data_table_.prepare_for_safe_destroy())) {
-    LOG_WARN("tx data table prepare for safe destory failed", KR(ret));
   }
   return ret;
 }
@@ -186,14 +175,11 @@ int ObTxTable::create_tablet(const lib::Worker::CompatMode compat_mode, const SC
     
     const share::ObLSID &ls_id = ls_->get_ls_id();
     if (OB_FAIL(create_data_tablet_(ls_id, compat_mode, create_scn))) {
-      LOG_WARN("create data tablet failed", K(ret));
     } else if (OB_FAIL(create_ctx_tablet_(ls_id, compat_mode, create_scn))) {
-      LOG_WARN("create ctx tablet failed", K(ret));
     }
     if (OB_FAIL(ret)) {
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(remove_tablet())) {
-        LOG_WARN("remove tablet failed", K(tmp_ret));
       }
     }
   }
@@ -247,19 +233,12 @@ int ObTxTable::get_ctx_table_schema_(share::schema::ObTableSchema &schema)
   schema.set_schema_version(SCHEMA_VERSION);
 
   if (OB_FAIL(id_column.set_column_name(AUTO_INC_ID))) {
-    LOG_WARN("failed to set column name", K(ret), K(AUTO_INC_ID));
   } else if (OB_FAIL(meta_column.set_column_name(META_NAME))) {
-    LOG_WARN("failed to set column name", K(ret), K(META_NAME));
   } else if (OB_FAIL(value_column.set_column_name(VALUE_NAME))) {
-    LOG_WARN("failed to set column name", K(ret), K(VALUE_NAME));
   } else if (OB_FAIL(schema.set_table_name(TABLE_NAME))) {
-    LOG_WARN("failed to set table name", K(ret), K(TABLE_NAME));
   } else if (OB_FAIL(schema.add_column(id_column))) {
-    LOG_WARN("failed to add column", K(ret), K(id_column));
   } else if (OB_FAIL(schema.add_column(meta_column))) {
-    LOG_WARN("failed to add column", K(ret), K(meta_column));
   } else if (OB_FAIL(schema.add_column(value_column))) {
-    LOG_WARN("failed to add column", K(ret), K(value_column));
   } else {
     schema.set_micro_index_clustered(false);
   }
@@ -275,18 +254,13 @@ int ObTxTable::create_ctx_tablet_(const ObLSID ls_id,
   ObArenaAllocator arena_allocator;
   ObCreateTabletSchema create_tablet_schema;
   if (OB_FAIL(get_ctx_table_schema_( table_schema))) {
-    LOG_WARN("get ctx table schema failed", K(ret));
   } else if (OB_FAIL(create_tablet_schema.init(arena_allocator, table_schema, compat_mode,
         false/*skip_column_info*/, DATA_CURRENT_VERSION))) {
-    LOG_WARN("failed to init storage schema", KR(ret), K(table_schema));
   } else if (OB_FAIL(ls_->create_ls_inner_tablet(ls_id,
                                                  LS_TX_CTX_TABLET,
                                                  ObLS::LS_INNER_TABLET_FROZEN_SCN,
                                                  create_tablet_schema,
                                                  create_scn))) {
-    LOG_WARN("create tx ctx tablet failed", K(ret), K(ls_id),
-             K(LS_TX_CTX_TABLET), K(ObLS::LS_INNER_TABLET_FROZEN_SCN),
-             K(table_schema), K(compat_mode), K(create_scn));
   }
   return ret;
 }
@@ -365,27 +339,16 @@ int ObTxTable::get_data_table_schema_(share::schema::ObTableSchema &schema)
   schema.set_schema_version(SCHEMA_VERSION);
 
   if (OB_FAIL(tx_id_column.set_column_name(TX_ID_NAME))) {
-    LOG_WARN("failed to set column name", KR(ret), K(TX_ID_NAME));
   } else if (OB_FAIL(idx_column.set_column_name(IDX_NAME))) {
-    LOG_WARN("failed to set column name", KR(ret), K(IDX_NAME));
   } else if (OB_FAIL(total_row_cnt_column.set_column_name(TOTAL_ROW_CNT_NAME))) {
-    LOG_WARN("failed to set column name", KR(ret), K(TOTAL_ROW_CNT_NAME));
   } else if (OB_FAIL(end_ts_column.set_column_name(END_SCN_NAME))) {
-    LOG_WARN("failed to set column name", KR(ret), K(END_SCN_NAME));
   } else if (OB_FAIL(value_column.set_column_name(VALUE_NAME))) {
-    LOG_WARN("failed to set column name", KR(ret), K(VALUE_NAME));
   } else if (OB_FAIL(schema.set_table_name(TABLE_NAME))) {
-    LOG_WARN("failed to set table name", K(ret), K(TABLE_NAME));
   } else if (OB_FAIL(schema.add_column(tx_id_column))) {
-    LOG_WARN("failed to add column", K(ret), K(tx_id_column));
   } else if (OB_FAIL(schema.add_column(idx_column))) {
-    LOG_WARN("failed to add column", K(ret), K(idx_column));
   } else if (OB_FAIL(schema.add_column(total_row_cnt_column))) {
-    LOG_WARN("failed to add column", K(ret), K(total_row_cnt_column));
   } else if (OB_FAIL(schema.add_column(end_ts_column))) {
-    LOG_WARN("failed to add column", K(ret), K(end_ts_column));
   } else if (OB_FAIL(schema.add_column(value_column))) {
-    LOG_WARN("failed to add column", K(ret), K(value_column));
   } else {
     schema.set_micro_index_clustered(false);
   }
@@ -401,18 +364,13 @@ int ObTxTable::create_data_tablet_(const ObLSID ls_id,
   ObArenaAllocator arena_allocator;
   ObCreateTabletSchema create_tablet_schema;
   if (OB_FAIL(get_data_table_schema_( table_schema))) {
-    LOG_WARN("get data table schema failed", K(ret));
   } else if (OB_FAIL(create_tablet_schema.init(arena_allocator, table_schema, compat_mode,
         false/*skip_column_info*/, DATA_CURRENT_VERSION))) {
-    LOG_WARN("failed to init storage schema", KR(ret), K(table_schema));
   } else if (OB_FAIL(ls_->create_ls_inner_tablet(ls_id,
                                                  LS_TX_DATA_TABLET,
                                                  ObLS::LS_INNER_TABLET_FROZEN_SCN,
                                                  create_tablet_schema,
                                                  create_scn))) {
-    LOG_WARN("create tx data tablet failed", K(ret), K(ls_id),
-             K(LS_TX_DATA_TABLET), K(ObLS::LS_INNER_TABLET_FROZEN_SCN),
-             K(table_schema), K(compat_mode), K(create_scn));
   }
   return ret;
 }
@@ -422,7 +380,6 @@ int ObTxTable::remove_tablet_(const common::ObTabletID &tablet_id)
   int ret = OB_SUCCESS;
   const share::ObLSID &ls_id = ls_->get_ls_id();
   if (OB_FAIL(ls_->remove_ls_inner_tablet(ls_id, tablet_id))) {
-    LOG_WARN("remove ls inner tablet failed", K(ret), K(ls_id), K(tablet_id));
   }
   return ret;
 }
@@ -460,21 +417,15 @@ int ObTxTable::load_tx_ctx_table_()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("get ls tablet svr failed", K(ret));
   } else if (OB_FAIL(ls_tablet_svr->get_tablet(LS_TX_CTX_TABLET, handle))) {
-    LOG_WARN("get tablet failed", K(ret));
   } else if (FALSE_IT(tablet = handle.get_obj())) {
   } else if (OB_FAIL(tablet->fetch_table_store(table_store_wrapper))) {
-    LOG_WARN("fail to fetch table store", K(ret));
   } else if (OB_FAIL(ls_tablet_svr->create_memtable(LS_TX_CTX_TABLET, arg/* use default arg */))) {
-    LOG_WARN("failed to create memtable", K(ret));
   } else if (OB_FAIL(ls_tablet_svr->get_tx_ctx_memtable_mgr(mgr_handle))) {
-    LOG_WARN("failed to get memtable mgr", K(ret));
   } else if (OB_ISNULL(mgr_handle.get_memtable_mgr())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get memtable mgr", K(ret));
   } else if (OB_FAIL(mgr_handle.get_memtable_mgr()->get_active_memtable(table_handle))) {
-    LOG_WARN("failed to get memtable handle", K(ret));
   } else if (OB_FAIL(table_handle.get_tx_ctx_memtable(memtable))) {
-    LOG_WARN("failed to get tx ctx memtable", K(ret));
   } else {
     const ObSSTableArray &sstables = table_store_wrapper.get_member()->get_minor_sstables();
 
@@ -483,12 +434,9 @@ int ObTxTable::load_tx_ctx_table_()
       ObSSTable *sstable = static_cast<ObSSTable *>(sstables[0]);
       if (sstable->is_loaded()) {
       } else if (OB_FAIL(ObCacheSSTableHelper::load_sstable(sstable->get_addr(), false/*load_co_sstable*/, sstable_handle))) {
-        LOG_WARN("fail to load sstable", K(ret), KPC(sstable));
       } else if (OB_FAIL(sstable_handle.get_sstable(sstable))) {
-        LOG_WARN("fail to get sstable", K(ret), K(sstable_handle));
       }
       if (FAILEDx(restore_tx_ctx_table_(*sstable))) {
-        LOG_WARN("fail to restore tx ctx table", K(ret), KPC(sstable));
       } else {
         memtable->set_max_end_scn(sstable->get_end_scn());
       }
@@ -541,26 +489,20 @@ int ObTxTable::restore_tx_ctx_table_(ObITable &trans_sstable)
   iter_param.table_id_ = 1;
 
   if (OB_FAIL(access_context.init(query_flag, store_ctx, allocator, trans_version_range))) {
-    LOG_WARN("failed to init access context", K(ret));
   } else if (OB_FAIL(columns.push_back(key))) {
-    LOG_WARN("failed to push back key", K(ret), K(key));
   } else if (OB_FAIL(columns.push_back(meta))) {
-    LOG_WARN("failed to push back meta", K(ret), K(meta));
   } else if (OB_FAIL(columns.push_back(value))) {
-    LOG_WARN("failed to push back value", K(ret), K(value));
   } else if (OB_FAIL(read_info.init(
               allocator,
               LS_TX_CTX_SCHEMA_COLUMN_CNT,
               LS_TX_CTX_SCHEMA_ROWKEY_CNT,
               columns,
               nullptr/*storage_cols_index*/))) {
-    LOG_WARN("Fail to init read_info", K(ret));
   } else if (FALSE_IT(iter_param.read_info_ = &read_info)) {
   } else if (OB_FAIL(trans_sstable.scan(iter_param,
                                         access_context,
                                         whole_range,
                                         row_iter))) {
-    LOG_WARN("failed to scan trans table", K(ret));
   } else if (NULL == row_iter) {
     // do nothing
   } else {
@@ -570,7 +512,6 @@ int ObTxTable::restore_tx_ctx_table_(ObITable &trans_sstable)
           LOG_WARN("failed to get next row", K(ret));
         }
       } else if (OB_FAIL(tx_ctx_table_.recover(*row, tx_data_table_))) {
-        LOG_WARN("failed to recover tx ctx table", K(ret));
       }
     }
 
@@ -606,7 +547,6 @@ int ObTxTable::alloc_tx_data(ObTxDataGuard &tx_data_guard, const bool enable_thr
     ret = OB_NOT_INIT;
     LOG_WARN("tx table is not init.", KR(ret));
   } else if (OB_FAIL(tx_data_table_.alloc_tx_data(tx_data_guard, enable_throttle, abs_expire_time))) {
-    LOG_WARN("allocate tx data from tx data table fail.", KR(ret));
   }
   return ret;
 }
@@ -618,7 +558,6 @@ int ObTxTable::deep_copy_tx_data(const ObTxDataGuard &in_tx_data_guard, ObTxData
     ret = OB_NOT_INIT;
     LOG_WARN("tx table is not init.", KR(ret));
   } else if (OB_FAIL(tx_data_table_.deep_copy_tx_data(in_tx_data_guard, out_tx_data_guard))) {
-    LOG_WARN("deep copy tx data from tx data table fail", KR(ret));
   }
   return ret;
 }
@@ -630,7 +569,6 @@ int ObTxTable::insert(ObTxData *&tx_data)
     ret = OB_NOT_INIT;
     LOG_WARN("tx table is not init.", KR(ret), KPC(tx_data), KP(this));
   } else if (OB_FAIL(tx_data_table_.insert(tx_data))) {
-    LOG_WARN("allocate tx data from tx data table fail.", KR(ret), KPC(tx_data));
   }
   return ret;
 }
@@ -654,7 +592,6 @@ int ObTxTable::check_with_tx_data(ObReadTxDataArg &read_tx_data_arg, ObITxDataCh
       STORAGE_LOG(WARN, "check tx data in mini cache failed", KR(tmp_ret), K(read_tx_data_arg));
     }
   } else {
-    STORAGE_LOG(DEBUG, "check tx data in mini cache success", K(read_tx_data_arg), K(fn));
     find_tx_data_in_cache = true;
   }
 
@@ -667,7 +604,6 @@ int ObTxTable::check_with_tx_data(ObReadTxDataArg &read_tx_data_arg, ObITxDataCh
       STORAGE_LOG(WARN, "check tx data in kv cache failed", KR(tmp_ret), K(read_tx_data_arg));
     }
   } else {
-    STORAGE_LOG(DEBUG, "check tx data in kv cache success", K(read_tx_data_arg), K(fn));
     find_tx_data_in_cache = true;
   }
 
@@ -700,7 +636,6 @@ int ObTxTable::check_tx_data_in_mini_cache_(ObReadTxDataArg &read_tx_data_arg, O
   } else {
     EVENT_INC(ObStatEventIds::TX_DATA_HIT_MINI_CACHE_COUNT);
     if (OB_FAIL(fn(tx_data))) {
-      STORAGE_LOG(WARN, "check tx data in mini cache failed", KR(ret), K(read_tx_data_arg), K(tx_data));
     }
   }
   return ret;
@@ -734,7 +669,6 @@ int ObTxTable::check_tx_data_in_kv_cache_(ObReadTxDataArg &read_tx_data_arg, ObI
 
       if (ObTxData::RUNNING == tx_data->state_) {
         ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(ERROR, "read an unexpected state tx data from kv cache");
       } else if (!tx_data->op_guard_.is_valid()) {
         // put into mini cache only if this tx data do not have undo actions
         read_tx_data_arg.tx_data_mini_cache_.set(*tx_data);
@@ -751,7 +685,6 @@ int ObTxTable::check_tx_data_in_tables_(ObReadTxDataArg &read_tx_data_arg, ObITx
 
   if (OB_SUCC(tx_ctx_table_.check_with_tx_data(read_tx_data_arg.tx_id_, fn))) {
     EVENT_INC(ObStatEventIds::TX_DATA_READ_TX_CTX_COUNT);
-    TRANS_LOG(DEBUG, "tx ctx table check with tx data succeed", K(read_tx_data_arg), K(fn));
   } else if (OB_TRANS_CTX_NOT_EXIST == ret) {
     ObTxDataGuard tx_data_guard;
     ObTxData *tx_data = nullptr;
@@ -780,7 +713,6 @@ int ObTxTable::check_tx_data_in_tables_(ObReadTxDataArg &read_tx_data_arg, ObITx
 
         int tmp_ret = OB_SUCCESS;
         if (OB_TMP_FAIL(put_tx_data_into_kv_cache_(*tx_data))) {
-          STORAGE_LOG(WARN, "put tx data into kv cache failed", KR(tmp_ret), KPC(tx_data));
         }
       }
     }
@@ -796,11 +728,8 @@ int ObTxTable::put_tx_data_into_kv_cache_(const ObTxData &tx_data)
   ObTxDataCacheValue cache_value;
 
   if (OB_FAIL(cache_value.init(tx_data))) {
-    STORAGE_LOG(WARN, "init tx data cache value failed", KR(ret), K(key), K(cache_value));
   } else if (OB_FAIL(OB_TX_DATA_KV_CACHE.put_row(key, cache_value))) {
-    STORAGE_LOG(WARN, "put tx data cache value failed", KR(ret), K(key), K(cache_value));
   } else {
-    STORAGE_LOG(INFO, "finish put tx data into kv cache", K(key), K(cache_value));
     // put tx data into cache succeed
   }
 
@@ -830,7 +759,6 @@ void ObTxTable::check_state_and_epoch_(const transaction::ObTransID tx_id,
     SCN max_decided_scn = SCN::invalid_scn();
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(ls_->get_max_decided_scn(max_decided_scn))) {
-      LOG_WARN("get max decided scn failed", KR(tmp_ret));
     }
     LOG_WARN("check with tx data failed.", KR(ret), K(tx_id), K(read_epoch), K(max_decided_scn), K(ls_id_), KPC(this));
   }
@@ -947,7 +875,6 @@ int ObTxTable::get_recycle_scn_(const int64_t tx_result_retention_s, share::SCN 
   SCN tablet_recycle_scn = SCN::min_scn();
 
   if (OB_FAIL(tx_data_table_.get_recycle_scn(tablet_recycle_scn))) {
-    TRANS_LOG(WARN, "get recycle scn from tx data table failed.", KR(ret));
   } else if (FALSE_IT(state = ATOMIC_LOAD(&state_))) {
   } else if (FALSE_IT(after_epoch = ATOMIC_LOAD(&epoch_))) {
   } else if (TxTableState::ONLINE != state || prev_epoch != after_epoch) {
@@ -1006,7 +933,6 @@ void ObTxTable::update_min_start_scn_info(const SCN &max_decided_scn)
 {
   if (true == ATOMIC_LOAD(&calc_upper_trans_is_disabled_)) {
     // quit updating if calculate upper trans versions disabled
-    STORAGE_LOG(INFO, "skip update min start scn", K(max_decided_scn), KPC(this));
     return;
   }
 
@@ -1035,20 +961,17 @@ void ObTxTable::update_min_start_scn_info(const SCN &max_decided_scn)
         tmp_min_start_scn_info.min_start_scn_in_ctx_ = min_start_scn;
       } else {
         ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(ERROR, "invalid min start scn status", K(min_start_scn), K(keep_alive_scn), K(status));
       }
 
       if (OB_FAIL(ret)) {
       } else if (tmp_min_start_scn_info.min_start_scn_in_ctx_ < ctx_min_start_scn_info_.min_start_scn_in_ctx_) {
         ret = OB_ERR_UNEXPECTED;
-        STORAGE_LOG(WARN, "invalid min start scn", K(tmp_min_start_scn_info), K(ctx_min_start_scn_info_));
       } else {
         ctx_min_start_scn_info_ = tmp_min_start_scn_info;
       }
     }
   }
 
-  STORAGE_LOG(INFO, "finish update min start scn", K(max_decided_scn), K(ctx_min_start_scn_info_));
 }
 
 void ObTxTable::recycle_tx_data_finish(const share::SCN current_recycle_scn)
@@ -1075,7 +998,6 @@ int ObTxTable::get_upper_trans_version_before_given_scn(const SCN sstable_end_sc
   if (ATOMIC_LOAD(&calc_upper_trans_is_disabled_)) {
     // cannot calculate upper trans version right now
     if (REACH_TIME_INTERVAL(1LL * 1000LL * 1000LL)) {
-      STORAGE_LOG(INFO, "calc upper trans version is disabled", K(calc_upper_trans_is_disabled_), K(sstable_end_scn));
     }
   } else {
     ret = tx_data_table_.get_upper_trans_version_before_given_scn(sstable_end_scn, upper_trans_version);
@@ -1142,7 +1064,6 @@ int ObTxTable::generate_virtual_tx_data_row(const transaction::ObTransID tx_id, 
 int ObTxTable::dump_single_tx_data_2_text(const int64_t tx_id_int, const char *fname)
 {
   int ret = OB_SUCCESS;
-  STORAGE_LOG(INFO, "start dump single tx data");
   char real_fname[OB_MAX_FILE_NAME_LENGTH];
   FILE *fd = NULL;
 
@@ -1151,15 +1072,12 @@ int ObTxTable::dump_single_tx_data_2_text(const int64_t tx_id_int, const char *f
     LOG_WARN("tx table is not init.", KR(ret), K(tx_id_int));
   } else if (OB_ISNULL(fname)) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "fanme is NULL");
   } else if (snprintf(
                  real_fname, sizeof(real_fname), "%s.%ld", fname, ::oceanbase::common::ObTimeUtility::current_time()) >=
              (int64_t)sizeof(real_fname)) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "fname too long", K(fname));
   } else if (NULL == (fd = fopen(real_fname, "w"))) {
     ret = OB_IO_ERROR;
-    STORAGE_LOG(WARN, "open file fail:", K(fname));
   } else {
     int64_t ls_id = ls_->get_ls_id().id();
     
@@ -1177,7 +1095,6 @@ int ObTxTable::dump_single_tx_data_2_text(const int64_t tx_id_int, const char *f
     fd = NULL;
   }
   if (OB_FAIL(ret)) {
-    STORAGE_LOG(WARN, "dump single tx data fail", K(fname), KR(ret));
   }
 
   return ret;
@@ -1202,7 +1119,6 @@ int ObTxTable::get_tx_data_sstable_recycle_scn(share::SCN &recycle_scn)
     ret = OB_NOT_INIT;
     LOG_WARN("tx table is not init.", KR(ret));
   } else if (OB_FAIL(tx_data_table_.get_sstable_recycle_scn(recycle_scn))) {
-    TRANS_LOG(WARN, "get recycle scn from tx data table failed.", KR(ret));
   }
   return ret;
 }

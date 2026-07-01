@@ -361,7 +361,6 @@ static int ob_ssl_load_cert_and_pkey(SSL_CTX* ctx, const ObSSLConfig& ssl_config
 #endif
     } else {
       if (OB_FAIL(ob_ssl_load_cert_and_pkey_for_intl_memory(ctx, ssl_config))) {
-        COMMON_LOG(WARN, "ob_ssl_load_cert_and_pkey_for_intl_memory failed", K(ret));
       } else if (SSL_CTX_check_private_key(ctx) <= 0) {
         ret = OB_ERR_UNEXPECTED;
         COMMON_LOG(WARN, "SSL_CTX_check_private_key failed", K(ret), K(ERR_error_string(ERR_get_error(), NULL)));
@@ -394,9 +393,7 @@ static SSL_CTX* ob_ssl_create_ssl_ctx(const ObSSLConfig& ssl_config)
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(WARN, "SSL_CTX_set_cipher_list failed", K(ret), K(ssl_config.is_sm_), K(ERR_error_string(ERR_get_error(), NULL)));
   } else if (OB_FAIL(ob_ssl_set_verify_mode_and_load_CA(ctx, ssl_config))) {
-    COMMON_LOG(WARN, "ob_ssl_set_verify_mode_and_load_CA failed", K(ret));
   } else if (OB_FAIL(ob_ssl_load_cert_and_pkey(ctx, ssl_config))) {
-    COMMON_LOG(WARN, "ob_ssl_load_cert_and_pkey for client failed", K(ret));
   } else {
     /* client side options */
     SSL_CTX_set_options(ctx, SSL_OP_MICROSOFT_SESS_ID_BUG);
@@ -475,7 +472,6 @@ int ob_ssl_load_config(int ctx_id, const ObSSLConfig& ssl_config)
       is_inited = 1;
     }
     if (OB_FAIL(ob_ssl_config_check(ssl_config))) {
-      COMMON_LOG(WARN, "ob_ssl_config_check failed", K(ctx_id), K(ret));
     } else if (OB_ISNULL(client_ssl_ctx = ob_ssl_create_ssl_ctx(ssl_config))) {
       ret = OB_ERR_UNEXPECTED;
       COMMON_LOG(WARN, "ob_ssl_create_client_ctx failed", K(ctx_id), K(ret));
@@ -485,9 +481,7 @@ int ob_ssl_load_config(int ctx_id, const ObSSLConfig& ssl_config)
     } else {
       SpinWLockGuard guard(gs_ssl_array_lock);
       if (OB_FAIL(ob_ssl_ctx_reconfigure(ctx_id, OB_SSL_ROLE_SERVER, server_ssl_ctx))) {
-        COMMON_LOG(WARN, "ob_ssl_ctx_reconfigure for server failed", K(ctx_id), K(ret));
       } else if (OB_FAIL(ob_ssl_ctx_reconfigure(ctx_id, OB_SSL_ROLE_CLIENT, client_ssl_ctx))) {
-        COMMON_LOG(WARN, "ob_ssl_ctx_reconfigure for client failed", K(ctx_id), K(ret));
       }
     }
   }
@@ -553,13 +547,11 @@ ssize_t ob_read_regard_ssl(int fd, void *buf, size_t nbytes, ssl_state_st &ssl_s
         int ssl_ret = SSL_do_handshake(ssl_st.ssl);
         if (ssl_ret > 0) {
           if ((rbytes = SSL_read(ssl_st.ssl, buf, nbytes)) > 0) {
-            COMMON_LOG(INFO, "read data after SSL_do_handshake succ", K(rbytes), K(fd));
           } else {
             rbytes = -1;
             errno = EINTR;
           }
           ssl_st.hand_shake_done = 1;
-          COMMON_LOG(INFO, "SSL_do_handshake succ", K(fd));
         } else {
           int err = SSL_get_error(ssl_st.ssl, ssl_ret);
           if (SSL_ERROR_WANT_READ == err) {
@@ -630,7 +622,6 @@ ssize_t ob_write_regard_ssl(int fd, const void *buf, size_t nbytes, ssl_state_st
           wbytes = -1;
           errno = EINTR;
           ssl_st.hand_shake_done = 1;
-          COMMON_LOG(INFO, "SSL_do_handshake succ", K(fd));
         } else {
           int err = SSL_get_error(ssl_st.ssl, ssl_ret);
           if (SSL_ERROR_WANT_WRITE == err || SSL_ERROR_WANT_READ == err) {

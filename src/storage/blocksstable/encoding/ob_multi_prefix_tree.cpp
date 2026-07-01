@@ -160,7 +160,6 @@ int ObMultiPrefixTree::init(const int64_t cell_cnt, const int64_t bucket_cnt_lim
     const int64_t cnode_cnt_limit = cell_cnt / CNODE_LIMIT_RATIO + 1;
 
     if (OB_FAIL(ht_.create(bucket_cnt_limit, cnode_cnt_limit, &alloc_))) {
-      LOG_WARN("failed to create hashtable", K(ret), K(cell_cnt));
     } else if (OB_ISNULL(cell_nodes_ = reinterpret_cast<CellNode *>(alloc_.alloc(cnode_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc cell nodes", K(ret), K(cnode_size));
@@ -217,7 +216,6 @@ int ObMultiPrefixTree::try_previous_length(const int64_t last_prefix_length, boo
     stop = true;
     // do nothing
   } else if (OB_FAIL(traverse_by_level(/* level = */ 1, stop, last_prefix_length))) {
-    LOG_WARN("failed to traverse by level using previous length", K(ret));
   } else {
     // for try previous length (root node was split),
     // the cells in root node should be moved to a new tree node,
@@ -255,9 +253,7 @@ int ObMultiPrefixTree::build_tree(
   } else {
 
     if (OB_FAIL(init_root_node(col_datums))) {
-      LOG_WARN("failed to init root node", K(ret), KP(col_datums));
     } else if (OB_FAIL(try_previous_length(last_prefix_length, stop))) {
-      LOG_WARN("failed to try previous length", K(ret), KP(last_prefix_length));
     } else {
       int64_t level = stop ? 0 : 1;
       stop = false;
@@ -282,7 +278,6 @@ int ObMultiPrefixTree::build_tree(
     if (OB_FAIL(ret) || !suitable) {
       // do nothing
     } else if (OB_FAIL(complete_build(prefix_count, prefix_length, last_prefix_length))) {
-      LOG_WARN("failed to complete build prefix tree", K(ret));
     }
   }
   return ret;

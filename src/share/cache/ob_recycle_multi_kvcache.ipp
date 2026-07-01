@@ -280,7 +280,6 @@ int ObRecycleMultiKVCache<K, V>::append(const K &key, Value &&value)
             offset_reserved_ = offset_next_to_appended_ + buffer_len_;
             offset_next_to_appended_ = round_end_offset;
           } else if (OB_FAIL(recycle_one_())) {
-            OCCAM_LOG(WARN, "fail to do recycle", PRINT_WRAPPER);
           }
         } else {
           ret = tmp_ret;
@@ -313,7 +312,6 @@ int ObRecycleMultiKVCache<K, V>::for_each(const K &key, OP &&op) const// optimiz
   } else {
     do {
       if (OB_FAIL(op(iter->v_))) {
-        OCCAM_LOG(DEBUG, "do user op faled on iter", K(key), K(*iter), K(typeid(op).name()), K(*this));
       }
       iter = iter->key_node_next_;
     } while (list != iter && OB_SUCC(ret));
@@ -331,7 +329,6 @@ int ObRecycleMultiKVCache<K, V>::for_each(OP &&op) const// optimized for point s
   while (OB_SUCC(ret) && offset - offset_next_to_appended_ != buffer_len_) {
     KVNode<K, V> *cur = (KVNode<K, V> *)&buffer_[offset % buffer_len_];
     if (OB_FAIL(op(cur->k_, cur->v_))) {
-      OCCAM_LOG(WARN, "fail to apply user op on KVNode", K(*cur), K(*this));
     } else {
       offset += sizeof(KVNode<K, V>) + cur->extre_buffer_size_;
       if (offset == offset_reserved_) {

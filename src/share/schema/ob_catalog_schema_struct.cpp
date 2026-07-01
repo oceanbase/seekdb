@@ -62,11 +62,8 @@ ObCatalogSchema &ObCatalogSchema::operator =(const ObCatalogSchema &src_schema)
     set_name_case_mode(src_schema.name_case_mode_);
 
     if (OB_FAIL(set_catalog_name(src_schema.catalog_name_))) {
-      LOG_WARN("set_tenant_name failed", K(ret));
     } else if (OB_FAIL(set_catalog_properties(src_schema.catalog_properties_))) {
-      LOG_WARN("set_tenant_name failed", K(ret));
     } else if (OB_FAIL(set_comment(src_schema.comment_))) {
-      LOG_WARN("set_comment failed", K(ret));
     } else {} // no more to do
 
     if (OB_FAIL(ret)) {
@@ -145,9 +142,7 @@ ObCatalogPriv& ObCatalogPriv::operator=(const ObCatalogPriv &other)
     int ret = OB_SUCCESS;
     error_ret_ = other.error_ret_;
     if (OB_FAIL(ObPriv::assign(other))) {
-      LOG_WARN("assign failed", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.catalog_, catalog_))) {
-      LOG_WARN("failed to deep copy catalog", K(ret));
     }
     if (OB_FAIL(ret)) {
       error_ret_ = ret;
@@ -192,9 +187,7 @@ OB_DEF_DESERIALIZE(ObCatalogPriv)
   BASE_DESER((, ObPriv));
   LST_DO_CODE(OB_UNIS_DECODE, catalog);
   if (OB_FAIL(ret)) {
-    LOG_WARN("failed to deserialize data", K(ret));
   } else if (OB_FAIL(deep_copy_str(catalog, catalog_))) {
-    LOG_WARN("failed to deep copy catalog", K(catalog), K(ret));
   }
   return ret;
 }

@@ -119,21 +119,17 @@ int ObTableLoadDagTableOpOpenOpTask::process()
   table_op->start_time_ = ObTimeUtil::current_time();
 
   if (OB_FAIL(table_op->open())) {
-    LOG_WARN("fail to open table op", KR(ret), KPC(table_op));
   } else {
     ObSEArray<ObITask *, 1> ddl_start_tasks;
     if (OB_FAIL(dag_->generate_start_tasks(ddl_start_tasks))) {
-      LOG_WARN("fail to generate start tasks", KR(ret));
     } else if (!ddl_start_tasks.empty()) {
       ObITask *last_task = ddl_start_tasks.at(ddl_start_tasks.count() - 1);
       if (OB_FAIL(last_task->deep_copy_children(get_child_nodes()))) {
-        LOG_WARN("fail to deep copy children", KR(ret));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < ddl_start_tasks.count(); ++i) {
       ObITask *task = ddl_start_tasks.at(i);
       if (OB_FAIL(dag_->add_task(*task))) {
-        LOG_WARN("fail to add task", KR(ret));
       }
     }
   }
@@ -153,7 +149,6 @@ int ObTableLoadDagTableOpCloseOpTask::process()
   ObTableLoadTableOpCloseOp *op = static_cast<ObTableLoadTableOpCloseOp *>(op_);
   ObTableLoadTableOp *table_op = op->table_op_;
   if (OB_FAIL(table_op->close())) {
-    LOG_WARN("fail to close table op", KR(ret), KPC(table_op));
   }
 
   table_op->end_time_ = ObTimeUtil::current_time();
@@ -174,7 +169,6 @@ int ObTableLoadDagFinishOpTask::process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(store_ctx_->set_status_merged())) {
-    LOG_WARN("fail to set status merged", KR(ret));
   }
   FLOG_INFO("[DIRECT_LOAD_OP] finish");
   return ret;

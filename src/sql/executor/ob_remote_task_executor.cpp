@@ -48,17 +48,13 @@ int ObRemoteTaskExecutor::execute(ObExecContext &query_ctx, ObJob *job, ObTaskIn
     LOG_WARN("task info is NULL", K(ret));
   } else {
     if (OB_FAIL(ObTaskExecutorCtxUtil::get_stream_handler(query_ctx, handler))) {
-      LOG_WARN("fail get task response handler", K(ret));
     } else if (OB_FAIL(ObTaskExecutorCtxUtil::get_task_executor_rpc(query_ctx, rpc))) {
-      LOG_WARN("fail get executor rpc", K(ret));
     } else if (OB_ISNULL(session) || OB_ISNULL(plan_ctx) || OB_ISNULL(handler) || OB_ISNULL(rpc)
         || OB_ISNULL(retry_info = &session->get_retry_info_for_update())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("unexpected null ptr", K(ret), K(session), K(plan_ctx), K(handler), K(rpc), K(retry_info));
     } else if (OB_FAIL(build_task(query_ctx, *job, *task_info, task))) {
-      LOG_WARN("fail build task", K(ret), K(job), K(task_info));
     } else if (OB_FAIL(handler->reset_and_init_result())) {
-      LOG_WARN("fail to reset and init result", K(ret));
     } else {
       // Set task_info to OB_TASK_STATE_RUNNING state, which may be used for retries later
       task_info->set_state(OB_TASK_STATE_RUNNING);
@@ -114,7 +110,6 @@ int ObRemoteTaskExecutor::execute(ObExecContext &query_ctx, ObJob *job, ObTaskIn
       if (OB_SUCC(ret)) {
         ObExecFeedbackInfo &fb_info = handler->get_result()->get_feedback_info();
         if (OB_FAIL(query_ctx.get_feedback_info().merge_feedback_info(fb_info))) {
-          LOG_WARN("fail to merge exec feedback info", K(ret));
         }
       }
       NG_TRACE_EXT(remote_task_completed, OB_ID(ret), ret,
@@ -162,16 +157,12 @@ int ObRemoteTaskExecutor::build_task(ObExecContext &query_ctx,
     ret = OB_NOT_INIT;
     LOG_WARN("physical plan is NULL", K(ret));
   } else if (OB_FAIL(build_task_op_input(query_ctx, task_info, *root_spec))) {
-    LOG_WARN("fail build op inputs", K(ret));
   } else if (OB_FAIL(DAS_CTX(query_ctx).get_all_lsid(ls_list))) {
-    LOG_WARN("get ls ids failed.", K(ret));
   } else if (OB_FAIL(query_ctx.get_my_session()->get_trans_result().add_touched_ls(ls_list))) {
-    LOG_WARN("add touched ls failed.", K(ret));
   } else {
     const ObTaskInfo::ObRangeLocation &range_loc = task_info.get_range_location();
     for (int64_t i = 0; OB_SUCC(ret) && i < range_loc.part_locs_.count(); ++i) {
       if (OB_FAIL(task.assign_ranges(range_loc.part_locs_.at(i).scan_ranges_))) {
-        LOG_WARN("assign range failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -208,9 +199,6 @@ int ObRemoteTaskExecutor::handle_tx_after_rpc(ObScanner *scanner,
     } else if (OB_FAIL(share::g_mp->trans_service()
                        ->add_tx_exec_result(*tx_desc,
                                             scanner->get_trans_result()))) {
-      LOG_WARN("fail to report tx result", K(ret),
-                 "scanner_trans_result", scanner->get_trans_result(),
-               K(tx_desc));
     } else {
       LOG_TRACE("report tx result",
                 "scanner_trans_result", scanner->get_trans_result(),
@@ -226,9 +214,7 @@ int ObRemoteTaskExecutor::handle_tx_after_rpc(ObScanner *scanner,
         share::ObLSArray ls_ids;
         int tmp_ret = OB_SUCCESS;
         if (OB_TMP_FAIL(das_ctx.get_all_lsid(ls_ids))) {
-          LOG_WARN("get all ls_ids failed", K(tmp_ret));
         } else if (OB_TMP_FAIL(session->get_trans_result().add_touched_ls(ls_ids))) {
-          LOG_WARN("add touched ls to txn failed", K(tmp_ret));
         } else {
          LOG_INFO("add touched ls succ", K(ls_ids));
         }

@@ -83,7 +83,6 @@ int ObCoreLocalStorage<T>::init(int64_t array_len/* = INT64_MAX*/)
     LIB_LOG(WARN, "init twice", K(ret));
   } else if (OB_UNLIKELY(array_len <= 0)) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(WARN , "invalid argument", K(array_len));
   } else if (INT64_MAX == array_len) {
     array_len_ = core_num_ * STORAGE_SIZE_TIMES;
   } else {
@@ -92,7 +91,6 @@ int ObCoreLocalStorage<T>::init(int64_t array_len/* = INT64_MAX*/)
   if (OB_SUCC(ret)) {
     if (NULL == (val_array_ = ob_malloc(ITEM_SIZE * array_len_,
                                         ObModIds::OB_CORE_LOCAL_STORAGE))) {
-      LIB_LOG(ERROR, "ob_malloc failed", K(ITEM_SIZE * array_len_));
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else {
       for (int64_t i = 0; i < array_len_; i++) {
@@ -128,7 +126,6 @@ inline int ObCoreLocalStorage<T>::get_value(T& val) const
   int64_t array_idx = get_array_idx();
   if (OB_FAIL(check_inited())) {
   } else if (OB_ISNULL(val_array_) || OB_UNLIKELY(array_idx < 0) || OB_UNLIKELY(array_idx >= array_len_)) {
-    LIB_LOG(ERROR, "get_value failed", K_(val_array), K(array_idx), K_(array_len));
     ret = OB_ERR_UNEXPECTED;
   } else {
      val = VAL_ARRAY_AT(T, array_idx);
@@ -142,7 +139,6 @@ inline int ObCoreLocalStorage<T>::get_value(int64_t index, T &val) const
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inited())) {
   } else if (NULL == val_array_ || index < 0 || index >= array_len_) {
-    LIB_LOG(ERROR, "get value failed", K_(val_array), K(index), K_(array_len));
     ret = OB_ERR_UNEXPECTED;
   } else {
     val = VAL_ARRAY_AT(T, index);
@@ -157,7 +153,6 @@ inline int ObCoreLocalStorage<T>::set_value(const T & val)
   int64_t array_idx = get_array_idx();
   if (OB_FAIL(check_inited())) {
   } else if (NULL == val_array_ || array_idx < 0 || array_idx >= array_len_) {
-    LIB_LOG(ERROR, "set_value failed", K_(val_array), K(array_idx), K_(array_len));
     ret = OB_ERR_UNEXPECTED;
   } else {
     VAL_ARRAY_AT(T, array_idx) = val;
@@ -171,7 +166,6 @@ inline int ObCoreLocalStorage<T>::set_value(int64_t index, const T &val)
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inited())) {
   } else if (NULL == val_array_ || index < 0 || index >= array_len_) {
-    LIB_LOG(ERROR, "set value failed", K_(val_array), K(index), K_(array_len));
     ret = OB_ERR_UNEXPECTED;
   } else {
     VAL_ARRAY_AT(T, index) = val;
@@ -203,7 +197,6 @@ inline int ObCoreLocalPtr::cas_value(void * & old_val, void * & new_val)
   int64_t array_idx = get_array_idx();
   if (OB_FAIL(check_inited())) {
   } else if (NULL == val_array_ || array_idx < 0 || array_idx >= array_len_) {
-    LIB_LOG(ERROR, "cas_value failed", K_(val_array), K(array_idx), K_(array_len));
     ret = OB_ERR_UNEXPECTED;
   } else if (!__sync_bool_compare_and_swap(&VAL_ARRAY_AT(void *, array_idx), old_val, new_val)) {
     ret = OB_EAGAIN;

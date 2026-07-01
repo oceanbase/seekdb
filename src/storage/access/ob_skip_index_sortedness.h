@@ -43,7 +43,6 @@ public:
     int cmp_ret = 0;
     if (OB_FAIL(cmp_func_.compare(a.datum_, b.datum_, cmp_ret))) {
       sort_ret_ = OB_ERR_UNEXPECTED;
-      STORAGE_LOG(WARN, "Fail to compare datum", KR(sort_ret_), K(a.datum_), K(b.datum_));
     } else if (0 == cmp_ret) {
       has_equal_datum_ = true;
     }

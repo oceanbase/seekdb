@@ -141,7 +141,6 @@ int ObOBJLockCallback::get_redo(
                                    lock_op_->lock_op_,
                                    memtable_->get_key().get_tablet_id(),
                                    this))) {
-    LOG_WARN("get redo failed", K(ret), KP(this), KP_(lock_op));
   }
   LOG_DEBUG("ObOBJLockCallback::get_redo", K(ret), K(*this), K(lock_op_->lock_op_));
   return ret;

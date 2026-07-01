@@ -46,9 +46,7 @@ int ObMemtableBlockRowScanner::init(const storage::ObTableIterParam &param,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memtable block reader failed", KR(ret));
   } else if (OB_FAIL(memtable_reader_->init(param.is_delete_insert_))) {
-    LOG_WARN("init memtable block reader failed", KR(ret));
   } else if (OB_FAIL(row_.init(allocator_, param.get_buffered_out_col_cnt()))) {
-    LOG_WARN("Failed to init datum row", K(ret));
   } else {
     param_ = &param;
     context_ = &context;
@@ -81,9 +79,7 @@ int ObMemtableBlockRowScanner::prefetch()
     use_private_bitmap_ = param_->is_delete_insert_ && nullptr != param_->pushdown_filter_;
     if (use_private_bitmap_) {
       if (OB_FAIL(init_bitmap(filter_bitmap_, true/*is_all_true*/))) {
-        LOG_WARN("Failed to init bitmap", K(ret));
       } else if (OB_FAIL(apply_filter(false))) {
-        LOG_WARN("Fail to apply filter", K(ret));
       }
     }
   }
@@ -123,7 +119,6 @@ int ObMemtableBlockRowScanner::fetch_row(const ObDatumRow *&row)
   row = nullptr;
   ObFilterResult res;
   if (OB_FAIL(get_filter_result(res))) {
-    LOG_WARN("Failed to get pushdown filter result bitmap", K(ret));
   } else {
     bool readed = false;
     while (OB_SUCC(ret) && !readed) {
@@ -132,7 +127,6 @@ int ObMemtableBlockRowScanner::fetch_row(const ObDatumRow *&row)
           LOG_WARN("fail to judge end of block or not", K(ret));
         }
       } else if (OB_FAIL(memtable_reader_->get_next_di_row(res, current_, row_))) {
-        LOG_WARN("Fail to get next di row", K(ret), K_(current));
       } else {
         readed = true;
         row_.fast_filter_skipped_ = is_filter_applied_;

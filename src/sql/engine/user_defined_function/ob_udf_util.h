@@ -172,7 +172,6 @@ int ObUdfUtil::load_function(const common::ObString &name,
     SQL_LOG(WARN, "Can't find symbol", K(ret), K(name), K(func_name));
   } else {
     func = func_tmp;
-    SQL_LOG(DEBUG, "get func_init function", K(handler), K(func));
   }
   return ret;
 }

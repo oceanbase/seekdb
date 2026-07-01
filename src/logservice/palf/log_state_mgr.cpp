@@ -354,7 +354,6 @@ int LogStateMgr::set_scan_disk_log_finished()
     ret = OB_NOT_INIT;
   } else {
     scan_disk_log_finished_ = true;
-    PALF_LOG(INFO, "scan disk log finished", K_(palf_id));
   }
   return ret;
 }
@@ -448,8 +447,6 @@ int LogStateMgr::handle_prepare_request(const common::ObAddr &server,
     if (server != self_ && LEADER == role_) {
       if (is_leader_reconfirm_()) {
         ret = reconfirm_to_follower_pending_();
-        PALF_LOG(INFO, "there is another replica has been leader which used greater prorposl id", K(server),
-            K(proposal_id), K(self_), "local proposal_id", get_proposal_id());
       } else if (is_leader_active_()) {
         ret = leader_active_to_follower_pending_();
       } else {}
@@ -464,7 +461,6 @@ int LogStateMgr::handle_prepare_request(const common::ObAddr &server,
       }
 
       if (OB_FAIL(write_prepare_meta_(proposal_id, server))) {
-        PALF_LOG(WARN, "write_prepare_meta_ failed", K(ret), K_(palf_id), K(proposal_id), K(server));
       }
     }
     PALF_LOG(INFO, "LogStateMgr handle_prepare_request success", K(ret), K_(palf_id),
@@ -498,7 +494,6 @@ int LogStateMgr::reject_prepare_request_(const common::ObAddr &server,
     LogModeMeta fake_mode_meta;
     if (OB_FAIL(log_engine_->submit_prepare_meta_resp(server, proposal_id,
             vote_granted, fake_log_proposal_id, fake_lsn, fake_lsn, fake_mode_meta))) {
-      PALF_LOG(WARN, "submit_prepare_response failed", K(ret), K_(palf_id));
     } else {
       PALF_LOG(INFO, "reject_prepare_request_ success", K(ret), K_(palf_id), K(server), K(proposal_id), K(vote_granted));
     }
@@ -542,13 +537,10 @@ int LogStateMgr::write_prepare_meta_(const int64_t &proposal_id,
     flush_cb_ctx.type_ = PREPARE_META;
     flush_cb_ctx.proposal_id_ = proposal_id;
     if (OB_FAIL(prepare_meta.generate(LogVotedFor(), proposal_id))) {
-      PALF_LOG(WARN, "prepare_meta generate failed", K(ret), K_(palf_id));
     } else if (OB_FAIL(log_engine_->submit_flush_prepare_meta_task(flush_cb_ctx, prepare_meta))) {
-      PALF_LOG(WARN, "submit_flush_prepare_meta_task failed", K(ret), K_(palf_id));
     } else {
       // update prepare with 'proposal-id'
       prepare_meta_ = prepare_meta;
-      PALF_LOG(INFO, "write_prepare_meta_ success", K(prepare_meta), K(new_leader), K(prepare_meta_));
     }
   }
   return ret;
@@ -569,7 +561,6 @@ int LogStateMgr::to_follower_active_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(palf_role_change_cb_->on_role_change(palf_id_))) {
-    PALF_LOG(WARN, "on_leader_revoke failed!", K(ret), K_(palf_id));
   } else {}
   PALF_LOG(INFO, "to_follower_active_ finished!", K(ret), K_(palf_id), K_(self));
   return ret;
@@ -582,7 +573,6 @@ int LogStateMgr::pending_to_follower_active_()
   // Need to update role/state first, then submit role_change_event
   // Otherwise handle role_change event execution may occur first leading to role switch failure
   if (OB_FAIL(to_follower_active_())) {
-    PALF_LOG(ERROR, "to_follower_active_ failed", K(ret), K_(palf_id));
   }
   PALF_REPORT_INFO_KV(K_(leader), K_(pending_end_lsn));
   plugins_->record_role_change_event(palf_id_, FOLLOWER, ObReplicaState::PENDING,
@@ -597,7 +587,6 @@ int LogStateMgr::to_reconfirm_(const int64_t new_leader_epoch)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(sw_->to_leader_reconfirm())) {
-    PALF_LOG(ERROR, "sw to_leader_reconfirm failed", K(ret), K_(palf_id));
   } else {
     reconfirm_start_time_us_ = ObTimeUtility::current_time();
     reset_status_();
@@ -639,7 +628,6 @@ int LogStateMgr::reconfirm_to_follower_pending_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(to_follower_pending_())) {
-    PALF_LOG(WARN, "to_follower_pending_ failed, try again", K(ret), K_(palf_id));
   } else {
     reset_status_();
     update_role_and_state_(FOLLOWER, PENDING);
@@ -660,7 +648,6 @@ int LogStateMgr::reconfirm_to_leader_active_()
   int64_t replica_num = -1;
   LogConfigVersion config_version;
   if (OB_FAIL(mm_->get_config_version(config_version))) {
-    PALF_LOG(WARN, "get_config_version failed", K(ret), K_(palf_id));
   }
   // set_initial_member_list hasn't been called, so self_ may not be in member_list
   // else if (OB_FAIL(mm_->get_alive_member_list_with_arb(member_list, replica_num))) {
@@ -670,15 +657,12 @@ int LogStateMgr::reconfirm_to_leader_active_()
   //            K(member_list), K_(self));
   // }
   else if (OB_FAIL(sw_->to_leader_active())) {
-    PALF_LOG(WARN, "sw leader_active failed", K(ret), K_(palf_id));
   } else {
     update_role_and_state_(LEADER, ACTIVE);
     // Need to update role/state and committed_end_lsn first, then submit role_change_event
     // Otherwise handle role_change event execution may occur first leading to role switch failure
     if (OB_FAIL(to_leader_active_())) {
-      PALF_LOG(ERROR, "to_leader_active_ failed", K(ret), K_(palf_id));
     } else if (OB_FAIL(mm_->submit_broadcast_leader_info(get_proposal_id()))) {
-      PALF_LOG(ERROR, "submit_broadcast_leader_info failed", KR(ret));
     }
     const int64_t reconfirm_to_active_cost = ObTimeUtility::current_time() - reconfirm_start_time_us_;
     PALF_EVENT("reconfirm_to_leader_active end", palf_id_, K(ret), K_(self), K(reconfirm_to_active_cost), K_(role), K_(state));
@@ -696,7 +680,6 @@ int LogStateMgr::leader_active_to_follower_pending_()
 
   if (LEADER == role_) {
     if (OB_FAIL(to_follower_pending_())) {
-      PALF_LOG(WARN, "to_follower_pending_ failed, try again", K(ret), K_(palf_id));
     } else {
       reset_status_();
     }
@@ -724,14 +707,12 @@ void LogStateMgr::reset_status_()
   ATOMIC_STORE(&is_changing_config_with_arb_, false);
   mm_->reset_status();
   mode_mgr_->reset_status();
-  PALF_LOG(INFO, "reset_status_", K_(palf_id), K_(self), K_(leader_epoch), K(leader_));
 }
 
 int LogStateMgr::to_leader_active_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(palf_role_change_cb_->on_role_change(palf_id_))) {
-    PALF_LOG(WARN, "on_leader_takeover failed!", K(ret), K_(palf_id));
   }
   PALF_LOG(INFO, "to_leader_active_ finished!", K(ret), K_(palf_id));
   return ret;
@@ -761,7 +742,6 @@ int LogStateMgr::to_follower_pending_()
   int ret = OB_SUCCESS;
   LSN curr_end_lsn;
   if (OB_FAIL(sw_->to_follower_pending(curr_end_lsn))) {
-    PALF_LOG(WARN, "get_curr_end_lsn failed", K(ret), K_(palf_id));
   } else {
     pending_end_lsn_ = curr_end_lsn;
   }
@@ -792,7 +772,6 @@ bool LogStateMgr::is_pending_log_clear_() const
   } else {
     bool_ret = false;
     if (palf_reach_time_interval(1000 * 1000, check_follower_pending_warn_time_)) {
-      PALF_LOG(INFO, "follower pending log not clear, need wait", K(bool_ret), K_(palf_id), K(last_slide_end_lsn), K_(pending_end_lsn));
     }
   }
   return bool_ret;
@@ -805,7 +784,6 @@ bool LogStateMgr::follower_pending_need_switch_()
   LSN last_slide_end_lsn;
   if (is_pending_log_clear_()) {
     state_changed = true;
-    PALF_LOG(INFO, "follower_pending_need_switch_", K(state_changed), K_(palf_id));
   }
   return state_changed;
 }
@@ -819,7 +797,6 @@ bool LogStateMgr::follower_active_need_switch_()
   } else if (new_leader.is_valid()
              && self_ == new_leader) {
     if (is_arb_replica()) {
-      PALF_LOG(INFO, "arb replica is leader, skip", K_(palf_id), K_(self), K(new_leader));
     } else {
       state_changed = true;
     }
@@ -869,8 +846,6 @@ bool LogStateMgr::is_reconfirm_timeout_()
         (void) sw_->report_log_task_trace(start_id);
       }
     } else if (palf_reach_time_interval(100 * 1000, check_reconfirm_timeout_time_)) {
-      PALF_LOG(INFO, "leader reconfirm need wait", K_(palf_id), K(start_id), K(is_sw_timeout),
-          K_(self), K_(reconfirm));
     } else {
       // do nothing
     }
@@ -889,11 +864,9 @@ bool LogStateMgr::is_reconfirm_state_changed_(int &ret)
   ret = reconfirm_->reconfirm();
   if (OB_EAGAIN == ret) {
   } else if (OB_SUCC(ret)) {
-    PALF_LOG(TRACE, "is_reconfirm_state_changed_", K(bool_ret));
     bool_ret = true;
   } else {
     // election leader may has changed, so ret is maybe OB_NOT_MASTER.
-    PALF_LOG(WARN, "reconfirm failed", K_(palf_id));
     bool_ret = true;
   }
   return bool_ret;
@@ -962,8 +935,6 @@ bool LogStateMgr::need_update_leader_(common::ObAddr &new_leader)
     if (new_leader != leader_ || new_leader_epoch != leader_epoch_) {
       bool_ret = true;
       if (palf_reach_time_interval(1 * 1000 * 1000, update_leader_warn_time_)) {
-        PALF_LOG(WARN, "leader or epoch has changed, need update", K(bool_ret), K(new_leader),
-            K_(palf_id), K(new_leader_epoch), K(leader_), K(leader_epoch_), K_(self));
       }
     }
   }
@@ -993,10 +964,8 @@ bool LogStateMgr::follower_need_update_role_(common::ObAddr &new_leader,
   } else {
     bool_ret = (self_ == new_leader);
     if (bool_ret && is_arb_replica()) {
-      PALF_LOG(INFO, "arb replica is leader, skip", K_(palf_id), K_(self), K(new_leader), K(new_leader_epoch));
       bool_ret = false;
     }
-    PALF_LOG(TRACE, "follower_need_update_role_", K(new_leader), K(new_leader_epoch));
   }
   return bool_ret;
 }
@@ -1005,7 +974,6 @@ void LogStateMgr::set_leader_and_epoch_(const common::ObAddr &new_leader, const 
 {
   leader_ = new_leader;
   leader_epoch_ = new_leader_epoch;
-  PALF_LOG(INFO, "set_leader_and_epoch_", K_(palf_id), K_(self), K(leader_), K(leader_epoch_), K(new_leader));
 }
 
 int LogStateMgr::get_elect_leader_(common::ObAddr &leader,
@@ -1043,7 +1011,6 @@ bool LogStateMgr::check_epoch_is_same_with_election(const int64_t expected_epoch
   ObRole curr_election_role = ObRole::INVALID_ROLE;
   int64_t curr_election_epoch = OB_INVALID_TIMESTAMP;
   if (OB_FAIL(election_->get_role(curr_election_role, curr_election_epoch))) {
-    PALF_LOG(WARN, "get_elect_leader_ failed", K(ret));
   } else if (OB_UNLIKELY(curr_election_role != ObRole::LEADER)) {
     PALF_LOG(WARN, "election is not leader now", K(ret), K(curr_election_role), K(curr_election_epoch));
   } else if (OB_UNLIKELY(curr_election_epoch != expected_epoch)) {
@@ -1095,14 +1062,12 @@ int LogStateMgr::check_and_try_fetch_log_()
   const uint64_t start_id = sw_->get_start_id();
   if (false == ATOMIC_LOAD(&is_sync_enabled_)) {
     if (palf_reach_time_interval(5 * 1000 * 1000, check_sync_enabled_time_)) {
-      PALF_LOG(INFO, "sync is disabled, cannot fetch log", K_(palf_id));
     }
   } else if (OB_INVALID_ID == last_check_start_id_
       || OB_INVALID_TIMESTAMP == last_check_start_id_time_us_
       || (last_check_start_id_ == start_id
           && now_us - last_check_start_id_time_us_ > PALF_FETCH_LOG_INTERVAL_US)) {
     if (OB_FAIL(sw_->try_fetch_log(FetchTriggerType::LOG_LOOP_TH))) {
-      PALF_LOG(WARN, "sw try_fetch_log failed", K(ret), K_(palf_id));
     } else {
       last_check_start_id_ = start_id;
       last_check_start_id_time_us_ = now_us;
@@ -1216,7 +1181,6 @@ int LogStateMgr::get_election_role(common::ObRole &role, int64_t &epoch) const
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(election_->get_role(role, epoch))) {
-    PALF_LOG(WARN, "get elect role failed", K(ret), K_(self), K_(palf_id));
   } else {
     // do nothing
   }

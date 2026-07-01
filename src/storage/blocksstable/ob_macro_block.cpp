@@ -67,7 +67,6 @@ int ObMicroBlockCompressor::init(const int64_t micro_block_size, const ObCompres
     is_none_ = true;
     micro_block_size_ = micro_block_size;
   } else if (OB_FAIL(ObCompressorPool::get_instance().get_compressor(comptype, compressor_))) {
-    STORAGE_LOG(WARN, "Fail to get compressor, ", K(ret), K(comptype));
   } else {
     is_none_ = false;
     micro_block_size_ = micro_block_size;
@@ -87,20 +86,13 @@ int ObMicroBlockCompressor::compress(const char *in, const int64_t in_size, cons
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "compressor is unexpected null", K(ret), K_(compressor));
   } else if (OB_FAIL(compressor_->get_max_overflow_size(in_size, max_overflow_size))) {
-    STORAGE_LOG(WARN, "fail to get max_overflow_size, ", K(ret), K(in_size));
   } else {
     int64_t comp_size = 0;
     int64_t max_comp_size = max_overflow_size + in_size;
     int64_t need_size = std::max(max_comp_size, micro_block_size_ * 2);
     if (OB_FAIL(comp_buf_.ensure_space(need_size))) {
-      STORAGE_LOG(WARN, "macro block writer fail to allocate memory for comp_buf_.", K(ret),
-                  K(need_size));
     } else if (OB_FAIL(compressor_->compress(in, in_size, comp_buf_.data(), max_comp_size, comp_size))) {
-      STORAGE_LOG(WARN, "compressor fail to compress.", K(in), K(in_size),
-                  "comp_ptr", comp_buf_.data(), K(max_comp_size), K(comp_size));
     } else if (comp_size >= in_size) {
-      STORAGE_LOG(TRACE, "compressed_size is larger than origin_size",
-                  K(comp_size), K(in_size));
       out = in;
       out_size = in_size;
     } else {
@@ -123,10 +115,8 @@ int ObMicroBlockCompressor::decompress(const char *in, const int64_t in_size,
     out = in;
     out_size = in_size;
   } else if (OB_FAIL(decomp_buf_.ensure_space(uncomp_size))) {
-    STORAGE_LOG(WARN, "failed to ensure decomp space", K(ret), K(uncomp_size));
   } else if (OB_FAIL(compressor_->decompress(in, in_size, decomp_buf_.data(), uncomp_size,
                                              decomp_size))) {
-    STORAGE_LOG(WARN, "failed to decompress data", K(ret), K(in_size), K(uncomp_size));
   } else {
     out = decomp_buf_.data();
     out_size = decomp_size;
@@ -179,7 +169,6 @@ int ObMacroBlock::init(const ObDataStoreDesc &spec,
       LOG_WARN("invalid argument, cannot create macro block bloom filter for ls inner tablet",
                K(ret), K(spec), K(spec.get_tablet_id()), K(bf_max_row_count));
     } else if (OB_FAIL(macro_block_bf_.alloc_bf(spec, bf_max_row_count))) {
-      LOG_WARN("fail to allocate macro block bloom filter", K(ret), K(spec), K(bf_max_row_count));
     }
   }
   // Init macro block.
@@ -208,10 +197,7 @@ int ObMacroBlock::inner_init()
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "unexpected null spec", K(ret));
   } else if (OB_FAIL(data_.ensure_space(spec_->get_macro_block_size()))) {
-    STORAGE_LOG(WARN, "macro block fail to ensure space for data.",
-                K(ret), "macro_block_size", spec_->get_macro_block_size());
   } else if (OB_FAIL(reserve_header(*spec_, cur_macro_seq_))) {
-    STORAGE_LOG(WARN, "macro block fail to reserve header.", K(ret));
   } else if (spec_->is_cg()) {
     last_rowkey_.set_min_rowkey(); // used to protect cg sstable
   }
@@ -271,16 +257,13 @@ int ObMacroBlock::write_micro_block(const ObMicroBlockDesc &micro_block_desc,
   int ret = OB_SUCCESS;
   data_offset = data_.length();
   if (OB_FAIL(check_micro_block(micro_block_desc))) {
-    STORAGE_LOG(WARN, "fail to check micro block", K(ret));
   } else if (OB_FAIL(inner_init())) {
-    STORAGE_LOG(WARN, "fail to inner init", K(ret));
   } else if (!spec_->is_cg()) {
     const ObDatumRowkey &last_rowkey = micro_block_desc.last_rowkey_;
     if (OB_UNLIKELY(last_rowkey.get_datum_cnt() != spec_->get_rowkey_column_count())) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "unexpected rowkey count", K(ret), K(last_rowkey), KPC_(spec));
     } else if (OB_FAIL(last_rowkey.deep_copy(last_rowkey_, allocator_))) {
-      STORAGE_LOG(WARN, "fail to deep copy last rowkey", K(ret), K(last_rowkey));
     }
   }
   if (OB_SUCC(ret)) {
@@ -291,10 +274,8 @@ int ObMacroBlock::write_micro_block(const ObMicroBlockDesc &micro_block_desc,
     is_dirty_ = true;
     int64_t pos = 0;
     if (OB_FAIL(header->serialize(data_.current(), header->header_size_, pos))) {
-      STORAGE_LOG(WARN, "serialize header failed", K(ret), KPC(header));
     } else if (FALSE_IT(MEMCPY(data_.current() + pos, data_buf, data_size))) {
     } else if (OB_FAIL(data_.advance(header->header_size_ + data_size))) {
-      STORAGE_LOG(WARN, "data advance failed", K(ret), KPC(header), K(data_size));
     } else {
       ++macro_header_.fixed_header_.micro_block_count_;
       macro_header_.fixed_header_.micro_block_data_size_ = static_cast<int32_t>(get_data_size() - data_base_offset_);
@@ -315,7 +296,6 @@ int ObMacroBlock::write_micro_block(const ObMicroBlockDesc &micro_block_desc,
         if (OB_FAIL(add_column_checksum(header->column_checksums_,
                                         header->column_count_,
                                         macro_header_.column_checksum_))) {
-          STORAGE_LOG(WARN, "fail to add column checksum", K(ret));
         }
       }
       // Merge micro block bloom filter to macro block.
@@ -323,7 +303,6 @@ int ObMacroBlock::write_micro_block(const ObMicroBlockDesc &micro_block_desc,
       } else if (micro_block_bf == nullptr || !spec_->enable_macro_block_bloom_filter()) {
         // do nothing.
       } else if (OB_FAIL(macro_block_bf_.merge(*micro_block_bf))) {
-        LOG_WARN("fail to merge micro block", K(ret), K(macro_block_bf_), KPC(micro_block_bf));
       }
     }
   }
@@ -339,7 +318,6 @@ int ObMacroBlock::write_index_micro_block(
   int ret = OB_SUCCESS;
   data_offset = data_.length();
   if (OB_FAIL(check_micro_block(micro_block_desc))) {
-    STORAGE_LOG(WARN, "fail to check index micro block", K(ret));
   } else if (OB_UNLIKELY(!is_dirty_)) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "can not write index micro block into empty macro block", K(micro_block_desc), K(ret));
@@ -350,10 +328,8 @@ int ObMacroBlock::write_index_micro_block(
     const int64_t block_size = header->header_size_ + data_size;
     int64_t pos = 0;
     if (OB_FAIL(header->serialize(data_.current(), header->header_size_, pos))) {
-      STORAGE_LOG(WARN, "serialize header failed", K(ret), KPC(header));
     } else if (FALSE_IT(MEMCPY(data_.current() + pos, data_buf, data_size))) {
     } else if (OB_FAIL(data_.advance(block_size))) {
-      STORAGE_LOG(WARN, "data advance failed", K(ret), KPC(header), K(block_size));
     } else if (is_leaf_index_block) {
       macro_header_.fixed_header_.idx_block_offset_ = data_offset;
       macro_header_.fixed_header_.idx_block_size_ = block_size;
@@ -369,7 +345,6 @@ int ObMacroBlock::add_pre_warm_state(const bool micro_block_need_pre_warm)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(micro_block_need_pre_warm_list.push_back(micro_block_need_pre_warm))) {
-    STORAGE_LOG(WARN, "push back failed.", K(ret), K(micro_block_need_pre_warm_list));
   } else if (micro_block_need_pre_warm) {
     need_pre_warm_ = true;
   }
@@ -394,15 +369,12 @@ int ObMacroBlock::flush(ObIMacroBlockFlusher &macro_block_flusher, const bool is
 #ifdef ERRSIM
   ret = OB_E(EventTable::EN_BAD_BLOCK_ERROR) OB_SUCCESS;
   if (OB_CHECKSUM_ERROR == ret) { // obtest will set this code
-    STORAGE_LOG(INFO, "ERRSIM bad block: Insert a bad block.");
     macro_header_.fixed_header_.magic_ = 0;
     macro_header_.fixed_header_.data_checksum_ = 0;
   }
 #endif
   if (OB_FAIL(write_macro_header())) {
-    STORAGE_LOG(WARN, "fail to write macro header", K(ret), K_(macro_header));
   } else if (OB_FAIL(macro_block_flusher.write_disk(*this, is_close_flush))) {
-    STORAGE_LOG(WARN, "fail to write disk", K(ret), K(is_close_flush));
   } else if (NULL != merge_block_info_) {
     merge_block_info_->macro_block_count_++;
     merge_block_info_->occupy_size_ += macro_header_.fixed_header_.occupy_size_;
@@ -468,11 +440,9 @@ int ObMacroBlock::reserve_header(const ObDataStoreDesc &spec, const int64_t &cur
   common_header_.set_payload_size(0);
   common_header_.set_payload_checksum(0);
   if (OB_FAIL(common_header_.set_attr(spec.data_store_type_))) {
-    STORAGE_LOG(WARN, "fail to set attr for common header", K(ret));
   } else if (FALSE_IT(common_header_size = common_header_.get_serialize_size())) {
   // } else if (FALSE_IT(MEMSET(data_.data(), 0, data_.capacity()))) { // no need memset
   } else if (OB_FAIL(data_.advance(common_header_size))) {
-    STORAGE_LOG(WARN, "data buffer is not enough for common header.", K(ret), K(common_header_size));
   } else {
     MEMSET(data_.current(), 0, macro_header_.get_fixed_header_size());
     char *col_types_buf = data_.current()  + macro_header_.get_fixed_header_size();
@@ -483,7 +453,6 @@ int ObMacroBlock::reserve_header(const ObDataStoreDesc &spec, const int64_t &cur
                                    reinterpret_cast<ObObjMeta *>(col_types_buf),
                                    reinterpret_cast<ObOrderType *>(col_orders_buf),
                                    reinterpret_cast<int64_t *>(col_checksum_buf)))){
-      STORAGE_LOG(WARN, "fail to init macro block header", K(ret), K(spec));
     } else {
       macro_header_.fixed_header_.data_seq_ = cur_macro_seq;
       const int64_t expect_base_offset = macro_header_.get_serialize_size() + common_header_size;
@@ -494,7 +463,6 @@ int ObMacroBlock::reserve_header(const ObDataStoreDesc &spec, const int64_t &cur
             K_(macro_header), K(common_header_size), K(spec.get_row_column_count()), K(spec.get_rowkey_column_count()),
             K(spec.get_fixed_header_version()));
       } else if (OB_FAIL(data_.advance(macro_header_.get_serialize_size()))) {
-        STORAGE_LOG(WARN, "macro_block_header_size out of data buffer.", K(ret));
       }
     }
   }
@@ -509,7 +477,6 @@ int ObMacroBlock::write_macro_header()
   const int64_t data_length = data_.length();
   int64_t pos = 0;
   if (OB_FAIL(macro_header_.serialize(data_.data() + common_header_size, buf_len, pos))) {
-    STORAGE_LOG(WARN, "fail to serialize macro block", K(ret), K(macro_header_));
   } else {
     const int64_t common_header_size = common_header_.get_serialize_size();
     const char *payload_buf = data_.data() + common_header_size;
@@ -518,7 +485,6 @@ int ObMacroBlock::write_macro_header()
     common_header_.set_payload_checksum(static_cast<int32_t>(ob_crc64(payload_buf, payload_size)));
 
     if (OB_FAIL(common_header_.build_serialized_header(data_.data(), data_.capacity()))) {
-      STORAGE_LOG(WARN, "Fail to build common header, ", K(ret), K_(common_header));
     }
   }
 
@@ -571,7 +537,6 @@ int ObMacroBlock::get_macro_block_meta(ObDataMacroBlockMeta &macro_meta)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to allocate serialized macro block bloom filter buffer", K(ret), K(serialized_bf_size));
     } else if (OB_FAIL(macro_block_bf_.serialize(serialized_bf_buf, serialized_bf_size, pos))) {
-      LOG_WARN("fail to serialize macro block bloom filter", K(ret), K(macro_block_bf_), K(serialized_bf_size));
     } else {
       macro_meta.val_.macro_block_bf_buf_ = serialized_bf_buf;
       LOG_INFO("serialize macro block bloom filter", K(ret), K(macro_block_bf_));
@@ -581,11 +546,9 @@ int ObMacroBlock::get_macro_block_meta(ObDataMacroBlockMeta &macro_meta)
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(macro_header_.column_checksum_)) {
   } else if (OB_FAIL(macro_meta.val_.column_checksums_.reserve(macro_meta.val_.column_count_))) {
-    STORAGE_LOG(WARN, "fail to reserve checksum array", K(ret), K(macro_meta));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < macro_meta.val_.column_count_; ++i) {
       if (OB_FAIL(macro_meta.val_.column_checksums_.push_back(macro_header_.column_checksum_[i]))) {
-        STORAGE_LOG(WARN, "fail to push column checksum", K(ret), K(macro_meta));
       }
     }
   }

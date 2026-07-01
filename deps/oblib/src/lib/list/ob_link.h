@@ -84,8 +84,6 @@ public:
   inline bool is_empty()
   {
     if (next_ == NULL || prev_ == NULL) {
-      _OB_LOG(ERROR, "dlink item corrupt [link_addr:%p,next:%p,prev:%p]",
-                this, next_, prev_);
       return true;
     }
     return next_ == this;
@@ -96,8 +94,6 @@ public:
   {
     // next_ and prev_ can not be null.
     if (next_ == NULL || prev_ == NULL) {
-      _OB_LOG(ERROR, "dlink item corrupt [link_addr:%p,next:%p,prev:%p]",
-                this, next_, prev_);
     } else {
       link.next_ = next_;
       link.prev_ = this;
@@ -110,8 +106,6 @@ public:
   inline void insert_prev(ObDLink &link)
   {
     if (next_ == NULL || prev_ == NULL) {
-      _OB_LOG(ERROR, "dlink item corrupt [link_addr:%p,next:%p,prev:%p]",
-                this, next_, prev_);
     } else {
       link.prev_ = prev_;
       link.next_ = this;
@@ -124,8 +118,6 @@ public:
   inline void remove()
   {
     if (next_ == NULL || prev_ == NULL) {
-      _OB_LOG(ERROR, "dlink item corrupt [link_addr:%p,next:%p,prev:%p]",
-                this, next_, prev_);
     } else {
       prev_->next_ = next_;
       next_->prev_ = prev_;
@@ -159,8 +151,6 @@ public:
   inline void replace(ObDLink &link)
   {
     if (next_ == NULL || prev_ == NULL) {
-      _OB_LOG(ERROR, "dlink item corrupt [link_addr:%p,next:%p,prev:%p]",
-                this, next_, prev_);
     } else {
       next_->prev_ = &link;
       prev_->next_ = &link;

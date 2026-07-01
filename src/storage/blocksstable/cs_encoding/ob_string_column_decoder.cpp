@@ -87,7 +87,6 @@ int ObStringColumnDecoder::decode_vector(
 
   if (OB_FAIL(ObStringStreamVecDecoder::decode_vector(
     string_ctx, vec_decoder_ctx, nullptr, ObVecDecodeRefWidth::VDRW_NOT_REF, vector_ctx))) {
-    LOG_WARN("fail to decode_vector", K(ret), K(vec_decoder_ctx), K(vector_ctx));
   }
   return ret;
 
@@ -188,7 +187,6 @@ struct FilterTranverseDatum_T<offset_width_V, ObBaseColumnDecoderCtx::ObNullFlag
       if (need_padding_V && OB_FAIL(pad_datum(ctx, cur_datum))) {
         LOG_WARN("failed to pad datum", K(ret));
       } else if (OB_FAIL(op_handle(cur_datum, i))) {
-        LOG_WARN("fail to handle op", KR(ret), K(i), K(ctx), K(cur_datum));
       }
     }
     return ret;
@@ -228,7 +226,6 @@ struct FilterTranverseDatum_T<offset_width_V, ObBaseColumnDecoderCtx::ObNullFlag
       if (need_padding_V && OB_FAIL(pad_datum(ctx, cur_datum))) {
         LOG_WARN("failed to pad datum", K(ret));
       } else if (OB_FAIL(op_handle(cur_datum, i))) {
-        LOG_WARN("fail to handle op", KR(ret), K(i), K(ctx), K(cur_datum));
       }
     }
     return ret;
@@ -275,7 +272,6 @@ struct FilterTranverseDatum_T<offset_width_V, ObBaseColumnDecoderCtx::ObNullFlag
       if (need_padding_V && OB_FAIL(pad_datum(ctx, cur_datum))) {
         LOG_WARN("failed to pad datum", K(ret));
       } else if (OB_FAIL(op_handle(cur_datum, i))) {
-        LOG_WARN("fail to handle op", KR(ret), K(i), K(ctx), K(cur_datum));
       }
     }
     return ret;
@@ -314,7 +310,6 @@ struct FilterTranverseDatum_T<FIX_STRING_OFFSET_WIDTH_V,
       if (need_padding_V && OB_FAIL(pad_datum(ctx, cur_datum))) {
         LOG_WARN("failed to pad datum", K(ret));
       } else if (OB_FAIL(op_handle(cur_datum, i))) {
-        LOG_WARN("fail to handle op", KR(ret), K(i), K(ctx), K(cur_datum));
       }
     }
     return ret;
@@ -352,7 +347,6 @@ struct FilterTranverseDatum_T<FIX_STRING_OFFSET_WIDTH_V,
       if (need_padding_V && OB_FAIL(pad_datum(ctx, cur_datum))) {
         LOG_WARN("failed to pad datum", K(ret));
       } else if (OB_FAIL(op_handle(cur_datum, i))) {
-        LOG_WARN("fail to handle op", KR(ret), K(i), K(ctx), K(cur_datum));
       }
     }
     return ret;
@@ -400,7 +394,6 @@ int ObStringColumnDecoder::pushdown_operator(
       case sql::WHITE_OP_NU:
       case sql::WHITE_OP_NN: {
         if (OB_FAIL(nunn_operator(string_ctx, row_start, row_count, parent, filter, result_bitmap))) {
-          LOG_WARN("fail to handle nunn operator", KR(ret), K(pd_filter_info), K(col_ctx));
         }
         break;
       }
@@ -415,7 +408,6 @@ int ObStringColumnDecoder::pushdown_operator(
           LOG_WARN("invalid argument", KR(ret), K(filter));
         } else if (OB_FAIL(comparison_operator(string_ctx, row_start, row_count, parent, filter,
             result_bitmap))) {
-          LOG_WARN("fail to handle comparison operator", KR(ret), K(pd_filter_info), K(col_ctx));
         }
         break;
       }
@@ -424,13 +416,11 @@ int ObStringColumnDecoder::pushdown_operator(
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("invalid argument", KR(ret), K(filter));
         } else if (OB_FAIL(in_operator(string_ctx, row_start, row_count, parent, filter, result_bitmap))) {
-          LOG_WARN("fail to handle in operator", KR(ret), K(pd_filter_info), K(col_ctx));
         }
         break;
       }
       case sql::WHITE_OP_BT: {
         if (OB_FAIL(bt_operator(string_ctx, row_start, row_count, parent, filter, result_bitmap))) {
-          LOG_WARN("fail to handle bt operator", KR(ret), K(pd_filter_info), K(col_ctx));
         }
         break;
       }
@@ -472,7 +462,6 @@ int ObStringColumnDecoder::nunn_operator(
         }
         return tmp_ret;
       }))) {
-      LOG_WARN("assign function failed", K(ret));
     }
     if (OB_FAIL(ret)) {
     } else if (is_fixed_len_str) {
@@ -486,10 +475,8 @@ int ObStringColumnDecoder::nunn_operator(
     }
   }
   if (OB_FAIL(ret)) {
-    LOG_WARN("nunn_operator failed", KR(ret), K(ctx));
   } else if (sql::WHITE_OP_NN == op_type) {
     if (OB_FAIL(result_bitmap.bit_not())) {
-      LOG_WARN("fail to execute bit not", KR(ret), K(ctx));
     }
   }
 
@@ -526,7 +513,6 @@ int ObStringColumnDecoder::comparison_operator(
       }
       return tmp_ret;
     }))) {
-    LOG_WARN("assign function failed", K(ret));
   }
   if (OB_FAIL(ret)) {
   } else if (is_fixed_len_str) {
@@ -572,7 +558,6 @@ int ObStringColumnDecoder::in_operator(
         }
         return tmp_ret;
       }))) {
-      LOG_WARN("assign function failed", K(ret));
     }
   } else if (cmp_type == ObFilterInCmpType::HASH_SEARCH) {
     if (OB_FAIL(op_handle.assign(
@@ -590,7 +575,6 @@ int ObStringColumnDecoder::in_operator(
         }
         return tmp_ret;
       }))) {
-      LOG_WARN("assign function failed", K(ret));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -646,7 +630,6 @@ int ObStringColumnDecoder::bt_operator(
       }
       return tmp_ret;
     }))) {
-      LOG_WARN("assign function failed", K(ret));
     }
   if (OB_FAIL(ret)) {
   } else if (is_fixed_len_str) {

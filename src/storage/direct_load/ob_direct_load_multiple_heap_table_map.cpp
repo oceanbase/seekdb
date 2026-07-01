@@ -65,7 +65,6 @@ int ObDirectLoadMultipleHeapTableMap::deep_copy_row(const RowType &row, RowType 
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc buf", K(size), KR(ret));
     } else if (OB_FAIL(result_row->deep_copy(row, buf, size, pos))) {
-      LOG_WARN("fail to copy row", KR(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -81,7 +80,6 @@ int ObDirectLoadMultipleHeapTableMap::get_all_key_sorted(ObArray<KeyType> &key_a
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(tablet_map_.get_all_key(key_array))) {
-    LOG_WARN("fail to get all keys", KR(ret));
   }
   if (OB_SUCC(ret)) {
     lib::ob_sort(key_array.begin(), key_array.end());
@@ -99,7 +97,6 @@ int ObDirectLoadMultipleHeapTableMap::add_row(const KeyType &key, const RowType 
       LOG_WARN("fail to copy row", KR(ret));
     }
   } else if (OB_FAIL(tablet_map_.add(key, result_row))) {
-    LOG_WARN("fail to add row", KR(ret));
   }
   return ret;
 }

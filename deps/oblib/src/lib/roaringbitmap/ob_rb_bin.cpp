@@ -161,7 +161,6 @@ int ObRoaringBin::init()
       size_t offset = offsets_[size_ - 1];
       size_t container_size = 0;
       if (OB_FAIL(get_container_size_at_index(size_ - 1, container_size))) {
-        LOG_WARN("failed to get container size", K(ret), K(size_));
       } else if (offset + container_size > roaring_bin_.length()) {
         ret = OB_INVALID_DATA;
         LOG_WARN("ran out of bytes while checking the last container", K(ret), K(size_), K(offset), K(container_size), K(roaring_bin_.length()));
@@ -178,7 +177,6 @@ int ObRoaringBin::init()
       offsets_[k] = read_bytes;
       size_t container_size = 0;
       if (OB_FAIL(get_container_size_at_index(k, container_size))) {
-        LOG_WARN("failed to get container size", K(ret), K(k));
       } else {
         read_bytes += container_size;
       }
@@ -232,7 +230,6 @@ int ObRoaringBin::contains(uint32_t value, bool &is_contains)
     uint8_t container_type = 0;
     roaring::api::container_s *container = nullptr;
     if (OB_FAIL(this->get_container_at_index(idx, container_type, container))) {
-      LOG_WARN("failed to get container at index", K(ret), K(idx));
     } else {
       is_contains = roaring::internal::container_contains(container, lowvalue, container_type);
     }
@@ -268,9 +265,7 @@ int ObRoaringBin::calc_and_cardinality(ObRoaringBin *rb, uint64_t &cardinality)
         roaring::api::container_s *l_container = nullptr;
         roaring::api::container_s *r_container = nullptr;
         if (OB_FAIL(this->get_container_at_index(l_idx, l_container_type, l_container))) {
-          LOG_WARN("failed to get container at index from left ObRoaringBin", K(ret), K(l_idx));
         } else if (OB_FAIL(rb->get_container_at_index(r_idx, r_container_type, r_container))) {
-          LOG_WARN("failed to get container at index from right ObRoaringBin", K(ret), K(r_idx));
         } else {
           container_card = roaring::internal::container_and_cardinality(l_container, l_container_type, r_container, r_container_type);
           cardinality += container_card;
@@ -327,9 +322,7 @@ int ObRoaringBin::calc_and(ObRoaringBin *rb, ObStringBuffer &res_buf, uint64_t &
         roaring::api::container_s *res_container = nullptr;
         int res_container_card = 0;
         if (OB_FAIL(this->get_container_at_index(l_idx, l_container_type, l_container))) {
-          LOG_WARN("failed to get container at index from left ObRoaringBin", K(ret), K(l_idx));
         } else if (OB_FAIL(rb->get_container_at_index(r_idx, r_container_type, r_container))) {
-          LOG_WARN("failed to get container at index from right ObRoaringBin", K(ret), K(r_idx));
         } else {
           ROARING_TRY_CATCH(res_container = roaring::internal::container_and(l_container, l_container_type, r_container, r_container_type, &res_container_type));
         }
@@ -363,9 +356,7 @@ int ObRoaringBin::calc_and(ObRoaringBin *rb, ObStringBuffer &res_buf, uint64_t &
       ROARING_TRY_CATCH(serial_size = static_cast<uint64_t>(roaring::api::roaring_bitmap_portable_size_in_bytes(res_bitmap)));
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(res_buf.reserve(sizeof(uint32_t) + serial_size))) {
-        LOG_WARN("failed to reserve buffer", K(ret), K(serial_size));
       } else if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&high32), sizeof(uint32_t)))) {
-        LOG_WARN("fail to append high32", K(ret), K(high32));
       } else {
         ROARING_TRY_CATCH(real_serial_size = roaring::api::roaring_bitmap_portable_serialize(res_bitmap, res_buf.ptr() + res_buf.length()));
         if (OB_FAIL(ret)) {
@@ -376,7 +367,6 @@ int ObRoaringBin::calc_and(ObRoaringBin *rb, ObStringBuffer &res_buf, uint64_t &
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(res_buf.set_length(res_buf.length() + serial_size))) {
-        LOG_WARN("failed to set buffer length", K(ret));
       }
     }
   }
@@ -417,9 +407,7 @@ int ObRoaringBin::calc_andnot(ObRoaringBin *rb, ObStringBuffer &res_buf, uint64_
         roaring::api::container_s *res_container = nullptr;
         int res_container_card = 0;
         if (OB_FAIL(this->get_container_at_index(l_idx, l_container_type, l_container))) {
-          LOG_WARN("failed to get container at index from left ObRoaringBin", K(ret), K(l_idx));
         } else if (OB_FAIL(rb->get_container_at_index(r_idx, r_container_type, r_container))) {
-          LOG_WARN("failed to get container at index from right ObRoaringBin", K(ret), K(r_idx));
         } else {
           ROARING_TRY_CATCH(res_container = roaring::internal::container_andnot(l_container, l_container_type, r_container, r_container_type, &res_container_type));
         }
@@ -449,7 +437,6 @@ int ObRoaringBin::calc_andnot(ObRoaringBin *rb, ObStringBuffer &res_buf, uint64_
         roaring::api::container_s *res_container = nullptr;
         int res_container_card = 0;
         if (OB_FAIL(this->get_container_at_index(l_idx, res_container_type, res_container))) {
-          LOG_WARN("failed to get container at index from left ObRoaringBin", K(ret), K(l_idx));
         } else if (OB_FALSE_IT(res_container_card = roaring::internal::container_get_cardinality(res_container, res_container_type))) {
         } else if (res_container_card > 0) {
           ROARING_TRY_CATCH(roaring::internal::ra_append(&res_bitmap->high_low_container, l_key, res_container, res_container_type));
@@ -468,7 +455,6 @@ int ObRoaringBin::calc_andnot(ObRoaringBin *rb, ObStringBuffer &res_buf, uint64_
       roaring::api::container_s *res_container = nullptr;
       int res_container_card = 0;
       if (OB_FAIL(this->get_container_at_index(l_idx, res_container_type, res_container))) {
-        LOG_WARN("failed to get container at index from left ObRoaringBin", K(ret), K(l_idx));
       } else if (OB_FALSE_IT(res_container_card = roaring::internal::container_get_cardinality(res_container, res_container_type))) {
       } else if (res_container_card > 0) {
         ROARING_TRY_CATCH(roaring::internal::ra_append(&res_bitmap->high_low_container, l_key, res_container, res_container_type));
@@ -487,9 +473,7 @@ int ObRoaringBin::calc_andnot(ObRoaringBin *rb, ObStringBuffer &res_buf, uint64_
       ROARING_TRY_CATCH(serial_size = static_cast<uint64_t>(roaring::api::roaring_bitmap_portable_size_in_bytes(res_bitmap)));
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(res_buf.reserve(sizeof(uint32_t) + serial_size))) {
-        LOG_WARN("failed to reserve buffer", K(ret), K(serial_size));
       } else if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&high32), sizeof(uint32_t)))) {
-        LOG_WARN("fail to append high32", K(ret), K(high32));
       } else {
         ROARING_TRY_CATCH(real_serial_size = roaring::api::roaring_bitmap_portable_serialize(res_bitmap, res_buf.ptr() + res_buf.length()));
         if (OB_FAIL(ret)) {
@@ -500,7 +484,6 @@ int ObRoaringBin::calc_andnot(ObRoaringBin *rb, ObStringBuffer &res_buf, uint64_
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(res_buf.set_length(res_buf.length() + serial_size))) {
-        LOG_WARN("failed to set buffer length", K(ret));
       }
     }
   }
@@ -743,7 +726,6 @@ int ObRoaring64Bin::init()
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to alloc memory for roaring_bufs_", K(ret), K(bucket));
       } else if (OB_FAIL(roaring_bufs_[bucket]->init())) {
-        LOG_WARN("failed to init roaring_buf", K(ret), K(bucket));
       } else {
         buf += roaring_bufs_[bucket]->get_bin_length();
         read_bytes += roaring_bufs_[bucket]->get_bin_length();
@@ -771,7 +753,6 @@ int ObRoaring64Bin::get_cardinality(uint64_t &cardinality)
     {
       uint64_t this_card = 0;
       if (OB_FAIL(roaring_bufs_[i]->get_cardinality(this_card))) {
-        LOG_WARN("fail to get cardinality from roaring_buf", K(ret), K(i), K(roaring_bufs_[i]));
       } else {
         cardinality += this_card;
       }
@@ -818,7 +799,6 @@ int ObRoaring64Bin::calc_and_cardinality(ObRoaring64Bin *rb, uint64_t &cardinali
         // l_high32 == r_high32
         uint64_t rb32_card = 0;
         if (OB_FAIL(roaring_bufs_[l_idx]->calc_and_cardinality(rb->roaring_bufs_[r_idx], rb32_card))) {
-          LOG_WARN("fail to calc and cardinality", K(ret), K(l_idx), K(r_idx));
         } else {
           cardinality += rb32_card;
           l_idx++;
@@ -840,9 +820,7 @@ int ObRoaring64Bin::calc_and(ObRoaring64Bin *rb, ObStringBuffer &res_buf, uint64
     ret = OB_NOT_INIT;
     LOG_WARN("ObRoaring64Bin is not inited", K(ret));
   } else if (OB_FAIL(res_buf.reserve(roaring_bin_.length() > rb->roaring_bin_.length() ? roaring_bin_.length() : rb->roaring_bin_.length()))) {
-    LOG_WARN("failed to reserve buffer", K(ret), K(roaring_bin_.length()), K(rb->roaring_bin_.length()));
   } else if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&buckets), sizeof(uint64_t)))) {
-    LOG_WARN("fail to append buckets");
   } else {
     uint64_t l_idx = 0;
     uint64_t r_idx = 0;
@@ -858,7 +836,6 @@ int ObRoaring64Bin::calc_and(ObRoaring64Bin *rb, ObStringBuffer &res_buf, uint64
         uint64_t rb32_card = 0;
         ObString rb32_bin = nullptr;
         if (OB_FAIL(roaring_bufs_[l_idx]->calc_and(rb->roaring_bufs_[r_idx], res_buf ,rb32_card, l_high32))) {
-          LOG_WARN("fail to calculate ObRoaringBin andnot", K(ret), K(l_idx), K(r_idx));
         } else if (rb32_card > 0) {
           res_card += rb32_card;
           buckets++;
@@ -885,9 +862,7 @@ int ObRoaring64Bin::calc_andnot(ObRoaring64Bin *rb, ObStringBuffer &res_buf, uin
     ret = OB_NOT_INIT;
     LOG_WARN("ObRoaring64Bin is not inited", K(ret));
   } else if (OB_FAIL(res_buf.reserve(roaring_bin_.length()))) {
-    LOG_WARN("failed to reserve buffer", K(ret), K(roaring_bin_.length()));
   } else if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&buckets), sizeof(uint64_t)))) {
-    LOG_WARN("fail to append buckets");
   } else {
     uint64_t l_idx = 0;
     uint64_t r_idx = 0;
@@ -898,7 +873,6 @@ int ObRoaring64Bin::calc_andnot(ObRoaring64Bin *rb, ObStringBuffer &res_buf, uin
         uint64_t rb32_card = 0;
         ObString rb32_bin = nullptr;
         if (OB_FAIL(roaring_bufs_[l_idx]->calc_andnot(rb->roaring_bufs_[r_idx], res_buf ,rb32_card, l_high32))) {
-          LOG_WARN("fail to calculate ObRoaringBin andnot", K(ret), K(l_idx), K(r_idx));
         } else if (rb32_card > 0) {
           res_card += rb32_card;
           buckets++;
@@ -907,9 +881,7 @@ int ObRoaring64Bin::calc_andnot(ObRoaring64Bin *rb, ObStringBuffer &res_buf, uin
         r_idx++;
       } else {
         if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&l_high32), sizeof(uint32_t)))) {
-          LOG_WARN("fail to append high32", K(ret), K(l_idx), K(l_high32));
         } else if (OB_FAIL(res_buf.append(roaring_bufs_[l_idx]->get_bin()))) {
-          LOG_WARN("fail to append roaring_bin", K(ret), K(l_idx));
         }
         l_idx++;
         buckets++;
@@ -918,9 +890,7 @@ int ObRoaring64Bin::calc_andnot(ObRoaring64Bin *rb, ObStringBuffer &res_buf, uin
     while(OB_SUCC(ret) && l_idx < buckets_) {
       uint32_t l_high32 = high32_[l_idx];
       if (OB_FAIL(res_buf.append(reinterpret_cast<const char*>(&l_high32), sizeof(uint32_t)))) {
-        LOG_WARN("fail to append high32", K(ret), K(l_idx), K(l_high32));
       } else if (OB_FAIL(res_buf.append(roaring_bufs_[l_idx]->get_bin()))) {
-        LOG_WARN("fail to append roaring _bin", K(ret), K(l_idx));
       }
       l_idx++;
       buckets++;

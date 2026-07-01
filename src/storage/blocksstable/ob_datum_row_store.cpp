@@ -66,7 +66,6 @@ int ObDatumRowStore::BlockInfo::append_row(const ObDatumRow &row, const int64_t 
     STORAGE_LOG(WARN, "out of memory range",
         K(ret), K_(block_size), K_(curr_data_pos), K(length));
   } else if (OB_FAIL(row.serialize(get_buffer(), get_remain_size(), pos))) {
-    STORAGE_LOG(WARN, "fail to serialize datum row", K(ret), K(row));
   } else {
     advance(pos);
   }
@@ -137,8 +136,6 @@ int ObDatumRowStore::Iterator::get_next_row(ObDatumRow &row)
     // the last block
     ret = OB_ITER_END;
   } else if (OB_FAIL(row.deserialize(cur_iter_block_->get_buffer_head() + cur_iter_pos_, cur_iter_block_->get_remain_size_for_read(cur_iter_pos_), pos))) {
-    STORAGE_LOG(WARN, "failed to deserialize datum row", K(ret), K(cur_iter_block_->get_block_size()), K(cur_iter_pos_),  
-                                                          K(row.get_serialize_size()), K(pos), K(row)); 
   } else {
     // next
     cur_iter_pos_ += pos;
@@ -195,7 +192,6 @@ int ObDatumRowStore::new_block(int64_t block_size, ObDatumRowStore::BlockInfo *&
   } else {
     block = new(block) BlockInfo(block_size);
     if (OB_FAIL(blocks_.add_last(block))) {
-      STORAGE_LOG(WARN, "failed to add a new block to block list", K(ret));
     }
   }
   return ret;
@@ -206,18 +202,15 @@ int ObDatumRowStore::add_row(const ObDatumRow &row)
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(0 < col_count_) && OB_UNLIKELY(row.count_ != col_count_)) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "all rows should have the same columns", K(col_count_), K(row.count_));
   } else {
     int64_t length = row.get_serialize_size();
     BlockInfo *block = blocks_.get_last();
     if (OB_ISNULL(block) || block->get_remain_size() < length) {
       if (OB_FAIL(new_block(length, block))) {
-        STORAGE_LOG(WARN, "failed to new block", K(ret), K(length));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(block->append_row(row, length))) {
-        STORAGE_LOG(WARN, "failed to append row", K(ret), K(row));
       } else {
         ++row_count_;
       }

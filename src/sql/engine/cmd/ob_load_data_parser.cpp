@@ -101,11 +101,8 @@ int ObODPSGeneralFormat::encrypt()
   ObString encrypted_access_key;
   ObString encrypted_sts_token;
   if (OB_FAIL(encrypt_str(access_id_, encrypted_access_id))) {
-    LOG_WARN("failed to encrypt", K(ret));
   } else if (OB_FAIL(encrypt_str(access_key_, encrypted_access_key))) {
-    LOG_WARN("failed to encrypt", K(ret));
   } else if (OB_FAIL(encrypt_str(sts_token_, encrypted_sts_token))) {
-    LOG_WARN("failed to encrypt", K(ret));
   } else {
     access_id_ = encrypted_access_id;
     access_key_ = encrypted_access_key;
@@ -121,11 +118,8 @@ int ObODPSGeneralFormat::decrypt()
   ObString decrypted_access_key;
   ObString decrypted_sts_token;
   if (OB_FAIL(decrypt_str(access_id_, decrypted_access_id))) {
-    LOG_WARN("failed to encrypt", K(ret));
   } else if (OB_FAIL(decrypt_str(access_key_, decrypted_access_key))) {
-    LOG_WARN("failed to encrypt", K(ret));
   } else if (OB_FAIL(decrypt_str(sts_token_, decrypted_sts_token))) {
-    LOG_WARN("failed to encrypt", K(ret));
   } else {
     access_id_ = decrypted_access_id;
     access_key_ = decrypted_access_key;
@@ -157,29 +151,17 @@ int ObODPSGeneralFormat::deep_copy_str(const ObString &src, ObString &dest)
 int ObODPSGeneralFormat::deep_copy(const ObODPSGeneralFormat &src) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(deep_copy_str(src.access_type_, access_type_))) {
-    LOG_WARN("failed to deep copy", K(ret));
   } else if (OB_FAIL(deep_copy_str(src.access_id_, access_id_))) {
-    LOG_WARN("failed to deep copy", K(ret));
   } else if (OB_FAIL(deep_copy_str(src.access_key_, access_key_))) {
-    LOG_WARN("failed to deep copy", K(ret));
   } else if (OB_FAIL(deep_copy_str(src.sts_token_, sts_token_))) {
-    LOG_WARN("failed to deep copy", K(ret));
   } else if (OB_FAIL(deep_copy_str(src.endpoint_, endpoint_))) {
-    LOG_WARN("failed to deep copy", K(ret));
   } else if (OB_FAIL(deep_copy_str(src.tunnel_endpoint_, tunnel_endpoint_))) {
-    LOG_WARN("failed to deep copy", K(ret));
   } else if (OB_FAIL(deep_copy_str(src.project_, project_))) {
-    LOG_WARN("failed to deep copy", K(ret));
   } else if (OB_FAIL(deep_copy_str(src.schema_, schema_))) {
-    LOG_WARN("failed to deep copy", K(ret));
   } else if (OB_FAIL(deep_copy_str(src.table_, table_))) {
-    LOG_WARN("failed to deep copy", K(ret));
   } else if (OB_FAIL(deep_copy_str(src.quota_, quota_))) {
-    LOG_WARN("failed to deep copy", K(ret));
   } else if (OB_FAIL(deep_copy_str(src.compression_code_, compression_code_))) {
-    LOG_WARN("failed to deep copy", K(ret));
   } else if (OB_FAIL(deep_copy_str(src.region_, region_))) {
-    LOG_WARN("failed to deep copy region for odps general format", K(ret));
   } else {
     collect_statistics_on_create_ = src.collect_statistics_on_create_;
     api_mode_ = src.api_mode_;
@@ -354,9 +336,7 @@ int ObCSVGeneralParser::init(const ObDataInFileStruct &format,
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(format_.init_format(format, file_column_nums, file_cs_type))) {
-    LOG_WARN("fail to init format", K(ret));
   } else if (OB_FAIL(init_opt_variables())) {
-    LOG_WARN("fail to init opt values", K(ret));
   }
 
   return ret;
@@ -369,7 +349,6 @@ int ObCSVGeneralParser::init(const ObCSVGeneralFormat &format)
   format_ = format;
 
   if (OB_FAIL(init_opt_variables())) {
-    LOG_WARN("fail to init opt values", K(ret));
   }
 
   return ret;
@@ -607,7 +586,6 @@ int ObCSVGeneralFormat::load_from_json_data(json::Pair *&node, ObIAllocator &all
   if (OB_NOT_NULL(node) && 0 == node->name_.case_compare(OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::COMPRESSION)])
       && json::JT_STRING == node->value_->get_type()) {
     if (OB_FAIL(compression_algorithm_from_string(node->value_->get_string(), compression_algorithm_))) {
-      LOG_WARN("failed to convert string to compression", K(ret));
     } else {
       node = node->get_next();
     }
@@ -640,7 +618,6 @@ int ObCSVGeneralFormat::load_from_json_data(json::Pair *&node, ObIAllocator &all
   if (OB_NOT_NULL(node) && 0 == node->name_.case_compare(OPTION_NAMES[static_cast<int32_t>(ObCSVOptionsEnum::BINARY_FORMAT)])
       && json::JT_STRING == node->value_->get_type()) {
     if (OB_FAIL(binary_format_from_string(node->value_->get_string(), binary_format_))) {
-      LOG_WARN("failed to convert string to binary format", K(ret));
     } else {
       node = node->get_next();
     }
@@ -690,7 +667,6 @@ int ObParquetGeneralFormat::load_from_json_data(json::Pair *&node, common::ObIAl
   if (OB_NOT_NULL(node) && 0 == node->name_.case_compare(OPTION_NAMES[idx++])
       && json::JT_STRING == node->value_->get_type()) {
     if (OB_FAIL(column_index_type_from_string(node->value_->get_string(), column_index_type_))) {
-      LOG_WARN("failed to convert string to column index type", K(ret));
     } else {
       node = node->get_next();
     }
@@ -758,7 +734,6 @@ int ObOrcGeneralFormat::load_from_json_data(json::Pair *&node, common::ObIAlloca
     if (sz == 0) {
       // do no thing
     } else if (OB_FAIL(column_use_bloom_filter_.allocate_array(allocator, sz))) {
-      LOG_WARN("allocate array failed", K(ret));
     } else {
       int64_t idx = 0;
       DLIST_FOREACH(it, node->value_->get_array()) {
@@ -777,7 +752,6 @@ int ObOrcGeneralFormat::load_from_json_data(json::Pair *&node, common::ObIAlloca
   if (OB_NOT_NULL(node) && 0 == node->name_.case_compare(OPTION_NAMES[idx++])
       && json::JT_STRING == node->value_->get_type()) {
     if (OB_FAIL(column_index_type_from_string(node->value_->get_string(), column_index_type_))) {
-      LOG_WARN("failed to convert string to column index type", K(ret));
     } else {
       node = node->get_next();
     }
@@ -985,7 +959,6 @@ int ObExternalFileFormat::to_string_with_alloc(ObString &str, ObIAllocator &allo
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc buf", K(ret), K(buf_len));
     } else if (OB_FAIL(to_string(buf, buf_len, pos, into_outfile))) {
-      LOG_WARN("failed to write string", K(ret));
     }
   } while (OB_SIZE_OVERFLOW == ret);
   OX(str.assign_ptr(buf, pos));
@@ -1038,9 +1011,7 @@ int ObExternalFileFormat::load_from_string(const ObString &str, ObIAllocator &al
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("format string is empty", K(ret), K(str));
   } else if (OB_FAIL(parser.init(&temp_allocator))) {
-    LOG_WARN("parser init failed", K(ret));
   } else if (OB_FAIL(parser.parse(str.ptr(), str.length(), data))) {
-    LOG_WARN("parse json failed", K(ret), K(str));
   } else if (NULL == data || json::JT_OBJECT != data->get_type()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("error json value", K(ret), KPC(data));
@@ -1093,14 +1064,12 @@ int ObExternalFileFormat::mock_gen_column_def(
     case CSV_FORMAT: {
       uint64_t file_column_idx = column.get_column_id() - OB_APP_MIN_COLUMN_ID + 1;
       if (OB_FAIL(temp_str.append_fmt("%s%lu", N_EXTERNAL_FILE_COLUMN_PREFIX, file_column_idx))) {
-        LOG_WARN("fail to append sql str", K(ret));
       }
       break;
     }
     case ODPS_FORMAT: {
       uint64_t odps_column_idx = column.get_column_id() - OB_APP_MIN_COLUMN_ID + 1;
       if (OB_FAIL(temp_str.append_fmt("%s%lu", N_EXTERNAL_TABLE_COLUMN_PREFIX, odps_column_idx))) {
-        LOG_WARN("fail to append sql str", K(ret));
       } else {
       }
       break;
@@ -1111,12 +1080,10 @@ int ObExternalFileFormat::mock_gen_column_def(
                                         N_EXTERNAL_FILE_ROW,
                                         column.get_column_name_str().length(),
                                         column.get_column_name_str().ptr()))) {
-          LOG_WARN("fail to append sql str", K(ret));
         }
       } else if (parquet_format_.column_index_type_ == sql::ColumnIndexType::POSITION) {
         uint64_t file_column_idx = column.get_column_id() - OB_APP_MIN_COLUMN_ID + 1;
         if (OB_FAIL(temp_str.append_fmt("%s%lu", N_EXTERNAL_FILE_POS, file_column_idx))) {
-          LOG_WARN("fail to append sql str", K(ret));
         }
       } else {
         ret = OB_NOT_SUPPORTED;
@@ -1136,7 +1103,6 @@ int ObExternalFileFormat::mock_gen_column_def(
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ob_write_string(allocator, temp_str.string(), def))) {
-       LOG_WARN("fail to write string", K(ret));
      }
   }
 
@@ -1205,9 +1171,7 @@ int ObExternalFileFormat::StringList::store_strs(ObIArray<ObString> &strs)
   for (int64_t i = 0; OB_SUCC(ret) && i < strs.count(); i++) {
     str.reset();
     if (OB_FAIL(ob_write_string(allocator_, strs.at(i), str))) {
-      LOG_WARN("failed to deep copy string", K(ret));
     } else if (OB_FAIL(strs_.push_back(str))) {
-      LOG_WARN("failed to push back string", K(ret));
     }
   }
   return ret;

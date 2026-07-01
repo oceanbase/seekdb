@@ -452,27 +452,21 @@ public:
       ObExpr::get_serialize_array() = &(const_cast<ObIArray<ObExpr> &>(exprs));
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, expr_cnt))) {
-        SQL_LOG(WARN, "fail to encode op type", K(ret));
       } else if (nullptr == ObExpr::get_serialize_array()) {
         ret = OB_ERR_UNEXPECTED;
         SQL_LOG(WARN, "serialize array is null", K(ret), K(pos), K(expr_cnt));
       } else {
         if (!expr_frame_info.is_mark_serialize()) {
-          SQL_LOG(TRACE, "exprs normal serialization", K(expr_cnt));
           for (int64_t i = 0; i < expr_cnt && OB_SUCC(ret); ++i) {
             if (OB_FAIL(exprs.at(i).serialize(buf, buf_len, pos))) {
-              SQL_LOG(WARN, "failed to serialize expr", K(ret), K(i), K(exprs.at(i)));
             }
           }
         } else {
-          SQL_LOG(TRACE, "exprs mark serialization", K(expr_cnt), K(exprs.count()));
           for (int64_t i = 0; i < expr_cnt && OB_SUCC(ret); ++i) {
             if (expr_frame_info.ser_expr_marks_.at(i)) {
               if (OB_FAIL(exprs.at(i).serialize(buf, buf_len, pos))) {
-                SQL_LOG(WARN, "failed to serialize expr", K(ret), K(i), K(exprs.at(i)));
               }
             } else if (OB_FAIL(ObEmptyExpr::instance().serialize(buf, buf_len, pos))) {
-              SQL_LOG(WARN, "serialize empty expr failed", K(ret), K(i));
             }
           }
         }
@@ -491,13 +485,9 @@ public:
     OB_UNIS_ENCODE(frame_count);
     if (OB_SUCC(ret)) {
       if (OB_FAIL(serialize_frame_info<SERIALIZE_PLAN_PART>(buf, buf_len, pos, expr_frame_info.const_frame_, frames, frame_count))) {
-        SQL_LOG(WARN, "serialize const frame failed", K(ret));
       } else if (OB_FAIL(serialize_frame_info<SERIALIZE_PLAN_PART>(buf, buf_len, pos, expr_frame_info.param_frame_, frames, frame_count))) {
-        SQL_LOG(WARN, "serialize param frame failed", K(ret));
       } else if (OB_FAIL(serialize_frame_info<SERIALIZE_PLAN_PART>(buf, buf_len, pos, expr_frame_info.dynamic_frame_, frames, frame_count))) {
-        SQL_LOG(WARN, "serialize dynamic frame failed", K(ret));
       } else if (OB_FAIL(serialize_frame_info<SERIALIZE_PLAN_PART>(buf, buf_len, pos, expr_frame_info.datum_frame_, frames, frame_count, true))) {
-        SQL_LOG(WARN, "serialize datum frame failed", K(ret));
       }
     }
     SQL_LOG(DEBUG, "trace end ser expr frame info", K(ret), K(buf_len), K(pos));
@@ -612,14 +602,11 @@ public:
       ObExpr::get_serialize_array() = &(const_cast<ObIArray<ObExpr> &>(exprs));
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &expr_cnt))) {
-        SQL_LOG(WARN, "fail to encode op type", K(ret));
       } else if (OB_FAIL(exprs.prepare_allocate(expr_cnt))) {
-        SQL_LOG(WARN, "failed to prepare allocator expr", K(ret));
       } else {
         for (int64_t i = 0; i < expr_cnt && OB_SUCC(ret); ++i) {
           ObExpr &expr = exprs.at(i);
           if (OB_FAIL(expr.deserialize(buf, data_len, pos))) {
-            SQL_LOG(WARN, "failed to serialize expr", K(ret));
           }
         }
       }
@@ -642,19 +629,15 @@ public:
     } else if (OB_FAIL(deserialize_frame_info<DESERIALIZE_PLAN_PART>(
         buf, data_len, pos, ctx.get_allocator(), expr_frame_info.const_frame_,
         const_char_ptrs, frames, frame_cnt))) {
-      SQL_LOG(WARN, "failed to deserialize const frame", K(ret));
     } else if (OB_FAIL(deserialize_frame_info<DESERIALIZE_PLAN_PART>(
         buf, data_len, pos, ctx.get_allocator(), expr_frame_info.param_frame_,
         const_cast<ObIArray<char*>*>(param_frame_ptrs), frames, frame_cnt))) {
-      SQL_LOG(WARN, "failed to deserialize const frame", K(ret));
     } else if (OB_FAIL(deserialize_frame_info<DESERIALIZE_PLAN_PART>(
         buf, data_len, pos, ctx.get_allocator(),expr_frame_info.dynamic_frame_,
         nullptr, frames, frame_cnt))) {
-      SQL_LOG(WARN, "failed to deserialize const frame", K(ret));
     } else if (OB_FAIL(deserialize_frame_info<DESERIALIZE_PLAN_PART>(
         buf, data_len, pos, ctx.get_allocator(),expr_frame_info.datum_frame_,
         nullptr, frames, frame_cnt, true))) {
-      SQL_LOG(WARN, "failed to deserialize const frame", K(ret));
     } else {
       ctx.set_frames(frames);
       ctx.set_frame_cnt(frame_cnt);
@@ -690,13 +673,11 @@ public:
       ObIArray<ObFrameInfo> &non_const_all_frames = const_cast<ObIArray<ObFrameInfo> &>(all_frames);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(non_const_all_frames.reserve(frame_info_cnt))) {
-        SQL_LOG(WARN, "failed to reserve const frame", K(ret));
       } else {
         ObFrameInfo frame_info;
         for (int64_t i = 0; i < frame_info_cnt && OB_SUCC(ret); ++i) {
           OB_UNIS_DECODE(frame_info);
           if (OB_FAIL(non_const_all_frames.push_back(frame_info))) {
-            SQL_LOG(WARN, "failed to push back frame", K(ret), K(i));
           }
         }
       }
@@ -1108,8 +1089,6 @@ public:
            OB_GOT_SIGNAL_ABORTING == current_error_code) &&
            OB_SUCCESS != new_error_code) {
         current_error_code = new_error_code;
-        SQL_LOG(WARN, "QC update the error code. Please visit the corresponding address for more details.",
-            K(new_error_code), K(exec_addr));
         FORWARD_USER_ERROR(new_error_code, from.msg_);
       }
     }
@@ -1143,7 +1122,6 @@ public:
     // **append** warning msg
     for (int i = 0; i < from.warnings_.count(); ++i) {
       if (OB_FAIL(to.warnings_.push_back(from.warnings_.at(i)))) {
-        SQL_LOG(WARN, "Failed to add warning. ignore error & continue", K(ret));
       }
     }
   }
@@ -1169,7 +1147,6 @@ static int get_location_addrs(const T &locations,
   int ret = OB_SUCCESS;
   hash::ObHashSet<ObAddr> addr_set;
   if (OB_FAIL(addr_set.create(locations.size()))) {
-    SQL_LOG(WARN, "fail create addr set", K(locations.size()), K(ret));
   }
   for (auto iter = locations.begin(); OB_SUCC(ret) && iter != locations.end(); ++iter) {
     ret = addr_set.exist_refactored((*iter)->server_);
@@ -1177,9 +1154,7 @@ static int get_location_addrs(const T &locations,
       ret = OB_SUCCESS;
     } else if (OB_HASH_NOT_EXIST == ret) {
       if (OB_FAIL(addrs.push_back((*iter)->server_))) {
-        SQL_LOG(WARN, "fail push back server", K(ret));
       } else if (OB_FAIL(addr_set.set_refactored((*iter)->server_))) {
-        SQL_LOG(WARN, "fail set addr to addr_set", K(ret));
       }
     } else {
       SQL_LOG(WARN, "fail check server exist in addr_set", K(ret));

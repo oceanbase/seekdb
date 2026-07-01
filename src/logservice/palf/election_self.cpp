@@ -61,7 +61,6 @@ int ElectionImpl::init_and_start(const int64_t id,
     self_addr_ = self_addr;
     is_inited_ = true;
     is_running_ = true;
-    PALF_LOG(INFO, "election init and start (single-replica self-leader)", K(id), K(self_addr));
   }
   // NB: palf passes only prepare_change_leader_cb; role_change_cb is the default
   // no-op.  Real leader takeover is synthesized by LogStateMgr (get_role()==LEADER).
@@ -76,7 +75,6 @@ void ElectionImpl::stop()
     PALF_LOG_RET(WARN, OB_NOT_RUNNING, "election is not running or not inited", K_(self_addr));
   } else {
     is_running_ = false;
-    PALF_LOG(INFO, "election stopped", K_(self_addr));
   }
 }
 

@@ -128,7 +128,6 @@ inline ABlock *ObPageManager::alloc_block(uint64_t size, const ObMemAttr &attr)
   ABlock *block = nullptr;
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(get_itid() != itid_)) {
-    _OB_LOG(ERROR, "cross thread not supported, pm_tid: %ld, cur_tid: %ld", itid_, get_itid());
   } else if (OB_UNLIKELY(!is_inited_)) {
     ret = init();
   }
@@ -138,10 +137,6 @@ inline ABlock *ObPageManager::alloc_block(uint64_t size, const ObMemAttr &attr)
     inner_attr.ctx_id_ = ctx_id_;
     block = bs_.alloc_block(size, inner_attr);
     if (OB_UNLIKELY(nullptr == block)) {
-      _OB_LOG(WARN, "oops, alloc failed, ctx_id=%ld hold=%ld limit=%ld",
-              ctx_id_,
-              ta_->get_hold(),
-              ta_->get_limit());
     } else {
       used_ += size;
     }

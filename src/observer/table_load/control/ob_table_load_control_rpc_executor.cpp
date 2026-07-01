@@ -52,7 +52,6 @@ int ObDirectLoadControlPreBeginExecutor::process()
   int ret = OB_SUCCESS;
   LOG_INFO("table load control pre begin", K_(arg));
   if (OB_FAIL(ObTableLoadService::check_tenant())) {
-    LOG_WARN("fail to check tenant", KR(ret));
   }
   if (OB_SUCC(ret)) {
     ObTableLoadTableCtx *table_ctx = nullptr;
@@ -79,14 +78,11 @@ int ObDirectLoadControlPreBeginExecutor::process()
     param.online_sample_percent_ = arg_.online_sample_percent_;
     param.load_level_ = ObDirectLoadLevel::TABLE;
     if (OB_FAIL(create_table_ctx(param, arg_.ddl_param_, table_ctx))) {
-      LOG_WARN("fail to create table ctx", KR(ret));
     }
     if (OB_SUCC(ret)) {
       ObTableLoadStore store(table_ctx);
       if (OB_FAIL(store.init())) {
-        LOG_WARN("fail to init store", KR(ret));
       } else if (OB_FAIL(store.pre_begin())) {
-        LOG_WARN("fail to store pre begin", KR(ret));
       }
     }
     if (OB_NOT_NULL(table_ctx)) {
@@ -104,15 +100,11 @@ int ObDirectLoadControlPreBeginExecutor::create_table_ctx(const ObTableLoadParam
   int ret = OB_SUCCESS;
   table_ctx = nullptr;
   if (OB_FAIL(ObTableLoadService::alloc_ctx(table_ctx))) {
-    LOG_WARN("fail to alloc table ctx", KR(ret), K(param));
   } else if (OB_FAIL(table_ctx->init(param, ddl_param, arg_.session_info_, arg_.exec_ctx_serialized_str_))) {
-    LOG_WARN("fail to init table ctx", KR(ret));
   } else if (OB_FAIL(ObTableLoadStore::init_ctx(table_ctx, arg_.partition_id_array_,
                                                 arg_.target_partition_id_array_))) {
-    LOG_WARN("fail to store init ctx", KR(ret));
   } else if (FALSE_IT(table_ctx->store_ctx_->heart_beat())) {
   } else if (OB_FAIL(ObTableLoadService::add_ctx(table_ctx))) {
-    LOG_WARN("fail to add ctx", KR(ret));
   }
   if (OB_FAIL(ret)) {
     if (nullptr != table_ctx) {
@@ -139,19 +131,15 @@ int ObDirectLoadControlConfirmBeginExecutor::process()
   int ret = OB_SUCCESS;
   LOG_INFO("table load control confirm begin", K_(arg));
   if (OB_FAIL(ObTableLoadService::check_tenant())) {
-    LOG_WARN("fail to check tenant", KR(ret));
   }
   if (OB_SUCC(ret)) {
     ObTableLoadTableCtx *table_ctx = nullptr;
     ObTableLoadUniqueKey key(arg_.table_id_, arg_.task_id_);
     if (OB_FAIL(ObTableLoadService::get_ctx(key, table_ctx))) {
-      LOG_WARN("fail to get table ctx", KR(ret), K(key));
     } else {
       ObTableLoadStore store(table_ctx);
       if (OB_FAIL(store.init())) {
-        LOG_WARN("fail to init store", KR(ret));
       } else if (OB_FAIL(store.confirm_begin())) {
-        LOG_WARN("fail to store confirm begin", KR(ret));
       }
     }
     if (OB_NOT_NULL(table_ctx)) {
@@ -184,19 +172,15 @@ int ObDirectLoadControlPreMergeExecutor::process()
   int ret = OB_SUCCESS;
   LOG_INFO("table load control pre merge", K_(arg));
   if (OB_FAIL(ObTableLoadService::check_tenant())) {
-    LOG_WARN("fail to check tenant", KR(ret));
   }
   if (OB_SUCC(ret)) {
     ObTableLoadTableCtx *table_ctx = nullptr;
     ObTableLoadUniqueKey key(arg_.table_id_, arg_.task_id_);
     if (OB_FAIL(ObTableLoadService::get_ctx(key, table_ctx))) {
-      LOG_WARN("fail to get table ctx", KR(ret), K(key));
     } else {
       ObTableLoadStore store(table_ctx);
       if (OB_FAIL(store.init())) {
-        LOG_WARN("fail to init store", KR(ret));
       } else if (OB_FAIL(store.pre_merge(arg_.committed_trans_id_array_))) {
-        LOG_WARN("fail to store pre merge", KR(ret));
       }
     }
     if (OB_NOT_NULL(table_ctx)) {
@@ -223,19 +207,15 @@ int ObDirectLoadControlStartMergeExecutor::process()
   int ret = OB_SUCCESS;
   LOG_INFO("table load control start merge", K_(arg));
   if (OB_FAIL(ObTableLoadService::check_tenant())) {
-    LOG_WARN("fail to check tenant", KR(ret));
   }
   if (OB_SUCC(ret)) {
     ObTableLoadTableCtx *table_ctx = nullptr;
     ObTableLoadUniqueKey key(arg_.table_id_, arg_.task_id_);
     if (OB_FAIL(ObTableLoadService::get_ctx(key, table_ctx))) {
-      LOG_WARN("fail to get table ctx", KR(ret), K(key));
     } else {
       ObTableLoadStore store(table_ctx);
       if (OB_FAIL(store.init())) {
-        LOG_WARN("fail to init store", KR(ret));
       } else if (OB_FAIL(store.start_merge())) {
-        LOG_WARN("fail to store start merge", KR(ret));
       }
     }
     if (OB_NOT_NULL(table_ctx)) {
@@ -262,24 +242,19 @@ int ObDirectLoadControlCommitExecutor::process()
   int ret = OB_SUCCESS;
   LOG_INFO("table load control commit", K_(arg));
   if (OB_FAIL(ObTableLoadService::check_tenant())) {
-    LOG_WARN("fail to check tenant", KR(ret));
   }
   if (OB_SUCC(ret)) {
     ObTableLoadTableCtx *table_ctx = nullptr;
     ObTableLoadUniqueKey key(arg_.table_id_, arg_.task_id_);
     if (OB_FAIL(ObTableLoadService::get_ctx(key, table_ctx))) {
-      LOG_WARN("fail to get table ctx", KR(ret), K(key));
     } else {
       ObTableLoadStore store(table_ctx);
       if (OB_FAIL(store.init())) {
-        LOG_WARN("fail to init store", KR(ret));
       } else if (OB_FAIL(store.commit(res_.result_info_,
                                       res_.sql_statistics_,
                                       res_.dml_stats_,
                                       res_.trans_result_))) {
-        LOG_WARN("fail to store commit", KR(ret));
       } else if (OB_FAIL(ObTableLoadService::remove_ctx(table_ctx))) {
-        LOG_WARN("fail to remove table ctx", KR(ret), K(key));
       }
     }
     if (OB_NOT_NULL(table_ctx)) {
@@ -343,19 +318,15 @@ int ObDirectLoadControlGetStatusExecutor::process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableLoadService::check_tenant())) {
-    LOG_WARN("fail to check tenant", KR(ret));
   }
   if (OB_SUCC(ret)) {
     ObTableLoadTableCtx *table_ctx = nullptr;
     ObTableLoadUniqueKey key(arg_.table_id_, arg_.task_id_);
     if (OB_FAIL(ObTableLoadService::get_ctx(key, table_ctx))) {
-      LOG_WARN("fail to get table ctx", KR(ret), K(key));
     } else {
       ObTableLoadStore store(table_ctx);
       if (OB_FAIL(store.init())) {
-        LOG_WARN("fail to init store", KR(ret));
       } else if (OB_FAIL(store.get_status(res_.status_, res_.error_code_))) {
-        LOG_WARN("fail to store get status", KR(ret));
       }
     }
     if (OB_NOT_NULL(table_ctx)) {
@@ -381,19 +352,15 @@ int ObDirectLoadControlHeartBeatExecutor::process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableLoadService::check_tenant())) {
-    LOG_WARN("fail to check tenant", KR(ret));
   }
   if (OB_SUCC(ret)) {
     ObTableLoadTableCtx *table_ctx = nullptr;
     ObTableLoadUniqueKey key(arg_.table_id_, arg_.task_id_);
     if (OB_FAIL(ObTableLoadService::get_ctx(key, table_ctx))) {
-      LOG_WARN("fail to get table ctx", KR(ret), K(key));
     } else {
       ObTableLoadStore store(table_ctx);
       if (OB_FAIL(store.init())) {
-        LOG_WARN("fail to init store", KR(ret));
       } else if (OB_FAIL(store.heart_beat())) {
-        LOG_WARN("fail to heart beat store", KR(ret));
       }
     }
     if (OB_NOT_NULL(table_ctx)) {
@@ -421,19 +388,15 @@ int ObDirectLoadControlPreStartTransExecutor::process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableLoadService::check_tenant())) {
-    LOG_WARN("fail to check tenant", KR(ret));
   }
   if (OB_SUCC(ret)) {
     ObTableLoadTableCtx *table_ctx = nullptr;
     ObTableLoadUniqueKey key(arg_.table_id_, arg_.task_id_);
     if (OB_FAIL(ObTableLoadService::get_ctx(key, table_ctx))) {
-      LOG_WARN("fail to get table ctx", KR(ret), K(key));
     } else {
       ObTableLoadStore store(table_ctx);
       if (OB_FAIL(store.init())) {
-        LOG_WARN("fail to init store", KR(ret));
       } else if (OB_FAIL(store.pre_start_trans(arg_.trans_id_))) {
-        LOG_WARN("fail to store pre start trans", KR(ret), K(arg_.trans_id_));
       }
     }
     if (OB_NOT_NULL(table_ctx)) {
@@ -460,19 +423,15 @@ int ObDirectLoadControlConfirmStartTransExecutor::process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableLoadService::check_tenant())) {
-    LOG_WARN("fail to check tenant", KR(ret));
   }
   if (OB_SUCC(ret)) {
     ObTableLoadTableCtx *table_ctx = nullptr;
     ObTableLoadUniqueKey key(arg_.table_id_, arg_.task_id_);
     if (OB_FAIL(ObTableLoadService::get_ctx(key, table_ctx))) {
-      LOG_WARN("fail to get table ctx", KR(ret), K(key));
     } else {
       ObTableLoadStore store(table_ctx);
       if (OB_FAIL(store.init())) {
-        LOG_WARN("fail to init store", KR(ret));
       } else if (OB_FAIL(store.confirm_start_trans(arg_.trans_id_))) {
-        LOG_WARN("fail to store confirm start trans", KR(ret), K(arg_.trans_id_));
       }
     }
     if (OB_NOT_NULL(table_ctx)) {
@@ -499,19 +458,15 @@ int ObDirectLoadControlPreFinishTransExecutor::process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableLoadService::check_tenant())) {
-    LOG_WARN("fail to check tenant", KR(ret));
   }
   if (OB_SUCC(ret)) {
     ObTableLoadTableCtx *table_ctx = nullptr;
     ObTableLoadUniqueKey key(arg_.table_id_, arg_.task_id_);
     if (OB_FAIL(ObTableLoadService::get_ctx(key, table_ctx))) {
-      LOG_WARN("fail to get table ctx", KR(ret), K(key));
     } else {
       ObTableLoadStore store(table_ctx);
       if (OB_FAIL(store.init())) {
-        LOG_WARN("fail to init store", KR(ret));
       } else if (OB_FAIL(store.pre_finish_trans(arg_.trans_id_))) {
-        LOG_WARN("fail to store pre finish trans", KR(ret), K(arg_.trans_id_));
       }
     }
     if (OB_NOT_NULL(table_ctx)) {
@@ -538,19 +493,15 @@ int ObDirectLoadControlConfirmFinishTransExecutor::process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableLoadService::check_tenant())) {
-    LOG_WARN("fail to check tenant", KR(ret));
   }
   if (OB_SUCC(ret)) {
     ObTableLoadTableCtx *table_ctx = nullptr;
     ObTableLoadUniqueKey key(arg_.table_id_, arg_.task_id_);
     if (OB_FAIL(ObTableLoadService::get_ctx(key, table_ctx))) {
-      LOG_WARN("fail to get table ctx", KR(ret), K(key));
     } else {
       ObTableLoadStore store(table_ctx);
       if (OB_FAIL(store.init())) {
-        LOG_WARN("fail to init store", KR(ret));
       } else if (OB_FAIL(store.confirm_finish_trans(arg_.trans_id_))) {
-        LOG_WARN("fail to store confirm finish trans", KR(ret), K(arg_.trans_id_));
       }
     }
     if (OB_NOT_NULL(table_ctx)) {
@@ -579,13 +530,10 @@ int ObDirectLoadControlAbandonTransExecutor::process()
   ObTableLoadTableCtx *table_ctx = nullptr;
   ObTableLoadUniqueKey key(arg_.table_id_, arg_.task_id_);
   if (OB_FAIL(ObTableLoadService::get_ctx(key, table_ctx))) {
-    LOG_WARN("fail to get table ctx", KR(ret), K(key));
   } else {
     ObTableLoadStore store(table_ctx);
     if (OB_FAIL(store.init())) {
-      LOG_WARN("fail to init store", KR(ret));
     } else if (OB_FAIL(store.abandon_trans(arg_.trans_id_))) {
-      LOG_WARN("fail to store abandon trans", KR(ret), K(arg_.trans_id_));
     }
   }
   if (OB_NOT_NULL(table_ctx)) {
@@ -611,20 +559,16 @@ int ObDirectLoadControlGetTransStatusExecutor::process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableLoadService::check_tenant())) {
-    LOG_WARN("fail to check tenant", KR(ret));
   }
   if (OB_SUCC(ret)) {
     ObTableLoadTableCtx *table_ctx = nullptr;
     ObTableLoadUniqueKey key(arg_.table_id_, arg_.task_id_);
     if (OB_FAIL(ObTableLoadService::get_ctx(key, table_ctx))) {
-      LOG_WARN("fail to get table ctx", KR(ret), K(key));
     } else {
       ObTableLoadStore store(table_ctx);
       if (OB_FAIL(store.init())) {
-        LOG_WARN("fail to init store", KR(ret));
       } else if (OB_FAIL(
                    store.get_trans_status(arg_.trans_id_, res_.trans_status_, res_.error_code_))) {
-        LOG_WARN("fail to store get trans status", KR(ret));
       }
     }
     if (OB_NOT_NULL(table_ctx)) {
@@ -651,7 +595,6 @@ int ObDirectLoadControlInsertTransExecutor::process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableLoadService::check_tenant())) {
-    LOG_WARN("fail to check tenant", KR(ret));
   }
   if (OB_SUCC(ret)) {
     ObTableLoadTableCtx *table_ctx = nullptr;
@@ -661,9 +604,7 @@ int ObDirectLoadControlInsertTransExecutor::process()
     char *buf = nullptr;
     if (OB_FAIL(ObTableLoadSharedAllocatorHandle::make_handle(
           allocator_handle, "TLD_share_alloc", OB_MALLOC_NORMAL_BLOCK_SIZE))) {
-      LOG_WARN("failed to make allocator handle", KR(ret));
     } else if (OB_FAIL(ObTableLoadService::get_ctx(key, table_ctx))) {
-      LOG_WARN("fail to get table ctx", KR(ret), K(key));
     } else if (!allocator_handle) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to make allocator handle", KR(ret));
@@ -677,12 +618,9 @@ int ObDirectLoadControlInsertTransExecutor::process()
       row_array.set_allocator(allocator_handle);
       MEMCPY(buf, arg_.payload_.ptr(), data_len);
       if (OB_FAIL(row_array.deserialize(buf, data_len, pos))) {
-        LOG_WARN("failed to deserialize obj rows", KR(ret));
       } else if (OB_FAIL(store.init())) {
-        LOG_WARN("fail to init store", KR(ret));
       } else if (OB_FAIL(
                    store.write(arg_.trans_id_, arg_.session_id_, arg_.sequence_no_, row_array))) {
-        LOG_WARN("fail to store write", KR(ret), K_(arg));
       }
     }
     if (OB_NOT_NULL(table_ctx)) {
@@ -711,13 +649,11 @@ int ObDirectLoadControlInitEmptyTabletsExecutor::process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableLoadService::check_tenant())) {
-    LOG_WARN("fail to check tenant", KR(ret));
   } else if (OB_FAIL(ObTableLoadEmptyInsertTabletCtxManager::execute_for_dag(
                                                     arg_.table_id_,
                                                     arg_.ddl_param_,
                                                     arg_.partition_id_array_,
                                                     arg_.target_partition_id_array_))) {
-    LOG_WARN("fail to execute init empty tablet", KR(ret));
   }
   return ret;
 }

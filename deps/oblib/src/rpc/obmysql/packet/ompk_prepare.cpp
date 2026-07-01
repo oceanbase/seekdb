@@ -35,17 +35,11 @@ int OMPKPrepare::serialize(char* buffer, int64_t length, int64_t& pos) const
     LOG_WARN("size is overflow",  K(length), K(pos), "need_size", get_serialize_size(), K(ret));
   } else {
     if (OB_FAIL(ObMySQLUtil::store_int1(buffer, length, status_, pos))) {
-      LOG_WARN("store failed", KP(buffer), K(length), K_(status), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_int4(buffer, length, statement_id_, pos))) {
-      LOG_WARN("store failed", KP(buffer), K(length), K_(statement_id), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_int2(buffer, length, column_num_, pos))) {
-      LOG_WARN("store failed", KP(buffer), K(length), K_(column_num), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_int2(buffer, length, param_num_, pos))) {
-      LOG_WARN("store failed", KP(buffer), K(length), K_(param_num), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_int1(buffer, length, reserved_, pos))) {
-      LOG_WARN("store failed", KP(buffer), K(length), K_(reserved), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_int2(buffer, length, warning_count_, pos))) {
-      LOG_WARN("store failed", KP(buffer), K(length), K_(warning_count), K(pos));
     }
   }
   return ret;

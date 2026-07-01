@@ -49,7 +49,6 @@ int ObMPQuit::process()
   int ret = OB_SUCCESS;
   sql::ObSQLSessionInfo *session = NULL;
   if (OB_FAIL(get_session(session))) {
-    LOG_WARN("fail to get session", K(ret));
   } else {
     // set NORMAL_QUIT state.
     session->set_disconnect_state(NORMAL_QUIT);
@@ -58,7 +57,6 @@ int ObMPQuit::process()
     revert_session(session);
   }
   disconnect();
-  SERVER_LOG(INFO, "quit");
   return ret;
 }
 

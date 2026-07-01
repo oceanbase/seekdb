@@ -364,7 +364,6 @@ int RankLikeExpr<rank_op>::process_window(WinExprEvalCtx &ctx, const Frame &fram
   if (row_idx != frame.head_) {
     int cmp_ret = 0;
     if (OB_FAIL(cmp_prev_row(ctx, row_idx, cmp_ret))) {
-      LOG_WARN("compare previous row failed", K(ret));
     } else {
       equal_with_prev_row = (cmp_ret == 0);
     }
@@ -396,11 +395,8 @@ int RankLikeExpr<rank_op>::process_window(WinExprEvalCtx &ctx, const Frame &fram
           number::ObNumber res_nmb;
           ObNumStackAllocator<3> tmp_alloc;
           if (OB_FAIL(numerator.from(rank - 1, tmp_alloc))) {
-            LOG_WARN("failed to build number from int64_t", K(ret));
           } else if (OB_FAIL(denominator.from(frame.tail_ - frame.head_ - 1, tmp_alloc))) {
-            LOG_WARN("failed to build number from int64_t", K(ret));
           } else if (OB_FAIL(numerator.div(denominator, res_nmb, tmp_alloc))) {
-            LOG_WARN("failed to div number", K(ret));
           } else {
             number::ObCompactNumber *res_cnum = reinterpret_cast<number::ObCompactNumber *>(res);
             res_cnum->desc_ = res_nmb.d_;

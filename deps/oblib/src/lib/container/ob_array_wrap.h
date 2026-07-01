@@ -100,7 +100,6 @@ public:
       LIB_LOG(WARN, "invalid argument", K(num), K(ret));
     } else if (OB_ISNULL(ptr = allocator.alloc(size))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LIB_LOG(WARN, "allocate memory failed", K(size), K(num));
     } else {
       data_ = new(ptr) T[num];
       count_ = num;

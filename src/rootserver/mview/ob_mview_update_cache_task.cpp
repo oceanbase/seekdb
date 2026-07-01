@@ -99,7 +99,6 @@ int ObMviewUpdateCacheTask::get_mview_refresh_scn_sql(const int refresh_mode,
                               FROM `%s`.`%s` \
                               WHERE REFRESH_MODE = %d",
                             OB_SYS_DATABASE_NAME, OB_ALL_MVIEW_TNAME, refresh_mode))) {
-    LOG_WARN("fail to get sql", KR(ret), K(sql));
   }
   return ret;
 }
@@ -130,14 +129,11 @@ void ObMviewUpdateCacheTask::runTimerTask()
       ObSqlString sql;
       sqlclient::ObMySQLResult *mysql_result = NULL;
       if (OB_FAIL(get_mview_refresh_scn_sql(refresh_mode, sql))) {
-        LOG_WARN("failed to get last refresh scn sql", K(ret));
       } else if (OB_FAIL(sql_proxy->read(res, sql.ptr()))) {
-        LOG_WARN("fail to execute sql", K(ret), K(sql));
       } else if (OB_FAIL(extract_sql_result(res.get_result(),
                                             mview_ids,
                                             mview_refresh_scns,
                                             mview_refresh_modes))) {
-        LOG_WARN("fail to extract sql result", K(ret), K(sql));
       }
     }
     if (OB_FAIL(ret)) {
@@ -145,8 +141,6 @@ void ObMviewUpdateCacheTask::runTimerTask()
     } else if (OB_FAIL(mview_maintenance_service->update_mview_refresh_info_cache(mview_ids,
                                                                                   mview_refresh_scns,
                                                                                   mview_refresh_modes))){
-      LOG_WARN("fail to update mview refresh info cache", K(ret),
-               K(mview_ids), K(mview_refresh_scns), K(mview_refresh_modes));
     }
   }
 }

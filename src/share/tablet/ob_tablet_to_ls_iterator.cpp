@@ -48,7 +48,6 @@ int ObTenantTabletToLSIterator::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
   } else if (OB_FAIL(ls_white_list_.assign(ls_white_list))) {
-    LOG_WARN("assign LS white list fail", KR(ret), K(ls_white_list));
   } else {
     sql_proxy_ = &sql_proxy;
     inited_ = true;
@@ -65,7 +64,6 @@ int ObTenantTabletToLSIterator::next(ObTabletLSPair &pair)
       LOG_WARN("next tablet to LS info fail", KR(ret));
     }
   } else if (OB_FAIL(pair.init(info.get_tablet_id(), info.get_ls_id()))) {
-    LOG_WARN("init ObTabletLSPair fail", KR(ret), K(info));
   }
   return ret;
 }
@@ -91,8 +89,6 @@ int ObTenantTabletToLSIterator::next(ObTabletToLSInfo &info)
       }
     }
     if (FAILEDx(info.assign(inner_tablet_infos_[inner_idx_]))) {
-      LOG_WARN("failed to assign tablet to ls info",
-          KR(ret), K_(inner_idx), K(inner_tablet_infos_[inner_idx_]));
     } else {
       ++inner_idx_;
     }
@@ -120,8 +116,6 @@ int ObTenantTabletToLSIterator::prefetch_()
         last_tablet_id,
         range_size,
         inner_tablet_infos_))) {
-      LOG_WARN("fail to range get by operator", KR(ret),
-          K_(ls_white_list), K(last_tablet_id), K(range_size), K(inner_tablet_infos_));
     } else if (inner_tablet_infos_.count() <= 0) {
       ret = OB_ITER_END;
     }

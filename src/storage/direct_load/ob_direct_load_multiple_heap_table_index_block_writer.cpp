@@ -48,7 +48,6 @@ int ObDirectLoadMultipleHeapTableIndexBlockWriter::append_index(
   item.fragment_idx_ = tablet_index.fragment_idx_;
   item.offset_ = tablet_index.offset_;
   if (OB_FAIL(this->write_item(item))) {
-    STORAGE_LOG(WARN, "fail to write item", KR(ret));
   } else {
     ++entry_count_;
     last_entry_pos_ = cur_entry_pos_;

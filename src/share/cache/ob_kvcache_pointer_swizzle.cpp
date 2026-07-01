@@ -56,7 +56,6 @@ int ObPointerSwizzleNode::swizzle(const blocksstable::ObMicroBlockBufferHandle &
     ObPointerSwizzleGuard guard(node_version_);
     if (guard.is_multi_thd_safe() && nullptr == mb_handle_ && nullptr == value_) {
       set(mb_handle, value);
-      COMMON_LOG(DEBUG, "swizzle successfully", KPC(this));
     }
   }
   
@@ -76,7 +75,6 @@ int ObPointerSwizzleNode::access_mem_ptr(blocksstable::ObMicroBlockBufferHandle 
     // The multithreaded safe loading of the node failed
     ret = OB_READ_NOTHING;
   } else if (OB_FAIL(handle.handle_.hazptr_holder_.protect(protect_success, tmp_ps_node.mb_handle_, tmp_ps_node.seq_num_))) {
-    COMMON_LOG(WARN, "protect failed", KP(tmp_ps_node.mb_handle_));
   } else if (!protect_success) {
     // The memory for value_ corresponding to the node has been released;
     // the node is reset to improve efficiency, whether the node is reset or not is 
@@ -88,7 +86,6 @@ int ObPointerSwizzleNode::access_mem_ptr(blocksstable::ObMicroBlockBufferHandle 
     ++tmp_ps_node.mb_handle_->recent_get_cnt_;
     ATOMIC_AAF(&tmp_ps_node.mb_handle_->get_cnt_, 1);
     handle.set_micro_block(reinterpret_cast<const blocksstable::ObMicroBlockCacheValue*>(tmp_ps_node.value_));
-    COMMON_LOG(DEBUG, "access the memory successfully which the swizzling pointer points to", KPC(this));
   }
   return ret;
 }

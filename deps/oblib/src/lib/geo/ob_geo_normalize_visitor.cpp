@@ -44,9 +44,7 @@ int ObGeoNormalizeVisitor::normalize(ObIWkbPoint *geo)
     ny = geo->y() * M_PI / 180.0;
   } else {
     if (OB_FAIL(srs_->latitude_convert_to_radians(geo->y(), ny))) {
-      LOG_WARN("normalize y failed", K(ret));
     } else if (OB_FAIL(srs_->longtitude_convert_to_radians(geo->x(), nx))) {
-      LOG_WARN("normalize x failed", K(ret));
     }
   }
 
@@ -61,7 +59,6 @@ int ObGeoNormalizeVisitor::visit(ObIWkbGeogPoint *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(normalize(geo))){
-    LOG_WARN("failed to normalize geographical point", K(ret));
   }
   return ret;
 }
@@ -71,7 +68,6 @@ int ObGeoNormalizeVisitor::visit(ObIWkbGeomPoint *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(normalize(geo))){
-    LOG_WARN("failed to normalize cartesian point", K(ret));
   }
   return ret;
 }

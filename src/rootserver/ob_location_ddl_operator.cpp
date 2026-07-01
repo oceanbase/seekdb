@@ -38,16 +38,13 @@ int ObLocationDDLOperator::create_location(const ObString &ddl_str,
     ret = OB_ERR_SYS;
     LOG_ERROR("schema_service should not be null", K(ret));
   } else if (OB_FAIL(schema_service->fetch_new_location_id(new_location_id))) {
-    LOG_WARN("failed to fetch new_location_id", K(ret));
   } else if (FALSE_IT(schema.set_location_id(new_location_id))) {
     // do nothing
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(schema_version))) {
-    LOG_WARN("failed to gen new_schema_version", K(ret));
   } else if (FALSE_IT(schema.set_schema_version(schema_version))) {
     // do nothing
   } else if (OB_FAIL(schema_service->get_location_sql_service().apply_new_schema(
               schema, trans, ObSchemaOperationType::OB_DDL_CREATE_LOCATION, ddl_str))) {
-    LOG_WARN("failed to create location", K(schema.get_location_name()), K(ret));
   } else {
     ObTablePrivSortKey table_priv_key;
     
@@ -79,7 +76,6 @@ int ObLocationDDLOperator::create_location(const ObString &ddl_str,
     ObDDLOperator ddl_operator(schema_service_, sql_proxy_);
     ObObjPrivMysqlDDLOperator mysql_ddl_operator(schema_service_, sql_proxy_);
     if (OB_FAIL(mysql_ddl_operator.grant_object(obj_mysql_priv_key, priv_set, trans, 0, false))) {
-      LOG_WARN("fail to grant table, mysql mode", K(ret), K(obj_mysql_priv_key), K(priv_set));
     }
   }
   return ret;
@@ -97,12 +93,10 @@ int ObLocationDDLOperator::alter_location(const ObString &ddl_str,
     ret = OB_ERR_SYS;
     LOG_ERROR("schema_service should not be null", K(ret));
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
-    LOG_WARN("failed to gen new schema_version", K(ret));
   } else if (FALSE_IT(schema.set_schema_version(new_schema_version))) {
     // do nothing
   } else if (OB_FAIL(schema_service->get_location_sql_service().apply_new_schema(
     schema, trans, ObSchemaOperationType::OB_DDL_ALTER_LOCATION, ddl_str))) {
-    LOG_WARN("failed to alter location", K(schema), K(ret));
   }
   return ret;
 }
@@ -120,14 +114,12 @@ int ObLocationDDLOperator::drop_location(const ObString &ddl_str,
   const uint64_t location_type = static_cast<uint64_t>(ObObjectType::LOCATION);
   int64_t new_schema_version = OB_INVALID_VERSION;
   if (OB_FAIL(schema_service_.get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("failed to get schema guard", K(ret));
   } else if (OB_ISNULL(schema_service)) {
     ret = OB_ERR_SYS;
     LOG_ERROR("schema service must not null", K(ret));
   } else {
     ObArray<const ObSimpleTableSchemaV2 *> tables;
     if (OB_FAIL(schema_guard.get_table_schemas_in_tenant(tables))) {
-      LOG_WARN("get full tables failed", KT(location_id), K(ret));
     }
     bool is_stop = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < tables.count() && !is_stop; ++i) {
@@ -138,7 +130,6 @@ int ObLocationDDLOperator::drop_location(const ObString &ddl_str,
       } else if (ObTableType::EXTERNAL_TABLE == table_schema->get_table_type()) {
         const ObTableSchema *full_schema = NULL;
         if (OB_FAIL(schema_guard.get_table_schema( table_schema->get_table_id(), full_schema))) {
-          LOG_WARN("get table schema failed");
         } else if (OB_ISNULL(full_schema)){
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("table_schema is null", KR(ret), K(i));
@@ -156,18 +147,13 @@ int ObLocationDDLOperator::drop_location(const ObString &ddl_str,
   ObObjPrivMysqlDDLOperator mysql_ddl_operator(schema_service_, sql_proxy_);
   lib::Worker::CompatMode compat_mode = lib::Worker::CompatMode::MYSQL;
   if (OB_FAIL(ret)) {
-    LOG_WARN("location in use", K(ret));
   } else if (OB_FAIL(mysql_ddl_operator.drop_obj_mysql_privs(schema.get_location_name(), location_type,
                                                           trans, schema_service_, schema_guard))) {
-    LOG_WARN("failed to drop obj privs for location", K(ret),
-              K(location_id), K(location_type));
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
-    LOG_WARN("failed to gen new schema_version", K(ret));
   } else if (FALSE_IT(schema.set_schema_version(new_schema_version))) {
     // do nothing
   } else if (OB_FAIL(schema_service->get_location_sql_service().apply_new_schema(
     schema, trans, ObSchemaOperationType::OB_DDL_DROP_LOCATION, ddl_str))) {
-    LOG_WARN("failed to drop location", K(schema), K(ret));
   }
   return ret;
 }

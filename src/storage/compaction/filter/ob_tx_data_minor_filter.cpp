@@ -65,7 +65,6 @@ int ObTxDataMinorFilter::filter(
     const int64_t trans_end_scn_storage_val = row.storage_datums_[filter_col_idx_].get_int();
     SCN trans_end_scn;
     if (OB_FAIL(trans_end_scn.convert_for_tx(trans_end_scn_storage_val))) {
-      LOG_WARN("failed to convert for tx", K(ret), K(trans_end_scn_storage_val));
     } else if (trans_end_scn <= filter_val_) {
       filter_ret = FILTER_RET_REMOVE;
       max_filtered_end_scn_ = SCN::max(max_filtered_end_scn_, trans_end_scn);

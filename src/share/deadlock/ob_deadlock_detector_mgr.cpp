@@ -149,7 +149,6 @@ int ObDeadLockDetectorMgr::mtl_init(ObDeadLockDetectorMgr *&p_deadlock_detector_
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(p_deadlock_detector_mgr->init())) {
-    DETECT_LOG(ERROR, "init failure detector failed", KR(ret));
   }
   return ret;
 }
@@ -160,10 +159,8 @@ int ObDeadLockDetectorMgr::init()
   int ret = OB_SUCCESS;
   
   if (OB_FAIL(ObDeadLockInnerTableService::init())) {
-    DETECT_LOG(WARN, "failed to init deadlock inner table service", K(ret));
   } else if (nullptr != rpc_) {
     ret = OB_ERR_UNEXPECTED;
-    DETECT_LOG(ERROR, "rpc_ is not null", PRINT_WRAPPER);
   } else {
     ObMemAttr attr(MEMORY_LABEL);
     SET_USE_500(attr);
@@ -178,18 +175,12 @@ int ObDeadLockDetectorMgr::init()
     } else if (OB_FAIL(time_wheel_.init(TIME_WHEEL_PRECISION_US,
                                  TIMER_THREAD_COUNT,
                                  DETECTOR_TIMER_NAME))) {
-      DETECT_LOG(WARN, "time_wheel_ init failed", PRINT_WRAPPER);
     } else if (OB_FAIL(rpc_->init(GCTX.self_addr()))) {
-      DETECT_LOG(WARN, "rpc_ init faile", PRINT_WRAPPER);
     } else if (OB_FAIL(detector_map_.init(attr))) {
-      DETECT_LOG(WARN, "detector_map_ init failed", PRINT_WRAPPER);
     } else if (OB_FAIL(sender_thread_.init())) {
-      DETECT_LOG(WARN, "ObLCLBatchSenderThread init failed", PRINT_WRAPPER);
     } else {
       is_inited_ = true;
-      DETECT_LOG(INFO, "ObDeadLockDetectorMgr init success", PRINT_WRAPPER);
     }
-    DETECT_LOG(INFO, "ObDeadLockDetectorMgr init called", PRINT_WRAPPER, K(lbt()));
   }
 
   if (OB_FAIL(ret)) {
@@ -208,9 +199,7 @@ int ObDeadLockDetectorMgr::start()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(time_wheel_.start())) {
-    DETECT_LOG(WARN, "time wheel start failed");
   } else if (OB_FAIL(sender_thread_.start())) {
-    DETECT_LOG(WARN, "ObLCLBatchSenderThread start failed");
   }
   return ret;
 }
@@ -231,7 +220,6 @@ void ObDeadLockDetectorMgr::stop()
   ob_usleep(PHASE_TIME * 2);
   sender_thread_.stop();
   if (OB_FAIL(time_wheel_.stop())) {
-    DETECT_LOG(WARN, "ObDeadLockDetectorMgr stop time wheel failed", KR(ret));
   }
 }
 
@@ -240,7 +228,6 @@ void ObDeadLockDetectorMgr::wait()
   int ret = OB_SUCCESS;
   sender_thread_.wait();
   if (OB_FAIL(time_wheel_.wait())) {
-    DETECT_LOG(WARN, "ObDeadLockDetectorMgr wait time wheel failed", KR(ret));
   }
 }
 
@@ -250,7 +237,6 @@ void ObDeadLockDetectorMgr::destroy()
   int ret = OB_SUCCESS;
 
   if (false == is_inited_) {
-    DETECT_LOG(WARN, "ObDeadLockDetectorMgr not init or has been destroyed");
   } else {
     sender_thread_.destroy();
     detector_map_.destroy();
@@ -261,9 +247,7 @@ void ObDeadLockDetectorMgr::destroy()
     }
     time_wheel_.destroy();
     is_inited_ = false;
-    DETECT_LOG(INFO, "ObDeadLockDetectorMgr destroy success");
   }
-  DETECT_LOG(INFO, "ObDeadLockDetectorMgr destroy called", K(lbt()));
 
   return;
 }
@@ -295,9 +279,7 @@ int ObDeadLockDetectorMgr::unregister_key_(const UserBinaryKey &key)
   } else {
     ref_guard.get_detector()->unregister_timer_task();
     if (OB_FAIL(detector_map_.del(key))) {
-      DETECT_LOG(WARN, "detector_map_ erase node failed", PRINT_WRAPPER);
     } else {
-      DETECT_LOG(TRACE, "unregister key success", PRINT_WRAPPER);
     }
   }
   return ret;
@@ -316,11 +298,9 @@ int ObDeadLockDetectorMgr::process_lcl_message(const ObLCLMessage &lcl_msg)
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
     } else {
-      DETECT_LOG(WARN, "fail to get detector", PRINT_WRAPPER);
     }
   } else if (OB_FAIL(ref_guard.get_detector()->process_lcl_message(lcl_msg))) {
     ObIDeadLockDetector *detector = ref_guard.get_detector();
-    DETECT_LOG(WARN, "fail to process message", PRINT_WRAPPER, KP(detector));
   } else {}
 
   return ret;
@@ -340,11 +320,9 @@ int ObDeadLockDetectorMgr::process_collect_info_message(
   if (OB_FAIL(get_detector_(collect_info_msg.get_dest_key(), ref_guard))) {
     if (REACH_TIME_INTERVAL(100 * 1000)) {
       // the local resource has been unregistered
-      DETECT_LOG(INFO, "dest_resource not in map", PRINT_WRAPPER);
     }
   } else if (OB_FAIL(ref_guard.get_detector()->process_collect_info_message(collect_info_msg))) {
     ObIDeadLockDetector *detector = ref_guard.get_detector();
-    DETECT_LOG(WARN, "fail to process message", PRINT_WRAPPER, KP(detector));
   } else {
     // do nothing
   }
@@ -373,7 +351,6 @@ int ObDeadLockDetectorMgr::process_notify_parent_message(
     ObDeadLockDetectorMgr *p_deadlock_detector_mgr = share::g_mp->dead_lock_detector_mgr();
     if (OB_ISNULL(p_deadlock_detector_mgr)) {
       ret = OB_ERR_UNEXPECTED;
-      DETECT_LOG(ERROR, "can not get ObDeadLockDetectorMgr", KP(p_deadlock_detector_mgr));
     } else if (OB_FAIL(p_deadlock_detector_mgr->inner_alloc_handle_.inner_factory_.create(binary_key,
                                                             [](const common::ObIArray<ObDetectorInnerReportInfo> &,
                                                                const int64_t) -> int { DETECT_LOG_RET(ERROR, common::OB_ERR_UNEXPECTED, "should not kill inner node");
@@ -399,26 +376,21 @@ int ObDeadLockDetectorMgr::process_notify_parent_message(
                                                             0,
                                                             true,
                                                             p_detector))) {
-      DETECT_LOG(WARN, "create new detector instance failed", PRINT_WRAPPER);
     } else if (OB_FAIL(detector_map_.insert_and_get(binary_key, p_detector))) {
-      DETECT_LOG(WARN, "detector_map_ insert key and value failed", PRINT_WRAPPER);
       p_deadlock_detector_mgr->inner_alloc_handle_.inner_factory_.release(p_detector);
     } else if (FALSE_IT(p_detector->set_timeout(10 * 1000 * 1000))) {
     } else if (OB_FAIL(p_detector->register_timer_task())) {
       if (common::OB_ENTRY_NOT_EXIST == ret) {
         ret = common::OB_EAGAIN;// telling user there is a concurrent problem, need retry
       }
-      DETECT_LOG(WARN, "start timer task failed", PRINT_WRAPPER);
       (void)detector_map_.del(binary_key);
       detector_map_.revert(p_detector);
     } else {
       ObDependencyResource resource(notify_msg.get_src_addr(), notify_msg.get_src_key());
       if (OB_FAIL(p_detector->block(resource))) {
-        DETECT_LOG(WARN, "block child failed", PRINT_WRAPPER);
         p_detector->unregister_timer_task();
         (void)detector_map_.del(binary_key);
       } else {
-        DETECT_LOG(INFO, "register parent key success", PRINT_WRAPPER);
       }
       detector_map_.revert(p_detector);
     }
@@ -440,14 +412,10 @@ int ObDeadLockDetectorMgr::check_and_report_cycle_(
         organizer.get_user_key() == collect_info_msg.get_dest_key()) {
       uint64_t cycle_hash = calculate_cycle_hash_(collect_info_msg);
       if (OB_FAIL(check_and_record_cycle_hash_(cycle_hash))) {
-        DETECT_LOG(INFO, "this cycle may has been reported",
-                         KR(ret), K(collect_info_msg), K(cycle_hash));
       } else {
         if (OB_FAIL(ObDeadLockInnerTableService::
                     insert_all(collect_info_msg.get_collected_info()))) {
-          DETECT_LOG(INFO, "report inner table success", KR(ret), K(collect_info_msg));
         } else {
-          DETECT_LOG(INFO, "report inner table success", K(collect_info_msg));
         }
       }
     }

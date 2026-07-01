@@ -39,7 +39,6 @@ int ObGeoDeNormalizeVisitor::visit(ObCartesianPoint *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(denormalize(geo))){
-    LOG_WARN("failed to denormalize cartesian point", K(ret));
   }
   return ret;
 }

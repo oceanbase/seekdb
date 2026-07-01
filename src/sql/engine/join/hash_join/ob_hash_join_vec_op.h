@@ -135,8 +135,6 @@ public:
       ATOMIC_AAF(&shared_hj_info->total_memory_row_count_, row_count);
       ATOMIC_AAF(&shared_hj_info->total_memory_size_, input_size);
     }
-    OB_LOG(DEBUG, "set basic info", K(shared_hj_info->total_memory_row_count_),
-      K(shared_hj_info->total_memory_size_));
   }
   void sync_info_for_naaj(int64_t n_times, bool null_in_naal, bool non_preserved_side_naaj)
   {
@@ -152,8 +150,6 @@ public:
         ATOMIC_SET(&shared_hj_info->non_preserved_side_is_not_empty_, non_preserved_side_naaj);
       }
     }
-    OB_LOG(DEBUG, "set basic info", K(shared_hj_info->total_memory_row_count_),
-      K(shared_hj_info->total_memory_size_));
   }
 
   int64_t &get_sqc_thread_count()
@@ -266,9 +262,6 @@ public:
         ATOMIC_SET(&shared_hj_info->sync_val_, shared_hj_info->init_val_);
       }
     }
-    OB_LOG(TRACE, "sync cur part_count", K(n_times),
-      K(shared_hj_info->init_val_),
-      K(shared_hj_info->sync_val_));
   }
 
   void set_task_id(int64_t task_id) { task_id_ = task_id; }

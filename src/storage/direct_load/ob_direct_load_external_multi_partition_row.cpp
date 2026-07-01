@@ -124,7 +124,6 @@ int ObDirectLoadConstExternalMultiPartitionRow::deep_copy(
   } else {
     tablet_id_ = src.tablet_id_;
     if (OB_FAIL(rowkey_datum_array_.deep_copy(src.rowkey_datum_array_, buf, len, pos))) {
-      LOG_WARN("fail to deep copy datum array", KR(ret));
     } else {
       seq_no_ = src.seq_no_;
       is_delete_ = src.is_delete_;
@@ -170,9 +169,7 @@ int ObDirectLoadConstExternalMultiPartitionRow::to_datum_row(ObDirectLoadDatumRo
       if (OB_FAIL(
             deserialize_datum_array.assign(datum_row.storage_datums_ + rowkey_datum_array_.count_,
                                            datum_row.count_ - rowkey_datum_array_.count_))) {
-        LOG_WARN("fail to assign datum array", KR(ret));
       } else if (OB_FAIL(deserialize_datum_array.deserialize(buf_, buf_size_, pos))) {
-        LOG_WARN("fail to deserialize datum array", KR(ret));
       } else if (OB_UNLIKELY(rowkey_datum_array_.count_ + deserialize_datum_array.count_ !=
                              datum_row.count_)) {
         ret = OB_ERR_UNEXPECTED;
@@ -206,7 +203,6 @@ int ObDirectLoadConstExternalMultiPartitionRow::generate_aqs_store_row(
       ObDatum &sortkey_datum = store_row->cells()[0];
       if (OB_FAIL(build_sortkey_datum(encode_buf, encode_buf_size, enc_params, allocator,
                                       sortkey_datum, has_invalid_uni))) {
-        LOG_WARN("fail to build sortkey datum", KR(ret));
       } else if (!has_invalid_uni) {
         // store data datum
         ObDatum &data_datum = store_row->cells()[1];
@@ -228,8 +224,6 @@ int ObDirectLoadConstExternalMultiPartitionRow::build_sortkey_datum(
   // encode tablet_id
   if (OB_FAIL(encode_table_id(encode_buf, encode_buf_size, enc_params.at(0), data_len,
                               has_invalid_uni))) {
-    LOG_WARN("failed to encode tablet_id", KR(ret), K(encode_buf_size), K(enc_params.at(0)),
-             K(data_len), K(has_invalid_uni));
   }
   // encode rowkey
   else if (!has_invalid_uni && OB_FAIL(encode_rowkey(encode_buf, encode_buf_size, enc_params,

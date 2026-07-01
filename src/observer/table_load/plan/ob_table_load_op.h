@@ -69,9 +69,7 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(plan_->alloc_op(op, static_cast<Derived *>(this), args...))) {
-      SERVER_LOG(WARN, "fail to alloc op", KR(ret));
     } else if (OB_FAIL(childs_.push_back(op))) {
-      SERVER_LOG(WARN, "fail to push back", KR(ret));
     }
     return ret;
   }

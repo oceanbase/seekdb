@@ -92,11 +92,8 @@ int ObTenantVectorAllocator::init()
     SHARE_LOG(WARN, "init tenant vector allocator twice", KR(ret), KPC(this));
   } else if (OB_ISNULL(throttle_tool_)) {
     ret = OB_ERR_UNEXPECTED;
-    SHARE_LOG(WARN, "throttle tool is unexpected null", KP(throttle_tool_), KP(share_mem_alloc_mgr));
   } else if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(memory_context_, param))) {
-    SHARE_LOG(WARN, "create memory entity failed", K(ret));
   } else if (OB_FAIL(ObVectorMemContext::init(memory_context_, throttle_tool_))) {
-    SHARE_LOG(WARN, "vector mem context init failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -196,9 +193,7 @@ int ObVsagMemContext::init(lib::MemoryContext &parent_mem_context,
     .set_parallel(8)
     .set_properties(lib::ALLOC_THREAD_SAFE | lib::RETURN_MALLOC_DEFAULT);
   if (OB_FAIL(parent_mem_context->CREATE_CONTEXT(mem_context_, param))) {
-    OB_LOG(WARN, "create memory entity failed", K(ret));
   } else if (OB_FAIL(ObVectorMemContext::init(mem_context_, &(share_mem_alloc_mgr->share_resource_throttle_tool())))) {
-    SHARE_LOG(WARN, "vector mem context init failed", K(ret));
   } else {
     all_vsag_use_mem_ = all_vsag_use_mem;
   }
@@ -266,9 +261,7 @@ int ObIvfMemContext::init(lib::MemoryContext &parent_mem_context, uint64_t *all_
     .set_parallel(8)
     .set_properties(lib::ALLOC_THREAD_SAFE | lib::RETURN_MALLOC_DEFAULT);
   if (OB_FAIL(parent_mem_context->CREATE_CONTEXT(mem_context_, param))) {
-    OB_LOG(WARN, "create memory entity failed", K(ret));
   } else if (OB_FAIL(ObVectorMemContext::init(mem_context_, &(share_mem_alloc_mgr->share_resource_throttle_tool())))) {
-    SHARE_LOG(WARN, "vector mem context init failed", K(ret));
   } else {
     all_vsag_use_mem_ = all_vsag_use_mem;
   }

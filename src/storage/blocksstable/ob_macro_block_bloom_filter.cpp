@@ -73,12 +73,10 @@ int ObMicroBlockBloomFilter::init(const ObDataStoreDesc &data_store_desc)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to init micro block bloom filter, invalid data store desc", K(ret), K(data_store_desc));
   } else if (OB_FAIL(hash_set_.create(1024, "MicroBFHashset", "MicroBFHashset"))) {
-    LOG_WARN("fail to create hash set", K(ret));
   } else {
     if (data_store_desc.is_cg()) { // Fetch datum utils for rowkey murmurhash.
       const ObITableReadInfo *index_read_info;
       if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(index_read_info))) {
-        LOG_WARN("fail to get index read info for cg sstable", K(ret), K(data_store_desc));
       } else if (OB_UNLIKELY(!index_read_info->get_datum_utils().is_valid())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected invalid datum utails for cg sstable", K(ret), KPC(index_read_info));
@@ -115,12 +113,8 @@ int ObMicroBlockBloomFilter::insert_row(const ObDatumRow &row)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("fail to insert row, invalid column count", K(ret), K(row), KPC(this));
   } else if (OB_FAIL(rowkey.assign(row.storage_datums_, empty_read_prefix_))) {
-    LOG_WARN("fail to fetch rowkey from datum row",
-             K(ret), K(row), K(rowkey_column_count_), K(empty_read_prefix_));
   } else if (OB_FAIL(rowkey.murmurhash(0, *datum_utils_, key_hash))) {
-    LOG_WARN("fail to murmurhash rowkey", K(ret), K(rowkey), K(row));
   } else if (OB_FAIL(hash_set_.set_refactored(static_cast<uint32_t>(key_hash), 1 /* cover */))) {
-    LOG_WARN("fail to insert into hash set", K(ret), K(row), K(key_hash), KPC(this));
   } else {
     row_count_++;
   }
@@ -160,29 +154,19 @@ int ObMicroBlockBloomFilter::insert_micro_block(const ObMicroBlock &micro_block)
                                                   micro_data,
                                                   micro_index_data,
                                                   decompressed_data))) {
-      LOG_WARN("fail to decrypt and decompress micro data", K(ret), K(micro_block));
     } else if (OB_FAIL(reader_helper.init(temp_allocator))) {
-      LOG_WARN("fail to init micro reader helper", K(ret));
     } else if (OB_FAIL(reader_helper.get_reader(row_store_type, reader))) {
-      LOG_WARN("fail to get reader", K(ret), K(micro_block));
     } else if (OB_ISNULL(reader)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null reader", K(ret), K(micro_block), KP(reader));
     } else if (OB_FAIL(reader->init(decompressed_data, nullptr))) {
-      LOG_WARN("reader init failed", K(ret), K(micro_block));
     } else if (OB_FAIL(reader->get_row_count(row_count))) {
-      LOG_WARN("fail to get row count from micro block reader", K(ret));
     } else if (OB_FAIL(row.init(reader->get_column_count()))) {
-      LOG_WARN("fail to init datum row", K(ret), K(reader->get_column_count()), K(row_count));
     } else {
       for (int64_t row_idx = 0; OB_SUCC(ret) && row_idx < row_count; ++row_idx) {
         row.reuse();
         if (OB_FAIL(reader->get_row(row_idx, row))) {
-          LOG_WARN("fail to get next row",
-                   K(ret), K(row.is_valid()), K(reader->get_column_count()), K(row_idx), K(row_count));
         } else if (OB_FAIL(insert_row(row))) {
-          LOG_WARN("fail to insert row into micro block bloom filter",
-                   K(ret), K(row), K(reader->get_column_count()), K(row_idx), K(row_count), KPC(this));
         }
       }
     }
@@ -223,29 +207,19 @@ int ObMicroBlockBloomFilter::insert_micro_block(const ObMicroBlockDesc &micro_bl
                                                   micro_data,
                                                   micro_index_data,
                                                   decompressed_data))) {
-      LOG_WARN("fail to decrypt and decompress micro data", K(ret), K(micro_block_desc), K(micro_index_data));
     } else if (OB_FAIL(reader_helper.init(temp_allocator))) {
-      LOG_WARN("fail to init micro reader helper", K(ret));
     } else if (OB_FAIL(reader_helper.get_reader(row_store_type, reader))) {
-      LOG_WARN("fail to get reader", K(ret), K(micro_block_desc), K(micro_index_data));
     } else if (OB_ISNULL(reader)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null reader", K(ret), K(micro_block_desc), K(micro_index_data), KP(reader));
     } else if (OB_FAIL(reader->init(decompressed_data, nullptr))) {
-      LOG_WARN("reader init failed", K(ret), K(micro_block_desc), K(micro_index_data));
     } else if (OB_FAIL(reader->get_row_count(row_count))) {
-      LOG_WARN("fail to get row count from micro block reader", K(ret));
      } else if (OB_FAIL(row.init(reader->get_column_count()))) {
-      LOG_WARN("fail to init datum row", K(ret), K(reader->get_column_count()), K(row_count));
     } else {
       for (int64_t row_idx = 0; OB_SUCC(ret) && row_idx < row_count; ++row_idx) {
         row.reuse();
         if (OB_FAIL(reader->get_row(row_idx, row))) {
-          LOG_WARN("fail to get next row",
-                   K(ret), K(row.is_valid()), K(reader->get_column_count()), K(row_idx), K(row_count));
         } else if (OB_FAIL(insert_row(row))) {
-          LOG_WARN("fail to insert row into micro block bloom filter",
-                   K(ret), K(row), K(reader->get_column_count()), K(row_idx), K(row_count), KPC(this));
         }
       }
     }
@@ -270,14 +244,12 @@ int ObMicroBlockBloomFilter::decrypt_and_decompress_micro_data(const ObMicroBloc
              K(ret), K(header), K(micro_data), K(micro_index_data));
   } else if (OB_FAIL(
                  micro_index_data.row_header_->fill_micro_des_meta(false /* need_deep_copy_key */, micro_des_meta))) {
-    LOG_WARN("fail to fill micro block deserialize meta", K(ret), K(micro_index_data));
   } else if (OB_FAIL(macro_reader_.decrypt_and_decompress_data(micro_des_meta,
                                                                micro_data.get_buf(),
                                                                micro_data.get_buf_size(),
                                                                decompressed_data.get_buf(),
                                                                decompressed_data.get_buf_size(),
                                                                is_compressed))) {
-    LOG_WARN("fail to decrypt and decompress data", K(ret), K(micro_des_meta), K(micro_data));
   }
 
   return ret;
@@ -291,7 +263,6 @@ int ObMicroBlockBloomFilter::foreach(F &functor) const
     ret = OB_NOT_INIT;
     LOG_WARN("fail to foreach hash set, not inited", K(ret), KPC(this));
   } else if (OB_FAIL(hash_set_.foreach_refactored(functor))) {
-    LOG_WARN("fail to foreach hash set", K(ret), KPC(this));
   }
   return ret;
 }
@@ -301,7 +272,6 @@ int ObMacroBlockBloomFilter::MergeMicroBlockFunctor::operator()(common::hash::Ha
   int ret = OB_SUCCESS;
   uint32_t hash_val = pair.first;
   if (OB_FAIL(bf_.insert(hash_val))) {
-    LOG_WARN("fail to insert hash val", K(ret), K(hash_val), K(bf_));
   }
   return ret;
 }
@@ -354,12 +324,10 @@ int ObMacroBlockBloomFilter::alloc_bf(const ObDataStoreDesc &data_store_desc, co
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(bf_.init_by_row_count(max_row_count_, ObBloomFilter::BLOOM_FILTER_FALSE_POSITIVE_PROB))) {
-    LOG_WARN("fail to init new bloom filter", K(ret), K(max_row_count_));
   } else {
     if (data_store_desc.is_cg()) { // Fetch datum utils for rowkey murmurhash.
       const ObITableReadInfo *index_read_info;
       if (OB_FAIL(share::g_mp->tenant_cg_read_info_mgr()->get_index_read_info(index_read_info))) {
-        LOG_WARN("fail to get index read info for cg sstable", K(ret), K(data_store_desc));
       } else if (OB_UNLIKELY(!index_read_info->get_datum_utils().is_valid())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected invalid datum utails for cg sstable", K(ret), KPC(index_read_info));
@@ -403,7 +371,6 @@ int ObMacroBlockBloomFilter::merge(const ObMicroBlockBloomFilter &micro_bf)
   } else {
     MergeMicroBlockFunctor functor(bf_);
     if (OB_FAIL(micro_bf.foreach(functor))) {
-      LOG_WARN("fail to merge micro bf", K(ret), K(micro_bf), KPC(this));
     }
   }
   return ret;
@@ -437,11 +404,8 @@ int ObMacroBlockBloomFilter::serialize(char *buf, const int64_t buf_len, int64_t
     LOG_WARN("macro block bloom filter serialize size overflow",
              K(ret), K(serialize_size), K(buf_len), K(pos), KPC(this));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, version_))) {
-    LOG_WARN("fail to serialize version_", K(ret), K(buf_len), K(pos), KPC(this));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, serialize_size))) {
-    LOG_WARN("fail to serialize additional serialize_size", K(ret), K(buf_len), K(pos), K(serialize_size), KPC(this));
   } else if (OB_FAIL(bf_.serialize(buf, buf_len, pos))) {
-    LOG_WARN("fail to serialize bloom filter", K(ret), K(buf_len), K(pos), KPC(this));
   } else if (OB_UNLIKELY(pos - initial_pos != serialize_size)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to serialize macro block bloom filter, unexpected error",
@@ -459,9 +423,7 @@ int ObMacroBlockBloomFilter::deserialize(const char *buf, const int64_t data_len
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(buf), K(data_len), K(pos));
   } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &version_))) {
-    LOG_WARN("fail to deserialize version_", K(ret), K(data_len), K(pos));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &serialize_size))) {
-    LOG_WARN("fail to deserialize additional serialize_size", K(ret), K(data_len), K(pos), KPC(this));
   } else if (OB_UNLIKELY(serialize_size <= sizeof(version_) + sizeof(serialize_size))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to deserialize macro block bloom filter, unexpected serialize_size",

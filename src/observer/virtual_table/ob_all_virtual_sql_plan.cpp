@@ -77,7 +77,6 @@ int ObAllVirtualSqlPlan::DumpAllPlan::operator()(
     
     info.plan_id_ = plan->get_plan_id();
     if (OB_FAIL(plan_ids_->push_back(info))) {
-      SERVER_LOG(WARN, "failed to push back plan id", K(ret));
     }
   }
   return ret;
@@ -113,7 +112,6 @@ int ObAllVirtualSqlPlan::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(extract_tenant_and_plan_id(key_ranges_))) {
-    SERVER_LOG(WARN, "set tenant id and plan id failed", K(ret));
   }
   return ret;
 }
@@ -125,12 +123,10 @@ int ObAllVirtualSqlPlan::inner_get_next_row(common::ObNewRow *&row)
     if (plan_idx_ >= plan_ids_.count()) {
       ret = OB_ITER_END;
     } else if (OB_FAIL(prepare_next_plan())) {
-      SERVER_LOG(WARN, "failed to prepare next plan", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(fill_cells(plan_items_.at(plan_item_idx_++)))) {
-    SERVER_LOG(WARN, "failed to fill cell", K(ret));
   } else {
     //finish fetch one row
     row = &cur_row_;
@@ -147,7 +143,6 @@ int ObAllVirtualSqlPlan::fill_cells(ObSqlPlanItem *plan_item)
   #define REFINE_LENGTH(len) ((len) > MAX_LENGTH ? MAX_LENGTH : (len))
   if (OB_ISNULL(cells) || OB_ISNULL(plan_item)) {
     ret = OB_INVALID_ARGUMENT;
-    SERVER_LOG(WARN, "invalid argument", K(cells));
   }
   for (int64_t cell_idx = 0; OB_SUCC(ret) && cell_idx < col_count; cell_idx++) {
     uint64_t col_id = output_column_ids_.at(cell_idx);
@@ -418,7 +413,6 @@ int ObAllVirtualSqlPlan::extract_tenant_and_plan_id(const common::ObIArray<commo
                end_key_obj_ptr[KEY_PLAN_ID_IDX].is_max_value()) {
       is_always_true = true;
       if (OB_FAIL(dump_tenant_plans())) {
-        SERVER_LOG(WARN, "failed to dump tenant plans", K(ret));
       }
     } else if (start_key_obj_ptr[KEY_PLAN_ID_IDX].is_max_value() &&
                end_key_obj_ptr[KEY_PLAN_ID_IDX].is_min_value()) {
@@ -432,16 +426,12 @@ int ObAllVirtualSqlPlan::extract_tenant_and_plan_id(const common::ObIArray<commo
       if (ObIntType != start_key_obj_ptr[KEY_PLAN_ID_IDX].get_type() || 
           (start_key_obj_ptr[KEY_PLAN_ID_IDX].get_type() != end_key_obj_ptr[KEY_PLAN_ID_IDX].get_type())) {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "expect plan id type to be int",
-                    K(start_key_obj_ptr[KEY_PLAN_ID_IDX].get_type()),
-                    K(end_key_obj_ptr[KEY_PLAN_ID_IDX].get_type()));
       } else {
         int64_t plan_id = start_key_obj_ptr[KEY_PLAN_ID_IDX].get_int();
         PlanInfo info;
         
         info.plan_id_ = plan_id;
         if (OB_FAIL(plan_ids_.push_back(info))) {
-          SERVER_LOG(WARN, "failed to push back plan info", K(ret));
         }
       }
     }
@@ -453,7 +443,6 @@ int ObAllVirtualSqlPlan::dump_all_tenant_plans()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(dump_tenant_plans())) {
-    SERVER_LOG(WARN, "failed to dump tenant` plan", K(ret));
   }
   return ret;
 }
@@ -474,7 +463,6 @@ int ObAllVirtualSqlPlan::dump_tenant_plans()
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "unexpect null plan cache", K(ret));
       } else if (OB_FAIL(plan_cache->foreach_alloc_cache_obj(dump_plan))) {
-        SERVER_LOG(WARN, "failed to dump plan", K(ret));
       }
     } // mtl switch ends
     if (OB_OP_NOT_ALLOW == ret) {
@@ -495,7 +483,6 @@ int ObAllVirtualSqlPlan::prepare_next_plan()
     SERVER_LOG(WARN, "no more plan", K(ret));
   } else if (OB_INVALID_INDEX == 1UL || 
              OB_INVALID_INDEX == plan_ids_.at(plan_idx_).plan_id_) {
-    SERVER_LOG(DEBUG, "invalid plan_id");
     //next plan
     ++plan_idx_;
   } else {
@@ -524,7 +511,6 @@ int ObAllVirtualSqlPlan::prepare_next_plan()
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "unexpect null allocator", K(ret));
         } else if (OB_FAIL(raw_plan.uncompress_logical_plan(*allocator_, plan_items_))) {
-          SERVER_LOG(WARN, "failed to uncompress logical plan", K(ret));
         } else {
           db_id_ = plan->stat_.db_id_;
           plan_hash_ = plan->get_plan_hash_value();

@@ -49,26 +49,20 @@ int ObTenantDicLoader::load_dictionary_in_trans(ObMySQLTransaction &trans)
           ObDicItem item;
           dml.reuse();
           if (OB_FAIL(get_dic_item(i, pos, item))) {
-            LOG_WARN("fail to get dic item", K(ret), K(i), K(pos));
           } else if (OB_FAIL(fill_dic_item(item, dml))){
-            LOG_WARN("fail to fill dic item", K(ret));
           } else {
             if (0 == j) {
               if (OB_FAIL(dml.splice_column_names(columns))) {
-                LOG_WARN("fail to splice column names", K(ret));
               } else if (OB_FAIL(query_string.append_fmt("INSERT INTO %s (%s) VALUES", 
                           table_name, columns.ptr()))) {
-                LOG_WARN("assign sql string failed", KR(ret), K(query_string));
               }
             }
 
             if (OB_SUCC(ret)) {
               values.reset();
               if (OB_FAIL(dml.splice_values(values))) {
-                LOG_WARN("fail to splice values", K(ret));
               } else if (OB_FAIL(query_string.append_fmt("%s(%s)",
                       0 == j ? " " : " , ", values.ptr()))) {
-                LOG_WARN("fail to assign sql string", K(ret));
               }
             }
           }
@@ -80,7 +74,6 @@ int ObTenantDicLoader::load_dictionary_in_trans(ObMySQLTransaction &trans)
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("sql proxy is null", K(ret));
           } else if (OB_FAIL(trans.write(query_string.ptr(), affected_rows))) {
-            LOG_WARN("fail to execute sql", K(ret));
           } else if (OB_UNLIKELY(((array_size > 0) && affected_rows != DEFAULT_BATCH_SIZE) || (affected_rows <= 0))) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("invalid affected rows", K(ret), K(affected_rows));
@@ -105,20 +98,16 @@ int ObTenantDicLoader::try_load_dictionary_in_trans(ObMySQLTransaction &trans)
     if (!is_load_) {
       bool is_need_load_dic = false;
       if (OB_FAIL(check_need_load_dic(is_need_load_dic))) {
-        LOG_WARN("failed to check is real load", K(ret));
       } else if (is_need_load_dic) {
         if (OB_FAIL(ObDicLock::lock_dic_tables_in_trans(*this,
                                                         transaction::tablelock::EXCLUSIVE, 
                                                         trans))) {
-          LOG_WARN("failed to lock all dictionary table", K(ret), KPC(this));
         }
         if (OB_SUCC(ret)) {
           if (OB_FALSE_IT(is_need_load_dic = false)) {
           } else if (OB_FAIL(check_need_load_dic(is_need_load_dic))) {
-            LOG_WARN("failed to check is real load", K(ret));
           } else if (is_need_load_dic) {
             if (OB_FAIL(load_dictionary_in_trans( trans))) {
-              LOG_WARN("failed to load dictionary", K(ret));
             }
           }
         }
@@ -150,13 +139,9 @@ int ObTenantDicLoader::try_load_dictionary_in_trans()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("sql proxy is null", K(ret));
       } else if (OB_FAIL(timeout_ctx.set_trx_timeout_us(timeout))) {
-        LOG_WARN("set trx timeout failed", K(ret));
       } else if (OB_FAIL(timeout_ctx.set_timeout(timeout))) {
-        LOG_WARN("set timeout failed", K(ret));
       } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-        LOG_WARN("failed to start trans", K(ret));
       } else if (OB_FAIL(try_load_dictionary_in_trans(trans))) {
-        LOG_WARN("fail to try load dictionary in trans", K(ret));
       }
       if (trans.is_started()) {
         int tmp_ret = OB_SUCCESS;

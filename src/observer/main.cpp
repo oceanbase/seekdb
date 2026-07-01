@@ -465,9 +465,7 @@ static void print_limit(const char *name, const int resource)
   struct rlimit limit;
   if (0 == getrlimit(resource, &limit)) {
     if (RLIM_INFINITY == limit.rlim_cur) {
-      _OB_LOG(INFO, "[%s] %-24s = %s", __func__, name, "unlimited");
     } else {
-      _OB_LOG(INFO, "[%s] %-24s = %ld", __func__, name, limit.rlim_cur);
     }
   }
   if (RLIMIT_CORE == resource) {
@@ -477,7 +475,6 @@ static void print_limit(const char *name, const int resource)
 
 static void print_all_limits()
 {
-  OB_LOG(INFO, "============= *begin server limit report * =============");
   print_limit("RLIMIT_CORE",RLIMIT_CORE);
   print_limit("RLIMIT_CPU",RLIMIT_CPU);
   print_limit("RLIMIT_DATA",RLIMIT_DATA);
@@ -491,7 +488,6 @@ static void print_all_limits()
   print_limit("RLIMIT_NOFILE",RLIMIT_NOFILE);
   print_limit("RLIMIT_NPROC",RLIMIT_NPROC);
   print_limit("RLIMIT_STACK",RLIMIT_STACK);
-  OB_LOG(INFO, "============= *stop server limit report* ===============");
 }
 #else
 static void print_all_limits()
@@ -576,7 +572,7 @@ int inner_main(int argc, char *argv[])
   // temporarily unlimited memory before init config
   set_memory_limit(INT_MAX64);
 
-  // LLVM removed: the LLVM symbolizer is gone; sanity (ASAN/UBSAN) builds keep
+  // LLVM removed: the objit LLVM symbolizer is gone; sanity (ASAN/UBSAN) builds keep
   // backtrace_symbolize_func at its default (NULL) -> unsymbolized frames.
 #if defined(_WIN32) || defined(__ANDROID__)
   snprintf(ob_get_tname(), OB_THREAD_NAME_BUF_LEN, "seekdb");
@@ -722,12 +718,10 @@ int inner_main(int argc, char *argv[])
       ObServer &observer = ObServer::get_instance();
       LOG_INFO("seekdb starts", "seekdb_version", PACKAGE_STRING);
       if (OB_FAIL(observer.init(*opts, log_cfg))) {
-        LOG_ERROR("seekdb init fail", K(ret));
       }
       OB_DELETE(ObServerOptions, mem_attr, opts);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(observer.start(embed_mode))) {
-        LOG_ERROR("seekdb start fail", K(ret));
       } else {
         safe_sd_notify(0, "READY=1\n"
                        "STATUS=seekdb is ready and running\n");
@@ -738,7 +732,6 @@ int inner_main(int argc, char *argv[])
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(observer.wait())) {
-        LOG_ERROR("seekdb wait fail", K(ret));
       }
 
       if (OB_FAIL(ret)) {

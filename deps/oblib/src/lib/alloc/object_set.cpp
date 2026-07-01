@@ -571,7 +571,6 @@ bool ObjectSet::build_free_lists()
   ABlock *new_block = alloc_block(sizeof (FreeList) * (cells_per_block_ + 1) +
       sizeof (BitMap) + BitMap::buf_len(cells_per_block_ + 1), attr);
 
-  OB_LOG(DEBUG, "build free lists", KCSTRING(common::lbt()));
 
   if (NULL != new_block) {
     //new_block->label_ = common::ObModIds::OB_OBJ_FREELISTS;

@@ -87,8 +87,6 @@ int ObTaskSpliter::find_scan_ops_inner(ObIArray<const ENG_OP::TSC *> &scan_ops, 
       if (OB_ISNULL(child_op)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(ObTaskSpliter::find_scan_ops(scan_ops, *child_op))) {
-        LOG_WARN("fail to find child scan ops",
-                 K(ret), K(i), "op_id", op.get_id(), "child_id", child_op->get_id());
       }
     }
   }
@@ -97,7 +95,6 @@ int ObTaskSpliter::find_scan_ops_inner(ObIArray<const ENG_OP::TSC *> &scan_ops, 
     if (static_cast<const ENG_OP::TSC &>(op).use_dist_das()) {
       //do nothing, use DAS to execute TSC, DAS will handle DAS-related information, no need for the scheduler to be aware of TSC
     } else if (OB_FAIL(scan_ops.push_back(static_cast<const ENG_OP::TSC *>(&op)))) {
-      LOG_WARN("fail to push back table scan op", K(ret));
     }
   }
   return ret;
@@ -114,7 +111,6 @@ int ObTaskSpliter::find_insert_ops_inner(ObIArray<const ENG_OP::TableModify *> &
   int ret = OB_SUCCESS;
   if (IS_TABLE_INSERT(op.get_type())) { // INSERT, REPLACE, INSERT UPDATE, INSERT RETURNING
     if (OB_FAIL(insert_ops.push_back(static_cast<const ENG_OP::TableModify *>(&op)))) {
-      LOG_WARN("fail to push back table insert op", K(ret));
     }
   }
   if (OB_SUCC(ret) && !IS_RECEIVE(op.get_type())) {
@@ -123,8 +119,6 @@ int ObTaskSpliter::find_insert_ops_inner(ObIArray<const ENG_OP::TableModify *> &
       if (OB_ISNULL(child_op)) {
         ret = OB_ERR_UNEXPECTED;
       } else if (OB_FAIL(ObTaskSpliter::find_insert_ops(insert_ops, *child_op))) {
-        LOG_WARN("fail to find child insert ops",
-                 K(ret), K(i), "op_id", op.get_id(), "child_id", child_op->get_id());
       }
     }
   }

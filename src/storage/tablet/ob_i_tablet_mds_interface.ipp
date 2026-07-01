@@ -57,7 +57,6 @@ inline int ObITabletMdsInterface::read_data_from_tablet_cache
   if (last_persisted_committed_tablet_status.is_valid() && ObTabletStatus::NONE != last_persisted_committed_tablet_status.get_tablet_status()) {
     applied_success = true;
     if (OB_FAIL(read_op(last_persisted_committed_tablet_status))) {
-      MDS_LOG(WARN, "failed to do read op", KR(ret), K(last_persisted_committed_tablet_status));
     }
   } else {
     applied_success = false;
@@ -75,7 +74,6 @@ int ObITabletMdsInterface::read_data_from_cache_or_mds_sstable(common::ObIAlloca
   int ret = OB_SUCCESS;
   bool applied_success = false;
   if (OB_SUCCESS != (ret = read_data_from_tablet_cache<K, V>(key, read_op, applied_success))) {
-    MDS_LOG(WARN, "failed to read mds data from cache", KR(ret), K(key), K(snapshot), K(timeout_us));
   } else if (!applied_success) {
     if (OB_FAIL(read_data_from_mds_sstable(allocator, key, snapshot, timeout_us, read_op))) {
       if (OB_ITER_END == ret) {
@@ -110,7 +108,6 @@ int ObITabletMdsInterface::read_data_from_mds_sstable(common::ObIAllocator &allo
       ret = OB_ALLOCATE_MEMORY_FAILED;
       MDS_LOG(WARN, "fail to alloc memory", K(ret), K(key_size));
     } else if (OB_FAIL(key.mds_serialize(buffer, key_size, pos))) {
-      MDS_LOG(WARN, "fail to serialize key", K(ret));
     } else {
       key_str.assign_ptr(buffer, key_size);
     }
@@ -129,9 +126,7 @@ int ObITabletMdsInterface::read_data_from_mds_sstable(common::ObIAllocator &allo
     const common::ObString &user_data = kv.v_.user_data_;
     int64_t pos = 0;
     if (OB_FAIL(ms.deserialize(user_data.ptr(), user_data.length(), pos))) {
-      MDS_LOG(WARN, "fail to deserialize", K(ret));
     } else if (OB_FAIL(read_op(data))) {
-      MDS_LOG(WARN, "fail to do read op", K(ret));
     } else {
       MDS_LOG(DEBUG, "succeed to get data from mds sstable", K(ret), K(data));
     }
@@ -433,7 +428,6 @@ int ObITabletMdsInterface::get_latest(OP &&read_op,
   bool is_online = false;
   bool is_data_complete = false;
   if (OB_FAIL(check_mds_data_complete_<T>(is_data_complete))) {
-    MDS_LOG(WARN, "failed to check data completion");
   } else if (!is_data_complete) {
     ret = OB_EAGAIN;
     MDS_LOG(INFO, "mds_data is not complete, try again later", K(ret), K(get_tablet_meta_().ha_status_));
@@ -516,7 +510,6 @@ int ObITabletMdsInterface::get_latest_committed(OP &&read_op) const
   bool is_online = false;
   bool is_data_complete = false;
   if (OB_FAIL(check_mds_data_complete_<T>(is_data_complete))) {
-    MDS_LOG(WARN, "failed to check data completion");
   } else if (!is_data_complete) {
     ret = OB_EAGAIN;
     MDS_LOG(INFO, "mds_data is not complete, try again later", K(ret), K(get_tablet_meta_().ha_status_));
@@ -603,7 +596,6 @@ int ObITabletMdsInterface::get_snapshot(const Key &key,
   bool is_online = false;
   bool is_data_complete = false;
   if (OB_FAIL(check_mds_data_complete_<Value>(is_data_complete))) {
-    MDS_LOG(WARN, "failed to check data completion");
   } else if (!is_data_complete) {
     ret = OB_EAGAIN;
     MDS_LOG(INFO, "mds_data is not complete, try again later", K(ret), K(get_tablet_meta_().ha_status_));
@@ -678,7 +670,6 @@ int ObITabletMdsInterface::obj_to_string_holder_(const T &obj, ObStringHolder &h
   int64_t pos = 0;
   if (FALSE_IT(databuff_printf(stack_buffer, buffer_size, pos, obj))) {// try hard to fill buffer, it's ok if buffer not enough
   } else if (OB_FAIL(holder.assign(ObString(pos, stack_buffer)))) {
-    MDS_LOG(WARN, "fail to assign to holder");
   }
   return ret;
 }
@@ -716,7 +707,6 @@ int ObITabletMdsInterface::fill_virtual_info_from_mds_sstable(ObIArray<mds::MdsN
           scan_param))) {
       MDS_LOG(WARN, "fail to build scan param", K(ret));
     } else if (OB_FAIL(mds_table_scan(scan_param, store_ctx, iter))) {
-        MDS_LOG(WARN, "fail to do mds table scan", K(ret), K(ls_id), K(tablet_id), K(scan_param));
     } else {
       int tmp_ret = OB_SUCCESS;
       while(OB_SUCC(iter.get_next_mds_kv(allocator, kv))) {
@@ -835,15 +825,12 @@ int ObITabletMdsInterface::mds_range_query(
   ObTabletHandle src_tablet_handle;
   if (get_tablet_meta_().has_transfer_table()) {
     if (OB_FAIL(get_src_tablet_handle_and_base_ptr_(src_tablet_handle, src))) {
-      MDS_LOG(WARN, "fail to get src tablet handle", K(ret), K(get_tablet_meta_()));
     }
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(get_tablet_handle_from_this(tablet_handle))) {
-    MDS_LOG(WARN, "fail to get tablet_handle", K(ret));
   } else if (OB_FAIL(iter.init(scan_param, tablet_handle, src_tablet_handle))) {
-    MDS_LOG(WARN, "fail to init range scan iter", K(ret), K(scan_param));
   }
 
   return ret;

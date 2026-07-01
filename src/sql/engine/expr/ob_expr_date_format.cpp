@@ -85,15 +85,12 @@ int ObExprDateFormat::calc_date_format(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     ret = OB_NOT_INIT;
     LOG_WARN("session is null", K(ret), K(session));
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
-    LOG_WARN("get sql mode failed", K(ret));
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
-    LOG_WARN("get tz info failed", K(ret));
   } else if (FALSE_IT(ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                                        session->is_ignore_stmt(),
 	                                                     sql_mode, cast_mode))) {
     LOG_WARN("get default cast mode failed", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, date, format))) {
-    LOG_WARN("calc param failed", K(ret));
   } else if (date->is_null() || format->is_null()) {
     expr_datum.set_null();
   } else if (OB_ISNULL(buf = expr.get_str_res_mem(ctx, buf_len))) {
@@ -116,7 +113,6 @@ int ObExprDateFormat::calc_date_format(const ObExpr &expr, ObEvalCtx &ctx, ObDat
   } else if (OB_UNLIKELY(format->get_string().empty())) {
     expr_datum.set_null();
   } else if (OB_FAIL(session->get_locale_name(locale_name))) {
-      LOG_WARN("failed to get locale time name", K(expr), K(expr_datum));
   } else if (OB_FAIL(ObTimeConverter::ob_time_to_str_format(ob_time,
                                                             format->get_string(),
                                                             buf,
@@ -124,7 +120,6 @@ int ObExprDateFormat::calc_date_format(const ObExpr &expr, ObEvalCtx &ctx, ObDat
                                                             pos,
                                                             res_null,
                                                             locale_name))) {
-      LOG_WARN("failed to convert ob time to str with format");
   } else if (res_null) {
     expr_datum.set_null();
   } else {
@@ -147,7 +142,6 @@ int ObExprDateFormat::calc_date_format_invalid(const ObExpr &expr, ObEvalCtx &ct
     ret = OB_NOT_INIT;
     LOG_WARN("session is null", K(ret), K(session));
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
-    LOG_WARN("get sql mode failed", K(ret));
   } else if (FALSE_IT(ObSQLUtils::get_default_cast_mode(session->get_stmt_type(),
                                                         session->is_ignore_stmt(),
                                                         sql_mode, cast_mode))) {
@@ -266,7 +260,6 @@ int ObExprGetFormat::calc_get_format(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   ObDatum *unit = NULL;
   ObDatum *format = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, unit, format))) {
-    LOG_WARN("calc param failed", K(ret));
   } else if (OB_UNLIKELY(unit->is_null() || unit->get_int() < 0
              || unit->get_int() >= GET_FORMAT_MAX)) {
     ret = OB_INVALID_ARGUMENT;
@@ -305,7 +298,6 @@ int ObExprGetFormat::calc_get_format(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
                                                         out,
                                                         expr.datum_meta_.cs_type_,
                                                         out_alloc))) {
-          LOG_WARN("convert string collation failed", K(ret));
         } else {
           expr_datum.set_string(out);
         }
@@ -523,13 +515,9 @@ int ObExprDateFormat::vector_date_format(const ObExpr &expr,
     ret = OB_NOT_INIT;
     LOG_WARN("session is null", K(ret), K(session));
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
-    LOG_WARN("get tz info failed", K(ret));
   } else if (OB_FAIL(session->get_locale_name(locale_name))) {
-    LOG_WARN("failed to get locale time name", K(expr));
   } else if (OB_FAIL(get_day_month_names(locale_name, day_name, ab_day_name, month_name, ab_month_name))) {
-    LOG_WARN("get day month names fail", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("failed to get format", K(expr));
   } else if (expr.args_[1]->get_vector(ctx)->is_null(0) ||
              expr.args_[1]->get_vector(ctx)->get_string(0).empty()) {
     for (int64_t idx = bound.start(); OB_SUCC(ret) && idx < bound.end(); ++idx) {
@@ -540,7 +528,6 @@ int ObExprDateFormat::vector_date_format(const ObExpr &expr,
   } else {
     const ObTimeZoneInfo *local_tz_info = (ObTimestampType == expr.args_[0]->datum_meta_.type_) ? tz_info : NULL;
     if (OB_FAIL(get_tz_offset(local_tz_info, tz_offset))) {
-      LOG_WARN("get tz_info offset fail", K(ret));
     } else {
       // analyze format and get calculate mode
       int32_t mode = MODE_NONE;
@@ -548,7 +535,6 @@ int ObExprDateFormat::vector_date_format(const ObExpr &expr,
       const char *format_ptr = format_string.ptr();
       const char *end_ptr = format_ptr + format_string.length();
       if (OB_FAIL(analyze_format(format_ptr, end_ptr, mode))) {
-        LOG_WARN("invalid format", K(ret));
       } else {
         int batch_size = bound.end();
         // (4 + 4 + 1 + 8 + 4 + 4 + 4 +1+1+1+1 + 2 + ...) * 256 / 1024 = 33/4 = 8.75 KB
@@ -734,7 +720,6 @@ int ObExprDateFormat::calc_date_format_vector(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval date_format param", K(ret));
   } else {
     VectorFormat arg_format = expr.args_[0]->get_format(ctx);
     VectorFormat res_format = expr.get_format(ctx);
@@ -750,7 +735,6 @@ int ObExprDateFormat::calc_date_format_vector(const ObExpr &expr,
     }
 
     if (OB_FAIL(ret)) {
-      LOG_WARN("expr calculation failed", K(ret));
     }
   }
   return ret;
@@ -771,7 +755,6 @@ OB_INLINE int ObExprDateFormat::calc_usec_only(COMMON_PART_FORMAT_FUNC_ARG_DECL)
     sec = ob_time.parts_[DT_SEC];
     fsec = ob_time.parts_[DT_USEC];
   } else if (OB_FAIL(ObTimeConverter::parse_date_usec<IN_TYPE>(in_val, tz_offset, false, date, usec))) {
-    LOG_WARN("get date and usec from vec failed", K(ret));
   } else {
     calc_time_parts(usec);
   }
@@ -785,7 +768,6 @@ OB_INLINE int ObExprDateFormat::calc_year_only(COMMON_PART_FORMAT_FUNC_ARG_DECL)
     ret = ObTimeConverter::parse_ob_time<IN_TYPE>(in_val, ob_time);
     get_parts(ob_time);
   } else if (OB_FAIL(ObTimeConverter::parse_date_usec<IN_TYPE>(in_val, tz_offset, false, date, usec))) {
-    LOG_WARN("get date and usec from vec failed", K(ret));
   } else if (OB_UNLIKELY(ObTimeConverter::ZERO_DATE == date)) {
     year = dt_yday = usec = hour = minute = sec = fsec = 0; // USEC_ONLY, YEAR_ONLY
   } else {
@@ -803,7 +785,6 @@ OB_INLINE int ObExprDateFormat::calc_yday_only(COMMON_PART_FORMAT_FUNC_ARG_DECL)
     get_parts(ob_time);
     dt_yday = ObTimeConverter::calc_yday(ob_time);
   } else if (OB_FAIL(ObTimeConverter::parse_date_usec<IN_TYPE>(in_val, tz_offset, false, date, usec))) {
-    LOG_WARN("get date and usec from vec failed", K(ret));
   } else if (OB_UNLIKELY(ObTimeConverter::ZERO_DATE == date)) {
     year = dt_yday = usec = hour = minute = sec = fsec =  0; // USEC_ONLY, YEAR_ONLY, YDAY_ONLY
   } else {
@@ -820,7 +801,6 @@ OB_INLINE int ObExprDateFormat::calc_week_only(COMMON_PART_FORMAT_FUNC_ARG_DECL)
     ret = ObTimeConverter::parse_ob_time<IN_TYPE>(in_val, ob_time, true);
     get_parts(ob_time);
   } else if (OB_FAIL(ObTimeConverter::parse_date_usec<IN_TYPE>(in_val, tz_offset, false, date, usec))) {
-    LOG_WARN("get date and usec from vec failed", K(ret));
   } else if (OB_UNLIKELY(ObTimeConverter::ZERO_DATE == date)) {
     dt_wday = usec = hour = minute = sec = fsec = 0; // USEC_ONLY, WEEK_ONLY
   } else {
@@ -837,7 +817,6 @@ OB_INLINE int ObExprDateFormat::calc_year_month(COMMON_PART_FORMAT_FUNC_ARG_DECL
     ret = ObTimeConverter::parse_ob_time<IN_TYPE>(in_val, ob_time, true);
     get_parts(ob_time);
   } else if (OB_FAIL(ObTimeConverter::parse_date_usec<IN_TYPE>(in_val, tz_offset, false, date, usec))) {
-    LOG_WARN("get date and usec from vec failed", K(ret));
   } else if (OB_UNLIKELY(ObTimeConverter::ZERO_DATE == date)) {
     year = month = usec = dt_yday = dt_mday = hour = minute = sec = fsec = 0;  // USEC_ONLY, YEAR_ONLY, YEAR_MONTH
   } else {
@@ -855,7 +834,6 @@ OB_INLINE int ObExprDateFormat::calc_year_week(COMMON_PART_FORMAT_FUNC_ARG_DECL)
     ret = ObTimeConverter::parse_ob_time<IN_TYPE>(in_val, ob_time, true);
     get_parts(ob_time);
   } else if (OB_FAIL(ObTimeConverter::parse_date_usec<IN_TYPE>(in_val, tz_offset, false, date, usec))) {
-    LOG_WARN("get date and usec from vec failed", K(ret));
   } else if (OB_UNLIKELY(ObTimeConverter::ZERO_DATE == date)) {
     year = date = usec = dt_yday = dt_wday = hour = minute = sec = fsec = 0; // USEC_ONLY, YEAR_ONLY, WEEK_ONLY, YEAR_WEEK
   } else {
@@ -873,7 +851,6 @@ OB_INLINE int ObExprDateFormat::calc_year_month_week(COMMON_PART_FORMAT_FUNC_ARG
     ret = ObTimeConverter::parse_ob_time<IN_TYPE>(in_val, ob_time, true);
     get_parts(ob_time);
   } else if (OB_FAIL(ObTimeConverter::parse_date_usec<IN_TYPE>(in_val, tz_offset, false, date, usec))) {
-    LOG_WARN("get date and usec from vec failed", K(ret));
   } else if (OB_UNLIKELY(ObTimeConverter::ZERO_DATE == date)) {
     // USEC_ONLY, YEAR_ONLY, YEAR_MONTH, WEEK_ONLY, YEAR_WEEK, YEAR_MONTH_WEEK
     year = month = date = usec = dt_yday = dt_mday = dt_wday = hour = minute = sec = fsec = 0;

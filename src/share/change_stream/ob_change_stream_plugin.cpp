@@ -44,14 +44,12 @@ int ObCSDebugPlugin::process(common::ObIArray<ObCSRow> &rows, ObCSExecCtx &ctx)
 
     if (OB_NOT_NULL(row.new_row_.data_) && row.new_row_.size_ > 0) {
       if (OB_FAIL(row_reader.read_row(row.new_row_.data_, row.new_row_.size_, nullptr, new_datum_row))) {
-        LOG_WARN("CSDebugPlugin: read new_row failed", K(ret), K(i));
       } else {
         has_new = true;
       }
     }
     if (OB_SUCC(ret) && OB_NOT_NULL(row.old_row_.data_) && row.old_row_.size_ > 0) {
       if (OB_FAIL(row_reader.read_row(row.old_row_.data_, row.old_row_.size_, nullptr, old_datum_row))) {
-        LOG_WARN("CSDebugPlugin: read old_row failed", K(ret), K(i));
       } else {
         has_old = true;
       }

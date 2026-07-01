@@ -279,7 +279,6 @@ public:
     int ret = common::OB_SUCCESS;
     reset();
     if (OB_FAIL(mutex.lock())) {
-      SERVER_LOG(WARN, "fail to lock mutex", KR(ret));
     } else {
       mutex_ = &mutex;
     }

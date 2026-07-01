@@ -252,7 +252,6 @@ public:
       allocator_ = allocator;
       // Init Dir & Segment.
       if (OB_SUCCESS != (ret = dir_seg_init_())) {
-        LIB_LOG(WARN, "failed to init Dir Segment", K(ret));
       } else {
         inited_ = true;
       }
@@ -266,7 +265,6 @@ public:
       ret = OB_NOT_INIT;
       LIB_LOG(WARN, "not init", K(ret));
     } else if (OB_SUCCESS != (ret = dir_seg_destroy_())) {
-      LIB_LOG(WARN, "failed to destroy Dir Segment", K(ret));
     } else {
       inited_ = false;
     }
@@ -349,8 +347,8 @@ private:
   // Pop lock
   // Expand, shrink, Segment alloc lock.
   bool estrylock_() { return OB_SUCCESS == es_lock_.trylock(); }
-  void eslock_() { int ret = es_lock_.lock(); if (OB_SUCCESS != ret) { LIB_LOG(ERROR, "err lock", K(ret)); } }
-  void esunlock_() { int ret = es_lock_.unlock(); if (OB_SUCCESS != ret) { LIB_LOG(ERROR, "err unlock", K(ret)); }}
+  void eslock_() { int ret = es_lock_.lock(); if (OB_SUCCESS != ret) {} }
+  void esunlock_() { int ret = es_lock_.unlock(); if (OB_SUCCESS != ret) {}}
   // Calc.
   SlotIdx calc_slot_idx_(const int64_t sn, Dir *dir)
   {
@@ -608,7 +606,6 @@ private:
       int64_t seg_cnt = 0;
       if (NULL == old_dir) {
         ret = OB_ERR_UNEXPECTED;
-        LIB_LOG(ERROR, "err dir", K(old_dir));
         // double check, need_shrink may be based on a stale dir
       } else if (dir != old_dir) {
         ret = OB_EAGAIN;

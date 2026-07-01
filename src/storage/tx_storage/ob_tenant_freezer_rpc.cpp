@@ -46,15 +46,12 @@ int tenant_freeze_dispatch(const ObTenantFreezeArg &arg)
     LOG_ERROR("should not be here");
   } else if (storage::TX_DATA_TABLE_FREEZE == arg.freeze_type_) {
     if (OB_FAIL(do_tx_data_table_freeze_(arg))) {
-      LOG_WARN("do tx data table freeze failed.", KR(ret), K(arg));
     }
   } else if (storage::MAJOR_FREEZE == arg.freeze_type_) {
     if (OB_FAIL(do_major_freeze_(arg))) {
-      LOG_WARN("do major freeze failed", K(ret));
     }
   } else if (storage::MDS_TABLE_FREEZE == arg.freeze_type_) {
     if (OB_FAIL(do_mds_table_freeze_(arg))) {
-      LOG_WARN("do mds table freeze failed.", KR(ret), K(arg));
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
@@ -75,11 +72,9 @@ static int do_tx_data_table_freeze_(const ObTenantFreezeArg &arg)
   ObTenantFreezer *freezer = share::g_mp->tenant_freezer();
 
   if (OB_FAIL(tenant_freeze_guard.init(freezer))) {
-    LOG_WARN("[TenantFreezer] fail to get log stream iterator", K(ret));
   } else if (!tenant_freeze_guard.can_freeze()) {
     // skip tx data self freeze due to another freeze task is running
   } else if (OB_FAIL(ls_srv->get_ls_iter(iter_guard, ObLSGetMod::TXSTORAGE_MOD))) {
-    LOG_WARN("[TenantFreezer] fail to get log stream iterator", K(ret));
   } else {
     int ls_cnt = 0;
     while (OB_SUCC(ret))
@@ -94,9 +89,7 @@ static int do_tx_data_table_freeze_(const ObTenantFreezeArg &arg)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("ls is unexpected nullptr", KR(ret), K(arg));
       } else if (OB_FAIL(ls->get_tx_table_guard(tx_table_guard))) {
-        LOG_WARN("get tx table guard failed.", KR(ret), K(arg));
       } else if (OB_FAIL(tx_table_guard.self_freeze_task())) {
-        LOG_WARN("freeze tx data table failed.", KR(ret), K(arg));
       }
       ++ls_cnt;
     }
@@ -121,7 +114,6 @@ static int do_major_freeze_(const ObTenantFreezeArg &arg)
   SCN frozen_scn;
 
   if (OB_FAIL(ObMajorFreezeHelper::get_frozen_scn(frozen_scn))) {
-    LOG_WARN("get_frozen_scn failed", KR(ret));
   } else {
     int64_t frozen_scn_val = frozen_scn.get_val_for_tx();
     bool need_major = true;
@@ -145,11 +137,9 @@ static int do_major_freeze_(const ObTenantFreezeArg &arg)
       ObMajorFreezeParam param;
       param.freeze_reason_ = rootserver::MF_MAJOR_COMPACT_TRIGGER;
       if (OB_FAIL(param.add_freeze_info())) {
-        LOG_WARN("push back failed", KR(ret));
       } else {
         LOG_INFO("do major freeze", K(param));
         if (OB_FAIL(ObMajorFreezeHelper::major_freeze(param))) {
-          LOG_WARN("major freeze failed", K(param), KR(ret));
         } else {
           retry_major_info.reset();
         }
@@ -171,7 +161,6 @@ static int do_mds_table_freeze_(const ObTenantFreezeArg &arg)
   ObLSService *ls_srv = share::g_mp->ls_service();
 
   if (OB_FAIL(ls_srv->get_ls_iter(iter_guard, ObLSGetMod::TXSTORAGE_MOD))) {
-    LOG_WARN("[TenantFreezer] fail to get log stream iterator", K(ret));
   } else {
     int ls_cnt = 0;
     while (OB_SUCC(ret)) {
@@ -189,7 +178,6 @@ static int do_mds_table_freeze_(const ObTenantFreezeArg &arg)
       } else {
         int tmp_ret = OB_SUCCESS;
         if (OB_TMP_FAIL(ls->flush_mds_table(INT64_MAX))) {
-          LOG_WARN("flush mds table failed", KR(tmp_ret), KPC(ls));
         }
       }
       ++ls_cnt;

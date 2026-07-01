@@ -41,7 +41,6 @@ int ObAllVirtualTabletCompactionProgress::init()
     ret = OB_INIT_TWICE;
     SERVER_LOG(WARN, "ObAllVirtualTabletCompactionProgress has been inited", K(ret));
   } else if (OB_FAIL(progress_iter_.open())) {
-    SERVER_LOG(WARN, "Fail to open suggestion iter", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -60,7 +59,6 @@ int ObAllVirtualTabletCompactionProgress::inner_get_next_row(common::ObNewRow *&
       STORAGE_LOG(WARN, "Fail to get next suggestion info", K(ret));
     }
   } else if (OB_FAIL(fill_cells())) {
-    STORAGE_LOG(WARN, "Fail to fill cells", K(ret), K(progress_));
   } else {
     row = &cur_row_;
   }

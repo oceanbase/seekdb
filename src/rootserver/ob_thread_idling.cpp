@@ -46,7 +46,6 @@ int ObThreadIdling::idle()
   int ret = OB_SUCCESS;
   const int64_t max_time_us = INT64_MAX;
   if (OB_FAIL(idle(max_time_us))) {
-    LOG_WARN("idle failed", K(ret));
   }
   return ret;
 }

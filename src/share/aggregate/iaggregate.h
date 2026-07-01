@@ -166,7 +166,6 @@ public:
       }
       ret = add_batch_rows<ObVectorBase>(agg_ctx, skip, bound, *param_expr, agg_col_id, agg_cell, row_sel);
       if (OB_FAIL(ret)) {
-        SQL_LOG(WARN, "add batch rows failed", K(ret), K(param_exprs.at(0)->datum_meta_));
       }
     } else if (param_exprs.empty() && !agg_ctx.aggr_infos_.at(agg_col_id).is_implicit_first_aggr()) {
       ObItemType agg_fun_type = agg_ctx.aggr_infos_.at(agg_col_id).get_expr_type();
@@ -176,7 +175,6 @@ public:
               (std::is_same<Derived, SingleRowAggregate<T_FUN_COUNT, VEC_TC_INTEGER, VEC_TC_INTEGER>>::value
               || std::is_same<Derived, SingleRowAggregate<T_FUN_COUNT, VEC_TC_INTEGER, VEC_TC_NUMBER>>::value),
               skip, bound, row_sel, agg_col_id, agg_cell))) {
-          SQL_LOG(WARN, "quick add batch rows failed", K(ret));
         }
       } else if (T_FUN_GROUP_ID == agg_fun_type) {
         // TODO:
@@ -187,7 +185,6 @@ public:
       }
     } else if (defined_add_param_batch<Derived>::value) {
       if (OB_FAIL(add_params_batch_row(agg_ctx, agg_col_id, skip, bound, row_sel, agg_cell))) {
-        SQL_LOG(WARN, "add param batch rows failed", K(ret));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -231,7 +228,6 @@ public:
         char *agg_cell = agg_ctx.row_meta().locate_cell_payload(agg_col_id, agg_rows[batch_idx]);
         if (OB_FAIL(derived_this->add_one_row(agg_ctx, batch_idx, batch_size, false, nullptr, 0,
                                               agg_col_id, agg_cell))) {
-          SQL_LOG(WARN, "inner add one row failed", K(ret));
         }
       }
     } else {
@@ -265,7 +261,6 @@ public:
       } else {
         ret = collect_group_results<ObVectorBase>(agg_ctx, agg_col_id, cur_group_id, output_start_idx, loop_cnt, skip);
         if (OB_FAIL(ret)) {
-          SQL_LOG(WARN, "collect batch group results failed", K(ret));
         } else {
           output_size = loop_cnt;
         }
@@ -300,7 +295,7 @@ public:
       } else {
         ret = collect_group_results<ObVectorBase>(agg_ctx, agg_col_id, output_start_idx, batch_size,
                                                   rows, row_meta, row_start_idx, need_init_vector);
-        if (OB_FAIL(ret)) { SQL_LOG(WARN, "collect batch group results failed", K(ret)); }
+        if (OB_FAIL(ret)) {}
       }
     }
     return ret;
@@ -329,7 +324,6 @@ protected:
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(derived_this->add_one_row(agg_ctx, batch_idx, batch_size, is_null, payload, len,
                                             agg_col_id, agg_cell))) {
-        SQL_LOG(WARN, "inner add one row failed", K(ret));
       }
     }
     return ret;
@@ -352,7 +346,6 @@ protected:
           for (int i = bound.start(); OB_SUCC(ret) && i < bound.end(); i++) {
             if (OB_FAIL(AddRow<Derived>::do_op(derived, agg_ctx, *columns, i, agg_col_id,
                                                      agg_cell, tmp_res, calc_info))) {
-              SQL_LOG(WARN, "add row failed", K(ret));
             }
           } // end for
           if (agg_cell != nullptr) {
@@ -363,7 +356,6 @@ protected:
           for (int i = bound.start(); OB_SUCC(ret) && i < bound.end(); i++) {
             if (OB_FAIL(AddNullableRow<Derived>::do_op(
                   derived, agg_ctx, *columns, i, agg_col_id, agg_cell, tmp_res, calc_info))) {
-              SQL_LOG(WARN, "add row failed", K(ret));
             }
           } // end for
         }
@@ -372,7 +364,6 @@ protected:
           for (int i = 0; OB_SUCC(ret) && i < row_sel.size(); i++) {
             if (OB_FAIL(AddRow<Derived>::do_op(derived, agg_ctx, *columns, row_sel.index(i),
                                                      agg_col_id, agg_cell, tmp_res, calc_info))) {
-              SQL_LOG(WARN, "add row failed", K(ret));
             }
           } // end for
           if (agg_cell != nullptr) {
@@ -384,7 +375,6 @@ protected:
             if (OB_FAIL(AddNullableRow<Derived>::do_op(
                   derived, agg_ctx, *columns, row_sel.index(i), agg_col_id, agg_cell, tmp_res,
                   calc_info))) {
-              SQL_LOG(WARN, "add row failed", K(ret));
             }
           } // end for
         }
@@ -396,7 +386,6 @@ protected:
             } else if (OB_FAIL(AddRow<Derived>::do_op(derived, agg_ctx, *columns, i,
                                                             agg_col_id, agg_cell, tmp_res,
                                                             calc_info))) {
-              SQL_LOG(WARN, "add row failed", K(ret));
             } else {
               has_data = true;
             }
@@ -411,7 +400,6 @@ protected:
             } else if (OB_FAIL(AddNullableRow<Derived>::do_op(
                          derived, agg_ctx, *columns, i, agg_col_id, agg_cell, tmp_res,
                          calc_info))) {
-              SQL_LOG(WARN, "add row failed", K(ret));
             }
           } // end for
         }
@@ -422,7 +410,7 @@ protected:
           for (int i = bound.start(); OB_SUCC(ret) && i < bound.end(); i++) {
             ret = removal_opt<Derived>::add_or_sub_row(derived, agg_ctx, *columns, i, agg_col_id, agg_cell,
                                                        tmp_res, calc_info);
-            if (OB_FAIL(ret)) { SQL_LOG(WARN, "add or sub row failed", K(ret)); }
+            if (OB_FAIL(ret)) {}
           }
         } else {
           for (int i = bound.start(); OB_SUCC(ret) && i < bound.end(); i++) {
@@ -430,7 +418,7 @@ protected:
             } else {
               ret = removal_opt<Derived>::add_or_sub_row(derived, agg_ctx, *columns, i, agg_col_id, agg_cell,
                                                          tmp_res, calc_info);
-              if (OB_FAIL(ret)) { SQL_LOG(WARN, "add or sub row failed", K(ret)); }
+              if (OB_FAIL(ret)) {}
             }
           }
         }
@@ -438,14 +426,13 @@ protected:
         for (int i = 0; OB_SUCC(ret) && i < row_sel.size(); i++) {
           ret = removal_opt<Derived>::add_or_sub_row(derived, agg_ctx, *columns, i, agg_col_id, agg_cell,
                                                      tmp_res, calc_info);
-          if (OB_FAIL(ret)) { SQL_LOG(WARN, "add or sub row failed", K(ret)); }
+          if (OB_FAIL(ret)) {}
         }
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(
             collect_tmp_result<Derived>::do_op(derived, agg_ctx, agg_col_id, agg_cell))) {
-        SQL_LOG(WARN, "collect tmp result failed", K(ret));
       }
     }
     return ret;
@@ -476,7 +463,6 @@ protected:
       } else if (FALSE_IT(agg_cell_len = agg_ctx.row_meta().get_cell_len(agg_col_id, agg_row))) {
       } else if (OB_FAIL(static_cast<Derived *>(this)->template collect_group_result<ResultFmt>(
                    agg_ctx, *agg_expr, agg_col_id, agg_cell, agg_cell_len))) {
-        SQL_LOG(WARN, "collect group result failed", K(ret));
       }
     }
     return ret;
@@ -514,14 +500,8 @@ protected:
           if (OB_FAIL(ret)) {
           } else {
             agg_cell_len = agg_ctx.row_meta().get_cell_len(agg_col_id, agg_row);
-            SQL_LOG(DEBUG, "collect group results", K(agg_col_id), K(output_start_idx), K(i),
-                    K(batch_size), K(row_start_idx),
-                    K(agg_ctx.aggr_infos_.at(agg_col_id).get_expr_type()), KP(agg_cell),
-                    K(agg_cell_len), K(agg_cell), K(row_meta), KP(row), KP(agg_expr),
-                    KPC(agg_expr));
             if (OB_FAIL(static_cast<Derived *>(this)->template collect_group_result<ResultFmt>(
                   agg_ctx, *agg_expr, agg_col_id, agg_cell, agg_cell_len))) {
-              SQL_LOG(WARN, "collect group result failed", K(ret));
             }
           }
         }
@@ -629,7 +609,6 @@ public:
       ret = OB_ERR_UNEXPECTED;
       SQL_LOG(WARN, "invalid null aggregate", K(ret));
     } else if (OB_FAIL(agg_->init(agg_ctx, agg_col_id, allocator))) {
-      SQL_LOG(WARN, "init aggregate failed", K(ret));
     }
     return ret;
   }
@@ -650,7 +629,6 @@ public:
       SQL_LOG(WARN, "invalid null extra or extra is not inited", K(ret), K(agg_col_id), KP(extra));
     } else if (OB_FAIL(extra->insert_row_for_batch(param_exprs, bound.end(), &skip,
                                                    bound.start()))) {
-      SQL_LOG(WARN, "add batch rows failed", K(ret));
     }
     return ret;
   }
@@ -674,9 +652,7 @@ public:
       ret = OB_ERR_UNEXPECTED;
       SQL_LOG(WARN, "distinct set is NULL", K(ret));
     } else if (OB_FAIL(ad_result->init_vector_default(ctx, ctx.max_batch_size_))) {
-      SQL_LOG(WARN, "failed to init vector default", K(ret));
     } else if (OB_FAIL(ad_result->brs_holder_.save(ctx.max_batch_size_))) {
-      SQL_LOG(WARN, "backup datum failed", K(ret));
     } else {
       int64_t read_rows = 0;
       while (OB_SUCC(ret)) {
@@ -689,13 +665,11 @@ public:
           }
           break;
         } else if (OB_FAIL(rollup_result->insert_row_for_batch(param_exprs, read_rows))) {
-          SQL_LOG(WARN, "add_row failed", K(ret));
         }
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ad_result->brs_holder_.restore())) {
-      SQL_LOG(WARN, "restore datum failed", K(ret));
     }
     return ret;
   }
@@ -719,20 +693,14 @@ public:
       ret = OB_ERR_UNEXPECTED;
       SQL_LOG(WARN, "invalid null extra", K(ret));
     } else if (OB_FAIL(ad_result->init_vector_default(ctx, ctx.max_batch_size_))) {
-      SQL_LOG(WARN, "failed to init vector default", K(ret));
     } else if (OB_FAIL(ad_result->brs_holder_.save(ctx.max_batch_size_))) {
-      SQL_LOG(WARN, "backup datum failed", K(ret));
     } else if (agg_ctx.has_rollup_ && group_id > 0) {
       if (group_id > agg_ctx.rollup_context_->start_partial_rollup_idx_
           && group_id <= agg_ctx.rollup_context_->end_partial_rollup_idx_) {
         // Group id greater than zero in sort based group by must be rollup,
         // distinct set is sorted and iterated in rollup_process(), rewind here.
         if (OB_FAIL(ad_result->rewind())) {
-          SQL_LOG(WARN, "rewind iterator failed", K(ret));
         }
-        SQL_LOG(DEBUG, "debug process distinct batch", K(group_id),
-                K(agg_ctx.rollup_context_->start_partial_rollup_idx_),
-                K(agg_ctx.rollup_context_->end_partial_rollup_idx_));
       }
     }
     char *skip_mem = nullptr;
@@ -758,11 +726,9 @@ public:
           ret = OB_ERR_UNEXPECTED;
           SQL_LOG(WARN, "read unexpected zero rows", K(ret));
         } else {
-          SQL_LOG(DEBUG, "read rows", K(read_rows), K(ctx.max_batch_size_));
           sql::EvalBound bound(read_rows, true);
           if (OB_FAIL(static_cast<Aggregate *>(agg_)->add_batch_rows(
                 agg_ctx, agg_col_id, mock_skip, bound, const_cast<char *>(agg_cell)))) {
-            SQL_LOG(WARN, "add batch rows failed", K(ret));
           }
         }
       }
@@ -774,7 +740,6 @@ public:
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ad_result->brs_holder_.restore())) {
-      SQL_LOG(WARN, "restore datum failed", K(ret));
     }
     return ret;
   }
@@ -786,7 +751,6 @@ public:
     int ret = OB_SUCCESS;
     if (OB_FAIL(static_cast<Aggregate *>(agg_)->template collect_group_result<ResultFmt>(
           agg_ctx, agg_expr, agg_col_id, agg_cell, agg_cell_len))) {
-      SQL_LOG(WARN, "collect group result failed", K(ret));
     }
     return ret;
   }
@@ -843,7 +807,6 @@ public:
       ret = OB_ERR_UNEXPECTED;
       SQL_LOG(WARN, "invalid null aggregate", K(ret));
     } else if (OB_FAIL(agg_->init(agg_ctx, agg_col_id, allocator))) {
-      SQL_LOG(WARN, "init aggregate failed", K(ret));
     }
     return ret;
   }
@@ -878,8 +841,7 @@ public:
         ret = extra->add_batch(param_exprs, ctx, bound, skip, row_sel.selector(), row_sel.size(),
                                agg_ctx.allocator_);
       }
-      if (OB_FAIL(ret)) { 
-        SQL_LOG(WARN, "add batch rows failed", K(ret)); 
+      if (OB_FAIL(ret)) {
       }
     }
 
@@ -910,7 +872,6 @@ public:
       ret = OB_ERR_UNEXPECTED;
       SQL_LOG(WARN, "distinct set is NULL", K(ret));
     } else if (OB_FAIL(ad_result->data_store_brs_holder_.save(ctx.max_batch_size_))) {
-      SQL_LOG(WARN, "backup datum failed", K(ret));
     } else if (OB_ISNULL(skip_mem = (char *)alloc_guard.get_allocator().alloc(
                            ObBitVector::memory_size(ctx.max_batch_size_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -934,14 +895,12 @@ public:
           sql::EvalBound bound(read_rows, true);
           if (OB_FAIL(
                 rollup_result->add_batch(param_exprs, ctx, bound, mock_skip, agg_ctx.allocator_))) {
-            SQL_LOG(WARN, "add_row failed", K(ret));
           }
         }
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ad_result->data_store_brs_holder_.restore())) {
-      SQL_LOG(WARN, "restore datum failed", K(ret));
     }
     return ret;
   }
@@ -966,13 +925,11 @@ public:
       ret = OB_ERR_UNEXPECTED;
       SQL_LOG(WARN, "Invalid null extra or extra not inited", K(ret));
     } else if (OB_FAIL(data_result->data_store_brs_holder_.save(ctx.max_batch_size_))) {
-      SQL_LOG(WARN, "backup datum failed", K(ret));
     } else if (agg_ctx.has_rollup_ && group_id > 0) {
       ret = OB_NOT_IMPLEMENT;
       // Should not be here. Merge rollupllup is not supported. Hash based rollup will not reach
       // here.
     } else if (OB_FAIL(data_result->prepare_for_eval())) {
-      SQL_LOG(WARN, "prepare fetch failed", K(ret));
     } else if (agg_ctx.is_in_window_func() && aggr_info.get_expr_type() == T_FUN_GROUP_CONCAT) {
       // Reset the output string length
       *reinterpret_cast<int32_t *>(agg_cell + sizeof(char **) + sizeof(int32_t)) = 0;
@@ -1003,14 +960,12 @@ public:
           sql::EvalBound bound(read_rows, true);
           if (OB_FAIL(static_cast<Aggregate *>(agg_)->add_batch_rows(agg_ctx, agg_col_id, mock_skip,
                                                                      bound, agg_cell))) {
-            SQL_LOG(WARN, "add batch rows failed", K(ret));
           }
         }
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(data_result->data_store_brs_holder_.restore())) {
-      SQL_LOG(WARN, "restore datum failed", K(ret));
     }
     return ret;
   }
@@ -1022,7 +977,6 @@ public:
     int ret = OB_SUCCESS;
     if (OB_FAIL(static_cast<Aggregate *>(agg_)->template collect_group_result<ResultFmt>(
           agg_ctx, agg_expr, agg_col_id, agg_cell, agg_cell_len))) {
-      SQL_LOG(WARN, "collect group result failed", K(ret));
     }
     return ret;
   }
@@ -1131,7 +1085,6 @@ int init_agg_func(RuntimeContext &agg_ctx, const int64_t agg_col_id, const bool 
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(agg->init(agg_ctx, agg_col_id, allocator))) {
-      SQL_LOG(WARN, "init aggregate failed", K(ret));
     }
   }
   return ret;
@@ -1150,7 +1103,6 @@ int init_agg_func(RuntimeContext &agg_ctx, const int64_t agg_col_id, ObIAllocato
     SQL_LOG(WARN, "allocate memory failed", K(ret));
   } else if (FALSE_IT(agg = new (agg_buf) AggType())) {
   } else if (OB_FAIL(agg->init(agg_ctx, agg_col_id, allocator))) {
-    SQL_LOG(WARN, "init aggregate failed", K(ret));
   }
   return ret;
 }

@@ -103,11 +103,9 @@ int Ob20ProtocolProcessor::do_decode(ObSMConnection& conn, ObICSMemPool& pool, c
         next_read_bytes = delta_len;
         // Attention!! when arrive here, all mysql compress protocols are in command phase
       } else if (OB_FAIL(decode_compressed_body(pool, start, pktlen, pktseq, pktlen_before_compress, pkt))) {
-        LOG_ERROR("fail to decode_compressed_body", K(sessid), K(pktseq), K(ret));  
       }
     } else {
       if (OB_FAIL(decode_ob20_header(origin_start, start, end, header20, sessid, true))) {
-        LOG_ERROR("invalid 20 protocol header", K(header20), K(sessid), K(ret));
       } else if (0 != pktlen_before_compress) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("pktlen_before_compress must be 0 here", 
@@ -133,9 +131,7 @@ int Ob20ProtocolProcessor::do_decode(ObSMConnection& conn, ObICSMemPool& pool, c
           // delat_len == 0, recevied one packet complete
           // delta_len < 0, received more than one packet
         } else if (OB_FAIL(do_body_checksum(start, header20))) {
-          LOG_ERROR("fail to do body checksum", K(header20), K(sessid), K(ret));
         } else if (OB_FAIL(decode_ob20_body(pool, start, header20, pkt))) {
-          LOG_ERROR("fail to decode_compressed_body", K(sessid), K(header20), K(ret));
         }
       }
     }
@@ -222,7 +218,6 @@ inline int Ob20ProtocolProcessor::decode_ob20_header(const char*& origin_start, 
     LOG_DEBUG("decode proto20 header succ", K(header20));
     // 3. crc16 for header checksum
     if (OB_FAIL(do_header_checksum((const char*)origin, header20, need_check_compress))) {
-      LOG_ERROR("fail to do header checksum", K(header20), K(ret));
     } else if (OB_UNLIKELY(OB20_PROTOCOL_MAGIC_NUM != header20.magic_num_)) {
       ret = OB_UNKNOWN_PACKET;
       LOG_ERROR("invalid magic num", K(OB20_PROTOCOL_MAGIC_NUM),
@@ -296,12 +291,10 @@ int Ob20ProtocolProcessor::decode_extra_info(const Ob20ProtocolHeader &hdr,
         common::ObObj key;
         common::ObObj value;
         if (OB_FAIL(key.deserialize(buf, len, pos))) {
-          LOG_WARN("fail to deserialize extra info", K(ret));
         } else if (!key.is_varchar()) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("invalid extra info key type", K(ret), K(key));
         } else if (OB_FAIL(value.deserialize(buf, len, pos))) {
-          LOG_WARN("fail to deserialize extra info", K(ret));
         } else {
           LOG_TRACE("extra info", K(key), K(value));
 
@@ -368,7 +361,6 @@ int Ob20ProtocolProcessor::decode_new_extra_info(const Ob20ProtocolHeader &hdr,
       while (OB_SUCC(ret) && pos < extra_info.extra_len_) {
         int16_t extra_id = 0;
         if (OB_FAIL(ObProtoTransUtil::resolve_type(buf, len, pos, extra_id))) {
-          OB_LOG(WARN,"failed to get extra_info", K(ret), KP(buf));
         } else if (FALSE_IT(pos -= sizeof(int16_t))) {
           // do nothing, reset pos to original
         } else if (extra_id <= OBP20_PROXY_MAX_TYPE || extra_id >= OBP20_SVR_END) {
@@ -378,7 +370,6 @@ int Ob20ProtocolProcessor::decode_new_extra_info(const Ob20ProtocolHeader &hdr,
           LOG_ERROR("get a null encoder", K(extra_id), K(extra_id-OBP20_PROXY_MAX_TYPE-1), K(ret));
         } else if (OB_FAIL(svr_decoders_[extra_id-OBP20_PROXY_MAX_TYPE-1]->
                                                     deserialize(buf, len, pos, extra_info))) {
-          LOG_WARN("failed to decode", K(ret),  KP(buf), K(len), K(pos), K(extra_id));
         } else {
           // do nothing
         }
@@ -403,12 +394,10 @@ int Ob20ProtocolProcessor::do_splice(ObSMConnection& conn, ObICSMemPool& pool, v
     if (OB_FAIL(process_compressed_ob20_packet(conn.sessid_,
                 conn.proto20_pkt_context_, conn.mysql_pkt_context_,
                 conn.pkt_rec_wrapper_, pool, pkt, need_decode_more))) {
-      LOG_ERROR("fail to process_compressed_ob20_packet", K(ret));
     }
   } else {
     if (OB_FAIL(process_ob20_packet(conn.proto20_pkt_context_, conn.mysql_pkt_context_,
                                       conn.pkt_rec_wrapper_, pool, pkt, need_decode_more))) {
-      LOG_ERROR("fail to process_ob20_packet", K(ret));
     }
   }
   return ret;
@@ -456,8 +445,6 @@ inline int Ob20ProtocolProcessor::process_ob20_packet(ObProto20PktContext& conte
     } else if (OB_FAIL(process_fragment_mysql_packet(
                         mysql_pkt_context, pool, mysql_data_start,
                         mysql_data_size, ipacket, need_decode_more))) {
-      LOG_ERROR("fail to process fragment mysql packet", KP(mysql_data_start),
-                K(mysql_data_size), K(need_decode_more), K(ret));
     } else if (!context.extra_info_.exist_extra_info() 
         && pkt20->get_extra_info().exist_extra_info()) {
       char* tmp_buffer = NULL;
@@ -468,7 +455,6 @@ inline int Ob20ProtocolProcessor::process_ob20_packet(ObProto20PktContext& conte
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_ERROR("no memory available", "alloc_size", total_len, K(ret));
       } else if (OB_FAIL(context.extra_info_.assign(pkt20->get_extra_info(), tmp_buffer, total_len))) {
-        LOG_ERROR("failed to deep copy extra info", K(ret));
       }
     } else {
       // do nothing
@@ -477,7 +463,6 @@ inline int Ob20ProtocolProcessor::process_ob20_packet(ObProto20PktContext& conte
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(after_process_mysql_packet(pool, context, pkt_rec_wrapper, ipacket, need_decode_more, pkt20))) {
-      LOG_ERROR("failed to do after process mysql packet");
     }
   }
   return ret;
@@ -512,7 +497,6 @@ inline int Ob20ProtocolProcessor::after_process_mysql_packet(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_ERROR("no memory available", "alloc_size", t_len, K(ret));
     } else if (OB_FAIL(input_packet->extra_info_.assign(context.extra_info_, t_buffer, t_len))) {
-      LOG_ERROR("failed to assign extra info", K(ret));
     }
 
     input_packet->set_txn_free_route(pkt20->get_flags().txn_free_route());
@@ -550,7 +534,6 @@ inline int Ob20ProtocolProcessor::decode_compressed_packet(
       int64_t decompress_data_len = 0;
       if (OB_FAIL(compressor.decompress(comp_buf, comp_pktlen, pkt_body,
                                         pktlen_before_compress, decompress_data_len))) {
-        LOG_ERROR("failed to decompress packet", K(ret));
       } else if (OB_UNLIKELY(pktlen_before_compress != decompress_data_len)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("failed to decompress packet", K(pktlen_before_compress),
@@ -600,21 +583,15 @@ inline int Ob20ProtocolProcessor::process_compressed_ob20_packet(uint32_t sessid
       if (OB_FAIL(decode_compressed_packet(iraw_pkt->get_cdata(), iraw_pkt->get_comp_len(),
                                            iraw_pkt->get_uncomp_len(), decompress_data_buf,
                                            decompress_data_size))) {
-        LOG_ERROR("fail to decode_compressed_packet", K(ret));
       } else {
         const char* start = decompress_data_buf;
         // compressed 20 proto skip compress head
         if (OB_FAIL(decode_ob20_header(start, start, 
                   start + decompress_data_size, header20, sessid, false))) {
-          LOG_ERROR("invalid 20 protocol header", K(header20), K(sessid), K(ret));
         } else if (OB_FAIL(do_body_checksum(start, header20))) {
-          LOG_ERROR("fail to do body checksum", K(header20), K(sessid), K(ret));
         } else if (OB_FAIL(decode_ob20_body(pool, start, header20, (rpc::ObPacket*&)ipacket))) {
-          LOG_ERROR("fail to decode_compressed_body", K(sessid), K(header20), K(ret));
         } else if (OB_FAIL(process_ob20_packet(context, mysql_pkt_context, pkt_rec_wrapper,
                 pool, ipacket, need_decode_more))) {
-          LOG_ERROR("fail to process fragment mysql packet", KP(start),
-                    K(decompress_data_size), K(need_decode_more), K(ret));
         } else {
           // do nothing 
         }

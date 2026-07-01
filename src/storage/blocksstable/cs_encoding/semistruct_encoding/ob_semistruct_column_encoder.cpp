@@ -41,11 +41,9 @@ int ObSemiStructColumnEncoder::init(const ObColumnCSEncodingCtx &ctx, const int6
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnCSEncoder::init(ctx, column_index, row_count))) {
-    LOG_WARN("init base column encoder failed", K(ret), K(ctx), K(column_index), K(row_count));
   } else {
     column_header_.type_ = type_;
     if (OB_FAIL(do_init_())) {
-      LOG_WARN("fail to pre_handle", K(ret));
     }
   }
   return ret;
@@ -62,7 +60,6 @@ int ObSemiStructColumnEncoder::do_init_()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("semistruct_ctx is null", K(ret), KPC(ctx_));
   } else if (OB_FAIL(semistruct_ctx_->init_sub_column_encoders())) {
-    LOG_WARN("init sub column encoders fail", K(ret), KPC(semistruct_ctx_));
   }
   return ret;
 }
@@ -90,7 +87,6 @@ int ObSemiStructColumnEncoder::store_column(ObMicroBufferWriter &buf_writer)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid state", K(ret), KPC(ctx_));
   } else if (OB_FAIL(store_column_meta(buf_writer))) {
-    LOG_WARN("fail to store column meta", K(ret));
   } else {
     int64_t sub_col_count = semistruct_ctx_->get_store_column_count();
     for (int64_t i = 0; OB_SUCC(ret) && i < sub_col_count; ++i) {
@@ -99,11 +95,8 @@ int ObSemiStructColumnEncoder::store_column(ObMicroBufferWriter &buf_writer)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("sub column encoder is null", K(ret), K(i), KPC(semistruct_ctx_));
       } else if (OB_FAIL(sub_encoder->store_column(buf_writer))) {
-        LOG_WARN("store sub column fail", K(ret), K(i), KPC(semistruct_ctx_));
       } else if (OB_FAIL(sub_encoder->get_stream_offsets(stream_offsets_))) {
-        LOG_WARN("fail to get sub column stream offsets", K(ret), K(i), KPC(semistruct_ctx_));
       } else if (OB_FAIL(update_previous_info_after_encoding_(i, *sub_encoder))) {
-        LOG_WARN("update_previous_info_after_encoding fail", K(ret), K(i), KPC(semistruct_ctx_));
       } else {
         sub_col_headers_[i] = sub_encoder->get_column_header();
       }
@@ -120,13 +113,9 @@ int ObSemiStructColumnEncoder::store_column_meta(ObMicroBufferWriter &buf_writer
   int ret = OB_SUCCESS;
   int64_t start_offset = buf_writer.length();
   if (OB_FAIL(reserve_header_(buf_writer))) {
-    LOG_WARN("reserve_header fail", K(ret), K(buf_writer));
   } else if (OB_FAIL(reserve_sub_col_headers_(buf_writer))) {
-    LOG_WARN("reserve_sub_col_headers fail", K(ret), K(buf_writer));
   } else if (OB_FAIL(serialize_sub_schema_(buf_writer))) {
-    LOG_WARN("serialize sub schema fail", K(ret));
   } else if (OB_FAIL(store_null_bitamp(buf_writer))) {
-    LOG_WARN("fail to store null bitmap", K(ret));
   } else {
     int64_t sub_col_count = semistruct_ctx_->get_store_column_count();
     for (int64_t i = 0; OB_SUCC(ret) && i < sub_col_count; ++i) {
@@ -135,7 +124,6 @@ int ObSemiStructColumnEncoder::store_column_meta(ObMicroBufferWriter &buf_writer
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("sub column encoder is null", K(ret), K(i), KPC(semistruct_ctx_));
       } else if (OB_FAIL(sub_encoder->store_column_meta(buf_writer))) {
-        LOG_WARN("store sub column meta fail", K(ret), K(i), KPC(semistruct_ctx_));
       } else {
         semistruct_ctx_->sub_col_ctxs_.at(i).has_stored_meta_ = true;
       }
@@ -190,7 +178,6 @@ int ObSemiStructColumnEncoder::get_maximal_encoding_store_size(int64_t &size) co
     for (int64_t i = 0; OB_SUCC(ret) && i < sub_col_count; ++i) {
       int64_t sub_col_store_size = 0;
       if (OB_FAIL(semistruct_ctx_->sub_encoders_.at(i)->get_maximal_encoding_store_size(sub_col_store_size))) {
-        LOG_WARN("get sub column maximal_encoding_store_size fail", K(ret), K(i), KPC(semistruct_ctx_));
       } else {
         size += sub_col_store_size;
       }
@@ -214,7 +201,6 @@ int ObSemiStructColumnEncoder::get_string_data_len(uint32_t &len) const
     for (int64_t i = 0; OB_SUCC(ret) && i < sub_col_count; ++i) {
       uint32_t sub_col_string_len = 0;
       if (OB_FAIL(semistruct_ctx_->sub_encoders_.at(i)->get_string_data_len(sub_col_string_len))) {
-        LOG_WARN("get sub column string data len fail", K(ret), K(i), KPC(semistruct_ctx_));
       } else {
         len += sub_col_string_len;
       }
@@ -244,7 +230,6 @@ int ObSemiStructColumnEncoder::reserve_header_(ObMicroBufferWriter &buf_writer)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("current of buffer is null", K(ret), K(buf_writer));
   } else if (OB_FAIL(buf_writer.write_nop(header_size, true))) {
-    LOG_WARN("data buffer fail to advance headers size", K(ret), K(header_size));
   } else {
     semistruct_header_->type_ = ObSemiStructEncodeHeader::Type::JSON;
     semistruct_header_->column_cnt_ = semistruct_ctx_->get_store_column_count();
@@ -261,7 +246,6 @@ int ObSemiStructColumnEncoder::reserve_sub_col_headers_(ObMicroBufferWriter &buf
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("current of buffer is null", K(ret), K(buf_writer));
   } else if (OB_FAIL(buf_writer.write_nop(sub_col_header_size, true))) {
-    LOG_WARN("data buffer fail to advance sub column headers size", K(ret), K(sub_col_header_size));
   } else {
     for (int i = 0; i < sub_col_count; ++i) {
       sub_col_headers_[i].reuse();
@@ -275,7 +259,6 @@ int ObSemiStructColumnEncoder::serialize_sub_schema_(ObMicroBufferWriter &buf_wr
   int ret = OB_SUCCESS;
   int64_t start_offset = buf_writer.length();
   if (OB_FAIL(semistruct_ctx_->serialize_sub_schema(buf_writer))) {
-    LOG_WARN("serialize sub schema fail", K(ret));
   } else {
     semistruct_header_->schema_len_ = buf_writer.length() - start_offset;
     LOG_TRACE("serialize sub column succese", KPC(semistruct_header_), K(semistruct_ctx_->sub_schema_));
@@ -289,10 +272,8 @@ int ObSemiStructColumnEncoder::update_previous_info_after_encoding_(const int32_
   const ObIntegerStream::EncodingType *stream_types = nullptr;
   ObColumnEncodingIdentifier identifier;
   if (OB_FAIL(e.get_identifier_and_stream_types(identifier, stream_types))) {
-    LOG_WARN("get_identifier_and_stream_types fail", K(ret), K(col_idx));
   } else if (OB_FAIL(semistruct_ctx_->previous_cs_encoding_.update_stream_detect_info(col_idx, identifier,
       stream_types, ctx_->encoding_ctx_->major_working_cluster_version_))) {
-    LOG_WARN("update_column_detect_info fail", K(ret), K(col_idx), K(identifier));
   }
   return ret;
 }

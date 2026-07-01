@@ -63,9 +63,7 @@ int ObVertialPartitionBuilder::generate_schema(
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(set_basic_infos(frozen_version, data_schema, aux_vp_table_schema))) {
-      LOG_WARN("set_basic_infos failed", K(vp_arg), K(frozen_version), K(data_schema), K(ret));
     } else if (OB_FAIL(set_aux_vp_table_columns(vp_arg, data_schema, aux_vp_table_schema))) {
-      LOG_WARN("set_index_table_columns failed", K(vp_arg), K(data_schema), K(ret));
     }
   }
 
@@ -103,7 +101,6 @@ int ObVertialPartitionBuilder::set_basic_infos(
   aux_vp_table_schema.set_storage_format_version(data_schema.get_storage_format_version());
   aux_vp_table_schema.set_progressive_merge_round(data_schema.get_progressive_merge_round());
   if (OB_FAIL(aux_vp_table_schema.set_compress_func_name(data_schema.get_compress_func_name()))) {
-    LOG_WARN("set_compress_func_name failed", K(data_schema));
   }
 
   return ret;
@@ -124,14 +121,12 @@ int ObVertialPartitionBuilder::set_aux_vp_table_columns(
       data_column = NULL;
       uint64_t column_id = OB_INVALID_ID;
       if (OB_FAIL(rowkey_info.get_column_id(i, column_id))) {
-        LOG_WARN("get_column_id failed", "index", i, K(ret));
       } else if (NULL == (data_column = data_schema.get_column_schema(column_id))) {
         ret = OB_ERR_BAD_FIELD_ERROR;
         LOG_WARN("get_column_schema failed", K(column_id), K(ret));
       } else {
         ObColumnSchemaV2 column_schema;
         if (OB_FAIL(column_schema.assign(*data_column))) {
-          LOG_WARN("fail to assign column schema", KR(ret), KPC(data_column));
         } else {
           // When processing the main partition table, mark the original vertical partition column of the main table as PRIMARY_VP_COLUMN_FLAG
           // When copying the rowkey from the main table to the secondary table, this flag should be cleared
@@ -139,7 +134,6 @@ int ObVertialPartitionBuilder::set_aux_vp_table_columns(
           column_schema.set_is_hidden(true);
           if (OB_FAIL(ObIndexBuilderUtil::add_column(&column_schema, false /*is_index_column*/, true /*is_rowkey*/,
               data_column->get_order_in_rowkey(), row_desc, aux_vp_table_schema, false /* is_hidden */, false /* is_specified_storing_col */))) {
-            LOG_WARN("add column failed", K(column_schema), K(ret));
           }
         }
       }
@@ -153,7 +147,6 @@ int ObVertialPartitionBuilder::set_aux_vp_table_columns(
       } else {
         ObColumnSchemaV2 column_schema;
         if (OB_FAIL(column_schema.assign(*data_column))) {
-          LOG_WARN("fail to assign column schema", KR(ret), KPC(data_column));
         } else if (column_schema.is_rowkey_column()) {
           // Do not add this column, because the first step has already added this column, but it still needs to be labeled
           ObColumnSchemaV2 *rowkey_column = NULL;
@@ -175,7 +168,6 @@ int ObVertialPartitionBuilder::set_aux_vp_table_columns(
             aux_vp_table_schema,
             false /* is_hidden */, 
             false /* is_specified_storing_col */))) {
-          LOG_WARN("add column failed", K(column_schema), K(ret));
         }
       }
     }

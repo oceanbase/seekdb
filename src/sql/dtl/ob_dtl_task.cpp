@@ -40,7 +40,6 @@ int ObDtlChSet::add_channel_info(const ObDtlChannelInfo &info)
     ret = OB_SIZE_OVERFLOW;
     LOG_WARN("chan set full", "count", ch_info_set_.count(), K(ret));
   } else if (OB_FAIL(ch_info_set_.push_back(info))) {
-    LOG_WARN("fail push back channel info", K(info), K(ret));
   }
   return ret;
 }
@@ -64,7 +63,6 @@ int ObDtlChSet::assign(const ObDtlChSet &other)
   ch_info_set_.reuse();
   if (0 < other.ch_info_set_.count()) {
     if (OB_FAIL(ch_info_set_.prepare_allocate(other.ch_info_set_.count()))) {
-      LOG_WARN("failed to prepare alloc", K(ret));
     } else {
       for (int64_t i = 0; i < other.ch_info_set_.count(); ++i) {
         ch_info_set_.at(i) = other.ch_info_set_.at(i);
@@ -108,7 +106,6 @@ int ObDtlExecServer::add_exec_addr(const common::ObAddr &exec_addr)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(exec_addrs_.push_back(exec_addr))) {
-    LOG_WARN("fail push back exec addr", K(exec_addr), K(ret));
   }
   return ret;
 }

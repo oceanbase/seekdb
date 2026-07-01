@@ -96,7 +96,6 @@ int ObDMLRunningCtx::init(
       dml_param_.table_param_->get_data_table(),
       tablet_handle,
       store_ctx_.mvcc_acc_ctx_.get_snapshot_version()))) {
-    LOG_WARN("failed to get relative table", K(ret), K(dml_param_));
   } else if (NULL != column_ids && OB_FAIL(prepare_column_info(*column_ids))) {
     LOG_WARN("fail to get column descriptions and column map", K(ret), K(*column_ids));
   } else if (is_need_check_old_row_ && OB_FAIL(check_need_old_row_legitimacy())) {
@@ -135,18 +134,14 @@ int ObDMLRunningCtx::prepare_relative_table(
   is_delete_insert_table_ = false;
   if (OB_FAIL(relative_table_.init(&schema, tablet_handle.get_obj()->get_tablet_meta().tablet_id_,
       schema.is_storage_index_table() && !schema.can_read_index()))) {
-    LOG_WARN("fail to init relative_table_", K(ret), K(tablet_handle), K(schema.get_index_status()));
   } else if (OB_FAIL(relative_table_.tablet_iter_.set_tablet_handle(tablet_handle))) {
-    LOG_WARN("fail to set tablet handle to iter", K(ret), K(relative_table_.tablet_iter_));
   } else if (OB_FAIL(tablet_handle.get_obj()->check_is_delete_insert_table(is_delete_insert_table_))) {
-    LOG_WARN("fail to check is delete insert table", K(ret));
   } else if (OB_FAIL(relative_table_.tablet_iter_.refresh_read_tables_from_tablet(
       read_snapshot.get_val_for_tx(), 
       relative_table_.allow_not_ready(), 
       false/*major_sstable_only*/,
       true/*need_split_src_table*/,
       false/*need_split_dst_table*/))) {
-    LOG_WARN("failed to get relative table read tables", K(ret));
   } else if (schema.get_read_info().need_truncate_filter() &&
       OB_FAIL(relative_table_.prepare_truncate_part_filter(allocator_, read_snapshot.get_val_for_tx()))) {
     LOG_WARN("failed to prepare truncate part filter", K(ret));
@@ -177,7 +172,6 @@ int ObDMLRunningCtx::prepare_column_info(const common::ObIArray<uint64_t> &colum
       }
       if (relative_table_.is_index_table()) {
         if (OB_FAIL(main_table_rowkey_col_flag_.init(col_descs_->count()))) {
-          LOG_WARN("fail to init main table rowkey column flag array", K(ret), K_(relative_table));
         }
         for (int64_t i = 0; OB_SUCC(ret) && i < col_descs_->count(); ++i) {
           bool is_main_table_rowkey_col = false;
@@ -186,7 +180,6 @@ int ObDMLRunningCtx::prepare_column_info(const common::ObIArray<uint64_t> &colum
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("column is null", K(ret), K(i), KP(column), K(col_descs_->at(i)));  
           } else if (OB_FAIL(main_table_rowkey_col_flag_.push_back(column->is_data_table_rowkey()))) {
-            LOG_WARN("fail to push back", K(ret), K(i), KPC(column));
           }
         }
       }
@@ -201,7 +194,6 @@ int ObDMLRunningCtx::check_need_old_row_legitimacy()
   is_need_check_old_row_ = false;
 
   if (OB_FAIL(relative_table_.has_udf_column(is_need_check_old_row_))) {
-    LOG_WARN("check has udf column failed", K(ret));
   } else if (is_need_check_old_row_) {
     is_udf_ = true;
   } else if (GCONF.enable_defensive_check()) {
@@ -230,7 +222,6 @@ int ObDMLRunningCtx::init_cmp_funcs()
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument to init compare functions", K(ret), K(column_cnt), K(col_descs));
   } else if (OB_FAIL(cmp_funcs_.init(column_cnt, allocator_))) {
-    STORAGE_LOG(WARN, "Failed to reserve cmp func array", K(ret));
   } else {
     ObCmpFunc cmp_func;
     for (int64_t i = 0; OB_SUCC(ret) && i < col_descs.count(); i++) {
@@ -255,7 +246,6 @@ int ObDMLRunningCtx::init_cmp_funcs()
         if (is_ascending) {
           cmp_func.cmp_func_ = basic_funcs->null_first_cmp_;
           if (OB_FAIL(cmp_funcs_.push_back(ObStorageDatumCmpFunc(cmp_func)))) {
-            STORAGE_LOG(WARN, "Failed to push back cmp func", K(ret), K(i), K(col_desc));
           }
         } else {
           ret = OB_ERR_SYS;
@@ -281,11 +271,9 @@ int ObDMLRunningCtx::check_schema_version(
   if (OB_SUCCESS == tmp_ret) {
     // Check tenant schema first. If not pass, then check table level schema version
   } else if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard_))) {
-    LOG_WARN("failed to get tenant schema guard", K(ret));
   } else if (check_formal && OB_FAIL(schema_guard_.check_formal_guard())) {
     LOG_WARN("schema_guard is not formal", K(ret));
   } else if (OB_FAIL(schema_guard_.get_table_schema( table_id, table_schema))) {
-    LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_SCHEMA_ERROR;
     LOG_WARN("failed to get schema", K(ret));
@@ -299,7 +287,6 @@ int ObDMLRunningCtx::check_schema_version(
       // 1. check for wait trans end's check_schema_version_elapsed
       int64_t data_max_schema_version = 0;
       if (OB_FAIL(tablet_handle.get_obj()->get_max_schema_version(data_max_schema_version))) {
-        LOG_WARN("failed to get max schema version", K(ret));
       } else if (table_version < data_max_schema_version) {
         ret = OB_SCHEMA_EAGAIN;
         LOG_WARN("table version mismatch", K(ret), K(table_id), K(table_version), K(data_max_schema_version), K(table_schema->get_schema_version()));
@@ -313,7 +300,6 @@ int ObDMLRunningCtx::check_schema_version(
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(tablet_handle.get_obj()->check_schema_version_with_cache(table_version))) {
-      LOG_WARN("failed to check schema version", K(ret), K(table_version));
     }
   }
   return ret;

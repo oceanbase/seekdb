@@ -53,16 +53,13 @@ int ObIColumnCSEncoder::init(const ObColumnCSEncodingCtx &ctx,
   } else if (ctx.is_semistruct_sub_col_) {
     ObObjMeta col_type;
     if (OB_FAIL(ctx.semistruct_ctx_->get_sub_column_type(column_index, col_type))) {
-      LOG_WARN("get sub column type fail", K(ret), K(column_index), KPC(ctx.semistruct_ctx_));
     } else if (OB_FAIL(init_common_(ctx, column_index, col_type, row_count))) {
-      LOG_WARN("sub column init common fail", K(ret), K(column_index), KPC(ctx.semistruct_ctx_));
     }
   } else if (!ctx.encoding_ctx_->is_valid() || column_index < 0
       || column_index >= ctx.encoding_ctx_->column_cnt_ || 0 == row_count) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(ctx), K(column_index), K(row_count));
   } else if (OB_FAIL(init_common_(ctx, column_index, ctx.encoding_ctx_->col_descs_->at(column_index).col_type_, row_count))) {
-    LOG_WARN("init common fail", K(ret), K(column_index), K(ctx));
   }
   if (OB_SUCC(ret)) {
     is_inited_ = true;
@@ -110,7 +107,6 @@ int ObIColumnCSEncoder::store_null_bitamp(ObMicroBufferWriter &buf_writer)
     int64_t bitmap_size = ObCSEncodingUtil::get_bitmap_byte_size(row_count_);
 
     if (OB_FAIL(buf_writer.advance(bitmap_size))) {
-      LOG_WARN("buffer advance failed", K(ret), K(bitmap_size), K(row_count_));
     } else {
       MEMSET(bitmap, 0, bitmap_size);
       const ObColDatums &datums = *ctx_->col_datums_;
@@ -135,7 +131,6 @@ int ObIColumnCSEncoder::get_stream_offsets(ObIArray<uint32_t> &offsets) const
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < stream_offsets_.count(); i++) {
       if (OB_FAIL(offsets.push_back(stream_offsets_.at(i)))) {
-        LOG_WARN("fail to push back", K(ret));
       }
     }
   }

@@ -49,7 +49,6 @@ int ObCatalogProperties::to_string_with_alloc(ObString &str, ObIAllocator &alloc
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to alloc buf", K(ret), K(buf_len));
     } else if (OB_FAIL(to_string(buf, buf_len, pos))) {
-      LOG_WARN("failed to write string", K(ret));
     }
   } while (OB_SIZE_OVERFLOW == ret);
   OX(str.assign_ptr(buf, pos));
@@ -86,9 +85,7 @@ int ObCatalogProperties::parse_catalog_type(const ObString &str, CatalogType &ty
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("format string is empty", K(ret), K(str));
   } else if (OB_FAIL(parser.init(&temp_allocator))) {
-    LOG_WARN("parser init failed", K(ret));
   } else if (OB_FAIL(parser.parse(str.ptr(), str.length(), data))) {
-    LOG_WARN("parse json failed", K(ret), K(str));
   } else if (NULL == data || json::JT_OBJECT != data->get_type()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("error json value", K(ret), KPC(data));
@@ -162,11 +159,8 @@ int ObODPSCatalogProperties::encrypt(ObIAllocator &allocator)
   ObString encrypted_access_key;
   ObString encrypted_sts_token;
   if (OB_FAIL(encrypt_str(access_id_, encrypted_access_id, allocator))) {
-    LOG_WARN("failed to encrypt", K(ret));
   } else if (OB_FAIL(encrypt_str(access_key_, encrypted_access_key, allocator))) {
-    LOG_WARN("failed to encrypt", K(ret));
   } else if (OB_FAIL(encrypt_str(sts_token_, encrypted_sts_token, allocator))) {
-    LOG_WARN("failed to encrypt", K(ret));
   } else {
     access_id_ = encrypted_access_id;
     access_key_ = encrypted_access_key;
@@ -182,11 +176,8 @@ int ObODPSCatalogProperties::decrypt(ObIAllocator &allocator)
   ObString decrypted_access_key;
   ObString decrypted_sts_token;
   if (OB_FAIL(decrypt_str(access_id_, decrypted_access_id, allocator))) {
-    LOG_WARN("failed to encrypt", K(ret));
   } else if (OB_FAIL(decrypt_str(access_key_, decrypted_access_key, allocator))) {
-    LOG_WARN("failed to encrypt", K(ret));
   } else if (OB_FAIL(decrypt_str(sts_token_, decrypted_sts_token, allocator))) {
-    LOG_WARN("failed to encrypt", K(ret));
   } else {
     access_id_ = decrypted_access_id;
     access_key_ = decrypted_access_key;
@@ -314,9 +305,7 @@ int ObODPSCatalogProperties::load_from_string(const ObString &str, ObIAllocator 
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("format string is empty", K(ret), K(str));
   } else if (OB_FAIL(parser.init(&temp_allocator))) {
-    LOG_WARN("parser init failed", K(ret));
   } else if (OB_FAIL(parser.parse(str.ptr(), str.length(), data))) {
-    LOG_WARN("parse json failed", K(ret), K(str));
   } else if (NULL == data || json::JT_OBJECT != data->get_type()
              || OB_ISNULL(node = data->get_object().get_first())) {
     ret = OB_ERR_UNEXPECTED;

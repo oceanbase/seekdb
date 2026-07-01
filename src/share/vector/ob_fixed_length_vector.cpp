@@ -86,7 +86,6 @@ int ObFixedLengthVector<ValueType, BasicOp>::null_first_mul_cmp(VECTOR_MUL_COMPA
     if (skip.at(row_idx)) {
       continue;
     } else if (OB_FAIL(null_first_cmp(expr, row_idx, r_null, r_v, r_len, cmp_ret))) {
-      LOG_WARN("failed to compare", K(ret));
     } else if (0 != cmp_ret) {
       diff_row_idx = row_idx;
       break;
@@ -109,7 +108,6 @@ int ObFixedLengthVector<ValueType, BasicOp>::null_last_mul_cmp(VECTOR_MUL_COMPAR
     if (skip.at(row_idx)) {
       continue;
     } else if (OB_FAIL(null_last_cmp(expr, row_idx, r_null, r_v, r_len, cmp_ret))) {
-      LOG_WARN("failed to compare", K(ret));
     } else if (0 != cmp_ret) {
       diff_row_idx = row_idx;
       break;
@@ -138,7 +136,6 @@ int ObFixedLengthVector<ValueType, BasicOp>::null_first_cmp_batch_rows(
       r_v = rows[i]->payload() + fixed_offset;
       if (OB_FAIL(null_first_cmp(
               expr, batch_idx, rows[i]->is_null(row_col_idx), r_v, r_len, cmp_ret[i]))) {
-        LOG_WARN("failed to compare", K(ret));
       }
     }
   } else {
@@ -147,7 +144,6 @@ int ObFixedLengthVector<ValueType, BasicOp>::null_first_cmp_batch_rows(
       rows[i]->get_cell_payload(row_meta, row_col_idx, r_v, r_len);
       if (OB_FAIL(null_first_cmp(
               expr, batch_idx, rows[i]->is_null(row_col_idx), r_v, r_len, cmp_ret[i]))) {
-        LOG_WARN("failed to compare", K(ret));
       }
     }
   }

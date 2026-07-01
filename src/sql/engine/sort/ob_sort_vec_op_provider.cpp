@@ -117,26 +117,22 @@ int ObSortVecOpProvider::init_sort_impl_instance(ObSortVecOpContext &ctx, ObISor
       if (OB_SUCCESS
           != (ret = alloc_sort_impl_instance<RTSingleColSortImplType<sk_type, true>>(
                 sort_op_impl))) {
-        LOG_WARN("failed to alloc sort impl instance", K(ret));
       }
     } else {
       if (OB_SUCCESS
           != (ret = alloc_sort_impl_instance<RTSingleColSortImplType<sk_type, false>>(
                 sort_op_impl))) {
-        LOG_WARN("failed to alloc sort impl instance", K(ret));
       }
     }
   } else if (is_basic_cmp_) {
     if (OB_SUCCESS
         != (ret = alloc_sort_impl_instance<RTSortImplType<sort_type, true, sk_type, has_addon>>(
               sort_op_impl))) {
-      LOG_WARN("failed to alloc sort impl instance", K(ret));
     }
   } else if (OB_SUCCESS
              != (ret =
                    alloc_sort_impl_instance<RTSortImplType<sort_type, false, sk_type, has_addon>>(
                      sort_op_impl))) {
-    LOG_WARN("failed to alloc sort impl instance", K(ret));
   }
   return ret;
 }
@@ -160,7 +156,6 @@ int ObSortVecOpProvider::init_sort_impl(ObSortVecOpContext &ctx, ObISortVecOpImp
   sort_op_impl = nullptr;
   has_addon_ = ctx.has_addon_;
   if (OB_FAIL(decide_sort_key_type(ctx))) {
-    LOG_WARN("failed to decide sort key type", K(ret));
   } else if (SORT_TYPE_GENERAL == sort_type_) {
     if (SK_TYPE_TOPN == sort_key_type_) {
       INIT_SORT_IMPL_INSTANCE(SORT_TYPE_GENERAL, SK_TYPE_TOPN, has_addon_);
@@ -207,11 +202,8 @@ int ObSortVecOpProvider::init(ObSortVecOpContext &context)
     LOG_WARN("invalid argument: argument is null", K(ret),
              K(context.sk_collations_), K(context.eval_ctx_), K(context.exec_ctx_));
   } else if (OB_FAIL(init_mem_context())) {
-    LOG_WARN("failed to init mem context", K(ret));
   } else if (OB_FAIL(init_sort_impl(context, sort_op_impl_))) {
-    LOG_WARN("failed to init sort impl instance", K(ret));
   } else if (OB_FAIL(sort_op_impl_->init(context))) {
-    LOG_WARN("failed to init sort impl", K(ret));
   } else {
     is_inited_ = true;
   }

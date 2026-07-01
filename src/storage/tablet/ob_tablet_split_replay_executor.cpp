@@ -46,7 +46,6 @@ int ObTabletSplitReplayExecutor::do_replay_(ObTabletHandle &tablet_handle)
   int ret = OB_SUCCESS;
   mds::MdsCtx &user_ctx = static_cast<mds::MdsCtx&>(*user_ctx_);
   if (OB_FAIL(replay_to_mds_table_(tablet_handle, *data_, user_ctx, scn_))) {
-    TRANS_LOG(WARN, "failed to replay to tablet", K(ret));
   }
   return ret;
 }

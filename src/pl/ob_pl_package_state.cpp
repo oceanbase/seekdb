@@ -157,11 +157,8 @@ int ObPackageVarSetName::encode_key(common::ObIAllocator &alloc,
     LOG_WARN("allocate memory failed", K(ret));
   } else {
     if (OB_FAIL(serialization::encode(ser_buf, ser_buf_len, ser_buf_pos, package_id_))) {
-      LOG_WARN("fail to encode value", K(ret));
     } else if(OB_FAIL(serialization::encode(ser_buf, ser_buf_len, ser_buf_pos, state_version_.package_version_))) {
-      LOG_WARN("fail to encode value", K(ret));
     } else if (OB_FAIL(serialization::encode(ser_buf, ser_buf_len, ser_buf_pos, state_version_.package_body_version_))) {
-      LOG_WARN("fail to encode value", K(ret));
     } else {
       uint64_t key_buf_len = 2*ser_buf_len + key_prefix_len + 1;
       char *key_buf = static_cast<char *>(alloc.alloc(key_buf_len));
@@ -171,7 +168,6 @@ int ObPackageVarSetName::encode_key(common::ObIAllocator &alloc,
       } else {
         MEMCPY(key_buf, key_prefix, static_cast<ObString::obstr_size_t>(key_prefix_len));
         if (OB_FAIL(to_hex_cstr(ser_buf, ser_buf_len, key_buf+key_prefix_len, key_buf_len-key_prefix_len))) {
-          LOG_WARN("hex encode failed", K(ret));
         } else if (key_buf_len != ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, key_buf, key_buf_len, key_buf, key_buf_len)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("package var to down case failed", K(ret));
@@ -201,7 +197,6 @@ int ObPackageVarSetName::decode_key(common::ObIAllocator &alloc,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memory failed", K(ret));
   } else if (OB_FAIL(ob_write_string(alloc, key_str, var_name_str_upcase))) {
-    LOG_WARN("package var name string copy failed", K(ret));
   } else if (var_name_len != ObCharset::caseup(CS_TYPE_UTF8MB4_GENERAL_CI,
                                                var_name_str_upcase.ptr(),
                                                var_name_str_upcase.length(),
@@ -217,11 +212,8 @@ int ObPackageVarSetName::decode_key(common::ObIAllocator &alloc,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("hex decode failed", K(ret));
   } else if (OB_FAIL(serialization::decode(hex_decoed_buf, hex_decoed_buf_len, deser_buf_pos, package_id_))) {
-    LOG_WARN("fail to encode value", K(ret));
   } else if(OB_FAIL(serialization::decode(hex_decoed_buf, hex_decoed_buf_len, deser_buf_pos, state_version_.package_version_))) {
-    LOG_WARN("fail to encode value", K(ret));
   } else if (OB_FAIL(serialization::decode(hex_decoed_buf, hex_decoed_buf_len, deser_buf_pos, state_version_.package_body_version_))) {
-    LOG_WARN("fail to encode value", K(ret));
   } else {
     LOG_DEBUG("decode package var set name",
               K(package_id_), K(var_idx_), K(var_type_), K(state_version_));
@@ -244,7 +236,6 @@ int ObPackageVarSetName::encode(common::ObIAllocator &alloc, common::ObString &v
     LOG_WARN("allocate memory failed", K(ret));
   } else {
     if (OB_FAIL(serialize(ser_buf, ser_buf_len, ser_buf_pos))) {
-      LOG_WARN("package var name serialize failed", K(ret));
     } else {
       uint64_t key_buf_len = 2*ser_buf_len + key_prefix_len+1;
       char *key_buf = static_cast<char *>(alloc.alloc(key_buf_len));
@@ -254,7 +245,6 @@ int ObPackageVarSetName::encode(common::ObIAllocator &alloc, common::ObString &v
       } else {
         MEMCPY(key_buf, key_prefix, static_cast<ObString::obstr_size_t>(key_prefix_len));
         if (OB_FAIL(to_hex_cstr(ser_buf, ser_buf_len, key_buf+key_prefix_len, key_buf_len-key_prefix_len))) {
-          LOG_WARN("hex encode failed", K(ret));
         } else if (key_buf_len != ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, key_buf, key_buf_len, key_buf, key_buf_len)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("package var to down case failed", K(ret));
@@ -286,7 +276,6 @@ int ObPackageVarSetName::decode(common::ObIAllocator &alloc, const common::ObStr
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memory failed", K(ret));
   } else if (OB_FAIL(ob_write_string(alloc, var_name_str, var_name_str_upcase))) {
-    LOG_WARN("package var name string copy failed", K(ret));
   } else if (var_name_len != ObCharset::caseup(CS_TYPE_UTF8MB4_GENERAL_CI,
                                                var_name_str_upcase.ptr(),
                                                var_name_str_upcase.length(),
@@ -302,7 +291,6 @@ int ObPackageVarSetName::decode(common::ObIAllocator &alloc, const common::ObStr
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("hex decode failed", K(ret));
   } else if (OB_FAIL(deserialize(hex_decoed_buf, hex_decoed_buf_len, deser_buf_pos))) {
-    LOG_WARN("package var name serialize failed", K(ret));
   } else {
     LOG_DEBUG("decode package var set name",
               K(package_id_), K(var_idx_), K(var_type_),
@@ -344,7 +332,6 @@ void ObPLPackageState::reset(ObSQLSessionInfo *session_info)
                || PL_OPAQUE_TYPE == types_.at(i)) {
       int ret = OB_SUCCESS;
       if (OB_FAIL(ObUserDefinedType::destruct_objparam(inner_allocator_, vars_.at(i), session_info))) {
-        LOG_WARN("failed to destruct composte obj", K(ret));
       }
     } else if (PL_CURSOR_TYPE == types_.at(i)) {
       ObPLCursorInfo *cursor = reinterpret_cast<ObPLCursorInfo *>(vars_.at(i).get_ext());
@@ -439,7 +426,6 @@ int ObPLPackageState::make_pkg_var_kv_key(ObIAllocator &alloc, int64_t var_idx, 
     key_name.var_type_ = var_type;
     key_name.var_idx_ = var_idx;
     if (OB_FAIL(key_name.encode(alloc, key))) {
-      LOG_WARN("package var name encode failed", K(ret));
     }
   }
   return ret;
@@ -506,13 +492,10 @@ int ObPLPackageState::encode_pkg_var_value(ObPLExecCtx &pl_ctx,
   } else if (cur_ser_val->is_null()) {
     // expired data, do nothing
   } else if (OB_FAIL(ObPLPackageState::is_oversize_value(*cur_ser_val, is_oversize_value))) {
-    LOG_WARN("fail to check value oversize", K(ret));
   } else if (is_oversize_value) {
     value = *cur_ser_val;
   } else if (OB_FAIL(value_map.create(4, ObModIds::OB_PL_TEMP, ObModIds::OB_HASH_NODE))) {
-    LOG_WARN("fail to create hash map", K(ret));
   } else if (OB_FAIL(decode_pkg_var_value(*cur_ser_val, state_version, value_map))) {
-    LOG_WARN("fail to decode pkg var value", K(ret));
   } else {
     // add_changed_package_info intf has check package state valid, do not check again
   }
@@ -526,13 +509,10 @@ int ObPLPackageState::encode_pkg_var_value(ObPLExecCtx &pl_ctx,
           && vars_.at(i).get_meta().get_extend_type() != PL_REF_CURSOR_TYPE) {
         pkg_enc_info.var_idx_ = i;
         if (OB_FAIL(make_pkg_var_kv_value(pl_ctx, resolve_ctx, vars_.at(i), i, pkg_enc_info.encode_value_))) {
-          LOG_WARN("fail to make pkg var value", K(ret));
         } else if (OB_FAIL(pkg_enc_info.construct())) {
-          LOG_WARN("fail to construct pkg enc info", K(ret));
         }
 
         if (FAILEDx(serialize_values.push_back(pkg_enc_info))) {
-          LOG_WARN("fail to push back", K(ret));
         } else if (value_map.created() && OB_FAIL(value_map.erase_refactored(i))) {
           if (OB_HASH_NOT_EXIST == ret) {
             ret = OB_SUCCESS;
@@ -543,11 +523,9 @@ int ObPLPackageState::encode_pkg_var_value(ObPLExecCtx &pl_ctx,
 
         // for mark old user var invalid which encode with old rule
         if (FAILEDx(make_pkg_var_kv_key(*pl_ctx.allocator_, i, VARIABLE, old_key))) {
-          LOG_WARN("make package var name failed", K(ret), K(package_id_), K(i));
         } else if (OB_ISNULL(old_value = pl_ctx.exec_ctx_->get_my_session()->get_user_variable_value(old_key))) {
           // do nothing
         } else if (OB_FAIL(old_keys.push_back(old_key))) {
-          LOG_WARN("fail to push back old key", K(ret));
         }
       }
     }
@@ -680,9 +658,7 @@ int ObPLPackageState::convert_info_to_string_kv(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(var_idx), K(var_type), K(ret));
   } else if (OB_FAIL(make_pkg_var_kv_key(*pl_ctx.allocator_, var_idx, var_type, key))) {
-    LOG_WARN("make package var kv key failed", K(var_idx), K(var_type), K(ret));
   } else if (OB_FAIL(make_pkg_var_kv_value(pl_ctx, resolve_ctx, vars_.at(var_idx), var_idx, value))) {
-    LOG_WARN("make package var kv value failed", K(var_idx), K(var_type), K(ret));
   } else {
     LOG_DEBUG("convert pacakge var info to string kv",
               K(package_id_), K(var_idx), K(key), K(value), K(var_type));
@@ -698,7 +674,6 @@ int ObPLPackageState::encode_pkg_var_key(ObIAllocator &alloc, ObString &key)
   key_name.package_id_ = package_id_;
   key_name.state_version_ = state_version_;
   if (OB_FAIL(key_name.encode_key(alloc, key))) {
-    LOG_WARN("package var name encode failed", K(ret));
   }
   return ret;
 }
@@ -712,9 +687,7 @@ int ObPLPackageState::encode_info_to_string_kvs(ObPLExecCtx &pl_ctx,
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(encode_pkg_var_key(*pl_ctx.allocator_, key))) {
-    LOG_WARN("package var key encode failed", K(ret));
   } else if (OB_FAIL(encode_pkg_var_value(pl_ctx, resolve_ctx, key, value, old_keys))) {
-    LOG_WARN("package var value encode failed", K(ret));
   } else {
     LOG_TRACE("encode_info_to_string_kvs", K(key), K(value), K(old_keys));
   }
@@ -753,11 +726,8 @@ int ObPLPackageState::convert_changed_info_to_string_kvs(ObPLExecCtx &pl_ctx, Ob
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected pointer", K(ret));
   } else if (OB_FAIL(package_guard.init())) {
-    LOG_WARN("fail to init package guard", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_package_info( package_id_, package_info))) {
-    LOG_WARN("fail to get package info", K(ret));
   }
   if (OB_SUCC(ret) && OB_NOT_NULL(package_info)) {
     ObPLResolveCtx resolve_ctx(pl_ctx.exec_ctx_->get_allocator(),
@@ -767,35 +737,25 @@ int ObPLPackageState::convert_changed_info_to_string_kvs(ObPLExecCtx &pl_ctx, Ob
                               *pl_ctx.exec_ctx_->get_sql_proxy(),
                               false);
     if (OB_FAIL(check_package_state_valid(*pl_ctx.exec_ctx_, resolve_ctx, is_valid))) {
-      LOG_WARN("check package state failed", K(ret), KPC(this));
     } else if (!is_valid) {
       LOG_INFO("package state is invalid, ignore this package.", KPC(this));
       ObString key;
       if (OB_FAIL(encode_pkg_var_key(*pl_ctx.allocator_, key))) {
-        LOG_WARN("fail to encode pkg var key", K(ret));
       } else if (OB_FAIL(disable_expired_user_variables(*pl_ctx.exec_ctx_->get_my_session(), key))) {
-        LOG_WARN("fail to disable expired user var", K(ret));
       }
     } else if (OB_FAIL(need_use_new_sync_policy(use_new))) {
-      LOG_WARN("fail to get sync policy", K(ret));
     } else if (use_new) {
       if (is_package_info_changed()) {
         if (OB_FAIL(encode_info_to_string_kvs(pl_ctx, resolve_ctx, key_str, value_obj, old_keys))) {
-          LOG_WARN("fail to encode info", K(ret));
         } else if (OB_FAIL(key.push_back(key_str))) {
-          LOG_WARN("fail to push key ", K(ret));
         } else if (OB_FAIL(value.push_back(value_obj))) {
-          LOG_WARN("fail to push value ", K(ret));
         } else if (old_keys.count() > 0) {
           ObObj invalid_val;
           if (OB_FAIL(get_invalid_value(invalid_val))) {
-            LOG_WARN("fail to get invalid value", K(ret));
           }
           for (int64_t i = 0; OB_SUCC(ret) && i < old_keys.count(); ++i) {
             if (OB_FAIL(key.push_back(old_keys.at(i)))) {
-              LOG_WARN("fail to push key", K(ret));
             } else if (OB_FAIL(value.push_back(invalid_val))) {
-              LOG_WARN("fail to push value", K(ret));
             }
           }
         }
@@ -807,11 +767,8 @@ int ObPLPackageState::convert_changed_info_to_string_kvs(ObPLExecCtx &pl_ctx, Ob
           key_str.reset();
           value_obj.reset();
           if (OB_FAIL(convert_info_to_string_kv(pl_ctx, resolve_ctx, i, VARIABLE, key_str, value_obj))) {
-            LOG_WARN("fail to convert package variable to string kv", K(i), K(ret));
           } else if (OB_FAIL(key.push_back(key_str))) {
-            LOG_WARN("fail to push key ", K(ret));
           } else if (OB_FAIL(value.push_back(value_obj))) {
-            LOG_WARN("fail to push value ", K(ret));
           } else {
             LOG_DEBUG("convert changed info to strings kvs success!",
                       K(package_id_), K(i), K(key_str), K(value_obj));
@@ -833,24 +790,18 @@ int ObPLPackageState::remove_user_variables_for_package_state(ObSQLSessionInfo &
     // ignore error code, reset all variables
     key.reset();
     if (OB_FAIL(make_pkg_var_kv_key(allocator, var_idx, VARIABLE, key))) {
-      LOG_WARN("make package var name failed", K(ret), K(package_id_), K(var_idx));
     } else if (session.user_variable_exists(key)) {
       if (OB_FAIL(session.remove_user_variable(key))) {
-        LOG_WARN("fail to remove user var", K(ret), K(key), K(package_id_), K(var_idx));
       } else if (OB_FAIL(session.remove_changed_user_var(key))) {
-        LOG_WARN("fail to remove change user var", K(ret), K(key), K(package_id_), K(var_idx));
       }
     }
   }
   if (OB_SUCC(ret)) {
     ObString new_key;
     if (OB_FAIL(encode_pkg_var_key(allocator, new_key))) {
-      LOG_WARN("fail to encode pkg var key", K(ret));
     } else if (session.user_variable_exists(new_key)) {
       if (OB_FAIL(session.remove_user_variable(new_key))) {
-        LOG_WARN("fail to remove user var", K(ret), K(new_key), K(package_id_));
       } else if (OB_FAIL(session.remove_changed_user_var(new_key))) {
-        LOG_WARN("fail to remove change user var", K(ret), K(new_key), K(package_id_));
       }
     }
   }
@@ -878,7 +829,6 @@ int ObPLPackageState::check_version(const ObPackageStateVersion &state_version,
                                                            spec.get_dependency_table(),
                                                            cur_state_version.header_merge_version_,
                                                            match))) {
-        LOG_WARN("fail to check dep schema", K(ret), K(cur_state_version), K(state_version));
       }
     }
     if (OB_SUCC(ret) && match &&
@@ -888,7 +838,6 @@ int ObPLPackageState::check_version(const ObPackageStateVersion &state_version,
                                                            body->get_dependency_table(),
                                                            cur_state_version.body_merge_version_,
                                                            match))) {
-        LOG_WARN("fail to check dep schema", K(ret), K(cur_state_version), K(state_version));
       }
     }
   }
@@ -933,7 +882,6 @@ int ObPLPackageState::check_package_state_valid(ObExecContext &exec_ctx, ObPLRes
                                 *package_spec,
                                 package_body,
                                 valid))) {
-        LOG_WARN("fail to check version", K(ret));
       }
     }
   }
@@ -949,7 +897,6 @@ int ObPLPackageState::disable_expired_user_variables(sql::ObSQLSessionInfo &sess
     sess_var.value_.set_null();
     sess_var.meta_ = sess_var.value_.get_meta();
     if (OB_FAIL(session.replace_user_variable(key, sess_var))) {
-      LOG_WARN("fail to remove user var", K(ret), K(key));
     } else {
       LOG_TRACE("disable user var", K(key));
     }

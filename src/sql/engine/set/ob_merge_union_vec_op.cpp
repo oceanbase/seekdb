@@ -52,7 +52,6 @@ int ObMergeUnionVecOp::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObMergeSetVecOp::inner_open())) {
-    LOG_WARN("failed to init open", K(ret));
   } else {
     cur_child_op_ = left_;
     next_child_op_idx_ = 1;
@@ -173,7 +172,6 @@ int ObMergeUnionVecOp::get_first_row_vectorize(const int64_t batch_size)
   bool is_first = true;
   clear_evaluated_flag();
   if (OB_FAIL(left_->get_next_batch(MY_SPEC.max_batch_size_, left_info_.child_op_brs_))) {
-    LOG_WARN("failed to get next batch", K(ret));
   } else if (left_info_.child_op_brs_->end_ && 0 == left_info_.child_op_brs_->size_) {
     //left is empty, switch to right
     candidate_output_row_ = NULL;
@@ -183,12 +181,10 @@ int ObMergeUnionVecOp::get_first_row_vectorize(const int64_t batch_size)
     curr_info_ = &right_info_;
     clear_evaluated_flag();
     if (OB_FAIL(cur_child_op_->get_next_batch(MY_SPEC.max_batch_size_, curr_info_->child_op_brs_))) {
-      LOG_WARN("failed to get next batch", K(ret));
     } else if (curr_info_->child_op_brs_->end_ && 0 == curr_info_->child_op_brs_->size_) {
       ret = OB_ITER_END;
     } else if (OB_FAIL(distinct_for_batch(*cur_child_op_, *curr_info_->child_op_brs_, is_first,
                 MY_SPEC.set_exprs_, -1, curr_info_->result_op_brs_))) {
-      LOG_WARN("distinct for right first batch failed", K(ret));
      } else {
       //got a batch now, locate curr_op_idx_ to first row without skipped
       //ObOperator::get_next_batch promise we can get 1 row in a valid batch
@@ -200,7 +196,6 @@ int ObMergeUnionVecOp::get_first_row_vectorize(const int64_t batch_size)
     }
   } else if (OB_FAIL(distinct_for_batch(*left_, *left_info_.child_op_brs_, is_first,
                 MY_SPEC.set_exprs_, -1, left_info_.result_op_brs_))) {
-    LOG_WARN("distinct for left first batch failed", K(ret));
   } else {
     // left have row
     while(left_info_.op_idx_ < left_info_.child_op_brs_->size_
@@ -232,8 +227,6 @@ int ObMergeUnionVecOp::get_first_row_vectorize(const int64_t batch_size)
                        right_info_.op_idx_,
                        eval_ctx_,
                        cmp))) {
-        LOG_WARN("cmp left and right first row failed", K(ret), K(left_info_.op_idx_),
-          K(right_info_.op_idx_));
       } else if (cmp <= 0) {
         cur_child_op_ = left_;
         candidate_child_op_ = right_;
@@ -341,7 +334,6 @@ int ObMergeUnionVecOp::distinct_get_next_batch(const int64_t batch_size)
                               candidate_info_->op_idx_,
                               eval_ctx_,
                               cmp))) {
-        LOG_WARN("failed to cmp curr row", K(ret));
       } else if (0 == cmp) {
         //left equal right, output left row
         add_idx_into_selector(curr_info_->op_idx_, got_cnt, curr_info_ == &left_info_);
@@ -414,12 +406,10 @@ int ObMergeUnionVecOp::distinct_get_next_batch(const int64_t batch_size)
       LOG_WARN("unexpected error", K(ret), K(last_valid_idx_), K(left_selectors_item_cnt_),
         K(right_selectors_item_cnt_));
     } else if (OB_FAIL(convert_batch_rows())) {
-      LOG_WARN("convert batch rows failed", K(ret));
     } else {
       ObEvalCtx::BatchInfoScopeGuard guard(eval_ctx_);
       guard.set_batch_idx(last_valid_idx_);
       if (OB_FAIL(last_row_.save_store_row(MY_SPEC.set_exprs_, brs_, eval_ctx_))) {
-        LOG_WARN("failed to save last row", K(ret));
       }
       last_valid_idx_ = -1;
     }
@@ -446,14 +436,12 @@ int ObMergeUnionVecOp::all_get_next_batch(const int64_t batch_size)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get physical operator failed", K(MY_SPEC.id_));
   } else if (OB_FAIL(cur_child_op_->get_next_batch(batch_size, child_brs))) {
-    LOG_WARN("failed to get next batch", K(ret));
   } else if (child_brs->end_ && 0 == child_brs->size_) {
     while(OB_SUCC(ret)
           && child_brs->end_ && 0 == child_brs->size_
           && next_child_op_idx_ < get_child_cnt()) {
       cur_child_op_ = get_child(next_child_op_idx_++);
       if (OB_FAIL(cur_child_op_->get_next_batch(batch_size, child_brs))) {
-        LOG_WARN("failed to get next batch", K(ret));
       }
     }
   }
@@ -467,7 +455,6 @@ int ObMergeUnionVecOp::all_get_next_batch(const int64_t batch_size)
                                       MY_SPEC.set_exprs_,
                                       brs_,
                                       true))) {
-      LOG_WARN("failed to convert batch", K(ret));
     }
   }
   return ret;
@@ -490,12 +477,10 @@ int ObMergeUnionVecOp::inner_get_next_batch(const int64_t max_row_cnt)
     : (expr->is_fixed_length_data_ ? VEC_FIXED : VEC_DISCRETE));
     if (OB_FAIL(expr->init_vector(eval_ctx_, default_format, 
         MY_SPEC.max_batch_size_))) {
-      LOG_WARN("init vector failed", K(ret), K(i));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL((this->*get_next_batch_func_)(batch_size))) {
-    LOG_WARN("get next batch failed ", K(ret));
   }
   return ret;
 }
@@ -539,15 +524,12 @@ int ObMergeUnionVecOp::do_strict_distinct_vectorize(ObOperator &child_op,
     //if cannot find a bigger row, iter until end or find it
     while (OB_SUCC(ret) && !found_valid_row) {
       if (OB_FAIL(child_op.get_next_batch(MY_SPEC.max_batch_size_, op_info.child_op_brs_))) {
-        LOG_WARN("failed to get next batch ", K(ret));
       } else if (op_info.child_op_brs_->end_ && 0 == op_info.child_op_brs_->size_) {
         ret = OB_ITER_END;
       } else {
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(distinct_for_batch(child_op, *op_info.child_op_brs_, is_first,
                 compare_expr, compare_idx, op_info.result_op_brs_))) {
-          // When performing deduplication within a batch, you need to judge based on compare_idx whether last_row is taken from compactrow or from compare_expr
-          LOG_WARN("distinct for batch failed", K(ret));
         }
         op_info.op_idx_ = 0;
         for (int64_t i = 0; OB_SUCC(ret) && !found_valid_row

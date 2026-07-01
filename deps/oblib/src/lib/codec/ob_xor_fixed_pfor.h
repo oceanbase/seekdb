@@ -83,7 +83,6 @@ template<typename UIntT>
       *(out + out_pos) = b;
       out_pos++;
       if (OB_FAIL(ObSIMDFixedPFor::__encode_array<UIntT>(pfor_ptype, v, BSIZE, out, out_buf_len, out_pos))) {
-        LIB_LOG(WARN, "fail to encode array", K(ret), K(out_buf_len), K(out_pos));
       } else {
         DO_PREFETCH(ip + 512);
       }
@@ -113,7 +112,6 @@ template<typename UIntT>
         const char *tmp_in = reinterpret_cast<const char *>(v);
         uint64_t tmp_in_len = remain_cnt * sizeof(UIntT);
         if (OB_FAIL(ObSimpleBitPacking::_encode_array<UIntT>(tmp_in, tmp_in_len, out, out_buf_len, out_pos, 0))) {
-          LIB_LOG(WARN, "fail to encode array", K(ret), K(tmp_in_len), K(out_buf_len), K(out_pos));
         }
       }
     }
@@ -228,7 +226,6 @@ public:
       }
     }
     if (OB_FAIL(ret)) {
-      LIB_LOG(WARN, "fail to do_encode", K(ret), K(get_uint_bytes()), KPC(this));
     }
     return ret;
   }

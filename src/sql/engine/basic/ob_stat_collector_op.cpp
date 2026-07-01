@@ -74,12 +74,10 @@ int ObStatCollectorOp::inner_open()
         false/*enable_encode_sortkey*/,
         false/*in_local_order*/,
         true/*need_rewind*/))) {
-      LOG_WARN("fail to init sort impl", K(ret));
     } else if (FALSE_IT(sort_impl_.set_io_event_observer(&io_event_observer_))) {
     } else if (OB_FAIL(partition_row_count_map_.create(DEFAULT_HASH_MAP_BUCKETS_COUNT,
         "StatPartBucket",
         "StatPartNode"))) {
-      LOG_WARN("fail to create partition count map", K(ret));
     }
   }
   return ret;
@@ -132,7 +130,6 @@ int ObStatCollectorOp::find_sample_scan(ObOperator *op, ObOperator *&tsc)
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < op->get_child_cnt(); ++i) {
       if (OB_FAIL(SMART_CALL(find_sample_scan(op->get_child(i), tsc)))) {
-        LOG_WARN("fail to find sample scan", K(ret));
       }
     }
   }
@@ -154,7 +151,6 @@ int ObStatCollectorOp::inner_get_next_row()
       }
     }
   } else if (OB_FAIL(generate_sample_partition_range())) {
-    LOG_WARN("fail to generate sample range", K(ret));
   }
   return ret;
 }
@@ -175,10 +171,8 @@ int ObStatCollectorOp::inner_get_next_batch(const int64_t max_row_cnt)
         iter_end_ = true;
       }
     } else if (OB_FAIL(brs_.copy(brs))) {
-      LOG_WARN("fail to copy batch result", K(ret));
     }
   } else if (OB_FAIL(generate_sample_partition_range(batch_cnt))) {
-    LOG_WARN("fail to generate sample range", K(ret));
   }
   return ret;
 }
@@ -206,9 +200,7 @@ int ObStatCollectorOp::generate_sample_partition_range(int64_t batch_size)
       }
       if (OB_FAIL(ret) || !exist_sample_row_) {
       } else if (OB_FAIL(collect_row_count_in_partitions())) {
-        LOG_WARN("fail to collect row count", K(ret));
       } else if (OB_FAIL(sort_impl_.add_row(MY_SPEC.sort_exprs_))) {
-        LOG_WARN("fail to add row", K(ret));
       }
     }
   } else {
@@ -221,7 +213,6 @@ int ObStatCollectorOp::generate_sample_partition_range(int64_t batch_size)
       } else if (0 == ctx_.get_expect_range_count() - 1) {
         break;
       } else if (OB_FAIL(child_->get_next_batch(batch_size, input_brs))) {
-        LOG_WARN("fail to get next batch", K(ret));
       } else if (input_brs->end_) {
         break;
       } else if (!exist_sample_row_) {
@@ -229,18 +220,14 @@ int ObStatCollectorOp::generate_sample_partition_range(int64_t batch_size)
       }
       if (OB_FAIL(ret) || !exist_sample_row_) {
       } else if (OB_FAIL(collect_row_count_in_partitions(true/*is_vec*/, input_brs, batch_size))) {
-        LOG_WARN("fail to collect row count", K(ret));
       } else if (OB_FAIL(sort_impl_.add_batch(MY_SPEC.sort_exprs_,
           *input_brs->skip_, input_brs->size_, 0, nullptr))) {
-        LOG_WARN("fail to add row", K(ret));
       }
     }
   }
   if (OB_SUCC(ret) && exist_sample_row_) {
     if (OB_FAIL(sort_impl_.sort())) {
-      LOG_WARN("fail to do sort", K(ret));
     } else if (OB_FAIL(split_partition_range())) {
-      LOG_WARN("fail to split partition range", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -283,7 +270,6 @@ int ObStatCollectorOp::split_partition_range()
           ret = OB_SUCCESS;
         }
       } else if (OB_FAIL(get_tablet_id(cur_tablet_id))) {
-        LOG_WARN("failed to calc partition id", K(ret));
       } else if (cur_tablet_id != pre_tablet_id) {
         cur_row_count = 0;
         if (!is_none_partition() &&
@@ -315,13 +301,11 @@ int ObStatCollectorOp::split_partition_range()
               OB_SUCC(ret) && i < MY_SPEC.sort_exprs_.count(); ++i) {
             ObDatum *cur_datum = nullptr;
             if (OB_FAIL(MY_SPEC.sort_exprs_.at(i)->eval(eval_ctx_, cur_datum))) {
-              LOG_WARN("eval expr to datum failed", K(ret), K(i));
             } else if (OB_ISNULL(cur_datum)) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("current datum is null", K(ret), K(i));
             } else if (OB_FAIL(border_vals.at(i - (int64_t)!is_none_partition()).
                   deep_copy(*cur_datum, ctx_.get_allocator()))) {
-              LOG_WARN("deep copy datum failed", K(ret), K(i), K(*cur_datum));
             } else {
               datum_len_sum += cur_datum->get_deep_copy_size();
             }
@@ -364,7 +348,6 @@ int ObStatCollectorOp::collect_row_count_in_partitions(
     if (is_none_partition()) {
       non_partition_row_count_++;
     } else if (OB_FAIL(update_partition_row_count())) {
-      LOG_WARN("fail to update partition row count", K(ret));
     }
   } else {
     ObEvalCtx::BatchInfoScopeGuard batch_info_guard(eval_ctx_);
@@ -387,7 +370,6 @@ int ObStatCollectorOp::update_partition_row_count()
   int64_t tablet_id = 0;
   int64_t *count_ptr = nullptr;
   if (OB_FAIL(get_tablet_id(tablet_id))) {
-    LOG_WARN("fail to calc partition id", K(ret));
   } else if (OB_FAIL(partition_row_count_map_.get_refactored(tablet_id, count_ptr))) {
     if (OB_HASH_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
@@ -396,7 +378,6 @@ int ObStatCollectorOp::update_partition_row_count()
         LOG_WARN("allocate memory failed", K(ret));
       } else if (FALSE_IT(*count_ptr = 0)) {
       } else if (OB_FAIL(partition_row_count_map_.set_refactored(tablet_id, count_ptr))) {
-        LOG_WARN("fail to set partition row count", K(ret));
       }
     } else {
       LOG_WARN("fail to get partition row count", K(ret));
@@ -416,7 +397,6 @@ int ObStatCollectorOp::get_tablet_id(int64_t &tablet_id)
   tablet_id = 0;
   if (!is_none_partition()) {
     if (OB_FAIL(MY_SPEC.sort_exprs_.at(0)->eval(eval_ctx_, datum))) {
-      LOG_WARN("failed to eval datum", K(ret));
     } else if (ObExprCalcPartitionId::NONE_PARTITION_ID == (tablet_id = datum->get_int())) {
       ret = OB_NO_PARTITION_FOR_GIVEN_VALUE;
       LOG_WARN("fail to calc partition id", K(ret));

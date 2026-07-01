@@ -96,7 +96,6 @@ static int build_compressed_packet(ObEasyBuffer &src_buf,
       if (OB_FAIL(compressor.compress(src_buf.read_pos(), next_compress_size,
                                       dst_buf.last() + OB_MYSQL_COMPRESSED_HEADER_SIZE,
                                       comp_buf_size, dst_data_size))) {
-        SERVER_LOG(WARN, "compress packet failed", K(ret));
       } else if (OB_UNLIKELY(dst_data_size > comp_buf_size)) {
         ret = OB_SIZE_OVERFLOW;
         SERVER_LOG(WARN, "dst_data_size is overflow, it should not happened",
@@ -117,21 +116,15 @@ static int build_compressed_packet(ObEasyBuffer &src_buf,
 
     if (FAILEDx(ObMySQLUtil::store_int3(dst_buf.last(), OB_MYSQL_COMPRESSED_HEADER_SIZE,
                                                static_cast<int32_t>(dst_data_size), pos))) {
-      SERVER_LOG(WARN, "failed to store_int3", K(ret));
     } else if (OB_FAIL(ObMySQLUtil::store_int1(dst_buf.last(), OB_MYSQL_COMPRESSED_HEADER_SIZE,
                                                context.seq_, pos))) {
-      SERVER_LOG(WARN, "failed to store_int1", K(ret));
     } else if (OB_FAIL(ObMySQLUtil::store_int3(dst_buf.last(), OB_MYSQL_COMPRESSED_HEADER_SIZE,
                                                static_cast<int32_t>(len_before_compress), pos))) {
-      SERVER_LOG(WARN, "failed to store_int3", K(ret));
     } else {
       if (context.conn_->pkt_rec_wrapper_.enable_proto_dia()) {
         context.conn_->pkt_rec_wrapper_.end_seal_comp_pkt(
                           static_cast<uint32_t>(dst_data_size), context.seq_);
       }
-      SERVER_LOG(DEBUG, "succ to build compressed pkt", "comp_len", dst_data_size,
-                 "comp_seq", context.seq_, K(len_before_compress), K(next_compress_size),
-                 K(src_buf), K(dst_buf), K(context), K(context.conn_->sessid_));
       src_buf.read(next_compress_size);
       dst_buf.write(dst_data_size + OB_MYSQL_COMPRESSED_HEADER_SIZE);
       ++context.seq_;
@@ -172,7 +165,6 @@ static int build_compressed_buffer(ObEasyBuffer &orig_send_buf,
         }
 
         if (OB_FAIL(build_compressed_packet(orig_send_buf, next_read_size, context))) {
-          SERVER_LOG(WARN, "fail to build_compressed_packet", K(ret));
         } else {
           //optimize for multi packet
           last_read_size = next_read_size;
@@ -204,8 +196,6 @@ static int reuse_compress_buffer(ObCompressionContext &comp_context, ObEasyBuffe
     if (new_size <= comp_buf_size) {
       //reusing last size is enough
     } else {
-      SERVER_LOG(DEBUG, "need resize compressed buf", "old_size", comp_buf_size, K(new_size),
-                 "orig_send_buf_", orig_send_buf);
       //realloc
       comp_buf_size = new_size;
       need_alloc = true;
@@ -249,18 +239,15 @@ static int send_compressed_buffer(bool pkt_has_completed, ObCompressionContext &
   if (read_avail_size > 0) {
     if (is_last_flush) {
         if (OB_FAIL(SQL_REQ_OP.async_write_response(&req, comp_context.send_buf_->pos, read_avail_size))) {
-          SERVER_LOG(WARN, "failed to flush buffer", K(ret));
         }
     } else {
       if (OB_FAIL(SQL_REQ_OP.write_response(&req, comp_context.send_buf_->pos, read_avail_size))) {
-        SERVER_LOG(WARN, "failed to flush buffer", K(ret));
       }
     }
   }
 
   if (OB_SUCC(ret) && !is_last_flush) {
     if (OB_FAIL(reuse_compress_buffer(comp_context, orig_send_buf, buf_size, req))) {
-      SERVER_LOG(WARN, "faild to reuse_compressed_buffer_sql_nio", K(ret));
     }
   }
 
@@ -342,8 +329,6 @@ int ObMySQLRequestUtils::flush_compressed_buffer(bool pkt_has_completed, ObCompr
   } else if (comp_context.need_hold_last_pkt(pkt_has_completed)) {
     need_hold_size = orig_send_buf.proxy_read_avail_size(comp_context.last_pkt_pos_);
     orig_send_buf.write(0 - need_hold_size);
-    SERVER_LOG(DEBUG, "need hold uncompleted proxy pkt", K(need_hold_size),
-            "orig_send_buf", orig_send_buf);
   }
 
   if (false == orig_send_buf.is_read_avail()) {
@@ -379,9 +364,6 @@ int ObMySQLRequestUtils::flush_compressed_buffer(bool pkt_has_completed, ObCompr
           orig_send_buf.write(need_hold_size);
       }
       comp_context.last_pkt_pos_ = orig_send_buf.begin();
-      SERVER_LOG(DEBUG, "need reset last_pkt_pos", K(need_hold_size),
-            "orig_send_buf_", orig_send_buf,
-            "comp_context", comp_context);
     }
   }
   

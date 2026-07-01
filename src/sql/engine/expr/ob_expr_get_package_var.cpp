@@ -56,7 +56,6 @@ int ObExprGetPackageVar::calc(ObObj &result,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("pl engine is null", K(ret));
   } else if (OB_FAIL(exec_ctx->get_package_guard(package_guard))) {
-    LOG_WARN("get package guard failed", K(ret));
   } else if (OB_ISNULL(package_guard)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("package guard is null", K(ret));
@@ -77,7 +76,6 @@ int ObExprGetPackageVar::calc(ObObj &result,
     ObPLPackageManager &package_manager = pl_engine->get_package_manager();
     if (OB_FAIL(package_manager.get_package_var_val(
         resolve_ctx, *exec_ctx, package_id, spec_version, body_version, var_idx, result))) {
-      LOG_WARN("get package var failed", K(ret));
     }
   } 
   return ret;
@@ -125,7 +123,6 @@ int ObExprGetPackageVar::eval_get_package_var(const ObExpr &expr,
   ObDatum *body_version = NULL;
   if (OB_FAIL(expr.eval_param_value(
       ctx, package_id, var_idx, result_type, spec_version, body_version))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else if (package_id->is_null()
              || var_idx->is_null()
              || result_type->is_null()

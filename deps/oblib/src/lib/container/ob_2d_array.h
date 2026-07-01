@@ -246,7 +246,6 @@ inline int Ob2DArray<T, max_block_size, BlockAllocatorT, auto_free,
   int ret = OB_SUCCESS;
   T *blk = alloc_block(block_capacity);
   if (OB_ISNULL(blk)) {
-    LIB_LOG(WARN, "no memory");
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(blocks_.push_back(blk))) {
     LIB_LOG(WARN, "failed to add block", K(ret));
@@ -299,12 +298,10 @@ int Ob2DArray<T, max_block_size, BlockAllocatorT, auto_free,
   } else {
     const int64_t need_blocks = (new_size - 1) / BLOCK_CAPACITY + 1;
     int64_t left_count = new_size;
-    LIB_LOG(DEBUG, "trace init 2darray", K(new_size), K(need_blocks), K(capacity_));
     for (int64_t i = 0; OB_SUCC(ret) && i < need_blocks; ++i) {
       if (i != need_blocks - 1) {
         if (BLOCK_CAPACITY >= left_count) {
           ret = OB_ERR_UNEXPECTED;
-          LIB_LOG(WARN, "failed: left count is not match", K(left_count), K(need_blocks), K(i));
         } else {
           if (need_construct_items) {
             construct_items(blocks_.at(i), BLOCK_CAPACITY);
@@ -316,7 +313,6 @@ int Ob2DArray<T, max_block_size, BlockAllocatorT, auto_free,
         // last one
         if (left_count > BLOCK_CAPACITY) {
           ret = OB_ERR_UNEXPECTED;
-          LIB_LOG(WARN, "failed: left count is not match", K(left_count), K(need_blocks), K(i));
         } else {
           if (need_construct_items) {
             construct_items(blocks_.at(i), left_count);
@@ -328,8 +324,6 @@ int Ob2DArray<T, max_block_size, BlockAllocatorT, auto_free,
     }
     if (0 != left_count || count_ != new_size) {
       ret = OB_ERR_UNEXPECTED;
-      LIB_LOG(WARN, "failed: left count is not 0", K(left_count),
-        K(need_blocks), K(count_), K(new_size));
     }
   }
   return ret;
@@ -347,12 +341,9 @@ int Ob2DArray<T, max_block_size, BlockAllocatorT, auto_free,
   } else if (0 != count_) {
     // do not force capacity = 0, because it will init when reuse
     ret = OB_ERR_UNEXPECTED;
-    LIB_LOG(WARN, "failed: capacity or count is 0", K(capacity_), K(count_));
   } else {
     if (OB_FAIL(reserve(new_size))) {
-      LIB_LOG(WARN, "failed: failed to reserve(new_size)", K(ret), K(new_size));
     } else if (OB_FAIL(set_default(new_size))) {
-      LIB_LOG(WARN, "failed to set default value", K(new_size), K(ret));
     }
   }
   return ret;
@@ -369,17 +360,14 @@ int Ob2DArray<T, max_block_size, BlockAllocatorT, auto_free,
   if (count_ >= capacity_) {
     if (get_block_count() == 0) {
       if (OB_FAIL(new_block(INITIAL_FIRST_BLOCK_CAPACITY))) {
-        LIB_LOG(WARN, "failed: creating first block", K(ret));
       }
     } else if (capacity_ < BLOCK_CAPACITY) {
       OB_ASSERT(get_block_count() == 1);
       int64_t new_capacity = BLOCK_CAPACITY < 2 * capacity_ ? BLOCK_CAPACITY : 2 * capacity_;
       if (OB_FAIL(realloc_first_block(new_capacity))) {
-        LIB_LOG(WARN, "failed: realloc_first_block(new_capacity)", K(ret));
       }
     } else {
       if (OB_FAIL(new_block())) {
-        LIB_LOG(WARN, "failed: new_block()", K(ret));
       }
     }
   }
@@ -389,7 +377,6 @@ int Ob2DArray<T, max_block_size, BlockAllocatorT, auto_free,
     } else {
       T *obj_buf = get_obj_pos(count_);
       if (OB_FAIL(construct_assign(*obj_buf, obj))) {
-        LIB_LOG(WARN, "failed to copy data", K(ret));
       } else {
         ++count_;
       }
@@ -422,7 +409,6 @@ int Ob2DArray<T, max_block_size, BlockAllocatorT, auto_free, BlockPointerArrayT,
     T *obj_ptr = get_obj_pos(count_ - 1);
     // assign
     if (OB_FAIL(copy_assign(obj, *obj_ptr))) {
-      LIB_LOG(WARN, "failed to copy data", K(ret));
     } else {
       obj_ptr->~T();
       --count_;
@@ -446,7 +432,6 @@ int Ob2DArray<T, max_block_size, BlockAllocatorT, auto_free, BlockPointerArrayT,
     T *obj_ptr = get_obj_pos(idx);
     for (int64_t i = idx; OB_SUCC(ret) && i < count_ - 1; ++i) {
       if (OB_FAIL(copy_assign(at(i), at(i + 1)))) {
-        LIB_LOG(WARN, "failed to copy data", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -472,7 +457,6 @@ int Ob2DArray<T, max_block_size, BlockAllocatorT, auto_free,
   } else {
     T *obj_ptr = get_obj_pos(idx);
     if (OB_FAIL(copy_assign(obj, *obj_ptr))) {
-      LIB_LOG(WARN, "failed to copy data", K(ret));
     }
   }
   return ret;
@@ -553,17 +537,14 @@ int Ob2DArray<T, max_block_size, BlockAllocatorT, auto_free,
       // initialize or expand first block
       if (get_block_count() == 0) {
         if (OB_FAIL(new_block(capacity))) {
-          LIB_LOG(WARN, "failed: creating first block", K(ret));
         }
       } else {
         if (OB_FAIL(realloc_first_block(capacity))) {
-          LIB_LOG(WARN, "failed: realloc_first_block(capacity)", K(ret));
         }
       }
     } else {
       if (get_block_count() == 1 && capacity_ < BLOCK_CAPACITY) {
         if (OB_FAIL(realloc_first_block(BLOCK_CAPACITY))) {
-          LIB_LOG(WARN, "failed: realloc_first_block(BLOCK_CAPACITY)", K(ret));
         }
       }
 
@@ -573,7 +554,6 @@ int Ob2DArray<T, max_block_size, BlockAllocatorT, auto_free,
         const int64_t current_blocks = get_block_count();
         for (int64_t i = current_blocks; OB_SUCC(ret) && i < need_blocks; ++i) {
           if (OB_FAIL(new_block())) {
-            LIB_LOG(WARN, "failed: new_block()", K(ret), K(need_blocks), K(capacity));
           }
         }
       }
@@ -594,7 +574,6 @@ int Ob2DArray<T, max_block_size, BlockAllocatorT, auto_free,
   int ret = OB_SUCCESS;
   for(int i = 0; OB_SUCC(ret) && i < count_; ++i){
     if (OB_FAIL(construct_assign(at(i), value))) {
-      LIB_LOG(WARN, "failed: assign", K(ret), K(value));
     }
   }
 

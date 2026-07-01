@@ -80,7 +80,6 @@ int ObMySQLResultSet::to_new_result_field(const ObField &field, ObMySQLField &mf
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(to_mysql_field(field, mfield))) {
-    LOG_WARN("fail to mysql field", K(ret), K(mfield), K(field));
   }
   return ret;
 }
@@ -128,7 +127,6 @@ int ObMySQLResultSet::to_oracle_field(const ObField &field, ObMySQLField &mfield
           || EMySQLFieldType::MYSQL_TYPE_OB_NCHAR == mfield.type_) {
       int64_t mbmaxlen = 1;
       if (OB_FAIL(common::ObCharset::get_mbmaxlen_by_coll(static_cast<ObCollationType>(mfield.charsetnr_), mbmaxlen))) {
-        LOG_WARN("fail to get mbmaxlen", K(field.charsetnr_), K(ret));
       }
       mfield.length_ = mfield.length_ / mbmaxlen;
     }

@@ -62,11 +62,8 @@ int ObDirectLoadMultipleSSTableFragment::assign(const ObDirectLoadMultipleSSTabl
   rowkey_count_ = other.rowkey_count_;
   max_data_block_size_ = other.max_data_block_size_;
   if (OB_FAIL(index_file_handle_.assign(other.index_file_handle_))) {
-    LOG_WARN("fail to assign file handle", KR(ret));
   } else if (OB_FAIL(data_file_handle_.assign(other.data_file_handle_))) {
-    LOG_WARN("fail to assign file handle", KR(ret));
   } else if (OB_FAIL(rowkey_file_handle_.assign(other.rowkey_file_handle_))) {
-    LOG_WARN("fail to assign file handle", KR(ret));
   }
   return ret;
 }
@@ -194,11 +191,8 @@ int ObDirectLoadMultipleSSTable::init(const ObDirectLoadMultipleSSTableCreatePar
     meta_.rowkey_count_ = param.rowkey_count_;
     meta_.max_data_block_size_ = param.max_data_block_size_;
     if (OB_FAIL(start_key_.deep_copy(param.start_key_, allocator_))) {
-      LOG_WARN("fail to deep copy rowkey", KR(ret));
     } else if (OB_FAIL(end_key_.deep_copy(param.end_key_, allocator_))) {
-      LOG_WARN("fail to deep copy rowkey", KR(ret));
     } else if (OB_FAIL(fragments_.assign(param.fragments_))) {
-      LOG_WARN("fail to assign fragments", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -263,7 +257,6 @@ int ObDirectLoadMultipleSSTable::scan(const ObDirectLoadTableDataDesc &table_dat
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadMultipleSSTableScanner", KR(ret));
     } else if (OB_FAIL(scanner->init(this, table_data_desc, range, datum_utils))) {
-      LOG_WARN("fail to init multiple sstable scanner", KR(ret));
     }
     if (OB_FAIL(ret)) {
       if (nullptr != scanner) {
@@ -299,13 +292,11 @@ int ObDirectLoadMultipleSSTable::scan_whole_index_block_endkey(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadMultipleSSTableIndexBlockMetaWholeScanner", KR(ret));
     } else if (OB_FAIL(whole_scanner->init(this, table_data_desc))) {
-      LOG_WARN("fail to init multiple sstable index block meta scanner", KR(ret));
     } else if (OB_ISNULL(endkey_iter = OB_NEWx(ObDirectLoadMultipleSSTableIndexBlockEndKeyIterator,
                                                (&allocator)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadIndexBlockEndKeyIterator", KR(ret));
     } else if (OB_FAIL(endkey_iter->init(whole_scanner))) {
-      LOG_WARN("fail to init end key iter", KR(ret));
     } else {
       rowkey_iter = endkey_iter;
     }
@@ -349,14 +340,12 @@ int ObDirectLoadMultipleSSTable::scan_whole_index_block_endkey(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadMultipleSSTableIndexBlockMetaWholeScanner", KR(ret));
     } else if (OB_FAIL(whole_scanner->init(this, table_data_desc))) {
-      LOG_WARN("fail to init multiple sstable index block meta scanner", KR(ret));
     } else if (OB_ISNULL(endkey_iter =
                            OB_NEWx(ObDirectLoadMultipleSSTableIndexBlockTabletEndKeyIterator,
                                    (&allocator)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadIndexBlockEndKeyIterator", KR(ret));
     } else if (OB_FAIL(endkey_iter->init(tablet_id_, whole_scanner))) {
-      LOG_WARN("fail to init end key iter", KR(ret));
     } else {
       rowkey_iter = endkey_iter;
     }
@@ -396,7 +385,6 @@ int ObDirectLoadMultipleSSTable::scan_whole_rowkey(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadMultipleSSTableRowkeyScanner", KR(ret));
     } else if (OB_FAIL(scanner->init(this, table_data_desc))) {
-      LOG_WARN("fail to init multiple sstable rowkey scanner", KR(ret));
     } else {
       rowkey_iter = scanner;
     }
@@ -433,7 +421,6 @@ int ObDirectLoadMultipleSSTable::scan_whole_rowkey(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadSSTableRowkeyScanner", KR(ret));
     } else if (OB_FAIL(scanner->init(this, table_data_desc))) {
-      LOG_WARN("fail to init sstable rowkey scanner", KR(ret));
     } else {
       rowkey_iter = scanner;
     }

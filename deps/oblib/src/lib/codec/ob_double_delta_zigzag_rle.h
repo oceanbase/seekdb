@@ -172,14 +172,12 @@ template<typename UIntT>
   if (OB_SUCC(ret)) {
     if (ip > pp) {
       if (OB_FAIL(encode_delta_and_repeat_cnt<UIntT>(bw, br, pp, ip, out, out_buf_len, out_pos, delta))) {
-        LIB_LOG(WARN, "fail to encode_delta_and_repeat_cnt", K(ret), K(out_buf_len), K(out_pos));
       }
     }
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ObBitUtils::flush(bw, br, out, out_buf_len, out_pos))) {
-      LIB_LOG(WARN, "fail to flush", K(ret), K(out_buf_len), K(out_pos));
     }
   }
 
@@ -357,7 +355,6 @@ public:
       }
     }
     if (OB_FAIL(ret)) {
-      LIB_LOG(WARN, "fail to do_encode", K(ret), K(get_uint_bytes()), KPC(this), K(in_len), K(out_len), K(out_pos));
     }
     return ret;
   }
@@ -395,7 +392,6 @@ public:
     }
 
     if (OB_FAIL(ret)) {
-      LIB_LOG(WARN, "fail to do_decode", K(ret), K(get_uint_bytes()), KPC(this), K(in_len), K(in_pos), K(out_len), K(out_pos));
     }
     return ret;
   }

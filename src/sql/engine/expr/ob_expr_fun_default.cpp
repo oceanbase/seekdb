@@ -65,7 +65,6 @@ int ObExprFunDefault::calc_result_typeN(ObExprResType &type,
   } else if (param_num != ObExprColumnConv::PARAMS_COUNT_WITH_COLUMN_INFO
       && param_num != ObExprColumnConv::PARAMS_COUNT_WITHOUT_COLUMN_INFO) {
     ret = OB_INVALID_ARGUMENT;
-    SQL_ENG_LOG(WARN, "invalid argument, param_num should be 5 or 6", K(param_num));
   } else {
     type.set_type(types[0].get_type());
     type.set_collation_type(types[1].get_collation_type());

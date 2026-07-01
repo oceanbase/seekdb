@@ -112,14 +112,11 @@ int ObDirectLoadOriginTable::init(const ObDirectLoadOriginTableCreateParam &para
       ret = OB_ERR_SYS;
       LOG_WARN("MTL ObLSService is null", KR(ret));
     } else if (OB_FAIL(ls_svr->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-      LOG_WARN("fail to get ls", KR(ret), K(ls));
     } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected ls is nullptr", KR(ret));
     } else if (OB_FAIL(ls->get_tablet(tablet_id, tablet_handle_))) {
-      LOG_WARN("fail to get tablet", KR(ret), K(tablet_id));
     } else if (OB_FAIL(prepare_tables())) {
-      LOG_WARN("fail to prepare tables", KR(ret));
     } else {
       meta_.ls_id_ = param.ls_id_;
       meta_.table_id_ = param.table_id_;
@@ -138,9 +135,7 @@ int ObDirectLoadOriginTable::prepare_tables()
   ObITable *table = nullptr;
   table_iter_.reset();
   if (OB_FAIL(table_iter_.set_tablet_handle(tablet_handle_))) {
-    LOG_WARN("Failed to set tablet handle to tablet table iter", K(ret));
   } else if (OB_FAIL(table_iter_.refresh_read_tables_from_tablet(INT64_MAX, false /*allow_not_ready*/, false /*major_sstable_only*/, false /*need_split_src_table*/, false/*need_split_dst_table*/))) {
-    LOG_WARN("fail to get read tables", KR(ret), K(tablet_handle_));
   }
   // find major sstable or ddl sstables
   while (OB_SUCC(ret)) {
@@ -165,7 +160,6 @@ int ObDirectLoadOriginTable::prepare_tables()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected not sstable", KR(ret), KPC(table));
       } else if (OB_FAIL(ddl_sstables_.push_back(ddl_sstable))) {
-        LOG_WARN("fail to push back ddl sstable", KR(ret));
       }
     }
   }
@@ -202,9 +196,7 @@ int ObDirectLoadOriginTable::scan(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadOriginTableScanner", KR(ret));
     } else if (OB_FAIL(row_scanner->init(this, skip_read_lob))) {
-      LOG_WARN("Fail to init row scanner", KR(ret), K(*this));
     } else if (OB_FAIL(row_scanner->open(key_range))) {
-      LOG_WARN("Fail to open row scanner", KR(ret), K(key_range));
     } else {
       row_iter = row_scanner;
     }
@@ -238,9 +230,7 @@ int ObDirectLoadOriginTable::get(const ObDatumRowkey &key,
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadOriginTableGetter", KR(ret));
     } else if (OB_FAIL(row_getter->init(this, skip_read_lob))) {
-      LOG_WARN("Fail to init row scanner", KR(ret), K(*this));
     } else if (OB_FAIL(row_getter->open(key))) {
-      LOG_WARN("Fail to open row scanner", KR(ret), K(key));
     } else {
       row_iter = row_getter;
     }
@@ -285,11 +275,8 @@ int ObDirectLoadOriginTableAccessor::inner_init(ObDirectLoadOriginTable *origin_
   } else {
     origin_table_ = origin_table;
     if (OB_FAIL((init_table_access_param()))) {
-      LOG_WARN("fail to init query range", KR(ret));
     } else if (OB_FAIL(init_table_access_ctx(skip_read_lob))) {
-      LOG_WARN("fail to init table access param", KR(ret));
     } else if (OB_FAIL(init_get_table_param())) {
-      LOG_WARN("fail to init get table param", KR(ret));
     } else {
       // set parent params
       column_count_ = col_ids_.count();
@@ -309,25 +296,19 @@ int ObDirectLoadOriginTableAccessor::init_table_access_param()
   ObRelativeTable relative_table;
   int64_t store_column_count = 0;
   if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not exist", KR(ret), K(table_id));
   } else if (OB_FAIL(schema_param_.convert(table_schema))) {
-    LOG_WARN("fail to convert schema para", KR(ret));
   } else if (OB_FAIL(relative_table.init(&schema_param_, tablet_id))) {
-    LOG_WARN("fail to init relative table", KR(ret));
   } else if (OB_FAIL(table_schema->get_store_column_count(store_column_count))) {
-    LOG_WARN("fail to get store column count", KR(ret));
   }
   // schema_param_ column order is get_column_ids(column_ids, false/*no_virtual*/), consistent with storage order, just need to skip virtual generated columns
   for (int64_t i = 0; OB_SUCC(ret) && i < schema_param_.get_columns().count(); ++i) {
     if (schema_param_.get_columns().at(i)->is_virtual_gen_col()) {
       // skip
     } else if (OB_FAIL(col_ids_.push_back(i))) {
-      LOG_WARN("fail to push back col id", KR(ret), K(i));
     }
   }
   if (OB_FAIL(ret)) {
@@ -341,7 +322,6 @@ int ObDirectLoadOriginTableAccessor::init_table_access_param()
                                                           origin_table_->get_tablet_handle().get_obj()->get_rowkey_read_info(),
                                                           schema_param_,
                                                           &col_ids_))) {
-      LOG_WARN("fail to init merge param", KR(ret));
     }
   }
   return ret;
@@ -372,19 +352,16 @@ int ObDirectLoadOriginTableAccessor::init_table_access_ctx(bool skip_read_lob)
   trans_version_range.snapshot_version_ = snapshot_version;
   share::SCN snapshot_scn;
   if (OB_FAIL(snapshot_scn.convert_for_tx(snapshot_version))) {
-    LOG_WARN("fail to convert scn", KR(ret));
   } else if (OB_FAIL(store_ctx_.init_for_read(origin_table_->get_meta().ls_id_,
                                               tablet_id,
                                               INT64_MAX,
                                               -1,
                                               snapshot_scn))) {
-    LOG_WARN("fail to init for read", KR(ret));
   } else if (OB_FAIL(table_access_ctx_.init(query_flag,
                                             store_ctx_,
                                             allocator_,
                                             stmt_allocator_,
                                             trans_version_range))) {
-    LOG_WARN("fail to init table access context", KR(ret));
   } else {
     store_ctx_.mvcc_acc_ctx_.snapshot_.tx_id_ = tx_id;
     store_ctx_.mvcc_acc_ctx_.snapshot_.scn_ = tx_seq;
@@ -397,13 +374,11 @@ int ObDirectLoadOriginTableAccessor::init_get_table_param()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(get_table_param_.tablet_iter_.set_tablet_handle(origin_table_->get_tablet_handle()))) {
-    LOG_WARN("Failed to set tablet handle to tablet table iter", K(ret));
   } else if (OB_FAIL(get_table_param_.tablet_iter_.refresh_read_tables_from_tablet(INT64_MAX,
                                                                                    false /*allow_not_ready*/,
                                                                                    false /*major_sstable_only*/,
                                                                                    false /*need_split_src_table*/,
                                                                                    false /*need_split_dst_table*/))) {
-    LOG_WARN("fail to copy table iter", KR(ret));
   }
   return ret;
 }
@@ -419,9 +394,7 @@ int ObDirectLoadOriginTableScanner::init(ObDirectLoadOriginTable *origin_table, 
     ret = OB_INIT_TWICE;
     LOG_WARN("ObDirectLoadOriginTableScanner init twice", KR(ret), KP(this));
   } else if (OB_FAIL(inner_init(origin_table, skip_read_lob))) {
-    LOG_WARN("fail to inner init", KR(ret));
   } else if (OB_FAIL(scan_merge_.init(table_access_param_, table_access_ctx_, get_table_param_))) {
-    LOG_WARN("fail to init scan merge", KR(ret));
   } else {
     datum_row_.seq_no_ = 0;
     is_inited_ = true;
@@ -442,7 +415,6 @@ int ObDirectLoadOriginTableScanner::open(const ObDatumRange &query_range)
     scan_merge_.reuse();
     allocator_.reuse();
     if (OB_FAIL(scan_merge_.open(query_range))) {
-      LOG_WARN("fail to open scan merge", KR(ret), K(query_range));
     }
   }
   return ret;
@@ -480,10 +452,8 @@ int ObDirectLoadOriginTableGetter::init(ObDirectLoadOriginTable *origin_table, b
     ret = OB_INIT_TWICE;
     LOG_WARN("ObDirectLoadOriginTableGetter init twice", KR(ret), KP(this));
   } else if (OB_FAIL(inner_init(origin_table, skip_read_lob))) {
-    LOG_WARN("fail to inner init", KR(ret));
   } else if (OB_FAIL(
                single_merge_.init(table_access_param_, table_access_ctx_, get_table_param_))) {
-    LOG_WARN("fail to init multi merge", KR(ret));
   } else {
     datum_row_.seq_no_ = 0;
     is_inited_ = true;
@@ -504,7 +474,6 @@ int ObDirectLoadOriginTableGetter::open(const ObDatumRowkey &key)
     single_merge_.reuse();
     allocator_.reuse();
     if (OB_FAIL(single_merge_.open(key))) {
-      LOG_WARN("fail to open multi merge", KR(ret), K(key));
     }
   }
   return ret;

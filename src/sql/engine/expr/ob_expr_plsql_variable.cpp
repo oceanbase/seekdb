@@ -47,7 +47,6 @@ int ObExprPLSQLVariable::assign(const ObExprOperator &other)
     LOG_WARN("invalid argument. wrong type for other", K(other), K(ret));
   } else if (OB_LIKELY(this != tmp)) {
     if (OB_FAIL(ObExprOperator::assign(other))) {
-      LOG_WARN("copy in Base class ObExprOperator failed", K(other), K(ret));
     } else {
       OX (this->plsql_line_ = tmp->plsql_line_);
       OZ (deep_copy_plsql_variable(tmp->plsql_variable_));

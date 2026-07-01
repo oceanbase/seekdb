@@ -100,7 +100,6 @@ uint16_t LogEntryHeader::calculate_header_checksum_() const
   } else {
     PALF_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "unexpected version", KPC(this));
   }
-  PALF_LOG(TRACE, "update_header_checksum_", KPC(this), K(checksum));
   return checksum;
 }
 
@@ -175,20 +174,14 @@ int LogEntryHeader::generate_padding_log_buf(const int64_t padding_data_len,
       || padding_valid_data_len < serialize_len
       || padding_data_len < padding_valid_data_len) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", K(padding_data_len), K(scn), KP(out_buf), K(padding_valid_data_len));
   } else if(OB_FAIL(base_header.serialize(out_buf, padding_valid_data_len, serialize_base_header_pos))) {
-    PALF_LOG(WARN, "serailize ObLogBaseHeader failed", K(padding_data_len), KP(out_buf), K(padding_valid_data_len),
-        K(serialize_base_header_pos));
   } else if (FALSE_IT(serialize_base_header_pos = serialize_header_pos + header_len)) {
   } else if (OB_FAIL(header.generate_padding_header_(out_buf+serialize_base_header_pos,
                                                      base_header_len,
                                                      padding_data_len,
                                                      scn))) {
-    PALF_LOG(WARN, "generaet LogEntryHeader failed", K(padding_data_len), K(scn), KP(out_buf), K(padding_valid_data_len));
   } else if (OB_FAIL(header.serialize(out_buf, header_len, serialize_header_pos))) {
-    PALF_LOG(WARN, "serialize LogEntryHeader failed", K(padding_data_len), K(scn), KP(out_buf), K(padding_valid_data_len));
   } else {
-    PALF_LOG(INFO, "generate_padding_log_buf success", K(header), K(padding_data_len), K(scn), KP(out_buf), K(padding_valid_data_len));
   }
   return ret;
 }
@@ -240,7 +233,6 @@ int LogEntryHeader::generate_padding_header_(const char *log_data,
     flag_ = (flag_ | get_padding_mask_());
     // update header checksum after all member vars assigned
     (void) update_header_checksum_();
-    PALF_LOG(INFO, "generate_padding_header_ success", KPC(this), K(log_data), K(base_header_len), K(padding_data_len));
   }
   return ret;
 }

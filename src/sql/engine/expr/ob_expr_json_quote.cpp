@@ -82,18 +82,14 @@ int ObExprJsonQuote::calc(ObEvalCtx &ctx, MultimodeAlloctor &temp_allocator, con
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_ARGUMENT);
   } else if (OB_FAIL(ObJsonExprHelper::ensure_collation(type, cs_type))) {
-    LOG_WARN("fail to ensure collation", K(ret), K(type), K(cs_type));
   } else { // string type
     ObString json_val = data.get_string();
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(temp_allocator, data, meta, has_lob_header, json_val))) {
-      LOG_WARN("fail to get real data.", K(ret), K(json_val));
     } else if (json_val.length() == 0) {
       if (OB_FAIL(j_buf.append("\"\"", 2))) {
-        LOG_WARN("failed: jbuf append", K(ret));        
       }
     } else if (OB_FALSE_IT(temp_allocator.add_baseline_size(j_buf.length()))) {
     } else if (OB_FAIL(ObJsonPathUtil::double_quote(json_val, &j_buf))) {
-      LOG_WARN("failed: add double quote", K(ret), K(json_val));
     }
   }
 
@@ -113,14 +109,11 @@ int ObExprJsonQuote::eval_json_quote(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
   bool is_null = false;
 
   if (OB_FAIL(temp_allocator.eval_arg(arg, ctx, json_datum))) {
-    LOG_WARN("failed: eval json args datum.", K(ret));
   } else if (OB_FAIL(calc(ctx, temp_allocator, *json_datum, arg->datum_meta_,
                           arg->obj_meta_.has_lob_header(), j_buf, is_null))) {
-    LOG_WARN("fail to calc json quote result in new engine", K(ret), K(arg->datum_meta_));
   } else if (is_null) {
     res.set_null();
   } else if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, res, j_buf))) {
-    LOG_WARN("fail to pack json result", K(ret));
   }
 
   return ret;

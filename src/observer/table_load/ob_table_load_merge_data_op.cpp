@@ -88,10 +88,8 @@ int ObTableLoadMergeDataOp::switch_next_op(bool is_parent_called)
     if (OB_SUCC(ret)) {
       if (Status::COMPLETED == status_) {
         if (OB_FAIL(switch_parent_op())) {
-          LOG_WARN("fail to switch parent op", KR(ret));
         }
       } else if (OB_FAIL(switch_child_op(child_op_type))) {
-        LOG_WARN("fail to switch child op", KR(ret));
       }
     }
   }

@@ -54,13 +54,10 @@ int PalfEnv::create_palf_env(
   if (NULL == palf_env) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (OB_FAIL(FileDirectoryUtils::delete_tmp_file_or_directory_at(base_dir))) {
-    CLOG_LOG(WARN, "delete_tmp_file_or_directory_at failed", K(ret), K(base_dir));
   } else if (OB_FAIL(palf_env->palf_env_impl_.init(options, base_dir, self, 1L,
                                                    log_alloc_mgr, log_block_pool, monitor, 
                                                    log_local_device, resource_manager, io_manager))) {
-    PALF_LOG(WARN, "PalfEnvImpl init failed", K(ret), K(base_dir));
   } else {
-    PALF_LOG(INFO, "create_palf_handle_impl success", K(base_dir));
   }
   if (NULL != palf_env && OB_FAIL(ret)) {
     MTL_DELETE(PalfEnv, "PalfEnv", palf_env);
@@ -106,10 +103,8 @@ int PalfEnv::create(const int64_t id,
   int64_t  palf_id(id);
   palf::IPalfHandleImpl *palf_handle_impl = NULL;
   if (OB_FAIL(palf_env_impl_.create_palf_handle_impl(palf_id, access_mode, palf_base_info, palf_handle_impl))) {
-    PALF_LOG(WARN, "create_palf_handle_impl failed", K(ret), K(palf_id));
   } else if (FALSE_IT(handle.palf_handle_impl_ = palf_handle_impl)) {
   } else {
-    PALF_LOG(INFO, "create palf handle success", K(id));
   }
   if (OB_FAIL(ret)) {
     handle.palf_handle_impl_ = NULL;
@@ -123,7 +118,6 @@ int PalfEnv::open(const int64_t id, PalfHandle &handle)
   int64_t  palf_id(id);
   palf::IPalfHandleImpl *palf_handle_impl = NULL;
   if (OB_FAIL(palf_env_impl_.get_palf_handle_impl(palf_id, palf_handle_impl))) {
-    PALF_LOG(TRACE, "get_palf_handle_impl failed", K(ret), K(palf_id));
   } else if (FALSE_IT(handle.palf_handle_impl_ = palf_handle_impl)) {
   } else {
     PALF_LOG(TRACE, "PalfEnv open success", K(ret), K(id), K(handle));
@@ -141,7 +135,6 @@ void PalfEnv::close(PalfHandle &handle)
   (void)handle.unregister_rebuild_cb();
   palf_env_impl_.revert_palf_handle_impl(handle.palf_handle_impl_);
   handle.palf_handle_impl_ = NULL;
-  PALF_LOG(TRACE, "PalfEnv close success", K(handle));
 }
 
 int PalfEnv::remove(int64_t id)

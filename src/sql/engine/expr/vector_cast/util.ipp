@@ -170,7 +170,6 @@ struct DecintRangeChecker
 
       DecimalintCheck cast_fn(res_vec, min_v, max_v, min_decint, max_decint);
       if (OB_FAIL(batch_cast_check(cast_fn, expr, res_vec, skip, bound))) {
-        SQL_LOG(WARN, "cast failed", K(ret));
       }
     }
     return ret;
@@ -217,7 +216,6 @@ struct FloatRangeChecker
     ObObjTypeClass type_class = ob_obj_type_class(type);
     ObAccuracy accuracy;
     if (OB_FAIL(get_accuracy_from_parse_node(expr, ctx, accuracy, out_type))) {
-      SQL_LOG(WARN, "get accuracy failed", K(ret));
     } else if (OB_UNLIKELY(ObFloatTC != type_class && ObDoubleTC != type_class)) {
       ret = OB_INVALID_ARGUMENT;
       SQL_LOG(WARN, "obj type is invalid, must be float/double tc", K(ret), K(type), K(type_class));
@@ -235,7 +233,6 @@ struct FloatRangeChecker
       FloatDoubleCheck cast_fn(res_vec, integer_part, decimal_part,
                                    max_value, min_value, need_real_range_check);
       if (OB_FAIL(batch_cast_check(cast_fn, expr, res_vec, skip, bound))) {
-        SQL_LOG(WARN, "cast failed", K(ret));
       }
     }
     return ret;
@@ -267,8 +264,6 @@ struct FloatRangeChecker
           }
         }
         if (CAST_FAIL_CM(ret, expr.extra_)) {
-        // if (OB_UNLIKELY((OB_SUCCESS != (ret = get_cast_ret(cast_mode, real_range_check(accuracy, out_val), warning))))) {
-          SQL_LOG(WARN, "real_range_check failed", K(ret));
         } else if (in_val != out_val) {
           res_vec_->set_payload(idx, &out_val, sizeof(ResType));
         } else {
@@ -332,7 +327,6 @@ struct NumberRangeChecker
         NumberNotFinishCheck cast_fn(res_vec, scale, min_check_num, max_check_num,
                                           min_num_mysql, max_num_mysql);
         if (OB_FAIL(batch_cast_check(cast_fn, expr, res_vec, skip, bound))) {
-          SQL_LOG(WARN, "cast failed", K(ret));
         }
       }
     }
@@ -422,9 +416,7 @@ struct NumberRangeChecker
         const static int64_t num_alloc_used_times = 2; // out val alloc will be used twice
         ObNumStackAllocator<num_alloc_used_times> out_val_alloc;
         if (OB_FAIL(out_val.from(in_val, out_val_alloc))) {
-          SQL_LOG(WARN, "out_val.from failed", K(ret), K(in_val));
         } else if (OB_FAIL(out_val.round(scale_))) {
-          SQL_LOG(WARN, "round failed", K(ret));
         } else if (CM_IS_ERROR_ON_SCALE_OVER(expr.extra_) && in_val.compare(out_val) != 0) {
           ret = OB_OPERATE_OVERFLOW;
           SQL_LOG(WARN, "input value is out of range", K(scale_), K(in_val));
@@ -487,7 +479,6 @@ struct DateTimeRangeChecker
     ObObjTypeClass type_class = ob_obj_type_class(type);
     ObAccuracy accuracy;
     if (OB_FAIL(get_accuracy_from_parse_node(expr, ctx, accuracy, out_type))) {
-      SQL_LOG(WARN, "get accuracy failed", K(ret));
     } else if (OB_UNLIKELY(accuracy.get_scale() > MAX_SCALE_FOR_TEMPORAL)) {
       ret = OB_ERR_TOO_BIG_PRECISION;
       LOG_USER_ERROR(OB_ERR_TOO_BIG_PRECISION, accuracy.get_scale(), "CAST",
@@ -505,7 +496,6 @@ struct DateTimeRangeChecker
           int64_t value = res_vec_->get_int(idx);
           const uint64_t cast_mode = expr.extra_;
           if (OB_FAIL(time_usec_scale_check(cast_mode, accuracy_, value))) {
-            SQL_LOG(WARN, "check zero scale fail.", K(ret), K(value), K(scale));
           } else if (OB_UNLIKELY(0 <= scale && scale < MAX_SCALE_FOR_TEMPORAL)) {
             if(CM_IS_COLUMN_CONVERT(cast_mode) ? CM_IS_TIME_TRUNCATE_FRACTIONAL(cast_mode) : false) {
               value /= trunc_div_;
@@ -533,7 +523,6 @@ struct DateTimeRangeChecker
       int64_t trunc_mul = power_of_10[MAX_SCALE_FOR_TEMPORAL - accuracy.get_scale()];
       DatetimeValidCheck cast_fn(res_vec, accuracy, trunc_div, trunc_mul);
       if (OB_FAIL(batch_cast_check(cast_fn, expr, res_vec, skip, bound))) {
-        SQL_LOG(WARN, "cast failed", K(ret));
       }
     }
     return ret;
@@ -572,7 +561,6 @@ struct StringRangeChecker
       ret = OB_ERR_UNEXPECTED;
       SQL_LOG(WARN, "session is NULL", K(ret));
     } else if (OB_FAIL(get_accuracy_from_parse_node(expr, ctx, accuracy, out_type))) {
-      SQL_LOG(WARN, "get accuracy failed", K(ret));
     } else {
       ObObjType in_type = expr.args_[0]->datum_meta_.type_;
       ObCollationType out_cs_type = expr.datum_meta_.cs_type_;
@@ -590,7 +578,6 @@ struct StringRangeChecker
                                             skip_string_length_check,
                                             max_allowed_packet, packet_ret,
                                             no_padding))) {
-            SQL_LOG(WARN, "varchar char check failed", K(ret), K(res_vec->get_string(idx)));
           }
         }
       } else {
@@ -606,7 +593,6 @@ struct StringRangeChecker
               in_datum.set_string(res_vec->get_string(idx));
               if (OB_FAIL(string_length_check(expr, cast_mode, accuracy, out_type, out_cs_type,
                                         ctx, in_datum, res_datum, warning))) {
-                SQL_LOG(WARN, "string length check failed", K(ret), K(in_datum));
               } else {
                 if (res_datum.is_null()) {
                   res_vec->set_null(idx);
@@ -738,7 +724,6 @@ struct StringRangeChecker
               ObIAllocator &calc_alloc = alloc_guard.get_allocator();
               if (OB_FAIL(padding_char_for_cast(padding_cnt, out_cs_type, calc_alloc,
                                                 padding_res))) {
-                SQL_LOG(WARN, "padding char failed", K(ret), K(padding_cnt), K(out_cs_type));
               } else {
                 int64_t padding_size = padding_res.length() + text.length();
                 char *res_ptr = expr.get_str_res_mem(ctx, padding_size, idx);

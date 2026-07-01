@@ -75,9 +75,7 @@ int ObLogHandler::init(const int64_t id,
              OB_ISNULL(rpc_proxy) ||
              OB_ISNULL(alloc_mgr)) {
     ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "invalid arguments", K(id), KP(palf_env), KP(lc_cb), KP(rpc_proxy), KP(alloc_mgr));
   } else if (OB_FAIL(apply_service->get_apply_status(ls_id, guard))) {
-    CLOG_LOG(WARN, "guard get apply status failed", K(ret), K(id));
   } else if (NULL == (apply_status_ = guard.get_apply_status())) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "apply status is not exist", K(ret), K(id));
@@ -85,7 +83,6 @@ int ObLogHandler::init(const int64_t id,
     CLOG_LOG(WARN, "open palf failed", K(ret), K(id));
 #ifdef OB_BUILD_LOG_STORAGE_COMPRESS
   } else if (OB_FAIL(compressor_wrapper_.init(id, alloc_mgr))) {
-    CLOG_LOG(WARN, "failed to init compressor_wrapper_", K(id));
 #endif
   } else {
     get_max_decided_scn_debug_time_ = OB_INVALID_TIMESTAMP;
@@ -141,12 +138,10 @@ int ObLogHandler::stop()
     apply_status_->unregister_file_size_cb();
     tg.click("unreg cb end");
     if (OB_FAIL(apply_status_->stop())) {
-      CLOG_LOG(INFO, "apply_status stop failed", KPC(this), KPC(apply_status_), KR(ret));
     } else if (false == palf_handle_.is_valid()) {
     // Note: we disable log sync in here, therefore executing ObLogHander::offline()
     // is safe after ObLogHandler::stop() has been executed
     } else if (OB_FAIL(palf_handle_.disable_sync())) {
-      CLOG_LOG(WARN, "disable_sync failed", KPC(this), KR(ret));
     } else {
       tg.click("apply stop end");
       palf_env_->close(palf_handle_);
@@ -169,7 +164,6 @@ int ObLogHandler::safe_to_destroy(bool &is_safe_destroy)
     if (palf_handle_.is_valid() || !is_in_stop_state_) {
       ret = OB_STATE_NOT_MATCH;
     } else if (OB_FAIL(apply_status_->is_apply_done(is_done, end_lsn))) {
-      CLOG_LOG(ERROR, "check apply status is_apply_done failed", K(ret), K(is_done), K(end_lsn), KPC(apply_status_));
     } else if (false == is_done) {
       ret = OB_EAGAIN;
       CLOG_LOG(INFO, "wait apply done false", K(ret), K(is_done), K(end_lsn), KPC(apply_status_));
@@ -222,10 +216,7 @@ int ObLogHandler::append(const void *buffer,
   int ret = OB_SUCCESS;
   if (nbytes > MAX_NORMAL_LOG_BODY_SIZE) {
     ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "nbytes is greater than expected size", K(nbytes), K(MAX_NORMAL_LOG_BODY_SIZE));
   } else if (OB_FAIL(append_(buffer, nbytes, ref_scn, need_nonblock, allow_compress, cb, lsn, scn))) {
-    CLOG_LOG(WARN, "appending log fails", K(buffer), K(nbytes), K(ref_scn), K(need_nonblock),
-             K(allow_compress), K(lsn), K(scn));
   }
   return ret;
 }
@@ -242,10 +233,7 @@ int ObLogHandler::append_big_log(const void *buffer,
   int ret = OB_SUCCESS;
   if (nbytes <= MAX_NORMAL_LOG_BODY_SIZE) {
     ret = OB_INVALID_ARGUMENT;
-    CLOG_LOG(WARN, "nbytes is smaller than expected size", K(nbytes), K(MAX_NORMAL_LOG_BODY_SIZE));
   } else if (OB_FAIL(append_(buffer, nbytes, ref_scn, need_nonblock, allow_compress, cb, lsn, scn))) {
-    CLOG_LOG(WARN, "append big log to palf failed", K(buffer), K(nbytes), K(ref_scn),
-             K(need_nonblock), K(allow_compress), K(lsn), K(scn));
   }
   return ret;
 }
@@ -271,7 +259,6 @@ int ObLogHandler::get_access_mode(int64_t &mode_version, palf::AccessMode &acces
   } else if (is_in_stop_state_) {
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(palf_handle_.get_access_mode(mode_version, access_mode))) {
-    CLOG_LOG(WARN, "palf get_access_mode failed", K(ret), K_(id));
   } else {
   }
   return ret;
@@ -290,7 +277,6 @@ int ObLogHandler::get_append_mode_initial_scn(share::SCN &ref_scn) const
   } else if (is_in_stop_state_) {
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(palf_handle_.get_access_mode_ref_scn(mode_version, access_mode, curr_ref_scn))) {
-    CLOG_LOG(WARN, "get_access_mode_ref_scn failed", K(ret), K_(id));
   } else if (AccessMode::APPEND == access_mode) {
     ref_scn = curr_ref_scn;
   } else {
@@ -314,8 +300,6 @@ int ObLogHandler::change_access_mode(const int64_t mode_version,
   } else if (is_in_stop_state_) {
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(palf_handle_.change_access_mode(proposal_id, mode_version, access_mode, ref_scn))) {
-    CLOG_LOG(WARN, "palf change_access_mode failed", K(ret), K_(id), K(proposal_id), K(mode_version),
-             K(access_mode), K(ref_scn));
   } else {
     FLOG_INFO("change_access_mode success", K(ret), K_(id), K(proposal_id), K(mode_version), K(access_mode), K(ref_scn));
   }
@@ -329,9 +313,7 @@ int ObLogHandler::seek(const LSN &lsn, PalfBufferIterator &iter)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(seek_log_iterator_dispatch_(lsn, default_suggested_max_read_buf_size, iter))) {
-    CLOG_LOG(WARN, "seek_log_iterator_dispatch failed", KP(palf_env_), K(id_), K(lsn));
   } else {
-    CLOG_LOG(TRACE, "seek success", KP(palf_env_), K(id_), K(lsn));
   }
   return ret;
 }
@@ -343,9 +325,7 @@ int ObLogHandler::seek(const LSN &lsn, PalfGroupBufferIterator &iter)
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(seek_log_iterator_dispatch_(lsn, default_suggested_max_read_buf_size, iter))) {
-    CLOG_LOG(WARN, "seek_log_iterator_dispatch failed", KP(palf_env_), K(id_), K(lsn));
   } else {
-    CLOG_LOG(TRACE, "seek success", KP(palf_env_), K(id_), K(lsn));
   }
   return ret;
 }
@@ -375,7 +355,6 @@ int ObLogHandler::locate_by_scn_coarsely(const SCN &scn, LSN &result_lsn)
   int ret = OB_SUCCESS;
   RLockGuard guard(lock_);
   if (OB_FAIL(palf_handle_.locate_by_scn_coarsely(scn, result_lsn))) {
-    CLOG_LOG(WARN, "locate_by_scn_coarsely from palf failed", K(id_), K(scn));
   }
 
   return ret;
@@ -390,7 +369,6 @@ int ObLogHandler::locate_by_lsn_coarsely(const LSN &lsn, SCN &result_scn)
   } else if (is_in_stop_state_) {
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(palf_handle_.locate_by_lsn_coarsely(lsn, result_scn))) {
-    CLOG_LOG(WARN, "locate_by_scn_coarsely from palf failed", KR(ret), K(id_), K(lsn));
   }
   return ret;
 }
@@ -406,7 +384,6 @@ int ObLogHandler::get_max_decided_scn_as_leader(share::SCN &scn) const
     ret = OB_ERR_UNEXPECTED;
   } else if (FALSE_IT(ls_id = id_)) {
   } else if (OB_FAIL(apply_service_->get_palf_committed_end_scn(ls_id, scn))) {
-    CLOG_LOG(WARN, "get palf_committed_end_lsn fail", K(ret), K(id_));
   }
   return ret;
 }
@@ -484,7 +461,6 @@ int ObLogHandler::get_stable_membership(
     CLOG_LOG(INFO, "loghandler is stopped", K(ret), K_(id));
   } else if (OB_FAIL(palf_handle_.get_stable_membership(config_version,
       member_list, paxos_replica_num, learner_list))) {
-    CLOG_LOG(WARN, "get_stable_membership failed", K(ret), KPC(this));
   } else {/*do nothing*/}
   return ret;
 }
@@ -531,13 +507,11 @@ int ObLogHandler::advance_base_info(const PalfBaseInfo &palf_base_info, const bo
     ret = OB_NOT_RUNNING;
   } else if (FALSE_IT(ls_id = id_)) {
   } else if (OB_FAIL(replay_service_->is_enabled(ls_id, is_replay_enabled))) {
-    CLOG_LOG(WARN, "check replay status failed", K(ret), K(ls_id));
   } else if (OB_UNLIKELY(is_replay_enabled)) {
     ret = OB_ERR_UNEXPECTED;
     CLOG_LOG(WARN, "replay is not disabled", K(ret), K(ls_id));
   } else {
     if (OB_FAIL(palf_handle_.advance_base_info(palf_base_info, is_rebuild))) {
-      CLOG_LOG(WARN, "advance_base_info failed", K(ret), K_(id), K(palf_base_info));
     } else {
       CLOG_LOG(INFO, "advance_base_info success", K(ret), K_(id), K(palf_base_info));
     }
@@ -578,7 +552,6 @@ int ObLogHandler::is_in_sync(bool &is_log_sync,
   } else if (is_in_stop_state_) {
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(palf_handle_.stat(palf_stat))) {
-    CLOG_LOG(WARN, "palf stat failed", K(ret), K_(id));
   } else {
     is_log_sync = palf_stat.is_in_sync_;
     is_need_rebuild = palf_stat.is_need_rebuild_;
@@ -606,13 +579,10 @@ int ObLogHandler::get_leader_config_version(LogConfigVersion &config_version) co
     ret = OB_NOT_RUNNING;
     CLOG_LOG(INFO, "loghandler is stopped", K(ret), K_(id));
   } else if (OB_FAIL(palf_handle_.get_role(role, proposal_id, is_pending_state))) {
-    CLOG_LOG(WARN, "get_role failed", K(ret), KPC(this));
   } else if (LEADER != role || true == is_pending_state) {
     ret = OB_NOT_MASTER;
   } else if (OB_FAIL(palf_handle_.get_config_version(config_version))) {
-    CLOG_LOG(WARN, "get_config_version failed", K(ret), KPC(this));
   } else if (OB_FAIL(palf_handle_.get_role(new_role, new_proposal_id, is_pending_state))) {
-    CLOG_LOG(WARN, "get_role failed", K(ret), KPC(this));
   } else if (role != new_role || proposal_id != new_proposal_id) {
     ret = OB_NOT_MASTER;
     CLOG_LOG(INFO, "role changed during getting config version", K(ret), KPC(this), K(role),
@@ -651,7 +621,6 @@ int ObLogHandler::change_replica_num(const common::ObMemberList &member_list,
     LogConfigChangeCmd req(self_, id_, member_list, curr_replica_num, new_replica_num,
         CHANGE_REPLICA_NUM_CMD, timeout_us);
     if (OB_FAIL(submit_config_change_cmd_(req))) {
-      CLOG_LOG(WARN, "submit_config_change_cmd failed", KR(ret), K_(id), K(req), K(timeout_us));
     } else {
       CLOG_LOG(INFO, "change_replica_num success", KR(ret), K_(id), K(member_list),
           K(curr_replica_num), K(new_replica_num));
@@ -681,7 +650,6 @@ int ObLogHandler::force_set_as_single_replica()
     ConfigChangeCmdHandler cmd_handler(&palf_handle_);
     LogConfigChangeCmdResp resp;
     if (OB_FAIL(cmd_handler.handle_config_change_cmd(req, resp))) {
-      CLOG_LOG(WARN, "handle_config_change_cmd failed", KR(ret), K_(id));
     } else {
       CLOG_LOG(INFO, "force_set_as_single_replica success", KR(ret), K_(id), K_(self));
     }
@@ -706,9 +674,7 @@ int ObLogHandler::force_set_member_list(const common::ObMemberList &new_member_l
     ConfigChangeCmdHandler cmd_handler(&palf_handle_);
     LogConfigChangeCmdResp resp;
     if (OB_FAIL(cmd_handler.handle_config_change_cmd(req, resp))) {
-      CLOG_LOG(WARN, "handle force_set_member_list_cmd failed", KR(ret), K_(id), K(req));
     } else {
-      CLOG_LOG(INFO, "force_set_member_list success", K_(id), K_(self), K(new_member_list), K(new_replica_num), K(resp));
     }
   }
 
@@ -744,7 +710,6 @@ int ObLogHandler::add_member(const common::ObMember &added_member,
     LogConfigChangeCmd req(self_, id_, added_member, dummy_member, new_replica_num, ADD_MEMBER_CMD, timeout_us);
     req.in_leader(config_version);
     if (OB_FAIL(submit_config_change_cmd_(req))) {
-      CLOG_LOG(WARN, "add_member failed", KR(ret), K_(id), K(added_member), K(new_replica_num), K(config_version));
     } else {
       CLOG_LOG(INFO, "add_member success", KR(ret), K_(id), K(added_member), K(new_replica_num), K(config_version));
     }
@@ -777,7 +742,6 @@ int ObLogHandler::remove_member(const common::ObMember &removed_member,
     common::ObMember dummy_member;
     LogConfigChangeCmd req(self_, id_, dummy_member, removed_member, new_replica_num, REMOVE_MEMBER_CMD, timeout_us);
     if (OB_FAIL(submit_config_change_cmd_(req))) {
-      CLOG_LOG(WARN, " submit_config_change_cmd failed", KR(ret), K_(id), K(req), K(timeout_us));
     } else {
       CLOG_LOG(INFO, "remove_member success", KR(ret), K_(id), K(removed_member), K(new_replica_num));
     }
@@ -813,7 +777,6 @@ int ObLogHandler::replace_member(const common::ObMember &added_member,
     LogConfigChangeCmd req(self_, id_, added_member, removed_member, 0, REPLACE_MEMBER_CMD, timeout_us);
     req.in_leader(config_version);
     if (OB_FAIL(submit_config_change_cmd_(req))) {
-      CLOG_LOG(WARN, "replace_member failed", KR(ret), K_(id), K(added_member), K(removed_member), K(config_version));
     } else {
       CLOG_LOG(INFO, "replace_member success", KR(ret), K_(id), K(added_member), K(removed_member), K(config_version));
     }
@@ -844,7 +807,6 @@ int ObLogHandler::replace_member_with_learner(const common::ObMember &added_memb
         REPLACE_MEMBER_WITH_LEARNER_CMD, timeout_us);
     replace_req.in_leader(config_version);
     if (OB_FAIL(submit_config_change_cmd_(replace_req))) {
-      CLOG_LOG(WARN, " submit_config_change_cmd failed", KR(ret), K_(id), K(replace_req), K(timeout_us));
     } else {
       CLOG_LOG(INFO, "replace_member_with_learner success", KR(ret), K_(id), K(added_member),
           K(removed_member), K(config_version), K(timeout_us));
@@ -876,7 +838,6 @@ int ObLogHandler::add_learner(const common::ObMember &added_learner,
     common::ObMember dummy_member;
     LogConfigChangeCmd req(self_, id_, added_learner, dummy_member, 0, ADD_LEARNER_CMD, timeout_us);
     if (OB_FAIL(submit_config_change_cmd_(req))) {
-      CLOG_LOG(WARN, " submit_config_change_cmd failed", KR(ret), K_(id), K(req), K(timeout_us));
     } else {
       CLOG_LOG(INFO, "add_learner success", KR(ret), K_(id), K(added_learner));
     }
@@ -907,7 +868,6 @@ int ObLogHandler::remove_learner(const common::ObMember &removed_learner,
     common::ObMember dummy_member;
     LogConfigChangeCmd req(self_, id_, dummy_member, removed_learner, 0, REMOVE_LEARNER_CMD, timeout_us);
     if (OB_FAIL(submit_config_change_cmd_(req))) {
-      CLOG_LOG(WARN, " submit_config_change_cmd failed", KR(ret), K_(id), K(req), K(timeout_us));
     } else {
       CLOG_LOG(INFO, "remove_learner success", KR(ret), K_(id), K(removed_learner));
     }
@@ -934,7 +894,6 @@ int ObLogHandler::replace_learners(const common::ObMemberList &added_learners,
   } else {
     LogConfigChangeCmd replace_req(self_, id_, added_learners, removed_learners, REPLACE_LEARNERS_CMD, timeout_us);
     if (OB_FAIL(submit_config_change_cmd_(replace_req))) {
-      CLOG_LOG(WARN, " submit_config_change_cmd failed", KR(ret), K_(id), K(replace_req), K(timeout_us));
     } else {
       CLOG_LOG(INFO, "replace_learners success", KR(ret), K_(id), K(added_learners), K(removed_learners), K(timeout_us));
     }
@@ -969,7 +928,6 @@ int ObLogHandler::switch_learner_to_acceptor(const common::ObMember &learner,
     LogConfigChangeCmd req(self_, id_, learner, learner, new_replica_num, SWITCH_TO_ACCEPTOR_CMD, timeout_us);
     req.in_leader(config_version);
     if (OB_FAIL(submit_config_change_cmd_(req))) {
-      CLOG_LOG(WARN, "switch_learner_to_acceptor failed", KR(ret), K_(id), K(learner), K(new_replica_num), K(config_version));
     } else {
       CLOG_LOG(INFO, "switch_learner_to_acceptor success", KR(ret), K_(id), K(learner), K(new_replica_num), K(config_version));
     }
@@ -1001,7 +959,6 @@ int ObLogHandler::switch_acceptor_to_learner(const common::ObMember &member,
   } else {
     LogConfigChangeCmd req(self_, id_, member, member, new_replica_num, SWITCH_TO_LEARNER_CMD, timeout_us);
     if (OB_FAIL(submit_config_change_cmd_(req))) {
-      CLOG_LOG(WARN, " submit_config_change_cmd failed", KR(ret), K_(id), K(req), K(timeout_us));
     } else {
       CLOG_LOG(INFO, "switch_acceptor_to_learner success", KR(ret), K_(id), K(member), K(new_replica_num));
     }
@@ -1024,7 +981,6 @@ int ObLogHandler::try_lock_config_change(const int64_t lock_owner, const int64_t
   } else {
     LogConfigChangeCmd req(self_, id_, lock_owner, TRY_LOCK_CONFIG_CHANGE_CMD, timeout_us);
     if (OB_FAIL(submit_config_change_cmd_(req))) {
-      CLOG_LOG(WARN, "try_lock_config_change failed", KR(ret), K_(id), K(lock_owner), K(timeout_us));
     } else {
       CLOG_LOG(INFO, "try_lock_config_change success", KR(ret), K_(id), K(lock_owner));
     }
@@ -1048,7 +1004,6 @@ int ObLogHandler::unlock_config_change(const int64_t lock_owner, const int64_t t
   } else {
     LogConfigChangeCmd req(self_, id_, lock_owner, UNLOCK_CONFIG_CHANGE_CMD, timeout_us);
     if (OB_FAIL(submit_config_change_cmd_(req))) {
-      CLOG_LOG(WARN, "unlock_config_change failed", KR(ret), K_(id), K(lock_owner), K(timeout_us));
     } else {
       CLOG_LOG(INFO, "unlock_config_change success", KR(ret), K_(id), K(lock_owner));
     }
@@ -1070,7 +1025,6 @@ int ObLogHandler::get_config_change_lock_stat(int64_t &lock_owner, bool &is_lock
                            GET_CONFIG_CHANGE_LOCK_STAT_CMD, CONFIG_CHANGE_TIMEOUT/*timeout_us*/);
     LogConfigChangeCmdResp resp;
     if (OB_FAIL(submit_config_change_cmd_(req, resp))) {
-      CLOG_LOG(WARN, "get_config_change_lock_stat failed", KR(ret), K_(id));
     } else {
       lock_owner = resp.lock_owner_;
       is_locked = resp.is_locked_;
@@ -1193,8 +1147,6 @@ int ObLogHandler::append_(const void *buffer,
         cb->__set_lsn(lsn);
         cb->__set_scn(scn);
         ret = apply_status_->push_append_cb(cb);
-        CLOG_LOG(TRACE, "palf_handle_ push_append_cb success", K(lsn), K(scn), K(log_compressed),
-                 K(nbytes), K(final_nbytes), K(id_));
 #ifdef OB_BUILD_LOG_STORAGE_COMPRESS
         //add stat event
         EVENT_ADD(LOG_STORAGE_COMPRESS_ORIGINAL_SIZE, nbytes);
@@ -1283,7 +1235,6 @@ int ObLogHandler::get_member_gc_stat(const common::ObAddr &addr,
       if (learner_list.contains(addr)) {
         ObMember member;
         if (OB_FAIL(learner_list.get_learner_by_addr(addr, member))) {
-          CLOG_LOG(ERROR, "failed to get_learner_by_addr", K(learner_list), K(addr), KPC(this));
         } else {
           stat = member.is_migrating() ? LogMemberGCStat::LOG_LEARNER_IN_MIGRATING : LogMemberGCStat::LOG_MEMBER_NORMAL_GC_STAT;
         }
@@ -1293,7 +1244,6 @@ int ObLogHandler::get_member_gc_stat(const common::ObAddr &addr,
       CLOG_LOG(INFO, "role changed during is_valid_member", K(ret), KPC(this), K(role),
                K(new_role), K(proposal_id), K(new_proposal_id));
     }
-    CLOG_LOG(INFO, "get_member_gc_stat", K(is_valid_member), K(stat), K(member_list), K(learner_list), K(addr), KPC(this));
   }
   return ret;
 }
@@ -1315,7 +1265,6 @@ int ObLogHandler::enable_replay(const palf::LSN &lsn,
     ret = OB_INVALID_ARGUMENT;
     CLOG_LOG(WARN, "invalid argument", K(ret), K(id), K(lsn), K(scn));
   } else if (OB_FAIL(replay_service_->enable(id, lsn, scn))) {
-    CLOG_LOG(WARN, "failed to enable replay", K(ret), K(id), K(lsn), K(scn));
   } else {
     CLOG_LOG(INFO, "enable replay success", K(ret), K(id), K(lsn), K(scn));
   }
@@ -1331,7 +1280,6 @@ int ObLogHandler::disable_replay()
     ret = OB_NOT_INIT;
   } else if (FALSE_IT(id = id_)) {
   } else if (OB_FAIL(replay_service_->disable(id))) {
-    CLOG_LOG(WARN, "failed to disable replay", K(ret), K(id));
   } else {
     CLOG_LOG(INFO, "disable replay success", K(ret), K(id));
   }
@@ -1347,7 +1295,6 @@ int ObLogHandler::pend_submit_replay_log()
     ret = OB_NOT_INIT;
   } else if (FALSE_IT(id = id_)) {
   } else if (OB_FAIL(replay_service_->block_submit_log(id))) {
-    CLOG_LOG(WARN, "failed to block_submit_log", K(ret), K(id));
   } else {
     CLOG_LOG(INFO, "block_submit_log success", K(ret), K(id));
   }
@@ -1363,7 +1310,6 @@ int ObLogHandler::restore_submit_replay_log()
     ret = OB_NOT_INIT;
   } else if (FALSE_IT(id = id_)) {
   } else if (OB_FAIL(replay_service_->unblock_submit_log(id))) {
-    CLOG_LOG(WARN, "failed to unblock_submit_log", K(ret), K(id));
   } else {
     CLOG_LOG(INFO, "unblock_submit_log success", K(ret), K(id));
   }
@@ -1400,10 +1346,8 @@ int ObLogHandler::get_max_decided_scn(SCN &scn)
     ret = OB_STATE_NOT_MATCH;
   } else if (is_offline()) {
     ret = OB_STATE_NOT_MATCH;
-    CLOG_LOG(WARN, "log handle is offline", K(id_));
   } else if (FALSE_IT(id = id_)) {
   } else if (OB_FAIL(apply_service_->get_max_applied_scn(id, max_applied_scn))) {
-    CLOG_LOG(WARN, "failed to get_max_applied_scn", K(ret), K(id));
   } else if (OB_FAIL(replay_service_->get_max_replayed_scn(id, max_replayed_scn))) {
     if (OB_STATE_NOT_MATCH != ret) {
       CLOG_LOG(WARN, "failed to get_max_replayed_scn", K(ret), K(id));
@@ -1463,7 +1407,6 @@ int ObLogHandler::register_rebuild_cb(palf::PalfRebuildCb *rebuild_cb)
   } else if (is_in_stop_state_) {
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(palf_handle_.register_rebuild_cb(rebuild_cb))) {
-    CLOG_LOG(WARN, "register_rebuild_cb failed", K(ret), KPC(this));
   }
 	return ret;
 }
@@ -1477,7 +1420,6 @@ int ObLogHandler::unregister_rebuild_cb()
   } else if (is_in_stop_state_) {
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(palf_handle_.unregister_rebuild_cb())) {
-    CLOG_LOG(WARN, "unregister_rebuild_cb failed", K(ret), KPC(this));
   } else {
   }
 	return ret;
@@ -1505,7 +1447,6 @@ int ObLogHandler::offline()
   if (IS_NOT_INIT) {
     PALF_LOG(INFO, "ObLogHandler has already been destroyed", K(ret), KPC(this));
   } else if (OB_FAIL(disable_replay())) {
-    CLOG_LOG(WARN, "disable_replay failed", K(ret), KPC(this));
   } else if (OB_FAIL(disable_sync()) && OB_NOT_INIT != ret) {
     CLOG_LOG(WARN, "disable_sync failed", K(ret), KPC(this));
   } else {
@@ -1535,7 +1476,6 @@ int ObLogHandler::offline()
     is_offline_ = true;
     // NB: must ensure on_role_change not fail.
     if (OB_FAIL(rc_service_->on_role_change(id_))) {
-      CLOG_LOG(WARN, "on_role_change failed", K(ret), KPC(this));
     } else {
       CLOG_LOG(INFO, "LogHandler offline success", K(ret), KPC(this));
     }
@@ -1550,7 +1490,6 @@ int ObLogHandler::diagnose_palf(palf::PalfDiagnoseInfo &diagnose_info) const
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
   } else if (OB_FAIL(palf_handle_.diagnose(diagnose_info))) {
-    CLOG_LOG(WARN, "palf handle diagnose failed", K(ret), KPC(this));
   } else {
     // do nothing
   }
@@ -1565,9 +1504,7 @@ int ObLogHandler::online(const LSN &lsn, const SCN &scn)
   } else if (true == is_in_stop_state_) {
     ret = OB_NOT_RUNNING;
   } else if (OB_FAIL(enable_replay(lsn, scn))) {
-    CLOG_LOG(WARN, "enable_replay failed", K(ret), KPC(this), K(lsn), K(scn));
   } else if (OB_FAIL(enable_sync())) {
-    CLOG_LOG(WARN, "enable_sync failed", K(ret), KPC(this));
   } else {
     WLockGuard guard(lock_);
     proposal_id_ = INVALID_PROPOSAL_ID;
@@ -1580,7 +1517,6 @@ int ObLogHandler::online(const LSN &lsn, const SCN &scn)
     // otherwise, role change service may need switch leader to leader.
     role_ = common::FOLLOWER;
     if (OB_FAIL(rc_service_->on_role_change(id_))) {
-      CLOG_LOG(WARN, "on_role_change failed", K(ret), KPC(this));
     } else {
       CLOG_LOG(INFO, "LogHander online success", K(ret), KPC(this), K(lsn), K(scn));
     }
@@ -1604,7 +1540,6 @@ int ObLogHandler::is_replay_fatal_error(bool &has_fatal_error)
     RLockGuard guard(lock_);
     ObLSID ls_id(id_);
     if (OB_FAIL(replay_service_->has_fatal_error(ls_id, has_fatal_error))) {
-      CLOG_LOG(WARN, "has_fatal_error failed", KR(ret), K(ls_id));
     }
   }
   return ret;
@@ -1618,7 +1553,6 @@ int ObLogHandler::advance_base_lsn_impl_(const LSN &lsn)
     ret = OB_NOT_RUNNING;
     CLOG_LOG(WARN, "ObLogHandler is not running", KR(ret), K_(id));
   } else if (OB_FAIL(palf_handle_.advance_base_lsn(lsn))) {
-    CLOG_LOG(WARN, "advance_base_lsn failed", KR(ret), K(lsn));
   } else {}
   return ret;
 }
@@ -1633,13 +1567,10 @@ int __get_log_handler(const ObLSID &ls_id,
   if (OB_ISNULL(ls_service)) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::LOG_MOD))) {
-    CLOG_LOG(WARN, "get_ls failed", K(ls_id));
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(WARN, "unexpected error!!! ls must not nullptr", K(ls_id));
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(WARN, "unexpected error!!! ls must not nullptr", K(ls_id));
   } else if (OB_ISNULL(log_handler = ls->get_log_handler())) {
     ret = OB_ERR_UNEXPECTED;
   } else {}

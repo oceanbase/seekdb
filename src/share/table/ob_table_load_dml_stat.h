@@ -56,7 +56,6 @@ public:
       ret = OB_ALLOCATE_MEMORY_FAILED;
       OB_LOG(WARN, "fail to allocate buffer", KR(ret));
     } else if (OB_FAIL(dml_stat_array_.push_back(new_dml_stat))) {
-      OB_LOG(WARN, "fail to push back", KR(ret));
     } else {
       dml_stat = new_dml_stat;
     }
@@ -79,7 +78,6 @@ public:
         ret = OB_ERR_UNEXPECTED;
         OB_LOG(WARN, "unexpected dml stat is null", KR(ret));
       } else if (OB_FAIL(allocate_dml_stat(new_dml_stat))) {
-        OB_LOG(WARN, "fail to allocate dml stat", KR(ret));
       } else {
         *new_dml_stat = *dml_stat;
       }

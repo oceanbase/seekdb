@@ -67,9 +67,7 @@ int ObLSStorageClogHandler::replay(
     LOG_WARN("invalid arguments", K(ret), K(buffer), K(nbytes), K(lsn), K(scn));
   } else if (FALSE_IT(buf = static_cast<const char *>(buffer))) {
   } else if (OB_FAIL(base_header.deserialize(buf, nbytes, pos))) {
-    LOG_WARN("log base header deserialize error", K(ret));
   } else if (OB_FAIL(inner_replay(base_header, scn, buf, nbytes, pos))) {
-    LOG_WARN("failed to replay update reserved snapshot", K(ret));
   }
   return ret;
 }
@@ -89,7 +87,6 @@ int ObLSResvSnapClogHandler::inner_replay(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("log header is not valid", K(ret), K(base_header));
   } else if (OB_FAIL(ls_->replay_reserved_snapshot_log(scn, buffer, buffer_size, pos))) {
-    LOG_WARN("failed to replay update reserved snapshot", K(ret));
   }
   return ret;
 }
@@ -114,7 +111,6 @@ int ObMediumCompactionClogHandler::inner_replay(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("log header is not valid", K(ret), K(base_header));
   } else if (OB_FAIL(tablet_id.deserialize(buffer, buffer_size, new_pos))) {
-    LOG_WARN("fail to deserialize tablet id", K(ret), K(buffer_size), K(pos), K(tablet_id));
   } else if (OB_FAIL(ls_->replay_get_tablet(tablet_id, scn, is_update_mds_table, handle))) {
     if (OB_OBSOLETE_CLOG_NEED_SKIP == ret) {
       LOG_INFO("clog is obsolete, should skip replay", K(ret), K(tablet_id), K(scn));
@@ -126,7 +122,6 @@ int ObMediumCompactionClogHandler::inner_replay(
       LOG_WARN("failed to get tablet", K(ret), K(tablet_id), K(scn));
     }
   } else if (OB_FAIL(handle.get_obj()->replay_medium_compaction_clog(scn, buffer, buffer_size, new_pos))) {
-    LOG_WARN("failed to replay medium compaction clog", K(ret), K(tablet_id), K(scn), K(buffer_size), K(new_pos));
   }
 
   return ret;

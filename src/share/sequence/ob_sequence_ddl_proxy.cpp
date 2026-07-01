@@ -50,12 +50,10 @@ int ObSequenceDDLProxy::create_sequence_without_bitset(
               exists,
               sequence_id,
               is_system_generated))) {
-    LOG_WARN("fail get sequence", K(seq_schema), K(ret));
   } else if (exists) {
     ret = OB_OBJECT_NAME_EXIST;
     LOG_WARN("sequence already exist", K(sequence_id), K(ret));
   } else if (OB_FAIL(inner_create_sequence(seq_schema, trans, schema_guard, ddl_stmt_str, true /* need_sync_seq_val */))) {
-    LOG_WARN("fail inner create sequence", K(seq_schema), K(ret));
   }
   return ret;
 }
@@ -77,7 +75,6 @@ int ObSequenceDDLProxy::create_sequence(
   if (OB_FAIL(schema_guard.check_oracle_object_exist(
       seq_schema.get_database_id(), seq_schema.get_sequence_name(),
       SEQUENCE_SCHEMA, INVALID_ROUTINE_TYPE, false, conflict_schema_types))) {
-    LOG_WARN("fail to check oracle_object exist", K(ret), K(seq_schema));
   } else if (conflict_schema_types.count() > 0) {
     ret = OB_ERR_EXIST_OBJECT;
     LOG_WARN("Name is already used by an existing object", K(ret), K(seq_schema),
@@ -87,14 +84,11 @@ int ObSequenceDDLProxy::create_sequence(
               exists,
               sequence_id,
               is_system_generated))) {
-    LOG_WARN("fail get sequence", K(seq_schema), K(ret));
   } else if (exists) {
     ret = OB_OBJECT_NAME_EXIST;
     LOG_WARN("sequence already exist", K(sequence_id), K(ret));
   } else if (OB_FAIL(opt_builder.build_create_sequence_option(opt_bitset, seq_schema.get_sequence_option()))) {
-    LOG_WARN("fail build create sequence option", K(seq_schema), K(ret));
   } else if (OB_FAIL(inner_create_sequence(seq_schema, trans, schema_guard, ddl_stmt_str, false /* need_sync_seq_val */))) {
-    LOG_WARN("fail inner create sequence", K(seq_schema), K(ret));
   }
   return ret;
 }
@@ -116,16 +110,13 @@ int ObSequenceDDLProxy::inner_create_sequence(
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("schema_service must not null", K(ret));
   } else if (OB_FAIL(schema_service->fetch_new_sequence_id(new_sequence_id))) {
-    LOG_WARN("failed to fetch new_sequence_id", K(ret));
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
-    LOG_WARN("fail to gen new schema_version", K(ret));
   } else {
     seq_schema.set_sequence_id(new_sequence_id);
     seq_schema.set_schema_version(new_schema_version);
     // old_seuquence_id is used to obtain next value of sequence from all_sequence_value if needed.
     if (OB_FAIL(schema_service->get_sequence_sql_service().insert_sequence(
                 seq_schema, &trans, ddl_stmt_str, need_sync_seq_val ? &old_sequence_id : nullptr))) {
-      LOG_WARN("insert sequence info failed", K(seq_schema.get_sequence_name()), K(ret));
     } else {
       LOG_INFO("create sequence", K(lbt()), K(seq_schema));
     }
@@ -158,7 +149,6 @@ int ObSequenceDDLProxy::alter_sequence(
               exists,
               sequence_id,
               is_system_generated))) {
-    LOG_WARN("fail get sequence", K(seq_schema), K(ret));
   } else if (!exists) {
     ret = OB_OBJECT_NAME_NOT_EXIST;
     LOG_WARN("sequence not exists", K(sequence_id), K(ret));
@@ -170,7 +160,6 @@ int ObSequenceDDLProxy::alter_sequence(
   } else if (OB_FAIL(schema_guard.get_sequence_schema(
               sequence_id,
               cur_sequence_schema))) {
-    LOG_WARN("fail get sequence schema", K(ret));
   } else if (OB_ISNULL(cur_sequence_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL unexpected", K(ret));
@@ -179,17 +168,12 @@ int ObSequenceDDLProxy::alter_sequence(
               cur_sequence_schema->get_sequence_option(),
               opt_new,
               can_alter_start_with))) {
-    LOG_WARN("fail build alter sequence option",
-             K(seq_schema),
-             K(*cur_sequence_schema),
-             K(ret));
   } else {
     ObSchemaService *schema_service = schema_service_.get_schema_service();
     if (OB_ISNULL(schema_service)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("schema_service must not null", K(ret));
     } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
-      LOG_WARN("fail to gen new schema_version", K(ret));
     } else {
       const ObSequenceOption &opt_old = cur_sequence_schema->get_sequence_option();
       bool alter_start_with = opt_bitset.has_member(ObSequenceArg::START_WITH) ||
@@ -203,7 +187,6 @@ int ObSequenceDDLProxy::alter_sequence(
       seq_schema.set_schema_version(new_schema_version);
       if (OB_FAIL(schema_service->get_sequence_sql_service().replace_sequence(seq_schema,
             false, &trans, alter_start_with, need_clean_cache, need_write_back, ddl_stmt_str))) {
-        LOG_WARN("alter sequence info failed", K(seq_schema.get_sequence_name()), K(ret));
       } else {
         LOG_INFO("alter sequence", K(lbt()), K(seq_schema));
       }
@@ -239,7 +222,6 @@ int ObSequenceDDLProxy::drop_sequence(
               exists,
               sequence_id,
               is_system_generated))) {
-    LOG_WARN("fail get sequence", K(seq_schema), K(ret));
   } else if (!exists) {
     ret = OB_OBJECT_NAME_NOT_EXIST;
     LOG_WARN("sequence does not exist", K(seq_schema), K(ret));
@@ -254,10 +236,8 @@ int ObSequenceDDLProxy::drop_sequence(
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
-    LOG_WARN("fail to gen new schema_version", K(ret));
   } else if (OB_FAIL(schema_service->get_sequence_sql_service().drop_sequence(
               seq_schema, new_schema_version, &trans, ddl_stmt_str))) {
-    LOG_WARN("drop sequence info failed", K(seq_schema.get_sequence_name()), K(ret));
   } else {
     LOG_INFO("drop sequence", K(lbt()), K(seq_schema));
   }
@@ -277,12 +257,10 @@ int ObSequenceDDLProxy::rename_sequence(share::schema::ObSequenceSchema &seq_sch
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("schema_service must not null", K(ret));
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(new_schema_version))) {
-    LOG_WARN("fail to gen new schema_version", K(ret));
   } else {
     seq_schema.set_schema_version(new_schema_version);
     if (OB_FAIL(schema_service->get_sequence_sql_service().replace_sequence(
                 seq_schema, true, &trans, false, false, false, ddl_stmt_str))) {
-      LOG_WARN("rename sequence info failed", K(ret), K(seq_schema.get_sequence_name()));
     } else {
       LOG_INFO("rename sequence", K(lbt()), K(seq_schema));
     }

@@ -30,7 +30,6 @@ ObExprDocID::ObExprDocID(ObIAllocator &allocator)
   : ObFuncExprOperator(allocator, T_FUN_SYS_DOC_ID, N_DOC_ID, ZERO_OR_ONE, VALID_FOR_GENERATED_COL, NOT_ROW_DIMENSION)
 {
   need_charset_convert_ = false;
-  STORAGE_FTS_LOG(DEBUG, "construct doc id expr", K(common::lbt()));
 }
 
 int ObExprDocID::calc_result_typeN(ObExprResType &type,
@@ -89,7 +88,6 @@ int ObExprDocID::cg_expr(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(raw_ctx), KP(raw_ctx.args_));
   } else if (OB_FAIL(ObExprCalcPartitionBase::calc_part_and_tablet_id(raw_ctx.args_[0], eval_ctx, partition_id, tablet_id))) {
-    LOG_WARN("fail to calc part and tablet id by expr", K(ret));
   } else {
     uint64_t seq_id = 0;
     uint64_t buf_len = sizeof(ObDocId);
@@ -106,7 +104,6 @@ int ObExprDocID::cg_expr(
       } else {
         share::ObTabletAutoincrementService &auto_inc = share::ObTabletAutoincrementService::get_instance();
         if (OB_FAIL(auto_inc.get_autoinc_seq(tablet_id, seq_id))) {
-          LOG_WARN("fail to get tablet autoinc seq", K(ret), K(tablet_id));
         }
       }
       if (OB_SUCC(ret)) {

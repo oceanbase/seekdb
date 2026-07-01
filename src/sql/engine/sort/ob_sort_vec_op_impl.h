@@ -113,7 +113,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(add_batch(input_brs, start_pos, append_row_count))) {
-      SQL_ENG_LOG(WARN, "failed to add batch", K(ret));
     } else if (use_heap_sort_) {
       sort_need_dump = false;
     } else {
@@ -301,7 +300,6 @@ protected:
     } else if (OB_FAIL(init_temp_row_store(*sk_exprs_, 1, eval_ctx_->max_batch_size_, true,
                                            true /*enable dump*/, Store_Row::get_extra_size(true), compress_type_,
                                            chunk->sk_store_))) {
-      SQL_ENG_LOG(WARN, "failed to init temp row store", K(ret));
     } else if (has_addon
                && OB_FAIL(init_temp_row_store(
                     *addon_exprs_, 1, eval_ctx_->max_batch_size_, true, true /*enable dump*/,
@@ -319,11 +317,9 @@ protected:
           }
           break;
         } else if (OB_FAIL(chunk->sk_store_.add_row(SK_CONST_UPCAST_P(sort_key_row), dst_sk_row))) {
-          SQL_ENG_LOG(WARN, "copy row to row store failed");
         } else if (has_addon
                    && OB_FAIL(chunk->addon_store_.add_row(SK_CONST_UPCAST_P(addon_field_row),
                                                           dst_addon_row))) {
-          SQL_ENG_LOG(WARN, "copy row to row store failed");
         } else {
           stored_row_cnt++;
           if (level > 0) {
@@ -340,9 +336,7 @@ protected:
         SQL_ENG_LOG(WARN, "the number of rows in sort key store and addon store is expected to be equal",
           K(chunk->sk_store_.get_row_cnt()), K(chunk->addon_store_.get_row_cnt()), K(ret));
       } else if (OB_FAIL(chunk->sk_store_.dump(true))) {
-        SQL_ENG_LOG(WARN, "failed to dump row store", K(ret));
       } else if (OB_FAIL(chunk->sk_store_.finish_add_row(true /*+ need dump */))) {
-        SQL_ENG_LOG(WARN, "finish add row failed", K(ret));
       } else if (has_addon && OB_FAIL(chunk->addon_store_.dump(true))) {
         SQL_ENG_LOG(WARN, "failed to dump row store", K(ret));
       } else if (has_addon && OB_FAIL(chunk->addon_store_.finish_add_row(true /*+ need dump */))) {
@@ -394,12 +388,10 @@ protected:
         SQL_ENG_LOG(WARN, "failed to allocate memory", K(ret));
       } else if (FALSE_IT(buckets = new (buckets_buf) ArrayType(page_allocator_))) {
       } else if (OB_FAIL(buckets->init(bucket_num))) {
-        SQL_ENG_LOG(WARN, "failed to init bucket", K(ret), K(bucket_num));
       }
     } else {
       buckets->reuse();
       if (OB_FAIL(buckets->init(bucket_num))) {
-        LOG_WARN("failed to init bucket array", K(ret), K(bucket_num));
       }
     }
     return ret;

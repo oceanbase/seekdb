@@ -32,7 +32,6 @@ int ObRbExprHelper::get_input_roaringbitmap_bin(ObEvalCtx &ctx, ObIAllocator &al
   ObDatum *rb_datum = nullptr;
   ObString get_str;
   if (OB_FAIL(rb_arg->eval(ctx, rb_datum))) {
-    LOG_WARN("eval roaringbitmap args failed", K(ret));
   } else if (rb_datum->is_null()) {
     is_rb_null = true;
   } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
@@ -41,10 +40,8 @@ int ObRbExprHelper::get_input_roaringbitmap_bin(ObEvalCtx &ctx, ObIAllocator &al
                          rb_arg->datum_meta_,
                          rb_arg->obj_meta_.has_lob_header(),
                          get_str))) {
-    LOG_WARN("fail to get real string data", K(ret), K(get_str));
   } else if (rb_arg->datum_meta_.type_ != ObRoaringBitmapType) {
     if (OB_FAIL(ObRbUtils::build_binary(allocator, get_str, rb_bin))) {
-      LOG_WARN("failed to build roaringbitmap from binary", K(ret), K(get_str));
     }
   } else {
     rb_bin.assign_ptr(get_str.ptr(), get_str.length());
@@ -58,7 +55,6 @@ int ObRbExprHelper::get_input_roaringbitmap(ObEvalCtx &ctx, ObIAllocator &alloca
   ObDatum *rb_datum = nullptr;
   ObString get_str;
   if (OB_FAIL(rb_arg->eval(ctx, rb_datum))) {
-    LOG_WARN("eval roaringbitmap args failed", K(ret));
   } else if (rb_datum->is_null()) {
     is_rb_null = true;
   } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(
@@ -67,17 +63,13 @@ int ObRbExprHelper::get_input_roaringbitmap(ObEvalCtx &ctx, ObIAllocator &alloca
                          rb_arg->datum_meta_,
                          rb_arg->obj_meta_.has_lob_header(),
                          get_str))) {
-    LOG_WARN("fail to get real string data", K(ret), K(get_str));
   } else if (rb_arg->datum_meta_.type_ != ObRoaringBitmapType) {
     bool need_validate = true;
     if (OB_FAIL(ObRbUtils::check_binary(get_str))) {
-      LOG_WARN("invalid roaringbitmap binary string", K(ret));
     } else if (OB_FAIL(ObRbUtils::rb_deserialize(allocator, get_str, rb, need_validate))) {
-      LOG_WARN("failed to deserialize roaringbitmap", K(ret));
     }
   } else {
     if (OB_FAIL(ObRbUtils::rb_deserialize(allocator, get_str, rb))) {
-      LOG_WARN("failed to deserialize roaringbitmap", K(ret));
     }
   }
   return ret;
@@ -97,17 +89,13 @@ int ObRbExprHelper::get_input_roaringbitmap(ObEvalCtx &ctx, ObIAllocator &alloca
                          rb_arg->obj_meta_.has_lob_header(),
                          get_str,
                          idx))) {
-    LOG_WARN("fail to get real string data", K(ret), K(get_str));
   } else if (rb_arg->datum_meta_.type_ != ObRoaringBitmapType) {
     bool need_validate = true;
     if (OB_FAIL(ObRbUtils::check_binary(get_str))) {
-      LOG_WARN("invalid roaringbitmap binary string", K(ret));
     } else if (OB_FAIL(ObRbUtils::rb_deserialize(allocator, get_str, rb, need_validate))) {
-      LOG_WARN("failed to deserialize roaringbitmap", K(ret));
     }
   } else {
     if (OB_FAIL(ObRbUtils::rb_deserialize(allocator, get_str, rb))) {
-      LOG_WARN("failed to deserialize roaringbitmap", K(ret));
     }
   }
   return ret;
@@ -118,9 +106,7 @@ int ObRbExprHelper::pack_rb_res(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res
   int ret = OB_SUCCESS;
   ObTextStringDatumResult text_result(expr.datum_meta_.type_, &expr, &ctx, &res);
   if (OB_FAIL(text_result.init(str.length()))) {
-    LOG_WARN("init lob result failed");
   } else if (OB_FAIL(text_result.append(str.ptr(), str.length()))) {
-    LOG_WARN("failed to append realdata", K(ret), K(text_result));
   } else {
     text_result.set_result();
   }

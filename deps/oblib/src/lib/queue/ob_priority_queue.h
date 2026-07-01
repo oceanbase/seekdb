@@ -53,7 +53,6 @@ public:
       ret = OB_SIZE_OVERFLOW;
     } else if (OB_UNLIKELY(NULL == data) || OB_UNLIKELY(priority < 0) || OB_UNLIKELY(priority >= PRIO_CNT)) {
       ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "push error, invalid argument", KP(data), K(priority));
     } else if (OB_FAIL(queue_[priority].push(data))) {
       // do nothing
     } else {
@@ -71,7 +70,6 @@ public:
     ATOMIC_FAA(&size_, 1);
     if (OB_UNLIKELY(NULL == data) || OB_UNLIKELY(priority < 0) || OB_UNLIKELY(priority >= PRIO_CNT)) {
       ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "push front error, invalid argument", KP(data), K(priority));
     } else if (OB_FAIL(queue_[priority].push_front(data))) {
       // do nothing
     } else {
@@ -171,7 +169,6 @@ public:
 
     if (queue_num <= 0 || queue_num > OB_MAX_NUMA_NUM) {
         queue_num_ = 1;
-        COMMON_LOG(WARN, "failed to set invalid queue_num, fallback to 1", K(queue_num), K(queue_num_));
     } else {
         queue_num_ = queue_num;
     }
@@ -203,7 +200,6 @@ public:
 
         mq_[0] = &sq_;
         queue_num_ = 1;
-        COMMON_LOG(WARN, "failed to initialize mq_, fallback to sq_", K(queue_num), K(queue_num_));
       }
     }
 
@@ -280,7 +276,6 @@ public:
       ret = OB_SIZE_OVERFLOW;
     } else if (OB_UNLIKELY(NULL == data) || OB_UNLIKELY(priority < 0) || OB_UNLIKELY(priority >= PRIO_CNT)) {
       ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "push error, invalid argument", KP(data), K(priority));
     } else if (OB_FAIL(mq_[to_push_idx]->q[priority].push(data))) {
       // do nothing
     } else {

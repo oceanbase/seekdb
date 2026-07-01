@@ -51,7 +51,6 @@ int ObOptColumnStatCache::put_and_fetch_row(const ObOptColumnStat::Key &key,
      ret = OB_INVALID_ARGUMENT;
      COMMON_LOG(WARN, "invalid column stat cache key.", K(key), K(ret));
   } else if (OB_FAIL(put_and_fetch(key, value, handle.stat_, handle.handle_, true /*overwrite*/))) {
-     COMMON_LOG(WARN, "Fail to put kvpair to cache.", K(ret));
   }
   return ret;
 }

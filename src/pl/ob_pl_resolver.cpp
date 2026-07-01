@@ -24,7 +24,7 @@
 #include "sql/resolver/dml/ob_select_resolver.h"
 #include "sql/resolver/expr/ob_raw_expr_wrap_enum_set.h"
 #include "sql/rewrite/ob_transform_pre_process.h"
-#include "ob_pl_build.h"
+#include "ob_pl_compile.h"
 #include "pl/ob_pl_dependency_util.h"
 #include "pl/ob_pl_package.h"
 #include "pl/parser/parse_stmt_item_type.h"
@@ -48,7 +48,6 @@ int ObPLResolver::init(ObPLFunctionAST &func_ast)
   int ret = OB_SUCCESS;
   resolve_ctx_.enum_set_ctx_ = &func_ast.get_enum_set_ctx();
   if (OB_FAIL(make_block(func_ast, NULL, current_block_, true))) {
-    LOG_WARN("failed to make block", K(current_block_), K(ret));
   } else {
     current_level_ = 0;
     current_block_->set_level(current_level_);
@@ -63,13 +62,11 @@ int ObPLResolver::init(ObPLFunctionAST &func_ast)
     if (OB_SUCC(ret)) {
       if (!resolve_ctx_.package_guard_.is_inited()) {
         if (OB_FAIL(resolve_ctx_.package_guard_.init())) {
-          LOG_WARN("package guard init failed", K(ret));
         }
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < func_ast.get_arg_count(); ++i) {
       if (OB_FAIL(current_block_->get_namespace().get_symbols().push_back(i))) {
-        LOG_WARN("failed to add variable to symbol table", K(i),K(ret));
       } else {
         common::ObString name;
         ObPLDataType type;
@@ -234,22 +231,17 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
           for (int64_t i = 0; OB_SUCC(ret) && i < labels_node->num_child_; ++i) {
             label.reset();
             if (OB_FAIL(resolve_ident(labels_node->children_[i], label))) {
-              LOG_WARN("failed to resolve ident", K(labels_node->children_[i]), K(ret));
             } else if (OB_FAIL(labels.push_back(label))) {
-              LOG_WARN("failed to push labels", K(label), K(labels.count()), K(ret));
             } else {
               // do nothing
             }
           }
         } else if (OB_FAIL(resolve_ident(parse_tree->children_[0], label))) {
-          LOG_WARN("failed to resolve ident",  K(parse_tree->children_[0]), K(ret));
         } else if (OB_FAIL(labels.push_back(label))) {
-          LOG_WARN("failed to push labels", K(label), K(labels.count()), K(ret));
         }
       }
       if (OB_SUCC(ret) && NULL != parse_tree->children_[2]) {
         if (OB_FAIL(resolve_ident(parse_tree->children_[2], end_label))) {
-          LOG_WARN("failed to resolve ident", K(parse_tree->children_[2]), K(ret));
         } else {
           bool find_flag = false;
           for (int64_t i = 0; i < labels.count(); ++i) {
@@ -288,9 +280,7 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
         ObPLStmtBlock *block = NULL;
         ++current_level_;
         if (OB_FAIL(resolve_stmt_list(parse_tree, block, func))) {
-          LOG_WARN("failed to resolve stmt list", K(parse_tree->type_), K(ret));
         } else if (OB_FAIL(handler_analyzer_.reset_handlers(current_level_))) {
-          LOG_WARN("failed to reset handlers", K(ret));
         } else {
           --current_level_;
           handler_analyzer_.reset_notfound_and_warning(current_level_);
@@ -401,14 +391,11 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
           if (current_block_->has_eh()) {
             stmt = NULL;
           } else if (OB_FAIL(stmt_factory_.allocate(PL_HANDLER, current_block_, stmt))) {
-            LOG_WARN("failed to alloc stmt", K(ret));
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(check_declare_order(PL_HANDLER))) {
-            LOG_WARN("fail to check decalre order", K(ret));
           } else if (OB_FAIL(resolve_declare_handler(parse_tree, static_cast<ObPLDeclareHandlerStmt*>(NULL == stmt ? current_block_->get_eh() : stmt), func))) {
-            LOG_WARN("failed to resolve declare handler stmt", K(parse_tree), K(stmt), K(ret));
           } else if (stmt != NULL && static_cast<ObPLDeclareHandlerStmt*>(stmt)->get_handlers().count() <= 0) {
             // continue handler will record into handler_analyzer_,
             // so here handlers may null, do not add null handler to current block.
@@ -441,7 +428,6 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
         break;
       case T_SP_INNER_CALL_STMT: {
         if (OB_FAIL(resolve_inner_call(parse_tree, stmt, func))) {
-          LOG_WARN("failed to resolve inner call", K(parse_tree), K(ret));
         } else {
           func.set_is_all_sql_stmt(false);
         }
@@ -449,7 +435,6 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
         break;
       case T_SP_DECL_CURSOR: {
         if (OB_FAIL(check_declare_order(PL_CURSOR))) {
-          LOG_WARN("fail to check decalre order", K(ret));
         } else {
           RESOLVE_STMT(PL_CURSOR, resolve_declare_cursor, ObPLDeclareCursorStmt);
           if (!func.is_modifies_sql_data()) {
@@ -483,7 +468,6 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
         break;
       case T_SP_SOURCE: {
         if (OB_FAIL(resolve_root(parse_tree->children_[3], func))) {
-          LOG_WARN("failed to resolve sp source", K(current_block_), K(ret));
         }
       }
         break;
@@ -506,7 +490,6 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
       case T_SUB_PROC_DECL: {
         ObPLRoutineInfo *routine_info = NULL;
         if (OB_FAIL(resolve_routine_decl(parse_tree, func, routine_info, false))) {
-          LOG_WARN("resolve routine declaration failed", K(parse_tree), K(ret));
         } else {
           func.set_is_all_sql_stmt(false);
         }
@@ -516,7 +499,6 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
       case T_SUB_PROC_DEF: {
         // must be nested routine, because udt member is process in package ast resolve
         if (OB_FAIL(resolve_routine_def(parse_tree, func, false))) {
-          LOG_WARN("resolve procedure definition failed", K(parse_tree), K(ret));
         } else {
           func.set_is_all_sql_stmt(false);
         }
@@ -528,7 +510,6 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
         break;
       case T_SP_PRAGMA_UDF: {
         if (OB_FAIL(resolve_udf_pragma(parse_tree, func))) {
-          LOG_WARN("resolve udf pragma failed", K(ret), K(parse_tree), K(func));
         }
       }
         break;
@@ -600,7 +581,6 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
           stmt = NULL;
         }
         if (OB_FAIL(stmt_factory_.allocate(PL_SIGNAL, current_block_, stmt))) {
-          LOG_WARN("failed to alloc stmt", K(ret));
         } else if (OB_ISNULL(signal_stmt = static_cast<ObPLSignalStmt*>(stmt))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("static cast failed", K(ret));
@@ -626,32 +606,26 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLFunctionAST &fun
         // for continue handler, should add handler to every stmt, here, make a new block, consturct new block with handler and stmt.
         ObPLStmtBlock *block = NULL;
         if (OB_FAIL(make_block(func, current_block_, block))) {
-          LOG_WARN("failed to make block", K(current_block_), K(ret));
         } else {
           ObPLStmt *stmt = NULL;
           ObPLDeclareHandlerStmt *declare_handler_stmt = NULL;
           if (OB_FAIL(stmt_factory_.allocate(PL_HANDLER, block, stmt))) {
-            LOG_WARN("failed to alloc stmt", K(ret));
           } else if (OB_ISNULL(declare_handler_stmt = static_cast<ObPLDeclareHandlerStmt*>(stmt))) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("failed to allocate stmt", K(current_block_), K(ret));
           } else if (OB_FAIL(block->add_stmt(declare_handler_stmt))) {
-            LOG_WARN("failed to add stmt", K(declare_handler_stmt), K(ret));
           } else {
             block->set_eh(declare_handler_stmt);
             ObPLDeclareHandlerStmt::DeclareHandler handler_info;
             for (int64_t i = handler_analyzer_.get_continue(); OB_SUCC(ret) && i < handler_analyzer_.get_stack_depth(); ++i) {
               if (OB_FAIL(handler_analyzer_.get_handler(i, handler_info))) {
-                LOG_WARN("failed to get handler", K(i), K(ret));
               } else if (OB_FAIL(declare_handler_stmt->add_handler(handler_info))) {
-                LOG_WARN("failed to add handler", K(handler_info), K(ret));
               } else { /*do nothing*/ }
             }
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(block->add_stmt(stmt))) {
-            LOG_WARN("failed to add stmt", K(stmt), K(ret));
           } else {
             stmt->set_block(block);
             stmt = block;
@@ -697,9 +671,7 @@ int ObPLResolver::resolve_root(const ObStmtNodeTree *parse_tree, ObPLFunctionAST
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(resolve(parse_tree, func))) {
-    LOG_WARN("failed to resolve pl.", K(ret));
   } else if (OB_FAIL(check_subprogram(func))) {
-    LOG_WARN("faield to check subprogram", K(ret));
   }
   return ret;
 }
@@ -730,7 +702,6 @@ int ObPLResolver::init(ObPLPackageAST &package_ast)
   int ret = OB_SUCCESS;
   resolve_ctx_.enum_set_ctx_ = &package_ast.get_enum_set_ctx();
   if (OB_FAIL(make_block(package_ast, current_block_))) {
-    LOG_WARN("failed to make block", K(current_block_), K(ret));
   } else {
     current_level_ = 0;
     current_block_->set_level(current_level_);
@@ -864,7 +835,6 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLPackageAST &pack
     case T_SUB_PROC_DECL: {
       ObPLRoutineInfo *routine_info = NULL;
       if (OB_FAIL(resolve_routine_decl(parse_tree, package_ast, routine_info))) {
-        LOG_WARN("resolve routine declaration failed", K(parse_tree), K(ret));
       }
     }
       break;
@@ -874,7 +844,6 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLPackageAST &pack
                          || ObPackageType::PL_UDT_OBJECT_BODY == package_ast.get_package_type()) ?
                          true : false;
       if (OB_FAIL(resolve_routine_def(parse_tree, package_ast, is_udt_routine))) {
-        LOG_WARN("resolve procedure definition failed", K(parse_tree), K(ret));
       }
     }
       break;
@@ -884,7 +853,6 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLPackageAST &pack
       break;
     case T_SP_PROC_STMT_LIST: {
       if (OB_FAIL(resolve_init_routine(parse_tree, package_ast))) {
-        LOG_WARN("resolve init routine failed", K(parse_tree), K(ret));
       }
     }
       break;
@@ -894,19 +862,16 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLPackageAST &pack
       break;
     case T_SP_PRAGMA_SERIALLY_REUSABLE: {
       if (OB_FAIL(resolve_serially_reusable_pragma(parse_tree, package_ast))) {
-        LOG_WARN("resolve serially pragma failed", K(ret), K(parse_tree), K(package_ast));
       }
     }
       break;
     case T_SP_PRAGMA_RESTRICT_REFERENCE: {
       if (OB_FAIL(resolve_restrict_references_pragma(parse_tree, package_ast))) {
-        LOG_WARN("resolve restrict references failed", K(ret), K(parse_tree), K(package_ast));
       }
     }
       break;
     case T_SP_PRAGMA_INTERFACE: {
       if (OB_FAIL(resolve_interface_pragma(parse_tree, package_ast))) {
-        LOG_WARN("resolve restrict references failed", K(ret), K(parse_tree), K(package_ast));
       }
     }
       break;
@@ -917,7 +882,6 @@ int ObPLResolver::resolve(const ObStmtNodeTree *parse_tree, ObPLPackageAST &pack
       break;
     case T_SP_DECL_CURSOR: {
       if (OB_FAIL(resolve_declare_cursor(parse_tree, package_ast))) {
-        LOG_WARN("resovle package cursor declare failed", K(ret), K(parse_tree), K(package_ast));
       } else {
         if (!package_ast.is_modifies_sql_data()) {
           package_ast.set_reads_sql_data();
@@ -974,7 +938,6 @@ int ObPLResolver::check_declare_order(ObPLStmtType type)
   if (handler_analyzer_.get_stack_depth() > 0) {
     ObPLDeclareHandlerStmt::DeclareHandler info;
     if (OB_FAIL(handler_analyzer_.get_handler(handler_analyzer_.get_stack_depth() - 1, info))) {
-      LOG_WARN("failed to get last handler", K(ret));
     } else if (info.get_level() == current_level_) {
       pre_type = PL_HANDLER;
     }
@@ -1067,7 +1030,7 @@ int ObPLResolver::get_const_number_variable_literal_value(ObRawExpr *expr, int64
 
 
 int ObPLResolver::resolve_sp_composite_type(const ParseNode *sp_data_type_node,
-                                            ObPLAstUnit &func,
+                                            ObPLCompileUnitAST &func,
                                             ObPLDataType &data_type,
                                             ObPLExternTypeInfo *extern_type_info)
 {
@@ -1254,7 +1217,6 @@ int ObPLResolver::resolve_sp_scalar_type(ObIAllocator &allocator,
   if (OB_FAIL(ret)) {
   } else if (T_SP_INTEGER_TYPE == sp_data_type_node->type_) {
     if (OB_FAIL(resolve_sp_integer_type(sp_data_type_node, data_type))) {
-      LOG_WARN("fail to resolve sp integer data type", K(ret));
     }
   } else {
     ObDataType scalar_data_type;
@@ -1263,7 +1225,6 @@ int ObPLResolver::resolve_sp_scalar_type(ObIAllocator &allocator,
     bool enable_mysql_compatible_dates = false;
     if (OB_FAIL(ObSQLUtils::check_enable_mysql_compatible_dates(&session_info, false /*is_ddl*/,
                               enable_mysql_compatible_dates))) {
-      LOG_WARN("fail to check enable mysql compatible dates", K(ret));
     } else if (OB_FAIL(ObResolverUtils::resolve_data_type(*sp_data_type_node,
                                       ident_name,
                                       scalar_data_type,
@@ -1273,7 +1234,6 @@ int ObPLResolver::resolve_sp_scalar_type(ObIAllocator &allocator,
                                       false, // TODO
                                       enable_mysql_compatible_dates,
                                       convert_real_to_decimal))) {
-      LOG_WARN("resolve data type failed", K(ret));
     } else if (scalar_data_type.get_meta_type().is_string_or_lob_locator_type()
             || scalar_data_type.get_meta_type().is_enum_or_set()
             || scalar_data_type.get_meta_type().is_json()
@@ -1291,7 +1251,6 @@ int ObPLResolver::resolve_sp_scalar_type(ObIAllocator &allocator,
         OZ (session_info.get_character_set_connection(charset_type));
         OZ (session_info.get_collation_connection(collation_type));
       } else if (OB_FAIL(ObCharset::check_and_fill_info(charset_type, collation_type))) {
-        LOG_WARN("fail to fill collation info", K(charset_type), K(collation_type), K(ret));
       }
       if (OB_SUCC(ret)) {
         scalar_data_type.set_charset_type(charset_type);
@@ -1310,7 +1269,6 @@ int ObPLResolver::resolve_sp_scalar_type(ObIAllocator &allocator,
                                                      type,
                                                      length,
                                                      true))) {
-          LOG_WARN("failed to check text length", K(ret), K(scalar_data_type));
         } else {
           scalar_data_type.set_length(length);
           scalar_data_type.set_obj_type(type);
@@ -1331,7 +1289,6 @@ int ObPLResolver::resolve_sp_scalar_type(ObIAllocator &allocator,
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(ObResolverUtils::resolve_extended_type_info(*(sp_data_type_node->children_[3]),
                                                                      type_info_array))) {
-        LOG_WARN("fail to resolve extended type info", K(ret));
       } else if (OB_FAIL(ObResolverUtils::check_extended_type_info(
                   allocator,
                   type_info_array,
@@ -1341,13 +1298,10 @@ int ObPLResolver::resolve_sp_scalar_type(ObIAllocator &allocator,
                   scalar_data_type.get_obj_type(),
                   scalar_data_type.get_collation_type(),
                   session_info.get_sql_mode()))) {
-        LOG_WARN("fail to check extended type info", K(type_info_array), K(ret));
       } else if (OB_FAIL(data_type.set_type_info(type_info_array))) {
-        LOG_WARN("fail to set type info", K(ret));
       } else if (OB_FAIL(ObDDLResolver::calc_enum_or_set_data_length(type_info_array,
                                                   scalar_data_type.get_collation_type(),
                                                   scalar_data_type.get_obj_type(), length))) {
-        LOG_WARN("failed to calc enum or set data length", K(ret));
       } else {
         scalar_data_type.set_length(length);
       }
@@ -1367,14 +1321,12 @@ int ObPLResolver::resolve_sp_scalar_type(ObIAllocator &allocator,
     if (OB_SUCC(ret) && scalar_data_type.get_meta_type().is_enum_or_set()) {
       ObIArray<common::ObString>* stored_type_info = NULL;
       if (OB_FAIL(data_type.get_type_info(stored_type_info))) {
-        LOG_WARN("failed to get type info", K(ret));
       } else if (OB_ISNULL(stored_type_info)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get null type info", K(ret));
       } else if (OB_FAIL(ObRawExprUtils::init_enum_set_subschema_id(scalar_data_type.get_meta_type(),
                                                                     *stored_type_info,
                                                                     session_info))) {
-        LOG_WARN("failed to init enum set subschema id", K(ret));
       }
     }
   }
@@ -1909,7 +1861,7 @@ bool ObPLResolver::is_data_type_name(const ObString &ident_name)
 }
 
 int ObPLResolver::resolve_sp_row_type(const ParseNode *sp_data_type_node,
-                                      ObPLAstUnit &func,
+                                      ObPLCompileUnitAST &func,
                                       ObPLDataType &pl_type,
                                       ObPLExternTypeInfo *extern_type_info,
                                       bool with_rowid)
@@ -2031,7 +1983,6 @@ int ObPLResolver::resolve_sp_row_type(const ParseNode *sp_data_type_node,
                 record_name.to_string(name_buf, record_name.length() + 1);
                 record_name_str.assign_ptr(name_buf, record_name.length());
                 if (OB_FAIL(pre_ns->check_dup_type(record_name_str, is_dup, dup_type))) {
-                  LOG_WARN("check dup type failed", K(record_name_str), K(is_dup), K(ret));
                 } else if (is_dup) {
                   if (OB_ISNULL(dup_type)) {
                     ret = OB_ERR_UNEXPECTED;
@@ -2200,7 +2151,7 @@ int ObPLResolver::adjust_routine_param_type(ObPLDataType &type)
 // whether rowid is actual accessed or not.
 int ObPLResolver::resolve_sp_data_type(const ParseNode *sp_data_type_node,
                                        const ObString &ident_name,
-                                       ObPLAstUnit &func,
+                                       ObPLCompileUnitAST &func,
                                        ObPLDataType &data_type,
                                        ObPLExternTypeInfo *extern_type_info,
                                        bool with_rowid,
@@ -2272,9 +2223,8 @@ int ObPLResolver::resolve_sp_data_type(const ParseNode *sp_data_type_node,
 int ObPLResolver::resolve_declare_var(const ObStmtNodeTree *parse_tree, ObPLDeclareVarStmt *stmt, ObPLFunctionAST &func)
 {
   int ret = OB_SUCCESS;
-  ObPLAstUnit &unit_ast = static_cast<ObPLAstUnit&>(func);
+  ObPLCompileUnitAST &unit_ast = static_cast<ObPLCompileUnitAST&>(func);
   if (OB_FAIL(check_declare_order(PL_VAR))) {
-    LOG_WARN("fail to check decalre order", K(ret));
   } else {
     ret = resolve_declare_var_comm(parse_tree, stmt, unit_ast);
   }
@@ -2284,14 +2234,14 @@ int ObPLResolver::resolve_declare_var(const ObStmtNodeTree *parse_tree, ObPLDecl
 int ObPLResolver::resolve_declare_var(const ObStmtNodeTree *parse_tree, ObPLPackageAST &package_ast)
 {
   int ret = OB_SUCCESS;
-  ObPLAstUnit &unit_ast = static_cast<ObPLAstUnit&>(package_ast);
+  ObPLCompileUnitAST &unit_ast = static_cast<ObPLCompileUnitAST&>(package_ast);
   ret = resolve_declare_var_comm(parse_tree, NULL, unit_ast);
   return ret;
 }
 
 int ObPLResolver::resolve_declare_var_comm(const ObStmtNodeTree *parse_tree,
                                            ObPLDeclareVarStmt *stmt,
-                                           ObPLAstUnit &unit_ast)
+                                           ObPLCompileUnitAST &unit_ast)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(parse_tree));
@@ -2640,13 +2590,11 @@ int ObPLResolver::resolve_assign(const ObStmtNodeTree *parse_tree, ObPLAssignStm
         bool need_expect_type = true;
         if (T_SP_OBJ_ACCESS_REF == into_node->type_/*Oracle mode*/) {
           if (OB_FAIL(resolve_obj_access_idents(*into_node, q_name.access_idents_, func))) {
-            LOG_WARN("resolve pl obj access ident failed", K(ret));
           }
         } else if (T_QUESTIONMARK == into_node->type_/*Oracle mode*/) {
           OZ (resolve_question_mark_node(into_node, into_expr));
         } else if (OB_FAIL(ObResolverUtils::resolve_obj_access_ref_node(expr_factory_,
                             into_node, q_name, resolve_ctx_.session_info_))) {
-          LOG_WARN("resolve obj access ref node failed", K(ret));
         }
         if (OB_SUCC(ret)) {
           if (T_SYSTEM_VARIABLE == into_node->type_) {
@@ -2796,9 +2744,7 @@ int ObPLResolver::resolve_if(const ObStmtNodeTree *parse_tree, ObPLIfStmt *stmt,
     set_item_type(T_SP_IF);
     if (OB_FAIL(resolve_then(
         parse_tree, func, &data_type, expr, then_block, true))) {
-      LOG_WARN("failed to resolve then", K(ret));
     } else if (OB_FAIL(func.add_expr(expr))) {
-      LOG_WARN("failed to add expr", K(*expr), K(ret));
     } else {
       stmt->set_cond(func.get_expr_count() - 1);
       stmt->set_then(then_block);
@@ -2817,7 +2763,6 @@ int ObPLResolver::resolve_if(const ObStmtNodeTree *parse_tree, ObPLIfStmt *stmt,
       } else {
         ObPLStmtBlock *else_block = NULL;
         if (OB_FAIL(resolve_stmt_list(else_node->children_[0], else_block, func))) {
-          LOG_WARN("failed to resolve stmt list", K(else_node->children_[0]->type_), K(ret));
         } else {
           stmt->set_else(else_block);
         }
@@ -2842,14 +2787,12 @@ int ObPLResolver::resolve_case(const ObStmtNodeTree *parse_tree, ObPLCaseStmt *s
     set_item_type(T_SP_CASE);
     ObPLStmtBlock *current_block = current_block_;
     if (OB_FAIL(make_block(func, current_block, current_block_))) {
-      LOG_WARN("failed to make block", K(ret));
     } else if (NULL == expr_node) {
       //no case expression
     } else if (OB_FAIL(resolve_expr(expr_node, 
                                     func,
                                     case_expr,
                                     combine_line_and_col(expr_node->stmt_loc_)))) {
-      LOG_WARN("failed to resolve expr", K(expr_node), K(ret));
     } else {
       ObPLDataType pl_data_type(case_expr->get_data_type());
       if (case_expr->get_result_type().is_ext()) {
@@ -2900,12 +2843,10 @@ int ObPLResolver::resolve_case(const ObStmtNodeTree *parse_tree, ObPLCaseStmt *s
          * a Case not found for CASE statement error results.
          * */
         if (OB_FAIL(make_block(func, current_block_, else_block))) {
-          LOG_WARN("failed to make block", K(ret));
         } else {
           ObPLStmt *stmt = NULL;
           ObPLSignalStmt *signal_stmt = NULL;
           if (OB_FAIL(stmt_factory_.allocate(PL_SIGNAL, else_block, stmt))) {
-            LOG_WARN("failed to alloc stmt", K(ret));
           } else if (OB_ISNULL(signal_stmt = static_cast<ObPLSignalStmt*>(stmt))) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("failed to cast stmt", K(ret));
@@ -2916,7 +2857,6 @@ int ObPLResolver::resolve_case(const ObStmtNodeTree *parse_tree, ObPLCaseStmt *s
             signal_stmt->set_error_code(ER_SP_CASE_NOT_FOUND); // MySQL mode uses MySQL error codes
             signal_stmt->set_ob_error_code(OB_ER_SP_CASE_NOT_FOUND);
             if (OB_FAIL(else_block->add_stmt(signal_stmt))) {
-              LOG_WARN("failed to add stmt", K(stmt), K(ret));
             }
           }
         }
@@ -2929,7 +2869,6 @@ int ObPLResolver::resolve_case(const ObStmtNodeTree *parse_tree, ObPLCaseStmt *s
           LOG_WARN("Invalid else node", K(else_node->children_[0]->type_), K(ret));
         } else {
           if (OB_FAIL(resolve_stmt_list(else_node->children_[0], else_block, func))) {
-            LOG_WARN("failed to resolve stmt list", K(else_node->children_[0]->type_), K(ret));
           }
         }
       }
@@ -2969,14 +2908,12 @@ int ObPLResolver::resolve_when(const ObStmtNodeTree *parse_tree, ObRawExpr *case
       }
       set_item_type(T_SP_WHEN);
       if (OB_FAIL(make_block(func, current_block_, body))) {
-        LOG_WARN("failed to make block");
       } else if (OB_FAIL(resolve_then(parse_tree->children_[i],
                                       func,
                                       case_expr_var ? nullptr : &data_type,
                                       expr,
                                       body,
                                       is_bool_stmt))) {
-        LOG_WARN("failed to resolve then", K(ret));
       }
 
       if (OB_SUCC(ret) && case_expr_var) {
@@ -3025,7 +2962,6 @@ int ObPLResolver::resolve_then(const ObStmtNodeTree *parse_tree,
     } else if (OB_FAIL(resolve_expr(expr_node, func, expr,
                                     combine_line_and_col(expr_node->stmt_loc_),
                                     false, data_type, false, is_add_bool_expr))) {
-      LOG_WARN("failed to resolve expr", K(expr_node), K(ret));
     } else { /*do nothing*/ }
     //Parse the then clause
     if (OB_SUCC(ret)) {
@@ -3038,7 +2974,6 @@ int ObPLResolver::resolve_then(const ObStmtNodeTree *parse_tree,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Invalid then node type", K(then_node->type_), K(ret));
       } else if (OB_FAIL(resolve_stmt_list(then_node, then_block, func))) {
-        LOG_WARN("failed to resolve stmt list", K(then_node->type_), K(ret));
       } else { /*do nothing*/ }
     }
   }
@@ -3058,9 +2993,7 @@ int ObPLResolver::resolve_loop_control(const ObStmtNodeTree *parse_tree, ObPLLoo
     int64_t label = OB_INVALID_INDEX;
     const ObStmtNodeTree *label_node = parse_tree->children_[0];
     if (OB_FAIL(resolve_ident(label_node, name))) {
-      LOG_WARN("failed to resolve ident", K(label_node), K(ret));
     } else if (OB_FAIL(resolve_label(name, current_block_->get_namespace(), label, is_iterate_label))) {
-      LOG_WARN("failed to resolve label", K(name), K(ret));
     } else if (OB_INVALID_INDEX == label) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("can not resolve label", K(name), K(label), K(ret));
@@ -3103,7 +3036,6 @@ int ObPLResolver::resolve_while(const ObStmtNodeTree *parse_tree, ObPLWhileStmt 
     const ObStmtNodeTree *expr_node = parse_tree->children_[0];
     const ObStmtNodeTree *body_node = parse_tree->children_[1];
     if (OB_FAIL(resolve_cond_loop(expr_node, body_node, stmt, func))) {
-      LOG_WARN("failed to resolve while", K(parse_tree), K(stmt), K(ret));
     }
   }
   return ret;
@@ -3119,7 +3051,6 @@ int ObPLResolver::resolve_repeat(const ObStmtNodeTree *parse_tree, ObPLRepeatStm
     const ObStmtNodeTree *expr_node = parse_tree->children_[1];
     const ObStmtNodeTree *body_node = parse_tree->children_[0];
     if (OB_FAIL(resolve_cond_loop(expr_node, body_node, stmt, func))) {
-      LOG_WARN("failed to resolve while", K(parse_tree), K(stmt), K(ret));
     }
   }
   return ret;
@@ -3142,7 +3073,6 @@ int ObPLResolver::resolve_loop(const ObStmtNodeTree *parse_tree, ObPLLoopStmt *s
     } else {
       ObPLStmtBlock *body_block = NULL;
       if (OB_FAIL(resolve_stmt_list(parse_tree->children_[0], body_block, func))) {
-        LOG_WARN("failed to resolve stmt list", K(parse_tree->children_[0]->type_), K(ret));
       } else {
         stmt->set_body(body_block);
       }
@@ -3181,7 +3111,6 @@ int ObPLResolver::resolve_return(const ObStmtNodeTree *parse_tree, ObPLReturnStm
     } else if (OB_FAIL(resolve_expr(expr_node, func, expr,
                                     combine_line_and_col(expr_node->stmt_loc_),
                                     true, &func.get_ret_type()))) {
-      LOG_WARN("failed to resolve expr", K(expr_node), K(ret));
     } else {
       stmt->set_ret(func.get_expr_count() - 1);
       bool is_ref_cursor_type = false;
@@ -3401,7 +3330,6 @@ int ObPLResolver::resolve_static_sql(const ObStmtNodeTree *parse_tree, ObPLSql &
           LOG_WARN("failed to prepare stmt", K(ret));
         }
       } else if (OB_FAIL(check_and_record_stmt_type(func, prepare_result))) {
-        LOG_WARN("sql stmt not support in pl function", K(parse_tree->str_value_), K(prepare_result.type_), K(ret));
       } else if (stmt::T_SET_PASSWORD == prepare_result.type_) {
           ret = OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_PROCEDRUE;
           LOG_WARN("set password in PL not allow", K(ret), K(get_type_name(parse_tree->type_)));
@@ -3417,9 +3345,7 @@ int ObPLResolver::resolve_static_sql(const ObStmtNodeTree *parse_tree, ObPLSql &
         LOG_WARN("%s is not allowed in stored procedure. ", K(name), K(ret));
         LOG_USER_ERROR(OB_ERR_STMT_NOT_ALLOW_IN_MYSQL_PROCEDRUE, name.length(), name.ptr());
       } else if (OB_FAIL(func.add_sql_exprs(prepare_result.exec_params_))) {
-        LOG_WARN("failed to set precalc exprs", K(prepare_result.exec_params_), K(ret));
       } else if (OB_FAIL(func.add_sql_exprs(prepare_result.into_exprs_))) {
-        LOG_WARN("failed to set precalc exprs", K(prepare_result.into_exprs_), K(ret));
       } else { /*do nothing*/ }
 
       if (OB_SUCC(ret)) {
@@ -3454,12 +3380,10 @@ int ObPLResolver::resolve_static_sql(const ObStmtNodeTree *parse_tree, ObPLSql &
             OB_SUCC(ret) && i < func.get_expr_count() - prepare_result.into_exprs_.count();
             ++i) {
           if (OB_FAIL(idxs.push_back(i))) {
-            LOG_WARN("push back error", K(prepare_result.into_exprs_), K(ret));
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(static_sql.set_params(idxs))) {
-            LOG_WARN("failed to set params", K(prepare_result.exec_params_), K(idxs), K(ret));
           }
         }
         if (OB_SUCC(ret)) {
@@ -3489,7 +3413,6 @@ int ObPLResolver::resolve_static_sql(const ObStmtNodeTree *parse_tree, ObPLSql &
              OB_SUCC(ret) && i < func.get_expr_count();
              ++i) {
           if (OB_FAIL(idxs.push_back(i))) {
-            LOG_WARN("push back error", K(prepare_result.into_exprs_), K(ret));
           }
         }
         if (OB_SUCC(ret)) {
@@ -3497,7 +3420,6 @@ int ObPLResolver::resolve_static_sql(const ObStmtNodeTree *parse_tree, ObPLSql &
             static_into.set_bulk();
           }
           if (OB_FAIL(static_into.set_into(idxs, current_block_->get_namespace(), prepare_result.into_exprs_))) {
-            LOG_WARN("failed to set into exprs", K(prepare_result.into_exprs_), K(idxs), K(ret));
           }
         }
         if (OB_SUCC(ret)) {
@@ -3529,7 +3451,6 @@ int ObPLResolver::resolve_static_sql(const ObStmtNodeTree *parse_tree, ObPLSql &
           if (DEPENDENCY_TABLE == prepare_result.ref_objects_.at(i).object_type_) {
             // do nothing, no need collect table schema in mysql mode
           } else if (OB_FAIL(ObPLDependencyUtil::add_dependency_object_impl(func.get_dependency_table(), prepare_result.ref_objects_.at(i)))) {
-            LOG_WARN("add dependency object failed", K(ret));
           }
         }
         // used for generate route sql
@@ -3570,7 +3491,6 @@ int ObPLResolver::resolve_using(const ObStmtNodeTree *using_node,
         LOG_WARN("using param node must have only 1 child", K(i), K(using_node->type_), K(using_param->num_child_), K(ret));
       } else if (OB_FAIL(resolve_expr(using_param->children_[0], func, expr,
                                    combine_line_and_col(using_param->children_[0]->stmt_loc_)))) {
-        LOG_WARN("failed to resolve const", K(ret));
       } else {
         bool legal_extend = false;
         if (ObExtendType == expr->get_result_type().get_type()) {
@@ -3645,7 +3565,6 @@ int ObPLResolver::resolve_execute_immediate(
       LOG_WARN("sql node is NULL", K(parse_tree->children_), K(sql_node), K(ret));
     } else if (OB_FAIL(resolve_expr(sql_node, func,
                                     sql, combine_line_and_col(sql_node->stmt_loc_)))) {
-      LOG_WARN("failed to resolve sql expr", K(ret));
     } else if (!sql->get_result_type().is_string_or_lob_locator_type() && !sql->get_result_type().is_json()
                && !sql->get_result_type().is_geometry()) {
       ret = OB_NOT_SUPPORTED;
@@ -3659,7 +3578,6 @@ int ObPLResolver::resolve_execute_immediate(
       const ObStmtNodeTree *into_node = parse_tree->children_[1];
       if (NULL != into_node) {
         if (OB_FAIL(resolve_into(into_node, *stmt, func))) {
-          LOG_WARN("type node is NULL", K(parse_tree->children_), K(into_node), K(ret));
         }
       }
     }
@@ -3951,14 +3869,13 @@ int ObPLResolver::resolve_declare_cond(const ObStmtNodeTree *parse_tree,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(resolve_declare_cond(parse_tree, NULL, package_ast))) {
-    LOG_WARN("failed to resolve declare condition for package", K(ret));
   }
   return ret;
 }
 
 int ObPLResolver::resolve_declare_cond(const ObStmtNodeTree *parse_tree,
                                        ObPLDeclareCondStmt *stmt,
-                                       ObPLAstUnit &func)
+                                       ObPLCompileUnitAST &func)
 {
   int ret = OB_SUCCESS;
   UNUSED(func);
@@ -3967,7 +3884,6 @@ int ObPLResolver::resolve_declare_cond(const ObStmtNodeTree *parse_tree,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parse_tree is NULL", K(parse_tree), K(ret));
   } else if (OB_FAIL(check_declare_order(PL_COND))) {
-    LOG_WARN("fail to check declare order", K(ret));
   } else {
     //Parse name
     const ObStmtNodeTree *name_node = (T_SP_DECL_COND == parse_tree->type_
@@ -3977,7 +3893,6 @@ int ObPLResolver::resolve_declare_cond(const ObStmtNodeTree *parse_tree,
       ret = OB_ERR_EX_NAME_ARG;
       LOG_WARN("expect a name for exception", K(name_node->type_), K(ret));
     } else if (OB_FAIL(resolve_ident(name_node, name))) {
-      LOG_WARN("failed to resolve ident", K(name_node), K(ret));
     }
     //parse condition
     ObPLConditionValue value;
@@ -4031,7 +3946,6 @@ int ObPLResolver::resolve_declare_handler(const ObStmtNodeTree *parse_tree, ObPL
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("parse_tree is NULL", K(parse_tree), K(stmt), K(ret));
   } else if (OB_FAIL(check_declare_order(PL_HANDLER))) {
-    LOG_WARN("fail to check declare order", K(ret));
   } else {
     ObPLDeclareHandlerStmt::DeclareHandler::HandlerDesc* desc =
             static_cast<ObPLDeclareHandlerStmt::DeclareHandler::HandlerDesc*>(resolve_ctx_.allocator_.alloc(sizeof(ObPLDeclareHandlerStmt::DeclareHandler::HandlerDesc)));
@@ -4057,7 +3971,6 @@ int ObPLResolver::resolve_declare_handler(const ObStmtNodeTree *parse_tree, ObPL
           if (handler_analyzer_.in_continue()) {
             ObPLDeclareHandlerStmt::DeclareHandler info;
             if (OB_FAIL(handler_analyzer_.get_handler(top_continue, info))) {
-              LOG_WARN("failed to get top continue handler", K(ret), K(top_continue));
             } else if (info.get_level() == (current_level_ - 1)) {
               handler_analyzer_.set_continue(OB_INVALID_INDEX);
             }
@@ -4068,9 +3981,7 @@ int ObPLResolver::resolve_declare_handler(const ObStmtNodeTree *parse_tree, ObPL
                                         func,
                                         true,/*stop scarch label*/
                                         true /*in exception handler scope*/))) {
-            LOG_WARN("failed to resolve stmt list", K(parse_tree->children_[1]->type_), K(ret));
           } else if (OB_FAIL(handler_analyzer_.reset_handlers(current_level_))) {
-            LOG_WARN("failed to reset handlers", K(ret), K(current_level_));
           } else {
             --current_level_;
             handler_analyzer_.reset_notfound_and_warning(current_level_);
@@ -4094,25 +4005,19 @@ int ObPLResolver::resolve_declare_handler(const ObStmtNodeTree *parse_tree, ObPL
             bool dup = false;
             ObPLConditionType actual_type = INVALID_TYPE;
             if (OB_FAIL(fast_check_status())) {
-              LOG_WARN("fast check status failed", K(ret));
             } else if (OB_FAIL(resolve_handler_condition(handler_list->children_[i], value, func))) {
-              LOG_WARN("failed to resolve condition value", K(handler_list->children_[i]), K(ret));
             } else if (OB_FAIL(check_duplicate_condition(*stmt, value, dup))) {
-              LOG_WARN("failed to check duplication", K(value), K(ret));
             } else if (dup) {
               ret = OB_ERR_SP_DUP_HANDLER;
               LOG_USER_ERROR(OB_ERR_SP_DUP_HANDLER);
               LOG_WARN("Duplicate handler declared in the same block", K(value), K(dup), K(ret));
             } else if (OB_FAIL(check_duplicate_condition(value, *desc, dup))) {
-              LOG_WARN("failed to check duplication", K(ret), K(value), KPC(desc));
             } else if (dup) {
               ret = OB_ERR_SP_DUP_HANDLER;
               LOG_USER_ERROR(OB_ERR_SP_DUP_HANDLER);
               LOG_WARN("Duplicate handler declared in the same block", K(value), K(dup), K(ret));
             } else if (OB_FAIL(ObPLResolver::analyze_actual_condition_type(value, actual_type))) {
-              LOG_WARN("failed to analyze actual condition type", K(value), K(ret));
             } else if (OB_FAIL(desc->add_condition(value))) {
-              LOG_WARN("failed to add condition for delcare handler desc", K(ret), K(value));
             } else {
               if (NOT_FOUND == actual_type && !handler_analyzer_.in_notfound()) {
                 handler_analyzer_.set_notfound(current_level_);
@@ -4147,7 +4052,6 @@ int ObPLResolver::resolve_declare_handler(const ObStmtNodeTree *parse_tree, ObPL
         // If self is top continue, need to trace back and push all peer level handlers onto the stack
         handler_analyzer_.set_continue();
         if (OB_FAIL(handler_analyzer_.set_handlers(stmt->get_handlers(), current_level_))) {
-          LOG_WARN("failed to set handler", K(ret));
         }
       }
     }
@@ -4370,7 +4274,6 @@ int ObPLResolver::resolve_call(const ObStmtNodeTree *parse_tree, ObPLCallStmt *s
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("the children of parse tree is NULL", K(name_node), K(ret));
     } else if (OB_FAIL(schema_checker.init(resolve_ctx_.schema_guard_, resolve_ctx_.session_info_.get_server_sid()))) {
-      LOG_ERROR("schema checker init failed", K(ret));
     } else {
       ObString db_name;
       ObString package_name;
@@ -4384,7 +4287,6 @@ int ObPLResolver::resolve_call(const ObStmtNodeTree *parse_tree, ObPLCallStmt *s
       } else if (OB_FAIL(ObResolverUtils::resolve_sp_access_name(schema_checker,
                             resolve_ctx_.session_info_.get_database_name(),
                             *name_node, db_name, package_name, sp_name, dblink_name, &deps))) {
-        LOG_WARN("resolve sp name failed", K(ret));
       }
       OZ (ObPLDependencyUtil::add_dependency_objects(&func.get_dependency_table(), deps));
       if (OB_SUCC(ret) && OB_NOT_NULL(params_node)) {
@@ -4412,7 +4314,6 @@ int ObPLResolver::resolve_call(const ObStmtNodeTree *parse_tree, ObPLCallStmt *s
           stmt->set_package_id(func.get_package_id());
           if (package_routine_info->get_param_count() != 0) {
             if (OB_FAIL(resolve_call_param_list(expr_params, package_routine_info->get_params(), stmt, func))) {
-              LOG_WARN("failed to resolve call param list", K(ret));
             }
           }
         } else if (STANDALONE_PROCEDURE == routine_type || STANDALONE_FUNCTION == routine_type) {
@@ -4426,7 +4327,6 @@ int ObPLResolver::resolve_call(const ObStmtNodeTree *parse_tree, ObPLCallStmt *s
           }
           if (routine_params.count() != 0) {
             if (OB_FAIL(resolve_call_param_list(expr_params, routine_params, stmt, func))) {
-              LOG_WARN("failed to resolve call param list", K(ret));
             }
           }
         } else {}
@@ -4446,7 +4346,7 @@ int ObPLResolver::resolve_cparams_expr(const ParseNode *params_node,
   for (int64_t i = 0; OB_SUCC(ret) && i < params_node->num_child_; ++i) {
     ObRawExpr *expr = NULL;
     CK (params_node->children_[i]);
-    OZ (resolve_expr(params_node->children_[i], static_cast<ObPLAstUnit&>(func), expr,
+    OZ (resolve_expr(params_node->children_[i], static_cast<ObPLCompileUnitAST&>(func), expr,
                      combine_line_and_col(params_node->children_[i]->stmt_loc_), true, NULL));
     CK (OB_NOT_NULL(expr));
     OZ (exprs.push_back(expr));
@@ -5131,7 +5031,7 @@ int ObPLResolver::resolve_cursor_def(const ObString &cursor_name,
                                       ObPLBlockNS &sql_ns,
                                       ObPLDataType &cursor_type,
                                       const ObIArray<int64_t> &formal_params,
-                                      ObPLAstUnit &func,
+                                      ObPLCompileUnitAST &func,
                                       int64_t &cursor_index) // CURSOR index in the symbol table
 {
   int ret = OB_SUCCESS;
@@ -5149,7 +5049,6 @@ int ObPLResolver::resolve_cursor_def(const ObString &cursor_name,
       ObSqlString record_name;
       char* name_buf = NULL;
       if (OB_FAIL(record_name.append_fmt("__for_loop_cursor_record_name_%ld", current_time))) {
-        LOG_WARN("failed to generate cursor record name", K(ret));
       } else if (OB_ISNULL(name_buf = static_cast<char*>(resolve_ctx_.allocator_.alloc(record_name.length() + 1)))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to allocate record name", K(ret));
@@ -5175,13 +5074,11 @@ int ObPLResolver::resolve_cursor_def(const ObString &cursor_name,
                                           &sql_ns,
                                           prepare_result,
                                           func))) {
-      LOG_WARN("failed to prepare stmt", K(ret));
     } else if (!prepare_result.into_exprs_.empty()) {
       ret = OB_ER_SP_BAD_CURSOR_SELECT;
       LOG_USER_ERROR(OB_ER_SP_BAD_CURSOR_SELECT);
       LOG_WARN("Sql with into clause should not in Declare cursor", K(prepare_result.route_sql_), K(ret));
     } else if (OB_FAIL(func.add_sql_exprs(prepare_result.exec_params_))) {
-      LOG_WARN("failed to set precalc exprs", K(prepare_result.exec_params_), K(ret));
     }
     if (OB_SUCC(ret)) {
       if (prepare_result.for_update_) {
@@ -5195,7 +5092,6 @@ int ObPLResolver::resolve_cursor_def(const ObString &cursor_name,
         if (DEPENDENCY_TABLE == prepare_result.ref_objects_.at(i).object_type_) {
           // do nothing, no need collect table schema in mysql mode
         } else if (OB_FAIL(ObPLDependencyUtil::add_dependency_object_impl(func.get_dependency_table(), prepare_result.ref_objects_.at(i)))) {
-          LOG_WARN("add dependency object failed", K(ret));
         }
       }
     }
@@ -5205,7 +5101,6 @@ int ObPLResolver::resolve_cursor_def(const ObString &cursor_name,
       OB_SUCC(ret) && i < func.get_expr_count();
       ++i) {
       if (OB_FAIL(expr_idxs.push_back(i))) {
-        LOG_WARN("push_back error", K(i), K(ret));
       }
     }
   }
@@ -5220,7 +5115,6 @@ int ObPLResolver::resolve_cursor_def(const ObString &cursor_name,
       const ObUserDefinedType *cursor_user_type = NULL;
       if (OB_FAIL(current_block_->get_namespace().get_user_type(cursor_type.get_user_type_id(),
                                                                 cursor_user_type, &allocator))) {
-        LOG_WARN("failed to get user type", K(cursor_type), K(ret));
       } else if (OB_ISNULL(cursor_user_type)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get cursor type", K(cursor_type), K(ret));
@@ -5231,7 +5125,6 @@ int ObPLResolver::resolve_cursor_def(const ObString &cursor_name,
         bool is_compatible = false;
         const ObRecordType *return_type = static_cast<const ObRecordType*>(cursor_user_type);
         if (OB_FAIL(record_type->is_compatble(*return_type, is_compatible))) {
-          LOG_WARN("failed to check compatible", K(*record_type), K(*return_type), K(ret));
         } else if (!is_compatible) {
           ret = OB_OBJ_TYPE_ERROR;
           LOG_WARN("type not compatible", K(*record_type), K(*return_type), K(ret));
@@ -5260,14 +5153,6 @@ int ObPLResolver::resolve_cursor_def(const ObString &cursor_name,
                                                              prepare_result.has_dup_column_name_,
                                                              index,
                                                              prepare_result.is_skip_locked_))) {
-        LOG_WARN("failed to add cursor to symbol table",
-                 K(cursor_name),
-                 K(sql_node->str_value_),
-                 K(prepare_result.exec_params_),
-                 K(prepare_result.ps_sql_),
-                 K(prepare_result.type_),
-                 K(prepare_result.for_update_),
-                 K(ret));
       } else {
         cursor_index = index;
       }
@@ -5380,7 +5265,7 @@ int ObPLResolver::resolve_declare_cursor(const ObStmtNodeTree *parse_tree, ObPLP
 }
 
 int ObPLResolver::resolve_declare_cursor(
-  const ObStmtNodeTree *parse_tree, ObPLDeclareCursorStmt *stmt, ObPLAstUnit &func)
+  const ObStmtNodeTree *parse_tree, ObPLDeclareCursorStmt *stmt, ObPLCompileUnitAST &func)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(parse_tree) || OB_ISNULL(current_block_)) {
@@ -5439,7 +5324,6 @@ int ObPLResolver::resolve_declare_cursor(
                                          cursor_index,
                                          func,
                                          true/*check mode*/))) {
-          LOG_WARN("failed to resolve cursor", K(ret), K(name));
         } else if (OB_INVALID_INDEX != cursor_index) {
           ret = OB_ERR_SP_DUP_CURSOR;
           LOG_WARN("Duplicate cursor", K(name),K(ret));
@@ -5462,7 +5346,6 @@ int ObPLResolver::resolve_declare_cursor(
                                                                    ObPLCursor::DECLARED,
                                                                    false,
                                                                    cursor_index))) {
-              LOG_WARN("failed to add cursor to symbol table", K(name), K(ret));
             } else if (OB_NOT_NULL(stmt)) {
               stmt->set_cursor_index(cursor_index);
             } else { /*do nothing*/ }
@@ -5473,7 +5356,6 @@ int ObPLResolver::resolve_declare_cursor(
         } else { //declare and define
           if (OB_FAIL(resolve_cursor_def(name, sql_node, cursor_block->get_namespace(),
                                          return_type, formal_params, func, cursor_index))) {
-            LOG_WARN("failed to resolve cursor comm", K(ret), K(name));
           } else if (OB_NOT_NULL(stmt)) {
             stmt->set_cursor_index(cursor_index);
           } else { /*do nothing*/ }
@@ -5483,7 +5365,6 @@ int ObPLResolver::resolve_declare_cursor(
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("unexpected cursor", K(ret));
             } else if (OB_FAIL(cursor->set_ref_objects(formal_deps))) {
-              LOG_WARN("fail to add ref objects", K(ret));
             }
           }
         }
@@ -5495,16 +5376,14 @@ int ObPLResolver::resolve_declare_cursor(
 
 int ObPLResolver::resolve_cursor_common(const ObStmtNodeTree *name_node,
                                         const ObStmtNodeTree *type_node,
-                                        ObPLAstUnit &func,
+                                        ObPLCompileUnitAST &func,
                                         ObString &name,
                                         ObPLDataType &return_type)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(resolve_ident(name_node, name))) {
-    LOG_WARN("failed to resolve ident", K(name_node), K(ret));
   } else if (NULL != type_node) {
     if (OB_FAIL(resolve_sp_data_type(type_node, name, func, return_type))) {
-      LOG_WARN("failed to resolve return type", K(type_node), K(name), K(ret));
     } else if (!return_type.is_record_type()) {
       ret = OB_ERR_TYPE_DECL_MALFORMED;
       LOG_WARN("PLS-00320: the declaration of the type of this expression is incomplete or malformed",
@@ -5515,7 +5394,7 @@ int ObPLResolver::resolve_cursor_common(const ObStmtNodeTree *name_node,
 }
 
 int ObPLResolver::resolve_cursor_formal_param(
-  const ObStmtNodeTree *param_list, ObPLAstUnit &func, ObIArray<int64_t> &params)
+  const ObStmtNodeTree *param_list, ObPLCompileUnitAST &func, ObIArray<int64_t> &params)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(current_block_) || OB_ISNULL(param_list)) {
@@ -5534,7 +5413,6 @@ int ObPLResolver::resolve_cursor_formal_param(
       param_name.reset();
       param_type.reset();
       if (OB_FAIL(fast_check_status())) {
-        LOG_WARN("fast check status failed", K(ret));
       } else if (OB_ISNULL(param_node)
           || OB_UNLIKELY(param_node->type_ != T_SP_PARAM)
           || OB_ISNULL(param_node->children_)) {
@@ -5549,7 +5427,6 @@ int ObPLResolver::resolve_cursor_formal_param(
         ObPLExternTypeInfo extern_type_info;
         param_name.assign_ptr(name_node->str_value_, static_cast<int32_t>(name_node->str_len_));
         if (OB_FAIL(resolve_sp_data_type(type_node, param_name, func, param_type, &extern_type_info))) {
-          LOG_WARN("resolve data type failed", K(ret), K(param_name));
         } else if (MODE_IN != param_node->value_) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("param inout flag is invalid", K(param_node->value_), K(ret));
@@ -5563,7 +5440,6 @@ int ObPLResolver::resolve_cursor_formal_param(
                                           combine_line_and_col(default_node->stmt_loc_),
                                           true /*need_add*/,
                                           &param_type))) {
-            LOG_WARN("failed to resolve default expr", K(ret));
           } else if (OB_ISNULL(default_expr)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("failed to resolve default expr", K(ret), K(default_expr));
@@ -5573,9 +5449,7 @@ int ObPLResolver::resolve_cursor_formal_param(
         if (OB_SUCC(ret)) {
           if (OB_FAIL(current_block_->get_namespace().add_symbol(param_name, param_type, default_expr,
                                                                  false, false, false, true))) {
-            LOG_WARN("failed to add symbol", K(param_name), K(param_type), K(default_expr), K(ret));
           } else if (OB_FAIL(params.push_back(current_block_->get_namespace().get_symbol_table()->get_count() - 1))) {
-            LOG_WARN("push back error", K(params), K(param_type), K(default_expr), K(ret));
           } else { /*do nothing*/ }
         }
       }
@@ -5601,7 +5475,6 @@ int ObPLResolver::resolve_open(
     if (OB_SUCC(ret)) {
       const ObPLVar *var = NULL;
       if (OB_FAIL(stmt->get_var(var))) {
-        LOG_WARN("failed to get var", K(ret));
       } else if (NULL == var) {
         //Non-local cursor, must not be read-only
       } else if (var->get_type().is_ref_cursor_type() && stmt->get_type() != PL_OPEN_FOR) {
@@ -5653,7 +5526,6 @@ int ObPLResolver::resolve_open(
   if (OB_SUCC(ret)) {
     const ObStmtNodeTree *param_node = parse_tree->children_[1];
     if (OB_FAIL(resolve_cursor_actual_params(param_node, stmt, func))) {
-      LOG_WARN("failed to resolve cursor actual params", K(ret));
     }
   }
   return ret;
@@ -5748,7 +5620,6 @@ int ObPLResolver::resolve_cursor_actual_params(
     for (int64_t i = 0; OB_SUCC(ret) && i < params_list.count(); ++i) {
       const ObPLVar *var = NULL;
       if (OB_FAIL(fast_check_status())) {
-        LOG_WARN("fast check status failed", K(ret));
       } else if (cursor->is_package_cursor()) {
         OZ (stmt->get_namespace()->get_package_var(resolve_ctx_,
                                                    cursor->get_package_id(),
@@ -5804,7 +5675,6 @@ int ObPLResolver::resolve_fetch(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Fetch statement must have a INTO clause", K(ret));
       } else if (OB_FAIL(resolve_into(into_node, *stmt, func))) {
-        LOG_WARN("resolve into node failed", K(parse_tree->children_), K(into_node), K(ret));
       } else { /*do nothing*/ }
     }
     //parse limit
@@ -5926,7 +5796,6 @@ int ObPLResolver::add_pl_integer_checker_expr(ObRawExprFactory &expr_factory,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("new raw expr is NULL", K(checker), K(ret));
     } else if (OB_FAIL(checker->set_param_expr(expr))) {
-      LOG_WARN("add real param expr failed", K(ret));
     } else {
       checker->set_pl_integer_type(type);
       checker->set_range(lower, upper);
@@ -5950,7 +5819,6 @@ int ObPLResolver::check_expr_result_type(const ObRawExpr *expr, ObPLIntegerType 
       ObPLDataType pl_data_type;
       const ObObjAccessRawExpr *obj_expr = static_cast<const ObObjAccessRawExpr*>(expr);
       if (OB_FAIL(obj_expr->get_final_type(pl_data_type))) {
-        LOG_WARN("failed to get obj access raw expr final type", K(ret));
       } else if (pl_data_type.is_pl_integer_type()) {
         pl_integer_type = pl_data_type.get_pl_integer_type();
       }
@@ -6013,7 +5881,6 @@ int ObPLResolver::add_pl_integer_checker_expr(ObRawExprFactory &expr_factory,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("child expr is null", K(ret));
     } else if (OB_FAIL(SMART_CALL(add_pl_integer_checker_expr(expr_factory, child, need_replace)))) {
-      LOG_WARN("failed to add pl integer checker expr", K(ret));
     } else if (need_replace) {
       expr->get_param_expr(i) = child;
     }
@@ -6040,9 +5907,7 @@ int ObPLResolver::add_pl_integer_checker_expr(ObRawExprFactory &expr_factory,
       bool is_anonymos_arg_left = false;
       bool is_anonymos_arg_right = false;
       if (OB_FAIL(check_expr_result_type(left, left_pl_integer, is_anonymos_arg_left))) {
-        LOG_WARN("failed to check expr result type", K(ret));
       } else if (OB_FAIL(check_expr_result_type(right, right_pl_integer, is_anonymos_arg_right))) {
-        LOG_WARN("failed to check expr result type", K(ret));
       } else if (PL_INTEGER_INVALID != left_pl_integer && PL_INTEGER_INVALID != right_pl_integer) {
         ObPLIntegerType type = PL_SIMPLE_INTEGER == left_pl_integer && PL_SIMPLE_INTEGER == right_pl_integer ?
                           PL_SIMPLE_INTEGER : PL_PLS_INTEGER;
@@ -6165,10 +6030,8 @@ int ObPLResolver::is_static_pls_expr(const ObRawExpr *expr, bool &is_static_pls_
   OX (is_static_pls_expr = false);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(is_pls_literal_expr(expr, is_static_pls_expr))) {
-    LOG_WARN("failed to call is_pls_literal_expr", K(ret), KPC(expr));
   } else if (!is_static_pls_expr) {
     if (OB_FAIL(is_static_expr(expr, is_static_pls_expr))) {
-      LOG_WARN("failed to call is_static_expr", K(ret), KPC(expr));
     } else if (is_static_pls_expr && ObInt32Type != expr->get_result_type().get_type()) {
       is_static_pls_expr = false;
     }
@@ -6279,7 +6142,6 @@ int ObPLResolver::check_static_bool_expr(const ObRawExpr *expr, bool &static_boo
   CK (OB_NOT_NULL(expr));
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(is_bool_literal_expr(expr, static_bool_expr))) {
-    LOG_WARN("failed to call is_bool_literal_expr", K(ret), KPC(expr));
   } else if (!static_bool_expr
     && OB_FAIL(is_static_bool_expr(expr, static_bool_expr))) {
       LOG_WARN("failed to call is_static_bool_expr", K(ret), KPC(expr));
@@ -6303,7 +6165,6 @@ int ObPLResolver::resolve_and_calc_static_expr(
   } else if (ObTinyIntType == expect_type) {
     bool is_static_bool_expr = false;
     if (OB_FAIL(check_static_bool_expr(expr, is_static_bool_expr))) {
-      LOG_WARN("failed to check static bool expr", K(ret), KPC(expr));
     } else if (!is_static_bool_expr) {
       ret = OB_ERR_STATIC_BOOL_EXPR;
       LOG_WARN("not a bool expr for condition compile", K(ret), KPC(expr));
@@ -6339,7 +6200,6 @@ int ObPLResolver::build_raw_expr(const ParseNode &node,
     TgTimingEvent tg = static_cast<TgTimingEvent>(resolve_ctx_.params_.tg_timing_event_);
     if (OB_FAIL(schema_checker.init(ctx.schema_guard_,
                                     ctx.session_info_.get_server_sid()))) {
-      LOG_WARN("failed to init schema checker", K(ret));
     } else if (OB_FAIL(ObRawExprUtils::build_raw_expr(expr_factory_,
                                ctx.session_info_,
                                &schema_checker,
@@ -6359,14 +6219,13 @@ int ObPLResolver::build_raw_expr(const ParseNode &node,
                                op_exprs,
                                is_prepare_protocol,
                                tg))) {
-      LOG_WARN("failed to build raw expr", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
 }
 
 int ObPLResolver::build_raw_expr(const ParseNode *node,
-                                 ObPLAstUnit &unit_ast,
+                                 ObPLCompileUnitAST &unit_ast,
                                  ObRawExpr *&expr,
                                  const ObPLDataType *expected_type)
 {
@@ -6390,7 +6249,6 @@ int ObPLResolver::build_raw_expr(const ParseNode *node,
                      op_exprs,
                      resolve_ctx_.is_prepare_protocol_));
   if (OB_FAIL(ret)) {
-    LOG_WARN("build raw expr failed", K(ret));
   } else if (aggr_exprs.count() > 0) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("agg expr in pl assign stmt not allowed", K(ret));
@@ -6404,7 +6262,6 @@ int ObPLResolver::build_raw_expr(const ParseNode *node,
   if (OB_SUCC(ret) && op_exprs.count() > 0) {
     if (OB_FAIL(ObRawExprUtils::resolve_op_exprs_for_oracle_implicit_cast(expr_factory_,
                                         &resolve_ctx_.session_info_, op_exprs))) {
-      LOG_WARN("implicit cast faild", K(ret));
     }
   }
   // record can only be defined in two places, local and package
@@ -6423,13 +6280,11 @@ int ObPLResolver::build_raw_expr(const ParseNode *node,
         type = ObPLExternalNS::PKG_NS;
         const ObString &pkg_name = columns.at(0).access_idents_.at(0).access_name_;
         if (OB_SUCCESS != (tmp_ret =resolve_ctx_.session_info_.get_database_id(parent_id))) {
-          LOG_WARN("get database id failed.", K(tmp_ret));
         } else if (OB_SUCCESS != (tmp_ret = ns.resolve_symbol(pkg_name,
                                                                   type,
                                                                   pl_data_type,
                                                                   parent_id,
                                                                   var_index))) {
-          LOG_WARN("failed to get var index", K(pl_data_type), K(tmp_ret));
         } else {
           parent_id = var_index;
           type = ObPLExternalNS::PKG_VAR;
@@ -6445,7 +6300,6 @@ int ObPLResolver::build_raw_expr(const ParseNode *node,
                                           pl_data_type,
                                           parent_id,
                                           var_index))) {
-        LOG_WARN("failed to get var index", K(pl_data_type), K(ret));
       } else {
         if (pl_data_type.is_record_type() && !pl_data_type.is_object_type()) {
           ret = OB_NOT_SUPPORTED;
@@ -6726,7 +6580,7 @@ int ObPLResolver::check_access_external_state(ObRawExpr *&expr,
 }
 
 int ObPLResolver::analyze_expr_type(ObRawExpr *&expr,
-                                    ObPLAstUnit &unit_ast)
+                                    ObPLCompileUnitAST &unit_ast)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(expr));
@@ -6766,7 +6620,7 @@ int ObPLResolver::set_udf_expr_line_number(ObRawExpr *expr, uint64_t line_number
 }
 
 int ObPLResolver::resolve_expr(const ParseNode *node,
-                               ObPLAstUnit &unit_ast,
+                               ObPLCompileUnitAST &unit_ast,
                                ObRawExpr *&expr,
                                uint64_t line_number,
                                bool need_add,
@@ -6793,7 +6647,6 @@ int ObPLResolver::resolve_expr(const ParseNode *node,
   if (OB_SUCC(ret) && !OB_ISNULL(expr) && (T_OP_MULTISET == expr->get_expr_type())) {
     bool is_obj_acc = false;
     if (OB_FAIL(check_collection_expr_illegal(expr, is_obj_acc))) {
-      LOG_WARN("failed to check collection expr illegal", K(ret));
     } else if (!is_obj_acc) {
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("multiset op should apply to nested tables", K(ret));
@@ -6896,7 +6749,6 @@ int ObPLResolver::resolve_expr(const ParseNode *node,
   } else if (is_add_bool) {
     ObOpRawExpr *bool_expr = NULL;
     if (OB_FAIL(expr_factory_.create_raw_expr(T_OP_BOOL, bool_expr))) {
-      LOG_WARN("create bool expr failed", K(ret));
     } else if (OB_ISNULL(bool_expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("bool_expr is NULL", K(ret));
@@ -7044,7 +6896,7 @@ int ObPLResolver::check_anonymous_array_compatible (const ObPLINS &ns,
 int ObPLResolver::transform_subquery_expr(const ParseNode *node,
                                           ObRawExpr *&expr,
                                           const ObPLDataType *expected_type,
-                                          ObPLAstUnit &func)
+                                          ObPLCompileUnitAST &func)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(expr));
@@ -7088,14 +6940,11 @@ int ObPLResolver::transform_subquery_expr(const ParseNode *node,
                               &current_block_->get_namespace(),
                               prepare_result,
                               func))) {
-      LOG_WARN("failed to prepare stmt", K(ret));
     } else if (0 != prepare_result.into_exprs_.count()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected into expr", K(ret));
     } else if (OB_FAIL(func.add_sql_exprs(prepare_result.exec_params_))) {
-      LOG_WARN("failed to set precalc exprs", K(prepare_result.exec_params_), K(ret));
     } else if (OB_FAIL(ObPLDependencyUtil::add_dependency_objects(&func.get_dependency_table(), prepare_result.ref_objects_))) {
-      LOG_WARN("failed to add dependency objects", K(prepare_result.ref_objects_), K(ret));
     } else {
       if (!func.is_modifies_sql_data()) {
         func.set_reads_sql_data();
@@ -7310,7 +7159,7 @@ int ObPLResolver::replace_to_const_expr_if_need(ObRawExpr *&expr)
   return ret;
 }
 
-int ObPLResolver::resolve_columns(ObRawExpr *&expr, ObArray<ObQualifiedName> &columns, ObPLAstUnit &unit_ast)
+int ObPLResolver::resolve_columns(ObRawExpr *&expr, ObArray<ObQualifiedName> &columns, ObPLCompileUnitAST &unit_ast)
 {
   int ret = OB_SUCCESS;
   ObArray<ObRawExpr*> real_exprs;
@@ -7391,7 +7240,7 @@ int ObPLResolver::resolve_raw_expr(const ParseNode &node,
         }
       }
 
-      OZ (ObPLBuilder::init_anonymous_ast(func_ast,
+      OZ (ObPLCompiler::init_anonymous_ast(func_ast,
                                             *(params.allocator_),
                                             *(params.session_info_),
                                             *(params.sql_proxy_),
@@ -7485,7 +7334,7 @@ int ObPLResolver::resolve_raw_expr(const ParseNode &node,
                                     is_prepare_protocol));
 
         for(int64_t i = 0; OB_SUCC(ret) && i < columns.count(); ++i) {
-          OZ (resolver.resolve_columns(expr, columns, static_cast<ObPLAstUnit &>(func_ast)));
+          OZ (resolver.resolve_columns(expr, columns, static_cast<ObPLCompileUnitAST &>(func_ast)));
         }
         // The call stack for this interface:
         // resolve_into_variable_node -> resolve_external_expr -> resolve_raw_expr
@@ -7647,7 +7496,6 @@ int ObPLResolver::resolve_inner_call(
           LOG_WARN("PLS-00452: Subprogram 'string' violates its associated pragma", K(ret), K(func.get_compile_flag()));
           LOG_USER_ERROR(OB_ERR_SUBPROGRAM_VIOLATES_PRAGMA, func.get_name().length(), func.get_name().ptr());
         } else if (OB_FAIL(stmt_factory_.allocate(PL_CALL, current_block_, stmt))) {
-          LOG_WARN("failed to alloc stmt", K(ret));
         } else if (OB_ISNULL(call_stmt = static_cast<ObPLCallStmt *>(stmt))) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("failed to cast stmt", K(ret));
@@ -7939,7 +7787,7 @@ int ObPLResolver::resolve_obj_access_idents(const ParseNode &node,
 
 int ObPLResolver::resolve_obj_access_idents(const ParseNode &node,
                                             ObIArray<ObObjAccessIdent> &obj_access_idents,
-                                            ObPLAstUnit &func)
+                                            ObPLCompileUnitAST &func)
 {
   int ret = OB_SUCCESS;
   CK (OB_LIKELY(T_SP_OBJ_ACCESS_REF == node.type_));
@@ -7958,7 +7806,6 @@ int ObPLResolver::resolve_obj_access_idents(const ParseNode &node,
       ObString ident_name(static_cast<int32_t>(node.children_[0]->str_len_), node.children_[0]->str_value_);
       ObObjAccessIdent access_ident(ident_name);
       if (OB_FAIL(obj_access_idents.push_back(access_ident))) {
-        LOG_WARN("push back access ident failed", K(ret), K(access_ident));
       }
     } else if (T_QUESTIONMARK == node.children_[0]->type_) {
       if (obj_access_idents.count() > 0) {
@@ -7978,7 +7825,6 @@ int ObPLResolver::resolve_obj_access_idents(const ParseNode &node,
             access_ident.set_pl_var();
           }
           if (OB_FAIL(obj_access_idents.push_back(access_ident))) {
-            LOG_WARN("push back access ident failed", K(ret));
           }
         }
       }
@@ -7993,23 +7839,19 @@ int ObPLResolver::resolve_obj_access_idents(const ParseNode &node,
         ObRawExpr *expr = NULL;
         if (OB_FAIL(resolve_expr(params_node->children_[param_idx], func, expr,
                             combine_line_and_col(params_node->children_[param_idx]->stmt_loc_)))) {
-          LOG_WARN("failed to resolve expr", K(ret));
         } else {
           std::pair<ObRawExpr*, int64_t> param(expr, 0);
           if (current_params) {
             if (OB_FAIL(obj_access_idents.at(obj_access_idents.count()-1).params_.push_back(param))) {
-              LOG_WARN("push back expr failed", K(ret));
             }
           } else {
             if (OB_FAIL(param_access.params_.push_back(param))) {
-              LOG_WARN("push back access ident failed", K(ret));
             }
           }
         }
       }
       if (OB_SUCC(ret) && !param_access.params_.empty()) {
         if (OB_FAIL(obj_access_idents.push_back(param_access))) {
-          LOG_WARN("push back access ident failed", K(ret));
         }
       }
     } else {
@@ -8023,7 +7865,6 @@ int ObPLResolver::resolve_obj_access_idents(const ParseNode &node,
         ObString ident_name(static_cast<int32_t>(node.children_[1]->str_len_), node.children_[1]->str_value_);
         ObObjAccessIdent access_ident(ident_name);
         if (OB_FAIL(obj_access_idents.push_back(access_ident))) {
-          LOG_WARN("push back access ident failed", K(ret));
         }
       } else if (T_SP_CPARAM_LIST == node.children_[1]->type_) {
         ParseNode *params_node = node.children_[1];
@@ -8037,7 +7878,6 @@ int ObPLResolver::resolve_obj_access_idents(const ParseNode &node,
           ObRawExpr *expr = NULL;
           if (OB_FAIL(resolve_expr(params_node->children_[param_idx], func, expr,
                             combine_line_and_col(params_node->children_[param_idx]->stmt_loc_)))) {
-            LOG_WARN("failed to resolve expr", K(ret));
           } else {
             std::pair<ObRawExpr*, int64_t> param(expr, current_level);
             if (T_IDENT == node.children_[0]->type_
@@ -8045,23 +7885,19 @@ int ObPLResolver::resolve_obj_access_idents(const ParseNode &node,
                 || T_SP_CPARAM_LIST == node.children_[0]->type_
                 || T_QUESTIONMARK == node.children_[0]->type_) {
               if (OB_FAIL(obj_access_idents.at(obj_access_idents.count()-1).params_.push_back(param))) {
-                LOG_WARN("push back access ident failed", K(ret));
               }
             } else {
               if (OB_FAIL(param_access.params_.push_back(param))) {
-                LOG_WARN("push back access ident failed", K(ret));
               }
             }
           }
         }
         if (OB_SUCC(ret) && !param_access.params_.empty()) {
           if (OB_FAIL(obj_access_idents.push_back(param_access))) {
-            LOG_WARN("push back access ident failed", K(ret));
           }
         }
       } else if (T_SP_OBJ_ACCESS_REF == node.children_[1]->type_) {
         if (OB_FAIL(SMART_CALL(resolve_obj_access_idents(*(node.children_[1]), obj_access_idents, func)))) {
-          LOG_WARN("resolve obj access idents failed", K(ret));
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -8075,7 +7911,7 @@ int ObPLResolver::resolve_obj_access_idents(const ParseNode &node,
 int ObPLResolver::resolve_qualified_identifier(ObQualifiedName &q_name,
                                                ObIArray<ObQualifiedName> &columns,
                                                ObIArray<ObRawExpr*> &real_exprs,
-                                               ObPLAstUnit &unit_ast,
+                                               ObPLCompileUnitAST &unit_ast,
                                                ObRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
@@ -8095,7 +7931,7 @@ int ObPLResolver::resolve_qualified_identifier(ObQualifiedName &q_name,
 }
 
 int ObPLResolver::resolve_sqlcode_or_sqlerrm(ObQualifiedName &q_name,
-                                             ObPLAstUnit &unit_ast,
+                                             ObPLCompileUnitAST &unit_ast,
                                              ObRawExpr *&expr)
 {
   // This point is reached if it is definitely a parameterless SQLCODE or SQLERRM, parameterized SQLERRM has already been handled by is_sysfunc
@@ -8363,7 +8199,7 @@ int ObPLResolver::resolve_associative_array_construct(const ObQualifiedName &q_n
 }
 
 int ObPLResolver::resolve_udf_without_brackets(
-  ObQualifiedName &q_name, ObPLAstUnit &unit_ast, ObRawExpr *&expr)
+  ObQualifiedName &q_name, ObPLCompileUnitAST &unit_ast, ObRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
   ObUDFRawExpr *udf_expr = NULL;
@@ -8404,7 +8240,6 @@ int ObPLResolver::replace_udf_param_expr(
       ObRawExpr *expr = static_cast<ObRawExpr *>(access_ident.sys_func_expr_);
       for (int64_t i = 0; OB_SUCC(ret) && i < real_exprs.count(); ++i) {
         if (OB_FAIL(ObRawExprUtils::replace_ref_column(expr, columns.at(i).ref_expr_, real_exprs.at(i)))) {
-          LOG_WARN("replace column ref expr failed", K(ret));
         }
       }
     } else { /*do nothing*/ }
@@ -8449,7 +8284,7 @@ int ObPLResolver::replace_udf_param_expr(
 int ObPLResolver::resolve_qualified_name(ObQualifiedName &q_name,
                                          ObIArray<ObQualifiedName> &columns,
                                          ObIArray<ObRawExpr*> &real_exprs,
-                                         ObPLAstUnit &unit_ast,
+                                         ObPLCompileUnitAST &unit_ast,
                                          ObRawExpr *&expr)
 {
   int ret = OB_SUCCESS;
@@ -8460,7 +8295,6 @@ int ObPLResolver::resolve_qualified_name(ObQualifiedName &q_name,
   if (OB_FAIL(ret)) {
   } else if (q_name.is_sys_func()) {
     if (OB_FAIL(q_name.access_idents_.at(0).check_param_num())) {
-      LOG_WARN("sys func param number not match", K(ret));
     } else {
       expr = static_cast<ObRawExpr *>(q_name.access_idents_.at(0).sys_func_expr_);
     }
@@ -8511,7 +8345,6 @@ int ObPLResolver::resolve_qualified_name(ObQualifiedName &q_name,
           CK (OB_NOT_NULL(expr));
         } else { // if it is udf return access, need to be parsed as var
           if (OB_FAIL(resolve_var(q_name, unit_ast, expr))) {
-            LOG_WARN("failed to resolve var", K(q_name), K(ret));
           }
         }
       }
@@ -8565,7 +8398,7 @@ int ObPLResolver::resolve_qualified_name(ObQualifiedName &q_name,
   return ret;
 }
 
-int ObPLResolver::resolve_var(ObQualifiedName &q_name, ObPLAstUnit &func, ObRawExpr *&expr,
+int ObPLResolver::resolve_var(ObQualifiedName &q_name, ObPLCompileUnitAST &func, ObRawExpr *&expr,
                               bool for_write)
 {
   int ret = OB_SUCCESS;
@@ -8582,7 +8415,7 @@ int ObPLResolver::resolve_var(ObQualifiedName &q_name, ObPLAstUnit &func, ObRawE
 
 
 int ObPLResolver::resolve_udf_info(
-  ObUDFInfo &udf_info, ObIArray<ObObjAccessIdx> &access_idxs, ObPLAstUnit &func,
+  ObUDFInfo &udf_info, ObIArray<ObObjAccessIdx> &access_idxs, ObPLCompileUnitAST &func,
   const ObIRoutineInfo *routine_info)
 {
   int ret = OB_SUCCESS;
@@ -9696,7 +9529,7 @@ int ObPLResolver::check_variable_accessible(ObRawExpr *expr, bool for_write)
 
 int ObPLResolver::resolve_var(ObQualifiedName &q_name, ObPLBlockNS &ns,
                               ObRawExprFactory &expr_factory, const ObSQLSessionInfo *session_info,
-                              ObPLAstUnit &func, ObRawExpr *&expr, bool for_write)
+                              ObPLCompileUnitAST &func, ObRawExpr *&expr, bool for_write)
 {
   int ret = OB_SUCCESS;
   ObSEArray<ObObjAccessIdx, 8> access_idxs;
@@ -9716,10 +9549,8 @@ int ObPLResolver::resolve_var(ObQualifiedName &q_name, ObPLBlockNS &ns,
                    access_idxs.at(access_idxs.count()-1).var_name_.length(),
                    access_idxs.at(access_idxs.count()-1).var_name_.ptr());
   } else if (OB_FAIL(check_variable_accessible(ns, access_idxs, for_write))) {
-    LOG_WARN("failed to check variable read only", K(ret), K(q_name), K(access_idxs));
   } else if (OB_FAIL(make_var_from_access(access_idxs, expr_factory, session_info,
                                           &resolve_ctx_.schema_guard_, ns, expr, for_write))) {
-    LOG_WARN("failed to make var from access", K(ret), K(q_name), K(access_idxs));
   } else { /*do nothing*/ }
 
   if (OB_SUCC(ret)
@@ -9762,7 +9593,6 @@ int ObPLResolver::resolve_local_var(const ObString &var_name,
   ObPLDataType pl_data_type;
   ObObjAccessIdx access_idx;
   if (OB_FAIL(ns.resolve_symbol(var_name, type, pl_data_type, parent_id, var_index))) {
-    LOG_WARN("failed to get var index", K(var_name), K(ret));
   } else if (ObPLExternalNS::LOCAL_VAR != type) {
     ret = OB_ERR_SP_UNDECLARED_VAR;
     LOG_USER_ERROR(OB_ERR_SP_UNDECLARED_VAR, var_name.length(), var_name.ptr());
@@ -9786,11 +9616,9 @@ int ObPLResolver::resolve_local_var(const ObString &var_name,
   if (OB_SUCC(ret)) {
     ObSEArray<ObObjAccessIdx, 8> access_idxs;
     if (OB_FAIL(access_idxs.push_back(access_idx))) {
-      LOG_WARN("failed to resolve symbol", K(var_name), K(ret));
     } else if (OB_FAIL(make_var_from_access(access_idxs, expr_factory,
                                             session_info, schema_guard,
                                             ns, expr, for_write))) {
-      LOG_WARN("failed to make var from access", K(var_name));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -9808,7 +9636,6 @@ int ObPLResolver::resolve_local_var(const ParseNode &node,
   if (OB_FAIL(resolve_local_var(ObString(node.str_len_, node.str_value_),
                                 ns, expr_factory, session_info,
                                 schema_guard, expr, for_write))) {
-    LOG_WARN("failed to resolve_local_var", K(ret));
   }
   return ret;
 }
@@ -9953,7 +9780,7 @@ int ObPLResolver::resolve_name(ObQualifiedName &q_name,
                                ObRawExprFactory &expr_factory,
                                const ObSQLSessionInfo *session_info,
                                ObIArray<ObObjAccessIdx> &access_idxs,
-                               ObPLAstUnit &func)
+                               ObPLCompileUnitAST &func)
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(q_name.access_idents_.empty())) {
@@ -10183,7 +10010,6 @@ ObPLMockSelfArg::~ObPLMockSelfArg()
   if (mocked_) {
     if (mark_only_) {
       if (OB_FAIL(expr_params_.at(0)->clear_flag(IS_UDT_UDF_SELF_PARAM))) {
-        LOG_WARN("failed to clear flag", K(ret));
       }
     } else {
       std::rotate(expr_params_.begin(), expr_params_.begin() + 1, expr_params_.end());
@@ -10198,7 +10024,7 @@ ObPLMockSelfArg::~ObPLMockSelfArg()
 int ObPLResolver::resolve_routine(ObObjAccessIdent &access_ident,
                                   const ObPLBlockNS &ns,
                                   ObIArray<ObObjAccessIdx> &access_idxs,
-                                  ObPLAstUnit &func)
+                                  ObPLCompileUnitAST &func)
 {
   int ret = OB_SUCCESS;
 
@@ -10293,7 +10119,7 @@ int ObPLResolver::resolve_routine(ObObjAccessIdent &access_ident,
 int ObPLResolver::resolve_function(ObObjAccessIdent &access_ident,
                                    ObIArray<ObObjAccessIdx> &access_idxs,
                                    const ObIRoutineInfo *routine_info,
-                                   ObPLAstUnit &func)
+                                   ObPLCompileUnitAST &func)
 {
   int ret = OB_SUCCESS;
 
@@ -10378,7 +10204,7 @@ int ObPLResolver::resolve_construct(ObObjAccessIdent &access_ident,
                                     const ObPLBlockNS &ns,
                                     ObIArray<ObObjAccessIdx> &access_idxs,
                                     uint64_t user_type_id,
-                                    ObPLAstUnit &func)
+                                    ObPLCompileUnitAST &func)
 {
   int ret = OB_SUCCESS;
   ObQualifiedName q_name;
@@ -10466,7 +10292,7 @@ int ObPLResolver::build_self_access_idx(ObObjAccessIdx &self_access_idx, const O
 int ObPLResolver::resolve_self_element_access(ObObjAccessIdent &access_ident,
                                               const ObPLBlockNS &ns,
                                               ObIArray<ObObjAccessIdx> &access_idxs,
-                                              ObPLAstUnit &func)
+                                              ObPLCompileUnitAST &func)
 {
   int ret = OB_SUCCESS;
   const ObPLBlockNS *udt_routine_ns = ns.get_udt_routine_ns();
@@ -10570,7 +10396,7 @@ int ObPLResolver::build_collection_index_expr(ObObjAccessIdent &access_ident,
                                               const ObPLBlockNS &ns,
                                               ObIArray<ObObjAccessIdx> &access_idxs,
                                               const ObUserDefinedType &user_type,
-                                              ObPLAstUnit &func)
+                                              ObPLCompileUnitAST &func)
 {
   int ret = OB_SUCCESS;
   if (!access_ident.params_.empty()
@@ -10622,7 +10448,7 @@ int ObPLResolver::build_collection_index_expr(ObObjAccessIdent &access_ident,
 int ObPLResolver::resolve_composite_access(ObObjAccessIdent &access_ident,
                                            ObIArray<ObObjAccessIdx> &access_idxs,
                                            const ObPLBlockNS &ns,
-                                           ObPLAstUnit &func)
+                                           ObPLCompileUnitAST &func)
 {
   int ret = OB_SUCCESS;
 
@@ -10701,7 +10527,6 @@ int ObPLResolver::resolve_sys_func_access(ObObjAccessIdent &access_ident,
   if (OB_SUCC(ret)) {
     if (access_ident.sys_func_expr_->get_result_type().get_type() == ObMaxType) {
       if (OB_FAIL(access_ident.sys_func_expr_->formalize(session_info))) {
-        LOG_WARN("deduce type failed for sys func ident", K(ret));
       }
     }
     uint64_t udt_id = 0;
@@ -10736,7 +10561,7 @@ int ObPLResolver::resolve_access_ident(ObObjAccessIdent &access_ident, // The id
                                        ObRawExprFactory &expr_factory,
                                        const ObSQLSessionInfo *session_info,
                                        ObIArray<ObObjAccessIdx> &access_idxs, // already resolved ident information, as the parent node of the current ident
-                                       ObPLAstUnit &func,
+                                       ObPLCompileUnitAST &func,
                                        bool is_routine,
                                        bool is_resolve_rowtype)
 {
@@ -10902,7 +10727,7 @@ int ObPLResolver::resolve_access_ident(ObObjAccessIdent &access_ident, // The id
 int ObPLResolver::build_collection_attribute_access(ObRawExprFactory &expr_factory,
                                                     const ObSQLSessionInfo *session_info,
                                                     const ObPLBlockNS &ns,
-                                                    ObPLAstUnit &func,
+                                                    ObPLCompileUnitAST &func,
                                                     const ObUserDefinedType &user_type,
                                                     ObIArray<ObObjAccessIdx> &access_idxs,
                                                     int64_t attr_index,
@@ -10916,7 +10741,7 @@ int ObPLResolver::build_collection_attribute_access(ObRawExprFactory &expr_facto
 
 int ObPLResolver::build_collection_access(ObObjAccessIdent &access_ident,
                                         ObIArray<ObObjAccessIdx> &access_idxs,
-                                        ObPLAstUnit &func,
+                                        ObPLCompileUnitAST &func,
                                         int64_t start_level)
 {
   int ret = OB_SUCCESS;
@@ -10926,7 +10751,7 @@ int ObPLResolver::build_collection_access(ObObjAccessIdent &access_ident,
 
 int ObPLResolver::build_return_access(ObObjAccessIdent &access_ident,
                                           ObIArray<ObObjAccessIdx> &access_idxs,
-                                          ObPLAstUnit &func)
+                                          ObPLCompileUnitAST &func)
 {
   return build_collection_access(access_ident, access_idxs, func, 1/*start level = 1*/);
 }
@@ -10951,7 +10776,6 @@ int ObPLResolver::resolve_into(const ParseNode *into_node, ObPLInto &into, ObPLF
       CK (OB_NOT_NULL(into_list->children_[i]))
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(fast_check_status())) {
-        LOG_WARN("fast check status failed", K(ret));
       } else if (T_SP_OBJ_ACCESS_REF == into_list->children_[i]->type_/*Oracle mode*/) {
         OZ (resolve_obj_access_idents(*into_list->children_[i], q_name.access_idents_, func));
       } else if (T_QUESTIONMARK == into_list->children_[i]->type_ /*Oracle mode*/) {
@@ -11034,7 +10858,7 @@ static ObPredefinedException PREDEFINED_EXCEPTIONS[] =
 int ObPLResolver::resolve_condition(const ObStmtNodeTree *parse_tree,
                                     const ObPLBlockNS &ns,
                                     const ObPLConditionValue **value,
-                                    ObPLAstUnit &func)
+                                    ObPLCompileUnitAST &func)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(parse_tree));
@@ -11180,7 +11004,7 @@ int ObPLResolver::resolve_condition(const ObString &name, const ObPLBlockNS &ns,
 
 int ObPLResolver::resolve_handler_condition(const ObStmtNodeTree *parse_tree,
                                             ObPLConditionValue &condition,
-                                            ObPLAstUnit &func)
+                                            ObPLCompileUnitAST &func)
 {
   int ret = OB_SUCCESS;
   if (OB_ISNULL(parse_tree)) {
@@ -11194,7 +11018,6 @@ int ObPLResolver::resolve_handler_condition(const ObStmtNodeTree *parse_tree,
   } else if (T_SP_CONDITION == parse_tree->type_) {
     if (OB_FAIL(resolve_condition_value(parse_tree, condition,
                                         is_sys_database_id(func.get_database_id())))) {
-      LOG_WARN("failed to resolve condition", K(parse_tree), K(ret));
     }
   } else if (T_IDENT == parse_tree->type_ // for mysql mode
             || T_SP_ACCESS_NAME == parse_tree->type_) { // for oracle mode
@@ -11285,7 +11108,6 @@ int ObPLResolver::check_duplicate_condition(const ObPLDeclareHandlerStmt &stmt,
   for (int64_t i = handler_analyzer_.get_stack_depth() - 1; OB_SUCC(ret) && !dup && i >= 0; --i) {
     ObPLDeclareHandlerStmt::DeclareHandler handler;
     if (OB_FAIL(handler_analyzer_.get_handler(i, handler))) {
-      LOG_WARN("failed to get handler from handler analyzer", K(ret), K(i));
     } else if (handler.get_level() == current_level_) {
       ObPLDeclareHandlerStmt::DeclareHandler::HandlerDesc *desc = handler.get_desc();
       if (OB_ISNULL(desc)) {
@@ -11320,9 +11142,7 @@ int ObPLResolver::build_seq_value_expr(ObRawExpr *&expr,
 
   if (0 == q_name.col_name_.case_compare("CURRVAL")) {
     if (OB_FAIL(expr_factory_.create_raw_expr(T_FUN_SYS_SEQ_NEXTVAL, func_expr))) {
-      LOG_WARN("create currval failed", K(ret));
     } else if (OB_FAIL(expr_factory_.create_raw_expr(T_UINT64, col_id_expr))) {
-      LOG_WARN("create const raw expr failed", K(ret));
     } else {
       if (OB_ISNULL(func_expr) || OB_ISNULL(col_id_expr)){
         ret = OB_ERR_UNEXPECTED;
@@ -11332,13 +11152,9 @@ int ObPLResolver::build_seq_value_expr(ObRawExpr *&expr,
         col_id.set_uint64(seq_id);
         col_id_expr->set_value(col_id);
         if (OB_FAIL(func_expr->set_sequence_meta(q_name.database_name_, q_name.tbl_name_, q_name.col_name_, seq_id))) {
-          LOG_WARN("failed to set sequence meta", K(ret));
         } else if (OB_FAIL(func_expr->add_flag(IS_SEQ_EXPR))) {
-          LOG_WARN("failed to add flag", K(ret));
         } else if (OB_FAIL(func_expr->set_param_expr(col_id_expr))) {
-          LOG_WARN("set funcation param expr failed", K(ret));
         } else if (OB_FAIL(func_expr->formalize(&session_info))) {
-          LOG_WARN("failed to extract info", K(ret));
         } else {
           expr = func_expr;
         }
@@ -11346,9 +11162,7 @@ int ObPLResolver::build_seq_value_expr(ObRawExpr *&expr,
     }
   } else if (0 == q_name.col_name_.case_compare("NEXTVAL")) {
     if (OB_FAIL(expr_factory_.create_raw_expr(T_FUN_SYS_PL_SEQ_NEXT_VALUE, func_expr))) {
-      LOG_WARN("create nextval failed", K(ret));
     } else if (OB_FAIL(expr_factory_.create_raw_expr(T_UINT64, col_id_expr))) {
-      LOG_WARN("create const raw expr failed", K(ret));
     } else {
       if (OB_ISNULL(func_expr) || OB_ISNULL(col_id_expr)){
         ret = OB_ERR_UNEXPECTED;
@@ -11359,9 +11173,7 @@ int ObPLResolver::build_seq_value_expr(ObRawExpr *&expr,
         col_id.set_uint64(seq_id);
         col_id_expr->set_value(col_id);
         if (OB_FAIL(func_expr->set_param_expr(col_id_expr))) {
-          LOG_WARN("set funcation param expr failed", K(ret));
         } else if (OB_FAIL(func_expr->formalize(&session_info))) {
-          LOG_WARN("failed to extract info", K(ret));
         } else {
           expr = func_expr;
         }
@@ -11376,7 +11188,7 @@ int ObPLResolver::build_seq_value_expr(ObRawExpr *&expr,
 
 
 int ObPLResolver::resolve_sequence_object(const ObQualifiedName &q_name,
-                                          ObPLAstUnit &unit_ast,
+                                          ObPLCompileUnitAST &unit_ast,
                                           ObRawExpr *&real_ref_expr)
 {
   int ret = OB_SUCCESS;
@@ -11385,7 +11197,6 @@ int ObPLResolver::resolve_sequence_object(const ObQualifiedName &q_name,
   if (0 == q_name.col_name_.case_compare("NEXTVAL") ||
       0 == q_name.col_name_.case_compare("CURRVAL")) {
     if (OB_FAIL(sc.init(resolve_ctx_.schema_guard_, resolve_ctx_.session_info_.get_server_sid()))) {
-      LOG_WARN("init schemachecker failed.");
     } else {
       // check if sequence is created. will also check synonym
       uint64_t dblink_id = OB_INVALID_ID;
@@ -11395,7 +11206,6 @@ int ObPLResolver::resolve_sequence_object(const ObQualifiedName &q_name,
                                                                   seq_id))) {
         LOG_WARN_IGNORE_COL_NOTFOUND(ret, "check basic column namespace failed", K(ret), K(q_name));
       } else if(OB_FAIL(build_seq_value_expr(real_ref_expr, q_name, seq_id))) {
-        LOG_WARN("failed to resolve seq.", K(ret));
       } else if (OB_INVALID_ID == dblink_id) {
         int64_t schema_version = OB_INVALID_VERSION;
         ObSchemaObjVersion obj_version;
@@ -11524,7 +11334,6 @@ int ObPLResolver::HandlerAnalyzer::set_handlers(const common::ObIArray<ObPLDecla
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < handlers.count(); ++i) {
     if (OB_FAIL(set_handler(handlers.at(i).get_desc(), level))) {
-      LOG_WARN("failed to set handler", K(i), K(ret));
     }
   }
   return ret;
@@ -11574,7 +11383,7 @@ int ObPLResolver::add_external_cursor(ObPLBlockNS &ns,
                                       const ObPLBlockNS *external_ns,
                                       const ObPLCursor &cursor,
                                       int64_t &index,
-                                      ObPLAstUnit &func)
+                                      ObPLCompileUnitAST &func)
 {
   int ret = OB_SUCCESS;
   OX (index = OB_INVALID_INDEX);
@@ -11736,7 +11545,7 @@ int ObPLResolver::resolve_obj_access_ref_for_cursor_node(
 }
 
 int ObPLResolver::resolve_cursor(
-  const ObStmtNodeTree *parse_tree, const ObPLBlockNS &ns, int64_t &index, ObPLAstUnit &func)
+  const ObStmtNodeTree *parse_tree, const ObPLBlockNS &ns, int64_t &index, ObPLCompileUnitAST &func)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(parse_tree));
@@ -11825,7 +11634,7 @@ int ObPLResolver::resolve_cursor(
 }
 
 int ObPLResolver::resolve_package_cursor(
-  uint64_t package_id, const ObString &cursor_name, int64_t &index, ObPLAstUnit &func)
+  uint64_t package_id, const ObString &cursor_name, int64_t &index, ObPLCompileUnitAST &func)
 {
   int ret = OB_SUCCESS;
   int64_t idx = OB_INVALID_INDEX;
@@ -11892,7 +11701,6 @@ int ObPLResolver::resolve_questionmark_cursor(
   }
   if (OB_SUCC(ret) && OB_INVALID_INDEX == cursor) {
     if (OB_FAIL(ns.add_questionmark_cursor(symbol_idx))) {
-      LOG_WARN("failed to add condition", K(ret));
     } else {
       ObPLVar *var = const_cast<ObPLVar *>(ns.get_symbol_table()->get_symbol(symbol_idx));
       if (OB_ISNULL(var)) {
@@ -11912,7 +11720,7 @@ int ObPLResolver::resolve_questionmark_cursor(
 
 int ObPLResolver::resolve_local_cursor(
   const ObString &name, const ObPLBlockNS &ns,
-  int64_t &cursor, ObPLAstUnit &func, bool check_mode, bool for_external_cursor)
+  int64_t &cursor, ObPLCompileUnitAST &func, bool check_mode, bool for_external_cursor)
 {
   int ret = OB_SUCCESS;
   cursor = OB_INVALID_INDEX;
@@ -12040,7 +11848,6 @@ int ObPLResolver::resolve_cond_loop(const ObStmtNodeTree *expr_node, const ObStm
     ObPLDataType data_type(ObTinyIntType);
     if (OB_FAIL(resolve_expr(expr_node, func, expr, combine_line_and_col(expr_node->stmt_loc_),
                              true, &data_type, false, true))) {
-      LOG_WARN("failed to resolve expr", K(expr_node), K(ret));
     } else {
       stmt->set_cond(func.get_expr_count() - 1);
     }
@@ -12052,7 +11859,6 @@ int ObPLResolver::resolve_cond_loop(const ObStmtNodeTree *expr_node, const ObStm
       } else {
         ObPLStmtBlock *body_block = NULL;
         if (OB_FAIL(resolve_stmt_list(body_node, body_block, func))) {
-          LOG_WARN("failed to resolve stmt list", K(body_node->type_), K(ret));
         } else {
           stmt->set_body(body_block);
         }
@@ -12116,7 +11922,6 @@ int ObPLResolver::make_block(
   bool replace_current = block == current_block_;
   ObPLStmt *stmt = NULL;
   if (OB_FAIL(stmt_factory_.allocate(PL_BLOCK, parent, stmt))) {
-    LOG_WARN("failed to alloc stmt", K(ret));
   } else if (OB_ISNULL(block = static_cast<ObPLStmtBlock*>(stmt))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to static cast", K(block), K(ret));
@@ -12167,7 +11972,6 @@ int ObPLResolver::make_block(ObPLPackageAST &package_ast, ObPLStmtBlock *&block)
   int ret = OB_SUCCESS;
   ObPLStmt *stmt = NULL;
   if (OB_FAIL(stmt_factory_.allocate(PL_BLOCK, NULL, stmt))) {
-    LOG_WARN("failed to alloc stmt", K(ret));
   } else if (OB_ISNULL(block = static_cast<ObPLStmtBlock*>(stmt))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to allocate block", K(block), K(ret));
@@ -12323,7 +12127,7 @@ int ObPLResolver::check_param_default_expr_legal(ObRawExpr *expr, bool is_subpro
 }
 
 int ObPLResolver::resolve_routine_decl_param_list(const ParseNode *param_list,
-                                                  ObPLAstUnit &unit_ast,
+                                                  ObPLCompileUnitAST &unit_ast,
                                                   ObPLRoutineInfo &routine_info)
 {
   int ret = OB_SUCCESS;
@@ -12368,7 +12172,6 @@ int ObPLResolver::resolve_routine_decl_param_list(const ParseNode *param_list,
       param_type.reset();
       extern_type_info.reset();
       if (OB_FAIL(fast_check_status())) {
-        LOG_WARN("fast check status failed", K(ret));
       } else if (OB_ISNULL(param_node)
           || OB_UNLIKELY(param_node->type_ != T_SP_PARAM)
           || OB_ISNULL(param_node->children_)) {
@@ -12384,7 +12187,6 @@ int ObPLResolver::resolve_routine_decl_param_list(const ParseNode *param_list,
                                            resolve_ctx_.session_info_.is_for_trigger_package());
         if (OB_FAIL(resolve_sp_data_type(type_node, param_name, unit_ast,
                                          param_type, &extern_type_info, with_rowid, true))) {
-          LOG_WARN("resolve data type failed", K(ret), K(param_name));
         } else {
           switch (param_node->int32_values_[0]) {
           case MODE_IN:
@@ -12592,7 +12394,7 @@ int ObPLResolver::check_params_legal_in_body_routine(ObPLFunctionAST &routine_as
 }
 
 int ObPLResolver::resolve_routine_decl(const ObStmtNodeTree *parse_tree,
-                                       ObPLAstUnit &unit_ast,
+                                       ObPLCompileUnitAST &unit_ast,
                                        ObPLRoutineInfo *&routine_info,
                                        bool is_udt_routine,
                                        bool resolve_routine_def)
@@ -12881,9 +12683,7 @@ int ObPLResolver::resolve_routine_block(const ObStmtNodeTree *parse_tree,
                           resolve_ctx_.params_.param_list_);
     // note: init function references resolver's external_ns_, while resolver is a stack variable, use with caution
     if (OB_FAIL(resolver.init(routine_ast))) {
-      LOG_WARN("routine init failed ", K(ret));
     } else if (OB_FAIL(resolver.init_default_exprs(routine_ast, routine_info.get_params()))) {
-      LOG_WARN("routine init default exprs failed", K(ret));
     } else {
       const ObPLRoutineInfo *parent_routine_info = NULL;
       // NOTICE: only package body need search parent_routine_info
@@ -12908,14 +12708,12 @@ int ObPLResolver::resolve_routine_block(const ObStmtNodeTree *parse_tree,
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(resolver.resolve_root(routine_block, routine_ast))) {
-        LOG_WARN("resolve routine block failed", K(routine_block->type_), K(ret));
       } else {
         OX (const_cast<ObPLBlockNS &>(routine_ast.get_body()->get_namespace()).set_external_ns(NULL));
       }
     }
     if (resolve_ctx_.session_info_.is_pl_debug_on()) {
       if (OB_FAIL(routine_ast.generate_symbol_debuginfo())) {
-        LOG_WARN("failed to generate symbol debuginfo", K(ret));
       }
     }
   }
@@ -12923,7 +12721,7 @@ int ObPLResolver::resolve_routine_block(const ObStmtNodeTree *parse_tree,
 }
 
 int ObPLResolver::resolve_routine_def(const ObStmtNodeTree *parse_tree,
-                                      ObPLAstUnit &unit_ast,
+                                      ObPLCompileUnitAST &unit_ast,
                                       bool is_udt_routine)
 {
   int ret = OB_SUCCESS;
@@ -13075,18 +12873,14 @@ int ObPLResolver::resolve_init_routine(const ObStmtNodeTree *parse_tree, ObPLPac
                                                      ObPLRoutineTable::INIT_ROUTINE_IDX,
                                                      ObArray<int64_t>(),
                                                      routine_info))) {
-    LOG_WARN("make routine info failed", K(ret));
   } else if (OB_FAIL(routine_table.make_routine_ast(resolve_ctx_.allocator_,
                                                     package_ast.get_db_name(),
                                                     package_ast.get_name(),
                                                     package_ast.get_version(),
                                                     *routine_info,
                                                     routine_ast))) {
-    LOG_WARN("make routine ast failed", K(ret));
   } else if (OB_FAIL(resolve_routine_block(parse_tree, *routine_info, *routine_ast))) {
-    LOG_WARN("resolve routine block failed", K(ret));
   } else if (OB_FAIL(ObPLDependencyUtil::add_dependency_objects(&package_ast.get_dependency_table(), routine_ast->get_dependency_table()))) {
-    LOG_WARN("add dependency table failed", K(ret));
   } else {
     routine_ast->get_body()->set_location(
       parse_tree->stmt_loc_.first_line_, parse_tree->stmt_loc_.first_column_);
@@ -13104,7 +12898,7 @@ int64_t ObPLResolver::combine_line_and_col(const ObStmtLoc &loc)
 }
 
 int ObPLResolver::replace_map_or_order_expr(
-  uint64_t udt_id, ObRawExpr *&expr, ObPLAstUnit &func)
+  uint64_t udt_id, ObRawExpr *&expr, ObPLCompileUnitAST &func)
 {
   int ret = OB_SUCCESS;
   ObSEArray<const ObRoutineInfo *, 2> routine_infos;
@@ -13183,7 +12977,7 @@ int ObPLResolver::replace_map_or_order_expr(
 }
 
 
-int ObPLResolver::replace_object_compare_expr(ObRawExpr *&expr, ObPLAstUnit &unit_ast)
+int ObPLResolver::replace_object_compare_expr(ObRawExpr *&expr, ObPLCompileUnitAST &unit_ast)
 {
   int ret = OB_SUCCESS;
   CK (OB_NOT_NULL(expr));
@@ -13246,7 +13040,6 @@ int ObPLResolver::record_error_line(ObSQLSessionInfo &session_info,
       ObSqlString &err_msg = session_info.get_pl_exact_err_msg();
       err_msg.reset();
       if (OB_FAIL(err_msg.append_fmt("\nat "))) {
-        LOG_WARN("fail to get call stack name.", K(ret));
       } else if (name.case_compare("__anonymous_block__") != 0) {
         if (!db_name.empty()) {
          OZ (err_msg.append_fmt("%.*s.", db_name.length(), db_name.ptr()));
@@ -13327,14 +13120,12 @@ int ObPLResolver::check_var_type(ObString &name, uint64_t db_id, ObSchemaType &s
   uint64_t seq_id = OB_INVALID_ID;
   bool is_sys_generated = false;
   if (OB_FAIL(schema_guard.get_simple_table_schema( db_id, name, false, schema))) {
-    LOG_WARN("failed to get table schema", K(db_id), K(name), K(ret));
   } else if (OB_NOT_NULL(schema)) {
     // return when find a table schema
     schema_type = TABLE_SCHEMA;
   } else if (OB_FAIL(schema_guard.check_sequence_exist_with_name(db_id, name,
                                                                  is_exist, seq_id,
                                                                  is_sys_generated))) {
-    LOG_WARN("fail to check sequence exist", K(db_id), K(name), K(ret));
   } else if (is_exist) {
     // return when find a seq id
     schema_type = SEQUENCE_SCHEMA;
@@ -13409,9 +13200,7 @@ int ObPLResolver::resolve_do(const ObStmtNodeTree *parse_tree, ObPLDoStmt *stmt,
       } else if (OB_FAIL(resolve_expr(value_node, func, value_expr,
                         combine_line_and_col(value_node->stmt_loc_),
                         true, NULL))) {
-          LOG_WARN("failed to resolve expr ", K(value_node), K(ret));
       } else if (OB_FAIL(stmt->add_value(func.get_expr_count() - 1))) {
-        LOG_WARN("failed to add_value ", K(stmt), K(ret));
       }
     }
   }
@@ -13455,7 +13244,7 @@ int ObPLResolver::fast_check_status(uint64_t n) const
 
 ObPLSwitchDatabaseGuard::ObPLSwitchDatabaseGuard(sql::ObSQLSessionInfo &session_info,
                                                  share::schema::ObSchemaGetterGuard &schema_guard,
-                                                 ObPLAstUnit &func,
+                                                 ObPLCompileUnitAST &func,
                                                  int &ret_val,
                                                  bool with_rowid)
   : ret_(ret_val),
@@ -13501,7 +13290,6 @@ ObPLSwitchDatabaseGuard::~ObPLSwitchDatabaseGuard()
   int ret = OB_SUCCESS;
   if (need_reset_) {
     if (OB_FAIL(session_info_.set_default_database(database_name_.string()))) {
-      LOG_ERROR("failed to reset default database", K(ret), K(database_name_.string()));
     } else {
       session_info_.set_database_id(database_id_);
     }
@@ -13513,3 +13301,4 @@ ObPLSwitchDatabaseGuard::~ObPLSwitchDatabaseGuard()
 
 }
 }
+

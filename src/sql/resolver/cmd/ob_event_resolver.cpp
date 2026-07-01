@@ -184,7 +184,6 @@ int ObEventResolver::resolve_event_definer(const ParseNode *parse_node, ObEventI
       ObString definer_user(tmp_buf);
       if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(
                 *allocator_, session_info_->get_dtc_params(), definer_user))) {
-        LOG_WARN("fail to convert charset", K(ret));
       } else {
         event_info.set_event_definer(definer_user);
       }
@@ -214,7 +213,6 @@ int ObEventResolver::resolve_event_name(const ParseNode *parse_node, ObEventInfo
   if (OB_SUCC(ret)) {
     ObString db_name, event_name;
     if (OB_FAIL(ObResolverUtils::resolve_sp_name(*session_info_, *parse_node, db_name, event_name))) {
-      LOG_WARN("get sp name failed", K(ret), KP(parse_node));
     } else if (0 != db_name.compare(session_info_->get_database_name())) {
       ret = OB_NOT_SUPPORTED;
       LOG_USER_ERROR(OB_NOT_SUPPORTED, "create event in non-current database");
@@ -246,7 +244,6 @@ int ObEventResolver::resolve_event_schedule(const ParseNode *parse_node, ObEvent
   } else if (1 == parse_node->value_) {
     int64_t start_time_us = OB_INVALID_TIMESTAMP;
     if (OB_FAIL(get_event_time_node_value(parse_node->children_[0], start_time_us))){
-      LOG_WARN("event get at time failed", K(ret), KP(parse_node));
     } else if (stmt_type_ == T_EVENT_JOB_ALTER && start_time_us < now) {
       ret = OB_ERR_EVENT_CANNOT_ALTER_IN_THE_PAST;
       LOG_WARN("start time invalid", K(ret), K(start_time_us), K(now));
@@ -268,7 +265,6 @@ int ObEventResolver::resolve_event_schedule(const ParseNode *parse_node, ObEvent
       int64_t max_run_duration = 0;
       memset(repeat_interval, 0, OB_EVENT_REPEAT_MAX_LEN);
       if (OB_FAIL(get_repeat_interval(repeat_num_node, repeat_type_node, repeat_interval, max_run_duration))){
-        LOG_WARN("event get repeat interval str failed", K(ret), KP(parse_node));
       } else {
         event_info.set_max_run_duration(max_run_duration);
         event_info.set_repeat_interval(repeat_interval);
@@ -281,7 +277,6 @@ int ObEventResolver::resolve_event_schedule(const ParseNode *parse_node, ObEvent
           if (OB_NOT_NULL(start_time_node)) {
             int64_t start_time_us = OB_INVALID_TIMESTAMP;
             if (OB_FAIL(get_event_time_node_value(start_time_node->children_[0], start_time_us))) {
-              LOG_WARN("event get time us failed", K(ret), KP(start_time_node));
             } else if (stmt_type_ == T_EVENT_JOB_ALTER && start_time_us < now) {
               ret = OB_ERR_EVENT_CANNOT_ALTER_IN_THE_PAST;
               LOG_WARN("start time invalid", K(ret), K(start_time_us), K(now));
@@ -294,7 +289,6 @@ int ObEventResolver::resolve_event_schedule(const ParseNode *parse_node, ObEvent
           if (OB_NOT_NULL(end_time_node)) {
             int64_t end_time_us = OB_INVALID_TIMESTAMP;
             if (OB_FAIL(get_event_time_node_value(end_time_node->children_[0], end_time_us))) {
-              LOG_WARN("event get time str failed", K(ret), KP(end_time_node));
             } else {
               event_info.set_end_time(end_time_us);
             }          
@@ -523,10 +517,8 @@ int ObEventResolver::get_event_time_node_value(const ParseNode *parse_node, int6
     if(OB_FAIL(sql.assign_fmt("select TIME_TO_USEC (\'%.*s\') as time",  /* If input is a pure string, SQL parsing will remove ' need to add it back */ 
                                                                         (int)parse_node->str_len_, 
                                                                         parse_node->str_value_))) {
-     LOG_WARN("time node is not vaild", K(ret));
     }
   } else if (OB_FAIL(sql.assign_fmt("select TIME_TO_USEC (%.*s) as time", (int)parse_node->str_len_, parse_node->str_value_))) {
-    LOG_WARN("time node is not vaild", K(ret));
   }
 
   if (OB_SUCC(ret)) {

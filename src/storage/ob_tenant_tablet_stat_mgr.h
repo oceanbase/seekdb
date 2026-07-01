@@ -489,7 +489,6 @@ int ObTabletStream::get_bucket_tablet_stat(
   for (int64_t i = 0; OB_SUCC(ret) && i < bucket.count(); ++i) {
     int64_t curr_idx = bucket.get_idx(idx);
     if (OB_FAIL(tablet_stats.push_back(bucket.units_[curr_idx]))) {
-      STORAGE_LOG(WARN, "failed to add tablet stat", K(ret), K(idx));
     }
     ++idx;
   }

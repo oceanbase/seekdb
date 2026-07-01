@@ -52,9 +52,7 @@ int ObGeoSegmentCollectVisitor::collect_line_segment(T_IBIN *geo)
     if (start.x == end.x && start.y == end.y) {
       // do nothing
     } else if (OB_FAIL(line_segments_->verts_.push_back(start))) {
-      LOG_WARN("failed to append segment", K(ret));
     } else if (OB_FAIL(ObGeoTypeUtil::get_quadrant_direction(start, end, curr_dir))) {
-      LOG_WARN("failed to get point direction", K(ret), K(start.x), K(start.y), K(end.x), K(end.y));
     } else {
       if (is_new_start) {
         is_new_start  = false;
@@ -70,7 +68,6 @@ int ObGeoSegmentCollectVisitor::collect_line_segment(T_IBIN *geo)
         start_idx = seg.end;
         last_dir = curr_dir;
         if (OB_FAIL(line_segments_->segs_.push_back(seg))) {
-          LOG_WARN("failed to append segment", K(ret));
         }
       }
     }
@@ -80,7 +77,6 @@ int ObGeoSegmentCollectVisitor::collect_line_segment(T_IBIN *geo)
     if (line_segments_->verts_[last_idx].x == end.x && line_segments_->verts_[last_idx].y == end.y) {
       // do nothing
     } else if (OB_FAIL(line_segments_->verts_.push_back(end))) {
-      LOG_WARN("failed to append segment", K(ret));
     }
     if (OB_SUCC(ret) && start_idx < line_segments_->verts_.size() - 1) {
     // generate last new line segment
@@ -91,7 +87,6 @@ int ObGeoSegmentCollectVisitor::collect_line_segment(T_IBIN *geo)
       // last end point is current start point
       start_idx = seg.end;
       if (OB_FAIL(line_segments_->segs_.push_back(seg))) {
-        LOG_WARN("failed to append segment", K(ret));
       }
     }
   }
@@ -116,7 +111,6 @@ int ObGeoSegmentCollectVisitor::collect_segment(T_IBIN *geo)
     if (seg.begin.x == seg.end.x && seg.begin.y == seg.end.y) {
       // do nothing
     } else if (OB_FAIL(segments_->push_back(seg))) {
-      LOG_WARN("failed to append segment", K(ret));
     } 
   }
   return ret;
@@ -130,13 +124,11 @@ int ObGeoSegmentCollectVisitor::visit(ObIWkbGeomLineString *geo)
       ret = OB_ERR_NULL_VALUE;
       LOG_WARN("line segments is null", K(ret));
     } else if (OB_FAIL(collect_line_segment(geo))) {
-      LOG_WARN("failed to collect line segment", K(ret));
     }
   } else if (OB_ISNULL(segments_)) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("line segments is null", K(ret));
   } else if (OB_FAIL(collect_segment(geo))) {
-    LOG_WARN("failed to collect segment", K(ret));
   }
   return ret;
 }
@@ -149,13 +141,11 @@ int ObGeoSegmentCollectVisitor::visit(ObIWkbGeogLineString *geo)
       ret = OB_ERR_NULL_VALUE;
       LOG_WARN("line segments is null", K(ret));
     } else if (OB_FAIL(collect_line_segment(geo))) {
-      LOG_WARN("failed to collect line segment", K(ret));
     }
   } else if (OB_ISNULL(segments_)) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("line segments is null", K(ret));
   } else if (OB_FAIL(collect_segment(geo))) {
-    LOG_WARN("failed to collect segment", K(ret));
   }
   return ret;
 }
@@ -168,13 +158,11 @@ int ObGeoSegmentCollectVisitor::visit(ObIWkbGeomLinearRing *geo)
       ret = OB_ERR_NULL_VALUE;
       LOG_WARN("line segments is null", K(ret));
     } else if (OB_FAIL(collect_line_segment(geo))) {
-      LOG_WARN("failed to collect line segment", K(ret));
     }
   } else if (OB_ISNULL(segments_)) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("line segments is null", K(ret));
   } else if (OB_FAIL(collect_segment(geo))) {
-    LOG_WARN("failed to collect segment", K(ret));
   }
   return ret;
 }
@@ -187,13 +175,11 @@ int ObGeoSegmentCollectVisitor::visit(ObIWkbGeogLinearRing *geo)
       ret = OB_ERR_NULL_VALUE;
       LOG_WARN("line segments is null", K(ret));
     } else if (OB_FAIL(collect_line_segment(geo))) {
-      LOG_WARN("failed to collect line segment", K(ret));
     }
   } else if (OB_ISNULL(segments_)) {
     ret = OB_ERR_NULL_VALUE;
     LOG_WARN("line segments is null", K(ret));
   } else if (OB_FAIL(collect_segment(geo))) {
-    LOG_WARN("failed to collect segment", K(ret));
   }
   return ret;
 }

@@ -71,11 +71,9 @@ int ObExprMakedate::calc_makedate(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
   ObDatum *year = NULL;
   ObDatum *day = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, year, day))) {
-    LOG_WARN("calc param failed", K(ret));
   } else if (year->is_null() || day->is_null()) {
     expr_datum.set_null();
   } else if (OB_FAIL(calc(expr_datum, year->get_int(), day->get_int()))) {
-    LOG_WARN("calc make date failed", K(ret));
   }
   return ret;
 }

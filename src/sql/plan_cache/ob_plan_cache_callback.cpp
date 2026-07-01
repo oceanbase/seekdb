@@ -26,7 +26,6 @@ void ObLibCacheAtomicOp::operator()(LibCacheKV &entry)
   if (NULL != entry.second) {
     entry.second->inc_ref_count(ref_handle_);
     cache_node_ = entry.second;
-    SQL_PC_LOG(DEBUG, "succ to get cache_node", "ref_count", cache_node_->get_ref_count());
   } else {
     // if no cache node found, no need to do anything now
   }
@@ -39,7 +38,6 @@ int ObLibCacheAtomicOp::get_value(ObILibCacheNode *&cache_node)
   cache_node = NULL;
   if (OB_ISNULL(cache_node_)) {
     ret = OB_NOT_INIT;
-    SQL_PC_LOG(WARN, "invalid argument", K(cache_node_));
   } else if (OB_SUCC(lock(*cache_node_))) {
     cache_node = cache_node_;
   } else {
@@ -70,7 +68,6 @@ void ObCacheObjAtomicOp::operator()(ObjKV &entry)
     } else {
       cache_obj_ = nullptr;
     }
-    SQL_PC_LOG(DEBUG, "succ to get plan");
   } else {
     // do nothing
   }

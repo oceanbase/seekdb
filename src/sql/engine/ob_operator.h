@@ -533,9 +533,6 @@ protected:
   inline int get_next_batch_with_onlyone_row()
   {
     int ret = OB_SUCCESS;
-    SQL_ENG_LOG(DEBUG,
-        "operator does NOT support batch interface, call get_next_row instead",
-        K(eval_ctx_), K(spec_), KCSTRING(op_name()));
     clear_evaluated_flag();//TODO qubin.qb: remove this line as inner_get_next_row() calls it
     if (OB_FAIL(get_next_row())) {
       if (ret == OB_ITER_END) {
@@ -570,7 +567,6 @@ protected:
       // project
       FOREACH_CNT_X(e, spec_.output_, OB_SUCC(ret)) {
         if (OB_FAIL((*e)->eval_batch(eval_ctx_, *brs_.skip_, brs_.size_))) {
-          SQL_ENG_LOG(WARN, "expr evaluate failed", K(ret), K(*e));
         } else {
           (*e)->get_eval_info(eval_ctx_).projected_ = true;
         }

@@ -48,7 +48,6 @@ int ObDiskUsageReportTask::init(ObMySQLProxy &sql_proxy)
     ret = OB_INIT_TWICE;
     STORAGE_LOG(WARN, "init twice", K(ret));
   } else if (OB_FAIL(result_map_.create(OB_MAX_SERVER_TENANT_CNT * 5, SET_USE_500("OB_DISK_REP")))) {
-    STORAGE_LOG(WARN, "Failed to create result_map_", K(ret));
   } else {
     sql_proxy_ = &sql_proxy;
     is_inited_ = true;
@@ -84,7 +83,6 @@ int ObDiskUsageReportTask::count_tenant_data()
   int64_t tablet_local_required_size = 0;
 
   if (OB_FAIL(share::g_mp->tenant_storage_meta_service()->get_meta_block_list(block_list))) {
-    STORAGE_LOG(WARN, "failed to get tenant's meta block list", K(ret));
   } else {
     ObTenantMetaMemMgr *t3m = share::g_mp->tenant_meta_mem_mgr();
     ObLSService *ls_service = share::g_mp->ls_service();
@@ -109,12 +107,9 @@ int ObDiskUsageReportTask::count_tenant_data()
         } else if (OB_NOT_NULL(ls) && ls->get_ls_id() == tablet_map_key.ls_id_) {
           // do not need get_ls again
         } else if (OB_FAIL(ls_service->get_ls(tablet_map_key.ls_id_, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-          STORAGE_LOG(WARN, "get_ls failed", K(tablet_map_key.ls_id_));
         } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
           ret = OB_ERR_UNEXPECTED;
-          STORAGE_LOG(WARN, "unexpected error!!! ls must not nullptr", K(tablet_map_key.ls_id_));
         } else if (OB_FAIL(ls->get_ls_role(ls_role))) {
-          STORAGE_LOG(WARN, "fail to get ls_role", K(ret), KPC(ls));
         } 
         
         if (OB_FAIL(ret)) {
@@ -150,13 +145,9 @@ int ObDiskUsageReportTask::count_tenant_data()
     
     quick_restore_remote_key.file_type_ = ObDiskReportFileType::TENANT_BACKUP_DATA;
     if (OB_FAIL(result_map_.set_refactored(meta_key, std::make_pair(meta_size, meta_size), 1 /* whether allowed to override */))) {
-      STORAGE_LOG(WARN, "failed to insert meta info result_map_", K(ret), K(meta_key), K(meta_size));
     } else if (OB_FAIL(result_map_.set_refactored(data_key, std::make_pair(occupy_size, data_size), 1 /* whether allowed to override */))) {
-      STORAGE_LOG(WARN, "failed to insert data info result_map_", K(ret), K(data_key), K(occupy_size), K(data_size));
     } else if (OB_FAIL(result_map_.set_refactored(local_data_key,std::make_pair(tablet_local_required_size, tablet_local_required_size), 1 /* whether allowed to override */))) {
-      STORAGE_LOG(WARN, "failed to insert data info result_map_", K(ret), K(local_data_key), K(tablet_local_required_size));
     } else if (OB_FAIL(result_map_.set_refactored(quick_restore_remote_key, std::make_pair(backup_size, backup_size), 1 /* whether allowed to override */))) {
-      STORAGE_LOG(WARN, "failed to insert backup_size info result_map_", K(ret), K(data_key), K(backup_size));
     }
   }
   return ret;
@@ -173,7 +164,6 @@ int ObDiskUsageReportTask::get_data_disk_used_size(int64_t &used_size)
     // compute disk usage on demand instead of relying on periodic timer
     MOD_SCOPE {
       if (OB_FAIL(count_tenant_data())) {
-        STORAGE_LOG(WARN, "fail to count tenant data", K(ret));
       } else {
         ObDiskUsageReportKey tmp_key;
         tmp_key.file_type_ = ObDiskReportFileType::TENANT_TMP_DATA;

@@ -54,7 +54,6 @@ int ObFastColumnConvExpr::assign(const ObFastExprOperator &other)
     column_type_ = other_conv.column_type_;
     value_item_ = other_conv.value_item_;
     if (OB_FAIL(ob_write_string(alloc_, other_conv.column_info_, column_info_))) {
-      LOG_WARN("fail to set column info", K(ret));
     }
   }
   return ret;
@@ -74,13 +73,10 @@ int ObFastColumnConvExpr::calc(ObExprCtx &expr_ctx, const ObNewRow &row, ObObj &
       column_info = &column_info_;
     }
     if (OB_FAIL(value_item_.get_item_value_directly(*expr_ctx.phy_plan_ctx_, row, value))) {
-      LOG_WARN("get item value directly from value item failed", K(ret), K_(value_item));
     } else if (OB_FAIL(ObSqlExpressionUtil::expand_array_params(expr_ctx, *value, value))) {
-      LOG_WARN("expand array params failed", K(ret));
     } else if (OB_FAIL(ObExprColumnConv::convert_skip_null_check(result, *value, column_type_,
                                          is_strict, expr_ctx.column_conv_ctx_,
                                          &str_values_, column_info))) {
-      LOG_WARN("convert column value failed", K(ret), K(*this));
     }
   }
   return ret;
@@ -91,9 +87,7 @@ int ObFastColumnConvExpr::set_const_value(const ObObj &value)
   int ret = OB_SUCCESS;
   ObObj tmp;
   if (OB_FAIL(ob_write_obj(alloc_, value, tmp))) {
-    LOG_WARN("write const value failed", K(ret));
   } else if (OB_FAIL(value_item_.assign(tmp))) {
-    LOG_WARN("write value item failed", K(ret));
   }
   return ret;
 }
@@ -124,7 +118,6 @@ int ObExprColumnConv::assign(const ObExprOperator &other)
     LOG_WARN("invalid argument. wrong type for other", K(ret), K(other));
   } else if (OB_LIKELY(this != tmp_other)) {
     if (OB_FAIL(ObFuncExprOperator::assign(other))) {
-      LOG_WARN("copy in Base class ObFuncExprOperator failed", K(ret));
     } else if (tmp_other->str_values_.count() > 0 &&
                OB_FAIL(deep_copy_str_values(tmp_other->str_values_))) {
       LOG_WARN("copy str_values failed", K(ret));
@@ -144,7 +137,6 @@ int ObExprColumnConv::convert_with_null_check(ObObj &result,
   bool is_not_null = res_type.is_not_null_for_write();
   if (OB_FAIL(ObExprColumnConv::convert_skip_null_check(result, obj, res_type, is_strict,
                                                         cast_ctx, type_infos))) {
-    LOG_WARN("fail to convert skip null check", K(ret));
   } else if (is_not_null && (result.is_null())) {
     ret = OB_BAD_NULL_ERROR;
     LOG_WARN("Column should not be null", K(ret));
@@ -176,7 +168,6 @@ int ObExprColumnConv::convert_skip_null_check(ObObj &result,
     expect_type.set_collation_type(collation_type);
     expect_type.set_type_infos(type_infos);
     if (OB_FAIL(ObObjCaster::to_type(expect_type, cast_ctx, obj, result))) {
-      LOG_WARN("fail to cast to enum or set", K(obj), K(expect_type), K(ret));
     } else {
       res_obj = &result;
     }
@@ -191,9 +182,7 @@ int ObExprColumnConv::convert_skip_null_check(ObObj &result,
                                                           get_accuracy().get_length());
     const int64_t str_len_byte = static_cast<int64_t>(result.get_string_len());
     if (OB_FAIL(obj_collation_check(is_strict, collation_type, *const_cast<ObObj*>(res_obj)))) {
-      LOG_WARN("failed to check collation", K(ret), K(collation_type), KPC(res_obj));
     } else if (OB_FAIL(obj_accuracy_check(cast_ctx, accuracy, collation_type, *res_obj, result, res_obj))) {
-      LOG_WARN("failed to check accuracy", K(ret), K(accuracy), K(collation_type), KPC(res_obj));
     }
   }
   if (OB_SUCC(ret)) {
@@ -232,7 +221,6 @@ int ObExprColumnConv::calc_result_typeN(ObExprResType &type,
     SQL_ENG_LOG(WARN, "invalid argument, param_num should be 5 or 6",
                K(param_num), K(types), K(ret));
   } else if (OB_FAIL(type_ctx.get_session()->get_collation_connection(coll_type))) {
-    SQL_ENG_LOG(WARN, "fail to get_collation_connection", K(coll_type), K(ret));
   } else {
     type.set_type(types[0].get_type());
     type.set_collation_type(types[1].get_collation_type());
@@ -250,7 +238,6 @@ int ObExprColumnConv::calc_result_typeN(ObExprResType &type,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("need context to search subschema mapping", K(ret), K(udt_id));
       } else if (OB_FAIL(exec_ctx->get_subschema_id_by_udt_id(udt_id, subschema_id))) {
-        LOG_WARN("failed to get sub schema id", K(ret), K(udt_id));
       }
       if (OB_SUCC(ret)) {
         type.set_subschema_id(subschema_id);
@@ -367,7 +354,6 @@ int ObExprColumnConv::cg_expr(ObExprCGCtx &op_cg_ctx,
     LOG_WARN("exec ctx is null", K(ret));
   } else if (OB_FAIL(ObEnumSetInfo::init_enum_set_info(op_cg_ctx.allocator_, rt_expr, type_,
       raw_expr.get_cast_mode(), str_values_))) {
-    LOG_WARN("fail to init_enum_set_info", K(ret), K(type_), K(str_values_));
   } else {
     ObEnumSetInfo *enumset_info = static_cast<ObEnumSetInfo *>(rt_expr.extra_info_);
     if (op_cg_ctx.session_->is_ignore_stmt()) {
@@ -414,7 +400,6 @@ static OB_INLINE int column_convert_datum_accuracy_check(const ObExpr &expr,
                                    datum_for_check,
                                    datum,
                                    warning))) {
-    LOG_WARN("fail to check accuracy", K(ret), K(expr), K(warning));
   }
   if (OB_SUCC(ret) && OB_ERR_DATA_TOO_LONG == warning) {
     ObDatum *column_info = NULL;
@@ -450,7 +435,6 @@ static OB_INLINE int column_convert_vector_accuracy_check(const ObExpr &expr,
                                    in_vec,
                                    out_vec,
                                    warning))) {
-    LOG_WARN("fail to check accuracy", K(ret), K(expr), K(warning));
   }
   if (OB_SUCC(ret) && OB_ERR_DATA_TOO_LONG == warning) {
     ObDatum *column_info = NULL;
@@ -505,11 +489,9 @@ int ObExprColumnConv::column_convert(const ObExpr &expr,
     ObDatum *val = NULL;
     if (ob_is_enum_or_set_type(out_type) && !expr.args_[4]->obj_meta_.is_enum_or_set()) {
       if (OB_FAIL(eval_enumset(expr, ctx, val))) {
-        LOG_WARN("fail to eval enumset result", K(ret));
       }
     } else {
       if (OB_FAIL(expr.args_[4]->eval(ctx, val))) {
-        LOG_WARN("evaluate parameter failed", K(ret));
       }
     }
 
@@ -525,15 +507,12 @@ int ObExprColumnConv::column_convert(const ObExpr &expr,
         if (ob_is_string_type(out_type)) { // in type must not be lob type
           ObString str = val->get_string();
           if (OB_FAIL(string_collation_check(is_strict, out_cs_type, out_type, str))) {
-            LOG_WARN("fail to check collation", K(ret), K(str), K(is_strict), K(expr));
           } else {
             val->set_string(str);
           }
         } else if (ob_is_enum_or_set_type(out_type)) {
           if (OB_FAIL(enum_set_valid_check(val->get_uint64(), enumset_info->str_values_.count(),
                                            (expr.datum_meta_.type_ == ObEnumType)))) {
-            LOG_WARN("enum set val is invalid", K(ret), K(val->get_uint64()),
-                                                K(enumset_info->str_values_.count()), K(expr));
           }
         }
         if (OB_SUCC(ret)
@@ -565,9 +544,7 @@ int ObExprColumnConv::column_convert(const ObExpr &expr,
           ObString str;
           ObTextStringIter striter(in_type, in_cs_type, val->get_string(), has_lob_header);
           if (OB_FAIL(striter.init(0, ctx.exec_ctx_.get_my_session(), &temp_allocator))) {
-            LOG_WARN("fail to init string iter", K(ret), K(is_strict), K(expr));
           } else if (OB_FAIL(striter.get_full_data(str))) {
-            LOG_WARN("fail to get full data from string iter", K(ret), K(is_strict), K(expr));
           } else if (ob_is_geometry(out_type)) {
             ObGeoType geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
             if (OB_FAIL(ObGeoTypeUtil::check_geo_type(geo_type, str))) {
@@ -576,7 +553,6 @@ int ObExprColumnConv::column_convert(const ObExpr &expr,
               LOG_USER_ERROR(OB_ERR_CANT_CREATE_GEOMETRY_OBJECT);
             }
           } else if (OB_FAIL(string_collation_check(is_strict, out_cs_type, out_type, str))) {
-            LOG_WARN("fail to check collation", K(ret), K(str), K(is_strict), K(expr));
           }
           if (OB_SUCC(ret)) {
             has_lob_header_for_check = false; // datum_for_check must have no lob header
@@ -585,14 +561,12 @@ int ObExprColumnConv::column_convert(const ObExpr &expr,
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(column_convert_datum_accuracy_check(expr, ctx, has_lob_header_for_check, datum,
                                                                  cast_mode, datum_for_check))) {
-            LOG_WARN("fail do datum_accuracy_check for lob res", K(ret), K(expr), K(datum_for_check));
           } else {
             // in type is the same with out type, if length changed, build a new lob
             ObLobLocatorV2 loc(raw_str, has_lob_header);
             int64_t old_data_byte_len = 0;
             if (raw_str.length() > 0) {
               if (OB_FAIL(loc.get_lob_data_byte_len(old_data_byte_len))) {
-                LOG_WARN("Lob: failed to get data byte len", K(ret));
               }
             }
             if (OB_SUCC(ret)) {
@@ -602,9 +576,7 @@ int ObExprColumnConv::column_convert(const ObExpr &expr,
               } else {
                 ObTextStringDatumResult str_result(expr.datum_meta_.type_, &expr, &ctx, &datum);
                 if (OB_FAIL(str_result.init(new_data_byte_len))) {
-                  LOG_WARN("Lob: init lob result failed", K(ret));
                 } else if (OB_FAIL(str_result.append(datum.get_string().ptr(), new_data_byte_len))) {
-                  LOG_WARN("Lob: append lob result failed", K(ret));
                 } else {
                   str_result.set_result();
                 }
@@ -627,7 +599,6 @@ int ObExprColumnConv::column_convert_fast(const ObExpr &expr,
   int ret = OB_SUCCESS;
   ObDatum *val = nullptr;
   if (OB_FAIL(expr.args_[4]->eval(ctx, val))) {
-    LOG_WARN("evaluate parameter failed", K(ret));
   } else {
     datum.set_datum(*val);
   }
@@ -649,7 +620,6 @@ int ObExprColumnConv::column_convert_batch(const ObExpr &expr,
   bool param_not_eval = !expr.args_[4]->get_eval_info(ctx).evaluated_
                         && !expr.args_[4]->get_eval_info(ctx).projected_;
   if (OB_FAIL(expr.args_[4]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("failed to eval batch vals", K(ret));
   } else {
     ObDatum *vals = expr.args_[4]->locate_batch_datums(ctx);
     ObDatum *results = expr.locate_batch_datums(ctx);
@@ -696,7 +666,6 @@ int ObExprColumnConv::column_convert_batch(const ObExpr &expr,
                                                                    is_strict, max_accuracy_len, cast_mode,
                                                                    eval_flags, vals, results,
                                                                    batch_info_guard))) {
-        LOG_WARN("failed to convert batch", K(ret));
       }
     } else {
       ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx); // temp alloc only used for lob types
@@ -739,9 +708,7 @@ int ObExprColumnConv::column_convert_batch(const ObExpr &expr,
             }
             if (!can_use_raw_str) {
               if (OB_FAIL(striter.init(0, ctx.exec_ctx_.get_my_session(), &temp_allocator))) {
-                LOG_WARN("fail to init string iter", K(ret), K(is_strict), K(expr));
               } else if (OB_FAIL(striter.get_full_data(str))) {
-                LOG_WARN("fail to get full data from string iter", K(ret), K(is_strict), K(expr));
               } else if (ob_is_geometry(out_type)) {
                 ObGeoType geo_type = ObGeoCastUtils::get_geo_type_from_cast_mode(cast_mode);
                 if (OB_FAIL(ObGeoTypeUtil::check_geo_type(geo_type, str))) {
@@ -772,7 +739,6 @@ int ObExprColumnConv::column_convert_batch(const ObExpr &expr,
               results[i].set_datum(datum_for_check);
             } else if (OB_FAIL(column_convert_datum_accuracy_check(expr, ctx, has_lob_header_for_check, results[i],
                                                                   cast_mode, datum_for_check))) {
-              LOG_WARN("fail do datum_accuracy_check for lob res", K(ret), K(expr), K(datum_for_check));
             }
             if (OB_SUCC(ret)) {
               // in type is the same with out type, if length changed, build a new lob
@@ -780,7 +746,6 @@ int ObExprColumnConv::column_convert_batch(const ObExpr &expr,
               int64_t old_data_byte_len = 0;
               if (need_check_length && raw_str.length() > 0) {
                 if (OB_FAIL(loc.get_lob_data_byte_len(old_data_byte_len))) {
-                  LOG_WARN("Lob: failed to get data byte len", K(ret));
                 }
               }
               if (OB_SUCC(ret)) {
@@ -790,9 +755,7 @@ int ObExprColumnConv::column_convert_batch(const ObExpr &expr,
                 } else {
                   ObTextStringDatumResult str_result(expr.datum_meta_.type_, &expr, &ctx, &results[i]);
                   if (OB_FAIL(str_result.init(new_data_byte_len))) {
-                    LOG_WARN("Lob: init lob result failed", K(ret));
                   } else if (OB_FAIL(str_result.append(results[i].get_string().ptr(), new_data_byte_len))) {
-                    LOG_WARN("Lob: append lob result failed", K(ret));
                   } else {
                     str_result.set_result();
                   }
@@ -804,7 +767,6 @@ int ObExprColumnConv::column_convert_batch(const ObExpr &expr,
           if (OB_FAIL(ret) && ctx.exec_ctx_.get_my_session()->is_diagnosis_enabled()) {
             // overwrite ret on diagnosis node
             if (OB_FAIL(ctx.exec_ctx_.get_diagnosis_manager().add_warning_info(ret, i))) {
-              LOG_WARN("failed to add warning info", K(ret), K(i));
             } else {
               // set null to avoid accessing invalid data before setting skip
               // in ObTableScanOp::do_diagnosis
@@ -819,7 +781,6 @@ int ObExprColumnConv::column_convert_batch(const ObExpr &expr,
     if (OB_SUCC(ret) && ctx.exec_ctx_.get_my_session()->is_diagnosis_enabled()) {
       if (OB_FAIL(calc_column_name_for_diagnosis(expr, ctx,
                                                 ctx.exec_ctx_.get_diagnosis_manager()))) {
-        LOG_WARN("fail to calculate column name for diagnosis", K(ret), K(expr));
       }
     }
   }
@@ -839,12 +800,10 @@ int ObExprColumnConv::calc_column_name_for_diagnosis(const ObExpr &expr,
 
       ObString tmp_str;
       if (OB_FAIL(ob_write_string(diagnosis_manager.allocator_, column_name, tmp_str, true))) {
-        LOG_WARN("failed to write string", K(ret));
       } else {
         int64_t gap_cnt = diagnosis_manager.rets_.count() - diagnosis_manager.col_names_.count();
         for (int64_t i = 0; OB_SUCC(ret) && i < gap_cnt; i++) {
           if (OB_FAIL(diagnosis_manager.col_names_.push_back(tmp_str))) {
-            LOG_WARN("failed to push back column name into array", K(ret), K(tmp_str));
           }
         }
       }
@@ -871,7 +830,6 @@ int ObExprColumnConv::column_convert_vector(const ObExpr &expr,
   bool param_not_eval = !expr.args_[4]->get_eval_info(ctx).evaluated_
                         && !expr.args_[4]->get_eval_info(ctx).projected_;
   if (OB_FAIL(expr.args_[4]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("failed to eval args", K(ret));
   } else {
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
     bool is_string_type = ob_is_string_type(out_type);
@@ -919,7 +877,6 @@ int ObExprColumnConv::column_convert_vector(const ObExpr &expr,
                                                                              eval_flags);
         }
         if (OB_FAIL(ret)) {
-          LOG_WARN("failed to convert batch", K(ret));
         }
       } else if (is_string_type) {
         if (VEC_DISCRETE == arg_format && VEC_DISCRETE == res_format) {
@@ -951,7 +908,6 @@ int ObExprColumnConv::column_convert_vector(const ObExpr &expr,
                                                                              eval_flags);
         }
         if (OB_FAIL(ret)) {
-          LOG_WARN("failed to convert batch", K(ret));
         }
       } else if (is_int_tc) {
         if (VEC_FIXED == arg_format && VEC_FIXED == res_format) {
@@ -992,7 +948,6 @@ int ObExprColumnConv::column_convert_vector(const ObExpr &expr,
                                                                              eval_flags);
         }
         if (OB_FAIL(ret)) {
-          LOG_WARN("failed to convert batch", K(ret));
         }
       } else if (is_decimal_int_tc
                  && OB_SUCCESS != (ret = inner_loop_for_convert_vector<PARAM_TC::DECIMAL_INT_TC, ObVectorBase, ObVectorBase, false, true>(expr, ctx, skip, bound,
@@ -1002,14 +957,12 @@ int ObExprColumnConv::column_convert_vector(const ObExpr &expr,
       } else if (OB_SUCCESS != (ret = inner_loop_for_convert_vector<PARAM_TC::OTHER_TC, ObVectorBase, ObVectorBase, false, true>(expr, ctx, skip, bound,
                                                                              is_strict, max_accuracy_len, cast_mode,
                                                                              eval_flags))) {
-        LOG_WARN("failed to convert batch", K(ret));
       }
     }
 
     if (OB_SUCC(ret) && ctx.exec_ctx_.get_my_session()->is_diagnosis_enabled()) {
       if (OB_FAIL(calc_column_name_for_diagnosis(expr, ctx,
                                                 ctx.exec_ctx_.get_diagnosis_manager()))) {
-        LOG_WARN("fail to calculate column name for diagnosis", K(ret), K(expr));
       }
     }
   }
@@ -1023,7 +976,6 @@ int ObExprColumnConv::column_convert_batch_fast(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[4]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("failed to eval batch vals", K(ret));
   } else {
     ObDatum *vals = expr.args_[4]->locate_batch_datums(ctx);
     ObDatum *results = expr.locate_batch_datums(ctx);
@@ -1049,7 +1001,6 @@ int ObExprColumnConv::column_convert_vector_fast(const ObExpr &expr,
   VectorFormat arg_format = expr.args_[4]->get_format(ctx);
   ObObjType out_type = expr.datum_meta_.type_;
   if (OB_FAIL(expr.args_[4]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("failed to eval args", K(ret));
   } else {
     if (VEC_FIXED == res_format && VEC_FIXED == arg_format) {
       if (ob_is_integer_type(out_type)) {
@@ -1065,14 +1016,11 @@ int ObExprColumnConv::column_convert_vector_fast(const ObExpr &expr,
         ret = inner_calc_column_convert_vector_fast<ObVectorBase, ObVectorBase> (expr, ctx, skip, bound);
       }
       if (OB_FAIL(ret)) {
-        LOG_WARN("failed to convert args", K(ret));
       }
     } else if (VEC_DISCRETE == res_format && VEC_DISCRETE == arg_format) {
       if (OB_SUCCESS != inner_calc_column_convert_vector_fast<ObDiscreteFormat, ObDiscreteFormat>(expr, ctx, skip, bound)) {
-        LOG_WARN("failed to convert args", K(ret));
       }
     } else if (OB_SUCCESS != inner_calc_column_convert_vector_fast<ObVectorBase, ObVectorBase>(expr, ctx, skip, bound)) {
-      LOG_WARN("failed to convert args", K(ret));
     }
   }
   return ret;
@@ -1123,7 +1071,6 @@ int ObExprColumnConv::eval_enumset(const ObExpr &expr, ObEvalCtx &ctx, common::O
     ObExpr *old_expr = expr.args_[0];
     expr.args_[0] = expr.args_[4];
     if (OB_FAIL(expr.eval_enumset(ctx, enumset_info->str_values_, cast_mode, datum))) {
-      LOG_WARN("fail to eval_enumset", KPC(enumset_info), K(ret));
     }
     expr.args_[0] = old_expr;
   } else {
@@ -1131,15 +1078,12 @@ int ObExprColumnConv::eval_enumset(const ObExpr &expr, ObEvalCtx &ctx, common::O
     if (OB_ISNULL(column_conv_ctx = static_cast<ObExprColumnConvCtx *>
         (ctx.exec_ctx_.get_expr_op_ctx(expr_ctx_id)))) {
       if (OB_FAIL(ctx.exec_ctx_.create_expr_op_ctx(expr_ctx_id, column_conv_ctx))) {
-        LOG_WARN("fail to create expr op ctx", K(ret), K(expr_ctx_id));
       } else if (OB_FAIL(column_conv_ctx->setup_eval_expr(ctx.exec_ctx_.get_allocator(), expr))) {
-        LOG_WARN("fail to init column conv ctx", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(column_conv_ctx->expr_.eval_enumset(ctx, enumset_info->str_values_, cast_mode,
                                                       datum))) {
-        LOG_WARN("fail to eval_enumset", KPC(enumset_info), K(ret));
       }
     }
   }
@@ -1251,13 +1195,11 @@ int ObExprColumnConv::inner_loop_for_convert_batch(const ObExpr &expr,
       } else if (OB_FAIL(column_convert_datum_accuracy_check(expr, ctx,
                                                              has_lob_header, results[i],
                                                              cast_mode, vals[i]))) {
-        LOG_WARN("fail do datum_accuracy_check for lob res", K(ret), K(expr));
       }
 
       if (OB_FAIL(ret) && ctx.exec_ctx_.get_my_session()->is_diagnosis_enabled()) {
         // overwrite ret on diagnosis node
         if (OB_FAIL(ctx.exec_ctx_.get_diagnosis_manager().add_warning_info(ret, i))) {
-          LOG_WARN("failed to add warning info", K(ret), K(i));
         } else {
           results[i].set_null();
         }
@@ -1358,7 +1300,6 @@ int ObExprColumnConv::inner_loop_for_convert_vector(const ObExpr &expr,
       } else if (OB_FAIL(column_convert_vector_accuracy_check(expr, ctx, skip,
                                                              has_lob_header, cast_mode,
                                                              i, *arg_vec, *res_vec))) {
-        LOG_WARN("fail do datum_accuracy_check for lob res", K(ret), K(expr));
       }
     }
     if (!ALL_ROWS_ACTIVE) {
@@ -1367,7 +1308,6 @@ int ObExprColumnConv::inner_loop_for_convert_vector(const ObExpr &expr,
     if (OB_FAIL(ret) && ctx.exec_ctx_.get_my_session()->is_diagnosis_enabled()) {
       // overwrite ret on diagnosis node
       if (OB_FAIL(ctx.exec_ctx_.get_diagnosis_manager().add_warning_info(ret, i))) {
-        LOG_WARN("failed to add warning info", K(ret), K(i));
       } else {
         // set null to avoid accessing invalid data before setting skip
         // in ObTableScanOp::do_diagnosis
@@ -1390,7 +1330,6 @@ int ObBaseExprColumnConv::shallow_copy_str_values(const common::ObIArray<common:
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid str_values", K(str_values), K(ret));
   } else if (OB_FAIL(str_values_.assign(str_values))) {
-    LOG_WARN("fail to assign str values", K(ret));
   } else {/*do nothing*/}
   return ret;
 }
@@ -1403,7 +1342,6 @@ int ObBaseExprColumnConv::deep_copy_str_values(const ObIArray<ObString> &str_val
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid str_values", K(str_values), K(ret));
   } else if (OB_FAIL(str_values_.reserve(str_values.count()))) {
-    LOG_WARN("fail to init str_values_", K(ret));
   } else {/*do nothing*/}
 
   for (int64_t i = 0; OB_SUCC(ret) && i < str_values.count(); ++i) {
@@ -1422,7 +1360,6 @@ int ObBaseExprColumnConv::deep_copy_str_values(const ObIArray<ObString> &str_val
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(str_values_.push_back(str_tmp))) {
-        LOG_WARN("failed to push back str", K(i), K(str_tmp), K(str), K(ret));
       }
     }
   }

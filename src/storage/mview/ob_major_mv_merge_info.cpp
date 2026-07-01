@@ -215,7 +215,6 @@ int ObMVCheckReplicaHelper::get_and_update_merge_info(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("arg is not valid", KR(ret), K(ls_id));
   } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::TABLET_MOD))) {
-    LOG_WARN("failed to get ls", KR(ret), K(ls_id));
   } else if (OB_UNLIKELY(NULL == (ls = ls_handle.get_ls()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls should not be NULL", KR(ret), KPC(ls));
@@ -226,7 +225,6 @@ int ObMVCheckReplicaHelper::get_and_update_merge_info(
   } else if (!info.need_update_major_mv_merge_scn()) {
     STORAGE_LOG(INFO, "no need update", KR(ret), K(info), KPC(ls));
   } else if (OB_FAIL(ls->get_tablet_svr()->build_tablet_iter(tablet_iter))) {
-    STORAGE_LOG(WARN, "failed to build ls tablet iter", KR(ret), KPC(ls));
   } else {
     share::SCN min_major_mv_merge_scn;
     min_major_mv_merge_scn.set_max();
@@ -252,7 +250,6 @@ int ObMVCheckReplicaHelper::get_and_update_merge_info(
                  tablet->is_empty_shell()) {
         // skip ls inner tablet or empty shell
       } else if (OB_FAIL(tablet->load_storage_schema(allocator, storage_schema))) {
-        LOG_WARN("load storage schema failed", K(ret), K(ls_id), KPC(tablet));
       } else if (OB_ISNULL(storage_schema)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("storage schema is NULL", K(ret), K(ls_id), KPC(tablet));
@@ -276,13 +273,11 @@ int ObMVCheckReplicaHelper::get_and_update_merge_info(
     // there is no new mv tablet
     else if (min_major_mv_merge_scn.is_max()) {
       if (OB_FAIL(ls->set_major_mv_merge_scn(info.major_mv_merge_scn_safe_calc_))) {
-        LOG_WARN("failed to set_major_mv_merge_scn", K(ret), K(info), K(min_major_mv_merge_scn), KPC(ls));
       } else {
         info.major_mv_merge_scn_ = info.major_mv_merge_scn_safe_calc_;
       }
     } else if (min_major_mv_merge_scn >= info.major_mv_merge_scn_safe_calc_) {
       if (OB_FAIL(ls->set_major_mv_merge_scn(info.major_mv_merge_scn_safe_calc_))) {
-        LOG_WARN("failed to set_major_mv_merge_scn", K(ret), K(info), K(min_major_mv_merge_scn), KPC(ls));
       } else {
         info.major_mv_merge_scn_ = info.major_mv_merge_scn_safe_calc_;
       }
@@ -302,7 +297,6 @@ int ObMVCheckReplicaHelper::get_merge_info(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("arg is not valid", KR(ret), K(ls_id));
   } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::TABLET_MOD))) {
-    LOG_WARN("failed to get ls", KR(ret), K(ls_id));
   } else if (OB_UNLIKELY(NULL == (ls = ls_handle.get_ls()))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls should not be NULL", KR(ret), KPC(ls));

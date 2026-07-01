@@ -49,18 +49,14 @@ int ObMviewAlterService::alter_mview_or_mlog_in_trans(obcall::ObAlterTableArg &a
              K(origin_table_name), K(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( origin_database_name,
                                                    origin_table_name, false, orig_table_schema))) {
-    LOG_WARN("failed to get table schema", K(ret), K(origin_database_name),
-             K(origin_table_name));
   } else if (NULL == orig_table_schema) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("orig_table_schema is null", KR(ret), KP(orig_table_schema));
   } else if (OB_FAIL(schema_guard.get_schema_version(schema_version))) {
-    LOG_WARN("failed to get tenant schema version", KR(ret));
   } else {
     ObDDLSQLTransaction trans(schema_service);
     ObDDLOperator ddl_operator(*schema_service, *sql_proxy);
     if (OB_FAIL(trans.start(sql_proxy, schema_version))) {
-      LOG_WARN("start transaction failed", KR(ret), K(schema_version));
     } else if (orig_table_schema->is_materialized_view() && OB_FAIL(alter_mview_attributes(orig_table_schema, alter_table_arg, ddl_operator, schema_guard, trans))) {
       LOG_WARN("failed to alter mview attributes", KR(ret), K(alter_table_arg));
     } else if (alter_table_arg.is_alter_mlog_attributes_ && OB_FAIL(alter_mlog_attributes( orig_table_schema, alter_table_arg, ddl_operator, schema_guard, trans))) {
@@ -98,29 +94,23 @@ int ObMviewAlterService::alter_mview_attributes(const ObTableSchema *orig_table_
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("orig table schema is not mview", KR(ret), K(orig_table_schema));
   } else if (OB_FAIL(schema_guard.get_table_schema( orig_table_schema->get_data_table_id(), container_table_schema))) {
-    LOG_WARN("failed to get mv container table schema", KR(ret));
   } else if (OB_ISNULL(container_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("mv container table schema is null", KR(ret));
   } else if (OB_FAIL(schema_guard.get_database_schema( orig_table_schema->get_database_id(), db_schema))) {
-    LOG_WARN("failed to get database schema", KR(ret), "db_id",
-             orig_table_schema->get_database_id());
   } else if (OB_ISNULL(db_schema)) {
     ret = OB_ERR_BAD_DATABASE;
     LOG_WARN("db schema is NULL", KR(ret), "db_id",
              orig_table_schema->get_database_id());
   } else if (OB_FAIL(ObMViewInfo::fetch_mview_info(
                  trans, orig_table_schema->get_table_id(), mview_info, true))) {
-    LOG_WARN("failed to fetch mview info", KR(ret), "mview_id", orig_table_schema->get_table_id());
   } else {
     HEAP_VAR(ObTableSchema, new_mview_schema)
     {
     HEAP_VAR(ObTableSchema, new_container_schema)
     {
       if (OB_FAIL(new_mview_schema.assign(*orig_table_schema))) {
-        LOG_WARN("failed to assign schema", K(ret));
       } else if (OB_FAIL(new_container_schema.assign(*container_table_schema))) {
-        LOG_WARN("failed to assign schema", K(ret));
       } else {
         bool need_alter_mview_schema = false;
         bool need_alter_mview_refresh_job = false;
@@ -191,7 +181,6 @@ int ObMviewAlterService::alter_mview_attributes(const ObTableSchema *orig_table_
 
         if (OB_FAIL(ddl_operator.alter_table_options(schema_guard, new_container_schema,
                                                      *container_table_schema, false, trans))) {
-          LOG_WARN("failed to update container schema", KR(ret), K(new_mview_schema));
         } else if (need_alter_mview_schema &&
                    OB_FAIL(ddl_operator.alter_table_options(schema_guard, new_mview_schema,
                                                             *orig_table_schema, false, trans))) {
@@ -237,7 +226,6 @@ int ObMviewAlterService::alter_mlog_attributes(const ObTableSchema *orig_table_s
     const ObTableSchema *container_table_schema = nullptr;
     if (OB_FAIL(schema_guard.get_table_schema( orig_table_schema->get_data_table_id(),
                                               container_table_schema))) {
-      LOG_WARN("failed to get table schema", KR(ret));
     } else if (OB_ISNULL(container_table_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null container table schema", KR(ret), KP(container_table_schema));
@@ -254,23 +242,19 @@ int ObMviewAlterService::alter_mlog_attributes(const ObTableSchema *orig_table_s
     LOG_WARN("table doesn't have mlog", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( data_table_schema->get_mlog_tid(),
                                                    mlog_table_schema))) {
-    LOG_WARN("failed to get mlog schema", KR(ret));
   } else if (OB_ISNULL(mlog_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("mlog table schema is null", KR(ret));
   } else if (OB_FAIL(schema_guard.get_database_schema( data_table_schema->get_database_id(), db_schema))) {
-    LOG_WARN("failed to get database schema", KR(ret));
   } else if (OB_ISNULL(db_schema)) {
     ret = OB_ERR_BAD_DATABASE;
     LOG_WARN("failed to get database schema", KR(ret), "db_id",
              data_table_schema->get_database_id());
   } else if (OB_FAIL(ObMLogInfo::fetch_mlog_info(
                  trans, mlog_table_schema->get_table_id(), mlog_info, true))) {
-    LOG_WARN("failed to get mlog info", KR(ret), K(mlog_table_schema));
   } else {
     HEAP_VAR(ObTableSchema, new_mlog_schema){
       if (OB_FAIL(new_mlog_schema.assign(*mlog_table_schema))) {
-        LOG_WARN("failed to assign schema", K(ret));
       } else {
         bool need_alter_mlog_purge_job = false;
         bool need_alter_mlog_info = false;
@@ -314,7 +298,6 @@ int ObMviewAlterService::alter_mlog_attributes(const ObTableSchema *orig_table_s
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(ddl_operator.alter_table_options(schema_guard, new_mlog_schema,
                                                      *mlog_table_schema, false, trans))) {
-          LOG_WARN("failed to update container schema", KR(ret), K(new_mlog_schema));
         } else if (need_alter_mlog_purge_job &&
                    OB_FAIL(ObMViewSchedJobUtils::replace_mlog_purge_job(
                        trans, mlog_info, db_schema->get_database_name_str(),

@@ -62,7 +62,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(handle_.assign(other.handle_))) {
-      COMMON_LOG(WARN, "fail to assign handle");
       this->stat_ = nullptr;
       this->cache_ = nullptr;
     } else {

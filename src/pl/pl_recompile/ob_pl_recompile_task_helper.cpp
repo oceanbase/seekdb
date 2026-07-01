@@ -42,12 +42,10 @@ int ObPLRecompileTaskHelper::check_job_exists(ObMySQLTransaction &trans,
   if (OB_FAIL(select_sql.append_fmt("SELECT count(*) FROM %s WHERE job_name = '%.*s';",
                                     share::OB_ALL_SCHEDULER_JOB_TNAME,
                                     job_name.length(), job_name.ptr()))) {
-    LOG_WARN("failed to append fmt", K(ret));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, proxy_result) {
       sqlclient::ObMySQLResult *client_result = NULL;
       if (OB_FAIL(trans.read(proxy_result, select_sql.ptr()))) {
-        LOG_WARN("failed to execute sql", K(ret), K(select_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to execute sql", K(ret));
@@ -56,9 +54,7 @@ int ObPLRecompileTaskHelper::check_job_exists(ObMySQLTransaction &trans,
           int64_t idx = 0;
           ObObj obj;
           if (OB_FAIL(client_result->get_obj(idx, obj))) {
-            LOG_WARN("failed to get object", K(ret));
           } else if (OB_FAIL(obj.get_int(row_count))) {
-            LOG_WARN("failed to get int", K(ret), K(obj));
           } else if (OB_UNLIKELY(row_count != 2 && row_count != 0)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("get unexpected error", K(ret), K(row_count));

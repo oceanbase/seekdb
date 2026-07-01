@@ -94,11 +94,9 @@ public:
   void set_tx_end(bool is_tx_end) { is_tx_end_ = is_tx_end; }
   void inc_unsync_cnt_for_multi_data() {
     unsynced_cnt_for_multi_data_++;
-    TRANS_LOG(INFO, "unsync_cnt_for_multi_data inc", KPC(this));
   }
   void dec_unsync_cnt_for_multi_data() {
     unsynced_cnt_for_multi_data_--;
-    TRANS_LOG(INFO, "unsync_cnt_for_multi_data dec", KPC(this));
   }
   int get_unsync_cnt_for_multi_data() const { return unsynced_cnt_for_multi_data_; }
   void set_unsync_cnt_for_multi_data(const int unsynced_cnt_for_multi_data) { unsynced_cnt_for_multi_data_ = unsynced_cnt_for_multi_data; }

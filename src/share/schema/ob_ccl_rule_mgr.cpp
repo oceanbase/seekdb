@@ -65,9 +65,7 @@ int ObCCLRuleMgr::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("init private rls_group schema manager twice", K(ret));
   } else if (OB_FAIL(ccl_rule_name_map_.init())) {
-    LOG_WARN("init rls_group name map failed", K(ret));
   } else if (OB_FAIL(ccl_rule_id_map_.init())) {
-    LOG_WARN("init rls_group id map failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -95,15 +93,10 @@ int ObCCLRuleMgr::assign(const ObCCLRuleMgr &other)
     LOG_WARN("ccl_rule manager not init", K(ret));
   } else if (this != &other) {
     if (OB_FAIL(ccl_rule_name_map_.assign(other.ccl_rule_name_map_))) {
-      LOG_WARN("assign rls_group name map failed", K(ret));
     } else if (OB_FAIL(ccl_rule_id_map_.assign(other.ccl_rule_id_map_))) {
-      LOG_WARN("assign rls_group id map failed", K(ret));
     } else if (OB_FAIL(ccl_rules_.assign(other.ccl_rules_))) {
-      LOG_WARN("assign rls_group schema vector failed", K(ret));
     } else if (OB_FAIL(ccl_rules_specified_by_dml_.assign(other.ccl_rules_specified_by_dml_))) {
-      LOG_WARN("assign rls_group schema vector failed", K(ret));
     } else if (OB_FAIL(ccl_rules_specified_by_database_table_dml_.assign(other.ccl_rules_specified_by_database_table_dml_))) {
-      LOG_WARN("assign rls_group schema vector failed", K(ret));
     }
   }
   return ret;
@@ -124,7 +117,6 @@ int ObCCLRuleMgr::deep_copy(const ObCCLRuleMgr &other)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", KP(schema), K(ret));
       } else if (OB_FAIL(add_ccl_rule(*schema, (*iter)->get_name_case_mode(), ccl_rules_))) {
-        LOG_WARN("add ccl_rule failed", K(*schema), K(ret));
       }
     }
     for (CCLRuleIter iter = other.ccl_rules_specified_by_dml_.begin();
@@ -133,7 +125,6 @@ int ObCCLRuleMgr::deep_copy(const ObCCLRuleMgr &other)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", KP(schema), K(ret));
       } else if (OB_FAIL(add_ccl_rule(*schema, (*iter)->get_name_case_mode(), ccl_rules_specified_by_dml_))) {
-        LOG_WARN("add ccl_rule failed", K(*schema), K(ret));
       }
     }
     for (CCLRuleIter iter = other.ccl_rules_specified_by_database_table_dml_.begin();
@@ -142,7 +133,6 @@ int ObCCLRuleMgr::deep_copy(const ObCCLRuleMgr &other)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", KP(schema), K(ret));
       } else if (OB_FAIL(add_ccl_rule(*schema, (*iter)->get_name_case_mode(), ccl_rules_specified_by_database_table_dml_))) {
-        LOG_WARN("add ccl_rule failed", K(*schema), K(ret));
       }
     }
   }
@@ -164,25 +154,20 @@ int ObCCLRuleMgr::add_ccl_rule(const ObSimpleCCLRuleSchema &schema, const ObName
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_,
                                                  schema,
                                                  new_schema))) {
-    LOG_WARN("alloc schema failed", K(ret));
   } else if (OB_ISNULL(new_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("alloc schema is a NULL ptr", K(new_schema), K(ret));
   } else if (OB_FALSE_IT(new_schema->set_name_case_mode(mode))) {
   } else if (OB_FAIL(ccl_rule_infos.replace(new_schema, iter, compare_ccl_rule, equal_ccl_rule,
                                             old_schema))) {
-    LOG_WARN("failed to add rls_group schema", K(ret));
   } else {
     if (OB_SUCC(ret)) {
       int over_write = 1;
       ObCCLRuleNameHashKey hash_wrapper(new_schema->get_name_case_mode(),
                                         new_schema->get_ccl_rule_name());
       if (OB_FAIL(ccl_rule_name_map_.set_refactored(hash_wrapper, new_schema, over_write))) {
-        LOG_WARN("build ccl_rule hash map failed", K(ret));
       } else if (OB_FAIL(ccl_rule_id_map_.set_refactored(new_schema->get_ccl_rule_id(), new_schema,
                                                          over_write))) {
-        LOG_WARN("build ccl_rule id hashmap failed", K(ret), "ccl_rule id",
-                 new_schema->get_ccl_rule_id());
       }
     }
   }
@@ -206,7 +191,6 @@ int ObCCLRuleMgr::add_ccl_rule(const ObSimpleCCLRuleSchema &schema, const ObName
   }
   CCLRuleInfos *target_ccl_rule_infos = get_ccl_rule_belong_ccl_rule_infos(ccl_rule_contains_info);
   if (OB_FAIL(add_ccl_rule(schema, mode, *target_ccl_rule_infos))) {
-    LOG_WARN("fail to add ccl rule", K(ret));
   }
   return ret;
 }
@@ -244,7 +228,6 @@ int ObCCLRuleMgr::del_ccl_rule(const ObTenantCCLRuleId &id)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(id));
   } else if (OB_FAIL(del_ccl_rule_from_ccl_rule_infos(id, ccl_rules_specified_by_database_table_dml_, schema))) {
-    LOG_WARN("fail to del ccl rules from ccl_rules_specified_by_database_table_dml_", K(ret));
   } else if (OB_ISNULL(schema) && OB_FAIL(del_ccl_rule_from_ccl_rule_infos(id, ccl_rules_specified_by_dml_, schema))) {
     LOG_WARN("fail to del ccl rules from ccl_rules_specified_by_dml_", K(ret));
   } else if (OB_ISNULL(schema) && OB_FAIL(del_ccl_rule_from_ccl_rule_infos(id, ccl_rules_, schema))) {
@@ -368,7 +351,6 @@ int ObCCLRuleMgr::get_schemas_in_tenant(common::ObIArray<const ObSimpleCCLRuleSc
     } else if (false) {
       is_stop = true;
     } else if (OB_FAIL(schemas.push_back(schema))) {
-      LOG_WARN("push back ccl_rule failed", K(ret));
     }
   }
   return ret;
@@ -378,11 +360,8 @@ int ObCCLRuleMgr::get_schemas_in_tenant(common::ObIArray<const ObSimpleCCLRuleSc
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(get_schemas_in_tenant(schemas, ccl_rules_specified_by_database_table_dml_))) {
-    LOG_WARN("fail to get ccl rule schemas in ccl_rules_specified_by_database_table_dml_", K(ret));
   } else if (OB_FAIL(get_schemas_in_tenant(schemas, ccl_rules_specified_by_dml_))) {
-    LOG_WARN("fail to get ccl rule schemas in ccl_rules_specified_by_database_table_dml_", K(ret));
   } else if (OB_FAIL(get_schemas_in_tenant(schemas, ccl_rules_))) {
-    LOG_WARN("fail to get ccl rule schemas in ccl_rules_specified_by_database_table_dml_", K(ret));
   }
   return ret;
 }
@@ -409,7 +388,6 @@ int ObCCLRuleMgr::get_schema_statistics(ObSchemaStatisticsInfo &schema_info) con
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(get_schema_count(schema_info.count_))) {
-    LOG_WARN("fail to get ccl rule schema count", K(ret));
   } else {
     for (ConstCCLRuleIter iter = ccl_rules_specified_by_database_table_dml_.begin();
         OB_SUCC(ret) && iter != ccl_rules_specified_by_database_table_dml_.end(); ++iter) {

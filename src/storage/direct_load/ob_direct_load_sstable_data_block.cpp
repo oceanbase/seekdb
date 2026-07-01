@@ -47,11 +47,8 @@ OB_DEF_SERIALIZE_SIMPLE(ObDirectLoadSSTableDataBlock::Header)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDirectLoadDataBlock::Header::serialize(buf, buf_len, pos))) {
-    LOG_WARN("fail to encode header", KR(ret), K(buf_len), K(pos));
   } else if (OB_FAIL(NS_::encode_i32(buf, buf_len, pos, last_row_pos_))) {
-    LOG_WARN("fail to encode i32", KR(ret), K(buf_len), K(pos), K(last_row_pos_));
   } else if (OB_FAIL(NS_::encode_i32(buf, buf_len, pos, reserved_))) {
-    LOG_WARN("fail to encode i32", KR(ret), K(buf_len), K(pos), K(reserved_));
   }
   return ret;
 }
@@ -60,11 +57,8 @@ OB_DEF_DESERIALIZE_SIMPLE(ObDirectLoadSSTableDataBlock::Header)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDirectLoadDataBlock::Header::deserialize(buf, data_len, pos))) {
-    LOG_WARN("fail to decode header", KR(ret), K(data_len), K(pos));
   } else if (OB_FAIL(NS_::decode_i32(buf, data_len, pos, &last_row_pos_))) {
-    LOG_WARN("fail to decode i32", KR(ret), K(data_len), K(pos), K(last_row_pos_));
   } else if (OB_FAIL(NS_::decode_i32(buf, data_len, pos, &reserved_))) {
-    LOG_WARN("fail to decode i32", KR(ret), K(data_len), K(pos), K(reserved_));
   }
   return ret;
 }

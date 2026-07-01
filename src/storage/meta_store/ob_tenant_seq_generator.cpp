@@ -155,7 +155,6 @@ void ObTenantSeqGenerator::runTimerTask()
   int ret = OB_SUCCESS;
   ObCurTraceId::init(GCONF.self_addr_);
   if (OB_FAIL(try_preallocate_())) {
-    LOG_WARN("fail to try preallocate", K(ret));
   }
 }
 
@@ -192,7 +191,6 @@ int ObTenantSeqGenerator::try_preallocate_()
 
     if (need_update) {
       if (OB_FAIL(persister_->update_tenant_preallocated_seqs(seqs))) {
-        LOG_WARN("fail to update_tenant_preallocated_seqs", K(ret), K(seqs));
       } else {
         ATOMIC_STORE(&preallocated_seqs_.object_seq_, seqs.object_seq_);
         ATOMIC_STORE(&preallocated_seqs_.tmp_file_seq_, seqs.tmp_file_seq_);

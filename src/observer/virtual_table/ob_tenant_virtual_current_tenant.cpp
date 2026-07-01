@@ -71,7 +71,6 @@ int ObTenantVirtualCurrentTenant::inner_get_next_row(ObNewRow *&row)
           ret = OB_ALLOCATE_MEMORY_FAILED;
           SERVER_LOG(ERROR, "fail to alloc memory", K(ret));
         } else if (OB_FAIL(schema_guard_->get_tenant_info(tenant_schema))) {
-          SERVER_LOG(WARN, "get tenant info failed", K(ret));
         } else if (OB_ISNULL(tenant_schema)) {
           ret = OB_TENANT_NOT_EXIST;
           SERVER_LOG(WARN, "Unknow tenant", K(ret));
@@ -100,7 +99,6 @@ int ObTenantVirtualCurrentTenant::inner_get_next_row(ObNewRow *&row)
                                                                     OB_MAX_VARCHAR_LENGTH,
                                                                     pos,
                                                                     false/*is_agent_mode*/))) {
-                  SERVER_LOG(WARN, "print tenant definition fail", K(ret));
                 } else {
                   cells[cell_idx].set_varchar(ObString::make_string(create_stmt));
                   cells[cell_idx].set_collation_type(

@@ -54,9 +54,7 @@ struct ObGetAllOperatorStatOp
         for (int64_t i = 0; i < plan->op_stats_.count() && OB_SUCC(ret); i++) {
           if (OB_FAIL(plan->op_stats_.get_op_stat_accumulation(plan,
                                                                i, stat))) {
-            SERVER_LOG(WARN, "fail to get op stat accumulation", K(ret), K(i));
           } else if (OB_FAIL(key_array_->push_back(stat))) {
-            SERVER_LOG(WARN, "fail to push back plan_id", K(ret));
           }
         } // for end
       }
@@ -104,7 +102,6 @@ int ObVirtualSqlPlanStatistics::get_row_from_specified_tenant(bool &is_end)
     plan_cache = share::g_mp->plan_cache();
     ObGetAllOperatorStatOp operator_stat_op(&operator_stat_array_);
     if (OB_FAIL(plan_cache->foreach_cache_obj(operator_stat_op))) {
-      SERVER_LOG(WARN, "fail to traverse id2stat_map");
     } else {
       operator_stat_array_idx_ = 0;
     }
@@ -112,7 +109,6 @@ int ObVirtualSqlPlanStatistics::get_row_from_specified_tenant(bool &is_end)
   if (OB_SUCC(ret)) {
     if (operator_stat_array_idx_ < 0) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "invalid operator_stat_array index", K(operator_stat_array_idx_));
     } else if (operator_stat_array_idx_ >= operator_stat_array_.count()) {
       is_end = true;
       operator_stat_array_idx_ = OB_INVALID_ID;
@@ -122,7 +118,6 @@ int ObVirtualSqlPlanStatistics::get_row_from_specified_tenant(bool &is_end)
       ObOperatorStat &opstat = operator_stat_array_.at(operator_stat_array_idx_);
       ++operator_stat_array_idx_;
       if (OB_FAIL(fill_cells(opstat))) {
-        SERVER_LOG(WARN, "fail to fill cells", K(opstat));
       }
     }
   }
@@ -215,7 +210,6 @@ int ObVirtualSqlPlanStatistics::inner_get_next_row(common::ObNewRow *&row)
   } else {
     MOD_SCOPE {
       if (OB_FAIL(get_row_from_specified_tenant(is_sub_end))) {
-        SERVER_LOG(WARN, "fail to insert plan by tenant id", K(ret));
       } else if (is_sub_end) {
         iter_end_ = true;
         ret = OB_ITER_END;

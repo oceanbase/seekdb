@@ -42,9 +42,7 @@ int LogMeta::generate_by_palf_base_info(const PalfBaseInfo &palf_base_info,
   int ret = OB_SUCCESS;
   if (false == is_valid_access_mode(access_mode) || false == palf_base_info.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(INFO, "invalid argument", KPC(this), K(access_mode), K(palf_base_info));
   } else if (OB_FAIL(log_snapshot_meta_.generate(palf_base_info.curr_lsn_, palf_base_info.prev_log_info_, palf_base_info.curr_lsn_))) {
-    PALF_LOG(WARN, "generate snapshot_meta failed", K(ret), K(palf_base_info));
   } else {
     const int64_t prev_log_proposal_id = palf_base_info.prev_log_info_.log_proposal_id_;
     const SCN &prev_scn = palf_base_info.prev_log_info_.scn_;
@@ -61,7 +59,6 @@ int LogMeta::generate_by_palf_base_info(const PalfBaseInfo &palf_base_info,
     log_mode_meta_.generate(init_log_proposal_id, init_log_proposal_id, access_mode, init_ref_scn);
     const bool allow_vote = (replica_type != ARBITRATION_REPLICA);
     log_replica_property_meta_.generate(allow_vote, replica_type);
-    PALF_LOG(INFO, "generate_by_palf_base_info success", KPC(this));
   }
   return ret;
 }
@@ -74,7 +71,6 @@ int LogMeta::load(const char *buf, int64_t buf_len)
     ret = OB_INVALID_ARGUMENT;
     PALF_LOG(ERROR, "Invalid argument!!!", K(ret), K(buf), K(buf_len));
   } else if (OB_FAIL(this->deserialize(buf, buf_len, pos))) {
-    PALF_LOG(ERROR, "deserialize failed", K(ret));
   }
   return ret;
 }
@@ -184,7 +180,6 @@ DEFINE_SERIALIZE(LogMeta)
     PALF_LOG(ERROR, "LogMeta serialize failed", K(ret), K(buf), K(buf_len), K(pos), K(new_pos));
   } else {
     pos = new_pos;
-    PALF_LOG(INFO, "LogMeta serialize", K(*this), K(buf), KP(buf), K(pos));
   }
   return ret;
 }
@@ -203,7 +198,6 @@ DEFINE_DESERIALIZE(LogMeta)
              || OB_FAIL(log_replica_property_meta_.deserialize(buf, data_len, new_pos))) {
     PALF_LOG(ERROR, "LogMeta deserialize failed", K(ret), K(buf), K(data_len), K(pos), K(new_pos));
   } else {
-    PALF_LOG(INFO, "LogMeta deserialize", K(buf), K(buf + pos), K(pos), K(new_pos), K(*this));
     pos = new_pos;
   }
   return ret;

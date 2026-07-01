@@ -70,12 +70,10 @@ int ObDirectReceiveOp::inner_get_next_row()
   //Scanner contains the updated values.
   //so we update the user variables in terms of scanners here.
   if (OB_FAIL(ObTaskExecutorCtxUtil::get_stream_handler(ctx_, resp_handler))) {
-    LOG_WARN("fail get task response handler", K(ret));
   } else if (OB_ISNULL(resp_handler)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("resp_handler is NULL", K(ret));
   } else if (OB_FAIL(THIS_WORKER.check_status())) {
-    LOG_WARN("check physical plan status failed", K(ret));
   } else if (OB_ERR_TASK_SKIPPED == resp_handler->get_result_code()) {
     // skip
     ret = OB_ITER_END;
@@ -124,20 +122,17 @@ int ObDirectReceiveOp::inner_close()
   int ret = OB_SUCCESS;
   RemoteExecuteStreamHandle *resp_handler = NULL;
   if (OB_FAIL(ObTaskExecutorCtxUtil::get_stream_handler(ctx_, resp_handler))) {
-    LOG_WARN("fail get task response handler", K(ret));
   } else if (OB_ISNULL(resp_handler)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("resp_handler is NULL", K(ret));
   } else {
     if (resp_handler->has_more()) {
       if (OB_FAIL(resp_handler->abort())) {
-        LOG_WARN("fail to abort", K(ret));
       } else {
         ObSQLSessionInfo *session = ctx_.get_my_session();
         ObPhysicalPlanCtx *plan_ctx = ctx_.get_physical_plan_ctx();
         ObExecutorRpcImpl *rpc = NULL;
         if (OB_FAIL(ObTaskExecutorCtxUtil::get_task_executor_rpc(ctx_, rpc))) {
-          LOG_WARN("get task executor rpc failed", K(ret));
         } else if (OB_ISNULL(session) || OB_ISNULL(plan_ctx) || OB_ISNULL(rpc)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("session or plan ctx or rpc is NULL", K(ret));
@@ -152,8 +147,6 @@ int ObDirectReceiveOp::inner_close()
               group_id);
           int tmp_ret = rpc->task_kill(rpc_ctx, resp_handler->get_task_id(), resp_handler->get_dst_addr());
           if (OB_SUCCESS != tmp_ret) {
-            LOG_WARN("kill task failed", K(tmp_ret),
-                K(resp_handler->get_task_id()), K(resp_handler->get_dst_addr()));
           }
         }
       }
@@ -169,7 +162,6 @@ int ObDirectReceiveOp::setup_next_scanner()
   RemoteExecuteStreamHandle *resp_handler = NULL;
   ObSQLSessionInfo *my_session = GET_MY_SESSION(ctx_);
   if (OB_FAIL(ObTaskExecutorCtxUtil::get_stream_handler(ctx_, resp_handler))) {
-    LOG_WARN("fail get task response handler", K(ret));
   } else if (OB_ISNULL(resp_handler)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("resp_handler is NULL", K(ret));
@@ -189,9 +181,7 @@ int ObDirectReceiveOp::setup_next_scanner()
         int tmp_ret = OB_SUCCESS;
         ObExecStatCollector *collector = NULL;
         if (OB_SUCCESS != (tmp_ret = ctx_.get_exec_stat_collector(collector))) {
-          LOG_WARN("fail to get exec stat collector", K(tmp_ret));
         } else if (OB_SUCCESS != (tmp_ret = collector->add_raw_stat(scanner->get_extend_info()))) {
-          LOG_WARN("fail to collected raw extend info in scanner", K(tmp_ret));
         }
         if (OB_FAIL(scanner->get_err_code())) {
           int add_ret = OB_SUCCESS;
@@ -211,21 +201,10 @@ int ObDirectReceiveOp::setup_next_scanner()
           plan_ctx->set_affected_rows(scanner->get_affected_rows());
           found_rows_ += scanner->get_found_rows();
           if (OB_FAIL(scanner->get_datum_store().begin(scanner_iter_))) {
-            LOG_WARN("fail to init datum store iter", K(ret));
           } else if (OB_FAIL(plan_ctx->set_row_matched_count(scanner->get_row_matched_count()))) {
-            LOG_WARN("fail to set row matched count", K(ret), K(scanner->get_row_matched_count()));
           } else if (OB_FAIL(plan_ctx->set_row_duplicated_count(
                       scanner->get_row_duplicated_count()))) {
-            LOG_WARN("fail to set row duplicate count",
-                     K(ret), K(scanner->get_row_duplicated_count()));
-            /**
-             * ObRemoteTaskExecutor::execute() has called merge_result() before here, that is a
-             * better place to call merge_result(), especially when any operation failed between
-             * there and here.
-             * see 
-             */
           } else if (OB_FAIL(plan_ctx->merge_implicit_cursors(scanner->get_implicit_cursors()))) {
-            LOG_WARN("merge implicit cursors failed", K(ret), K(scanner->get_implicit_cursors()));
           }
         }
       }
@@ -233,7 +212,6 @@ int ObDirectReceiveOp::setup_next_scanner()
       ObScanner *result_scanner = NULL;
       if (resp_handler->has_more()) {
         if (OB_FAIL(resp_handler->reset_and_init_result())) {
-          LOG_WARN("fail reset and init result", K(ret));
         } else if (OB_ISNULL(result_scanner = resp_handler->get_result())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("succ to alloc result, but result scanner is NULL", K(ret));
@@ -253,7 +231,6 @@ int ObDirectReceiveOp::setup_next_scanner()
           scanner_ = result_scanner;
           found_rows_ += scanner_->get_found_rows();
           if (OB_FAIL(scanner_->get_datum_store().begin(scanner_iter_))) {
-            LOG_WARN("fail to init datum store iter", K(ret));
           }
         }
       } else {
@@ -268,14 +245,10 @@ int ObDirectReceiveOp::setup_next_scanner()
         int tmp_ret = OB_SUCCESS;
         ObExecStatCollector *collector = NULL;
         if (OB_SUCCESS != (tmp_ret = ctx_.get_exec_stat_collector(collector))) {
-          LOG_WARN("fail to get exec stat collector", K(tmp_ret));
         } else if (OB_SUCCESS != (tmp_ret = collector->add_raw_stat(scanner_->get_extend_info()))) {
-          LOG_WARN("fail to collected raw extend info in scanner", K(tmp_ret));
         }
         if (OB_SUCCESS != (tmp_ret = plan_ctx->get_table_row_count_list()
                                              .assign(scanner_->get_table_row_counts()))) {
-          LOG_WARN("fail to set table row count", K(ret),
-                    K(scanner_->get_table_row_counts()));
         }
         LOG_DEBUG("remote table row counts", K(scanner_->get_table_row_counts()),
                                              K(plan_ctx->get_table_row_count_list()));
@@ -284,7 +257,6 @@ int ObDirectReceiveOp::setup_next_scanner()
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(my_session->replace_user_variables(ctx_, scanner_->get_session_var_map()))) {
-      LOG_WARN("replace user variables failed", K(ret));
     }
   }
 
@@ -318,7 +290,6 @@ int ObDirectReceiveOp::get_next_row_from_cur_scanner()
         if (0 == expr->res_buf_off_) {
           // for compat 4.0, do nothing
         } else if (OB_FAIL(expr->deep_copy_self_datum(eval_ctx_))) {
-          LOG_WARN("fail to deep copy datum", K(ret), K(eval_ctx_), K(*expr));
         }
       }
     }

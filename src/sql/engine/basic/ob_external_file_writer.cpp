@@ -40,18 +40,15 @@ int ObExternalFileWriter::open_file()
       access_type = OB_STORAGE_ACCESS_BUFFERED_MULTIPART_WRITER;
     }
     if (OB_FAIL(adapter.is_exist(url_, &access_info_, is_exist))) {
-      LOG_WARN("fail to check file exist", KR(ret), K(url_), K(access_info_));
     } else if (is_exist) {
       ret = OB_FILE_ALREADY_EXIST;
       LOG_WARN("file already exist", KR(ret), K(url_), K(access_info_));
     } else if (OB_FAIL(storage_appender_.open(&access_info_, url_, access_type))) {
-      LOG_WARN("fail to open file", KR(ret), K(url_), K(access_info_));
     } else {
       is_file_opened_ = true;
     }
   } else {//SERVER DISK
     if (OB_FAIL(file_appender_.create(url_, true))) {
-      LOG_WARN("failed to create file", K(ret), K(url_));
     } else {
       is_file_opened_ = true;
     }
@@ -69,7 +66,6 @@ int ObExternalFileWriter::close_file()
       file_appender_.close();
     }
   } else if (OB_FAIL(storage_appender_.close())) {
-    LOG_WARN("fail to close storage appender", K(ret), K(url_), K(access_info_));
   }
   if (OB_SUCC(ret)) {
     is_file_opened_ = false;
@@ -130,7 +126,6 @@ int ObCsvFileWriter::flush_buf()
     // do nothing
   } else if (last_line_pos_ > 0 && OB_NOT_NULL(buf_)) {
     if (OB_FAIL(flush_data(buf_, last_line_pos_))) {
-      LOG_WARN("failed to flush data", K(ret));
     } else {
       MEMMOVE(buf_, buf_ + last_line_pos_, curr_pos_ - last_line_pos_);
       curr_pos_ = curr_pos_ - last_line_pos_;
@@ -161,11 +156,9 @@ int ObCsvFileWriter::flush_data(const char * data, int64_t data_len)
   int ret = OB_SUCCESS;
   if (has_compress_) {
     if (OB_FAIL(flush_to_compress_stream(data, data_len))) {
-      LOG_WARN("failed to flush to compress stream", K(ret));
     }
   } else {
     if (OB_FAIL(flush_to_storage(data, data_len))) {
-      LOG_WARN("failed to flush to storage", K(ret));
     }
   }
   return ret;
@@ -181,7 +174,6 @@ int ObCsvFileWriter::flush_to_compress_stream(const char *data, int64_t data_len
   } else if (!is_file_opened_ && OB_FAIL(open_file())) {
     LOG_WARN("failed to open file", K(ret), K(url_));
   } else if (OB_FAIL(compress_stream_writer_->write(data, data_len))) {
-    LOG_WARN("failed to write to compress stream writer", K(ret), K(url_));
   }
   return ret;
 }
@@ -195,13 +187,11 @@ int ObCsvFileWriter::flush_to_storage(const char *data, int64_t data_len)
   } else {
     if (file_location_ == IntoFileLocation::SERVER_DISK) {
       if (OB_FAIL(file_appender_.append(data, data_len, false))) {
-        LOG_WARN("failed to append file", K(ret), K(data_len));
       }
     } else {
       int64_t write_size = 0;
       int64_t begin_ts = ObTimeUtility::current_time();
       if (OB_FAIL(storage_appender_.append(data, data_len, write_size))) {
-        LOG_WARN("fail to append data", KR(ret), KP(data), K(data_len), K(url_), K(access_info_));
       } else {
         write_offset_ += write_size;
         int64_t end_ts = ObTimeUtility::current_time();
@@ -209,8 +199,6 @@ int ObCsvFileWriter::flush_to_storage(const char *data, int64_t data_len)
         long double speed = (cost_time <= 0) ? 0 :
                         (long double) write_size * 1000.0 * 1000.0 / 1024.0 / 1024.0 / cost_time;
         long double total_write = (long double) write_offset_ / 1024.0 / 1024.0;
-        _OB_LOG(TRACE, "write oss stat, time:%ld write_size:%ld speed:%.2Lf MB/s total_write:%.2Lf MB",
-                cost_time, write_size, speed, total_write);
       }
     }
   }
@@ -229,7 +217,6 @@ int ObCsvFileWriter::close_file()
       && OB_FAIL(compress_stream_writer_->finish_file_compress())) {
     LOG_WARN("failed to flush compress buffer", K(ret));
   } else if (OB_FAIL(ObExternalFileWriter::close_file())) {
-    LOG_WARN("failed to close file", K(ret));
   }
   return ret;
 }
@@ -319,11 +306,8 @@ int ObParquetFileWriter::create_parquet_row_batch(const int64_t &row_batch_size,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(parquet_row_batch_.allocate_array(allocator, parquet_writer_schema_->field_count()))) {
-    LOG_WARN("failed to allocate array", K(ret));
   } else if (OB_FAIL(parquet_row_def_levels_.allocate_array(allocator, parquet_writer_schema_->field_count()))) {
-    LOG_WARN("failed to allocate array", K(ret));
   } else if (OB_FAIL(parquet_value_offsets_.allocate_array(allocator, parquet_writer_schema_->field_count()))) {
-    LOG_WARN("failed to allocate array", K(ret));
   }
   for (int col_idx = 0; OB_SUCC(ret) && col_idx < parquet_writer_schema_->field_count(); col_idx++) {
     if (!(p_node = std::static_pointer_cast<parquet::schema::PrimitiveNode>(parquet_writer_schema_->field(col_idx)))) {
@@ -339,7 +323,6 @@ int ObParquetFileWriter::create_parquet_row_batch(const int64_t &row_batch_size,
         {
           ObArrayWrap<parquet::ByteArray> value_batch;
           if (OB_FAIL(value_batch.allocate_array(allocator, row_batch_size_))) {
-            LOG_WARN("failed to allocate array", K(ret));
           } else {
             parquet_row_batch_.at(col_idx) = value_batch.get_data();
           }
@@ -349,7 +332,6 @@ int ObParquetFileWriter::create_parquet_row_batch(const int64_t &row_batch_size,
         {
           ObArrayWrap<parquet::FixedLenByteArray> value_batch;
           if (OB_FAIL(value_batch.allocate_array(allocator, row_batch_size_))) {
-            LOG_WARN("failed to allocate array", K(ret));
           } else {
             parquet_row_batch_.at(col_idx) = value_batch.get_data();
           }
@@ -359,7 +341,6 @@ int ObParquetFileWriter::create_parquet_row_batch(const int64_t &row_batch_size,
         {
           ObArrayWrap<double> value_batch;
           if (OB_FAIL(value_batch.allocate_array(allocator, row_batch_size_))) {
-            LOG_WARN("failed to allocate array", K(ret));
           } else {
             parquet_row_batch_.at(col_idx) = value_batch.get_data();
           }
@@ -369,7 +350,6 @@ int ObParquetFileWriter::create_parquet_row_batch(const int64_t &row_batch_size,
         {
           ObArrayWrap<float> value_batch;
           if (OB_FAIL(value_batch.allocate_array(allocator, row_batch_size_))) {
-            LOG_WARN("failed to allocate array", K(ret));
           } else {
             parquet_row_batch_.at(col_idx) = value_batch.get_data();
           }
@@ -379,7 +359,6 @@ int ObParquetFileWriter::create_parquet_row_batch(const int64_t &row_batch_size,
         {
           ObArrayWrap<int32_t> value_batch;
           if (OB_FAIL(value_batch.allocate_array(allocator, row_batch_size_))) {
-            LOG_WARN("failed to allocate array", K(ret));
           } else {
             parquet_row_batch_.at(col_idx) = value_batch.get_data();
           }
@@ -389,7 +368,6 @@ int ObParquetFileWriter::create_parquet_row_batch(const int64_t &row_batch_size,
         {
           ObArrayWrap<int64_t> value_batch;
           if (OB_FAIL(value_batch.allocate_array(allocator, row_batch_size_))) {
-            LOG_WARN("failed to allocate array", K(ret));
           } else {
             parquet_row_batch_.at(col_idx) = value_batch.get_data();
           }
@@ -399,7 +377,6 @@ int ObParquetFileWriter::create_parquet_row_batch(const int64_t &row_batch_size,
         {
           ObArrayWrap<parquet::Int96> value_batch;
           if (OB_FAIL(value_batch.allocate_array(allocator, row_batch_size_))) {
-            LOG_WARN("failed to allocate array", K(ret));
           } else {
             parquet_row_batch_.at(col_idx) = value_batch.get_data();
           }
@@ -415,7 +392,6 @@ int ObParquetFileWriter::create_parquet_row_batch(const int64_t &row_batch_size,
     if (OB_SUCC(ret)) {
       ObArrayWrap<int16_t> def_levels;
       if (OB_FAIL(def_levels.allocate_array(allocator, row_batch_size_))) {
-        LOG_WARN("failed to allocate array", K(ret));
       } else {
         parquet_row_def_levels_.at(col_idx) = def_levels.get_data();
         parquet_value_offsets_.at(col_idx) = 0;

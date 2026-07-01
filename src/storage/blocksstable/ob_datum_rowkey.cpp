@@ -57,12 +57,10 @@ int ObDatumRowkey::murmurhash(const uint64_t seed, const ObStorageDatumUtils &da
     hash = seed;
     if (is_ext_rowkey()) {
       if (OB_FAIL(datum_utils.get_ext_hash_funcs().hash_func_(datums_[0], hash, hash))) {
-        STORAGE_LOG(WARN, "fail to calc hash", K(ret));
       }
     } else {
       for (int64_t i = 0; i < datum_cnt_ && OB_SUCC(ret); i++) {
         if (OB_FAIL(datum_utils.get_hash_funcs().at(i).hash_func_(datums_[i], hash, hash))) {
-          STORAGE_LOG(WARN, "fail to calc hash", K(ret));
         }
       }
     }
@@ -87,7 +85,6 @@ int ObDatumRowkey::equal(const ObDatumRowkey &rhs, const ObStorageDatumUtils &da
       int cmp_ret = 0;
       for (int64_t i = 0; OB_SUCC(ret) && is_equal && i < datum_cnt_; i++) {
         if (OB_FAIL(cmp_funcs.at(i).compare(datums_[i], rhs.datums_[i], cmp_ret))) {
-          STORAGE_LOG(WARN, "Failed to compare datum rowkey", K(ret), K(i), K(*this), K(rhs));
         } else {
           is_equal = 0 == cmp_ret;
         }
@@ -116,7 +113,6 @@ int ObDatumRowkey::compare(const ObDatumRowkey &rhs, const ObStorageDatumUtils &
       cmp_ret = 0;
       for (int64_t i = 0; OB_SUCC(ret) && i < cmp_cnt && 0 == cmp_ret; ++i) {
         if (OB_FAIL(cmp_funcs.at(i).compare(datums_[i], rhs.datums_[i], cmp_ret))) {
-          STORAGE_LOG(WARN, "Failed to compare datum rowkey", K(ret), K(i), K(*this), K(rhs));
         }
       }
       if (0 == cmp_ret && compare_datum_cnt) {
@@ -134,7 +130,6 @@ int ObDatumRowkey::compare(const ObCommonDatumRowkey &rhs, const ObStorageDatumU
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(rhs.compare(*this, datum_utils, cmp_ret, compare_datum_cnt))) {
-    STORAGE_LOG(WARN, "Failed to compare", K(ret));
   } else {
     cmp_ret = -cmp_ret;
   }
@@ -146,7 +141,6 @@ OB_DEF_SERIALIZE(ObDatumRowkey)
   int ret = OB_SUCCESS;
   if (!is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "datum row key is invalid", KPC(this));
   } else {
     OB_UNIS_ENCODE_ARRAY(datums_, datum_cnt_);
   }
@@ -246,7 +240,6 @@ int ObDatumRowkey::from_rowkey(const ObRowkey &rowkey, common::ObIAllocator &all
           ret = OB_ERR_UNEXPECTED;
           STORAGE_LOG(WARN, "Lob rowkey does not has lob header", K(ret), K(rowkey_obj));
         } else if (OB_FAIL(datums[i].from_obj_enhance(rowkey_obj))) {
-          STORAGE_LOG(WARN, "Failed to from obj to datum", K(ret), K(i));
         }
       }
     }
@@ -284,7 +277,6 @@ int ObDatumRowkey::to_rowkey(ObRowkey &rowkey, const ObObjMeta* obj_metas, commo
       objs = new (objs) ObObj[datum_cnt_];
       for (int64_t i = 0; OB_SUCC(ret) && i < datum_cnt_; i++) {
         if (OB_FAIL(datums_[i].to_obj_enhance(objs[i], obj_metas[i]))) {
-          STORAGE_LOG(WARN, "Failed to from obj to datum", K(ret), K(i));
         }
       }
     }
@@ -309,7 +301,6 @@ int ObDatumRowkey::from_rowkey(const ObRowkey &rowkey, ObStorageDatumBuffer &dat
   } else if (rowkey.is_min_row()) {
     set_min_rowkey();
   } else if (OB_FAIL(datum_buffer.reserve(rowkey.get_obj_cnt()))) {
-    STORAGE_LOG(WARN, "Failed to reserver datum buffer", K(ret));
   } else {
     ObStorageDatum *datums = datum_buffer.get_datums();
     datum_cnt_ = rowkey.get_obj_cnt();
@@ -320,7 +311,6 @@ int ObDatumRowkey::from_rowkey(const ObRowkey &rowkey, ObStorageDatumBuffer &dat
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "Lob rowkey does not has lob header", K(ret), K(rowkey_obj));
       } else if (OB_FAIL(datums[i].from_obj_enhance(rowkey_obj))) {
-        STORAGE_LOG(WARN, "Failed to from obj to datum", K(ret), K(i), K(rowkey));
       }
     }
   }
@@ -354,14 +344,12 @@ int ObDatumRowkey::to_store_rowkey(const common::ObIArray<share::schema::ObColDe
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < datum_cnt_; i++) {
       if (OB_FAIL(datums_[i].to_obj_enhance(objs[i], col_descs.at(i).col_type_))) {
-        STORAGE_LOG(WARN, "Failed to transfer datum to obj", K(ret), K(i), K(datums_[i]));
       } else if (col_descs.at(i).col_type_.is_lob_storage()) {
         objs[i].set_has_lob_header();
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(store_rowkey.assign(objs, datum_cnt_))) {
-        STORAGE_LOG(WARN, "Failed to assign rowkey", K(ret), K(*this), K(objs));
       }
     }
   }
@@ -393,14 +381,12 @@ int ObDatumRowkey::deep_copy(ObStoreRowkey &dest,
       for (int64_t i = 0; OB_SUCC(ret) && i < datum_cnt; i++) {
         ObObj obj;
         if (OB_FAIL(get_datum(i).to_obj_enhance(obj, col_descs.at(i).col_type_))) {
-          STORAGE_LOG(WARN, "Fail to transform datum to obj", KR(ret));
         } else if (col_descs.at(i).col_type_.is_lob_storage()) {
           obj.set_has_lob_header();
         }
 
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(objs[i].deep_copy(obj, buffer, alloc_size, pos))) {
-          STORAGE_LOG(WARN, "Fail to deep copy obj", KR(ret));
         }
       }
 
@@ -412,7 +398,6 @@ int ObDatumRowkey::deep_copy(ObStoreRowkey &dest,
       // assign to dest
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(dest.assign(objs, datum_cnt + extra_rowkey_cnt))) {
-        STORAGE_LOG(WARN, "Fail to assign target rowkey", KR(ret));
       }
     }
   }
@@ -471,9 +456,7 @@ int ObDatumRowkey::to_multi_version_range(common::ObIAllocator &allocator, ObDat
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument to transfer multi version datum range", K(ret), K(*this));
   } else if (OB_FAIL(to_multi_version_rowkey(true/*min*/, allocator, dest.start_key_))) {
-    STORAGE_LOG(WARN, "Failed to transfer start key", K(ret), K(*this));
   } else if (OB_FAIL(to_multi_version_rowkey(false/*max*/, allocator, dest.end_key_))) {
-    STORAGE_LOG(WARN, "Failed to transfer end key", K(ret), K(*this));
   } else {
     dest.border_flag_.unset_inclusive_end();
     dest.border_flag_.unset_inclusive_start();
@@ -501,7 +484,6 @@ int ObDiscreteDatumRowkey::compare(const ObDatumRowkey &rhs, const ObStorageDatu
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument to compare datum rowkey", K(ret), K(*this), K(rhs), K(datum_utils));
   } else if (OB_FAIL(rowkey_vector_->compare_rowkey(rhs, row_idx_, datum_utils, cmp_ret, compare_datum_cnt))) {
-    STORAGE_LOG(WARN, "Failed to compare rowkey in rowkey vector", K(ret));
   }
   return ret;
 }
@@ -514,7 +496,6 @@ int ObDiscreteDatumRowkey::compare(const ObDiscreteDatumRowkey &rhs, const ObSto
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument to compare datum rowkey", K(ret), K(*this), K(rhs), K(datum_utils));
   } else if (OB_FAIL(rowkey_vector_->compare_rowkey(rhs, row_idx_, datum_utils, cmp_ret, compare_datum_cnt))) {
-    STORAGE_LOG(WARN, "Failed to compare rowkey in rowkey vector", K(ret), K(*this), K(rhs));
   }
   return ret;
 }
@@ -544,7 +525,6 @@ int ObDiscreteDatumRowkey::deep_copy(ObDatumRowkey &dest, common::ObIAllocator &
     char *buf = nullptr;
     int64_t deep_copy_size = 0;
     if (OB_FAIL(rowkey_vector_->get_deep_copy_rowkey_size(row_idx_, deep_copy_size))) {
-      STORAGE_LOG(WARN, "Failed to get deep copy rowkey size", K(ret));
     } else if (OB_UNLIKELY(deep_copy_size <= 0)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "Unexpected deep copy size", K(ret), KPC(rowkey_vector_));
@@ -552,7 +532,6 @@ int ObDiscreteDatumRowkey::deep_copy(ObDatumRowkey &dest, common::ObIAllocator &
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
       STORAGE_LOG(WARN, "Failed to alloc memory for datum rowkey", K(ret), K(deep_copy_size));
     } else if (OB_FAIL(rowkey_vector_->deep_copy_rowkey(row_idx_, dest, buf, deep_copy_size))) {
-      STORAGE_LOG(WARN, "Failed to deep copy datum rowkey", K(ret));
     }
     if (OB_FAIL(ret) && nullptr != buf) {
       dest.reset();
@@ -576,10 +555,8 @@ int ObCommonDatumRowkey::compare(const ObDatumRowkey &rhs, const ObStorageDatumU
     STORAGE_LOG(WARN, "Invalid argument to compare datum rowkey", K(ret), K(*this), K(rhs), K(datum_utils));
   } else if (is_compact_rowkey()) {
     if (OB_FAIL(rowkey_->compare(rhs, datum_utils, cmp_ret, compare_datum_cnt))) {
-      STORAGE_LOG(WARN, "Failed to compare compact rowkey", K(ret));
     }
   } else if (OB_FAIL(discrete_rowkey_->compare(rhs, datum_utils, cmp_ret, compare_datum_cnt))) {
-    STORAGE_LOG(WARN, "Failed to compare discrete rowkey", K(ret));
   }
   return ret;
 }
@@ -594,7 +571,6 @@ int ObCommonDatumRowkey::compare(const ObCommonDatumRowkey &rhs, const ObStorage
     STORAGE_LOG(WARN, "Invalid argument to compare datum rowkey", K(ret), K(*this), K(rhs), K(datum_utils));
   } else if (is_compact_rowkey()) {
     if (OB_FAIL(rhs.compare(*rowkey_, datum_utils, cmp_ret, compare_datum_cnt))) {
-      STORAGE_LOG(WARN, "Failed to compare", K(ret));
     } else {
       cmp_ret = -cmp_ret;
     }
@@ -653,7 +629,6 @@ int ObDatumRowkeyHelper::convert_datum_rowkey(const common::ObRowkey &rowkey, Ob
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Invalid argument to transfer datum rowkey", K(ret), K(rowkey));
   } else if (OB_FAIL(datum_rowkey.from_rowkey(rowkey, datum_buffer_))) {
-    STORAGE_LOG(WARN, "Failed to transfer datum rowkey", K(ret), K(rowkey));
   }
 
   return ret;
@@ -672,21 +647,18 @@ int ObDatumRowkeyHelper::convert_store_rowkey(const ObDatumRowkey &datum_rowkey,
   } else if (!obj_buffer_.is_inited() && OB_FAIL(obj_buffer_.init(allocator_))) {
     STORAGE_LOG(WARN, "Failed to init obj_buf array", K(ret));
   } else if (OB_FAIL(obj_buffer_.reserve(datum_rowkey.get_datum_cnt()))) {
-    STORAGE_LOG(WARN, "Failed to reserve obj buffer", K(ret), K(datum_rowkey));
   } else if (OB_ISNULL(objs = obj_buffer_.get_data())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "Unexpected null obj buffer", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < datum_rowkey.get_datum_cnt(); i++) {
       if (OB_FAIL(datum_rowkey.datums_[i].to_obj_enhance(objs[i], col_descs.at(i).col_type_))) {
-        STORAGE_LOG(WARN, "Failed to transfer datum to obj", K(ret), K(i), K(datum_rowkey));
       } else if (col_descs.at(i).col_type_.is_lob_storage()) {
         objs[i].set_has_lob_header();
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(rowkey.assign(objs, datum_rowkey.get_datum_cnt()))) {
-        STORAGE_LOG(WARN, "Failed to assign rowkey", K(ret), K(datum_rowkey), K(objs));
       }
     }
   }
@@ -705,9 +677,7 @@ int ObDatumRowkeyHelper::prepare_datum_rowkey(const ObDatumRow &datum_row,
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "Get invalid datum row", K(ret), K(datum_row), K(col_descs));
   } else if (OB_FAIL(datum_rowkey.assign(datum_row.storage_datums_, key_datum_cnt))) {
-    STORAGE_LOG(WARN, "Failed to assign datum rowkey", K(ret), K(datum_row), K(key_datum_cnt));
   } else if (OB_FAIL(convert_store_rowkey(datum_rowkey, col_descs, datum_rowkey.store_rowkey_))) {
-    STORAGE_LOG(WARN, "Failed to convert store rowkeyy", K(ret), K(datum_rowkey));
   }
 
   return ret;
@@ -723,7 +693,6 @@ int ObDatumRowkeyHelper::reserve(const int64_t rowkey_cnt)
     STORAGE_LOG(WARN, "Invalid argument to reverve datum roweky", K(ret), K(rowkey_cnt));
   } else if (datum_buffer_.get_capacity() >= rowkey_cnt) {
   } else if (OB_FAIL(datum_buffer_.reserve(rowkey_cnt))) {
-    STORAGE_LOG(WARN, "Failed to reserve datum buffer", K(ret), K(rowkey_cnt));
   }
 
   return ret;

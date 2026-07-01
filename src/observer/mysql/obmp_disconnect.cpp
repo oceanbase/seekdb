@@ -40,7 +40,6 @@ int ObMPDisconnect::kill_unfinished_session(uint32_t sessid)
   sql::ObSQLSessionInfo *session = NULL;
   sql::ObSessionGetterGuard guard(*GCTX.session_mgr_, sessid);
   if (OB_FAIL(guard.get_session(session))) {
-    LOG_WARN("get session fail", K(ret));
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("fail to get session info", K(session), K(sessid), K(ret));
@@ -55,7 +54,6 @@ int ObMPDisconnect::kill_unfinished_session(uint32_t sessid)
      *     Ultimately, the reference count is reduced to 0, and the session is physically recycled.
      */
     if (OB_FAIL(GCTX.session_mgr_->disconnect_session(*session))) {
-      LOG_WARN("fail to disconnect session", K(session), K(sessid), K(ret));
     }
   }
   return ret;
@@ -72,7 +70,6 @@ int ObMPDisconnect::run()
       // bugfix: 
       (void) kill_unfinished_session(ctx_.sessid_); // ignore ret
       if (OB_FAIL(GCTX.session_mgr_->free_session(ctx_))) {
-        LOG_WARN("free session fail", K(ctx_));
       } else {
         common::ObTenantDiagnosticInfoSummaryGuard guard{};
         EVENT_INC(SQL_USER_LOGOUTS_CUMULATIVE);

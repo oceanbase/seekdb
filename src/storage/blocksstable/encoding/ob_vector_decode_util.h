@@ -1432,7 +1432,6 @@ int ObVecDecodeUtils::load_byte_aligned_vector(
   #undef LOAD_VEC_BY_TYPE
 
   if (OB_FAIL(ret)) {
-    STORAGE_LOG(WARN, "failed to load byte aligned data to vector", K(ret), K(schema_obj_meta), K(stored_obj_type));
   }
   return ret;
 }

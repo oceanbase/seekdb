@@ -88,7 +88,6 @@ int ObCreateMLogResolver::resolve(const ParseNode &parse_tree)
       LOG_WARN("invalid parse tree", KR(ret));
     } else if (OB_FAIL(resolve_table_name_node(parse_tree.children_[ENUM_TABLE_NAME],
                                                *create_mlog_stmt))) {
-      LOG_WARN("failed to resolve table name", KR(ret));
     }
   }
 
@@ -102,7 +101,6 @@ int ObCreateMLogResolver::resolve(const ParseNode &parse_tree)
     ParseNode *table_options_node = parse_node.children_[ENUM_OPT_TABLE_OPTIONS];
     if (OB_NOT_NULL(table_options_node)) {
       if (OB_FAIL(resolve_table_option_node(table_options_node, *create_mlog_stmt))) {
-        LOG_WARN("failed to resolve table options", KR(ret));
       }
     }
   }
@@ -120,7 +118,6 @@ int ObCreateMLogResolver::resolve(const ParseNode &parse_tree)
     }
     if (OB_NOT_NULL(with_options_node)) {
       if (OB_FAIL(resolve_with_option_node(with_options_node, *create_mlog_stmt))) {
-        LOG_WARN("failed to resolve with option node", KR(ret));
       }
     }
   }
@@ -131,7 +128,6 @@ int ObCreateMLogResolver::resolve(const ParseNode &parse_tree)
     create_mlog_stmt->set_include_new_values(true);
     if (OB_NOT_NULL(new_values_node)) {
       if (OB_FAIL(resolve_new_values_node(new_values_node, *create_mlog_stmt))) {
-        LOG_WARN("failed to resolve new values node", KR(ret));
       }
     }
   }
@@ -143,14 +139,12 @@ int ObCreateMLogResolver::resolve(const ParseNode &parse_tree)
     ParseNode *purge_node = parse_node.children_[ENUM_OPT_PURGE];
     if (OB_NOT_NULL(purge_node)) {
       if (OB_FAIL(resolve_purge_node(purge_node, *create_mlog_stmt))) {
-        LOG_WARN("failed to resolve purge node", KR(ret));
       }
     }
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(fill_session_info_into_arg(*session_info_, *create_mlog_stmt))) {
-      LOG_WARN("failed to fill session info into arg", KR(ret));
     }
   }
 
@@ -215,10 +209,7 @@ int ObCreateMLogResolver::resolve_table_name_node(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid table option node", KR(ret), KP(table_name_node));
   } else if (OB_FAIL(resolve_table_relation_node(table_name_node, data_table_name, database_name))) {
-    LOG_WARN("failed to resolve table name",
-        KR(ret), K(data_table_name), K(database_name));
   } else if (OB_FAIL(set_database_name(database_name))) {
-    LOG_WARN("failed to set database name", KR(ret), K(database_name));
   } else if (OB_FAIL(schema_checker_->get_table_schema_with_synonym(database_name,
       data_table_name,
       false/*is index table*/,
@@ -250,15 +241,12 @@ int ObCreateMLogResolver::resolve_table_name_node(
       new_tbl_name.assign_ptr(data_table_name.ptr(), data_table_name.length());
     }
     if (OB_FAIL(deep_copy_str(new_db_name, tmp_new_db_name))) {
-      LOG_WARN("failed to deep copy new_db_name", KR(ret));
     } else if (OB_FAIL(deep_copy_str(new_tbl_name, tmp_new_tbl_name))) {
-      LOG_WARN("failed to deep copy new_tbl_name", KR(ret));
     } else {
       const ObTableSchema *real_table_schema = nullptr;
       if (data_table_schema->is_materialized_view()) {
         const ObTableSchema *container_table_schema = nullptr;
         if (OB_FAIL(schema_checker_->get_table_schema( data_table_schema->get_data_table_id(), container_table_schema))) {
-          LOG_WARN("failed to get table schema", KR(ret));
         } else if (OB_ISNULL(container_table_schema)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected null container table schema", KR(ret), KP(container_table_schema));
@@ -273,21 +261,15 @@ int ObCreateMLogResolver::resolve_table_name_node(
       } else if (OB_FAIL(ObTableSchema::build_mlog_table_name(
                      *allocator_, data_table_name, mlog_table_name,
                      real_table_schema->has_mlog_table()))) {
-        LOG_WARN("failed to build mlog table name", KR(ret), K(data_table_name));
       } else if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
-        LOG_WARN("failed to get name case mode", KR(ret));
       } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-        LOG_WARN("failed to get collation connection", KR(ret));
       } else if (OB_FAIL(ObSQLUtils::check_and_convert_table_name(
                      cs_type,
                      (OB_LOWERCASE_AND_INSENSITIVE != mode) /*perserve_lettercase*/,
                      mlog_table_name))) {
-        LOG_WARN("failed to check and convert table name", KR(ret), K(cs_type), K(mode),
-                 K(mlog_table_name));
       } else if (OB_FAIL(schema_checker_->check_table_exists(database_name,
                                                              mlog_table_name, false /*is_index*/,
                                                              false /*is_hidden*/, table_exist))) {
-        LOG_WARN("failed to check table exists", KR(ret), K(database_name), K(mlog_table_name));
       } else if (table_exist) {
         ret = OB_ERR_TABLE_EXIST;
         LOG_WARN("table already exist", KR(ret), K(mlog_table_name), K(table_exist));
@@ -297,7 +279,6 @@ int ObCreateMLogResolver::resolve_table_name_node(
       if (OB_SUCC(ret)) {
         CK (OB_NOT_NULL(schema_checker_->get_schema_guard()));
         if (OB_FAIL(real_table_schema->is_table_with_logic_pk(*schema_checker_->get_schema_guard(), is_table_with_logic_pk_))) {
-          LOG_WARN("failed to check table with logic pk", KR(ret));
         } else {
           create_mlog_stmt.set_database_name(tmp_new_db_name);
           create_mlog_stmt.set_table_name(tmp_new_tbl_name);
@@ -317,7 +298,6 @@ int ObCreateMLogResolver::resolve_table_name_node(
     based_info.schema_version_ = data_table_schema->get_schema_version();
     
     if (OB_FAIL(create_mlog_stmt.get_create_mlog_arg().based_schema_object_infos_.push_back(based_info))) {
-      LOG_WARN("fail to push back base info", KR(ret));
     }
   }
   return ret;
@@ -332,7 +312,6 @@ int ObCreateMLogResolver::resolve_table_option_node(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid table option node", KR(ret), K(table_option_node));
   } else if (OB_FAIL(resolve_table_options(table_option_node, true/*is_index_option*/))) {
-    LOG_WARN("failed to resolve table options", KR(ret));
   } else {
     ObCreateMLogArg &create_mlog_arg = create_mlog_stmt.get_create_mlog_arg();
     create_mlog_arg.mlog_schema_.set_block_size(block_size_);
@@ -410,7 +389,6 @@ int ObCreateMLogResolver::resolve_special_columns_node(
       } else {
         ParseNode *special_column_node = special_columns_node->children_[0];
         if (OB_FAIL(resolve_special_column_node(special_column_node, create_mlog_stmt))) {
-          LOG_WARN("failed to resolve special column node", KR(ret));
         } else {
           special_columns_node = special_columns_node->children_[1];
         }
@@ -482,7 +460,6 @@ int ObCreateMLogResolver::resolve_reference_columns_node(
       } else {
         ParseNode *ref_column_node = ref_columns_node->children_[0];
         if (OB_FAIL(resolve_reference_column_node(ref_column_node, create_mlog_stmt))) {
-          LOG_WARN("failed to resolve reference column node", KR(ret));
         } else {
           ref_columns_node = ref_columns_node->children_[1];
         }
@@ -512,7 +489,6 @@ int ObCreateMLogResolver::resolve_reference_column_node(
       ret = OB_ERR_COLUMN_DUPLICATE;
       LOG_USER_ERROR(OB_ERR_COLUMN_DUPLICATE, column_name.length(), column_name.ptr());
     } else if (OB_FAIL(create_mlog_arg.store_columns_.push_back(column_name))) {
-      LOG_WARN("failed to push back column name to store columns", KR(ret));
     }
   }
   return ret;
@@ -596,7 +572,6 @@ int ObCreateMLogResolver::resolve_purge_node(
           ParseNode *purge_start_node = purge_type_node->children_[0];
           ParseNode *purge_next_node = purge_type_node->children_[1];
           if (OB_FAIL(resolve_purge_start_next_node(purge_start_node, purge_next_node, create_mlog_stmt))) {
-            LOG_WARN("failed to resolve purge start next node", KR(ret));
           }
         }
         break;
@@ -627,7 +602,6 @@ int ObCreateMLogResolver::resolve_purge_start_next_node(
         && OB_NOT_NULL(purge_start_node->children_[0])) {
       if (OB_FAIL(ObMViewSchedJobUtils::resolve_date_expr_to_timestamp(params_,
           *session_info_, *(purge_start_node->children_[0]), *allocator_, start_time))) {
-        LOG_WARN("failed to resolve date expr to timestamp", KR(ret));
       } else if (start_time < current_time) {
         ret = OB_ERR_TIME_EARLIER_THAN_SYSDATE;
         LOG_WARN("the parameter start date must evaluate to a time in the future",
@@ -640,7 +614,6 @@ int ObCreateMLogResolver::resolve_purge_start_next_node(
       int64_t next_time = OB_INVALID_TIMESTAMP;
       if (OB_FAIL(ObMViewSchedJobUtils::resolve_date_expr_to_timestamp(params_,
           *session_info_, *purge_next_node, *allocator_, next_time))) {
-        LOG_WARN("failed to resolve date expr to timestamp", KR(ret));
       } else if (next_time < current_time) {
         ret = OB_ERR_TIME_EARLIER_THAN_SYSDATE;
         LOG_WARN("the parameter next date must evaluate to a time in the future",
@@ -654,7 +627,6 @@ int ObCreateMLogResolver::resolve_purge_start_next_node(
         ObString next_date_str(purge_next_node->str_len_, purge_next_node->str_value_);
         if (OB_FAIL(ob_write_string(*allocator_, next_date_str,
             create_mlog_arg.purge_options_.next_datetime_expr_))) {
-          LOG_WARN("fail to write string", KR(ret));
         }
       }
     }

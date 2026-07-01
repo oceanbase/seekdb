@@ -54,7 +54,6 @@ int ObStmtResolver::resolve_table_relation_node(const ParseNode *node,
                                              is_db_explicit,
                                              is_org,
                                              is_oracle_sys_view))) {
-    LOG_WARN("failed to resolve table name", K(ret));
   } else {
     // do nothing
   }
@@ -76,7 +75,6 @@ int ObStmtResolver::resolve_table_relation_node(const ParseNode *node,
                                              catalog_name,
                                              is_org,
                                              is_oracle_sys_view))) {
-    LOG_WARN("failed to resolve table name", K(ret));
   } else {
     // do nothing
   }
@@ -114,11 +112,8 @@ int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL", K(ret));
   } else if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
-    SERVER_LOG(WARN, "fail to get name case mode", K(mode), K(ret));
   } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-    LOG_WARN("fail to get collation_connection", K(ret));
   } else if (OB_FAIL(resolve_catalog_node(catalog_node, catalog_id, catalog_name))) {
-    LOG_WARN("fail to resolve catalog node", K(ret));
   } else if (OB_UNLIKELY(is_external_catalog_id(catalog_id) && !is_catalog_supported_stmt_())) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "this operation in catalog is");
@@ -134,7 +129,6 @@ int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
           // ObString tmp(OB_ORA_SYS_SCHEMA_NAME); // right code
           ObString tmp("SYS");
           if (OB_FAIL(ob_write_string(*allocator_, tmp, db_name))) {
-            LOG_WARN("fail to write db name", K(ret));
           }
         } else if (is_org || params_.is_resolve_fake_cte_table_) {
           db_name = ObString::make_empty_string();
@@ -149,7 +143,6 @@ int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
         int32_t db_len = static_cast<int32_t>(db_node->str_len_);
         db_name.assign_ptr(const_cast<char*>(db_node->str_value_), db_len);
         if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(cs_type, perserve_lettercase, db_name))) {
-          LOG_WARN("fail to check and convert database name", K(db_name), K(ret));
         } else {
           if (is_external_catalog_id(catalog_id)) {
             CK(OB_NOT_NULL(schema_checker_->get_sql_schema_guard()));
@@ -171,12 +164,10 @@ int ObStmtResolver::resolve_table_relation_node_v2(const ParseNode *node,
          const bool is_hidden = session_info_->is_table_name_hidden();
          const bool is_built_in_index = true;
          if (OB_FAIL(schema_checker_->check_table_exists(db_name, table_name, true, is_hidden, is_index_table, catalog_id))) {
-           LOG_WARN("fail to check and convert table name", K(db_name), K(table_name), K(ret));
          } else if (!is_index_table && // check again
              OB_FAIL(schema_checker_->check_table_exists(db_name, table_name, true, is_hidden, is_index_table, is_built_in_index))) {
            LOG_WARN("fail to check table exist again", K(ret), K(db_name), K(table_name));
          } else if (OB_FAIL(ObSQLUtils::check_and_convert_table_name(cs_type, perserve_lettercase, table_name, stmt_type, is_index_table))) {
-           LOG_WARN("fail to check and convert table name", K(table_name), K(stmt_type), K(is_index_table), K(ret));
          }
       } else if (OB_ERR_TOO_LONG_IDENT == tmp_ret) {
         // For compatibility with MySQL, prioritize returning the error code from the first table name check
@@ -208,7 +199,6 @@ int ObStmtResolver::resolve_catalog_node(const ParseNode *catalog_node, uint64_t
     LOG_WARN("invalid argument", K(ret));
   } else if (OB_FALSE_IT(catalog_id = session_info_->get_current_default_catalog())) {
   } else if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
-    LOG_WARN("failed to get name case mode", K(ret));
   } else if (NULL != catalog_node) {
     // if catalog ParseNode is not null, deduce catalog from ParseNode
     ObString catalog_node_str{static_cast<int32_t>(catalog_node->str_len_), const_cast<char *>(catalog_node->str_value_)};
@@ -217,13 +207,10 @@ int ObStmtResolver::resolve_catalog_node(const ParseNode *catalog_node, uint64_t
       catalog_name = OB_INTERNAL_CATALOG_NAME;
     } else {
       if (OB_FAIL(schema_checker_->get_schema_guard()->get_catalog_schema_by_name( catalog_node_str, catalog_schema))) {
-        LOG_WARN("failed to get catalog schema by name", K(ret), K(catalog_node_str));
       } else if (OB_ISNULL(catalog_schema)) {
         ret = OB_CATALOG_NOT_EXIST;
         LOG_USER_ERROR(OB_CATALOG_NOT_EXIST, catalog_node_str.length(), catalog_node_str.ptr());
       } else if (OB_FAIL(ob_write_string(*allocator_, catalog_schema->get_catalog_name(), catalog_name))) {
-        // use catalog name from CatalogSchema and deep copy it
-        LOG_WARN("deep copy catalog_name failed", K(ret));
       } else {
         catalog_id = catalog_schema->get_catalog_id();
       }
@@ -232,13 +219,10 @@ int ObStmtResolver::resolve_catalog_node(const ParseNode *catalog_node, uint64_t
     // if catalog ParseNode is null, deduce catalog from session's catalog_id
     // catalog is not explict specific, use catalog_id from session
     if (OB_FAIL(schema_checker_->get_schema_guard()->get_catalog_schema_by_id( catalog_id, catalog_schema))) {
-      LOG_WARN("failed to get catalog schema by name", K(ret), K(catalog_id));
     } else if (OB_ISNULL(catalog_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("catalog schema is null", K(ret), K(catalog_id));
     } else if (OB_FAIL(ob_write_string(*allocator_, catalog_schema->get_catalog_name(), catalog_name))) {
-      // use catalog name from CatalogSchema and deep copy it
-      LOG_WARN("deep copy catalog_name failed", K(ret));
     }
   } else {
     // do nothing
@@ -280,13 +264,10 @@ int ObStmtResolver::resolve_ref_factor(const ParseNode *node,
     table_name.assign_ptr(const_cast<char*>(relation_node->str_value_), table_len);
     ObCollationType cs_type = CS_TYPE_INVALID;
     if (OB_FAIL(session_info->get_name_case_mode(mode))) {
-      SERVER_LOG(WARN, "fail to get name case mode", K(mode), K(ret));
     } else if (OB_FAIL(session_info->get_collation_connection(cs_type))) {
-      LOG_WARN("fail to get collation_connection", K(ret));
     } else {
       bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
       if (OB_FAIL(ObSQLUtils::check_and_convert_table_name(cs_type, perserve_lettercase, table_name))) {
-        LOG_WARN("fail to check and convert relation name", K(table_name), K(ret));
       } else {
         if (NULL == db_node) {
           if (session_info->get_database_name().empty()) {
@@ -299,7 +280,6 @@ int ObStmtResolver::resolve_ref_factor(const ParseNode *node,
           int32_t db_len = static_cast<int32_t>(db_node->str_len_);
           db_name.assign_ptr(const_cast<char*>(db_node->str_value_), db_len);
           if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(cs_type, perserve_lettercase, db_name))) {
-            LOG_WARN("fail to check and convert database name", K(db_name), K(ret));
           }
         }
       }
@@ -363,7 +343,6 @@ int ObStmtResolver::normalize_table_or_database_names(ObString &name)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid name is empty", K(name), K(ret));
   } else if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
-    LOG_WARN("fail to get name case mode", K(ret));
   } else if (OB_LOWERCASE_AND_INSENSITIVE == case_mode) {
     ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, name);
   }
@@ -386,7 +365,6 @@ int ObStmtResolver::get_column_schema(const uint64_t table_id,
 
     // generated column added by function-based index is hidden in OB but can be selected in oracle
     if (OB_FAIL(schema_checker_->get_column_schema( table_id, column_name, column_schema, true, is_link))) {
-      LOG_WARN("fail to get column schema", K(table_id), K(column_name), K(ret));
     } else if (!hidden && column_schema->is_hidden() && !column_schema->is_generated_column()) {
       ret = OB_ERR_BAD_FIELD_ERROR;
       LOG_INFO("do not get hidden column", K(table_id), K(column_name), K(ret));
@@ -408,7 +386,6 @@ int ObStmtResolver::get_column_schema(const uint64_t table_id,
   } else {
     const bool hidden = get_hidden || session_info_->is_inner();
     if (OB_FAIL(schema_checker_->get_column_schema( table_id, column_id, column_schema, hidden, is_link))) {
-      SQL_RESV_LOG(WARN, "get_column_schema failed", K(ret), K(table_id), K(column_id), K(hidden), K(is_link));
     }
   }
   return ret;
@@ -423,7 +400,6 @@ int ObStmtResolver::check_table_name_equal(const ObString &name1, const ObString
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected session info", K(ret));
   } else if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
-    LOG_WARN("fail to get name case mode", K(ret));
   } else if (OB_NAME_CASE_INVALID == case_mode) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected name case mode", K(ret));

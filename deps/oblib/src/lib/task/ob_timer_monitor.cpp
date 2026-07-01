@@ -48,7 +48,6 @@ int ObTimerMonitor::init()
     ret = OB_INIT_TWICE;
     OB_LOG(WARN, "init twice", K(ret));
   } else if (OB_FAIL(timer_.init())) {
-    OB_LOG(ERROR, "fail to init timer", K(ret));
   } else {
     inited_ = true;
   }
@@ -63,7 +62,6 @@ int ObTimerMonitor::start()
     ret = OB_NOT_INIT;
     OB_LOG(WARN, "not init", K(ret));
   } else if (OB_FAIL(timer_.schedule(monitor_task_, CHECK_INTERVAL, true))) {
-    OB_LOG(ERROR, "fail to schedule task", K(ret));
   }
 
   return ret;
@@ -198,10 +196,6 @@ void ObTimerMonitor::dump(const bool print_trace)
 
     if (print_trace) {
       int64_t avg_time = 0 == record.task_cnt_ ? 0 : record.cost_time_ / record.task_cnt_;
-      OB_LOG(INFO, "TIMER THREAD STAT: ",
-             "thread_id", record.thread_id_,
-             "task_cnt", record.task_cnt_,
-             "avg_time", avg_time);
 
       records_[i].task_cnt_ = 0;
     }

@@ -69,9 +69,7 @@ int ObSRDaaTBooleanRelevanceCollector::init(ObIAllocator *allocator, const int64
   boolean_compute_node_ = node;
   if (FALSE_IT(boolean_relevances_.set_allocator(allocator))) {
   } else if (OB_FAIL(boolean_relevances_.init(dim_cnt_))) {
-    LOG_WARN("failed to init boolean relevances array", K(ret));
   } else if (OB_FAIL(boolean_relevances_.prepare_allocate(dim_cnt_))) {
-    LOG_WARN("failed to prepare allocate boolean relevacnes array", K(ret));
   } else {
     for (int64_t i = 0; i < dim_cnt_; ++i) {
       boolean_relevances_[i] = 0.0;
@@ -110,7 +108,6 @@ int ObSRDaaTBooleanRelevanceCollector::get_result(double &relevance, bool &is_va
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null boolean compute node", K(ret));
   } else if (OB_FAIL(ObFtsEvalNode::fts_boolean_eval(boolean_compute_node_, boolean_relevances_, relevance))) {
-    LOG_WARN("failed to evaluate boolean relevance");
   } else {
     is_valid = relevance > 0;
     for (int64_t i = 0; i < dim_cnt_; ++i) {

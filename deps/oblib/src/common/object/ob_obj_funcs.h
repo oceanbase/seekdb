@@ -1743,20 +1743,14 @@ inline int obj_print_sql<ObJsonType>(const ObObj &obj, char *buffer, int64_t len
   ObJsonInType in_type = ObJsonInType::JSON_BIN;
   uint32_t parse_flag = 0;
   if (OB_FAIL(obj.get_json_print_data(str, buffer, length, pos))) {
-    COMMON_LOG(WARN, "fail to get json data", K(ret), K(in_type));
   } else if (str.empty()) { // nothing to print;
   } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&tmp_allocator, str, in_type, in_type, j_base, parse_flag))) {
-    COMMON_LOG(WARN, "fail to get json base", K(ret), K(in_type));
-  } else if (OB_FAIL(j_base->print(jbuf, false, str.length()))) { // json binary to string
-    COMMON_LOG(WARN, "fail to convert json to string", K(ret), K(obj));
+  } else if (OB_FAIL(j_base->print(jbuf, false, str.length()))) {
   } else if (OB_FAIL(databuff_printf(buffer, length, pos, "'"))) {
-    COMMON_LOG(WARN, "fail to print \"'\"", K(ret), K(length), K(pos));
   } else if (OB_FAIL(databuff_printf(buffer, length, pos, "%.*s", 
                                      static_cast<int>(MIN(jbuf.length(), length - pos)),
                                      jbuf.ptr()))) {
-    COMMON_LOG(WARN, "fail to print json doc", K(ret), K(length), K(pos), K(jbuf.length()));
   } else if (OB_FAIL(databuff_printf(buffer, length, pos, "'"))) {
-    COMMON_LOG(WARN, "fail to print \"'\"", K(ret), K(length), K(pos));
   }
   return ret;
 }
@@ -1780,12 +1774,9 @@ inline int obj_print_plain_str<ObJsonType>(const ObObj &obj, char *buffer, int64
   ObJsonInType in_type = ObJsonInType::JSON_BIN;
   uint32_t parse_flag = 0;
   if (OB_FAIL(obj.get_json_print_data(str, buffer, length, pos))) {
-    COMMON_LOG(WARN, "fail to get json data", K(ret), K(in_type));
   } else if (str.empty()) { // nothing to print;
   } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&tmp_allocator, str, in_type, in_type, j_base, parse_flag))) {
-    COMMON_LOG(WARN, "fail to get json base", K(ret), K(in_type));
-  } else if (OB_FAIL(j_base->print(jbuf, false, str.length()))) { // json binary to string
-    COMMON_LOG(WARN, "fail to convert json to string", K(ret), K(obj));
+  } else if (OB_FAIL(j_base->print(jbuf, false, str.length()))) {
   } else if (params.use_memcpy_) {
     ret = databuff_memcpy(buffer, length, pos, jbuf.length(), jbuf.ptr());
   } else {
@@ -1808,16 +1799,12 @@ inline int obj_print_json<ObJsonType>(const ObObj &obj, char *buf, int64_t buf_l
   ObJsonBuffer jbuf(&tmp_allocator);
   uint32_t parse_flag = 0;
   if (OB_FAIL(obj.get_json_print_data(str, buf, buf_len, pos))) {
-    COMMON_LOG(WARN, "fail to get json data", K(ret), K(in_type));
   } else if (str.empty()) { // nothing to print;
   } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&tmp_allocator, str, in_type, in_type, j_base, parse_flag))) {
-    COMMON_LOG(WARN, "fail to get json base", K(ret), K(in_type));
-  } else if (OB_FAIL(j_base->print(jbuf, false, str.length()))) { // json binary to string
-    COMMON_LOG(WARN, "fail to convert json to string", K(ret), K(obj));
+  } else if (OB_FAIL(j_base->print(jbuf, false, str.length()))) {
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%.*s",
                                      static_cast<int>(MIN(jbuf.length(), buf_len - pos)),
                                      jbuf.ptr()))) {
-    COMMON_LOG(WARN, "fail to print json doc", K(ret), K(buf_len), K(pos), K(jbuf.length()));
   }
   return ret;
 }
@@ -2112,7 +2099,6 @@ template <>
       ret = databuff_printf(buffer, length, pos, "'%s'", N_UPPERCASE_CUR_TIMESTAMP);
       break;
     default:
-      _OB_LOG(WARN, "ext %ld should not be print as sql varchar literal", obj.get_ext());
       ret = OB_INVALID_ARGUMENT;
       break;
   }
@@ -2139,7 +2125,6 @@ template <>
       ret = databuff_printf(buffer, length, pos, "%s", N_UPPERCASE_CUR_TIMESTAMP);
       break;
     default:
-      _OB_LOG(WARN, "ext %ld should not be print as sql", obj.get_ext());
       ret = OB_INVALID_ARGUMENT;
       break;
   }
@@ -2186,7 +2171,6 @@ inline int obj_val_serialize<ObExtendType>(const ObObj &obj, char* buf, const in
   int ret = OB_SUCCESS;
   if (obj.is_pl_extend()) {
     OB_UNIS_ENCODE(obj.get_ext());
-    COMMON_LOG(ERROR, "Unexpected serialize", K(OB_NOT_SUPPORTED), K(obj), K(obj.get_meta().get_extend_type()));
     return OB_NOT_SUPPORTED; //TODO:@ryan.ly: close this feature before composite refactor
     if (NULL == serialize_composite_callback) {
       ret = OB_ERR_UNEXPECTED;
@@ -2216,7 +2200,6 @@ inline int obj_val_deserialize<ObExtendType>(ObObj &obj, const char* buf, const 
   OB_UNIS_DECODE(v);
   if (OB_SUCC(ret)) {
     if (!obj.is_ext_sql_array() && !ObObj::is_ext_val(v) && 0 != v) {
-      COMMON_LOG(ERROR, "Unexpected serialize", K(OB_NOT_SUPPORTED), K(v));
       return OB_NOT_SUPPORTED; //TODO:@ryan.ly: close this feature before composite refactor
       if (NULL == deserialize_composite_callback) {
         ret = OB_ERR_UNEXPECTED;
@@ -2392,7 +2375,6 @@ inline int obj_val_serialize<ObDecimalIntType>(const ObObj &obj, char *buf, cons
   OB_UNIS_ENCODE(val_len);
   OB_UNIS_ENCODE(scale);
   if (OB_FAIL(ret)) {
-    COMMON_LOG(WARN, "failed to encode val_len", K(ret), K(val_len));
   } else if (OB_UNLIKELY(pos + val_len > buf_len)) {
     ret = OB_BUF_NOT_ENOUGH;
     COMMON_LOG(WARN, "buf not enough", K(ret), K(pos), K(buf_len), K(val_len));
@@ -2419,7 +2401,6 @@ inline int obj_val_deserialize<ObDecimalIntType>(ObObj &obj, const char *buf,
   OB_UNIS_DECODE(val_len);
   OB_UNIS_DECODE(scale);
   if (OB_FAIL(ret)) {
-    COMMON_LOG(WARN, "failed to decode val_len", K(ret));
   } else if (pos + val_len > data_len) {
     ret = OB_DESERIALIZE_ERROR;
     COMMON_LOG(WARN, "data buf is not enoght", K(ret), K(data_len), K(pos), K(val_len));
@@ -2454,7 +2435,6 @@ inline int obj_print_sql<ObDecimalIntType>(const ObObj &obj, char *buffer, int64
   int ret = OB_SUCCESS;
   if (OB_FAIL(wide::to_string(obj.get_decimal_int(), obj.get_int_bytes(), obj.get_scale(),
                                      buffer, length, pos))) {
-    COMMON_LOG(WARN, "to_string failed", K(ret));
   } else if (OB_UNLIKELY(pos >= length)) {
     ret = OB_SIZE_OVERFLOW;
     COMMON_LOG(WARN, "buffer size is overflow", K(ret));
@@ -2474,7 +2454,6 @@ inline int obj_print_str<ObDecimalIntType>(const ObObj &obj, char *buffer, int64
     COMMON_LOG(WARN, "buffer size is overflow", K(ret));
   } else if (OB_FALSE_IT(buffer[pos++] = '\'')) {
   } else if (OB_FAIL(obj_print_sql<ObDecimalIntType>(obj, buffer, length, pos, params))) {
-    COMMON_LOG(WARN, "fail to print decimal int sql", K(ret));
   } else if (OB_UNLIKELY(pos + 1 >= length)) {
     ret = OB_SIZE_OVERFLOW;
     COMMON_LOG(WARN, "buffer size is overflow", K(ret));
@@ -2768,11 +2747,8 @@ inline int obj_print_plain_str<ObCollectionSQLType>(const ObObj &obj, char *buff
     ObArenaAllocator tmp_allocator;
     ObStringBuffer buf(&tmp_allocator);
     if (OB_FAIL(ObArrayTypeObjFactory::construct(tmp_allocator, *arr_type, arr_obj, true))) {
-      COMMON_LOG(WARN, "construct array obj failed", K(ret),  K(*params.coll_meta_));
     } else if (OB_FAIL(arr_obj->init(udt_data))) {
-      COMMON_LOG(WARN, "failed to init array", K(ret));
     } else if (OB_FAIL(arr_obj->print(buf))) {
-      COMMON_LOG(WARN, "failed to format array", K(ret));
     } else if (params.use_memcpy_) {
       ret = databuff_memcpy(buffer, length, pos, buf.length(), buf.ptr());
     } else {

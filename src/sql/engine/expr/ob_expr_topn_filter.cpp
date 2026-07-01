@@ -41,7 +41,6 @@ inline int proc_by_pass<IntegerUniVec>(IntegerUniVec *res_vec, const ObBitVector
               res_vec->set_int(idx, 1);
               return OB_SUCCESS;
             }))) {
-      LOG_WARN("fail to do for each operation", K(ret));
     }
   } else {
     if (OB_FAIL(ObBitVector::flip_foreach(
@@ -49,7 +48,6 @@ inline int proc_by_pass<IntegerUniVec>(IntegerUniVec *res_vec, const ObBitVector
               res_vec->set_int(idx, 1);
               return OB_SUCCESS;
             }))) {
-      LOG_WARN("fail to do for each operation", K(ret));
     }
   }
   return ret;
@@ -125,7 +123,6 @@ int ObExprTopNFilterContext::state_machine(const ObExpr &expr, ObEvalCtx &ctx, A
       }
       case FilterState::CHECK_READY: {
         if (OB_FAIL(check_filter_ready())) {
-          LOG_WARN("fail to check filter ready", K(ret));
         }
         // result not filled, so while loop continues
         break;
@@ -187,7 +184,6 @@ inline int ObExprTopNFilterContext::bypass(const ObExpr &expr, ObEvalCtx &ctx,
             ++total_count;
             return OB_SUCCESS;
           }))) {
-    LOG_WARN("failed to flip_foreach");
   } else if (FALSE_IT(total_count_ += total_count)) {
   } else if (!dynamic_disable()) {
     // if msg not ready, add n_times_ and check ready every ROW_COUNT_CHECK_INTERVAL
@@ -221,7 +217,6 @@ inline int ObExprTopNFilterContext::bypass(const ObExpr &expr, ObEvalCtx &ctx,
     ret = proc_by_pass(res_vec, skip, bound, valid_cnt, true /* calc_valid_cnt */);
   }
   if (OB_FAIL(ret)) {
-    LOG_WARN("failed to proc_by_pass", K(res_format), K(ret));
   } else {
     total_count_ += valid_cnt;
     eval_flags.set_all(true);
@@ -294,7 +289,6 @@ inline int ObExprTopNFilterContext::do_process(const ObExpr &expr, ObEvalCtx &ct
   int ret = OB_SUCCESS;
   if (OB_FAIL(topn_filter_msg_->prepare_storage_white_filter_data(dynamic_filter, ctx, params,
                                                                   is_data_prepared))) {
-    LOG_WARN("fail to prepare_storage_white_filter_data", K(ret));
   } else {
     if (topn_filter_msg_->is_null_first(dynamic_filter.get_col_idx())) {
       dynamic_filter.cmp_func_ =
@@ -433,7 +427,6 @@ int ObExprTopNFilter::eval_topn_filter_vector(const ObExpr &expr, ObEvalCtx &ctx
       ret = proc_by_pass(res_vec, skip, bound, valid_cnt, false /* calc_valid_cnt */);
     }
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to proc_by_pass for das", K(res_format), K(ret));
     } else {
       eval_flags.set_all(true);
     }
@@ -483,7 +476,6 @@ int ObExprTopNFilter::update_storage_white_filter_data(const ObExpr &expr,
     LOG_WARN("topn_filter_ctx must not null during update stage");
   } else if (OB_FAIL(topn_filter_ctx->topn_filter_msg_->update_storage_white_filter_data(
                  dynamic_filter, params, is_update))) {
-    LOG_WARN("Failed to update_storage_white_filter_data");
   }
   return ret;
 }

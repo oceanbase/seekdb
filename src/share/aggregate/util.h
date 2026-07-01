@@ -447,7 +447,6 @@ add_overflow<number::ObCompactNumber, number::ObCompactNumber>(const number::ObC
   number::ObNumber param2(r);
   number::ObNumber res_nmb;
   if (OB_FAIL(param1.add_v3(param2, res_nmb, local_allocator))) {
-    SQL_LOG(WARN, "add_v3 failed", K(ret));
   } else {
     *reinterpret_cast<uint32_t *>(res_buf) = res_nmb.d_.desc_;
     MEMCPY(res_buf + sizeof(uint32_t), res_nmb.get_digits(), res_nmb.d_.len_ * sizeof(uint32_t));
@@ -566,12 +565,10 @@ struct Caster<Integer, number::ObCompactNumber>
     if (std::is_signed<Integer>::value) { // int
       int64_t tmp_v = in_val;
       if (OB_FAIL(wide::to_number(in_val, scale, tmp_alloc, result_nmb))) {
-        SQL_LOG(WARN, "to_number failed", K(ret));
       }
     } else { // uint
       uint64_t tmp_v = in_val;
       if (OB_FAIL(result_nmb.from(tmp_v, tmp_alloc))) {
-        SQL_LOG(WARN, "cast to number failed", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -618,7 +615,6 @@ struct DecintToNmb
     char *tmp_buf = nullptr;
     if (OB_FAIL(wide::to_number(*reinterpret_cast<const Integer *>(src), scale, tmp_alloc,
                                 res_nmb))) {
-      SQL_LOG(WARN, "to_number failed", K(ret));
     } else if (OB_ISNULL(tmp_buf = (char *)alloc.alloc(sizeof(ObNumberDesc)
                                                        + res_nmb.d_.len_ * sizeof(uint32_t)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;

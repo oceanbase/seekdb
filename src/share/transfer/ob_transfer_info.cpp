@@ -76,7 +76,6 @@ int ObTransferTabletInfo::to_display_str(char *buf, const int64_t len, int64_t &
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(buf), K(len), K(pos), KPC(this));
   } else if (OB_FAIL(databuff_printf(buf, len, pos, "%lu:%ld", tablet_id_.id(), transfer_seq_))) {
-    LOG_WARN("databuff_printf failed", KR(ret), K(len), K(pos), K(buf), KPC(this));
   }
   return ret;
 }
@@ -127,7 +126,6 @@ int ObTransferPartInfo::to_display_str(char *buf, const int64_t len, int64_t &po
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(buf), K(len), K(pos), KPC(this));
   } else if (OB_FAIL(databuff_printf(buf, len, pos, "%lu:%lu", table_id_, part_object_id_))) {
-    LOG_WARN("databuff_printf failed", KR(ret), K(len), K(pos), K(buf), KPC(this));
   }
   return ret;
 }
@@ -159,7 +157,6 @@ int ObDisplayTabletID::to_display_str(char *buf, const int64_t len, int64_t &pos
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(buf), K(len), K(pos), KPC(this));
   } else if (OB_FAIL(databuff_printf(buf, len, pos, "%lu", tablet_id_.id()))) {
-    LOG_WARN("databuff_printf failed", KR(ret), K(len), K(pos), K(buf), KPC(this));
   }
   return ret;
 }

@@ -203,7 +203,6 @@ private:
     if (OB_FAIL(diff_ctx.append_geo_arg(g1)) || OB_FAIL(diff_ctx.append_geo_arg(g2))) {
       LOG_WARN("failed to append geo to ctx", K(ret));
     } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Difference>::geo_func::eval(diff_ctx, res))) {
-      LOG_WARN("failed to do func difference", K(ret));
     } else if (OB_NOT_NULL(last_res)) {
       context.get_allocator()->free(last_res);
       last_res = nullptr;
@@ -221,11 +220,8 @@ private:
     ObGeometry *diff_result = nullptr;
     is_part_difference = false;
     if (OB_FAIL(eval_difference(mpt1, mpt2, context, diff_result))) {
-      LOG_WARN("failed to do func difference", K(ret));
     } else if (OB_FAIL(eval_difference(diff_result, mls2, context, diff_result))) {
-      LOG_WARN("failed to do func difference", K(ret));
     } else if (OB_FAIL(eval_difference(diff_result, mpy2, context, diff_result))) {
-      LOG_WARN("failed to do func difference", K(ret));
     } else if (diff_result->type() != ObGeoType::MULTIPOINT) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("result of func difference might be invalid", K(ret), K(diff_result->type()));
@@ -236,9 +232,7 @@ private:
         is_part_difference = true;
       } else {
         if (OB_FAIL(eval_difference(mls1, mls2, context, diff_result))) {
-          LOG_WARN("failed to do func difference", K(ret));
         } else if (OB_FAIL(eval_difference(diff_result, mpy2, context, diff_result))) {
-          LOG_WARN("failed to do func difference", K(ret));
         } else {
           typename GcTreeType::sub_ml_type *mls_diff =
               static_cast<typename GcTreeType::sub_ml_type *>(diff_result);
@@ -352,18 +346,15 @@ private:
       ObIAllocator *allocator = context.get_allocator();
       ObGeoToTreeVisitor tree_visitor(allocator);
       if (OB_FAIL(geo1->do_visit(tree_visitor))) {
-        LOG_WARN("failed to transform gc to tree", K(ret));
       } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_split(*allocator,
                   *static_cast<const GcTreeType *>(tree_visitor.get_geometry()),
                   mpt1, mls1, mpy1))) {
-        LOG_WARN("failed to do gc split", K(ret));
       } else if (OB_ISNULL(mpt1) || OB_ISNULL(mls1) || OB_ISNULL(mpy1)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null geometry collection split", K(ret));
       } else if (!mpy1->empty()) {
         result.is_null = true;
       } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_union(context.get_mem_ctx(), *srs, mpt1, mls1, mpy1))) {
-        LOG_WARN("failed to do gc union", K(ret));
       } else if (OB_ISNULL(mpt1) || OB_ISNULL(mls1) || OB_ISNULL(mpy1)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null geometry collection union", K(ret));
@@ -375,11 +366,9 @@ private:
         bool has_common_interior = false;  // Check that if g1 and g2 has common interior
         ObGeoToTreeVisitor tree_visitor2(allocator);
         if (OB_FAIL(geo2->do_visit(tree_visitor2))) {
-          LOG_WARN("failed to transform gc to tree", K(ret));
         } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_split(*allocator,
                     *static_cast<const GcTreeType *>(tree_visitor2.get_geometry()),
                     mpt2, mls2, mpy2))) {
-          LOG_WARN("failed to do gc split", K(ret));
         } else if (!mpt2->is_empty() && mls2->is_empty() && mpy2->is_empty()) {
           // MySQL return NULL, PG return false
           result.is_null = true;
@@ -387,20 +376,17 @@ private:
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected null geometry collection split", K(ret));
         } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_union(context.get_mem_ctx(), *srs, mpt2, mls2, mpy2))) {
-          LOG_WARN("failed to do gc union", K(ret));
         } else if (OB_ISNULL(mpt2) || OB_ISNULL(mls2) || OB_ISNULL(mpy2)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected null geometry collection union", K(ret));
         } else if (OB_FAIL((has_common_interior_gc_gc<GcTreeType>(
                        mpt1, mls1, mpy1, mpt2, mls2, mpy2, context, has_common_interior)))) {
-          LOG_WARN("fail to eval is part joint", K(ret));
         } else if (!has_common_interior) {
           result.bret = false;
         } else {
           // Check that if g1 has at least one point in g2's exterior
           if (OB_FAIL((is_part_difference_gc_gc<GcTreeType>(
                   mpt1, mls1, mpt2, mls2, mpy2, context, result.bret)))) {
-            LOG_WARN("fail to eval is part crosses", K(ret));
           }
         }
       }
@@ -418,13 +404,9 @@ private:
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null geometry", K(ret));
     } else if (OB_FAIL(buffer.append(static_cast<char>(ObGeoWkbByteOrder::LittleEndian)))) {
-      LOG_WARN("fail to append byte order to buffer", K(ret));
     } else if (OB_FAIL(buffer.append(static_cast<uint32_t>(ObGeoType::GEOMETRYCOLLECTION)))) {
-      LOG_WARN("fail to append type to buffer", K(ret));
     } else if (OB_FAIL(buffer.append(static_cast<uint32_t>(1)))) {
-      LOG_WARN("fail to append geo num to buffer", K(ret));
     } else if (OB_FAIL(buffer.append(g->val(), g->length()))) {
-      LOG_WARN("fail to append geo num to buffer", K(ret));
     } else {
       gc_bin->set_data(buffer.string());
       geo = gc_bin;
@@ -446,12 +428,10 @@ private:
     } else if (g1->type() == ObGeoType::GEOMETRYCOLLECTION) {
       gc1 = g1;
       if (OB_FAIL((make_collection<GcBinType>(g2, context.get_allocator(), gc2)))) {
-        LOG_WARN("fail to make collection", K(ret));
       }
     } else if (g2->type() == ObGeoType::GEOMETRYCOLLECTION) {
       gc2 = g2;
       if (OB_FAIL((make_collection<GcBinType>(g1, context.get_allocator(), gc1)))) {
-        LOG_WARN("fail to make collection", K(ret));
       }
     } else {
       ret = OB_ERR_GIS_INVALID_DATA;

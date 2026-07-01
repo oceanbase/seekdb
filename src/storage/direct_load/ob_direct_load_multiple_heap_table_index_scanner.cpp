@@ -56,9 +56,7 @@ int ObDirectLoadMultipleHeapTableIndexWholeScanner::init(
   } else {
     if (OB_FAIL(index_block_reader_.init(table_data_desc.sstable_index_block_size_,
                                          table_data_desc.compressor_type_))) {
-      LOG_WARN("fail to init data block reader", KR(ret));
     } else if (OB_FAIL(index_block_reader_.open(index_file_handle, 0, file_size))) {
-      LOG_WARN("fail to open index file", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -117,9 +115,7 @@ int ObDirectLoadMultipleHeapTableTabletIndexWholeScanner::init(
     tablet_id_ = tablet_id;
     if (OB_FAIL(index_block_reader_.init(table_data_desc.sstable_index_block_size_,
                                          table_data_desc.compressor_type_))) {
-      LOG_WARN("fail to init data block reader", KR(ret));
     } else if (OB_FAIL(locate_left_border())) {
-      LOG_WARN("fail to locate left border", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -149,9 +145,7 @@ int ObDirectLoadMultipleHeapTableTabletIndexWholeScanner::locate_left_border()
     if (OB_FAIL(index_block_reader_.open(
           heap_table_->get_index_file_handle(), index_block_offset,
           heap_table_->get_meta().index_file_size_ - index_block_offset))) {
-      LOG_WARN("fail to open index file", KR(ret), K(index_block_offset));
     } else if (OB_FAIL(index_block_reader_.seek_index(index_entry_idx))) {
-      LOG_WARN("fail to get entry", KR(ret));
     }
   }
   return ret;

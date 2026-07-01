@@ -72,16 +72,12 @@ int ObDirectLoadExternalTableBuilder::init(const ObDirectLoadExternalTableBuildP
     build_param_ = build_param;
     int64_t dir_id = -1;
     if (OB_FAIL(build_param_.file_mgr_->alloc_dir(dir_id))) {
-      LOG_WARN("fail to alloc dir", KR(ret));
     } else if (OB_FAIL(build_param_.file_mgr_->alloc_file(dir_id, file_handle_))) {
-      LOG_WARN("fail to alloc fragment", KR(ret));
     } else if (OB_FAIL(
                  external_writer_.init(build_param_.table_data_desc_.external_data_block_size_,
                                        build_param_.table_data_desc_.compressor_type_,
                                        build_param_.extra_buf_, build_param_.extra_buf_size_))) {
-      LOG_WARN("fail to init external writer", KR(ret));
     } else if (OB_FAIL(external_writer_.open(file_handle_))) {
-      LOG_WARN("fail to open file", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -108,9 +104,7 @@ int ObDirectLoadExternalTableBuilder::append_row(const ObTabletID &tablet_id,
     OB_TABLE_LOAD_STATISTICS_TIME_COST(DEBUG, external_append_row_time_us);
     if (OB_FAIL(external_row_.from_datum_row(datum_row,
                                              build_param_.table_data_desc_.rowkey_column_num_))) {
-      LOG_WARN("fail to from datums", KR(ret));
     } else if (OB_FAIL(external_writer_.write_item(external_row_))) {
-      LOG_WARN("fail to write item", KR(ret));
     } else {
       ++row_count_;
     }
@@ -130,7 +124,6 @@ int ObDirectLoadExternalTableBuilder::close()
   } else {
     OB_TABLE_LOAD_STATISTICS_TIME_COST(DEBUG, external_append_row_time_us);
     if (OB_FAIL(external_writer_.close())) {
-      LOG_WARN("fail to close external writer", KR(ret));
     } else {
       is_closed_ = true;
     }
@@ -161,20 +154,15 @@ int ObDirectLoadExternalTableBuilder::get_tables(ObDirectLoadTableHandleArray &t
     fragment.row_count_ = row_count_;
     fragment.max_data_block_size_ = external_writer_.get_max_block_size();
     if (OB_FAIL(fragment.file_handle_.assign(file_handle_))) {
-      LOG_WARN("fail to assign file handle", KR(ret));
     } else if (OB_FAIL(create_param.fragments_.push_back(fragment))) {
-      LOG_WARN("fail to push back fragment", KR(ret));
     }
     if (OB_SUCC(ret)) {
       ObDirectLoadTableHandle table_handle;
       ObDirectLoadExternalTable *external_table = nullptr;
       if (OB_FAIL(table_manager->alloc_external_table(table_handle))) {
-        LOG_WARN("fail to alloc external table", KR(ret));
       } else if (FALSE_IT(external_table = static_cast<ObDirectLoadExternalTable*>(table_handle.get_table()))) {        
       } else if (OB_FAIL(external_table->init(create_param))) {
-        LOG_WARN("fail to init external table", KR(ret));
       } else if (OB_FAIL(table_array.add(table_handle))) {
-        LOG_WARN("fail to push back external table", KR(ret));
       }
     }
   }

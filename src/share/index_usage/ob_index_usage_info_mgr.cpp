@@ -55,7 +55,6 @@ int ObIndexUsageInfoMgr::mtl_init(ObIndexUsageInfoMgr *&index_usage_mgr)
   int ret = OB_SUCCESS;
   
   if (OB_FAIL(index_usage_mgr->init())) {
-    LOG_WARN("ObIndexUsageInfoMgr init failed", K(ret));
   }
   return ret;
 }
@@ -95,7 +94,6 @@ int ObIndexUsageInfoMgr::create_hash_map()
     for (int64_t i = 0 ; OB_SUCC(ret) && i < hashmap_count_; ++i) {
       ObIndexUsageHashMap *hashmap = index_usage_map_ + i;
       if (OB_FAIL(hashmap->create(DEFAULT_MAX_HASH_BUCKET_CNT, attr))) {
-        LOG_WARN("create hash map failed", K(ret));
       }
     }
   }
@@ -122,9 +120,7 @@ int ObIndexUsageInfoMgr::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(allocator_.init(ObMallocAllocator::get_instance(), OB_MALLOC_NORMAL_BLOCK_SIZE, attr))) {
-    LOG_WARN("init allocator failed", K(ret));
   } else if (OB_FAIL(create_hash_map())) {
-    LOG_WARN("create hash map failed", K(ret));
   } else if (OB_FALSE_IT(refresh_config())) {
   } else {
     is_inited_ = true;
@@ -166,13 +162,9 @@ int ObIndexUsageInfoMgr::start()
   if (is_inited_) {
     // report index usage
     if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(), report_task_, INDEX_USAGE_REPORT_INTERVAL, true))) {
-      LOG_WARN("failed to schedule index usage report task", K(ret));
     } else if (OB_FAIL(report_task_.init(this))) {
-      LOG_WARN("fail to init report task", K(ret));
     } else if (OB_FAIL(TG_SCHEDULE(share::g_mp->shared_timer()->get_tg_id(), refresh_conf_task_, INDEX_USAGE_REFRESH_CONF_INTERVAL, true))) {
-      LOG_WARN("failed to schedule index usage refresh conf task", K(ret));
     } else if (OB_FAIL(refresh_conf_task_.init((this)))) {
-      LOG_WARN("fail to init refresh conf task", K(ret));
     } else {
       LOG_TRACE("success to start ObIndexUsageInfoMgr");
     }
@@ -246,7 +238,6 @@ void ObIndexUsageInfoMgr::update(const uint64_t index_table_id)
       if (max_entries_ <= index_usage_map_[idx].size()) {
         LOG_TRACE("index usage hashmap reaches max entries");
       } else if (OB_FAIL(index_usage_map_[idx].set_or_update(key, new_info, update_op))) {
-        LOG_WARN("failed to set or update index-usage map", K(ret));
       }
     } else {
       LOG_WARN("failed to update index-usage map", K(ret));

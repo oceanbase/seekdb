@@ -93,7 +93,6 @@ int ObSubPlanFilterVecOp::rescan()
   clear_evaluated_flag();
   set_param_null();
   if (OB_FAIL(ObOperator::inner_rescan())) {
-    LOG_WARN("failed to inner rescan", K(ret));
   }
   drive_iter_.reset();
 
@@ -101,8 +100,6 @@ int ObSubPlanFilterVecOp::rescan()
     // call each child's rescan when not batch rescan
     for (int32_t i = 1; OB_SUCC(ret) && i < child_cnt_; ++i) {
       if (OB_FAIL(children_[i]->rescan())) {
-        LOG_WARN("rescan child operator failed", K(ret),
-                 "op", op_name(), "child", children_[i]->op_name());
       }
     }
   } else {
@@ -110,8 +107,6 @@ int ObSubPlanFilterVecOp::rescan()
       if (MY_SPEC.init_plan_idxs_.has_member(i) || MY_SPEC.one_time_idxs_.has_member(i)) {
         // rescan for init plan and onetime expr when batch rescan
         if (OB_FAIL(children_[i]->rescan())) {
-          LOG_WARN("rescan child operator failed", K(ret),
-                  "op", op_name(), "child", children_[i]->op_name());
         }
       }
     }
@@ -125,18 +120,14 @@ int ObSubPlanFilterVecOp::rescan()
     } else if (MY_SPEC.init_plan_idxs_.has_member(i)) {
       iter->reuse();
       if (OB_FAIL(iter->prepare_init_plan())) {
-        LOG_WARN("prepare init plan failed", K(ret), K(i));
       }
     } else if (OB_FAIL(iter->reset_hash_map())) {
-      LOG_WARN("failed to reset hash map", K(ret), K(i));
     }
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(prepare_onetime_exprs())) {
-      LOG_WARN("prepare onetime exprs failed", K(ret));
-    } else if (OB_FAIL(drive_iter_.rescan_left())) { // use drive_iter_ to rescan drive child operator of SPF
-      LOG_WARN("failed to do rescan", K(ret));
+    } else if (OB_FAIL(drive_iter_.rescan_left())) {
     } else {
       startup_passed_ = spec_.startup_filters_.empty();
     }
@@ -153,7 +144,6 @@ int ObSubPlanFilterVecOp::switch_iterator()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOperator::inner_switch_iterator())) {
-    LOG_WARN("failed to inner switch iterator", K(ret));
   } else if (OB_FAIL(child_->switch_iterator())) {
     //TODO: Currently only supports multi-group iterator switch for non-correlated subqueries, only switches the main table
     if (OB_ITER_END != ret) {
@@ -197,16 +187,13 @@ int ObSubPlanFilterVecOp::init_subplan_iters()
         if (!MY_SPEC.exec_param_idxs_inited_) {
           //unittest or old version, do not init hashmap
         } else if (OB_FAIL(iter->init_mem_entity())) {
-          LOG_WARN("failed to init mem_entity", K(ret));
         } else if (MY_SPEC.exec_param_array_[i - 1].count() > 0) {
           //min of buckets is 16,
           //max will not exceed card of left_child and HASH_MAP_MEMORY_LIMIT/ObObj
           if (OB_FAIL(iter->init_hashmap(max(
                   16/*hard code*/, min(get_child(0)->get_spec().get_rows(),
                       iter->HASH_MAP_MEMORY_LIMIT / static_cast<int64_t>(sizeof(ObDatum))))))) {
-            LOG_WARN("failed to init hash map for idx", K(i), K(ret));
           } else if (OB_FAIL(iter->init_probe_row(MY_SPEC.exec_param_array_[i - 1].count()))) {
-            LOG_WARN("failed to init probe row", K(ret));
           }
         }
         if (OB_SUCC(ret)) {
@@ -231,9 +218,7 @@ int ObSubPlanFilterVecOp::inner_open()
                               MY_SPEC.enable_das_group_rescan_,
                               false
                               ))) {
-    LOG_WARN("failed to init drive iterator for SPF", KR(ret));
   } else if (OB_FAIL(init_subplan_iters())) {
-    LOG_WARN("failed to init sub plan iters for SPF", K(ret));
   }
   return ret;
 }
@@ -266,7 +251,6 @@ int ObSubPlanFilterVecOp::inner_get_next_batch(const int64_t max_row_cnt)
     const ObBatchRows *child_brs = NULL;
     set_param_null();
     if (OB_FAIL(drive_iter_.get_next_left_batch(op_max_batch_size, child_brs))) {
-      LOG_WARN("fail to get next batch", K(ret));
     } else if (child_brs->end_) {
       iter_end_ = true;
     }
@@ -282,7 +266,6 @@ int ObSubPlanFilterVecOp::inner_get_next_batch(const int64_t max_row_cnt)
       if (child_brs->skip_->exist(l_idx)) { continue; }
       guard.set_batch_idx(l_idx);
       if (OB_FAIL(drive_iter_.fill_cur_row_group_param())) {
-        LOG_WARN("prepare rescan params failed", K(ret));
       } else {
         if (need_init_before_get_row_) {
           for (int32_t i = 1; OB_SUCC(ret) && i < child_cnt_; ++i) {
@@ -297,7 +280,6 @@ int ObSubPlanFilterVecOp::inner_get_next_batch(const int64_t max_row_cnt)
       if (OB_SUCC(ret))  {
         bool filtered = false;
         if (OB_FAIL(filter_row_vector(eval_ctx_, MY_SPEC.filter_exprs_, *(child_brs->skip_), filtered))) {
-          LOG_WARN("fail to filter row", K(ret), K(l_idx), K(spec_.id_));
         } else if (filtered) {
           brs_.skip_->set(l_idx);
           LOG_TRACE("left rows is filterd", K(l_idx), K(spec_.id_));
@@ -308,7 +290,6 @@ int ObSubPlanFilterVecOp::inner_get_next_batch(const int64_t max_row_cnt)
           EvalBound eval_bound(eval_ctx_.get_batch_size(), l_idx, l_idx + 1, false);
           FOREACH_CNT_X(e, spec_.output_, OB_SUCC(ret)) {
             if (OB_FAIL((*e)->eval_vector(eval_ctx_, *(child_brs->skip_), eval_bound))) {
-              LOG_WARN("expr evaluate failed", K(ret), K(*e));
             }
           }
         }
@@ -364,7 +345,6 @@ int ObSubPlanFilterVecOp::prepare_onetime_exprs_inner()
     sql::ObBitVector &skip = *sql::to_bit_vector(mock_skip_data);
     const ObDynamicParamSetter &setter = MY_SPEC.onetime_exprs_.at(i);
     if (OB_FAIL(setter.set_dynamic_param_vec2(eval_ctx_, skip))) {
-      LOG_WARN("failed to prepare onetime expr", K(ret), K(i));
     }
   }
   return ret;

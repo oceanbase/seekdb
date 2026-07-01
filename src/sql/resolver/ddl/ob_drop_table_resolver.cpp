@@ -42,7 +42,6 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
     SQL_RESV_LOG(WARN, "invalid parse tree!", K(ret));
   } else if (OB_ISNULL(drop_table_stmt = create_stmt<ObDropTableStmt>())) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    SQL_RESV_LOG(ERROR, "create drop table stmt failed");
   } else {
     stmt_ = drop_table_stmt;
     drop_table_stmt->set_is_view_stmt(T_DROP_VIEW == parse_tree.type_);
@@ -55,7 +54,6 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
       ret = OB_ERR_UNEXPECTED;
       SQL_RESV_LOG(WARN, "invalid parse tree!", K(ret));
     } else if (OB_FAIL(session_info_->get_sys_variable(share::SYS_VAR_RECYCLEBIN, is_recyclebin_open))){
-      SQL_RESV_LOG(WARN, "get sys variable failed", K(ret));
     } else {
       drop_table_arg.if_exist_ = (NULL != parse_tree.children_[IF_EXIST_NODE]) ? true : false;
       
@@ -114,11 +112,9 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
           if (OB_FAIL(resolve_table_relation_node(table_node,
                                                   table_name,
                                                   db_name))) {
-            SQL_RESV_LOG(WARN, "failed to resolve table relation node!", K(ret));
           } else {
             table_item.reset();
             if (OB_FAIL(session_info_->get_name_case_mode(table_item.mode_))) {
-              SQL_RESV_LOG(WARN, "failed to get name case mode!", K(ret));
             } else {
               table_item.database_name_ = db_name;
               table_item.table_name_ = table_name;
@@ -126,9 +122,7 @@ int ObDropTableResolver::resolve(const ParseNode &parse_tree)
                 ret = OB_ERR_NONUNIQ_TABLE;
                 LOG_USER_ERROR(OB_ERR_NONUNIQ_TABLE, table_item.table_name_.length(), table_item.table_name_.ptr());
               } else if (OB_FAIL(table_item_set->set_refactored(table_item))) {
-                SQL_RESV_LOG(WARN, "failed to add table item!", K(table_item), K(ret));
               } else if (OB_FAIL(drop_table_stmt->add_table_item(table_item))) {
-                SQL_RESV_LOG(WARN, "failed to add table item!", K(table_item), K(ret));
               }
             }
           }

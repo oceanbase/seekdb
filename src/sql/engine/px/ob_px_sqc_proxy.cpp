@@ -47,9 +47,7 @@ int ObPxSQCProxy::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(link_sqc_qc_channel(sqc_arg_))) {
-    LOG_WARN("fail to link sqc qc channel", K(ret));
   } else if (OB_FAIL(setup_loop_proc(sqc_ctx_))) {
-    LOG_WARN("fail to setup loop proc", K(ret));
   }
   return ret;
 }
@@ -79,11 +77,8 @@ int ObPxSQCProxy::setup_loop_proc(ObSqcCtx &sqc_ctx)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(msg_ready_cond_.init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
-    LOG_WARN("fail init cond", K(ret));
   } else if (OB_FAIL(sqc_ctx.receive_data_ch_provider_.init())) {
-    LOG_WARN("fail init receive ch provider", K(ret));
   } else if (OB_FAIL(sqc_ctx.transmit_data_ch_provider_.init())) {
-    LOG_WARN("fail init transmit ch provider", K(ret));
   } else {
     (void)sqc_ctx.msg_loop_
         .register_processor(sqc_ctx.receive_data_ch_msg_proc_)
@@ -441,10 +436,7 @@ int ObPxSQCProxy::report(int end_ret) const
     LOG_WARN("empty channel", K(sqc), K(ret));
   } else if (OB_FAIL(ch->send(finish_msg,
       sqc_arg.exec_ctx_->get_physical_plan_ctx()->get_timeout_timestamp()))) {
-      // Do our best, if push fails it will be handled by other mechanisms
-    LOG_WARN("fail push data to channel", K(ret));
   } else if (OB_FAIL(ch->flush())) {
-    LOG_WARN("fail flush dtl data", K(ret));
   }
 
   return ret;
@@ -490,7 +482,6 @@ int ObPxSQCProxy::get_whole_msg_provider(uint64_t op_id, ObDtlMsgType msg_type, 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(sqc_ctx_.get_whole_msg_provider(op_id, msg_type, provider))) {
-    SQL_LOG(WARN, "fail get provider", K(ret));
   }
   return ret;
 }
@@ -505,7 +496,6 @@ int ObPxSQCProxy::make_sqc_sample_piece_msg(ObDynamicSamplePieceMsg &msg, bool &
       sqc_ctx_.get_task_count(),
       msg,
       finish))) {
-    LOG_WARN("fail to merge piece msg", K(ret));
   } else if (finish) {
     sample_msg_.expect_range_count_ = msg.expect_range_count_;
     sample_msg_.source_dfo_id_ = msg.source_dfo_id_;
@@ -563,7 +553,6 @@ int ObPxSQCProxy::sync_wait_all(ObPxDatahubDataProvider &provider)
           ret = code.code_;
           LOG_WARN("message loop is interrupted", K(code), K(ret));
         } else if (OB_FAIL(THIS_WORKER.check_status())) {
-          LOG_WARN("failed to sync wait", K(ret), K(task_cnt), K(provider.dh_msg_cnt_));
         }
       }
     }
@@ -580,7 +569,6 @@ int ObPxSQCProxy::construct_p2p_dh_map(ObP2PDhMapInfo &map_info)
   } else if (OB_FAIL(p2p_dh_map_.create(bucket_size,
       "SQCDHMapKey",
       "SQCDHMAPNode"))) {
-    LOG_WARN("create hash table failed", K(ret));
   } else if (map_info.p2p_sequence_ids_.count() !=
       map_info.target_addrs_.count()) {
     ret = OB_ERR_UNEXPECTED;
@@ -590,7 +578,6 @@ int ObPxSQCProxy::construct_p2p_dh_map(ObP2PDhMapInfo &map_info)
          i < map_info.p2p_sequence_ids_.count(); ++i) {
       if (OB_FAIL(p2p_dh_map_.set_refactored(map_info.p2p_sequence_ids_.at(i),
           &map_info.target_addrs_.at(i)))) {
-        LOG_WARN("fail to set p2p dh map", K(ret));
       }
     }
   }
@@ -602,7 +589,6 @@ int ObPxSQCProxy::check_is_local_dh(int64_t p2p_dh_id, bool &is_local, int64_t m
   int ret = OB_SUCCESS;
   ObSArray<ObAddr> *target_addrs = nullptr;
   if (OB_FAIL(p2p_dh_map_.get_refactored(p2p_dh_id, target_addrs))) {
-    LOG_WARN("fail to get dh map", K(ret));
   } else if (OB_ISNULL(target_addrs) || target_addrs->empty()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected target addrs", K(ret));

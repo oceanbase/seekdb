@@ -52,7 +52,6 @@ int ObTenantMajorMergeStrategy::filter_merging_zones(common::ObIArray<common::Ob
     HEAP_VAR(ObZoneMergeInfo, merge_info) {
       SCN global_broadcast_scn;
       if (OB_FAIL(zone_merge_mgr_->get_global_broadcast_scn(global_broadcast_scn))) {
-        LOG_WARN("fail to get get_global_broadcast_scn", KR(ret));
       }
       for (int64_t i = 0; (i < to_merge_zones.count()) && OB_SUCC(ret); i++) {
         
@@ -64,7 +63,6 @@ int ObTenantMajorMergeStrategy::filter_merging_zones(common::ObIArray<common::Ob
           }
         } else if (merge_info.broadcast_scn() == global_broadcast_scn) {
           if (OB_FAIL(to_merge_zones.remove(i))) {
-            LOG_WARN("fail to remove to merge zone", KR(ret), K(i));
           } else {
             i--;
           }

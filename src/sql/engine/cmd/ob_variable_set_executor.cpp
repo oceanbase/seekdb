@@ -66,7 +66,6 @@ int ObVariableSetExecutor::do_set_names(ObExecContext &ctx, ObSetNamesStmt &stmt
   int ret = OB_SUCCESS;
   ObSetNamesExecutor executor;
   if (OB_FAIL(executor.execute(ctx, stmt))) {
-    LOG_WARN("fail to set names", K(ret));
   }
   return ret;
 }
@@ -103,7 +102,6 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("expr_ctx.exec_ctx_ is NULL", K(ret));
       } else if (OB_FAIL(password_ctx.init())) {
-        LOG_WARN("fail to init password ctx", K(ret));
       } else {
         expr_ctx.exec_ctx_->set_sql_proxy(sql_proxy);
       }
@@ -111,10 +109,8 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
       for (int64_t i = 0; OB_SUCC(ret) && i < stmt.get_variables_size(); ++i) {
         ObVariableSetStmt::VariableSetNode &node = tmp_node;
         if (OB_FAIL(stmt.get_variable_node(i, node))) {
-          LOG_WARN("fail to get variable node", K(i), K(ret));
         } else if (OB_NOT_NULL(node.set_names_stmt_)) {
           if (OB_FAIL(do_set_names(ctx, *node.set_names_stmt_))) {
-            LOG_WARN("fail to set names", K(ret));
           }
         } else {
           ObObj value_obj;
@@ -133,14 +129,11 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                                                       *session,
                                                       node.value_expr_,
                                                       transformed))) {
-              LOG_WARN("transform expr failed", K(ret));
           } else if (node.value_expr_->has_flag(CNT_SUB_QUERY)) {
             if (OB_FAIL(calc_subquery_expr_value(ctx, session, node.value_expr_, value_obj))) {
-              LOG_WARN("failed to calc subquery result", K(ret));
             }
           } else {
             if (OB_FAIL(calc_var_value_static_engine(node, stmt, ctx, value_obj))) {
-              LOG_WARN("calc var value in static engine failed", K(ret));
             }
           }
           if (OB_FAIL(ret)) {
@@ -149,7 +142,6 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
               ObObjParam obj_param = value_obj;
               const ObEnumSetMeta *meta = NULL;
               if (OB_FAIL(ObRawExprUtils::extract_enum_set_meta(node.value_expr_->get_result_type(), session, meta))) {
-                LOG_WARN("failed to extrac enum set meta", K(ret));
               } else if (OB_ISNULL(meta) || OB_ISNULL(meta->get_str_values())) {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("failed to get enum set meta", K(ret));
@@ -157,12 +149,10 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                                                                        *meta->get_str_values(),
                                                                        obj_param,
                                                                        value_obj))) {
-                LOG_WARN("cast enum set to string failed", K(ret));
               }
             }
             if (OB_FAIL(ret)) {
             } else if (OB_FAIL(set_user_variable(value_obj, node.variable_name_, expr_ctx))) {
-              LOG_WARN("set user variable failed", K(ret));
             }
           } else {
             ObSetVar set_var(node.variable_name_, node.set_scope_, node.is_set_default_,
@@ -186,9 +176,7 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                   if (OB_FAIL(sql.assign_fmt("select 1 from %s where name='%.*s';",
                       OB_ALL_SYS_VARIABLE_TNAME,
                       node.variable_name_.length(), node.variable_name_.ptr()))) {
-                    LOG_WARN("assign sql string failed", K(ret));
                   } else if (OB_FAIL(sql_client_retry_weak.read(res, sql.ptr()))) {
-                    LOG_WARN("execute sql failed", K(sql), K(ret));
                   } else if (OB_ISNULL(result = res.get_result())) {
                     ret = OB_ERR_UNEXPECTED;
                     LOG_WARN("fail to get sql result", K(ret));
@@ -218,30 +206,25 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
             } else {
               if (OB_FAIL(check_and_convert_sys_var(
                           ctx, set_var, *sys_var, value_obj, out_obj, is_set_stmt))) {
-                LOG_WARN("fail to check", K(ret), K(node), K(*sys_var), K(value_obj));
               } else if (FALSE_IT(value_obj = out_obj)) {
               } else if (OB_FAIL(cast_value(ctx, node,
                                             *expr_ctx.calc_buf_, *sys_var, value_obj, out_obj))) {
-                LOG_WARN("fail to cast value", K(ret), K(node), K(*sys_var), K(value_obj));
               } else if (FALSE_IT(value_obj = out_obj)) {
               } else if (node.variable_name_ == OB_SV_AUTO_INCREMENT_INCREMENT
                          || node.variable_name_ == OB_SV_AUTO_INCREMENT_OFFSET) {
                 if (OB_FAIL(process_auto_increment_hook(session->get_sql_mode(), //FIXME Refer to MySQL source code and move to the function in ObBasicSysVar
                                                         node.variable_name_,
                                                         value_obj))) {
-                  LOG_WARN("fail to process auto increment hook", K(ret));
                 } else {}
               } else if (node.variable_name_ == OB_SV_LAST_INSERT_ID) {
                 if (OB_FAIL(process_last_insert_id_hook(plan_ctx,
                                                         session->get_sql_mode(), //FIXME refer to mysql source code and move to the function in ObBasicSysVar
                                                         node.variable_name_,
                                                         value_obj))) {
-                  LOG_WARN("fail to process auto increment hook", K(ret));
                 } else {}
               } else if (ObSetVar::SET_SCOPE_GLOBAL == node.set_scope_
                         && node.variable_name_ == OB_SV_RESOURCE_MANAGER_PLAN) {
                 if (OB_FAIL(update_resource_mapping_rule_version(*sql_proxy))) {
-                  LOG_WARN("fail to update resource mapping rule version", K(ret));
                 }
               } else if (node.variable_name_ == OB_SV_VALIDATE_PASSWORD_LENGTH
                          || node.variable_name_ == OB_SV_VALIDATE_PASSWORD_MIXED_CASE_COUNT
@@ -250,7 +233,6 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                 if (OB_FAIL(process_validate_password_hook(password_ctx,
                                                            node.variable_name_,
                                                            value_obj))) {
-                  LOG_WARN("fail to process validate password hook", K(ret));
                 }
               } else {}
 
@@ -335,7 +317,6 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                 if (OB_SUCC(ret) && set_var.set_scope_ == ObSetVar::SET_SCOPE_GLOBAL) {
                   if(set_var.var_name_ == OB_SV_TIME_ZONE) {
                     if(OB_FAIL(global_variable_timezone_formalize(ctx, value_obj))) {
-                      LOG_WARN("failed to formalize global variables", K(ret));
                     }
                   }
                   if (OB_SUCC(ret) && OB_FAIL(update_global_variables(ctx, stmt, set_var, value_obj))) {
@@ -344,13 +325,11 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
                 }
                 if (OB_SUCC(ret) && set_var.set_scope_ == ObSetVar::SET_SCOPE_SESSION) {
                   if (OB_FAIL(sys_var->session_update(ctx, set_var, value_obj))) {
-                    LOG_WARN("fail to update", K(ret), K(*sys_var), K(set_var), K(value_obj));
                   }
                 }
                 // Some variables need to be updated immediately
                 if (OB_SUCC(ret)) {
                   if (OB_FAIL(sys_var->update(ctx, set_var, value_obj))) {
-                    LOG_WARN("update sys var state failed", K(ret), K(set_var));
                   }
                 }
               }
@@ -365,7 +344,6 @@ int ObVariableSetExecutor::execute(ObExecContext &ctx, ObVariableSetStmt &stmt)
       if (OB_SUCC(ret)) {
         if (OB_FAIL(cascade_set_validate_password(ctx, stmt, *expr_ctx.calc_buf_,
                                                   *sql_proxy, password_ctx))) {
-          LOG_WARN("fail to cascade set validate password", K(ret));
         }
       }
     }
@@ -395,7 +373,6 @@ int ObVariableSetExecutor::calc_var_value_static_engine(
                                 exec_ctx.get_allocator(),
                                 param_store,
                                 &exec_ctx))) {
-    LOG_WARN("calc const expr failed", K(ret));
   }
   return ret;
 }
@@ -424,23 +401,17 @@ int ObVariableSetExecutor::calc_subquery_expr_value(ObExecContext &ctx,
       ObRawExprPrinter expr_printer(expr_str_buf, OB_MAX_DEFAULT_VALUE_LENGTH,
                                     &pos, ctx.get_sql_ctx()->schema_guard_, print_params);
       if (OB_FAIL(expr_printer.do_print(expr, T_NONE_SCOPE, true, true))) {
-        LOG_WARN("print expr definition failed", K(ret));
       } else if (OB_FAIL(tmp_expr_subquery.assign_fmt("select %.*s from dual",
                                                   static_cast<int32_t>(pos), expr_str_buf))) {
-        LOG_WARN("failed to assign sql", K(ret));
       } else if (OB_FALSE_IT(tmp_expr_query_str = ObString::make_string(tmp_expr_subquery.ptr()))) {
       } else if (OB_FAIL(session_info->get_character_set_client(client_cs_type))) {
-        LOG_WARN("failed to get character type", K(ret));
       } else if (OB_FAIL(ObCharset::charset_convert(temp_allocator,
                                                     tmp_expr_query_str,
                                                     ObCharset::get_default_collation(ObCharset::get_default_charset()),
                                                     ObCharset::get_default_collation(client_cs_type),
                                                     expr_query_str))) {
-        LOG_WARN("failed to convert charset", K(ret));
       } else if (OB_FAIL(expr_subquery.append(expr_query_str))) {
-        LOG_WARN("failed to append sql string", K(ret));
       } else if (OB_FAIL(execute_subquery_expr(ctx, session_info, expr_subquery, value_obj))) {
-        LOG_WARN("failed to execute subquery expr", K(ret));
       }
     }
   }
@@ -465,7 +436,6 @@ int ObVariableSetExecutor::execute_subquery_expr(ObExecContext &ctx,
     LOG_WARN("sql proxy must be inner", K(ret), K(sql_proxy->get_pool()->get_type()));
   } else if (OB_FALSE_IT(pool = static_cast<observer::ObInnerSQLConnectionPool *>(sql_proxy->get_pool()))) {
   } else if (OB_FAIL(pool->acquire(session_info, conn))) {
-    LOG_WARN("failed to acquire connection", K(ret));
   } else {
     int64_t idx = 0;
     ObObj tmp_value;
@@ -473,13 +443,11 @@ int ObVariableSetExecutor::execute_subquery_expr(ObExecContext &ctx,
       common::sqlclient::ObMySQLResult *result = NULL;
       bool need_check = false;
       if (OB_FAIL(session_info->check_feature_enable(ObCompatFeatureType::MYSQL_SET_VAR_PRIV_ENHANCE, need_check))) {
-        LOG_WARN("failed to check feature enable", K(ret));
       } else if (need_check) {
         conn->set_check_priv(true);
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(conn->execute_read(subquery_expr.ptr(), res))) {
-        LOG_WARN("failed to execute sql", K(ret), K(subquery_expr));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret));
@@ -490,7 +458,6 @@ int ObVariableSetExecutor::execute_subquery_expr(ObExecContext &ctx,
           LOG_WARN("failed to get next result", K(ret));
         }
       } else if (OB_FAIL(result->get_obj(idx, tmp_value))) {
-        LOG_WARN("failed to get obj", K(ret), K(idx));
       }
     }
     if (OB_SUCC(ret) && (OB_FAIL(ob_write_obj(ctx.get_allocator(), tmp_value, value_obj)))) {
@@ -501,7 +468,6 @@ int ObVariableSetExecutor::execute_subquery_expr(ObExecContext &ctx,
   if (OB_NOT_NULL(conn) && OB_NOT_NULL(sql_proxy)) {
     int tmp_ret = sql_proxy->close(conn, true);
     if (OB_UNLIKELY(tmp_ret != OB_SUCCESS)) {
-      LOG_WARN("failed to close sql connection", K(tmp_ret));
     }
     ret = ret == OB_SUCCESS ? tmp_ret : ret;
   }
@@ -521,9 +487,7 @@ int ObVariableSetExecutor::set_user_variable(const ObObj &val,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(switch_to_session_variable(expr_ctx, val, sess_var))) {
-    LOG_WARN("fail to switch to session variable", K(ret), K(val));
   } else if (OB_FAIL(session->replace_user_variable(*ctx, variable_name, sess_var))) {
-    LOG_WARN("set variable to session plan failed", K(ret), K(variable_name));
   } else {
   }
   return ret;
@@ -540,9 +504,7 @@ int ObVariableSetExecutor::set_user_variable(const ObObj &val,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(switch_to_session_variable(val, sess_var))) {
-    LOG_WARN("fail to switch to session variable", K(ret), K(val));
   } else if (OB_FAIL(session->replace_user_variable(variable_name, sess_var))) {
-    LOG_WARN("set variable to session plan failed", K(ret), K(variable_name));
   } else {
   }
   return ret;
@@ -573,7 +535,6 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
     
     ObString first_stmt;
     if (OB_FAIL(stmt.get_first_stmt(first_stmt))) {
-      LOG_WARN("fail to get first stmt" , K(ret));
     } else {
       arg.ddl_stmt_str_ = first_stmt;
     }
@@ -584,7 +545,6 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
       ObString coll_str;
       int64_t coll_int64 = OB_INVALID_INDEX;
       if (OB_FAIL(val.get_int(coll_int64))) {
-        LOG_WARN("get int from val failed", K(ret));
       } else if (OB_UNLIKELY(!ObCharset::is_valid_collation(coll_int64))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_ERROR("invalid collation", K(ret), K(coll_int64), K(val));
@@ -592,10 +552,7 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
         //do nothing
       } else if (OB_FAIL(ObBasicSysVar::get_charset_var_and_val_by_collation(
                   set_var.var_name_, coll_str, extra_var_name, extra_val, extra_coll_type))) {
-        LOG_ERROR("fail to get charset variable and value by collation",
-                  K(ret), K(set_var.var_name_), K(val), K(coll_str));
       } else if (OB_FAIL(databuff_printf(extra_var_value_buf, sizeof(extra_var_value_buf), pos, "%d", static_cast<int32_t>(extra_coll_type)))) {
-        LOG_WARN("databuff printf failed", K(extra_coll_type), K(ret));
       } else {
         extra_var_value.assign(extra_var_value_buf, pos);
         should_update_extra_var = true;
@@ -606,7 +563,6 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
       ObString cs_str;
       int64_t coll_int64 = OB_INVALID_INDEX;
       if (OB_FAIL(val.get_int(coll_int64))) {
-        LOG_WARN("get int from value failed", K(ret));
       } else if (OB_UNLIKELY(!ObCharset::is_valid_collation(coll_int64))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid collation", K(ret), K(coll_int64));
@@ -615,9 +571,7 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
         //do nothing
       } else if (OB_FAIL(ObBasicSysVar::get_collation_var_and_val_by_charset(
           set_var.var_name_, cs_str, extra_var_name, extra_val, extra_coll_type))) {
-        LOG_ERROR("fail to get collation variable and value by charset", K(ret), K(set_var.var_name_), K(val), K(cs_str));
       } else if (OB_FAIL(databuff_printf(extra_var_value_buf, sizeof(extra_var_value_buf), pos, "%d", static_cast<int32_t>(extra_coll_type)))) {
-        LOG_WARN("databuff printf failed", K(extra_coll_type), K(ret));
       } else {
         extra_var_value.assign(extra_var_value_buf, pos);
         should_update_extra_var = true;
@@ -630,7 +584,6 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
         ret = OB_INVALID_DATE_FORMAT;
         LOG_WARN("date format not recognized", K(ret), K(set_var.var_name_), K(val));
       } else if (OB_FAIL(val.get_varchar(format))) {
-        LOG_WARN("fail get varchar", K(val), K(ret));
       } else {
         int64_t nls_enum = ObNLSFormatEnum::NLS_DATE;
         ObDTMode mode = DT_TYPE_DATETIME;
@@ -648,39 +601,31 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
         // TODO: support double-quotes in system variable when ob-client support.
         if (OB_FAIL(ObDFMUtil::parse_datetime_format_string(format, dfm_elems,
                                                             false /* support double-quotes */))) {
-          LOG_WARN("fail to parse oracle datetime format string", K(ret), K(format));
         } else if (OB_FAIL(ObDFMUtil::check_semantic(dfm_elems, elem_flags, mode))) {
-          LOG_WARN("check semantic of format string failed", K(ret), K(format));
         }
       }
     } else if (set_var.var_name_ == OB_SV_LOG_LEVEL) {
       ObString log_level;
       if (OB_FAIL(val.get_varchar(log_level))) {
-        LOG_WARN("fail get varchar", K(val), K(ret));
       } else if (0 == log_level.case_compare("disabled")) {
         //allowed for variables
       } else if (OB_FAIL(OB_LOGGER.parse_check(log_level.ptr(), log_level.length()))) {
-        LOG_WARN("Log level parse check error", K(log_level), K(ret));
       }
     } else if (set_var.var_name_ == OB_SV_TRANSACTION_ISOLATION) {
       extra_var_name = ObString::make_string(OB_SV_TX_ISOLATION);
       should_update_extra_var = true;
       if (OB_FAIL(val.get_varchar(extra_var_value))) {
-        LOG_WARN("fail get varchar", K(val), K(ret));
       }
     } else if (set_var.var_name_ == OB_SV_TX_ISOLATION) {
       extra_var_name = ObString::make_string(OB_SV_TRANSACTION_ISOLATION);
       should_update_extra_var = true;
       if (OB_FAIL(val.get_varchar(extra_var_value))) {
-        LOG_WARN("fail get varchar", K(val), K(ret));
       }
     } else if (set_var.var_name_ == OB_SV_TX_READ_ONLY) {
       int64_t extra_var_values = -1;
       extra_var_name = ObString::make_string(OB_SV_TRANSACTION_READ_ONLY);
       if (OB_FAIL(val.get_int(extra_var_values))) {
-        LOG_WARN("fail get int", K(val), K(ret));
       } else if (OB_FAIL(databuff_printf(extra_var_value_buf, sizeof(extra_var_value_buf), pos, "%d", static_cast<int32_t>(extra_var_values)))) {
-        LOG_WARN("databuff printf failed", K(extra_var_values), K(ret));
       } else {
         extra_var_value.assign(extra_var_value_buf, pos);
         should_update_extra_var = true;
@@ -689,9 +634,7 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
       extra_var_name = ObString::make_string(OB_SV_TX_READ_ONLY);
       int64_t extra_var_values = -1;
       if (OB_FAIL(val.get_int(extra_var_values))) {
-        LOG_WARN("fail get int", K(val), K(ret));
       } else if (OB_FAIL(databuff_printf(extra_var_value_buf, sizeof(extra_var_value_buf), pos, "%d", static_cast<int32_t>(extra_var_values)))) {
-        LOG_WARN("databuff printf failed", K(extra_var_values), K(ret));
       } else {
         extra_var_value.assign(extra_var_value_buf, pos);
         should_update_extra_var = true;
@@ -699,7 +642,6 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
     } else if (set_var.var_name_ == OB_SV_MAX_READ_STALE_TIME) {
       int64_t max_read_stale_time = 0;
       if (OB_FAIL(val.get_int(max_read_stale_time))) {
-        LOG_WARN("fail to get int value", K(ret), K(val));
       } else if (max_read_stale_time != ObSysVarFactory::INVALID_MAX_READ_STALE_TIME &&
                  max_read_stale_time < GCONF.weak_read_version_refresh_interval) {
         ret = OB_INVALID_ARGUMENT;
@@ -708,24 +650,19 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
       }
     } else if (set_var.var_name_ ==  OB_SV_OPTIMIZER_FEATURES_ENABLE) {
       if (OB_FAIL(ObBasicSessionInfo::check_optimizer_features_enable_valid(val))) {
-        LOG_WARN("fail check optimizer_features_enable valid", K(val), K(ret));
       }
     } else if (set_var.var_name_ ==  OB_SV_PRIVILEGE_FEATURES_ENABLE) {
       if (OB_FAIL(ObBasicSessionInfo::check_optimizer_features_enable_valid(val))) {
-        LOG_WARN("fail check privilege_features_enable valid", K(val), K(ret));
       }
     }
 
     if (OB_SUCC(ret) && should_update_extra_var) {
       ObSysVarSchema sysvar_schema;
       if (OB_FAIL(sysvar_schema.set_name(extra_var_name))) {
-        LOG_WARN("set sysvar schema name failed", K(ret));
       } else if (OB_FAIL(sysvar_schema.set_value(extra_var_value))) {
-        LOG_WARN("set sysvar schema value failed", K(ret));
       } else {
         
         if (OB_FAIL(arg.sys_var_list_.push_back(sysvar_schema))) {
-          LOG_WARN("store sys var to array failed", K(ret));
         }
       }
     }
@@ -743,7 +680,6 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
     if (set_var.var_name_ == OB_SV_TCP_INVITED_NODES) {
       uint64_t data_version = 0;
       if (OB_FAIL(GET_MIN_DATA_VERSION(data_version))) {
-        LOG_WARN("fail to get tenant data version", KR(ret));
       } else {
         sys_var_val_length = OB_MAX_TCP_INVITED_NODES_LENGTH;
       }
@@ -753,13 +689,10 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
       LOG_WARN("set sysvar value is overflow", "max length", sys_var_val_length,
                "value length", val_str.length(), "name", set_var.var_name_, "value", val_str);
     } else if (OB_FAIL(sysvar_schema.set_name(set_var.var_name_))) {
-      LOG_WARN("set sysvar schema name failed", K(ret));
     } else if (OB_FAIL(sysvar_schema.set_value(val_str))) {
-      LOG_WARN("set sysvar schema value failed", K(ret));
     } else {
       
       if (OB_FAIL(arg.sys_var_list_.push_back(sysvar_schema))) {
-        LOG_WARN("store sys var to array failed", K(ret));
       }
     }
   }
@@ -768,7 +701,6 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
       ret = OB_NOT_INIT;
       LOG_WARN("task exec ctx is NULL", K(ret), K(task_exec_ctx));
     } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->modify_system_variable(arg); }))) {
-      LOG_WARN("rpc proxy alter system variable failed", K(ret));
     } else {}
   }
   return ret;
@@ -804,7 +736,6 @@ int ObVariableSetExecutor::global_variable_timezone_formalize(ObExecContext &ctx
         int32_t offset_min = static_cast<int32_t>(SEC_TO_MIN(sec_val));
         const char *fmt_str = (offset_min < 0 ? "-%02d:%02d" : "+%02d:%02d");
         if (OB_FAIL(databuff_printf(tmp_buf, buf_len, pos, fmt_str, abs(offset_min) / 60, abs(offset_min) % 60))) {
-          LOG_ERROR("fail to print offset_min information to tmp_buf", K(ret), K(tmp_buf), K(offset_min));
         } else {
           in_val.set_varchar(tmp_buf, pos);
         }
@@ -933,18 +864,13 @@ int ObVariableSetExecutor::cast_value(ObExecContext &ctx,
             ObBasicSessionInfo::create_dtc_params(ctx.get_my_session());
       if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
                   schema_guard))) {
-        LOG_WARN("get schema guard failed", K(ret));
       } else if (OB_FAIL(schema_guard.get_tenant_system_variable(var_node.variable_name_, var_schema))) {
-        LOG_WARN("get tenant system variable failed", K(ret), K(var_node.variable_name_));
       } else if (OB_FAIL(var_schema->get_value(&calc_buf, dtc_params, out_val))) {
-        LOG_WARN("get value from sysvar schema failed", K(ret));
       }
     } else if (ObSetVar::SET_SCOPE_GLOBAL == var_node.set_scope_) {
       const ObObj &def_val = sys_var.get_global_default_value();
       DEFINE_CAST_CTX();
       if (OB_FAIL(ObObjCaster::to_type(sys_var.get_data_type(), cast_ctx, def_val, out_val))) {
-        LOG_ERROR("failed to cast object", K(ret), K(var_node.variable_name_),
-                  K(def_val), K(sys_var.get_data_type()));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -955,8 +881,6 @@ int ObVariableSetExecutor::cast_value(ObExecContext &ctx,
   } else {
     DEFINE_CAST_CTX();
     if (OB_FAIL(ObObjCaster::to_type(sys_var.get_data_type(), cast_ctx, in_val, out_val))) {
-      LOG_WARN("failed to cast object", K(ret), K(var_node.variable_name_),
-               K(in_val), K(sys_var.get_data_type()));
     } else {}
   }
   return ret;
@@ -979,9 +903,7 @@ int ObVariableSetExecutor::process_session_autocommit_hook(ObExecContext &exec_c
     auto tx_desc = my_session->get_tx_desc();
     bool in_trans = OB_NOT_NULL(tx_desc) && tx_desc->in_tx_or_has_extra_state();
     if (OB_FAIL(my_session->get_autocommit(orig_ac))) {
-      LOG_WARN("fail to get autocommit", K(ret));
     } else if (OB_FAIL(val.get_int(autocommit))) {
-      LOG_WARN("fail get commit val", K(val), K(ret));
     } else if (0 != autocommit && 1 != autocommit) {
       char autocommit_str[32] = {'\0'};
       int64_t pos = 0;
@@ -1020,7 +942,6 @@ int ObVariableSetExecutor::process_session_autocommit_hook(ObExecContext &exec_c
         // `set transaction read only`
         // `set transaction isolation level`
         if (OB_FAIL(ObSqlTransControl::implicit_end_trans(exec_ctx, false, NULL, false))) {
-          LOG_WARN("fail implicit commit trans", K(ret));
         }
       } else {
         // Other only affects the AC flag bit, but no commit operation is needed
@@ -1037,7 +958,6 @@ int ObVariableSetExecutor::process_auto_increment_hook(const ObSQLMode sql_mode,
   int ret = OB_SUCCESS;
   uint64_t auto_increment = 0;
   if (OB_FAIL(val.get_uint64(auto_increment))) {
-    LOG_WARN("fail get auto_increment value", K(ret), K(val));
   } else {
     if (SMO_STRICT_ALL_TABLES & sql_mode) {
       if (auto_increment <= 0 || auto_increment > UINT16_MAX) {
@@ -1120,7 +1040,6 @@ int ObVariableSetExecutor::update_resource_mapping_rule_version(ObMySQLProxy &sq
   ObSqlString sql;
   const char *tname = OB_ALL_SYS_STAT_TNAME;
   if (OB_FAIL(sql.assign_fmt("REPLACE INTO %s (", tname))) {
-    STORAGE_LOG(WARN, "append table name failed, ", K(ret));
   } else {
     ObSqlString values;
     SQL_COL_APPEND_CSTR_VALUE(sql, values, "ob_current_resource_mapping_version", "name");
@@ -1134,11 +1053,9 @@ int ObVariableSetExecutor::update_resource_mapping_rule_version(ObMySQLProxy &sq
       if (OB_FAIL(sql.append_fmt(") VALUES (%.*s)",
                                   static_cast<int32_t>(values.length()),
                                   values.ptr()))) {
-        LOG_WARN("append sql failed, ", K(ret));
       } else if (OB_FAIL(sql_proxy.write(
                                       sql.ptr(),
                                       affected_rows))) {
-        LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else {
         if (is_single_row(affected_rows) || is_double_row(affected_rows)) {
           // insert or replace
@@ -1163,7 +1080,6 @@ int ObVariableSetExecutor::switch_to_session_variable(const ObExprCtx &expr_ctx,
     ObObj obj_tmp;
     const ObObj *res_obj_ptr = NULL;
     if (OB_FAIL(ObObjCaster::to_type(ObVarcharType, cast_ctx, value, obj_tmp, res_obj_ptr))) {
-      LOG_WARN("failed to cast object to ObVarcharType ", K(ret), K(value));
     } else if (OB_ISNULL(res_obj_ptr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("res_obj_ptr is NULL", K(ret));
@@ -1218,23 +1134,18 @@ int ObVariableSetExecutor::ObValidatePasswordCtx::init()
   } else {
     ObSchemaGetterGuard schema_guard;
     if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("get schema guard failed", K(ret));
     } else if (OB_FAIL(get_current_val(schema_guard,
                                        share::SYS_VAR_VALIDATE_PASSWORD_LENGTH,
                                        cur_length_))) {
-      LOG_WARN("fail to get validate_password_length", K(ret));
     } else if (OB_FAIL(get_current_val(schema_guard,
                                        share::SYS_VAR_VALIDATE_PASSWORD_MIXED_CASE_COUNT,
                                        cur_mixed_case_count_))) {
-      LOG_WARN("fail to get validate_password_mixed_case_count", K(ret));
     } else if (OB_FAIL(get_current_val(schema_guard,
                                        share::SYS_VAR_VALIDATE_PASSWORD_NUMBER_COUNT,
                                        cur_number_count_))) {
-      LOG_WARN("fail to get validate_password_number_count", K(ret));
     } else if (OB_FAIL(get_current_val(schema_guard,
                                        share::SYS_VAR_VALIDATE_PASSWORD_SPECIAL_CHAR_COUNT,
                                        cur_special_count_))) {
-      LOG_WARN("fail to get validate_password_special_char_count", K(ret));
     } else {
       expect_length_ = cur_length_;
     }
@@ -1251,14 +1162,11 @@ int ObVariableSetExecutor::ObValidatePasswordCtx::get_current_val(
   const schema::ObSysVarSchema *var_schema = NULL;
   ObObj val_obj;
   if (OB_FAIL(schema_guard.get_tenant_system_variable(var_id, var_schema))) {
-    LOG_WARN("fail to get system variable", K(ret), K(var_id));
   } else if (OB_ISNULL(var_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("var_schema is null");
   } else if (OB_FAIL(var_schema->get_value(NULL, NULL, val_obj))) {
-    LOG_WARN("get value from var_schema failed", K(ret), K(*var_schema));
   } else if (OB_FAIL(val_obj.get_uint64(val))) {
-    LOG_WARN("fail to get uint", K(val_obj), K(ret));
   }
   return ret;
 }
@@ -1278,7 +1186,6 @@ int ObVariableSetExecutor::process_validate_password_hook(ObValidatePasswordCtx 
   int ret = OB_SUCCESS;
   uint64_t new_val = 0;
   if (OB_FAIL(val.get_uint64(new_val))) {
-    LOG_WARN("fail to get uint", K(val), K(ret));
   } else if (var_name == OB_SV_VALIDATE_PASSWORD_MIXED_CASE_COUNT) {
     ctx.cur_mixed_case_count_ = new_val;
   } else if (var_name == OB_SV_VALIDATE_PASSWORD_NUMBER_COUNT) {
@@ -1292,7 +1199,6 @@ int ObVariableSetExecutor::process_validate_password_hook(ObValidatePasswordCtx 
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(ctx.update_expect_length())) {
-    LOG_WARN("failed to update expect length", K(ret));
   }
   return ret;
 }
@@ -1312,7 +1218,6 @@ int ObVariableSetExecutor::cascade_set_validate_password(ObExecContext &ctx,
                              calc_buf, sql_proxy);
     value_obj.set_uint64(password_ctx.expect_length_);
     if (OB_FAIL(update_global_variables(ctx, stmt, set_var, value_obj))) {
-      LOG_WARN("failed to update global variables", K(ret));
     }
   }
   return ret;

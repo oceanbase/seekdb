@@ -210,13 +210,11 @@ int TriggerHandle::init_param_old_row(
       ObObj dst;
       bool is_udt = false;
       if (OB_FAIL(trig_ctdef.old_row_exprs_.at(i)->eval(eval_ctx, datum))) {
-        LOG_WARN("failed to eval rowid expr", K(ret));
       } else if (OB_ISNULL(datum))  {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("datum is NULL", K(ret));
       } else if (OB_FAIL(datum->to_obj(result,
           trig_ctdef.old_row_exprs_.at(i)->obj_meta_))) {
-        LOG_WARN("failed to datum to obj", K(ret));
       } else if ((is_udt = ob_is_geometry(trig_ctdef.old_row_exprs_.at(i)->obj_meta_.get_type()))) {
         if (OB_FAIL(OB_ISNULL(eval_ctx.exec_ctx_.get_sql_ctx()))) {
           ret = OB_ERR_UNEXPECTED;
@@ -228,21 +226,17 @@ int TriggerHandle::init_param_old_row(
                                                 result,
                                                 dst,
                                                 trig_ctdef.old_row_exprs_.at(i)->obj_meta_.get_type()))) {
-          LOG_WARN("failed to convert sql type to pl type", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (is_udt) {
         if (OB_FAIL(pl::ObUserDefinedType::deep_copy_obj(*trig_rtdef.old_record_->get_allocator(), dst, cells[i]))) {
-          LOG_WARN("fail to deep copy obj", K(ret));
         }
         int tmp_ret = pl::ObUserDefinedType::destruct_obj(dst);
         if (tmp_ret != OB_SUCCESS) {
-          LOG_WARN("destruct obj failed", K(ret));
         }
       } else {
         if (OB_FAIL(deep_copy_obj(*trig_rtdef.old_record_->get_allocator(), result, cells[i]))) {
-          LOG_WARN("fail to deep copy obj", K(ret));
         }
       }
       LOG_DEBUG("debug init param old expr", K(ret), K(i),
@@ -252,7 +246,6 @@ int TriggerHandle::init_param_old_row(
     } else if (OB_NOT_NULL(trig_ctdef.rowid_old_expr_)) {
       ObDatum *datum;
       if (OB_FAIL(trig_ctdef.rowid_old_expr_->eval(eval_ctx, datum))) {
-        LOG_WARN("failed to eval rowid expr", K(ret));
       }
       LOG_DEBUG("debug init param rowid old expr", K(ret),
         K(ObToStringExpr(eval_ctx, *trig_ctdef.rowid_old_expr_)));
@@ -288,13 +281,11 @@ int TriggerHandle::init_param_new_row(
       ObObj dst;
       bool is_udt =false;
       if (OB_FAIL(trig_ctdef.new_row_exprs_.at(i)->eval(eval_ctx, datum))) {
-        LOG_WARN("failed to eval rowid expr", K(ret));
       } else if (OB_ISNULL(datum))  {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("datum is NULL", K(ret));
       } else if (OB_FAIL(datum->to_obj(result,
           trig_ctdef.new_row_exprs_.at(i)->obj_meta_))) {
-        LOG_WARN("failed to datum to obj", K(ret));
       } else if ((is_udt = ob_is_geometry(trig_ctdef.new_row_exprs_.at(i)->obj_meta_.get_type()))) {
         if (OB_FAIL(OB_ISNULL(eval_ctx.exec_ctx_.get_sql_ctx()))) {
           ret = OB_ERR_UNEXPECTED;
@@ -306,7 +297,6 @@ int TriggerHandle::init_param_new_row(
                                                 result,
                                                 dst,
                                                 trig_ctdef.new_row_exprs_.at(i)->obj_meta_.get_type()))) {
-          LOG_WARN("failed to convert sql type to pl type", K(ret));
         }
       }
 
@@ -322,14 +312,12 @@ int TriggerHandle::init_param_new_row(
                                                           accuracy,
                                                           &eval_ctx.exec_ctx_.get_allocator(),
                                                           &result))) {
-          LOG_WARN("failed to pad space", K(col_type), K(accuracy), K(ret));
         }
       }
       if (is_udt) {
         OZ (pl::ObUserDefinedType::deep_copy_obj(*trig_rtdef.new_record_->get_allocator(), dst, cells[i]));
         int tmp_ret = pl::ObUserDefinedType::destruct_obj(dst);
         if (tmp_ret != OB_SUCCESS) {
-          LOG_WARN("destruct obj failed", K(ret));
         }
       } else {
         OZ (deep_copy_obj(*trig_rtdef.new_record_->get_allocator(), result, cells[i]));
@@ -341,7 +329,6 @@ int TriggerHandle::init_param_new_row(
     } else if (OB_NOT_NULL(trig_ctdef.rowid_new_expr_)) {
       ObDatum *datum;
       if (OB_FAIL(trig_ctdef.rowid_new_expr_->eval(eval_ctx, datum))) {
-        LOG_WARN("failed to eval rowid expr", K(ret));
       }
       LOG_DEBUG("debug init param rowid new expr", K(ret),
         K(ObToStringExpr(eval_ctx, *trig_ctdef.rowid_new_expr_)));
@@ -377,14 +364,11 @@ int TriggerHandle::set_rowid_into_row(
       }
       cells[i].set_null();
       if (OB_FAIL(src_expr->eval(eval_ctx, datum))) {
-        LOG_WARN("failed to eval expr", K(ret));
       } else if (OB_ISNULL(datum)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("datum is NULL", K(ret));
       } else if (OB_FAIL(datum->to_obj(result, src_expr->obj_meta_))) {
-        LOG_WARN("failed to datum to obj", K(ret));
       } else if (OB_FAIL(deep_copy_obj(*record->get_allocator(), result, cells[i]))) {
-        LOG_WARN("fail to deep copy obj", K(ret));
       } else {
         LOG_DEBUG("set_rowid_into_row done", K(ret), K(ObToStringExpr(eval_ctx, *src_expr)));
       }
@@ -432,7 +416,6 @@ int TriggerHandle::calc_when_condition(
   } else if (OB_FAIL(calc_trigger_routine(dml_op.get_exec_ctx(),
                            trigger_id, ROUTINE_IDX_CALC_WHEN,
                            *trig_rtdef.tg_when_point_params_, result))) {
-    LOG_WARN("failed to cacl trigger routine", K(ret));
   } else {
     need_fire = result.is_true();
     LOG_DEBUG("TRIGGER", K(result), K(need_fire));
@@ -504,12 +487,10 @@ int TriggerHandle::check_and_update_new_row(
         ObDatum *datum;
         ObObj new_obj;
         if (OB_FAIL(new_row_exprs.at(i)->eval(eval_ctx, datum))) {
-          LOG_WARN("failed to eval expr", K(ret));
         } else if (OB_ISNULL(datum))  {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("datum is NULL", K(ret));
         } else if (OB_FAIL(datum->to_obj(new_obj, new_row_exprs.at(i)->obj_meta_))) {
-          LOG_WARN("failed to to obj", K(ret));
         } else {
           bool is_strict_equal = false;
           if (new_obj.is_lob_storage()) {
@@ -522,12 +503,10 @@ int TriggerHandle::check_and_update_new_row(
                                                                               cmp_obj,
                                                                               NULL,
                                                                               &lob_allocator))) {
-              LOG_WARN("failed to convert lob", K(ret), K(new_obj));
             } else if (OB_FAIL(ObTextStringIter::convert_outrow_lob_to_inrow_templob(new_cells[i],
                                                                               other_obj,
                                                                               NULL,
                                                                               &lob_allocator))) {
-              LOG_WARN("failed to convert lob", K(ret), K(i), K(new_cells[i]));
             } else {
               is_strict_equal = cmp_obj.strict_equal(other_obj);
             }
@@ -567,14 +546,11 @@ int TriggerHandle::check_and_update_new_row(
                                                     new_cells[i],
                                                     tmp_obj,
                                                     expr->obj_meta_.get_type()))) {
-              LOG_WARN("failed to convert pl type to sql type", K(ret));
             }
           } else if (OB_FAIL(deep_copy_obj(eval_ctx.exec_ctx_.get_allocator(), new_cells[i], tmp_obj))) {
-            LOG_WARN("failed to deep copy obj", K(ret));
           }
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(write_datum.from_obj(tmp_obj))) {
-            LOG_WARN("failed to from obj", K(ret));
           } else if (is_lob_storage(tmp_obj.get_type()) &&
                      OB_FAIL(ob_adjust_lob_datum(tmp_obj, expr->obj_meta_,
                                                  eval_ctx.exec_ctx_.get_allocator(), write_datum))) {
@@ -594,7 +570,6 @@ int TriggerHandle::check_and_update_new_row(
         // so the generated column can evalate by eval_function
         ObDatum *datum;
         if (OB_FAIL(new_row_exprs.at(i)->eval(eval_ctx, datum))) {
-          LOG_WARN("failed to eval expr", K(ret));
         } else {
           LOG_DEBUG("trigger write new datum", K(new_cells[i]), K(i),
             K(ObToStringExpr(eval_ctx, *new_row_exprs.at(i))));
@@ -617,7 +592,6 @@ int TriggerHandle::do_handle_before_row(
     LOG_DEBUG("debug handle before row");
     uint64_t tg_event = trig_ctdef.tg_event_;
     if (OB_FAIL(do_handle_rowid_before_row(dml_op, trig_ctdef, trig_rtdef, tg_event))) {
-      LOG_WARN("do handle rowid before row failed", K(ret), K(tg_event));
     } else {
       ObSQLSessionInfo *my_session = dml_op.get_exec_ctx().get_my_session();
       stmt::StmtType saved_stmt_type = stmt::T_NONE;
@@ -646,7 +620,6 @@ int TriggerHandle::do_handle_before_row(
           } else {
             const ObTableModifySpec &modify_spec = static_cast<const ObTableModifySpec&>(dml_op.get_spec());
             if (OB_FAIL(calc_before_row(dml_op, trig_rtdef, tg_arg.get_trigger_id()))) {
-              LOG_WARN("failed to calc before row", K(ret));
             } else if ((ObTriggerEvents::is_update_event(tg_event) ||
                   ObTriggerEvents::is_insert_event(tg_event))) {
                 if (!trig_ctdef.all_tm_points_.has_instead_row() &&
@@ -686,7 +659,6 @@ int TriggerHandle::calc_after_row(
   } else if (OB_FAIL(calc_trigger_routine(dml_op.get_exec_ctx(),
                                           trigger_id, idx,
                                           *trig_rtdef.tg_row_point_params_))) {
-    LOG_WARN("failed to calc trigger routine", K(ret));
   }
   return ret;
 }
@@ -702,7 +674,6 @@ int TriggerHandle::calc_before_row(
   } else if (OB_FAIL(calc_trigger_routine(dml_op.get_exec_ctx(),
                                           trigger_id, idx,
                                           *trig_rtdef.tg_row_point_params_))) {
-    LOG_WARN("failed to calc trigger routine", K(ret));
   }
   return ret;
 }
@@ -717,7 +688,6 @@ int TriggerHandle::calc_before_stmt(
   ParamStore params;
   if (OB_FAIL(calc_trigger_routine(dml_op.get_exec_ctx(),
                                    trigger_id, ROUTINE_IDX_BEFORE_STMT, params))) {
-    LOG_WARN("failed to calc trigger routine", K(ret));
   }
   return ret;
 }
@@ -740,7 +710,6 @@ int TriggerHandle::do_handle_after_stmt(
   }
   int tmp_ret = OB_SUCCESS;
   if (OB_SUCCESS != (tmp_ret = destroy_compound_trigger_state(dml_op.get_exec_ctx(), trig_ctdef))) {
-    LOG_WARN("destroy compound trigger state failed", K(tmp_ret), K(ret));
   }
   return ret;
 }
@@ -770,7 +739,6 @@ int TriggerHandle::do_handle_before_stmt(
       const ObTriggerArg &tg_arg = trig_ctdef.tg_args_.at(i);
       if (tg_arg.has_before_stmt_point() && tg_arg.has_trigger_events(tg_event)) {
         if (OB_FAIL(calc_before_stmt(dml_op, trig_rtdef, tg_arg.get_trigger_id()))) {
-          LOG_WARN("failed to calc befeore stmt", K(ret));
         }
       }
     }
@@ -818,7 +786,6 @@ int TriggerHandle::do_handle_after_row(
   int ret = OB_SUCCESS;
   if (trig_ctdef.all_tm_points_.has_after_row()) {
     if (OB_FAIL(do_handle_rowid_after_row(dml_op, trig_ctdef, trig_rtdef, tg_event))) {
-      LOG_WARN("do handle rowid after row failed", K(ret), K(tg_event));
     } else {
       bool need_fire = false;
       LOG_DEBUG("TRIGGER", K(trig_ctdef.tg_args_));
@@ -892,7 +859,6 @@ int TriggerHandle::convert_sql_type_to_pl_type(ObSQLSessionInfo *session,
     ObCastCtx cast_ctx(&alloc, &dtc_params, CM_NONE, src.get_collation_type());
     cast_ctx.exec_ctx_ = &exec_ctx;
     if (OB_FAIL(ObObjCaster::to_type(ObExtendType, cast_ctx, src, dst))) {
-      LOG_WARN("failed to cast to extend type", K(ret), K(src), K(dst), K(obj_type));
     }
   }
   return ret;
@@ -910,7 +876,6 @@ int TriggerHandle::convert_pl_type_to_sql_type(ObSQLSessionInfo *session,
     const ObDataTypeCastParams dtc_params = ObBasicSessionInfo::create_dtc_params(session);
     ObCastCtx cast_ctx(&alloc, &dtc_params, CM_NONE, src.get_collation_type());
     if (OB_FAIL(ObObjCaster::to_type(obj_type, cast_ctx, src, dst))) {
-      LOG_WARN("failed to cast to extend type", K(ret), K(src), K(dst), K(obj_type));
     }
   }
   return ret;

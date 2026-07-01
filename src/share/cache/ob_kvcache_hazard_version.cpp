@@ -181,7 +181,6 @@ int ObKVCacheHazardStation::init(const int64_t waiting_node_threshold, const int
 
 void ObKVCacheHazardStation::destroy()
 {
-  COMMON_LOG(INFO, "Hazard station begin to destroy");
 
   inited_ = false;
   if (OB_NOT_NULL(hazard_slots_)) {
@@ -210,7 +209,6 @@ int ObKVCacheHazardStation::delete_node(const int64_t slot_id, ObKVCacheHazardNo
   } else {
     node->set_version(ATOMIC_FAA(&version_, 1));
     if (OB_UNLIKELY(nullptr != node->get_next())) {
-      COMMON_LOG(ERROR, "Unexpected hazard next", KPC(node));
       ob_abort();
     } else {
       hazard_slots_[slot_id].delete_node(*node);
@@ -271,7 +269,6 @@ void ObKVCacheHazardStation::release(const int64_t slot_id)
   }
 
   if (OB_FAIL(ret)) {
-    COMMON_LOG(ERROR, "Fail to release version", K(ret));
   }
 }
 
@@ -324,12 +321,9 @@ int ObKVCacheHazardStation::print_current_status() const
           } else if (OB_FAIL(ret = databuff_printf(buf, BUFLEN, ctxpos,
                   "[KVCACHE-HAZARD] i=%8ld | acquire_version=%12lu | waiting_nodes_count=%8ld | last_retire_version=%8lu |\n",
                   i, acquired_version, waiting_nodes_count, slot.get_last_retire_version()))) {
-            COMMON_LOG(WARN, "Fail to write data buf", K(ret), K(ctxpos), K(BUFLEN));
           }
         }
         if (OB_SUCC(ret)) {
-          _OB_LOG(INFO, "[KVCACHE-HAZARD-VERSION] hazard version status info: current_version: %8ld | min_version=%8ld | total_nodes_count: %8ld |\n%s",
-              version_, get_min_version(), total_nodes_num, buf);
         }
       }
     }

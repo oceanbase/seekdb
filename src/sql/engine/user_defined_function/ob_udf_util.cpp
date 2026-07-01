@@ -69,9 +69,7 @@ int ObUdfUtil::calc_udf_result_type(common::ObIAllocator &allocator,
                                        udf_attributes,
                                        udf_attributes_types,
                                        udf_ctx.udf_args_))) {
-    LOG_WARN("failed to set udf args", K(ret));
   } else if (OB_FAIL(udf_func->process_init_func(udf_ctx))) {
-    LOG_WARN("do agg init func failed", K(ret));
   } else {
     /* further infomation about scale, precision and length, just see the ob_resolver_utils.cpp */
     init_succ = true;
@@ -285,7 +283,6 @@ int ObUdfUtil::deep_copy_udf_args_cell(common::ObIAllocator &allocator, int64_t 
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < param_num; ++i) {
     if (OB_FAIL(ob_write_obj(allocator, src_objs[i], objs_tmp[i]))) {
-      LOG_WARN("deep copy obj failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -332,7 +329,6 @@ int ObUdfUtil::init_udf_args(ObIAllocator &allocator,
     udf_args.args[i] = nullptr;
     udf_args.attribute_lengths[i] = udf_attributes.at(i).length();
     if (OB_FAIL(convert_ob_type_to_udf_type(udf_attributes_types.at(i).get_type(), udf_args.arg_type[i]))) {
-      LOG_WARN("failt to convert ob type to udf type", K(udf_attributes_types.at(i).get_type()), K(udf_attributes_types.at(i).get_calc_type()));
     } else if (udf_args.attribute_lengths[i] > 0) {
       if (OB_ISNULL(udf_args.attributes[i] = (char*)allocator.alloc(udf_args.attribute_lengths[i]))) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -369,7 +365,6 @@ int ObUdfUtil::set_udf_arg(common::ObIAllocator &alloc,
       udf_args.args[arg_idx] = NULL;
       udf_args.lengths[arg_idx] = 0;
     } else if (OB_FAIL(d.deep_copy(src_datum, alloc))) {
-      LOG_WARN("copy datum failed", K(ret));
     } else {
       auto const arg_type = udf_args.arg_type[arg_idx];
       auto const datum_type = expr.datum_meta_.type_;
@@ -385,7 +380,6 @@ int ObUdfUtil::set_udf_arg(common::ObIAllocator &alloc,
           ObScale in_scale = expr.datum_meta_.scale_;
           int64_t len = 0;
           if (OB_FAIL(nmb.format(buf, sizeof(buf), len, in_scale))) {
-            LOG_WARN("fail to format", K(ret), K(nmb));
           } else if (NULL == (mem = alloc.alloc(len))) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
             LOG_WARN("allocate memory failed", K(ret), K(len));
@@ -429,7 +423,6 @@ int ObUdfUtil::set_udf_args(common::ObExprCtx &expr_ctx, int64_t param_num, comm
           if (!src_objs[i].is_string_type()) {
             EXPR_DEFINE_CAST_CTX(expr_ctx, CM_WARN_ON_FAIL);
             if (OB_FAIL(ObObjCaster::to_type(ObVarcharType, cast_ctx, src_objs[i], src_objs[i]))) {
-              LOG_WARN("failed to cast", K(ret));
             }
           }
           if (OB_SUCC(ret)) {
@@ -444,7 +437,6 @@ int ObUdfUtil::set_udf_args(common::ObExprCtx &expr_ctx, int64_t param_num, comm
         if (OB_UNLIKELY(ObIntTC != src_objs[i].get_type_class())) {
           EXPR_DEFINE_CAST_CTX(expr_ctx, CM_WARN_ON_FAIL);
           if (OB_FAIL(ObObjCaster::to_type(ObIntType, cast_ctx, src_objs[i], src_objs[i]))) {
-            LOG_WARN("failed to cast", K(ret));
           }
         }
         if (OB_SUCC(ret) && !src_objs[i].is_null()) {
@@ -458,7 +450,6 @@ int ObUdfUtil::set_udf_args(common::ObExprCtx &expr_ctx, int64_t param_num, comm
         if (!src_objs[i].is_double()) {
           EXPR_DEFINE_CAST_CTX(expr_ctx, CM_WARN_ON_FAIL);
           if (OB_FAIL(ObObjCaster::to_type(ObDoubleType, cast_ctx, src_objs[i], src_objs[i]))) {
-            LOG_WARN("failed to cast", K(ret));
           }
         }
         if (OB_SUCC(ret) && !src_objs[i].is_null()) {
@@ -488,25 +479,21 @@ int ObUdfUtil::process_udf_func(share::schema::ObUDF::UDFRetType ret_type,
   switch (ret_type) {
   case share::schema::ObUDF::STRING: {
       if (OB_FAIL(ObUdfUtil::process_str(allocator, udf_init, udf_args, func_origin_, result))) {
-        LOG_WARN("failed to process str", K(ret));
       }
       break;
     }
   case share::schema::ObUDF::DECIMAL: {
       if (OB_FAIL(ObUdfUtil::process_dec(allocator, udf_init, udf_args, func_origin_, result))) {
-        LOG_WARN("failed to process dec", K(ret));
       }
       break;
     }
   case share::schema::ObUDF::INTEGER: {
       if (OB_FAIL(ObUdfUtil::process_int(allocator, udf_init, udf_args, func_origin_, result))) {
-        LOG_WARN("failed to process int", K(ret));
       }
       break;
     }
   case share::schema::ObUDF::REAL: {
       if (OB_FAIL(ObUdfUtil::process_real(allocator, udf_init, udf_args, func_origin_, result))) {
-        LOG_WARN("failed to process real", K(ret));
       }
       break;
     }
@@ -578,7 +565,6 @@ int ObUdfUtil::process_dec(common::ObIAllocator &allocator, ObUdfInit &udf_init,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("the string is too large, maybe some error happen in user defined function", K(ret), K(res_length));
   } else if (OB_FAIL(num.from(res, (long int)res_length, allocator, &res_precision, &res_scale))) {
-    LOG_WARN("fail to convert char* to decimal/obnumber", K(ret));
   } else {
     result.set_number(num);
   }
@@ -713,12 +699,10 @@ void ObUdfUtil::print_udf_args_to_log(const ObUdfArgs &args)
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(maybe_nulls.push_back(args.maybe_null[i] == 1 ? 1 : 0))) {
-        LOG_WARN("push back failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(arg_type_strings.push_back(ObString(STRLEN(result_type_name(args.arg_type[i])), result_type_name(args.arg_type[i]))))) {
-        LOG_WARN("push back failed", K(ret));
       }
     }
   }
@@ -737,9 +721,7 @@ int ObUdfUtil::convert_ob_type_to_udf_type(common::ObObjType ob_type, UdfItemRes
   uint16_t flags;
   ObScale num_decimals;
   if (OB_FAIL(ObSMUtils::get_mysql_type(ob_type, mysql_type, flags, num_decimals))) {
-    LOG_WARN("get mysql type failed", K(ret));
   } else if (OB_FAIL(convert_mysql_type_to_udf_type(mysql_type, udf_type))) {
-    LOG_WARN("get udf type failed", K(ret));
   }
   LOG_DEBUG("udf type change", K(ob_type), K(mysql_type), K(udf_type));
   return ret;

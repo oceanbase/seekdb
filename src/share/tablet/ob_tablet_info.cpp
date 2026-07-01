@@ -174,7 +174,6 @@ int ObTabletInfo::assign(const ObTabletInfo &other)
     tablet_id_ = other.tablet_id_;
     ls_id_ = other.ls_id_;
     if (OB_FAIL(replicas_.assign(other.replicas_))) {
-      LOG_WARN("fail to assign replicas", KR(ret), K_(tablet_id), K_(replicas));
     }
   }
   return ret;
@@ -193,7 +192,6 @@ int ObTabletInfo::init(
     LOG_WARN("init with invalid arguments", KR(ret),
         K(tablet_id), K(ls_id), K(replicas));
   } else if (OB_FAIL(replicas_.assign(replicas))) {
-    LOG_WARN("fail to assign replicas", KR(ret), K(replicas));
   } else {
     tablet_id_ = tablet_id;
     ls_id_ = ls_id;
@@ -210,12 +208,10 @@ int ObTabletInfo::init_by_replica(const ObTabletReplica &replica)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid replica", KR(ret), K(replica));
   } else if (OB_FAIL(replicas.push_back(replica))) {
-    LOG_WARN("fail to push back replica", KR(ret), K(replica));
   } else if (OB_FAIL(init(
       replica.get_tablet_id(),
       replica.get_ls_id(),
       replicas))) {
-    LOG_WARN("fail to init tablet_info", KR(ret), K(replica), K(replicas));
   }
   return ret;
 }
@@ -240,11 +236,9 @@ int ObTabletInfo::add_replica(const ObTabletReplica &replica)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid index", KR(ret), K(idx), "replica_count", replicas_.count());
       } else if (OB_FAIL(replicas_.at(idx).assign(replica))) {
-        LOG_WARN("fail to assign replicas_.at(idx)", KR(ret), K(idx), K(replica));
       }
     } else if (OB_ENTRY_NOT_EXIST == ret) {
       if (OB_FAIL(replicas_.push_back(replica))) {
-        LOG_WARN("insert replica failed", KR(ret), K(replica));
       }
     } else {
       LOG_WARN("find replica index failed", KR(ret), K(replica));
@@ -270,11 +264,9 @@ int ObTabletInfo::filter(const ObTabletReplicaFilter &filter)
   for (int64_t i = replicas_.count() - 1; OB_SUCC(ret) && i >= 0; i--) {
     bool pass = true;
     if (OB_FAIL(filter.check(replicas_.at(i), pass))) {
-      LOG_WARN("filter replica failed", K(ret), "replica", replicas_.at(i));
     } else {
       if (!pass) {
         if (OB_FAIL(replicas_.remove(i))) {
-          LOG_WARN("remove replica failed", K(ret), "idx", i);
         }
       }
     }

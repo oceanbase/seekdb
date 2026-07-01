@@ -36,7 +36,6 @@ int ObRoutePolicy::weak_sort_replicas(ObIArray<CandidateReplica>& candi_replicas
     ObReplicaCompare replica_cmp(policy_type);
     lib::ob_sort(first, first + candi_replicas.count(), replica_cmp);
     if (OB_FAIL(replica_cmp.get_sort_ret())) {
-      LOG_WARN("fail sort", K(candi_replicas), K(ret));
     }
   }
   return ret;
@@ -139,9 +138,7 @@ int ObRoutePolicy::calculate_replica_priority(const ObAddr &local_server,
     }
   } else if (WEAK == ctx.consistency_level_) {
     if (OB_FAIL(filter_replica(local_server, ls_id, candi_replicas, ctx))) {
-      LOG_WARN("fail to filter replicas", K(candi_replicas), K(ctx), K(ret));
     } else if (OB_FAIL(weak_sort_replicas(candi_replicas, ctx))) {
-      LOG_WARN("fail to sort replicas", K(candi_replicas), K(ctx), K(ret));
     }
   } else if (STRONG == ctx.consistency_level_) {
     ret = OB_ERR_UNEXPECTED;
@@ -176,7 +173,6 @@ int ObRoutePolicy::init_candidate_replicas(common::ObIArray<CandidateReplica> &c
   }
   for (int64_t i = 0 ; OB_SUCC(ret) && i < candi_replicas.count(); ++i) {
     if (OB_FAIL(init_candidate_replica(candi_replicas.at(i)))) {
-      LOG_WARN("fail to candidate replica", K(i), K(candi_replicas), K(ret));
     }
   }
   return ret;
@@ -195,14 +191,12 @@ int ObRoutePolicy::select_replica_with_priority(const ObRoutePolicyCtx &route_po
       if (has_found) {
         if (priority_attr == replica_array.at(i).attr_) {
           if (OB_FAIL(phy_part_loc_info.add_priority_replica_idx(i))) {
-            LOG_WARN("fail to select replica", K(i), K(priority_attr), K(ret));
           }
         } else {
           same_priority = false;
         }
       } else {
         if (OB_FAIL(phy_part_loc_info.add_priority_replica_idx(i))) {
-          LOG_WARN("fail to select replica", K(i), K(ret));
         } else {
           has_found = true;
           priority_attr = replica_array.at(i).attr_;
@@ -214,7 +208,6 @@ int ObRoutePolicy::select_replica_with_priority(const ObRoutePolicyCtx &route_po
   if (OB_UNLIKELY(false == has_found)) {
     int64_t select_idx = rand() % replica_array.count();
     if (OB_FAIL(phy_part_loc_info.add_priority_replica_idx(select_idx))) {
-      LOG_WARN("fail to select replica", K(select_idx), K(ret));
     }
     if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {// Print once every 10 seconds}
       LOG_WARN("all replica is not usable currently", K(replica_array), K(route_policy_ctx), K(select_idx));
@@ -243,18 +236,14 @@ int ObRoutePolicy::calc_intersect_repllica(const common::ObIArray<ObCandiTableLo
           if (phy_part_loc_info.has_selected_replica()) { // replica has already been selected
             tmp_replica.reset();
             if (OB_FAIL(phy_part_loc_info.get_selected_replica(tmp_replica))) {
-              LOG_WARN("fail to get selected replica", K(ret), K(phy_part_loc_info));
             } else if (OB_FAIL(intersect_server_list.push_back(tmp_replica))) {
-              LOG_WARN("fail to push back candidate server", K(ret), K(tmp_replica));
             }
           } else { // No replica has been selected yet
             for (int64_t k = 0; OB_SUCC(ret) && k < priority_replica_idxs.count(); ++k) {
               tmp_replica.reset();
               int64_t replica_idx = priority_replica_idxs.at(k);
               if (OB_FAIL(phy_part_loc_info.get_priority_replica(replica_idx, tmp_replica))) {
-                LOG_WARN("fail to get priority replica", K(k), K(priority_replica_idxs), K(ret));
               } else if (OB_FAIL(intersect_server_list.push_back(tmp_replica))) {
-                LOG_WARN("fail to push back server ", K(k), K(priority_replica_idxs), K(ret));
               }
             }
           }
@@ -266,7 +255,6 @@ int ObRoutePolicy::calc_intersect_repllica(const common::ObIArray<ObCandiTableLo
             if (phy_part_loc_info.has_selected_replica()) { // replica has already been selected
               tmp_replica.reset();
               if (OB_FAIL(phy_part_loc_info.get_selected_replica(tmp_replica))) {
-                LOG_WARN("fail to get selected replica", K(ret), K(phy_part_loc_info));
               } else if (tmp_replica.get_server() == candidate_server) {
                 has_replica = true;
               }
@@ -275,7 +263,6 @@ int ObRoutePolicy::calc_intersect_repllica(const common::ObIArray<ObCandiTableLo
                 tmp_replica.reset();
                 int64_t replica_idx = priority_replica_idxs.at(k);
                 if (OB_FAIL(phy_part_loc_info.get_priority_replica(replica_idx, tmp_replica))) {
-                  LOG_WARN("fail to get priority replica", K(k), K(priority_replica_idxs), K(ret));
                 } else if (candidate_server == tmp_replica.get_server()) {
                   has_replica = true;
                 }
@@ -283,7 +270,6 @@ int ObRoutePolicy::calc_intersect_repllica(const common::ObIArray<ObCandiTableLo
             }
             if (OB_SUCC(ret) && !has_replica) {
               if (OB_FAIL(intersect_server_list.erase(intersect_server_list_iter))) {
-                LOG_WARN("fail to erase from list", K(ret), K(candidate_server));
               }
             }
           }
@@ -305,7 +291,6 @@ int ObRoutePolicy::select_intersect_replica(ObRoutePolicyCtx &route_policy_ctx,
   UNUSED(route_policy_ctx);
   int ret = OB_SUCCESS;
   if (OB_FAIL(calc_intersect_repllica(phy_tbl_loc_info_list, intersect_server_list))) {
-    LOG_WARN("fail to calc intersect replica", K(phy_tbl_loc_info_list), K(ret));
   } else if (intersect_server_list.empty()) {//No intersection case, each partition selects replica separately
     is_proxy_hit = true;
     for (int64_t i = 0; OB_SUCC(ret) && i < phy_tbl_loc_info_list.count(); ++i) {
@@ -320,7 +305,6 @@ int ObRoutePolicy::select_intersect_replica(ObRoutePolicyCtx &route_policy_ctx,
           if (phy_part_loc_info.has_selected_replica()) {
             // do nothing
           } else if (OB_FAIL(phy_part_loc_info.set_selected_replica_idx_with_priority())) {
-            LOG_WARN("fail to set selected replica idx", K(ret));
           }
         }
       }
@@ -336,18 +320,15 @@ int ObRoutePolicy::select_intersect_replica(ObRoutePolicyCtx &route_policy_ctx,
         selected_replica = *replica_iter;
         is_first = false;
         if (OB_FAIL(same_priority_servers.push_back(replica_iter->get_server()))) {
-          LOG_WARN("fail to replica iterator", K(replica_iter), K(ret));
         }
       } else if (replica_iter->attr_.pos_type_ == selected_replica.attr_.pos_type_) {
         // Aggregate same priority servers for random selection later
         if (OB_FAIL(same_priority_servers.push_back(replica_iter->get_server()))) {
-          LOG_WARN("fail to replica iterator", K(replica_iter), K(ret));
         }
       } else if (replica_iter->attr_.pos_type_ < selected_replica.attr_.pos_type_) {
         selected_replica = *replica_iter;
         same_priority_servers.reset();
         if (OB_FAIL(same_priority_servers.push_back(replica_iter->get_server()))) {
-          LOG_WARN("fail to replica iterator", K(replica_iter), K(ret));
         }
       } else {
         /* replica_iter->attr_.pos_type_ > selected_replica.attr_.pos_type_ do nothing */
@@ -358,7 +339,6 @@ int ObRoutePolicy::select_intersect_replica(ObRoutePolicyCtx &route_policy_ctx,
       int64_t selected_idx = rand() % same_priority_servers.count();
       const ObAddr &selected_server = same_priority_servers.at(selected_idx);
       if (OB_FAIL(ObLogPlan::select_one_server(selected_server, phy_tbl_loc_info_list))) {
-        LOG_WARN("fail to select one server", K(selected_idx), K(selected_server), K(ret));
       } else {
         is_proxy_hit = (local_addr_ == selected_server);
       }

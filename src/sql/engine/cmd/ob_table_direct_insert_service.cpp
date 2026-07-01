@@ -42,7 +42,6 @@ int ObTableDirectInsertService::start_direct_insert(ObExecContext &ctx,
   CK (OB_NOT_NULL(session));
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(session->get_autocommit(auto_commit))) {
-    LOG_WARN("failed to get auto commit", KR(ret));
   } else if (is_insert_overwrite && (!auto_commit || session->is_in_transaction())) {
     ret = OB_NOT_SUPPORTED;
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "using insert overwrite within a transaction is");
@@ -53,7 +52,6 @@ int ObTableDirectInsertService::start_direct_insert(ObExecContext &ctx,
     uint64_t table_id = phy_plan.get_append_table_id();
     int64_t parallel = phy_plan.get_px_dop();
     if (OB_FAIL(table_direct_insert_ctx.init(&ctx, phy_plan, table_id, parallel, is_inc_direct_load, is_inc_replace, is_insert_overwrite, online_sample_precent))) {
-      LOG_WARN("failed to init table direct insert ctx", KR(ret), K(table_id), K(parallel), K(is_inc_direct_load), K(is_inc_replace), K(is_insert_overwrite));
     }
   }
   return ret;
@@ -65,7 +63,6 @@ int ObTableDirectInsertService::commit_direct_insert(ObExecContext &ctx,
   int ret = OB_SUCCESS;
   ObTableDirectInsertCtx &table_direct_insert_ctx = ctx.get_table_direct_insert_ctx();
   if (OB_FAIL(table_direct_insert_ctx.commit())) {
-    LOG_WARN("failed to commit table direct insert ctx", KR(ret));
   }
   return ret;
 }
@@ -108,9 +105,7 @@ int ObTableDirectInsertService::open_task(const uint64_t table_id,
     trans_id.trans_gid_ = 1;
     ObTableLoadStore store(table_ctx);
     if (OB_FAIL(store.init())) {
-      LOG_WARN("fail to init store", KR(ret));
     } else if (OB_FAIL(store.px_start_trans(trans_id))) {
-      LOG_WARN("fail to start direct load trans", KR(ret), K(trans_id));
     }
   }
   if (OB_FAIL(ret) && OB_NOT_NULL(table_ctx)) {
@@ -134,15 +129,12 @@ int ObTableDirectInsertService::close_task(const uint64_t table_id,
     if (OB_SUCC(error_code)) {
       ObTableLoadStore store(table_ctx);
       if (OB_FAIL(store.init())) {
-        LOG_WARN("fail to init store", KR(ret));
       } else if (OB_FAIL(store.px_finish_trans(trans_id))) {
-        LOG_WARN("fail to finish direct load trans", KR(ret), K(trans_id));
       }
     }
     if (OB_FAIL(ret)) {
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(ObTableLoadStore::px_abandon_trans(table_ctx, trans_id))) {
-        LOG_WARN("fail to abandon direct load trans", KR(tmp_ret), K(trans_id));
       }
     }
     ObTableLoadService::put_ctx(table_ctx);

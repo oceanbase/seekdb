@@ -42,9 +42,7 @@ int ObExprTypeToStr::assign(const ObExprOperator &other) {
     LOG_DEBUG("other is same with this, no need to assign");
   } else {
     if (OB_FAIL(ObExprOperator::assign(other))) {
-      LOG_WARN("ObExprOperator::assign failed", K(ret));
     } else if (OB_FAIL(str_values_.assign(tmp_other->str_values_))) {
-      LOG_WARN("copy str_values failed");
     }
   }
   return ret;
@@ -87,7 +85,6 @@ int ObExprTypeToStr::shallow_copy_str_values(const common::ObIArray<common::ObSt
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid str_values", K(str_values), K(ret));
   } else if (OB_FAIL(str_values_.assign(str_values))) {
-    LOG_WARN("fail to assign str values", K(ret));
   } else {/*do nothing*/}
   return ret;
 }
@@ -100,7 +97,6 @@ int ObExprTypeToStr::deep_copy_str_values(const ObIArray<ObString> &str_values)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid str_values", K(str_values), K(ret));
   } else if (OB_FAIL(str_values_.reserve(str_values.count()))) {
-    LOG_WARN("fail to init str_values_", K(ret));
   } else {/*do nothing*/}
 
   for (int64_t i = 0; OB_SUCC(ret) && i < str_values.count(); ++i) {
@@ -119,7 +115,6 @@ int ObExprTypeToStr::deep_copy_str_values(const ObIArray<ObString> &str_values)
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(str_values_.push_back(str_tmp))) {
-        LOG_WARN("failed to push back str", K(i), K(str_tmp), K(str), K(ret));
       }
     }
   }
@@ -146,7 +141,6 @@ int ObEnumSetInfo::init_enum_set_info(common::ObIAllocator *allocator, ObExpr &r
     enumset_info = new(buf) ObEnumSetInfo(*allocator, type);
     enumset_info->cast_mode_ = cast_mode;
     if (OB_FAIL(enumset_info->str_values_.reserve(str_values.count()))) {
-      LOG_WARN("fail to init str_values_", K(ret));
     }
 
     for (int64_t i = 0; OB_SUCC(ret) && i < str_values.count(); ++i) {
@@ -165,7 +159,6 @@ int ObEnumSetInfo::init_enum_set_info(common::ObIAllocator *allocator, ObExpr &r
 
       if (OB_SUCC(ret)) {
         if (OB_FAIL(enumset_info->str_values_.push_back(str_tmp))) {
-          LOG_WARN("failed to push back str", K(i), K(str_tmp), K(str), K(ret));
         }
       }
     }
@@ -185,18 +178,15 @@ int ObEnumSetInfo::deep_copy(common::ObIAllocator &allocator,
   int ret = OB_SUCCESS;
   ObEnumSetInfo *copied_enum_set_info = NULL;
   if (OB_FAIL(ObExprExtraInfoFactory::alloc(allocator, type, copied_info))) {
-    LOG_WARN("failed to alloc expr extra info", K(ret));
   } else if (OB_ISNULL(copied_enum_set_info = dynamic_cast<ObEnumSetInfo *>(copied_info))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(ret));
   } else if (OB_FAIL(copied_enum_set_info->str_values_.prepare_allocate(str_values_.count()))) {
-    LOG_WARN("failed to prepare allocate", K(ret));
   } else {
     copied_enum_set_info->cast_mode_ = cast_mode_;
     for (int i = 0; OB_SUCC(ret) && i < str_values_.count(); i++) {
       if (OB_FAIL(ob_write_string(allocator, str_values_.at(i),
                                   copied_enum_set_info->str_values_.at(i)))) {
-        LOG_WARN("failed to write string", K(ret));
       }
     }
   }
@@ -222,7 +212,6 @@ int ObExprSetToStr::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
   UNUSED(op_cg_ctx);
   if (OB_FAIL(ObEnumSetInfo::init_enum_set_info(op_cg_ctx.allocator_, rt_expr, type_,
       0, str_values_))) {
-    LOG_WARN("fail to init_enum_set_info", K(ret), K(type_), K(str_values_));
   } else {
     rt_expr.eval_func_ = calc_to_str_expr;
   }
@@ -240,7 +229,6 @@ int ObExprSetToStr::calc_to_str_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expr.arg_cnt_ is unexpected", K(ret), K(expr.arg_cnt_), KP(expr.args_));
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, set_datum))) {
-    LOG_WARN("eval param failed", K(ret));
   } else if (set_datum->is_null()) {
     res_datum.set_null();
   } else {
@@ -249,7 +237,6 @@ int ObExprSetToStr::calc_to_str_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum
     ObTextStringDatumResult text_result(expr.datum_meta_.type_, &expr, &ctx, &res_datum);
     if (OB_FAIL(ObExprSetToStr::inner_to_str(expr.datum_meta_.cs_type_, set_val, str_values,
                                              text_result))) {
-      LOG_WARN("enum to str failed", K(ret), K(set_val));
     } else {
       text_result.set_result();
     }
@@ -288,7 +275,6 @@ int ObExprSetToStr::inner_to_str(const ObCollationType cs_type,
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(text_result.init(need_size))) {
-      LOG_WARN("init lob result failed", K(ret), K(need_size));
     } else {
       uint64_t index = 1ULL;
       for (int64_t i = 0;
@@ -299,12 +285,10 @@ int ObExprSetToStr::inner_to_str(const ObCollationType cs_type,
           if (OB_UNLIKELY(element_val.empty())) {
             // skip empty string and its separator
           } else if (OB_FAIL(text_result.append(element_val))) {
-            LOG_WARN("fail to append str to lob result", K(ret), K(element_val));
           } else if ((i + 1) < element_num && (i + 1) < EFFECTIVE_COUNT &&
               ((index << 1) <= set_val)) {
             // skip setting last seperator
             if (OB_FAIL(text_result.append(sep))) {
-              LOG_WARN("fail to append str to lob result", K(ret), K(sep));
             }
           }
         }
@@ -332,7 +316,6 @@ int ObExprEnumToStr::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_expr,
   UNUSED(op_cg_ctx);
   if (OB_FAIL(ObEnumSetInfo::init_enum_set_info(op_cg_ctx.allocator_, rt_expr, type_,
       0, str_values_))) {
-    LOG_WARN("fail to init_enum_set_info", K(ret), K(type_), K(str_values_));
   } else {
     rt_expr.eval_func_ = calc_to_str_expr;
   }
@@ -350,7 +333,6 @@ int ObExprEnumToStr::calc_to_str_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expr.arg_cnt_ is unexpected", K(ret), K(expr.arg_cnt_), KP(expr.args_));
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, enum_datum))) {
-    LOG_WARN("eval param failed", K(ret));
   } else if (enum_datum->is_null()) {
     res_datum.set_null();
   } else {
@@ -358,7 +340,6 @@ int ObExprEnumToStr::calc_to_str_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
     uint64_t enum_val = enum_datum->get_enum();
     ObTextStringDatumResult text_result(expr.datum_meta_.type_, &expr, &ctx, &res_datum);
     if (OB_FAIL(ObExprEnumToStr::inner_to_str(enum_val, str_values, text_result))) {
-      LOG_WARN("enum to str failed", K(ret), K(enum_val));
     } else {
       text_result.set_result();
     }
@@ -387,9 +368,7 @@ int ObExprEnumToStr::inner_to_str(const uint64_t enum_val,
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(text_result.init(element_str.length()))) {
-      LOG_WARN("init lob result failed");
     } else if (OB_FAIL(text_result.append(element_str.ptr(), element_str.length()))) {
-      LOG_WARN("failed to append real data", K(ret), K(text_result));
     }
   }
   return ret;
@@ -433,7 +412,6 @@ int ObExprSetToInnerType::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_e
   UNUSED(op_cg_ctx);
   if (OB_FAIL(ObEnumSetInfo::init_enum_set_info(op_cg_ctx.allocator_, rt_expr, type_,
       0, str_values_))) {
-    LOG_WARN("fail to init_enum_set_info", K(ret), K(type_), K(str_values_));
   } else {
     rt_expr.eval_func_ = calc_to_inner_expr;
   }
@@ -452,7 +430,6 @@ int ObExprSetToInnerType::calc_to_inner_expr(const ObExpr &expr, ObEvalCtx &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expr.arg_cnt_ is unexpected", K(ret), K(expr.arg_cnt_), KP(expr.args_));
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, set_datum))) {
-    LOG_WARN("eval param failed", K(ret));
   } else if (set_datum->is_null()) {
     res_datum.set_null();
   } else {
@@ -476,7 +453,6 @@ int ObExprSetToInnerType::calc_to_inner_expr(const ObExpr &expr, ObEvalCtx &ctx,
       if (element_val & (index)) {
         const ObString &tmp_val = str_values.at(i);
         if (OB_FAIL(sql_string.append(tmp_val))) {
-          LOG_WARN("fail to deep copy str", K(element_val), K(i), K(ret));
         } else if ((element_val >= (index << 1)) && (OB_FAIL(sql_string.append(sep)))) {
           LOG_WARN("fail to deep copy comma", K(element_val), K(tmp_val), K(i), K(ret));
         }
@@ -493,7 +469,6 @@ int ObExprSetToInnerType::calc_to_inner_expr(const ObExpr &expr, ObEvalCtx &ctx,
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("alloc memory failed", K(ret), K(buf), K(BUF_LEN));
       } else if (OB_FAIL(inner_value.serialize(buf, BUF_LEN, pos))) {
-        LOG_WARN("failed to serialize inner_value", K(BUF_LEN), K(ret));
       } else {
         res_datum.set_enumset_inner(buf, static_cast<ObString::obstr_size_t>(pos));
       }
@@ -539,7 +514,6 @@ int ObExprEnumToInnerType::cg_expr(ObExprCGCtx &op_cg_ctx, const ObRawExpr &raw_
   UNUSED(op_cg_ctx);
   if (OB_FAIL(ObEnumSetInfo::init_enum_set_info(op_cg_ctx.allocator_, rt_expr, type_,
       0, str_values_))) {
-    LOG_WARN("fail to init_enum_set_info", K(ret), K(type_), K(str_values_));
   } else {
     rt_expr.eval_func_ = calc_to_inner_expr;
   }
@@ -558,7 +532,6 @@ int ObExprEnumToInnerType::calc_to_inner_expr(const ObExpr &expr, ObEvalCtx &ctx
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expr.arg_cnt_ is unexpected", K(ret), K(expr.arg_cnt_), KP(expr.args_));
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, enum_datum))) {
-    LOG_WARN("eval param failed", K(ret));
   } else if (enum_datum->is_null()) {
     res_datum.set_null();
   } else {
@@ -589,7 +562,6 @@ int ObExprEnumToInnerType::calc_to_inner_expr(const ObExpr &expr, ObEvalCtx &ctx
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("alloc memory failed", K(ret), K(buf), K(BUF_LEN));
       } else if (OB_FAIL(inner_value.serialize(buf, BUF_LEN, pos))) {
-        LOG_WARN("failed to serialize inner_value", K(BUF_LEN), K(ret));
       } else {
         res_datum.set_enumset_inner(buf, static_cast<ObString::obstr_size_t>(pos));
       }
@@ -642,13 +614,11 @@ int ObExprInnerTypeToEnumSet::eval_inner_type_to_enumset(const ObExpr &expr, ObE
   int ret = OB_SUCCESS;
   ObDatum *inner_datum = NULL;
   if (OB_FAIL(expr.args_[1]->eval(ctx, inner_datum))) {
-    LOG_WARN("eval inner datum failed", K(ret));
   } else if (inner_datum->is_null()) {
     res_datum.set_null();
   } else {
     ObEnumSetInnerValue inner_value;
     if (OB_FAIL(inner_datum->get_enumset_inner(inner_value))) {
-      LOG_WARN("failed to get enumset inner value", K(ret), K(inner_datum));
     } else {
       if (ObEnumInnerType == expr.args_[1]->obj_meta_.get_type()) {
         res_datum.set_enum(inner_value.numberic_value_);

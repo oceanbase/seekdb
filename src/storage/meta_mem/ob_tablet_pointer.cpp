@@ -238,9 +238,7 @@ int ObTabletPointer::deserialize(
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid argument", K(ret), KP(buf), K(buf_len), KP(t));
   } else if (OB_FAIL(get_attr_for_obj(t))) {
-    STORAGE_LOG(WARN, "fail to set attr for obj", K(ret));
   } else if (OB_FAIL(t->load_deserialize(allocator, buf, buf_len, pos))) {
-    STORAGE_LOG(WARN, "fail to de-serialize T", K(ret), KP(buf), K(buf_len), KP(t));
   }
   return ret;
 }
@@ -256,9 +254,7 @@ int ObTabletPointer::deserialize(
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid argument", K(ret), KP(buf), K(buf_len), KP(t));
   } else if (OB_FAIL(get_attr_for_obj(t))) {
-    STORAGE_LOG(WARN, "fail to set attr for obj", K(ret));
   } else if (OB_FAIL(t->deserialize(buf, buf_len, pos))) {
-    STORAGE_LOG(WARN, "fail to de-serialize T", K(ret), KP(buf), K(buf_len), KP(t));
   }
   return ret;
 }
@@ -319,9 +315,7 @@ int ObTabletPointer::dump_meta_obj(ObMetaObjGuard<ObTablet> &guard, void *&free_
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid tablet buffer length", K(ret), K(cur_buf_len), K(buf_len), KP(tmp_obj), KP(meta_obj.ptr_));
       } else if (OB_FAIL(get_attr_for_obj(meta_obj.ptr_))) {
-        LOG_WARN("fail to set attr for object", K(ret), K(meta_obj));
       } else if (OB_FAIL(ObTabletPersister::transform_tablet_memory_footprint(param, *obj_.ptr_, buf, buf_len))) {
-        LOG_WARN("fail to degrade tablet memory", K(ret), KPC(obj_.ptr_), KP(buf), K(buf_len));
       } else {
         meta_obj.ptr_->inc_ref();
         obj_ = meta_obj;
@@ -420,9 +414,7 @@ int ObTabletPointer::create_ddl_kv_mgr(
     } else {
       ObDDLKvMgrHandle tmp_handle;
       if (OB_FAIL(t3m->acquire_tablet_ddl_kv_mgr(tmp_handle))) {
-        LOG_WARN("fail to acquire tablet ddl kv mgr", K(ret));
       } else if (OB_FAIL(tmp_handle.get_obj()->init(ls_id, tablet_id))) {
-        LOG_WARN("init ddl kv mgr failed", K(ret), K(ls_id),K(tablet_id));
       } else {
         ddl_kv_mgr_handle_ = tmp_handle;
         is_created = true;
@@ -484,7 +476,6 @@ int ObTabletPointer::get_mds_table(const ObTabletID &tablet_id,
     ScanAllVersionTabletsOp::GetMaxMdsCkptScnOp op(mds_ckpt_scn);
     if (OB_UNLIKELY(phy_addr_.is_none())) {// first time create, without phy addr, use min scn to init mds table
     } else if (OB_FAIL(share::g_mp->tenant_meta_mem_mgr()->scan_all_version_tablets({ls_id, tablet_id}, op))) {
-      LOG_WARN("failed to get mds_ckpt_scn", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -545,7 +536,6 @@ int ObTabletPointer::release_memtable_and_mds_table_for_ls_offline(const ObTable
   if (tablet_id.is_ls_inner_tablet()) {
     LOG_INFO("skip inner tablet", K(tablet_id));
   } else if (OB_FAIL(protected_memtable_mgr_handle_.reset())) {
-    LOG_WARN("failed to reset protected_memtable_mgr_handle", K(ret));
   } else if (OB_FAIL(get_mds_table(tablet_id, mds_table, false/*not_exist_create*/))) {
     if (OB_ENTRY_NOT_EXIST == ret) {
       ret = OB_SUCCESS;
@@ -553,7 +543,6 @@ int ObTabletPointer::release_memtable_and_mds_table_for_ls_offline(const ObTable
       LOG_WARN("failed to get mds table", K(ret));
     }
   } else if (OB_FAIL(mds_table.forcely_remove_nodes("OFFLINE", share::SCN::max_scn()))) {
-    LOG_WARN("fail to release mds nodes in mds table", K(ret));
   }
   if (OB_SUCC(ret)) {
     ObByteLockGuard guard(ddl_kv_mgr_lock_);
@@ -578,7 +567,6 @@ int ObTabletPointer::release_mds_nodes_redo_scn_below(const ObTabletID &tablet_i
       LOG_WARN("failed to get mds table", K(ret));
     }
   } else if (OB_FAIL(mds_table.forcely_remove_nodes("REMOVE", mds_ckpt_scn))) {
-    LOG_WARN("fail to release mds nodes in mds table", K(ret));
   }
 
 #ifdef ERRSIM
@@ -655,7 +643,6 @@ int ObTabletPointer::scan_all_tablets_on_chain(const ObFunction<int(ObTablet &)>
   } else {
     while (OB_SUCC(ret) && OB_NOT_NULL(cur)) {
       if (OB_FAIL(op(*cur))) {
-        STORAGE_LOG(WARN, "failed to apply op on old version tablet", K(ret), K(obj_));
       }
       cur = cur->get_next_tablet();
     }
@@ -676,7 +663,6 @@ int ObTabletPointer::acquire_obj(ObTablet *&t)
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "object pool is nullptr", K(ret), K(obj_));
   } else if (OB_FAIL(obj_.t3m_->acquire_tablet(obj_.pool_, t))) {
-    STORAGE_LOG(WARN, "fail to acquire tablet buffer", K(ret), K(phy_addr_));
   }
   return ret;
 }
@@ -744,7 +730,6 @@ int ObITabletFilterOp::operator()(const ObTabletResidentInfo &info, bool &is_ski
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("try to skip tablet with invalid resident info", K(ret), K(info));
   } else if (OB_FAIL((do_filter(info, is_skipped)))) {
-    LOG_WARN("fail to do filter", K(ret), K(info), K_(skip_cnt), K_(total_cnt));
   } else if (is_skipped) {
     ++skip_cnt_;
   }

@@ -59,7 +59,6 @@ int ObDualMacroMetaIterator::open(
       allocator,
       is_reverse_scan,
       true /* need record micro index info */))) {
-    LOG_WARN("Fail to open index block tree iterator", K(ret));
   } else if (OB_FAIL(sec_meta_iter_.open(
       query_range,
       blocksstable::DATA_BLOCK_META,
@@ -67,7 +66,6 @@ int ObDualMacroMetaIterator::open(
       rowkey_read_info,
       allocator,
       is_reverse_scan))) {
-    LOG_WARN("Fail to open secondary meta iterator", K(ret), K(rowkey_read_info));
   } else {
     allocator_ = &allocator;
     iter_end_ = false;
@@ -122,7 +120,6 @@ int ObDualMacroMetaIterator::get_current_clustered_index_info(
   int ret = OB_SUCCESS;
   clustered_micro_block_data = nullptr;
   if (OB_FAIL(macro_iter_.get_current_clustered_index_info(clustered_micro_block_data))) {
-    LOG_WARN("fail to get current clustered index info", K(ret));
   } else {
     LOG_DEBUG("succeed to get current clustered index info in dual iter",
               K(ret), KPC(clustered_micro_block_data));

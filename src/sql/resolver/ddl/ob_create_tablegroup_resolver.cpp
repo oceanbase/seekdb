@@ -75,7 +75,6 @@ int ObCreateTablegroupResolver::resolve(const ParseNode &parse_tree)
           tablegroup_name.assign_ptr(node->children_[TG_NAME]->str_value_,
                                      static_cast<int32_t>(node->children_[TG_NAME]->str_len_));
           if (OB_FAIL(create_tablegroup_stmt->set_tablegroup_name(tablegroup_name))) {
-            SQL_RESV_LOG(WARN, "set tablegroup name failed", K(ret));
           } else {
             
           }
@@ -91,7 +90,6 @@ int ObCreateTablegroupResolver::resolve(const ParseNode &parse_tree)
   } else {
     if (OB_FAIL(resolve_tablegroup_option(create_tablegroup_stmt,
                                           node->children_[TABLEGROUP_OPTION]))) {
-      LOG_WARN("fail to resolve tabelgroup option", K(ret));
     }
   }
 
@@ -107,7 +105,6 @@ int ObCreateTablegroupResolver::resolve(const ParseNode &parse_tree)
     ObString sharding_default(OB_PARTITION_SHARDING_ADAPTIVE);
     if (tablegroup_schema.get_sharding().empty()) {
       if (OB_FAIL(tablegroup_schema.set_sharding(sharding_default))) {
-        LOG_WARN("set_default_sharding fail", K(ret));
       }
     }
   }

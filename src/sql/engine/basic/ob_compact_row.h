@@ -459,9 +459,7 @@ public:
       ret = OB_INVALID_ARGUMENT;
       SQL_ENG_LOG(ERROR, "invalid extra size", K(ret), K(extra_size));
     } else if (OB_FAIL(init_row_meta(exprs, extra_size, reorder_fixed_expr))) {
-      SQL_ENG_LOG(WARN, "fail to init row meta", K(ret));
     } else if (OB_FAIL(save_store_row(exprs, brs, ctx, row_meta_))) {
-      SQL_ENG_LOG(WARN, "fail to save store row", K(ret));
     }
     return ret;
   }
@@ -474,16 +472,13 @@ public:
     is_first_row_ = false;
     if (OB_UNLIKELY(0 == exprs.count())) {
     } else if (OB_FAIL(ObCompactRow::calc_row_size(row_meta, exprs, brs, ctx, row_size))) {
-      SQL_ENG_LOG(WARN, "failed to calc copy size", K(ret));
     } else if (OB_FAIL(ensure_compact_row_buffer(row_size))) {
-      SQL_ENG_LOG(WARN, "fail to ensure compact row buffer", K(ret));
     } else {
       compact_row_->init(row_meta);
       compact_row_->set_row_size(static_cast<uint32_t>(row_size));
       for (int64_t col_idx = 0; col_idx < exprs.count() && OB_SUCC(ret); ++col_idx) {
         ObIVector *vec = exprs.at(col_idx)->get_vector(ctx);
         if (OB_FAIL(vec->to_row(row_meta, compact_row_, ctx.get_batch_idx(), col_idx))) {
-          SQL_ENG_LOG(WARN, "vector to row failed", K(ret), K(col_idx));
         }
       }
     }
@@ -518,7 +513,6 @@ public:
     const int64_t row_size = last_row.compact_row_->get_row_size();
     ref_row_meta_ = last_row.ref_row_meta_;
     if (OB_FAIL(ensure_compact_row_buffer(row_size))) {
-      SQL_ENG_LOG(WARN, "fail to ensure compact row buffer", K(ret));
     } else {
       is_first_row_ = false;
       MEMCPY(compact_row_, reinterpret_cast<const char *>(last_row.compact_row_), row_size);
@@ -535,7 +529,6 @@ public:
       ret = OB_NOT_INIT;
       SQL_ENG_LOG(WARN, "row meta not inited", K(ret));
     } else if (OB_FAIL(ensure_compact_row_buffer(row_size))) {
-      SQL_ENG_LOG(WARN, "fail to ensure compact row buffer", K(ret));
     } else {
       MEMCPY(compact_row_, reinterpret_cast<const char *>(&row), row_size);
     }

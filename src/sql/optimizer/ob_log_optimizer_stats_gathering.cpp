@@ -42,11 +42,8 @@ int ObLogOptimizerStatsGathering::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
   if (NULL != calc_part_id_expr_ && OB_FAIL(all_exprs.push_back(calc_part_id_expr_))) {
     LOG_WARN("failed to push back expr", K(ret));
   } else if (OB_FAIL(append(all_exprs, get_col_conv_exprs()))) {
-    LOG_WARN("fail to append column conv expr", K(ret));
   } else if (OB_FAIL(append(all_exprs, get_generated_column_exprs()))) {
-    LOG_WARN("fail to append column conv expr", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
-    LOG_WARN("failed to get exprs", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -71,7 +68,6 @@ int ObLogOptimizerStatsGathering::inner_get_table_schema(const ObTableSchema *&t
     uint64_t table_id = ins_stmt->get_insert_table_info().table_id_;
     uint64_t ref_table_id = ins_stmt->get_insert_table_info().ref_table_id_;
     if (OB_FAIL(schema_guard->get_table_schema(table_id, ref_table_id, ins_stmt, table_schema))) {
-      LOG_WARN("fail to get table schema", K(ref_table_id), K(table_schema), K(ret));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("index schema should not be null", K(table_schema), K(ret));
@@ -91,9 +87,7 @@ int ObLogOptimizerStatsGathering::est_cost()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(child), K(ret));
   } else if (OB_FAIL(inner_get_table_schema(tab_schema))) {
-    LOG_WARN("fail to get table schema", K(ret));
   } else if (OB_FAIL(inner_get_stat_part_cnt(tab_schema, total_part_num))) {
-    LOG_WARN("fail to get pstat num", K(ret));
   } else if (OB_UNLIKELY(parallel < 1)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected parallel", K(parallel), K(ret));
@@ -149,9 +143,7 @@ int ObLogOptimizerStatsGathering::inner_replace_op_exprs(ObRawExprReplacer &repl
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(replace_exprs_action(replacer, col_conv_exprs_))) {
-    LOG_WARN("failed to replace exprs", K(ret));
   } else if (OB_FAIL(replace_exprs_action(replacer, generated_column_exprs_))) {
-    LOG_WARN("failed to replace exprs", K(ret));
   }
   return ret;
 }

@@ -72,7 +72,6 @@ protected:
       SERVER_LOG(WARN, "fail to alloc buf", KR(ret));
     } else if (FALSE_IT(op = new (buf) T(args...))) {
     } else if (OB_FAIL(ops_.push_back(op))) {
-      SERVER_LOG(WARN, "fail to push back", KR(ret));
     }
     if (OB_FAIL(ret)) {
       if (OB_NOT_NULL(op)) {
@@ -97,7 +96,6 @@ protected:
       SERVER_LOG(WARN, "fail to alloc buf", KR(ret));
     } else if (FALSE_IT(op = new (buf) T(this, args...))) {
     } else if (OB_FAIL(table_ops_.push_back(op))) {
-      SERVER_LOG(WARN, "fail to push back", KR(ret));
     }
     if (OB_FAIL(ret)) {
       if (OB_NOT_NULL(op)) {

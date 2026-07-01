@@ -89,7 +89,6 @@ int ObSchemaRetrieveUtils::retrieve_table_schema(const bool check_deleted,
     bool is_deleted = false;
     TABLE_SCHEMA *allocated_table_schema = NULL;
     if (OB_FAIL(fill_table_schema(check_deleted, result, table_schema, is_deleted))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to fill table schema", KR(ret), K(check_deleted));
     } else if (table_schema.get_table_id() == prev_table_id) {
       ret = common::OB_SUCCESS;
     } else if (is_deleted) {
@@ -98,7 +97,6 @@ int ObSchemaRetrieveUtils::retrieve_table_schema(const bool check_deleted,
                        "table_name", table_schema.get_table_name(),
                        "schema_version", table_schema.get_schema_version());
     } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator, table_schema, allocated_table_schema))) {
-      SHARE_SCHEMA_LOG(WARN, "alloc_table_schema failed", KR(ret));
     } else if (OB_FAIL(table_schema_array.push_back(allocated_table_schema))) {
       SHARE_SCHEMA_LOG(WARN, "failed to push back", KR(ret));
 
@@ -109,10 +107,6 @@ int ObSchemaRetrieveUtils::retrieve_table_schema(const bool check_deleted,
       SHARE_SCHEMA_LOG(INFO, "retrieve table schema", KR(ret), K(table_schema), K(is_deleted));
     }
     if (OB_FAIL(ret)) {
-      SHARE_SCHEMA_LOG(WARN, "retrieve table schema failed", KR(ret),
-                       "table_id", table_schema.get_table_id(),
-                       "schema_version", table_schema.get_schema_version(),
-                       K(prev_table_id), K(is_deleted));
     }
     prev_table_id = table_schema.get_table_id();
   }
@@ -142,7 +136,6 @@ int ObSchemaRetrieveUtils::retrieve_schema(
     bool is_deleted = false;
     SCHEMA &current = helper.get_and_reset_current();
     if (OB_FAIL(helper.fill_current(check_deleted, result, current, is_deleted))) {
-      SHARE_SCHEMA_LOG(WARN, "fill schema failed", K(ret));
     } else if (current.get_table_id() == last_table_id
                && helper.get_curr_schema_id() == last_schema_id) {
       //the same with last schema, continue;
@@ -150,8 +143,7 @@ int ObSchemaRetrieveUtils::retrieve_schema(
     } else {
       if (NULL == last_schema || is_last_deleted) {
         //LAST schema IS INVALID, IGNORE
-      } else if (OB_FAIL(helper.add(*last_schema))) { //add last schema
-        SHARE_SCHEMA_LOG(WARN, "add last schema failed", K(*last_schema), K(ret));
+      } else if (OB_FAIL(helper.add(*last_schema))) {
       }
     }
     //save current column to last, rotate
@@ -170,7 +162,6 @@ int ObSchemaRetrieveUtils::retrieve_schema(
     //add last schema
     if (NULL != last_schema && !is_last_deleted) {
       if (OB_FAIL(helper.add(*last_schema))) {
-        SHARE_SCHEMA_LOG(WARN, "add last schema failed", K(*last_schema), K(ret));
       }
     }
   }
@@ -187,7 +178,6 @@ int ObSchemaRetrieveUtils::retrieve_column_schema(const bool check_deleted,
                                           check_deleted,
                                           result,
                                           table_schema_array)))) {
-    SHARE_SCHEMA_LOG(WARN, "retrieve column schema failed", K(ret));
   }
   return ret;
 }
@@ -222,7 +212,6 @@ int ObSchemaRetrieveUtils::retrieve_column_group_schema(const bool check_deleted
       0 == tmp_idx ? current_allocator.reuse() : another_allocator.reuse();
 
       if (OB_FAIL(ObSchemaRetrieveUtils::fill_column_group_info(check_deleted, result, current, cur_table_id, is_deleted))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to fill column_group schema", KR(ret));
       } else if ((cur_table_id == last_table_id) && (current.get_column_group_id() == last_schema_id)) {
         //the same with last schema, continue;
         ret = common::OB_SUCCESS;
@@ -234,8 +223,7 @@ int ObSchemaRetrieveUtils::retrieve_column_group_schema(const bool check_deleted
           if (OB_ISNULL(table_schema) || table_schema->get_table_id() != last_table_id) {
             ret = OB_ERR_UNEXPECTED;
             SHARE_SCHEMA_LOG(WARN, "fail to find table schema", KR(ret), K(last_table_id), KP(table_schema));
-          } else if (OB_FAIL(table_schema->add_column_group(*last_schema))) { // add last schema
-            SHARE_SCHEMA_LOG(WARN, "fail to add last column_group schema", KR(ret), K(last_table_id), K(*last_schema));
+          } else if (OB_FAIL(table_schema->add_column_group(*last_schema))) {
           }
         }
       }
@@ -260,7 +248,6 @@ int ObSchemaRetrieveUtils::retrieve_column_group_schema(const bool check_deleted
           ret = OB_ERR_UNEXPECTED;
           SHARE_SCHEMA_LOG(WARN, "fail to find table schema", KR(ret), K(last_table_id), KP(table_schema));
         } else if (OB_FAIL(table_schema->add_column_group(*last_schema))) {
-          SHARE_SCHEMA_LOG(WARN, "fail to add last column_group schema", KR(ret), K(*last_schema));
         } else {
           table_schema = nullptr;
         }
@@ -280,7 +267,6 @@ int ObSchemaRetrieveUtils::retrieve_constraint(const bool check_deleted,
                                           check_deleted,
                                           result,
                                           table_schema_array)))) {
-    SHARE_SCHEMA_LOG(WARN, "retrieve constraint schema failed", K(ret));
   }
   return ret;
 }
@@ -295,7 +281,6 @@ int ObSchemaRetrieveUtils::retrieve_part_info(const bool check_deleted,
                                           check_deleted,
                                           result,
                                           table_schema_array)))) {
-    SHARE_SCHEMA_LOG(WARN, "retrieve part info failed", K(ret));
   }
   return ret;
 }
@@ -311,7 +296,6 @@ int ObSchemaRetrieveUtils::retrieve_def_subpart_info(const bool check_deleted,
                                           is_subpart_template,
                                           result,
                                           table_schema_array)))) {
-    SHARE_SCHEMA_LOG(WARN, "retrieve subpart info faield", K(ret));
   }
   return ret;
 }
@@ -327,7 +311,6 @@ int ObSchemaRetrieveUtils::retrieve_subpart_info(const bool check_deleted,
                                           is_subpart_template,
                                           result,
                                           table_schema_array)))) {
-    SHARE_SCHEMA_LOG(WARN, "retrieve subpart info faield", K(ret));
   }
   return ret;
 }
@@ -353,9 +336,7 @@ int ObSchemaRetrieveUtils::retrieve_table_schema(const bool check_deleted, T &re
     bool is_deleted = false;
     ObTableSchema tmp_table_schema;
     if (OB_FAIL(fill_table_schema(check_deleted, result, tmp_table_schema, is_deleted))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to fill table schema. ", K(check_deleted), K(ret));
     } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator, tmp_table_schema, table_schema))) {
-      SHARE_SCHEMA_LOG(WARN, "alloc_table_schema failed", K(ret));
     } else {
       //check if this is only one
       if (OB_ITER_END != (ret = result.next())) {
@@ -390,9 +371,7 @@ int ObSchemaRetrieveUtils::retrieve_tablegroup_schema(T &result,
     bool is_deleted = false;
     ObTablegroupSchema tmp_tablegroup_schema;
     if (OB_FAIL(fill_tablegroup_schema(result, tmp_tablegroup_schema, is_deleted))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to fill tablegroup schema. ", K(ret));
     } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator, tmp_tablegroup_schema, tablegroup_schema))) {
-      SHARE_SCHEMA_LOG(WARN, "alloc_tablegroup_schema failed", K(ret));
     } else {
       SHARE_SCHEMA_LOG(INFO, "retrieve tablegroup schema succeed", K(*tablegroup_schema), K(is_deleted));
     }
@@ -441,8 +420,6 @@ int ObSchemaRetrieveHelperBase<TABLE_SCHEMA, ObPartition>::add_schema(TABLE_SCHE
       const ObRowkey &interval_range = table_schema.get_interval_range();
       if (OB_FAIL(ObPartitionUtils::set_low_bound_val_by_interval_range_by_innersql(
           p, interval_range))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to set_low_bound_val_by_interval_range", K(interval_range),
-            K(p), K(ret));
       }
     }
   }
@@ -537,7 +514,6 @@ int ObSubPartSchemaRetrieveHelper<TABLE_SCHEMA>::add(ObSubPartition &p)
       const ObPartition *tmp_partition = NULL;
       if (OB_FAIL(table->get_partition_by_part_id(
                   p.get_part_id(), CHECK_PARTITION_MODE_ALL, tmp_partition))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to find partition", K(ret), KPC(table), K(p));
       } else if (OB_ISNULL(tmp_partition)) {
         ret = OB_PARTITION_NOT_EXIST;
         SHARE_SCHEMA_LOG(WARN, "partition not exist", KR(ret), K(p));
@@ -552,11 +528,9 @@ int ObSubPartSchemaRetrieveHelper<TABLE_SCHEMA>::add(ObSubPartition &p)
       ret = OB_ERR_UNEXPECTED;
       SHARE_SCHEMA_LOG(WARN, "partition not match", K(ret), K(p), KPC_(partition));
     } else if (OB_FAIL(partition_->add_partition(p))) {
-      SHARE_SCHEMA_LOG(WARN, "add schema failed", K(ret));
     }
   } else {
     if (OB_FAIL(table->add_def_subpartition(p))) {
-      SHARE_SCHEMA_LOG(WARN, "add def subpart schema failed", K(ret), K(p));
     }
   }
   return ret;
@@ -579,11 +553,9 @@ int ObSubPartSchemaRetrieveHelper<TABLE_SCHEMA>::fill_current(
   int ret = OB_SUCCESS;
   if (is_subpart_template_) {
     if (OB_FAIL(ObSchemaRetrieveUtils::fill_def_subpart_info(check_deleted, result, p, is_deleted))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to retrieve def sub part info", K(ret));
     }
   } else {
     if (OB_FAIL(ObSchemaRetrieveUtils::fill_subpart_info(check_deleted, result, p, is_deleted))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to retrieve sub part info", K(ret));
     }
   }
   return ret;
@@ -633,7 +605,6 @@ int ObSchemaRetrieveHelper<TABLE_SCHEMA, SCHEMA>::add(SCHEMA &p)
     SHARE_SCHEMA_LOG(WARN, "get table failed", K(ret), K(mode_));
   } else if (OB_FAIL((ObSchemaRetrieveHelperBase<TABLE_SCHEMA, SCHEMA>::add_schema(
                       *table, p)))) {
-    SHARE_SCHEMA_LOG(WARN, "add schema failed", K(ret));
   }
   return ret;
 }
@@ -675,7 +646,6 @@ int ObSchemaRetrieveUtils::retrieve_schema(
       bool is_deleted = false;
       SCHEMA &current = helper.get_and_reset_current();
       if (OB_FAIL(helper.fill_current(check_deleted, result, current, is_deleted))) {
-        SHARE_SCHEMA_LOG(WARN, "fill schema fail", K(ret));
       } else if (table_id != current.get_table_id()) {
         ret = OB_ERR_UNEXPECTED;
         SHARE_SCHEMA_LOG(WARN, "table_id is not equal", K(ret), K(table_id), K(current));
@@ -685,8 +655,7 @@ int ObSchemaRetrieveUtils::retrieve_schema(
       } else {
         if (NULL == last_schema || is_last_deleted) {
           //LAST schema IS INVALID, IGNORE
-        } else if (OB_FAIL(helper.add(*last_schema))) { //add last schema
-          SHARE_SCHEMA_LOG(WARN, "add last schema failed", K(*last_schema), K(ret));
+        } else if (OB_FAIL(helper.add(*last_schema))) {
         }
       }
       //save current column to last, rotate
@@ -704,7 +673,6 @@ int ObSchemaRetrieveUtils::retrieve_schema(
       //add last partition
       if (NULL != last_schema && !is_last_deleted) {
         if (OB_FAIL(helper.add(*last_schema))) {
-          SHARE_SCHEMA_LOG(WARN, "add last schema failed", K(*last_schema), K(ret));
         }
       }
     }
@@ -712,7 +680,6 @@ int ObSchemaRetrieveUtils::retrieve_schema(
     // so that generated column can be defined in any order.
     if (OB_SUCC(ret)) {
       if (OB_FAIL(cascaded_generated_column(*table_schema))) {
-        SHARE_SCHEMA_LOG(WARN, "cascaded_generated_column failed", K(ret), KPC(table_schema));
       }
     }
   }
@@ -737,8 +704,6 @@ inline int ObSchemaRetrieveUtils::cascaded_generated_column<ObTableSchema>(ObTab
       ret = common::OB_ERR_UNEXPECTED;
       SHARE_SCHEMA_LOG(WARN, "column schema is null", K(ret), K(table_schema));
     } else if (OB_FAIL(ObSchemaUtils::cascaded_generated_column(table_schema, *column, true))) {
-      SHARE_SCHEMA_LOG(WARN, "cascaded_generated_column failed",
-                        K(ret), K(table_schema), K(column));
     }
   }
   return ret;
@@ -754,7 +719,6 @@ int ObSchemaRetrieveUtils::retrieve_part_info(const bool check_deleted,
                                                              check_deleted,
                                                              result,
                                                              table_schema)))) {
-    SHARE_SCHEMA_LOG(WARN, "retrieve part info failed", K(ret));
   }
   return ret;
 }
@@ -770,7 +734,6 @@ int ObSchemaRetrieveUtils::retrieve_def_subpart_info(const bool check_deleted,
                                                         is_subpart_template,
                                                         result,
                                                         table_schema)))) {
-    SHARE_SCHEMA_LOG(WARN, "retrieve subpart info failed", K(ret));
   }
   return ret;
 }
@@ -786,7 +749,6 @@ int ObSchemaRetrieveUtils::retrieve_subpart_info(const bool check_deleted,
                                                         is_subpart_template,
                                                         result,
                                                         table_schema)))) {
-    SHARE_SCHEMA_LOG(WARN, "retrieve subpart info failed", K(ret));
   }
   return ret;
 }
@@ -807,7 +769,6 @@ int ObSchemaRetrieveUtils::retrieve_subpart_schema(const bool check_deleted,
     ObSubPartition &current = helper.get_and_reset_current();
     if (OB_FAIL(helper.fill_current(check_deleted,
                                     result, current, is_deleted))) {
-      SHARE_SCHEMA_LOG(WARN, "fill schema fail", K(ret));
     } else if (OB_ISNULL(last_schema)
                || current.key_match(*last_schema)) {
       // continue
@@ -827,7 +788,6 @@ int ObSchemaRetrieveUtils::retrieve_subpart_schema(const bool check_deleted,
     //add last partition
     if (OB_NOT_NULL(last_schema) && !is_last_deleted) {
       if (OB_FAIL(helper.add(*last_schema))) {
-        SHARE_SCHEMA_LOG(WARN, "add last schema failed", K(*last_schema), K(ret));
       }
     }
   }
@@ -854,7 +814,6 @@ int ObSchemaRetrieveUtils::retrieve_subpart_schema(const bool check_deleted,
       ObSubPartition &current = helper.get_and_reset_current();
       if (OB_FAIL(helper.fill_current(check_deleted,
                                       result, current, is_deleted))) {
-        SHARE_SCHEMA_LOG(WARN, "fill schema fail", K(ret));
       } else if (OB_ISNULL(last_schema)
                  || current.key_match(*last_schema)) {
         // continue
@@ -874,7 +833,6 @@ int ObSchemaRetrieveUtils::retrieve_subpart_schema(const bool check_deleted,
       //add last partition
       if (OB_NOT_NULL(last_schema) && !is_last_deleted) {
         if (OB_FAIL(helper.add(*last_schema))) {
-          SHARE_SCHEMA_LOG(WARN, "add last schema failed", K(*last_schema), K(ret));
         }
       }
     }
@@ -892,7 +850,6 @@ int ObSchemaRetrieveUtils::retrieve_column_schema(const bool check_deleted,
                                                                 check_deleted,
                                                                 result,
                                                                 table_schema)))) {
-    SHARE_SCHEMA_LOG(WARN, "retrieve column schema failed", K(ret));
   }
   return ret;
 }
@@ -907,7 +864,6 @@ int ObSchemaRetrieveUtils::retrieve_constraint(const bool check_deleted,
                                                             check_deleted,
                                                             result,
                                                             table_schema)))) {
-    SHARE_SCHEMA_LOG(WARN, "retrieve constraint schema failed", K(ret));
   }
   return ret;
 }
@@ -923,13 +879,11 @@ int ObSchemaRetrieveUtils::retrieve_constraint_column_info(T &result,
   common::ObSEArray<uint64_t, common::SEARRAY_INIT_NUM> column_ids;
   while (OB_SUCC(ret) && OB_SUCC(result.next())) {
     if (OB_FAIL(fill_constraint_column_info(result, column_id, is_deleted))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to fill constraint column info", K(ret));
     } else if (prev_column_id == column_id) {
       // skip
     } else if (is_deleted) {
       // skip
     } else if (OB_FAIL(column_ids.push_back(column_id))) {
-      SHARE_SCHEMA_LOG(WARN, "push back to column_ids failed", K(ret), K(column_id));
     }
     prev_column_id = column_id;
   }
@@ -941,7 +895,6 @@ int ObSchemaRetrieveUtils::retrieve_constraint_column_info(T &result,
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(cst->assign_column_ids(column_ids))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to assign_column_ids", K(column_ids));
     }
   }
   return ret;
@@ -959,9 +912,7 @@ int ObSchemaRetrieveUtils::retrieve_recycle_object(T &result,
     recycle_obj.reset();
     allocator.reuse();
     if (OB_FAIL(fill_recycle_object(result, recycle_obj))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to fill recycle object. ", K(ret));
     } else if (OB_FAIL(recycle_objs.push_back(recycle_obj))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to push back", K(ret));
     }
   }
   if (ret != common::OB_ITER_END) {
@@ -980,9 +931,7 @@ int ObSchemaRetrieveUtils::retrieve_column_group_schema(const bool check_deleted
   int ret = common::OB_SUCCESS;
   ObArray<ObTableSchema *> table_schema_array;
   if (OB_FAIL(table_schema_array.reserve(1))) {
-    LOG_WARN("fail to reserve", KR(ret));
   } else if (OB_FAIL(table_schema_array.push_back(table_schema))) {
-    LOG_WARN("fail to push back", KR(ret), KP(table_schema));
   } else if (OB_FAIL(ObSchemaRetrieveUtils::retrieve_column_group_schema(check_deleted, result, table_schema_array))) {
     LOG_WARN("fail to retrieve column_group schema", KR(ret), K(check_deleted), KP(table_schema));
   }
@@ -1030,13 +979,9 @@ int ObSchemaRetrieveUtils::retrieve_column_group_mapping(const bool check_delete
           } else {
             if (OB_ISNULL(column_group) || (last_column_group_id != column_group->get_column_group_id())) {
               if (OB_FAIL(table_schema->get_column_group_by_id(last_column_group_id, column_group))) {
-                LOG_WARN("fail to get column_group by id", KR(ret), K(last_column_group_id), K(table_id));
               }
             }
             if (FAILEDx(column_group->add_column_id(last_column_id))) {
-              LOG_WARN("fail to add column_id", KR(ret), K(last_column_group_id), K(last_column_id),
-                                                         K(curr_column_group_id), K(curr_column_id), 
-                                                         K(table_id), KPC(column_group), KPC(table_schema));
             }
           }
         }
@@ -1058,11 +1003,9 @@ int ObSchemaRetrieveUtils::retrieve_column_group_mapping(const bool check_delete
           && !is_last_deleted) {
         if (OB_ISNULL(column_group) || (last_column_group_id != column_group->get_column_group_id())) {
           if (OB_FAIL(table_schema->get_column_group_by_id(last_column_group_id, column_group))) {
-            LOG_WARN("fail to get column_group by id", KR(ret), K(last_column_group_id), K(table_id));
           }
         }
         if (FAILEDx(column_group->add_column_id(last_column_id))) {
-          LOG_WARN("fail to add column_id", KR(ret), K(last_column_group_id), K(last_column_id), K(table_id));
         }
       }
     }
@@ -1203,7 +1146,6 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, mv_mode, table_schema, int64_t, true, true, 0);
     if (OB_SUCC(ret)) {
       if (OB_FAIL(table_schema.set_expire_info(expire_info))) {
-        SHARE_SCHEMA_LOG(WARN, "set expire info failed", K(ret));
       }
     }
 
@@ -1218,7 +1160,6 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
     EXTRACT_VARCHAR_FIELD_MYSQL(result, "part_func_expr", part_func_expr);
     if (OB_SUCC(ret)) {
       if (OB_FAIL(partition_option.set_part_expr(part_func_expr))) {
-        SHARE_SCHEMA_LOG(WARN, "set part expr failed", K(ret));
       }
     }
     //sub_part_expr
@@ -1230,7 +1171,6 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
     EXTRACT_VARCHAR_FIELD_MYSQL(result, "sub_part_func_expr", sub_part_func_expr);
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sub_part_option.set_part_expr(sub_part_func_expr))) {
-        SHARE_SCHEMA_LOG(WARN, "set part expr failed", K(ret));
       }
     }
     //duplicate attribute
@@ -1292,9 +1232,7 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(table_schema.set_transition_point_with_hex_str(btransition_point))) {
-        SHARE_SCHEMA_LOG(WARN, "Failed to set transition point to partition", K(ret));
       } else if (OB_FAIL(table_schema.set_interval_range_with_hex_str(binterval_range))) {
-        SHARE_SCHEMA_LOG(WARN, "Failed to set interval range to partition", K(ret));
       }
     }
 
@@ -1449,8 +1387,6 @@ int ObSchemaRetrieveUtils::fill_column_schema(const bool check_deleted, T &resul
       // orig_default_value is used to store sequence_id when column is identity column.
       uint64_t sequence_id = OB_INVALID_ID;
       if (OB_FAIL(ObSchemaUtils::str_to_uint(column.get_orig_default_value().get_string(), sequence_id))) {
-        SHARE_SCHEMA_LOG(WARN, "get sequence id fail", K(ret), K(column.get_cur_default_value().get_string()),
-                                                       K(column.get_orig_default_value().get_string()));
       } else {
         column.set_sequence_id(sequence_id);
       }
@@ -1464,7 +1400,6 @@ int ObSchemaRetrieveUtils::fill_column_schema(const bool check_deleted, T &resul
         ret = OB_ERR_UNEXPECTED;
         SHARE_SCHEMA_LOG(WARN, "extend_type_info is empty", K(ret));
       } else if (OB_FAIL(column.deserialize_extended_type_info(extend_type_info.ptr(), extend_type_info.length(), pos))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to deserialize_extended_type_info", K(ret));
       } else {}
     }
 
@@ -1796,7 +1731,6 @@ int ObSchemaRetrieveUtils::retrieve_role_grantee_map_schema(T &result,
         ret = common::OB_SUCCESS;
       } else if (OB_FAIL(ObSchemaRetrieveUtils::find_user_info(is_fetch_role ? grantee_id : role_id,
             user_array, user_info))) {
-        SHARE_SCHEMA_LOG(WARN, "failed to find user info", K(ret), K(grantee_id), K(role_id));
       } else if (NULL == user_info) {
         // skip
         // e.g: user_array may only contain role.
@@ -1814,7 +1748,6 @@ int ObSchemaRetrieveUtils::retrieve_role_grantee_map_schema(T &result,
       prev_value_id = (is_fetch_role ? role_id : grantee_id);
     } else {
       if (OB_FAIL(ObSchemaRetrieveUtils::find_user_info(is_fetch_role ? grantee_id : role_id, user_array, user_info))) {
-        SHARE_SCHEMA_LOG(WARN, "failed to find user info", K(ret), K(grantee_id), K(role_id));
       } else if (NULL == user_info) {
         // skip
         // e.g: user_array may only contain role.
@@ -2249,7 +2182,6 @@ int ObSchemaRetrieveUtils::fill_routine_param_schema(T &result, ObRoutineParam &
         ret = OB_ERR_UNEXPECTED;
         SHARE_SCHEMA_LOG(WARN, "extended_type_info is empty", K(ret));
       } else if (OB_FAIL(schema.deserialize_extended_type_info(extended_type_info.ptr(), extended_type_info.length(), pos))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to deserialize_extended_type_info", K(ret));
       } else {}
     }
   }
@@ -2317,7 +2249,6 @@ int ObSchemaRetrieveUtils::fill_trigger_schema(T &result, ObTriggerInfo &trigger
         if (OB_ERR_NULL_VALUE == ret) {
           ret = OB_SUCCESS;
           if (OB_FAIL(result.get_varchar("trigger_body_v2", str_value))) {
-            SQL_LOG(WARN, "fail to extract varchar field mysql.", K(ret));
           }
         } else {
           SQL_LOG(WARN, "fail to extract varchar field mysql.", K(ret));
@@ -2325,7 +2256,6 @@ int ObSchemaRetrieveUtils::fill_trigger_schema(T &result, ObTriggerInfo &trigger
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(trigger_info.set_trigger_body(str_value))) {
-          SQL_LOG(WARN, "fail to set value", KR(ret), K(str_value));
         }
       }
     }
@@ -2459,7 +2389,6 @@ int ObSchemaRetrieveUtils::retrieve_system_variable_obj(T &result,
   EXTRACT_INT_FIELD_MYSQL(result, "data_type", vtype, int64_t);
   EXTRACT_VARCHAR_FIELD_MYSQL(result, "value", result_value);
   if (OB_FAIL(ret)) {
-    SHARE_SCHEMA_LOG(WARN,"fail to extract data", K(ret));
   } else if (is_deleted) {
     ret = common::OB_ENTRY_NOT_EXIST;
   } else if (!result_value.empty() && OB_ISNULL(value_buf = static_cast<char*>(allocator.alloc(result_value.length())))) {
@@ -2510,7 +2439,6 @@ int ObSchemaRetrieveUtils::retrieve_system_variable(T &result, SCHEMA &sys_varia
     sysvar_schema.reset();
     allocator.reuse();
     if (OB_FAIL(fill_sysvar_schema(result, sysvar_schema, is_deleted))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to fill sysvar schema", K(ret));
     } else if (ObCharset::case_insensitive_equal(prev_sys_name, sysvar_schema.get_name())) {
       //do nothing
     } else if (is_deleted) {
@@ -2524,7 +2452,6 @@ int ObSchemaRetrieveUtils::retrieve_system_variable(T &result, SCHEMA &sys_varia
       }
     } else if (FALSE_IT(tmp_allocator.reuse())) {
     } else if (OB_FAIL(ob_write_string(tmp_allocator, sysvar_schema.get_name(), prev_sys_name))) {
-      SHARE_SCHEMA_LOG(WARN, "write sysvar name failed", K(ret), K(sysvar_schema));
     } else {
       SHARE_SCHEMA_LOG(INFO, "fetch system variable schema finish", K(sysvar_schema));
     }
@@ -2627,13 +2554,11 @@ int ObSchemaRetrieveUtils::retrieve_routine_schema(T &result,
     routine_info.reset();
     allocator.reuse();
     if (OB_FAIL(fill_routine_schema(result, routine_info, is_deleted))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to fill routine info ", K(ret));
     } else if (routine_info.get_routine_id() == pre_routine_id) {
       // ignore
     } else if (is_deleted) {
       SHARE_SCHEMA_LOG(INFO, "routine info is deleted", K(routine_info));
     } else if (OB_FAIL(routine_infos.push_back(routine_info))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to push back", K(ret));
     } else {
       SHARE_SCHEMA_LOG(INFO, "retrieve routine schema succeed", K(routine_info));
     }
@@ -2660,13 +2585,11 @@ int ObSchemaRetrieveUtils::retrieve_trigger_list(T &result,
   bool is_deleted = false;
   while (OB_SUCC(ret) && OB_SUCC(result.next())) {
     if (OB_FAIL(fill_trigger_id(result, trigger_id, is_deleted))) {
-      SHARE_SCHEMA_LOG(WARN, "fill trigger id failed", K(ret));
     } else if (pre_trigger_id == trigger_id) {
       // ignore
     } else if (is_deleted) {
       SHARE_SCHEMA_LOG(INFO, "trigger is deleted", K(trigger_id));
     } else if (OB_FAIL(trigger_list.push_back(trigger_id))) {
-      SHARE_SCHEMA_LOG(WARN, "add trigger id failed", K(pre_trigger_id), K(trigger_id), K(ret));
     } else {
       SHARE_SCHEMA_LOG(TRACE, "retrieve trigger id succeed", K(trigger_id));
     }
@@ -2694,14 +2617,12 @@ int ObSchemaRetrieveUtils::retrieve_routine_param_schema(T &result,
     cur_param.reset();
     allocator.reuse();
     if (OB_FAIL(fill_routine_param_schema(result, cur_param, is_deleted))) {
-      SHARE_SCHEMA_LOG(WARN, "fill routine param schema failed", K(ret));
     } else if (cur_param.get_routine_id() == pre_routine_id
                && cur_param.get_sequence() == pre_sequence) {
       // ignore
     } else if (is_deleted) {
       SHARE_SCHEMA_LOG(INFO, "routine param info is deleted", K(cur_param));
     } else if (OB_FAIL(routine_param_setter.add_routine_param(cur_param))) {
-      SHARE_SCHEMA_LOG(WARN, "add routine param failed", K(pre_routine_id), K(pre_sequence), K(cur_param), K(ret));
     } else {
       SHARE_SCHEMA_LOG(TRACE, "add routine param success", K(cur_param));
     }
@@ -2732,19 +2653,16 @@ int ObSchemaRetrieveUtils::retrieve_udf_schema(T &result,
       schema.reset();
       allocator.reuse();
       if (OB_FAIL(fill_udf_schema(result, schema, is_deleted))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to fill udf schema", K(ret));
       } else if (schema.get_udf_name_str() == udf_name) {
         SHARE_SCHEMA_LOG(DEBUG, "debug ignore", K(schema.get_udf_name_str()), "version", schema.get_schema_version());
       } else if (is_deleted) {
         SHARE_SCHEMA_LOG(INFO, "udf is is_deleted, don't add", K(schema.get_udf_name_str()));
       } else if (OB_FAIL(schema_array.push_back(schema))) {
-        SHARE_SCHEMA_LOG(WARN, "failed to push back", K(ret));
       } else {
         SHARE_SCHEMA_LOG(INFO, "retrieve udf schema succeed", K(schema));
       }
       tmp_allocator.reuse();
       if (FAILEDx(ob_write_string(tmp_allocator, schema.get_udf_name_str(), udf_name))) {
-        SHARE_SCHEMA_LOG(WARN, "write udf_name failed", KR(ret), K(schema));
       }
     }
     if (ret != common::OB_ITER_END) {
@@ -2770,19 +2688,16 @@ int ObSchemaRetrieveUtils::retrieve_catalog_priv_schema(T &result,
     catalog_priv.reset();
     allocator.reuse();
     if (OB_FAIL(fill_catalog_priv_schema(result, catalog_priv, is_deleted))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to fill catalog privileges", K(ret));
     } else if (catalog_priv.get_sort_key() == pre_catalog_sort_key) {
       // ignore it
       ret = common::OB_SUCCESS;
     } else if (is_deleted) {
       SHARE_SCHEMA_LOG(TRACE, "catalog_priv is is_deleted", K(catalog_priv));
     } else if (OB_FAIL(catalog_priv_array.push_back(catalog_priv))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to push back", K(ret));
     }
     if (OB_SUCC(ret)) {
       tmp_allocator.reuse();
       if (OB_FAIL(pre_catalog_sort_key.deep_copy(catalog_priv.get_sort_key(), tmp_allocator))) {
-        SHARE_SCHEMA_LOG(WARN, "deep copy failed", KR(ret));
       }
     }
   }
@@ -2808,19 +2723,16 @@ int ObSchemaRetrieveUtils::retrieve_db_priv_schema(T &result,
     db_priv.reset();
     allocator.reuse();
     if (OB_FAIL(fill_db_priv_schema(result, db_priv, is_deleted))) {
-      SHARE_SCHEMA_LOG(WARN, "Fail to fill database privileges", K(ret));
     } else if (db_priv.get_original_key() == pre_priv) {
       // ignore it
       ret = common::OB_SUCCESS;
     } else if (is_deleted) {
       SHARE_SCHEMA_LOG(TRACE, "db_priv is is_deleted", K(db_priv));
     } else if (OB_FAIL(db_priv_array.push_back(db_priv))) {
-      SHARE_SCHEMA_LOG(WARN, "Failed to push back", K(ret));
     }
     if (OB_SUCC(ret)) {
       tmp_allocator.reuse();
       if (OB_FAIL(pre_priv.deep_copy(db_priv.get_original_key(), tmp_allocator))) {
-        SHARE_SCHEMA_LOG(WARN, "alloc_table_schema failed", KR(ret));
       }
     }
   }
@@ -2848,7 +2760,6 @@ int ObSchemaRetrieveUtils::retrieve_obj_priv_schema_inner(T &result,
   /* gather obj priv by key <obj_id, obj_type, col_id, grantor_id, grantee_id, priv_id> */
   while (OB_SUCCESS == ret && common::OB_SUCCESS == (ret = result.next())) {
     if (OB_FAIL(fill_obj_priv_schema(result, obj_priv, is_deleted, priv_id, option))) {
-      SHARE_SCHEMA_LOG(WARN, "Fail to fill obj privileges", K(ret));
     } else if ((prev_priv.get_sort_key() == obj_priv.get_sort_key()
                && prev_priv_id == priv_id)) {
       // jump over same priv operation before , eg: revoke or add grant option
@@ -2864,11 +2775,9 @@ int ObSchemaRetrieveUtils::retrieve_obj_priv_schema_inner(T &result,
         if (OB_SUCC(ret)) {
           packed_obj_privs = 0;
           if (OB_FAIL(ObPrivPacker::pack_raw_obj_priv(option, priv_id, packed_obj_privs))) {
-            SHARE_SCHEMA_LOG(WARN, "Fail to pack raw obj priv", K(ret));
           } else {
             obj_priv.set_obj_privs(packed_obj_privs);
             if (OB_FAIL(obj_priv_array.push_back(obj_priv))) {
-              SHARE_SCHEMA_LOG(WARN, "Fail to push back", K(ret));
             }
           }
         }
@@ -2904,7 +2813,6 @@ int ObSchemaRetrieveUtils::retrieve_sys_priv_schema_inner(T &result,
     sys_priv.reset();
     allocator.reuse();
     if (OB_FAIL(fill_sys_priv_schema(result, sys_priv, is_deleted, priv_id, option))) {
-      SHARE_SCHEMA_LOG(WARN, "Fail to fill system privileges", K(ret));
     } else if ((sys_priv.get_key() == prekey && prev_priv_id == priv_id)) {
       // jump over same priv operation before
       ret = common::OB_SUCCESS;
@@ -2922,13 +2830,9 @@ int ObSchemaRetrieveUtils::retrieve_sys_priv_schema_inner(T &result,
         /* set priv info and push back sys_priv */
         if (OB_SUCC(ret)) {
           if (OB_FAIL(ObPrivPacker::init_packed_array(packed_priv_array))) {
-            SHARE_SCHEMA_LOG(WARN, "Fail to init packed array", K(ret));
           } else if (OB_FAIL(ObPrivPacker::pack_raw_priv(option, priv_id, packed_priv_array))) {
-            SHARE_SCHEMA_LOG(WARN, "Fail to pack raw priv", K(ret));
           } else if (OB_FAIL(sys_priv.set_priv_array(packed_priv_array))) {
-            SHARE_SCHEMA_LOG(WARN, "Fail to set priv array", K(ret));
           } else if (OB_FAIL(sys_priv_array.push_back(sys_priv))) {
-            SHARE_SCHEMA_LOG(WARN, "Fail to push back", K(ret));
           }
         }
       }
@@ -2954,9 +2858,7 @@ int ObSchemaRetrieveUtils::push_prev_array_if_has(
   int ret = common::OB_SUCCESS;
   if (packed_grant_privs.count() > 0) {
     if (OB_FAIL(sys_priv.set_priv_array(packed_grant_privs))) {
-      SHARE_SCHEMA_LOG(WARN, "set priv array", K(packed_grant_privs), K(ret));
     } else if (OB_FAIL(sys_priv_array.push_back(sys_priv))) {
-      SHARE_SCHEMA_LOG(WARN, "push back failed", K(sys_priv), K(ret));
     }
   }
   return ret;
@@ -2973,21 +2875,18 @@ int ObSchemaRetrieveUtils::retrieve_sys_priv_schema(T &result,
   ObPackedPrivArray packed_grant_privs;
 
   if (OB_FAIL(retrieve_sys_priv_schema_inner(result, tmp_priv_array))) {
-    SHARE_SCHEMA_LOG(WARN, "retrieve_sys_priv_schema_inner failed", K(ret));
   } else {
     ARRAY_FOREACH(tmp_priv_array, i) {
       it_priv = tmp_priv_array.at(i);
       if (prev_priv.get_key() == it_priv.get_key()) {
         if (OB_FAIL(ObPrivPacker::merge_two_packed_array(packed_grant_privs,
                                                         it_priv.get_priv_array()))) {
-          SHARE_SCHEMA_LOG(WARN, "merg two packed array failed", K(ret));
         }
       } else {
         /* push back previous group */
         if (OB_FAIL(push_prev_array_if_has(sys_priv_array,
                                            prev_priv,
                                            packed_grant_privs))) {
-          SHARE_SCHEMA_LOG(WARN, "push prev array if has failed", K(ret));
         } else {
           /* initialize new sys priv group */
           packed_grant_privs = it_priv.get_priv_array();
@@ -3001,7 +2900,6 @@ int ObSchemaRetrieveUtils::retrieve_sys_priv_schema(T &result,
     if (OB_FAIL(push_prev_array_if_has(sys_priv_array,
                                        prev_priv,
                                        packed_grant_privs))) {
-      SHARE_SCHEMA_LOG(WARN, "push prev array if has failed", K(ret));
     }
   }
   return ret;
@@ -3021,19 +2919,16 @@ int ObSchemaRetrieveUtils::retrieve_table_priv_schema(T &result,
     allocator.reuse();
     bool is_deleted = false;
     if (OB_FAIL(fill_table_priv_schema(result, table_priv, is_deleted))) {
-      SHARE_SCHEMA_LOG(WARN, "Fail to fill table_priv", K(ret));
     } else if (table_priv.get_sort_key() == pre_table_sort_key) {
       // ignore it
       ret = common::OB_SUCCESS;
     } else if (is_deleted) {
       SHARE_SCHEMA_LOG(TRACE, "table_priv is is_deleted", K(table_priv));
     } else if (OB_FAIL(table_priv_array.push_back(table_priv))) {
-      SHARE_SCHEMA_LOG(WARN, "Failed to push back", K(ret));
     }
     if (OB_SUCC(ret)) {
       tmp_allocator.reuse();
       if (OB_FAIL(pre_table_sort_key.deep_copy(table_priv.get_sort_key(), tmp_allocator))) {
-        SHARE_SCHEMA_LOG(WARN, "alloc_table_schema failed", KR(ret));
       }
     }
   }
@@ -3059,19 +2954,16 @@ int ObSchemaRetrieveUtils::retrieve_routine_priv_schema(T &result,
     allocator.reuse();
     bool is_deleted = false;
     if (OB_FAIL(fill_routine_priv_schema(result, routine_priv, is_deleted))) {
-      LOG_WARN("Fail to fill routine_priv", K(ret));
     } else if (routine_priv.get_sort_key() == pre_routine_sort_key) {
       // ignore it
       ret = common::OB_SUCCESS;
     } else if (is_deleted) {
       LOG_TRACE("routine_priv is is_deleted", K(routine_priv));
     } else if (OB_FAIL(routine_priv_array.push_back(routine_priv))) {
-      LOG_WARN("Failed to push back", K(ret));
     }
     if (OB_SUCC(ret)) {
       tmp_allocator.reuse();
       if (OB_FAIL(pre_routine_sort_key.deep_copy(routine_priv.get_sort_key(), tmp_allocator))) {
-        LOG_WARN("alloc_routine_schema failed", KR(ret));
       }
     }
   }
@@ -3096,14 +2988,12 @@ int ObSchemaRetrieveUtils::retrieve_column_priv_schema(T &result,
     allocator.reuse();
     bool is_deleted = false;
     if (OB_FAIL(fill_column_priv_schema(result, column_priv, is_deleted))) {
-      LOG_WARN("Fail to fill column_priv", K(ret));
     } else if (column_priv.get_id_key() == pre_column_id_key) {
       // ignore it
       ret = common::OB_SUCCESS;
     } else if (is_deleted) {
       LOG_TRACE("column_priv is is_deleted", K(column_priv));
     } else if (OB_FAIL(column_priv_array.push_back(column_priv))) {
-      LOG_WARN("Failed to push back", K(ret));
     }
     if (OB_SUCC(ret)) {
       pre_column_id_key = column_priv.get_id_key();
@@ -3142,7 +3032,6 @@ int ObSchemaRetrieveUtils::retrieve_obj_priv_schema(T &result,
   // }
 
   if (OB_FAIL(retrieve_obj_priv_schema_inner(result, tmp_obj_priv_array))) {
-    SHARE_SCHEMA_LOG(WARN, "retrieve_obj_priv_schema_inner failed", K(ret));
   } else {
     ARRAY_FOREACH(tmp_obj_priv_array, i) {
       it_obj_priv = tmp_obj_priv_array.at(i);
@@ -3153,7 +3042,6 @@ int ObSchemaRetrieveUtils::retrieve_obj_priv_schema(T &result,
         if (OB_FAIL(push_prev_obj_privs_if_has(obj_priv_array,
                                                prev_obj_priv,
                                                packed_obj_privs))) {
-          SHARE_SCHEMA_LOG(WARN, "push prev obj privs if has failed", K(ret));
         } else {
           /* initialize new sys priv group */
           packed_obj_privs = it_obj_priv.get_obj_privs();
@@ -3167,7 +3055,6 @@ int ObSchemaRetrieveUtils::retrieve_obj_priv_schema(T &result,
     if (OB_FAIL(push_prev_obj_privs_if_has(obj_priv_array,
                                            prev_obj_priv,
                                            packed_obj_privs))) {
-      SHARE_SCHEMA_LOG(WARN, "push prev obj privs if has failed", K(ret));
     }
   }
   return ret;
@@ -3183,7 +3070,6 @@ int ObSchemaRetrieveUtils::push_prev_obj_privs_if_has(
   if (packed_obj_privs != 0) {
     obj_priv.set_obj_privs(packed_obj_privs);
     if (OB_FAIL(obj_priv_array.push_back(obj_priv))) {
-      SHARE_SCHEMA_LOG(WARN, "push back failed", K(obj_priv), K(ret));
     }
   }
   return ret;
@@ -3203,19 +3089,16 @@ int ObSchemaRetrieveUtils::retrieve_obj_mysql_priv_schema(T &result,
     allocator.reuse();
     bool is_deleted = false;
     if (OB_FAIL(fill_obj_mysql_priv_schema(result, obj_mysql_priv, is_deleted))) {
-      LOG_WARN("Fail to fill obj_mysql_priv", K(ret));
     } else if (obj_mysql_priv.get_sort_key() == pre_obj_mysql_sort_key) {
       // ignore it
       ret = common::OB_SUCCESS;
     } else if (is_deleted) {
       LOG_TRACE("obj_mysql_priv is is_deleted", K(obj_mysql_priv));
     } else if (OB_FAIL(obj_mysql_priv_array.push_back(obj_mysql_priv))) {
-      LOG_WARN("Failed to push back", K(ret));
     }
     if (OB_SUCC(ret)) {
       tmp_allocator.reuse();
       if (OB_FAIL(pre_obj_mysql_sort_key.deep_copy(obj_mysql_priv.get_sort_key(), tmp_allocator))) {
-        LOG_WARN("alloc_obj_mysql_schema failed", KR(ret));
       }
     }
   }
@@ -3308,7 +3191,6 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
 
       if (OB_SUCC(ret)) {
         if (OB_FAIL(partition_option.set_part_expr(part_func_expr))) {
-          SHARE_SCHEMA_LOG(WARN, "set part expr failed", K(ret));
         }
       }
       //sub_part_expr
@@ -3320,7 +3202,6 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
       EXTRACT_VARCHAR_FIELD_MYSQL(result, "sub_part_func_expr", sub_part_func_expr);
       if (OB_SUCC(ret)) {
         if (OB_FAIL(sub_part_option.set_part_expr(sub_part_func_expr))) {
-          SHARE_SCHEMA_LOG(WARN, "set part expr failed", K(ret));
         }
       }
     }
@@ -3367,9 +3248,7 @@ int ObSchemaRetrieveUtils::fill_table_schema(const bool check_deleted,
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(table_schema.set_transition_point_with_hex_str(btransition_point))) {
-        SHARE_SCHEMA_LOG(WARN, "Failed to set transition point to partition", K(ret));
       } else if (OB_FAIL(table_schema.set_interval_range_with_hex_str(binterval_range))) {
-        SHARE_SCHEMA_LOG(WARN, "Failed to set interval range to partition", K(ret));
       }
     }
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(result, tablet_id, table_schema, uint64_t, true, ignore_column_error, 0);
@@ -3559,7 +3438,6 @@ int ObSchemaRetrieveUtils::fill_replica_options(T &result, SCHEMA &schema)
   EXTRACT_VARCHAR_FIELD_MYSQL(result, "zone_list", zone_list_str);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(helper.convert(zone_list_str, zone_list_str_ptr))) {
-    SHARE_SCHEMA_LOG(WARN, "convert zone_list_str failed", K(zone_list_str), K(ret));
   } else if (OB_FAIL(schema.str2string_array(zone_list_str_ptr, zones))) {
     SHARE_SCHEMA_LOG(WARN, "str2string_array failed", K(zone_list_str), K(ret));
   } else {
@@ -3594,7 +3472,6 @@ int ObSchemaRetrieveUtils::fill_part_info(const bool check_deleted, T &result,
   bool is_subpart_template = false;
   if (OB_FAIL(fill_base_part_info(check_deleted, is_subpart_def,
                                   is_subpart_template, result, partition, is_deleted))) {
-    SHARE_SCHEMA_LOG(WARN, "Failed to fill base part info", K(ret));
   } else if (!is_deleted) {
     EXTRACT_VARCHAR_FIELD_TO_CLASS_MYSQL(result, part_name, partition);
     const int64_t default_part_idx = -1;
@@ -3623,7 +3500,6 @@ int ObSchemaRetrieveUtils::fill_def_subpart_info(const bool check_deleted,
   bool is_subpart_template = true;
   if (OB_FAIL(fill_base_part_info(check_deleted, is_subpart_def,
                                   is_subpart_template, result, partition, is_deleted))) {
-    SHARE_SCHEMA_LOG(WARN, "Failed to fill base part info", K(ret));
   } else if (!is_deleted) {
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, sub_part_id, partition, int64_t);
     const int64_t default_sub_part_idx = -1;
@@ -3633,7 +3509,6 @@ int ObSchemaRetrieveUtils::fill_def_subpart_info(const bool check_deleted,
     EXTRACT_VARCHAR_FIELD_MYSQL(result, "sub_part_name", sub_part_name);
     if (OB_SUCC(ret)) {
       if (OB_FAIL(partition.set_part_name(sub_part_name))) {
-        SHARE_SCHEMA_LOG(WARN, "Failed to set part name", K(ret));
       }
     }
   } else { }//do nothing
@@ -3653,7 +3528,6 @@ int ObSchemaRetrieveUtils::fill_subpart_info(const bool check_deleted,
   bool is_subpart_template = false;
   if (OB_FAIL(fill_base_part_info(check_deleted, is_subpart_def,
                                   is_subpart_template, result, partition, is_deleted))) {
-    SHARE_SCHEMA_LOG(WARN, "Failed to fill base part info", K(ret));
   }
   EXTRACT_INT_FIELD_TO_CLASS_MYSQL(result, sub_part_id, partition, int64_t);
   if (OB_SUCC(ret) && !is_deleted) {
@@ -3664,7 +3538,6 @@ int ObSchemaRetrieveUtils::fill_subpart_info(const bool check_deleted,
     EXTRACT_VARCHAR_FIELD_MYSQL(result, "sub_part_name", sub_part_name);
     if (OB_SUCC(ret)) {
       if (OB_FAIL(partition.set_part_name(sub_part_name))) {
-        SHARE_SCHEMA_LOG(WARN, "Failed to set part name", K(ret));
       }
     }
     EXTRACT_INT_FIELD_TO_CLASS_MYSQL_WITH_DEFAULT_VALUE(
@@ -3720,9 +3593,7 @@ int ObSchemaRetrieveUtils::fill_base_part_info(const bool check_deleted,
         // ignore error that column is not exist when schema service runs in liboblog
         ret = OB_SUCCESS;
       } else if (OB_SUCCESS != ret) {
-        SQL_LOG(WARN, "fail to get varchar. ", K(ret));
       } else if (OB_FAIL(partition.set_high_bound_val_with_hex_str(bhigh_bound_val))) {
-        SHARE_SCHEMA_LOG(WARN, "Failed to set high bound val to partition", K(ret));
       }
     }
 
@@ -3735,13 +3606,11 @@ int ObSchemaRetrieveUtils::fill_base_part_info(const bool check_deleted,
         // ignore error that column is not exist when schema service runs in liboblog
         ret = OB_SUCCESS;
       } else if (OB_SUCCESS != ret) {
-        SQL_LOG(WARN, "fail to get varchar column 'b_list_val' of base_part_info.", K(ret));
       } else {
         // bugfix: issue/48579037
         // In 4.x, tablegroup_id/table_id is in the same scope, so we can distinguish table and tablegroup based on object_id.
         const uint64_t table_id = partition.get_table_id();
         if (FAILEDx(partition.set_list_vector_values_with_hex_str(blist_val))) {
-          SHARE_SCHEMA_LOG(WARN, "Failed to set list val to partition", K(ret));
         }
       }
     }
@@ -3791,7 +3660,6 @@ int ObSchemaRetrieveUtils::retrieve_aux_tables(T &result,
 
       ObAuxTableMetaInfo aux_table_meta(table_id, table_type, index_type, is_tmp_mlog);
       if (FAILEDx(aux_tables.push_back(aux_table_meta))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to push back aux table", KR(ret), K(aux_table_meta));
       }
 
       SHARE_SCHEMA_LOG(TRACE, "dump aux table", K(aux_table_meta), K(table_type), K(index_type));
@@ -3859,14 +3727,12 @@ int ObSchemaRetrieveUtils::retrieve_mock_fk_parent_table_schema_column(T &result
   mock_fk_parent_table.reset_column_array();
   while (OB_SUCC(ret) && OB_SUCC(result.next())) {
     if (OB_FAIL(fill_mock_fk_parent_table_column_info(result, parent_column_id, parent_column_name, is_deleted))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to fill mock_fk_parent_table_column_info", K(ret));
     } else if (prev_parent_column_id == parent_column_id) {
       // skip
     } else if (is_deleted) {
       // skip
     } else if (OB_FAIL(mock_fk_parent_table.add_column_info_to_column_array(
                        std::pair<uint64_t, common::ObString>(parent_column_id, parent_column_name)))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to push back child_column_id", K(ret));
     }
     prev_parent_column_id = parent_column_id;
   }
@@ -3892,7 +3758,6 @@ int ObSchemaRetrieveUtils::retrieve_foreign_key_info(T &result,
     foreign_key_info.reset();
     allocator.reuse();
     if (OB_FAIL(fill_foreign_key_info(table_schema.get_table_id(), result, foreign_key_info, is_deleted))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to fill foreign key info", K(ret));
     } else if (foreign_key_info.foreign_key_id_ == prev_foreign_key_id) {
       ret = common::OB_SUCCESS;
     } else if (is_deleted) {
@@ -3900,7 +3765,6 @@ int ObSchemaRetrieveUtils::retrieve_foreign_key_info(T &result,
                        "table_id", table_schema.get_table_id(),
                        "foreign_key_id", foreign_key_info.foreign_key_id_);
     } else if (OB_FAIL(table_schema.add_foreign_key_info(foreign_key_info))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to add foreign key info", K(ret), K(foreign_key_info));
     }
     prev_foreign_key_id = foreign_key_info.foreign_key_id_;
   }
@@ -3927,15 +3791,12 @@ int ObSchemaRetrieveUtils::retrieve_foreign_key_column_info(T &result,
   foreign_key_info.parent_column_ids_.reset();
   while (OB_SUCC(ret) && OB_SUCC(result.next())) {
     if (OB_FAIL(fill_foreign_key_column_info(result, child_column_id, parent_column_id, is_deleted))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to fill foreign key info", K(ret));
     } else if (prev_child_column_id == child_column_id && prev_parent_column_id == parent_column_id) {
       // skip
     } else if (is_deleted) {
       // skip
     } else if (OB_FAIL(foreign_key_info.child_column_ids_.push_back(child_column_id))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to push back child_column_id", K(ret));
     } else if (OB_FAIL(foreign_key_info.parent_column_ids_.push_back(parent_column_id))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to push back parent_column_id", K(ret));
     }
     prev_child_column_id = child_column_id;
     prev_parent_column_id = parent_column_id;
@@ -3998,9 +3859,7 @@ int ObSchemaRetrieveUtils::fill_foreign_key_column_info(T &result,
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (OB_SUCC(ret)) {
     if (OB_FAIL(result.get_int("child_column_id", child_column_id))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to get child_column_id in row", K(ret));
     } else if (OB_FAIL(result.get_int("parent_column_id", parent_column_id))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to get parent_column_id in row", K(ret));
     }
   }
   return ret;
@@ -4024,7 +3883,6 @@ int ObSchemaRetrieveUtils::retrieve_simple_foreign_key_info(T &result,
     fk_id = common::OB_INVALID_ID;
     fk_name.reset();
     if (OB_FAIL(get_foreign_key_id_and_name(result, is_deleted, fk_id, fk_name, table_id))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to get foreign key id and name", K(ret));
     } else if (fk_id == prev_foreign_key_id) {
       ret = OB_SUCCESS;
     } else if (is_deleted) {
@@ -4034,7 +3892,6 @@ int ObSchemaRetrieveUtils::retrieve_simple_foreign_key_info(T &result,
     } else if (OB_FAIL(table_schema_ptr->add_simple_foreign_key_info(table_schema_ptr->get_database_id(),
                                           table_schema_ptr->get_table_id(),
                                           fk_id, fk_name))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to add simple foreign key info", K(ret), K(fk_id), K(fk_name));
     }
     prev_foreign_key_id = fk_id;
   }
@@ -4060,19 +3917,15 @@ int ObSchemaRetrieveUtils::get_foreign_key_id_and_name(T &result,
 
   EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
   if (OB_FAIL(ret)) {
-    SHARE_SCHEMA_LOG(WARN, "fail to extract is_deleted", K(ret));
   } else {
     EXTRACT_INT_FIELD_MYSQL(result, "foreign_key_id", fk_id, int64_t);
     if (OB_FAIL(ret)) {
-      SHARE_SCHEMA_LOG(WARN, "fail to extract foreign key id for simple foreign key info", K(ret));
     } else {
       EXTRACT_VARCHAR_FIELD_MYSQL(result, "foreign_key_name", fk_name);
       if (OB_FAIL(ret)) {
-        SHARE_SCHEMA_LOG(WARN, "fail to extract foreign key name for simple foreign key info", K(ret));
       } else {
         EXTRACT_INT_FIELD_MYSQL(result, "child_table_id", table_id, int64_t);
         if (OB_FAIL(ret)) {
-          SHARE_SCHEMA_LOG(WARN, "fail to extract child table id for simple foreign key info", K(ret));
         }
       }
     }
@@ -4101,7 +3954,6 @@ int ObSchemaRetrieveUtils::retrieve_simple_constraint_info(T &result, ObArray<Ob
     cst_name.reset();
     cst_type = CONSTRAINT_TYPE_INVALID;
     if (OB_FAIL(get_constraint_id_and_name(result, is_deleted, cst_id, cst_name, table_id, cst_type))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to get constraint id and name", K(ret));
     } else if (table_id == prev_table_id && cst_id == prev_constraint_id) {
       ret = OB_SUCCESS;
     } else if (is_deleted) {
@@ -4113,11 +3965,6 @@ int ObSchemaRetrieveUtils::retrieve_simple_constraint_info(T &result, ObArray<Ob
                                                                     table_schema_ptr->get_table_id(),
                                                                     cst_id,
                                                                     cst_name))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to add simple constraint info", K(ret),
-                                                                   K(table_schema_ptr->get_database_id()),
-                                                                   K(table_schema_ptr->get_table_id()),
-                                                                   K(cst_id),
-                                                                   K(cst_name));
     }
     prev_table_id = table_id;
     prev_constraint_id = cst_id;
@@ -4168,14 +4015,12 @@ int ObSchemaRetrieveUtils::retrieve_directory_schema(T &result,
     allocator.reuse();
     bool is_deleted = false;
     if (OB_FAIL(fill_directory_schema(result, schema, is_deleted))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to fill directory schema ", K(ret));
     } else if (schema.get_directory_id() == prev_id) {
       SHARE_SCHEMA_LOG(DEBUG, "hualong debug ignore", "id", schema.get_directory_id(), "version", schema.get_schema_version());
     } else if (is_deleted) {
       SHARE_SCHEMA_LOG(INFO, "directory is is_deleted, don't add",
                "directory_id", schema.get_directory_id());
     } else if (OB_FAIL(schema_array.push_back(schema))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to push back", K(ret));
     } else {
       SHARE_SCHEMA_LOG(INFO, "retrieve directory schema succeed", K(schema));
     }
@@ -4222,14 +4067,12 @@ int ObSchemaRetrieveUtils::retrieve_location_schema(T &result,
     allocator.reuse();
     bool is_deleted = false;
     if (OB_FAIL(fill_location_schema(result, schema, is_deleted))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to fill location schema ", K(ret));
     } else if (schema.get_location_id() == prev_id) {
       SHARE_SCHEMA_LOG(DEBUG, "hualong debug ignore", "id", schema.get_location_id(), "version", schema.get_schema_version());
     } else if (is_deleted) {
       SHARE_SCHEMA_LOG(INFO, "location is is_deleted, don't add",
                "location_id", schema.get_location_id());
     } else if (OB_FAIL(schema_array.push_back(schema))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to push back", K(ret));
     } else {
       SHARE_SCHEMA_LOG(INFO, "retrieve location schema succeed", K(schema));
     }
@@ -4365,7 +4208,6 @@ int ObSchemaRetrieveUtils::retrieve_object_list(T &result,
     } else if (is_deleted) {
       SHARE_SCHEMA_LOG(TRACE, "object is deleted", K(object_id));
     } else if (OB_FAIL(object_list.push_back(object_id))) {
-      SHARE_SCHEMA_LOG(WARN, "add object id failed", K(pre_object_id), K(object_id), K(ret));
     } else {
       SHARE_SCHEMA_LOG(TRACE, "retrieve object id succeed", K(object_id));
     }
@@ -4460,9 +4302,7 @@ int ObSchemaRetrieveUtils::retrieve_table_latest_schema_versions(
     EXTRACT_INT_FIELD_MYSQL(result, "is_deleted", is_deleted, bool);
 
     if (FAILEDx(table_schema_version.init(table_id, schema_version, is_deleted))) {
-      LOG_WARN("init failed", KR(ret), K(table_id), K(schema_version), K(is_deleted));
     } else if (OB_FAIL(table_schema_versions.push_back(table_schema_version))) {
-      LOG_WARN("push back failed", KR(ret), K(table_schema_version), K(table_schema_versions));
     }
   }
   if (ret == common::OB_ITER_END) {

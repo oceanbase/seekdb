@@ -37,7 +37,6 @@ int ObTenantSqlService::insert_tenant(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid tenant schema", K(tenant_schema), K(ret));
   } else if (OB_FAIL(replace_tenant(tenant_schema, sql_client, ddl_stmt_str))) {
-    LOG_WARN("replace_tenant failed", K(tenant_schema), K(ret));
   }
   return ret;
 }

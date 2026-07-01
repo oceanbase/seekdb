@@ -95,21 +95,13 @@ DEFINE_SERIALIZE(ObFileCommonHeader)
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid arguments", K(ret), KP(buf), K(buf_len), K(pos));
   } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, magic_))) {
-    COMMON_LOG(WARN, "encode magic failed", K(ret), KP(buf), K(buf_len), K(pos), K_(magic));
   } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, header_version_))) {
-    COMMON_LOG(WARN, "encode header version failed", K(ret), KP(buf), K(buf_len), K(pos), K_(header_version));
   } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, header_length_))) {
-    COMMON_LOG(WARN, "encode header length failed", K(ret), KP(buf), K(buf_len), K(pos), K_(header_length));
   } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, header_checksum_))) {
-    COMMON_LOG(WARN, "encode header checksum failed", K(ret), KP(buf), K(buf_len), K(pos), K_(header_checksum));
   } else if (OB_FAIL(serialization::encode_i16(buf, buf_len, pos, payload_version_))) {
-    COMMON_LOG(WARN, "encode payload version failed", K(ret), KP(buf), K(buf_len), K(pos), K_(payload_version));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, payload_length_))) {
-    COMMON_LOG(WARN, "encode payload length failed", K(ret), KP(buf), K(buf_len), K(pos), K_(payload_length));
   } else if (OB_FAIL(serialization::encode_i32(buf, buf_len, pos, payload_zlength_))) {
-    COMMON_LOG(WARN, "encode payload zlength failed", K(ret), KP(buf), K(buf_len), K(pos), K_(payload_zlength));
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, pos, payload_checksum_))) {
-    COMMON_LOG(WARN, "encode payload checksum failed", K(ret), KP(buf), K(buf_len), K(pos), K_(payload_checksum));
   }
   return ret;
 }
@@ -121,21 +113,13 @@ DEFINE_DESERIALIZE(ObFileCommonHeader)
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid arguments", K(ret), KP(buf), K(data_len), K(pos));
   } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &magic_))) {
-    COMMON_LOG(WARN, "decode magic failed", K(ret), KP(buf), K(data_len), K(pos), K_(magic));
   } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &header_version_))) {
-    COMMON_LOG(WARN, "decode header version failed", K(ret), KP(buf), K(data_len), K(pos), K_(header_version));
   }  else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &header_length_))) {
-    COMMON_LOG(WARN, "decode header length failed", K(ret), KP(buf), K(data_len), K(pos), K_(header_length));
   } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &header_checksum_))) {
-    COMMON_LOG(WARN, "decode header checksum failed", K(ret), KP(buf), K(data_len), K(pos), K_(header_checksum));
   } else if (OB_FAIL(serialization::decode_i16(buf, data_len, pos, &payload_version_))) {
-    COMMON_LOG(WARN, "decode payload checksum failed", K(ret), KP(buf), K(data_len), K(pos), K_(payload_version));
   } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &payload_length_))) {
-    COMMON_LOG(WARN, "decode payload length failed", K(ret), KP(buf), K(data_len), K(pos), K_(payload_length));
   } else if (OB_FAIL(serialization::decode_i32(buf, data_len, pos, &payload_zlength_))) {
-    COMMON_LOG(WARN, "decode payload zlength failed", K(ret), KP(buf), K(data_len), K(pos), K_(payload_zlength));
   } else if (OB_FAIL(serialization::decode_i64(buf, data_len, pos, &payload_checksum_))) {
-    COMMON_LOG(WARN, "decode payload checksum failed", K(ret), KP(buf), K(data_len), K(pos), K_(payload_checksum));
   }
   return ret;
 }

@@ -66,7 +66,6 @@ public:
   void dump_mapper_info() const {
     int64_t count = map_.count();
     int64_t bkt_cnt = map_.get_bkt_cnt();
-    TRANS_LOG(INFO, "report RowHolderMapper summary info", K(count), K(bkt_cnt));
   }
   void clear() { map_.clear(); }
 private:
@@ -84,15 +83,10 @@ public:
     ObDependencyResource resource;
     #define PRINT_WRAPPER KR(ret), K_(hash), K(trans_id), K(trans_scheduler)
     if (OB_FAIL(mapper_.get_hash_holder(hash_, trans_id))) {
-      DETECT_LOG(WARN, "get hash holder failed", PRINT_WRAPPER);
     } else if (OB_FAIL(user_key.set_user_key(trans_id))) {
-      DETECT_LOG(WARN, "set user key failed", PRINT_WRAPPER);
     } else if (OB_FAIL(ObTransDeadlockDetectorAdapter::get_conflict_trans_scheduler(trans_id, trans_scheduler))) {
-      DETECT_LOG(WARN, "get trans scheduler failed", PRINT_WRAPPER);
     } else if (OB_FAIL(resource.set_args(trans_scheduler, user_key))) {
-      DETECT_LOG(WARN, "resource set args failed", PRINT_WRAPPER);
     } else if (OB_FAIL(resource_array.push_back(resource))) {
-      DETECT_LOG(WARN, "fail to push resource to array", PRINT_WRAPPER);
     }
     #undef PRINT_WRAPPER
     need_remove = false;

@@ -51,10 +51,8 @@ int ObExprFormatBytes::eval_format_bytes(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   ObDatum *datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) {
-    LOG_WARN("eval arg0 failed", K(ret));
   } else {
     if (OB_FAIL(eval_format_bytes_util(expr, res_datum, datum, ctx))){
-      LOG_WARN("eval format_bytes unexpect error", K(ret));
     } else {
       // do nothing
     }
@@ -69,7 +67,6 @@ int ObExprFormatBytes::eval_format_bytes_batch(const ObExpr &expr,
   LOG_DEBUG("eval format bytes batch mode", K(batch_size));
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval arg0 failed", K(ret));
   } else {
     ObDatum *res_datum = expr.locate_batch_datums(ctx);
     ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
@@ -79,7 +76,6 @@ int ObExprFormatBytes::eval_format_bytes_batch(const ObExpr &expr,
       }
       ObDatum *datum= &expr.args_[0]->locate_expr_datum(ctx, i);
       if (OB_FAIL(eval_format_bytes_util(expr, res_datum[i], datum, ctx, i))){
-        LOG_WARN("eval format_bytes unexpect error", K(ret));
       } else {
         // do nothing
       }

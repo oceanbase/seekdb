@@ -70,7 +70,6 @@ public:
         ret = Caster<ParamType, ResultType>::to_type(agg_cell, agg_cell_len, in_scale,
                                                                   tmp_alloc, out_val, out_len);
         if (OB_FAIL(ret)) {
-          SQL_LOG(WARN, "cast value failed", K(ret));
         } else {
           CellWriter<ResultType>::set(reinterpret_cast<const char *>(out_val), out_len, res_vec,
                                       output_idx, nullptr);

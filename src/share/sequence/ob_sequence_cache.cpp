@@ -44,9 +44,7 @@ OB_DEF_DESERIALIZE(SequenceCacheNode)
   // deep copy is needed to ensure that the memory of start and end will not be reclaimed
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(start_.assign(start))) {
-    LOG_WARN("fail to assign start", K(ret));
   } else if (OB_FAIL(end_.assign(end))) {
-    LOG_WARN("fail to assign end", K(ret));
   }
   return ret;
 }
@@ -64,9 +62,7 @@ int SequenceCacheNode::assign(const SequenceCacheNode &other)
   int ret = OB_SUCCESS;
   if (this == &other) {
   } else if (OB_FAIL(start_.assign(other.start_))) {
-    LOG_WARN("fail to assign start", K(ret));
   } else if (OB_FAIL(end_.assign(other.end_))) {
-    LOG_WARN("fail to assign end", K(ret));
   }
   return ret;
 }
@@ -110,7 +106,6 @@ int ObSequenceCache::move_next(const ObSequenceSchema &schema,
   int ret = OB_SUCCESS;
   bool need_refill = false;
   if (OB_FAIL(need_refill_cache(schema, cache, allocator, need_refill))) {
-    LOG_WARN("fail check if need refill cache", K(schema), K(ret));
   } else if (need_refill) {
     ret = OB_SIZE_OVERFLOW;
   } else {
@@ -133,12 +128,10 @@ int ObSequenceCache::move_next(const ObSequenceSchema &schema,
       //  At this point, we handle it as a scenario where no loop appears
       // nextval = cache.curr_node_.start();
       if (OB_FAIL(nextval.set(cache.curr_node_.start()))) {
-        LOG_WARN("fail deep copy node value", K(ret));
       }
     } else {
       ObNumber new_start;
       if (OB_FAIL(cache.last_number().add(schema.get_increment_by(), new_start, allocator))) {
-        LOG_WARN("fail calc new_start", K(ret));
       } else if (schema.get_increment_by() > static_cast<int64_t>(0)) {
         // When the value spans across the cache, to minimize the gap as much as possible,
         // Make the difference between two nextvals as close to increment_by as possible
@@ -153,7 +146,6 @@ int ObSequenceCache::move_next(const ObSequenceSchema &schema,
         //  If it falls at o'', then the start value needs to be updated to o'', and it should be used as nextval
         if (new_start > cache.curr_node_.start()) {
           if (OB_FAIL(cache.curr_node_.set_start(new_start))) {
-            LOG_WARN("fail update new_start value to cache.curr_node_", K(ret));
           }
         } else {
           // start unchanged, use start as nextval
@@ -161,7 +153,6 @@ int ObSequenceCache::move_next(const ObSequenceSchema &schema,
       } else {
         if (new_start < cache.curr_node_.start()) {
           if (OB_FAIL(cache.curr_node_.set_start(new_start))) {
-            LOG_WARN("fail update new_start value to cache.curr_node_", K(ret));
           }
         } else {
           // start unchanged, use start as nextval
@@ -169,7 +160,6 @@ int ObSequenceCache::move_next(const ObSequenceSchema &schema,
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(nextval.set(cache.curr_node_.start()))) {
-          LOG_WARN("fail deep copy node value", K(ret));
         }
       }
     }
@@ -191,7 +181,6 @@ int ObSequenceCache::move_next(const ObSequenceSchema &schema,
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(cache.set_last_number(nextval.val()))) {
-        LOG_WARN("fail to cache last_number", K(nextval), K(ret));
       }
     }
   }
@@ -225,7 +214,6 @@ int ObSequenceCache::need_refill_cache(const ObSequenceSchema &schema,
       // refill = (cache.curr_node_.end() - cache.last_number() <= schema.get_increment_by());
       ObNumber diff;
       if (OB_FAIL(cache.curr_node_.end().sub(cache.last_number(), diff, allocator))) {
-        LOG_ERROR("fail sub number, unexpected", K(ret));
       } else {
         refill = (diff <= schema.get_increment_by());
       }
@@ -233,7 +221,6 @@ int ObSequenceCache::need_refill_cache(const ObSequenceSchema &schema,
     // If refill is needed, attempt to enable the prefetch cache to avoid refill
     if (refill && cache.with_prefetch_node_ && OB_SUCC(ret)) {
       if (OB_FAIL(cache.combine_prefetch_node())) {
-        LOG_WARN("fail combine prefetch node", K(ret));
       } else if (cache.curr_node_.start() < cache.last_number()) {
         refill = false;
       } else {
@@ -242,7 +229,6 @@ int ObSequenceCache::need_refill_cache(const ObSequenceSchema &schema,
         // refill = (cache.curr_node_.end() - cache.last_number() <= schema.get_increment_by());
         ObNumber diff;
         if (OB_FAIL(cache.curr_node_.end().sub(cache.last_number(), diff, allocator))) {
-          LOG_ERROR("fail sub number, unexpected", K(ret));
         } else {
           refill = (diff <= schema.get_increment_by());
         }
@@ -263,21 +249,18 @@ int ObSequenceCache::need_refill_cache(const ObSequenceSchema &schema,
       // refill = (cache.curr_node_.end() - cache.last_number() >= schema.get_increment_by());
       ObNumber diff;
       if (OB_FAIL(cache.curr_node_.end().sub(cache.last_number(), diff, allocator))) {
-        LOG_ERROR("fail sub number, unexpected", K(ret));
       } else {
         refill = (diff >= schema.get_increment_by());
       }
     }
     if (refill && cache.with_prefetch_node_ && OB_SUCC(ret)) {
       if (OB_FAIL(cache.combine_prefetch_node())) {
-        LOG_WARN("fail combine prefetch node", K(ret));
       } else if (cache.curr_node_.start() > cache.last_number()) {
         refill = false;
       } else {
         // refill = (cache.curr_node_.end() - cache.last_number() >= schema.get_increment_by());
         ObNumber diff;
         if (OB_FAIL(cache.curr_node_.end().sub(cache.last_number(), diff, allocator))) {
-          LOG_ERROR("fail sub number, unexpected", K(ret));
         } else {
           refill = (diff >= schema.get_increment_by());
         }
@@ -312,7 +295,6 @@ int ObSequenceCache::refill_sequence_cache(const ObSequenceSchema &schema,
                                       schema.get_sequence_option(),
                                       next_range,
                                       cache))) {
-      LOG_WARN("fail get next sequence batch", K(schema), K(ret));
     } else {
       // Determine if a re-fetch is needed to ensure the value obtained is sufficient for one increment
       if (schema.get_cycle_flag() && cache.base_on_last_number_) {
@@ -323,7 +305,6 @@ int ObSequenceCache::refill_sequence_cache(const ObSequenceSchema &schema,
           } else if (OB_FAIL(cache.last_number().add(schema.get_increment_by(),
                                                     next_number,
                                                     allocator))) {
-            LOG_WARN("fail add numbers", K(ret));
           } else if (next_number >= next_range.end()) {
             need_refetch = true;
             cache.base_on_last_number_ = false;
@@ -339,7 +320,6 @@ int ObSequenceCache::refill_sequence_cache(const ObSequenceSchema &schema,
           } else if (OB_FAIL(cache.last_number().add(schema.get_increment_by(),
                                                      next_number,
                                                      allocator))) {
-            LOG_WARN("fail add numbers", K(ret));
           } else if (next_number <= next_range.end()) {
             need_refetch = true;
             cache.base_on_last_number_ = false;
@@ -355,9 +335,7 @@ int ObSequenceCache::refill_sequence_cache(const ObSequenceSchema &schema,
         // Note: memory management of number in cache, its lifecycle is relatively long
         //       Need to do a good encapsulation
         if (OB_FAIL(cache.curr_node_.set_start(next_range.start()))) {
-          LOG_WARN("fail set start", K(next_range), K(ret));
         } else if (OB_FAIL(cache.curr_node_.set_end(next_range.end()))) {
-          LOG_WARN("fail set end", K(next_range), K(ret));
         } else {
           LOG_INFO("update sequence curr_node cache success", K(cache),
                                                               K(schema.get_sequence_id()));
@@ -383,7 +361,6 @@ int ObSequenceCache::prefetch_sequence_cache(const ObSequenceSchema &schema,
                                              schema.get_sequence_option(),
                                              cache.prefetch_node_,
                                              old_cache))) {
-    LOG_WARN("fail get next sequence batch", K(schema), K(ret));
   } else {
     cache.last_refresh_ts_ = ObTimeUtility::current_time();
     LOG_INFO("prefetch sequence",
@@ -401,9 +378,7 @@ int ObSequenceCache::get_item(CacheItemKey &key, ObSequenceCacheItem *&item)
     lib::ObMutexGuard guard(cache_mutex_); // Lock again to confirm, avoid concurrent addition of new nodes
     if (OB_ENTRY_NOT_EXIST == (ret = sequence_cache_.get(key, item))) {
       if (OB_FAIL(sequence_cache_.alloc_value(item))) {
-        LOG_WARN("fail alloc value", K(ret));
       } else if (OB_FAIL(sequence_cache_.insert_and_get(key, item))) {
-        LOG_WARN("fail set cache item", K(key), K(ret));
       }
       if (OB_FAIL(ret) && nullptr != item) {
         sequence_cache_.free_value(item);
@@ -424,15 +399,12 @@ int ObSequenceCache::del_item(CacheItemKey &key, obcall::ObSeqCleanCacheRes &cac
     if (OB_FAIL(sequence_cache_.get(key, item))) {
       // no cache, do nothing
     } else if (OB_FAIL(sequence_cache_.del(key))) {
-      LOG_WARN("del sequence cache failed", K(ret));
     } else {
       lib::ObMutexGuard guard(item->alloc_mutex_);
       if (OB_FAIL(ret) || item->last_refresh_ts_ <= SequenceCacheStatus::INITED) {
         // do nothing
       } else if (OB_FAIL(cache_res.cache_node_.set_start(item->last_number()))) {
-        LOG_WARN("fail to set cache value", K(ret));
       } else if (OB_FAIL(cache_res.cache_node_.set_end(item->curr_node_.end()))) {
-        LOG_WARN("fail to set cache end", K(ret));
       } else if (item->with_prefetch_node_
                   && OB_FAIL(cache_res.prefetch_node_.assign(item->prefetch_node_))) {
         LOG_WARN("fail to assign prefetch node", K(ret));
@@ -468,7 +440,6 @@ int ObSequenceCache::nextval(const ObSequenceSchema &schema,
   CacheItemKey key(schema.get_sequence_id());
   ObSequenceCacheItem *item = nullptr;
   if (OB_FAIL(get_item(key, item))) {
-    LOG_WARN("fail get item", K(key), K(ret));
   } else if (OB_ISNULL(item)) {
     ret = OB_ERR_UNEXPECTED;
   } else {
@@ -489,9 +460,7 @@ int ObSequenceCache::nextval(const ObSequenceSchema &schema,
         if (OB_SIZE_OVERFLOW == ret) {
           LOG_INFO("no more avaliable value in current cache, try refill cache", K(*item), K(ret));
           if (OB_FAIL(refill_sequence_cache(schema, allocator, *item))) {
-            LOG_WARN("fail refill sequence cache", K(*item), K(ret));
           } else if (OB_FAIL(move_next(schema, *item, allocator, nextval))) {
-            LOG_WARN("fail move next", K(*item), K(ret));
           }
           if (OB_SIZE_OVERFLOW == ret) {
             ret = OB_ERR_SEQ_VALUE_EXCEED_LIMIT;
@@ -523,9 +492,7 @@ int ObSequenceCache::nextval(const ObSequenceSchema &schema,
             // }
             //
             if (OB_FAIL(calc.sub(item->curr_node_.start()).mul(PREFETCH_OP_THRESHOLD).get_result(rest))) {
-              LOG_WARN("fail do number sub", K(ret));
             } else if (OB_FAIL(schema.get_increment_by().mul(schema.get_cache_size(), full, allocator))) {
-              LOG_WARN("fail do number multiply", K(ret));
             } else if (rest.abs() <= full.abs()) {
               item->prefetching_ = true;
               need_prefetch = true;
@@ -548,9 +515,7 @@ int ObSequenceCache::nextval(const ObSequenceSchema &schema,
             item->last_refresh_ts_ = mock_item.last_refresh_ts_;
             item->with_prefetch_node_ = true;
             if (OB_FAIL(item->prefetch_node_.set_start(mock_item.prefetch_node_.start()))) {
-              LOG_WARN("fail set start for pretch node", K(ret));
             } else if (OB_FAIL(item->prefetch_node_.set_end(mock_item.prefetch_node_.end()))) {
-              LOG_WARN("fail set end for pretch node", K(ret));
             }
           }
         }

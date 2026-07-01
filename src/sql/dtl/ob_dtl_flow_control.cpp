@@ -54,9 +54,7 @@ int ObDtlFlowControl::init(int64_t chan_cnt)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("init again", K(ret));
   } else if (OB_FAIL(chans_.reserve(chan_cnt))) {
-    LOG_WARN("failed to reserve data", K(ret));
   } else if (OB_FAIL(blocks_.reserve(chan_cnt))) {
-    LOG_WARN("failed to reserve data", K(ret));
   } else {
     if (true && true == GCONF._px_message_compression) {
       compressor_type_ = ObCompressorType::ZSTD_1_3_8_COMPRESSOR;
@@ -90,9 +88,7 @@ int ObDtlFlowControl::register_channel(ObDtlChannel* ch)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(chans_.push_back(ch))) {
-    LOG_WARN("failed to register channel", K(ret));
   } else if (OB_FAIL(blocks_.push_back(false))) {
-    LOG_WARN("failed to register channel", K(ret));
   } else if (OB_ISNULL(chan_loop_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected status: channel loop is null", K(ret));
@@ -117,7 +113,6 @@ int ObDtlFlowControl::unregister_channel(ObDtlChannel* channel)
   }
   if (find_idx >= 0) {
     if (OB_FAIL(channel->clean_recv_list())) {
-      LOG_WARN("failed to clean channel", K(ret));
     }
     channel->set_dfc(nullptr);
     if (OB_SUCCESS != (tmp_ret = chans_.remove(find_idx))) {
@@ -147,13 +142,10 @@ int ObDtlFlowControl::unregister_all_channel()
     if (nullptr == (ch = chans_.at(i))) {
       LOG_WARN("failed to unregister channel", K(ret));
     } else if (OB_FAIL(ch->clean_recv_list())) {
-      LOG_WARN("failed to clean channel", K(ret));
     }
   }
   for (int64_t i = chans_.count() - 1; 0 <= i; --i) {
     if (OB_FAIL(chans_.pop_back(ch))) {
-      // overwrite ret
-      LOG_WARN("failed to unregister channel", K(ret));
     }
   }
   if (is_receive() && (0 != get_blocked_cnt() || 0 != get_total_buffer_cnt() || 0 != get_used())) {
@@ -203,7 +195,6 @@ bool ObDtlFlowControl::is_block(ObDtlChannel* ch)
   } else {
     int64_t idx =  OB_INVALID_ID;
     if (OB_FAIL(find(ch, idx))) {
-      LOG_WARN("channel not exists in channel loop", K(ret));
     } else {
       blocked = is_block(idx);
     }
@@ -220,7 +211,6 @@ int ObDtlFlowControl::block_channel(ObDtlChannel* ch)
   } else {
     int64_t idx = OB_INVALID_ID;
     if (OB_FAIL(find(ch, idx))) {
-      LOG_WARN("channel not exists in channel loop", K(ret));
     } else if (is_block(idx)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("channel is blocked", K(ret), K(idx));
@@ -245,7 +235,6 @@ int ObDtlFlowControl::unblock_channel(ObDtlChannel* ch)
     // This way the channel's status is unblock, so the unblock state is not executed, when the response arrives later, it finds that the response sets the block state to is_block, and then it will never receive an unblocking msg
     // Here we need to restore response's is_block, i.e., unblocking msg, then the block status of response should be cleared
     if (OB_FAIL(ch->clear_response_block())) {
-      LOG_WARN("failed to clear response block info", K(ret));
     } else if (is_block(idx)) {
       unblock(idx);
       ch->unset_blocked();
@@ -262,7 +251,6 @@ int ObDtlFlowControl::notify_channel_unblocking(
   int64_t idx = OB_INVALID_ID;
   ObDtlUnblockingMsg unblocking_msg;
   if (OB_FAIL(find(ch, idx))) {
-    LOG_WARN("failed to find channel", K(ret), KP(ch->get_id()), K(ch->get_peer()), K(idx), K(get_blocked_cnt()));
   } else if (!is_block(idx)) {
     LOG_TRACE("channel is unblock", K(ret), KP(ch->get_id()), K(ch->get_peer()),
         K(get_nth_block(idx)), K(get_blocked_cnt()));
@@ -280,9 +268,7 @@ int ObDtlFlowControl::notify_channel_unblocking(
     if (OB_FAIL(ret)) {
     } else if (ch->is_drain()) {
     } else if (OB_FAIL(ch->send(unblocking_msg, timeout_ts_))) {
-      LOG_WARN("failed to push data to channel", K(ret), KP(ch->get_id()), K(ch->get_peer()));
     } else if (OB_FAIL(ch->flush(true, false))) {
-      LOG_TRACE("failed to flush unblocking msg", K(ret), KP(ch->get_id()), K(ch->get_peer()));
     } else if (!asyn_send && OB_FAIL(ch->wait_response())) {
       LOG_TRACE("failed to wait response", K(ret), K(ch->get_peer()));
     }
@@ -323,7 +309,6 @@ int ObDtlFlowControl::sync_send_drain(int64_t &unblock_cnt)
       LOG_TRACE("unblocking channel", K(ret), KP(ch->get_id()), K(ch->get_peer()),
         K(idx), K(cnt), K(is_block(idx)), K(get_nth_block(idx)), K(get_blocked_cnt()));
       if (OB_FAIL(notify_channel_unblocking(ch, unblock_cnt, false))) {
-        LOG_WARN("failed to unblocking channel", K(ret), KP(ch->get_id()), K(ch->get_peer()));
       }
     }
     LOG_TRACE("channel status", K(this), K(ret), KP(ch->get_id()), K(ch->get_peer()), K(idx),
@@ -347,12 +332,10 @@ int ObDtlFlowControl::notify_all_blocked_channels_unblocking(int64_t &unblock_cn
   LOG_TRACE("unblocking dfc", K(ret), K(is_block()));
   if (OB_ISNULL(ch_info_)) {
     if (OB_FAIL(sync_send_drain(unblock_cnt))) {
-      LOG_WARN("failed to sync send drain", K(ret));
     }
   } else {
     ObDfcUnblockAsynSender asyn_sender(chans_, ch_info_, is_transmit(), *this);
     if (OB_FAIL(asyn_sender.asyn_send())) {
-      LOG_WARN("failed to asyn send unblocking msg", K(ret));
     }
     unblock_cnt = asyn_sender.get_unblocked_cnt();
   }
@@ -370,7 +353,6 @@ int ObDtlFlowControl::drain_all_channels()
     } else {
       ObDfcDrainAsynSender drain_asyn_sender(chans_, ch_info_, false, timeout_ts_);
       if (OB_FAIL(drain_asyn_sender.asyn_send())) {
-        LOG_WARN("failed to asyn send drain", K(ret), K(lbt()));
       }
       ARRAY_FOREACH_X(chans_, idx, cnt, OB_SUCC(ret)) {
         ObDtlChannel *ch = chans_.at(idx);
@@ -384,9 +366,7 @@ int ObDtlFlowControl::drain_all_channels()
       ObDtlDrainMsg drain_msg;
       LOG_TRACE("drain channel", K(ret), KP(ch->get_id()), K(ch->get_peer()), K(idx));
       if (OB_FAIL(ch->send(drain_msg, timeout_ts_))) {
-        LOG_WARN("failed to push data to channel", K(ret), KP(ch->get_id()), K(ch->get_peer()));
       } else if (OB_FAIL(ch->flush(true))) {
-        LOG_WARN("failed to drain msg", K(ret));
       }
       // Here must send first, then set because if the channel is already drained, it will not send any more data
       ch->set_drain();

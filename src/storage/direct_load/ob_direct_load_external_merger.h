@@ -161,9 +161,7 @@ int ObDirectLoadExternalMerger<T, Compare>::build_heap()
       heap_item.item_ = item;
       heap_item.idx_ = i;
       if (OB_FAIL(heap_.push(heap_item))) {
-        STORAGE_LOG(WARN, "fail to push heap", KR(ret));
       } else if (OB_FAIL(compare_.get_error_code())) {
-        STORAGE_LOG(WARN, "fail to compare items", KR(ret));
       }
     }
   }
@@ -224,9 +222,7 @@ int ObDirectLoadExternalMerger<T, Compare>::heap_get_next_item(const T *&item)
         STORAGE_LOG(WARN, "fail to get next item", KR(ret));
       } else {
         if (OB_FAIL(heap_.pop())) {
-          STORAGE_LOG(WARN, "fail to pop heap item", KR(ret));
         } else if (OB_FAIL(compare_.get_error_code())) {
-          STORAGE_LOG(WARN, "fail to compare items", KR(ret));
         }
       }
     } else if (OB_ISNULL(heap_item.item_)) {
@@ -234,9 +230,7 @@ int ObDirectLoadExternalMerger<T, Compare>::heap_get_next_item(const T *&item)
       STORAGE_LOG(WARN, "invalid item", KR(ret), KP(heap_item.item_));
     } else {
       if (OB_FAIL(heap_.replace_top(heap_item))) {
-        STORAGE_LOG(WARN, "fail to replace heap top", KR(ret));
       } else if (OB_FAIL(compare_.get_error_code())) {
-        STORAGE_LOG(WARN, "fail to compare items", KR(ret));
       }
     }
     last_iter_idx_ = -1;
@@ -249,9 +243,7 @@ int ObDirectLoadExternalMerger<T, Compare>::heap_get_next_item(const T *&item)
   if (OB_SUCC(ret)) {
     const HeapItem *head_item = nullptr;
     if (OB_FAIL(heap_.top(head_item))) {
-      STORAGE_LOG(WARN, "fail to get heap top item", KR(ret));
     } else if (OB_FAIL(compare_.get_error_code())) {
-      STORAGE_LOG(WARN, "fail to compare items", KR(ret));
     } else if (OB_ISNULL(head_item) || OB_ISNULL(head_item->item_)) {
       ret = common::OB_ERR_UNEXPECTED;
       STORAGE_LOG(WARN, "invalid heap item", KR(ret), KP(head_item));

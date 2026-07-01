@@ -43,10 +43,8 @@ int ObSQLCCLRuleLevelConcurrencyMapWrapper::init(const ObMemAttr &bucket_attr) {
   bucket_attr_ = bucket_attr;
   if (OB_FAIL(alloc_.init(lib::ObMallocAllocator::get_instance(),
                               OB_MALLOC_NORMAL_BLOCK_SIZE, bucket_attr_))) {
-    LOG_WARN("failed to init fifo allocator", K(ret));
   } else if (OB_FAIL(concurrency_map_.create(hash::cal_next_prime(
     common::calculate_scaled_value_by_memory(OB_PLAN_CACHE_BUCKET_NUMBER_MIN, OB_PLAN_CACHE_BUCKET_NUMBER)), bucket_attr_))) {
-    LOG_WARN("failed to init concurrency_map_", K(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -69,11 +67,8 @@ int ObSQLCCLRuleManager::init()
   } else {
     
     if (OB_FAIL(rule_level_concurrency_map_wrapper_.init(ObMemAttr("ObSqlCclRuleMgr", ObCtxIds::DEFAULT_CTX_ID)))) {
-      LOG_WARN("fail to create hash map", KR(ret));
     } else if (OB_FAIL(format_sqlid_level_concurrency_map_wrapper_.init(ObMemAttr("ObSqlCclRuleMgr", ObCtxIds::DEFAULT_CTX_ID)))) {
-      LOG_WARN("fail to create hash map", KR(ret));
     } else if (OB_FAIL(init_whitelist())) {
-      LOG_WARN("failed to init whitelist", K(ret));
     } else {
       inited_ = true;
     }
@@ -101,7 +96,6 @@ int ObSQLCCLRuleManager::mtl_init(ObSQLCCLRuleManager* &sql_ccl_rule_mgr)
   } else {
     
     if (OB_FAIL(sql_ccl_rule_mgr->init())) {
-      LOG_WARN("failed to init request manager", K(ret));
     } else {
       // do nothing
     }
@@ -160,7 +154,6 @@ int ObSQLCCLRuleLevelConcurrencyMapWrapper::insert(const ObFormatSQLIDCCLRuleKey
     real_key.ccl_rule_id_ = key.ccl_rule_id_;
     if (OB_FAIL(ob_write_string(alloc_, key.format_sqlid_,
                                 real_key.format_sqlid_))) {
-      LOG_WARN("fail to deep copy format_sqlid into real_key", K(ret));
     } else {
       p_concurrency->ccl_rule_id_ = real_key.ccl_rule_id_;
       p_concurrency->format_sqlid_ = real_key.format_sqlid_;
@@ -195,7 +188,6 @@ int ObSQLCCLRuleManager::init_whitelist()
     ObSEArray<ObString, 2> keywords;
     for (int j = 0; OB_SUCC(ret) && CCL_WHITELIST_RULES[i].words[j] != nullptr; ++j) {
       if (OB_FAIL(keywords.push_back(ObString(CCL_WHITELIST_RULES[i].words[j])))) {
-        LOG_WARN("fail to push_back value into keywords", K(ret));
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(whitelist_keywords_array_.push_back(keywords))) {
@@ -254,7 +246,6 @@ int ObSQLCCLRuleLevelConcurrencyMapWrapper::inc_concurrency(const ObFormatSQLIDC
   //Once logic reach here, concurrenct guarantee to >= 1
   int tmp_ret = ret;
   if (OB_FAIL(matched_ccl_value_wrappers.push_back(ccl_rule_op.get_value()))) {
-    LOG_WARN("fail to push_back value into matched_ccl_value_wrappers", K(ret));
   } else {
     ret = tmp_ret;
   }
@@ -335,7 +326,6 @@ int ObSQLCCLRuleManager::is_whitelist_sql(const ObString &sql, bool &match) cons
     // Set match to true before each check, match_keywords_in_sql will set it to false if not found
     match = true;
     if (OB_FAIL(match_keywords_in_sql(sql, whitelist_keywords_array_.at(i), match))) {
-      LOG_WARN("fail to match keywords in sql", K(ret));
     } else if (match) {
       break;
     }
@@ -358,7 +348,6 @@ int ObSQLCCLRuleManager::match_ccl_rule(
     if (ccl_rule.get_affect_host() == "%") {
       //do nothing, ccl affect for all ip
     } else if (OB_FAIL(observer::ObServerUtils::get_server_ip(&alloc, ipstr))) {
-      SERVER_LOG(ERROR, "get server ip failed", K(ret));
     } else {
       match = ccl_rule.get_affect_host() == ipstr;
     }
@@ -449,7 +438,6 @@ int ObSQLCCLRuleManager::match_ccl_rule_with_sql(ObIAllocator &alloc,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql_ctx.shcema_guard_ is not init ", K(ret));
   } else if (OB_FAIL(sql_ctx.schema_guard_->get_ccl_rule_infos(contians_info, candidate_ccl_rules))) {
-    LOG_WARN("fail to get ccl_rule_infos from sql_ctx.schema_guard_", K(ret));
   } else {
     ObSqlString reconstruct_sql;
     if (is_ps_mode) {
@@ -457,9 +445,7 @@ int ObSQLCCLRuleManager::match_ccl_rule_with_sql(ObIAllocator &alloc,
       //Put this code after check ccl's dml, database&table if we get a performence problem
       if (sql_ctx.reconstruct_ps_sql_.empty()) {
         if (OB_FAIL(ObSQLUtils::reconstruct_ps_sql(reconstruct_sql, sql, param_store))) {
-          LOG_WARN("fail to reconstruct ps sql", K(ret));
         } else if (OB_FAIL(ob_write_string(alloc, reconstruct_sql.string(), sql_ctx.reconstruct_ps_sql_))) {
-          LOG_WARN("fail to write construct ps sql in sql_ctx", K(ret));
         } else {
           LOG_TRACE("orignal ps sql:", K(sql));
           LOG_TRACE("after ccl reconstruct: ", K(reconstruct_sql));
@@ -473,11 +459,9 @@ int ObSQLCCLRuleManager::match_ccl_rule_with_sql(ObIAllocator &alloc,
     FOREACH_X(ccl_rule_iter, *candidate_ccl_rules, OB_SUCC(ret)) {
       const ObCCLRuleSchema* ccl_rule_schema = nullptr;
       if (OB_FAIL(sql_ctx.schema_guard_->get_ccl_rule_with_ccl_rule_id((*ccl_rule_iter)->get_ccl_rule_id(), ccl_rule_schema))) {
-        LOG_WARN("fail to get ccl rule schema", K(ret));
       } else if (OB_FAIL(match_ccl_rule(alloc, user_name, is_ps_mode ? reconstruct_sql.string() : sql, sql_dml_type,
                                  sql_relate_databases, sql_relate_tables, *(const_cast<ObCCLRuleSchema*>(ccl_rule_schema)),
                                  match))) {
-        LOG_WARN("fail to match ccl rule", K(sql), K(reconstruct_sql), K(sql_dml_type), K(ccl_rule_schema));
       } else if (match) {
         uint64_t matched_ccl_rule_id = ccl_rule_schema->get_ccl_rule_id();
         if (ccl_rule_schema->get_affect_scope() == ObCCLAffectScope::RULE_LEVEL) {

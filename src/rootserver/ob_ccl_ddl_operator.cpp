@@ -35,16 +35,13 @@ int ObCclDDLOperator::create_ccl_rule(ObCCLRuleSchema &ccl_rule_schema,
     ret = OB_ERR_SYS;
     LOG_ERROR("schema_service must not null", K(ret));
   } else if (OB_FAIL(schema_service->fetch_new_ccl_rule_id(new_ccl_rule_id))) {
-    LOG_WARN("failed to fetch new_outline_id", K(ret));
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(
                  new_schema_version))) {
-    LOG_WARN("fail to gen new schema_version", K(ret));
   } else {
     ccl_rule_schema.set_ccl_rule_id(new_ccl_rule_id);
     ccl_rule_schema.set_schema_version(new_schema_version);
     if (OB_FAIL(schema_service->get_ccl_rule_sql_service().insert_ccl_rule(
             ccl_rule_schema, trans, ddl_stmt_str))) {
-      LOG_WARN("insert outline info failed", K(ccl_rule_schema), K(ret));
     }
   }
   return ret;
@@ -64,10 +61,8 @@ int ObCclDDLOperator::drop_ccl_rule(const ObCCLRuleSchema &ccl_rule_schema,
     LOG_ERROR("schema_service must not null", K(ret));
   } else if (OB_FAIL(schema_service_.gen_new_schema_version(
                  new_schema_version))) {
-    LOG_WARN("fail to gen new schema_version", K(ret));
   } else if (OB_FAIL(schema_service->get_ccl_rule_sql_service().delete_ccl_rule(
                  ccl_rule_schema, new_schema_version, trans, ddl_stmt_str))) {
-    LOG_WARN("drop ccl rule failed", K(ccl_rule_schema), K(ret));
   } else { /*do nothing*/
   }
   return ret;

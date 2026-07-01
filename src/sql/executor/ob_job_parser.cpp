@@ -62,23 +62,18 @@ int ObJobParser::parse_job(ObExecContext &exec_ctx,
     ObJob *root_job = NULL;
     if (OB_FAIL(create_job(exec_ctx, phy_plan, root_spec, exec_id, job_ctrl,
                            task_split_type, spfactory, root_job))) {
-      LOG_WARN("fail to create job", K(ret));
     } else if (OB_ISNULL(root_job)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("root_job is NULL", K(ret));
     } else if (FALSE_IT(root_job->set_root_job())) {
     } else if (OB_FAIL(split_jobs(exec_ctx, phy_plan, root_spec, exec_id,
                                   job_ctrl, spfactory, *root_job))) {
-      LOG_WARN("fail to split jobs", K(ret));
     } else {}
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(root_spec->create_op_input(exec_ctx))) {
-      LOG_WARN("fail create root_spec's input", K(ret));
     } else if (OB_FAIL(job_ctrl.sort_job_scan_part_locs(exec_ctx))) {
-      LOG_WARN("fail to sort job scan partition locations", K(ret));
     } else if (OB_FAIL(job_ctrl.init_job_finish_queue(exec_ctx))) {
-      LOG_WARN("fail init job", K(ret));
     } else {
       // sanity check for early stage debug, can be removed after code stabilized
       if (OB_UNLIKELY(job_ctrl.get_job_count() <= 0)) {
@@ -118,14 +113,11 @@ int ObJobParser::split_jobs(ObExecContext &exec_ctx,
       LOG_WARN("transmit op is NULL", K(ret), K(op_spec));
     } else if (OB_FAIL(create_job(exec_ctx, phy_plan, op_spec, exec_id, job_ctrl,
                        ObTaskSpliter::REMOTE_IDENTITY_SPLIT, spfactory, job))) {
-      LOG_WARN("fail to create job", K(ret), K(exec_id));
     } else if (OB_FAIL(cur_job.append_child_job(job))) {
-      LOG_WARN("fail to add child job", K(ret), K(exec_id));
     }
     for (int32_t i = 0; OB_SUCC(ret) && i < op_spec->get_child_num(); ++i) {
       if (OB_FAIL(split_jobs(exec_ctx, phy_plan, op_spec->get_child(i), exec_id,
                              job_ctrl, spfactory, NULL != job ? *job : cur_job))) {
-        LOG_WARN("fail to split jobs for child op", K(ret), K(exec_id), K(i));
       } else {}
     }
   }
@@ -150,7 +142,6 @@ int ObJobParser::create_job(
     LOG_WARN("NULL ptr is unexpected", K(ret), K(phy_plan), K(op_spec));
   } else if (OB_FAIL(job_ctrl.create_job(exec_ctx.get_allocator(), exec_id,
                      op_spec->get_id(), job))) {
-    LOG_WARN("fail to create job", K(ret));
   } else if (OB_ISNULL(job)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("job is NULL", K(ret), K(exec_id));
@@ -166,7 +157,6 @@ int ObJobParser::create_job(
       // Set Spliter and ServersProvider to Job
       ObTaskSpliter *task_spliter = NULL;
       if (OB_FAIL(spfactory.create(exec_ctx, *job, task_split_type, task_spliter))) {
-        LOG_WARN("fail create task spliter", "type", task_split_type, K(ret));
       } else if (OB_ISNULL(task_spliter)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("task_spliter is NULL", K(ret));

@@ -58,9 +58,7 @@ int ObDirectLoadPartitionDelLobTask::RowIterator::init(
     iter_param.col_descs_ = merge_param->col_descs_;
     iter_param.dml_row_handler_ = merge_param->dml_row_handler_;
     if (OB_FAIL(lob_iter_.init(iter_param, origin_table, sstable_array, range))) {
-      LOG_WARN("fail to init lob meta row iter", KR(ret));
     } else if (OB_FAIL(insert_tablet_ctx->init_datum_row(datum_row_, true/*is_delete*/))) {
-      LOG_WARN("fail to init lob datum row", KR(ret));
     } else {
       tablet_id_ = merge_ctx->get_tablet_id();
       parallel_idx_ = parallel_idx;
@@ -127,7 +125,6 @@ int ObDirectLoadPartitionDelLobTask::init(ObDirectLoadTabletMergeCtx *merge_ctx,
     LOG_WARN("invalid args", KR(ret), KPC(merge_ctx), K(origin_table), K(table_data_desc), K(range),
              K(data_seq), K(parallel_idx));
   } else if (OB_FAIL(sstable_array_.assign(sstable_array))) {
-    LOG_WARN("fail to assign sstable array", KR(ret));
   } else {
     merge_ctx_ = merge_ctx;
     origin_table_ = &origin_table;
@@ -154,7 +151,6 @@ int ObDirectLoadPartitionDelLobTask::init_iterator(ObITabletSliceRowIterator *&r
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to allocate memory", KR(ret));
     } else if (OB_FAIL(iter->init(merge_ctx_, *origin_table_, table_data_desc_, sstable_array_, *range_, parallel_idx_))) {
-      LOG_WARN("fail to init row iterator", KR(ret));
     } else {
       row_iterator = iter;
     }

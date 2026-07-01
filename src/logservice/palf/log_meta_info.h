@@ -170,12 +170,9 @@ private:
     for (int i = 0; OB_SUCC(ret) && i < list.get_member_number(); i++) {
       common::ObMember member;
       if (OB_FAIL(list.get_member_by_index(i, member))) {
-        PALF_LOG(WARN, "get_server_by_index failed", K(list));
       } else if (server_list.contains(member.get_server())) {
         ret = OB_INVALID_ARGUMENT;
-        PALF_LOG(WARN, "serverlist should not overlap with list", K(server_list), K(list));
       } else if (OB_FAIL(server_list.add_learner(member))) {
-        PALF_LOG(WARN, "add_learner failed", K(server_list), K(list));
       }
     }
     return ret;

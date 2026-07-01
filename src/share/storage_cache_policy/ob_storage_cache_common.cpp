@@ -52,7 +52,6 @@ int get_storage_cache_policy_type_from_str(const common::ObString &storage_cache
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid storage cache policy", KR(ret), K(storage_cache_policy_str));
   } else if (OB_FAIL(policy.load_from_string(storage_cache_policy_str))) {
-    LOG_WARN("fail to load storage cache policy", KR(ret), K(storage_cache_policy_str));
   } else if (policy.is_global_policy()) {
     switch (policy.get_global_policy()) {
       case ObStorageCacheGlobalPolicy::HOT_POLICY: {
@@ -332,9 +331,7 @@ int ObStorageCachePolicy::load_from_string(const ObString &str)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("storage cache policy string is null", K(ret));
   } else if (OB_FAIL(parser.init(&allocator))) {
-    LOG_WARN("parser init failed", K(ret));
   } else if (OB_FAIL(parser.parse(str.ptr(), str.length(), root))) {
-    LOG_WARN("parse json failed", K(ret), K(str));
   } else if (OB_ISNULL(root)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("no root value", K(ret));
@@ -372,7 +369,6 @@ int ObStorageCachePolicy::load_from_string(const ObString &str)
     }
   }
   if (OB_FAIL(check_table_cache_policy())) {
-    LOG_WARN("invalid storage cache policy", K(ret));
   }
   return ret;
 }
@@ -540,7 +536,6 @@ int ObStorageCachePolicy::cal_hot_rentention_time(int64_t &hot_rentention_time) 
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("row granularity not supported yet", K(ret));
   } else if (OB_FAIL(convert_hot_retention_unit(hot_retention_unit_, hot_rentention_time))) {
-    LOG_WARN("fail to convert column unit to seconds", K(ret), K(hot_retention_unit_));
   } else {
     hot_rentention_time *= hot_retention_interval_;
   }

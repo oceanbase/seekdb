@@ -33,7 +33,6 @@ int ObTablePartitionInfo::assign(const ObTablePartitionInfo &other)
   int ret = OB_SUCCESS;
   table_location_ = other.table_location_;
   if (OB_FAIL(candi_table_loc_.assign(other.candi_table_loc_))) {
-    LOG_WARN("fail to assign candi_table_loc_", K(ret), K(candi_table_loc_));
   }
   return ret;
 }
@@ -61,14 +60,12 @@ int ObTablePartitionInfo::init_table_location(ObSqlSchemaGuard &schema_guard,
                                         dtc_params,
                                         is_dml_table,
                                         sort_exprs))) {
-      LOG_WARN("fail to init table location", K(ret));
     }
   }
   // Judge and set whether it is a copy table
   if (OB_SUCC(ret)) {
     const ObTableSchema *table_schema = NULL;
     if (OB_FAIL(schema_guard.get_table_schema(table_id, ref_table_id, &stmt, table_schema))) {
-      LOG_WARN("fail to get table schema", K(ref_table_id), K(ret));
     } else if (table_schema->is_duplicate_table()) {
       // If the replication table itself has been modified, only leader can be selected, do not set duplicate table attribute
       candi_table_loc_.set_duplicate_type(is_dml_table ? ObDuplicateType::DUPLICATE_IN_DML :
@@ -96,7 +93,6 @@ int ObTablePartitionInfo::calculate_phy_table_location_info(
                        params,
                        candi_table_loc_.get_phy_part_loc_info_list_for_update(),
                        dtc_params))) {
-    LOG_WARN("Failed to calculate table location", K(ret));
   } else {
     candi_table_loc_.set_table_location_key(
         table_location_.get_table_id(), table_location_.get_ref_table_id());
@@ -114,7 +110,6 @@ int ObTablePartitionInfo::calc_phy_table_loc_and_select_leader(ObExecContext &ex
   if (OB_FAIL(calculate_phy_table_location_info(exec_ctx,
                                                 params,
                                                 dtc_params))) {
-    LOG_WARN("fail to calculate phy table location info", K(ret));
   } else if (OB_FAIL(candi_table_loc_.all_select_leader(is_on_same_server, same_server))) {
     LOG_WARN("fail to all select leader", K(ret), K(candi_table_loc_));
     // 
@@ -133,7 +128,6 @@ int ObTablePartitionInfo::calc_phy_table_loc_and_select_leader(ObExecContext &ex
       tmp_ret = OB_ERR_UNEXPECTED;
       LOG_WARN("task_exec_ctx not inited", K(tmp_ret));
     } else if (OB_SUCCESS != (tmp_ret = candi_table_loc.assign(candi_table_loc_))) {
-      LOG_WARN("fail to assign", K(tmp_ret), K(candi_table_loc_));
     } else {
       ObCandiTabletLocIArray &info_array = candi_table_loc.get_phy_part_loc_info_list_for_update();
 
@@ -142,7 +136,6 @@ int ObTablePartitionInfo::calc_phy_table_loc_and_select_leader(ObExecContext &ex
         if (info.get_partition_location().get_replica_locations().count() <= 0) {
           //nothing todo
         } else if (OB_SUCCESS != (tmp_ret = info.set_selected_replica_idx(0))) {
-          LOG_WARN("fail to set selected replica index", KR(ret));
         }
       }
 
@@ -150,7 +143,6 @@ int ObTablePartitionInfo::calc_phy_table_loc_and_select_leader(ObExecContext &ex
         //nothing todo
       } else if (OB_SUCCESS != (tmp_ret = task_exec_ctx
                          ->append_table_location(candi_table_loc))) {
-        LOG_WARN("fail append table locaion info", K(ret), K(tmp_ret));
       }
     }
   }
@@ -179,13 +171,9 @@ int ObTablePartitionInfo::replace_final_location_key(ObExecContext &exec_ctx,
       loc_meta.related_table_ids_.set_capacity(1);
       ref_table_id = ref_table_id;
       if (OB_FAIL(loc_meta.related_table_ids_.push_back(ref_table_id))) {
-        LOG_WARN("store related table ids failed", K(ret));
       } else if (OB_FAIL(ObPhyLocationGetter::build_related_tablet_info(table_location_, exec_ctx, related_map))) {
-        LOG_WARN("build related tablet info failed", K(ret));
       } else if (OB_FAIL(candi_table_loc_.replace_local_index_loc(*related_map, ref_table_id))) {
-        LOG_WARN("replace local index loc failed", K(ret));
       } else if (OB_FAIL(table_location_.replace_ref_table_id(ref_table_id, exec_ctx))) {
-        LOG_WARN("replace ref table id failed", K(ret));
       }
       //need to clear the related info in location meta
       loc_meta.related_table_ids_.reset();
@@ -196,7 +184,6 @@ int ObTablePartitionInfo::replace_final_location_key(ObExecContext &exec_ctx,
     } else {
       //get the real table location info use the real table id
       if (OB_FAIL(table_location_.replace_ref_table_id(ref_table_id, exec_ctx))) {
-        LOG_WARN("replace ref table id failed", K(ret), K(ref_table_id));
       } else if (!is_das_dyn_prune_part) {
         candi_table_loc_.set_table_location_key(table_location_.get_table_id(), ref_table_id);
       }
@@ -217,7 +204,6 @@ int ObTablePartitionInfo::get_all_servers(ObIArray<common::ObAddr> &servers) con
 {
 	int ret = OB_SUCCESS;
   if (OB_FAIL(candi_table_loc_.get_all_servers(servers))) {
-    LOG_WARN("failed to get all servers", K(ret));
   } else { /* do nothing */ }
   return ret;
 }

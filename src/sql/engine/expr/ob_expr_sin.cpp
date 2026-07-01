@@ -86,7 +86,6 @@ static int vector_sin(const ObExpr &expr,
       number::ObNumber radian_nmb(arg_vec->get_number(idx));
       ObEvalCtx::TempAllocGuard alloc_guard(ctx);
       if (OB_FAIL(radian_nmb.sin(res_nmb, alloc_guard.get_allocator()))) {
-        LOG_WARN("calc expr failed", K(ret), K(radian_nmb), K(expr));
       } else {
         res_vec->set_number(idx, res_nmb);
       }
@@ -104,7 +103,6 @@ int ObExprSin::eval_number_sin_vector(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval sin param", K(ret));
   } else {
     VectorFormat arg_format = expr.args_[0]->get_format(ctx);
     VectorFormat res_format = expr.get_format(ctx);
@@ -130,7 +128,6 @@ int ObExprSin::eval_double_sin_vector(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval sin param", K(ret));
   } else {
     VectorFormat arg_format = expr.args_[0]->get_format(ctx);
     VectorFormat res_format = expr.get_format(ctx);

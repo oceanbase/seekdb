@@ -51,7 +51,6 @@ int ObDtlLocalChannel::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDtlBasicChannel::init())) {
-    LOG_WARN("Initialize fifo allocator fail", K(ret));
   }
   return ret;
 }
@@ -81,7 +80,6 @@ int ObDtlLocalChannel::send_shared_message(ObDtlLinkedBuffer *&buf)
     if (buf->is_data_msg() && buf->use_interm_result()) {
       MOD_SCOPE {
         if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->process_interm_result(buf, peer_id_))) {
-          LOG_WARN("fail to process internal result", K(ret));
         }
       }
     } else if (ObDtlMsgType::PX_VECTOR == buf->msg_type()) {
@@ -111,7 +109,6 @@ int ObDtlLocalChannel::send_shared_message(ObDtlLinkedBuffer *&buf)
     } else {
       ObDtlLocalChannel *local_chan = reinterpret_cast<ObDtlLocalChannel*>(chan);
       if (OB_FAIL(local_chan->feedup(buf))) {
-        LOG_WARN("feed up DTL channel fail", KP(peer_id_), "peer", get_peer(), K(ret));
       } else if (OB_ISNULL(local_chan->get_dfc())) {
         LOG_TRACE("dfc of rpc channel is null", K(msg_response_.is_block()), KP(peer_id_), K(ret), KP(local_chan->get_id()), K(local_chan->get_peer()));
       } else if (local_chan->belong_to_receive_data()) {
@@ -152,7 +149,6 @@ int ObDtlLocalChannel::send_message(ObDtlLinkedBuffer *&buf)
     LOG_WARN("invalid argument", K(ret));
   } else {
     if (OB_FAIL(wait_response())) {
-      LOG_WARN("failed to wait response", K(ret));
     }
     if (OB_SUCC(ret) && OB_FAIL(wait_unblocking_if_blocked())) {
       LOG_WARN("failed to block data flow", K(ret));
@@ -166,15 +162,7 @@ int ObDtlLocalChannel::send_message(ObDtlLinkedBuffer *&buf)
     // we wait first message return and retry until peer setup.
     bool is_eof = buf->is_eof();
     if (OB_FAIL(msg_response_.start())) {
-      LOG_WARN("start message process fail", K(ret));
     } else if (OB_FAIL(send_shared_message(buf))) {
-      // 1) for data message, if dtl channel is not built, it's cached by first buffer manage,
-      //    it's processed rightly, or it's drain
-      //    so don't wait first response
-      // 2) control message SQC and QC channel also must be linked
-      // 3) bloom filter message rpc processor process, don't need channel
-      // so channel is linked and don't retry
-      LOG_DEBUG("Data channel linked", K_(peer), K(ret), KP(peer_id_));
     }
     LOG_TRACE("local channel status", K_(peer), K(ret), KP(peer_id_));
     if (is_eof) {

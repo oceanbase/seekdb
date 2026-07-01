@@ -68,17 +68,14 @@ struct __PartialResult
       res_data->get_payload(output_idx, cur_isnull, payload, len);
       if (cur_isnull && !src_isnull) {
         if (OB_FAIL(set_payload(res_data, out_tc, output_idx, src, src_len))) {
-          LOG_WARN("set payload failed", K(ret));
         }
       } else if (src_isnull) {
         // do nothing
       } else if (OB_FAIL(cmp_fn(obj_meta, obj_meta, payload, len, cur_isnull, src, src_len,
                                 src_isnull, cmp_ret))) {
-        LOG_WARN("compare failed", K(ret));
       } else if ((cmp_ret > 0 && (agg_func == T_FUN_MIN || wf_info.func_type_ == T_FUN_MIN))
                  || (cmp_ret < 0 && (agg_func == T_FUN_MAX || wf_info.func_type_ == T_FUN_MAX))) {
         if (OB_FAIL(set_payload(res_data, out_tc, output_idx, src, src_len))) {
-          LOG_WARN("set payload failed", K(ret));
         }
       }
     } else if (agg_func == T_FUN_COUNT
@@ -100,7 +97,6 @@ struct __PartialResult
         ret = sum_merge<int64_t>(res_buf, src, res_isnull, src_isnull, res_data, output_idx);
       }
       if (OB_FAIL(ret)) {
-        LOG_WARN("merge result failed", K(ret), K(agg_func), K(wf_info.func_type_));
       }
     } else if (agg_func == T_FUN_SUM || wf_info.func_type_ == T_FUN_SUM) {
       const char *res_buf;
@@ -128,7 +124,6 @@ struct __PartialResult
         ret = sum_merge<double>(res_buf, src, res_isnull, src_isnull, res_data, output_idx);
       }
       if (OB_FAIL(ret)) {
-        LOG_WARN("merge sum partial results failed", K(ret), K(res_tc), K(wf_info), K(agg_func));
       }
     }
     return ret;
@@ -148,20 +143,16 @@ struct __PartialResult
       number::ObNumber src2_nmb(res_data->get_number(output_idx));
       number::ObNumber res_nmb;
       if (OB_FAIL(extra_nmb.from(rank_val, tmp_alloc))) {
-        LOG_WARN("from number failed", K(ret));
       } else if (OB_FAIL(res_nmb.add(extra_nmb, res_nmb, tmp_alloc))) {
-        LOG_WARN("add number failed", K(ret));
       } else if (!src_isnull) {
         number::ObNumber src_nmb(*reinterpret_cast<const number::ObCompactNumber *>(src));
         if (OB_FAIL(res_nmb.add(src_nmb, res_nmb, tmp_alloc))) {
-          LOG_WARN("add number failed", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (!res_data->is_null(output_idx)) {
         number::ObNumber src_nmb(res_data->get_number(output_idx));
         if (OB_FAIL(res_nmb.add(src_nmb, res_nmb, tmp_alloc))) {
-          LOG_WARN("add number failed", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -236,7 +227,6 @@ private:
     } else {
       number::ObNumber l(*left), r(*right);
       if (OB_FAIL(l.add(r, res_nmb, tmp_alloc))) {
-        LOG_WARN("add_v3 failed", K(ret));
       } else {
         number::ObCompactNumber *res_cnum = reinterpret_cast<number::ObCompactNumber *>(res_buf);
         res_cnum->desc_ = res_nmb.d_;
@@ -257,7 +247,6 @@ private:
     char tmp_res[tmp_res_size] = {0};
     ret = add_result<T>(tmp_res, left, right, l_isnull, r_isnull);
     if (OB_FAIL(ret)) {
-      LOG_WARN("add result failed", K(ret));
     } else if (std::is_same<T, number::ObCompactNumber>::value) {
       number::ObCompactNumber *res_cnum = reinterpret_cast<number::ObCompactNumber *>(tmp_res);
       int32_t output_len = res_cnum->desc_.len_ * sizeof(uint32_t) + sizeof(ObNumberDesc);
@@ -296,14 +285,11 @@ int ObWindowFunctionVecOp::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOperator::inner_open())) {
-    LOG_WARN("inner ope child operator failed", K(ret));
   } else if (OB_ISNULL(ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid null session ptr", K(ret));
   } else if (OB_FAIL(init())) {
-    LOG_WARN("init window function failed", K(ret));
   } else if (OB_FAIL(reset_for_scan())) {
-    LOG_WARN("reset for scan failed", K(ret));
   }
   LOG_TRACE("window function inner open", K(MY_SPEC), K(MY_SPEC.single_part_parallel_), K(MY_SPEC.range_dist_parallel_));
   return ret;
@@ -349,12 +335,10 @@ int ObWindowFunctionVecOp::inner_rescan()
   int ret = OB_SUCCESS;
   // FIXME: add rescan logic
   if (OB_FAIL(ObOperator::inner_rescan())) {
-    LOG_WARN("inner_open child operator failed", K(ret));
   } else if (OB_ISNULL(ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null session", K(ret));
   } else if (OB_FAIL(reset_for_scan())) {
-    LOG_WARN("reset for scan failed", K(ret));
   } else {
     FOREACH_WINCOL(END_WF) {
       it->reset_for_scan();
@@ -411,7 +395,6 @@ int ObWindowFunctionVecOp::inner_get_next_batch(const int64_t max_row_cnt)
     switch(stat_) {
     case ProcessStatus::PARTIAL: {
       if (OB_FAIL(partial_next_batch(max_row_cnt))) {
-        LOG_WARN("partial next batch failed", K(ret));
       } else if (brs_.end_) {
         if (MY_SPEC.single_part_parallel_ || MY_SPEC.range_dist_parallel_) {
           stat_ = ProcessStatus::COORDINATE;
@@ -425,7 +408,6 @@ int ObWindowFunctionVecOp::inner_get_next_batch(const int64_t max_row_cnt)
       brs_.size_ = 0;
       brs_.end_ = false;
       if (OB_FAIL(coordinate())) {
-        LOG_WARN("coordinate failed", K(ret));
       } else {
         stat_ = ProcessStatus::FINAL;
       }
@@ -433,7 +415,6 @@ int ObWindowFunctionVecOp::inner_get_next_batch(const int64_t max_row_cnt)
     }
     case ProcessStatus::FINAL: {
       if (OB_FAIL(final_next_batch(max_row_cnt))) {
-        LOG_WARN("get next batch failed", K(ret));
       }
       break;
     }
@@ -512,7 +493,6 @@ int ObWindowFunctionVecOp::create_stores()
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(input_stores_.init(MY_SPEC.max_batch_size_, input_row_meta_, stored_mem_attr,
                                         INT64_MAX, true))) {
-    LOG_WARN("init input stores failed", K(ret));
   }
   FOREACH_WINCOL(END_WF) {
     it->res_ = OB_NEWx(winfunc::RowStores, local_allocator_);
@@ -541,7 +521,6 @@ int ObWindowFunctionVecOp::create_stores()
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(it->res_->init(MY_SPEC.max_batch_size_, it->wf_res_row_meta_,
                                         stored_mem_attr, INT64_MAX, true))) {
-        LOG_WARN("init row stores failed", K(ret));
       }
     }
   }
@@ -575,7 +554,6 @@ int ObWindowFunctionVecOp::build_pby_hash_values_for_transmit()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory failed", K(ret));
     } else if (OB_FAIL(pby_hash_values_.push_back(arr))) {
-      LOG_WARN("push back elements failed", K(ret));
     }
   }
   return ret;
@@ -590,7 +568,6 @@ int ObWindowFunctionVecOp::build_participator_whole_msg_array()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory failed", K(ret));
     } else if (OB_FAIL(participator_whole_msg_array_.push_back(msg))) {
-      LOG_WARN("push back element failed", K(ret));
     }
   }
   return ret;
@@ -610,27 +587,22 @@ int ObWindowFunctionVecOp::setup_participator_pby_hash_sets(WFInfoFixedArray &wf
     WinFuncInfo &wf_info = wf_infos.at(i);
     if (!wf_info.can_push_down_) {
       if (OB_FAIL(pby_expr_cnt_idx_array_.push_back(OB_INVALID_ID))) {
-        LOG_WARN("push back element failed", K(ret));
       }
     } else {
       if (wf_info.partition_exprs_.count() == prev_pushdown_pby_col_count) {
         if (OB_FAIL(pby_expr_cnt_idx_array_.push_back(idx))) {
-          LOG_WARN("push back element failed", K(ret));
         }
       } else {
         prev_pushdown_pby_col_count = wf_info.partition_exprs_.count();
         if (OB_FAIL(pby_expr_cnt_idx_array_.push_back(++idx))) {
-          LOG_WARN("push back element failed", K(ret));
         } else {
           ReportingWFHashSet *hash_set = OB_NEWx(ReportingWFHashSet, local_allocator_);
           if (OB_ISNULL(hash_set)) {
             ret = OB_ALLOCATE_MEMORY_FAILED;
             LOG_WARN("allocate memory failed", K(ret));
           } else if (OB_FAIL(hash_set->create(op_input->get_total_task_count()
-                                              * op_input->get_total_task_count()))) { // dop * dop
-            LOG_WARN("init hash sets failed", K(ret));
+                                              * op_input->get_total_task_count()))) {
           } else if (OB_FAIL(pby_hash_values_sets_.push_back(hash_set))) {
-            LOG_WARN("push back element failed", K(ret));
           }
         }
       }
@@ -663,16 +635,13 @@ int ObWindowFunctionVecOp::init()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null session ptr", K(ret));
   } else if (OB_FAIL(init_mem_context())) {
-    LOG_WARN("init memory context failed", K(ret));
   } else {
     int64_t est_rows = MY_SPEC.rows_;
     if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(&ctx_, MY_SPEC.px_est_size_factor_, est_rows, est_rows))) {
-      LOG_WARN("failed to get px size", K(ret));
     } else if (OB_FAIL(sql_mem_processor_.init(
                          &mem_context_->get_malloc_allocator(),
                          (est_rows * MY_SPEC.width_ / MY_SPEC.estimated_part_cnt_),
                          MY_SPEC.type_, MY_SPEC.id_, &ctx_))) {
-      LOG_WARN("init sql mem processor failed", K(ret));
     } else {
       LOG_TRACE("show some est values", K(ret), K(MY_SPEC.rows_), K(est_rows), K(MY_SPEC.width_),
                 K(MY_SPEC.estimated_part_cnt_), K(MY_SPEC.input_rows_mem_bound_ratio_));
@@ -680,7 +649,6 @@ int ObWindowFunctionVecOp::init()
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(init_hp_infras_group_mgr())) {
-      LOG_WARN("init hp infras group mgr failed", K(ret));
     }
   }
 
@@ -701,10 +669,8 @@ int ObWindowFunctionVecOp::init()
     int prev_pushdown_pby_col_count = -1;
     WFInfoFixedArray &wf_infos = const_cast<WFInfoFixedArray &>(MY_SPEC.wf_infos_);
     if (OB_FAIL(ObChunkStoreUtil::alloc_dir_id(dir_id_))) {
-      LOG_WARN("failed to alloc dir id", K(ret));
     } else if (MY_SPEC.max_batch_size_ > 0) {
       if (OB_FAIL(all_expr_vector_copy_.init(child_->get_spec().output_, eval_ctx_))) {
-        LOG_WARN("init vector holder failed", K(ret));
       } else {
         LOG_DEBUG("init expr vector holder", K(get_all_expr()));
       }
@@ -714,7 +680,6 @@ int ObWindowFunctionVecOp::init()
       // setup input_row_meta_
       input_row_meta_.set_allocator(local_allocator_);
       if (OB_FAIL(input_row_meta_.init(get_all_expr(), 0))) {
-        LOG_WARN("init row meta failed", K(ret));
       }
     }
     // create aggr rows
@@ -723,7 +688,6 @@ int ObWindowFunctionVecOp::init()
       WinFuncInfo &wf_info = wf_infos.at(wf_idx - 1);
       for (int j = 0; OB_SUCC(ret) && j < wf_info.partition_exprs_.count(); j++) {
         if (OB_FAIL(add_var_to_array_no_dup(all_part_exprs_, wf_info.partition_exprs_.at(j)))) {
-          LOG_WARN("add element failed", K(ret));
         }
       }
       void *win_col_buf = nullptr, *pby_row_mapped_value_buf = nullptr;
@@ -788,7 +752,6 @@ int ObWindowFunctionVecOp::init()
           aggregate::IAggregate *agg_func = nullptr;
           winfunc::AggrExpr *aggr_expr = nullptr;
           if (OB_FAIL(alloc_expr<winfunc::AggrExpr>(*local_allocator_, aggr_expr))) {
-            LOG_WARN("allocate aggr expr failed", K(ret));
           } else {
             win_col->wf_expr_ = aggr_expr;
             if (wf_info.aggr_info_.has_distinct_) {
@@ -801,7 +764,6 @@ int ObWindowFunctionVecOp::init()
           using ranklike_expr = winfunc::RankLikeExpr<T_WIN_FUN_RANK>;
           ranklike_expr *rank_expr = nullptr;
           if (OB_FAIL(alloc_expr<ranklike_expr>(*local_allocator_, rank_expr))) {
-            LOG_WARN("allocate rank expr failed", K(ret));
           } else {
             win_col->wf_expr_ = rank_expr;
           }
@@ -811,7 +773,6 @@ int ObWindowFunctionVecOp::init()
           using ranklike_expr = winfunc::RankLikeExpr<T_WIN_FUN_DENSE_RANK>;
           ranklike_expr *rank_expr = nullptr;
           if (OB_FAIL(alloc_expr<ranklike_expr>(*local_allocator_, rank_expr))) {
-            LOG_WARN("allocate rank expr failed", K(ret));
           } else {
             win_col->wf_expr_ = rank_expr;
           }
@@ -821,7 +782,6 @@ int ObWindowFunctionVecOp::init()
           using ranklike_expr = winfunc::RankLikeExpr<T_WIN_FUN_PERCENT_RANK>;
           ranklike_expr *rank_expr = nullptr;
           if (OB_FAIL(alloc_expr<ranklike_expr>(*local_allocator_, rank_expr))) {
-            LOG_WARN("allocate rank expr failed", K(ret));
           } else {
             win_col->wf_expr_ = rank_expr;
           }
@@ -830,7 +790,6 @@ int ObWindowFunctionVecOp::init()
         case T_WIN_FUN_CUME_DIST: {
           winfunc::CumeDist *cume_expr = nullptr;
           if (OB_FAIL(alloc_expr<winfunc::CumeDist>(*local_allocator_, cume_expr))) {
-            LOG_WARN("allocate cume dist expr failed", K(ret));
           } else {
             win_col->wf_expr_ = cume_expr;
           }
@@ -839,7 +798,6 @@ int ObWindowFunctionVecOp::init()
         case T_WIN_FUN_ROW_NUMBER: {
           winfunc::RowNumber *row_nmb = nullptr;
           if (OB_FAIL(alloc_expr<winfunc::RowNumber>(*local_allocator_, row_nmb))) {
-            LOG_WARN("allocate row number expr failed", K(ret));
           } else {
             win_col->wf_expr_ = row_nmb;
           }
@@ -851,7 +809,6 @@ int ObWindowFunctionVecOp::init()
         case T_WIN_FUN_NTH_VALUE: {
           winfunc::NthValue *nth_expr = nullptr;
           if (OB_FAIL(alloc_expr<winfunc::NthValue>(*local_allocator_, nth_expr))) {
-            LOG_WARN("allocate nth value expr failed", K(ret));
           } else {
             win_col->wf_expr_ = nth_expr;
           }
@@ -861,7 +818,6 @@ int ObWindowFunctionVecOp::init()
         case T_WIN_FUN_LEAD: {
           winfunc::LeadOrLag *lead_lag_expr = nullptr;
           if (OB_FAIL(alloc_expr<winfunc::LeadOrLag>(*local_allocator_, lead_lag_expr))) {
-            LOG_WARN("allocate lead_or_lag expr failed", K(ret));
           } else {
             win_col->wf_expr_ = lead_lag_expr;
           }
@@ -870,7 +826,6 @@ int ObWindowFunctionVecOp::init()
         case T_WIN_FUN_NTILE: {
           winfunc::Ntile *ntile_expr = nullptr;
           if (OB_FAIL(alloc_expr<winfunc::Ntile>(*local_allocator_, ntile_expr))) {
-            LOG_WARN("allocate ntile expr failed", K(ret));
           } else {
             win_col->wf_expr_ = ntile_expr;
           }
@@ -884,7 +839,6 @@ int ObWindowFunctionVecOp::init()
         if (OB_FAIL(ret)) {
           // do nothing
         } else if (OB_FAIL(win_col->init_res_rows())) {
-          LOG_WARN("init result compact rows failed", K(ret));
         } else if (win_col->wf_expr_->is_aggregate_expr()
                    && OB_FAIL(win_col->init_aggregate_ctx())) {
           LOG_WARN("init aggr ctx and rows failed", K(ret));
@@ -923,11 +877,8 @@ int ObWindowFunctionVecOp::init()
 
     if (OB_SUCC(ret) && MY_SPEC.is_participator()) {
       if (OB_FAIL(build_pby_hash_values_for_transmit())) {
-        LOG_WARN("build transimitting hash values failed", K(ret));
       } else if (OB_FAIL(build_participator_whole_msg_array())) {
-        LOG_WARN("build participator whole msg array failed", K(ret));
       } else if (OB_FAIL(setup_participator_pby_hash_sets(wf_infos, op_input))) {
-        LOG_WARN("setup oby hash sets failed", K(ret));
       }
     }
     if (OB_SUCC(ret) && max_pby_col_cnt_ > 0) {
@@ -995,7 +946,6 @@ int ObWindowFunctionVecOp::init()
 
     if (OB_SUCC(ret)) {// init batch_ctx_
       if (OB_FAIL(init_batch_ctx())) {
-        LOG_WARN("init batch context failed", K(ret));
       }
     }
     // init sing partition parallel execution members
@@ -1005,7 +955,6 @@ int ObWindowFunctionVecOp::init()
       if (MY_SPEC.single_part_parallel_) {
         FOREACH_WINCOL(END_WF) {
           if (OB_FAIL(all_wf_exprs.push_back(it->wf_info_.expr_))) {
-            LOG_WARN("push back element failed", K(ret));
           }
         }
         if (OB_SUCC(ret)) {
@@ -1015,7 +964,6 @@ int ObWindowFunctionVecOp::init()
             all_wf_res_row_meta_ = new(row_meta_buf)RowMeta(local_allocator_);
             all_wf_res_row_meta_->set_allocator(local_allocator_);
             if (OB_FAIL(all_wf_res_row_meta_->init(all_wf_exprs, 0, false))) {
-              LOG_WARN("init wf results row meta failed", K(ret));
             }
           }
         }
@@ -1032,13 +980,11 @@ int ObWindowFunctionVecOp::init()
         LOG_WARN("allocate memory failed", K(ret));
         // rd_coord_exprs + frame_offset
       } else if (OB_FAIL(rd_coord_row_meta_->init(MY_SPEC.rd_coord_exprs_, sizeof(int64_t), false))) {
-        LOG_WARN("init rd_coord_row_meta failed", K(ret));
       }
     }
     // create stores
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(create_stores())) {
-      LOG_WARN("create stores failed", K(ret));
     }
   }
   return ret;
@@ -1101,13 +1047,11 @@ int ObWindowFunctionVecOp::get_next_batch_from_child(int64_t batch_size,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(restore_child_vectors())) {
-    LOG_WARN("restore all expr datas failed", K(ret));
   } else {
     bool found = false;
     while (!found && OB_SUCC(ret)) {
       clear_evaluated_flag();
       if (OB_FAIL(child_->get_next_batch(batch_size, child_brs))) {
-        LOG_WARN("get child next batch failed", K(ret));
       } else if (child_brs->end_) {
         found = true;
       } else {
@@ -1125,7 +1069,6 @@ int ObWindowFunctionVecOp::get_next_batch_from_child(int64_t batch_size,
       ObExpr *agg_status = MY_SPEC.wf_aggr_status_expr_;
       if (OB_FAIL(agg_status->init_vector_for_write(eval_ctx_, agg_status->get_default_res_format(),
                                                     MY_SPEC.max_batch_size_))) {
-        LOG_WARN("init vector failed", K(ret));
       }
     }
     // mapping pby row to idx array
@@ -1133,7 +1076,6 @@ int ObWindowFunctionVecOp::get_next_batch_from_child(int64_t batch_size,
     if (OB_FAIL(ret)) {
     } else if (!found) { // do nothing
     } else if (OB_FAIL(get_last_input_row_of_prev_batch(last_row))) {
-      LOG_WARN("get last row failed", K(ret));
     } else if (OB_SUCC(ret) && OB_FAIL(mapping_pby_row_to_idx_arr(*child_brs, last_row))) {
       LOG_WARN("mapping pby row to idx array failed", K(ret));
     } else {
@@ -1166,7 +1108,6 @@ int ObWindowFunctionVecOp::mapping_pby_col_to_idx_arr(int32_t col_id, const ObEx
             prev_data, prev_len, prev_is_null,
             cur_data, cur_len, cur_is_null,
             cmp_ret))) {
-        LOG_WARN("null first cmp failed", K(ret));
       } else if (cmp_ret == 0) {
         pby_row_mapped_idx_arr_[val_idx] = prev;
       } else {
@@ -1186,7 +1127,6 @@ int ObWindowFunctionVecOp::mapping_pby_col_to_idx_arr(int32_t col_id, const ObEx
             part_expr.obj_meta_, part_expr.obj_meta_,
             prev_data, prev_len, prev_is_null,
             cur_data, cur_len, cur_is_null, cmp_ret))) {
-        LOG_WARN("compare failed", K(ret));
       } else if (cmp_ret == 0) {
         prev = last_row_idx_arr_[col_id];
         pby_row_mapped_idx_arr_[val_idx] = prev;
@@ -1230,18 +1170,14 @@ int ObWindowFunctionVecOp::eval_prev_part_exprs(const ObCompactRow *last_row, Ob
       last_row->get_cell_payload(input_row_meta_, part_expr_field_idx, payload, len);
       is_null = last_row->is_null(part_expr_field_idx);
       if (OB_FAIL(last_part_infos.push_back(cell_info(is_null, len, payload)))) {
-        LOG_WARN("push back element failed", K(ret));
       }
     } else {
       if (backuped_child_vector) {
       } else if (OB_FAIL(tmp_holder.init(all_exprs, eval_ctx_))) {
-        LOG_WARN("init result holder failed", K(ret));
       } else if (OB_FAIL(tmp_holder.save(1))) {
-        LOG_WARN("save vector results failed", K(ret));
       } else {
         backuped_child_vector = true;
         if (OB_FAIL(attach_row_to_output(last_row))) {
-          LOG_WARN("attach row failed", K(ret));
         }
       }
       int64_t mock_skip_data = 0;
@@ -1253,7 +1189,6 @@ int ObWindowFunctionVecOp::eval_prev_part_exprs(const ObCompactRow *last_row, Ob
       bool is_null = false;
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(part_expr->eval_vector(eval_ctx_, *mock_skip, tmp_bound))) {
-        LOG_WARN("eval vector failed", K(ret));
       } else {
         ObIVector *part_res_vec = part_expr->get_vector(eval_ctx_);
         part_res_vec->get_payload(0, is_null, payload, len);
@@ -1268,7 +1203,6 @@ int ObWindowFunctionVecOp::eval_prev_part_exprs(const ObCompactRow *last_row, Ob
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(last_part_infos.push_back(cell_info(is_null, len, part_res_buf)))) {
-          LOG_WARN("push back element failed", K(ret));
         }
       }
     }
@@ -1299,7 +1233,6 @@ int ObWindowFunctionVecOp::get_last_input_row_of_prev_batch(const ObCompactRow *
   if (OB_ISNULL(fetch_store)) {
     // do nothing
   } else if (OB_FAIL(fetch_store->get_row(fetch_store->stored_row_cnt_ - 1, last_row))) {
-    LOG_WARN("get row failed", K(ret));
   } else {
   }
   return ret;
@@ -1344,7 +1277,6 @@ int ObWindowFunctionVecOp::mapping_pby_row_to_idx_arr(const ObBatchRows &child_b
   if (max_pby_col_cnt_ > 0) {
     MEMSET(pby_row_mapped_idx_arr_, -1, child_brs.size_ * sizeof(int32_t) * max_pby_col_cnt_);
     if (OB_FAIL(eval_prev_part_exprs(last_row, tmp_mem_alloc, part_exprs, part_cell_infos))) {
-      LOG_WARN("eval last partition exprs of last row failed", K(ret));
     }
     bool prev_row_not_null = (last_row != nullptr);
     for (int i = 0; OB_SUCC(ret) && i < part_exprs.count(); i++) {
@@ -1353,7 +1285,6 @@ int ObWindowFunctionVecOp::mapping_pby_row_to_idx_arr(const ObBatchRows &child_b
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null expr", K(ret));
       } else if (OB_FAIL(part_exprs.at(i)->eval_vector(eval_ctx_, child_brs))) {
-        LOG_WARN("eval vector failed", K(ret));
       } else {
         VectorFormat fmt = part_exprs.at(i)->get_format(eval_ctx_);
         VecValueTypeClass tc = part_exprs.at(i)->get_vec_value_tc();
@@ -1394,7 +1325,6 @@ int ObWindowFunctionVecOp::mapping_pby_row_to_idx_arr(const ObBatchRows &child_b
         }
         }
         if (OB_FAIL(ret)) {
-          LOG_WARN("mapping pby col to idx array failed", K(ret), K(i), K(*part_exprs.at(i)));
         }
       }
     }
@@ -1419,7 +1349,6 @@ int ObWindowFunctionVecOp::partial_next_batch(const int64_t max_row_cnt)
   bool do_output = false;
   while(OB_SUCC(ret) && !do_output) {
     if (OB_FAIL(do_partial_next_batch(max_row_cnt, do_output))) {
-      LOG_WARN("do partial next batch failed", K(ret));
     }
   }
   return ret;
@@ -1437,7 +1366,6 @@ int ObWindowFunctionVecOp::do_partial_next_batch(const int64_t max_row_cnt, bool
     brs_.size_ = 0;
     brs_.end_ = true;
   } else if (OB_FAIL(ctx_.check_status())) {
-    LOG_WARN("check  physical plan status failed", K(ret));
   } else if (OB_ISNULL(ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid null session", K(ret));
@@ -1460,7 +1388,6 @@ int ObWindowFunctionVecOp::do_partial_next_batch(const int64_t max_row_cnt, bool
       // Hence, in the beginning of next partition iteration, resetting is necessary for computing next partition values.
       input_stores_.cur_->row_cnt_ = input_stores_.cur_->stored_row_cnt_;
       if (OB_FAIL(get_next_partition(check_times))) {
-        LOG_WARN("get next partition failed", K(ret));
       } else {
         rows_output_cnt =
           input_stores_.processed_->to_output_rows() + input_stores_.cur_->to_output_rows();
@@ -1490,7 +1417,6 @@ int ObWindowFunctionVecOp::do_partial_next_batch(const int64_t max_row_cnt, bool
         // Rows stored in `processed_` neither in the first partition nor in the last partition
         if (input_stores_.processed_->to_output_rows() > 0) {
           if (OB_FAIL(output_batch_rows(input_stores_.processed_->to_output_rows()))) {
-            LOG_WARN("output batch rows failed", K(ret));
           }
         } else {
           brs_.size_ = 0;
@@ -1498,7 +1424,6 @@ int ObWindowFunctionVecOp::do_partial_next_batch(const int64_t max_row_cnt, bool
         }
         do_output = true;
       } else if (OB_FAIL(output_batch_rows(output_row_cnt))) {
-        LOG_WARN("output batch rows failed", K(ret));
       } else {
         do_output = true;
         if (OB_SUCC(ret) && MY_SPEC.is_participator() && brs_.end_) {
@@ -1506,7 +1431,6 @@ int ObWindowFunctionVecOp::do_partial_next_batch(const int64_t max_row_cnt, bool
           // for some pushdown wf expr, it's partition count may not exceed DOP, hence no piece data
           // is sent to datahub. When iteration is done, send empty piece data anyway.
           if (OB_FAIL(rwf_send_empty_piece_data())) {
-            LOG_WARN("send empty piece data failed", K(ret));
           }
         }
       }
@@ -1534,21 +1458,16 @@ int ObWindowFunctionVecOp::get_next_partition(int64_t &check_times)
       // iteration in `compute_wf_values` will encounter aggr_res_row, and do wf computing.
       // while aggr_res_row has same frame as before, computing will be replaced as copying results.
       if (OB_FAIL(add_aggr_res_row_for_participator(end, current))) {
-        LOG_WARN("add aggr result row for last partition failed", K(ret));
       } else if (OB_FAIL(compute_wf_values(end, check_times))) {
-        LOG_WARN("compute wf values failed", K(ret));
       }
     }
   } else if (OB_FAIL(get_next_batch_from_child(batch_size, child_brs))) {
-    LOG_WARN("get next batch from child failed", K(ret));
   } else if ((child_brs->end_ && 0 == child_brs->size_)
              || (child_brs->size_ == (row_idx = next_nonskip_row_index(row_idx, *child_brs)))) {
     child_iter_end_ = true;
     if (!first_batch) {
       if (OB_FAIL(add_aggr_res_row_for_participator(end, current))) {
-        LOG_WARN("add aggr result row for last_partition failed", K(ret));
       } else if (OB_FAIL(compute_wf_values(end, check_times))) {
-        LOG_WARN("compute wf values failed", K(ret));
       }
     }
   } else {
@@ -1563,14 +1482,11 @@ int ObWindowFunctionVecOp::get_next_partition(int64_t &check_times)
       // 2. update first partition row idx
       // 3. detect and send aggr status if participator
       if (OB_FAIL(save_pby_row_for_wf(end, row_idx))) {
-        LOG_WARN("save pby row failed", K(ret));
       } else if (OB_FAIL(update_part_first_row_idx(end))) {
-        LOG_WARN("update first row idx of partition failed", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(process_child_batch(row_idx, child_brs, check_times))) {
-      LOG_WARN("process child batch rows failed", K(ret));
     }
   }
   return ret;
@@ -1592,7 +1508,6 @@ int ObWindowFunctionVecOp::process_child_batch(const int64_t batch_idx,
   // if `<a>` changed, found_next_part = true
   bool found_next_part = false;
   if (OB_FAIL(check_stack_overflow())) {
-    LOG_WARN("stack overflow", K(ret));
   }
   while (OB_SUCC(ret) && !found_next_part) { // find a big partition
     bool need_loop_util_child_brs_end = true;
@@ -1612,11 +1527,9 @@ int ObWindowFunctionVecOp::process_child_batch(const int64_t batch_idx,
           continue;
         }
         if (OB_FAIL(check_same_partition(*first, same_part))) {
-          LOG_WARN("check same partition failed", K(ret));
         } else if (OB_UNLIKELY(!same_part)) {
           // find same partition of any other window function
           if (OB_FAIL(find_same_partition_of_wf(end))) {
-            LOG_WARN("find same partition of wf failed", K(ret));
           } else {
             // new big partition or not
             found_next_part = (end == wf_list_.get_header());
@@ -1627,17 +1540,12 @@ int ObWindowFunctionVecOp::process_child_batch(const int64_t batch_idx,
             // 5. add aggr res row into current store
             // update part first row idx after computing wf values
             if (OB_FAIL(save_pby_row_for_wf(end, eval_ctx_.get_batch_idx()))) {
-              LOG_WARN("save partition groupby row failed", K(ret));
             } else if (OB_FAIL(detect_and_report_aggr_status(*child_brs, part_start_idx, row_idx))) {
-              LOG_WARN("detect and report aggr status failed", K(ret));
             } else if (OB_FAIL(current.add_batch_rows(
                          get_all_expr(), input_row_meta_, eval_ctx_,
                          EvalBound(child_brs->size_, part_start_idx, row_idx, false),
                          *child_brs->skip_, true, nullptr, true))) {
-              LOG_WARN("add batch rows failed", K(ret));
             } else if (OB_FAIL(add_aggr_res_row_for_participator(end, *input_stores_.cur_))) {
-              // new partition found, add aggr result row
-              LOG_WARN("add aggregate result row for participator failed", K(ret));
             } else {
               LOG_TRACE("found new partition", K(found_next_part), K(part_start_idx), K(row_idx),
                         K(*child_brs), K(need_swap_store));
@@ -1646,7 +1554,6 @@ int ObWindowFunctionVecOp::process_child_batch(const int64_t batch_idx,
           if (OB_FAIL(ret)) {
             // do nothing
           } else if (OB_FAIL(compute_wf_values(end, check_times))) {
-            LOG_WARN("compute wf values failed", K(ret));
           } else {
             part_start_idx = row_idx;
           }
@@ -1685,19 +1592,16 @@ int ObWindowFunctionVecOp::process_child_batch(const int64_t batch_idx,
           // `current.row_cnt_` will be adjusted back to `current.store_row_cnt_` in the beginning `do_partial_next_batch`
           if (part_start_idx < row_idx) {
             if (OB_FAIL(detect_and_report_aggr_status(*child_brs, part_start_idx, row_idx))) {
-              LOG_WARN("detect and report aggr status failed", K(ret));
             } else if (OB_FAIL(current.add_batch_rows(
                          get_all_expr(), input_row_meta_, eval_ctx_,
                          EvalBound(child_brs->size_, part_start_idx, row_idx,
                                    child_brs->all_rows_active_),
                          *child_brs->skip_, need_swap_store, nullptr, true))) {
-              LOG_WARN("add batch rows failed", K(ret));
             }
           }
           if (OB_FAIL(ret)) {
           } else if (need_swap_store) { // this means we haven't got a complete big partition
             if (OB_FAIL(get_next_batch_from_child(batch_size, child_brs))) {
-              LOG_WARN("get next batch from child failed", K(ret));
             } else {
               child_iter_end_ = child_brs->end_
                                 || (child_brs->size_ == child_brs->skip_->accumulate_bit_cnt(child_brs->size_));
@@ -1706,9 +1610,7 @@ int ObWindowFunctionVecOp::process_child_batch(const int64_t batch_idx,
                 // add aggr result row and compute wf values
                 if (OB_FAIL(
                              add_aggr_res_row_for_participator(END_WF, *input_stores_.cur_))) {
-                  LOG_WARN("add aggregate result row failed", K(ret));
                 } else if (OB_FAIL(compute_wf_values(END_WF, check_times))) {
-                  LOG_WARN("compute wf values failed", K(ret));
                 } else {
                   found_next_part = true;
                 }
@@ -1726,17 +1628,13 @@ int ObWindowFunctionVecOp::process_child_batch(const int64_t batch_idx,
           found_next_part = true;
           if (part_start_idx < row_idx) {
             if (OB_FAIL(detect_and_report_aggr_status(*child_brs, part_start_idx, row_idx))) {
-              LOG_WARN("detect and report aggr status failed", K(ret));
             } else if (OB_FAIL(current.add_batch_rows(
                          get_all_expr(), input_row_meta_, eval_ctx_,
                          EvalBound(child_brs->size_, part_start_idx, row_idx, false),
                          *child_brs->skip_, true, nullptr, true))) {
-              LOG_WARN("add batch rows failed", K(ret));
             } else if (OB_FAIL(add_aggr_res_row_for_participator(wf_list_.get_header(),
                                                                  *input_stores_.cur_))) {
-              LOG_WARN("add aggregate result row failed", K(ret));
             } else if (OB_FAIL(compute_wf_values(END_WF, check_times))) {
-              LOG_WARN("compute wf values failed", K(ret));
             }
           }
         }
@@ -1807,7 +1705,6 @@ int ObWindowFunctionVecOp::find_same_partition_of_wf(WinFuncColExpr *&end_wf)
   bool same = false;
   FOREACH_WINCOL(END_WF) {
     if (OB_FAIL(check_same_partition(*it, same))) {
-      LOG_WARN("check same partition failed", K(ret));
     } else if (same) {
       end_wf = it;
       break;
@@ -1821,11 +1718,9 @@ int ObWindowFunctionVecOp::coordinate()
   int ret = OB_SUCCESS;
   if (MY_SPEC.single_part_parallel_) {
     if (OB_FAIL(collect_sp_partial_results())) {
-      LOG_WARN("collect single partition partial results failed", K(ret));
     }
   } else if (MY_SPEC.range_dist_parallel_) {
     if (OB_FAIL(rd_fetch_patch())) {
-      LOG_WARN("fetch patch info from PX COORD failed", K(ret));
     } else {
       LOG_DEBUG("fetch patch", K(*rd_patch_));
       last_output_row_idx_ = OB_INVALID_INDEX;
@@ -1845,7 +1740,6 @@ int ObWindowFunctionVecOp::final_next_batch(const int64_t max_row_cnt)
   int ret = OB_SUCCESS;
   if (MY_SPEC.range_dist_parallel_) {
     if (OB_FAIL(rd_output_final_batch(std::min(max_row_cnt, MY_SPEC.max_batch_size_)))) {
-      LOG_WARN("output first part failed", K(ret));
     } else {
       if (brs_.end_ && brs_.size_ == 0 && !first_part_outputed_) {
         first_part_outputed_ = true;
@@ -1868,7 +1762,6 @@ int ObWindowFunctionVecOp::final_next_batch(const int64_t max_row_cnt)
       brs_.size_ = 0;
       brs_.end_ = true;
     } else if (OB_FAIL(output_batch_rows(std::min(max_row_cnt, MY_SPEC.max_batch_size_)))) {
-      LOG_WARN("output batch rows failed", K(ret));
     }
   }
   return ret;
@@ -1909,9 +1802,7 @@ int ObWindowFunctionVecOp::output_batch_rows(const int64_t output_row_cnt)
 
       if (backuped_size_ < rows_cnt_processed + rows_cnt_current) {
         if (OB_FAIL(restore_child_vectors())) {
-          LOG_WARN("restore child vector results failed", K(ret));
         } else if (OB_FAIL(backup_child_vectors(rows_cnt_processed + rows_cnt_current))) {
-          LOG_WARN("backup child vector results failed", K(ret));
         }
       }
       MEMSET(brs_.skip_, 0, word_cnt * ObBitVector::BYTES_PER_WORD);
@@ -1922,11 +1813,9 @@ int ObWindowFunctionVecOp::output_batch_rows(const int64_t output_row_cnt)
       // if rows of current batch are distributed in different blocks, all blocks are loaded must be valid
       winfunc::StoreGuard store_guard(*this);
       if (OB_FAIL(output_stored_rows(rows_cnt_processed, rows_cnt_current, input_stores_, outputed_cnt))) {
-        LOG_WARN("output processed store rows failed", K(ret));
       } else {
         FOREACH_WINCOL(END_WF) {
           if (OB_FAIL(output_stored_rows(rows_cnt_processed, rows_cnt_current, *it, outputed_wf_res_cnt))) {
-            LOG_WARN("output stored rows failed", K(ret));
           }
         }
       }
@@ -2003,15 +1892,12 @@ int ObWindowFunctionVecOp::output_stored_rows(const int64_t out_processed_cnt,
   if (OB_FAIL(store.processed_->get_batch_rows(
         store.processed_->output_row_idx_, store.processed_->output_row_idx_ + out_processed_cnt,
         input_stored_rows))) {
-    LOG_WARN("get batch rows failed", K(ret));
   } else if (OB_FAIL(store.cur_->get_batch_rows(store.cur_->output_row_idx_,
                                                 store.cur_->output_row_idx_ + out_cur_cnt,
                                                 &input_stored_rows[out_processed_cnt]))) {
-    LOG_WARN("get batch rows failed", K(ret));
   } else {
     int64_t out_batch = out_processed_cnt + out_cur_cnt;
     if (OB_FAIL(attach_rows_to_output(input_stored_rows, out_batch))) {
-      LOG_WARN("attach rows failed", K(ret));
     } else {
       store.processed_->output_row_idx_ += out_processed_cnt;
       store.cur_->output_row_idx_ += out_cur_cnt;
@@ -2037,9 +1923,7 @@ int ObWindowFunctionVecOp::attach_rows_to_output(const ObCompactRow **rows, int6
     if (all_exprs.at(i)->is_const_expr()) {// do nothing
     } else if (OB_FAIL(all_exprs.at(i)->init_vector_for_write(
                  eval_ctx_, all_exprs.at(i)->get_default_res_format(), row_cnt))) {
-      LOG_WARN("init vector failed", K(ret));
     } else if (OB_FAIL(all_exprs.at(i)->get_vector(eval_ctx_)->from_rows(input_row_meta_, rows, row_cnt, i))) {
-      LOG_WARN("from rows failed", K(ret));
     } else {
       all_exprs.at(i)->set_evaluated_projected(eval_ctx_);
     }
@@ -2070,7 +1954,6 @@ int ObWindowFunctionVecOp::output_stored_rows(const int64_t out_processed_cnt,
   int64_t out_batch = out_processed_cnt + out_cur_cnt;
   if (OB_FAIL(wf_col.wf_info_.expr_->init_vector_for_write(
         eval_ctx_, wf_col.wf_info_.expr_->get_default_res_format(), out_batch))) {
-    LOG_WARN("init vector for write failed", K(ret));
   } else if (MY_SPEC.single_part_parallel_) {
     int64_t col_idx = wf_col.wf_idx_ - 1;
     if (OB_ISNULL(sp_merged_row_)) {
@@ -2145,15 +2028,12 @@ int ObWindowFunctionVecOp::output_stored_rows(const int64_t out_processed_cnt,
     if (OB_FAIL(wf_col.res_->processed_->get_batch_rows(
           wf_col.res_->processed_->output_row_idx_,
           wf_col.res_->processed_->output_row_idx_ + out_processed_cnt, wf_col.res_rows_))) {
-      LOG_WARN("get batch rows failed", K(ret));
     } else if (OB_FAIL(
                  wf_col.res_->cur_->get_batch_rows(wf_col.res_->cur_->output_row_idx_,
                                                    wf_col.res_->cur_->output_row_idx_ + out_cur_cnt,
                                                    &wf_col.res_rows_[out_processed_cnt]))) {
-      LOG_WARN("get batch rows failed", K(ret));
     } else if (OB_FAIL(wf_col.wf_info_.expr_->get_vector(eval_ctx_)->from_rows(
                  wf_col.wf_res_row_meta_, wf_col.res_rows_, out_batch, 0))) {
-      LOG_WARN("from rows failed", K(ret));
     } else {
       wf_col.res_->processed_->output_row_idx_ += out_processed_cnt;
       wf_col.res_->cur_->output_row_idx_ += out_cur_cnt;
@@ -2183,9 +2063,7 @@ int ObWindowFunctionVecOp::compute_wf_values(WinFuncColExpr *end, int64_t &check
   }
   saved_batch_size = std::min(saved_batch_size, MY_SPEC.max_batch_size_);
   if (OB_FAIL(tmp_holder.init(get_all_expr(), eval_ctx_))) {
-    LOG_WARN("init tmp result holder failed", K(ret));
   } else if (OB_FAIL(tmp_holder.save(saved_batch_size))) {
-    LOG_WARN("save vector resule failed", K(ret));
   }
   FOREACH_WINCOL(end) {
     if (it == wf_list_.get_last()) {
@@ -2217,28 +2095,15 @@ int ObWindowFunctionVecOp::compute_wf_values(WinFuncColExpr *end, int64_t &check
         winfunc::StoreGuard store_guard(*this);
         if (OB_FAIL(it->wf_info_.expr_->init_vector_for_write(
               eval_ctx_, it->wf_info_.expr_->get_default_res_format(), batch_size))) {
-          LOG_WARN("init vector for write failed", K(ret));
         } else if (OB_FAIL(input_stores_.cur_->attach_rows(get_all_expr(), input_row_meta_,
                                                            eval_ctx_, start_idx,
                                                            start_idx + batch_size, false))) {
-          // step.1: attach rows
-          LOG_WARN("attach rows failed", K(ret), K(start_idx), K(batch_size),
-                   K(*input_stores_.cur_));
         } else if (OB_FAIL(it->reset_for_partition(batch_size, *wf_skip))) {
-          LOG_WARN("reset for partition failed", K(ret));
         } else if (MY_SPEC.is_push_down()) {
           if (OB_FAIL(
                 detect_nullres_or_pushdown_rows(*it, *nullres_skip, *pushdown_skip, *wf_skip))) {
-            // step.2 find nullres rows and bypass-pushdown rows
-            LOG_WARN("find null result rows or bypass-pushdown rows failed", K(ret));
           } else if (OB_FAIL(calc_bypass_pushdown_rows_of_wf(*it, batch_size, *pushdown_skip))) {
-            // by pass collect will reset null bitmap by calling `init_vector_for_write`
-            // must be called before `set_null_results_of_wf`
-            // step.4 calculate bypass-pushdown rows
-            LOG_WARN("calculate pushdown rows failed", K(ret));
           } else if (OB_FAIL(set_null_results_of_wf(*it, batch_size, *nullres_skip))) {
-            // step.3 set null results
-            LOG_WARN("set null results failed", K(ret));
           } else {
           }
         }
@@ -2253,18 +2118,14 @@ int ObWindowFunctionVecOp::compute_wf_values(WinFuncColExpr *end, int64_t &check
       } else if (OB_FAIL(it->wf_expr_->process_partition(win_expr_ctx, it->part_first_row_idx_,
                                                          input_stores_.cur_->count(), start_idx,
                                                          start_idx + batch_size, *wf_skip))) {
-        //   step.5 calculate window function results for rest rows
-        LOG_WARN("process partition failed", K(ret));
       } else {
         ObSEArray<ObExpr *, 1> tmp_exprs;
         // reset skip to add all rows
         wf_skip->unset_all(0, batch_size);
         if (OB_FAIL(tmp_exprs.push_back(it->wf_info_.expr_))) {
-          LOG_WARN("push back element failed", K(ret));
         } else if (OB_FAIL(it->res_->cur_->add_batch_rows(
                      tmp_exprs, it->wf_res_row_meta_, eval_ctx_,
                      EvalBound(batch_size, 0, batch_size, true), *wf_skip, true))) {
-          LOG_WARN("add batch rows failed", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -2276,9 +2137,7 @@ int ObWindowFunctionVecOp::compute_wf_values(WinFuncColExpr *end, int64_t &check
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(tmp_holder.restore())) {
-    LOG_WARN("restore results failed", K(ret));
   } else if (OB_FAIL(update_part_first_row_idx(end))) {
-    LOG_WARN("update part first row idx failed", K(ret));
   }
   // Row project flag is set when read row from RAStore, but the remain rows in batch
   // are not evaluated, need reset the flag here.
@@ -2344,10 +2203,8 @@ int ObWindowFunctionVecOp::calc_bypass_pushdown_rows_of_wf(WinFuncColExpr &wf,
   if (pushdown_skip.accumulate_bit_cnt(batch_size) == batch_size) {
     // do nothing
   } else if (OB_FAIL(agg_expr->aggr_processor_->init_fast_single_row_aggs())) {
-    LOG_WARN("init fast single row aggregate failed", K(ret));
   } else if (OB_FAIL(agg_expr->aggr_processor_->single_row_agg_batch(wf.aggr_rows_, batch_size,
                                                                      eval_ctx_, pushdown_skip))) {
-    LOG_WARN("bypass calculation failed", K(ret));
   }
   return ret;
 }
@@ -2362,7 +2219,6 @@ int ObWindowFunctionVecOp::collect_sp_partial_results()
   if (wf_col.res_->cur_->count() <= 0) {
     // current rows is empty, no need to compute wf values, hency just send empty msg and return.
     if (OB_FAIL(sp_get_whole_msg(true, whole_msg, nullptr))) {
-      LOG_WARN("sp_get_whole_msg failed", K(ret));
     }
   } else {
     // In order to construct a compact row with wf_expr list, following steps are needed:
@@ -2374,18 +2230,14 @@ int ObWindowFunctionVecOp::collect_sp_partial_results()
     guard.set_batch_idx(0);
     guard.set_batch_size(1);
     if (OB_FAIL(tmp_holder.init(get_all_expr(), eval_ctx_))) {
-      LOG_WARN("init results holder failed", K(ret));
     } else if (OB_FAIL(tmp_holder.save(1))) {
-      LOG_WARN("save vector data failed", K(ret));
     } else {
       ObCompactRow *wf_res_row = nullptr;
       ObSEArray<ObExpr *, 8> all_wf_exprs;
       FOREACH_WINCOL(END_WF) { // only one row, no need to set row store mem guard
         if (OB_FAIL(it->res_->cur_->attach_rows(it->wf_info_.expr_, it->wf_res_row_meta_, eval_ctx_,
                                                 0, 1, false))) {
-          LOG_WARN("attach rows failed", K(ret));
         } else if (OB_FAIL(all_wf_exprs.push_back(it->wf_info_.expr_))) {
-          LOG_WARN("push back element failed", K(ret));
         }
       }
       int64_t mocked_skip = 0;
@@ -2399,13 +2251,9 @@ int ObWindowFunctionVecOp::collect_sp_partial_results()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null tmp row", K(ret));
       } else if (OB_FAIL(batch_ctx_.tmp_wf_res_row_->save_store_row(all_wf_exprs, brs, eval_ctx_, 0, false))) {
-        LOG_WARN("save wf res row failed", K(ret));
-      } else if (OB_FAIL(sp_get_whole_msg(false, whole_msg, batch_ctx_.tmp_wf_res_row_->compact_row_))) { // all done ready to send piece msg and wait for whole
-        LOG_WARN("sp_get_whole msg failed", K(ret));
+      } else if (OB_FAIL(sp_get_whole_msg(false, whole_msg, batch_ctx_.tmp_wf_res_row_->compact_row_))) {
       } else if (OB_FAIL(sp_merge_partial_results(whole_msg))) {
-        LOG_WARN("merge partial results failed", K(ret));
       } else if (OB_FAIL(tmp_holder.restore())) {
-        LOG_WARN("restore failed", K(ret));
       } else { // do nothing
       }
     }
@@ -2438,7 +2286,6 @@ int ObWindowFunctionVecOp::sp_get_whole_msg(bool is_empty, SPWinFuncPXWholeMsg &
         LOG_WARN("unexpected null sending row", K(ret));
       } else if (OB_FAIL(
                    piece.row_meta_.deep_copy(*all_wf_res_row_meta_, &piece.deserial_allocator_))) {
-        LOG_WARN("deep copy row meta failed", K(ret));
       } else {
         piece.row_ = sending_row;
       }
@@ -2447,9 +2294,7 @@ int ObWindowFunctionVecOp::sp_get_whole_msg(bool is_empty, SPWinFuncPXWholeMsg &
     } else if (OB_FAIL(proxy.get_dh_msg_sync(
                  MY_SPEC.get_id(), dtl::DH_SP_WINFUNC_PX_WHOLE_MSG, piece, temp_whole_msg,
                  ctx_.get_physical_plan_ctx()->get_timeout_timestamp()))) {
-      LOG_WARN("get whole msg failed", K(ret));
     } else if (OB_FAIL(msg.assign(*temp_whole_msg))) {
-      LOG_WARN("assign whole msg failed", K(ret));
     }
   }
   return ret;
@@ -2467,7 +2312,6 @@ int ObWindowFunctionVecOp::sp_merge_partial_results(SPWinFuncPXWholeMsg &msg)
   int cmp_ret = 0;
   if (OB_UNLIKELY(msg.is_empty_)) {
   } else if (OB_FAIL(store_iter.init(&msg.row_store_))) {
-    LOG_WARN("init row store iteration failed", K(ret));
   } else {
     int64_t batch_size = std::min(msg.row_store_.get_row_cnt(), MY_SPEC.max_batch_size_);
     int64_t read_rows = 0;
@@ -2477,9 +2321,7 @@ int ObWindowFunctionVecOp::sp_merge_partial_results(SPWinFuncPXWholeMsg &msg)
     guard.set_batch_size(1);
     FOREACH_WINCOL(END_WF) {
       if (OB_FAIL(all_wf_exprs.push_back(it->wf_info_.expr_))) {
-        LOG_WARN("push back element failed", K(ret));
       } else if (OB_FAIL(it->wf_info_.expr_->init_vector_default(eval_ctx_, 1))) {
-        LOG_WARN("init vector for write failed", K(ret));
       } else {
         it->wf_info_.expr_->get_vector(eval_ctx_)->set_null(0); // initialize to null
       }
@@ -2502,7 +2344,6 @@ int ObWindowFunctionVecOp::sp_merge_partial_results(SPWinFuncPXWholeMsg &msg)
           cur_isnull = a_row->is_null(col_idx);
           a_row->get_cell_payload(msg.row_meta_, col_idx, cur, cur_len);
           if (OB_FAIL(part_res.merge<ObIVector>(it->wf_info_, cur_isnull, cur, cur_len))) {
-            LOG_WARN("merge result failed", K(ret));
           }
         }
       } // end wf for loop
@@ -2526,7 +2367,6 @@ int ObWindowFunctionVecOp::sp_merge_partial_results(SPWinFuncPXWholeMsg &msg)
       brs.skip_ = to_bit_vector(&mocked_skip);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(sp_merged_row_->save_store_row(all_wf_exprs, brs, eval_ctx_, 0, false))) {
-        LOG_WARN("save wf res row failed", K(ret));
       } else {
       }
     }
@@ -2557,9 +2397,7 @@ int ObWindowFunctionVecOp::add_aggr_res_row_for_participator(WinFuncColExpr *end
                                  batch_ctx_.all_exprs_backup_buf_len_);
       ObVectorsResultHolder tmp_holder(&vec_res_alloc);
       if (OB_FAIL(tmp_holder.init(get_all_expr(), eval_ctx_))) {
-        LOG_WARN("init result holder failed", K(ret));
       } else if (OB_FAIL(tmp_holder.save(1))) {
-        LOG_WARN("save result failed", K(ret));
       }
       FOREACH_WINCOL(end)
       {
@@ -2572,7 +2410,6 @@ int ObWindowFunctionVecOp::add_aggr_res_row_for_participator(WinFuncColExpr *end
         if (OB_FAIL(row_store.attach_rows(get_all_expr(), input_row_meta_, eval_ctx_,
                                           row_store.stored_row_cnt_ - 1, row_store.stored_row_cnt_,
                                           false))) {
-          LOG_WARN("attach rows failed", K(ret));
         } else {
           ObExpr *agg_status_code = get_all_expr().at(get_all_expr().count() - 1);
           if (last_aggr_status_ < it->wf_idx_) {
@@ -2580,7 +2417,6 @@ int ObWindowFunctionVecOp::add_aggr_res_row_for_participator(WinFuncColExpr *end
             agg_status_code->get_vector(eval_ctx_)->set_int(0, agg_status);
             if (OB_FAIL(row_store.add_batch_rows(get_all_expr(), input_row_meta_, eval_ctx_,
                                                  tmp_bound, *mock_skip, true, nullptr, true))) {
-              LOG_WARN("add batch rows failed", K(ret));
             }
           }
         }
@@ -2626,7 +2462,6 @@ int ObWindowFunctionVecOp::detect_and_report_aggr_status(const ObBatchRows &chil
               LOG_WARN("unexpected null hash value set", K(ret));
             } else if (OB_FAIL(rwf_calc_pby_row_hash(child_brs, it->wf_info_.partition_exprs_,
                                                      hash_value))) {
-              LOG_WARN("calculate hash value failed", K(ret));
             } else if (FALSE_IT(ret = pushdown_pby_hash_values_set->exist_refactored(hash_value))) {
             } else if (ret == OB_HASH_NOT_EXIST) {
               is_pushdown_bypass = true;
@@ -2648,7 +2483,6 @@ int ObWindowFunctionVecOp::detect_and_report_aggr_status(const ObBatchRows &chil
               uint64_t hash_value = 0;
               if (OB_FAIL(
                     rwf_calc_pby_row_hash(child_brs, it->wf_info_.partition_exprs_, hash_value))) {
-                LOG_WARN("calc hash value failed", K(ret));
               }
               bool exists = false;
               for (int i = 0;
@@ -2666,7 +2500,6 @@ int ObWindowFunctionVecOp::detect_and_report_aggr_status(const ObBatchRows &chil
                 && (pby_hash_values_.at(pushdown_wf_idx)->count() == total_task_cnt
                     || child_iter_end_)) {
               if (OB_FAIL(rwf_participator_coordinate(pushdown_wf_idx))) {
-                LOG_WARN("participator coordinate failed", K(ret));
               } else {
                 next_wf_pby_expr_cnt_to_transmit_ = it->wf_info_.partition_exprs_.count() - 1;
               }
@@ -2683,7 +2516,6 @@ int ObWindowFunctionVecOp::detect_and_report_aggr_status(const ObBatchRows &chil
       // update result value in expr
       if (OB_SUCC(ret)) {
         if (OB_FAIL(rwf_update_aggr_status_code(start_idx, end_idx))) {
-          LOG_WARN("update aggr_status code failed", K(ret));
         }
       }
     }
@@ -2729,12 +2561,10 @@ int ObWindowFunctionVecOp::rwf_calc_pby_row_hash(const ObBatchRows &child_brs,
     if (OB_FAIL(pby_exprs.at(i)->eval_vector(
           eval_ctx_, *child_brs.skip_,
           EvalBound(child_brs.size_, batch_idx, batch_idx + 1, true)))) {
-      LOG_WARN("eval vector failed", K(ret));
     } else {
       ObIVector *data = pby_exprs.at(i)->get_vector(eval_ctx_);
       if (OB_FAIL(data->murmur_hash_v3_for_one_row(*pby_exprs.at(i), hash_value, batch_idx,
                                                    eval_ctx_.get_batch_size(), hash_value))) {
-        LOG_WARN("murmur hash failed", K(ret));
       }
     }
   }
@@ -2752,13 +2582,11 @@ int ObWindowFunctionVecOp::rwf_participator_coordinate(const int64_t pushdown_wf
     LOG_WARN("unexpected null arguments", K(ret), K(whole_msg), K(pby_hash_value_array),
              K(pushdown_pby_hash_set));
   } else if (OB_FAIL(rwf_get_whole_msg(pby_hash_value_array, *whole_msg))) {
-    LOG_WARN("get whole msg failed", K(ret));
   } else if (0 == pby_hash_value_array->count()) {
     // empty input, do nothing
   } else {
     for (int i = 0; OB_SUCC(ret) && i < whole_msg->pby_hash_value_array_.count(); i++) {
       if (OB_FAIL(pushdown_pby_hash_set->set_refactored_1(whole_msg->pby_hash_value_array_.at(i), true))) {
-        LOG_WARN("insert hash set failed", K(ret));
       }
     }
   }
@@ -2786,19 +2614,16 @@ int ObWindowFunctionVecOp::rwf_get_whole_msg(const PbyHashValueArray *hash_value
     if (OB_FAIL(proxy.get_dh_msg_sync(MY_SPEC.get_id(), dtl::DH_SECOND_STAGE_REPORTING_WF_WHOLE_MSG,
                                       piece, temp_whole_msg,
                                       ctx_.get_physical_plan_ctx()->get_timeout_timestamp()))) {
-      LOG_WARN("get reporting window function whole msg failed", K(ret));
     } else if (OB_ISNULL(temp_whole_msg)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null whole msg", K(ret));
     } else if (OB_FAIL(whole_msg.assign(*temp_whole_msg))) {
-      LOG_WARN("assign whole msg failed", K(ret));
     } else {
       ObWindowFunctionVecOpInput *op_input = static_cast<ObWindowFunctionVecOpInput *>(input_);
       ObPxDatahubDataProvider *provider = nullptr;
       ObReportingWFWholeMsg::WholeMsgProvider *msg_provider = nullptr;
       if (OB_FAIL(proxy.sqc_ctx_.get_whole_msg_provider(
             MY_SPEC.get_id(), dtl::DH_SECOND_STAGE_REPORTING_WF_WHOLE_MSG, provider))) {
-        LOG_WARN("get whole msg provider failed", K(ret));
       } else {
         // `sync_wait` will wait for all workers to receive whole msg and then reset datahub's resource.
         // for reporting window function parallel excution, multiple pushdown wf exprs maybe exists in operator
@@ -2807,7 +2632,6 @@ int ObWindowFunctionVecOp::rwf_get_whole_msg(const PbyHashValueArray *hash_value
         // and cause unexpected error.
         msg_provider = static_cast<ObReportingWFWholeMsg::WholeMsgProvider *>(provider);
         if (OB_FAIL(op_input->sync_wait(ctx_, msg_provider))) {
-          LOG_WARN("sync wait failed", K(ret));
         }
       }
     }
@@ -2891,7 +2715,6 @@ int ObWindowFunctionVecOp::rwf_send_empty_piece_data()
     if (it->wf_info_.can_push_down_ && it->wf_info_.partition_exprs_.count() <= next_wf_pby_expr_cnt_to_transmit_) {
       int64_t pushdown_wf_idx = pby_expr_cnt_idx_array_.at(it->wf_idx_ - 1);
       if (OB_FAIL(rwf_participator_coordinate(pushdown_wf_idx))) {
-        LOG_WARN("participator coordinating failed", K(ret));
       } else {
         next_wf_pby_expr_cnt_to_transmit_ = it->wf_info_.partition_exprs_.count() - 1;
       }
@@ -2927,18 +2750,15 @@ int ObWindowFunctionVecOp::rd_fetch_patch()
     piece_msg.info_.sqc_id_ = handler->get_sqc_proxy().get_sqc_id();
     piece_msg.info_.thread_id_ = GETTID();
     if (OB_FAIL(piece_msg.info_.row_meta_.deep_copy(*rd_coord_row_meta_, &piece_msg.arena_alloc_))) {
-      LOG_WARN("deep copy row meta failed", K(ret));
     }
     if (OB_SUCC(ret) && input_stores_.first_->count() > 0) {
       if (OB_FAIL(rd_build_partial_info_row(0, true, piece_msg.arena_alloc_,
                                             piece_msg.info_.first_row_))) {
-        LOG_WARN("build first row failed", K(ret));
       } else if (input_stores_.last_->count() <= 0) {
         // get first partition's last row if only exists one partition
         if (OB_FAIL(rd_build_partial_info_row(input_stores_.first_->count() - 1,
                                               true, piece_msg.arena_alloc_,
                                               piece_msg.info_.last_row_))) {
-          LOG_WARN("build last row failed", K(ret));
         }
       }
     }
@@ -2946,7 +2766,6 @@ int ObWindowFunctionVecOp::rd_fetch_patch()
       if (OB_FAIL(rd_build_partial_info_row(input_stores_.last_->count() - 1,
                                             false, piece_msg.arena_alloc_,
                                             piece_msg.info_.last_row_))) {
-        LOG_WARN("build last row failed", K(ret));
       } else {
         *reinterpret_cast<int64_t *>(piece_msg.info_.last_row_->get_extra_payload(
           *rd_coord_row_meta_)) = last_computed_part_rows_ - 1;
@@ -2957,7 +2776,6 @@ int ObWindowFunctionVecOp::rd_fetch_patch()
     } else if (OB_FAIL(handler->get_sqc_proxy().get_dh_msg_sync(
                  MY_SPEC.get_id(), dtl::DH_RD_WINFUNC_PX_WHOLE_MSG, piece_msg, whole_msg,
                  ctx_.get_physical_plan_ctx()->get_timeout_timestamp()))) {
-      LOG_WARN("get range distributed winfunc msg failed", K(ret));
     } else if (OB_ISNULL(whole_msg)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null msg", K(ret));
@@ -2992,12 +2810,9 @@ int ObWindowFunctionVecOp::rd_build_partial_info_row(int64_t idx, bool is_first_
   const ObCompactRow *input_row = nullptr, *wf_res_row = nullptr;
   winfunc::RowStore *input = (is_first_part ? input_stores_.first_ : input_stores_.last_);
   if (OB_FAIL(tmp_holder.init(get_all_expr(), eval_ctx_))) {
-    LOG_WARN("init tmp result holder failed", K(ret));
   } else if (OB_FAIL(tmp_holder.save(1))) {
-    LOG_WARN("save batch results failed", K(ret));
   } else if (OB_FAIL(input->attach_rows(get_all_expr(), input_row_meta_, eval_ctx_, idx, idx + 1,
-                                        false))) { // first attach input row
-    LOG_WARN("attach row failed", K(ret));
+                                        false))) {
   }
 
   // second: attach wf res row
@@ -3006,7 +2821,6 @@ int ObWindowFunctionVecOp::rd_build_partial_info_row(int64_t idx, bool is_first_
     winfunc::RowStore *wf_res = (is_first_part ? it->res_->first_ : it->res_->last_);
     if (OB_FAIL(wf_res->attach_rows(it->wf_info_.expr_, it->wf_res_row_meta_, eval_ctx_, idx,
                                     idx + 1, false))) {
-      LOG_WARN("attach row failed", K(ret));
     }
   }
   // third: build rd_coord_res_row_
@@ -3023,7 +2837,6 @@ int ObWindowFunctionVecOp::rd_build_partial_info_row(int64_t idx, bool is_first_
       LOG_WARN("allocate memory failed", K(ret));
     } else if (OB_FAIL(rd_coord_row->save_store_row(MY_SPEC.rd_coord_exprs_, tmp_brs, eval_ctx_,
                                                     sizeof(int64_t), false))) {
-      LOG_WARN("save store row failed", K(ret));
     } else {
       build_row = rd_coord_row->compact_row_;
       *reinterpret_cast<int64_t *>(build_row->get_extra_payload(*rd_coord_row_meta_)) = idx;
@@ -3057,17 +2870,14 @@ int ObWindowFunctionVecOp::rd_output_final_batch(const int64_t max_row_cnt)
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(input_stores_.cur_->attach_rows(get_all_expr(), input_row_meta_, eval_ctx_,
                                                        store_start_idx, store_end_idx, true))) {
-      LOG_WARN("attach rows failed", K(ret));
     }
     FOREACH_WINCOL(END_WF) {
       if (OB_FAIL(it->res_->cur_->attach_rows(it->wf_info_.expr_, it->wf_res_row_meta_, eval_ctx_,
                                               store_start_idx, store_end_idx, true))) {
-        LOG_WARN("attach rows failed", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(rd_apply_patches(cnt))) {
-      LOG_WARN("apply patches failed", K(ret));
     } else {
       brs_.size_ = cnt;
       brs_.all_rows_active_ = true;
@@ -3103,10 +2913,8 @@ int ObWindowFunctionVecOp::rd_merge_result(PartialMerge &part_res, WinFuncInfo &
       if (is_rank && i >= first_row_same_order_upper_bound) {
         int64_t rank_patch = rd_patch_->first_row_frame_offset();
         if (OB_FAIL(part_res.template add_rank<ResFmt>(info, true, nullptr, 0, rank_patch))) {
-          LOG_WARN("add rank failed", K(ret));
         }
       } else if (OB_FAIL(part_res.template merge<ResFmt>(info, null_payload, payload, len))) {
-        LOG_WARN("merge result failed", K(ret));
       }
     }
   }
@@ -3117,7 +2925,6 @@ int ObWindowFunctionVecOp::rd_merge_result(PartialMerge &part_res, WinFuncInfo &
       guard.set_batch_idx(i);
       if (i >= last_row_same_order_lower_bound) {
         if (OB_FAIL(part_res.template merge<ResFmt>(info, null_payload, payload, len))) {
-          LOG_WARN("merge last row's patch failed", K(ret));
         }
       }
     }
@@ -3249,7 +3056,6 @@ int ObWindowFunctionVecOp::rd_apply_patches(const int64_t max_row_cnt)
     }
     }
     if (OB_FAIL(ret)) {
-      LOG_WARN("merge result failed", K(info), K(fmt), K(vec_tc), K(col_idx));
     }
   }
   return ret;
@@ -3281,7 +3087,6 @@ int ObWindowFunctionVecOp::rd_find_first_row_upper_bound(int64_t batch_size, int
                                         MY_SPEC.rd_sort_collations_.at(i).is_ascending_);
     if (OB_FAIL(VectorRangeUtil::upper_bound(sort_expr, eval_ctx_, bound,
                                              *batch_ctx_.bound_eval_skip_, cmp_op, tmp_bound))) {
-      LOG_WARN("find upper bound failed", K(ret));
     } else if (OB_UNLIKELY(tmp_bound == -1)) {
       // no value is larger than first_row
       // upper_bound = batch_size;
@@ -3320,7 +3125,6 @@ int ObWindowFunctionVecOp::rd_find_last_row_lower_bound(int64_t batch_size, int6
                                         MY_SPEC.rd_sort_collations_.at(i).is_ascending_);
     if (OB_FAIL(VectorRangeUtil::lower_bound(sort_expr, eval_ctx_, bound,
                                              *batch_ctx_.bound_eval_skip_, cmp_op, tmp_bound))) {
-      LOG_WARN("find lower bound failed", K(ret));
     } else if (OB_UNLIKELY(tmp_bound == -1)) {
       lower_bound = batch_size;
       break;
@@ -3347,7 +3151,6 @@ int ObWindowFunctionVecOp::backup_child_vectors(int64_t batch_size)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(all_expr_vector_copy_.save(batch_size))) {
-    LOG_WARN("save vector results failed", K(ret));
   } else {
     backuped_size_ = batch_size;
   }
@@ -3359,7 +3162,6 @@ int ObWindowFunctionVecOp::restore_child_vectors()
   int ret = OB_SUCCESS;
   if (backuped_size_ <= 0) {
   } else if (OB_FAIL(all_expr_vector_copy_.restore())) {
-    LOG_WARN("restore vector results failed", K(ret));
   } else {
     backuped_size_ = 0;
   }
@@ -3376,7 +3178,6 @@ int ObWindowFunctionVecOp::init_mem_context()
     param.set_mem_attr(ObModIds::OB_SQL_WINDOW_ROW_STORE, ObCtxIds::WORK_AREA)
       .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
-      LOG_WARN("create entity failed", K(ret));
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null memory entity returned", K(ret));
@@ -3430,12 +3231,10 @@ int ObWindowFunctionVecOp::update_mem_limit_version_periodically()
   } else if (OB_FAIL(sql_mem_processor_.update_max_available_mem_size_periodically(
                &mem_context_->get_malloc_allocator(),
                __mem_pred_op(sql_mem_processor_, amm_periodic_cnt_), updated))) {
-    LOG_WARN("failed to update max available memory size periodically", K(ret));
   } else if (updated || need_dump()) {
     if (OB_FAIL(sql_mem_processor_.extend_max_memory_size(
           &mem_context_->get_malloc_allocator(), __mem_extend_op(sql_mem_processor_),
           need_inc_version, sql_mem_processor_.get_data_size()))) {
-      LOG_WARN("failed to extend max memory size", K(ret), K(updated), K(need_dump()));
     }
   }
   if (OB_FAIL(ret)) {
@@ -3459,7 +3258,6 @@ int WinFuncColExpr::init_aggregate_ctx()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memory failed", K(ret));
   } else if (OB_FAIL(aggr_infos->push_back(wf_info_.aggr_info_))) {
-    LOG_WARN("push back element failed");
   } else {
     winfunc::AggrExpr *agg_expr = static_cast<winfunc::AggrExpr *>(wf_expr_);
     agg_expr->aggr_processor_ = OB_NEWx(aggregate::Processor, &local_allocator,
@@ -3470,7 +3268,6 @@ int WinFuncColExpr::init_aggregate_ctx()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory failed", K(ret));
     } else if (OB_FAIL(agg_expr->aggr_processor_->init())) {
-      LOG_WARN("processor init failed", K(ret), K(wf_info_.aggr_info_));
     } else if (FALSE_IT(agg_expr->aggr_processor_->set_io_event_observer(&op_.io_event_observer_))) {
     } else if (FALSE_IT(agg_expr->aggr_processor_->set_support_fast_single_row_agg(true))) {
     } else if (FALSE_IT(agg_expr->aggr_processor_->set_hp_infras_mgr(&op_.hp_infras_mgr_))) {
@@ -3548,9 +3345,7 @@ int WinFuncColExpr::init_res_rows()
   int32_t res_row_ptr_buf_sz = 0;
   ObSEArray<ObExpr *, 1> all_exprs;
   if (OB_FAIL(all_exprs.push_back(wf_info_.expr_))) {
-    LOG_WARN("push back elements failed", K(ret));
   } else if (OB_FAIL(wf_res_row_meta_.init(all_exprs, 0))) {
-    LOG_WARN("init compact row meta failed", K(ret));
   } else if (FALSE_IT(res_row_ptr_buf_sz = op_.spec_.max_batch_size_ * sizeof(const ObCompactRow *))) {
   } else if (OB_ISNULL(res_row_ptr_buf = local_allocator.alloc(res_row_ptr_buf_sz))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -3573,7 +3368,6 @@ int WinFuncColExpr::reset_for_partition(const int64_t batch_size, const ObBitVec
     aggregate::Processor *processor = static_cast<winfunc::AggrExpr *>(wf_expr_)->aggr_processor_;
     for (int i = 0; OB_SUCC(ret) && i < batch_size; i++) {
       if (OB_FAIL(processor->add_one_aggregate_row(aggr_rows_[i], agg_ctx_->row_meta().row_size_))) {
-        LOG_WARN("setup rt info failed", K(ret));
       }
     }
   } else {
@@ -3620,7 +3414,6 @@ int ObWindowFunctionVecSpec::register_to_datahub(ObExecContext &ctx) const
         ObSqcCtx &sqc_ctx = ctx.get_sqc_handler()->get_sqc_ctx();
         if (OB_FAIL(sqc_ctx.add_whole_msg_provider(get_id(), dtl::DH_SP_WINFUNC_PX_WHOLE_MSG,
                                                    *provider))) {
-          LOG_WARN("add whole msg provider failed", K(ret));
         }
       }
     }
@@ -3634,7 +3427,6 @@ int ObWindowFunctionVecSpec::register_to_datahub(ObExecContext &ctx) const
       LOG_WARN("unexpected null sqc handler", K(ret));
     } else if (OB_FAIL(ctx.get_sqc_handler()->get_sqc_ctx().add_whole_msg_provider(
                  get_id(), dtl::DH_RD_WINFUNC_PX_WHOLE_MSG, *provider))) {
-      LOG_WARN("add whole msg failed", K(ret));
     }
   } else if (is_participator()) {
     if (OB_ISNULL(ctx.get_sqc_handler())) {
@@ -3650,7 +3442,6 @@ int ObWindowFunctionVecSpec::register_to_datahub(ObExecContext &ctx) const
         ObSqcCtx &sqc_ctx = ctx.get_sqc_handler()->get_sqc_ctx();
         if (OB_FAIL(sqc_ctx.add_whole_msg_provider(
               get_id(), dtl::DH_SECOND_STAGE_REPORTING_WF_WHOLE_MSG, *provider))) {
-          LOG_WARN("add whole msg failed", K(ret));
         }
       }
     }
@@ -3683,7 +3474,6 @@ int ObWindowFunctionVecSpec::rd_sort_cmp(RowMeta &row_meta, const ObCompactRow *
       if (OB_FAIL(rd_sort_cmp_funcs_.at(i).row_cmp_func_(obj_meta, obj_meta, l_payload, l_len,
                                                          l_isnull, r_payload, r_len, r_isnull,
                                                          cmp_ret))) {
-        LOG_WARN("compare failed", K(ret));
       } else if(!rd_sort_collations_.at(i).is_ascending_) {
         cmp_ret = cmp_ret * (-1);
       }
@@ -3737,7 +3527,6 @@ int ObWindowFunctionVecSpec::rd_generate_patch(RDWinFuncPXPieceMsgCtx &msg_ctx, 
     bool prev_same_part = (nullptr != prev);
     if (prev_same_part) {
       if (OB_FAIL(rd_pby_cmp(cur->row_meta_, prev->last_row_, cur->first_row_, cmp_ret))) {
-        LOG_WARN("compare failed", K(ret));
       } else {
         prev_same_part = (cmp_ret == 0);
       }
@@ -3746,7 +3535,6 @@ int ObWindowFunctionVecSpec::rd_generate_patch(RDWinFuncPXPieceMsgCtx &msg_ctx, 
     } else if (prev_same_part) {
       cur->first_row_frame_offset() = prev->last_row_frame_offset() + 1;
       if (OB_FAIL(rd_pby_cmp(cur->row_meta_, cur->first_row_, cur->last_row_, cmp_ret))) {
-        LOG_WARN("compare failed", K(ret));
       } else if (cmp_ret == 0) {
         cur->last_row_frame_offset() += prev->last_row_frame_offset() + 1;
       }
@@ -3767,16 +3555,12 @@ int ObWindowFunctionVecSpec::rd_generate_patch(RDWinFuncPXPieceMsgCtx &msg_ctx, 
     VectorFormat default_fmt = rd_coord_exprs_.at(i)->get_default_res_format();
     if (OB_FAIL(rd_coord_exprs_.at(i)->init_vector_for_write(
           eval_ctx, rd_coord_exprs_.at(i)->is_const_expr() ? VEC_UNIFORM_CONST : VEC_UNIFORM, 1))) {
-      LOG_WARN("init vector failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(first_row_patch.init_row_meta(rd_coord_exprs_, sizeof(int64_t), false))) {
-      LOG_WARN("init row meta failed", K(ret));
     } else if (OB_FAIL(last_row_patch.init_row_meta(rd_coord_exprs_, sizeof(int64_t), false))) {
-      LOG_WARN("init row meta failed", K(ret));
     } else if (OB_FAIL(prev_rank_res.init_row_meta(rd_coord_exprs_, sizeof(int64_t), false))) {
-      LOG_WARN("init row meta failed", K(ret));
     }
   }
   for (int idx = 0; OB_SUCC(ret) && idx < msg_ctx.infos_.count(); idx++) {
@@ -3785,9 +3569,7 @@ int ObWindowFunctionVecSpec::rd_generate_patch(RDWinFuncPXPieceMsgCtx &msg_ctx, 
       break;
     }
     if (OB_FAIL(first_row_patch.save_store_row(*cur->first_row_))) {
-      LOG_WARN("save store row failed", K(ret));
     } else if (OB_FAIL(last_row_patch.save_store_row(*cur->last_row_))) {
-      LOG_WARN("save store row failed", K(ret));
     }
     for (int i = 0; OB_SUCC(ret) && i < rd_wfs_.count(); i++) {
       const WinFuncInfo &wf_info = wf_infos_.at(rd_wfs_.at(i));
@@ -3798,12 +3580,10 @@ int ObWindowFunctionVecSpec::rd_generate_patch(RDWinFuncPXPieceMsgCtx &msg_ctx, 
       if (is_rank || is_dense_rank) {
         if (OB_FAIL(rd_gen_rank_patches(msg_ctx, eval_ctx, idx, res_idx, wf_info, prev_rank_res,
                                         first_row_patch, last_row_patch))) {
-          LOG_WARN("gen rank patches failed", K(ret));
         }
       } else if (OB_FAIL(rd_gen_agg_patches(msg_ctx, eval_ctx, idx, res_idx, wf_info,
                                             first_row_patch,
-                                            last_row_patch))) { // aggregation function
-        LOG_WARN("gen aggregate patches failed", K(ret));
+                                            last_row_patch))) {
       }
     } // end iter of wf_infos
     if (OB_SUCC(ret)) {
@@ -3825,7 +3605,7 @@ int ObWindowFunctionVecSpec::rd_generate_patch(RDWinFuncPXPieceMsgCtx &msg_ctx, 
         buf += first_row_patch.compact_row_->get_row_size();
         MEMCPY(buf, last_row_patch.compact_row_, last_row_patch.compact_row_->get_row_size());
         tmp_pair.second = reinterpret_cast<ObCompactRow *>(buf);
-        if (OB_FAIL(patch_pairs.push_back(tmp_pair))) { LOG_WARN("push back failed", K(ret)); }
+        if (OB_FAIL(patch_pairs.push_back(tmp_pair))) {}
       }
     }
   }
@@ -3882,7 +3662,6 @@ int ObWindowFunctionVecSpec::rd_gen_rank_patches(RDWinFuncPXPieceMsgCtx &msg_ctx
 
   if (prev_same_part) {
     if (OB_FAIL(rd_pby_cmp(cur->row_meta_, prev->last_row_, cur->first_row_, cmp_ret))) {
-      LOG_WARN("compare failed", K(ret));
     } else {
       prev_same_part = (cmp_ret == 0);
     }
@@ -3890,23 +3669,19 @@ int ObWindowFunctionVecSpec::rd_gen_rank_patches(RDWinFuncPXPieceMsgCtx &msg_ctx
   // patch first row
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(first_row_patch.to_expr(rd_coord_exprs_, eval_ctx))) {
-    LOG_WARN("to expr failed", K(ret));
   } else if (FALSE_IT(patch_expr->get_vector(eval_ctx)->set_null(0))) {
   } else if (!prev_same_part) {
     // do nothing
   } else if (OB_FAIL(rd_oby_cmp(cur->row_meta_, prev->last_row_, cur->first_row_, cmp_ret))) {
-    LOG_WARN("compare failed", K(ret));
   } else if (cmp_ret == 0) { // same order as previous row
     prev_rank_res.compact_row_->get_cell_payload(cur->row_meta_, res_idx, payload, len);
     if (OB_FAIL(part_res.add_rank<ObIVector>(wf_info, false, payload, len, -1))) {
-      LOG_WARN("add rank failed", K(ret));
     }
   } else if (is_rank && OB_FAIL(part_res.add_rank<ObIVector>(wf_info, true, nullptr, 0, cur->first_row_frame_offset()))) {
     LOG_WARN("add rank failed", K(ret));
   } else if (is_dense_rank) {
     prev_rank_res.compact_row_->get_cell_payload(cur->row_meta_, res_idx, payload, len);
     if (OB_FAIL(part_res.add_rank<ObIVector>(wf_info, false, payload, len, 0))) {
-      LOG_WARN("add rank failed", K(ret));
     }
   }
   // if first_row & last_row in different partition, patch is not needed for last_row
@@ -3914,31 +3689,23 @@ int ObWindowFunctionVecSpec::rd_gen_rank_patches(RDWinFuncPXPieceMsgCtx &msg_ctx
   // save first row patch
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(first_row_patch.save_store_row(rd_coord_exprs_, tmp_brs, eval_ctx))) {
-    LOG_WARN("save store row failed", K(ret));
   } else if (OB_FAIL(last_row_patch.to_expr(rd_coord_exprs_, eval_ctx))) {
-    LOG_WARN("to expr failed", K(ret));
   } else if (FALSE_IT(patch_expr->get_vector(eval_ctx)->set_null(0))) {
   } else if (OB_FAIL(last_row_patch.save_store_row(rd_coord_exprs_, tmp_brs, eval_ctx))) {
-    LOG_WARN("save store row failed", K(ret));
   } else {
     // store last row's ranking results
     if (OB_FAIL(prev_rank_res.save_store_row(*cur->last_row_))) {
-      LOG_WARN("save store row failed", K(ret));
     } else if (OB_FAIL(prev_rank_res.to_expr(rd_coord_exprs_, eval_ctx))) {
-      LOG_WARN("to expr failed", K(ret));
     } else if (FALSE_IT(patch_expr->get_vector(eval_ctx)->set_null(0))) {
     } else if (OB_FAIL(rd_pby_cmp(cur->row_meta_, cur->first_row_, cur->last_row_, cmp_ret))) {
-      LOG_WARN("compare failed", K(ret));
     } else if (cmp_ret == 0) {
       // first_row & last_row have same order, add first_row's patch into last_row
       // else add first row's frame_offset into last_row
       if (OB_FAIL(rd_oby_cmp(cur->row_meta_, cur->first_row_, cur->last_row_, cmp_ret))) {
-        LOG_WARN("compare failed", K(ret));
       } else if (cmp_ret == 0 || is_dense_rank) {
         first_row_patch.compact_row_->get_cell_payload(cur->row_meta_, res_idx, payload, len);
         null_payload = first_row_patch.compact_row_->is_null(res_idx);
         if (OB_FAIL(part_res.add_rank<ObIVector>(wf_info, null_payload, payload, len, 0))) {
-          LOG_WARN("add rank failed", K(ret));
         }
       } else if (cmp_ret != 0 && OB_FAIL(part_res.add_rank<ObIVector>(wf_info, true, nullptr, 0, cur->first_row_frame_offset()))) {
         LOG_WARN("add rank failed", K(ret));
@@ -3947,9 +3714,7 @@ int ObWindowFunctionVecSpec::rd_gen_rank_patches(RDWinFuncPXPieceMsgCtx &msg_ctx
     if (OB_FAIL(ret)) {
     } else if (FALSE_IT(cur->get_cell(res_idx, false, payload, len))) {
     } else if (OB_FAIL(part_res.add_rank<ObIVector>(wf_info, cur->is_null(res_idx, false), payload, len, 0))) {
-      LOG_WARN("add rank failed", K(ret));
     } else if (OB_FAIL(prev_rank_res.save_store_row(rd_coord_exprs_, tmp_brs, eval_ctx))) {
-      LOG_WARN("save store row failed", K(ret));
     }
   }
   return ret;
@@ -3988,27 +3753,22 @@ int ObWindowFunctionVecSpec::rd_gen_agg_patches(RDWinFuncPXPieceMsgCtx &msg_ctx,
   
   // first row's patch
   if (OB_FAIL(first_row_patch.to_expr(rd_coord_exprs_, eval_ctx))) {
-    LOG_WARN("to expr failed", K(ret));
   } else if (FALSE_IT(patch_expr->get_vector(eval_ctx)->set_null(0))) {
   } else {
     for (int prev_idx = part_info_idx - 1; OB_SUCC(ret) && prev_idx >= 0 && cmp_ret == 0; prev_idx--) {
       RDWinFuncPXPartialInfo *prev = msg_ctx.infos_.at(prev_idx);
       if (OB_FAIL(rd_pby_cmp(cur->row_meta_, prev->last_row_, cur->first_row_, cmp_ret))) {
-        LOG_WARN("compare failed", K(ret));
       } else if (cmp_ret == 0) {
         prev->get_cell(res_idx, false, payload, len);
         null_payload = prev->is_null(res_idx, false);
         if (OB_FAIL(part_res.merge<ObIVector>(wf_info, null_payload, payload, len))) {
-          LOG_WARN("merge result failed", K(ret));
         }
       }
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(first_row_patch.save_store_row(rd_coord_exprs_, tmp_brs, eval_ctx))) {
-    LOG_WARN("save first row patch failed", K(ret));
   } else if (OB_FAIL(last_row_patch.to_expr(rd_coord_exprs_, eval_ctx))) {
-    LOG_WARN("to expr failed", K(ret));
   } else if (FALSE_IT(patch_expr->get_vector(eval_ctx)->set_null(0))) {
   }
   // last row's patch
@@ -4018,18 +3778,15 @@ int ObWindowFunctionVecSpec::rd_gen_agg_patches(RDWinFuncPXPieceMsgCtx &msg_ctx,
        post_idx++) {
     RDWinFuncPXPartialInfo *post = msg_ctx.infos_.at(post_idx);
     if (OB_FAIL(rd_pby_oby_cmp(cur->row_meta_, post->first_row_, cur->last_row_, cmp_ret))) {
-      LOG_WARN("compare failed", K(ret));
     } else if (cmp_ret == 0) {
       post->get_cell(res_idx, true, payload, len);
       null_payload = post->is_null(res_idx, true);
       if (OB_FAIL(part_res.merge<ObIVector>(wf_info, null_payload, payload, len))) {
-        LOG_WARN("merge result failed", K(ret));
       }
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(last_row_patch.save_store_row(rd_coord_exprs_, tmp_brs, eval_ctx))) {
-    LOG_WARN("save store row failed", K(ret));
   }
   return ret;
 }
@@ -4108,7 +3865,6 @@ int ObWindowFunctionVecOp::init_hp_infras_group_mgr()
     if (OB_FAIL(hp_infras_mgr_.init(GCONF.is_sql_operator_dump_enabled(), est_rows,
                                     MY_SPEC.width_, true, 1, &eval_ctx_, &sql_mem_processor_,
                                     &io_event_observer_, NONE_COMPRESSOR))) {
-      LOG_WARN("init hp mgr failed", K(ret));
     }
   }
   return ret;

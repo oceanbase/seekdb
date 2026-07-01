@@ -121,15 +121,10 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(deserialize())) {
-      SERVER_LOG(WARN, "fail to do deserialize", K(ret));
     } else if (OB_FAIL(check_args())) {
-      SERVER_LOG(WARN, "fail to check args", K(ret));
     } else if (OB_FAIL(process())) {
-      SERVER_LOG(WARN, "fail to process", K(ret));
     } else if (OB_FAIL(set_result_header())) {
-      SERVER_LOG(WARN, "fail to set result header", K(ret));
     } else if (OB_FAIL(serialize())) {
-      SERVER_LOG(WARN, "fail to do serialize", K(ret));
     }
     return ret;
   }

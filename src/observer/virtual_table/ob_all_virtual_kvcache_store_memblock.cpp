@@ -59,7 +59,6 @@ int ObAllVirtualKVCacheStoreMemblock::inner_get_next_row(ObNewRow *&row)
   } else if (memblock_iter_ >= memblock_infos_.count()) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(process_row(memblock_infos_.at(memblock_iter_++)))) {
-    SERVER_LOG(WARN, "Fail to process current row", K(ret), K(memblock_iter_));
   } else {
     row = &cur_row_;
   }
@@ -81,7 +80,6 @@ int ObAllVirtualKVCacheStoreMemblock::set_ip()
     ipstr_ = ObString::make_string(ipbuf);
     port_ = addr_->get_port();
     if (OB_FAIL(ob_write_string(*allocator_, ipstr_, ipstr_))) {
-      SERVER_LOG(WARN, "Failed to write string", K(ret));
     }
   }
   return ret;
@@ -93,9 +91,7 @@ int ObAllVirtualKVCacheStoreMemblock::inner_open()
 
   memblock_infos_.reset();
   if (OB_FAIL(set_ip())) {
-    SERVER_LOG(WARN, "Fail to get ip in ObAllVirtualKVCacheStoreMemblock", K(ret));
-  } else if (OB_FAIL(ObKVGlobalCache::get_instance().get_memblock_info(memblock_infos_))) {  // get memblock info from kvcache
-    SERVER_LOG(WARN, "Fail to get memblock information from global cache", K(ret));
+  } else if (OB_FAIL(ObKVGlobalCache::get_instance().get_memblock_info(memblock_infos_))) {
   }
 
   return ret;
@@ -153,7 +149,6 @@ int ObAllVirtualKVCacheStoreMemblock::process_row(const ObKVCacheStoreMemblockIn
             ret = OB_IO_ERROR;
             SERVER_LOG(WARN, "snprintf fail", K(ret), K(errno), KERRNOMSG(errno));
           } else if (OB_FAIL(num.from(buf, str_buf_))) {
-            SERVER_LOG(WARN, "Fail to cast to number", K(ret), K(cell_idx), K(output_column_ids_), K(col_id));
           } else {
             cur_row_.cells_[cell_idx].set_number(num);
           }

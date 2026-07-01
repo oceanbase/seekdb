@@ -103,7 +103,6 @@ int ObExprWordSegment::cg_expr(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected error, nullptr", K(ret), KP(raw_ctx.args_[i]), K(i), K(raw_ctx.arg_cnt_));
       } else if (OB_FAIL(raw_ctx.args_[i]->eval(eval_ctx, datum))) {
-        LOG_WARN("fail to eval expr", K(ret), K(raw_ctx), K(eval_ctx));
       } else if (OB_ISNULL(datum)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected error, datum is nullptr", K(ret), KP(datum));
@@ -112,9 +111,7 @@ int ObExprWordSegment::cg_expr(
       } else if (FALSE_IT(res = datum->get_string())) {
       } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(alloc_guard.get_allocator(), *datum, raw_ctx.args_[i]->datum_meta_,
               raw_ctx.args_[i]->obj_meta_.has_lob_header(), res))) {
-        LOG_WARN("fail to get real data.", K(ret), K(res));
       } else if (OB_FAIL(ft_parts.push_back(res))) {
-        LOG_WARN("fail to push back ft part array", K(ret), K(res));
       } else {
         res_str_len += ft_parts.at(ft_parts.count() - 1).length();
       }
@@ -126,7 +123,6 @@ int ObExprWordSegment::cg_expr(
       LOG_TRACE("generate fulltext column is null", K(raw_ctx), K(eval_ctx), K(expr_datum));
     } else if (OB_FAIL(ObCharset::wc_mb(raw_ctx.args_[0]->obj_meta_.get_collation_type(), wide_char, mb_separator,
               mb_max_len, length_of_separator))) {
-      LOG_WARN("fail to wc_mb", K(ret), K(mb_max_len), KPHEX(mb_separator, mb_max_len));
     } else {
       res_str_len = res_str_len + length_of_separator * (ft_parts.count() - 1);
       ObExprStrResAlloc res_alloc(raw_ctx, eval_ctx);

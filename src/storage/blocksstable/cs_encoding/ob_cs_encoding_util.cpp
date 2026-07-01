@@ -51,10 +51,8 @@ int ObCSEncodingUtil::build_cs_column_encoding_ctx(
   int ret = OB_SUCCESS;
   if (col_ctx.ht_ != nullptr) {
     if (OB_FAIL(build_column_encoding_ctx_with_hash_table_(store_class, precision_bytes, col_ctx))) {
-      LOG_WARN("fail to build_column_encoding_ctx_with_hash_table_", K(ret), K(col_ctx));
     }
   } else if (OB_FAIL(build_column_encoding_ctx_with_col_datums_(store_class, precision_bytes, col_ctx))) {
-    LOG_WARN("fail to build_column_encoding_ctx_with_col_datums_", K(ret), K(col_ctx));
   }
   return ret;
 }

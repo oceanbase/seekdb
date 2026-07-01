@@ -19,7 +19,7 @@
 #include "ob_anonymous_block_resolver.h"
 #include "ob_anonymous_block_stmt.h"
 #include "pl/ob_pl_package.h"
-#include "pl/ob_pl_build.h"
+#include "pl/ob_pl_compile.h"
 
 namespace oceanbase
 {
@@ -138,7 +138,7 @@ int ObAnonymousBlockResolver::resolve_anonymous_block(
     }
     OZ (package_guard.init());
     OX (func_ast.set_db_name(params_.session_info_->get_database_name()));
-    OZ (pl::ObPLBuilder::init_anonymous_ast(
+    OZ (pl::ObPLCompiler::init_anonymous_ast(
           func_ast,
           *(params_.allocator_),
           *(params_.session_info_),
@@ -183,13 +183,11 @@ int ObAnonymousBlockResolver::add_param()
     CK (params_.param_list_->count() == params_.query_ctx_->question_marks_count_);
     for (int64_t i = 0; OB_SUCC(ret) && i < params_.param_list_->count(); ++i) {
       if (OB_FAIL(anonymous_stmt->add_param(params_.param_list_->at(i)))) {
-        LOG_WARN("fail to push back param", K(i), K(ret));
       }
     }
   } else if (params_.query_ctx_->question_marks_count_ > 0) {
     for (int64_t i =0; OB_SUCC(ret) && i < params_.query_ctx_->question_marks_count_; ++i) {
       if (OB_FAIL(anonymous_stmt->add_param(ObObjParam(ObObj(ObNullType))))) {
-        LOG_WARN("failed to push back param", K(ret), K(i));
       }
     }
   }

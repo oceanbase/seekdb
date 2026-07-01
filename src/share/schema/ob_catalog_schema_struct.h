@@ -153,7 +153,6 @@ struct ObCatalogPrivSortKey
     int ret = OB_SUCCESS;
     user_id_ = src.user_id_;
     if (OB_FAIL(common::ob_write_string(allocator, src.catalog_, catalog_))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to deep copy catalog", KR(ret), K(src.catalog_));
     }
     return ret;
   }

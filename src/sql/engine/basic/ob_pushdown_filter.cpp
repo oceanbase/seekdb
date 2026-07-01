@@ -105,13 +105,11 @@ OB_DEF_DESERIALIZE(ObPushdownWhiteFilterNode)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected inited column exprs array", K(ret));
     } else if (OB_FAIL(column_exprs_.init(1))) {
-      LOG_WARN("failed to init column exprs array", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < expr_->arg_cnt_; i++) {
       ObExpr *e = expr_->args_[i];
       if (nullptr != e && e->type_ == T_REF_COLUMN) {
         if (OB_FAIL(column_exprs_.push_back(e))) {
-          LOG_WARN("failed to push back col expr", K(ret));
         }
       }
     }
@@ -147,17 +145,12 @@ int ObPushdownBlackFilterNode::merge(ObIArray<ObPushdownFilterNode*> &merged_nod
   if (0 < filter_exprs_.count()) {
     common::ObArray<ObExpr *> tmp_expr;
     if (OB_FAIL(tmp_expr.assign(filter_exprs_))) {
-      LOG_WARN("failed to assign filter exprs", K(ret));
     } else if (FALSE_IT(filter_exprs_.reuse())) {
     } else if (OB_FAIL(filter_exprs_.init(tmp_expr.count() + merge_expr_count))) {
-      LOG_WARN("failed to init filter exprs", K(ret));
     } else if (OB_FAIL(filter_exprs_.assign(tmp_expr))) {
-      LOG_WARN("failed to assign filter exprs", K(ret));
     }
   } else if (OB_FAIL(filter_exprs_.init(1 + merge_expr_count))) {
-    LOG_WARN("failed to init exprs", K(ret));
   } else if (OB_FAIL(filter_exprs_.push_back(tmp_expr_))) {
-    LOG_WARN("failed to push back expr", K(ret));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < merged_node.count(); ++i) {
@@ -165,14 +158,12 @@ int ObPushdownBlackFilterNode::merge(ObIArray<ObPushdownFilterNode*> &merged_nod
     if (!black_node->filter_exprs_.empty()) {
       for (int64_t idx = 0; OB_SUCC(ret) && idx < black_node->filter_exprs_.count(); idx++) {
         if (OB_FAIL(filter_exprs_.push_back(black_node->filter_exprs_.at(idx)))) {
-          LOG_WARN("failed to push back expr", K(ret));
         }
       }
     } else if (OB_ISNULL(black_node->tmp_expr_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected status: exprs must be only one", K(ret));
     } else if (OB_FAIL(filter_exprs_.push_back(black_node->tmp_expr_))) {
-      LOG_WARN("failed to push back expr", K(ret));
     }
   }
   return ret;
@@ -416,41 +407,31 @@ int ObPushdownFilterConstructor::create_black_filter_node(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid null raw expr", K(ret));
   } else if (OB_FAIL(static_cg_.generate_rt_expr(*raw_expr, expr))) {
-    LOG_WARN("failed to generate rt expr", K(ret));
   } else if (OB_FAIL(ObRawExprUtils::extract_column_exprs_and_rowscn(raw_expr, column_exprs))) {
-    LOG_WARN("failed to extract column exprs", K(ret));
   } else if (OB_FAIL(factory_.alloc(PushdownFilterType::BLACK_FILTER, 0, filter_node))) {
-    LOG_WARN("failed t o alloc pushdown filter", K(ret));
   } else if (OB_ISNULL(filter_node)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("black filter node is null", K(ret));
   } else if (FALSE_IT(black_filter_node = static_cast<ObPushdownBlackFilterNode*>(filter_node))) {
   } else if (OB_FAIL(get_black_filter_monotonicity(raw_expr, column_exprs, black_filter_node))) {
-    LOG_WARN("failed to get black filter monotonicity", K(ret));
   } else if (0 < column_exprs.count()) {
     if (OB_FAIL(black_filter_node->col_ids_.init(column_exprs.count()))) {
-      LOG_WARN("failed to init col ids", K(ret));
     } else if (OB_FAIL(black_filter_node->column_exprs_.init(column_exprs.count()))) {
-      LOG_WARN("failed to init column exprs", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < column_exprs.count(); ++i) {
       ObRawExpr *sub_raw_expr = column_exprs.at(i);
       ObExpr *sub_expr = nullptr;
       if (T_ORA_ROWSCN == sub_raw_expr->get_expr_type()) {
          if (OB_FAIL(black_filter_node->col_ids_.push_back(common::OB_HIDDEN_TRANS_VERSION_COLUMN_ID))) {
-           LOG_WARN("failed to push back column id", K(ret));
          }
       } else {
         ObColumnRefRawExpr *ref_expr = static_cast<ObColumnRefRawExpr*>(sub_raw_expr);
         if (OB_FAIL(black_filter_node->col_ids_.push_back(ref_expr->get_column_id()))) {
-          LOG_WARN("failed to push back column id", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(static_cg_.generate_rt_expr(*sub_raw_expr, sub_expr))) {
-        LOG_WARN("failed to generate rt expr", K(ret));
       } else if (OB_FAIL(black_filter_node->column_exprs_.push_back(sub_expr))) {
-        LOG_WARN("failed to push back column expr", K(ret));
       }
     }
   } else {
@@ -477,7 +458,6 @@ int ObPushdownFilterConstructor::get_black_filter_monotonicity(
     PushdownFilterMonotonicity mono;
     if (OB_FAIL(op_->get_filter_monotonicity(raw_expr, static_cast<ObColumnRefRawExpr *>(column_exprs.at(0)),
                                              mono, tmp_exprs))) {
-      LOG_WARN("Failed to get filter monotonicity", K(ret), KPC(raw_expr), K(column_exprs));
     } else if (OB_UNLIKELY(mono < MON_NON || mono > MON_EQ_DESC)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Unexpected filter monotonicity", K(mono));
@@ -487,9 +467,7 @@ int ObPushdownFilterConstructor::get_black_filter_monotonicity(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Unexpected expr count", K(ret), K(tmp_exprs));
     } else if (OB_FAIL(black_filter_node->assist_exprs_.init(2))) {
-      LOG_WARN("Failed to init assist exprs", K(ret));
     } else if (OB_FAIL(static_cg_.generate_rt_exprs(tmp_exprs, black_filter_node->assist_exprs_))) {
-      LOG_WARN("Failed to generate rt exprs", K(ret), K(tmp_exprs));
     }
     LOG_TRACE("[PUSHDOWN] check black filter monotonicity", K(ret), KPC(raw_expr), K(column_exprs), KPC(black_filter_node));
   }
@@ -516,7 +494,6 @@ int ObPushdownFilterConstructor::create_white_or_dynamic_filter_node(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected null alloc", K(ret));
   } else if (OB_FAIL(static_cg_.generate_rt_expr(*raw_expr, expr))) {
-    LOG_WARN("Failed to generate rt expr", K(ret));
   } else if (DYNAMIC_FILTER == type &&
       OB_FAIL(column_exprs.assign(static_cast<ObOpRawExpr *>(raw_expr)->get_param_exprs()))) {
     // for runtime filter, the param_exprs must be column_exprs
@@ -527,16 +504,12 @@ int ObPushdownFilterConstructor::create_white_or_dynamic_filter_node(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected white filter expr, col_idx greater than column exprs count", K(col_idx), K(column_exprs.count()));
   } else if (OB_FAIL(factory_.alloc(type, 0, filter_node))) {
-    LOG_WARN("Failed t o alloc pushdown filter", K(ret));
   } else if (OB_ISNULL(filter_node)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("White filter node is null", K(ret));
   } else if (FALSE_IT(white_filter_node = static_cast<ClassT *>(filter_node))) {
   } else if (OB_FAIL(white_filter_node->set_op_type(*raw_expr))) {
-    LOG_WARN("Failed to set white filter op type", K(ret), K(type), K(raw_expr->get_expr_type()),
-             K(raw_expr->get_runtime_filter_type()));
   } else if (OB_FAIL(white_filter_node->column_exprs_.init(column_exprs.count()))) {
-    LOG_WARN("failed to init column exprs", K(ret), K(type));
   } else if (SEMISTRUCT_FILTER == type && OB_FAIL(init_semistruct_filter_node(filter_node, raw_expr))) {
     LOG_WARN("failed to init semistruct filter", K(ret), K(type));
   } else {
@@ -550,13 +523,9 @@ int ObPushdownFilterConstructor::create_white_or_dynamic_filter_node(
     ObRawExpr *sub_raw_expr = column_exprs.at(col_idx);
     ObColumnRefRawExpr *sub_ref_expr = static_cast<ObColumnRefRawExpr *>(sub_raw_expr);
     if (OB_FAIL(white_filter_node->col_ids_.init(column_exprs.count()))) {
-      LOG_WARN("Failed to init col ids", K(ret));
     } else if (OB_FAIL(white_filter_node->col_ids_.push_back(sub_ref_expr->get_column_id()))) {
-      LOG_WARN("Failed to push back col id", K(ret));
     } else if (OB_FAIL(static_cg_.generate_rt_expr(*sub_raw_expr, sub_expr))) {
-      LOG_WARN("failed to generate rt expr", K(ret));
     } else if (OB_FAIL(white_filter_node->column_exprs_.push_back(sub_expr))) {
-      LOG_WARN("failed to push back column expr", K(ret));
     }
   }
 
@@ -589,7 +558,6 @@ int ObPushdownFilterConstructor::init_semistruct_filter_node(ObPushdownFilterNod
   } else {
     ObSemiStructWhiteFilterNode* semistruct_node = static_cast<ObSemiStructWhiteFilterNode *>(filter_node);
     if (OB_FAIL(ObJsonExprHelper::get_sub_column_path_from_json_expr(*alloc_, *child, semistruct_node->get_sub_col_path()))) {
-      LOG_WARN("get sub column path fail", K(ret), KPC(semistruct_node));
     }
   }
   return ret;
@@ -611,7 +579,6 @@ int ObPushdownFilterConstructor::merge_filter_node(
         && !static_cast<ObPushdownBlackFilterNode *>(other)->is_monotonic())
     {
       if (OB_FAIL(merged_node.push_back(other))) {
-        LOG_WARN("failed to push back", K(ret));
       }
       merged = true;
       LOG_DEBUG("[PUSHDOWN] merged filter", K(dst->get_col_ids()));
@@ -629,7 +596,6 @@ int ObPushdownFilterConstructor::deduplicate_filter_node(
     for (int64_t j = i + 1; j < filter_nodes.count() && OB_SUCC(ret); ++j) {
       bool merged = false;
       if (OB_FAIL(merge_filter_node(filter_nodes.at(i), filter_nodes.at(j), merged_node, merged))) {
-        LOG_WARN("failed to merge filter node", K(ret));
       } else if (merged) {
         filter_nodes.at(j) = nullptr;
         --n_node;
@@ -640,7 +606,6 @@ int ObPushdownFilterConstructor::deduplicate_filter_node(
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("filter node is null", K(ret), K(i));
       } else if (OB_FAIL(filter_nodes.at(i)->merge(merged_node))) {
-        LOG_WARN("failed to merge filter node", K(ret));
       }
     }
   }
@@ -661,9 +626,7 @@ int ObPushdownFilterConstructor::generate_and_deduplicate(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("raw expr is null", K(ret));
     } else if (OB_FAIL(generate(raw_expr, sub_filter_node))) {
-      LOG_WARN("failed to generate filter node from raw expr", K(ret));
     } else if (OB_FAIL(filter_nodes.push_back(sub_filter_node))) {
-      LOG_WARN("failed to push back filter node", K(ret));
     }
   }
   valid_nodes = (uint32_t)filter_nodes.count();
@@ -713,7 +676,6 @@ int ObPushdownFilterConstructor::remove_runtime_filter_root_node(
         if (and_node->is_runtime_filter_root_node_) {
           for (int j = 0; j < and_node->n_child_ && OB_SUCC(ret); ++j) {
             if (OB_FAIL(filter_nodes.push_back(and_node->childs_[j]))) {
-              LOG_WARN("failed to push back");
             }
           }
           if (OB_SUCC(ret)) {
@@ -758,16 +720,13 @@ int ObPushdownFilterConstructor::split_multi_cols_runtime_filter(
     } else if (OB_FAIL((
         create_white_or_dynamic_filter_node<ObPushdownDynamicFilterNode, PushdownFilterType::DYNAMIC_FILTER>(
             raw_expr, sub_filter_node, i)))) {
-      LOG_WARN("failed to generate filter node from raw expr", K(ret));
     } else if (OB_FAIL(tmp_filter_nodes.push_back(sub_filter_node))) {
-      LOG_WARN("failed to push back filter node", K(ret));
     } else if (i == raw_expr->get_param_count() - 1) {
       static_cast<ObPushdownDynamicFilterNode *>(sub_filter_node)->set_last_child(true);
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(factory_.alloc(PushdownFilterType::AND_FILTER, tmp_filter_nodes.count(), and_filter_node))) {
-      LOG_WARN("failed t o alloc pushdown filter node", K(ret));
     } else if (OB_ISNULL(and_filter_node)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Unexpected null filter node", K(ret));
@@ -776,7 +735,6 @@ int ObPushdownFilterConstructor::split_multi_cols_runtime_filter(
       uint32_t n_node = 0;
       for (int64_t i = 0; OB_SUCC(ret) && i < tmp_filter_nodes.count(); ++i) {
         if (OB_FAIL(tmp_filter_nodes.at(i)->postprocess())) {
-          LOG_WARN("failed to postprocess tmp_filter", K(ret));
         } else {
           and_filter_node->childs_[n_node] = tmp_filter_nodes.at(i);
           ++n_node;
@@ -813,25 +771,20 @@ int ObPushdownFilterConstructor::generate(ObRawExpr *raw_expr, ObPushdownFilterN
     ObOpRawExpr *op_raw_expr = static_cast<ObOpRawExpr *>(raw_expr);
     if (op_raw_expr->get_param_count() > 1) {
       if (OB_FAIL(split_multi_cols_runtime_filter(op_raw_expr, filter_node))) {
-        LOG_WARN("Failed to split_multi_cols_runtime_filter", K(ret), K(raw_expr->get_expr_type()));
       }
     } else if (OB_FAIL((create_white_or_dynamic_filter_node<ObPushdownDynamicFilterNode, PushdownFilterType::DYNAMIC_FILTER>(
         raw_expr, filter_node)))) {
-      LOG_WARN("Failed to create dynamic pushdown filter node", K(ret), K(raw_expr->get_expr_type()));
     } else {
       static_cast<ObPushdownDynamicFilterNode *>(filter_node)->set_last_child(true);
     }
   } else if (OB_FAIL(is_white_mode(raw_expr, is_white, is_semistruct_white))) {
-    LOG_WARN("Failed to get filter type", K(ret));
   } else if (is_white) {
     if (is_semistruct_white) {
       if (OB_FAIL((create_white_or_dynamic_filter_node<ObSemiStructWhiteFilterNode, PushdownFilterType::SEMISTRUCT_FILTER>(
         raw_expr, filter_node)))) {
-        LOG_WARN("Failed to create white pushdown filter node", K(ret), K(raw_expr->get_expr_type()));
       }
     } else if (OB_FAIL((create_white_or_dynamic_filter_node<ObPushdownWhiteFilterNode, PushdownFilterType::WHITE_FILTER>(
         raw_expr, filter_node)))) {
-      LOG_WARN("Failed to create white pushdown filter node", K(ret), K(raw_expr->get_expr_type()));
     }
   } else if (FALSE_IT(op_type = raw_expr->get_expr_type())) {
   } else if (T_OP_OR == op_type || T_OP_AND == op_type) {
@@ -841,12 +794,10 @@ int ObPushdownFilterConstructor::generate(ObRawExpr *raw_expr, ObPushdownFilterN
     ObArray<ObPushdownFilterNode*> tmp_filter_nodes;
     for (int64_t i = 0; OB_SUCC(ret) && i < children; i++) {
       if (OB_FAIL(children_exprs.push_back(raw_expr->get_param_expr(i)))) {
-        LOG_WARN("failed to push back expr", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(generate_and_deduplicate(children_exprs, tmp_filter_nodes, valid_nodes, T_OP_AND == op_type))) {
-      LOG_WARN("Failed to generate filter node from exprs", K(ret));
     } else if (OB_UNLIKELY(0 >= valid_nodes)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("Unexpected generated valid nodes", K(ret), K(valid_nodes));
@@ -855,17 +806,14 @@ int ObPushdownFilterConstructor::generate(ObRawExpr *raw_expr, ObPushdownFilterN
     } else {
       if (T_OP_OR == op_type) {
         if (OB_FAIL(factory_.alloc(PushdownFilterType::OR_FILTER, valid_nodes, filter_node))) {
-          LOG_WARN("Failed t o alloc or pushdown filter node", K(ret), K(valid_nodes));
         }
       } else if (OB_FAIL(factory_.alloc(PushdownFilterType::AND_FILTER, valid_nodes, filter_node))) {
-        LOG_WARN("Failed t o alloc or pushdown filter node", K(ret), K(valid_nodes));
       }
       uint32_t n_node = 0;
       for (int64_t i = 0; OB_SUCC(ret) && i < tmp_filter_nodes.count(); ++i) {
         if (nullptr != tmp_filter_nodes.at(i)) {
           if (n_node < valid_nodes) {
             if (OB_FAIL(tmp_filter_nodes.at(i)->postprocess())) {
-              LOG_WARN("failed to postprocess tmp_filter", K(ret));
             } else {
               filter_node->childs_[n_node] = tmp_filter_nodes.at(i);
               ++n_node;
@@ -878,7 +826,6 @@ int ObPushdownFilterConstructor::generate(ObRawExpr *raw_expr, ObPushdownFilterN
       }
     }
   } else if (OB_FAIL(create_black_filter_node(raw_expr, filter_node))) {
-    LOG_WARN("Failed to create black pushdown filter node", K(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -902,16 +849,13 @@ int ObPushdownFilterConstructor::apply(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected status: alloc is null", K(ret), KP(alloc_));
   } else if (OB_FAIL(generate_and_deduplicate(exprs, tmp_filter_nodes, valid_nodes, true))) {
-    LOG_WARN("Failed to generate filter node from exprs", K(ret));
   } else if (OB_UNLIKELY(0 >= valid_nodes)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected generated valid nodes", K(ret), K(valid_nodes));
   } else if (1 == valid_nodes) {
     filter_node = tmp_filter_nodes.at(0);
   } else if (OB_FAIL(remove_runtime_filter_root_node(tmp_filter_nodes, valid_nodes))) {
-    LOG_WARN("failed to remove_runtime_filter_root_node");
   } else if (OB_FAIL(factory_.alloc(PushdownFilterType::AND_FILTER, valid_nodes, filter_node))) {
-    LOG_WARN("failed t o alloc pushdown filter node", K(ret));
   } else if (OB_ISNULL(filter_node)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected null filter node", K(ret));
@@ -921,7 +865,6 @@ int ObPushdownFilterConstructor::apply(
       if (nullptr != tmp_filter_nodes.at(i)) {
         if (n_node < valid_nodes) {
           if (OB_FAIL(tmp_filter_nodes.at(i)->postprocess())) {
-            LOG_WARN("failed to postprocess tmp_filter", K(ret));
           } else {
             filter_node->childs_[n_node] = tmp_filter_nodes.at(i);
             ++n_node;
@@ -958,7 +901,6 @@ int ObPushdownFilterFactory::alloc(PushdownFilterType type, uint32_t n_child, Ob
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid filter type to alloc", K(ret), K(type));
   } else if (OB_FAIL(ObPushdownFilterFactory::PD_FILTER_ALLOC[type](*alloc_, n_child, pd_filter))) {
-    LOG_WARN("fail to alloc pushdown filter", K(ret), K(type));
   } else {
   }
   return ret;
@@ -1009,7 +951,6 @@ int ObPushdownFilterFactory::alloc(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid filter type to alloc", K(ret), K(type));
   } else if (OB_FAIL(ObPushdownFilterFactory::FILTER_EXECUTOR_ALLOC[type](*alloc_, n_child, filter_node, filter_executor, op))) {
-    LOG_WARN("fail to alloc pushdown filter", K(ret), K(type));
   } else {
   }
   return ret;
@@ -1054,16 +995,12 @@ int ObPushdownFilter::serialize_pushdown_filter(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("pd filter is null", K(ret));
   } else if (OB_FAIL(serialization::encode_vi32(buf, buf_len, pos, pd_storage_filter->type_))) {
-    LOG_WARN("fail to encode op type", K(ret));
   } else if (OB_FAIL(serialization::encode(buf, buf_len, pos, pd_storage_filter->n_child_))) {
-    LOG_WARN("fail to encode op type", K(ret));
   } else if (OB_FAIL(pd_storage_filter->serialize(buf, buf_len, pos))) {
-    LOG_WARN("fail to encode", K(ret));
   } else {
     for (int64_t i = 0; i < pd_storage_filter->n_child_ && OB_SUCC(ret); ++i) {
       if (OB_FAIL(serialize_pushdown_filter(
                   buf, buf_len, pos, pd_storage_filter->childs_[i]))) {
-        LOG_WARN("failed to serialize pushdown storage filter", K(ret));
       }
     }
   }
@@ -1081,21 +1018,16 @@ int ObPushdownFilter::deserialize_pushdown_filter(
   int32_t filter_type;
   uint32_t child_cnt = 0;
   if (OB_FAIL(serialization::decode_vi32(buf, data_len, pos, &filter_type))) {
-    LOG_WARN("fail to decode phy operator type", K(ret));
   } else if (OB_FAIL(serialization::decode(buf, data_len, pos, child_cnt))) {
-    LOG_WARN("fail to encode op type", K(ret));
   } else {
     if (OB_FAIL(filter_factory.alloc(
                 static_cast<PushdownFilterType>(filter_type), child_cnt, pd_storage_filter))) {
-      LOG_WARN("failed to allocate filter", K(ret));
     } else if (OB_FAIL(pd_storage_filter->deserialize(buf, data_len, pos))) {
-      LOG_WARN("failed to deserialize", K(ret));
     } else if (0 < child_cnt) {
       for (uint32_t i = 0; i < child_cnt && OB_SUCC(ret); ++i) {
         ObPushdownFilterNode *sub_pd_storage_filter = nullptr;
         if (OB_FAIL(deserialize_pushdown_filter(
                     filter_factory, buf, data_len, pos, sub_pd_storage_filter))) {
-          LOG_WARN("failed to deserialize child", K(ret));
         } else {
           pd_storage_filter->childs_[i] = sub_pd_storage_filter;
         }
@@ -1133,13 +1065,10 @@ OB_DEF_SERIALIZE(ObPushdownFilter)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(filter_tree_)) {
     if (OB_FAIL(serialization::encode(buf, buf_len, pos, false))) {
-      LOG_WARN("fail to encode op type", K(ret));
     }
   } else {
     if (OB_FAIL(serialization::encode(buf, buf_len, pos, true))) {
-      LOG_WARN("fail to encode op type", K(ret));
     } else if (OB_FAIL(serialize_pushdown_filter(buf, buf_len, pos, filter_tree_))) {
-      LOG_WARN("failed to serialize pushdown filter", K(ret));
     }
   }
   return ret;
@@ -1151,11 +1080,9 @@ OB_DEF_DESERIALIZE(ObPushdownFilter)
   bool has_filter = false;
   filter_tree_ = nullptr;
   if (OB_FAIL(serialization::decode(buf, data_len, pos, has_filter))) {
-    LOG_WARN("fail to encode op type", K(ret));
   } else if (has_filter) {
     ObPushdownFilterFactory filter_factory(&alloc_);
     if (OB_FAIL(deserialize_pushdown_filter(filter_factory, buf, data_len, pos, filter_tree_))) {
-      LOG_WARN("failed to deserialize pushdown filter", K(ret));
     }
   }
   return ret;
@@ -1209,11 +1136,9 @@ int ObPushdownFilterExecutor::find_evaluated_datums(
   int ret = OB_SUCCESS;
   if (is_contain(calc_exprs, expr)) {
     if (OB_FAIL(eval_exprs.push_back(expr))) {
-      LOG_WARN("failed to push back expr", K(ret));
     }
     for (uint32_t i = 0; i < expr->arg_cnt_ && OB_SUCC(ret); ++i) {
       if (OB_FAIL(find_evaluated_datums(expr->args_[i], calc_exprs, eval_exprs))) {
-        LOG_WARN("failed to find evaluated datums", K(ret));
       }
     }
   }
@@ -1228,7 +1153,6 @@ int ObPushdownFilterExecutor::find_evaluated_datums(
   int ret = OB_SUCCESS;
   for (uint32_t i = 0; i < src_exprs.count() && OB_SUCC(ret); ++i) {
     if (OB_FAIL(find_evaluated_datums(src_exprs.at(i), calc_exprs, eval_exprs))) {
-      LOG_WARN("failed to find evaluated datums", K(ret));
     }
   }
   return ret;
@@ -1240,7 +1164,6 @@ int ObPushdownFilterExecutor::init_bitmap(const int64_t row_count, common::ObBit
   void *buf = nullptr;
   if (OB_NOT_NULL(filter_bitmap_)) {
     if (OB_FAIL(filter_bitmap_->reserve(row_count))) {
-      LOG_WARN("Failed to expand size of filter bitmap", K(ret));
     } else if (FALSE_IT(filter_bitmap_->reuse(is_logic_and_node()))) {
     }
   } else {
@@ -1249,7 +1172,6 @@ int ObPushdownFilterExecutor::init_bitmap(const int64_t row_count, common::ObBit
       LOG_WARN("Failed to alloc memory for filter bitmap", K(ret));
     } else if (FALSE_IT(filter_bitmap_ = new (buf) ObBitmap(allocator_))) {
     } else if (OB_FAIL(filter_bitmap_->init(row_count, is_logic_and_node()))) {
-      LOG_WARN("Failed to init result bitmap", K(ret));
     }
   }
 
@@ -1272,11 +1194,8 @@ int ObPushdownFilterExecutor::init_filter_param(
   if (is_filter_node()) {
     if (0 == col_count) {
     } else if (OB_FAIL(init_array_param(col_params_, col_count))) {
-      LOG_WARN("Fail to init col params", K(ret), K(col_count));
     } else if (OB_FAIL(init_array_param(col_offsets_, col_count))) {
-      LOG_WARN("Fail to init col offsets", K(ret), K(col_count));
     } else if (OB_FAIL(init_array_param(default_datums_, col_count))) {
-      LOG_WARN("Fail to init default datums", K(ret), K(col_count));
     } else {
       const share::schema::ObColumnParam *col_param = nullptr;
       for (int64_t i = 0; OB_SUCC(ret) && i < col_count; i++) {
@@ -1295,21 +1214,17 @@ int ObPushdownFilterExecutor::init_filter_param(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Unexpected idx found", K(ret));
         } else if (OB_FAIL(col_offsets_.push_back(idx))) {
-          LOG_WARN("failed to push back col offset", K(ret));
         } else {
           blocksstable::ObStorageDatum default_datum;
           col_param = col_params.at(idx);
           const common::ObObj &def_cell = col_param->get_orig_default_value();
           const common::ObObjMeta &obj_meta = col_param->get_meta_type();
           if (OB_FAIL(col_params_.push_back(col_param))) {
-            LOG_WARN("failed to push back col param", K(ret));
           } else if (!def_cell.is_nop_value()) {
             if (OB_FAIL(default_datum.from_obj(def_cell))) {
-              LOG_WARN("convert obj to datum failed", K(ret), K(col_params_.count()), K(def_cell));
             } else if (!def_cell.is_null()) {
               if (need_padding && obj_meta.is_fixed_len_char_type()) {
                 if (OB_FAIL(storage::pad_column(obj_meta, col_param->get_accuracy(), allocator_, default_datum))) {
-                  LOG_WARN("failed to pad column", K(ret), K(i), K(idx), K(obj_meta), K(default_datum));
                 }
               } else if (obj_meta.is_lob_storage()) {
                 // lob def value must have no lob header when not null
@@ -1317,7 +1232,6 @@ int ObPushdownFilterExecutor::init_filter_param(
                 ObString data = default_datum.get_string();
                 ObString out;
                 if (OB_FAIL(ObLobManager::fill_lob_header(allocator_, data, out))) {
-                  LOG_WARN("failed to fill lob header for column", K(ret), K(idx), K(def_cell), K(data));
                 } else {
                   default_datum.set_string(out);
                 }
@@ -1326,7 +1240,6 @@ int ObPushdownFilterExecutor::init_filter_param(
           }
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(default_datums_.push_back(default_datum))) {
-            LOG_WARN("Fail to push back default datum", K(ret));
           }
         }
       }
@@ -1361,20 +1274,13 @@ int ObPushdownFilterExecutor::init_co_filter_param(const ObTableIterParam &iter_
   } else if (is_filter_node()) {
     if (0 == col_count) {
       if (OB_FAIL(init_array_param(cg_idxs_, 1))) {
-        LOG_WARN("Fail to init cg idxs", K(ret), K(col_count));
       } else if (OB_FAIL(cg_idxs_.push_back(OB_CS_VIRTUAL_CG_IDX))) {
-        LOG_WARN("Failed to push back cg idx", K(ret));
       }
     } else if (OB_FAIL(init_array_param(col_params_, col_count))) {
-      LOG_WARN("Fail to init col params", K(ret), K(col_count));
     } else if (OB_FAIL(init_array_param(col_offsets_, col_count))) {
-      LOG_WARN("Fail to init col offsets", K(ret), K(col_count));
     } else if (OB_FAIL(init_array_param(cg_col_offsets_, col_count))) {
-      LOG_WARN("Fail to init cg col offsets", K(ret), K(col_count));
     } else if (OB_FAIL(init_array_param(cg_idxs_, col_count))) {
-      LOG_WARN("Fail to init col offsets", K(ret), K(col_count));
     } else if (OB_FAIL(init_array_param(default_datums_, col_count))) {
-      LOG_WARN("Fail to init default datums", K(ret), K(col_count));
     } else if (FALSE_IT(cg_exprs = get_cg_col_exprs())) {
     } else if (nullptr != cg_exprs && OB_FAIL(cg_col_exprs_.assign(*cg_exprs))) {
       LOG_WARN("Fail to assign cg exprs", K(ret), KPC(cg_exprs));
@@ -1399,11 +1305,8 @@ int ObPushdownFilterExecutor::init_co_filter_param(const ObTableIterParam &iter_
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Unexpected result", K(ret), K(col_pos), K(cg_idx), K(col_ids.at(i)));
         } else if (OB_FAIL(col_offsets_.push_back(col_pos))) {
-          LOG_WARN("failed to push back col offset", K(ret));
-        } else if (OB_FAIL(cg_col_offsets_.push_back(0))) { // TODO: fix this later, use col index when multi cols contained in cg table
-          LOG_WARN("failed to push back col offset", K(ret));
+        } else if (OB_FAIL(cg_col_offsets_.push_back(0))) {
         } else if (OB_FAIL(cg_idxs_.push_back(cg_idx))) {
-          LOG_WARN("Failed to push back cg idx", K(ret), K(cg_idx));
         } else {
           const share::schema::ObColumnParam *cg_col_param = nullptr;
           blocksstable::ObStorageDatum default_datum;
@@ -1412,17 +1315,14 @@ int ObPushdownFilterExecutor::init_co_filter_param(const ObTableIterParam &iter_
           cg_col_param = col_param;
 
           if (OB_FAIL(col_params_.push_back(cg_col_param))) {
-            LOG_WARN("failed to push back col param", K(ret));
           } else if (!def_cell.is_nop_value()) {
             if (OB_FAIL(default_datum.from_obj(def_cell))) {
-              LOG_WARN("convert obj to datum failed", K(ret), K(col_params_.count()), K(def_cell));
             } else if (obj_meta.is_lob_storage() && !def_cell.is_null()) {
               // lob def value must have no lob header when not null
               // When do lob pushdown, should add lob header for default value
               ObString data = default_datum.get_string();
               ObString out;
               if (OB_FAIL(ObLobManager::fill_lob_header(allocator_, data, out))) {
-                LOG_WARN("failed to fill lob header for column", K(ret), K(col_pos), K(def_cell), K(data));
               } else {
                 default_datum.set_string(out);
               }
@@ -1430,7 +1330,6 @@ int ObPushdownFilterExecutor::init_co_filter_param(const ObTableIterParam &iter_
           }
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(default_datums_.push_back(default_datum))) {
-            LOG_WARN("Fail to push back default datum", K(ret));
           }
           LOG_DEBUG("[COLUMNSTORE] extract one cg idx", K(ret), KPC(read_info), K(col_pos), K(cg_idx), KPC(cg_col_param));
         }
@@ -1457,7 +1356,6 @@ int ObPushdownFilterExecutor::set_cg_param(const common::ObIArray<uint32_t> &cg_
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL((cg_idxs_.assign(cg_idxs)))) {
-    LOG_WARN("Failed to assign cg_idxs", K(ret), K(cg_idxs), K(cg_idxs_));
   } else if (!exprs.empty() && OB_FAIL(cg_col_exprs_.assign(exprs))) {
     LOG_WARN("Failed to assign cg_exprs", K(ret), K(exprs));
   }
@@ -1476,7 +1374,6 @@ int ObPushdownFilterExecutor::execute(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), K(filter_info.start_), K(filter_info.count_));
   } else if (OB_FAIL(init_bitmap(filter_info.count_, result))) {
-    LOG_WARN("Failed to get filter bitmap", K(ret));
   } else if (OB_ISNULL(result)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected null filter bitmap", K(ret));
@@ -1484,12 +1381,10 @@ int ObPushdownFilterExecutor::execute(
     LOG_WARN("Failed to check parent blockscan", K(ret));
   } else if (is_filter_node()) {
     if (OB_FAIL(do_filter(parent, filter_info, micro_scanner, use_vectorize, *result))) {
-      LOG_WARN("Fail to do filter", K(ret));
     }
   } else if (is_truncate_logic_and_node()) {
     ObTruncateAndFilterExecutor *truncate_and_filter = static_cast<ObTruncateAndFilterExecutor*>(this);
     if (OB_FAIL(truncate_and_filter->execute_logic_filter(filter_info, micro_scanner, false, *result))) {
-      LOG_WARN("Failed to inner execute truncate logic filter", K(ret));
     }
   } else if (is_logic_op_node()) {
     if (OB_UNLIKELY(get_child_count() < 2)) {
@@ -1506,20 +1401,17 @@ int ObPushdownFilterExecutor::execute(
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Unexpected null child filter", K(ret));
         } else if (OB_FAIL(children[i]->execute(this, filter_info, micro_scanner, use_vectorize))) {
-          LOG_WARN("Failed to filter micro block", K(ret), K(i), KP(children[i]));
         } else if (OB_ISNULL(child_result = children[i]->get_result())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("Unexpected get null filter bitmap", K(ret));
         } else {
           if (is_logic_and_node()) {
             if (OB_FAIL(result->bit_and(*child_result))) {
-              LOG_WARN("Failed to merge result bitmap", K(ret), KP(child_result));
             } else if (result->is_all_false()) {
               break;
             }
           } else  {
             if (OB_FAIL(result->bit_or(*child_result))) {
-              LOG_WARN("Failed to merge result bitmap", K(ret), KP(child_result));
             } else if (result->is_all_true()) {
               break;
             }
@@ -1547,7 +1439,6 @@ int ObPushdownFilterExecutor::execute_skipping_filter(ObBoolMask &bm)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Unexpected null child filter", K(ret));
       } else if (OB_FAIL(children[i]->execute_skipping_filter(child_bm))) {
-        LOG_WARN("Fail to execute skipping filter", K(ret), K(i), KP(children[i]));
       } else if (0 == i) {
         bm = child_bm;
       } else if (is_logic_and_node()) {
@@ -1613,7 +1504,6 @@ int ObPushdownFilterExecutor::do_filter(
   } else if (OB_LIKELY(nullptr != micro_scanner)) {
     if (OB_FAIL(micro_scanner->filter_pushdown_filter(parent, this, filter_info,
         use_vectorize, result_bitmap))) {
-      LOG_WARN("Fail to pushdown filter to micro scanner", K(ret));
     } else if (is_filter_dynamic_node()) {
       ObDynamicFilterExecutor *dynamic_filter = static_cast<ObDynamicFilterExecutor *>(this);
       dynamic_filter->filter_on_success(parent);
@@ -1626,7 +1516,6 @@ int ObPushdownFilterExecutor::do_filter(
     LOG_WARN("Unexpected filter node", K(ret), KPC(this));
   } else if ((OB_FAIL((static_cast<ObBlackFilterExecutor*>(this))->filter_batch(parent,
       0, filter_info.count_, result_bitmap)))) {
-    LOG_WARN("failed to filter batch", K(ret));
   }
   if (OB_SUCC(ret) && parent && parent->is_enable_reorder() && filter_info.disable_bypass_) {
     uint64_t popcnt = result_bitmap.popcnt();
@@ -1653,7 +1542,6 @@ int ObPushdownFilterExecutor::pull_up_common_node(
     LOG_WARN("Invalid arguments when pull up common filter node",
               K(ret), K(filter_indexes), K_(n_child));
   } else if (OB_FAIL(build_new_sub_filter_tree(filter_indexes, new_filter_executor))) {
-    LOG_WARN("Failed to build new sub filter tree", K(filter_indexes));
   } else {
     const uint32_t base_idx = filter_indexes.at(0);
     uint32_t pos = base_idx + 1;
@@ -1715,15 +1603,11 @@ int ObPushdownFilterExecutor::build_new_sub_filter_tree(
     uint32_t child_cnt = tmp_filter_nodes.count();
     if (AND_FILTER_EXECUTOR == get_type()) {
       if (OB_FAIL(factory_.alloc(AND_FILTER, child_cnt, filter_node))) {
-        LOG_WARN("Failed to alloc filter node", K(ret), K(get_type()));
       } else if (OB_FAIL(factory_.alloc(AND_FILTER_EXECUTOR, child_cnt, *filter_node, filter_executor, op_))) {
-        LOG_WARN("Failed to alloc filter executor", K(ret), K(get_type()));
       }
     } else {
       if (OB_FAIL(factory_.alloc(OR_FILTER, child_cnt, filter_node))) {
-        LOG_WARN("Failed to alloc filter node", K(ret), K(get_type()));
       } else if (OB_FAIL(factory_.alloc(OR_FILTER_EXECUTOR, child_cnt, *filter_node, filter_executor, op_))) {
-        LOG_WARN("Failed to alloc filter executor", K(ret), K(get_type()));
       }
     }
     if (OB_SUCC(ret)) {
@@ -1812,7 +1696,6 @@ int ObAndFilterExecutor::init_evaluated_datums(bool &is_valid)
   int ret = OB_SUCCESS;
   for (uint32_t i = 0; OB_SUCC(ret) && OB_LIKELY(is_valid) && i < n_child_; ++i) {
     if (OB_FAIL(childs_[i]->init_evaluated_datums(is_valid))) {
-      LOG_WARN("failed to filter child", K(ret), K(i));
     }
   }
   return ret;
@@ -1823,7 +1706,6 @@ int ObOrFilterExecutor::init_evaluated_datums(bool &is_valid)
   int ret = OB_SUCCESS;
   for (uint32_t i = 0; OB_SUCC(ret) && OB_LIKELY(is_valid) && i < n_child_; ++i) {
     if (OB_FAIL(childs_[i]->init_evaluated_datums(is_valid))) {
-      LOG_WARN("failed to filter child", K(ret), K(i));
     }
   }
   return ret;
@@ -1853,7 +1735,6 @@ int ObPhysicalFilterExecutor::filter(blocksstable::ObStorageDatum *datums, int64
     for (int64_t i = 0; OB_SUCC(ret) && i < column_exprs->count(); ++i) {
       ObDatum &expr_datum = column_exprs->at(i)->locate_datum_for_write(eval_ctx);
       if (OB_FAIL(expr_datum.from_storage_datum(datums[i], column_exprs->at(i)->obj_datum_map_))) {
-        LOG_WARN("Failed to convert object from datum", K(ret), K(datums[i]));
       }
     }
     if (OB_SUCC(ret) && OB_FAIL(filter(eval_ctx, skip_bit, filtered))) {
@@ -1879,7 +1760,6 @@ int ObPhysicalFilterExecutor::init_evaluated_datums(bool &is_valid)
     filter_exprs = &(static_cast<ObBlackFilterExecutor *>(this)->get_filter_node().filter_exprs_);
   } else {
     if (OB_FAIL(white_filter_exprs.push_back(static_cast<ObWhiteFilterExecutor *>(this)->get_filter_node().expr_))) {
-      LOG_WARN("Failed to push back filter expr", K(ret));
     } else {
       filter_exprs = &white_filter_exprs;
     }
@@ -1887,10 +1767,8 @@ int ObPhysicalFilterExecutor::init_evaluated_datums(bool &is_valid)
 
   if (OB_FAIL(ret)){
   } else if (OB_FAIL(find_evaluated_datums(*filter_exprs, op_.expr_spec_.calc_exprs_, eval_exprs))) {
-    LOG_WARN("failed to find evaluated datums", K(ret));
   } else if (0 < eval_exprs.count()) {
     if (OB_FAIL(init_eval_param(cur_eval_info_cnt, eval_exprs.count()))) {
-       LOG_WARN("failed to reuse filter param", K(ret));
     }
     FOREACH_CNT_X(e, eval_exprs, OB_SUCC(ret)) {
       eval_infos_[n_eval_infos_++] = &(*e)->get_eval_info(op_.get_eval_ctx());
@@ -1995,9 +1873,7 @@ int ObWhiteFilterExecutor::init_compare_eval_datums(bool &is_valid)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected filter expr", K(ret), KPC(filter_.expr_));
   } else if (OB_FAIL(ObPhysicalFilterExecutor::init_evaluated_datums(is_valid))) {
-    LOG_WARN("Failed to init evaluated datums", K(ret));
   } else if (OB_FAIL(init_array_param(datum_params_, filter_.expr_->arg_cnt_))) {
-    LOG_WARN("Failed to alloc params", K(ret));
   } else {
     null_param_contained_ = false;
     for (int64_t i = 0; OB_SUCC(ret) && i < filter_.expr_->arg_cnt_; i++) {
@@ -2016,9 +1892,7 @@ int ObWhiteFilterExecutor::init_compare_eval_datums(bool &is_valid)
       } else {
         ObDatum *datum = NULL;
         if (OB_FAIL(filter_.expr_->args_[i]->eval(eval_ctx, datum))) {
-          LOG_WARN("evaluate filter arg expr failed", K(ret), K(i));
         } else if (OB_FAIL(datum_params_.push_back(*datum))) {
-          LOG_WARN("Failed to push back datum", K(ret));
         } else {
           param_obj_meta = filter_.expr_->args_[i]->obj_meta_;
           if (is_null_param(*datum, param_obj_meta)) {
@@ -2056,11 +1930,8 @@ int ObWhiteFilterExecutor::init_in_eval_datums(bool &is_valid)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Unexpected filter expr", K(ret), KPC(filter_.expr_), KP(filter_.expr_->args_[0]), KP(filter_.expr_->args_[1]));
   } else if (OB_FAIL(ObPhysicalFilterExecutor::init_evaluated_datums(is_valid))) {
-    LOG_WARN("Failed to init evaluated datums", K(ret));
   } else if (OB_FAIL(init_array_param(datum_params_, filter_.expr_->inner_func_cnt_))) {
-    LOG_WARN("Failed to alloc params", K(ret));
   } else if (OB_FAIL(init_param_set(filter_.expr_->inner_func_cnt_, filter_.expr_->args_[1]->args_[0]))) {
-    LOG_WARN("Failed to init datum set", K(ret));
   } else {
     col_obj_meta = filter_.expr_->args_[0]->obj_meta_;
     null_param_contained_ = false;
@@ -2075,11 +1946,9 @@ int ObWhiteFilterExecutor::init_in_eval_datums(bool &is_valid)
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(cur_arg->eval(eval_ctx, datum))) {
-          LOG_WARN("Evaluate filter arg expr failed", K(ret), K(i));
         } else if (is_null_param(*datum, param_obj_meta)) {
           // skip null in filter IN
         } else if (OB_FAIL(add_to_param_set_and_array(*datum, cur_arg))) {
-          LOG_WARN("Failed to add param to set", K(ret), KPC(datum), K(cur_arg));
         }
       }
     }
@@ -2093,7 +1962,6 @@ int ObWhiteFilterExecutor::init_in_eval_datums(bool &is_valid)
     ObDatumComparator cmp(filter_.expr_->args_[1]->args_[0]->basic_funcs_->null_first_cmp_, ret, mock_equal);
     lib::ob_sort(datum_params_.begin(), datum_params_.end(), cmp);
     if (OB_FAIL(ret)) {
-      LOG_WARN("Failed to sort datums", K(ret));
     } else {
       cmp_func_ = get_datum_cmp_func(col_obj_meta, param_obj_meta);
       // When initializing a parameter set, the corresponding hash and comparison functions of the parameter type are used.
@@ -2112,7 +1980,6 @@ int ObWhiteFilterExecutor::init_param_set(const int64_t count, const ObExpr *par
     param_set_.destroy();
   }
   if (OB_FAIL(param_set_.create(count * 2))) {
-    LOG_WARN("Failed to create hash set", K(ret), K(count));
   } else {
     param_set_.set_hash_and_cmp_func(param_arg->basic_funcs_->murmur_hash_v2_, param_arg->basic_funcs_->null_first_cmp_);
   }
@@ -2129,7 +1996,6 @@ int ObWhiteFilterExecutor::add_to_param_set_and_array(const ObDatum &datum, cons
       ret = OB_SUCCESS;
     }
   } else if (OB_FAIL(datum_params_.push_back(datum))) {
-    LOG_WARN("Failed to add datum to datum array", K(ret), K(datum));
   }
   return ret;
 }
@@ -2140,7 +2006,6 @@ int ObWhiteFilterExecutor::exist_in_set(const ObDatum &datum, bool &is_exist) co
   is_exist = false;
   if (param_set_.count() > 0) {
     if (OB_FAIL(param_set_.exist_refactored(datum, is_exist))) {
-      LOG_WARN("Failed to search datum in param set", K(ret), K(datum));
     }
   }
   return ret;
@@ -2154,7 +2019,6 @@ int ObWhiteFilterExecutor::exist_in_datum_array(const ObDatum &datum, bool &is_e
     ObDatumComparator cmp_rev(cmp_func_, ret, is_exist, true);
     std::lower_bound(datum_params_.begin() + offset, datum_params_.end(), datum, cmp_rev);
     if (OB_FAIL(ret)) {
-      LOG_WARN("Failed to search datum in param array", K(ret), K(datum));
     }
   }
   return ret;
@@ -2178,7 +2042,6 @@ int ObWhiteFilterExecutor::filter(ObEvalCtx &eval_ctx, const sql::ObBitVector &s
   if (!op_.enable_rich_format_) {
     ObDatum *cmp_res = nullptr;
     if (OB_FAIL(filter_.expr_->eval(eval_ctx, cmp_res))) {
-      LOG_WARN("Failed to eval", K(ret));
     } else {
       filtered = is_row_filtered(*cmp_res);
     }
@@ -2186,7 +2049,6 @@ int ObWhiteFilterExecutor::filter(ObEvalCtx &eval_ctx, const sql::ObBitVector &s
     const int64_t batch_idx = eval_ctx.get_batch_idx();
     EvalBound eval_bound(eval_ctx.get_batch_size(), batch_idx, batch_idx + 1, false);
     if (OB_FAIL(filter_.expr_->eval_vector(eval_ctx, skip_bit, eval_bound))) {
-      LOG_WARN("Failed to eval vector", K(ret));
     } else {
       ObIVector *res = filter_.expr_->get_vector(eval_ctx);
       filtered = !res->is_true(batch_idx);
@@ -2218,7 +2080,6 @@ int ObBlackFilterExecutor::filter(ObEvalCtx &eval_ctx, const sql::ObBitVector &s
     ObDatum *cmp_res = nullptr;
     FOREACH_CNT_X(e, filter_.filter_exprs_, OB_SUCC(ret) && !filtered) {
       if (OB_FAIL((*e)->eval(eval_ctx, cmp_res))) {
-        LOG_WARN("failed to filter child", K(ret));
       } else {
         filtered = is_row_filtered(*cmp_res);
       }
@@ -2228,7 +2089,6 @@ int ObBlackFilterExecutor::filter(ObEvalCtx &eval_ctx, const sql::ObBitVector &s
     EvalBound eval_bound(eval_ctx.get_batch_size(), batch_idx, batch_idx + 1, false);
     FOREACH_CNT_X(e, filter_.filter_exprs_, OB_SUCC(ret) && !filtered) {
       if (OB_FAIL((*e)->eval_vector(eval_ctx, skip_bit, eval_bound))) {
-        LOG_WARN("Failed to evaluate vector", K(ret));
       } else {
         ObIVector *res = (*e)->get_vector(eval_ctx);
         filtered = !res->is_true(batch_idx);
@@ -2269,11 +2129,9 @@ int ObBlackFilterExecutor::judge_greater_or_less(
   } else {
     ObDatum &expr_datum = column_expr->locate_datum_for_write(eval_ctx);
     if (OB_FAIL(expr_datum.from_storage_datum(datum, column_expr->obj_datum_map_))) {
-      LOG_WARN("Failed to convert from datum", K(ret), K(datum));
     } else if (!op_.enable_rich_format_) {
       ObDatum *cmp_res = nullptr;
       if (OB_FAIL(assist_expr->eval(eval_ctx, cmp_res))) {
-        LOG_WARN("failed to filter child", K(ret));
       } else {
         ret_val = !is_row_filtered(*cmp_res);
       }
@@ -2281,7 +2139,6 @@ int ObBlackFilterExecutor::judge_greater_or_less(
       const int64_t batch_idx = eval_ctx.get_batch_idx();
       EvalBound eval_bound(eval_ctx.get_batch_size(), batch_idx, batch_idx + 1, true);
       if (OB_FAIL(assist_expr->eval_vector(eval_ctx, skip_bit, eval_bound))) {
-        LOG_WARN("Failed to evaluate vector", K(ret));
       } else {
         ObIVector *res = assist_expr->get_vector(eval_ctx);
         ret_val = res->is_true(batch_idx);
@@ -2305,7 +2162,6 @@ int ObBlackFilterExecutor::get_datums_from_column(common::ObIArray<blocksstable:
   FOREACH_CNT_X(e, filter_.column_exprs_, OB_SUCC(ret)) {
     if (OB_FAIL(datum_infos.push_back(
                 blocksstable::ObSqlDatumInfo((*e)->locate_batch_datums(eval_ctx), (*e))))) {
-      LOG_WARN("fail to push back datum ifno", K(ret));
     }
   }
   return ret;
@@ -2382,7 +2238,6 @@ int ObBlackFilterExecutor::eval_exprs_batch(ObBitVector &skip, const int64_t bsi
         // For black runtime filter, they are in the same BlackFilterExecutor, in filter and bloom
         // filter is mutually exclusive, so we can skip the inactive one here.
       } else if (OB_FAIL((*e)->eval_vector(eval_ctx, skip, bsize, skip.is_all_false(bsize)))) {
-        LOG_WARN("evaluate batch failed", K(ret));
       } else {
         ObIVector *res = (*e)->get_vector(eval_ctx);
         if (VectorFormat::VEC_FIXED == res->get_format()) {
@@ -2403,7 +2258,6 @@ int ObBlackFilterExecutor::eval_exprs_batch(ObBitVector &skip, const int64_t bsi
       }
     } else {
       if (OB_FAIL((*e)->eval_batch(eval_ctx, skip, bsize))) {
-       LOG_WARN("evaluate batch failed", K(ret));
       } else if (!(*e)->is_batch_result()) {
         const ObDatum &d = (*e)->locate_expr_datum(eval_ctx);
         if (is_row_filtered(d)) {
@@ -2458,17 +2312,14 @@ int ObBlackFilterExecutor::filter_batch(
     if (nullptr != parent && parent->need_check_row_filter()) {
       if (OB_FAIL(parent->get_result()->to_bits_mask(start, end, parent->is_logic_and_node(),
                                                       reinterpret_cast<uint8_t *>(skip_bit_->data_)))) {
-        LOG_WARN("failed to transform bytes mask to bit mask", K(start), K(end), KPC(parent->get_result()));
       }
     } else {
       skip_bit_->init(bsize);
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(eval_exprs_batch(*skip_bit_, bsize))) {
-        LOG_WARN("failed to eval batch", K(ret));
       } else if (FALSE_IT(skip_bit_->bit_not(bsize))) {
       } else if (OB_FAIL(result_bitmap.from_bits_mask(start, end, reinterpret_cast<uint8_t *>(skip_bit_->data_)))) {
-        LOG_WARN("failed to set filter result bitmap", K(start), K(end));
       }
     }
   }
@@ -2607,21 +2458,16 @@ int ObDynamicFilterExecutor::try_preparing_data()
   if (OB_FAIL(ret)) {
   } else if (is_data_prepared_) {
     if (OB_FAIL(init_array_param(datum_params_, runtime_filter_params.count()))) {
-      LOG_WARN("Failed to alloc params", K(ret));
     } else if (OB_FAIL(datum_params_.assign(runtime_filter_params))) {
-      LOG_WARN("Failed to assing params for white filter", K(runtime_filter_params));
     } else if (WHITE_OP_IN == get_op_type()){
       bool mock_equal = false;
       ObDatumComparator cmp(get_datum_cmp_func(get_filter_val_meta(), get_filter_val_meta()), ret, mock_equal);
       lib::ob_sort(datum_params_.begin(), datum_params_.end(), cmp);
       if (OB_FAIL(ret)) {
-        LOG_WARN("Failed to sort datums", K(ret));
       } else if (OB_FAIL(init_small_set(runtime_filter_params.count(), hash_func_))) {
-        LOG_WARN("Failed to init small set", K(ret));
       } else {
         for (int i = 0; OB_SUCC(ret) && i < runtime_filter_params.count(); ++i) {
           if (OB_FAIL(add_to_small_set(runtime_filter_params.at(i)))) {
-            LOG_WARN("Failed to add param to set for white filter", K(runtime_filter_params));
           }
         }
       }
@@ -2652,7 +2498,6 @@ int ObDynamicFilterExecutor::try_updating_data()
   if (OB_FAIL(ret)) {
   } else if (is_update) {
     if (OB_FAIL(datum_params_.assign(runtime_filter_params))) {
-      LOG_WARN("Failed to assing params for white filter", K(runtime_filter_params));
     }
   }
   return ret;
@@ -2673,7 +2518,6 @@ int ObDynamicFilterExecutor::init_small_set(const int64_t count, const ObExprHas
   int ret = OB_SUCCESS;
   if (small_set_.created()) {
   } else if (OB_FAIL(small_set_.create(count, hash_func))) {
-    LOG_WARN("Failed to create hash set", K(ret), K(count));
   }
   return ret;
 }
@@ -2697,7 +2541,6 @@ int ObDynamicFilterExecutor::exist_in_set(const ObDatum &datum, bool &is_exist) 
   is_exist = false;
   if (small_set_.count() > 0) {
     if (OB_FAIL(small_set_.exist_datum(datum, is_exist))) {
-      LOG_WARN("Failed to search datum in small set", K(ret), K(datum));
     }
   }
   return ret;
@@ -2726,13 +2569,11 @@ int ObFilterExecutorConstructor::create_filter_executor(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("filter tree is null", K(ret));
   } else if (OB_FAIL(factory_.alloc(type, filter_tree->n_child_, *filter_tree, tmp_filter_executor, op))) {
-    LOG_WARN("failed to alloc pushdown filter", K(ret), K(filter_tree->n_child_));
   } else {
     filter_executor = static_cast<CLASST*>(tmp_filter_executor);
     for (int64_t i = 0; i < filter_tree->n_child_ && OB_SUCC(ret); ++i) {
       ObPushdownFilterExecutor *sub_filter_executor = nullptr;
       if (OB_FAIL(apply(filter_tree->childs_[i], sub_filter_executor, op))) {
-        LOG_WARN("failed to apply filter node", K(ret));
       } else if (OB_ISNULL(sub_filter_executor)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("sub filter executor is null", K(ret));
@@ -2761,42 +2602,36 @@ int ObFilterExecutorConstructor::apply(
       case BLACK_FILTER: {
         ret = create_filter_executor<ObBlackFilterExecutor, BLACK_FILTER_EXECUTOR>(filter_tree, filter_executor, op);
         if (OB_FAIL(ret)) {
-          LOG_WARN("failed to create filter executor", K(ret));
         }
         break;
       }
       case WHITE_FILTER: {
         ret = create_filter_executor<ObWhiteFilterExecutor, WHITE_FILTER_EXECUTOR>(filter_tree, filter_executor, op);
         if (OB_FAIL(ret)) {
-          LOG_WARN("failed to create filter executor", K(ret));
         }
         break;
       }
       case DYNAMIC_FILTER: {
         ret = create_filter_executor<ObDynamicFilterExecutor, DYNAMIC_FILTER_EXECUTOR>(filter_tree, filter_executor, op);
         if (OB_FAIL(ret)) {
-          LOG_WARN("failed to create filter executor", K(ret));
         }
         break;
       }
       case AND_FILTER: {
         ret = create_filter_executor<ObAndFilterExecutor, AND_FILTER_EXECUTOR>(filter_tree, filter_executor, op);
         if (OB_FAIL(ret)) {
-          LOG_WARN("failed to create filter executor", K(ret));
         }
         break;
       }
       case OR_FILTER: {
         ret = create_filter_executor<ObOrFilterExecutor, OR_FILTER_EXECUTOR>(filter_tree, filter_executor, op);
         if (OB_FAIL(ret)) {
-          LOG_WARN("failed to create filter executor", K(ret));
         }
         break;
       }
       case SEMISTRUCT_FILTER: {
         ret = create_filter_executor<ObSemiStructWhiteFilterExecutor, SEMISTRUCT_FILTER_EXECUTOR>(filter_tree, filter_executor, op);
         if (OB_FAIL(ret)) {
-          LOG_WARN("failed to create filter executor", K(ret));
         }
         break;
       }
@@ -2922,7 +2757,6 @@ int ObPushdownOperator::init_pushdown_storage_filter()
       if (OB_FAIL(filter_exec_constructor.apply(expr_spec_.pd_storage_filters_.get_pushdown_filter(),
                                                 pd_storage_filters_,
                                                 *this))) {
-        LOG_WARN("failed to create filter executor", K(ret));
       } else if (OB_ISNULL(pd_storage_filters_)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("filter executor is null", K(ret));
@@ -2941,7 +2775,6 @@ int ObPushdownOperator::reset_trans_info_datum()
                   eval_ctx_,
                   VectorFormat::VEC_UNIFORM,
                   expr_spec_.trans_info_expr_->is_batch_result() ? expr_spec_.max_batch_size_ : 1))) {
-        LOG_WARN("Fail to init vector", K(ret), K(expr_spec_.max_batch_size_));
       }
     }
     if (OB_SUCC(ret)) {
@@ -2975,7 +2808,6 @@ int ObPushdownOperator::write_trans_info_datum(blocksstable::ObDatumRow &out_row
                                        pos,
                                        strlen(out_row.trans_info_),
                                        out_row.trans_info_))) {
-      LOG_WARN("fail to copy trans info to datum", K(ret));
     } else {
       datum.pack_ = pos;
       // out_row.trans_info_ must be reset to nullptr to prevent affecting the next row
@@ -3137,7 +2969,6 @@ int PushdownFilterInfo::init(const storage::ObTableIterParam &iter_param, common
                        (nullptr != iter_param.op_ && iter_param.op_->enable_rich_format_))) {
     batch_size_ = iter_param.vectorized_enabled_ ? iter_param.op_->get_batch_size() : storage::AGGREGATE_STORE_BATCH_SIZE;
     if (OB_FAIL(col_datum_buf_.init(batch_size_, alloc))) {
-      LOG_WARN("fail to init tmp col datum buf", K(ret));
     } else if (OB_ISNULL(buf = alloc.alloc(sizeof(char *) * batch_size_))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc cell data ptr", K(ret), K(batch_size_));
@@ -3172,7 +3003,6 @@ int PushdownFilterInfo::init_bitmap(const int64_t row_count, common::ObBitmap *&
   void *buf = nullptr;
   if (OB_NOT_NULL(ref_bitmap_)) {
     if (OB_FAIL(ref_bitmap_->reserve(row_count))) {
-      LOG_WARN("Failed to expand size of filter bitmap", K(ret));
     } else if (FALSE_IT(ref_bitmap_->reuse())) {
     }
   } else {
@@ -3181,7 +3011,6 @@ int PushdownFilterInfo::init_bitmap(const int64_t row_count, common::ObBitmap *&
       LOG_WARN("Failed to alloc memory for filter bitmap", K(ret));
     } else if (FALSE_IT(ref_bitmap_ = new (buf) common::ObBitmap(*allocator_))) {
     } else if (OB_FAIL(ref_bitmap_->init(row_count))) {
-      LOG_WARN("Failed to init result bitmap", K(ret));
     }
   }
 
@@ -3195,7 +3024,6 @@ int PushdownFilterInfo::get_col_datum(ObDatum *&datums) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(col_datum_buf_.get_col_datum(batch_size_, datums))) {
-    LOG_WARN("Failed to get col datum from tmp datum buf", K(ret));
   }
   return ret;
 }

@@ -32,7 +32,6 @@ DEFINE_SERIALIZE(ObString)
     LIB_LOG(WARN, "size overflow", K(ret),
         KP(buf), K(serialize_size), "remain", buf_len - pos);
   } else if (OB_FAIL(serialization::encode_vstr(buf, buf_len, pos, ptr_, data_length_))) {
-    LIB_LOG(WARN, "string serialize failed", K(ret));
   }
   return ret;
 }
@@ -61,7 +60,6 @@ DEFINE_DESERIALIZE(ObString)
             K(ret), K_(buffer_size), K(str_len), "remain", data_len - pos);
       } else if (NULL == serialization::decode_vstr(buf, data_len, pos, ptr_, buffer_size_, &len)) {
         ret = OB_ERROR;
-        LIB_LOG(WARN, "fail to decode_vstr", K(str_len), K(pos), K(data_len), K(buffer_size_));
       }
     }
     if (OB_SUCC(ret)) {

@@ -67,17 +67,13 @@ int ObDBMSPartition::manage_dynamic_partition(sql::ObExecContext &exec_ctx, Para
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(ObDynamicPartitionManager::check_tenant_is_valid_for_dynamic_partition(is_valid_tenant))) {
-    LOG_WARN("fail to check tenant is valid for dynamic partition", KR(ret));
   } else if (!is_valid_tenant) {
     ret = OB_OP_NOT_ALLOW;
     LOG_WARN("invalid tenant for dynamic partition, manage_dynamic_partition is not allowed", KR(ret));
     LOG_USER_ERROR(OB_OP_NOT_ALLOW, "invalid tenant for dynamic partition, manage_dynamic_partition is");
   } else if (OB_FAIL(get_and_check_params_(params, precreate_time_str, time_unit_strs))) {
-    LOG_WARN("fail to check and get params", KR(ret), K(params));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schemas_in_tenant(table_schemas))) {
-    LOG_WARN("fail to get table schemas in tenant", KR(ret));
   } else {
     // collect dynamic partition table ids
     ObArray<uint64_t> table_ids;
@@ -91,11 +87,9 @@ int ObDBMSPartition::manage_dynamic_partition(sql::ObExecContext &exec_ctx, Para
           || !table_schema->is_normal_schema()) {
         // skip
       } else if (OB_FAIL(schema_guard.get_database_schema( table_schema->get_database_id(), database_schema))) {
-        LOG_WARN("fail to get database schema", KR(ret), K(table_schema->get_database_id()));
       } else if (OB_ISNULL(database_schema) || database_schema->is_in_recyclebin()) {
         // skip
       } else if (OB_FAIL(table_ids.push_back(table_schema->get_table_id()))) {
-        LOG_WARN("fail to push back table_id", KR(ret), K(table_schema->get_table_id()));
       }
     }
 
@@ -106,9 +100,7 @@ int ObDBMSPartition::manage_dynamic_partition(sql::ObExecContext &exec_ctx, Para
       const uint64_t table_id = table_ids.at(i);
       const ObTableSchema *table_schema = NULL;
       if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-        LOG_WARN("fail to get tenant schema guard", KR(ret));
       } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
-        LOG_WARN("fail to get table schema", KR(ret), K(table_id));
       } else if (OB_ISNULL(table_schema)) {
         // table may be dropped, skip
       } else {
@@ -117,15 +109,12 @@ int ObDBMSPartition::manage_dynamic_partition(sql::ObExecContext &exec_ctx, Para
         int tmp_ret = OB_SUCCESS;
         bool skipped = false;
         if (OB_TMP_FAIL(dynamic_partition_manager.init(table_schema, exec_ctx.get_my_session()))) {
-          LOG_WARN("fail to init dynamic partition manager", KR(tmp_ret), KPC(table_schema));
         } else if (OB_TMP_FAIL(dynamic_partition_manager.execute(precreate_time_str, time_unit_strs, skipped))) {
-          LOG_WARN("fail to execute dynamic partition manage", KR(tmp_ret), K(precreate_time_str), K(time_unit_strs));
         }
 
         if (!skipped) {
           ObArray<uint64_t> &chosen_table_ids = OB_SUCCESS == tmp_ret ? success_table_ids : failed_table_ids;
           if (OB_FAIL(chosen_table_ids.push_back(table_id))) {
-            LOG_WARN("fail to push back table id", KR(ret), K(table_id));
           }
         }
       }
@@ -164,11 +153,9 @@ int ObDBMSPartition::get_and_check_params_(
     // get and check precreate_time
     if (!params.at(0).is_null()) {
       if (OB_FAIL(params.at(0).get_string(precreate_time_str))) {
-        LOG_WARN("fail to get string from params", KR(ret), K(params));
       } else if (OB_FAIL(ObDynamicPartitionManager::str_to_time(precreate_time_str,
                                                                 precreate_time_num,
                                                                 precreate_time_unit))) {
-        LOG_WARN("fail to convert str to time", KR(ret), K(precreate_time_str));
       } else if (precreate_time_num < 0) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid precreate time", KR(ret), K(precreate_time_num));
@@ -178,9 +165,7 @@ int ObDBMSPartition::get_and_check_params_(
     // get and check time_unit
     if (OB_SUCC(ret) && !params.at(1).is_null()) {
       if (OB_FAIL(params.at(1).get_string(time_unit_str))) {
-        LOG_WARN("fail to get string from params", KR(ret), K(params));
       } else if (OB_FAIL(split_on(time_unit_str, ',', time_unit_strs))) {
-        LOG_WARN("fail to split str", KR(ret), K(time_unit_str));
       } else if (time_unit_strs.empty()) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("timt unit is empty", KR(ret));
@@ -188,7 +173,6 @@ int ObDBMSPartition::get_and_check_params_(
         for (int64_t i = 0; OB_SUCC(ret) && i < time_unit_strs.count(); i++) {
           ObString str = time_unit_strs.at(i).trim();
           if (OB_FAIL(ObDynamicPartitionManager::str_to_time_unit(str, time_unit))) {
-            LOG_WARN("fail to convert str to time unit", KR(ret), K(str));
           } else {
             time_unit_strs.at(i) = str;
           }

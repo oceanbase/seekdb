@@ -47,7 +47,6 @@ int ObHJPartitionMgr::next_part_pair(ObHJPartitionPair &part_pair) {
   if (OB_ENTRY_NOT_EXIST == ret) {
     ret = OB_ITER_END;
   } else if (OB_SUCCESS != ret) {
-    LOG_WARN("fail to pop front", K(ret));
   }
   return ret;
 }
@@ -97,7 +96,6 @@ int ObHJPartitionMgr::remove_undumped_part(int64_t cur_dumped_partition, int32_t
                  K(left), K(right), K(left->get_partno()), K(left->get_part_level()),
                  K(left->get_partno() >> 32), K(left->get_partno() & PARTITION_IDX_MASK));
         if (OB_FAIL(part_pair_list_.erase(iter))) {
-          LOG_WARN("failed to remove iter", K(left->get_part_level()), K(left->get_partno()));
         } else {
           free(left);
           free(right);
@@ -195,7 +193,6 @@ int ObHJPartitionMgr::get_or_create_part(int32_t level,
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(part_pair_list_.push_front(part_pair))) {
-        LOG_WARN("fail to push part pair to part list", K(ret));
       } else {
         LOG_DEBUG("push front part", K(partno), K(is_left));
         if (is_left) {

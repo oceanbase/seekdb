@@ -45,7 +45,6 @@ int ObStandbySchemaRefreshTrigger::init()
     is_inited_ = true;
     LOG_INFO("ObStandbySchemaRefreshTrigger skip init in embed mode");
   } else if (OB_FAIL(schedule_())) {
-    LOG_WARN("failed to schedule standby schema refresh trigger", KR(ret));
   } else {
     is_inited_ = true;
     is_scheduled_ = true;
@@ -88,7 +87,6 @@ int ObStandbySchemaRefreshTrigger::schedule_()
   int ret = OB_SUCCESS;
   if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::ServerGTimer, *this,
       DEFAULT_IDLE_TIME, true /*schedule repeatly*/))) {
-    LOG_WARN("failed to schedule standby schema refresh trigger task", KR(ret));
   }
   return ret;
 }
@@ -98,11 +96,9 @@ void ObStandbySchemaRefreshTrigger::runTimerTask()
   int ret = OB_SUCCESS;
   
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("inner stat error", KR(ret), K_(is_inited));
   } else {
     ObCurTraceId::init(GCONF.self_addr_);
     if (OB_FAIL(submit_tenant_refresh_schema_task_())) {
-      LOG_WARN("submit_tenant_refresh_schema_task_ failed", KR(ret));
     }
   }
 }
@@ -132,13 +128,9 @@ int ObStandbySchemaRefreshTrigger::submit_tenant_refresh_schema_task_()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema_status_proxy is null", KR(ret));
     } else if (OB_FAIL(schema_status_proxy->get_refresh_schema_status(schema_status))) {
-      LOG_WARN("failed to get tenant refresh schema status", KR(ret));
     } else if (OB_FAIL(GCTX.schema_service_->get_schema_version_in_inner_table(*GCTX.sql_proxy_,
           schema_status, schema_version))) {
-      LOG_WARN("fail to get latest schema version in inner table", K(ret));
     } else if (OB_FAIL(GCTX.ob_service_->submit_async_refresh_schema_task(schema_version))) {
-      LOG_WARN("fail to submit async refresh schema task",
-               KR(ret), K(schema_version));
     }
   }
   

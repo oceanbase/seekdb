@@ -94,7 +94,6 @@ int ObILibCacheNode::get_cache_obj(ObILibCacheCtx &ctx,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(key));
   } else if (OB_FAIL(inner_get_cache_obj(ctx, key, obj))) {
-    LOG_DEBUG("failed to inner get cache obj", K(ret), K(key));
   } else {
     CacheRefHandleID ref_handle = obj->get_dynamic_ref_handle();
     ref_handle = (ref_handle != MAX_HANDLE ? ref_handle : LC_REF_CACHE_NODE_HANDLE);
@@ -116,12 +115,10 @@ int ObILibCacheNode::add_cache_obj(ObILibCacheCtx &ctx,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(key), K(obj));
   } else if (OB_FAIL(inner_add_cache_obj(ctx, key, obj))) {
-    LOG_WARN("failed to inner add cache obj", K(ret), K(key), K(obj));
   } else {
     {
       SpinWLockGuard lock_guard(co_list_lock_);
       if (OB_FAIL(co_list_.push_back(obj))) {
-        LOG_WARN("failed to add cache obj to cache_obj_list", K(ret));
       }
     }
     if (OB_SUCC(ret)) {

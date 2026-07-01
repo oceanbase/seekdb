@@ -38,7 +38,6 @@ int ObOptimizeTableStmt::add_table_item(const ObTableItem &table_item)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(optimize_table_arg_.tables_.push_back(table_item))) {
-    LOG_WARN("failed to add table item", K(ret), K(table_item));
   }
   return ret;
 }

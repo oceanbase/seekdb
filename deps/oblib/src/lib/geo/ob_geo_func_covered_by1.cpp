@@ -44,14 +44,12 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeomPoint, ObWkbGeomC
         ObGeometry *sub_g2 = NULL;
         common::ObIAllocator *allocator = context.get_allocator();
         if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(*allocator, sub_type, false, true, sub_g2))) {
-          LOG_WARN("failed to create wkb", K(ret), K(sub_type));
         } else {
           // Length is not used, cannot get real length until iter move to the next
           ObString wkb_nosrid(WKB_COMMON_WKB_HEADER_LEN, reinterpret_cast<const char *>(sub_ptr));
           sub_g2->set_data(wkb_nosrid);
           sub_g2->set_srid(g2->get_srid());
           if (OB_FAIL(eval_wkb_binary(g1, sub_g2, context, result))) {
-            LOG_WARN("failed to eval sub geo", K(ret), K(sub_type));
           }
         }
         break;
@@ -62,7 +60,6 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeomPoint, ObWkbGeomC
         ObString tmp(polygon->length(), reinterpret_cast<const char*>(sub_ptr));
         ObString pol_data;
         if (OB_FAIL(ob_write_string(tmp_alloc, tmp, pol_data))) {
-          LOG_WARN("failed to copy polygon geo", K(ret));
         } else {
           ObWkbGeomPolygon *poly_copy = reinterpret_cast<ObWkbGeomPolygon*>(pol_data.ptr());
           boost::geometry::correct(*poly_copy);
@@ -76,7 +73,6 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeomPoint, ObWkbGeomC
         ObString tmp(multi_poly->length(), reinterpret_cast<const char*>(sub_ptr));
         ObString multipol_data;
         if (OB_FAIL(ob_write_string(tmp_alloc, tmp, multipol_data))) {
-          LOG_WARN("failed to copy multi_poly geo", K(ret));
         } else {
           ObWkbGeomMultiPolygon *multipoly_copy = reinterpret_cast<ObWkbGeomMultiPolygon*>(multipol_data.ptr());
           boost::geometry::correct(*multipoly_copy);
@@ -167,7 +163,6 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeomLineString, ObWkb
   ObGeometry *geo2 = const_cast<ObGeometry *>(reinterpret_cast<const ObGeometry *>(g2));
   if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObCartesianGeometrycollection>(context, geo2, cart_multi_point,
                                                                            cart_multi_line, cart_multi_poly))) {
-    LOG_WARN("failed to prepare gc", K(ret));
   } else {
     const ObSrsItem *srs = context.get_srs();
     ObIAllocator *allocator = context.get_allocator();
@@ -206,7 +201,6 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeomPolygon, ObWkbGeo
 
   if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObCartesianGeometrycollection>(context, geo2, cart_multi_point,
                                                                            cart_multi_line, cart_multi_poly))) {
-    LOG_WARN("failed to prepare gc", K(ret));
   } else {
     const ObSrsItem *srs = context.get_srs();
     ObIAllocator *allocator = context.get_allocator();
@@ -256,7 +250,6 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeomMultiLineString, 
   ObGeometry *geo2 = const_cast<ObGeometry *>(reinterpret_cast<const ObGeometry *>(g2));
   if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObCartesianGeometrycollection>(context, geo2, cart_multi_point,
                                                                            cart_multi_line, cart_multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else {
     const ObSrsItem *srs = context.get_srs();
     ObIAllocator *allocator = context.get_allocator();
@@ -294,7 +287,6 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeomMultiPolygon, ObW
   ObGeometry *geo2 = const_cast<ObGeometry *>(reinterpret_cast<const ObGeometry *>(g2));
   if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObCartesianGeometrycollection>(context, geo2, cart_multi_point,
                                                                            cart_multi_line, cart_multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else {
     const ObSrsItem *srs = context.get_srs();
     ObIAllocator *allocator = context.get_allocator();
@@ -316,7 +308,6 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeomCollection, ObWkb
   ObGeometry *geo1 = const_cast<ObGeometry *>(reinterpret_cast<const ObGeometry *>(g1));
   if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObCartesianGeometrycollection>(context, geo1, cart_multi_point,
                                                                            cart_multi_line, cart_multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else if (!cart_multi_poly->empty() || !cart_multi_line->empty()) {
     result = false;
   } else if (cart_multi_point->empty()) {
@@ -340,7 +331,6 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeomCollection, ObWkb
   ObGeometry *geo1 = const_cast<ObGeometry *>(reinterpret_cast<const ObGeometry *>(g1));
   if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObCartesianGeometrycollection>(context, geo1, cart_multi_point,
                                                                            cart_multi_line, cart_multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else if (!cart_multi_poly->empty()) {
     result = false;
   } else if (cart_multi_point->empty() && cart_multi_line->empty()) {
@@ -367,7 +357,6 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeomCollection, ObWkb
   ObGeometry *geo1 = const_cast<ObGeometry *>(reinterpret_cast<const ObGeometry *>(g1));
   if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObCartesianGeometrycollection>(context, geo1, cart_multi_point,
                                                                            cart_multi_line, cart_multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else {
     result = true;
     const ObWkbGeomPolygon *geo2 = reinterpret_cast<const ObWkbGeomPolygon *>(g2->val());
@@ -393,7 +382,6 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeomCollection, ObWkb
   ObGeometry *geo1 = const_cast<ObGeometry *>(reinterpret_cast<const ObGeometry *>(g1));
   if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObCartesianGeometrycollection>(context, geo1, cart_multi_point,
                                                                            cart_multi_line, cart_multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else if (!cart_multi_poly->empty() || !cart_multi_line->empty()) {
     result = false;
   } else if (cart_multi_point->empty()) {
@@ -421,7 +409,6 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeomCollection, ObWkb
   ObGeometry *geo1 = const_cast<ObGeometry *>(reinterpret_cast<const ObGeometry *>(g1));
   if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObCartesianGeometrycollection>(context, geo1, cart_multi_point,
                                                                            cart_multi_line, cart_multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else if (!cart_multi_poly->empty()) {
     result = false;
   } else if (cart_multi_point->empty() && cart_multi_line->empty()) {
@@ -448,7 +435,6 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeomCollection, ObWkb
   ObGeometry *geo1 = const_cast<ObGeometry *>(reinterpret_cast<const ObGeometry *>(g1));
   if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObCartesianGeometrycollection>(context, geo1, cart_multi_point,
                                                                            cart_multi_line, cart_multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else {
     result = true;
     const ObWkbGeomMultiPolygon *geo2 = reinterpret_cast<const ObWkbGeomMultiPolygon *>(g2->val());
@@ -478,10 +464,8 @@ OB_GEO_CART_BINARY_FUNC_BEGIN(ObGeoFuncCoveredByImpl, ObWkbGeomCollection, ObWkb
   ObGeometry *geo2 = const_cast<ObGeometry *>(reinterpret_cast<const ObGeometry *>(g2));
   if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObCartesianGeometrycollection>(context, geo1, cart_multi_point1,
                                                                            cart_multi_line1, cart_multi_poly1))) {
-    LOG_WARN("failed to do gc1 prepare", K(ret));
   } else if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObCartesianGeometrycollection>(context, geo2, cart_multi_point2,
                                                                                   cart_multi_line2, cart_multi_poly2))) {
-    LOG_WARN("failed to do gc2 prepare", K(ret));
   } else {
     result = true;
     const ObSrsItem *srs = context.get_srs();

@@ -98,7 +98,6 @@ public:
       if (concated_rows > 0 && !buf_is_full) {
         if (OB_FAIL(append_str(info.expr_->datum_meta_.cs_type_, base_string, sep_str,
                                concated_rows, buf_is_full, concat_str_max_len))) {
-          SQL_LOG(WARN, "append string failed", K(ret), K(base_string));
         }
       }
       for (int j = 0; j < info.group_concat_param_count_ && !buf_is_full && OB_SUCC(ret); j++) {
@@ -182,7 +181,6 @@ protected:
 
       if (OB_FAIL(ObCharset::well_formed_len(cs_type, add_string.ptr(), append_len, well_formed_len,
                                              well_formed_error))) {
-        SQL_LOG(WARN, "invalid string for charset", K(ret), K(cs_type), K(add_string));
       } else {
         append_len = well_formed_len;
         buf_is_full = true;
@@ -208,7 +206,6 @@ protected:
     concat_str_max_len = OB_DEFAULT_GROUP_CONCAT_MAX_LEN;
     if (OB_FAIL(agg_ctx.eval_ctx_.exec_ctx_.get_my_session()->get_group_concat_max_len(
            concat_str_max_len))) {
-      SQL_LOG(WARN, "fail to get group concat max len", K(ret));
     }
     return ret;
   }
@@ -228,7 +225,6 @@ protected:
         ret = OB_ERR_UNEXPECTED;
         SQL_LOG(WARN, "expr node is null", K(ret), KPC(aggr_info.separator_expr_));
       } else if (OB_FAIL(aggr_info.separator_expr_->eval_vector(eval_ctx, skip, bound))) {
-        SQL_LOG(WARN, "eval failed", K(ret));
       } else {
         sep_str =
           aggr_info.separator_expr_->get_vector(eval_ctx)->get_string(eval_ctx.get_batch_idx());
@@ -241,7 +237,6 @@ protected:
       } else {
         sql::ObEvalCtx &eval_ctx = agg_ctx.eval_ctx_;
         if (OB_FAIL(aggr_info.separator_expr_->eval_vector(eval_ctx, skip, bound))) {
-          SQL_LOG(WARN, "eval failed", K(ret));
         } else {
           int first_idx = bound.start();
           while (first_idx < bound.end()) {
@@ -258,7 +253,6 @@ protected:
             sep_str = aggr_info.separator_expr_->get_vector(eval_ctx)->get_string(first_idx);
           }
         }
-        SQL_LOG(DEBUG, "get sep str", K(sep_str));
       }
     }
 
@@ -384,9 +378,7 @@ public:
 
     if (has_truncated || skip.is_all_true(bound.start(), bound.end())) {
     } else if (OB_FAIL(get_concat_str_max_len(agg_ctx, concat_str_max_len))) {
-      SQL_LOG(WARN, "fail to get group concat max len", K(ret));
     } else if (OB_FAIL(get_buf_is_full_sign(agg_cell, buf_is_full, concat_str_max_len))) {
-      SQL_LOG(WARN, "get buf is full failed", K(ret));
     } else if (buf_is_full) {
     } else {
       ObAggrInfo &aggr_info = agg_ctx.aggr_infos_.at(agg_col_id);
@@ -400,7 +392,6 @@ public:
         int64_t before_concat_rows = concated_rows;
         ObString sep_str = nullptr;
         if (OB_FAIL(get_sep_str(agg_ctx, aggr_info, sep_str, skip, bound))) {
-          SQL_LOG(WARN, "get sep str failed", K(ret));
         }
         for (int i = bound.start(); OB_SUCC(ret) && i < bound.end() && !buf_is_full; i++) {
           if (skip.at(i)) {

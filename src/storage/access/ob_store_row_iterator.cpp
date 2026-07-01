@@ -64,7 +64,6 @@ int ObStoreRowIterator::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Unexpected null long life allocator", K(ret));
   } else if (OB_FAIL(inner_open(iter_param, access_ctx, table, query_range))) {
-    STORAGE_LOG(WARN, "Failed to inner open ObStoreRowIterator", K(ret), K(iter_param), K(access_ctx));
   }
   return ret;
 }

@@ -110,7 +110,6 @@ int ObGlobalIteratorPool::mtl_init(ObGlobalIteratorPool *&pool)
   } else if (!pool->check_need_iterator_pool()) {
     // do not need use pool
   } else if (OB_FAIL(pool->init())) {
-    LOG_WARN("[Global Iterator Pool] Failed to init ObGlobalIteratorPool", K(ret));
   } else {
     LOG_INFO("[Global Iterator Pool] mtl init ObGlobalIteratorPool", K(ret), KPC(pool));
   }
@@ -177,10 +176,8 @@ int ObGlobalIteratorPool::get(const ObQRIterType type, CachedIteratorNode *&cach
   cache_node = nullptr;
   if (is_disabled()) {
   } else if (OB_FAIL(inner_get(type, cache_node))) {
-    STORAGE_LOG(WARN, "[Global Iterator Pool] Failed to inner get", K(ret));
   } else if (nullptr != cache_node) {
     if (OB_FAIL(cache_node->alloc_stmt_iter_pool())) {
-      LOG_WARN("[Global Iterator Pool] Failed to alloc stmt iter pool", K(ret));
     }
   }
   return ret;

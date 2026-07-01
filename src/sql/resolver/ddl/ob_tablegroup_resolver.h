@@ -93,7 +93,6 @@ int ObTableGroupResolver::resolve_tablegroup_option(T *stmt, ParseNode *node)
   int ret = common::OB_SUCCESS;
   if (OB_ISNULL(stmt) || OB_ISNULL(node)) {
     ret = common::OB_INVALID_ARGUMENT;
-    SQL_RESV_LOG(WARN, "invalid argument", K(stmt), K(node));
   } else {
     ParseNode *option_node = NULL;
     int32_t num = node->num_child_;
@@ -118,7 +117,6 @@ int ObTableGroupResolver::resolve_tablegroup_option(T *stmt, ParseNode *node)
             ret = OB_ERR_PARSE_SQL;
             SQL_RESV_LOG(WARN, "Not support to alter table id", K(ret));
           } else if (OB_FAIL(ObResolverUtils::check_sync_ddl_user(session_info_, is_sync_ddl_user))) {
-            SQL_RESV_LOG(WARN, "Failed to check sync_dll_user", K(ret));
           } else if (!is_sync_ddl_user) {
             ret = OB_ERR_PARSE_SQL;
             SQL_RESV_LOG(WARN, "Only support for sync ddl user to specify part id",
@@ -130,7 +128,6 @@ int ObTableGroupResolver::resolve_tablegroup_option(T *stmt, ParseNode *node)
               SQL_LOG(WARN, "tablegroup_id is invalid", K(ret), K(tablegroup_id));
               LOG_USER_ERROR(OB_INVALID_ARGUMENT, "tablegroup_id");
             } else if (OB_FAIL(stmt->set_tablegroup_id(tablegroup_id))) {
-              SQL_LOG(WARN, "fail to set tablegroup_id", K(ret));
             }
           }
           break;
@@ -172,7 +169,6 @@ int ObTableGroupResolver::resolve_tablegroup_option(T *stmt, ParseNode *node)
                          "sharding", tablegroup_sharding);
               LOG_USER_ERROR(OB_INVALID_ARGUMENT, "sharding");
             } else if (OB_FAIL(stmt->set_tablegroup_sharding(tablegroup_sharding))) {
-              SQL_LOG(WARN, "set_tablegroup_sharding", K(ret));
             }
           }
           if (OB_SUCC(ret) && OB_FAIL(alter_option_bitset_.add_member(obcall::ObAlterTablegroupArg::SHARDING))) {

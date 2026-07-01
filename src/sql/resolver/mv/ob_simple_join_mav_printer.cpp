@@ -34,7 +34,6 @@ int ObSimpleJoinMAVPrinter::gen_refresh_dmls(ObIArray<ObDMLStmt*> &dml_stmts)
   int ret = OB_SUCCESS;
   dml_stmts.reuse();
   if (OB_FAIL(gen_update_insert_delete_for_simple_join_mav(dml_stmts))) {
-    LOG_WARN("failed to gen update insert delete for simple mav", K(ret));
   }
   return ret;
 }
@@ -45,7 +44,6 @@ int ObSimpleJoinMAVPrinter::gen_update_insert_delete_for_simple_join_mav(ObIArra
   dml_stmts.reuse();
   ObSEArray<ObSelectStmt*, 4> inner_delta_mavs;
   if (OB_FAIL(gen_inner_delta_mav_for_simple_join_mav(inner_delta_mavs))) {
-    LOG_WARN("failed to gen inner delta mav for simple join mav", K(ret));
   } else {
     // zhanyue todo: call gen_merge_for_simple_mav once, and assign stmt, adjust inner_delta_mavs
     ObUpdateStmt *update_stmt = NULL;
@@ -55,10 +53,8 @@ int ObSimpleJoinMAVPrinter::gen_update_insert_delete_for_simple_join_mav(ObIArra
       // zhanyue todo: call gen_merge_for_simple_mav once, and assign stmt, adjust inner_delta_mavs
       values.reuse();
       if (OB_FAIL(gen_insert_for_mav(inner_delta_mavs.at(i), values, insert_stmt))) {
-        LOG_WARN("failed to gen insert for mav", K(ret));
       } else if (OB_FAIL(gen_update_for_mav(inner_delta_mavs.at(i), insert_stmt->get_values_desc(),
                                             values, update_stmt))) {
-        LOG_WARN("failed to gen update for mav", K(ret));
       } else if (OB_FAIL(dml_stmts.push_back(update_stmt))  // pushback and execute in this ordering
                  || OB_FAIL(dml_stmts.push_back(insert_stmt))) {
         LOG_WARN("failed to push back", K(ret));
@@ -71,9 +67,7 @@ int ObSimpleJoinMAVPrinter::gen_update_insert_delete_for_simple_join_mav(ObIArra
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null", K(ret), K(insert_stmt));
       } else if (OB_FAIL(gen_delete_for_mav(insert_stmt->get_values_desc(), delete_stmt))) {
-        LOG_WARN("failed gen delete for mav", K(ret));
-      } else if (OB_FAIL(dml_stmts.push_back(delete_stmt))) { // pushback and execute in this ordering
-        LOG_WARN("failed to push back", K(ret));
+      } else if (OB_FAIL(dml_stmts.push_back(delete_stmt))) {
       }
     }
   }
@@ -101,7 +95,6 @@ int ObSimpleJoinMAVPrinter::gen_inner_delta_mav_for_simple_join_mav(ObIArray<ObS
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret), K(i), K(source_table));
     } else if (OB_FAIL(gen_delta_data_access_stmt(*source_tables.at(i), delta_datas.at(i)))) {
-      LOG_WARN("failed to gen delta data access stmt", K(ret));
     } else if (0 < i && OB_FAIL(gen_pre_data_access_stmt(*source_tables.at(i), pre_datas.at(i)))) {
       LOG_WARN("failed to gen pre data access stmt", K(ret));
     }
@@ -109,7 +102,6 @@ int ObSimpleJoinMAVPrinter::gen_inner_delta_mav_for_simple_join_mav(ObIArray<ObS
 
   for (int64_t i = 0; OB_SUCC(ret) && i < source_tables.count(); ++i) {
     if (OB_FAIL(gen_inner_delta_mav_for_simple_join_mav(i, delta_datas, pre_datas, inner_delta_mavs.at(i)))) {
-      LOG_WARN("failed to gen inner delta mav for simple join mav", K(ret));
     }
   }
   return ret;
@@ -125,30 +117,23 @@ int ObSimpleJoinMAVPrinter::gen_inner_delta_mav_for_simple_join_mav(const int64_
   ObRawExprCopier copier(ctx_.expr_factory_);
   const TableItem *delta_table = NULL;
   if (OB_FAIL(create_simple_stmt(inner_delta_mav))) {
-    LOG_WARN("failed to create simple stmt", K(ret));
   } else if (OB_FAIL(construct_table_items_for_simple_join_mav_delta_data(inner_delta_no,
                                                                           all_delta_datas,
                                                                           all_pre_datas,
                                                                           inner_delta_mav))) {
-    LOG_WARN("failed to construct table items for simple join mav delta data", K(ret));
   } else if (OB_UNLIKELY(inner_delta_mav->get_table_size() <= inner_delta_no)
              || OB_ISNULL(delta_table = inner_delta_mav->get_table_item(inner_delta_no))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected table items", K(ret), K(inner_delta_no), K(inner_delta_mav->get_table_items()));
   } else if (OB_FAIL(init_expr_copier_for_stmt(*inner_delta_mav, copier))) {
-    LOG_WARN("failed to init expr copier for stmt", K(ret));
   } else if (OB_FAIL(construct_from_items_for_simple_mjv_delta_data(copier, *inner_delta_mav))) {
-    LOG_WARN("failed to construct from items for simple mjv delta data", K(ret));
   } else if (OB_FAIL(copier.copy_on_replace(mv_def_stmt_.get_condition_exprs(),
                                             inner_delta_mav->get_condition_exprs()))) {
-    LOG_WARN("failed to deep copy where conditions", K(ret));
   } else if (OB_FAIL(copier.copy_on_replace(mv_def_stmt_.get_group_exprs(),
                                             inner_delta_mav->get_group_exprs()))) {
-    LOG_WARN("failed to generate group by exprs", K(ret));
   } else if (OB_FAIL(gen_simple_mav_delta_mv_select_list(copier, *delta_table,
                                                          inner_delta_mav->get_group_exprs(),
                                                          inner_delta_mav->get_select_items()))) {
-    LOG_WARN("failed to gen select list ", K(ret));
   }
   return ret;
 }
@@ -186,15 +171,12 @@ int ObSimpleJoinMAVPrinter::construct_table_items_for_simple_join_mav_delta_data
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null", K(ret), K(i), K(orig_table_items));
       } else if (OB_FAIL(create_simple_table_item(stmt, orig_table->table_name_, table, view_stmt ,false))) {
-        LOG_WARN("failed to create simple table item", K(ret));
       } else if (inner_delta_no > i)  { //  access current data
         set_info_for_simple_table_item(*table, *orig_table);
       } else if (OB_FAIL(BUF_PRINTF(inner_delta_no == i ? "DLT_%.*s" : "PRE_%.*s",
                                     orig_table->get_object_name().length(),
                                     orig_table->get_object_name().ptr()))) {
-        LOG_WARN("failed to buf print for delta/pre view name", K(ret));
       } else if (OB_FAIL(ob_write_string(ctx_.alloc_, ObString(pos, buf), table->alias_name_))) {
-        LOG_WARN("failed to write string", K(ret));
       }
     }
   }
@@ -209,7 +191,6 @@ int ObSimpleJoinMAVPrinter::gen_delta_data_access_stmt(const TableItem &source_t
   access_sel = NULL;
   const uint64_t mlog_sel_flags = MLOG_EXT_COL_DML_FACTOR | MLOG_EXT_COL_ALL_NORMAL_COL;
   if (OB_FAIL(gen_delta_table_view(source_table, access_sel, mlog_sel_flags))) {
-    LOG_WARN("failed to gen delta table view", K(ret));
   }
   return ret;
 }
@@ -229,14 +210,10 @@ int ObSimpleJoinMAVPrinter::gen_pre_data_access_stmt(const TableItem &source_tab
   ObSelectStmt *unchanged_data_stmt = NULL;
   ObSelectStmt *deleted_data_stmt = NULL;
   if (OB_FAIL(create_simple_stmt(union_stmt))) {
-    LOG_WARN("failed to create simple stmt", K(ret));
   } else if (OB_FAIL(gen_unchanged_data_access_stmt(source_table, unchanged_data_stmt))) {
-    LOG_WARN("failed to unchanged deleted data access stmt ", K(ret));
   } else if (OB_FAIL(gen_deleted_data_access_stmt(source_table, deleted_data_stmt))) {
-    LOG_WARN("failed to generate deleted data access stmt ", K(ret));
   } else if (OB_FAIL(union_stmt->get_set_query().push_back(unchanged_data_stmt) ||
                      OB_FAIL(union_stmt->get_set_query().push_back(deleted_data_stmt)))) {
-    LOG_WARN("failed to set set query", K(ret));
   } else {
     union_stmt->assign_set_all();
     union_stmt->assign_set_op(ObSelectStmt::UNION);
@@ -254,16 +231,11 @@ int ObSimpleJoinMAVPrinter::gen_unchanged_data_access_stmt(const TableItem &sour
   ObRawExpr *anti_filter = NULL;
   const uint64_t access_sel_flags = MLOG_EXT_COL_ALL_NORMAL_COL;
   if (OB_FAIL(create_simple_stmt(access_sel))) {
-    LOG_WARN("failed to create simple stmt", K(ret));
   } else if (OB_FAIL(create_simple_table_item(access_sel, source_table.table_name_, table))) {
-    LOG_WARN("failed to create simple table item", K(ret));
   } else if (OB_FALSE_IT(set_info_for_simple_table_item(*table, source_table))) {
   } else if (OB_FAIL(gen_delta_table_view_select_list(*table, source_table, *access_sel, access_sel_flags))) {
-    LOG_WARN("failed to generate delta table view select lists", K(ret));
   } else if (OB_FAIL(gen_exists_cond_for_table(&source_table, table, false, false, anti_filter))) {
-    LOG_WARN("failed to create simple column exprs", K(ret));
   } else if (OB_FAIL(access_sel->get_condition_exprs().push_back(anti_filter))) {
-    LOG_WARN("failed to push back anti filter", K(ret));
   }
   return ret;
 }
@@ -278,15 +250,10 @@ int ObSimpleJoinMAVPrinter::gen_deleted_data_access_stmt(const TableItem &source
   ObSelectStmt *mlog_delta_sel = NULL;
   TableItem *cur_table = NULL;
   if (OB_FAIL(gen_delta_table_view(source_table, mlog_delta_sel, mlog_sel_flags))) {
-    LOG_WARN("failed to gen delta table view", K(ret));
   } else if (OB_FAIL(create_simple_stmt(access_sel))) {
-    LOG_WARN("failed to create simple stmt", K(ret));
   } else if (OB_FAIL(create_simple_table_item(access_sel, DELTA_TABLE_VIEW_NAME, cur_table, mlog_delta_sel))) {
-    LOG_WARN("failed to create simple table item", K(ret));
   } else if (OB_FAIL(gen_delta_table_view_select_list(*cur_table, source_table, *access_sel, access_sel_flags))) {
-    LOG_WARN("failed to generate delta table view select lists", K(ret));
   } else if (OB_FAIL(append_old_new_row_filter(*cur_table, access_sel->get_condition_exprs(), true, false))) {
-    LOG_WARN("failed to append old new row filter ", K(ret));
   }
   return ret;
 }

@@ -34,9 +34,7 @@ int ObNewColumnCSDecoder::get_aggregate_result(
   int ret = OB_SUCCESS;
   ObStorageDatum datum;
   if (OB_FAIL(common_decoder_.decode(ctx.get_col_param(), ctx.get_allocator(), datum))) {
-    LOG_WARN("Failed to decode datum", K(ret), K(ctx.get_col_param()[0].get_orig_default_value()));
   } else if (OB_FAIL(agg_cell.eval(datum))) {
-    LOG_WARN("Failed to eval datum", K(ret), K(datum));
   }
   LOG_DEBUG("[NEW_COLUMN_DECODE] get aggregate(min/max) result", K(datum), K(lbt()));
   return ret;

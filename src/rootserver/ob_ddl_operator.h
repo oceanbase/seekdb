@@ -645,6 +645,12 @@ public:
                      share::schema::ObErrorInfo &error_info,
                      common::ObIArray<share::schema::ObDependencyInfo> &dep_infos,
                      const common::ObString *ddl_stmt_str/*=NULL*/);
+  int alter_package(share::schema::ObPackageInfo &package_info,
+                    share::schema::ObSchemaGetterGuard &schema_guard,
+                    common::ObMySQLTransaction &trans,
+                    ObIArray<share::schema::ObRoutineInfo> &public_routine_infos,
+                    share::schema::ObErrorInfo &error_info,
+                    const common::ObString *ddl_stmt_str);
   int drop_package(const share::schema::ObPackageInfo &package_info,
                    common::ObMySQLTransaction &trans,
                    share::schema::ObSchemaGetterGuard &schema_guard,
@@ -955,7 +961,6 @@ int ObDDLOperator::construct_new_name_for_recyclebin(const T &schema,
         if (is_global_index_object(schema)) {
           common::ObString index_name;
           if (OB_FAIL(dynamic_cast<const share::schema::ObTableSchema &>(schema).get_index_name(index_name))) {
-            RS_LOG(WARN, "failed to get index_name", K(ret));
           } else {
             // Specify ddl id, use ddl id
             ret = new_object_name.append_fmt("__recycle_$_%.*s_%.*s",
@@ -976,7 +981,6 @@ int ObDDLOperator::construct_new_name_for_recyclebin(const T &schema,
       }
     }
     if (OB_SUCCESS != ret) {
-      RS_LOG(WARN, "append new object name failed", K(ret));
     }
   }
   return ret;

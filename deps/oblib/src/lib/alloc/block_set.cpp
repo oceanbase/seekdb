@@ -361,7 +361,6 @@ int64_t BlockSet::sync_wash(int64_t wash_size)
         block = next;
         AChunk *chunk = block->chunk();
         if (chunk->is_hugetlb_) {
-          _OB_LOG(DEBUG, "cannot be applied to Huge TLB pages");
           has_ignore = true;
         } else {
         #if MEMCHK_LEVEL >= 1
@@ -373,7 +372,6 @@ int64_t BlockSet::sync_wash(int64_t wash_size)
           int64_t len = cls * ABLOCK_SIZE;
           if ((reinterpret_cast<uint64_t>(data) & (ps - 1)) != 0 ||
               (len & (ps - 1)) != 0) {
-            _OB_LOG(DEBUG, "cannot be applied to non-multiple of page-size, page_size: %zd", ps);
             has_ignore = true;
           } else {
             int result = 0;

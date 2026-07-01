@@ -44,7 +44,6 @@ int ObGetAllCacheIdOp::operator()(common::hash::HashMapPair<ObCacheObjID, ObILib
     } else if (!entry.second->added_lc()) {
       // do nothing
     } else if (OB_FAIL(key_array_->push_back(entry.first))) {
-      SQL_PC_LOG(WARN, "fail to push back plan_id", K(ret));
     }
   }
   return ret;
@@ -85,7 +84,6 @@ int ObPhyLocationGetter::get_phy_locations(const common::ObIArray<ObTablePartiti
   //ObDASTableLoc table_loc;
   int64_t N = partition_infos.count();
   if (OB_FAIL(candi_table_locs.reserve(N))) {
-    LOG_WARN("fail reserve memory", K(ret), K(N));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
     if (OB_ISNULL(partition_infos.at(i))) {
@@ -93,8 +91,6 @@ int ObPhyLocationGetter::get_phy_locations(const common::ObIArray<ObTablePartiti
       LOG_WARN("invalid partition info", K(ret));
     } else if (OB_FAIL(candi_table_locs.push_back(
                    partition_infos.at(i)->get_phy_tbl_location_info()))) {
-      LOG_WARN("failed to push_back phy_location_info", K(ret),
-               K(partition_infos.at(i)->get_phy_tbl_location_info()));
     } else { /* do nothing */ }
   }
   return ret;
@@ -121,7 +117,6 @@ int ObPhyLocationGetter::reselect_duplicate_table_best_replica(const ObIArray<Ob
     } else if (ptli.get_partition_cnt() > 0) {
       const ObCandiTabletLoc &part_info = ptli.get_phy_part_loc_info_list().at(0);
       if (OB_FAIL(part_info.get_selected_replica(replica_location))) {
-        SQL_PC_LOG(WARN, "fail to get selected replica", K(ret), K(ptli));
       } else if (!replica_location.is_valid()) {
         SQL_PC_LOG(WARN, "replica_location is invalid", K(ret), K(replica_location));
       } else if (!ptli.is_duplicate_table_not_in_dml()) {
@@ -140,12 +135,10 @@ int ObPhyLocationGetter::reselect_duplicate_table_best_replica(const ObIArray<Ob
               part_info.get_partition_location().get_replica_locations();
           for (int64_t j = 0; OB_SUCC(ret) && j < replicas.count(); ++j) {
             if (OB_FAIL(candi_addrs.push_back(replicas.at(j).get_server()))) {
-              LOG_WARN("failed to push back servers", K(ret));
             }
           }
           duplicate_table_addr = replica_location.get_server();
           has_duplicate_tbl = true;
-          SQL_PC_LOG(DEBUG, "has duplicate table");
         } else if (duplicate_table_addr != replica_location.get_server()) {
           duplicate_table_addr.reset();
         }
@@ -172,7 +165,6 @@ int ObPhyLocationGetter::reselect_duplicate_table_best_replica(const ObIArray<Ob
       // duplicate table needs to reselect replica
       candi_addrs.reset();
       if (OB_FAIL(candi_addrs.push_back(normal_table_addr))) {
-        LOG_WARN("failed to push back normal table addr", K(ret));
       }
     }
   }
@@ -180,7 +172,6 @@ int ObPhyLocationGetter::reselect_duplicate_table_best_replica(const ObIArray<Ob
   if (OB_SUCC(ret) && !candi_addrs.empty()) {
     is_same = false;
     if (OB_FAIL(new_replic_idxs.prepare_allocate(proj_cnt))) {
-      SQL_PC_LOG(WARN, "failed to pre-alloc array space", K(ret), K(proj_cnt));
     }
     for (int64_t i = 0; OB_SUCC(ret) && !is_same && i < candi_addrs.count(); ++i) {
       bool is_valid = true;
@@ -200,7 +191,6 @@ int ObPhyLocationGetter::reselect_duplicate_table_best_replica(const ObIArray<Ob
           // do nothing
         } else if (OB_FAIL(ptli.get_phy_part_loc_info_list_for_update().at(0).
                            set_selected_replica_idx(new_replic_idxs.at(j)))) {
-          SQL_PC_LOG(WARN, "failed to set selected replica idx", K(ret));
         }
       }
       if (OB_SUCC(ret) && is_valid) {
@@ -236,7 +226,6 @@ int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &tabl
     ObSEArray<ObCandiTableLoc *, 2> phy_location_info_ptrs;
     const ParamStore &params = plan_ctx->get_param_store();
     if (OB_FAIL(candi_table_locs.prepare_allocate(N))) {
-      LOG_WARN("phy_locations_info prepare allocate error", K(ret), K(N));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
         const ObTableLocation &table_location = table_locations.at(i);
@@ -248,7 +237,6 @@ int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &tabl
                                                                     params,
                                                                     candi_table_loc.get_phy_part_loc_info_list_for_update(),
                                                                     dtc_params))) {
-          LOG_WARN("failed to calculate partition location", K(ret));
         } else {
           NG_TRACE(calc_partition_location_end);
           if (table_location.is_duplicate_table_not_in_dml()) {
@@ -261,13 +249,8 @@ int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &tabl
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(table_location_ptrs.push_back(&table_location))) {
-            LOG_WARN("failed to push back table location ptrs", K(ret), K(i),
-                     K(N), K(table_locations.at(i)));
           } else if (OB_FAIL(phy_location_info_ptrs.push_back(&candi_table_loc))) {
-            LOG_WARN("failed to push back phy location info ptrs", K(ret), K(i),
-                     K(N), K(candi_table_locs.at(i)));
           } else if (OB_FAIL(pc_ctx.is_retry_for_dup_tbl(is_retrying))) {
-            LOG_WARN("failed to test if retrying", K(ret));
           } else if (is_retrying) {
             LOG_INFO("Physical Location from Location Cache", K(candi_table_loc));
           }
@@ -284,13 +267,10 @@ int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &tabl
       if (OB_FAIL(ObLogPlan::select_replicas(exec_ctx, table_location_ptrs,
                                              exec_ctx.get_addr(),
                                              phy_location_info_ptrs))) {
-        LOG_WARN("failed to select replicas", K(ret), K(table_locations),
-                 K(exec_ctx.get_addr()), K(phy_location_info_ptrs));
       } else if (is_dup_ls_modified || is_retrying) {
         // do nothing
       } else if (OB_FAIL(reselect_duplicate_table_best_replica(candi_table_locs,
                                                                on_same_server))) {
-        LOG_WARN("failed to reselect replicas", K(ret));
       } else if (!on_same_server) {
         need_check_on_same_server = false;
       }
@@ -326,14 +306,12 @@ int ObPhyLocationGetter::get_phy_locations(const ObIArray<ObTableLocation> &tabl
       // Directly select leader replica for each table location.
       for (int64_t i = 0; OB_SUCC(ret) && i < N; i++) {
         if (OB_FAIL(table_locations.at(i).calculate_final_tablet_locations(exec_ctx, params, dtc_params))) {
-          LOG_WARN("failed to calculate final tablet locations", K(ret), K(table_locations.at(i)));
         }
       }
     } else {
       // Not all tables require select leader, fallback to original path.
       bool need_same_server = true;
       if (OB_FAIL(get_phy_locations(table_locations, pc_ctx, candi_table_locs, need_same_server))) {
-        LOG_WARN("failed to get phy locations", K(ret), K(table_locations), K(pc_ctx));
       }
     }
   }
@@ -349,7 +327,6 @@ int ObPhyLocationGetter::build_table_locs(ObDASCtx &das_ctx,
   CK(table_locations.count() == candi_table_locs.count());
   for (int64_t i = 0; OB_SUCC(ret) && i < table_locations.count(); i++) {
     if (OB_FAIL(das_ctx.add_candi_table_loc(table_locations.at(i).get_loc_meta(), candi_table_locs.at(i)))) {
-      LOG_WARN("add candi table location failed", K(ret), K(table_locations.at(i).get_loc_meta()));
     }
   }
   if (OB_FAIL(ret)) {
@@ -378,7 +355,6 @@ int ObPhyLocationGetter::build_related_tablet_info(const ObTableLocation &table_
                                                   partition_ids,
                                                   first_level_part_ids,
                                                   dtc_params))) {
-    LOG_WARN("calculate tablet ids failed", K(ret));
   } else {
     related_map = &exec_ctx.get_das_ctx().get_related_tablet_map();
     LOG_DEBUG("build_related tablet info", K(tablet_ids), K(partition_ids),
@@ -444,83 +420,55 @@ int ObConfigInfoInPC::serialize_configs(char *buf, int buf_len, int64_t &pos)
   // gen config str
   if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", pushdown_storage_level_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(pushdown_storage_level_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", rowsets_enabled_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(rowsets_enabled_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", enable_px_batch_rescan_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_px_batch_rescan_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", enable_px_ordered_coord_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_px_ordered_coord_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", bloom_filter_enabled_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(bloom_filter_enabled_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", enable_newsort_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_newsort_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", px_join_skew_handling_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(px_join_skew_handling_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", is_strict_defensive_check_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(is_strict_defensive_check_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", px_join_skew_minfreq_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(px_join_skew_minfreq_));
-
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%lu,", min_cluster_version_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(min_cluster_version_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", enable_spf_batch_rescan_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_spf_batch_rescan_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", enable_var_assign_use_das_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_var_assign_use_das_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", enable_das_keep_order_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_das_keep_order_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", bloom_filter_ratio_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(bloom_filter_ratio_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", realistic_runtime_bloom_filter_size_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(realistic_runtime_bloom_filter_size_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", enable_parallel_das_dml_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_parallel_das_dml_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", direct_load_allow_fallback_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(direct_load_allow_fallback_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", default_load_mode_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(default_load_mode_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%d,", hash_rollup_policy_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(hash_rollup_policy_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", enable_nlj_spf_use_rich_format_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_nlj_spf_use_rich_format_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", ndv_runtime_bloom_filter_size_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(ndv_runtime_bloom_filter_size_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                "%d,", enable_index_merge_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_index_merge_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", enable_distributed_das_scan_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_distributed_das_scan_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%ld,", enable_das_batch_rescan_flag_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_das_batch_rescan_flag_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                               "%d,", enable_topn_runtime_filter_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_topn_runtime_filter_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%d,", min_const_integer_precision_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(min_const_integer_precision_));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%d,", enable_px_task_rebalance_))) {
-    SQL_PC_LOG(WARN, "failed to databuff_printf", K(ret), K(enable_px_task_rebalance_));
   } else {
     // do nothing
   }

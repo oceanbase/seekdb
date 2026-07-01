@@ -48,7 +48,6 @@ int ObDBMSJobTask::init(ObDBMSJobQueue *ready_queue)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret), K(ready_queue));
   } else if (OB_FAIL(timer_.init())) {
-    LOG_WARN("fail to init timer", K(ret));
   } else {
     ready_queue_ = ready_queue;
     inited_ = true;
@@ -109,7 +108,6 @@ void ObDBMSJobTask::runTimerTask()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null ptr", K(ret), K(job_key_), K(ready_queue_));
   } else if (OB_FAIL(ready_queue_->push(job_key_, 0))) {
-    LOG_WARN("fail to push ready job to queue", K(ret), K(*job_key_));
   } else {
     job_key_ = NULL;
     if (wait_vector_.count() > 0) {
@@ -121,7 +119,6 @@ void ObDBMSJobTask::runTimerTask()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", K(ret), K(job_key_));
       } else if (OB_FAIL(timer_.schedule(*this, job_key_->get_adjust_delay()))) {
-        LOG_WARN("fail to schedule task", K(ret), K(*job_key_));
       }
     }
   }
@@ -197,7 +194,6 @@ int ObDBMSJobTask::immediately(ObDBMSJobKey *job_key)
   } else {
     ObSpinLockGuard guard(lock_);
     if (OB_FAIL(ready_queue_->push(job_key, 0))) {
-      LOG_WARN("fail to push ready job to queue", K(ret), K(*job_key));
     }
   }
   return ret;
@@ -223,7 +219,6 @@ void ObDBMSJobThread::handle(void *task)
     LOG_ERROR("null ptr", K(ret), K(task));
   } else if (FALSE_IT(master = static_cast<ObDBMSJobMaster *>(task))) {
   } else if (OB_FAIL(master->scheduler())) {
-    LOG_ERROR("fail to run dbms job master", K(ret));
   }
   return;
 }
@@ -249,13 +244,9 @@ int ObDBMSJobMaster::init(ObISQLClient *sql_client,
   } else if (FALSE_IT(ready_queue_.set_limit(MAX_READY_JOBS_CAPACITY))) {
     // do-nothing
   } else if (OB_FAIL(scheduler_task_.init(&ready_queue_))) {
-    LOG_WARN("fail to init ready queue", K(ret));
   } else if (OB_FAIL(scheduler_thread_.init(1, 1))) {
-    LOG_WARN("fail to init scheduler pool", K(ret));
   } else if (OB_FAIL(job_utils_.init(sql_client))) {
-    LOG_WARN("fail to init action record", K(ret));
   } else if (OB_FAIL(alive_jobs_.create(1024))) {
-    LOG_WARN("failed to create job hash set", K(ret));
   } else if (OB_ISNULL(ObCurTraceId::get())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("trace id is null", K(ret));
@@ -278,11 +269,8 @@ int ObDBMSJobMaster::start()
   } else if (running_) {
     // alreay running , do nothing ...
   } else if (OB_FAIL(scheduler_thread_.push(static_cast<void *>(this)))) {
-    LOG_WARN("fail to start scheduler thread", K(ret));
   } else if (OB_FAIL(scheduler_task_.start())) {
-    LOG_WARN("fail to start ready queue", K(ret));
   } else if (OB_FAIL(register_check_tenant_job())) {
-    LOG_WARN("fail to load all dbms jobs", K(ret));
   }
   LOG_WARN("dbms job master started", K(ret));
   return ret;
@@ -336,7 +324,6 @@ int ObDBMSJobMaster::scheduler()
       } else {
         int tmp_ret = OB_SUCCESS;
         if (OB_SUCCESS != (tmp_ret = scheduler_job(job_key))) {
-          LOG_WARN("fail to scheduler single dbms job", K(ret), K(tmp_ret), KPC(job_key));
         } else {
           LOG_INFO("success to scheduler single dbms job", K(ret), K(tmp_ret), KPC(job_key));
         }
@@ -414,12 +401,10 @@ int ObDBMSJobMaster::scheduler_job(ObDBMSJobKey *job_key, bool is_retry)
       int tmp_ret = OB_SUCCESS;
       // always add job to queue. we need this to check job status changes.
       if (OB_SUCCESS != (tmp_ret = register_job(job_info, job_key, ignore_nextdate))) {
-        LOG_WARN("failed to register job to job queue", K(tmp_ret));
       }
     } else {
       int tmp = alive_jobs_.erase_refactored(job_info.get_job_id_with_tenant());
       if (tmp != OB_SUCCESS) {
-        LOG_INFO("failed delete valid job from hash set", K(ret), K(job_info));
       }
       allocator_.free(job_key); // job deleted!
     }
@@ -483,14 +468,11 @@ int ObDBMSJobMaster::get_all_servers(ObString &pick_zone, ObIArray<ObAddr> &serv
     ret = OB_NOT_INIT;
     LOG_WARN("not init yet", K(ret), K(inited_));
   } else if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_info))) {
-    LOG_WARN("fail to get tenant info", K(ret));
   } else if (OB_ISNULL(tenant_info)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null ptr", K(ret), K(tenant_info));
   } else if (OB_FAIL(tenant_info->get_zone_list(zone_list))) {
-    LOG_WARN("fail to get zone list", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < zone_list.count(); ++i) {
       common::ObZone zone = zone_list.at(i);
@@ -500,7 +482,6 @@ int ObDBMSJobMaster::get_all_servers(ObString &pick_zone, ObIArray<ObAddr> &serv
          if (common::is_contain(servers, GCTX.self_addr())) {
            // do nothing
          } else if (OB_FAIL(servers.push_back(GCTX.self_addr()))) {
-           LOG_WARN("fail to push server to total", K(ret));
          }
       }
     }
@@ -513,7 +494,6 @@ int ObDBMSJobMaster::server_random_pick(ObString &pick_zone, ObAddr &server)
   int ret = OB_SUCCESS;
   common::ObArray<ObAddr> total_server;
   if (OB_FAIL(get_all_servers(pick_zone, total_server))) {
-    LOG_WARN("failed to get all server", K(pick_zone));
   }
   if (OB_SUCC(ret) && total_server.count() <= 0) {
     ret = OB_ERR_UNEXPECTED;

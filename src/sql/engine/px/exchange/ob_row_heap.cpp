@@ -70,7 +70,6 @@ bool ObDatumRowCompare::operator()(
     for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < sort_cmp_funs_->count(); i++) {
       const int64_t idx = sort_collations_->at(i).field_idx_;
       if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(lcells[idx], rcells[idx], cmp))) {
-        LOG_WARN("failed to compare", K(ret));
       } else if (cmp < 0) {
         cmp_ret = !sort_collations_->at(i).is_ascending_;
       } else if (cmp > 0) {
@@ -128,7 +127,6 @@ bool ObCompactRowCompare::operator()(
       const int64_t idx = sort_collations_->at(i).field_idx_;
       if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(l->get_datum(*row_meta_, idx),
                                                   r->get_datum(*row_meta_, idx), cmp))) {
-        LOG_WARN("failed to compare", K(ret));
       } else if (cmp < 0) {
         cmp_ret = !sort_collations_->at(i).is_ascending_;
       } else if (cmp > 0) {
@@ -184,7 +182,6 @@ bool ObLastCompactRowCompare::operator()(
     for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < sort_cmp_funs_->count(); i++) {
       const int64_t idx = sort_collations_->at(i).field_idx_;
       if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(l->get_datum(idx), r->get_datum(idx), cmp))) {
-        LOG_WARN("failed to compare", K(ret));
       } else if (cmp < 0) {
         cmp_ret = !sort_collations_->at(i).is_ascending_;
       } else if (cmp > 0) {
@@ -242,7 +239,6 @@ bool ObMaxDatumRowCompare::operator()(
     for (int64_t i = 0; OB_SUCC(ret) && 0 == cmp && i < sort_cmp_funs_->count(); i++) {
       const int64_t idx = sort_collations_->at(i).field_idx_;
       if (OB_FAIL(sort_cmp_funs_->at(i).cmp_func_(lcells[idx], rcells[idx], cmp))) {
-        LOG_WARN("failed to compare", K(ret));
       } else if (cmp < 0) {
         cmp_ret = !sort_collations_->at(i).is_ascending_;
       } else if (cmp > 0) {

@@ -30,7 +30,6 @@ int ObWktParser::check_next_token(ObWktTokenType tkn_type)
   int ret = OB_SUCCESS;
   ObWktTokenVal tkn_val; 
   if (OB_FAIL(check_next_token_with_val(tkn_type, tkn_val))) {
-    LOG_WARN("fail to check next token", K(ret), K(tkn_type));
   }
   return ret;
 }	
@@ -77,7 +76,6 @@ int ObWktParser::check_next_token_with_val(ObWktTokenType tkn_type, ObWktTokenVa
           ret = OB_ERR_PARSER_SYNTAX;
           LOG_WARN("fail to check next W_NUMBER, wkt should begin with number", K(ret), K(cur_pos_));
         } else if (OB_FAIL(process_number(tkn_val))) {
-          LOG_WARN("fail to process number", K(ret));
         }
         break;
       }
@@ -87,7 +85,6 @@ int ObWktParser::check_next_token_with_val(ObWktTokenType tkn_type, ObWktTokenVa
           ret = OB_ERR_PARSER_SYNTAX;
           LOG_WARN("fail to check next W_WORD, wkt should begin with word", K(ret), K(cur_pos_));
         } else if (OB_FAIL(process_word(tkn_val))) {
-          LOG_WARN("fail to process word", K(ret));
         } else if (ObWktTokenType::W_EMPTY == tkn_type && tkn_val.string_val_.case_compare("empty")){
           ret = OB_ERR_PARSER_SYNTAX;
           LOG_WARN("fail to check next empty token", K(ret), K(tkn_val.string_val_));
@@ -125,13 +122,11 @@ int ObWktParser::get_next_token(ObWktTokenType &tkn_type, ObWktTokenVal &tkn_val
       tkn_val.string_val_.assign_ptr(&wkt_[cur_pos_++], 1);
     } else if (is_number_beginning(ch)) {
       if (OB_FAIL(process_number(tkn_val))) {
-        LOG_WARN("fail to process NUMBER token", K(ret));
       } else {
         tkn_type = ObWktTokenType::W_NUMBER;
       }
     } else if (is_word_beginning(ch)) {
       if (OB_FAIL(process_word(tkn_val))) {
-        LOG_WARN("fail to process WORD token", K(ret));
       } else {
         if (tkn_val.string_val_.case_compare("empty")) {
           tkn_type = ObWktTokenType::W_WORD;
@@ -154,7 +149,6 @@ int ObWktParser::get_next_token_keep_pos(ObWktTokenType &tkn_type, ObWktTokenVal
   int ret = OB_SUCCESS;
   uint64_t pos = cur_pos_;
   if (OB_FAIL(get_next_token(tkn_type, tkn_val))) {
-    LOG_WARN("fail to get next token", K(ret));
   }
   cur_pos_ = pos;
   return ret;
@@ -252,7 +246,6 @@ int ObWktParser::parse(ObGeometry *&geo, bool is_geographical)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(inner_parse())){
-      LOG_WARN("fail to do inner parse for wkt", K(ret));
   } else if (!is_wkt_end()) {
     ret = OB_ERR_PARSER_SYNTAX;
     LOG_WARN("wkt has extra character after parse", K(ret), K(cur_pos_));
@@ -262,9 +255,7 @@ int ObWktParser::parse(ObGeometry *&geo, bool is_geographical)
     // new geo and attach wkb buffer
     uint32_t geo_type = 0;
     if (OB_FAIL(wkb_buf_.read(sizeof(uint8_t), geo_type))) {
-      LOG_WARN("fail to get geo type from wkb buff", K(ret));
     } else if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(allocator_, static_cast<ObGeoType>(geo_type), is_geographical, true, geo))) {
-      LOG_WARN("fail to create geometry given type", K(ret), K(geo_type));
     } else {
       geo->set_data(wkb_buf_.string());
     }
@@ -280,7 +271,6 @@ int ObWktParser::parse_geo_type(ObGeoType &geo_type)
   ObWktTokenVal tkn_val_1;
 
   if (OB_FAIL(check_next_token_with_val(ObWktTokenType::W_WORD, tkn_val_1))) {
-    LOG_WARN("fail to parse geometry type from wkt", K(ret));
   } else if (0 == tkn_val_1.string_val_.case_compare("geomcollection")) {
     ret = OB_ERR_PARSER_SYNTAX;
     LOG_WARN("wkt has extra character after parse", K(ret), K(cur_pos_));
@@ -292,17 +282,14 @@ int ObWktParser::parse_geo_type(ObGeoType &geo_type)
   } else if (ObGeoTypeUtil::is_3d_geo_type(geo_type)) {
     // 3d type
     if (OB_FAIL(set_dimension(ObGeoDimType::IS_3D))) {
-      LOG_WARN("fail to set dimension type", K(ret));
     } 
   } else {
     ObWktTokenType tkn_type_2;
     ObWktTokenVal tkn_val_2;
     if (OB_FAIL(get_next_token_keep_pos(tkn_type_2, tkn_val_2))) {
-      LOG_WARN("fail to parse next token", K(ret));
     } else if (tkn_type_2 == ObWktTokenType::W_WORD && 0 == tkn_val_2.string_val_.case_compare("z")) {
       // case like 'point z(1 1 1)'
       if (OB_FAIL(set_dimension(ObGeoDimType::IS_3D))) {
-        LOG_WARN("fail to set dimension type", K(ret));
       } else {
         geo_type = static_cast<ObGeoType>(static_cast<uint32_t>(geo_type) + 1000);
         if (OB_FAIL(check_next_token(ObWktTokenType::W_WORD))) {  // move the cur_pos_ to next token
@@ -324,60 +311,50 @@ int ObWktParser::inner_parse()
   ObWktTokenVal tkn_val;
   ObGeoType geo_type = ObGeoType::GEOTYPEMAX;
   if (OB_FAIL(parse_geo_type(geo_type))) {
-    LOG_WARN("fail to parse geo type", K(ret));
   } else if (OB_FAIL(wkb_buf_.append(static_cast<char>(ObGeoWkbByteOrder::LittleEndian)))) {
-    LOG_WARN("fail to append byteorder to wkb buffer", K(ret));
   } else if (OB_FAIL(wkb_buf_.append(static_cast<uint32_t>(geo_type)))) {
-    LOG_WARN("fail to append geo_type to wkb buffer", K(ret));
   } else {
     uint64_t pos = wkb_buf_.length() - sizeof(uint32_t);
     switch(geo_type) {
       case ObGeoType::POINT:
       case ObGeoType::POINTZ: {
         if (OB_FAIL(parse_point())) {
-          LOG_WARN("fail to parse point wkt", K(ret)); 
         }
         break;
       }
       case ObGeoType::LINESTRING:
       case ObGeoType::LINESTRINGZ: {
         if (OB_FAIL(parse_linestring())) {
-          LOG_WARN("fail to parse linestring wkt", K(ret)); 
         }
         break;
       }
       case ObGeoType::POLYGON: 
       case ObGeoType::POLYGONZ: {
         if (OB_FAIL(parse_polygon())) {
-          LOG_WARN("fail to parse polygon wkt", K(ret)); 
         }
         break;
       }
       case ObGeoType::MULTIPOINT: 
       case ObGeoType::MULTIPOINTZ: {
         if (OB_FAIL(parse_multipoint())) {
-          LOG_WARN("fail to parse multipoint wkt", K(ret)); 
         }
         break;
       }
       case ObGeoType::MULTILINESTRING:
       case ObGeoType::MULTILINESTRINGZ: {
         if (OB_FAIL(parse_mutilinestring())) {
-          LOG_WARN("fail to parse multilinestring wkt", K(ret)); 
         }
         break;
       }
       case ObGeoType::MULTIPOLYGON: 
       case ObGeoType::MULTIPOLYGONZ: {
         if (OB_FAIL(parse_multipolygen())) {
-          LOG_WARN("fail to parse multipolygen wkt", K(ret)); 
         }
         break;
       }
       case ObGeoType::GEOMETRYCOLLECTION:
       case ObGeoType::GEOMETRYCOLLECTIONZ: {
         if (OB_FAIL(parse_geometrycollectioin())) {
-          LOG_WARN("fail to parse geometrycollection wkt", K(ret)); 
         }
         break;
       }
@@ -405,7 +382,6 @@ int ObWktParser::refresh_type(uint64_t pos)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to refresh type",K(ret));
   } else if (OB_FAIL(wkb_buf_.read(pos, type))) {
-    LOG_WARN("fail to read type", K(ret));
   } else if (dim_type_ == ObGeoDimType::IS_3D && 
             type <= 7 && 
             OB_FAIL(wkb_buf_.write(pos, type + 1000))) {
@@ -424,17 +400,12 @@ int ObWktParser::parse_point(bool with_brackets)
   if (with_brackets && OB_FAIL(check_next_token(ObWktTokenType::W_LEFT_B))) {
     LOG_WARN("fail to parse point, check next LEFT_B", K(ret));
   } else if (OB_FAIL(check_next_token_with_val(ObWktTokenType::W_NUMBER, x_val))) {
-    LOG_WARN("fail to parse point, check next NUMBER", K(ret));
   } else if (OB_FAIL(check_next_token_with_val(ObWktTokenType::W_NUMBER, y_val))) {
-    LOG_WARN("fail to parse point, check next NUMBER", K(ret));
   } else if (OB_FAIL(try_parse_zdim_token(z_val))) {
-    LOG_WARN("fail to try parse z dim value", K(ret));
   } else if (with_brackets && OB_FAIL(check_next_token(ObWktTokenType::W_RIGHT_B))) {
     LOG_WARN("fail to parse point, check next RIGHT_B", K(ret));
   } else if (OB_FAIL(wkb_buf_.append(x_val.number_val_))) {
-    LOG_WARN("fail to append x_val to point", K(ret));
   } else if (OB_FAIL(wkb_buf_.append(y_val.number_val_))) {
-    LOG_WARN("fail to append y_val to point", K(ret));
   } else if (dim_type_ == ObGeoDimType::IS_3D && OB_FAIL(wkb_buf_.append(z_val.number_val_))) {
     LOG_WARN("fail to append z_val to point", K(dim_type_), K(ret));
   }
@@ -447,7 +418,6 @@ int ObWktParser::try_parse_zdim_token(ObWktTokenVal &z_val)
   ObGeoDimType tmp_dim_type = ObGeoDimType::NOT_INIT;
   ObWktTokenType tk_type;
   if (OB_FAIL(get_next_token_keep_pos(tk_type, z_val))) {
-    LOG_WARN("fail to get next token", K(ret));
   } else if (tk_type == ObWktTokenType::W_NUMBER) {
     tmp_dim_type = ObGeoDimType::IS_3D;
   } else if (tk_type == ObWktTokenType::W_RIGHT_B || tk_type == ObWktTokenType::W_COMMA) {
@@ -458,7 +428,6 @@ int ObWktParser::try_parse_zdim_token(ObWktTokenVal &z_val)
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(set_dimension(tmp_dim_type))) {
-      LOG_WARN("fail to set dimension type", K(ret));
     }
 
     if (OB_SUCC(ret)) { // if dim is 3, move the ptr to next token
@@ -475,7 +444,6 @@ int ObWktParser::parse_linestring(bool is_ring)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_next_token(ObWktTokenType::W_LEFT_B))) {
-    LOG_WARN("fail to check next token LEFT_B", K(ret));
   } else {
     ObWktTokenType tkn_type;
     ObWktTokenVal tkn_val;
@@ -483,13 +451,10 @@ int ObWktParser::parse_linestring(bool is_ring)
     uint32_t num_points = 0;
     int pos = wkb_buf_.length(); // backfill num_points
     if (OB_FAIL(wkb_buf_.append_zero(sizeof(uint32_t)))) {
-      LOG_WARN("fail to move back wkb buffer", K(ret));
     } else {
       do {
         if (OB_FAIL(parse_point(false))) {
-          LOG_WARN("fail to parse point in linestring", K(ret));
         } else if (OB_FAIL(get_next_token(tkn_type, tkn_val))) {
-          LOG_WARN("fail to parse point", K(ret));
         } else {
           num_points++;
           if (ObWktTokenType::W_COMMA == tkn_type) {
@@ -535,7 +500,6 @@ int ObWktParser::parse_polygon()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_next_token(ObWktTokenType::W_LEFT_B))) {
-    LOG_WARN("fail to check next token LEFT_B", K(ret));
   } else {
     ObWktTokenType tkn_type;
     ObWktTokenVal tkn_val;
@@ -543,13 +507,10 @@ int ObWktParser::parse_polygon()
     uint32_t num_lines = 0;
     int pos = wkb_buf_.length(); // backfill num_lines
     if (OB_FAIL(wkb_buf_.append_zero(sizeof(uint32_t)))) {
-      LOG_WARN("fail to move back wkb buffer", K(ret));
     } else {
       do {
         if (OB_FAIL(parse_linestring(true))) {
-          LOG_WARN("fail to parse linestring in polygon", K(ret));
         } else if (OB_FAIL(get_next_token(tkn_type, tkn_val))) {
-          LOG_WARN("fail to parse point", K(ret));
         } else {
           num_lines++;
           if (ObWktTokenType::W_COMMA == tkn_type) {
@@ -588,7 +549,6 @@ int ObWktParser::parse_multi_geom(ObGeoType geo_type, bool brackets)
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(check_next_token(ObWktTokenType::W_LEFT_B))) {
-      LOG_WARN("fail to check next token LEFT_B", K(ret));
     } else {
       ObWktTokenType tkn_type;
       ObWktTokenVal tkn_val;
@@ -596,19 +556,14 @@ int ObWktParser::parse_multi_geom(ObGeoType geo_type, bool brackets)
       uint32_t num_geo = 0;
       int pos = wkb_buf_.length(); // backfill num_lines
       if (OB_FAIL(wkb_buf_.append_zero(sizeof(uint32_t)))) {
-        LOG_WARN("fail to move back wkb buffer", K(ret));
       } else {
         do {
           uint64_t type_pos = wkb_buf_.length() + sizeof(char);
           // TODO: point without brackets
           if (OB_FAIL(wkb_buf_.append(static_cast<char>(ObGeoWkbByteOrder::LittleEndian)))) {
-            LOG_WARN("fail to add bo to xxx inside multixxx", K(ret), K(geo_type));
           } else if (OB_FAIL(wkb_buf_.append(static_cast<uint32_t>(geo_type)))) {
-            LOG_WARN("fail to add type to xxx inside multixxx", K(ret), K(geo_type));
           } else if (OB_FAIL(parse_func())) {
-            LOG_WARN("fail to parse xxx in multixxx", K(ret), K(geo_type));
           } else if (OB_FAIL(get_next_token(tkn_type, tkn_val))) {
-            LOG_WARN("fail to parse xxx", K(ret), K(geo_type));
           } else {
             num_geo++;
             if (ObWktTokenType::W_COMMA == tkn_type) {
@@ -663,14 +618,11 @@ int ObWktParser::parse_geometrycollectioin()
   int pos = wkb_buf_.length(); // backfill num_geos
   // in case of empty, we need move it first
   if (OB_FAIL(wkb_buf_.append_zero(sizeof(uint32_t)))) {
-    LOG_WARN("fail to move back wkb buffer", K(ret));
   } else {
     if (OB_FAIL(get_next_token(tkn_type, tkn_val))) {
-      LOG_WARN("fail to get next token", K(ret));
     } else if (ObWktTokenType::W_EMPTY == tkn_type) {
     } else if (ObWktTokenType::W_LEFT_B == tkn_type) {
       if (OB_FAIL(get_next_token_keep_pos(tkn_type, tkn_val))) {
-        LOG_WARN("fail to get next without skip", K(ret));
       } else if (ObWktTokenType::W_RIGHT_B == tkn_type) {
         if (OB_FAIL(check_next_token(ObWktTokenType::W_RIGHT_B))) {
           ret = OB_ERR_UNEXPECTED;
@@ -680,9 +632,7 @@ int ObWktParser::parse_geometrycollectioin()
         bool has_more_geo = false;
           do {
             if (OB_FAIL(SMART_CALL(inner_parse()))) {
-              LOG_WARN("fail to parse geom object inside geomtrycollection", K(ret));
             } else if (OB_FAIL(get_next_token(tkn_type, tkn_val))) {
-              LOG_WARN("fail to get next token", K(ret));
             } else {
               num_geos++;
               if (ObWktTokenType::W_COMMA == tkn_type) {
@@ -716,7 +666,6 @@ int ObWktParser::parse_wkt(ObIAllocator &allocator, const ObString &wkt, ObGeome
   } else {
     ObWktParser parser(allocator, wkt);
     if (OB_FAIL(parser.parse(geo, is_geographical))) {
-      LOG_WARN("fail to parse wkt", K(ret), K(wkt));
     }
   }
   return ret;

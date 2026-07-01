@@ -31,7 +31,6 @@ int ObMemtableRowSampleIterator::get_next_row(blocksstable::ObDatumRow *&row)
     if (OB_ITER_END != ret) {
       STORAGE_LOG(WARN, "multiple merge failed to get next row", K(ret));
     } else {
-      STORAGE_LOG(INFO, "total sample row count", K(row_num_));
     }
   } else {
     row_num_++;

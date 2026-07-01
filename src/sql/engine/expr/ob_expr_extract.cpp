@@ -151,9 +151,7 @@ int ObExprExtract::calc_extract_mysql(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum1))) {
-    LOG_WARN("eval param1 value failed");
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, param_datum2))) {
-    LOG_WARN("eval param2 value failed");
   } else {
     ObDateUnitType extract_field = static_cast<ObDateUnitType>(param_datum1->get_int());
     ObObjType date_type = expr.args_[1]->datum_meta_.type_;
@@ -173,7 +171,6 @@ int ObExprExtract::calc_extract_mysql(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
                                     cast_mode, tz_info,
                                     cur_ts_value, 
                                     date_sql_mode, has_lob_header, is_null, value))) {
-      LOG_WARN("failed to calculate extract expression", K(ret));
     } else if (is_null) {
       expr_datum.set_null();
     } else {
@@ -201,9 +198,7 @@ int ObExprExtract::calc_extract_mysql_batch(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("session is null", K(ret));
     } else if (OB_FAIL(expr.args_[0]->eval(ctx, date_unit_datum))) {
-      LOG_WARN("eval date_unit_datum failed", K(ret));
     } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
-      LOG_WARN("failed to eval batch result args0", K(ret));
     } else {
       uint64_t cast_mode = 0;
       ObSQLUtils::get_default_cast_mode(session->get_stmt_type(), session, cast_mode);
@@ -228,7 +223,6 @@ int ObExprExtract::calc_extract_mysql_batch(
           if (OB_FAIL(ObExprExtract::calc(
                   date_type, datum_array[j], extract_field, scale, cast_mode,
                   tz_info, cur_ts_value, date_sql_mode, has_lob_header, is_null, value))) {
-            LOG_WARN("failed to calculate extract expression", K(ret));
           } else {
             if (is_null) {
               results[j].set_null();
@@ -284,7 +278,6 @@ int process_vector_mysql(const ObExpr &expr, const T_ARG_VEC &arg_date_vec, ObOb
                           has_lob_header,
                           is_null,
                           value))) {
-        LOG_WARN("failed to calculate extract expression", K(ret));
       } else {
         if (is_null) {
           res_vec.set_null(i);
@@ -413,7 +406,6 @@ int sql::ObExprExtract::calc_extract_mysql_vector(const ObExpr &expr, ObEvalCtx 
           static_cast<ObVectorBase &>(*res_vec));
     }
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to calculate extract expression in vector format", K(ret));
     }
   }
 

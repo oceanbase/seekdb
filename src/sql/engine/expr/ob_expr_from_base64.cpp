@@ -49,7 +49,6 @@ int ObExprFromBase64::calc_result_type1(ObExprResType &type,
   int64_t mbmaxlen = 0;
   int64_t max_result_length = 0;
   if (OB_FAIL(common::ObCharset::get_mbmaxlen_by_coll(str.get_collation_type(), mbmaxlen))) {
-    LOG_WARN("fail to get mbmaxlen", K(type.get_collation_type()), K(ret));
   } else {
     max_result_length = base64_needed_decoded_length(str.get_length()) * mbmaxlen;
     if (max_result_length > OB_MAX_BLOB_WIDTH) {
@@ -80,7 +79,6 @@ int ObExprFromBase64::eval_from_base64(const ObExpr &expr,
   ObDatum *arg = nullptr;
 
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else if (OB_UNLIKELY(arg->is_null())) {
     res.set_null();
   } else {
@@ -108,7 +106,6 @@ int ObExprFromBase64::eval_from_base64(const ObExpr &expr,
         res.set_string(output_buf, pos);
         if (OB_FAIL(ObExprUtil::set_expr_ascii_result(
           expr, ctx, res, ObString(pos, output_buf)))) {
-          LOG_WARN("set ASCII result failed", K(ret));
         }
       }
     }
@@ -124,7 +121,6 @@ int ObExprFromBase64::eval_from_base64_batch(const ObExpr &expr, ObEvalCtx &ctx,
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
 
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else {
     ObDatumVector args = expr.args_[0]->locate_expr_datumvector(ctx);
     ObEvalCtx::TempAllocGuard alloc_guard(ctx);
@@ -161,7 +157,6 @@ int ObExprFromBase64::eval_from_base64_batch(const ObExpr &expr, ObEvalCtx &ctx,
           res[j].set_string(output_buf, pos);
           if (OB_FAIL(ObExprUtil::set_expr_ascii_result(
             expr, ctx, res[j], ObString(pos, output_buf)))) {
-            LOG_WARN("set ASCII result failed", K(ret));
           }
         }
       }

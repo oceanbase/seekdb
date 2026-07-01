@@ -97,11 +97,9 @@ void hex_dump(const void *data, const int32_t size,
     if (n % 16 == 0) {
       /* line completed */
       if (char_type)
-        _OB_NUM_LEVEL_LOG(log_level, OB_SUCCESS, "[%ld] [%4.4s]   %-50.50s  %s\n",
-                          pthread_self(), addrstr, hexstr, charstr);
+        (void)0;
       else
-        _OB_NUM_LEVEL_LOG(log_level, OB_SUCCESS, "[%ld] [%4.4s]   %-50.50s\n",
-                          pthread_self(), addrstr, hexstr);
+        (void)0;
       hexstr[0] = 0;
       charstr[0] = 0;
     } else if (n % 8 == 0) {
@@ -115,11 +113,9 @@ void hex_dump(const void *data, const int32_t size,
   if (strlen(hexstr) > 0) {
     /* print rest of buffer if not empty */
     if (char_type)
-      _OB_NUM_LEVEL_LOG(log_level, OB_SUCCESS, "[%ld] [%4.4s]   %-50.50s  %s\n",
-                        pthread_self(), addrstr, hexstr, charstr);
+      (void)0;
     else
-      _OB_NUM_LEVEL_LOG(log_level, OB_SUCCESS, "[%ld] [%4.4s]   %-50.50s\n",
-                        pthread_self(), addrstr, hexstr);
+      (void)0;
   }
 }
 int32_t parse_string_to_int_array(const char *line,
@@ -277,7 +273,6 @@ int convert_comment_str(char *comment_str)
   if (comment_str == NULL) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_SUCCESS != (ret = replace_str(comment_str, strlen(comment_str), "\\n", "\n"))) {
-    _OB_LOG(WARN, "replace \\n to enter failed, src_str=%s, ret=%d", comment_str, ret);
   }
   return ret;
 }
@@ -508,9 +503,6 @@ int replace_str(char *src_str, const int64_t src_str_buf_size,
 
   if (NULL == src_str || src_str_buf_size <= 0
       || NULL == match_str || NULL == replace_str) {
-    _OB_LOG(WARN, "invalid param, src_str=%p, src_str_buf_size=%ld, "
-            "match_str=%p, replace_str=%p",
-            src_str, src_str_buf_size, match_str, replace_str);
     ret = OB_ERROR;
   } else if (NULL != (find_pos = strstr(src_str, match_str))) {
     match_str_len = strlen(match_str);
@@ -520,9 +512,6 @@ int replace_str(char *src_str, const int64_t src_str_buf_size,
           + strlen(find_pos + match_str_len);
       if (str_len >= OB_MAX_EXPIRE_INFO_STRING_LENGTH
           || str_len >= src_str_buf_size) {
-        _OB_LOG(WARN, "str after replace is too large, new_size=%ld, "
-                "new_buf_size=%ld, src_str_buf_size=%ld",
-                str_len, OB_MAX_EXPIRE_INFO_STRING_LENGTH, src_str_buf_size);
         ret = OB_ERROR;
         break;
       } else {
@@ -545,7 +534,6 @@ int get_ethernet_speed(const char *devname, int64_t &speed)
   int ret = OB_SUCCESS;
   if (NULL == devname) {
     ret = OB_INVALID_ARGUMENT;
-    _OB_LOG(WARN, "invalid devname %p", devname);
   } else {
     ret = get_ethernet_speed(ObString::make_string(devname), speed);
   }
@@ -560,12 +548,10 @@ int get_ethernet_speed(const ObString &devname, int64_t &speed)
   static int dev_file_exist = 1;
   if (0 == devname.length()) {
     ret = OB_INVALID_ARGUMENT;
-    _OB_LOG(WARN, "empty devname");
   } else {
     IGNORE_RETURN snprintf(path, sizeof(path), "/sys/class/net/%.*s", devname.length(), devname.ptr());
     if (OB_SUCCESS != (ret = FileDirectoryUtils::is_exists(path, exist)) || !exist) {
       if (dev_file_exist) {
-      _OB_LOG(WARN, "path %s not exist", path);
        dev_file_exist = 0;
       }
       ret = OB_FILE_NOT_EXIST;
@@ -579,14 +565,11 @@ int get_ethernet_speed(const ObString &devname, int64_t &speed)
     IGNORE_RETURN snprintf(path, sizeof(path), "/sys/class/net/%.*s/bonding/",
                            devname.length(), devname.ptr());
     if (OB_SUCCESS != (ret = FileDirectoryUtils::is_exists(path, exist))) {
-      LIB_LOG(WARN, "check net file if exists failed.", K(ret));
     } else if (exist) {
       IGNORE_RETURN snprintf(path, sizeof(path), "/sys/class/net/%.*s/bonding/slaves",
                              devname.length(), devname.ptr());
       if (OB_SUCCESS != (ret = load_file_to_string(path, alloc, str))) {
-        _OB_LOG(WARN, "load file %s failed, ret %d", path, ret);
       } else if (0 == str.length()) {
-        _OB_LOG(WARN, "can't get slave ethernet");
         ret = OB_ERROR;
       } else {
         int len = 0;
@@ -601,7 +584,6 @@ int get_ethernet_speed(const ObString &devname, int64_t &speed)
     }
     if (OB_SUCCESS == ret) {
       if (OB_SUCCESS != (ret = load_file_to_string(path, alloc, str))) {
-        _OB_LOG(WARN, "load file %s failed, ret %d", path, ret);
       } else {
         speed = atoll(str.ptr());
         speed = speed * 1024 * 1024 / 8;
@@ -625,7 +607,6 @@ int deep_copy_obj(ObIAllocator &allocator, const ObObj &src, ObObj &dst)
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("Fail to allocate memory, ", K(size), K(ret));
       } else if (OB_FAIL(dst.deep_copy(src, buf, size, pos))){
-        LOG_WARN("Fail to deep copy obj, ", K(ret));
       } else { }//do nothing
     } else {
       dst = src;
@@ -640,7 +621,6 @@ int deep_copy_objparam(ObIAllocator &allocator, const ObObjParam &src, ObObjPara
   if (!src.need_deep_copy()) {
     dst = src;
   } else if (OB_FAIL(deep_copy_obj(allocator, src, dst))) {
-    LOG_WARN("failed to deep copy obj", K(ret));
   } else {
     dst.set_accuracy(src.get_accuracy());
     dst.unset_result_flag(dst.get_result_flag());
@@ -1125,7 +1105,6 @@ int sql_append_hex_escape_str(const ObString &str, ObSqlString &sql)
   char buf[LOCAL_BUF_LEN];
   int64_t pos = 0;
   if (OB_FAIL(sql.reserve(need_len))) {
-    LOG_WARN("reserve sql failed, ", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -1147,7 +1126,6 @@ int sql_append_hex_escape_str(const ObString &str, ObSqlString &sql)
       buf[pos++] = '\'';
       buf[pos] = '\0';
       if (OB_FAIL(sql.append(buf))) {
-        LOG_WARN("append string failed", K(ret));
       }
     }
   }
@@ -1298,7 +1276,6 @@ int start_daemon(const char *pidfile, bool skip_daemon)
 #endif
       long pid = 0;
       if (OB_FAIL(read_pid(pidfile, pid))) {
-        LOG_ERROR("read pid fail", KCSTRING(pidfile), K(ret));
       } else {
         LOG_ERROR("process is running", K(pid));
       }
@@ -1443,7 +1420,6 @@ int ObBandwidthThrottle::init(const int64_t rate, const char *comment)
     databuff_printf(comment_, OB_MAX_TASK_COMMENT_LENGTH, "%s", comment);
     inited_ = true;
 
-    COMMON_LOG(INFO, "init bandwidth", K(rate_), KCSTRING(comment_));
     if (0 == rate_) {
       LOG_ERROR("bandwidth throttle rate is zero, please make sure is the config right?");
     }
@@ -1477,7 +1453,6 @@ int ObBandwidthThrottle::set_rate(const int64_t rate)
   } else {
     ObSpinLockGuard guard(lock_);
     if (rate_ != rate) {
-      COMMON_LOG(INFO, "set bandwidth", "old rate", rate_, "new rate", rate);
       rate_ = rate;
       next_avaliable_timestamp_ = ObTimeUtility::current_time();
       unlimit_bytes_ = 0;
@@ -1493,7 +1468,6 @@ int ObBandwidthThrottle::set_rate(const int64_t rate)
 void ObBandwidthThrottle::destroy()
 {
   ObSpinLockGuard guard(lock_);
-  COMMON_LOG(INFO, "destroy bandwidth throttle");
   inited_ = false;
 }
 
@@ -1508,9 +1482,7 @@ int ObBandwidthThrottle::limit_and_sleep(const int64_t bytes, const int64_t last
     ret = OB_NOT_INIT;
     COMMON_LOG(WARN, "throttle is not initialized.", K(ret));
   } else if (OB_FAIL(cal_limit(bytes, avaliable_timestamp))) {
-    LOG_WARN("failed to cal limit", K(ret));
   } else if (OB_FAIL(do_sleep(avaliable_timestamp, last_active_time, max_idle_time, sleep_us))) {
-    LOG_WARN("failed to do sleep", K(ret));
   } else {
     ObSpinLockGuard guard(lock_);
     const int64_t cur_time = ObTimeUtility::current_time();
@@ -1523,8 +1495,6 @@ int ObBandwidthThrottle::limit_and_sleep(const int64_t bytes, const int64_t last
       const int64_t speed_KB_per_s = copy_KB * 1000 / print_interval_ms;
       const int64_t sleep_ms_sum = total_sleep_ms_ - last_printed_sleep_ms_;
       const int64_t rate_KB = rate_ / 1024;
-      COMMON_LOG(INFO, "print band limit", KCSTRING_(comment), K(copy_KB), K(sleep_ms_sum), K(speed_KB_per_s),
-          K_(total_sleep_ms), K_(total_bytes), "rate_KB/s", rate_KB, K(print_interval_ms));
       last_printed_bytes_ = total_bytes_;
       last_printed_sleep_ms_ = total_sleep_ms_;
       last_printed_ts_ = cur_time;
@@ -1552,7 +1522,6 @@ int ObBandwidthThrottle::cal_limit(const int64_t bytes, int64_t &avaliable_times
     unlimit_bytes_ += bytes;
 
     if (unlimit_bytes_ > INT64_MAX / 1000 / 1000) {
-      COMMON_LOG(ERROR, "unlimit_bytes_ is too large, cannot limit it...", K(bytes), K(rate_), K(unlimit_bytes_));
       next_avaliable_timestamp_ = cur_time;
       unlimit_bytes_ = 0;
     } else if (unlimit_bytes_ * 1000 * 1000 >= 200 * rate_) { // The minimum calculation unit is 200us, and the fragments smaller than the limit will be calculated next time
@@ -1593,7 +1562,6 @@ int ObBandwidthThrottle::do_sleep(
   sleep_us = 0;
 
   if (real_sleep_time > 0 && real_sleep_time <= UINT32_MAX) {
-    COMMON_LOG(DEBUG, "do band limit sleep", K(max_wait_time), K(sleep_time), K(real_sleep_time), K(last_active_time));
     sleep_us = real_sleep_time;
     ob_usleep<common::ObWaitEventIds::BANDWIDTH_THROTTLE_SLEEP>(static_cast<uint32_t>(real_sleep_time));
   }
@@ -1616,9 +1584,7 @@ int ObInOutBandwidthThrottle::init(const int64_t rate)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(in_throttle_.init(rate, "in"))) {
-    COMMON_LOG(WARN, "failed to init in_throttle_", K(ret));
   } else if (OB_FAIL(out_throttle_.init(rate, "out"))) {
-    COMMON_LOG(WARN, "failed to init out_throttle_", K(ret));
   }
   return ret;
 }
@@ -1628,9 +1594,7 @@ int ObInOutBandwidthThrottle::set_rate(const int64_t rate)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(in_throttle_.set_rate(rate))) {
-    COMMON_LOG(WARN, "failed to set in_throttle_ rate", K(ret));
   } else if (OB_FAIL(out_throttle_.set_rate(rate))) {
-    COMMON_LOG(WARN, "failed to set out_throttle_", K(ret));
   }
   return ret;
 }
@@ -1640,7 +1604,6 @@ int ObInOutBandwidthThrottle::get_rate(int64_t &rate)
   int ret = OB_SUCCESS;
   rate = 0;
   if (OB_FAIL(out_throttle_.get_rate(rate))) {
-    COMMON_LOG(WARN, "failed to get rate", K(ret));
   }
   return ret;
 }
@@ -1652,7 +1615,6 @@ int ObInOutBandwidthThrottle::limit_in_and_sleep(
   int64_t sleep_us = 0;
 
   if (OB_FAIL(in_throttle_.limit_and_sleep(bytes, last_active_time, max_idle_time, sleep_us))) {
-    COMMON_LOG(WARN, "failed to limit in_throttle_", K(ret));
   }
 
   EVENT_ADD(BANDWIDTH_IN_THROTTLE, bytes);
@@ -1667,7 +1629,6 @@ int ObInOutBandwidthThrottle::limit_out_and_sleep(
   int64_t sleep_us = 0;
 
   if (OB_FAIL(out_throttle_.limit_and_sleep(bytes, last_active_time, max_idle_time, sleep_us))) {
-    COMMON_LOG(WARN, "failed to limit out_throttle_", K(ret));
   }
   if (OB_SUCC(ret) && nullptr != need_sleep_us) {
     *need_sleep_us = sleep_us;
@@ -1767,11 +1728,8 @@ bool ez2ob_addr(ObAddr &addr, easy_addr_t& ez)
   bool ret = false;
   addr.reset();
   if (AF_INET == ez.family && !(ret = addr.set_ipv4_addr(ntohl(ez.u.addr), ntohs(ez.port)))) {
-    LIB_LOG(WARN, "fail to set ipv4 addr", K(addr));
   } else if (AF_INET6 == ez.family && !(ret = addr.set_ipv6_addr(ez.u.addr6, ntohs(ez.port)))) {
-    LIB_LOG(WARN, "fail to set ipv6 addr", K(addr));
   } else if (AF_UNIX == ez.family && !(ret = addr.set_unix_addr(ez.u.unix_path))) {
-    LIB_LOG(WARN, "fail to set unix addr", K(addr));
   }
   return ret;
 }
@@ -1823,7 +1781,6 @@ int ob_atoll(const char *str, int64_t &res)
   if (OB_ISNULL(str)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ob_strtoll(str, endptr, val))) {
-    LIB_LOG(WARN, "failed to strtoll", K(ret), KCSTRING(str));
   } else if (str == endptr || OB_ISNULL(endptr) || OB_UNLIKELY('\0' != *endptr)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
@@ -1840,7 +1797,6 @@ int ob_atoull(const char *str, uint64_t &res)
   if (OB_ISNULL(str)) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(ob_strtoull(str, endptr, val))) {
-    LIB_LOG(WARN, "failed to strtoll", K(ret), KCSTRING(str));
   } else if (str == endptr || OB_ISNULL(endptr) || OB_UNLIKELY('\0' != *endptr)) {
     ret = OB_INVALID_ARGUMENT;
   } else {
@@ -1979,7 +1935,6 @@ static int64_t get_cpu_cache_size(int sysconf_name, const char *sysfs_path, int6
     }
     if (OB_UNLIKELY(nullptr == file || cache_size <= 0)) {
       int ret = OB_ERR_UNEXPECTED;
-      COMMON_LOG(ERROR, "failed to read cpu cache size in file", KP(file), K(cache_size));
       cache_size = default_value;
     }
   }

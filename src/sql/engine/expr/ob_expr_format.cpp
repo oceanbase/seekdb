@@ -62,7 +62,6 @@ int ObExprFormat::calc_result_typeN(ObExprResType &type,
     LOG_WARN("format function not support an optional locale parameter", K(ret));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "optional locale parameter of format");
   } else if (OB_FAIL(calc_result_type(type, type_array))) {
-    LOG_WARN("failed to calc result type", K(ret));
   } else {
     type.set_default_collation_type();
     type.set_collation_level(CS_LEVEL_COERCIBLE);
@@ -104,7 +103,6 @@ int ObExprFormat::calc_result_type(ObExprResType &type, ObExprResType *type_arra
   int ret = OB_SUCCESS;
   ObExprResType ori_type = type_array[0];
   if (OB_FAIL(get_origin_param_type(ori_type))) {
-    LOG_WARN("fail to get_origin_param_type", K(ret));
   } else {
     const ObObjType obj_type = ori_type.get_type();
     if (ob_is_integer_type(obj_type)) {
@@ -288,23 +286,16 @@ int ObExprFormat::convert_num_to_str(const ObDatumMeta &x_meta,
                 x_meta.precision_, x_meta.scale_,
                 x_meta.precision_ - x_meta.scale_ + 1 + scale, scale, scale,
                 x_datum, builder))) {
-      LOG_WARN("do_round_decimalint failed",
-               K(ret), K(x_meta.precision_), K(x_meta.scale_),
-               K(x_meta.precision_ - x_meta.scale_ + 1 + scale), K(scale));
     } else if (OB_FAIL(wide::to_string(builder.get_decimal_int(), builder.get_int_bytes(),
                        scale, buf, buf_len, str_len, false))) {
-      LOG_WARN("to_string failed", K(ret));
     }
   } else {
     number::ObNumber num = x_datum.get_number();
     number::ObNumber nmb;
     ObNumStackOnceAlloc tmp_alloc;
     if (OB_FAIL(nmb.from(num, tmp_alloc))) {
-      LOG_WARN("copy number failed.", K(ret), K(num));
     } else if (OB_FAIL(nmb.round(scale))) {
-      LOG_WARN("round failed.", K(ret), K(num.format()), K(scale));
     } else if (OB_FAIL(nmb.format_v2(buf, buf_len, str_len, scale))) {
-      LOG_WARN("fail to convert number to string", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -342,11 +333,9 @@ int ObExprFormat::calc_format_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       LOG_ERROR("fail to allocate memory", K(buf_len), K(ret));
     } else if (OB_FAIL(convert_num_to_str(x_meta, *x_datum, tmp_buf, MAX_FORMAT_BUFFER_SIZE,
                                           scale, str))) {
-      LOG_WARN("fail to convert num to str", K(ret));
     } else {
       tmp_buf = tmp_buf + MAX_FORMAT_BUFFER_SIZE;
       if (OB_FAIL(build_format_str(tmp_buf, locale, scale, str))) {
-        LOG_WARN("fail to build format str", K(ret));
       } else if (!ob_is_text_tc(expr.datum_meta_.type_)) {
         if (OB_ISNULL(res_buf = expr.get_str_res_mem(ctx, str.length()))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -359,9 +348,7 @@ int ObExprFormat::calc_format_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &
       } else { // text tc
         ObTextStringDatumResult text_res(expr.datum_meta_.type_, &expr, &ctx, &res_datum);
         if (OB_FAIL(text_res.init(str.length()))) {
-          LOG_WARN("init lob result failed", K(ret), K(str.length()));
         } else if (OB_FAIL(text_res.append(str.ptr(), str.length()))) {
-          LOG_WARN("failed to append realdata", K(ret), K(str), K(text_res));
         } else {
           text_res.set_result();
         }

@@ -103,7 +103,6 @@ public:
     DLink total_list_;
     DLink active_list_;
     void reset() {
-      COMMON_LOG(DEBUG, "reset list");
       freeze_stat_ = INIT;
       id_ = -1;
       clock_ = INT64_MAX;

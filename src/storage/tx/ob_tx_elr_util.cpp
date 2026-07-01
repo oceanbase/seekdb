@@ -39,7 +39,6 @@ void ObTxELRUtil::refresh_elr_tenant_config_()
       last_refresh_ts_ = ObClockGenerator::getClock();
     }
     if (REACH_TIME_INTERVAL(10000000 /* 10s */)) {
-      TRANS_LOG(INFO, "refresh tenant config success",  K(*this));
     }
   }
 }

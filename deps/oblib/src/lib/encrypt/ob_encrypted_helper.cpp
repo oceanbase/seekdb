@@ -77,18 +77,12 @@ int ObEncryptedHelper::encrypt_passwd_to_stage2(const ObString &password, ObStri
      * concat('*', stage2) => mysql_stage2
      */
     if (OB_FAIL(mysql_sha1_reset_wrap(&sha1_context))) {
-      LOG_WARN("failed to reset sha context", K(ret));
     } else if (OB_FAIL(mysql_sha1_input_wrap(&sha1_context,
         reinterpret_cast<const unsigned char *>(password.ptr()), password.length()))) {
-      LOG_WARN("failed to feed stage1 input", K(ret));
     } else if (OB_FAIL(mysql_sha1_result_wrap(&sha1_context, hash_stage1))) {
-      LOG_WARN("failed to get hash_stage1", K(ret));
     } else if (OB_FAIL(mysql_sha1_reset_wrap(&sha1_context))) {
-      LOG_WARN("failed to reset sha context", K(ret));
     } else if (OB_FAIL(mysql_sha1_input_wrap(&sha1_context, hash_stage1, SHA1_HASH_SIZE))) {
-      LOG_WARN("failed to feed stage2 input", K(ret));
     } else if (OB_FAIL(mysql_sha1_result_wrap(&sha1_context, hash_stage2))) {
-      LOG_WARN("failed to get hash_stage2", K(ret));
     } else {
       int64_t cnt = 0;
       char *out_buf = mysql_stage2.ptr();
@@ -145,19 +139,15 @@ int ObEncryptedHelper::encrypt_password(const ObString &raw_pwd, const ObString 
 
     // 1. stage1 = sha1(passwd)
     if (OB_FAIL(mysql_sha1_reset_wrap(&sha1_context))) {
-      LOG_WARN("failed to reset sha context", K(ret));
     } else if (OB_FAIL(mysql_sha1_input_wrap(&sha1_context,
             reinterpret_cast<const unsigned char *>(raw_pwd.ptr()), raw_pwd.length()))) {
-      LOG_WARN("failed to feed raw_pwd input", K(ret));
     } else if (OB_FAIL(mysql_sha1_result_wrap(&sha1_context, stage1_client))) {
-      LOG_WARN("failed to get stage1_client", K(ret));
     }
 
     // 2. stage2 = sha1(stage1)
     if (OB_SUCC(ret)) {
       const ObString stage1_str(SHA1_HASH_SIZE, reinterpret_cast<const char *>(stage1_client));
       if (OB_FAIL(encrypt_stage1_hex(stage1_str, scramble_str, pwd_buf, buf_len, copy_len))) {
-        LOG_WARN("failed to encrypt_stage1", K(ret));
       }
     }
   }
@@ -201,26 +191,19 @@ int ObEncryptedHelper::encrypt_stage1_hex(const ObString &stage1_hex_str,
     // 1. stage2 = sha1(stage1)
     if (OB_SUCC(ret)) {
       if (OB_FAIL(mysql_sha1_reset_wrap(&sha1_context))) {
-        LOG_WARN("failed to reset sha context", K(ret));
       } else if (OB_FAIL(mysql_sha1_input_wrap(&sha1_context,
           reinterpret_cast<const unsigned char *>(stage1_hex_str.ptr()), SHA1_HASH_SIZE))) {
-        LOG_WARN("failed to feed stage1_client input", K(ret));
       } else if (OB_FAIL(mysql_sha1_result_wrap(&sha1_context, stage2_client))) {
-        LOG_WARN("failed to get stage2_client", K(ret));
       }
     }
 
     // 2. scrambled_stage2 = sha1(scramble_got_from_server, stage2)
     if (OB_SUCC(ret)) {
       if (OB_FAIL(mysql_sha1_reset_wrap(&sha1_context))) {
-        LOG_WARN("failed to reset sha context", K(ret));
       } else if (OB_FAIL(mysql_sha1_input_wrap(&sha1_context,
           reinterpret_cast<const unsigned char *>(scramble_str.ptr()), SCRAMBLE_LENGTH))) {
-        LOG_WARN("failed to feed scramble_str input", K(ret));
       } else if (OB_FAIL(mysql_sha1_input_wrap(&sha1_context, stage2_client, SHA1_HASH_SIZE))) {
-        LOG_WARN("failed to feed stage2_client input", K(ret));
       } else if (OB_FAIL(mysql_sha1_result_wrap(&sha1_context, stage2_scambled))) {
-        LOG_WARN("failed to get stage2_scambled", K(ret));
       }
     }
 
@@ -228,7 +211,6 @@ int ObEncryptedHelper::encrypt_stage1_hex(const ObString &stage1_hex_str,
     if (OB_SUCC(ret)) {
       if (OB_FAIL(my_xor(reinterpret_cast<const unsigned char *>(stage1_hex_str.ptr()),
           stage2_scambled, SHA1_HASH_SIZE, reinterpret_cast<unsigned char *>(pwd_buf)))) {
-        LOG_WARN("failed to calc xor", K(ret));
       } else {
         copy_len = SHA1_HASH_SIZE;
       }
@@ -280,27 +262,19 @@ int ObEncryptedHelper::check_login(const ObString &login_reply,
   } else {
     //scample the stored stage2 hash with scramble_str
     if (OB_FAIL(mysql_sha1_reset_wrap(&sha1_context))) {
-      LOG_WARN("failed to reset sha context", K(ret));
     } else if (OB_FAIL(mysql_sha1_input_wrap(&sha1_context,
         reinterpret_cast<const unsigned char *>(scramble_str.ptr()), SCRAMBLE_LENGTH))) {
-      LOG_WARN("failed to feed scramble_str input", K(ret));
     } else if (OB_FAIL(mysql_sha1_input_wrap(&sha1_context,
         reinterpret_cast<const unsigned char *>(stored_stage2.ptr()), SHA1_HASH_SIZE))) {
-      LOG_WARN("failed to feed stored_stage2 input", K(ret));
     } else if (OB_FAIL(mysql_sha1_result_wrap(&sha1_context, stage2_scambled))) {
-      LOG_WARN("failed to get stage2_scambled", K(ret));
     } else if (OB_FAIL(my_xor(reinterpret_cast<const unsigned char *>(login_reply.ptr()),
         stage2_scambled, SHA1_HASH_SIZE, stage1_client))) {
-      LOG_WARN("failed to calc xor", K(ret));
     }
     //reproduce stage2 of client, compare it to stored_stage2
     if (OB_SUCC(ret)) {
       if (OB_FAIL(mysql_sha1_reset_wrap(&sha1_context))) {
-        LOG_WARN("failed to reset sha context", K(ret));
       } else if (OB_FAIL(mysql_sha1_input_wrap(&sha1_context, stage1_client, SCRAMBLE_LENGTH))) {
-        LOG_WARN("failed to feed stage1_client input", K(ret));
       } else if (OB_FAIL(mysql_sha1_result_wrap(&sha1_context, stage2_client))) {
-        LOG_WARN("failed to get stage2_client", K(ret));
       } else {
         pass = (0 == MEMCMP(stage2_client, stored_stage2.ptr(), SHA1_HASH_SIZE));
       }
@@ -325,9 +299,7 @@ int ObEncryptedHelper::displayable_to_hex(const ObString &displayable, ObString 
       int64_t high = 0;
       int64_t low = 0;
       if (OB_FAIL(char_to_hex(in_buf[i * 2], high))) {
-        LOG_WARN("Failed convert high char to hex", K(ret));
       } else if (OB_FAIL(char_to_hex(in_buf[i * 2 + 1], low))) {
-        LOG_WARN("Failed convert low char to hex", K(ret));
       } else {
         out_buf[i] = static_cast<char>(high << 4 | low);
       }

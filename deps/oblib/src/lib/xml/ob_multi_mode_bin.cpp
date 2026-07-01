@@ -85,7 +85,6 @@ int ObMulBinHeaderSerializer::serialize()
 {
   INIT_SUCC(ret);
   if (OB_FAIL(buffer_->reserve(MUL_MODE_BIN_HEADER_LEN))) {
-    LOG_WARN("failed to reserve", K(ret), K(buffer_->length()));
   } else if (is_scalar_data_type(type_)) {
     if (is_extend_type(type_)) {
       ObMulModeExtendStorageType tmp = get_extend_storage_type(type_);
@@ -93,10 +92,8 @@ int ObMulBinHeaderSerializer::serialize()
           || OB_FAIL(buffer_->append(reinterpret_cast<const char*>(&tmp.second), sizeof(uint8_t))))
       LOG_WARN("failed to append", K(ret), K(buffer_->length()));
     } else if (OB_FAIL(buffer_->append(reinterpret_cast<const char*>(&type_), sizeof(uint8_t)))) {
-      LOG_WARN("failed to append", K(ret), K(buffer_->length()));
     }
   } else if (OB_FAIL(buffer_->reserve(header_size()))) {
-    LOG_WARN("failed to reserve", K(ret), K(buffer_->length()));
   } else {
     buffer_->set_length(start() + header_size());
     new (buffer_->ptr() + start())ObMulModeBinHeader(static_cast<uint8_t>(type_),
@@ -404,9 +401,7 @@ int ObMulModeBinMerge::merge(ObIMulModeBase& origin, ObIMulModeBase& patch, ObIM
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("must be binary.", K(patch.is_tree()), K(origin.is_tree()), K(ret));
   } else if (OB_FAIL(init_merge_info(ctx, origin, patch, res))) {
-    LOG_WARN("fail to init ctx", K(ret));
   } else if (OB_FAIL(inner_merge(ctx, origin, patch, res))) {
-    LOG_WARN("fail to merge", K(ret));
   }
   return ret;
 }
@@ -432,10 +427,8 @@ int ObMulModeBinMerge::inner_merge(ObBinMergeCtx& ctx, ObIMulModeBase& origin,
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(if_need_merge(ctx, origin, patch, res, need_merge))) {
-    LOG_WARN("fail to check if need to merge", K(ret));
   } else if (!need_merge) {
     if (OB_FAIL(append_res_without_merge(ctx, origin, patch, res))) {
-      LOG_WARN("fail to merge", K(ret));
     }
   } else {
     // init common_header, the total_size and count is not precise
@@ -444,13 +437,10 @@ int ObMulModeBinMerge::inner_merge(ObBinMergeCtx& ctx, ObIMulModeBase& origin,
                                         estimated_length(retry, ctx, origin, patch),
                                         estimated_count(retry, ctx, origin, patch));
     if (OB_FAIL(append_header_to_res(ctx, origin, patch, cur_header, res))) {
-      LOG_WARN("fail to append header", K(ret));
     } else if (!if_need_append_key(ctx, origin, patch, res)) {
       if (OB_FAIL(append_key_without_merge(ctx, origin, cur_header, res))) {
-        LOG_WARN("fail to copy key", K(ret));
       }
     } else if (OB_FAIL(append_merge_key(ctx, origin, patch, cur_header, res))) {
-      LOG_WARN("fail to merge key", K(ret));
     }
     int64_t merged_len = 0;
     int append_key_count = ctx.defined_ns_idx_.size();
@@ -464,13 +454,11 @@ int ObMulModeBinMerge::inner_merge(ObBinMergeCtx& ctx, ObIMulModeBase& origin,
         idx -= append_key_count;
       }
       if (OB_FAIL(append_value_by_idx(is_origin, idx, ctx, origin, patch, cur_header, res))) {
-        LOG_WARN("fail to append value", K(ret));
       } else if (OB_FALSE_IT(merged_len = ctx.buffer_->length())) {
       } else if (merged_len < origin_len) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("value length must > 0", K(ret));
       } else if (OB_FAIL(set_value_offset(i, origin_len - start, ctx, res))) {
-        LOG_WARN("fail to set value offset", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -489,7 +477,6 @@ int ObMulModeBinMerge::inner_merge(ObBinMergeCtx& ctx, ObIMulModeBase& origin,
         ctx.retry_len_ = (merged_len - start) + cur_header.count_ * count_type_diff + 4 * cur_header.count_ * obj_type_diff;
         new (&cur_header) ObMulBinHeaderSerializer(ctx.buffer_, get_res_type(origin.type(), patch.type()), merged_len, cur_header.count_);
         if (OB_FAIL(inner_merge(ctx, origin, patch, res, true))) {
-          LOG_WARN("fail to retry", K(ret));
         } else {
           merged_len = ctx.buffer_->length();
         }
@@ -514,7 +501,6 @@ int ObMulModeBinMerge::append_header_to_res(ObBinMergeCtx& ctx, ObIMulModeBase& 
     ret = OB_BAD_NULL_ERROR;
     LOG_WARN("should not be null", K(ret));
   } else if (OB_FAIL(header.serialize())) {
-    LOG_WARN("fail to serialize common header", K(ret));
   }
   return ret;
 }

@@ -192,7 +192,6 @@ int ObGeoGridVisitor::visit(ObCartesianGeometrycollection *geo)
   int32_t valid_geo = 0;
   for (int32_t i = 0; i < geo->size() && OB_SUCC(ret); i++) {
     if (OB_FAIL((*geo)[i].do_visit(*this))) {
-      LOG_WARN("failed to do tree item visit", K(ret));
     } else if (!(*geo)[i].is_empty()) {
       if (valid_geo != i) {
         (*geo)[valid_geo] = (*geo)[i];

@@ -65,7 +65,6 @@ int ObPxPools::init()
   int ret = OB_SUCCESS;
   ObMemAttr attr("PxPoolBkt");
   if (OB_FAIL(pool_map_.create(PX_POOL_COUNT, attr, attr))) {
-    LOG_WARN("fail init pool map", K(ret));
   }
   return ret;
 }
@@ -78,7 +77,6 @@ int ObPxPools::get_or_create(int64_t group_id, ObPxPool *&pool)
   } else if (OB_FAIL(pool_map_.get_refactored(group_id, pool))) {
     if (OB_HASH_NOT_EXIST == ret) {
       if (OB_FAIL(create_pool(group_id, pool))) {
-        LOG_WARN("fail create pool", K(ret), K(group_id));
       }
     } else {
       LOG_WARN("fail get group id from hashmap", K(ret), K(group_id));
@@ -102,9 +100,7 @@ int ObPxPools::create_pool(int64_t group_id, ObPxPool *&pool)
         pool->set_group_id(group_id);
         pool->set_run_wrapper(MTL_CTX());
         if (OB_FAIL(pool->start())) {
-          LOG_WARN("fail startup px pool", K(group_id), K(ret));
         } else if (OB_FAIL(pool_map_.set_refactored(group_id, pool))) {
-          LOG_WARN("fail set pool to hashmap", K(group_id), K(ret));
         }
       }
     } else {
@@ -120,7 +116,6 @@ int ObPxPools::thread_recycle()
   common::SpinWLockGuard g(lock_);
   ThreadRecyclePoolFunc recycle_pool_func;
   if (OB_FAIL(pool_map_.foreach_refactored(recycle_pool_func))) {
-    LOG_WARN("failed to do foreach", K(ret));
   }
   return ret;
 }
@@ -180,7 +175,6 @@ void ObPxPools::mtl_stop(ObPxPools *&pools)
     common::SpinWLockGuard g(pools->lock_);
     StopPoolFunc stop_pool_func;
     if (OB_FAIL(pools->pool_map_.foreach_refactored(stop_pool_func))) {
-      LOG_WARN("failed to do foreach", K(ret));
     }
   }
 }
@@ -191,7 +185,6 @@ void ObPxPools::destroy()
   common::SpinWLockGuard g(lock_);
   DeletePoolFunc free_pool_func;
   if (OB_FAIL(pool_map_.foreach_refactored(free_pool_func))) {
-    LOG_WARN("failed to do foreach", K(ret));
   } else {
     pool_map_.destroy();
   }
@@ -213,7 +206,6 @@ int ObPxPool::submit(const RunFuncT &func)
     if (OB_ISNULL(t)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
     } else if (OB_FAIL(queue_.push(static_cast<ObLink*>(t), 0))) {
-      LOG_ERROR("px push queue failed", K(ret));
     }
   }
   if (ret != OB_SUCCESS) {
@@ -369,7 +361,6 @@ int ObTenant::init_ctx()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(CREATE_ENTITY(ctx_, this))) {
-    LOG_WARN("create tenant ctx failed", K(ret));
   } else if (OB_ISNULL(ctx_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(ret));
@@ -382,15 +373,9 @@ int ObTenant::init(const ObTenantMeta &meta)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(ObTenantBase::init(&cgroup_ctrl_))) {
-    LOG_WARN("fail to init tenant base", K(ret));
   } else if (OB_FAIL(req_queue_.init(AFFINITY_CTRL.get_num_nodes()))) {
-    // For now only the enable_numa_aware mode can ensure the number of worker threads is at least the number of
-    // NUMA node, so fallback to single-queue if enabel_numa_aware is disabled, otherwise some of the queues will
-    // never be consumed if the worker thread number is small.
-    LOG_WARN("fail to init tenant request queues", K(ret));
   } else if (FALSE_IT(req_queue_.set_limit(GCONF.tenant_task_queue_size))) {
   } else if (OB_FAIL(construct_mtl_init_ctx(meta, mtl_init_ctx_))) {
-    LOG_WARN("construct_mtl_init_ctx failed", KR(ret), K(*this));
   } else {
     ObTenantBase::mtl_init_ctx_ = mtl_init_ctx_;
     tenant_meta_ = meta;
@@ -411,7 +396,6 @@ int ObTenant::init(const ObTenantMeta &meta)
   }
 
   if (OB_FAIL(ret)) {
-    LOG_ERROR("fail to create tenant module", K(ret));
   } else {
     start();
   }
@@ -426,7 +410,6 @@ int ObTenant::construct_mtl_init_ctx(const ObTenantMeta &meta, share::ObTenantMo
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc ObTenantModuleInitCtx failed", K(ret));
   } else if (OB_FAIL(OB_FILE_SYSTEM_ROUTER.get_tenant_clog_dir(mtl_init_ctx_->tenant_clog_dir_))) {
-    LOG_ERROR("get_tenant_clog_dir failed", K(ret));
   } else {
     mtl_init_ctx_->palf_options_.disk_options_.log_disk_usage_limit_size_ = meta.unit_.config_.log_disk_size();
     mtl_init_ctx_->palf_options_.disk_options_.log_disk_utilization_threshold_ = 80;
@@ -542,18 +525,14 @@ int ObTenant::create_tenant_module()
 
   bool mtl_init = false;
   if (OB_FAIL(OBSERVER.obs_construct_modules())) {
-    LOG_ERROR("create mtl module failed", K(ret));
   } else if (CREATE_MTL_MODULE_FAIL) {
     ret = CREATE_MTL_MODULE_FAIL;
     LOG_ERROR("create_tenant_module failed because of tracepoint CREATE_MTL_MODULE_FAIL",
               K(ret));
   } else if (FALSE_IT(mtl_init = true)) {
   } else if (OB_FAIL(OBSERVER.obs_init_modules())) {
-    LOG_ERROR("init mtl module failed", K(ret));
   } else if (OB_FAIL(OBSERVER.obs_start_modules())) {
-    LOG_ERROR("start mtl module failed", K(ret));
   } else if (OB_FAIL(update_thread_cnt(max_cpu))) {
-    LOG_ERROR("update mtl module thread cnt fail", K(ret));
   }
 
   FLOG_INFO("finish create mtl module>>>>", K(ret));
@@ -641,7 +620,6 @@ int ObTenant::try_wait()
     }
   } else {
     if (OB_FAIL(ob_pthread_tryjoin_np(gc_thread_))) {
-      LOG_WARN("tenant pthread_tryjoin_np failed", K(errno), K(id()));
     } else {
       ATOMIC_STORE(&gc_thread_, nullptr); // avoid try_wait again after wait success
       LOG_INFO("tenant pthread_tryjoin_np successfully", K(id()));
@@ -786,12 +764,10 @@ int ObTenant::recv_request(ObRequest &req)
         if (req.is_retry_on_lock()) {
           ATOMIC_INC(&recv_retry_on_lock_mysql_cnt_);
           if (OB_FAIL(req_queue_.push(&req, RQ_HIGH, true))) {
-            LOG_WARN("push request to RQ_HIGH queue fail", K(ret), K(this));
           }
         } else {
           ATOMIC_INC(&recv_mysql_cnt_);
           if (OB_FAIL(req_queue_.push(&req, RQ_NORMAL, true))) {
-            LOG_WARN("push request to queue fail", K(ret), K(this));
           }
         }
         break;
@@ -800,14 +776,12 @@ int ObTenant::recv_request(ObRequest &req)
       case ObRequest::OB_TS_TASK: {
         ATOMIC_INC(&recv_task_cnt_);
         if (OB_FAIL(req_queue_.push(&req, RQ_HIGH, true))) {
-          LOG_WARN("push request to queue fail", K(ret), K(this));
         }
         break;
       }
       case ObRequest::OB_SQL_TASK: {
         ATOMIC_INC(&recv_sql_task_cnt_);
         if (OB_FAIL(req_queue_.push(&req, RQ_NORMAL, true))) {
-          LOG_WARN("push request to queue fail", K(ret), K(this));
         }
         break;
       }
@@ -844,7 +818,6 @@ int ObTenant::push_retry_queue(rpc::ObRequest &req, const uint64_t timestamp)
     ret = OB_IN_STOP_STATE;
     LOG_WARN("receive retry request but tenant has already stopped", K(ret), K(id()));
   } else if (OB_FAIL(retry_queue_.push(req, timestamp))) {
-    LOG_ERROR("push retry queue failed", K(ret), K(id()));
   }
   return ret;
 }
@@ -885,7 +858,6 @@ int ObTenant::get_default_group_throttled_time(int64_t &default_group_throttled_
   int ret = OB_SUCCESS;
   int64_t current_default_group_throttled_time_us = -1;
   if (OB_FAIL(GCTX.cgroup_ctrl_->get_throttled_time(current_default_group_throttled_time_us, OBCG_DEFAULT_GROUP_ID))) {
-    LOG_WARN("get throttled time failed", K(ret), K(id()));
   } else if (current_default_group_throttled_time_us > 0) {
     default_group_throttled_time = current_default_group_throttled_time_us - default_group_throttled_time_us_;
     default_group_throttled_time_us_ = current_default_group_throttled_time_us;
@@ -1041,7 +1013,6 @@ int ObTenant::acquire_more_worker(int64_t num, int64_t &succ_num, bool force)
   while (OB_SUCC(ret) && num > succ_num) {
     ObThWorker *w = nullptr;
     if (OB_FAIL(create_worker(w, this))) {
-      LOG_WARN("create worker failed", K(ret));
     } else {
       lib::ObMutexGuard g(workers_lock_);
       if (!workers_.add_last(&w->worker_node_)) {
@@ -1121,7 +1092,6 @@ void ObTenant::check_parallel_servers_target()
   if (OB_FAIL(ObSchemaUtils::get_tenant_int_variable(
               SYS_VAR_PARALLEL_SERVERS_TARGET,
               val))) {
-    LOG_WARN("fail read tenant variable", K(id()), K(ret));
   } else {
     OB_PX_TARGET_MONITOR.set_parallel_servers_target(val);
   }

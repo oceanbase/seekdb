@@ -59,14 +59,12 @@ public:
       ret = OB_INVALID_ARGUMENT;
       STORAGE_LOG(WARN, "Invalid argument", K(ret), K(bitmap));
     } else if (OB_FAIL(bitmap_.reserve(bitmap.bitmap_.size()))) {
-      STORAGE_LOG(WARN, "Fail to expand bitmap", K(ret), K(bitmap.bitmap_.size()));
     } else if (bitmap.filter_constant_type_.is_constant()) {
       max_filter_constant_id_ = bitmap.max_filter_constant_id_;
       filter_constant_type_ = bitmap.filter_constant_type_;
       bitmap_.reuse(filter_constant_type_.is_always_true());
     } else {
       if (OB_FAIL(bitmap_.copy_from(bitmap.bitmap_, 0, bitmap.bitmap_.size()))) {
-        STORAGE_LOG(WARN, "Fail to set bitmap", K(ret), K(bitmap));
       } else {
         max_filter_constant_id_ = OB_INVALID_CS_ROW_ID;
         filter_constant_type_.set_uncertain();

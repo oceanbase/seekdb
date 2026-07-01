@@ -35,11 +35,8 @@ int OMPKPrexecute::serialize(char* buffer, int64_t length, int64_t& pos) const
     LOG_WARN("size is overflow",  K(length), K(pos), "need_size", get_serialize_size(), K(ret));
   } else {
     if (OB_FAIL(OMPKPrepare::serialize(buffer, length, pos))) {
-      LOG_WARN("prepare failed", KP(buffer), K(length), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_int4(buffer, length, extend_flag_.extend_flag_, pos))) {
-      LOG_WARN("store failed", KP(buffer), K(length), K_(extend_flag_.extend_flag), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_int1(buffer, length, has_result_set_, pos))) {
-      LOG_WARN("store failed", KP(buffer), K(length), K_(has_result_set), K(pos));
     } 
   }
   return ret;

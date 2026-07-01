@@ -53,8 +53,6 @@ int ObRawEncoder::init(const ObColumnEncodingCtx &ctx,
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnEncoder::init(ctx, column_index, rows))) {
-    LOG_WARN("init base column encoder failed",
-        K(ret), K(ctx), K(column_index), "row count", rows.count());
   } else {
     column_header_.type_ = type_;
     store_class_ = get_store_class_map()[ob_obj_type_class(column_type_.get_type())];
@@ -286,7 +284,6 @@ int ObRawEncoder::store_fix_data(ObBufferWriter &buf_writer)
         ? desc_.bit_packing_length_
         : desc_.fix_data_length_);
     if (OB_FAIL(fill_column_store(buf_writer, *ctx_->col_datums_, getter, DatumDataSetter()))) {
-      LOG_WARN("fill datum column store failed", K(ret));
     }
   }
   return ret;

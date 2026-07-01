@@ -95,7 +95,6 @@ int ObFtParserAdaptor::segment(ObFTParserParam *param, ObITokenIterator *&iter) 
   } else if (OB_ISNULL(ftparser_.scan_begin) || OB_ISNULL(ftparser_.next_token)) {
     ret = OB_NOT_SUPPORTED;
   } else if (OB_FAIL(ftparser_.scan_begin(param))) {
-    LOG_WARN("failed to call ftparser.init", K(ret));
   } else if (OB_ISNULL(iter_adaptor = static_cast<ObTokenIteratorAdaptor *>(param->allocator_->alloc(sizeof(ObTokenIteratorAdaptor))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if (FALSE_IT(new (iter_adaptor) ObTokenIteratorAdaptor(ftparser_, param))) {
@@ -114,7 +113,6 @@ void ObFtParserAdaptor::free_token_iter(ObFTParserParam *param, ObITokenIterator
   } else if (OB_NOT_NULL(ftparser_.scan_end)) {
     int tmp_ret = ftparser_.scan_end(param);
     if (tmp_ret != OB_SUCCESS) {
-      LOG_WARN("failed to call ftparser.scan_end(ignore)", K(tmp_ret));
     }
   } else {
     ObTokenIteratorAdaptor *iter_adaptor = static_cast<ObTokenIteratorAdaptor *>(iter);
@@ -133,7 +131,6 @@ int ObFtParserAdaptor::get_add_word_flag(ObAddWordFlag &flag) const
   } else if (OB_ISNULL(ftparser_.get_add_word_flag)) {
     ret = OB_NOT_SUPPORTED;
   } else if (OB_FAIL(ftparser_.get_add_word_flag(&iflag))) {
-    LOG_WARN("failed to get add_word_flag", K(ret));
   } else {
     flag.set_flag(iflag);
   }

@@ -202,9 +202,7 @@ int ObIMulModeBase::print(ObStringBuffer& x_buf, uint32_t format_flag, uint64_t 
     } else {
       ObNsSortedVector ns_vec;
       if (OB_FAIL(ObXmlUtil::init_extend_ns_vec(allocator_, this, ns_vec))) {
-        LOG_WARN("fail to init ns vector by extend area", K(ret));
       } else if (OB_FAIL(print_xml(x_buf, format_flag, depth, size, &ns_vec, charset))) {
-        LOG_WARN("fail to print xml", K(ret));
       }
       ns_vec.clear();
     }
@@ -223,21 +221,18 @@ int ObIMulModeBase::print_xml(ObStringBuffer& x_buf, uint32_t format_flag, uint6
   switch(xml_type) {
     case ObMulModeNodeType::M_DOCUMENT : {
       if (OB_FAIL(print_document(x_buf, CS_TYPE_INVALID, format_flag, size, ns_vec))) {
-        LOG_WARN("fail to print element to string", K(ret), K(depth), K(xml_type));
       }
       break;
     }
     case ObMulModeNodeType::M_CONTENT : {
       ParamPrint param_list;
       if (OB_FAIL(print_content(x_buf, false, false, format_flag, param_list, ns_vec))) {
-        LOG_WARN("fail to print element to string", K(ret), K(depth), K(xml_type));
       }
       break;
     }
     case ObMulModeNodeType::M_UNPARESED_DOC:
     case ObMulModeNodeType::M_UNPARSED : {
       if (OB_FAIL(print_unparsed(x_buf, CS_TYPE_INVALID, format_flag, size))) {
-        LOG_WARN("fail to print element to string", K(ret), K(depth), K(xml_type));
       }
       break;
     }
@@ -246,43 +241,36 @@ int ObIMulModeBase::print_xml(ObStringBuffer& x_buf, uint32_t format_flag, uint6
         ret = OB_ERR_JSON_OUT_OF_DEPTH;
         LOG_WARN("current xml over depth", K(ret), K(depth), K(xml_type));
       } else if (OB_FAIL(print_element(x_buf, depth, format_flag, size, ns_vec))) {
-        LOG_WARN("fail to print element to string", K(ret), K(depth), K(xml_type));
       }
       break;
     }
     case ObMulModeNodeType::M_ATTRIBUTE : {
       if (OB_FAIL(print_attr(x_buf, format_flag))) {
-        LOG_WARN("fail to print attribute to string", K(ret));
       } 
       break;
     }
     case ObMulModeNodeType::M_NAMESPACE : {
       if (OB_FAIL(print_ns(x_buf, format_flag))) {
-        LOG_WARN("fail to print namespace to string", K(ret), K(depth), K(xml_type));
       }
       break;
     }
     case ObMulModeNodeType::M_TEXT : {
       if (OB_FAIL(print_text(x_buf, format_flag))) {
-        LOG_WARN("fail to print text to string", K(ret), K(depth), K(xml_type));
       }
       break;
     }
     case ObMulModeNodeType::M_CDATA : {
       if (OB_FAIL(print_cdata(x_buf, format_flag))) {
-        LOG_WARN("fail to print cdata to string", K(ret), K(depth), K(xml_type));
       }
       break;
     }
     case ObMulModeNodeType::M_INSTRUCT : {
       if (OB_FAIL(print_pi(x_buf, format_flag))) {
-        LOG_WARN("fail to print pi to string", K(ret), K(depth), K(xml_type));
       }
       break;
     }
     case ObMulModeNodeType::M_COMMENT : {
       if (OB_FAIL(print_comment(x_buf, format_flag))) {
-        LOG_WARN("fail to print comment to string", K(ret), K(depth), K(xml_type));
       }
       break;
     }
@@ -316,21 +304,15 @@ int ObIMulModeBase::print_attr(ObStringBuffer& x_buf, uint32_t format_flag)
   
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(get_key(key))) {
-    LOG_WARN("fail to print =\" in attr", K(ret));
   } else if (OB_FAIL(get_value(value))) {
-    LOG_WARN("fail to print =\" in attr", K(ret));
   } else if (OB_FAIL(ObXmlUtil::append_qname(x_buf, get_prefix(), key))) {
-    LOG_WARN("fail to print prefix in attr", K(ret), K(get_prefix()), K(key));
   } else if (is_mysql_key_only) {
     // do nothing
   } else if (OB_FAIL(x_buf.append("=\""))) {
-    LOG_WARN("fail to print =\" in attr", K(ret));
   } else if (!(format_flag & NO_ENTITY_ESCAPE)) {
     if (OB_FAIL(ObXmlParserUtils::escape_xml_text(value, x_buf))) {
-      LOG_WARN("fail to print text with escape char", K(ret), K(value));
     }
   } else if (OB_FAIL(x_buf.append(value, 0))) {
-    LOG_WARN("fail to print value in attr", K(ret), K(value));
   }
   
   if (OB_SUCC(ret) && !is_mysql_key_only && OB_FAIL(x_buf.append("\""))) {
@@ -348,24 +330,18 @@ int ObIMulModeBase::print_ns(ObStringBuffer& x_buf, uint32_t format_flag)
   ObString value;
 
   if (OB_FAIL(get_key(key))) {
-    LOG_WARN("fail to print =\" in attr", K(ret));
   } else if (OB_FAIL(get_value(value))) {
-    LOG_WARN("fail to print =\" in attr", K(ret));
   } else if (xmlns.compare(key) == 0) {
     xmlns = ObString();
   } 
   
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObXmlUtil::append_qname(x_buf, xmlns, key))) {
-    LOG_WARN("fail to print prefix in ns", K(ret), K(xmlns), K(key));
   } else if (OB_FAIL(x_buf.append("=\""))) {
-    LOG_WARN("fail to print =\" in ns", K(ret));
   } else if (!(format_flag & NO_ENTITY_ESCAPE)) {
     if (OB_FAIL(ObXmlParserUtils::escape_xml_text(value, x_buf))) {
-      LOG_WARN("fail to print text with escape char", K(ret), K(value));
     }
   } else if (OB_FAIL(x_buf.append(value, 0))) {
-    LOG_WARN("fail to print value in ns", K(ret), K(value));
   } 
   
   if (OB_SUCC(ret) && OB_FAIL(x_buf.append("\""))) {
@@ -383,18 +359,12 @@ int ObIMulModeBase::print_pi(ObStringBuffer& x_buf, uint32_t format_flag)
     // do nothing
   } else {
     if (OB_FAIL(get_key(key))) {
-      LOG_WARN("fail to print =\" in attr", K(ret));
     } else if (OB_FAIL(get_value(value))) {
-      LOG_WARN("fail to print =\" in attr", K(ret));
     } else if (OB_FAIL(x_buf.append("<?"))) {
-      LOG_WARN("fail to print <? in pi", K(ret));
     } else if (OB_FAIL(x_buf.append(key, 0))) {
-      LOG_WARN("fail to print target in attr", K(ret), K(key));
     } else if (value.empty()) { // if value is empty then do nothing
     } else if (OB_FAIL(x_buf.append(" "))) {
-      LOG_WARN("fail to print space in attr", K(ret));
     } else if (OB_FAIL(x_buf.append(value, 0))) {
-      LOG_WARN("fail to print value in attr", K(ret), K(value));
     }
     
     if (OB_SUCC(ret) && OB_FAIL(x_buf.append("?>"))) {
@@ -412,19 +382,14 @@ int ObIMulModeBase::print_unparsed(ObStringBuffer& x_buf, ObCollationType charse
   uint16_t standalone = get_standalone();
   uint64_t reserve_size = 0;
   if (OB_FAIL(get_bin_size(reserve_size))) {
-    LOG_WARN("failed to get binary size.", K(ret));
   } else if (reserve_size > 0 && OB_FAIL(x_buf.reserve(reserve_size))) {
     LOG_WARN("failed to reserve x_buf.", K(ret), K(reserve_size));
   } else if (!(format_flag & ObXmlFormatType::HIDE_PROLOG) && has_flags(XML_DECL_FLAG)) {
     if (OB_FAIL(x_buf.append("<?xml"))) {
-      LOG_WARN("fail to print <?xml in document", K(ret));
     } else if (!version.empty()) {
       if (OB_FAIL(x_buf.append(" version=\""))) {
-        LOG_WARN("fail to print version=\" in document", K(ret));
       } else if (OB_FAIL(x_buf.append(version, 0))) {
-        LOG_WARN("fail to print version value in document", K(ret), K(version));
       } else if (OB_FAIL(x_buf.append("\""))) {
-        LOG_WARN("fail to print \" in document", K(ret));
       }
     }
     if (OB_SUCC(ret) && (!encoding.empty() || has_flags(XML_ENCODING_EMPTY_FLAG))) {
@@ -432,11 +397,8 @@ int ObIMulModeBase::print_unparsed(ObStringBuffer& x_buf, ObCollationType charse
         encoding = ObXmlUtil::get_charset_name(charset);
       }
       if (OB_FAIL(x_buf.append(" encoding=\""))) {
-        LOG_WARN("fail to print encoding=\" in document", K(ret));
       } else if (OB_FAIL(x_buf.append(encoding, 0))) {
-        LOG_WARN("fail to print encoding value in document", K(ret), K(encoding), K(charset));
       } else if (OB_FAIL(x_buf.append("\""))) {
-        LOG_WARN("fail to print \" in document", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -445,7 +407,6 @@ int ObIMulModeBase::print_unparsed(ObStringBuffer& x_buf, ObCollationType charse
       } else if (standalone == OB_XML_STANDALONE_YES && OB_FAIL(x_buf.append(" standalone=\"yes\""))) {
         LOG_WARN("failed to print standalone yes", K(ret));
       } else if (OB_FAIL(x_buf.append("?>\n"))) {
-        LOG_WARN("failed to print ?>", K(ret));
       }
     }
   }
@@ -484,19 +445,14 @@ int ObIMulModeBase::print_document(ObStringBuffer& x_buf, ObCollationType charse
   bool need_newline_end = true;
   uint64_t reserve_size = 0;
   if (OB_FAIL(get_bin_size(reserve_size))) {
-    LOG_WARN("failed to get binary size.", K(ret));
   } else if (reserve_size > 0 && OB_FAIL(x_buf.reserve(reserve_size))) {
     LOG_WARN("failed to reserve x_buf.", K(ret), K(reserve_size));
   } else if (!(format_flag & ObXmlFormatType::HIDE_PROLOG) && has_flags(XML_DECL_FLAG)) {
     if (OB_FAIL(x_buf.append("<?xml"))) {
-      LOG_WARN("fail to print <?xml in document", K(ret));
     } else if (!version.empty()) {
       if (OB_FAIL(x_buf.append(" version=\""))) {
-        LOG_WARN("fail to print version=\" in document", K(ret));
       } else if (OB_FAIL(x_buf.append(version, 0))) {
-        LOG_WARN("fail to print version value in document", K(ret), K(version));
       } else if (OB_FAIL(x_buf.append("\""))) {
-        LOG_WARN("fail to print \" in document", K(ret));
       }
     }
     if (OB_SUCC(ret) && (!encoding.empty() || has_flags(XML_ENCODING_EMPTY_FLAG))) {
@@ -504,11 +460,8 @@ int ObIMulModeBase::print_document(ObStringBuffer& x_buf, ObCollationType charse
         encoding = ObXmlUtil::get_charset_name(charset);
       }
       if (OB_FAIL(x_buf.append(" encoding=\""))) {
-        LOG_WARN("fail to print encoding=\" in document", K(ret));
       } else if (OB_FAIL(x_buf.append(encoding, 0))) {
-        LOG_WARN("fail to print encoding value in document", K(ret), K(encoding), K(charset));
       } else if (OB_FAIL(x_buf.append("\""))) {
-        LOG_WARN("fail to print \" in document", K(ret));
       }
     }
 
@@ -518,7 +471,6 @@ int ObIMulModeBase::print_document(ObStringBuffer& x_buf, ObCollationType charse
       } else if (standalone == OB_XML_STANDALONE_YES && OB_FAIL(x_buf.append(" standalone=\"yes\""))) {
         LOG_WARN("failed to print standalone yes", K(ret));
       } else if (OB_FAIL(x_buf.append("?>\n"))) {
-        LOG_WARN("failed to print ?>", K(ret));
       }
     }
   }
@@ -536,7 +488,6 @@ int ObIMulModeBase::print_document(ObStringBuffer& x_buf, ObCollationType charse
                   && OB_FAIL(ObXmlUtil::append_newline_and_indent(x_buf, 0, size))) {
         LOG_WARN("failed to add is_pretty", K(ret), K(size));
       } else if (OB_FAIL(cur->print_xml(x_buf, format_flag, 0, size))) {
-        LOG_WARN("failed to print child in element", K(ret), K(i));
       }
     }
   }
@@ -559,7 +510,6 @@ int ObIMulModeBase::print_document(ObStringBuffer& x_buf, ObCollationType charse
       
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(cur->print_xml(x_buf, format_flag, 0, size, ns_vec))) {
-        LOG_WARN("failed to print child in element", K(ret), K(i));
       } else if (num_children - 1 == i) {
         need_newline_end = !(cur->type() == M_TEXT || (cur->type() == M_ELEMENT && cur->get_unparse()));
       }
@@ -579,28 +529,20 @@ int ObIMulModeBase::print_content(ObStringBuffer& x_buf, bool with_encoding, boo
   uint64_t reserve_size = 0;
 
   if (OB_FAIL(get_bin_size(reserve_size))) {
-    LOG_WARN("failed to get binary size.", K(ret));
   } else if (reserve_size > 0 && OB_FAIL(x_buf.reserve(reserve_size))) {
     LOG_WARN("failed to reserve x_buf.", K(ret), K(reserve_size));
   } else if (with_encoding || with_version) {
     if (OB_FAIL(x_buf.append("<?xml"))) {
-       LOG_WARN("fail to print <?xml in document", K(ret));
     } else if (with_version) {
       if (OB_FAIL(x_buf.append(" version=\""))) {
-        LOG_WARN("fail to print version=\" in document", K(ret));
       } else if (OB_FAIL(x_buf.append(param_list.version, 0))) {
-        LOG_WARN("fail to print version value in document", K(ret), K(param_list.version));
       } else if (OB_FAIL(x_buf.append("\""))) {
-        LOG_WARN("fail to print \" in document", K(ret));
       }
     }
     if (OB_SUCC(ret) && with_encoding) {
       if (OB_FAIL(x_buf.append(" encoding=\""))) {
-        LOG_WARN("fail to print encoding=\" in document", K(ret));
       } else if (OB_FAIL(x_buf.append(param_list.encode, 0))) {
-        LOG_WARN("fail to print encoding value in document", K(ret), K(param_list.encode));
       } else if (OB_FAIL(x_buf.append("\""))) {
-        LOG_WARN("fail to print \" in document", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -609,7 +551,6 @@ int ObIMulModeBase::print_content(ObStringBuffer& x_buf, bool with_encoding, boo
       } else if (get_standalone() == OB_XML_STANDALONE_YES && OB_FAIL(x_buf.append(" standalone=\"yes\""))) {
         LOG_WARN("failed to print standalone yes", K(ret));
       } else if (OB_FAIL(x_buf.append("?>"))) {
-        LOG_WARN("failed to print ?>", K(ret));
       } else if ((format_flag & ObXmlFormatType::NEWLINE_AND_INDENT) && 
                   OB_FAIL(ObXmlUtil::append_newline_and_indent(x_buf, 0, param_list.indent))) {
         LOG_WARN("fail to add newline and indent", K(ret));
@@ -630,7 +571,6 @@ int ObIMulModeBase::print_content(ObStringBuffer& x_buf, bool with_encoding, boo
                   && OB_FAIL(ObXmlUtil::append_newline_and_indent(x_buf, 0, param_list.indent))) {
         LOG_WARN("failed to add is_pretty", K(ret));
       } else if (OB_FAIL(cur->print_xml(x_buf, format_flag, 0, param_list.indent))) {
-        LOG_WARN("failed to print child in element", K(ret), K(i));
       }
     }
   }
@@ -655,7 +595,6 @@ int ObIMulModeBase::print_content(ObStringBuffer& x_buf, bool with_encoding, boo
       
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(cur->print_xml(x_buf, format_flag, 0, param_list.indent, ns_vec))) {
-        LOG_WARN("failed to print child in element", K(ret), K(i));
       } else if (num_children - 1 == i) {
         need_newline_end = !(cur->type() == M_TEXT || (cur->type() == M_ELEMENT && cur->get_unparse()));
       }
@@ -673,17 +612,12 @@ int ObIMulModeBase::print_cdata(ObStringBuffer& x_buf, uint32_t format_flag)
   INIT_SUCC(ret);
   ObString value;
   if (OB_FAIL(get_value(value))) {
-    LOG_WARN("fail to get value.", K(ret));
   } else if (format_flag & ObXmlFormatType::PRINT_CDATA_AS_TEXT) {
     if (OB_FAIL(ObXmlParserUtils::escape_xml_text(value, x_buf))) {
-      LOG_WARN("fail to print escape text", K(ret));
     }
   } else if (OB_FAIL(x_buf.append("<![CDATA["))) {
-    LOG_WARN("fail to print <![CDATA[ in pi", K(ret));
   } else if (OB_FAIL(x_buf.append(value, 0))) {
-    LOG_WARN("fail to print text in attr", K(ret), K(value));
   } else if (OB_FAIL(x_buf.append("]]>"))) {
-    LOG_WARN("fail to print ]]> in attr", K(ret));
   }
   return ret;
 }
@@ -695,13 +629,9 @@ int ObIMulModeBase::print_comment(ObStringBuffer& x_buf, uint32_t format_flag)
   ObString value;
 
   if (OB_FAIL(get_value(value))) {
-    LOG_WARN("fail to get value.", K(ret));
   } else if (OB_FAIL(x_buf.append("<!--"))) {
-    LOG_WARN("fail to print <!-- in pi", K(ret));
   } else if (OB_FAIL(x_buf.append(value, 0))) {
-    LOG_WARN("fail to print text in attr", K(ret), K(value));
   } else if (OB_FAIL(x_buf.append("-->"))) {
-    LOG_WARN("fail to print --> in attr", K(ret));
   }
   return ret;
 }
@@ -711,9 +641,7 @@ int ObIMulModeBase::print_text(ObStringBuffer& x_buf, uint32_t format_flag)
   INIT_SUCC(ret);
   ObString value;
   if (OB_FAIL(get_value(value))) {
-    LOG_WARN("fail to get value.", K(ret));
   } else if (OB_FAIL(x_buf.append(value, 0))) {
-    LOG_WARN("fail to print text", K(ret), K(value));
   }
   return ret;
 }
@@ -734,7 +662,6 @@ int ObIMulModeBase::print_element(ObStringBuffer& x_buf, uint64_t depth, uint32_
   // so, restore ns vec when finish printing this element, in case its sibling loses ns definition
   ObVector<ObNsPair*> deleted_ns_vec;
   if (OB_FAIL(get_key(key))) {
-    LOG_WARN("fail get key of element", K(ret));
   } else if (is_unparse && key.empty() && OB_FAIL(get_node_count(ObMulModeNodeType::M_ATTRIBUTE, attributes_count))) {
     LOG_WARN("get attributes count failed", K(ret));
   } else if (is_unparse && key.empty() && attributes_count == 0) {
@@ -745,7 +672,6 @@ int ObIMulModeBase::print_element(ObStringBuffer& x_buf, uint64_t depth, uint32_
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get child from element", K(ret), K(i));
       } else if (OB_FAIL(cur->print_xml(x_buf, format_flag, (depth + 1), size, ns_vec))) {
-        LOG_WARN("failed to print child in element", K(ret), K(i));
       }
     }
   } else if (OB_NOT_NULL(ns_vec) && OB_FAIL(ObXmlUtil::delete_dup_ns_definition(this, *ns_vec, deleted_ns_vec))) {
@@ -753,9 +679,7 @@ int ObIMulModeBase::print_element(ObStringBuffer& x_buf, uint64_t depth, uint32_
   } else {
     ObString prefix = get_prefix();
     if (OB_FAIL(x_buf.append("<"))) {
-      LOG_WARN("fail to print < in element", K(ret));
     } else if (OB_FAIL(ObXmlUtil::append_qname(x_buf, prefix, key))) {
-      LOG_WARN("fail to print tag in element", K(ret), K(prefix), K(key));
     } else if (OB_NOT_NULL(ns_vec) 
       && (OB_FAIL(ObXmlUtil::add_ns_def_if_necessary(format_flag, x_buf, prefix, ns_vec, deleted_ns_vec))
       || OB_FAIL(ObXmlUtil::add_attr_ns_def(this, format_flag, x_buf, ns_vec, deleted_ns_vec)))) {
@@ -772,9 +696,7 @@ int ObIMulModeBase::print_element(ObStringBuffer& x_buf, uint64_t depth, uint32_
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("failed to get child from element", K(ret), K(i));
         } else if (OB_FAIL(x_buf.append(" "))) {
-          LOG_WARN("failed to append space", K(ret));
         } else if (OB_FAIL(cur->print_xml(x_buf, format_flag, 0, size))) {
-          LOG_WARN("failed to print child in element", K(ret), K(i));
         }
       }
     }
@@ -787,10 +709,8 @@ int ObIMulModeBase::print_element(ObStringBuffer& x_buf, uint64_t depth, uint32_
     if (OB_FAIL(ret)) {
     } else if ((format_flag & ObXmlFormatType::MERGE_EMPTY_TAG) && (is_empty || num_children == 0)) {
       if (OB_FAIL(x_buf.append("/>"))) {
-        LOG_WARN("fail to print />", K(ret));
       }
     } else if (OB_FAIL(x_buf.append(">"))) {
-      LOG_WARN("fail to print >", K(ret));
     } else {
       ObIMulModeBase* cur = nullptr;
       ObMulModeNodeType prev_node_type, cur_node_type;
@@ -809,7 +729,6 @@ int ObIMulModeBase::print_element(ObStringBuffer& x_buf, uint64_t depth, uint32_
                    && OB_FAIL(ObXmlUtil::append_newline_and_indent(x_buf, depth + 1, size))) {
           LOG_WARN("failed to add is_pretty", K(ret), K(depth), K(size));
         } else if (OB_FAIL(cur->print_xml(x_buf, format_flag, depth + 1, size, ns_vec))) {
-          LOG_WARN("failed to print child in element", K(ret), K(i));
         } else {
           prev_node_type = cur->type();
           last_node_type = prev_node_type;
@@ -824,11 +743,8 @@ int ObIMulModeBase::print_element(ObStringBuffer& x_buf, uint64_t depth, uint32_
               && OB_FAIL(ObXmlUtil::append_newline_and_indent(x_buf, depth, size))) {
       LOG_WARN("failed to add is_pretty", K(ret), K(depth), K(size));
     } else if (OB_FAIL(x_buf.append("</"))) {
-      LOG_WARN("fail to print </ in element", K(ret));
     } else if (OB_FAIL(ObXmlUtil::append_qname(x_buf, prefix, key))) {
-      LOG_WARN("fail to print tag in element", K(ret), K(key), K(prefix));
     } else if (OB_FAIL(x_buf.append(">"))) {
-      LOG_WARN("fail to print > in element", K(ret));
     }
   }
 

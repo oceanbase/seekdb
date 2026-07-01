@@ -42,7 +42,6 @@ ObRootMinorFreeze::~ObRootMinorFreeze()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(destroy())) {
-    LOG_WARN("destroy failed", K(ret));
   }
 }
 
@@ -107,25 +106,20 @@ int ObRootMinorFreeze::try_minor_freeze(const obcall::ObRootMinorFreezeArg &arg)
     ParamsContainer params;
     if ((arg.ls_id_.is_valid() && arg.ls_id_.id() > 0) || arg.tablet_id_.is_valid()) {
       if (OB_FAIL(init_params_by_ls_or_tablet( arg.ls_id_, arg.tablet_id_, params))) {
-        LOG_WARN("fail to init param by tablet_id");
       }
     } else if (arg.server_list_.count() == 0 && arg.zone_.size() > 0) {
       if (OB_FAIL(init_params_by_zone(arg.zone_, params))) {
-        LOG_WARN("fail to init param by zone, ", K(ret), K(arg));
       }
     } else if (arg.server_list_.count() > 0) {
       if (OB_FAIL(init_params_by_server(arg.server_list_, params))) {
-        LOG_WARN("fail to init param by server, ", K(ret), K(arg));
       }
     } else {
       if (OB_FAIL(init_params_by_tenant(params))) {
-        LOG_WARN("fail to init param by tenant, ", K(ret), K(arg));
       }
     }
 
     if (OB_SUCC(ret) && !params.is_empty()) {
       if (OB_FAIL(do_minor_freeze(params))) {
-        LOG_WARN("fail to do minor freeze, ", K(ret));
       }
     }
   }
@@ -142,7 +136,6 @@ int ObRootMinorFreeze::do_minor_freeze(const ParamsContainer &params) const
   for (int64_t i = 0; OB_SUCC(ret) && i < params.get_params().count(); ++i) {
     const MinorFreezeParam &param = params.get_params().at(i);
     if (OB_FAIL(check_cancel())) {
-      LOG_WARN("fail to check cancel", KR(ret));
     } else {
       obcall::Int64 result;
       int rpc_ret = GCTX.ob_service_->minor_freeze(param.arg, result);
@@ -189,7 +182,6 @@ int ObRootMinorFreeze::init_params_by_ls_or_tablet(share::ObLSID ls_id,
       ret = OB_NOT_SUPPORTED;
       LOG_WARN("can not minor freeze inner tablet without specifying ls id", K(ls_id), K(tablet_id));
     } else if (OB_FAIL(GCTX.location_service_->get(tablet_id, expire_renew_time, is_cache_hit, ls_id))) {
-      LOG_WARN("fail to get ls id according to tablet_id", K(ret), K(tablet_id));
     }
   } 
   
@@ -198,7 +190,6 @@ int ObRootMinorFreeze::init_params_by_ls_or_tablet(share::ObLSID ls_id,
     // get ls location by ls_id
     if (OB_FAIL(GCTX.location_service_->get(
             GCONF.cluster_id, ls_id, expire_renew_time, is_cache_hit, location))) {
-      LOG_WARN("get ls location failed", KR(ret), K(ls_id), K(tablet_id));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -212,7 +203,6 @@ int ObRootMinorFreeze::init_params_by_ls_or_tablet(share::ObLSID ls_id,
       const ObAddr &server = ls_locations.at(i).get_server();
       if (is_server_alive(server)) {
         if (OB_FAIL(params.push_back_param(server, ls_id, tablet_id))) {
-          LOG_WARN("fail to add tenant & server, ", K(ret), K(ls_id), K(tablet_id));
         }
       } else {
         int tmp_ret = OB_SERVER_NOT_ACTIVE;
@@ -228,7 +218,6 @@ int ObRootMinorFreeze::init_params_by_tenant(ParamsContainer &params) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(params.push_back_param(GCTX.self_addr()))) {
-    LOG_WARN("fail to add tenant & server", KR(ret));
   }
   return ret;
 }
@@ -241,7 +230,6 @@ int ObRootMinorFreeze::init_params_by_zone(const ObZone &zone,
   if (OB_UNLIKELY(0 == zone.size())) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(params.push_back_param(GCTX.self_addr()))) {
-    LOG_WARN("fail to add server", K(ret));
   }
   return ret;
 }
@@ -254,7 +242,6 @@ int ObRootMinorFreeze::init_params_by_server(const ObIArray<ObAddr> &server_list
     for (int i = 0; i < server_list.count() && OB_SUCC(ret); ++i) {
       if (is_server_alive(server_list.at(i))) {
         if (OB_FAIL(params.push_back_param(server_list.at(i)))) {
-          LOG_WARN("fail to add server, ", K(ret));
         }
       } else {
         ret = OB_SERVER_NOT_ACTIVE;
@@ -262,7 +249,6 @@ int ObRootMinorFreeze::init_params_by_server(const ObIArray<ObAddr> &server_list
       }
     }
   } else if (OB_FAIL(params.push_back_param(GCTX.self_addr()))) {
-    LOG_WARN("fail to add server", K(ret));
   }
 
   return ret;
@@ -280,7 +266,6 @@ int ObRootMinorFreeze::ParamsContainer::push_back_param(const common::ObAddr &se
   param.arg.tablet_id_ = tablet_id;
 
   if (OB_FAIL(params_.push_back(param))) {
-    LOG_WARN("fail to push server, ", K(ret));
   }
 
   return ret;

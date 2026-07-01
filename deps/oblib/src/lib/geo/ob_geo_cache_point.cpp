@@ -29,7 +29,6 @@ int ObCachedGeoPoint::intersects(ObGeometry& geo, ObGeoEvalCtx& gis_context, boo
   if (!is_inited() && OB_FAIL(init())) {
     LOG_WARN("cached polygon init failed", K(ret));
   } else if (OB_FAIL(ObCachedGeomBase::check_any_vertexes_in_geo(geo, res))) {
-    LOG_WARN("fail to check whether is there any point from cached poly in geo.", K(ret));
   }
 
   return ret;

@@ -40,11 +40,8 @@ int ObIIKProcessor::process(TokenizeContext &ctx)
   uint8_t char_len = 0;
 
   if (OB_FAIL(ctx.current_char_type(type))) {
-    LOG_WARN("fail to get current char type", K(ret));
   } else if (OB_FAIL(ctx.current_char(ch, char_len))) {
-    LOG_WARN("Fail to get current char", K(ret));
   } else if (OB_FAIL(do_process(ctx, ch, char_len, type))) {
-    LOG_WARN("Failed to do process char", K(ret));
   }
   return ret;
 }
@@ -67,7 +64,6 @@ int TokenizeContext::init()
   if (OB_ISNULL(fulltext_) || fulltext_len_ <= 0) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(prepare_next_char())) {
-    LOG_WARN("Failed to prepare next char", K(ret));
   }
   return ret;
 }
@@ -110,12 +106,10 @@ int TokenizeContext::prepare_next_char()
                                           fulltext_ + cursor_,
                                           fulltext_len_ - cursor_,
                                           next_char_len_))) {
-    LOG_WARN("Failed to get first valid char, ", K(ret));
   } else if (OB_FAIL(ObFTCharUtil::classify_first_char(coll_type_,
                                                        fulltext_ + cursor_,
                                                        next_char_len_,
                                                        next_char_type_))) {
-    LOG_WARN("Failed to classify first char", K(ret));
   }
   return ret;
 }
@@ -137,7 +131,6 @@ int TokenizeContext::step_next()
     cursor_ += next_char_len_;
     handle_size_++;
     if (OB_FAIL(prepare_next_char())) {
-      LOG_WARN("Failed to prepare next char", K(ret));
     } else {
     }
   }
@@ -174,7 +167,6 @@ int TokenizeContext::add_token(const char *fulltext,
   token.char_cnt_ = char_cnt;
   token.type_ = type;
   if (OB_FAIL(token_list_.add_token(token))) {
-    LOG_WARN("Failed to add token to result list", K(ret));
   }
   return ret;
 }
@@ -196,7 +188,6 @@ int TokenizeContext::get_next_token(const char *&word,
     result_list_.pop_front();
     if (!result_list_.empty()) {
       if (OB_FAIL(compound(token))) {
-        LOG_WARN("Failed to compound", K(ret));
       } else {
         // pass
       }

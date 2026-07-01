@@ -645,7 +645,6 @@ int ObStringStreamVecDecoder::decode_vector(
 #undef DECODE_VECTOR_
 
   if (OB_FAIL(ret)) {
-    LOG_ERROR("fail to decode vector", K(ret), K(vec_tc), K(base_col_ctx), K(vec_decode_ctx));
   }
   return ret;
 }

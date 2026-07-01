@@ -44,7 +44,6 @@ int ObVirtualCompatibilityConflictControl::inner_get_next_row(common::ObNewRow *
   int ret = OB_SUCCESS;
   if (!start_to_read_) {
     if (OB_FAIL(fill_scanner())) {
-      SERVER_LOG(WARN, "fail to fill scanner", K(ret));
     } else {
       start_to_read_ = true;
     }
@@ -80,7 +79,6 @@ int ObVirtualCompatibilityConflictControl::fill_scanner()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid compat feature info array", K(ret), KP(infos), K(info_len));
   } else if (OB_FAIL(session_->get_compatibility_version(compat_version))) {
-    LOG_WARN("failed to get compat version", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < ObCompatFeatureType::COMPAT_FEATURE_END; ++i) {
     int cell_idx = 0;
@@ -109,7 +107,6 @@ int ObVirtualCompatibilityConflictControl::fill_scanner()
         case ENABLE_VERSIONS: {
           ObString range_str;
           if (OB_FAIL(info->print_version_range(range_str, *allocator_))) {
-            LOG_WARN("failed to print version range", K(ret));
           } else {
             cells[cell_idx].set_lob_value(ObLongTextType, range_str.ptr(),
                                           static_cast<int32_t>(range_str.length()));

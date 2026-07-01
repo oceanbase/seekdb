@@ -75,19 +75,16 @@ int ObExprRbCalcCardinality::eval_rb_calc_cardinality(const ObExpr &expr, ObEval
   ObString rb2_bin;
   uint64_t cardinality = 0;
   if (OB_FAIL(ObRbExprHelper::get_input_roaringbitmap_bin(ctx, tmp_allocator, rb1_arg, rb1_bin, is_rb1_null))) {
-    LOG_WARN("fail to get left input roaringbitmap", K(ret));
   } else if (is_rb1_null && !is_null2empty) {
     is_res_null = true;
   } else if (is_rb1_null && is_null2empty && OB_FAIL(ObRbUtils::build_empty_binary(tmp_allocator, rb1_bin))) {
     LOG_WARN("failed to build empty roaringbitmap binary", K(ret));
   } else if (OB_FAIL(ObRbExprHelper::get_input_roaringbitmap_bin(ctx, tmp_allocator, rb2_arg, rb2_bin, is_rb2_null))) {
-    LOG_WARN("fail to get right input roaringbitmap", K(ret));
   } else if (is_rb2_null  && !is_null2empty) {
     is_res_null = true;
   } else if (is_rb2_null && is_null2empty && OB_FAIL(ObRbUtils::build_empty_binary(tmp_allocator, rb2_bin))) {
     LOG_WARN("failed to build empty roaringbitmap binary", K(ret));
   } else if (OB_FAIL(ObRbUtils::get_calc_cardinality(tmp_allocator, rb1_bin, rb2_bin, cardinality, op))) {
-    LOG_WARN("failed to get roaringbitmap claculate cardinality", K(ret), K(op));
   }
   if (OB_FAIL(ret)) {
   } else if (is_res_null) {
@@ -109,7 +106,6 @@ int ObExprRbAndCardinality::eval_rb_and_cardinality(const ObExpr &expr, ObEvalCt
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(eval_rb_calc_cardinality(expr, ctx, res, ObRbOperation::AND))) {
-    LOG_WARN("failed to eval roaringbitmap and cardinality calculation", K(ret));
   }
   return ret;
 }
@@ -134,7 +130,6 @@ int ObExprRbOrCardinality::eval_rb_or_cardinality(const ObExpr &expr, ObEvalCtx 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(eval_rb_calc_cardinality(expr, ctx, res, ObRbOperation::OR))) {
-    LOG_WARN("failed to eval roaringbitmap or cardinality calculation", K(ret));
   }
   return ret;
 }
@@ -159,7 +154,6 @@ int ObExprRbXorCardinality::eval_rb_xor_cardinality(const ObExpr &expr, ObEvalCt
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(eval_rb_calc_cardinality(expr, ctx, res, ObRbOperation::XOR))) {
-    LOG_WARN("failed to eval roaringbitmap xor cardinality calculation", K(ret));
   }
   return ret;
 }
@@ -184,7 +178,6 @@ int ObExprRbAndnotCardinality::eval_rb_andnot_cardinality(const ObExpr &expr, Ob
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(eval_rb_calc_cardinality(expr, ctx, res, ObRbOperation::ANDNOT))) {
-    LOG_WARN("failed to eval roaringbitmap andnot cardinality calculation", K(ret));
   }
   return ret;
 }
@@ -209,7 +202,6 @@ int ObExprRbAndNull2emptyCardinality::eval_rb_and_null2empty_cardinality(const O
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(eval_rb_calc_cardinality(expr, ctx, res, ObRbOperation::AND, true))) {
-    LOG_WARN("failed to eval roaringbitmap and cardinality calculation", K(ret));
   }
   return ret;
 }
@@ -234,7 +226,6 @@ int ObExprRbOrNull2emptyCardinality::eval_rb_or_null2empty_cardinality(const ObE
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(eval_rb_calc_cardinality(expr, ctx, res, ObRbOperation::OR, true))) {
-    LOG_WARN("failed to eval roaringbitmap or cardinality calculation", K(ret));
   }
   return ret;
 }
@@ -259,7 +250,6 @@ int ObExprRbAndnotNull2emptyCardinality::eval_rb_andnot_null2empty_cardinality(c
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(eval_rb_calc_cardinality(expr, ctx, res, ObRbOperation::ANDNOT, true))) {
-    LOG_WARN("failed to eval roaringbitmap andnot cardinality calculation", K(ret));
   }
   return ret;
 }

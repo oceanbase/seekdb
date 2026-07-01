@@ -68,15 +68,11 @@ int ObMLogPurger::purge()
   } else {
     const ObDatabaseSchema *database_schema = nullptr;
     if (OB_FAIL(get_and_check_mlog_database_schema(database_schema))) {
-      LOG_WARN("failed to get and check mlog database schema", KR(ret));
     } else if (OB_FAIL(trans_.start(ctx_->get_my_session(),
                                     ctx_->get_sql_proxy(),
                                     database_schema->get_database_id(),
                                     database_schema->get_database_name_str()))) {
-      LOG_WARN("fail to start trans", KR(ret), K(database_schema->get_database_id()),
-          K(database_schema->get_database_name_str()));
     } else if (OB_FAIL(prepare_for_purge())) {
-      LOG_WARN("fail to prepare for purge", KR(ret));
     } else if (need_purge_) {
       ObMViewOpArg arg;
       arg.table_id_ =  mlog_info_.get_mlog_id();
@@ -86,13 +82,10 @@ int ObMLogPurger::purge()
       arg.start_ts_ = ObTimeUtil::current_time();
       share::SCN curr_scn;
       if (OB_FAIL(ObMViewRefreshHelper::get_current_scn(curr_scn))) {
-        LOG_WARN("get current_scn failed", KR(ret));
       } else if (FALSE_IT(arg.read_snapshot_ = curr_scn.get_val_for_tx())) {
       } else if (OB_FAIL(ObMViewMdsOpHelper::register_mview_mds(arg,
                                                          trans_))) {
-        LOG_WARN("register mview mds failed", KR(ret), K(arg));
       } else if (OB_FAIL(do_purge())) {
-        LOG_WARN("fail to do purge", KR(ret));
       }
     }
     if (trans_.is_started()) {
@@ -125,14 +118,11 @@ int ObMLogPurger::prepare_for_purge()
     ret = OB_ERR_SYS;
     LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", KR(ret));
   } else if (OB_FAIL(ObMViewRefreshHelper::get_current_scn(current_scn))) {
-    LOG_WARN("fail to get current scn", KR(ret));
   }
   // get master table schema
   if (OB_SUCC(ret)) {
     if (OB_FAIL(schema_guard.get_table_schema( master_table_id, master_table_schema))) {
-      LOG_WARN("fail to get table schema", KR(ret), K(master_table_id));
     } else if (OB_ISNULL(master_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("table not exist", KR(ret), K(master_table_id));
@@ -142,7 +132,6 @@ int ObMLogPurger::prepare_for_purge()
       LOG_WARN("table does not have materialized view log", KR(ret), KPC(master_table_schema));
     } else if (OB_FAIL(
                  schema_guard.get_table_schema( mlog_table_id, mlog_table_schema))) {
-      LOG_WARN("fail to get table schema", KR(ret), K(mlog_table_id));
     } else if (OB_ISNULL(mlog_table_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected mlog table schema not exist", KR(ret),
@@ -172,7 +161,6 @@ int ObMLogPurger::prepare_for_purge()
         }
       } else if (OB_FAIL(
                    ObDependencyInfo::collect_dep_infos(master_table_id, trans_, deps))) {
-        LOG_WARN("fail to collect dep infos", KR(ret), K(master_table_id));
       }
     }
   }
@@ -184,7 +172,6 @@ int ObMLogPurger::prepare_for_purge()
         const uint64_t table_id = deps.at(i).get_dep_obj_id();
         const ObTableSchema *table_schema = nullptr;
         if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
-          LOG_WARN("fail to get table schema", KR(ret), K(table_id));
         } else if (OB_NOT_NULL(table_schema) && table_schema->is_materialized_view()) {
           ObMViewInfo mview_info;
           if (OB_FAIL(ObMViewInfo::fetch_mview_info(trans_, table_id, mview_info))) {
@@ -215,7 +202,6 @@ int ObMLogPurger::prepare_for_purge()
         need_purge_ = false;
         LOG_INFO("mlog does not need purge", KR(ret), K(mlog_info_), K(min_mview_refresh_scn));
       } else if (OB_FAIL(purge_scn_.convert_for_inner_table_field(min_mview_refresh_scn))) {
-        LOG_WARN("fail to convert for inner table field", KR(ret), K(min_mview_refresh_scn));
       } else {
         need_purge_ = true;
       }
@@ -227,7 +213,6 @@ int ObMLogPurger::prepare_for_purge()
   if (OB_SUCC(ret) && need_purge_) {
     if (OB_FAIL(ObMViewRefreshHelper::generate_purge_mlog_sql(
           schema_guard, mlog_table_id, purge_scn_, purge_param_.purge_log_parallel_, purge_sql_))) {
-      LOG_WARN("fail to generate purge mlog sql", KR(ret), K(mlog_table_id), K(purge_scn_));
     }
   }
   return ret;
@@ -241,7 +226,6 @@ int ObMLogPurger::do_purge()
   const int64_t start_time = ObTimeUtil::current_time();
   int64_t affected_rows = 0;
   if (OB_FAIL(trans_.write(purge_sql_.ptr(), affected_rows))) {
-    LOG_WARN("fail to execute sql", KR(ret), K(purge_sql_));
   }
   const int64_t end_time = ObTimeUtil::current_time();
   LOG_INFO("do_purge", K_(purge_sql), "time", end_time - start_time);
@@ -255,9 +239,7 @@ int ObMLogPurger::do_purge()
       mlog_info_.set_last_purge_time((end_time - start_time) / 1000 / 1000);
       mlog_info_.set_last_purge_rows(affected_rows);
       if (OB_FAIL(mlog_info_.set_last_purge_trace_id(ObCurTraceId::get_trace_id_str(trace_id_buf, sizeof(trace_id_buf))))) {
-        LOG_WARN("fail to set last purge trace id", KR(ret));
       } else if (OB_FAIL(ObMLogInfo::update_mlog_last_purge_info(trans_, mlog_info_))) {
-        LOG_WARN("fail to update mlog last purge info", KR(ret), K(mlog_info_));
       }
     }
   }
@@ -279,14 +261,11 @@ int ObMLogPurger::get_and_check_mlog_database_schema(
     ret = OB_ERR_SYS;
     LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( master_table_id, master_table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(master_table_id));
   } else if (OB_ISNULL(master_table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not exist", KR(ret), K(master_table_id));
   } else if (OB_FAIL(schema_guard.get_database_schema( master_table_schema->get_database_id(), database_schema))) {
-    LOG_WARN("fail to get database schema", KR(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("database schema is nullptr", KR(ret));

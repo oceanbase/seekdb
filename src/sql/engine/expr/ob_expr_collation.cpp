@@ -48,7 +48,6 @@ int ObExprCharset::calc_result_type1(ObExprResType &type,
 
   int64_t mbmaxlen = 1;
   if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(type.get_collation_type(), mbmaxlen))) {
-    LOG_WARN("fail get mbmaxlen", K(mbmaxlen), K(ret));
   } else {
     type.set_length(static_cast<ObLength>(64 * mbmaxlen));
   }
@@ -62,7 +61,6 @@ int calc_charset_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   ObDatum *arg = NULL;
   ObString charset_str = ObString::make_string(ObCharset::collation_name(CS_TYPE_BINARY));
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else {
     const ObCollationType &cs_type = expr.args_[0]->datum_meta_.get_cs_type();
     ObCharsetType charset_type = ObCharset::charset_type_by_coll(cs_type);
@@ -123,7 +121,6 @@ int ObExprCollation::calc_result_type1(ObExprResType &type,
 
   int64_t mbmaxlen = 1;
   if (OB_FAIL(ObCharset::get_mbmaxlen_by_coll(type.get_collation_type(), mbmaxlen))) {
-    LOG_WARN("fail get mbmaxlen", K(mbmaxlen), K(ret));
   } else {
     type.set_length(static_cast<ObLength>(64 * mbmaxlen));
   }
@@ -136,7 +133,6 @@ int calc_collation_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, arg))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else {
     const ObCollationType &cs_type = expr.args_[0]->datum_meta_.get_cs_type();
     ObString collation = ObCharset::collation_name(cs_type);
@@ -389,7 +385,6 @@ int calc_cmp_meta_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datum)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to convert obj_meta", K(ret));
   } else if (OB_FAIL(ob_alloc_printf(res_str, res_alloc, "%s", ptr))) {
-    LOG_WARN("failed to print", K(ret));
   } else {
     res_datum.set_string(res_str);
   }

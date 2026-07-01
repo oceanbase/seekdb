@@ -117,7 +117,6 @@ int ObMdsRangeQueryIterator<K, T>::init(
     ret = OB_INVALID_ARGUMENT;
     MDS_LOG(WARN, "invalid argument", KR(ret), K(scan_param));
   } else if (OB_FAIL(cur_tablet_iter_.init(scan_param, tablet_handle, cur_ctx))) {
-    MDS_LOG(WARN, "failed to init cur_tablet_iter", K(ret), KPC(tablet_handle.get_obj()));
   } else if (OB_ISNULL(src_tablet_handle.get_obj())) {
     src_finished_ = true;
   } else if (OB_NOT_NULL(src_tablet_handle.get_obj())) {
@@ -132,16 +131,13 @@ int ObMdsRangeQueryIterator<K, T>::init(
       MDS_LOG(WARN, "allocate mem failed", K(ret), KP(buf));
     } else if (FALSE_IT(src_scan_param = new(buf) ObTableScanParam())) {
     } else if (OB_FAIL(ObMdsRangeQueryIteratorHelper::get_tablet_ls_id_and_tablet_id(src_tablet_handle, ls_id, tablet_id))) {
-      MDS_LOG(WARN, "failed to get ls_id and tablet_id", K(ret), KPC(src_tablet_handle.get_obj()));
     } else if (OB_FAIL((ObMdsScanParamHelper::build_customized_scan_param<K, T>(*scan_param.allocator_,
                                                                                ls_id,
                                                                                tablet_id,
                                                                                scan_param.read_version_range_,
                                                                                *scan_param.mds_collector_,
                                                                                *src_scan_param)))) {
-      MDS_LOG(WARN, "failed to build src tablet scan param");
     } else if (OB_FAIL(src_tablet_iter_.init(*src_scan_param, src_tablet_handle, src_ctx))) {
-      MDS_LOG(WARN, "init src_tablet_iter failed ", K(ret), KPC(src_scan_param), K(src_tablet_handle), KPC(src_tablet_handle.get_obj()), K(src_ctx));
     }
   }
 
@@ -196,16 +192,13 @@ int ObMdsRangeQueryIterator<K, T>::get_next_mds_kv(
     ret = common::OB_ITER_END;
     MDS_LOG(DEBUG, "both iter end", K(ret));
   } else if (OB_FAIL(ObTabletObjLoadHelper::alloc_and_new(allocator, kv))) {
-    MDS_LOG(WARN, "fail to alloc and new", K(ret));
   } else if (cur_finished_) {
     if (OB_ISNULL(src_kv_)) {
       ret = OB_ERR_UNEXPECTED;
       MDS_LOG(WARN, "src_kv_ shoulde not be nullptr", K(ret), KPC(cur_kv_), KPC(src_kv_), K(cur_finished_), K(src_finished_));
     } else {
       if (OB_FAIL(kv->assign(*src_kv_, allocator))) {
-        MDS_LOG(WARN, "fail to copy", K(ret), K(cur_kv_));
       } else if (OB_FAIL(advance_iter(src_tablet_iter_, src_finished_, src_kv_))) {
-        MDS_LOG(WARN, "fail to advance mds sstable iter", K(ret));
       }
     }
   } else if (src_finished_) {
@@ -214,9 +207,7 @@ int ObMdsRangeQueryIterator<K, T>::get_next_mds_kv(
       MDS_LOG(WARN, "cur_kv_ shoulde not be nullptr", K(ret), KPC(cur_kv_), KPC(src_kv_), K(cur_finished_), K(src_finished_));
     } else {
       if (OB_FAIL(kv->assign(*cur_kv_, allocator))) {
-        MDS_LOG(WARN, "fail to copy", K(ret), K(cur_kv_));
       } else if (OB_FAIL(advance_iter(cur_tablet_iter_, cur_finished_, cur_kv_))) {
-        MDS_LOG(WARN, "fail to advance mds sstable iter", K(ret));
       }
     }
   } else if (OB_UNLIKELY(OB_ISNULL(src_kv_) || OB_ISNULL(cur_kv_))) {
@@ -227,29 +218,21 @@ int ObMdsRangeQueryIterator<K, T>::get_next_mds_kv(
       src_kv_->k_.key_.ptr(), src_kv_->k_.key_.size(), 
       cur_kv_->k_.key_.ptr(), cur_kv_->k_.key_.size(), 
       compare_result))) {
-    MDS_LOG(WARN, "fail to compare binary key", K(ret));
   } else if (compare_result < 0) {
     if (OB_FAIL(kv->assign(*src_kv_, allocator))) {
-      MDS_LOG(WARN, "fail to copy", K(ret), K(src_kv_));
     } else if (OB_FAIL(advance_iter(src_tablet_iter_, src_finished_, src_kv_))) {
-      MDS_LOG(WARN, "fail to advance mds sstable iter", K(ret));
     }
   } else if (compare_result == 0) {
     if (OB_FAIL(kv->assign(*cur_kv_, allocator))) {
-      MDS_LOG(WARN, "fail to copy", K(ret), K(cur_kv_));
     } else if (OB_FAIL(advance_iter(cur_tablet_iter_, cur_finished_, cur_kv_))) {
-      MDS_LOG(WARN, "fail to advance mds sstable iter", K(ret));
     } else if (OB_FAIL(advance_iter(src_tablet_iter_, src_finished_, src_kv_))) {
-      MDS_LOG(WARN, "fail to advance mds sstable iter", K(ret));
     } else {
       int tmp_ret = OB_ERR_UNEXPECTED;
       MDS_LOG(WARN, "dest_tablet and src_tablet in a transfer progress should not have the same Key", K(tmp_ret), KPC(kv), KPC(cur_kv_), KPC(src_kv_), K(lbt()));
     }
   } else {
     if (OB_FAIL(kv->assign(*cur_kv_, allocator))) {
-      MDS_LOG(WARN, "fail to copy", K(ret), K(cur_kv_));
     } else if (OB_FAIL(advance_iter(cur_tablet_iter_, cur_finished_, cur_kv_))) {
-      MDS_LOG(WARN, "fail to advance mds sstable iter", K(ret));
     }
   }
 

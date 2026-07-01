@@ -92,11 +92,8 @@ int ObDirectLoadExternalSequentialScanner<T>::init(
     STORAGE_LOG(WARN, "invalid argument", KR(ret), K(compressor_type), K(fragments));
   } else {
     if (OB_FAIL(fragments_.assign(fragments))) {
-      STORAGE_LOG(WARN, "fail to assign fragments", KR(ret));
     } else if (OB_FAIL(reader_.init(data_block_size, compressor_type))) {
-      STORAGE_LOG(WARN, "fail to init fragment reader", KR(ret));
     } else if (OB_FAIL(switch_next_fragment())) {
-      STORAGE_LOG(WARN, "fail to switch next fragment", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -140,7 +137,6 @@ int ObDirectLoadExternalSequentialScanner<T>::switch_next_fragment()
     reader_.reuse();
     const ObDirectLoadExternalFragment &fragment = fragments_.at(next_pos_);
     if (OB_FAIL(reader_.open(fragment.file_handle_, 0, fragment.file_size_))) {
-      STORAGE_LOG(WARN, "fail to open file", KR(ret));
     } else {
       next_pos_++;
     }

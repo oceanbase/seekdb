@@ -223,9 +223,7 @@ int ObBlockStatCollector::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("double initialization", K(ret));
   } else if (OB_FAIL(result_row_.init(stat_cols.count()))) {
-    LOG_WARN("failed to init result row", K(ret), K(stat_cols));
   } else if (OB_FAIL(init_collectors(stat_cols, stat_projectors, col_descs, allocator))) {
-    LOG_WARN("failed to init collector", K(ret), K(stat_cols));
   } else {
     result_tmp_allocator_.set_attr(ObMemAttr("BlkStatTmpRes"));
     projector_ = &stat_cols;
@@ -241,9 +239,7 @@ int ObBlockStatCollector::collect_data_row(const blocksstable::ObDatumRow &data_
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(collect_row(data_row, min_data_row_projs_, loose_min_collectors_))) {
-    LOG_WARN("failed to collect min stats", K(ret), K(data_row));
   } else if (OB_FAIL(collect_row(data_row, max_data_row_projs_, loose_max_collectors_))) {
-    LOG_WARN("failed to collect max stats", K(ret), K(data_row));
   } else if (has_bm25_ && OB_FAIL(bm25_collector_.collect_data_row(data_row))) {
     LOG_WARN("failed to collect bm25 stats", K(ret), K(data_row));
   }
@@ -257,9 +253,7 @@ int ObBlockStatCollector::collect_agg_row(const blocksstable::ObDatumRow &agg_ro
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(collect_row(agg_row, min_agg_row_projs_, loose_min_collectors_))) {
-    LOG_WARN("failed to collect min stats", K(ret), K(agg_row));
   } else if (OB_FAIL(collect_row(agg_row, max_agg_row_projs_, loose_max_collectors_))) {
-    LOG_WARN("failed to collect max stats", K(ret), K(agg_row));
   } else if (has_bm25_ && OB_FAIL(bm25_collector_.collect_agg_row(agg_row))) {
     LOG_WARN("failed to collect bm25 stats", K(ret), K(agg_row));
   }
@@ -325,7 +319,6 @@ int ObBlockStatCollector::init_collectors(
   } else if (!has_bm25_token_freq_param || !has_bm25_doc_len_param) {
     has_bm25_ = false;
   } else if (OB_FAIL(bm25_collector_.init(stat_cols, stat_projectors, col_descs, result_row_, allocator))) {
-    LOG_WARN("failed to init bm25 collector", K(ret), K(stat_cols));
   } else {
     has_bm25_ = true;
   }
@@ -346,7 +339,6 @@ int ObBlockStatCollector::init_collectors(
     if (col_type == blocksstable::ObSkipIndexColType::SK_IDX_MIN) {
       ObLooseMinStatCollector &collector = loose_min_collectors_.at(min_idx);
       if (OB_FAIL(collector.init(col_desc, result_datum, result_tmp_allocator_))) {
-        LOG_WARN("failed to init loose_min_collector", K(ret));
       } else {
         min_agg_row_projs_.at(min_idx) = i;
         min_data_row_projs_.at(min_idx) = stat_col_proj;
@@ -355,7 +347,6 @@ int ObBlockStatCollector::init_collectors(
     } else if (col_type == blocksstable::ObSkipIndexColType::SK_IDX_MAX) {
       ObLooseMaxStatCollector &collector = loose_max_collectors_.at(max_idx);
       if (OB_FAIL(collector.init(col_desc, result_datum, result_tmp_allocator_))) {
-        LOG_WARN("failed to init loose_max_collector", K(ret));
       } else {
         max_agg_row_projs_.at(max_idx) = i;
         max_data_row_projs_.at(max_idx) = stat_col_proj;

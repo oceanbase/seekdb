@@ -68,13 +68,9 @@ int ObTableLoadRowProjector::init(const ObTableSchema *src_table_schema,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KP(src_table_schema), KP(dest_table_schema));
   } else if (OB_FAIL(tablet_projector_.create(1024, "TLD_ITP", "TLD_ITP"))) {
-    LOG_WARN("fail to create tablet projector", KR(ret));
   } else if (OB_FAIL(dest_tablet_id_to_part_id_map_.create(1024, "TLD_ITP", "TLD_ITP"))) {
-    LOG_WARN("fail to create index tablet id to part id map", KR(ret));
   } else if (OB_FAIL(build_projector(src_table_schema, dest_table_schema))) {
-    LOG_WARN("fail to build projector", KR(ret), KPC(src_table_schema), KPC(dest_table_schema));
   } else if (OB_FAIL(src_table_schema->get_store_column_count(src_column_num_))) {
-    LOG_WARN("fail to get store column count", KR(ret));
   } else {
     dest_column_num_ = col_projector_.count();
     dest_rowkey_column_num_ = dest_table_schema->get_rowkey_column_num();
@@ -92,13 +88,9 @@ int ObTableLoadRowProjector::init(const uint64_t src_table_id, const uint64_t de
   const ObTableSchema *src_table_schema = nullptr;
   const ObTableSchema *dest_table_schema = nullptr;
   if (OB_FAIL(ObTableLoadSchema::get_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(schema_guard, src_table_id, src_table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret));
   } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(schema_guard, dest_table_id, dest_table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret));
   } else if (OB_FAIL(init(src_table_schema, dest_table_schema))) {
-    LOG_WARN("fail to do init", KR(ret));
   }
   return ret;
 }
@@ -111,9 +103,7 @@ int ObTableLoadRowProjector::get_dest_tablet_id_and_part_id_by_src_tablet_id(
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadProjector not init", KR(ret));
   } else if (OB_FAIL(tablet_projector_.get_refactored(src_tablet_id, dest_tablet_id))) {
-    LOG_WARN("fail to get index tablet id", KR(ret), K(src_tablet_id));
   } else if (OB_FAIL(dest_tablet_id_to_part_id_map_.get_refactored(dest_tablet_id, part_id))) {
-    LOG_WARN("fail to get index tablet id", KR(ret), K(dest_tablet_id));
   }
   return ret;
 }
@@ -126,7 +116,6 @@ int ObTableLoadRowProjector::get_dest_tablet_id(const ObTabletID &src_tablet_id,
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadIndexTableProjector not init", KR(ret));
   } else if (OB_FAIL(tablet_projector_.get_refactored(src_tablet_id, dest_tablet_id))) {
-    LOG_WARN("fail to get index tablet id", KR(ret), K(src_tablet_id));
   }
   return ret;
 }
@@ -139,9 +128,7 @@ int ObTableLoadRowProjector::build_projector(const ObTableSchema *src_table_sche
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(src_table_schema), KP(dest_table_schema));
   } else if (OB_FAIL(build_row_projector(src_table_schema, dest_table_schema))) {
-    LOG_WARN("fail to build row projector", KR(ret));
   } else if (OB_FAIL(build_tablet_projector(src_table_schema, dest_table_schema))) {
-    LOG_WARN("fail to build tablet projector", KR(ret));
   }
   return ret;
 }
@@ -157,7 +144,6 @@ int ObTableLoadRowProjector::build_tablet_projector(
   } else {
     ObArray<ObTabletID> tablet_ids;
     if (OB_FAIL(src_table_schema->get_tablet_ids(tablet_ids))) {
-      LOG_WARN("fail to get tablet ids", KR(ret));
     } else {
       int64_t src_part_idx = OB_INVALID_ID;
       int64_t src_subpart_idx = OB_INVALID_ID;
@@ -172,13 +158,9 @@ int ObTableLoadRowProjector::build_tablet_projector(
         } else if (OB_FAIL(dest_table_schema->get_part_id_and_tablet_id_by_idx(
                      src_part_idx, src_subpart_idx, dest_part_id, dest_subpart_id,
                      dest_tablet_id))) {
-          LOG_WARN("fail to get index tablet id", KR(ret), K(src_part_idx), K(src_subpart_idx));
         } else if (OB_FAIL(tablet_projector_.set_refactored(tablet_ids.at(i), dest_tablet_id))) {
-          LOG_WARN("fail to add tablet projector", KR(ret), K(dest_tablet_id), K(tablet_ids.at(i)));
         } else if (OB_FAIL(
                      dest_tablet_id_to_part_id_map_.set_refactored(dest_tablet_id, dest_part_id))) {
-          LOG_WARN("fail to add index tablet id to part id map", KR(ret), K(dest_tablet_id),
-                   K(dest_part_id));
         }
       }
     }
@@ -253,7 +235,6 @@ int ObTableLoadRowProjector::project_row(const blocksstable::ObBatchDatumRows &s
     if (OB_FAIL(ObDirectLoadVectorUtils::to_datum(vector,
                                                   row_idx,
                                                   dest_datum_row.storage_datums_[i]))) {
-      LOG_WARN("fail to get datum", KR(ret));
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(check_index_lob_inrow(dest_datum_row))) {
@@ -290,7 +271,6 @@ int ObTableLoadRowProjector::check_index_lob_inrow(storage::ObDirectLoadDatumRow
           const ObString &data = datum.get_string();
           ObLobLocatorV2 locator(data, true);
           if (OB_FAIL(locator.get_lob_data_byte_len(lob_length))) {
-            LOG_WARN("fail to get lob data byte len", KR(ret), K(locator));
           } else {
             total_rowkey_length = total_rowkey_length + lob_length + sizeof(ObLobCommon);
           }
@@ -334,9 +314,7 @@ int ObTableLoadMainToIndexProjector::build_row_projector(
     src_rowkey_column_num_ = src_table_schema->get_rowkey_column_num();
     ObArray<ObColDesc> main_column_descs;
     if (OB_FAIL(src_table_schema->get_column_ids(main_column_descs, true))) {
-      LOG_WARN("fail to get column ids", KR(ret));
     } else if (OB_FAIL(dest_table_schema->get_column_ids(index_column_descs_, true))) {
-      LOG_WARN("fail to get column ids", KR(ret));
     } else {
       FOREACH_X(iter, index_column_descs_, OB_SUCC(ret))
       {
@@ -345,12 +323,10 @@ int ObTableLoadMainToIndexProjector::build_row_projector(
         for (int64_t i = 0; OB_SUCC(ret) && i < main_column_descs.count(); i++) {
           if (index_col_desc.col_id_ == main_column_descs.at(i).col_id_) {
             if (OB_FAIL(col_projector_.push_back(i))) {
-              LOG_WARN("fail to push back", KR(ret), K(i));
             } else if (OB_ISNULL(column_schema = src_table_schema->get_column_schema(main_column_descs.at(i).col_id_))) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("unexpected null column schema", KR(ret), K(i), K(main_column_descs.at(i)));
             } else if (OB_FAIL(main_table_rowkey_col_flag_.push_back(column_schema->is_rowkey_column()))) {
-              LOG_WARN("fail to push back rowkey column flag", K(ret), KPC(column_schema));
             } else if (index_col_desc.col_type_.is_lob_storage()) {
               index_has_lob_ = true;
             }
@@ -372,9 +348,7 @@ int ObTableLoadMainToIndexProjector::projector(const ObTabletID &src_tablet_id,
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadMainToIndexProjector not init", KR(ret));
   } else if (OB_FAIL(tablet_projector_.get_refactored(src_tablet_id, dest_tablet_id))) {
-    LOG_WARN("fail to get index id", KR(ret), K(src_tablet_id));
   } else if (OB_FAIL(project_row(src_datum_row, dest_datum_row))) {
-    LOG_WARN("fail to project row", KR(ret));
   }
   return ret;
 }
@@ -389,9 +363,7 @@ int ObTableLoadMainToIndexProjector::projector(const ObTabletID &src_tablet_id,
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadMainToIndexProjector not init", KR(ret));
   } else if (OB_FAIL(tablet_projector_.get_refactored(src_tablet_id, dest_tablet_id))) {
-    LOG_WARN("fail to get index id", KR(ret), K(src_tablet_id));
   } else if (OB_FAIL(project_row(src_datum_row, src_rowkey_column_num_, dest_datum_row))) {
-    LOG_WARN("fail to project row", KR(ret));
   }
   return ret;
 }
@@ -408,7 +380,6 @@ int ObTableLoadMainToIndexProjector::projector(const ObBatchDatumRows &src_datum
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(dest_datum_row.count_), K(dest_column_num_));
   } else if (OB_FAIL(project_row(src_datum_rows, row_idx, src_rowkey_column_num_, dest_datum_row))) {
-    LOG_WARN("fail to project row", KR(ret));
   }
   return ret;
 }
@@ -439,9 +410,7 @@ int ObTableLoadMainToUniqueIndexProjector::build_row_projector(
     dest_index_rowkey_cnt_ = dest_rowkey_cnt_ - dest_spk_cnt_;
     ObArray<ObColDesc> main_column_descs;
     if (OB_FAIL(src_table_schema->get_column_ids(main_column_descs, true))) {
-      LOG_WARN("fail to get column ids", KR(ret));
     } else if (OB_FAIL(dest_table_schema->get_column_ids(index_column_descs_))) {
-      LOG_WARN("fail to get column ids", KR(ret));
     } else {
       FOREACH_X(iter, index_column_descs_, OB_SUCC(ret))
       {
@@ -452,12 +421,10 @@ int ObTableLoadMainToUniqueIndexProjector::build_row_projector(
                  ? index_col_desc.col_id_ - OB_MIN_SHADOW_COLUMN_ID
                  : index_col_desc.col_id_) == main_column_descs.at(i).col_id_) {
             if (OB_FAIL(col_projector_.push_back(i))) {
-              LOG_WARN("fail to push back", KR(ret), K(i));
             } else if (OB_ISNULL(column_schema = src_table_schema->get_column_schema(main_column_descs.at(i).col_id_))) {
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("unexpected null column schema", KR(ret), K(i), K(main_column_descs.at(i)));
             } else if (OB_FAIL(main_table_rowkey_col_flag_.push_back(column_schema->is_rowkey_column()))) {
-              LOG_WARN("fail to push back rowkey column flag", K(ret), KPC(column_schema));
             } else if (index_col_desc.col_type_.is_lob_storage()) {
               index_has_lob_ = true;
             }
@@ -480,9 +447,7 @@ int ObTableLoadMainToUniqueIndexProjector::projector(const ObTabletID &src_table
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadMainToUniqueIndexProjector not init", KR(ret));
   } else if (OB_FAIL(tablet_projector_.get_refactored(src_tablet_id, dest_tablet_id))) {
-    LOG_WARN("fail to get index id", KR(ret), K(src_tablet_id));
   } else if (OB_FAIL(project_row(src_datum_row, dest_datum_row))) {
-    LOG_WARN("fail to project row", KR(ret));
   } else {
     shadow_columns(dest_datum_row);
   }
@@ -499,9 +464,7 @@ int ObTableLoadMainToUniqueIndexProjector::projector(const ObTabletID &src_table
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadMainToUniqueIndexProjector not init", KR(ret));
   } else if (OB_FAIL(tablet_projector_.get_refactored(src_tablet_id, dest_tablet_id))) {
-    LOG_WARN("fail to get index id", KR(ret), K(src_tablet_id));
   } else if (OB_FAIL(project_row(src_datum_row, src_rowkey_column_num_, dest_datum_row))) {
-    LOG_WARN("fail to project row", KR(ret));
   } else {
     shadow_columns(dest_datum_row);
   }
@@ -517,7 +480,6 @@ int ObTableLoadMainToUniqueIndexProjector::projector(const ObBatchDatumRows &src
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadMainToUniqueIndexProjector not init", KR(ret));
   } else if (OB_FAIL(project_row(src_datum_rows, row_idx, src_rowkey_column_num_, dest_datum_row))) {
-    LOG_WARN("fail to project row", KR(ret));
   } else {
     shadow_columns(dest_datum_row);
   }
@@ -560,9 +522,7 @@ int ObTableLoadUniqueIndexToMainRowkeyProjector::build_row_projector(
     ObArray<ObColDesc> src_column_descs;
     ObArray<ObColDesc> dest_column_descs;
     if (OB_FAIL(src_table_schema->get_column_ids(src_column_descs, true))) {
-      LOG_WARN("fail to get column ids", KR(ret));
     } else if (OB_FAIL(dest_table_schema->get_rowkey_column_ids(dest_column_descs))) {
-      LOG_WARN("fail to get column ids", KR(ret));
     } else {
       FOREACH_X(iter, dest_column_descs, OB_SUCC(ret))
       {
@@ -570,7 +530,6 @@ int ObTableLoadUniqueIndexToMainRowkeyProjector::build_row_projector(
         for (int64_t i = 0; OB_SUCC(ret) && i < src_column_descs.count(); i++) {
           if (dest_col_desc.col_id_ == src_column_descs.at(i).col_id_) {
             if (OB_FAIL(col_projector_.push_back(i))) {
-              LOG_WARN("fail to push back", KR(ret), K(i));
             }
           }
         }
@@ -590,9 +549,7 @@ int ObTableLoadUniqueIndexToMainRowkeyProjector::projector(const ObTabletID &src
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadUniqueIndexToMainRowkeyProjector not init", KR(ret));
   } else if (OB_FAIL(tablet_projector_.get_refactored(src_tablet_id, dest_tablet_id))) {
-    LOG_WARN("fail to get index id", KR(ret), K(src_tablet_id));
   } else if (OB_FAIL(project_row(src_datum_row, dest_datum_row))) {
-    LOG_WARN("fail to project row", KR(ret));
   }
   return ret;
 }

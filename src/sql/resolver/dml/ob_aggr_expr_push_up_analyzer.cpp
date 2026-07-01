@@ -40,9 +40,7 @@ int ObAggrExprPushUpAnalyzer::analyze_and_push_up_aggr_expr(ObRawExprFactory &ex
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("aggr expr is null", K(ret));
   } else if (OB_FAIL(analyze_aggr_param_expr(root_expr, false, true))) {
-    LOG_WARN("failed to analyze aggr param expr", K(ret), K(*root_expr));
   } else if (OB_FAIL(get_min_level_resolver(min_level_resolver))) {
-    LOG_WARN("failed to get min level resolver", K(ret));
   } else if (OB_ISNULL(final_aggr_resolver = fetch_final_aggr_resolver(&cur_resolver_,
                                                                        min_level_resolver))) {
     ret = OB_ERR_INVALID_GROUP_FUNC_USE;
@@ -50,45 +48,34 @@ int ObAggrExprPushUpAnalyzer::analyze_and_push_up_aggr_expr(ObRawExprFactory &ex
   } else if (final_aggr_resolver == &cur_resolver_) {
     // do nothing
   } else if (OB_FAIL(get_exec_params(final_aggr_resolver, exec_columns_, final_exec_params))) {
-    LOG_WARN("failed to get final exec params", K(ret));
   } else if (OB_FAIL(check_param_aggr(final_exec_params, has_param_aggr))) {
-    LOG_WARN("failed to check param expr level", K(ret));
   } else if (has_param_aggr) {
     ret = OB_ERR_INVALID_GROUP_FUNC_USE;
     LOG_WARN("no resolver can produce aggregate function", K(ret));
   } else if (OB_FAIL(push_up_aggr_column(final_aggr_resolver))) {
-    LOG_WARN("push up aggr column failed", K(ret));
   } else if (OB_FAIL(ObTransformUtils::extract_query_ref_expr(aggr_expr, param_query_refs))) {
-    LOG_WARN("failed to extract query ref exprs", K(ret));
   } else if (OB_FAIL(push_up_subquery_in_aggr(*final_aggr_resolver,
                                               param_query_refs))) {
-    LOG_WARN("push up subquery in aggr failed", K(ret));
   } else if (OB_FAIL(ObTransformUtils::decorrelate(reinterpret_cast<ObRawExpr *&>(aggr_expr),
                                                    final_exec_params))) {
-    LOG_WARN("failed to decorrelate exec params", K(ret));
   } else if (OB_FAIL(replace_final_exec_param_in_aggr(final_exec_params, param_query_refs, expr_factory))) {
-    LOG_WARN("failed to replace real exec param in aggr", K(ret));
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(final_aggr_resolver->add_aggr_expr(aggr_expr))) {
-      LOG_WARN("add aggr to final resolver failed", K(ret));
     } else if (final_aggr_resolver == &cur_resolver_) {
       final_aggr = aggr_expr;
     } else if (OB_FAIL(ObRawExprUtils::get_exec_param_expr(expr_factory,
                                                            final_aggr_resolver->get_query_ref_exec_params(),
                                                            aggr_expr,
                                                            final_aggr))) {
-      LOG_WARN("failed to get exec param expr", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
     // do nothing
   } else if(OB_FAIL(remove_alias_exprs())) {
-    LOG_WARN("failed to remove alias exprs", K(ret));
   } else if (final_aggr_resolver == &cur_resolver_) {
     // do nothing
   } else if(OB_FAIL(remove_alias_exprs(reinterpret_cast<ObRawExpr *&>(aggr_expr)))) {
-    LOG_WARN("failed to remove alias exprs", K(ret));
   }
   return ret;
 }
@@ -125,7 +112,6 @@ int ObAggrExprPushUpAnalyzer::analyze_aggr_param_expr(ObRawExpr *&param_expr,
     }
     if (OB_SUCC(ret) && param_expr->is_exec_param_expr()) {
       if (OB_FAIL(exec_columns_.push_back(static_cast<ObExecParamRawExpr *>(param_expr)))) {
-        LOG_WARN("failed to push back exec columns", K(ret));
       }
     }
 
@@ -150,13 +136,11 @@ int ObAggrExprPushUpAnalyzer::analyze_aggr_param_expr(ObRawExpr *&param_expr,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret));
     } else if (OB_FAIL(SMART_CALL(analyze_aggr_param_expr(param, is_in_aggr_expr || param_expr->is_aggr_expr(), false, is_child_stmt)))) {
-      LOG_WARN("analyze child expr failed", K(ret));
     }
   }
   if (OB_SUCC(ret) && param_expr->is_query_ref_expr()) {
     ObQueryRefRawExpr *query_ref = static_cast<ObQueryRefRawExpr*>(param_expr);
     if (OB_FAIL(analyze_child_stmt(query_ref->get_ref_stmt()))) {
-      LOG_WARN("analyze child stmt failed", K(ret));
     }
   }
   return ret;
@@ -170,19 +154,15 @@ int ObAggrExprPushUpAnalyzer::analyze_child_stmt(ObSelectStmt *child_stmt)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("child stmt is null");
   } else if (OB_FAIL(child_stmt->get_relation_exprs(relation_exprs))) {
-    LOG_WARN("failed to get relation exprs", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < relation_exprs.count(); ++i) {
     ObRawExpr *expr = NULL;
     if (OB_FAIL(relation_exprs.at(i).get(expr))) {
-      LOG_WARN("failed to get expr", K(ret));
     } else if (OB_ISNULL(expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret));
     } else if (OB_FAIL(analyze_aggr_param_expr(expr, false, false, true))) {
-      LOG_WARN("failed to analyze aggr param expr", K(ret));
     } else if (OB_FAIL(relation_exprs.at(i).set(expr))) {
-      LOG_WARN("failed to set expr", K(ret));
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < child_stmt->get_table_size(); ++i) {
@@ -193,7 +173,6 @@ int ObAggrExprPushUpAnalyzer::analyze_child_stmt(ObSelectStmt *child_stmt)
     } else if (!table_item->is_generated_table()) {
       //do nothing
     } else if (OB_FAIL(analyze_child_stmt(table_item->ref_query_))) {
-      LOG_WARN("analyze child stmt failed", K(ret));
     }
   }
   return ret;
@@ -212,7 +191,6 @@ int ObAggrExprPushUpAnalyzer::get_min_level_resolver(ObSelectResolver *&resolver
         resolver->get_parent_namespace_resolver()->is_select_resolver()) {
       resolver = static_cast<ObSelectResolver *>(resolver->get_parent_namespace_resolver());
       if (OB_FAIL(get_exec_params(resolver, exec_columns_, my_exec_params))) {
-        LOG_WARN("failed to get my exec params", K(ret));
       }
     } else {
       resolver = NULL;
@@ -310,7 +288,6 @@ int ObAggrExprPushUpAnalyzer::push_up_aggr_column(ObSelectResolver *final_resolv
     if (NULL != resolver) {
       exec_params.reuse();
       if (OB_FAIL(get_exec_params(resolver, exec_columns_, exec_params))) {
-        LOG_WARN("failed to get exec params", K(ret));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < exec_params.count(); ++i) {
         ObExecParamRawExpr *upper_column = exec_params.at(i);
@@ -321,7 +298,6 @@ int ObAggrExprPushUpAnalyzer::push_up_aggr_column(ObSelectResolver *final_resolv
         } else if (!ref_expr->is_column_ref_expr()) {
           // do nothing
         } else if (OB_FAIL(resolver->add_unsettled_column(static_cast<ObColumnRefRawExpr *>(ref_expr)))) {
-          LOG_WARN("failed to add unsettle column", K(ret));
         }
       }
     }
@@ -342,9 +318,7 @@ int ObAggrExprPushUpAnalyzer::push_up_subquery_in_aggr(
   } else if (&cur_resolver_ != &final_resolver) {
     for (int64_t i = 0; OB_SUCC(ret) && i < query_refs.count(); ++i) {
       if (OB_FAIL(cur_stmt->remove_subquery_expr(query_refs.at(i)))) {
-        LOG_WARN("failed to remove subquery expr", K(ret));
       } else if (OB_FAIL(final_stmt->add_subquery_ref(query_refs.at(i)))) {
-        LOG_WARN("failed to add query ref", K(ret));
       }
     }
   }
@@ -361,7 +335,6 @@ int ObAggrExprPushUpAnalyzer::check_param_aggr(const ObIArray<ObExecParamRawExpr
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("exec param expr is null", K(ret));
     } else if (OB_FAIL(has_aggr_expr(exec_params.at(i)->get_ref_expr(), has_aggr))) {
-      LOG_WARN("failed to check has aggr expr", K(ret));
     }
   }
   return ret;
@@ -378,7 +351,6 @@ int ObAggrExprPushUpAnalyzer::has_aggr_expr(const ObRawExpr *expr, bool &has)
   }
   for (int64_t i = 0; OB_SUCC(ret) && !has && i < expr->get_param_count(); ++i) {
     if (OB_FAIL(has_aggr_expr(expr->get_param_expr(i), has))) {
-      LOG_WARN("failed to check has aggr expr", K(ret));
     }
   }
   return ret;
@@ -424,7 +396,6 @@ int ObAggrExprPushUpAnalyzer::remove_alias_exprs(ObRawExpr* &expr)
 
   for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); ++i) {
     if (OB_FAIL(SMART_CALL(remove_alias_exprs(expr->get_param_expr(i))))) {
-      LOG_WARN("failed to decorrelate expr", K(ret));
     }
   }
   return ret;
@@ -444,7 +415,6 @@ int ObAggrExprPushUpAnalyzer::get_exec_params(ObDMLResolver *resolver,
     if (!ObRawExprUtils::find_expr(*query_ref_exec_params, all_exec_params.at(i))) {
       // do nothing
     } else if (OB_FAIL(my_exec_params.push_back(all_exec_params.at(i)))) {
-      LOG_WARN("failed to push back exec param", K(ret));
     }
   }
   return ret;
@@ -462,20 +432,16 @@ int ObAggrExprPushUpAnalyzer::replace_final_exec_param_in_aggr(const ObIArray<Ob
                                                       exec_params.at(i)->get_ref_expr(),
                                                       new_expr,
                                                       false))) {
-      LOG_WARN("failed to create new exec param", K(ret));
     } else if (OB_FAIL(new_execs.push_back(static_cast<ObExecParamRawExpr *>(new_expr)))) {
-      LOG_WARN("failed to push back", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     ObStmtExecParamReplacer replacer;
     replacer.set_relation_scope();
     if (OB_FAIL(replacer.add_replace_exprs(exec_params, new_execs))) {
-      LOG_WARN("failed to add replace exprs", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < param_query_refs.count(); i++) {
         if (OB_FAIL(replacer.do_visit(reinterpret_cast<ObRawExpr *&>(param_query_refs.at(i))))) {
-          LOG_WARN("failed to replace exec param", K(ret));
         }
       }
     }
@@ -517,9 +483,7 @@ int ObStmtExecParamReplacer::add_replace_exprs(const ObIArray<ObExecParamRawExpr
   } else if (expr_replace_map_.created()) {
     /* do nothing */
   } else if (OB_FAIL(expr_replace_map_.create(bucket_size, ObModIds::OB_SQL_COMPILE))) {
-    LOG_WARN("failed to create expr map", K(ret));
   } else if (OB_FAIL(to_exprs_.create(bucket_size))) {
-    LOG_WARN("failed to create expr set", K(ret));
   }
   const ObRawExpr *from_expr = NULL;
   const ObRawExpr *to_expr = NULL;
@@ -530,14 +494,11 @@ int ObStmtExecParamReplacer::add_replace_exprs(const ObIArray<ObExecParamRawExpr
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null expr", KP(from_expr), KP(to_expr), K(ret));
     } else if (OB_FAIL(check_need_replace(from_expr, new_expr, is_existed))) {
-      LOG_WARN("failed to check need replace", K(ret));
     } else if (is_existed) {
       /* do nothing */
     } else if (OB_FAIL(expr_replace_map_.set_refactored(reinterpret_cast<uint64_t>(from_expr),
                                                         reinterpret_cast<uint64_t>(to_expr)))) {
-      LOG_WARN("failed to add replace expr into map", K(ret));
     } else if (OB_FAIL(to_exprs_.set_refactored(reinterpret_cast<uint64_t>(to_expr)))) {
-      LOG_WARN("failed to add replace expr into set", K(ret));
     }
   }
   return ret;
@@ -554,7 +515,6 @@ int ObStmtExecParamReplacer::do_visit(ObRawExpr *&expr)
     bool need_replace = false;
     ObRawExpr *to_expr;
     if (OB_FAIL(check_need_replace(expr, to_expr, need_replace))) {
-      LOG_WARN("failed to check need replace", K(ret));
     } else if (need_replace) {
       expr = to_expr;
     }
@@ -563,18 +523,15 @@ int ObStmtExecParamReplacer::do_visit(ObRawExpr *&expr)
     for (int64_t i = 0; OB_SUCC(ret) && i < query_ref_expr->get_param_count(); ++i) {
       if (OB_FAIL(SMART_CALL(do_visit(reinterpret_cast<ObRawExpr *&>(
                                                       query_ref_expr->get_exec_params().at(i)))))) {
-        LOG_WARN("failed to remove const exec param", K(ret));
       }
     }
     if (NULL == query_ref_expr->get_ref_stmt()) {
       /* ref_stmt may has not been resolve yet */
     } else if (OB_FAIL(SMART_CALL(query_ref_expr->get_ref_stmt()->iterate_stmt_expr(*this)))) {
-      LOG_WARN("failed to iterator stmt expr", K(ret));
     }
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < expr->get_param_count(); i++) {
       if (OB_FAIL(SMART_CALL(do_visit(expr->get_param_expr(i))))) {
-        LOG_WARN("failed to do replace exec param", K(ret));
       }
     }
   }

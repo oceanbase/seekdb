@@ -59,7 +59,6 @@ int ObParallelTaskController::init(int64_t max_parallelism)
   int ret = OB_SUCCESS;
   max_parallelism_ = max_parallelism;
   if (OB_FAIL(vacant_cond_.init(common::ObWaitEventIds::ASYNC_RPC_PROXY_COND_WAIT))) {
-    LOG_WARN("init vacant cond failed", K(ret));
   }
   return ret;
 }
@@ -123,7 +122,6 @@ int ObInsertResult::assign(const ObInsertResult &other)
   err_line_no_ = other.err_line_no_;
 
   if (OB_FAIL(ob_write_string(allocator_, other.err_msg_, err_msg_))) {
-    LOG_WARN("fail to write string", K(ret));
   }
 
   return ret;
@@ -143,13 +141,9 @@ OB_DEF_SERIALIZE(ObLoadbuffer)
               insert_column_num_);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(table_name_.serialize(buf, buf_len, pos))) {
-    LOG_WARN("serialize error", K(ret));
   } else if (OB_FAIL(insert_column_names_.serialize(buf, buf_len, pos))) {
-    LOG_WARN("serialize column names error", K(ret));
   } else if (OB_FAIL(insert_values_.serialize(buf, buf_len, pos))) {
-    LOG_WARN("serialize row store error", K(ret));
   } else if (OB_FAIL(expr_bitset_.serialize(buf, buf_len, pos))) {
-    LOG_WARN("serialize expr bitset error", K(ret));
   }
   return ret;
 }
@@ -168,13 +162,9 @@ OB_DEF_DESERIALIZE(ObLoadbuffer)
               insert_column_num_);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(table_name_.deserialize(buf, data_len, pos))) {
-    LOG_WARN("deserialize error", K(ret));
   } else if (OB_FAIL(insert_column_names_.deserialize(buf, data_len, pos))) {
-    LOG_WARN("deserialize row store error", K(ret));
   } else if (OB_FAIL(insert_values_.deserialize(buf, data_len, pos))) {
-    LOG_WARN("deserialize row store error", K(ret));
   } else if (OB_FAIL(expr_bitset_.deserialize(buf, data_len, pos))) {
-    LOG_WARN("deserialize expr bitset error", K(ret));
   }
   return ret;
 }
@@ -209,9 +199,7 @@ OB_DEF_SERIALIZE(ObLoadResult)
               task_flags_);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(row_number_.serialize(buf, buf_len, pos))) {
-    LOG_WARN("serialize row_number_ error", K(ret));
   } else if (OB_FAIL(row_err_code_.serialize(buf, buf_len, pos))) {
-    LOG_WARN("serialize row_err_code_ error", K(ret));
   }
   return ret;
 }
@@ -227,9 +215,7 @@ OB_DEF_DESERIALIZE(ObLoadResult)
               task_flags_);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(row_number_.deserialize(buf, data_len, pos))) {
-    LOG_WARN("deserialize row_number_ error", K(ret));
   } else if (OB_FAIL(row_err_code_.deserialize(buf, data_len, pos))) {
-    LOG_WARN("deserialize row_err_code_ error", K(ret));
   }
   return ret;
 }

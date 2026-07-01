@@ -119,7 +119,6 @@ int CompareBase::init_cmp_sort_key(const ObIArray<ObExpr *> *cmp_sk_exprs,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(cmp_funcs_.init(cmp_sort_collations->count()))) {
-    SQL_ENG_LOG(WARN, "failed to init sort collations", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < cmp_sort_collations->count(); i++) {
     const ObSortFieldCollation &sort_collation = cmp_sort_collations->at(i);
@@ -128,7 +127,6 @@ int CompareBase::init_cmp_sort_key(const ObIArray<ObExpr *> *cmp_sk_exprs,
                            e->basic_funcs_->row_null_first_cmp_ :
                            e->basic_funcs_->row_null_last_cmp_;
     if (OB_FAIL(cmp_funcs_.push_back(cmp_fun))) {
-      SQL_ENG_LOG(WARN, "failed to add compare func", K(ret));
     }
   }
   return ret;
@@ -144,7 +142,6 @@ int CompareBase::init(const ObIArray<ObExpr *> *cmp_sk_exprs, const RowMeta *sk_
     ret = OB_INVALID_ARGUMENT;
     SQL_ENG_LOG(WARN, "invalid argument", K(ret), KP(cmp_sort_collations));
   } else if (OB_FAIL(init_cmp_sort_key(cmp_sk_exprs, cmp_sort_collations))) {
-    SQL_ENG_LOG(WARN, "failed to init compare sort key", K(ret));
   } else {
     cmp_sk_exprs_ = cmp_sk_exprs;
     sk_row_meta_ = sk_row_meta;

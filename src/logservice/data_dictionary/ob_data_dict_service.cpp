@@ -106,7 +106,6 @@ int ObDataDictService::start()
 
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    DDLOG(WARN, "ObDataDictService is not inited",  K_(is_inited));
   } else {
     // datadict only for user tenant; dead in lite (no user tenant)
   }
@@ -118,7 +117,6 @@ void ObDataDictService::stop()
 {
   if (IS_INIT && ! stop_flag_) {
     TG_STOP(timer_tg_id_);
-    DDLOG(INFO, "stop datadict_service", K_(is_inited), K_(stop_flag));
   }
 }
 
@@ -127,7 +125,6 @@ void ObDataDictService::wait()
   if (IS_INIT && ! stop_flag_) {
     TG_WAIT(timer_tg_id_);
     stop_flag_ = true;
-    DDLOG(INFO, "wait datadict_service finish", K_(timer_tg_id));
   }
 }
 
@@ -147,7 +144,6 @@ void ObDataDictService::destroy()
     stop_flag_ = true;
     is_leader_ = false;
     is_inited_ = false;
-    DDLOG(INFO, "destroy datadict_service");
   }
 }
 
@@ -179,11 +175,9 @@ void ObDataDictService::runTimerTask()
         ATOMIC_SET(&last_dump_succ_time_, end_time);
 
         if (force_need_dump) {
-          DDLOG(INFO, "force dump_data_dict done", K_(last_dump_succ_time), K(start_time));
           mark_force_dump_data_dict(false);
         }
 
-        DDLOG(INFO, "do_dump_data_dict_ success", "cost_time", end_time - start_time);
       }
     }
   }
@@ -224,7 +218,6 @@ void ObDataDictService::refresh_config_()
   const int64_t dump_interval = GCONF.dump_data_dictionary_to_log_interval;
   if (dump_interval != dump_interval_) {
     ATOMIC_SET(&dump_interval_, dump_interval);
-    DDLOG(INFO, "modify dump_data_dictionary_to_log_interval", K_(dump_interval));
   }
 }
 
@@ -232,7 +225,6 @@ OB_INLINE void ObDataDictService::switch_role_to_(bool is_leader)
 {
   ATOMIC_SET(&is_leader_, is_leader);
   ATOMIC_SET(&stop_flag_, ! is_leader);
-  DDLOG(INFO, "switch_role", K(is_leader));
 }
 
 int ObDataDictService::do_dump_data_dict_()
@@ -266,7 +258,6 @@ int ObDataDictService::do_dump_data_dict_()
   } else if (OB_FAIL(check_cluster_status_normal_(is_cluster_status_normal))) {
     DDLOG(TRACE, "check_cluster_status_normal_ failed", KR(ret), K(is_cluster_status_normal));
   } else if (OB_UNLIKELY(! is_cluster_status_normal)) {
-    DDLOG(TRACE, "cluster_status not normal, won't dump_data_dict", K(is_cluster_status_normal));
   } else if (OB_FAIL(ls_service_->get_ls(share::SYS_LS, ls_handle, ObLSGetMod::DATA_DICT_MOD))) {
     if (OB_LS_NOT_EXIST != ret || REACH_TIME_INTERVAL_THREAD_LOCAL(PRINT_DETAIL_INTERVAL)) {
       DDLOG(WARN, "get_ls for data_dict_service from ls_service failed", KR(ret));
@@ -390,7 +381,6 @@ int ObDataDictService::get_snapshot_scn_(share::SCN &snapshot_scn)
       ret = OB_ERR_UNEXPECTED;
       DDLOG(WARN, "gts invalid", KR(ret), K(gts_scn));
     } else {
-      DDLOG(TRACE, "get gts", K(gts_scn));
     }
   } while (OB_EAGAIN == ret && ! stop_flag_);
 
@@ -469,7 +459,6 @@ int ObDataDictService::check_tenant_status_normal_(
     DDLOG(WARN, "invalid tenant_schema", KR(ret));
   } else {
     is_normal = tenant_schema->is_valid() && tenant_schema->is_normal();
-    DDLOG(TRACE, "check_tenant_status", K(is_normal), KPC(tenant_schema));
   }
 
   return ret;
@@ -499,7 +488,6 @@ int ObDataDictService::handle_tenant_meta_(
   } else if (OB_FAIL(check_tenant_status_normal_(tenant_schema_guard, is_normal))) {
     DDLOG(WARN, "check_tenant_status_normal_ failed", KR(ret), K(is_normal));
   } else if (OB_UNLIKELY(! is_normal)) {
-    DDLOG(INFO, "ignore non-normal status tenant for dump_data_dict_", K(is_normal));
   } else if (OB_FAIL(tenant_schema_guard.get_tenant_info(tenant_schema))) {
     DDLOG(WARN, "get_tenant_schema failed", KR(ret), K(snapshot_scn));
   } else if (OB_ISNULL(tenant_schema)) {
@@ -631,11 +619,6 @@ int ObDataDictService::handle_table_metas_(
       DDLOG(WARN, "filter_table_ failed", KR(ret), K(is_filtered), KPC(table_schema));
     } else if (is_filtered) {
       filter_table_count++;
-      DDLOG(DEBUG, "filter_table_",
-          K(schema_version),
-          "table_id", table_schema->get_table_id(),
-          "table_name", table_schema->get_table_name(),
-          "table_type", table_schema->get_table_type());
       // ignore this table.
     } else if (OB_FAIL(table_meta.init(*table_schema))) {
       DDLOG(WARN, "init table_meta failed", KR(ret), K(schema_version), KPC(table_schema));

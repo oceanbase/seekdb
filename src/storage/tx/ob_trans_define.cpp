@@ -116,7 +116,6 @@ int ObTraceInfo::set_app_trace_info(const ObString &app_trace_info)
   int ret = OB_SUCCESS;
 
   if (len < 0 || len > OB_MAX_TRACE_INFO_BUFFER_SIZE) {
-    TRANS_LOG(WARN, "unexpected trace info str", K(app_trace_info));
     ret = OB_INVALID_ARGUMENT;
   } else if (0 != app_trace_info_.length()) {
     ret = OB_ERR_UNEXPECTED;
@@ -146,7 +145,6 @@ int ObTraceInfo::set_app_trace_id(const ObString &app_trace_id)
   const int64_t len = app_trace_id.length();
 
   if (len < 0 || len > OB_MAX_TRACE_ID_BUFFER_SIZE) {
-    TRANS_LOG(WARN, "unexpected trace id str", K(app_trace_id));
     ret = OB_INVALID_ARGUMENT;
   } else if (0 != app_trace_id_.length()) {
     ret = OB_ERR_UNEXPECTED;
@@ -231,7 +229,6 @@ int ObTransTask::make(const int64_t task_type)
   int ret = OB_SUCCESS;
 
   if (!ObTransRetryTaskType::is_valid(task_type)) {
-    TRANS_LOG(WARN, "invalid argument", K(task_type));
     ret = OB_INVALID_ARGUMENT;
   } else {
     task_type_ = task_type;
@@ -419,7 +416,6 @@ int ObTxExecInfo::generate_mds_buffer_ctx_array()
   for (int64_t idx = 0; idx < multi_data_source_.count() && OB_SUCC(ret); ++idx) {
     const ObTxBufferNode &buffer_node = multi_data_source_.at(idx);
     if (OB_FAIL(mds_buffer_ctx_array_.push_back(buffer_node.get_buffer_ctx_node()))) {
-      TRANS_LOG(WARN, "fail to push back", KR(ret), K(*this));
     }
   }
   if (OB_FAIL(ret)) {
@@ -475,7 +471,6 @@ int ObTxExecInfo::assign_commit_parts(const share::ObLSArray &participants,
       if (OB_FAIL(commit_parts_.push_back(ObTxExecPart(participants[i],
                                                        -1, /*exec_epoch*/
                                                        -1  /*transfer_epoch*/)))) {
-        TRANS_LOG(WARN, "set commit parts error", K(ret), K(*this));
       }
     }
 
@@ -485,7 +480,6 @@ int ObTxExecInfo::assign_commit_parts(const share::ObLSArray &participants,
     }
   } else {
     if (OB_FAIL(commit_parts_.assign(commit_parts))) {
-      TRANS_LOG(WARN, "set commit parts error", K(ret), K(*this));
     }
   }
 
@@ -500,26 +494,16 @@ int ObTxExecInfo::assign(const ObTxExecInfo &exec_info)
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "no need to assign the same object", KR(ret), K(exec_info));
   } else if (OB_FAIL(participants_.assign(exec_info.participants_))) {
-    TRANS_LOG(WARN, "participants assign error", KR(ret), K(exec_info));
   } else if (OB_FAIL(incremental_participants_.assign(exec_info.incremental_participants_))) {
-    TRANS_LOG(WARN, "incremental participants assign error", KR(ret), K(exec_info));
   } else if (OB_FAIL(intermediate_participants_.assign(exec_info.intermediate_participants_))) {
-    TRANS_LOG(WARN, "intermediate participants assign error", KR(ret), K(exec_info));
   } else if (OB_FAIL(redo_lsns_.assign(exec_info.redo_lsns_))) {
-    TRANS_LOG(WARN, "redo_lsns assign error", KR(ret), K(exec_info));
   } else if (OB_FAIL(multi_data_source_.assign(exec_info.multi_data_source_))) {
-    TRANS_LOG(WARN, "multi_data_source assign error", KR(ret), K(exec_info));
   } else if (OB_FAIL(mds_buffer_ctx_array_.assign(exec_info.mds_buffer_ctx_array_))) {
-    TRANS_LOG(WARN, "mds_buffer_ctx_array assign error", KR(ret), K(exec_info));
   } else if (OB_FAIL(prepare_log_info_arr_.assign(exec_info.prepare_log_info_arr_))) {
-    TRANS_LOG(WARN, "prepare log info array assign error", KR(ret), K(exec_info));
   } else if (OB_FAIL(assign_commit_parts(exec_info.participants_,
                                          exec_info.commit_parts_))) {
-    TRANS_LOG(WARN, "commit parts assign error", KR(ret), K(exec_info));
   } else if (OB_FAIL(transfer_parts_.assign(exec_info.transfer_parts_))) {
-    TRANS_LOG(WARN, "transfer_epoch assign error", KR(ret), K(exec_info));
   } else if (OB_FAIL(dli_batch_set_.assign(exec_info.dli_batch_set_))) {
-    TRANS_LOG(WARN, "direct load inc batch set assign error", K(ret), K(exec_info.dli_batch_set_));
   } else {
     // Prepare version should be initialized before state_
     // for ObTransPartCtx::get_prepare_version_if_preapred();
@@ -535,9 +519,7 @@ int ObTxExecInfo::assign(const ObTxExecInfo &exec_info)
     max_applying_part_log_no_ = exec_info.max_applying_part_log_no_;
     max_submitted_seq_no_ = exec_info.max_submitted_seq_no_;
     if (OB_FAIL(checksum_.assign(exec_info.checksum_))) {
-      TRANS_LOG(WARN, "assign failed", K(ret));
     } else if (OB_FAIL(checksum_scn_.assign(exec_info.checksum_scn_))) {
-      TRANS_LOG(WARN, "assign failed", K(ret));
     }
     max_durable_lsn_ = exec_info.max_durable_lsn_;
     data_complete_ = exec_info.data_complete_;
@@ -625,7 +607,6 @@ int RollbackMaskSet::merge_part(const share::ObLSID add_ls_id, const int64_t exe
       if (rollback_parts_->at(i).ls_id_ == add_ls_id) {
         is_exist = true;
         if (OB_FAIL(mask_set_.unmask(rollback_parts_->at(i)))) {
-          TRANS_LOG(WARN, "unmask fail", KR(ret), K(add_ls_id));
         }
         break;
       }
@@ -670,7 +651,6 @@ int RollbackMaskSet::find_part(const share::ObLSID ls_id,
     ret = OB_ENTRY_NOT_EXIST;
   }
   if (OB_FAIL(ret)) {
-    TRANS_LOG(WARN, "find part", K(ret), K(ls_id), K(orig_epoch), K(rollback_parts_), K(transfer_epoch));
   }
   return ret;
 }

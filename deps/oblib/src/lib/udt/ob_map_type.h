@@ -61,9 +61,7 @@ public :
       ret = OB_ERR_UNEXPECTED;
       OB_LOG(WARN, "invalid map type", K(ret));
     } else if (OB_FAIL(map_obj->keys_->check_validity(*map_type->key_type_, *map_obj->keys_))) {
-      OB_LOG(WARN, "map key check validity failed", K(ret), K(map_obj->keys_), K(map_type->key_type_));
     } else if (OB_FAIL(map_obj->values_->check_validity(*map_type->value_type_, *map_obj->values_))) {
-      OB_LOG(WARN, "map value check validity failed", K(ret), K(map_obj->values_), K(map_type->value_type_));
     }
     return OB_SUCCESS;
   }

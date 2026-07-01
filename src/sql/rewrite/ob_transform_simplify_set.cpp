@@ -43,7 +43,6 @@ int ObTransformSimplifySet::transform_one_stmt(common::ObIArray<ObParentDMLStmt>
   } else {
     ObSelectStmt * sel_stmt = static_cast<ObSelectStmt*>(stmt);
     if (OB_FAIL(pruning_set_query(parent_stmts, sel_stmt, is_happened))) {
-      LOG_WARN("failed to pruning set query", K(ret));
     } else {
       stmt = sel_stmt;
       trans_happened |= is_happened;
@@ -108,13 +107,11 @@ int ObTransformSimplifySet::add_limit(ObSelectStmt *stmt, ObSelectStmt *upper_st
                                                       upper_stmt->get_limit_expr(),
                                                       upper_stmt->get_offset_expr(),
                                                       limit_count_offset_expr))) {
-    LOG_WARN("make pushdown limit expr failed", K(ret));
   }
 
   if (OB_SUCC(ret)) {
     ObRawExprCopier copier(*ctx_->expr_factory_);
     if (OB_FAIL(copier.copy(limit_count_offset_expr, limit_count_expr))) {
-      LOG_WARN("fail to copy limit count expr", K(ret));
     } else if (OB_ISNULL(limit_count_expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("left_limit_count_expr is NULL", K(ret));
@@ -139,7 +136,6 @@ int ObTransformSimplifySet::add_order_by(ObSelectStmt *stmt, ObSelectStmt *upper
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("stmt should not have order by", K(ret), K(stmt->get_order_item_size()));
   } else if (OB_FAIL(upper_stmt->get_pure_set_exprs(set_exprs))) {
-    LOG_WARN("failed to get expr in cast", K(ret));
   } else {
     ObRawExprCopier copier(*ctx_->expr_factory_);
     for (int64_t i = 0; OB_SUCC(ret) && i < set_exprs.count(); ++i) {
@@ -153,16 +149,13 @@ int ObTransformSimplifySet::add_order_by(ObSelectStmt *stmt, ObSelectStmt *upper
           LOG_WARN("invalid select item index", K(ret), K(idx), K(stmt->get_select_item_size()));
         } else if (OB_FAIL(copier.add_replaced_expr(set_exprs.at(i),
                                                     stmt->get_select_item(idx).expr_))) {
-          LOG_WARN("failed to add replace expr pair", K(ret));
         }
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < upper_stmt->get_order_item_size(); ++i) {
       OrderItem order_item = upper_stmt->get_order_item(i);
       if (OB_FAIL(copier.copy(order_item.expr_, order_item.expr_))) {
-        LOG_WARN("failed to copy expr", K(ret));
       } else if (OB_FAIL(stmt->add_order_item(order_item))) {
-        LOG_WARN("failed to add order item", K(ret));
       }
     }
   }
@@ -241,7 +234,6 @@ int ObTransformSimplifySet::add_limit_order_distinct_for_union(const common::ObI
              && ObSelectStmt::UNION == static_cast<ObSelectStmt*>(stmt)->get_set_op()) {
     select_stmt = static_cast<ObSelectStmt*>(stmt);
     if (OB_FAIL(is_calc_found_rows_for_union(parent_stmts, stmt, is_calc))) {
-      LOG_WARN("fail to judge calc found rows for union", K(ret));
     } else if (is_calc) {
         /*do nothing*/
     } else if(select_stmt->has_limit()){
@@ -256,7 +248,6 @@ int ObTransformSimplifySet::add_limit_order_distinct_for_union(const common::ObI
           LOG_WARN("unexpected null", K(ret));
         } else if (OB_FAIL(check_can_push(child_stmt, select_stmt, need_push_distinct, 
                                           need_push_orderby, can_push))) {
-          LOG_WARN("Failed to check left stmt", K(ret));
         } else if (!can_push) {
           /*do nothing*/
         } else if (need_push_distinct && OB_FAIL(add_distinct(child_stmt, select_stmt))) {
@@ -264,7 +255,6 @@ int ObTransformSimplifySet::add_limit_order_distinct_for_union(const common::ObI
         } else if (need_push_orderby && OB_FAIL(add_order_by(child_stmt, select_stmt))) {
           LOG_WARN("Failed to add order by to left stmt", K(ret));
         } else if (OB_FAIL(add_limit(child_stmt, select_stmt))) {
-          LOG_WARN("Failed to add limit to left stmt", K(ret));
         } else {
           trans_happened = true;
         }
@@ -317,7 +307,6 @@ int ObTransformSimplifySet::check_exprs_constant_false(common::ObIArray<ObRawExp
   bool is_valid_type = true;
   constant_false |= false;
   if (OB_FAIL(ObTransformUtils::check_integer_result_type(exprs, is_valid_type))) {
-    LOG_WARN("check valid type fail", K(ret));
   } else if (!is_valid_type) {
     LOG_TRACE("expr list is not valid for removing dummy exprs", K(is_valid_type));
   } else {
@@ -327,7 +316,6 @@ int ObTransformSimplifySet::check_exprs_constant_false(common::ObIArray<ObRawExp
                                                                exprs,
                                                                true_exprs,
                                                                false_exprs))) {
-      LOG_WARN("fail to extract exprs info", K(ret));
     } else if (false_exprs.count() > 0) {
       /* do the check.
        * N: exprs.count(), M:false_exprs.count(), K:true_exprs.count();
@@ -339,7 +327,6 @@ int ObTransformSimplifySet::check_exprs_constant_false(common::ObIArray<ObRawExp
       ObSEArray<ObRawExpr*, 4> ob_params;
       ObRawExpr *op_expr = NULL;
       if (OB_FAIL(ObTransformUtils::extract_target_exprs_by_idx(exprs, false_exprs, ob_params))) {
-        LOG_WARN("fail to push back params expr", K(ret));
       } else {
         ObRawExpr *tmp_expr = NULL;
         for (int64_t i = 0; OB_SUCC(ret) && i < ob_params.count(); i++) {
@@ -348,7 +335,6 @@ int ObTransformSimplifySet::check_exprs_constant_false(common::ObIArray<ObRawExp
             LOG_WARN("get null pointer", K(ret));
           } else if (OB_FAIL(helper.precalc_constraint_exprs_.push_back(
                                     std::pair<ObRawExpr*, int64_t>(tmp_expr, stmt_idx)))) {
-            LOG_WARN("fail to push back constraint exprs", K(ret));
           }
         }
       }
@@ -385,11 +371,9 @@ int ObTransformSimplifySet::check_limit_zero_in_stmt(ObRawExpr *limit_expr,
   bool is_valid = false;
   if (OB_NOT_NULL(limit_expr)) {
     if (OB_FAIL(ObTransformUtils::calc_const_expr_result(limit_expr, ctx_, result, is_valid))) {
-      LOG_WARN("fail to calc const expr", K(ret));
     }
   } else if (OB_NOT_NULL(percent_expr)) {
     if (OB_FAIL(ObTransformUtils::calc_const_expr_result(percent_expr, ctx_, result, is_valid))) {
-      LOG_WARN("fail to calc const expr", K(ret));
     }
   } else {}
   
@@ -412,12 +396,10 @@ int ObTransformSimplifySet::check_limit_zero_in_stmt(ObRawExpr *limit_expr,
     if (OB_NOT_NULL(limit_expr)) {
       if (OB_FAIL(helper.const_constraint_exprs_.push_back(
                       std::pair<ObRawExpr *, int64_t>(limit_expr, stmt_idx)))) {
-        LOG_WARN("fail to push back const constraints", K(ret));
       }
     } else if (OB_NOT_NULL(percent_expr)) {
       if (OB_FAIL(helper.const_constraint_exprs_.push_back(
                       std::pair<ObRawExpr *, int64_t>(percent_expr, stmt_idx)))) {
-        LOG_WARN("fail to push back const constraints", K(ret));
       }
     }
   }
@@ -497,7 +479,6 @@ int ObTransformSimplifySet::pruning_set_query(common::ObIArray<ObParentDMLStmt> 
       ObSelectStmt* child_stmt = select_stmt->get_set_query(i);
       bool need_remove = false;
       if (OB_FAIL(check_set_stmt_removable(child_stmt, need_remove, i, helper))) {
-        LOG_WARN("fail to check set stmt removeable", K(ret));
       } else if (need_remove && OB_FAIL(remove_list.push_back(i))) {
         LOG_WARN("fail to push back", K(ret));
       }
@@ -508,7 +489,6 @@ int ObTransformSimplifySet::pruning_set_query(common::ObIArray<ObParentDMLStmt> 
                                              select_stmt,
                                              remove_list,
                                              first_can_remove))) {
-        LOG_WARN("failed to check first stmt removable", K(ret));
       } else if(!first_can_remove &&
                 OB_FAIL(remove_list.remove(0))) {
         LOG_WARN("fail to remove item", K(ret));
@@ -519,7 +499,6 @@ int ObTransformSimplifySet::pruning_set_query(common::ObIArray<ObParentDMLStmt> 
       ObSEArray<int64_t, 1> constraints_idxs;
       if (OB_FAIL(remove_set_query_in_stmt(select_stmt, remove_list,
                                            constraints_idxs, trans_happened))) {
-        LOG_WARN("fail to remove dummy set query", K(ret));
       } else if (trans_happened && OB_FAIL(add_constraints_by_idx(constraints_idxs, helper))) {
         LOG_WARN("fail to add constraints by idx", K(ret));
       }
@@ -558,10 +537,7 @@ int ObTransformSimplifySet::remove_set_query_in_stmt(ObSelectStmt *&select_stmt,
             // keep the left branches.
             child_stmt = select_stmt->get_set_query(0);
             if (OB_FAIL(replace_set_stmt_with_child_stmt(select_stmt, child_stmt))) {
-              LOG_WARN("fail to replace stmt with child stmt", K(ret));
             } else if (OB_FAIL(constraints_idxs.push_back(1))) {
-              // mark that need to add the second branches's constraints.
-              LOG_WARN("fail to add constraints", K(ret));
             }
           }
         } else if (remove_list.count() >= select_stmt->get_set_query().count() - 1) {
@@ -574,22 +550,17 @@ int ObTransformSimplifySet::remove_set_query_in_stmt(ObSelectStmt *&select_stmt,
               found = true;
               child_stmt = select_stmt->get_set_query(i);
             } else if (OB_FAIL(constraints_idxs.push_back(i))){
-              // the i-th branch need to be removed, add the constraints
-              LOG_WARN("fail to push back constraints", K(ret));
             }
           }
           if (OB_SUCC(ret) && found) {
             if (OB_FAIL(replace_set_stmt_with_child_stmt(select_stmt, child_stmt))) {
-              LOG_WARN("fail to replace stmt with child stmt", K(ret));
             }
           }
         } else {
           for (int64_t i = remove_list.count() - 1; OB_SUCC(ret) && i >= 0; i--) {
             if (OB_LIKELY(remove_list.at(i) >= 0 && remove_list.at(i) < select_stmt->get_set_query().count())) {
               if (OB_FAIL(select_stmt->get_set_query().remove(remove_list.at(i)))) {
-                LOG_WARN("fail to remove set query", K(ret));
               } else if (OB_FAIL(constraints_idxs.push_back(remove_list.at(i)))) {
-                LOG_WARN("fail to push back constraints", K(ret));
               }
             }
           }
@@ -605,18 +576,15 @@ int ObTransformSimplifySet::remove_set_query_in_stmt(ObSelectStmt *&select_stmt,
          
           child_stmt = select_stmt->get_set_query(1);
           if (OB_FAIL(constraints_idxs.push_back(0))) {
-            LOG_WARN("fail to push back constraints", K(ret));
           }
         } else if (remove_list.count() == 1 && remove_list.at(0) == 0) {
           // remove second branch.
           child_stmt = select_stmt->get_set_query(0);
           if (OB_FAIL(constraints_idxs.push_back(1))) {
-            LOG_WARN("fail to push back constraints", K(ret));
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(replace_set_stmt_with_child_stmt(select_stmt, child_stmt))) {
-            LOG_WARN("fail to replace stmt with child stmt", K(ret));
           }
         }
         break;
@@ -630,18 +598,15 @@ int ObTransformSimplifySet::remove_set_query_in_stmt(ObSelectStmt *&select_stmt,
           // keep the first branch.
           child_stmt = select_stmt->get_set_query(0);
           if (OB_FAIL(constraints_idxs.push_back(0))) {
-            LOG_WARN("fail to push back constraints", K(ret));
           }
         } else if (remove_list.count() == 1 && remove_list.at(0) == 1) {
           // keep the first branch. Since the stmt is not empty, we should keep the order by.
           child_stmt = select_stmt->get_set_query(0);
           if (OB_FAIL(constraints_idxs.push_back(1))) {
-            LOG_WARN("fail to push back constraints", K(ret));
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(replace_set_stmt_with_child_stmt(select_stmt, child_stmt))) {
-            LOG_WARN("fail to replace stmt with child stmt", K(ret));
           }
         }
         break;
@@ -669,7 +634,6 @@ int ObTransformSimplifySet::add_constraints_by_idx(common::ObIArray<int64_t> &co
       int64_t expr_branch_idx = helper.precalc_constraint_exprs_.at(j).second; 
       if (expr_branch_idx == branch_idx) {
         if (OB_FAIL(ob_params.push_back(helper.precalc_constraint_exprs_.at(j).first))) {
-          LOG_WARN("fail to push back expr", K(ret));
         }
       } else if (expr_branch_idx > branch_idx) {
         // since constraint exprs is sorted, we don't need to go through the whole array.
@@ -680,15 +644,12 @@ int ObTransformSimplifySet::add_constraints_by_idx(common::ObIArray<int64_t> &co
     } else if (OB_FAIL(ObRawExprUtils::build_and_expr(*ctx_->expr_factory_,
                                                       ob_params,
                                                       op_expr))) {
-      LOG_WARN("fail to build constaint expr", K(ret));
     } else if (OB_ISNULL(op_expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get null pointer", K(ret));
     } else if (OB_FAIL(op_expr->formalize(ctx_->session_info_))) {
-      LOG_WARN("fail to formalize expr", K(ret));
     } else if (OB_FAIL(ctx_->expr_constraints_.push_back(
                 ObExprConstraint(op_expr, PreCalcExprExpectResult::PRE_CALC_RESULT_FALSE)))) {
-      LOG_WARN("fail to push back constraints", K(ret));
     }
 
     // const constraints.
@@ -701,7 +662,6 @@ int ObTransformSimplifySet::add_constraints_by_idx(common::ObIArray<int64_t> &co
         if (expr_branch_idx == branch_idx) {
           tmp_expr = helper.const_constraint_exprs_.at(j).first;
           if (OB_FAIL(ObTransformUtils::add_const_param_constraints(tmp_expr, ctx_))) {
-            LOG_WARN("fail to add const constraints", K(ret));
           }
           found = true;
         }
@@ -739,13 +699,10 @@ int ObTransformSimplifySet::replace_set_stmt_with_child_stmt(ObSelectStmt *&pare
     */
     ObSelectStmt *view_stmt = NULL;
     if (OB_FAIL(ObTransformUtils::create_stmt_with_generated_table(ctx_, child_stmt, view_stmt))) {
-      LOG_WARN("fail to create view with generated table", K(ret));
     } else if (OB_ISNULL(view_stmt)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("view table is null", K(ret));
     } else if (OB_FAIL(add_order_by(view_stmt, parent_stmt))) {
-      // set child's order by to view.
-      LOG_WARN("fail to assign parents's order items to child", K(ret));
     } else {
       // set child's limit to view. and reset child's order by items.
       view_stmt->set_fetch_info(parent_stmt->get_offset_expr(),
@@ -774,7 +731,6 @@ int ObTransformSimplifySet::replace_set_stmt_with_child_stmt(ObSelectStmt *&pare
                                                                expr1,
                                                                expr2, 
                                                                ctx_->session_info_))) {
-              LOG_WARN("fail to add cast expr for replace", K(ret));
             } else {
               view_stmt->get_select_item(i).expr_ = expr2;
             }
@@ -813,12 +769,10 @@ int ObTransformSimplifySet::check_first_stmt_removable(common::ObIArray<ObParent
   } else if (!ObStmt::is_dml_write_stmt(parent_stmt->get_stmt_type())) {
     // do nothing
   } else if (OB_FAIL(ObTransformUtils::get_generated_table_item(*parent_stmt, stmt, table_item))) {
-    LOG_WARN("failed to get table_item", K(ret));
   } else if (OB_ISNULL(table_item)) {
     // do nothing
   } else if (OB_FAIL(static_cast<ObDelUpdStmt *>(parent_stmt)->has_dml_table_info(table_item->table_id_,
                                                                                   is_dml_table))) {
-    LOG_WARN("failed to check is dml table", K(ret));
   } else if (is_dml_table) {
     can_remove = false;
   } 

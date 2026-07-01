@@ -33,7 +33,6 @@ int ObDDLTransController::init(share::schema::ObMultiVersionSchemaService *schem
   if (!inited_) {
     for (int i=0; OB_SUCC(ret) && i < DDL_TASK_COND_SLOT; i++) {
       if (OB_FAIL(cond_slot_[i].init(ObWaitEventIds::DEFAULT_COND_WAIT))) {
-        LOG_WARN("init cond fail", KR(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -41,7 +40,6 @@ int ObDDLTransController::init(share::schema::ObMultiVersionSchemaService *schem
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("schema_service is null", KR(ret));
     } else if (OB_FAIL(ObThreadPool::start())) {
-      LOG_WARN("thread start fail", KR(ret));
     } else {
       schema_service_ = schema_service;
       inited_ = true;
@@ -104,12 +102,9 @@ void ObDDLTransController::run1()
         ObDIActionGuard(ObDIActionGuard::NS_ACTION, "control tenant[T_1]");
 
         if (OB_FAIL(server_list.push_back(GCTX.self_addr()))) {
-          LOG_WARN("fail to push self addr", KR(ret));
         }
         if (OB_FAIL(GCTX.root_service_->get_ddl_service().publish_schema_and_get_schema_version(server_list, refreshed_schema_version))) {
-          LOG_WARN("fail to publish_schema", KR(ret));
         } else if (OB_FAIL(broadcast_consensus_version(refreshed_schema_version, server_list))) {
-          LOG_WARN("fail to broadcast consensus version", KR(ret), K(refreshed_schema_version));
         } else {
           int64_t end_time = ObTimeUtility::current_time();
           LOG_INFO("refresh_schema", KR(ret), K(end_time - start_time), K(refreshed_schema_version));
@@ -142,7 +137,6 @@ int ObDDLTransController::broadcast_consensus_version(const int64_t schema_versi
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid schema_version", KR(ret), K(schema_version));
   } else if (OB_FAIL(schema_service_->set_tenant_broadcast_consensus_version(schema_version))) {
-    LOG_WARN("fail to set tenant broadcast consensus_version", KR(ret));
   } else {
     
     arg.set_consensus_version(schema_version);
@@ -156,8 +150,6 @@ int ObDDLTransController::broadcast_consensus_version(const int64_t schema_versi
         UNUSED(*s);
         int tmp_ret = GCTX.ob_service_->broadcast_consensus_version(arg, result);
         if (OB_SUCCESS != tmp_ret) {
-          LOG_WARN("broadcast consensus version failed", KR(tmp_ret),
-              K(schema_version), K(arg));
         }
       }
     }
@@ -181,7 +173,6 @@ int ObDDLTransController::reserve_schema_version(const uint64_t schema_version_c
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("register_task_and_assign_schema_version", KR(ret), K(schema_version_count));
   } else if (OB_FAIL(schema_service_->gen_batch_new_schema_versions(schema_version_count, end_schema_version))) {
-    LOG_WARN("fail to gen batch new schema versions", KR(ret), K(schema_version_count));
   }
   return ret;
 }
@@ -204,15 +195,12 @@ int ObDDLTransController::create_task_and_assign_schema_version(const uint64_t s
     int64_t end_schema_version = OB_INVALID_VERSION;
     SpinWLockGuard guard(lock_);
     if (OB_FAIL(schema_service_->gen_batch_new_schema_versions(schema_version_count, end_schema_version))) {
-      LOG_WARN("fail to gen batch new schema versions", KR(ret), K(schema_version_count));
     } else if (OB_FAIL(schema_version_res.reserve(schema_version_count))) {
-      LOG_WARN("fail to reserve memory", KR(ret), K(schema_version_count));
     } else {
       int64_t new_schema_version = end_schema_version -
       (schema_version_count - 1) * ObSchemaVersionGenerator::SCHEMA_VERSION_INC_STEP;
       for (int i = 0; OB_SUCC(ret) && i < schema_version_count; i++) {
         if (OB_FAIL(schema_version_res.push_back(new_schema_version))) {
-          LOG_WARN("register_task_and_assign_schema_version", KR(ret));
         } else {
           new_schema_version += ObSchemaVersionGenerator::SCHEMA_VERSION_INC_STEP;
         }
@@ -233,7 +221,6 @@ int ObDDLTransController::create_task_and_assign_schema_version(const uint64_t s
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(tasks_.push_back(TaskDesc{last_schema_version, false}))) {
-        LOG_WARN("register_task_and_assign_schema_version", KR(ret));
       } else {
         task_id = last_schema_version;
       }
@@ -278,7 +265,6 @@ int ObDDLTransController::check_task_ready_(const int64_t task_id,
         LOG_INFO("gc parallel ddl task", K(tasks_.at(0)));
         int tmp_ret = OB_SUCCESS;
         if (OB_TMP_FAIL(tasks_.remove(0))) {
-          LOG_WARN("check_task_ready", KR(tmp_ret));
         }
       } else {
         break;
@@ -298,7 +284,6 @@ int ObDDLTransController::wait_task_ready(
   int64_t start_time = ObTimeUtility::current_time();
   while (OB_SUCC(ret) && ObTimeUtility::current_time() - start_time < wait_us) {
     if (OB_FAIL(check_task_ready_(task_id, ready))) {
-      LOG_WARN("wait_task_ready", KR(ret), K(task_id), K(ready));
     } else if (ready) {
       break;
     } else {
@@ -309,7 +294,6 @@ int ObDDLTransController::wait_task_ready(
   if (OB_FAIL(ret)) {
   } else if (!ready) {
     if (OB_FAIL(remove_task(task_id))) {
-      LOG_WARN("fail to remove task", KR(ret), K(task_id));
     } else {
       ret = OB_TIMEOUT;
     }
@@ -329,7 +313,6 @@ int ObDDLTransController::remove_task(const int64_t task_id)
       idx = i;
       LOG_INFO("remove parallel ddl task", K(tasks_.at(i)));
       if (OB_FAIL(tasks_.remove(i))) {
-        LOG_WARN("remove_task fail", KR(ret), K(task_id));
       } else {
         need_refresh_ = true;
         wait_cond_.signal();

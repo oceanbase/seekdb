@@ -47,13 +47,11 @@ int ObCOSSTableRowGetter::inner_open(
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObCGSSTableRowGetter::init(
               iter_param, access_ctx, prefetcher_, table, query_range))) {
-    LOG_WARN("Fail to init sstable cg getter", K(ret));
   } else {
     read_handle_.rowkey_ = static_cast<const blocksstable::ObDatumRowkey *>(query_range);
     read_handle_.range_idx_ = 0;
     read_handle_.is_get_ = true;
     if (OB_FAIL(prefetcher_.single_prefetch(read_handle_))) {
-      LOG_WARN("ObCOSSTableRowGetter prefetch failed", K(ret));
     } else {
       is_inited_ = true;
     }
@@ -74,9 +72,7 @@ int ObCOSSTableRowGetter::inner_get_next_row(const blocksstable::ObDatumRow *&st
   } else if (has_fetched_) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(prefetcher_.lookup_in_index_tree(read_handle_, true))) {
-    LOG_WARN("Fail to prefetch", K(ret), K_(read_handle));
   } else if (OB_FAIL(fetch_row(read_handle_, nop_pos_, store_row))) {
-    LOG_WARN("Fail to fetch row", K(ret));
   } else {
     has_fetched_ = true;
     nop_pos_ = nullptr;

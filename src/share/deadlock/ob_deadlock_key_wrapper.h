@@ -109,7 +109,6 @@ int UserBinaryKey::set_user_key(const T &user_key)
   } else if (OB_FAIL(user_key.serialize(key_binary_code_buffer_,
                                         user_key.get_serialize_size(),
                                         length))) {
-    DETECT_LOG(WARN, "user key serialization failed", PRINT_WRAPPER);
   } else {
     key_type_id_ = GET_ID(T);
     key_binary_code_buffer_length_ = user_key.get_serialize_size();

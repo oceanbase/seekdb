@@ -47,7 +47,6 @@ int ObDASLookupIter::inner_init(ObDASIterParam &param)
     param.set_mem_attr(ObModIds::OB_SQL_TABLE_LOOKUP, ObCtxIds::DEFAULT_CTX_ID)
          .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(lookup_memctx_, param))) {
-      LOG_WARN("failed to create lookup memctx", K(ret));
     }
   }
   return ret;
@@ -115,7 +114,6 @@ int ObDASLookupIter::inner_get_next_row()
               ret = OB_SUCCESS;
             }
           } else if (OB_FAIL(add_rowkey())) {
-            LOG_WARN("failed to add row key", K(ret));
           } else {
             ++lookup_rowkey_cnt_;
           }
@@ -133,7 +131,6 @@ int ObDASLookupIter::inner_get_next_row()
 
       case DO_LOOKUP: {
         if (OB_FAIL(do_index_lookup())) {
-          LOG_WARN("failed to do index lookup", K(ret));
         } else {
           state_ = OUTPUT_ROWS;
         }
@@ -146,7 +143,6 @@ int ObDASLookupIter::inner_get_next_row()
           if (OB_LIKELY(OB_ITER_END == ret)) {
             ret = OB_SUCCESS;
             if (OB_FAIL(check_index_lookup())) {
-              LOG_WARN("failed to check table lookup", K(ret));
             } else {
               state_ = INDEX_SCAN;
             }
@@ -204,7 +200,6 @@ int ObDASLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
           }
           if (OB_SUCC(ret) && storage_count > 0) {
             if (OB_FAIL(add_rowkeys(storage_count))) {
-              LOG_WARN("failed to add row keys", K(ret));
             } else {
               lookup_rowkey_cnt_ += storage_count;
             }
@@ -223,7 +218,6 @@ int ObDASLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
 
       case DO_LOOKUP: {
         if (OB_FAIL(do_index_lookup())) {
-          LOG_WARN("failed to do index lookup", K(ret));
         } else {
           state_ = OUTPUT_ROWS;
         }
@@ -241,7 +235,6 @@ int ObDASLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
               get_next_rows = true;
             } else {
               if (OB_FAIL(check_index_lookup())) {
-                LOG_WARN("failed to check table lookup", K(ret));
               } else {
                 state_ = INDEX_SCAN;
               }
@@ -291,16 +284,13 @@ int ObDASLookupIter::build_lookup_range(ObNewRange &range)
       if (OB_UNLIKELY(T_PSEUDO_GROUP_ID == expr->type_ || T_PSEUDO_ROW_TRANS_INFO_COLUMN == expr->type_)) {
         // skip.
       } else if (OB_FAIL(col_datum.to_obj(tmp_obj, expr->obj_meta_, expr->obj_datum_map_))) {
-        LOG_WARN("failed to convert datum to obj", K(ret));
       } else if (OB_FAIL(ob_write_obj(lookup_alloc, tmp_obj, obj_ptr[i]))) {
-        LOG_WARN("failed to deep copy rowkey", K(ret), K(tmp_obj));
       }
     }
 
     if (OB_SUCC(ret)) {
       ObRowkey row_key(obj_ptr, rowkey_cnt);
       if (OB_FAIL(range.build_range(lookup_ctdef_->ref_table_id_, row_key))) {
-        LOG_WARN("failed to build lookup range", K(ret), K(lookup_ctdef_->ref_table_id_), K(row_key));
       }
     }
   }
@@ -325,7 +315,6 @@ int ObDASLookupIter::build_trans_info_datum(const ObExpr *trans_info_expr, ObDat
       LOG_WARN("failed to allocate enough memory", K(ret));
     } else if (FALSE_IT(datum_ptr = new (buf) ObDatum)) {
     } else if (OB_FAIL(datum_ptr->deep_copy(col_datum, static_cast<char*>(buf), len, pos))) {
-      LOG_WARN("failed to deep copy datum", K(ret), K(pos), K(len));
     }
   }
 

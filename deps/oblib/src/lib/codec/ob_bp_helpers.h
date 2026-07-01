@@ -98,7 +98,6 @@ inline void fastunpack(const uint32_t *__restrict__ _in,
     }
     default: {
       int ret = OB_ERR_UNEXPECTED;
-      LIB_LOG(ERROR, "unexpected", KP(in), KP(out), K(bit));
       break;
     }
   }
@@ -197,7 +196,6 @@ inline void fastunpack(const uint32_t *__restrict__ _in,
     }
     default: {
       int ret = OB_ERR_UNEXPECTED;
-      LIB_LOG(ERROR, "unexpected", KP(in), KP(out), K(bit));
       break;
     }
   }
@@ -311,7 +309,6 @@ inline void fastunpack(const uint32_t *__restrict__ in,
     break;
   default: {
     int ret = OB_ERR_UNEXPECTED;
-    LIB_LOG(ERROR, "unexpected", KP(in), KP(out), K(bit));
     break;
   }
   }
@@ -520,7 +517,6 @@ inline void fastunpack(const uint32_t *__restrict__ in,
     break;
   default: {
     int ret = OB_ERR_UNEXPECTED;
-    LIB_LOG(ERROR, "unexpected", KP(in), KP(out), K(bit));
     break;
   }
   }
@@ -594,7 +590,6 @@ inline void fastpack(const uint8_t *__restrict__ in, uint32_t *__restrict__ _out
     }
     default: {
       int ret = OB_ERR_UNEXPECTED;
-      LIB_LOG(ERROR, "unexpected", KP(in), KP(out), K(bit));
       break;
     }
   }
@@ -691,7 +686,6 @@ inline void fastpack(const uint16_t *__restrict__ in, uint32_t *__restrict__ _ou
     }
     default: {
       int ret = OB_ERR_UNEXPECTED;
-      LIB_LOG(ERROR, "unexpected", KP(in), KP(out), K(bit));
       break;
     }
   }
@@ -804,7 +798,6 @@ inline void fastpack(const uint32_t *__restrict__ in,
     break;
   default: {
     int ret = OB_ERR_UNEXPECTED;
-    LIB_LOG(ERROR, "unexpected", KP(in), KP(out), K(bit));
     break;
   }
   }
@@ -1010,7 +1003,6 @@ inline void fastpack(const uint64_t *__restrict__ in,
     break;
   default: {
     int ret = OB_ERR_UNEXPECTED;
-    LIB_LOG(ERROR, "unexpected", KP(in), KP(out), K(bit));
     break;
   }
   }
@@ -1125,7 +1117,6 @@ inline void fastpackwithoutmask(const uint32_t *__restrict__ in,
     break;
   default: {
     int ret = OB_ERR_UNEXPECTED;
-    LIB_LOG(ERROR, "unexpected", KP(in), KP(out), K(bit));
     break;
   }
   }
@@ -1332,7 +1323,6 @@ inline void fastpackwithoutmask(const uint64_t *__restrict__ in,
     break;
   default: {
     int ret = OB_ERR_UNEXPECTED;
-    LIB_LOG(ERROR, "unexpected", KP(in), KP(out), K(bit));
     break;
   }
   }

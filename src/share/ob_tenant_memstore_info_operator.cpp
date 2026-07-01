@@ -48,7 +48,6 @@ int ObTenantMemstoreInfoOperator::get(
       } else if (OB_FAIL(unit_servers_str.append_fmt(
               "%s(1 = 1)",
               (0 != i) ? " or " : ""))) {
-        LOG_WARN("fail to append fmt", K(ret));
       } else {} // no more to do
     }
     if (OB_FAIL(ret)) {
@@ -56,12 +55,10 @@ int ObTenantMemstoreInfoOperator::get(
         "memstore_used, freeze_trigger, memstore_limit FROM %s "
         "WHERE (%s)",
         OB_ALL_VIRTUAL_MEMSTORE_INFO_TNAME, unit_servers_str.ptr()))) {
-      LOG_WARN("assign_fmt failed", K(ret));
     } else {
       SMART_VAR(ObMySQLProxy::MySQLResult, res) {
         ObMySQLResult *result = NULL;
         if (OB_FAIL(proxy_.read(res, sql.ptr()))) {
-          LOG_WARN("execute sql failed", K(sql), K(ret));
         } else if (NULL == (result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("execute sql failed", K(sql), K(ret));
@@ -88,7 +85,6 @@ int ObTenantMemstoreInfoOperator::get(
               if (OB_SUCC(ret)) {
                 mem_info.server_ = GCTX.self_addr();
                 if (OB_FAIL(mem_infos.push_back(mem_info))) {
-                  LOG_WARN("push_back failed", K(ret));
                 }
               }
             }

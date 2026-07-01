@@ -120,14 +120,12 @@ int ObStmtExprVisitor::visit(T *&expr,
   if (is_required(my_scope) && NULL != expr) {
     ObRawExpr *tmp = expr;
     if (OB_FAIL(do_visit(reinterpret_cast<ObRawExpr *&>(expr)))) {
-      SQL_RESV_LOG(WARN, "failed to visit tmp expr", K(ret));
     } else if (tmp == expr) {
       // do nothing
     } else if (OB_ISNULL(expr) ||
                (!std::is_same<T, ObRawExpr>::value &&
                 OB_UNLIKELY(tmp->get_expr_class() != expr->get_expr_class()))) {
       ret = OB_ERR_UNEXPECTED;
-      SQL_RESV_LOG(WARN, "expr class is changed", K(tmp->get_expr_class()), K(expr->get_expr_class()));
     }
   }
   return ret;
@@ -143,14 +141,12 @@ int ObStmtExprVisitor::visit(common::ObIArray<T *> &exprs,
       if (NULL != exprs.at(i)) {
         ObRawExpr *tmp = exprs.at(i);
         if (OB_FAIL(do_visit(reinterpret_cast<ObRawExpr *&>(exprs.at(i))))) {
-          SQL_RESV_LOG(WARN, "failed to visit tmp expr", K(ret));
         } else if (tmp == exprs.at(i)) {
           // continue
         } else if (OB_ISNULL(exprs.at(i)) ||
                    (!std::is_same<T, ObRawExpr>::value &&
                     OB_UNLIKELY(tmp->get_expr_class() != exprs.at(i)->get_expr_class()))) {
           ret = OB_ERR_UNEXPECTED;
-          SQL_RESV_LOG(WARN, "expr class is changed", K(tmp->get_expr_class()), K(exprs.at(i)->get_expr_class()));
         }
       }
     }

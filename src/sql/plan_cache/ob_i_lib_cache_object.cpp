@@ -62,13 +62,6 @@ void ObILibCacheObject::dump_deleted_log_info(const bool is_debug_log /* = true 
                K(log_del_time_),
                K(this));
   } else {
-    SQL_PC_LOG(INFO, "Dumping Cache Deleted Info",
-               K(object_id_),
-               K(added_to_lc_),
-               K(ns_),
-               K(get_ref_count()),
-               K(log_del_time_),
-               K(this));
   }
 }
 

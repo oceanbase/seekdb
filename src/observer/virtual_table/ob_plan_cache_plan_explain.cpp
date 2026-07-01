@@ -63,7 +63,6 @@ int ObExpVisitor::add_row(const Op &cur_op)
           }
           if (OB_UNLIKELY(0 > snprintf(buf + pos, buf_len - pos, "%s", cur_op.get_name()))) {
             ret = OB_ERR_UNEXPECTED;
-            SERVER_LOG(WARN, "fail to gen operator name");
           } else {
             cells[i].set_varchar(buf);
             cells[i].set_collation_type(ObCharset::get_default_collation(
@@ -123,7 +122,6 @@ int ObExpVisitor::add_row(const Op &cur_op)
     if (OB_SUCC(ret)) {
       // deep copy row
       if (OB_FAIL(scanner_.add_row(cur_row_))) {
-        SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
       } else {
         // free memory
         allocator_.reuse();
@@ -156,7 +154,6 @@ int ObExpVisitor::get_table_name<ObOpSpec>(const ObOpSpec &cur_op, ObString &tab
     index_name = tsc_spec.index_name_;
     if (OB_FAIL(get_table_access_desc(tsc_spec.should_scan_index(), scan_flag,
                                       tmp_table_name, index_name, table_name))) {
-        SERVER_LOG(WARN, "failed to get table name", K(ret));
     }
   } else {
     table_name = ObString::make_string("NULL");
@@ -257,7 +254,6 @@ int ObCacheObjIterator::operator()(common::hash::HashMapPair<ObCacheObjID, ObILi
     SERVER_LOG(WARN, "HashMapPair second element is NULL", K(ret));
   } else if (ObLibCacheNameSpace::NS_CRSR != entry.second->get_ns()) {
   } else if (OB_FAIL(plan_id_array_.push_back(entry.first))){
-    SERVER_LOG(WARN, "fail to push plan id into plan_id_array_", K(ret), K(entry.first));
   }
   return ret;
 }
@@ -279,7 +275,6 @@ int ObCacheObjIterator::next(ObCacheObjGuard &guard)
             // not inited
             SERVER_LOG(INFO, "plan cache is not inited, ", K(ret));
           } else if (OB_FAIL(plan_cache->foreach_cache_obj(*this))) {
-            SERVER_LOG(WARN, "fail to traverse plan cache obj", K(ret));
           }
         } else {
           ret = OB_SUCCESS;
@@ -299,7 +294,6 @@ int ObCacheObjIterator::next(ObCacheObjGuard &guard)
             ret = OB_ERR_UNEXPECTED;
             SERVER_LOG(WARN, "plan_cache is NULL", K(ret));
           } else if (OB_FAIL(plan_id_array_.pop_back(plan_id))) {
-            SERVER_LOG(WARN, "failed to pop back plan id", K(ret));
           } else if (OB_ISNULL(plan_cache)) {
               ret = OB_ERR_UNEXPECTED;
               SERVER_LOG(WARN, "plan_cache is NULL", K(ret));
@@ -357,7 +351,6 @@ int ObPlanCachePlanExplain::inner_open()
   ObPhysicalPlan *plan = NULL;
   static_engine_exp_visitor_.set_row_mem_attr();
   if (OB_FAIL(set_tenant_plan_id(key_ranges_))) {
-    LOG_WARN("set tenant id and plan id failed", K(ret));
   } else if (!scan_all_plan_) {
     ObPlanCache *plan_cache = NULL;
     // !!!Before referencing plan cache resources, ObReqTimeGuard must be added
@@ -375,9 +368,7 @@ int ObPlanCachePlanExplain::inner_open()
           // maybe pl object, do nothing
         } else if (OB_NOT_NULL(plan->get_root_op_spec())) {
           if (OB_FAIL(static_engine_exp_visitor_.init(plan_id_))) {
-            SERVER_LOG(WARN, "failed to init visitor", K(ret));
           } else if (OB_FAIL(plan->get_root_op_spec()->accept(static_engine_exp_visitor_))) {
-            SERVER_LOG(WARN, "fail to traverse physical plan", K(ret));
           }
         } else {
           // done
@@ -394,7 +385,6 @@ int ObPlanCachePlanExplain::inner_open()
       ret = OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "GCTX.omt_ is NULL", K(ret));
     } else if (OB_FAIL(id_arr_.push_back(0))) {
-      SERVER_LOG(WARN, "failed to get all tenant id", K(ret));
     }
   }
 
@@ -429,9 +419,7 @@ int ObPlanCachePlanExplain::inner_get_next_row(common::ObNewRow *&row)
             } else {
               ObPhysicalPlan *plan = static_cast<ObPhysicalPlan*>(guard.get_cache_obj());
               if (OB_FAIL(static_engine_exp_visitor_.init(plan->get_plan_id()))) {
-                SERVER_LOG(WARN, "failed to init visitor", K(ret));
               } else if (OB_FAIL(plan->get_root_op_spec()->accept(static_engine_exp_visitor_))) {
-                SERVER_LOG(WARN, "fail to traverse physical plan", K(ret));
               }
             }
           } else {

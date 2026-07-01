@@ -58,17 +58,14 @@ int ObMdsSchemaHelper::init()
   } else {
      // mock
     if (OB_FAIL(build_table_schema(DATABASE_ID, MDS_TABLE_ID, MDS_TABLE_NAME, table_schema_))) {
-      LOG_WARN("fail to build table schema", K(ret));
     } else if (OB_UNLIKELY(!table_schema_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid table schema", K(ret), K_(table_schema));
     } else if (OB_FAIL(storage_schema_.init(allocator_, table_schema_, lib::Worker::CompatMode::MYSQL))) {
-      LOG_WARN("fail to init storage schema", K(ret));
     } else if (OB_UNLIKELY(!storage_schema_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid storage schema", K(ret), K_(storage_schema));
     } else if (OB_FAIL(build_rowkey_read_info(allocator_, storage_schema_, rowkey_read_info_))) {
-      LOG_WARN("fail to build rowkey read info", K(ret));
     } else if (OB_UNLIKELY(!rowkey_read_info_.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid rowkey read info", K(ret), K_(rowkey_read_info));
@@ -177,7 +174,6 @@ int ObMdsSchemaHelper::build_table_schema(const int64_t database_id,
       mds_type_meta,
       MDS_TYPE_DATA_LENGTH,
       mds_type_column_schema))) {
-    LOG_WARN("fail to build column schema", K(ret));
   } else if (OB_FAIL(build_column_schema(table_id,
       UDF_KEY_COLUMN_ID,
       UDF_KEY_COLUMN_NAME,
@@ -187,7 +183,6 @@ int ObMdsSchemaHelper::build_table_schema(const int64_t database_id,
       udf_key_meta,
       UDF_KEY_DATA_LENGTH,
       udf_key_column_schema))) {
-    LOG_WARN("fail to build column schema", K(ret));
   } else if (OB_FAIL(build_column_schema(table_id,
       META_INFO_COLUMN_ID,
       META_INFO_COLUMN_NAME,
@@ -197,7 +192,6 @@ int ObMdsSchemaHelper::build_table_schema(const int64_t database_id,
       meta_info_meta,
       META_INFO_DATA_LENGTH,
       meta_info_column_schema))) {
-    LOG_WARN("fail to build column schema", K(ret));
   } else if (OB_FAIL(build_column_schema(table_id,
       USER_DATA_COLUMN_ID,
       USER_DATA_COLUMN_NAME,
@@ -207,7 +201,6 @@ int ObMdsSchemaHelper::build_table_schema(const int64_t database_id,
       user_data_meta,
       USER_DATA_DATA_LENGTH,
       user_data_column_schema))) {
-    LOG_WARN("fail to build column schema", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -225,13 +218,9 @@ int ObMdsSchemaHelper::build_table_schema(const int64_t database_id,
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(table_schema.add_column(mds_type_column_schema))) {
-    LOG_WARN("fail to add column", K(ret));
   } else if (OB_FAIL(table_schema.add_column(udf_key_column_schema))) {
-    LOG_WARN("fail to add column", K(ret));
   } else if (OB_FAIL(table_schema.add_column(meta_info_column_schema))) {
-    LOG_WARN("fail to add column", K(ret));
   } else if (OB_FAIL(table_schema.add_column(user_data_column_schema))) {
-    LOG_WARN("fail to add column", K(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -251,9 +240,7 @@ int ObMdsSchemaHelper::build_rowkey_read_info(
   int64_t full_stored_col_cnt = 0;
 
   if (OB_FAIL(storage_schema.get_mulit_version_rowkey_column_ids(cols_desc))) {
-    LOG_WARN("fail to get rowkey column ids", K(ret));
   } else if (OB_FAIL(storage_schema.get_store_column_count(full_stored_col_cnt, true/*full_col*/))) {
-    LOG_WARN("failed to get store column count", K(ret));
   } else if (OB_FAIL(rowkey_read_info.init(
       allocator,
       full_stored_col_cnt,
@@ -262,7 +249,6 @@ int ObMdsSchemaHelper::build_rowkey_read_info(
       false/*is_cg_sstable*/,
       true/*use_default_compat_version*/,
       false/*is_cs_replica_compat*/))) {
-    LOG_WARN("fail to init rowkey read info", K(ret));
   }
 
   return ret;
@@ -290,7 +276,6 @@ int ObMdsSchemaHelper::build_column_schema(const uint64_t table_id,
   column_schema.set_data_length(data_length);
 
   if (OB_FAIL(column_schema.set_column_name(column_name))) {
-    LOG_WARN("fail to set column name", K(ret), K(column_name));
   }
 
   return ret;

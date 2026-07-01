@@ -81,7 +81,6 @@ int ObSysDispatchCallExecutor::create_session(ObFreeSessionCtx &free_session_ctx
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session_mgr_ is null");
   } else if (OB_FAIL(GCTX.session_mgr_->create_sessid(sid))) {
-    LOG_WARN("alloc session id failed");
   } else if (OB_FAIL(GCTX.session_mgr_->create_session(
                  sid, ObTimeUtility::current_time(), session_info))) {
     LOG_WARN("create session failed", K(ret), K(sid));

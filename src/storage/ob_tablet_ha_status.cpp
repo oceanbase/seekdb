@@ -197,7 +197,6 @@ int ObTabletHAStatus::serialize(char *buf, const int64_t len, int64_t &pos) cons
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(buf), K(len), K(pos));
   } else if (OB_FAIL(serialization::encode_i64(buf, len, new_pos, ha_status_))) {
-    LOG_WARN("serialize ha status failed.", K(ret), K(new_pos), K(len), K(ha_status_), K(*this));
   } else {
     pos = new_pos;
   }
@@ -215,7 +214,6 @@ int ObTabletHAStatus::deserialize(const char *buf, const int64_t len, int64_t &p
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", K(ret), K(buf), K(len), K(pos));
   } else if (OB_FAIL(serialization::decode_i64(buf, len, new_pos, &ha_status_))) {
-    LOG_WARN("failed to deserialize ha status", K(ret), K(len), K(new_pos));
   } else {
     pos = new_pos;
   }

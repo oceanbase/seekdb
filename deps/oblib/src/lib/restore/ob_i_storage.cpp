@@ -65,7 +65,6 @@ int c_str_to_int(const char *str, const int64_t length, int64_t &num)
     MEMCPY(tmp_str, str, length);
     tmp_str[length] = '\0';
     if(OB_FAIL(c_str_to_int(tmp_str, num))) {
-      OB_LOG(WARN, "fail to c_str_to_int", K(ret), KCSTRING(str), K(length));
     }
   }
   return ret;
@@ -78,13 +77,10 @@ int c_str_to_int(const char *str, int64_t &num)
   char *end_str = NULL;
   if (OB_ISNULL(str) || OB_UNLIKELY(0 == strlen(str))) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "c_str_to_int str should not be null/empty", KP(str));
   } else {
     num = strtoll(str, &end_str, 10);
     if (errno != 0 || (NULL != end_str && *end_str != '\0')) {
       ret = OB_INVALID_DATA;
-      OB_LOG(WARN, "strtoll convert string to int value fail", K(str), K(num),
-          "error", strerror(errno), K(end_str));
     }
   }
   return ret;
@@ -105,7 +101,6 @@ int handle_listed_object(ObBaseDirEntryOperator &op,
     if (op.need_get_file_size()) {
       if (OB_UNLIKELY(obj_size < 0)) {
         ret = OB_INVALID_ARGUMENT;
-        OB_LOG(WARN, "invalid object size", K(obj_size));
       } else {
         op.set_size(obj_size);
       }
@@ -114,9 +109,7 @@ int handle_listed_object(ObBaseDirEntryOperator &op,
     if (OB_SUCC(ret)) {
       MEMCPY(entry.d_name, obj_name, obj_name_len);
       entry.d_name[obj_name_len] = '\0';
-      if (OB_FAIL(op.func(&entry))) { 
-        OB_LOG(WARN, "fail to exe application callback for listed object",
-            K(ret), K(obj_name), K(obj_name_len), K(obj_size));
+      if (OB_FAIL(op.func(&entry))) {
       } 
     }
   }
@@ -137,9 +130,7 @@ int handle_listed_directory(ObBaseDirEntryOperator &op,
   } else {
     MEMCPY(entry.d_name, dir_name, dir_name_len);
     entry.d_name[dir_name_len] = '\0';
-    if (OB_FAIL(op.func(&entry))) { 
-      OB_LOG(WARN, "fail to exe application callback for listed directory",
-          K(ret), K(dir_name), K(dir_name_len));
+    if (OB_FAIL(op.func(&entry))) {
     }
   }
   return ret;
@@ -185,7 +176,6 @@ int build_bucket_and_object_name(ObIAllocator &allocator,
 
   const char *prefix = "UNKNOWN";
   if (OB_FAIL(get_storage_prefix_from_path(uri, prefix))) {
-    OB_LOG(WARN, "fail to get storage type", K(ret), K(uri));
   } else {
     bucket_start = static_cast<ObString::obstr_size_t>(strlen(prefix));
     if (OB_UNLIKELY(bucket_start >= uri.length())) {
@@ -198,7 +188,6 @@ int build_bucket_and_object_name(ObIAllocator &allocator,
   } else if (prefix == OB_FILE_PREFIX) {
     // for nfs, bucket is empty
     if (OB_FAIL(ob_write_string(allocator, uri.ptr() + bucket_start, object, true/*c_style*/))) {
-      OB_LOG(WARN, "fail to deep copy object", K(uri), K(bucket_start), K(ret));
     }
   } else {
     for (int64_t i = bucket_start; OB_SUCC(ret) && i < uri.length() - 1; i++) {
@@ -222,7 +211,6 @@ int build_bucket_and_object_name(ObIAllocator &allocator,
           OB_LOG(WARN, "failed to alloc bucket name buff", K(ret), K(uri), K(bucket_length));
         } else if (OB_FAIL(databuff_printf(bucket_name_buff, bucket_length + 1,
                                            "%.*s", bucket_length, uri.ptr() + bucket_start))) {
-          OB_LOG(WARN, "fail to deep copy bucket", K(uri), K(bucket_start), K(bucket_length), K(ret));
         } else {
           bucket.assign_ptr(bucket_name_buff, bucket_length + 1);// must include '\0'
         }
@@ -244,14 +232,12 @@ int build_bucket_and_object_name(ObIAllocator &allocator,
       } else if (object_length > 0) {
         // And we only allocate memory to object when object_length > 0
         if (OB_FAIL(ob_write_string(allocator, uri.ptr() + object_start, object, true/*c_style*/))) {
-          OB_LOG(WARN, "fail to deep copy object", K(uri), K(object_start), K(object_length), K(ret));
         }
       }
     }
   }
 
   if (OB_SUCC(ret)) {
-    OB_LOG(DEBUG, "get bucket object name", K(uri), K(bucket), K(object));
   }
   return ret;
 }
@@ -270,8 +256,6 @@ int construct_fragment_full_name(const ObString &logical_appendable_object_name,
   } else if (OB_FAIL(databuff_printf(name_buf, name_buf_len, pos, "%s/%s%s",
                                      logical_appendable_object_name.ptr(),
                                      OB_ADAPTIVELY_APPENDABLE_FRAGMENT_PREFIX, fragment_name))) {
-    OB_LOG(WARN, "failed to construct formatted mock append object fragment name",
-        K(ret), K(logical_appendable_object_name), K(fragment_name));
   } else {
     // Fixed the logic to correctly identify the object name's suffix.
     // Now it only considers the string after the last '.' following the final '/' as the suffix,
@@ -289,8 +273,6 @@ int construct_fragment_full_name(const ObString &logical_appendable_object_name,
         OB_LOG(WARN, "object name has invalid suffix",
             K(ret), K(logical_appendable_object_name), K(suffix));
       } else if (OB_FAIL(databuff_printf(name_buf, name_buf_len, pos, "%s", suffix))) {
-        OB_LOG(WARN, "failed to set formatted mock append object fragment suffix",
-            K(ret), K(logical_appendable_object_name), K(fragment_name), K(suffix));
       }
     }
   }
@@ -306,11 +288,8 @@ int construct_fragment_full_name(const ObString &logical_appendable_object_name,
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "invalid arguments", K(ret), K(start), K(end));
   } else if (OB_FAIL(databuff_printf(fragment_name, sizeof(fragment_name), "%ld-%ld", start, end))) {
-    OB_LOG(WARN, "failed to construct mock append object fragment name", K(ret), K(start), K(end));
   } else if (OB_FAIL(construct_fragment_full_name(logical_appendable_object_name,
                                                   fragment_name, name_buf, name_buf_len))) {
-    OB_LOG(WARN, "failed to construct mock append object fragment name",
-        K(ret), K(start), K(end), K(fragment_name), K(logical_appendable_object_name));
   }
   return ret;
 }
@@ -346,7 +325,6 @@ int record_failed_files_idx(const hash::ObHashMap<ObString, int64_t> &files_to_d
   hash::ObHashMap<ObString, int64_t>::const_iterator iter = files_to_delete.begin();
   while (OB_SUCC(ret) && iter != files_to_delete.end()) {
     if (OB_FAIL(failed_files_idx.push_back(iter->second))) {
-      OB_LOG(WARN, "fail to record failed del", K(ret), K(iter->first), K(iter->second));
     }
     iter++;
   }
@@ -433,17 +411,10 @@ int ObAppendableFragmentMeta::parse_from(ObString &fragment_name)
     ObString end_string;
     if (OB_UNLIKELY(!start_part.is_numeric() || !fragment_name.is_numeric())) {
       ret = OB_INVALID_ARGUMENT;
-      OB_LOG(WARN, "unexpected fragment name", K(start_part), K(fragment_name));
     } else if (OB_FAIL(ob_write_string(allocator, start_part, start_string, true))) {
-      OB_LOG(WARN, "fail to deep copy start part of fragment name",
-          K(ret), K(start_string), K(fragment_name), K_(suffix));
     } else if (OB_FAIL(ob_write_string(allocator, fragment_name, end_string, true))) {
-      OB_LOG(WARN, "fail to deep copy end part of fragment name",
-          K(ret), K(start_string), K(fragment_name), K_(suffix));
     } else if (OB_FAIL(c_str_to_int(start_string.ptr(), start_))) {
-      OB_LOG(WARN, "fail to parse 'start'", K(ret), K(start_string), K(fragment_name));
     } else if (OB_FAIL(c_str_to_int(end_string.ptr(), end_))) {
-      OB_LOG(WARN, "fail to parse 'end'", K(ret), K(end_string), K(fragment_name));
     } else {
       type_ = ObAppendableFragmentType::APPENDABLE_FRAGMENT_DATA;
       if (OB_UNLIKELY(!is_valid())) {
@@ -528,7 +499,6 @@ int ObStorageObjectMeta::get_needed_fragments(
   fragments.reset();
   if (OB_UNLIKELY(start < 0 || end <= start)) {
     ret = OB_INVALID_ARGUMENT;
-    OB_LOG(WARN, "invalid arguments", K(start), K(end));
   } else if (OB_UNLIKELY(!is_simulate_append_type() || !is_valid())) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "invalid storage object meta", K(ret), K_(type), K_(fragment_metas));
@@ -558,7 +528,6 @@ int ObStorageObjectMeta::get_needed_fragments(
           OB_LOG(WARN, "the object data may contain holes, can't read correct data", K(ret), K(start), K(end), 
             K(fragment_metas_[cur_fragment_idx]), K(last_fragment_end));
         } else if (OB_FAIL(fragments.push_back(fragment_metas_[cur_fragment_idx]))) {
-          OB_LOG(WARN, "fail to push back fragement", K(ret), K(fragments));
         } else {
           last_fragment_end = fragment_metas_[cur_fragment_idx].end_;
           cur_fragment_idx++;
@@ -666,7 +635,6 @@ int ObStorageListObjectsCtx::init(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObStorageListCtxBase::init(allocator, max_list_num, need_size))) {
-    OB_LOG(WARN, "fail to init storage_list_ctx_base", K(ret), K(max_list_num), K(need_size));
   } else {
     next_token_buf_len_ = OB_MAX_URI_LENGTH;
     if (OB_ISNULL(next_token_ = static_cast<char *>(allocator.alloc(next_token_buf_len_)))) {
@@ -801,7 +769,6 @@ int ObStoragePartInfoHandler::init()
     ret = OB_INIT_TWICE;
     OB_LOG(WARN, "ObStoragePartInfoHandler has been inited", K(ret));
   } else if (OB_FAIL(part_info_map_.create(PART_INFO_MAP_BUCKET_NUM, PART_INFO_MAP_TAG))) {
-    OB_LOG(WARN, "fail to create part info map", K(ret), K(PART_INFO_MAP_BUCKET_NUM));
   } else {
     is_inited_ = true;
   }
@@ -824,14 +791,12 @@ int ObStoragePartInfoHandler::add_part_info(
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "invalid args", K(ret), K(part_id), KP(etag));
   } else if (OB_FAIL(ob_dup_cstring(part_info_allocator_, etag, copied_etag_str))) {
-    OB_LOG(WARN, "fail to deep copy etag", K(ret), K(etag), K(checksum));
   } else if (OB_NOT_NULL(checksum)
       && OB_FAIL(ob_dup_cstring(part_info_allocator_, checksum, copied_checksum_str))) {
     OB_LOG(WARN, "fail to deep copy checksum", K(ret), K(etag), K(checksum));
   // 'set_refactored' is thread safe
   } else if (OB_FAIL(part_info_map_.set_refactored(
       part_id, PartInfo(copied_etag_str, copied_checksum_str)))) {
-    OB_LOG(WARN, "fail to store part info", K(ret), K(etag), K(checksum));
   }
   return ret;
 }

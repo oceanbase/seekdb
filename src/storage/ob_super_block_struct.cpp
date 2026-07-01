@@ -170,9 +170,7 @@ int ObServerSuperBlock::serialize(char *buf, const int64_t buf_size, int64_t &po
   } else {
     MEMSET(buf + pos, 0, buf_size - pos);
     if (OB_FAIL(header_.serialize(buf, buf_size, new_pos))) {
-      LOG_WARN("failed to encode super block header", K(ret), K(buf_size), K(new_pos), K(*this));
     } else if (OB_FAIL(body_.serialize(buf, buf_size, new_pos))) {
-      LOG_WARN("failed to encode super block content", K(ret), K(buf_size), K(new_pos), K(*this));
     } else {
       pos = new_pos;
       LOG_INFO("succeed to serialize super block buf", K(buf_size), K(pos), K(*this));
@@ -192,13 +190,11 @@ int ObServerSuperBlock::deserialize(const char *buf, const int64_t buf_size, int
     ret = OB_INIT_TWICE;
     LOG_ERROR("cannot read super block twice", K(ret), K(*this));
   } else if (OB_FAIL(header_.deserialize(buf, buf_size, pos))) {
-    LOG_WARN("failed to decode header", K(ret), KP(buf), K(buf_size), K(pos));
   } else if (OB_UNLIKELY(header_.body_crc_ !=
       (calc_crc = static_cast<int32_t>(ob_crc64(buf + pos, header_.body_size_))))) {
     ret = OB_PHYSIC_CHECKSUM_ERROR;
     LOG_DBA_ERROR(OB_PHYSIC_CHECKSUM_ERROR, "msg", "failed to check crc", K(ret), KP(buf), K(buf_size), K(pos), K_(header), K(calc_crc));
   } else if (OB_FAIL(body_.deserialize(buf, buf_size, pos))) {
-    LOG_WARN("failed to decode body", K(ret), KP(buf), K(buf_size), K(pos));
   } else if (OB_UNLIKELY(!is_valid())) {
     ret = OB_INVALID_DATA;
     LOG_WARN("invalid data, ", K(ret), K(*this));
@@ -229,7 +225,6 @@ int ObServerSuperBlock::construct_header()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to allocate memory for body", K(ret));
     } else if (OB_FAIL(body_.serialize(body_buf, body_buf_len, pos))) {
-      LOG_WARN("fail to serialize super block body", K(ret));
     } else {
       header_.version_ = ObServerSuperBlockHeader::SERVER_SUPER_BLOCK_VERSION;
       header_.magic_ = SERVER_SUPER_BLOCK_MAGIC;
@@ -262,7 +257,6 @@ int ObServerSuperBlock::format_startup_super_block(
     SET_FIRST_VALID_SLOG_CURSOR(body_.replay_start_point_);
 
     if (OB_FAIL(construct_header())) {
-      LOG_WARN("fail to construct super block header", K(ret), K_(body));
     } else {
       LOG_INFO("success to format super block", K(*this));
     }
@@ -388,7 +382,6 @@ int ObTenantSuperBlock::add_snapshot(const ObTenantSnapshotMeta &snapshot)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_new_snapshot(snapshot.snapshot_id_))) {
-    LOG_WARN("fail to check new snapshot", K(ret), K(snapshot));
   } else {
     tenant_snapshots_[snapshot_cnt_] = snapshot;
     snapshot_cnt_++;
@@ -443,7 +436,6 @@ int ObTenantSuperBlock::serialize(char *buf, const int64_t buf_len, int64_t &pos
     int64_t pos_bak = (pos += size_nbytes);
     if (OB_SUCC(ret)) {
       if (OB_FAIL(serialize_(buf, buf_len, pos))) {
-        LOG_WARN("fail to serialize", K(ret), KP(buf), K(buf_len), K(pos));
       }
     }
     int64_t serial_size = pos - pos_bak;
@@ -494,7 +486,6 @@ int ObTenantSuperBlock::deserialize(const char *buf, const int64_t data_len, int
       int64_t pos_orig = pos;
       pos = 0;
       if (OB_FAIL(deserialize_(buf + pos_orig, len, pos))) {
-        LOG_WARN("fail to deserialize", K(ret), K(len), K(pos));
       }
       pos = pos_orig + len;
     }
@@ -566,7 +557,6 @@ int ObLSPendingFreeTabletArray::assign(const ObLSPendingFreeTabletArray &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(items_.assign(other.items_))) {
-    LOG_WARN("fail to assign items", K(ret));
   }
   return ret;
 }

@@ -37,7 +37,6 @@ int ObLoadDataStorageInfo::assign(const ObLoadDataStorageInfo &storage_info)
   if (this != &storage_info) {
     reset();
     if (OB_FAIL(ObObjectStorageInfo::assign(storage_info))) {
-      LOG_WARN("fail to assign object storage info", KR(ret), K(storage_info));
     } else {
       load_data_format_ = storage_info.load_data_format_;
     }
@@ -60,11 +59,8 @@ int ObLoadDataStorageInfo::set(const ObStorageType device_type, const char *stor
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObObjectStorageInfo::set(device_type, storage_info))) {
-    LOG_WARN("fail to set object storage info", KR(ret), K(device_type), KP(storage_info));
   } else if (OB_FAIL(parse_load_data_params(storage_info))) {
-    LOG_WARN("fail to parse load data params", KR(ret), KP(storage_info));
   } else if (OB_FAIL(set_load_data_param_defaults())) {
-    LOG_WARN("fail to set load data param defaults", KR(ret));
   }
   if (OB_FAIL(ret)) {
     reset();
@@ -123,13 +119,10 @@ int ObLoadDataStorageInfo::get_storage_info_str(char *storage_info, const int64_
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObObjectStorageInfo::get_storage_info_str(storage_info, info_len))) {
-    LOG_WARN("fail to get object storage info str", KR(ret), KPC(this), KP(storage_info),
-             K(info_len));
   } else {
     int64_t pos = ::strlen(storage_info);
     if (OB_FAIL(databuff_printf(storage_info, info_len, pos, "&%s=%s", LOAD_DATA_FORMAT,
                                 ObLoadDataFormat::get_type_string(load_data_format_)))) {
-      LOG_WARN("fail to set load data format", K(ret), K(info_len));
     }
   }
   return ret;

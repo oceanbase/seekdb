@@ -56,7 +56,6 @@ int ObMallocSampleInfo::inner_get_next_row(ObNewRow *&row)
   if (!opened_) {
     col_count_ = output_column_ids_.count();
     if (OB_FAIL(malloc_sample_map_.create(1000, "MallocInfoMap", "MallocInfoMap"))) {
-      SERVER_LOG(WARN, "create memory info map failed", K(ret));
     } else {
       ret = ObMemoryDump::get_instance().load_malloc_sample_map(malloc_sample_map_);
       if (OB_SUCC(ret)) {
@@ -69,7 +68,6 @@ int ObMallocSampleInfo::inner_get_next_row(ObNewRow *&row)
   for (; OB_SUCC(ret) && it_ != malloc_sample_map_.end(); ++it_) {
     if (true || true) {
       if (OB_FAIL(fill_row(row))) {
-        SERVER_LOG(WARN, "failed to fill row", K(ret));
       }
       break;
     }

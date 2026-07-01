@@ -119,7 +119,6 @@ int ObExprObjAccess::assign(const ObExprOperator &other)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expr operator is mismatch", K(other.get_type()));
   } else if (OB_FAIL(ObExprOperator::assign(other))) {
-    LOG_WARN("assign parent expr failed", K(ret));
   } else {
     const ObExprObjAccess &other_expr = static_cast<const ObExprObjAccess &>(other);
     OZ(info_.assign(other_expr.info_));
@@ -487,10 +486,8 @@ int ObExprObjAccess::ExtraInfo::calc(ObObj &result,
         ObCastCtx cast_ctx(&alloc, NULL, CM_NONE, res_type.get_collation_type(), NULL);
         const ObObj *res_obj = nullptr;
         if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, *datum, result, res_obj))) {
-          LOG_WARN("failed to cast decimal int to number", K(ret));
         }
       } else if (OB_FAIL(result.apply(*datum))) {
-        LOG_WARN("apply failed", K(ret), KPC(datum), K(result), K(res_type));
       }
       if (OB_SUCC(ret)) {
        if (!result.is_null()

@@ -44,7 +44,6 @@ int ObSRSImporter::exec_op(table::ObModuleDataArg op)
     LOG_WARN("invalid exec op", K(ret), K(op));
   }
   if (OB_FAIL(ret)) {
-    LOG_WARN("fail to operate info", K(ret), K(op));
   }
   return ret;
 }
@@ -54,22 +53,18 @@ int ObSRSImporter::get_srs_cnt(ObCommonSqlProxy *sql_proxy, int64_t &srs_cnt)
   int ret = OB_SUCCESS;
   ObSqlString sql;
   if (OB_FAIL(sql.assign_fmt("select count(*) as srs_cnt from oceanbase.%s", OB_ALL_SPATIAL_REFERENCE_SYSTEMS_TNAME))) {
-    LOG_WARN("failed to assign sql", KR(ret), K(sql));
   } else {
     srs_cnt = 0;
     HEAP_VAR(ObMySQLProxy::MySQLResult, res) {
       common::sqlclient::ObMySQLResult *result = NULL;
       if (OB_FAIL(sql_proxy->read(res, sql.ptr()))) {
-        LOG_WARN("failed to read", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to get sql result", KR(ret));
       } else if (OB_FAIL(result->next())) {
-        LOG_WARN("failed to get srs count", KR(ret), K(sql));
       } else {
         EXTRACT_INT_FIELD_MYSQL(*result, "srs_cnt", srs_cnt, int64_t);
         if (OB_FAIL(ret)) {
-          LOG_WARN("failed to srs cnt", KR(ret), K(sql));
         } else {
           LOG_INFO("old srs rows", K(srs_cnt));
         }
@@ -91,20 +86,15 @@ int ObSRSImporter::import_srs_info(const ObString &file_path)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy must not null", K(ret), KP(exec_ctx_.get_sql_proxy()));
   } else if (OB_FAIL(get_srs_cnt(exec_ctx_.get_sql_proxy(), srs_cnt))) {
-    LOG_WARN("get srs count failed", K(ret));
   } else if (OB_FAIL(sql.assign_fmt("select count(*) as srs_cnt from oceanbase.%s", OB_ALL_SPATIAL_REFERENCE_SYSTEMS_TNAME))) {
-    LOG_WARN("failed to assign sql", KR(ret), K(sql));
   }
   // truncate table
   if (OB_SUCC(ret)) {
     ObSqlString trucate_sql;
     affected_rows_ = 0;
     if (OB_FAIL(trans.start(exec_ctx_.get_sql_proxy()))) {
-      LOG_WARN("fail to start transaction", K(ret));
     } else if (OB_FAIL(trucate_sql.assign_fmt("DELETE FROM oceanbase.%s", OB_ALL_SPATIAL_REFERENCE_SYSTEMS_TNAME))) {
-      LOG_WARN("failed to assign sql", K(ret), K(trucate_sql));
     } else if (OB_FAIL(trans.write(trucate_sql.ptr(), affected_rows_))) {
-      LOG_WARN("failed to exec sql", K(ret), K(trucate_sql));
     } 
   }
 
@@ -116,14 +106,10 @@ int ObSRSImporter::import_srs_info(const ObString &file_path)
     const char *srs_file = "spatial_reference_systems.data";
     if (OB_FAIL(load_sql.assign_fmt("LOAD DATA INFILE '%.*s/%s' INTO TABLE oceanbase.%s ", file_path.length(), file_path.ptr(), srs_file,
       OB_ALL_SPATIAL_REFERENCE_SYSTEMS_TNAME))) {
-      LOG_WARN("failed to assign sql", K(ret), K(load_sql));
     } else if (OB_FAIL(update_time.assign_fmt("update oceanbase.%s set gmt_create = NOW(), gmt_modified = NOW()",
       OB_ALL_SPATIAL_REFERENCE_SYSTEMS_TNAME))) {
-      LOG_WARN("failed to assign update time sql", K(ret), K(load_sql));
     } else if (OB_FAIL(trans.write(load_sql.ptr(), affected_rows_))) {
-      LOG_WARN("failed to exec sql", K(ret), K(load_sql));
     } else if (OB_FAIL(trans.write(update_time.ptr(), affected_rows_))) {
-      LOG_WARN("failed to exec sql", K(ret), K(load_sql));
     } else if (trans.is_started()) {
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = trans.end(OB_SUCC(ret)))) {

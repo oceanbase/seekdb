@@ -50,7 +50,6 @@ ObStorageObjectHandle &ObStorageObjectHandle::operator=(const ObStorageObjectHan
     if (macro_id_.is_valid()) {
       if (macro_id_.is_id_mode_local()) {
         if (OB_FAIL(OB_SERVER_BLOCK_MGR.inc_ref(macro_id_))) {
-          LOG_ERROR("failed to inc macro block ref cnt", K(ret), K(macro_id_));
         }
         if (OB_FAIL(ret)) {
           macro_id_.reset();
@@ -84,7 +83,6 @@ void ObStorageObjectHandle::reset_macro_id()
   if (macro_id_.is_valid()) {
     if (macro_id_.is_id_mode_local()) {
       if (OB_FAIL(OB_SERVER_BLOCK_MGR.dec_ref(macro_id_))) {
-        LOG_ERROR("failed to dec macro block ref cnt", K(ret), K(macro_id_));
       } else {
         macro_id_.reset();
       }
@@ -104,7 +102,6 @@ int ObStorageObjectHandle::report_bad_block() const
   if (macro_id_.is_id_mode_local()) {
     int io_errno = 0;
     if (OB_FAIL(io_handle_.get_fs_errno(io_errno))) {
-      LOG_WARN("fail to get io errno", K(macro_id_), K(ret));
     } else if (0 != io_errno) {
       LOG_ERROR("fail to io macro block", K(macro_id_), K(ret), K(io_errno));
       char error_msg[common::OB_MAX_ERROR_MSG_LEN];
@@ -115,12 +112,10 @@ int ObStorageObjectHandle::report_bad_block() const
                                   ret,
                                   io_errno,
                                   strerror(io_errno)))){
-        LOG_WARN("error msg is too long", K(macro_id_), K(ret), K(sizeof(error_msg)), K(io_errno));
       } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.report_bad_block(macro_id_,
                                                               ret,
                                                               error_msg,
                                                               GCONF.data_dir))) {
-        LOG_WARN("fail to report bad block", K(macro_id_), K(ret), "erro_type", ret, K(error_msg));
       }
     }
   } else if (macro_id_.is_id_mode_share()) {
@@ -143,7 +138,6 @@ int ObStorageObjectHandle::async_read(const ObStorageObjectReadInfo &read_info)
   } else {
     if (read_info.macro_block_id_.is_id_mode_local()) {
       if (OB_FAIL(sn_async_read(read_info))) {
-        LOG_WARN("fail to sn_async_read", K(ret), K(read_info));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -163,7 +157,6 @@ int ObStorageObjectHandle::async_write(const ObStorageObjectWriteInfo &write_inf
   } else {
     if (macro_id_.is_id_mode_local()) {
       if (OB_FAIL(sn_async_write(write_info))) {
-        LOG_WARN("fail to sn_async_write", K(ret), K_(macro_id), K(write_info));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -207,9 +200,7 @@ int ObStorageObjectHandle::sn_async_read(const ObStorageObjectReadInfo &read_inf
     }
 
     if (FAILEDx(ObIOManager::get_instance().aio_read(io_info, io_handle_))) {
-      LOG_WARN("Fail to aio_read", K(read_info), K(ret));
     } else if (OB_FAIL(set_macro_block_id(read_info.macro_block_id_))) {
-      LOG_WARN("failed to set macro block id", K(ret));
     }
   }
   return ret;
@@ -238,7 +229,6 @@ int ObStorageObjectHandle::sn_async_write(const ObStorageObjectWriteInfo &write_
 
     io_info.flag_.set_write();
     if (FAILEDx(ObIOManager::get_instance().aio_write(io_info, io_handle_))) {
-      LOG_WARN("Fail to aio_write", K(ret), K_(macro_id), K(write_info));
     } else {
       int tmp_ret = OB_SUCCESS;
       if (macro_id_.is_id_mode_local() && OB_TMP_FAIL(OB_SERVER_BLOCK_MGR.update_write_time(macro_id_))) {
@@ -263,7 +253,6 @@ int ObStorageObjectHandle::wait()
     LOG_WARN("fail to wait block io, may be retry", K(macro_id_), K(ret));
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = report_bad_block())) {
-      LOG_WARN("fail to report bad block", K(tmp_ret), K(ret));
     }
     io_handle_.reset();
   }
@@ -295,7 +284,6 @@ int ObStorageObjectHandle::set_macro_block_id(const MacroBlockId &macro_block_id
     if (macro_id_.is_valid()) {
       if (macro_id_.is_id_mode_local()) {
         if (OB_FAIL(OB_SERVER_BLOCK_MGR.inc_ref(macro_id_))) {
-          LOG_ERROR("failed to inc macro block ref cnt", K(ret), K(macro_id_));
         }
         if (OB_FAIL(ret)) {
           macro_id_.reset();

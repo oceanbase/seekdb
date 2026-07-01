@@ -78,7 +78,6 @@ int ObTableLoadDagPreSortWriteChannel::init(ObTableLoadDag *dag, ObTableLoadPreS
     dag_ = dag;
     op_ = op;
     if (OB_FAIL(inner_init())) {
-      LOG_WARN("fail to init", KR(ret));
     }
     // init mem_compact_ctx_
     if (OB_SUCC(ret)) {
@@ -91,14 +90,12 @@ int ObTableLoadDagPreSortWriteChannel::init(ObTableLoadDag *dag, ObTableLoadPreS
       mem_compact_ctx_.compact_chunk_cnt_ = MAX(store_ctx_->max_mem_chunk_count_ / 2, 1);
       mem_compact_ctx_.range_cnt_ = store_ctx_->thread_cnt_;
       if (OB_FAIL(mem_compact_ctx_.init())) {
-        LOG_WARN("fail to init mem compact ctx", KR(ret));
       }
     }
     // init chunk_nodes_
     if (OB_SUCC(ret)) {
       const int64_t chunk_node_cnt = MAX(store_ctx_->max_mem_chunk_count_ / 2, 1);
       if (OB_FAIL(chunk_nodes_.prepare_allocate(chunk_node_cnt))) {
-        LOG_WARN("fail to prepare allocate chunk node", KR(ret), K(chunk_node_cnt));
       }
     }
     if (OB_SUCC(ret)) {
@@ -130,12 +127,10 @@ int ObTableLoadDagPreSortWriteChannel::do_flush()
     } else if (nullptr == chunk_node.chunk_) {
       // do nothing
     } else if (OB_FAIL(add_closed_chunk(chunk_node.chunk_))) {
-      LOG_WARN("fail to push", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(finish_add_closed_chunk())) {
-      LOG_WARN("fail to finish add closed chunk", KR(ret));
     }
   }
   return ret;
@@ -148,7 +143,6 @@ int ObTableLoadDagPreSortWriteChannel::do_close()
   table_store.clear();
   table_store.set_multiple_sstable();
   if (OB_FAIL(table_store.add_tables(mem_compact_ctx_.get_result_tables_handle()))) {
-    LOG_WARN("fail to add tables", KR(ret));
   } else {
     mem_compact_ctx_.reset();
   }
@@ -164,7 +158,6 @@ int ObTableLoadDagPreSortWriteChannel::acquire_chunk(ChunkType *&chunk)
     ret = OB_EAGAIN;
   } else {
     if (OB_FAIL(mem_compact_ctx_.acquire_chunk(chunk))) {
-      LOG_WARN("fail to acquire chunk", KR(ret));
     }
   }
   return ret;
@@ -255,7 +248,6 @@ int ObTableLoadDagPreSortWriteChannel::close_chunk(int64_t chunk_node_id)
       LOG_WARN("chunk node should be used and chunk not null", KR(ret), K(chunk_node_id),
                K(chunk_node));
     } else if (OB_FAIL(add_closed_chunk(chunk_node.chunk_))) {
-      LOG_WARN("fail to push", KR(ret));
     } else if (OB_UNLIKELY(!chunk_node.set_unused())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected set chunk node unused failed", KR(ret), K(chunk_node_id), K(chunk_node));
@@ -285,7 +277,6 @@ int ObTableLoadDagPreSortWriteChannel::add_sort_chunk_task(SortChunkTask *task)
       } else if (finish_add_closed_chunk_) {
       } else {
         if (OB_FAIL(sort_chunk_tasks_.push_back(task))) {
-          LOG_WARN("fail to push back", KR(ret));
         } else {
           task = nullptr;
         }
@@ -293,7 +284,6 @@ int ObTableLoadDagPreSortWriteChannel::add_sort_chunk_task(SortChunkTask *task)
     }
     if (OB_SUCC(ret) && nullptr != task) {
       if (OB_FAIL(dag_->add_task(*task))) {
-        LOG_WARN("fail to add task", KR(ret));
       }
     }
   }
@@ -320,7 +310,6 @@ int ObTableLoadDagPreSortWriteChannel::add_closed_chunk(ChunkType *&chunk)
         chunk = nullptr;
       } else {
         if (OB_FAIL(closed_chunks_.push_back(chunk))) {
-          LOG_WARN("fail to push back", KR(ret));
         } else {
           chunk = nullptr;
         }
@@ -328,7 +317,6 @@ int ObTableLoadDagPreSortWriteChannel::add_closed_chunk(ChunkType *&chunk)
     }
     if (OB_SUCC(ret) && nullptr != task) {
       if (OB_FAIL(dag_->add_task(*task))) {
-        LOG_WARN("fail to add task", KR(ret));
       }
     }
   }
@@ -344,7 +332,6 @@ int ObTableLoadDagPreSortWriteChannel::finish_add_closed_chunk()
     finish_add_closed_chunk_ = true;
     no_more_closed_chunk_ = closed_chunks_.empty();
     if (OB_FAIL(sort_chunk_tasks.assign(sort_chunk_tasks_))) {
-      LOG_WARN("fail to assign", KR(ret));
     } else {
       sort_chunk_tasks_.reset();
     }
@@ -352,7 +339,6 @@ int ObTableLoadDagPreSortWriteChannel::finish_add_closed_chunk()
   for (int64_t i = 0; OB_SUCC(ret) && i < sort_chunk_tasks.count(); ++i) {
     SortChunkTask *task = sort_chunk_tasks.at(i);
     if (OB_FAIL(dag_->add_task(*task))) {
-      LOG_WARN("fail to add task", KR(ret));
     }
   }
   return ret;
@@ -396,7 +382,6 @@ int ObTableLoadDagPreSortChunkWriter::init(ObTableLoadDagWriteChannel *write_cha
     mem_compact_ctx_ = &write_channel_->mem_compact_ctx_;
     if (OB_FAIL(datum_row_.init(
           write_channel_->op_->op_ctx_->table_store_.get_table_data_desc().column_count_))) {
-      LOG_WARN("fail to init datum row", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -412,7 +397,6 @@ int ObTableLoadDagPreSortChunkWriter::inner_append_row(const ObTabletID &tablet_
   row_.tablet_id_ = tablet_id;
   if (OB_FAIL(row_.external_row_.from_datum_row(
         datum_row, mem_compact_ctx_->table_data_desc_.rowkey_column_num_))) {
-    LOG_WARN("fail to cast row from datum row", KR(ret));
   } else {
     const_row = row_;
     while (OB_SUCC(ret)) {
@@ -428,7 +412,6 @@ int ObTableLoadDagPreSortChunkWriter::inner_append_row(const ObTabletID &tablet_
         } else {
           ret = OB_SUCCESS;
           if (OB_FAIL(write_channel_->close_chunk(chunk_node_id_))) {
-            LOG_WARN("fail to close chunk", KR(ret));
           } else {
             chunk_ = nullptr;
             chunk_node_id_ = -1;
@@ -479,7 +462,6 @@ int ObTableLoadDagPreSortChunkWriter::append_batch(ObIVector *tablet_id_vector,
     while (OB_SUCC(ret) && start < batch_rows.size()) {
       const ObTabletID tablet_id = ObDirectLoadVectorUtils::get_tablet_id(tablet_id_vector, start);
       if (OB_FAIL(batch_rows.get_datum_row(start, datum_row_))) {
-        LOG_WARN("fail to get datum row", KR(ret), K(start));
       } else if (OB_FAIL(inner_append_row(tablet_id, datum_row_))) {
         if (OB_UNLIKELY(OB_EAGAIN != ret)) {
           LOG_WARN("fail to append row", KR(ret));
@@ -492,7 +474,6 @@ int ObTableLoadDagPreSortChunkWriter::append_batch(ObIVector *tablet_id_vector,
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(push_chunk())) {
-        LOG_WARN("fail to push chunk", KR(ret));
       }
     }
   }
@@ -504,7 +485,6 @@ int ObTableLoadDagPreSortChunkWriter::push_chunk()
   int ret = OB_SUCCESS;
   if (OB_LIKELY(-1 != chunk_node_id_ && nullptr != chunk_)) {
     if (OB_FAIL(write_channel_->push_chunk(chunk_node_id_))) {
-      LOG_WARN("fail to push chunk", K(chunk_node_id_), KR(ret));
     } else {
       chunk_ = nullptr;
       chunk_node_id_ = -1;
@@ -524,7 +504,6 @@ int ObTableLoadDagPreSortChunkWriter::close(ObTableLoadStoreTrans *trans, const 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected is closed", KR(ret));
   } else if (OB_FAIL(push_chunk())) {
-    LOG_WARN("fail to push chunk", KR(ret));
   } else {
     is_closed_ = true;
   }

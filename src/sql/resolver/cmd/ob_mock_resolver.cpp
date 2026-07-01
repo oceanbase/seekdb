@@ -75,7 +75,6 @@ int ObMockResolver::resolve(const ParseNode& parse_tree)
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("unexpected parse tree type", K(ret), K(node->type_));
             } else if (OB_FAIL(mock_stmt->add_stmt(type_convert(node->type_)))) {
-              LOG_WARN("failed to add stmt", K(ret), K(node->type_));
             }
           }
         }

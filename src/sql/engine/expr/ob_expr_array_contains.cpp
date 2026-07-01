@@ -79,7 +79,6 @@ int ObExprArrayContains::calc_result_type2(ObExprResType &type,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, ob_obj_type_str(type1_ptr->get_type()), ob_obj_type_str(type2_ptr->get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::deduce_array_type(exec_ctx, *type1_ptr, *type2_ptr, subschema_id))) {
-    LOG_WARN("failed to get result array type subschema id", K(ret));
   } 
   
   if (OB_SUCC(ret)) {
@@ -145,20 +144,15 @@ int ObExprArrayContains::eval_array_contains_array(const ObExpr &expr, ObEvalCtx
   ObDatum *datum_val = NULL;
   bool bret = false;
   if (OB_FAIL(expr.args_[p0]->eval(ctx, datum))) {
-    LOG_WARN("failed to eval args", K(ret));
   } else if (OB_FAIL(expr.args_[p1]->eval(ctx, datum_val))) {
-    LOG_WARN("failed to eval args", K(ret));
   } else if (datum->is_null()) {
     res.set_null();
   } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, l_meta_id, datum->get_string(), arr_obj))) {
-    LOG_WARN("construct array obj failed", K(ret));
   } else if (datum_val->is_null()) {
     bool contains_null = arr_obj->contain_null();
     res.set_bool(contains_null);
   } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, r_meta_id, datum_val->get_string(), arr_val))) {
-    LOG_WARN("construct array obj failed", K(ret));
   } else if (OB_FAIL(ObArrayUtil::contains(*arr_obj, *arr_val, bret))) {
-    LOG_WARN("array contains failed", K(ret));
   } else {
     res.set_bool(bret);
   }
@@ -230,9 +224,7 @@ int ObExprArrayContains::eval_array_contains_array_batch(const ObExpr &expr, ObE
   ObIArrayType *arr_obj = NULL;
   ObIArrayType *arr_val = NULL;
   if (OB_FAIL(expr.args_[p0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval date_unit_datum failed", K(ret));
   } else if (OB_FAIL(expr.args_[p1]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("failed to eval batch result args0", K(ret));
   } else {
     ObDatumVector src_array = expr.args_[p0]->locate_expr_datumvector(ctx);
     ObDatumVector val_array = expr.args_[p1]->locate_expr_datumvector(ctx);
@@ -246,15 +238,12 @@ int ObExprArrayContains::eval_array_contains_array_batch(const ObExpr &expr, ObE
         res_datum.at(j)->set_null();
       } else if (OB_FAIL(
               ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, l_meta_id, src_array.at(j)->get_string(), arr_obj))) {
-        LOG_WARN("construct array obj failed", K(ret));
       } else if (val_array.at(j)->is_null()) {
         bool contains_null = arr_obj->contain_null();
         res_datum.at(j)->set_bool(contains_null);
       } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(
                      tmp_allocator, ctx, r_meta_id, val_array.at(j)->get_string(), arr_val))) {
-        LOG_WARN("construct array obj failed", K(ret));
       } else if (OB_FAIL(ObArrayUtil::contains(*arr_obj, *arr_val, bret))) {
-        LOG_WARN("array contains failed", K(ret));
       } else {
         res_datum.at(j)->set_bool(bret);
       }
@@ -352,7 +341,6 @@ int ObExprArrayContains::eval_array_contains_array_vector(const ObExpr &expr, Ob
       } else {
         ObString left = left_vec->get_string(idx);
         if (OB_FAIL(ObNestedVectorFunc::construct_param(tmp_allocator, ctx, left_meta_id, left, arr_obj))) {
-          LOG_WARN("construct array obj failed", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -367,9 +355,7 @@ int ObExprArrayContains::eval_array_contains_array_vector(const ObExpr &expr, Ob
         bool bret = false;
         ObString right = right_vec->get_string(idx);
         if (OB_FAIL(ObNestedVectorFunc::construct_param(tmp_allocator, ctx, right_meta_id, right, arr_val))) {
-          LOG_WARN("construct array obj failed", K(ret));
         } else if (OB_FAIL(ObArrayUtil::contains(*arr_obj, *arr_val, bret))) {
-          LOG_WARN("array contains failed", K(ret));
         } else {
           res_vec->set_bool(idx, bret);
           eval_flags.set(idx);
@@ -412,7 +398,6 @@ int ObExprArrayContains::cg_expr(ObExprCGCtx &expr_cg_ctx,
       if (ob_is_null(rt_expr.args_[p0]->datum_meta_.type_)) {
         // do nothing
       } else if (OB_FAIL(ObArrayExprUtils::get_array_element_type(exec_ctx, sub_id, elem_type, unused, is_vec))) {
-        LOG_WARN("failed to get collection elem type", K(ret), K(sub_id));
       } else {
         right_tc = ob_obj_type_class(elem_type);
       }

@@ -76,34 +76,26 @@ int ObTableLoadCoordinatorCtx::init(const ObIArray<uint64_t> &column_ids,
     LOG_WARN("invalid args", KR(ret), K(ctx_->param_), K(column_ids), KPC(exec_ctx));
   } else {
     if (OB_FAIL(target_schema_.init(ctx_->ddl_param_.dest_table_id_, ctx_->ddl_param_.schema_version_))) {
-      LOG_WARN("fail to init table load schema", KR(ret),
-               K(ctx_->ddl_param_.dest_table_id_), K(ctx_->ddl_param_.schema_version_));
     }
     // init column idxs
     else if (OB_FAIL(init_column_idxs(column_ids))) {
-      LOG_WARN("fail to init column idxs", KR(ret), K(column_ids));
     }
     // init partition_calc_
     else if (OB_FAIL(
                partition_calc_.init(ctx_->param_, ctx_->session_info_, tablet_ids))) {
-      LOG_WARN("fail to init partition calc", KR(ret));
     }
     // init trans_allocator_
     else if (OB_FAIL(trans_allocator_.init("TLD_CTransPool"))) {
-      LOG_WARN("fail to init trans allocator", KR(ret));
     }
     // init trans_map_
     else if (OB_FAIL(
                trans_map_.create(1024, "TLD_TransMap", "TLD_TransMap"))) {
-      LOG_WARN("fail to create trans map", KR(ret));
     }
     // init trans_ctx_map_
     else if (OB_FAIL(trans_ctx_map_.create(1024, "TLD_TCtxMap", "TLD_TCtxMap"))) {
-      LOG_WARN("fail to create trans ctx map", KR(ret));
     }
     // init segment_trans_ctx_map_
     else if (OB_FAIL(segment_ctx_map_.init("TLD_SegCtxMap"))) {
-      LOG_WARN("fail to init segment ctx map", KR(ret));
     }
     // init error_row_handler_
     else if (OB_ISNULL(error_row_handler_ =
@@ -111,7 +103,6 @@ int ObTableLoadCoordinatorCtx::init(const ObIArray<uint64_t> &column_ids,
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObTableLoadErrorRowHandler", KR(ret));
     } else if (OB_FAIL(error_row_handler_->init(ctx_->param_, result_info_, ctx_->job_stat_))) {
-      LOG_WARN("fail to init error row handler", KR(ret));
     }
     // init sequence_cache_ and sequence_schema_
     else if (ctx_->schema_.has_identity_column_ && OB_FAIL(init_sequence())) {
@@ -119,7 +110,6 @@ int ObTableLoadCoordinatorCtx::init(const ObIArray<uint64_t> &column_ids,
     }
     // init partition ids
     else if (OB_FAIL(init_partition_ids(tablet_ids))) {
-      LOG_WARN("fail to init partition ids", KR(ret));
     }
     // init empty_insert_tablet_ctx_manager_
     else if (ObDirectLoadMethod::is_full(ctx_->param_.method_)
@@ -290,7 +280,6 @@ int ObTableLoadCoordinatorCtx::alloc_trans_ctx(const ObTableLoadTransId &trans_i
   }
   // Insert trans_ctx into map
   else if (OB_FAIL(trans_ctx_map_.set_refactored(trans_ctx->trans_id_, trans_ctx))) {
-    LOG_WARN("fail to set trans ctx", KR(ret), K(trans_ctx->trans_id_));
   }
   if (OB_FAIL(ret)) {
     if (nullptr != trans_ctx) {
@@ -313,16 +302,13 @@ int ObTableLoadCoordinatorCtx::alloc_trans(const ObTableLoadSegmentID &segment_i
   ObTableLoadTransCtx *trans_ctx = nullptr;
   // allocate trans_ctx
   if (OB_FAIL(alloc_trans_ctx(trans_id, trans_ctx))) {
-    LOG_WARN("fail to alloc trans ctx", KR(ret), K(trans_id));
   }
   // construct trans
   else if (OB_ISNULL(trans = trans_allocator_.alloc(trans_ctx, default_session_id))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc ObTableLoadCoordinatorTrans", KR(ret));
   } else if (OB_FAIL(trans->init())) {
-    LOG_WARN("fail to init trans", KR(ret), K(trans_id));
   } else if (OB_FAIL(trans_map_.set_refactored(trans_id, trans))) {
-    LOG_WARN("fail to set_refactored", KR(ret), K(trans_id));
   }
   if (OB_FAIL(ret)) {
     if (nullptr != trans) {
@@ -348,8 +334,6 @@ int ObTableLoadCoordinatorCtx::init_column_idxs(const ObIArray<uint64_t> &column
       if (col_desc.col_id_ == column_id) {
         found_column = true;
         if (OB_FAIL(idx_array_.push_back(j))) {
-          LOG_WARN("fail to push back column idx", KR(ret), K(idx_array_), K(i), K(col_desc), K(j),
-                   K(column_ids));
         }
       }
     }
@@ -358,7 +342,6 @@ int ObTableLoadCoordinatorCtx::init_column_idxs(const ObIArray<uint64_t> &column
         ret = OB_SCHEMA_NOT_UPTODATE;
         LOG_WARN("column not found", KR(ret), K(idx_array_), K(column_descs), K(column_ids));
       } else if (OB_FAIL(idx_array_.push_back(-1))) {
-        LOG_WARN("fail to push back column idx", KR(ret), K(idx_array_), K(i), K(col_desc));
       }
     }
   }
@@ -373,8 +356,6 @@ int ObTableLoadCoordinatorCtx::generate_autoinc_params(AutoincParam &autoinc_par
   if (OB_FAIL(ObTableLoadSchema::get_table_schema(
                                                   ctx_->param_.table_id_,
                                                   schema_guard, table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret),
-                                         K(ctx_->param_.table_id_));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not exist", KR(ret), K(ctx_->param_.table_id_));
@@ -439,7 +420,6 @@ int ObTableLoadCoordinatorCtx::init_sequence()
   uint64_t sequence_id = OB_INVALID_ID;
   if (OB_FAIL(ObTableLoadSchema::get_table_schema( table_id, table_schema_guard,
                                                   target_table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(table_id));
   } else {
     //ddl for identity is to synchronize the auto-increment value when creating a table, for sequence parameter initialization must use the hidden table id's table schema
     for (ObTableSchema::const_column_iterator iter = target_table_schema->column_begin();
@@ -463,16 +443,13 @@ int ObTableLoadCoordinatorCtx::init_sequence()
     LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
                      sequence_schema_guard))) {
-    LOG_WARN("get schema guard failed", KR(ret));
   } else if (OB_FAIL(sequence_schema_guard.get_sequence_schema(
                      sequence_id,
                      sequence_schema))) {
-    LOG_WARN("fail get sequence schema", K(sequence_id), KR(ret));
   } else if (OB_ISNULL(sequence_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null unexpected", KR(ret));
   } else if (OB_FAIL(sequence_schema_.assign(*sequence_schema))) {
-    LOG_WARN("cache sequence_schema fail", K(sequence_id), KR(ret));
   }
   return ret;
 }
@@ -518,28 +495,22 @@ int ObTableLoadCoordinatorCtx::init_partition_ids(const ObIArray<ObTabletID> &ta
   ObTableLoadPartitionId origin_id, target_id;
   ObHashSet<ObTabletID> tablet_ids_set;
   if (OB_FAIL(ObTableLoadSchema::get_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get schema guard", KR(ret));
   } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(schema_guard,
                                                          ctx_->param_.table_id_,
                                                          origin_table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(ctx_->param_.table_id_));
   } else if (OB_ISNULL(origin_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("table schema is nullptr", KR(ret));
   } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(schema_guard,
                                                          ctx_->ddl_param_.dest_table_id_,
                                                          target_table_schema))) {
-    LOG_WARN("fail to get target schema", KR(ret),
-                                          K(ctx_->ddl_param_.dest_table_id_));
   } else if (OB_ISNULL(target_table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("target schema is nullptr", KR(ret));
   } else if (OB_FAIL(origin_table_schema->get_all_tablet_and_object_ids(all_origin_tablet_ids,
                                                                         all_origin_part_ids))) {
-    LOG_WARN("fail to get all origin tablet ids and part ids", KR(ret));
   } else if (OB_FAIL(target_table_schema->get_all_tablet_and_object_ids(all_target_tablet_ids,
                                                                         all_target_part_ids))) {
-    LOG_WARN("fail to get all target tablet ids and part ids", KR(ret));
   } else if (tablet_ids.empty()) {
     for (int64_t i = 0; OB_SUCC(ret) && i < all_origin_tablet_ids.count(); ++i) {
       origin_id.partition_id_ = all_origin_part_ids.at(i);
@@ -547,18 +518,14 @@ int ObTableLoadCoordinatorCtx::init_partition_ids(const ObIArray<ObTabletID> &ta
       target_id.partition_id_ = all_target_part_ids.at(i);
       target_id.tablet_id_ = all_target_tablet_ids.at(i);
       if (OB_FAIL(partition_ids_.push_back(origin_id))) {
-        LOG_WARN("fail to push back origin id", KR(ret));
       } else if (OB_FAIL(target_partition_ids_.push_back(target_id))) {
-        LOG_WARN("fail to push back target id", KR(ret));
       }
     }
   } else if (OB_FAIL(tablet_ids_set.create(tablet_ids.count(),
                                            ObMemAttr("TLD_TABLETID")))) {
-    LOG_WARN("fail to create tablet ids set", KR(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids.count(); ++i) {
       if (OB_FAIL(tablet_ids_set.set_refactored(tablet_ids.at(i)))) {
-        LOG_WARN("fail to set refactored", KR(ret), K(tablet_ids.at(i)));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < all_origin_tablet_ids.count(); ++i) {
@@ -570,17 +537,13 @@ int ObTableLoadCoordinatorCtx::init_partition_ids(const ObIArray<ObTabletID> &ta
       // non_empty partition
       if (OB_HASH_EXIST == ret) {
         if (OB_FAIL(partition_ids_.push_back(origin_id))) {
-          LOG_WARN("fail to push origin id", KR(ret));
         } else if (OB_FAIL(target_partition_ids_.push_back(target_id))) {
-          LOG_WARN("fail to push target id", KR(ret));
         }
       } 
       // empty partition
       else if (OB_HASH_NOT_EXIST == ret) {
         if (OB_FAIL(empty_partition_ids_.push_back(origin_id))) {
-          LOG_WARN("fail to push empty origin id", KR(ret));
         } else if (OB_FAIL(empty_target_partition_ids_.push_back(target_id))) {
-          LOG_WARN("fail to push empty target id", KR(ret));
         }
       } else {
         LOG_WARN("fail to search tablet ids set", KR(ret));
@@ -604,16 +567,13 @@ int ObTableLoadCoordinatorCtx::init_partition_location_and_store_infos()
                                                                     target_partition_ids_,
                                                                     partition_location_,
                                                                     target_partition_location_))) {
-    LOG_WARN("fail to init partition location", KR(ret));
   } else if (OB_FAIL(partition_location_.get_all_leader(all_addr_array))) {
-    LOG_WARN("fail to get all leader", KR(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < all_addr_array.count(); ++i) {
       StoreInfo store_info;
       store_info.addr_ = all_addr_array.at(i);
       store_info.enable_heart_beat_ = false;
       if (OB_FAIL(store_infos_.push_back(store_info))) {
-        LOG_WARN("fail to push back store info", KR(ret));
       }
     }
   }
@@ -633,7 +593,6 @@ int ObTableLoadCoordinatorCtx::init_empty_insert_tablet_ctx_manager()
     LOG_WARN("fail to new empty_insert_tablet_ctx_manager", KR(ret));
   } else if (OB_FAIL(empty_insert_tablet_ctx_manager_->init(empty_partition_ids_,
                                                             empty_target_partition_ids_))) {
-    LOG_WARN("fail to init empty_insert_tablet_ctx_manager", KR(ret));
   }
   return ret;
 }
@@ -647,7 +606,6 @@ int ObTableLoadCoordinatorCtx::start_trans(const ObTableLoadSegmentID &segment_i
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadCoordinatorCtx not init", KR(ret));
   } else if (OB_FAIL(check_status(ObTableLoadStatusType::LOADING))) {
-    LOG_WARN("fail to check status", KR(ret), K_(status));
   } else {
     obsys::ObWLockGuard guard(rwlock_);
     SegmentCtx *segment_ctx = nullptr;
@@ -656,7 +614,6 @@ int ObTableLoadCoordinatorCtx::start_trans(const ObTableLoadSegmentID &segment_i
         LOG_WARN("fail to get segment ctx", KR(ret));
       } else {
         if (OB_FAIL(segment_ctx_map_.create(segment_id, segment_ctx))) {
-          LOG_WARN("fail to create", KR(ret));
         }
       }
     }
@@ -667,7 +624,6 @@ int ObTableLoadCoordinatorCtx::start_trans(const ObTableLoadSegmentID &segment_i
         LOG_WARN("trans already exist", KR(ret));
       } else {
         if (OB_FAIL(alloc_trans(segment_id, trans))) {
-          LOG_WARN("fail to alloc trans", KR(ret));
         } else {
           segment_ctx->current_trans_ = trans;
           trans->inc_ref_count();
@@ -705,9 +661,7 @@ int ObTableLoadCoordinatorCtx::commit_trans(ObTableLoadCoordinatorTrans *trans)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected trans", KR(ret));
     } else if (OB_FAIL(trans->check_trans_status(ObTableLoadTransStatusType::COMMIT))) {
-      LOG_WARN("fail to check trans status commit", KR(ret));
     } else if (OB_FAIL(commited_trans_ctx_array_.push_back(trans->get_trans_ctx()))) {
-      LOG_WARN("fail to push back trans ctx", KR(ret));
     } else {
       segment_ctx->current_trans_ = nullptr;
       segment_ctx->committed_trans_ctx_ = trans->get_trans_ctx();
@@ -744,7 +698,6 @@ int ObTableLoadCoordinatorCtx::abort_trans(ObTableLoadCoordinatorTrans *trans)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected trans", KR(ret));
     } else if (OB_FAIL(trans->check_trans_status(ObTableLoadTransStatusType::ABORT))) {
-      LOG_WARN("fail to check trans status abort", KR(ret));
     } else {
       segment_ctx->current_trans_ = nullptr;
       trans->set_dirty();
@@ -773,7 +726,6 @@ void ObTableLoadCoordinatorCtx::put_trans(ObTableLoadCoordinatorTrans *trans)
                 ObTableLoadTransStatusType::ABORT == trans_status);
       obsys::ObWLockGuard guard(rwlock_);
       if (OB_FAIL(trans_map_.erase_refactored(trans->get_trans_id()))) {
-        LOG_WARN("fail to erase_refactored", KR(ret));
       } else {
         trans_allocator_.free(trans);
         trans = nullptr;
@@ -869,7 +821,6 @@ int ObTableLoadCoordinatorCtx::get_active_trans_ids(
     for (TransMap::const_iterator trans_iter = trans_map_.begin();
          OB_SUCC(ret) && trans_iter != trans_map_.end(); ++trans_iter) {
       if (OB_FAIL(trans_id_array.push_back(trans_iter->first))) {
-        LOG_WARN("fail to push back", KR(ret));
       }
     }
   }
@@ -887,7 +838,6 @@ int ObTableLoadCoordinatorCtx::get_committed_trans_ids(
   } else {
     obsys::ObRLockGuard guard(rwlock_);
     if (OB_FAIL(trans_id_array.create(commited_trans_ctx_array_.count(), allocator))) {
-      LOG_WARN("fail to create trans id array", KR(ret));
     } else {
       for (int64_t i = 0; i < commited_trans_ctx_array_.count(); ++i) {
         ObTableLoadTransCtx *trans_ctx = commited_trans_ctx_array_.at(i);
@@ -938,11 +888,8 @@ int ObTableLoadCoordinatorCtx::init_complete()
   }
   // init session_ctx_array_
   else if (OB_FAIL(init_session_ctx_array())) {
-    LOG_WARN("fail to init session ctx array", KR(ret));
   } else if (OB_FAIL(task_scheduler_->init())) {
-    LOG_WARN("fail to init task scheduler", KR(ret));
   } else if (OB_FAIL(task_scheduler_->start())) {
-    LOG_WARN("fail to start task scheduler", KR(ret));
   } 
   
   return ret;

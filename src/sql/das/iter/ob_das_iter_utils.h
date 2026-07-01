@@ -461,7 +461,6 @@ private:
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to new a das iter", K(ret));
     } else if (OB_FAIL(iter->init(param))) {
-      LOG_WARN("failed to init das iter", K(param), K(ret));
     }
     if (OB_SUCC(ret)) {
       result = iter;

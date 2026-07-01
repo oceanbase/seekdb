@@ -44,7 +44,6 @@ int ShortStringAggregator::fallback_calc_hash_value_batch(const common::ObIArray
       if (OB_FAIL(col_vec->murmur_hash_v3(*expr, new_hash_values, *child_brs.skip_,
                                           EvalBound(child_brs.size_, child_brs.all_rows_active_),
                                           is_batch_seed ? new_hash_values : &seed, is_batch_seed))) {
-        LOG_WARN("failed to calc hash value", K(ret));
       }
     }
   }
@@ -73,7 +72,6 @@ int BatchAggrRowsTable::init(int64_t max_batch_size, ObIAllocator &alloc/*arena 
     }
   }
   if (OB_FAIL(ret)) {
-    LOG_WARN("failed to alloc memory for batch aggr rows table", K(ret), K(max_batch_size_));
   }
   return ret;
 }

@@ -63,11 +63,8 @@ int ObScanMergeLoserTreeCmp::compare_rowkey(const ObDatumRow &l_row, const ObDat
     ObDatumRowkey r_key;
     int temp_cmp_ret = 0;
     if (OB_FAIL(l_key.assign(l_row.storage_datums_, rowkey_size_))) {
-      STORAGE_LOG(WARN, "Failed to assign store rowkey", K(ret), K(l_row), K_(rowkey_size));
     } else if (OB_FAIL(r_key.assign(r_row.storage_datums_, rowkey_size_))) {
-      STORAGE_LOG(WARN, "Failed to assign store rowkey", K(ret), K(r_row), K_(rowkey_size));
     } else if (OB_FAIL(l_key.compare(r_key, *datum_utils_, temp_cmp_ret))) {
-      STORAGE_LOG(WARN, "Failed to compare rowkey", K(ret), K(l_key), K(r_key), KPC(datum_utils_));
     } else {
       cmp_result = temp_cmp_ret;
     }
@@ -92,7 +89,6 @@ int ObScanMergeLoserTreeCmp::cmp(
     cmp_ret = l.row_->scan_index_ - r.row_->scan_index_;
     if (0 == cmp_ret) {
       if (OB_FAIL(compare_rowkey(*l.row_, *r.row_, cmp_ret))) {
-        LOG_WARN("compare rowkey error", K(ret));
       } else if (reverse_) {
         cmp_ret = -cmp_ret;
       }

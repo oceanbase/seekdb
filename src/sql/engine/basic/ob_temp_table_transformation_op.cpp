@@ -48,7 +48,6 @@ int ObTempTableTransformationOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOperator::inner_rescan())) {
-    LOG_WARN("failed to rescan the operator.", K(ret));
   } else { /*do nothing.*/ }
   return ret;
 }
@@ -77,7 +76,6 @@ int ObTempTableTransformationOp::inner_get_next_row()
         ret = OB_SUCCESS;
         while(OB_SUCC(ret) && ctx.get_temp_table_ctx().count() <= temp_table_count) {
           if (OB_FAIL(check_status())) {
-            LOG_WARN("failed to wait temp table finish msg", K(ret));
           } else {
             ob_usleep(1000);
           }
@@ -110,7 +108,6 @@ int ObTempTableTransformationOp::inner_get_next_batch(const int64_t max_row_cnt)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("child op is null");
       } else if (OB_FAIL(children_[i]->get_next_batch(max_row_cnt, child_brs))) {
-        LOG_WARN("failed to get next row batch.", K(ret));
       }
     }
     init_temp_table_ = false;
@@ -121,7 +118,6 @@ int ObTempTableTransformationOp::inner_get_next_batch(const int64_t max_row_cnt)
     LOG_WARN("child op is null");
   } else if (OB_FAIL(children_[get_child_cnt() - 1]->get_next_batch(
                  max_row_cnt, child_brs))) {
-    LOG_WARN("failed to get next batch.", K(ret));
   } else { /*do nothing.*/
   }
   (void)brs_.copy(child_brs);
@@ -132,7 +128,6 @@ int ObTempTableTransformationOp::inner_close()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(destory_interm_results())) {
-    LOG_WARN("failed to destory interm results.", K(ret));
   }
   return ret;
 }
@@ -152,7 +147,6 @@ int ObTempTableTransformationOp::destory_interm_results()
       ObTempTableResultInfo &result_info = temp_table_ctx.interm_result_infos_.at(j);
       if (result_info.addr_ == ctx.get_addr() || temp_table_ctx.is_local_interm_result_) {
         if (OB_FAIL(destory_local_interm_results(result_info.interm_result_ids_))) {
-          LOG_WARN("failed to destory interm results.", K(ret));
         }
       } else if (has_exist_in_array(svrs, result_info.addr_, &idx)) {
         if (OB_UNLIKELY(idx < 0 || idx >= args.count())) {
@@ -160,14 +154,10 @@ int ObTempTableTransformationOp::destory_interm_results()
           LOG_WARN("unexpected idx.", K(ret), K(idx), K(args.count()));
         } else if (OB_FAIL(append(args.at(idx).interm_result_ids_,
                                   result_info.interm_result_ids_))) {
-          LOG_WARN("failed to append args", K(ret));
         }
       } else if (OB_FAIL(svrs.push_back(result_info.addr_))) {
-        LOG_WARN("failed to push back svr", K(ret));
       } else if (OB_FAIL(interm_ids.interm_result_ids_.assign(result_info.interm_result_ids_))) {
-        LOG_WARN("failed to assign interm result ids", K(ret));
       } else if (OB_FAIL(args.push_back(interm_ids))) {
-        LOG_WARN("failed to push back args", K(ret));
       }
     }
   }

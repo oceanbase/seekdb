@@ -514,7 +514,6 @@ struct DASCtEncoder
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(common::serialization::encode_i32(buf, buf_len, pos, static_cast<int32_t>(idx)))) {
-        SQL_DAS_LOG(WARN, "encode idx failed", K(ret), K(idx));
       }
     }
     return ret;
@@ -529,7 +528,6 @@ struct DASCtEncoder
       ret = common::OB_ERR_UNEXPECTED;
       SQL_DAS_LOG(WARN, "remote_info is nullptr", K(ret), K(remote_info));
     } else if (OB_FAIL(common::serialization::decode_i32(buf, data_len, pos, &idx))) {
-      SQL_DAS_LOG(WARN, "decode idx failed", K(ret), K(idx));
     } else if (OB_UNLIKELY(common::OB_INVALID_INDEX == idx)) {
       val = nullptr;
     } else if (OB_UNLIKELY(idx < 0) || OB_UNLIKELY(idx >= remote_info->ctdefs_.count())) {
@@ -569,7 +567,6 @@ struct DASRtEncoder
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(common::serialization::encode_i32(buf, buf_len, pos, static_cast<int32_t>(idx)))) {
-        SQL_DAS_LOG(WARN, "encode idx failed", K(ret), K(idx));
       }
     }
     return ret;
@@ -584,7 +581,6 @@ struct DASRtEncoder
       ret = common::OB_ERR_UNEXPECTED;
       SQL_DAS_LOG(WARN, "remote_info is nullptr", K(ret), K(remote_info));
     } else if (OB_FAIL(common::serialization::decode_i32(buf, data_len, pos, &idx))) {
-      SQL_DAS_LOG(WARN, "decode idx failed", K(ret), K(idx));
     } else if (OB_UNLIKELY(common::OB_INVALID_INDEX == idx)) {
       val = nullptr;
     } else if (OB_UNLIKELY(idx < 0) || OB_UNLIKELY(idx >= remote_info->rtdefs_.count())) {

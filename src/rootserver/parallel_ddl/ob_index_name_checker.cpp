@@ -67,7 +67,6 @@ int ObIndexNameCache::check_index_name_exist(
     ObString idx_name;
     uint64_t data_table_id = OB_INVALID_ID;
     if (OB_FAIL(try_load_cache_())) {
-      LOG_WARN("fail to load index name cache", KR(ret));
     } else if (is_recyclebin_database_id(database_id)) {
       idx_name = index_name;
       data_table_id = OB_INVALID_ID;
@@ -77,7 +76,6 @@ int ObIndexNameCache::check_index_name_exist(
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("invalid index name", KR(ret), K(index_name));
       } else if (OB_FAIL(ObSimpleTableSchemaV2::get_index_name(index_name, idx_name))) {
-        LOG_WARN("fail to get original index name", KR(ret), K(index_name));
       } else {
         // data_table_id stays as is in MySQL mode
       }
@@ -114,7 +112,6 @@ int ObIndexNameCache::check_index_name_exist(
         } else if (OB_FAIL(schema_service_impl->get_index_id(
                    sql_proxy_, database_id,
                    index_name_info->get_index_name(), index_id))) {
-          LOG_WARN("fail to get index id", KR(ret), KPC(index_name_info));
         } else if (OB_INVALID_ID != index_id) {
           is_exist = true;
         } else {
@@ -159,7 +156,6 @@ int ObIndexNameCache::add_index_name(
   } else {
     lib::ObMutexGuard guard(mutex_);
     if (OB_FAIL(try_load_cache_())) {
-      LOG_WARN("fail to load index name cache", KR(ret));
     } else {
       void *buf = NULL;
       ObIndexNameInfo *index_name_info = NULL;
@@ -169,7 +165,6 @@ int ObIndexNameCache::add_index_name(
         LOG_WARN("fail to alloc index name info", KR(ret));
       } else if (FALSE_IT(index_name_info = new (buf) ObIndexNameInfo())) {
       } else if (OB_FAIL(index_name_info->init(allocator_, index_schema))) {
-        LOG_WARN("fail to init index name info", KR(ret), K(index_schema));
       } else if (is_recyclebin_database_id(database_id)) {
         data_table_id = OB_INVALID_ID;
         idx_name = index_name_info->get_index_name();
@@ -217,12 +212,10 @@ int ObIndexNameCache::try_load_cache_()
     int64_t timeout_ts = OB_INVALID_TIMESTAMP;
     if (OB_FAIL(GSCHEMASERVICE.get_schema_version_in_inner_table(
         sql_proxy_, schema_status, schema_version))) {
-      LOG_WARN("fail to get schema version", KR(ret), K(schema_status));
     } else if (!ObSchemaService::is_formal_version(schema_version)) {
       ret = OB_EAGAIN;
       LOG_WARN("schema version is informal, need retry", KR(ret), K(schema_status), K(schema_version));
     } else if (OB_FAIL(ObShareUtil::get_abs_timeout(GCONF.internal_sql_execute_timeout, timeout_ts))) {
-      LOG_WARN("fail to get timeout", KR(ret));
     } else {
       int64_t original_timeout_ts = THIS_WORKER.get_timeout_ts();
       THIS_WORKER.set_timeout_ts(timeout_ts);
@@ -230,13 +223,9 @@ int ObIndexNameCache::try_load_cache_()
       ObSchemaGetterGuard guard;
       int64_t start_time = ObTimeUtility::current_time();
       if (OB_FAIL(GSCHEMASERVICE.async_refresh_schema(schema_version))) {
-        LOG_WARN("fail to refresh schema", KR(ret), K(schema_version));
       } else if (OB_FAIL(GSCHEMASERVICE.get_tenant_schema_guard(guard))) {
-        LOG_WARN("fail to get schema guard", KR(ret));
       } else if (OB_FAIL(guard.get_schema_version(schema_version))) {
-        LOG_WARN("fail to get schema version", KR(ret));
       } else if (OB_FAIL(guard.deep_copy_index_name_map(allocator_, cache_))) {
-        LOG_WARN("fail to deep copy index name map", KR(ret));
       } else {
         loaded_ = true;
         FLOG_INFO("[INDEX NAME CACHE] load index name map", KR(ret),
@@ -338,7 +327,6 @@ int ObIndexNameChecker::check_index_name_exist(
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
   } else if (OB_FAIL(check_tenant_can_be_skipped_(can_skip))) {
-    LOG_WARN("fail to check tenant", KR(ret));
   } else if (can_skip) {
     // do nothing
   } else if (OB_UNLIKELY(false
@@ -347,7 +335,6 @@ int ObIndexNameChecker::check_index_name_exist(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), K(database_id), K(index_name));
   } else if (OB_FAIL(try_init_index_name_cache_map_())) {
-    LOG_WARN("fail to init index name cache", KR(ret));
   } else {
     SpinRLockGuard guard(rwlock_);
     ObIndexNameCache *cache = index_name_cache_member_;
@@ -356,8 +343,6 @@ int ObIndexNameChecker::check_index_name_exist(
       LOG_WARN("fail to get refactored", KR(ret));
     } else if (OB_FAIL(cache->check_index_name_exist(
       database_id, index_name, is_exist))) {
-      LOG_WARN("fail to check index name exist",
-               KR(ret), K(database_id), K(index_name));
     }
   }
   return ret;
@@ -373,14 +358,12 @@ int ObIndexNameChecker::add_index_name(
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
   } else if (OB_FAIL(check_tenant_can_be_skipped_(can_skip))) {
-    LOG_WARN("fail to check tenant", KR(ret));
   } else if (can_skip) {
     // do nothing
   } else if (OB_UNLIKELY(false)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret));
   } else if (OB_FAIL(try_init_index_name_cache_map_())) {
-    LOG_WARN("fail to init index name cache", KR(ret));
   } else {
     SpinRLockGuard guard(rwlock_);
     ObIndexNameCache *cache = index_name_cache_member_;
@@ -388,7 +371,6 @@ int ObIndexNameChecker::add_index_name(
       ret = OB_HASH_NOT_EXIST;
       LOG_WARN("fail to get refactored", KR(ret));
     } else if (OB_FAIL(cache->add_index_name(index_schema))) {
-      LOG_WARN("fail to add index name", KR(ret), K(index_schema));
     }
   }
   return ret;

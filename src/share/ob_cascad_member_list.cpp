@@ -49,7 +49,6 @@ int ObCascadMemberList::add_member(const ObCascadMember &member)
     if (contains(member.get_server())) {
       ret = OB_ENTRY_EXIST;
     } else if (OB_FAIL(member_array_.push_back(member))) {
-      COMMON_LOG(ERROR, "member_array_ push_back failed", K(ret), K(member));
     }
   }
 
@@ -98,9 +97,7 @@ int ObCascadMemberList::deep_copy(const ObCascadMemberList &member_list)
   for (int64_t i = 0; OB_SUCC(ret) && i < member_list.get_member_number(); ++i) {
     ObCascadMember member;
     if (OB_FAIL(member_list.get_member_by_index(i, member))) {
-      COMMON_LOG(WARN, "get_member_by_index failed", K(ret), K(i));
     } else if (OB_FAIL(add_member(member))) {
-      COMMON_LOG(WARN, "add_member failed", K(ret));
     }
   }
   return ret;
@@ -115,11 +112,9 @@ OB_DEF_SERIALIZE(ObCascadMemberList)
   if (NULL == buf || pos < 0 || pos > buf_len) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_SUCCESS != (ret = serialization::encode_i64(buf, buf_len, new_pos, get_member_number()))) {
-    COMMON_LOG(WARN, "encode member_number failed", K(ret), "member_number", get_member_number());
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < get_member_number(); ++i) {
       if (OB_FAIL(member_array_[i].serialize(buf, buf_len, new_pos))) {
-        COMMON_LOG(WARN, "member serialize failed", K(ret), K(i), "member", member_array_[i]);
       }
     }
   }
@@ -137,14 +132,11 @@ OB_DEF_DESERIALIZE(ObCascadMemberList)
   if (NULL == buf || pos < 0 || pos > data_len) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_SUCCESS != (ret = serialization::decode_i64(buf, data_len, new_pos, &member_number))) {
-    COMMON_LOG(WARN, "decode member_number failed", K(ret), K(member_number));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < member_number; ++i) {
       ObCascadMember member;
       if (OB_FAIL(member.deserialize(buf, data_len, new_pos))) {
-        COMMON_LOG(WARN, "decode member failed", K(ret), K(member_number));
       } else if (OB_FAIL(add_member(member))) {
-        COMMON_LOG(WARN, "add_member failed", K(ret));
       }
     }
   }

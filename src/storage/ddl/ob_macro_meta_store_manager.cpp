@@ -50,13 +50,11 @@ int ObMacroMetaStoreManager::add_macro_meta_store(const ObTabletID &tablet_id, c
     ObMutexGuard guard(mutex_);
     if (dir_id_ < 0) {
       if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.alloc_dir(dir_id_))) {
-        LOG_WARN("alloc dir id failed");
       }
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(add_store_item(tablet_id, cg_idx, parallel_idx, lob_start_seq, dir_id_, macro_meta_store))) {
-      LOG_WARN("add macro meta store failed", K(ret), K(dir_id_));
     }
   }
   return ret;
@@ -86,9 +84,7 @@ int ObMacroMetaStoreManager::add_store_item(const ObTabletID &tablet_id, const i
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory failed", K(ret));
     } else if (OB_FAIL(item.macro_meta_store_->init(dir_id))) {
-      LOG_WARN("init macro meta store failed", K(ret), K(dir_id));
     } else if (OB_FAIL(store_items_.push_back(item))) {
-      LOG_WARN("push back store item failed", K(ret));
     } else {
       macro_meta_store = item.macro_meta_store_;
     }
@@ -120,7 +116,6 @@ int ObMacroMetaStoreManager::get_sorted_macro_meta_stores(const ObTabletID &tabl
     for (int64_t i = 0; OB_SUCC(ret) && i < store_items_.count(); ++i) {
       if (cg_idx == store_items_.at(i).cg_idx_ && tablet_id == store_items_.at(i).tablet_id_) {
         if (OB_FAIL(temp_items.push_back(store_items_.at(i)))) {
-          LOG_WARN("push back store item failed", K(ret), K(i));
         }
       }
     }
@@ -131,7 +126,6 @@ int ObMacroMetaStoreManager::get_sorted_macro_meta_stores(const ObTabletID &tabl
     } ParallelIdxCmp;
     lib::ob_sort(temp_items.begin(), temp_items.end(), ParallelIdxCmp);
     if (OB_FAIL(macro_meta_stores.reserve(temp_items.count()))) {
-      LOG_WARN("reserve macro meta stores failed", K(ret), K(temp_items.count()));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < temp_items.count(); ++i) {
       ObMacroMetaTempStore *cur_store = temp_items.at(i).macro_meta_store_;
@@ -139,7 +133,6 @@ int ObMacroMetaStoreManager::get_sorted_macro_meta_stores(const ObTabletID &tabl
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("current macro meta store is null", K(ret), K(i), K(temp_items.at(i)));
       } else if (OB_FAIL(macro_meta_stores.push_back(temp_items.at(i)))) {
-        LOG_WARN("push back macro meta store failed", K(ret), K(i), KPC(cur_store));
       }
     }
   }

@@ -436,7 +436,6 @@ int main(int argc, char **argv)
   int ret = 0;
   OB_LOG_COMPRESSOR.loop_interval_ = 100000; // used by syslog_compressor_thread_test
   if (OB_FAIL(ret = OB_LOG_COMPRESSOR.init())) {
-    LOG_WARN("failed to init log compressor", K(ret));
   } else {
     ret = RUN_ALL_TESTS();
     OB_LOG_COMPRESSOR.destroy();

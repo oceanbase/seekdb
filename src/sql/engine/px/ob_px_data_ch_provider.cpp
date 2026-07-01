@@ -43,7 +43,6 @@ int ObPxTransmitChProvider::get_data_ch_nonblock(
   } else {
     if (OB_FAIL(ObPxChProviderUtil::inner_get_data_ch(msg_.get_ch_sets(), 
         msg_.get_ch_total_info(), sqc_id, task_id, ch_set, true))) {
-      LOG_WARN("failed to get data channel", K(ret));
     } else if (OB_NOT_NULL(ch_info)) {
       *ch_info = &msg_.get_ch_total_info();
     }
@@ -65,7 +64,6 @@ int ObPxTransmitChProvider::get_data_ch(const int64_t sqc_id,
       LOG_WARN("channel set is empty. expect at lease one data channel for transmit op", K(ret));
     } else if (OB_FAIL(ObPxChProviderUtil::inner_get_data_ch(
         msg_.get_ch_sets(), msg_.get_ch_total_info(), sqc_id, task_id, ch_set, true))) {
-      LOG_WARN("failed to get data channel", K(ret));
     } else if (OB_NOT_NULL(ch_info)) {
       *ch_info = &msg_.get_ch_total_info();
     }
@@ -89,13 +87,11 @@ int ObPxChProviderUtil::inner_get_data_ch(
     // transmit
     if (OB_FAIL(ObDtlChannelUtil::get_transmit_dtl_channel_set(
         sqc_id, task_id, ch_total_info, ch_set))) {
-      LOG_WARN("failed to get transmit dtl channel set", K(ret));
     }
   } else {
     // receive
     if (OB_FAIL(ObDtlChannelUtil::get_receive_dtl_channel_set(
         sqc_id, task_id, ch_total_info, ch_set))) {
-      LOG_WARN("failed to get transmit dtl channel set", K(ret));
     }
   }
   return ret;
@@ -107,7 +103,6 @@ int ObPxTransmitChProvider::get_part_ch_map(ObPxPartChInfo &map, int64_t timeout
   ret = wait_msg(timeout_ts);
   if (OB_SUCC(ret)) {
     if (OB_FAIL(inner_get_part_ch_map(map))) {
-      LOG_WARN("failed to get part ch map", K(ret));
     }
   }
   return ret;
@@ -125,7 +120,6 @@ int ObPxTransmitChProvider::get_part_ch_map_nonblock(ObPxPartChInfo &map,
     ret = OB_DTL_WAIT_EAGAIN;
   } else {
     if (OB_FAIL(inner_get_part_ch_map(map))) {
-      LOG_WARN("failed to get part ch map", K(ret));
     }
   }
   return ret;
@@ -158,7 +152,6 @@ int ObPxTransmitChProvider::inner_get_part_ch_map(ObPxPartChInfo &map)
       for (int64_t task_idx = pre_sqc_task_count; task_idx < sqc_task_count && OB_SUCC(ret); ++task_idx) {
         tmp_part_ch_item.second_ = task_idx; // global task idx
         if (OB_FAIL(map.part_ch_array_.push_back(tmp_part_ch_item))) {
-          LOG_WARN("failed to push back part ch item", K(ret));
         } else {
           LOG_DEBUG("debug partition map", K(tmp_part_ch_item));
         }
@@ -169,7 +162,6 @@ int ObPxTransmitChProvider::inner_get_part_ch_map(ObPxPartChInfo &map)
       // [tablet_id, prefiex_task_count + sqc_task_id(i.e., sqc_worker_id)]
       tmp_part_ch_item.second_ = tmp_part_ch_item.second_ + tmp_part_ch_item.third_;
       if (OB_FAIL(map.part_ch_array_.push_back(tmp_part_ch_item))) {
-        LOG_WARN("failed to push back part ch item", K(ret));
       } else {
         LOG_DEBUG("debug get partition map", K(map.part_ch_array_));
       }
@@ -221,7 +213,6 @@ int ObPxTransmitChProvider::add_msg(const ObPxTransmitDataChannelMsg &msg)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(msg_.assign(msg))) {
-    LOG_WARN("fail assign msg", K(msg),K(ret));
   } else {
     ObThreadCondGuard guard(msg_ready_cond_);
     msg_set_ = true;
@@ -235,7 +226,6 @@ int ObPxReceiveChProvider::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(reserve_msg_set_array_size(MSG_SET_DEFAULT_SIZE))) {
-    LOG_WARN("fail to reserve msg set array", K(ret));
   }
   return ret;
 }
@@ -247,7 +237,6 @@ int ObPxReceiveChProvider::reserve_msg_set_array_size(int64_t size)
   // Dynamically reserve array size based on child_dfo_id value
   int64_t pre_count = msg_set_.count();
   if (OB_FAIL(msg_set_.prepare_allocate(size))) {
-    LOG_WARN("fail to reserve array size", K(ret), K(size));
   } else {
     for (int i = pre_count; i < msg_set_.count(); ++i) {
       msg_set_.at(i) = false;
@@ -273,7 +262,6 @@ int ObPxReceiveChProvider::get_data_ch_nonblock(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid msg", K(child_dfo_id), K(ret));
   } else if (OB_FAIL(ObPxChProviderUtil::check_status(timeout_ts, qc_addr, query_start_time))) {
-    LOG_WARN("Fail to check status", K(child_dfo_id), K(msg_set_), K(msgs_), K(ret));
   } else {
     ObLockGuard<ObSpinLock> lock_guard(lock_);
     ARRAY_FOREACH_X(msgs_, idx, cnt, OB_SUCC(ret) && !found) {
@@ -282,8 +270,6 @@ int ObPxReceiveChProvider::get_data_ch_nonblock(
         ObPxReceiveDataChannelMsg &msg = msgs_.at(idx);
         if (OB_FAIL(ObPxChProviderUtil::inner_get_data_ch(msg.get_ch_sets(),
             msg.get_ch_total_info(), sqc_id, task_id, ch_set, false))) {
-          LOG_WARN("fail to copy channel info",
-                    K(child_dfo_id), K(idx), K(cnt), K(ret));
         } else if (OB_NOT_NULL(ch_info)) {
           // Here we do a deep copy, because push_back will change the address
           *ch_info = msg.get_ch_total_info();
@@ -321,8 +307,6 @@ int ObPxReceiveChProvider::get_data_ch(
           ObPxReceiveDataChannelMsg &msg = msgs_.at(idx);
           if (OB_FAIL(ObPxChProviderUtil::inner_get_data_ch(msg.get_ch_sets(),
               msg.get_ch_total_info(), sqc_id, task_id, ch_set, false))) {
-            LOG_WARN("fail to copy channel info",
-                     K(child_dfo_id), K(idx), K(cnt), K(ret));
           } else if (OB_NOT_NULL(ch_info)) {
             // Here we do a deep copy, because push_back will change the address
             *ch_info = msg.get_ch_total_info();
@@ -349,7 +333,6 @@ int ObPxReceiveChProvider::add_msg(const ObPxReceiveDataChannelMsg &msg)
   if (OB_SUCC(ret)) {
     ObLockGuard<ObSpinLock> lock_guard(lock_);
     if (OB_FAIL(msgs_.push_back(msg))) {
-      LOG_WARN("fail assign msg", K(ret));
     } else if (child_dfo_id >= msg_set_.count() &&
           OB_FAIL(reserve_msg_set_array_size(child_dfo_id * 2 + 1))) {
       LOG_WARN("fail to reserve msg set array size", K(ret));
@@ -373,7 +356,6 @@ int ObPxReceiveChProvider::wait_msg(int64_t child_dfo_id, int64_t timeout_ts)
     if (child_dfo_id < msg_set_.count()) {
       /*do nothing*/
     } else if (OB_FAIL(reserve_msg_set_array_size(child_dfo_id * 2 + 1))) {
-      LOG_WARN("fail to reserve msg set array", K(ret));
     }
   }
   if (OB_SUCC(ret)) {

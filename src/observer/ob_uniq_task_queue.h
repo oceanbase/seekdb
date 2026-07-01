@@ -205,7 +205,6 @@ int ObUniqTaskQueue<Task, Process>::init(Process *updater, const int64_t thread_
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(init_only(updater, thread_num, queue_size, thread_name))) {
-    SERVER_LOG(WARN, "fail to init only", K(ret), K(thread_num), K(queue_size));
   } else if (FALSE_IT(share::ObThreadPool::set_run_wrapper(MTL_CTX()))) {  // seekdb: always set (was 500!=1)
   } else if (OB_FAIL(start())) {
     inited_ = false;
@@ -229,17 +228,12 @@ int ObUniqTaskQueue<Task, Process>::init_only(Process *updater, const int64_t th
     SERVER_LOG(WARN, "init twice", K(ret));
   } else if (thread_num <= 0 || queue_size <= 0 || OB_ISNULL(updater)) {
     ret = common::OB_INVALID_ARGUMENT;
-    SERVER_LOG(WARN, "invalid argument", K(thread_num), K(queue_size), K(updater));
   } else if (OB_FAIL(cond_.init(common::ObWaitEventIds::PARTITION_TABLE_UPDATER_COND_WAIT))) {
-    SERVER_LOG(WARN, "fai to init condition, ", K(ret));
   } else if (OB_FAIL(task_set_.create(queue_size, attr, attr))) {
-    SERVER_LOG(WARN, "create hash map failed", K(ret), K(queue_size));
   } else if (OB_FAIL(group_map_.create(group_count,
                                        attr, attr))) {
-    SERVER_LOG(WARN, "create hash map failed", K(ret), K(group_count));
   } else if (OB_FAIL(processing_task_set_.create(common::UNIQ_TASK_QUEUE_BATCH_EXECUTE_NUM * thread_num,
                                                  attr, attr))) {
-    SERVER_LOG(WARN, "create hash map failed", K(ret));
   } else {
     this->set_thread_count(static_cast<int32_t>(thread_num));
     queue_size_ = queue_size;
@@ -262,7 +256,6 @@ int ObUniqTaskQueue<Task, Process>::start()
     ret = OB_NOT_INIT;
     SERVER_LOG(WARN, "ObUniqTaskQueue is not inited", K(ret), K_(inited));
   } else if (OB_FAIL(share::ObThreadPool::start())) {
-    SERVER_LOG(WARN, "start thread failed", K(ret));
   }
   return ret;
 }
@@ -350,7 +343,6 @@ int ObUniqTaskQueue<Task, Process>::add(const Task &task)
           SERVER_LOG(WARN, "get group failed", K(ret), K(group_id));
           int tmp_ret = OB_SUCCESS;
           if (OB_TMP_FAIL(task_set_.erase_refactored(*stored_task))) {
-            SERVER_LOG(ERROR, "fail to erase task from uniq queue", K(tmp_ret), K(task));
           } else {
             stored_task = NULL;
           }
@@ -365,11 +357,9 @@ int ObUniqTaskQueue<Task, Process>::add(const Task &task)
           int tmp_ret = common::OB_SUCCESS;
           if (barrier_task_count_ > 0) {
             if (common::OB_SUCCESS != (tmp_ret = cond_.broadcast())) {
-              SERVER_LOG(WARN, "condition broadcast fail", K(tmp_ret));
             }
           } else {
             if (common::OB_SUCCESS != (tmp_ret = cond_.signal())) {
-              SERVER_LOG(WARN, "condition signal fail", K(tmp_ret));
             }
           }
         }
@@ -382,7 +372,6 @@ int ObUniqTaskQueue<Task, Process>::add(const Task &task)
 template <typename Task, typename Process>
 void ObUniqTaskQueue<Task, Process>::run1()
 {
-  SERVER_LOG(INFO, "UniqTaskQueue thread start");
   int ret = common::OB_SUCCESS;
   Group *group = NULL;
   const int64_t batch_exec_cnt = common::UNIQ_TASK_QUEUE_BATCH_EXECUTE_NUM;
@@ -404,7 +393,6 @@ void ObUniqTaskQueue<Task, Process>::run1()
         common::ObThreadCondGuard guard(cond_);
         if (task_count() > 0) {
           if (OB_FAIL(get_next_group(group))) {
-            SERVER_LOG(WARN, "get_next_next failed", K(ret));
           } else if (NULL == group || group->list_.get_size() <= 0) {
             ret = common::OB_ERR_UNEXPECTED;
             SERVER_LOG(WARN, "group is null or group is empty", K(ret));
@@ -422,10 +410,7 @@ void ObUniqTaskQueue<Task, Process>::run1()
                   ret = common::OB_ERR_UNEXPECTED;
                   SERVER_LOG(WARN, "remove first return null", K(ret));
                 } else if (OB_FAIL(tasks.push_back(*t))) {
-                  SERVER_LOG(WARN, "push_back failed", K(ret));
                 } else if (OB_FAIL(task_set_.erase_refactored(*t))) {
-                  SERVER_LOG(ERROR, "erase task from task map failed",
-                             K(ret), "task", tasks.at(tasks.count() - 1));
                 } else {
                   t = NULL;
                   --task_count_;
@@ -450,8 +435,6 @@ void ObUniqTaskQueue<Task, Process>::run1()
                   SERVER_LOG(WARN, "groups remove return null", K(ret));
                 } else {
                   if (OB_FAIL(group_map_.erase_refactored(tasks.at(0).get_group_id()))) {
-                    SERVER_LOG(WARN, "erase group from group_map failed",
-                        K(ret), "group_id", tasks.at(0).get_group_id());
                   }
                 }
               } else {
@@ -473,7 +456,6 @@ void ObUniqTaskQueue<Task, Process>::run1()
             SERVER_LOG(WARN, "get invalid task", K(ret), K(task));
           } else if (task->is_barrier()) {
             if (is_batch_execute) {
-              SERVER_LOG(ERROR, "barrier task should not execute with non-barrier task", K(*task));
             }
             common::ObThreadCondGuard guard(cond_);
             ++barrier_task_count_;
@@ -481,14 +463,12 @@ void ObUniqTaskQueue<Task, Process>::run1()
             if (0 == processing_thread_count_) {
               int tmp_ret = cond_.broadcast();
               if (common::OB_SUCCESS != tmp_ret) {
-                SERVER_LOG(WARN, "condition broadcast fail", K(tmp_ret));
               }
             }
             while (0 != processing_thread_count_) {
               cond_.wait(QUEUE_WAIT_INTERVAL_MS);
             }
             if (OB_FAIL(process_barrier(*task))) {
-              SERVER_LOG(WARN, "process task failed", "task", *task, K(ret));
             }
             --barrier_task_count_;
             ++processing_thread_count_;
@@ -498,7 +478,6 @@ void ObUniqTaskQueue<Task, Process>::run1()
         } //end foreach
         if (OB_SUCC(ret) && is_batch_execute) {
           if (OB_FAIL(batch_process_tasks(tasks))) {
-            SERVER_LOG(WARN, "fail to batch execute task", K(ret), K(tasks.count()));
           }
         }
         // always decrease $processing_thread_count_
@@ -507,19 +486,16 @@ void ObUniqTaskQueue<Task, Process>::run1()
         if (0 == processing_thread_count_ && barrier_task_count_ > 0) {
           int tmp_ret = cond_.broadcast();
           if (common::OB_SUCCESS != tmp_ret) {
-            SERVER_LOG(WARN, "condition broadcast fail", K(tmp_ret));
           }
         }
       }
       if (tasks.count() > 0) {
         common::ObThreadCondGuard guard(cond_);
         if (OB_FAIL(batch_unlock(tasks))) {
-          SERVER_LOG(ERROR, "fail to batch unlock task", K(ret));
         }
       }
     }
   }
-  SERVER_LOG(INFO, "UniqTaskQueue thread stop");
 }
 
 template <typename Task, typename Process>
@@ -528,7 +504,6 @@ int ObUniqTaskQueue<Task, Process>::diagnose_waiting_task(ObIArray<Task> &tasks)
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   if (OB_FAIL(tasks.reserve(MAX_DIAGNOSE_NUM))) {
-    SERVER_LOG(WARN, "failed to reserve array", K(ret));
   } else {
     int64_t add_cnt = 0;
     common::ObThreadCondGuard guard(cond_);
@@ -537,7 +512,6 @@ int ObUniqTaskQueue<Task, Process>::diagnose_waiting_task(ObIArray<Task> &tasks)
       if (task.need_diagnose()
            && DIAGNOSE_PROCESSING_TIME < ObTimeUtility::current_time() - task.get_add_timestamp()) {
         if (OB_TMP_FAIL(tasks.push_back(task))) {
-          SERVER_LOG(WARN, "fail to push back array", K(tmp_ret));
         } else {
           ++add_cnt;
         }
@@ -553,7 +527,6 @@ int ObUniqTaskQueue<Task, Process>::diagnose_processing_task(ObIArray<Task> &tas
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
   if (OB_FAIL(tasks.reserve(MAX_DIAGNOSE_NUM))) {
-    SERVER_LOG(WARN, "failed to reserve array", K(ret));
   } else {
     int64_t add_cnt = 0;
     common::ObThreadCondGuard guard(cond_);
@@ -562,7 +535,6 @@ int ObUniqTaskQueue<Task, Process>::diagnose_processing_task(ObIArray<Task> &tas
       if (task.need_diagnose()
           && DIAGNOSE_PROCESSING_TIME < ObTimeUtility::current_time() - task.get_start_timestamp()) {
         if (OB_TMP_FAIL(tasks.push_back(task))) {
-          SERVER_LOG(WARN, "fail to push back array", K(tmp_ret));
         } else {
           ++add_cnt;
         }
@@ -582,7 +554,6 @@ int ObUniqTaskQueue<Task, Process>::process_barrier(Task &task)
     ret = common::OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "invalid updater", K(ret), K(updater_));
   } else if (OB_FAIL(updater_->process_barrier(task, stopped))) {
-    SERVER_LOG(WARN, "fail to batch process task", K(ret));
   }
   return ret;
 }
@@ -599,7 +570,6 @@ int ObUniqTaskQueue<Task, Process>::batch_process_tasks(common::ObIArray<Task> &
     ret = common::OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "invalid updater", K(ret), K(updater_));
   } else if (OB_FAIL(updater_->batch_process_tasks(tasks, stopped))) {
-    SERVER_LOG(WARN, "fail to batch process task", K(ret));
   }
   return ret;
 }
@@ -652,7 +622,6 @@ int ObUniqTaskQueue<Task, Process>::try_lock(const Task &task)
   } else if (OB_FAIL(processing_task_set_.set_refactored(task, 0))) {
     if (common::OB_HASH_EXIST == ret) {
       ret = common::OB_EAGAIN;
-      SERVER_LOG(TRACE, "same task exist", K(task));
     } else {
       SERVER_LOG(WARN, "fail to lock task", K(ret), K(task));
     }
@@ -670,7 +639,6 @@ int ObUniqTaskQueue<Task, Process>::batch_unlock(const common::ObIArray<Task> &t
       tmp_ret = common::OB_ERR_UNEXPECTED;
       SERVER_LOG(WARN, "get invalid task", K(tmp_ret), K(task));
     } else if (common::OB_SUCCESS != (tmp_ret = processing_task_set_.erase_refactored(*task))) {
-      SERVER_LOG(ERROR, "fail to erase task", K(tmp_ret), K(*task));
     }
     if (common::OB_SUCCESS != tmp_ret && OB_SUCC(ret)) {
       ret = tmp_ret;

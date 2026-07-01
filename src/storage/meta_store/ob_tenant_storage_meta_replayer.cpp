@@ -54,7 +54,6 @@ int ObTenantStorageMetaReplayer::start_replay(const ObTenantSuperBlock &super_bl
     LOG_WARN("tenant super block invalid", K(ret), K(super_block));
   } else {
     if (OB_FAIL(ckpt_slog_handler_->start_replay(super_block))) {
-      LOG_WARN("fail to start replay", K(ret));
     }
   }
   return ret;

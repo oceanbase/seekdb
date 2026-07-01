@@ -65,9 +65,7 @@ int ObTableLoadMergeInsertSSTableOp::switch_next_op(bool is_parent_called)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new ObTableLoadParallelMerger", KR(ret));
   } else if (OB_FAIL(parallel_merger_->init_merge_task(this))) {
-    LOG_WARN("fail to init merge task", KR(ret));
   } else if (OB_FAIL(parallel_merger_->start())) {
-    LOG_WARN("fail to start parallel merge", KR(ret));
   }
   return ret;
 }
@@ -76,7 +74,6 @@ int ObTableLoadMergeInsertSSTableOp::on_success()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(switch_parent_op())) {
-    LOG_WARN("fail to switch parent op", KR(ret));
   }
   return ret;
 }

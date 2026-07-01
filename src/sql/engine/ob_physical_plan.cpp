@@ -264,10 +264,7 @@ int ObPhysicalPlan::set_vars(const common::ObIArray<ObVarInfo> &vars)
     const ObVarInfo &var_info = vars.at(i);
     ObVarInfo clone_var_info;
     if (OB_FAIL(var_info.deep_copy(allocator_, clone_var_info))) {
-      LOG_WARN("fail to deep copy var info", K(ret), K(var_info));
     } else if (OB_FAIL(vars_.push_back(clone_var_info))) {
-      // deep_copy when only ObString objects were written, ObString objects can be completely released when allocator_ is destructed, therefore there is no need to call the destructor of ObString here
-      LOG_WARN("fail to push back vars", K(ret), K(clone_var_info));
     }
   }
   return ret;
@@ -292,7 +289,6 @@ int ObPhysicalPlan::init_params_info_str()
                                     params_info_.at(i).flag_.expected_bool_value_,
                                     params_info_.at(i).scale_,
                                     params_info_.at(i).type_))) {
-          SQL_PC_LOG(WARN, "fail to buff_print param info", K(ret));
         }
       } else {
         if (OB_FAIL(databuff_printf(buf, buf_len, pos, "{%d,%d,%d,%d,%d}",
@@ -301,14 +297,12 @@ int ObPhysicalPlan::init_params_info_str()
                                     params_info_.at(i).flag_.expected_bool_value_,
                                     params_info_.at(i).scale_,
                                     params_info_.at(i).type_))) {
-          SQL_PC_LOG(WARN, "fail to buff_print param info", K(ret));
         }
       }
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ob_write_string(allocator_, ObString(pos, buf), stat_.param_infos_))) {
-      SQL_PC_LOG(WARN, "fail to deep copy param infos", K(ret));
     }
   }
 
@@ -338,9 +332,7 @@ int ObPhysicalPlan::set_field_columns(const ColumnsFieldArray &fields)
       if (OB_FAIL(ret)) {
         // do nothing
       } else if (OB_FAIL(field.deep_copy(ofield, &allocator_))) {
-        LOG_WARN("deep copy field failed", K(ret));
       } else if (OB_FAIL(field_columns_.push_back(field))) {
-        LOG_WARN("push back field columns failed", K(ret));
       } else {
         LOG_DEBUG("succ to push back field columns", K(field));
       }
@@ -361,9 +353,7 @@ int ObPhysicalPlan::set_param_fields(const common::ParamsFieldArray &params)
     for (int i = 0; OB_SUCC(ret) && i < N; ++i) {
       const ObField &param_field = params.at(i);
       if (OB_FAIL(tmp_field.deep_copy(param_field, &allocator_))) {
-        LOG_WARN("deep copy field failed", K(ret));
       } else if (OB_FAIL(param_columns_.push_back(tmp_field))) {
-        LOG_WARN("push back field columns failed", K(ret));
       }
     }
   }
@@ -382,9 +372,7 @@ int ObPhysicalPlan::set_returning_param_fields(const common::ParamsFieldArray &p
     for (int i = 0; OB_SUCC(ret) && i < N; ++i) {
       const ObField &param_field = params.at(i);
       if (OB_FAIL(tmp_field.deep_copy(param_field, &allocator_))) {
-        LOG_WARN("deep copy field failed", K(ret));
       } else if (OB_FAIL(returning_param_columns_.push_back(tmp_field))) {
-        LOG_WARN("push back field columns failed", K(ret));
       }
     }
   }
@@ -401,7 +389,6 @@ int ObPhysicalPlan::set_stmt_need_privs(const ObStmtNeedPrivs& stmt_need_privs)
   int ret = OB_SUCCESS;
   stmt_need_privs_.reset();
   if (OB_FAIL(stmt_need_privs_.deep_copy(stmt_need_privs, allocator_))) {
-    LOG_WARN("Failed to deep copy ObStmtNeedPrivs", K_(stmt_need_privs));
   }
   return ret;
 }
@@ -430,7 +417,6 @@ int ObPhysicalPlan::init_operator_stats()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(op_stats_.init(&allocator_, next_phy_operator_id_))) {
-    LOG_WARN("fail to init op_stats", K(ret));
   }
   return ret;
 }
@@ -829,23 +815,18 @@ int ObPhysicalPlan::set_table_locations(const ObTablePartitionInfoArray &infos,
   das_table_locations_.reset();
   if (OB_FAIL(table_locations_.prepare_allocate_and_keep_count(infos.count(),
                                                  allocator_))) {
-    LOG_WARN("fail to init table location count", K(ret));
   } else if (OB_FAIL(das_table_locations_.prepare_allocate_and_keep_count(infos.count(),
                                                             allocator_))) {
-    LOG_WARN("fail to init das table location count", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < infos.count(); ++i) {
     ObTableLocation &tl = infos.at(i)->get_table_location();
     const ObTableSchema *table_schema = nullptr;
     if (tl.use_das()) {
       if (OB_FAIL(das_table_locations_.push_back(tl))) {
-        LOG_WARN("fail to push das table location", K(ret), K(i));
       }
     } else if (OB_FAIL(table_locations_.push_back(tl))) {
-      LOG_WARN("fail to push table location", K(ret), K(i));
     } else if (!is_external_object_id(tl.get_ref_table_id())) {
       if (OB_FAIL(schema_guard.get_table_schema( tl.get_ref_table_id(), table_schema))) {
-        LOG_WARN("get table schema failed", K(ret), K(tl.get_ref_table_id()));
       } else {
         contain_index_location_ |= table_schema->is_index_table();
       }
@@ -867,11 +848,9 @@ int ObPhysicalPlan::set_location_constraints(const ObIArray<LocationConstraint> 
     base_constraints_.reset();
     base_constraints_.set_allocator(&allocator_);
     if (OB_FAIL(base_constraints_.init(base_constraints.count()))) {
-      LOG_WARN("failed to init base constraints", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < base_constraints.count(); ++i) {
       if (OB_FAIL(base_constraints_.push_back(base_constraints.at(i)))) {
-        LOG_WARN("failed to push back element", K(ret), K(base_constraints.at(i)));
       } else { /*do nothing*/ }
     }
   }
@@ -880,9 +859,7 @@ int ObPhysicalPlan::set_location_constraints(const ObIArray<LocationConstraint> 
     strict_constrinats_.reset();
     strict_constrinats_.set_allocator(&allocator_);
     if (OB_FAIL(strict_constrinats_.init(strict_constraints.count()))) {
-      LOG_WARN("failed to init strict constraints", K(ret));
     } else if (OB_FAIL(strict_constrinats_.prepare_allocate(strict_constraints.count()))) {
-      LOG_WARN("failed to prepare allocate location constraints", K(ret));
     } else {
       ObPwjConstraint *cur_cons;
       for (int64_t i = 0; OB_SUCC(ret) && i < strict_constraints.count(); ++i) {
@@ -896,11 +873,9 @@ int ObPhysicalPlan::set_location_constraints(const ObIArray<LocationConstraint> 
           strict_constrinats_.at(i).reset();
           strict_constrinats_.at(i).set_allocator(&allocator_);
           if (OB_FAIL(strict_constrinats_.at(i).init(cur_cons->count()))) {
-            LOG_WARN("failed to init fixed array", K(ret));
           }
           for (int64_t j = 0; OB_SUCC(ret) && j < cur_cons->count(); ++j) {
             if (OB_FAIL(strict_constrinats_.at(i).push_back(cur_cons->at(j)))) {
-              LOG_WARN("failed to push back element", K(ret), K(cur_cons->at(j)));
             } else { /*do nothing*/ }
           }
         }
@@ -912,9 +887,7 @@ int ObPhysicalPlan::set_location_constraints(const ObIArray<LocationConstraint> 
     non_strict_constrinats_.reset();
     non_strict_constrinats_.set_allocator(&allocator_);
     if (OB_FAIL(non_strict_constrinats_.init(non_strict_constraints.count()))) {
-      LOG_WARN("failed to init strict constraints", K(ret));
     } else if (OB_FAIL(non_strict_constrinats_.prepare_allocate(non_strict_constraints.count()))) {
-      LOG_WARN("failed to prepare allocate location constraints", K(ret));
     } else {
       ObPwjConstraint *cur_cons;
       for (int64_t i = 0; OB_SUCC(ret) && i < non_strict_constraints.count(); ++i) {
@@ -928,11 +901,9 @@ int ObPhysicalPlan::set_location_constraints(const ObIArray<LocationConstraint> 
           non_strict_constrinats_.at(i).reset();
           non_strict_constrinats_.at(i).set_allocator(&allocator_);
           if (OB_FAIL(non_strict_constrinats_.at(i).init(cur_cons->count()))) {
-            LOG_WARN("failed to init fixed array", K(ret));
           }
           for (int64_t j = 0; OB_SUCC(ret) && j < cur_cons->count(); ++j) {
             if (OB_FAIL(non_strict_constrinats_.at(i).push_back(cur_cons->at(j)))) {
-              LOG_WARN("failed to push back element", K(ret), K(cur_cons->at(j)));
             } else { /*do nothing*/ }
           }
         }
@@ -944,11 +915,9 @@ int ObPhysicalPlan::set_location_constraints(const ObIArray<LocationConstraint> 
     dup_table_replica_cons_.reset();
     dup_table_replica_cons_.set_allocator(&allocator_);
     if (OB_FAIL(dup_table_replica_cons_.init(dup_table_replica_cons.count()))) {
-      LOG_WARN("failed to init duplicate table constraints", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < dup_table_replica_cons.count(); ++i) {
         if(OB_FAIL(dup_table_replica_cons_.push_back(dup_table_replica_cons.at(i)))) {
-          LOG_WARN("failed to assign element", K(ret), K(dup_table_replica_cons.at(i)));
         } else { /*do nothing*/ }
       }
     }
@@ -1035,7 +1004,6 @@ int ObPhysicalPlan::alloc_op_spec(const ObPhyOperatorType type,
     LOG_WARN("invalid argument", K(ret), K(type), K(child_cnt));
   } else if (OB_FAIL(ObOperatorFactory::alloc_op_spec(
               allocator_, type, child_cnt, op))) {
-    LOG_WARN("allocate operator spec failed", K(ret));
   } else if (OB_ISNULL(op)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL operator spec returned", K(ret));
@@ -1065,9 +1033,7 @@ int ObPhysicalPlan::alloc_op_spec_for_cg(ObLogicalOperator *op, ObSqlSchemaGuard
   int ret = OB_SUCCESS;
   bool disable_vectorize = false;
   if (OB_FAIL(alloc_op_spec(type, child_cnt, spec, op_id))) {
-    LOG_WARN("alloc op spec failed", K(ret));
   } else if (OB_FAIL(ObStaticEngineCG::check_op_vectorization(op, schema_guard, type, disable_vectorize))) {
-    LOG_WARN("check op vectorization failed", K(ret));
   } else if (disable_vectorize) {
     spec->max_batch_size_ = 0;
     spec->use_rich_format_ = false;
@@ -1162,7 +1128,6 @@ int ObPhysicalPlan::set_expected_worker_map(const common::hash::ObHashMap<ObAddr
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(assign_worker_map(stat_.expected_worker_map_, c))) {
-    LOG_WARN("set expected worker map failed", K(ret));
   }
   return ret;
 }
@@ -1175,7 +1140,6 @@ int ObPhysicalPlan::set_minimal_worker_map(const common::hash::ObHashMap<ObAddr,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(assign_worker_map(stat_.minimal_worker_map_, c))) {
-    LOG_WARN("set minimal worker map failed", K(ret));
   }
   return ret;
 }
@@ -1188,13 +1152,11 @@ int ObPhysicalPlan::assign_worker_map(ObPlanStat::AddrMap &worker_map, const com
   if (worker_map.created()) {
     worker_map.clear();
   } else if (OB_FAIL(worker_map.create(common::hash::cal_next_prime(100), attr, node_attr))){
-    LOG_WARN("create hash map failed", K(ret));
   }
   if (OB_SUCC(ret)) {
     for (common::hash::ObHashMap<ObAddr, int64_t>::const_iterator it = c.begin();
         OB_SUCC(ret) && it != c.end(); ++it) {
       if (OB_FAIL(worker_map.set_refactored(it->first, it->second))){
-        SQL_PC_LOG(WARN, "set refactored failed", K(ret), K(it->first), K(it->second));
       }
     }
   }
@@ -1223,7 +1185,6 @@ int ObPhysicalPlan::update_cache_obj_stat(ObILibCacheCtx &ctx)
       if (OB_FAIL(ob_write_string(get_allocator(),
                                   trunc_stmt.string(),
                                   stat_.stmt_))) {
-        SQL_PC_LOG(WARN, "fail to set truncate string", K(ret));
       }
       stat_.ps_stmt_id_ = pc_ctx.sql_ctx_.statement_id_;
     } else {
@@ -1231,7 +1192,6 @@ int ObPhysicalPlan::update_cache_obj_stat(ObILibCacheCtx &ctx)
       if (OB_FAIL(ob_write_string(get_allocator(),
                                   trunc_stmt.string(),
                                   stat_.stmt_))) {
-        SQL_PC_LOG(WARN, "fail to set truncate string", K(ret));
       }
     }
     stat_.large_querys_= 0;
@@ -1243,21 +1203,16 @@ int ObPhysicalPlan::update_cache_obj_stat(ObILibCacheCtx &ctx)
     ObTruncatedString trunc_raw_sql(pc_ctx.raw_sql_, sql_length);
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(pc_ctx.get_not_param_info_str(get_allocator(), stat_.sp_info_str_))) {
-      SQL_PC_LOG(WARN, "fail to get special param info string", K(ret));
     } else if (OB_FAIL(ob_write_string(get_allocator(),
                                        pc_ctx.fp_result_.pc_key_.sys_vars_str_,
                                        stat_.sys_vars_str_))) {
-      SQL_PC_LOG(DEBUG, "succeed to add plan statistic", "plan_id", get_plan_id(), K(ret));
     } else if (OB_FAIL(ob_write_string(get_allocator(),
                                        pc_ctx.fp_result_.pc_key_.config_str_,
                                        stat_.config_str_))) {
-      SQL_PC_LOG(DEBUG, "failed to add plan statistic", "plan_id", get_plan_id(), K(ret));
     } else if (OB_FAIL(init_params_info_str())) {
-      SQL_PC_LOG(DEBUG, "fail to gen param info str", K(ret));
     } else if (OB_FAIL(ob_write_string(get_allocator(),
                                        trunc_raw_sql.string(),
                                        stat_.raw_sql_))) {
-      SQL_PC_LOG(DEBUG, "fail to copy raw sql", "plan_id", get_plan_id(), K(ret));
     } else {
       stat_.sql_cs_type_ = pc_ctx.sql_ctx_.session_info_->get_local_collation_connection();
     }
@@ -1343,15 +1298,12 @@ int ObPhysicalPlan::get_all_spec_op(ObIArray<const ObOpSpec *> &simple_op_infos,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(simple_op_infos.push_back(&op))) {
-    LOG_WARN("fail to push back spec_op", K(ret), K(op.get_id()));
   }
   for (int32_t i = 0; OB_SUCC(ret) && i < op.get_child_num(); ++i) {
     const ObOpSpec *child_op = op.get_child(i);
     if (OB_ISNULL(child_op)) {
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_FAIL(SMART_CALL(get_all_spec_op(simple_op_infos, *child_op)))) {
-      LOG_WARN("fail to find child ops",
-               K(ret), K(i), "op_id", op.get_id(), "child_id", child_op->get_id());
     }
   }
   return ret;
@@ -1368,20 +1320,16 @@ int ObPhysicalPlan::print_this_plan_info(ObExecContext &ctx)
   ExplainType type = EXPLAIN_EXTENDED;
   ObSEArray<ObSqlPlanItem*, 4> plan_items;
   if (OB_FAIL(logical_plan_.uncompress_logical_plan(ctx.get_allocator(), plan_items))) {
-    LOG_WARN("failed to uncompress logical plan", K(ret));
   } else if (OB_FAIL(sql_plan.format_sql_plan(plan_items,
                                               type,
                                               option,
                                               out_plan_text))) {
-    LOG_WARN("failed to format sql plan", K(ret));
   } else if (OB_FAIL(sql_plan.plan_text_to_strings(out_plan_text, plan_strs))) {
-    LOG_WARN("failed to convert plan text to strings", K(ret));
   } else {
     LOG_INFO("print plan info:");
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < plan_strs.count(); i++) {
-    _OB_LOG(INFO, "%*s", plan_strs.at(i).length(), plan_strs.at(i).ptr());
   }
   return ret;
 }
@@ -1395,7 +1343,6 @@ int ObPhysicalPlan::check_pdml_affected_rows(ObExecContext &ctx)
   if (!is_use_pdml()) {
     // do nothing
   } else if (OB_FAIL(get_all_spec_op(all_ops, *root_op_spec_))) {
-    LOG_WARN("fail to get all spec", K(ret));
   } else if (!fb_info.is_valid()) {
     // do nothing
   } else if (all_ops.count() != feedback_nodes.count()) {
@@ -1426,7 +1373,6 @@ int ObPhysicalPlan::check_pdml_affected_rows(ObExecContext &ctx)
                     K(feedback_nodes));
           int tmp_ret = OB_SUCCESS;
           if (OB_SUCCESS != (tmp_ret = print_this_plan_info(ctx))) {
-            LOG_WARN("failed to uncompress logical plan", K(tmp_ret));
           }
         }
       }
@@ -1444,7 +1390,6 @@ int ObPhysicalPlan::set_feedback_info(ObExecContext &ctx)
   ObExecFeedbackInfo &feedback_info = ctx.get_feedback_info();
   const common::ObIArray<ObExecFeedbackNode> &feedback_nodes = feedback_info.get_feedback_nodes();
   if (OB_FAIL(logical_plan_.uncompress_logical_plan(ctx.get_allocator(), plan_items))) {
-    LOG_WARN("failed to uncompress logical plan", K(ret));
   } else if (feedback_nodes.count() != plan_items.count()) {
     //ignore error code
     LOG_WARN("unexpect feedback node count", K(ret));
@@ -1479,9 +1424,7 @@ int ObPhysicalPlan::set_feedback_info(ObExecContext &ctx)
     if (OB_SUCC(ret)) {
       ObLogicalPlanRawData new_logical_plan;
       if (OB_FAIL(new_logical_plan.compress_logical_plan(ctx.get_allocator(), plan_items))) {
-        LOG_WARN("failed to compress logical plan", K(ret));
       } else if (OB_FAIL(set_logical_plan(new_logical_plan))) {
-        LOG_WARN("failed to set logical plan", K(ret));
       }
     }
   }
@@ -1498,15 +1441,12 @@ int ObPhysicalPlan::set_all_local_session_vars(ObIArray<ObLocalSessionVar> *all_
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), K(all_local_session_vars));
   } else if (OB_FAIL(all_local_session_vars_.reserve(all_local_session_vars->count()))) {
-    LOG_WARN("reserve for local_session_vars failed", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < all_local_session_vars->count(); ++i) {
       if (OB_FAIL(all_local_session_vars_.push_back(ObLocalSessionVar()))) {
-        LOG_WARN("push back local session var failed", K(ret));
       } else {
         all_local_session_vars_.at(i).set_allocator(&allocator_);
         if (OB_FAIL(all_local_session_vars_.at(i).deep_copy(all_local_session_vars->at(i)))) {
-          LOG_WARN("deep copy local session vars failed", K(ret));
         }
       }
     }
@@ -1526,7 +1466,6 @@ int ObPhysicalPlan::set_px_node_addrs(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(px_node_addrs_.assign(px_node_addrs))) {
-    LOG_WARN("failed to assign px_node_addrs", K(ret));
   }
   return ret;
 }

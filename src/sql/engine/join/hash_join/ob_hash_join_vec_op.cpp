@@ -189,21 +189,16 @@ int ObHashJoinVecOp::inner_open()
   int ret = OB_SUCCESS;
   ObSQLSessionInfo *session = NULL;
   if (OB_FAIL(set_shared_info())) {
-    LOG_WARN("failed to set shared info", K(ret));
   } else if (is_shared_ && OB_FAIL(sync_wait_open())) {
     is_shared_ = false;
     LOG_WARN("failed to sync open for shared hj", K(ret));
   } else if (OB_FAIL(ObJoinVecOp::inner_open())) {
-    LOG_WARN("failed to open in base class", K(ret));
   } else if (OB_ISNULL(session = ctx_.get_my_session())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get my session", K(ret));
   } else if (OB_FAIL(init_mem_context())) {
-    LOG_WARN("fail to init base join ctx", K(ret));
   } else if (OB_FAIL(init_join_table_ctx())) {
-    LOG_WARN("fail to init join table ctx", K(ret));
   } else if (OB_FAIL(join_table_.init(jt_ctx_, *alloc_))) {
-    LOG_WARN("fail to init hash table", K(ret));
   } else {
     
     force_hash_join_spill_ = GCONF._force_hash_join_spill;
@@ -261,7 +256,6 @@ int ObHashJoinVecOp::inner_open()
                        jt_ctx_.del_matched_bkts_, sizeof(*jt_ctx_.del_matched_bkts_) * batch_size,
                        jt_ctx_.build_cols_have_null_, ObBitVector::memory_size(key_count),
                        jt_ctx_.probe_cols_have_null_, ObBitVector::memory_size(key_count)))) {
-      LOG_WARN("vec alloc ptrs failed", K(ret));
     } else {
       const ObExprPtrIArray *left_output = jt_ctx_.build_output_;
       jt_ctx_.build_cols_have_null_->reset(key_count);
@@ -457,7 +451,6 @@ int ObHashJoinVecOp::inner_rescan()
   int ret = OB_SUCCESS;
   part_rescan(true);
  if (OB_FAIL(ObJoinVecOp::inner_rescan())) {
-    LOG_WARN("join rescan failed", K(ret));
   } else {
     part_round_ = 1;
     iter_end_ = false;
@@ -499,7 +492,6 @@ int ObHashJoinVecOp::inner_get_next_batch(const int64_t max_row_cnt)
       ObJoinFilterOp *join_filter_create = static_cast<ObJoinFilterOp *>(left_);
       const ObBatchRows *child_brs = NULL;
       if (OB_FAIL(join_filter_create->get_next_batch(max_output_cnt_, child_brs))) {
-        LOG_WARN("failed to get_next_batch", K(ret));
       } else {
         if (!(child_brs->end_ && child_brs->size_ == 0)) {
           ret = OB_ERR_UNEXPECTED;
@@ -578,9 +570,7 @@ int ObHashJoinVecOp::inner_get_next_batch(const int64_t max_row_cnt)
 
           // asynchronously wait to write while only read the dumped partition
           if (OB_FAIL(left_part_->get_row_store().finish_add_row(true))) {
-            LOG_WARN("finish dump failed", K(ret));
           } else if (OB_FAIL(right_part_->get_row_store().finish_add_row(true))) {
-            LOG_WARN("finish dump failed", K(ret));
           } else {
             left_part_->open();
             right_part_->open();
@@ -616,7 +606,6 @@ int ObHashJoinVecOp::process_partition()
       case JS_PROCESS_LEFT: {
         bool need_not_read_right = false;
         if (OB_FAIL(process_left(need_not_read_right))) {
-          LOG_WARN("fail to process left", K(ret), K(need_not_read_right));
         } else if (need_not_read_right) {
           state_ = output_unmatch_left() ? JS_LEFT_UNMATCH_RESULT : JS_JOIN_END;
         } else {
@@ -656,7 +645,6 @@ int ObHashJoinVecOp::process_partition()
             && !read_null_in_naaj_ && !is_shared_) {
           if (nullptr != right_part_) {
             if (OB_FAIL(right_part_->begin_iterator())) {
-              LOG_WARN("fail to begin iterator", K(right_part_), K(ret));
             }
           }
           state_ = JS_PROCESS_LEFT;
@@ -678,10 +666,8 @@ int ObHashJoinVecOp::process_left(bool &need_not_read_right)
   int64_t num_left_rows = 0;
   if (HJProcessor::NEST_LOOP == hj_processor_) {
     if (OB_FAIL(nest_loop_process(num_left_rows))) {
-      LOG_WARN("build hash table failed", K(ret));
     }
   } else if (OB_FAIL(adaptive_process(num_left_rows))) {
-    LOG_WARN("build hash table failed", K(ret));
   }
 
   if (OB_SUCC(ret)
@@ -714,7 +700,6 @@ int ObHashJoinVecOp::do_drain_exch()
    * 2. try to drain all children
    */
   if (OB_FAIL(try_open())) {
-    LOG_WARN("fail to open operator", K(ret));
   } else if (!exch_drained_) {
     // don't sync to wait all when operator call drain_exch by self
     tmp_ret = do_sync_wait_all();
@@ -724,13 +709,11 @@ int ObHashJoinVecOp::do_drain_exch()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL child found", K(ret), K(i));
       } else if (OB_FAIL(children_[i]->drain_exch())) {
-        LOG_WARN("drain exch failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       ret = tmp_ret;
       if (OB_FAIL(ret)) {
-        LOG_WARN("failed to do sync wait all", K(ret));
       }
     }
   }
@@ -784,7 +767,6 @@ int ObHashJoinVecOp::get_next_left_row_batch(bool is_from_row_store, const ObBat
   bool is_left = true;
   if (!is_from_row_store) {
     if (OB_FAIL(left_->get_next_batch(max_output_cnt_, child_brs))) {
-      LOG_WARN("get left row from child failed", K(ret));
     } else if (child_brs->end_ && 0 == child_brs->size_) {
       // do nothing
     } else if (MY_SPEC.is_naaj_) {
@@ -812,7 +794,6 @@ int ObHashJoinVecOp::get_next_left_row_batch(bool is_from_row_store, const ObBat
     int64_t read_size = 0;
     child_brs = &child_brs_;
     if (OB_FAIL(try_check_status())) {
-      LOG_WARN("failed to check status", K(ret));
     } else if (OB_FAIL(left_part_->get_next_batch(
                        // left_->get_spec().output_, eval_ctx_, MY_SPEC.max_batch_size_,
                        *jt_ctx_.build_output_, eval_ctx_, MY_SPEC.max_batch_size_,
@@ -844,13 +825,11 @@ int ObHashJoinVecOp::reuse_for_next_chunk()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected hash buckets number is 0", K(ret), K(part_level_));
   } else if (OB_FAIL(calc_basic_info())) {
-    LOG_WARN("failed to calc basic info", K(ret));
   } else {
     // reuse buckets
     OZ(cur_join_table_->build_prepare(jt_ctx_, profile_.get_row_count(), profile_.get_bucket_size()));
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(right_part_->rescan())) {
-      LOG_WARN("failed to rescan right", K(ret));
     }
     LOG_TRACE("trace hash table", K(ret), K(profile_.get_bucket_size()),
                                   K(profile_.get_row_count()), K(spec_.id_));
@@ -882,7 +861,6 @@ int ObHashJoinVecOp::build_hash_table_for_nest_loop(int64_t &num_left_rows)
   JoinHashTable &hash_table = join_table_;
   ObHJPartition *hj_part = left_part_;
   if (OB_FAIL(load_next())) {
-    LOG_WARN("failed to reset info for block", K(ret));
   } else {
     // at least hold 1 block in memory
     int64_t memory_bound = std::max(remain_data_memory_size_,
@@ -911,7 +889,6 @@ int ObHashJoinVecOp::nest_loop_process(int64_t &num_left_rows)
   int ret = OB_SUCCESS;
   num_left_rows = 0;
   if (OB_FAIL(build_hash_table_for_nest_loop(num_left_rows))) {
-    LOG_WARN("failed to build hash table", K(ret), K(part_level_));
   }
 
   return ret;
@@ -961,12 +938,10 @@ int ObHashJoinVecOp::get_max_memory_size(int64_t input_size)
   int64_t memory_size = (extra_memory_size + input_size) < 0 ? input_size : (extra_memory_size + input_size);
   if (OB_FAIL(ObSqlWorkareaUtil::get_workarea_size(
       ObSqlWorkAreaType::HASH_WORK_AREA, &ctx_, hash_area_size))) {
-    LOG_WARN("failed to get workarea size", K(ret));
   } else if (FALSE_IT(remain_data_memory_size_ = hash_area_size * 80 / 100)) {
     // default data memory size: 80%
   } else if (OB_FAIL(sql_mem_processor_.init(
       alloc_, memory_size, MY_SPEC.type_, MY_SPEC.id_, &ctx_))) {
-    LOG_WARN("failed to init sql mem mgr", K(ret));
   } else if (sql_mem_processor_.is_auto_mgr()) {
     remain_data_memory_size_ = calc_max_data_size(extra_memory_size);
     if (is_top_level_process_with_join_filter()) {
@@ -1001,7 +976,6 @@ int ObHashJoinVecOp::get_max_memory_size(int64_t input_size)
   data_ratio_ = 1.0;
   if (OB_SUCC(ret)) {
     if (OB_FAIL(sync_wait_part_count())) {
-      LOG_WARN("failed to sync part count", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -1046,7 +1020,6 @@ int ObHashJoinVecOp::calc_basic_info(bool global_info)
       // use estimate value with px if hava
       if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
           &ctx_, MY_SPEC.px_est_size_factor_, left_->get_spec().rows_, row_count))) {
-        LOG_WARN("failed to get px size", K(ret));
       } else {
         LOG_TRACE("trace left row count", K(row_count), K(spec_.id_));
         if (row_count < MIN_ROW_COUNT) {
@@ -1156,9 +1129,7 @@ int ObHashJoinVecOp::get_processor_type()
   int64_t pre_total_size = 0;
   int64_t nest_loop_count = 0;
   if (OB_FAIL(calc_basic_info())) {
-    LOG_WARN("failed to get input size", K(ret), K(part_level_));
   } else if (OB_FAIL(get_max_memory_size(profile_.get_input_size()))) {
-    LOG_WARN("failed to get max memory size", K(ret), K(remain_data_memory_size_));
   } else if (!top_part_level()) {
     // case 1: in-memory
     if (OB_ISNULL(left_part_) || OB_ISNULL(right_part_)
@@ -1220,7 +1191,6 @@ int ObHashJoinVecOp::get_processor_type()
       int64_t hash_area_size = 0;
       if (OB_FAIL(ObSqlWorkareaUtil::get_workarea_size(
           ObSqlWorkAreaType::HASH_WORK_AREA, &ctx_, hash_area_size))) {
-        LOG_WARN("failed to get workarea size", K(ret));
       }
       remain_data_memory_size_ = hash_area_size * 10;
       data_ratio_ = 1.0;
@@ -1254,7 +1224,6 @@ int ObHashJoinVecOp::get_processor_type()
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(sync_wait_processor_type())) {
-      LOG_WARN("failed to sync hj_processor_", K(ret), K(hj_processor_));
     }
   }
   LOG_TRACE("hash join process type", K(part_level_), K(hj_processor_),
@@ -1273,9 +1242,7 @@ int ObHashJoinVecOp::build_hash_table_in_memory(int64_t &num_left_rows)
   ObHJPartition *hj_part = left_part_;
   JoinHashTable &hash_table = *cur_join_table_;
   if (OB_FAIL(hj_part->begin_iterator())) {
-    LOG_WARN("failed to set iterator", K(ret));
   } else if (OB_FAIL(prepare_hash_table())) {
-    LOG_WARN("failed to prepare hash table", K(ret));
   } else {
     hj_part->set_iteration_age(iter_age_);
     iter_age_.inc();
@@ -1289,7 +1256,6 @@ int ObHashJoinVecOp::build_hash_table_in_memory(int64_t &num_left_rows)
     is_last_chunk_ = true;
     if (is_shared_) {
       if (OB_FAIL(sync_wait_finish_build_hash())) {
-        LOG_WARN("failed to wait finish build hash", K(ret));
       }
     }
   }
@@ -1316,7 +1282,6 @@ int ObHashJoinVecOp::in_memory_process(int64_t &num_left_rows)
   int ret = OB_SUCCESS;
   num_left_rows = 0;
   if (OB_FAIL(build_hash_table_in_memory(num_left_rows))) {
-    LOG_WARN("failed to build hash table", K(ret), K(part_level_));
   }
 
   return ret;
@@ -1339,7 +1304,6 @@ int ObHashJoinVecOp::create_partition(bool is_left, int64_t part_id, ObHJPartiti
   if (OB_FAIL(part_mgr_->get_or_create_part(part_level_, part_shift,
                                             (tmp_batch_round << 32) + part_id, is_left, part, false,
                                             need_create_left_partition_store))) {
-    LOG_WARN("fail to get partition", K(ret), K(part_level_), K(part_id), K(is_left));
   } else if (!need_create_left_partition_store) {
     // set_partition_store is doing in fill_partition_from_join_filter
     // this top level data is from join filter
@@ -1347,7 +1311,6 @@ int ObHashJoinVecOp::create_partition(bool is_left, int64_t part_id, ObHJPartiti
   // } else if (OB_FAIL(part->init(is_left ? left_->get_spec().output_ : right_->get_spec().output_,
   } else if (OB_FAIL(part->init(is_left ? *jt_ctx_.build_output_ : right_->get_spec().output_,
                                 MY_SPEC.max_batch_size_, MY_SPEC.compress_type_, build_extra_size))) {
-    LOG_WARN("fail to init batch", K(ret), K(part_level_), K(part_id), K(is_left));
   } else {
     part->get_row_store().set_dir_id(sql_mem_processor_.get_dir_id());
     part->get_row_store().set_io_event_observer(&io_event_observer_);
@@ -1374,9 +1337,7 @@ int ObHashJoinVecOp::init_join_partition()
       right_part_array_ = reinterpret_cast<ObHJPartition **>(mem + sizeof(ObHJPartition *) * part_count_);
       for (int64_t i = 0; i < part_count_ && OB_SUCC(ret); i ++) {
         if (OB_FAIL(create_partition(true/*is_left*/, i /*part_id*/, left_part_array_[i]))) {
-          LOG_WARN("fail to create partition", K(ret), K(i));
         } else if (OB_FAIL(create_partition(false/*is_left*/, i/*part_id*/, right_part_array_[i]))) {
-          LOG_WARN("fail to create partition", K(ret), K(i));
         }
       } // for end
     }
@@ -1446,7 +1407,6 @@ int ObHashJoinVecOp::update_remain_data_memory_size_periodically(int64_t row_cou
   int64_t tmp_periodic_row_count = sql_mem_processor_.get_periodic_cnt();
   if (OB_FAIL(sql_mem_processor_.update_max_available_mem_size_periodically(
     alloc_, [&](int64_t cur_cnt){ return force_update || row_count > cur_cnt; }, updated))) {
-    LOG_WARN("failed to update max usable memory size periodically", K(ret), K(row_count));
   } else if (updated) {
     update_remain_data_memory_size(
       row_count, sql_mem_processor_.get_mem_bound(), need_dump);
@@ -1509,7 +1469,6 @@ int ObHashJoinVecOp::asyn_dump_partition(
       bool tmp_part_dump = dump_part->is_dumped();
       if ((nullptr == pred || pred(i)) && (dump_part->has_switch_block() || (tmp_dump_all && 0 < dump_part->get_size_in_memory()))) {
         if (OB_FAIL(dump_part->dump(tmp_dump_all, 1))) {
-          LOG_WARN("failed to dump partition", K(part_level_), K(i));
         } else if (dump_part->is_dumped() && !tmp_part_dump) {
           // Set a limit, subsequent automatic dump
           dump_part->set_memory_limit(1);
@@ -1517,10 +1476,8 @@ int ObHashJoinVecOp::asyn_dump_partition(
           // recalculate available memory bound after dump one partition
           if (tmp_dump_all && sql_mem_processor_.is_auto_mgr()) {
             if (OB_FAIL(calc_basic_info())) {
-              LOG_WARN("failed to calc basic info", K(ret));
             } else if (OB_FAIL(update_remain_data_memory_size_periodically(
                 profile_.get_row_count(), tmp_need_dump, tmp_dump_all))) {
-              LOG_WARN("failed to update remain memory size periodically", K(ret));
             }
           }
         }
@@ -1546,7 +1503,6 @@ int ObHashJoinVecOp::dump_build_table(int64_t row_count, bool force_update)
   int64_t mem_used = get_cur_mem_used();
   if (OB_FAIL(update_remain_data_memory_size_periodically(
               row_count, tmp_need_dump, force_update))) {
-    LOG_WARN("failed to update remain memory size periodically", K(ret));
   } else if (OB_LIKELY(need_dump(mem_used))) {
     // judge whether reach max memory bound size
     // every time expend 20%
@@ -1562,7 +1518,6 @@ int ObHashJoinVecOp::dump_build_table(int64_t row_count, bool force_update)
         return tmp_need_dump;
       },
       tmp_need_dump, mem_used))) {
-      LOG_WARN("failed to extend max memory size", K(ret));
     }
     if (tmp_need_dump) {
       LOG_DEBUG("need dump",
@@ -1577,7 +1532,6 @@ int ObHashJoinVecOp::dump_build_table(int64_t row_count, bool force_update)
         // firstly find all need dumped partition
         int64_t dumped_size = get_need_dump_size(mem_used);
         if (OB_FAIL(asyn_dump_partition(dumped_size, true, false, 0, nullptr))) {
-          LOG_WARN("failed to asyn dump table", K(ret));
         }
         LOG_TRACE("trace left need dump", K(part_level_),
           K(cur_dumped_partition),
@@ -1668,7 +1622,6 @@ int ObHashJoinVecOp::do_sync_wait_all()
       state_ = JS_JOIN_END;
       drain_mode_ = HashJoinDrainMode::RIGHT_DRAIN;
       if (OB_FAIL(right_->drain_exch())) {
-        LOG_WARN("drain exch failed", K(ret));
       }
     } else {
       ret = OB_ERR_UNEXPECTED;
@@ -1712,7 +1665,6 @@ int ObHashJoinVecOp::sync_wait_processor_type()
             // RECURSIVE = 2,IN_MEMORY = 4. If hj_processor_ of any thread is RECURSIVE, set all thread to RECURSIVE.
             hj_input->sync_set_min(n_times, hj_processor_);
         }))) {
-      LOG_WARN("failed to sync wait", K(ret));
     } else {
       // sync partion_count
       set_processor(static_cast<HJProcessor>(hj_input->get_sync_val()));
@@ -1736,7 +1688,6 @@ int ObHashJoinVecOp::sync_wait_part_count()
           [&](int64_t n_times){
             hj_input->sync_set_max(n_times, part_count_);
         }))) {
-      LOG_WARN("failed to sync wait", K(ret));
     } else {
       // sync partion_count
       part_count_ = hj_input->get_sync_val();
@@ -1759,7 +1710,6 @@ int ObHashJoinVecOp::sync_wait_cur_dumped_partition_idx()
       [&](int64_t n_times) {
         hj_input->sync_set_min(n_times, cur_dumped_partition_);
       }))) {
-    LOG_WARN("failed to sync wait cur_dumped_partition", K(ret));
   } else {
     cur_dumped_partition_ = hj_input->get_sync_val();
     LOG_TRACE("debug cur_dumped_partition", K(hj_input->get_sync_val()),
@@ -1782,9 +1732,7 @@ int ObHashJoinVecOp::sync_wait_basic_info(uint64_t &build_ht_thread_ptr)
         hj_input->sync_set_first(n_times, reinterpret_cast<int64_t>(this));
         hj_input->sync_info_for_naaj(n_times, read_null_in_naaj_, non_preserved_side_is_not_empty_);
       }))) {
-    LOG_WARN("failed to sync wait basic info", K(ret));
   } else if (OB_FAIL(calc_basic_info(true))) {
-    LOG_WARN("failed to calc basic info", K(ret));
   } else {
     build_ht_thread_ptr = hj_input->get_sync_val();
     read_null_in_naaj_ = hj_input->get_null_in_naaj();
@@ -1806,7 +1754,6 @@ int ObHashJoinVecOp::sync_wait_init_build_hash(const uint64_t build_ht_thread_pt
       [&](int64_t n_times) {
         UNUSED(n_times);
       }))) {
-    LOG_WARN("failed to sync wait init build hash", K(ret));
   } else {
     ObHashJoinVecOp *build_hj_op = reinterpret_cast<ObHashJoinVecOp*>(build_ht_thread_ptr);
     // use the same hash table
@@ -1828,7 +1775,6 @@ int ObHashJoinVecOp::sync_wait_finish_build_hash()
       [&](int64_t n_times) {
         UNUSED(n_times);
       }))) {
-    LOG_WARN("failed to sync wait finish build hash table", K(ret));
   } else {
     LOG_TRACE("debug sync finish build hash", K(cur_join_table_), K(spec_.id_));
   }
@@ -1848,7 +1794,6 @@ int ObHashJoinVecOp::sync_wait_fetch_next_batch()
         UNUSED(n_times);
         hj_input->reset();
       }))) {
-    LOG_WARN("failed to sync fetch next batch", K(ret), K(spec_.id_));
   } else {
     LOG_TRACE("debug sync fetch next batch", K(ret), K(spec_.id_));
   }
@@ -1869,7 +1814,6 @@ int ObHashJoinVecOp::sync_wait_close()
       [&](int64_t n_times) {
         UNUSED(n_times);
       }, true))) {
-    LOG_WARN("failed to sync fetch next batch", K(ret), K(spec_.id_));
   } else {
     LOG_TRACE("debug sync fetch next batch", K(ret), K(spec_.id_));
   }
@@ -1888,7 +1832,6 @@ int ObHashJoinVecOp::sync_wait_open()
       [&](int64_t n_times) {
         UNUSED(n_times);
       }, false /*ignore_interrupt*/, true /*is_open*/))) {
-    LOG_WARN("failed to sync open", K(ret), K(spec_.id_));
   } else {
     LOG_TRACE("debug sync sync open", K(ret), K(spec_.id_));
   }
@@ -1904,9 +1847,7 @@ int ObHashJoinVecOp::dump_remain_partition()
     LOG_WARN("failed to sync cur dumped partition idx", K(ret));
   } else if (MAX_PART_COUNT_PER_LEVEL > cur_dumped_partition_) {
     if (OB_FAIL(asyn_dump_partition(INT64_MAX, true, true, cur_dumped_partition_ + 1, nullptr))) {
-      LOG_WARN("failed to asyn dump partition", K(ret));
     } else if (OB_FAIL(update_dumped_partition_statistics(true))) {
-      LOG_WARN("failed to update dumped partition statistics", K(ret));
     }
     LOG_TRACE("dump remain partition", K(ret), K(cur_dumped_partition_),
       "the last partition dumped size", left_part_array_[part_count_ - 1]->get_size_on_disk(),
@@ -1931,7 +1872,6 @@ int ObHashJoinVecOp::fill_partition_batch(int64_t &num_left_rows)
       if (OB_FAIL(stores_mgr_.init(MY_SPEC.max_batch_size_,
                                   part_count_,
                                   mem_context_->get_malloc_allocator()))) {
-        LOG_WARN("failed to init stores mgr", K(ret));
       } else {
         for (int64_t part_idx = 0; OB_SUCC(ret) && part_idx < part_count_; ++part_idx) {
           OZ (stores_mgr_.set_temp_store(part_idx, &left_part_array_[part_idx]->get_row_store()));
@@ -1950,13 +1890,10 @@ int ObHashJoinVecOp::fill_partition_batch(int64_t &num_left_rows)
       } else if (OB_FAIL(calc_hash_value_and_skip_null(
                         MY_SPEC.build_keys_, child_brs, is_from_row_store,
                         hash_vals_, part_stored_rows_, is_left))) {
-        LOG_WARN("fail to calc hash value batch", K(ret));
       } else if (true /*child_brs->size_ > 16 * part_count_*/) {
         // add partition by batch
         if (OB_FAIL(calc_part_selector(hash_vals_, *child_brs))) {
-          LOG_WARN("Fail to calc batch idx", K(ret));
         } else if (OB_FAIL(stores_mgr_.add_batch(part_idxes_, left_vectors_, *child_brs, reinterpret_cast<ObCompactRow **> (part_added_rows_)))) {
-          LOG_WARN("failed to add batch", K(ret));
         } else {
           for (int64_t i = 0; i < child_brs->size_; i++) {
             if (child_brs->skip_->at(i)) {
@@ -1971,7 +1908,6 @@ int ObHashJoinVecOp::fill_partition_batch(int64_t &num_left_rows)
 
         if (OB_SUCC(ret) && GCONF.is_sql_operator_dump_enabled()) {
           if (OB_FAIL(dump_build_table(num_left_rows))) {
-            LOG_WARN("fail to dump", K(ret));
           }
         }
       } else {
@@ -2018,7 +1954,6 @@ int ObHashJoinVecOp::calc_part_selector(uint64_t *hash_vals, const ObBatchRows &
     return OB_SUCCESS;
   };
   if (OB_FAIL(ObBitVector::flip_foreach(*child_brs.skip_, child_brs.size_, op))) {
-    LOG_WARN("fail to convert skip to selector", K(ret));
   }
 
   return ret;
@@ -2032,7 +1967,6 @@ int ObHashJoinVecOp::split_partition(int64_t &num_left_rows)
   if (nullptr != left_part_) {
     // read all data，use default iterator
     if (OB_FAIL(left_part_->begin_iterator())) {
-      LOG_WARN("failed to init iterator", K(ret));
     } else {
       row_count_on_disk = left_part_->get_row_count_on_disk();
     }
@@ -2048,16 +1982,13 @@ int ObHashJoinVecOp::split_partition(int64_t &num_left_rows)
     if (sql_mem_processor_.is_auto_mgr() && GCONF.is_sql_operator_dump_enabled()) {
       // last stage for dump build table
       if (OB_FAIL(calc_basic_info())) {
-        LOG_WARN("failed to calc basic info", K(ret));
       } else if (OB_FAIL(dump_build_table(profile_.get_row_count(), true))) {
-        LOG_WARN("fail to dump", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (top_part_level() && force_hash_join_spill_) {
       // force partition dump
       if (OB_FAIL(force_dump(true))) {
-        LOG_WARN("fail to finish dump", K(ret));
       } else {
         // for all partition to dump
         cur_dumped_partition_ = -1;
@@ -2090,17 +2021,14 @@ int ObHashJoinVecOp::prepare_hash_table()
   // calculate the buckets number of hash table
   if (HJProcessor::RECURSIVE == hj_processor_) {
     if (OB_FAIL(calc_basic_info())) {
-      LOG_WARN("failed to calc basic info", K(ret));
     } else if (GCONF.is_sql_operator_dump_enabled() &&
                OB_FAIL(dump_build_table(profile_.get_row_count(), true))) {
       LOG_WARN("fail to dump", K(ret));
     } else if (OB_FAIL(dump_remain_partition())) {
-      LOG_WARN("failed to dump remain partition");
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(calc_basic_info())) {
-    LOG_WARN("failed to calc basic info", K(ret));
   } else if (is_shared_ && OB_FAIL(sync_wait_basic_info(build_ht_thread_ptr))) {
     LOG_WARN("failed to sync cur dumped partition idx", K(ret));
   }
@@ -2120,18 +2048,13 @@ int ObHashJoinVecOp::prepare_hash_table()
         join_table_.free(alloc_);
       }
       if (OB_FAIL(join_table_.init_generic_ht(jt_ctx_, *alloc_))) {
-        LOG_WARN("failed to init hash table", K(ret));
       }
       cur_join_table_ = &join_table_;
     }
     if (OB_FAIL(ret)) {
     } else {
       if (OB_FAIL(cur_join_table_->build_prepare(jt_ctx_, profile_.get_row_count(), profile_.get_bucket_size()))) {
-        LOG_WARN("trace failed to  prepare hash table",
-                K(profile_.get_expect_size()), K(profile_.get_bucket_size()), K(profile_.get_row_count()),
-                K(get_mem_used()), K(sql_mem_processor_.get_mem_bound()), K(cur_dumped_partition_));
       } else if (OB_FAIL(sql_mem_processor_.update_used_mem_size(get_mem_used()))) {
-        LOG_WARN("failed to update used mem size", K(ret));
       }
     }
     LOG_TRACE("trace prepare hash table", K(ret), K(profile_.get_bucket_size()), K(profile_.get_row_count()),
@@ -2170,7 +2093,6 @@ int ObHashJoinVecOp::build_hash_table_for_recursive()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(prepare_hash_table())) {
-    LOG_WARN("failed to prepare hash table", K(ret));
   }
   int64_t start_id = is_shared_ ? (static_cast<ObHashJoinVecInput*>(input_))->get_task_id() : 0;
   JoinHashTable &hash_table = *cur_join_table_;
@@ -2183,11 +2105,6 @@ int ObHashJoinVecOp::build_hash_table_for_recursive()
         LOG_WARN("unexpect it has row on disk", K(ret), K(hj_part.get_row_count_in_memory()),
                                                         K(hj_part.get_row_count_on_disk()));
       } else if (OB_FAIL(hj_part.begin_iterator())) {
-        // It is assumed here that the partition must be either all dumped or all in memory,
-        // so just use row iter.
-        // There is no need to use chunk row store. If part is in memory and part is in disk,
-        // you can use chunk to load the data in memory first.
-        LOG_WARN("failed to init iterator", K(ret));
       } else {
         JoinPartitionRowIter left_iter(&hj_part);
         ret = hash_table.build(left_iter, jt_ctx_);
@@ -2209,7 +2126,6 @@ int ObHashJoinVecOp::build_hash_table_for_recursive()
     is_last_chunk_ = true;
     if (is_shared_) {
       if (OB_FAIL(sync_wait_finish_build_hash())) {
-        LOG_WARN("failed to wait finish build hash", K(ret));
       }
     }
     trace_hash_table_collision(hash_table.get_row_count());
@@ -2225,15 +2141,12 @@ int ObHashJoinVecOp::recursive_process(int64_t &num_left_rows)
   int ret = OB_SUCCESS;
   num_left_rows = 0;
   if (OB_FAIL(init_join_partition())) {
-    LOG_WARN("fail to init join ctx", K(ret));
   } else if (OB_FAIL(split_partition(num_left_rows))) {
-    LOG_WARN("failed split partition", K(ret), K(part_level_));
   } else {
     // TODO shengle If do not need to read the right table and do not need to return unmatch data,
     // you do not need to create a hash table
     // If read_null_in_naaj_ is true, there is no need to create a hash table
     if (OB_FAIL(build_hash_table_for_recursive())) {
-      LOG_WARN("failed to post process left", K(ret), K(num_left_rows));
     }
   }
   return ret;
@@ -2243,19 +2156,15 @@ int ObHashJoinVecOp::adaptive_process(int64_t &num_left_rows)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(get_processor_type())) {
-    LOG_WARN("failed to get processor", K(hj_processor_), K(ret));
   } else {
     switch (hj_processor_) {
       case IN_MEMORY: {
         if (OB_FAIL(in_memory_process(num_left_rows))) {
-          LOG_WARN("failed to process in memory", K(ret));
         }
         break;
       }
       case RECURSIVE: {
         if (OB_FAIL(recursive_process(num_left_rows))) {
-          LOG_WARN("failed to recursive process", K(ret), K(part_level_), K(part_count_),
-                                                  K(join_table_.get_nbuckets()));
         }
         break;
       }
@@ -2266,8 +2175,6 @@ int ObHashJoinVecOp::adaptive_process(int64_t &num_left_rows)
             clean_nest_loop_chunk();
             set_processor(RECURSIVE);
             if (OB_FAIL(recursive_process(num_left_rows))) {
-              LOG_WARN("failed to process in memory", K(ret), K(part_level_), K(part_count_),
-                                                      K(join_table_.get_nbuckets()));
             }
             LOG_TRACE("trace recursive process", K(part_level_), K(part_level_), K(part_count_),
                                                  K(join_table_.get_nbuckets()), K(spec_.id_));
@@ -2303,7 +2210,6 @@ int ObHashJoinVecOp::get_next_right_batch()
   if (right_part_ == NULL) {
     if (HashJoinDrainMode::BUILD_HT == drain_mode_ || (read_null_in_naaj_ && is_shared_)) {
       if (OB_FAIL(right_->drain_exch())) {
-        LOG_WARN("failed to drain the right child", K(ret), K(spec_.id_));
       } else {
         drain_mode_ = HashJoinDrainMode::RIGHT_DRAIN;
       }
@@ -2316,7 +2222,6 @@ int ObHashJoinVecOp::get_next_right_batch()
       const_cast<ObBatchRows *>(probe_brs)->end_ = true;
     } else {
       if (OB_FAIL(OB_I(t1) right_->get_next_batch(max_output_cnt_, probe_brs))) {
-        LOG_WARN("get right row from child failed", K(ret));
       } else if (probe_brs->end_ && 0 == probe_brs->size_) {
         // do nothing
       } else if (MY_SPEC.is_naaj_) {
@@ -2345,7 +2250,6 @@ int ObHashJoinVecOp::get_next_right_batch()
     int64_t read_size = 0;
     probe_brs = &probe_batch_rows_.brs_;
     if (OB_FAIL(try_check_status())) {
-      LOG_WARN("failed to check status", K(ret));
     } else if (HashJoinDrainMode::BUILD_HT == drain_mode_) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected status: drain mode is build_hash_table", K(ret), K(spec_.id_));
@@ -2394,11 +2298,8 @@ int ObHashJoinVecOp::read_right_operate()
                                               probe_batch_rows_.hash_vals_,
                                               probe_batch_rows_.stored_rows_,
                                               false /*is_left*/))) {
-      LOG_WARN("fail to calc hash value batch", K(ret));
     } else if (OB_FAIL(skip_rows_in_dumped_part())) {
-      LOG_WARN("fail to skip rows in dumped part", K(ret));
     } else if (OB_FAIL(convert_skip_to_selector())) {
-      LOG_WARN("fail to convert skip to selector", K(ret));
     }
   }
 
@@ -2434,7 +2335,6 @@ int ObHashJoinVecOp::calc_hash_value_and_skip_null(const ObIArray<ObExpr*> &join
     for (int64_t idx = 0; OB_SUCC(ret) && idx < join_keys.count() ; ++idx) {
       ObExpr *expr = join_keys.at(idx); // expr ptr check in cg, not check here
       if (OB_FAIL(expr->eval_vector(eval_ctx_, *brs))) {
-        LOG_WARN("eval failed", K(ret));
       } else {
         const bool is_batch_seed = (idx > 0);
         ObIVector *vector = expr->get_vector(eval_ctx_);
@@ -2515,13 +2415,11 @@ int ObHashJoinVecOp::skip_rows_in_dumped_part()
         if (probe_batch_rows_.from_stored_) {
           if (OB_FAIL(right_part_array_[part_idx]->add_row(
               probe_batch_rows_.stored_rows_[i], stored_row))) {
-            LOG_WARN("fail to add row", K(ret));
           }
         } else {
           guard.set_batch_idx(i);
           if (OB_FAIL(right_part_array_[part_idx]->add_row(
               right_->get_spec().output_, eval_ctx_, stored_row))) {
-            LOG_WARN("fail to add row", K(ret));
           } else {
             static_cast<ObHJStoredRow *>(stored_row)->set_hash_value(jt_ctx_.probe_row_meta_,
                                           probe_batch_rows_.hash_vals_[i]);
@@ -2546,7 +2444,6 @@ int ObHashJoinVecOp::convert_skip_to_selector()
   if (OB_FAIL(ObBitVector::flip_foreach(*probe_batch_rows_.brs_.skip_,
                                         probe_batch_rows_.brs_.size_,
                                         convertor_op))) {
-    LOG_WARN("fail to convert skip to selector", K(ret));
   } else {
     output_info_.selector_cnt_ = selector_idx;
   }
@@ -2572,7 +2469,6 @@ int ObHashJoinVecOp::finish_dump(bool for_left, bool need_dump, bool force /* fa
       if (force) {
         // finish dump if there was no previous dump, it will not force a dump, so we need to dump first
         if (OB_FAIL(part_array[i]->dump(true, INT64_MAX))) {
-          LOG_WARN("failed to dump", K(ret));
         } else if (cur_dumped_partition_ >= i) {
           cur_dumped_partition_ = i - 1;
         }
@@ -2581,7 +2477,6 @@ int ObHashJoinVecOp::finish_dump(bool for_left, bool need_dump, bool force /* fa
         if (OB_SUCC(ret)) {
           // Consider either all dump or all in-memory
           if (OB_FAIL(part_array[i]->finish_dump(true))) {
-            LOG_WARN("finish dump failed", K(i), K(for_left));
           } else if (for_left) {
             // enable pair right partition dump
             right_part_array_[i]->set_memory_limit(1);
@@ -2612,9 +2507,7 @@ int ObHashJoinVecOp::dump_right_partition_for_recursive()
   if (RECURSIVE == hj_processor_) {
     // Ensure left has been dumped, then the corresponding right will definitely be dumped
     if (OB_FAIL(asyn_dump_partition(INT64_MAX, false, true, cur_dumped_partition_ + 1, nullptr))) {
-      LOG_WARN("failed to asyn dump partition", K(ret));
     } else if (OB_FAIL(update_dumped_partition_statistics(false))) {
-      LOG_WARN("failed to update dumped partition statistics", K(ret));
     }
   }
   return ret;
@@ -2653,7 +2546,6 @@ int ObHashJoinVecOp::probe()
                   *probe_batch_rows_.brs_.skip_,
                   probe_batch_rows_.brs_.size_,
                   all_rows_active))) {
-            LOG_WARN("fail to eval vector", K(ret));
           }
         }
       }
@@ -2708,7 +2600,6 @@ int ObHashJoinVecOp::left_semi_output()
             *jt_ctx_.build_output_, eval_ctx_, jt_ctx_.build_row_meta_,
             reinterpret_cast<const ObCompactRow **>(output_info_.left_result_rows_),
             output_info_.selector_cnt_))) {
-    LOG_WARN("fail to attach rows", K(ret));
   } else {
     brs_.size_ = output_info_.selector_cnt_;
     mark_return();
@@ -2746,7 +2637,6 @@ int ObHashJoinVecOp::right_anti_semi_output()
       need_mark_return = false;
       clear_evaluated_flag();
       if (OB_FAIL(MY_SPEC.probe_keys_.at(0)->eval_vector(eval_ctx_, brs_))) {
-        LOG_WARN("failed to eval right join key", K(ret));
       } else {
         const ObIVector *vec = MY_SPEC.probe_keys_.at(0)->get_vector(eval_ctx_);
         for (int64_t i = 0; i < brs_.size_; ++i) {
@@ -2891,7 +2781,6 @@ int ObHashJoinVecOp::fill_left_unmatched_result()
       OZ(blank_row_batch(right_->get_spec().output_, output_info_.selector_cnt_));
     } else if (MY_SPEC.is_naaj_) {
       if (OB_FAIL(check_join_key_for_naaj_batch_output(output_info_.selector_cnt_))) {
-        LOG_WARN("failed to check join key", K(ret));
       }
     }
   }
@@ -2922,7 +2811,6 @@ int ObHashJoinVecOp::check_join_key_for_naaj_batch(const bool is_left,
   } else if (is_shared_ && FALSE_IT(has_null = hj_input->get_null_in_naaj())) {
   } else if (has_null) {
   } else if (OB_FAIL(curr_join_keys.at(0)->eval_vector(eval_ctx_, *child_brs))) {
-    LOG_WARN("failed to eval batch curr join key", K(ret));
   } else {
     ObIVector *vec = curr_join_keys.at(0)->get_vector(eval_ctx_);
     for (int64_t i = 0; OB_SUCC(ret) && i < child_brs->size_; ++i) {
@@ -2954,7 +2842,6 @@ int ObHashJoinVecOp::check_join_key_for_naaj_batch_output(const int64_t batch_si
                                                             *brs_.skip_,
                                                             batch_size,
                                                             false))) {
-    LOG_WARN("failed to eval join key for naaj", K(ret));
   } else {
     ObIVector *vec = MY_SPEC.build_keys_.at(0)->get_vector(eval_ctx_);
     VectorFormat format = vec->get_format();
@@ -2986,7 +2873,6 @@ int ObHashJoinVecOp::init_mem_context()
       .set_mem_attr(common::ObModIds::OB_ARENA_HASH_JOIN,
                      common::ObCtxIds::WORK_AREA);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
-      SQL_ENG_LOG(WARN, "create entity failed", K(ret));
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
       SQL_ENG_LOG(WARN, "mem entity is null", K(ret));

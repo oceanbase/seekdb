@@ -126,7 +126,6 @@ public:
     int ret = OB_SUCCESS;
     if (NULL != allocator_ && NULL != buf && NULL != buf->ptr()) {
       if (OB_FAIL(ob_write_string(*allocator_, *buf, buffer_))) {
-        SQL_ENG_LOG(WARN, "failed to write piece buffer", K(ret), K(mode_));
       } else {
         pos_ = buffer_.ptr();
       }
@@ -233,10 +232,8 @@ class ObPieceCache {
       int ret = OB_SUCCESS;
       if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(mem_context_,
           lib::ContextParam().set_mem_attr(ObModIds::OB_PL_TEMP)))) {
-        SQL_ENG_LOG(WARN, "create memory entity failed");
       } else if (OB_ISNULL(mem_context_)) {
         ret = OB_ERR_UNEXPECTED;
-        SQL_ENG_LOG(WARN, "null memory entity returned");
       } else if (!piece_map_.created() &&
                   OB_FAIL(piece_map_.create(common::hash::cal_next_prime(32),
                                             ObModIds::OB_HASH_BUCKET, ObModIds::OB_HASH_NODE))) {

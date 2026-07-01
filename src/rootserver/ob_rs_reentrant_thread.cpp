@@ -83,7 +83,6 @@ int ObRsReentrantThread::create(const int64_t thread_cnt, const char* thread_nam
   }
 
   if (FAILEDx(share::ObReentrantThread::create(thread_cnt, thread_name, wait_event_id))) {
-    LOG_WARN("fail to create reentraint thread", KR(ret), K(thread_name));
   } else if (last_run_timestamp_ != -1) {
     LOG_INFO("rs_monitor_check : reentrant thread check register success", K(thread_name));
   }
@@ -96,7 +95,6 @@ int ObRsReentrantThread::destroy()
   int ret = OB_SUCCESS;
   const char *thread_name = get_thread_name();
   if (OB_FAIL(share::ObReentrantThread::destroy())) {
-    LOG_INFO("fail to destroy reentraint thread", KR(ret), K(thread_name));
   }  else if (last_run_timestamp_ != -1) {
     LOG_INFO("rs_monitor_check : reentrant thread check unregister success", 
         K(thread_name), K_(last_run_timestamp));

@@ -47,7 +47,6 @@ int ObDirectLoadSSTableDataBlockReader<T>::get_last_row(const T *&row)
   const ObDirectLoadSSTableDataBlock::Header &header = this->data_block_reader_.get_header();
   this->curr_item_.reuse();
   if (OB_FAIL(this->data_block_reader_.read_item(header.last_row_pos_, this->curr_item_))) {
-    STORAGE_LOG(WARN, "fail to read item", KR(ret));
   } else {
     row = &this->curr_item_;
   }

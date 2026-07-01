@@ -127,7 +127,6 @@ int ObExprTimeStampAdd::calc(const int64_t unit_value,
       }
       ot.parts_[DT_DATE] = ObTimeConverter::ob_time_to_date(ot);
       if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ot, cvrt_ctx, value))) {
-        LOG_WARN("ob time to datetime failed", K(ret));
       }
     }
     break;
@@ -149,7 +148,6 @@ int ObExprTimeStampAdd::calc(const int64_t unit_value,
       ot.parts_[DT_MON] = month % 12 + 1;
       ot.parts_[DT_DATE] = ObTimeConverter::ob_time_to_date(ot);
       if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ot, cvrt_ctx, value))) {
-        LOG_WARN("ob time to datetime failed", K(ret));
       }
     }
     break;
@@ -162,7 +160,6 @@ int ObExprTimeStampAdd::calc(const int64_t unit_value,
     } else {
       ot.parts_[DT_DATE] = ObTimeConverter::ob_time_to_date(ot);
       if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ot, cvrt_ctx, value))) {
-        LOG_WARN("ob time to datetime failed", K(ret));
       }
     }
     break;
@@ -198,9 +195,7 @@ int calc_timestampadd_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datu
              timestamp_datum->is_null()) {
     res_datum.set_null();
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
-    LOG_WARN("get sql mode failed", K(ret));
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
-    LOG_WARN("get tz info failed", K(ret));
   } else {
     int64_t ts = 0;
     int64_t interval_int = interval_datum->get_int();
@@ -216,19 +211,15 @@ int calc_timestampadd_expr(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &res_datu
                 cvrt_ctx.tz_info_, ot,
                 get_cur_time(ctx.exec_ctx_.get_physical_plan_ctx()), 0,
                 expr.args_[2]->obj_meta_.has_lob_header()))) {
-      LOG_WARN("cast to ob time failed", K(ret), K(*timestamp_datum));
     } else if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ot, cvrt_ctx, ts))) {
-      LOG_WARN("ob time to datetime failed", K(ret));
     } else if (OB_FAIL(ObExprTimeStampAdd::calc(unit_datum->get_int(), ot, ts, cvrt_ctx,
                             interval_int, res))) {
-      LOG_WARN("calc failed", K(ret), K(*unit_datum), K(ts), K(interval_int));
     } else if (OB_ISNULL(buf = expr.get_str_res_mem(ctx, buf_len))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("allocate memory failed", K(ret), K(buf_len));
     } else if (OB_FAIL(common_datetime_string(expr, ObDateTimeType, ObVarcharType,
                                               expr.args_[2]->datum_meta_.scale_, false,
                                               res, ctx, buf, buf_len, out_len))) {
-      LOG_WARN("common_datetime_string failed", K(ret), K(res), K(expr));
     } else {
       res_datum.set_string(ObString(out_len, buf));
     }
@@ -292,11 +283,8 @@ int vector_timestamp_add(
   ObString nls_format;
   if (eval_flags.accumulate_bit_cnt(bound) == bound.range_size()) {
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
-    LOG_WARN("get sql mode failed", K(ret));
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
-    LOG_WARN("get tz info failed", K(ret));
   } else if (OB_FAIL(get_tz_offset(tz_info, tz_offset))) {
-    LOG_WARN("failed to get offset between utc and local", K(ret));
   } else {
     ObTimeConvertCtx cvrt_ctx(tz_info, false);
     tz_offset = (ObTimestampType == arg_type) ? tz_offset : 0;
@@ -324,35 +312,26 @@ int vector_timestamp_add(
       ObDateSqlMode date_sql_mode;
       if (std::is_same<IN_TYPE, ObMySQLDate>::value || std::is_same<IN_TYPE, ObMySQLDateTime>::value) {
         if (OB_FAIL(ObTimeConverter::parse_ob_time<IN_TYPE>(in_val, ot))) {
-          LOG_WARN("parse_ob_time fail", K(ret));
         } else {
           ot.parts_[DT_DATE] = ObTimeConverter::ob_time_to_date(ot);
           if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ot, cvrt_ctx, ts))) {
-            LOG_WARN("ob_time_to_datetime fail", K(ret));
           }
         }
       } else if (OB_FAIL(ObTimeConverter::parse_date_usec<IN_TYPE>(in_val, tz_offset, false, date, usec))) {
-        LOG_WARN("get_date_usec_from_vec failed", K(ret), K(date), K(usec), K(tz_offset));
       } else if (OB_FAIL(ObTimeConverter::date_to_ob_time(date, ot))) {
-        LOG_WARN("failed to convert date part to obtime", K(ret), K(date));
       } else if (OB_FAIL(ObTimeConverter::time_to_ob_time(usec, ot))) {
-        LOG_WARN("failed to convert time part to obtime", K(ret), K(usec));
       } else if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ot, cvrt_ctx, ts))) {
-        LOG_WARN("ob time to datetime failed", K(ret));
       }
       if (OB_SUCC(ret)) {
         int64_t res = 0;
         const ObTimeZoneInfo *null_tz_info = NULL;  // refer to calc_timestampadd_expr()
         if (OB_FAIL(ObExprTimeStampAdd::calc(unit_type_vec->get_int(idx), ot, ts, cvrt_ctx,
                                               interval_vec->get_int(idx), res))) {
-          LOG_WARN("calculate ts after adding interval failed", K(ret), K(ts));
         } else if (OB_ISNULL(buf = expr.get_str_res_mem(ctx, buf_len, idx))) {
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("allocate memory failed", K(ret), K(buf_len));
         } else if(OB_FAIL(ObTimeConverter::datetime_to_str(res, null_tz_info, nls_format, in_scale,
                                                             buf, buf_len, out_len))) {
-          LOG_WARN("failed to convert datetime to string",
-                    K(ret), K(res), K(nls_format), K(in_scale), K(buf), K(out_len));
         } else {
           res_vec->set_string(idx, ObString(out_len, buf));
           eval_flags.set(idx);
@@ -450,7 +429,6 @@ int ObExprTimeStampAdd::calc_timestamp_add_vector(const ObExpr &expr, ObEvalCtx 
     }
 
     if (OB_FAIL(ret)) {
-      LOG_WARN("expr calculation failed", K(ret));
     }
   }
   return ret;

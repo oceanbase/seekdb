@@ -38,9 +38,6 @@ int Obp20FeedbackProxyInfoEncoder::serialize(char *buf, int64_t len, int64_t &po
                                                  feedback_proxy_info_.ptr(),
                                                  feedback_proxy_info_.length(),
                                                  type_))) {
-    // ATTENTION: the response packet should be little-endian order.
-    // Please read example in file: ob_feedback_proxy_utils.h
-    OB_LOG(WARN, "failed to store extra info id", K(type_), K(feedback_proxy_info_), K(buf));
   } else {
     is_serial_ = true;
   }
@@ -70,12 +67,10 @@ int Obp20SessInfoVeriDecoder::deserialize(const char *buf, int64_t len, int64_t 
   int32_t v_len = 0;
   int16_t extra_id = 0;
   if (OB_FAIL(ObProtoTransUtil::resolve_type_and_len(buf, len, pos, extra_id, v_len))) {
-      OB_LOG(WARN,"failed to get extra_info", K(ret), KP(buf));
   } else if (static_cast<ExtraInfoKeyType>(extra_id) != type_) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "invalid encoder", K(ret), K(extra_id), K(type_));
   } else if (OB_FAIL(ObProtoTransUtil::get_str(buf, len, pos, v_len, ptr))) {
-    OB_LOG(WARN,"failed to resolve sess info verification required", K(ret));
   } else {
     extra_info.sess_info_veri_.assign_ptr(ptr, v_len);
     OB_LOG(TRACE,"success to deserialize sess info verification required", K(ret));
@@ -97,7 +92,6 @@ int Obp20TraceInfoEncoder::serialize(char *buf, int64_t len, int64_t &pos) {
     // do nothing
   } else if (OB_FAIL(ObProtoTransUtil::store_str(buf, len, pos,
                         trace_info_.ptr(), trace_info_.length(), type_))) {
-    OB_LOG(WARN, "failed to store extra info id", K(type_), K(trace_info_), K(buf));
   } else {
     is_serial_ = true;
   }
@@ -115,12 +109,10 @@ int Obp20TaceInfoDecoder::deserialize(const char *buf, int64_t len, int64_t &pos
   int32_t v_len = 0;
   int16_t extra_id = 0;
   if (OB_FAIL(ObProtoTransUtil::resolve_type_and_len(buf, len, pos, extra_id, v_len))) {
-      OB_LOG(WARN,"failed to get extra_info", K(ret), KP(buf));
   } else if (static_cast<ExtraInfoKeyType>(extra_id) != type_) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "invalid encoder", K(ret), K(extra_id), K(type_));
   } else if (OB_FAIL(ObProtoTransUtil::get_str(buf, len, pos, v_len, ptr))) {
-    OB_LOG(WARN,"failed to resolve flt level", K(ret));
   } else {
     extra_info.exist_trace_info_ = true;
     extra_info.trace_info_.assign(ptr, v_len);
@@ -142,7 +134,6 @@ int Obp20SessInfoEncoder::serialize(char *buf, int64_t len, int64_t &pos) {
     // do nothing
   } else if (OB_FAIL(ObProtoTransUtil::store_str(buf, len, pos,
                         sess_info_.ptr(), sess_info_.length(), type_))) {
-    OB_LOG(WARN, "failed to store extra info id", K(type_), K(sess_info_), K(buf));
   } else {
     is_serial_ = true;
   }
@@ -161,12 +152,10 @@ int Obp20SessInfoDecoder::deserialize(const char *buf, int64_t len, int64_t &pos
   int32_t v_len = 0;
   int16_t extra_id = 0;
   if (OB_FAIL(ObProtoTransUtil::resolve_type_and_len(buf, len, pos, extra_id, v_len))) {
-      OB_LOG(WARN,"failed to get extra_info", K(ret), KP(buf));
   } else if (static_cast<ExtraInfoKeyType>(extra_id) != type_) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "invalid encoder", K(ret), K(extra_id), K(type_));
   } else if (OB_FAIL(ObProtoTransUtil::get_str(buf, len, pos, v_len, ptr))) {
-    OB_LOG(WARN,"failed to resolve flt level", K(ret));
   } else {
     extra_info.sync_sess_info_.assign(ptr, v_len);
   }
@@ -184,7 +173,6 @@ int Obp20FullTrcEncoder::serialize(char *buf, int64_t len, int64_t &pos) {
     MEMSET(buf + pos, 0x00, len - pos);
     if (OB_FAIL(ObProtoTransUtil::store_str(buf, len, pos,
                           full_trc_.ptr(), full_trc_.length(), type_))) {
-      OB_LOG(WARN, "failed to store extra info id", K(type_), K(full_trc_), K(buf));
     } else {
       is_serial_ = true;
     }
@@ -203,12 +191,10 @@ int Obp20FullTrcDecoder::deserialize(const char *buf, int64_t len, int64_t &pos,
   int32_t v_len = 0;
   int16_t extra_id = 0;
   if (OB_FAIL(ObProtoTransUtil::resolve_type_and_len(buf, len, pos, extra_id, v_len))) {
-      OB_LOG(WARN,"failed to get extra_info", K(ret), KP(buf));
   } else if (static_cast<ExtraInfoKeyType>(extra_id) != type_) {
     ret = OB_ERR_UNEXPECTED;
     OB_LOG(WARN, "invalid encoder", K(ret), K(extra_id), K(type_));
   } else if (OB_FAIL(ObProtoTransUtil::get_str(buf, len, pos, v_len, ptr))) {
-    OB_LOG(WARN,"failed to resolve flt level", K(ret));
   } else {
     extra_info.full_link_trace_.assign(ptr, v_len);
   }

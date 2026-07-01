@@ -43,11 +43,9 @@ int ObStringColumnEncoder::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(ObIColumnCSEncoder::init(ctx, column_index, row_count))) {
-    LOG_WARN("init base column encoder failed", K(ret), K(ctx), K(column_index), K(row_count));
   } else {
     column_header_.type_ = type_;
     if (OB_FAIL(do_init_())) {
-      LOG_WARN("fail to pre_handle", K(ret));
     }
   }
 
@@ -124,9 +122,7 @@ int ObStringColumnEncoder::do_init_()
   ObPreviousColumnEncoding *pre_col_encoding = nullptr;
   if (OB_FAIL(enc_ctx_.build_string_stream_meta(
       fixed_len, is_use_zero_len_as_null, uncompress_len))) {
-    LOG_WARN("fail to build_string_stream_meta", K(ret));
   } else if (OB_FAIL(get_previous_cs_encoding(pre_col_encoding))) {
-    LOG_WARN("get_previous_cs_encoding fail", K(ret));
   } else if (OB_FAIL(enc_ctx_.build_string_stream_encoder_info(
       ctx_->encoding_ctx_->compressor_type_,
       is_force_raw_, &ctx_->encoding_ctx_->cs_encoding_opt_,
@@ -134,7 +130,6 @@ int ObStringColumnEncoder::do_init_()
       int_stream_idx,
       ctx_->encoding_ctx_->major_working_cluster_version_,
       ctx_->allocator_))) {
-    LOG_WARN("fail to build_string_stream_encoder_info", K(ret));
   }
 
   return ret;
@@ -157,7 +152,6 @@ int ObStringColumnEncoder::store_column(ObMicroBufferWriter &buf_writer)
       ObColumnDatumIter iter(*ctx_->col_datums_);
       if (OB_FAIL(string_stream_encoder_.encode(
           enc_ctx_, iter, buf_writer, ctx_->all_string_buf_writer_, offsets))) {
-        LOG_WARN("fail to store stream", K(ret), K_(enc_ctx));
       } else if (OB_UNLIKELY(offsets.count() != 1 && offsets.count() != 2)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("stream offset count unexpected", K(ret), K(offsets));
@@ -171,7 +165,6 @@ int ObStringColumnEncoder::store_column(ObMicroBufferWriter &buf_writer)
 
     for (int64_t i = 0; OB_SUCC(ret) && i < offsets.count(); i++) {
       if (OB_FAIL(stream_offsets_.push_back(offsets.at(i)))) {
-        LOG_WARN("fail to push back", K(ret));
       }
     }
   }
@@ -183,7 +176,6 @@ int ObStringColumnEncoder::store_column_meta(ObMicroBufferWriter &buf_writer)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(store_null_bitamp(buf_writer))) {
-    LOG_WARN("fail to store null bitmap", K(ret));
   }
   return ret;
 }

@@ -60,7 +60,6 @@ int ObUpdateAutoincSequenceTask::process()
     LOG_WARN("invalid argument", K(ret), K(data_table_id_), K(column_id_),
                                  K(orig_column_type_), K(dest_table_id_));
   } else if (OB_FAIL(DDL_SIM(task_id_, UPDATE_AUTOINC_SEQUENCE_FAILED))) {
-    LOG_WARN("ddl sim failure", K(ret), K(task_id_));
   } else {
     ObDDLService &ddl_service = root_service->get_ddl_service();
     ObMultiVersionSchemaService &schema_service = ddl_service.get_schema_service();
@@ -71,14 +70,11 @@ int ObUpdateAutoincSequenceTask::process()
     ObSchemaGetterGuard schema_guard;
     ObDDLTaskKey task_key(dest_table_id_, schema_version_);
     if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("get schema guard failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema( dest_table_id_, table_schema))) {
-      LOG_WARN("get data table schema failed", K(ret), K(dest_table_id_));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("table schemas should not be null", K(ret), K(table_schema));
     } else if (OB_FAIL(schema_guard.get_database_schema( table_schema->get_database_id(), db_schema))) {
-      LOG_WARN("failed to get database schema", K(ret), K(table_schema->get_data_table_id()), K(dest_table_id_));
     } else if (OB_ISNULL(db_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("error unexpected, database schema must not be nullptr", K(ret));
@@ -99,30 +95,23 @@ int ObUpdateAutoincSequenceTask::process()
         ObObj obj;
         const int64_t DDL_INNER_SQL_EXECUTE_TIMEOUT = ObDDLUtil::calc_inner_sql_execute_timeout();
         if (OB_FAIL(timeout_ctx.set_trx_timeout_us(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
-          LOG_WARN("set trx timeout failed", K(ret));
         } else if (OB_FAIL(timeout_ctx.set_timeout(DDL_INNER_SQL_EXECUTE_TIMEOUT))) {
-          LOG_WARN("set timeout failed", K(ret));
         } else if (OB_FAIL(sql.assign_fmt("SELECT /*+no_rewrite*/ CAST(MAX(`%s`) AS SIGNED) AS MAX_VALUE FROM `%s`.`%s`",
                                     column_schema->get_column_name(),
                                     db_schema->get_database_name(),
                                     table_schema->get_table_name()))) {
-          LOG_WARN("failed to assign fmt", K(ret), K(column_schema->get_column_name_str()), K(db_schema->get_database_name_str()), K(table_schema->get_table_name_str()));
         } else if (OB_FAIL(user_sql_proxy->read(res, sql.ptr(), &session_param))) {
-          LOG_WARN("fail to read", KR(ret), K(sql));
         } else if (OB_ISNULL(result = res.get_result())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get result failed", K(ret));
         } else if (OB_FAIL(result->next())) {
-          LOG_WARN("fail to get next", KR(ret));
         } else if (OB_FAIL(result->get_obj("MAX_VALUE", obj))) {
-          LOG_WARN("fail to get result obj", K(ret));
         } else {
           max_value = MAX(0, obj.get_int());
         }
       }
     }
     if (OB_TMP_FAIL(ObSysDDLSchedulerUtil::notify_update_autoinc_end(task_key, max_value + 1, ret))) {
-      LOG_WARN("fail to finish update autoinc task", KR(tmp_ret), K(max_value));
     }
     LOG_INFO("execute finish update autoinc task finish", K(ret), "ddl_event_info", ObDDLEventInfo(), K(task_key), K(data_table_id_), K(column_id_), K(max_value));
   }
@@ -183,9 +172,7 @@ int ObModifyAutoincTask::init(const int64_t task_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_id), K(table_id), K(alter_table_arg), K(task_status));
   } else if (OB_FAIL(deep_copy_table_arg(allocator_, alter_table_arg, alter_table_arg_))) {
-    LOG_WARN("deep copy alter table arg failed", K(ret));
   } else if (OB_FAIL(set_ddl_stmt_str(alter_table_arg_.ddl_stmt_str_))) {
-    LOG_WARN("set ddl stmt str failed", K(ret));
   } else {
     set_gmt_create(ObTimeUtility::current_time());
     task_type_ = ObDDLType::DDL_MODIFY_AUTO_INCREMENT;
@@ -222,9 +209,7 @@ int ObModifyAutoincTask::init(const ObDDLTaskRecord &task_record)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(task_record));
   } else if (OB_FAIL(deserialize_params_from_message(task_record.message_.ptr(), task_record.message_.length(), pos))) {
-    LOG_WARN("deserialize params from message failed", K(ret));
   } else if (OB_FAIL(set_ddl_stmt_str(task_record.ddl_stmt_str_))) {
-    LOG_WARN("set ddl stmt str failed", K(ret));
   } else {
     object_id_ = data_table_id;
     target_object_id_ = target_schema_id;
@@ -251,31 +236,26 @@ int ObModifyAutoincTask::process()
     ret = OB_NOT_INIT;
     LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
   } else if (OB_FAIL(check_health())) {
-    LOG_WARN("check health failed", K(ret));
   } else {
     ddl_tracing_.restore_span_hierarchy();
     switch(task_status_) {
       case ObDDLTaskStatus::WAIT_TRANS_END: {
         if (OB_FAIL(wait_trans_end())) {
-          LOG_WARN("wait trans end failed", K(ret), K(*this));
         }
         break;
       }
       case ObDDLTaskStatus::MODIFY_AUTOINC: {
         if (OB_FAIL(modify_autoinc())) {
-          LOG_WARN("update schema failed", K(ret), K(*this));
         }
         break;
       }
       case ObDDLTaskStatus::FAIL: {
         if (OB_FAIL(fail())) {
-          LOG_WARN("process fail failed", K(ret), K(*this));
         }
         break;
       }
       case ObDDLTaskStatus::SUCCESS: {
         if (OB_FAIL(success())) {
-          LOG_WARN("process success failed", K(ret), K(*this));
         }
         break;
       }
@@ -306,12 +286,9 @@ int ObModifyAutoincTask::unlock_table()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-    LOG_WARN("start transaction failed", K(ret));
   } else if (OB_FAIL(owner_id.convert_from_value(ObLockOwnerType::DEFAULT_OWNER_TYPE,
                                                  task_id_))) {
-    LOG_WARN("convert owner id failed", K(ret), K(task_id_));
   } else if (OB_FAIL(ObDDLLock::unlock_for_offline_ddl(object_id_, nullptr/*hidden_tablet_ids_alone*/, owner_id, trans))) {
-    LOG_WARN("failed to unlock table", K(ret));
   }
 
   bool commit = (OB_SUCCESS == ret);
@@ -334,9 +311,7 @@ int ObModifyAutoincTask::modify_autoinc()
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, root service must not be nullptr", K(ret));
   } else if (OB_FAIL(DDL_SIM(task_id_, MODIFY_AUTOINC_FAILED))) {
-    LOG_WARN("ddl sim failure", K(ret), K(task_id_));
   } else if (OB_FAIL(check_update_autoinc_end(is_update_autoinc_end))) {
-    LOG_WARN("fail to check update autoinc end", K(ret));
   } else if (!is_update_autoinc_end && update_autoinc_job_time_ == 0) {
     int64_t refreshed_schema_version = 0;
     const ObTableSchema *orig_table_schema = nullptr;
@@ -346,9 +321,7 @@ int ObModifyAutoincTask::modify_autoinc()
     ObMultiVersionSchemaService &schema_service = ddl_service.get_schema_service();
     const AlterTableSchema &alter_table_schema = alter_table_arg_.alter_table_schema_;
     if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("get schema guard failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, orig_table_schema))) {
-      LOG_WARN("get data table schema failed", K(ret), K(object_id_));
     } else if (OB_ISNULL(orig_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("cannot find orig table", K(ret), K(alter_table_arg_));
@@ -383,7 +356,6 @@ int ObModifyAutoincTask::modify_autoinc()
                                           alter_column_id, column_type, alter_table_arg_.sql_mode_,
                                           trace_id_, task_id_);
           if (OB_FAIL(root_service->submit_ddl_single_replica_build_task(task))) {
-            LOG_WARN("fail to submit ObUpdateAutoincSequenceTask", K(ret));
           } else {
             update_autoinc_job_time_ = ObTimeUtility::current_time();
             LOG_INFO("submit ObUpdateAutoincSequenceTask success", K(object_id_), K(alter_column_id));
@@ -394,7 +366,6 @@ int ObModifyAutoincTask::modify_autoinc()
   }
   if (OB_FAIL(ret) || is_update_autoinc_end) {
     if (OB_FAIL(switch_status(ObDDLTaskStatus::WAIT_TRANS_END, true, ret))) {
-      LOG_WARN("fail to switch status", K(ret));
     }
   }
   return ret;
@@ -424,9 +395,7 @@ int ObModifyAutoincTask::wait_trans_end()
     ObDDLService &ddl_service = root_service->get_ddl_service();
     ObMultiVersionSchemaService &schema_service = ddl_service.get_schema_service();
     if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("get schema guard failed", K(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema( object_id_, updated_table_schema))) {
-      LOG_WARN("get data table schema failed", K(ret), K(object_id_));
     } else if (OB_ISNULL(updated_table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("cannot find orig table", K(ret), K(alter_table_arg_));
@@ -435,7 +404,6 @@ int ObModifyAutoincTask::wait_trans_end()
                                             object_id_,
                                             ObDDLWaitTransEndCtx::WAIT_SCHEMA_TRANS,
                                             updated_table_schema->get_schema_version()))) {
-      LOG_WARN("fail to init wait trans ctx", K(ret));
     }
   }
   // try wait transaction end
@@ -454,7 +422,6 @@ int ObModifyAutoincTask::wait_trans_end()
 
   if (new_status != ObDDLTaskStatus::WAIT_TRANS_END || OB_FAIL(ret)) {
     if (OB_FAIL(switch_status(new_status, true, ret))) {
-      LOG_WARN("fail to switch task status", K(ret));
     }
   }
   return ret;
@@ -470,15 +437,12 @@ int ObModifyAutoincTask::set_schema_available()
     LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(DDL_SIM(task_id_, DDL_TASK_TAKE_EFFECT_FAILED))) {
-    LOG_WARN("ddl sim failure", K(ret), K(task_id_));
   } else {
     ObSArray<uint64_t> unused_ids;
     alter_table_arg_.ddl_task_type_ = share::UPDATE_AUTOINC_SCHEMA;
     
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(object_id_, rpc_timeout))) {
-      LOG_WARN("get rpc timeout failed", K(ret));
     } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->        execute_ddl_task(alter_table_arg_, unused_ids); }))) {
-      LOG_WARN("alter table failed", K(ret));
     }
   }
   return ret;
@@ -497,16 +461,13 @@ int ObModifyAutoincTask::rollback_schema()
     ObArenaAllocator allocator;
     SMART_VAR(obcall::ObAlterTableArg, alter_table_arg) {
       if (OB_FAIL(deep_copy_table_arg(allocator, alter_table_arg_, alter_table_arg))) {
-        LOG_WARN("deep copy table arg failed", K(ret));
       } else {
         ObSArray<uint64_t> unused_ids;
         alter_table_arg.ddl_task_type_ = share::UPDATE_AUTOINC_SCHEMA;
         
         alter_table_arg.alter_table_schema_.reset_column_info();
         if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(object_id_, rpc_timeout))) {
-          LOG_WARN("get rpc timeout failed", K(ret));
         } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->            execute_ddl_task(alter_table_arg, unused_ids); }))) {
-          LOG_WARN("alter table failed", K(ret));
         }
       }
     }
@@ -518,11 +479,8 @@ int ObModifyAutoincTask::fail()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(rollback_schema())) {
-    LOG_WARN("fail to set schema available", K(ret));
   } else if (OB_FAIL(unlock_table())) {
-    LOG_WARN("fail to unlock table", K(ret));
   } else if (OB_FAIL(cleanup())) {
-    LOG_WARN("clean up failed", K(ret));
   } else {
     need_retry_ = false;
   }
@@ -533,11 +491,8 @@ int ObModifyAutoincTask::success()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(set_schema_available())) {
-    LOG_WARN("fail to set schema available", K(ret));
   } else if (OB_FAIL(unlock_table())) {
-    LOG_WARN("fail to unlock table", K(ret));
   } else if (OB_FAIL(cleanup())) {
-    LOG_WARN("clean up failed", K(ret));
   } else {
     need_retry_ = false;
   }
@@ -552,9 +507,7 @@ int ObModifyAutoincTask::cleanup_impl()
     ret = OB_NOT_INIT;
     LOG_WARN("ObModifyAutoincTask has not been inited", K(ret));
   } else if (OB_FAIL(report_error_code(unused_str))) {
-    LOG_WARN("report error code failed", K(ret));
   } else if (OB_FAIL(remove_task_record())) {
-    LOG_WARN("remove task record failed", K(ret));
   }
   return ret;
 }
@@ -590,10 +543,8 @@ int ObModifyAutoincTask::check_health()
     ret = OB_STATE_NOT_MATCH;
     LOG_WARN("ddl service not started", KR(ret));
     need_retry_ = false;
-  } else if (OB_FAIL(refresh_status())) { // refresh task status
-    LOG_WARN("refresh status failed", K(ret));
+  } else if (OB_FAIL(refresh_status())) {
   } else if (OB_FAIL(refresh_schema_version())) {
-    LOG_WARN("refresh schema version failed", K(ret));
   } else if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
@@ -603,9 +554,7 @@ int ObModifyAutoincTask::check_health()
     const ObTableSchema *index_schema = nullptr;
     bool is_source_table_exist = false;
     if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("get tanant schema guard failed", K(ret));
     } else if (OB_FAIL(schema_guard.check_table_exist(object_id_, is_source_table_exist))) {
-      LOG_WARN("check data table exist failed", K(ret), K(object_id_));
     } else if (!is_source_table_exist) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("data table not exist", K(ret), K(is_source_table_exist));
@@ -631,9 +580,7 @@ int ObModifyAutoincTask::serialize_params_to_message(char *buf, const int64_t bu
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(ObDDLTask::serialize_params_to_message(buf, buf_len, pos))) {
-    LOG_WARN("fail to serialize ObDDLTask", K(ret));
   } else if (OB_FAIL(alter_table_arg_.serialize(buf, buf_len, pos))) {
-    LOG_WARN("serialize table arg failed", K(ret));
   }
   return ret;
 }
@@ -646,11 +593,8 @@ int ObModifyAutoincTask::deserialize_params_from_message(const char *buf, const 
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(buf), K(data_len));
   } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, data_len, pos))) {
-    LOG_WARN("ObDDLTask deserlize failed", K(ret));
   } else if (OB_FAIL(tmp_arg.deserialize(buf, data_len, pos))) {
-    LOG_WARN("serialize table failed", K(ret));
   } else if (OB_FAIL(deep_copy_table_arg(allocator_, tmp_arg, alter_table_arg_))) {
-    LOG_WARN("deep copy table arg failed", K(ret));
   }
   return ret;
 }

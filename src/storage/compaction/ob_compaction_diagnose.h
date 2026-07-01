@@ -329,9 +329,7 @@ int ObIDiagnoseInfoMgr::alloc_and_add(const int64_t key, T *input_info)
         ret = purge_with_rw_lock(true);
       }
       if (OB_FAIL(ret)) {
-        STORAGE_LOG(WARN, "failed to add info into pool", K(ret), K(key));
       } else if (OB_FAIL(add_with_no_lock(key, info))) {
-        STORAGE_LOG(WARN, "failed to add info into pool", K(ret), K(key));
       }
     }
   }
@@ -353,7 +351,6 @@ public:
 
   void destroy() {
     ObIDiagnoseInfoMgr::destroy();
-    STORAGE_LOG(INFO, "ObScheduleSuspectInfoMgr destroy finish");
   }
   int add_suspect_info(const int64_t key_value, ObScheduleSuspectInfo &info);
 

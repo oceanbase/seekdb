@@ -95,7 +95,6 @@ int ObMViewMdsOpTask::CollectNeedDeleteMdsFunctor::
       LOG_INFO("mview_mds_op", "txid", mv_mds_kv.first, "mds", mv_mds_kv.second);
     } else if (OB_HASH_NOT_EXIST) {
       if (OB_FAIL(del_tx_id_.push_back(mv_mds_kv.first))) {
-        LOG_WARN("del_tx_id push failed", KR(ret), K(mv_mds_kv.first));
       }
     } else {
       LOG_WARN("check tx_id failed", KR(ret), K(mv_mds_kv.first));
@@ -114,11 +113,8 @@ int ObMViewMdsOpTask::update_mview_mds_op()
   hash::ObHashSet<transaction::ObTransID> tx_set;
   int64_t start_ts = ObTimeUtil::current_time();
   if (OB_FAIL(tx_set.create(32))) {
-    LOG_WARN("create tx set failed", KR(ret));
   } else if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id, ls_handle, ObLSGetMod::STORAGE_MOD))) {
-    LOG_WARN("get_ls failed", KR(ret), K(ls_id));
   } else if (OB_FAIL(ls_handle.get_ls()->iterate_tx_ctx(ls_tx_ctx_iter))) {
-    LOG_WARN("construt tx_ctx iter failed", KR(ret));
   } else {
     transaction::ObPartTransCtx *tx_ctx = nullptr;
     while (OB_SUCC(ret)) {
@@ -130,7 +126,6 @@ int ObMViewMdsOpTask::update_mview_mds_op()
           break;
         }
       } else if (OB_FAIL(tx_ctx->collect_mview_mds_op(need_collect, arg))) {
-        LOG_WARN("collect mview mds failed", KR(ret));
       } else if (need_collect && OB_FAIL(mview_mds_map.set_refactored(tx_ctx->get_trans_id(), arg, 1))) {
         LOG_WARN("set mview mds failed", KR(ret));
       } else if (need_collect && OB_FAIL(tx_set.set_refactored(tx_ctx->get_trans_id()))) {
@@ -148,7 +143,6 @@ int ObMViewMdsOpTask::update_mview_mds_op()
   LOG_INFO("mview_mds_op", K(mview_mds_map.size()), "tx_count", tx_set.size());
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(mview_mds_map.foreach_refactored(collect_func))) {
-    LOG_WARN("fail to foreach mview mds map", K(ret));
   } else {
     for (int64_t idx = 0; idx < del_tx_id.count() && OB_SUCC(ret); idx++) {
       if (OB_FAIL(mview_mds_map.erase_refactored(del_tx_id.at(idx)))) {
@@ -177,7 +171,6 @@ void ObMViewMdsOpTask::runTimerTask()
   }
   if (!need_sched) {
   } else if (OB_FAIL(update_mview_mds_op())) {
-    LOG_WARN("update_mview_mds_op failed", KR(ret));
   } else {
     last_sched_ts_ = curr_ts;
   }

@@ -79,7 +79,6 @@ int ObAllVirtualStorageLeakInfo::set_ip()
     ipstr_ = ObString::make_string(ipbuf);
     port_ = addr_->get_port();
     if (OB_FAIL(ob_write_string(*allocator_, ipstr_, ipstr_))) {
-      SERVER_LOG(WARN, "Failed to write string", K(ret));
     }
   }
   return ret;
@@ -90,13 +89,9 @@ int ObAllVirtualStorageLeakInfo::inner_open()
   INIT_SUCC(ret);
   if (OB_UNLIKELY(opened_)) {
     ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(WARN, "Unexpected opened", K(opened_));
   } else if (OB_FAIL(set_ip())) {
-    SERVER_LOG(WARN, "Fail to set ip", K(ret));
   } else if (OB_FAIL(map_info_.create(MAP_BUCKET_NUM, "CACHE_CHECKER_T", "CACHE_CHECKER_T"))) {
-    SERVER_LOG(WARN, "Fail to create map info", K(ret));
   } else if (OB_FAIL(ObStorageLeakChecker::get_instance().get_aggregate_bt_info(map_info_))) {
-    SERVER_LOG(WARN, "Fail to get aggregated backtrace info", K(ret));
   } else {
     opened_ = true;
     map_iter_ = map_info_.begin();
@@ -125,7 +120,6 @@ int ObAllVirtualStorageLeakInfo::process_row()
           ObStorageCheckID check_id = map_iter_->first.check_id_;
           if (check_id < ObStorageCheckID::ALL_CACHE) {
             if (OB_FAIL(ObKVGlobalCache::get_instance().get_cache_name((int64_t)check_id, check_mod_))) {
-              SERVER_LOG(WARN, "Fail to get cache name", K(ret), K(check_id));
             }
           } else if (ObStorageCheckID::IO_HANDLE == check_id) {
             MEMCPY(check_mod_, ObStorageLeakChecker::IO_HANDLE_CHECKER_NAME, sizeof(check_mod_));

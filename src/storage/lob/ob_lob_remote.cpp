@@ -86,7 +86,6 @@ int ObLobRemoteUtil::query(ObLobAccessParam& param, const ObLobQueryArg::QueryTy
     ret = OB_NOT_MASTER;
     LOG_WARN("call from rpc, but remote again", K(ret), K(dst_addr), K(param));
   } else if (OB_FAIL(remote_query_init_ctx(param, qtype, remote_ctx))) {
-    LOG_WARN("fail to init remote query ctx", K(ret));
   } else {
     // cross-tenant LOB obcall RPC removed: run the same local LOB query the OB_LOB_QUERY
     // processor (ObLobQueryP::process) ran, in-process under the lob's tenant.
@@ -111,18 +110,15 @@ int ObLobRemoteUtil::query(ObLobAccessParam& param, const ObLobQueryArg::QueryTy
         const int64_t timeout = param.timeout_;
         if (OB_FAIL(lob_mngr->build_lob_param(query_param, *param.allocator_, param.coll_type_,
             param.offset_, param.len_, timeout, *param.lob_locator_))) {
-          LOG_WARN("failed to build lob param", K(ret));
         } else if (qtype == ObLobQueryArg::QueryType::READ) {
           ObLobQueryIter *iter = nullptr;
           if (OB_FAIL(lob_mngr->query(query_param, iter))) {
-            LOG_WARN("failed to query lob.", K(ret), K(query_param));
           } else {
             remote_ctx->query_iter_ = iter;
           }
         } else if (qtype == ObLobQueryArg::QueryType::GET_LENGTH) {
           uint64_t len = 0;
           if (OB_FAIL(lob_mngr->getlength(query_param, len))) {
-            LOG_WARN("failed to getlength lob.", K(ret), K(query_param));
           } else {
             remote_ctx->length_ = len;
           }

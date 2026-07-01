@@ -52,11 +52,8 @@ int ObTableLoadManager::init()
     LOG_WARN("ObTableLoadManager init twice", KR(ret), KP(this));
   } else {
     if (OB_FAIL(table_ctx_map_.create(bucket_num, "TLD_TblCtxMap", "TLD_TblCtxMap"))) {
-      LOG_WARN("fail to create hashmap", KR(ret), K(bucket_num));
     } else if (OB_FAIL(client_task_map_.create(bucket_num, "TLD_CliTaskMap", "TLD_CliTaskMap"))) {
-      LOG_WARN("fail to create hashmap", KR(ret), K(bucket_num));
     } else if (OB_FAIL(client_task_brief_map_.create(bucket_num, "TLD_CTBriefMap", "TLD_CTBriefMap"))) {
-      LOG_WARN("fail to init create hashmap", KR(ret));
     } else {
       is_inited_ = true;
     }

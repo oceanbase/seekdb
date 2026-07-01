@@ -63,7 +63,6 @@ int ObTableLoadResourceService::mtl_init(ObTableLoadResourceService *&service)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KP(service));
   } else if (OB_FAIL(service->init())) {
-    LOG_WARN("fail to init resource service", KR(ret));
   }
 
   return ret;
@@ -86,7 +85,6 @@ void ObTableLoadResourceService::wait()
   if (OB_NOT_NULL(resource_manager_)) {
     LOG_INFO("resource_manager_ start to wait");
     if (OB_FAIL(resource_manager_->wait())) {
-      LOG_WARN("fail to wait", KR(ret));
     }
   }
   LOG_INFO("resource_service finish to wait");
@@ -109,12 +107,10 @@ int ObTableLoadResourceService::switch_to_leader()
   ObMutexGuard switch_guard(switch_lock_);
   int64_t start_time_us = ObTimeUtility::current_time();
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("fail to check_inner_stat", KR(ret));
   } else {
     if (OB_ISNULL(resource_manager_)) {
       obsys::ObWLockGuard w_guard(rw_lock_);
       if (OB_FAIL(alloc_resource_manager())) {
-        LOG_WARN("fail to alloc resource_manager", KR(ret));
       }
     } else {
       obsys::ObRLockGuard r_guard(rw_lock_);
@@ -132,7 +128,6 @@ int ObTableLoadResourceService::switch_to_follower_gracefully() {
   int ret = OB_SUCCESS;
   LOG_INFO("switch_to_follower_gracefully");
   if (OB_FAIL(inner_switch_to_follower())) {
-    LOG_WARN("fail to switch to follower", KR(ret));
   }
   
   return ret;
@@ -142,7 +137,6 @@ void ObTableLoadResourceService::switch_to_follower_forcedly() {
   int ret = OB_SUCCESS;
   LOG_INFO("switch_to_follower_forcedly");
   if (OB_FAIL(inner_switch_to_follower())) {
-    LOG_WARN("fail to switch to follower", KR(ret));
   }
 }
 
@@ -152,7 +146,6 @@ int ObTableLoadResourceService::alloc_resource_manager()
   void *buf = nullptr;
   int64_t len = sizeof(ObTableLoadResourceManager);
   if (FAILEDx(check_inner_stat())) {
-    LOG_WARN("fail to check_inner_stat", KR(ret));
   } else if (OB_NOT_NULL(resource_manager_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("resource_manager_ is not null", KR(ret), KP_(resource_manager));
@@ -162,9 +155,7 @@ int ObTableLoadResourceService::alloc_resource_manager()
   } else if (FALSE_IT(resource_manager_ = new(buf) ObTableLoadResourceManager())) {
     // impossible
   } else if (OB_FAIL(resource_manager_->init())) {
-    LOG_WARN("fail to init resource_manager", KR(ret));
   } else if (OB_FAIL(resource_manager_->start())) {
-    LOG_WARN("fail to start resource_manager", KR(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -172,7 +163,6 @@ int ObTableLoadResourceService::alloc_resource_manager()
   } else {
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(delete_resource_manager())) {
-      LOG_WARN("fail to delete tenant major resource manager", KR(tmp_ret));
     }
     buf = nullptr;
   }
@@ -184,13 +174,11 @@ int ObTableLoadResourceService::delete_resource_manager()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("fail to check_inner_stat", KR(ret));
   } else if (OB_ISNULL(resource_manager_)) {
     // no need to delete
   } else {
     resource_manager_->stop();
     if (OB_FAIL(resource_manager_->wait())) {
-      LOG_WARN("fail to wait", KR(ret));
     } else {
       resource_manager_->destroy();
       LOG_INFO("succ to delete resource_manager");
@@ -309,7 +297,6 @@ int ObTableLoadResourceService::apply_resource(ObDirectLoadResourceApplyArg &arg
   } else {
     ObAddr leader;
     if (OB_FAIL(get_leader_addr(share::SYS_LS, leader))) {
-      LOG_WARN("fail to get leader addr", KR(ret));
     } else if (ObTableLoadUtils::is_local_addr(leader)) {
       ret = local_apply_resource(arg, res);
     } else {
@@ -329,7 +316,6 @@ int ObTableLoadResourceService::release_resource(ObDirectLoadResourceReleaseArg 
   } else {
     ObAddr leader;
     if (OB_FAIL(get_leader_addr(share::SYS_LS, leader))) {
-      LOG_WARN("fail to get leader addr", KR(ret));
     } else if (ObTableLoadUtils::is_local_addr(leader)) {
       ret = local_release_resource(arg);
     } else {

@@ -62,14 +62,10 @@ int ObDirectLoadMultipleSSTableDataBlockScanner::init(
     DataBlockReader data_block_reader;
     if (OB_FAIL(index_block_reader.init(table_data_desc.sstable_index_block_size_,
                                         table_data_desc.compressor_type_))) {
-      LOG_WARN("fail to index block reader", KR(ret));
     } else if (OB_FAIL(data_block_reader.init(table_data_desc.sstable_data_block_size_,
                                               table_data_desc.compressor_type_))) {
-      LOG_WARN("fail to data block reader", KR(ret));
     } else if (OB_FAIL(locate_left_border(index_block_reader, data_block_reader))) {
-      LOG_WARN("fail to locate left border", KR(ret));
     } else if (OB_FAIL(locate_right_border(index_block_reader, data_block_reader))) {
-      LOG_WARN("fail to locate right border", KR(ret));
     } else if (OB_UNLIKELY(left_index_entry_iter_ > right_index_entry_iter_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected locate result", KR(ret), K(left_index_entry_iter_),
@@ -92,13 +88,11 @@ int ObDirectLoadMultipleSSTableDataBlockScanner::locate_left_border(
     left_data_block_offset_ = 0;
   } else if (OB_FAIL(
                range_->start_key_.compare(sstable_->get_start_key(), *datum_utils_, cmp_ret))) {
-    LOG_WARN("fail to compare rowkey", KR(ret));
   } else if (cmp_ret < 0 ||
              (cmp_ret == 0 && range_->is_left_closed())) { // range.start_key_ < sstable
     left_index_entry_iter_ = sstable_->index_entry_begin();
     left_data_block_offset_ = 0;
   } else if (OB_FAIL(range_->start_key_.compare(sstable_->get_end_key(), *datum_utils_, cmp_ret))) {
-    LOG_WARN("fail to compare rowkey", KR(ret));
   } else if (cmp_ret > 0 ||
              (cmp_ret == 0 && range_->is_left_open())) { // range.start_key_ > sstable
     left_index_entry_iter_ = sstable_->index_entry_end();
@@ -132,9 +126,7 @@ int ObDirectLoadMultipleSSTableDataBlockScanner::locate_left_border(
       index_block_reader.reuse();
       if (OB_FAIL(index_block_reader.open(fragment.index_file_handle_, index_block_offset,
                                           sstable_->get_meta().index_block_size_))) {
-        LOG_WARN("fail to open index file", KR(ret), K(fragment), K(index_block_offset));
       } else if (OB_FAIL(index_block_reader.get_entry(index_entry_idx, entry))) {
-        LOG_WARN("fail to get entry", KR(ret));
       } else {
         left_data_block_offset_ = entry->offset_;
       }
@@ -152,12 +144,10 @@ int ObDirectLoadMultipleSSTableDataBlockScanner::locate_right_border(
     right_index_entry_iter_ = sstable_->index_entry_end();
     right_data_block_offset_ = 0;
   } else if (OB_FAIL(range_->end_key_.compare(sstable_->get_start_key(), *datum_utils_, cmp_ret))) {
-    LOG_WARN("fail to compare rowkey", KR(ret));
   } else if (cmp_ret < 0 || (cmp_ret == 0 && range_->is_right_open())) { // range.end_key_ < sstable
     right_index_entry_iter_ = sstable_->index_entry_begin();
     right_data_block_offset_ = 0;
   } else if (OB_FAIL(range_->end_key_.compare(sstable_->get_end_key(), *datum_utils_, cmp_ret))) {
-    LOG_WARN("fail to compare rowkey", KR(ret));
   } else if (cmp_ret > 0 ||
              (cmp_ret == 0 && range_->is_right_closed())) { // range.end_key_ > sstable
     right_index_entry_iter_ = sstable_->index_entry_end();
@@ -191,9 +181,7 @@ int ObDirectLoadMultipleSSTableDataBlockScanner::locate_right_border(
       index_block_reader.reuse();
       if (OB_FAIL(index_block_reader.open(fragment.index_file_handle_, index_block_offset,
                                           sstable_->get_meta().index_block_size_))) {
-        LOG_WARN("fail to open index file", KR(ret), K(fragment), K(index_block_offset));
       } else if (OB_FAIL(index_block_reader.get_entry(index_entry_idx, entry))) {
-        LOG_WARN("fail to get entry", KR(ret));
       } else {
         right_data_block_offset_ = entry->offset_;
       }

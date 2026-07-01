@@ -69,10 +69,8 @@ int ObExecutor::execute_plan(ObExecContext &ctx)
     ret = OB_NOT_INIT;
     LOG_WARN("phy_plan_ is NULL", K(ret));
   } else if (OB_FAIL(session_info->set_cur_phy_plan(phy_plan_))) {
-    LOG_WARN("set extra serialize vars", K(ret));
   } else if (OB_FAIL(phy_plan_->get_expr_frame_info()
                                  .pre_alloc_exec_memory(ctx))) {
-    LOG_WARN("fail to pre allocate memory", K(ret), K(phy_plan_->get_expr_frame_info()));
   } else if (batched_stmt_cnt > 0
       && OB_FAIL(plan_ctx->create_implicit_cursor_infos(batched_stmt_cnt))) {
     LOG_WARN("create implicit cursor infos failed", K(ret), K(batched_stmt_cnt));
@@ -98,7 +96,6 @@ int ObExecutor::execute_plan(ObExecContext &ctx)
         }
         ObOperator *op = NULL;
         if (OB_FAIL(phy_plan_->get_root_op_spec()->create_operator(ctx, op))) {
-          LOG_WARN("create operator from spec failed", K(ret));
         } else if (OB_ISNULL(op)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("created operator is NULL", K(ret));
@@ -145,9 +142,7 @@ int ObExecutor::execute_static_cg_px_plan(ObExecContext &ctx)
   int ret = OB_SUCCESS;
   ObOperator *op = NULL;
   if (OB_FAIL(phy_plan_->get_root_op_spec()->create_op_input(ctx))) {
-    LOG_WARN("create input from spec failed", K(ret));
   } else if (OB_FAIL(phy_plan_->get_root_op_spec()->create_operator(ctx, op))) {
-    LOG_WARN("create operator from spec failed", K(ret));
   } else if (OB_ISNULL(op)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("created operator is NULL", K(ret));

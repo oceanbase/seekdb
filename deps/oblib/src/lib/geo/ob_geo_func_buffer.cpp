@@ -110,7 +110,6 @@ private:
     if (is_tree == false) {
       GeomIType *i_geo = const_cast<GeomIType *>(reinterpret_cast<const GeomIType *>(g));
       if (OB_FAIL(i_geo->do_visit(visitor))) {
-        LOG_WARN("failed to do geo to tree visit", K(ret));
       } else {
         geo_tree = static_cast<GeomTreeType *>(visitor.get_geometry());
       }
@@ -181,7 +180,6 @@ private:
           LOG_WARN("invalid buffer distance", K(ret), K(strategy.distance_val_), K(geo_tree->type()));
         }
       } else if (OB_FAIL(unwrap_geometry_tree(geo_res, result))) {
-        LOG_WARN("unwrap buffer result failed", K(ret));
       } else {
         // do nothing
       }
@@ -223,7 +221,6 @@ private:
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid strategy for cartisan collection with null srs", K(srid), K(ret));
     } else if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<ObCartesianGeometrycollection>(context, const_cast<ObGeometry *>(g), mpt, ml, mpo))) {
-      LOG_WARN("fail to do gc prepare", K(ret));
     } else if (OB_ISNULL(mpt) || OB_ISNULL(ml) || OB_ISNULL(mpo)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null geometry collection union", K(ret), KP(mpt), KP(ml), KP(mpo)); 
@@ -339,13 +336,11 @@ private:
         union_context_mpt_ml.append_geo_arg(mpt_res);
         union_context_mpt_ml.append_geo_arg(ml_res);
         if (OB_FAIL(ObGeoFuncUnion::eval(union_context_mpt_ml, temp_geo))) {
-          LOG_WARN("union buffer result of multipoints and multistringline failed", K(ret));
         } else {
           ObGeoEvalCtx union_context_mpt_ml_mpo(context.get_mem_ctx(), srs);
           union_context_mpt_ml_mpo.append_geo_arg(temp_geo);
           union_context_mpt_ml_mpo.append_geo_arg(mpo_res);
           if (OB_FAIL(ObGeoFuncUnion::eval(union_context_mpt_ml_mpo, temp_geo))) {
-            LOG_WARN("union buffer result of multipolygon failed", K(ret));
           } else if (temp_geo->is_empty()) {
             result = OB_NEWx(ObCartesianGeometrycollection, allocator, srid, *allocator);
             if (OB_ISNULL(result)) {
@@ -353,7 +348,6 @@ private:
               LOG_WARN("failed to allocate memory for empty result", K(ret), K(srid), KP(result));
             }
           } else if (OB_FAIL(unwrap_geometry_tree(temp_geo, result))) {
-            LOG_WARN("unwrap buffer result of collection failed", K(ret));
           } else {
             // do nothing
           }
@@ -386,14 +380,9 @@ private:
       if (g->is_empty()) {
         is_empty_res = true;
       } else if (OB_FAIL(transfrom_proj_context.append_geo_arg(g))) {
-        LOG_WARN("failed to append geo arg to gis context", K(ret),
-          K(transfrom_proj_context.get_geo_count()));
       } else if (OB_FAIL(transfrom_proj_context.append_val_arg(&strategy->proj4_self_))) {
-        LOG_WARN("failed to append src proj4_param to proj_context", K(ret), K(strategy->proj4_self_));
       } else if (OB_FAIL(transfrom_proj_context.append_val_arg(&strategy->proj4_proj_))) {
-        LOG_WARN("failed to append dest proj4_param to proj_context", K(ret), K(strategy->proj4_proj_));
       } else if (OB_FAIL(ObGeoFuncTransform::eval(transfrom_proj_context, projected_geo))) {
-        LOG_WARN("failed to transfrom to proj srs", K(ret), K(strategy->proj4_self_), K(strategy->proj4_proj_));
       } else {
         if (!is_collection) {
           projected_geo->set_srid(strategy->srs_proj_->get_srid());
@@ -410,7 +399,6 @@ private:
       }
 
       if (OB_FAIL(ret)) {
-        LOG_WARN("eval buffer failed", K(ret), K(is_collection));
       } else if (is_empty_res) {
         // Notice: mysql only return emtpy geometry collection, but it does not support geographic types
         // return empty polygon for geographic types like postgis
@@ -421,20 +409,12 @@ private:
         }
       } else if (OB_FAIL(ObGeoTypeUtil::to_wkb(*allocator, *projected_result, 
           strategy->srs_proj_, buffered_proj_wkb))) {
-        LOG_WARN("fail to to_wkb for projected buffer", K(ret));
       } else if (OB_FAIL(ObGeoTypeUtil::create_geo_by_wkb(*allocator, buffered_proj_wkb,
           strategy->srs_proj_, projected_bin, false))) {
-        LOG_WARN("fail to create geo bin for projected buffer", K(ret));
       } else if (OB_FAIL(transfrom_wgs84_context.append_geo_arg(projected_bin))) {
-        LOG_WARN("failed to append geo arg to gis context", K(ret), 
-          K(transfrom_wgs84_context.get_geo_count()));
       } else if (OB_FAIL(transfrom_wgs84_context.append_val_arg(&strategy->proj4_proj_))) {
-        LOG_WARN("failed to append src proj4_param to wgs84_context", K(ret), K(strategy->proj4_proj_));
       } else if (OB_FAIL(transfrom_wgs84_context.append_val_arg(&strategy->proj4_wgs84_))) {
-        LOG_WARN("failed to append dest proj4_param to wgs84_context", K(ret), K(strategy->proj4_wgs84_));
       } else if (OB_FAIL(ObGeoFuncTransform::eval(transfrom_wgs84_context, wgs84_geo))) {
-        LOG_WARN("failed to transfrom to wgs84 srs", K(ret), K(strategy->proj4_proj_),
-            K(strategy->proj4_wgs84_));
       } else {
         result = wgs84_geo;
         // do nothing
@@ -604,7 +584,6 @@ OB_GEO_UNARY_FUNC_BEGIN(ObGeoFuncBufferImpl, ObWkbGeogPoint, ObGeometry *)
       ObIWkbGeogPoint *i_geo = const_cast<ObIWkbGeogPoint *>(reinterpret_cast<const ObIWkbGeogPoint *>(g));
       ObGeographMultipolygon *geo_res = OB_NEWx(ObGeographMultipolygon , allocator, g->get_srid(), *allocator); 
       if (OB_FAIL(i_geo->do_visit(visitor))) {
-        LOG_WARN("failed to do geo to tree visit", K(ret));
       } else {
         ObGeographPoint *geo_tree = static_cast<ObGeographPoint *>(visitor.get_geometry());
         // returning is a multipolygon
@@ -625,7 +604,6 @@ OB_GEO_UNARY_FUNC_BEGIN(ObGeoFuncBufferImpl, ObWkbGeogPoint, ObGeometry *)
             // normalize longititude range
             ObGeoLongtitudeCorrectVisitor longti_normalize_visitor(srs);
             if (OB_FAIL(result->do_visit(longti_normalize_visitor))) {
-              LOG_WARN("failed to do longti normalize visit", K(ret));
             }
           }
         }

@@ -58,7 +58,6 @@ int ObTabletReplicaFilterHolder::check(const ObTabletReplica &replica, bool &pas
     pass = true;
     DLIST_FOREACH(it, filter_list_) {
       if (OB_FAIL(it->check(replica, pass))) {
-        LOG_WARN("check replica failed", KR(ret));
       } else {
         if (!pass) {
           break;
@@ -96,7 +95,6 @@ int ObTabletReplicaFilterHolder::set_reserved_server(const ObAddr &server)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("server filter is null", KR(ret));
     } else if (OB_FAIL(add_(*server_filter))) {
-      LOG_WARN("add filter failed", KR(ret));
     }
   }
   if (OB_FAIL(ret)) {

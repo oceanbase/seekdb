@@ -76,8 +76,7 @@ struct str_helper
       ret = int512_t::_impl::is_zero(*v);
       break;
     }
-    default:
-      COMMON_LOG(WARN, "invalid integer width", K(int_bytes));
+    default: break;
     }
     return ret;
   }
@@ -102,8 +101,7 @@ struct str_helper
       ret = int512_t::_impl::is_negative(*v);
       break;
     }
-    default:
-      COMMON_LOG(WARN, "invalid integer width", K(int_bytes));
+    default: break;
     }
     return ret;
   }
@@ -178,7 +176,6 @@ int64_t ObWideInteger<Bits, Signed>::to_string(char *buffer, const int64_t buffe
   int64_t pos = 0;
   int ret = OB_SUCCESS;
   if (OB_FAIL(wide::to_string(*this, buffer, buffer_len, pos))) {
-    COMMON_LOG(WARN, "to_string failed", K(ret));
   }
   return pos;
 }

@@ -82,7 +82,6 @@ int ObLSRunningState::create_finish(const share::ObLSID &ls_id)
   int ret = OB_SUCCESS;
   StateHelper state_helper(ls_id, state_);
   if (OB_FAIL(state_helper.switch_state(Ops::CREATE_FINISH))) {
-    LOG_WARN("create finish failed", K(ret), K(ls_id));
   }
   return ret;
 }
@@ -92,7 +91,6 @@ int ObLSRunningState::online(const share::ObLSID &ls_id)
   int ret = OB_SUCCESS;
   StateHelper state_helper(ls_id, state_);
   if (OB_FAIL(state_helper.switch_state(Ops::ONLINE))) {
-    LOG_WARN("online failed", K(ret), K(ls_id));
   }
   return ret;
 }
@@ -102,7 +100,6 @@ int ObLSRunningState::pre_offline(const share::ObLSID &ls_id)
   int ret = OB_SUCCESS;
   StateHelper state_helper(ls_id, state_);
   if (OB_FAIL(state_helper.switch_state(Ops::PRE_OFFLINE))) {
-    LOG_WARN("pre offline failed", K(ret), K(ls_id));
   }
   return ret;
 }
@@ -112,7 +109,6 @@ int ObLSRunningState::post_offline(const share::ObLSID &ls_id)
   int ret = OB_SUCCESS;
   StateHelper state_helper(ls_id, state_);
   if (OB_FAIL(state_helper.switch_state(Ops::POST_OFFLINE))) {
-    LOG_WARN("post offline failed", K(ret), K(ls_id));
   }
   return ret;
 }
@@ -122,7 +118,6 @@ int ObLSRunningState::stop(const share::ObLSID &ls_id)
   int ret = OB_SUCCESS;
   StateHelper state_helper(ls_id, state_);
   if (OB_FAIL(state_helper.switch_state(Ops::STOP))) {
-    LOG_WARN("stop failed", K(ret), K(ls_id));
   }
   return ret;
 }
@@ -198,7 +193,6 @@ int ObLSPersistentState::start_work(const share::ObLSID &ls_id)
   int ret = OB_SUCCESS;
   StateHelper state_helper(ls_id, state_);
   if (OB_FAIL(state_helper.switch_state(Ops::START_WORK))) {
-    LOG_WARN("start work failed", K(ret), K(ls_id));
   }
   return ret;
 }
@@ -208,7 +202,6 @@ int ObLSPersistentState::start_ha(const share::ObLSID &ls_id)
   int ret = OB_SUCCESS;
   StateHelper state_helper(ls_id, state_);
   if (OB_FAIL(state_helper.switch_state(Ops::START_HA))) {
-    LOG_WARN("start ha failed", K(ret), K(ls_id));
   }
   return ret;
 }
@@ -218,7 +211,6 @@ int ObLSPersistentState::finish_ha(const share::ObLSID &ls_id)
   int ret = OB_SUCCESS;
   StateHelper state_helper(ls_id, state_);
   if (OB_FAIL(state_helper.switch_state(Ops::FINISH_HA))) {
-    LOG_WARN("finish ha failed", K(ret), K(ls_id));
   }
   return ret;
 }
@@ -228,7 +220,6 @@ int ObLSPersistentState::remove(const share::ObLSID &ls_id)
   int ret = OB_SUCCESS;
   StateHelper state_helper(ls_id, state_);
   if (OB_FAIL(state_helper.switch_state(Ops::REMOVE))) {
-    LOG_WARN("remove failed", K(ret), K(ls_id));
   }
   return ret;
 }
@@ -240,7 +231,6 @@ int ObLSPersistentState::serialize(char* buf, const int64_t buf_len, int64_t& po
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, state_))) {
-    LOG_WARN("serialize state failed", KR(ret), KP(buf), K(buf_len), K(pos));
   }
   return ret;
 }
@@ -252,7 +242,6 @@ int ObLSPersistentState::deserialize(const char* buf, const int64_t data_len, in
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KP(buf), K(data_len));
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &state_))) {
-    LOG_WARN("deserialize state failed", KR(ret), KP(buf), K(data_len), K(pos));
   }
   return ret;
 }

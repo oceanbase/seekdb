@@ -77,7 +77,6 @@ struct ExampleUserHelperFunction3 {
     bool ret = false;
     if (!for_replay) {
       ret = true;
-      MDS_LOG(INFO, "[UNITTEST] test can not do prepare return true");
     } else {
       static int call_times = 0;
       if (call_times++ >= 1) {
@@ -194,27 +193,22 @@ inline const storage::mds::MdsWriter ExampleUserHelperCtx::get_writer() const
 
 inline void ExampleUserHelperCtx::on_redo(const share::SCN &redo_scn)
 {
-  MDS_LOG(INFO, "[UNITTEST] call on_redo with ctx", K(++call_times_));
 }
 
 inline void ExampleUserHelperCtx::before_prepare()
 {
-  MDS_LOG(INFO, "[UNITTEST] call before_prepare with ctx", K(++call_times_));
 }
 
 inline void ExampleUserHelperCtx::on_prepare(const share::SCN &prepare_version)
 {
-  MDS_LOG(INFO, "[UNITTEST] call on_prepare with ctx", K(++call_times_));
 }
 
 inline void ExampleUserHelperCtx::on_commit(const share::SCN &commit_version, const share::SCN &scn)
 {
-  MDS_LOG(INFO, "[UNITTEST] call on_commit with ctx", K(++call_times_));
 }
 
 inline void ExampleUserHelperCtx::on_abort(const share::SCN &scn)
 {
-  MDS_LOG(INFO, "[UNITTEST] call on_abort with ctx", K(++call_times_));
 }
 #endif
 

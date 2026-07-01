@@ -98,7 +98,6 @@ int ObTableLoadPlan::finish_generate(ObTableLoadTableOp *first_table_op)
     if (OB_SUCC(ret)) {
       ObTableLoadFinishOp *finish_op = nullptr;
       if (OB_FAIL(alloc_op(finish_op, this))) {
-        LOG_WARN("fail to alloc op", KR(ret));
       } else {
         finish_op_ = finish_op;
         FLOG_INFO("[DIRECT_LOAD_OP] generate plan success", "plan", *this);
@@ -163,11 +162,9 @@ int ObTableLoadPlan::create_plan(ObTableLoadStoreCtx *store_ctx, ObIAllocator &a
   } else {
     if (ObDirectLoadMethod::is_incremental(store_ctx->ctx_->param_.method_)) {
       if (OB_FAIL(ObTableLoadIncPlan::create_plan(store_ctx, allocator, plan))) {
-        LOG_WARN("fail to create inc plan", KR(ret));
       }
     } else {
       if (OB_FAIL(ObTableLoadFullPlan::create_plan(store_ctx, allocator, plan))) {
-        LOG_WARN("fail to create full plan", KR(ret));
       }
     }
   }

@@ -52,7 +52,6 @@ int ObDropContextResolver::resolve(const ParseNode &parse_tree)
                                     K(allocator_), K(session_info_),
                                     K(params_.query_ctx_));
   } else if (OB_FAIL(ObResolverUtils::check_sync_ddl_user(session_info_, is_sync_ddl_user))) {
-    LOG_WARN("Failed to check sync_dll_user", K(ret));
   } else if (OB_UNLIKELY(NULL == (stmt = create_stmt<ObDropContextStmt>()))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("create context stmt failed", K(ret));
@@ -66,9 +65,7 @@ int ObDropContextResolver::resolve(const ParseNode &parse_tree)
     // check namesapce && package_name
     if (OB_FAIL(resolve_context_namespace(*parse_tree.children_[CONTEXT_NAMESPACE],
                                             ctx_namespace))) {
-      LOG_WARN("failed to resolve namespace", K(ret));
     } else if (OB_FAIL(ctx_schema.set_namespace(ctx_namespace))) {
-      LOG_WARN("failed to set context info", K(ret));
     }
   }
 
@@ -86,9 +83,7 @@ int ObDropContextResolver::resolve_context_namespace(const ParseNode &namespace_
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL", K(ret));
   } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-    LOG_WARN("fail to get collation_connection", K(ret));
   } else if (OB_FAIL(ObSQLUtils::check_and_convert_context_namespace(cs_type, ctx_namespace))) {
-    LOG_WARN("failed to check ctx namespace", K(ret));
   }
   return ret;
 }

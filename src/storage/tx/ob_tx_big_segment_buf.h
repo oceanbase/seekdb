@@ -110,7 +110,6 @@ int ObTxBigSegmentBuf::serialize_object(const T &obj)
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "The big segment buf is not inited", K(ret));
   } else if (OB_FAIL(obj.serialize(segment_buf_, segment_buf_len_, tmp_pos))) {
-    TRANS_LOG(WARN, "serialize object in big segment failed", K(ret));
   } else {
     segment_data_len_ = tmp_pos;
   }
@@ -127,7 +126,6 @@ int ObTxBigSegmentBuf::deserialize_object(T &obj)
     ret = OB_NOT_INIT;
     TRANS_LOG(WARN, "The big segment buf is not inited", K(ret));
   } else if (OB_FAIL(obj.deserialize(segment_buf_, segment_buf_len_, tmp_pos))) {
-    TRANS_LOG(WARN, "serialize object in big segment failed", K(ret));
   } else {
     segment_pos_ = tmp_pos;
   }

@@ -84,16 +84,13 @@ int ObExprStPrivAsEwkb::eval_priv_st_as_ewkb(const ObExpr &expr,
   ObString wkb_str;
 
   if (OB_FAIL(tmp_allocator.eval_arg(expr.args_[0], ctx, wkb_datum))) {
-    LOG_WARN("fail to eval wkb datum", K(ret));
   } else if (wkb_datum->is_null()) {
     is_null_result = true;
   } else if (FALSE_IT(wkb_str = wkb_datum->get_string())) {
   } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(tmp_allocator, *wkb_datum,
               expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb_str))) {
-    LOG_WARN("fail to get real data.", K(ret), K(wkb_str));
   } else if (FALSE_IT(tmp_allocator.set_baseline_size(wkb_str.length()))) {
   } else if (OB_FAIL(ObGeoExprUtils::get_srs_item(ctx, srs_guard, wkb_str, srs))) {
-    LOG_WARN("fail to get srs item", K(ret), K(wkb_str));
   } else if (OB_FAIL(ObGeoTypeUtil::create_geo_by_wkb(tmp_allocator, wkb_str, srs, geo, true, true, true))) {
     LOG_WARN("fail to create geo by wkb", K(ret), K(wkb_str));
     if (ret != OB_ERR_SRS_NOT_FOUND && ret != OB_ERR_INVALID_GEOMETRY_TYPE) {
@@ -110,19 +107,16 @@ int ObExprStPrivAsEwkb::eval_priv_st_as_ewkb(const ObExpr &expr,
     if (is_null_result) {
       res.set_null();
     } else if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*geo, expr, ctx, srs, res_wkb))) {
-      LOG_WARN("failed to write geometry to wkb", K(ret));
     } else {
       ObLobLocatorV2 lob(res_wkb, expr.obj_meta_.has_lob_header());
       ObGeoWkbHeader header;
       if (is_geog && OB_FAIL(ObGeoExprUtils::check_coordinate_range(srs, geo, N_PRIV_ST_ASEWKB, true))) {
         LOG_WARN("fail to check coordinate range", K(ret));
       } else if (OB_FAIL(lob.get_inrow_data(res_wkb))) {
-        LOG_WARN("fail to get inrow data", K(ret), K(lob));
       } else if (res_wkb.length() < data_offset) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected wkb length", K(ret), K(res_wkb.length()));
       } else if (OB_FAIL(ObGeoTypeUtil::get_header_info_from_wkb(res_wkb, header))) {
-        LOG_WARN("fail to get wkb header info", K(ret), K(res_wkb));
       } else {
         // ewkb:[bo][type][srid][data]
         // swkb:[srid][version][bo][type][data]

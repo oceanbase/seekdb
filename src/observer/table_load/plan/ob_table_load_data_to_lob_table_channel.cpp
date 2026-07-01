@@ -60,7 +60,6 @@ int ObTableLoadDataToLobTableChannel::handle_delete_row(const ObTabletID &tablet
   } else {
     ObTableLoadTableBuilder *table_builder = nullptr;
     if (OB_FAIL(table_builder_mgr_.get_table_builder(table_builder))) {
-      LOG_WARN("fail to get table builder", KR(ret));
     } else {
       ObDirectLoadDatumRow &delete_datum_row = table_builder->get_delete_datum_row();
       delete_datum_row.seq_no_ = datum_row.seq_no_;
@@ -68,7 +67,6 @@ int ObTableLoadDataToLobTableChannel::handle_delete_row(const ObTabletID &tablet
       if (OB_FAIL(
             (static_cast<ObTableLoadStoreLobTableCtx *>(down_table_op_->op_ctx_->store_table_ctx_))
               ->get_tablet_id(tablet_id, lob_tablet_id))) {
-        LOG_WARN("fail to get tablet id", KR(ret));
       }
       common::ObArray<int64_t> &lob_column_idxs =
         up_table_op_->op_ctx_->store_table_ctx_->schema_->lob_column_idxs_;
@@ -81,7 +79,6 @@ int ObTableLoadDataToLobTableChannel::handle_delete_row(const ObTabletID &tablet
           delete_datum_row.storage_datums_[0].set_string(reinterpret_cast<const char *>(&lob_id),
                                                          sizeof(ObLobId));
           if (OB_FAIL(table_builder->append_row(lob_tablet_id, delete_datum_row))) {
-            LOG_WARN("fail to append row", KR(ret));
           }
         }
       }
@@ -125,7 +122,6 @@ int ObTableLoadDataToLobTableChannel::handle_update_row(const ObTabletID &tablet
   } else if (result_row == &new_row) {
     ObTableLoadTableBuilder *table_builder = nullptr;
     if (OB_FAIL(table_builder_mgr_.get_table_builder(table_builder))) {
-      LOG_WARN("fail to get table builder", KR(ret));
     } else {
       ObDirectLoadDatumRow &delete_datum_row = table_builder->get_delete_datum_row();
       delete_datum_row.seq_no_ = old_row.seq_no_;
@@ -133,7 +129,6 @@ int ObTableLoadDataToLobTableChannel::handle_update_row(const ObTabletID &tablet
       if (OB_FAIL(
             (static_cast<ObTableLoadStoreLobTableCtx *>(down_table_op_->op_ctx_->store_table_ctx_))
               ->get_tablet_id(tablet_id, lob_tablet_id))) {
-        LOG_WARN("fail to get tablet id", KR(ret));
       }
       common::ObArray<int64_t> &lob_column_idxs =
         up_table_op_->op_ctx_->store_table_ctx_->schema_->lob_column_idxs_;
@@ -146,7 +141,6 @@ int ObTableLoadDataToLobTableChannel::handle_update_row(const ObTabletID &tablet
           delete_datum_row.storage_datums_[0].set_string(reinterpret_cast<const char *>(&lob_id),
                                                          sizeof(ObLobId));
           if (OB_FAIL(table_builder->append_row(lob_tablet_id, delete_datum_row))) {
-            LOG_WARN("fail to append row", KR(ret));
           }
         }
       }

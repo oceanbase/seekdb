@@ -81,7 +81,6 @@ int ObDirectLoadBatchRows::init(const ObIArray<ObColDesc> &col_descs,
     LOG_WARN("invalid args", KR(ret), K(col_descs), KP(col_nullables), K(max_batch_size));
   } else {
     if (OB_FAIL(init_vectors(col_descs, col_nullables, max_batch_size))) {
-      LOG_WARN("fail to init vectors", KR(ret));
     } else {
       max_batch_size_ = max_batch_size;
       row_flag_ = row_flag;
@@ -104,7 +103,6 @@ int ObDirectLoadBatchRows::init(const ObIArray<ObColumnSchemaItem> &column_schem
     LOG_WARN("invalid args", KR(ret), K(column_schemas), K(max_batch_size));
   } else {
     if (OB_FAIL(init_vectors(column_schemas, max_batch_size))) {
-      LOG_WARN("fail to init vectors", KR(ret), K(column_schemas), K(max_batch_size));
     } else {
       max_batch_size_ = max_batch_size;
       row_flag_ = row_flag;
@@ -119,7 +117,6 @@ int ObDirectLoadBatchRows::init_vectors(const ObIArray<ObColDesc> &col_descs,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(vectors_.prepare_allocate(col_descs.count()))) {
-    LOG_WARN("fail to prepare allocate", KR(ret), K(col_descs.count()));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < col_descs.count(); ++i) {
     const ObColDesc &col_desc = col_descs.at(i);
@@ -127,7 +124,6 @@ int ObDirectLoadBatchRows::init_vectors(const ObIArray<ObColDesc> &col_descs,
     ObDirectLoadVector *vector = nullptr;
     if (OB_FAIL(ObDirectLoadVector::create_vector(col_desc, is_nullable, max_batch_size, allocator_,
                                                   vector))) {
-      LOG_WARN("fail to create vector", KR(ret), K(col_desc));
     } else {
       vectors_.at(i) = vector;
     }
@@ -139,7 +135,6 @@ int ObDirectLoadBatchRows::init_vectors(const common::ObIArray<ObColumnSchemaIte
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(vectors_.prepare_allocate(column_schemas.count()))) {
-    LOG_WARN("fail to prepare allocate", KR(ret), K(column_schemas.count()));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < column_schemas.count(); ++i) {
     const ObObjMeta &col_type = column_schemas.at(i).col_type_;
@@ -147,7 +142,6 @@ int ObDirectLoadBatchRows::init_vectors(const common::ObIArray<ObColumnSchemaIte
     ObDirectLoadVector *vector = nullptr;
     if (OB_FAIL(ObDirectLoadVector::create_vector(col_type, is_nullable, max_batch_size, allocator_,
                                                   vector))) {
-      LOG_WARN("fail to create vector", KR(ret), K(col_type));
     } else {
       vectors_.at(i) = vector;
     }
@@ -184,7 +178,6 @@ int ObDirectLoadBatchRows::append_row(const ObStorageDatum *datums, const int64_
       const ObDatum &datum = datums[src_idx];
       ObDirectLoadVector *vector = vectors_.at(dest_idx);
       if (OB_FAIL(vector->append_datum(size_, datum))) {
-        LOG_WARN("fail to append datum", KR(ret), K(src_idx), K(datum), K(dest_idx), KPC(vector));
       }
     }
     if (OB_SUCC(ret)) {
@@ -215,7 +208,6 @@ int ObDirectLoadBatchRows::append_row(const ObIArray<ObDatum *> &datums)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("datum is null", K(ret), K(datum), K(src_idx));
       } else if (OB_FAIL(vector->append_datum(size_, *datum))) {
-        LOG_WARN("fail to append datum", KR(ret), K(src_idx), KPC(datum), K(dest_idx), KPC(vector));
       }
     }
     if (OB_SUCC(ret)) {
@@ -242,7 +234,6 @@ int ObDirectLoadBatchRows::append_batch(const ObDirectLoadBatchRows &vectors, co
     for (int64_t i = (row_flag_.uncontain_hidden_pk_ ? 1 : 0); OB_SUCC(ret) && i < vectors_.count();
          ++i) {
       if (OB_FAIL(vectors_.at(i)->append_batch(size_, *vectors.vectors_.at(i), offset, size))) {
-        LOG_WARN("fail to append batch", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -269,7 +260,6 @@ int ObDirectLoadBatchRows::append_batch(const IVectorPtrs &vectors, const int64_
     for (int64_t i = (row_flag_.uncontain_hidden_pk_ ? 1 : 0); OB_SUCC(ret) && i < vectors_.count();
          ++i) {
       if (OB_FAIL(vectors_.at(i)->append_batch(size_, vectors.at(i), offset, size))) {
-        LOG_WARN("fail to append batch", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -298,7 +288,6 @@ int ObDirectLoadBatchRows::append_selective(const ObDirectLoadBatchRows &src,
     for (int64_t i = (row_flag_.uncontain_hidden_pk_ ? 1 : 0); OB_SUCC(ret) && i < vectors_.count();
          ++i) {
       if (OB_FAIL(vectors_.at(i)->append_selective(size_, *src.vectors_.at(i), selector, size))) {
-        LOG_WARN("fail to append selective", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -325,7 +314,6 @@ int ObDirectLoadBatchRows::append_selective(const IVectorPtrs &vectors, share::O
     int64_t i = 0;
     while (OB_SUCC(ret) && OB_SUCC(selector.get_next(i))) {
       if (OB_FAIL(append_batch(vectors, i, 1))) {
-        LOG_WARN("append row failed", K(ret));
       }
     }
     if (OB_ITER_END == ret) {
@@ -353,7 +341,6 @@ int ObDirectLoadBatchRows::append_selective(const ObIArray<ObDatumVector> &datum
     for (int64_t i = (row_flag_.uncontain_hidden_pk_ ? 1 : 0); OB_SUCC(ret) && i < vectors_.count();
          ++i) {
       if (OB_FAIL(vectors_.at(i)->append_selective(size_, datum_vectors.at(i), selector, size))) {
-        LOG_WARN("fail to append selective", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -382,7 +369,6 @@ int ObDirectLoadBatchRows::get_datum_row(const int64_t batch_idx,
       ObDirectLoadVector *vector = vectors_.at(src_idx);
       ObDatum &datum = datum_row.storage_datums_[dest_idx];
       if (OB_FAIL(vector->get_datum(batch_idx, datum))) {
-        LOG_WARN("fail to get datum", KR(ret));
       }
     }
   }

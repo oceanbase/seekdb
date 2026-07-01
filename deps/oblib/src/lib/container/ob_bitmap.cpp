@@ -629,7 +629,6 @@ int ObBitmap::load_blocks_from_array(size_type *block_data, size_type num_bytes)
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "Trying to load data to Bitmap from null array", K(ret), K(block_data), K(num_bytes));
   } else if (OB_FAIL(reserve(num_bytes))) {
-    LIB_LOG(WARN, "Failed to reserve bitmap with num_bytes", K(ret), K(num_bytes));
   } else {
     const uint64_t *src = reinterpret_cast<uint64_t*>(block_data);
     uint8_t *pos = data_;
@@ -714,7 +713,6 @@ int ObBitmap::init(const size_type valid_bytes, const bool is_all_true)
     ret = OB_INIT_TWICE;
     LIB_LOG(WARN, "ObBitmap init twice", K(ret));
   } else if (OB_FAIL(reserve(valid_bytes))) {
-    LIB_LOG(WARN, "Failed to reserver", K(ret), K(valid_bytes));
   } else {
     if (is_all_true) {
       MEMSET(static_cast<void*>(data_), 1, valid_bytes);
@@ -829,7 +827,6 @@ int ObBitmap::from_bits_mask(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(valid_bytes_ < to || nullptr == bits)) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(WARN, "Invalid argument", K_(valid_bytes), K(to), KP(bits));
 #if OB_USE_MULTITARGET_CODE
   } else if (common::is_arch_supported(ObTargetArch::AVX2)) {
     common::specific::avx2::inner_from_bits_mask(from, to, bits, data_);
@@ -850,7 +847,6 @@ int ObBitmap::to_bits_mask(
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(valid_bytes_ < to || nullptr == bits)) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(WARN, "Invalid argument", K_(valid_bytes), K(to), KP(bits));
 #if OB_USE_MULTITARGET_CODE
   } else if (common::is_arch_supported(ObTargetArch::AVX2)) {
     common::specific::avx2::bitmap_to_bits_mask(from, to, need_flip, data_, bits);

@@ -94,7 +94,6 @@ int ObPLUserTypeTable::add_type(const ObUserDefinedType *user_defined_type)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(user_types_.push_back(user_defined_type))) {
-    LOG_WARN("user type push back failed", K(ret));
   }
   return ret;
 }
@@ -148,7 +147,6 @@ int ObPLUserTypeTable::add_external_type(const ObUserDefinedType *user_type)
     }
     if (OB_SUCC(ret) && i == count) {
       if (OB_FAIL(external_user_types_.push_back(user_type))) {
-        LOG_WARN("external user type push back failed", K(ret), K(i), K(count), KPC(user_type));
       } else {
         LOG_DEBUG("add external type",
                   K(ret),
@@ -562,9 +560,7 @@ int ObPLRoutineTable::init(ObPLRoutineTable *parent_routine_table)
   int ret = OB_SUCCESS;
   int64_t pre_alloc_count = OB_ISNULL(parent_routine_table)?INIT_ROUTINE_COUNT:parent_routine_table->get_count();
   if (OB_FAIL(routine_infos_.prepare_allocate(pre_alloc_count))) {
-    LOG_WARN("pre allocate routine infos failed", K(ret));
   } else if (OB_FAIL(routine_asts_.prepare_allocate(pre_alloc_count))) {
-    LOG_WARN("pre allocate routine asts failed", K(ret));
   } else {
     ARRAY_FOREACH(routine_infos_, routine_info_idx) {
       routine_infos_.at(routine_info_idx) = NULL;
@@ -606,9 +602,7 @@ int ObPLRoutineTable::make_routine_info(ObIAllocator &allocator,
       routine_info->set_id(id);
     }
     if (OB_FAIL(ob_write_string(allocator, name, dst_name))) {
-      LOG_WARN("copy routine name failed", K(name), K(ret));
     } else if (OB_FAIL(ob_strip_space(allocator, decl_str, dst_decl_str))) {
-      LOG_WARN("strip routine decl str space failed", K(decl_str), K(ret));
     } else {
       routine_info->set_name(dst_name);
       routine_info->set_decl_str(dst_decl_str);
@@ -654,9 +648,7 @@ int ObPLRoutineTable::make_routine_ast(ObIAllocator &allocator,
     routine_ast->set_compile_flag(routine_info.get_compile_flag());
     OZ (routine_ast->set_subprogram_path(routine_info.get_subprogram_path()));
     if (OB_FAIL(ob_write_string(allocator, db_name, const_cast<ObString &>(routine_ast->get_db_name())))) {
-      LOG_WARN("copy routine db name failed", K(db_name), K(ret));
     } else if (OB_FAIL(ob_write_string(allocator, package_name, routine_ast->get_package_name()))) {
-      LOG_WARN("copy routine package name failed", K(package_name), K(ret));
     } else {
       if (PACKAGE_FUNCTION == routine_info.get_type() || NESTED_FUNCTION == routine_info.get_type()) {
         const ObPLRoutineParam *ret_param = static_cast<const ObPLRoutineParam *>(routine_info.get_ret_info());
@@ -755,7 +747,6 @@ int ObPLRoutineTable::get_routine_info(const ObString &routine_decl_str, ObPLRou
   routine_info = NULL;
   ObString routine_decl_str_without_blank;
   if (OB_FAIL(ob_strip_space(allocator_, routine_decl_str, routine_decl_str_without_blank))) {
-    LOG_WARN("strip routine decl str space failed", K(routine_decl_str), K(ret));
   } else {
     uint64_t routine_count = get_count();
     for (int64_t i = ObPLRoutineTable::NORMAL_ROUTINE_START_IDX; OB_SUCC(ret) && i < routine_count; ++i) {
@@ -830,7 +821,6 @@ int ObPLBlockNS::get_user_type(uint64_t type_id,
   int ret = OB_SUCCESS;
   UNUSED(allocator);
   if (OB_FAIL(get_pl_data_type_by_id(type_id, user_type))) {
-    LOG_WARN("failed to get user type", K(type_id), K(ret));
   }
   return ret;
 }
@@ -856,9 +846,7 @@ int ObPLBlockNS::add_type(ObUserDefinedType *type)
     uint64_t type_id = get_type_table()->generate_user_type_id(package_id_);
     type->set_user_type_id(type_id);
     if (OB_FAIL(types_.push_back(get_type_table()->get_count()))) {
-      LOG_WARN("failed to add user defined type", K(ret));
     } else if (OB_FAIL(get_type_table()->add_type(type))) {
-      LOG_WARN("failed to add type to user defined type table", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -930,14 +918,11 @@ int ObPLBlockNS::add_label(const ObString &name,
   } else {
     bool is_dup = false;
     if (OB_FAIL(check_dup_label(name, is_dup))) {
-      LOG_INFO("check dup label fail. ", K(ret), K(name));
     } else if (is_dup) {
       ret = OB_ERR_REDEFINE_LABEL;
       LOG_WARN("redefining label ", K(name), K(ret));
     } else if (OB_FAIL(labels_.push_back(get_label_table()->get_count()))) {
-      LOG_WARN("failed to add symbol", K(ret));
     } else if (OB_FAIL(get_label_table()->add_label(name, type, stmt))) {
-      LOG_WARN("failed to add variable to sysbol table", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -954,7 +939,6 @@ int ObPLBlockNS::add_condition(const common::ObString &name,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("condition table is NULL", K(ret));
   } else if (OB_FAIL(check_dup_condition(name, is_dup, dup_cond))) {
-    LOG_WARN("failed to check dup", K(name), K(ret));
   } else if (is_dup) {
     if (OB_ISNULL(external_ns_)) {
       ret = OB_ERR_UNEXPECTED;
@@ -966,9 +950,7 @@ int ObPLBlockNS::add_condition(const common::ObString &name,
     }
   } else {
     if (OB_FAIL(conditions_.push_back(get_condition_table()->get_count()))) {
-      LOG_WARN("failed to add condition", K(ret));
     } else if (OB_FAIL(get_condition_table()->add_condition(name, value))) {
-      LOG_WARN("failed to add condition to condition table", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -986,7 +968,6 @@ int ObPLBlockNS::add_questionmark_cursor(const int64_t symbol_idx)
   const ObPLDataType dummy_return_type;
   const ObArray<int64_t> dummy_formal_params;
   if (OB_FAIL(cursors_.push_back(get_cursor_table()->get_count()))) {
-    LOG_WARN("failed to add condition", K(ret));
   } else if (OB_FAIL(get_cursor_table()->add_cursor(get_package_id(),
                                                     get_routine_id(),
                                                     symbol_idx,
@@ -1003,7 +984,6 @@ int ObPLBlockNS::add_questionmark_cursor(const int64_t symbol_idx)
                                                     dummy_formal_params,
                                                     ObPLCursor::PASSED_IN,
                                                     false))) {
-    LOG_WARN("failed to add condition to condition table", K(ret));
   }
   return ret;
 }
@@ -1029,18 +1009,15 @@ int ObPLBlockNS::add_cursor(const ObString &name,
   int ret = OB_SUCCESS;
   bool is_dup = false;
   if (OB_FAIL(check_dup_cursor(name, is_dup))) {
-    LOG_WARN("failed to check dup", K(name), K(ret));
   } else if (is_dup) {
     ret = OB_ERR_SP_DUP_CURSOR;
     LOG_USER_ERROR(OB_ERR_SP_DUP_CURSOR, name.length(), name.ptr());
   } else if (OB_FAIL(add_symbol(name, type))) {
-    LOG_WARN("failed to add cursor to symbol table", K(ret));
   } else if (OB_ISNULL(get_cursor_table())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("cursor table is NULL", K(ret));
   } else {
     if (OB_FAIL(cursors_.push_back(get_cursor_table()->get_count()))) {
-      LOG_WARN("failed to add condition", K(ret));
     } else if (OB_FAIL(get_cursor_table()->add_cursor(get_package_id(),
                                                       get_routine_id(),
                                                       get_symbol_table()->get_count() - 1,
@@ -1058,7 +1035,6 @@ int ObPLBlockNS::add_cursor(const ObString &name,
                                                       state,
                                                       has_dup_column_name,
                                                       skip_locked))) {
-      LOG_WARN("failed to add condition to condition table", K(ret));
     } else {
       index = cursors_.at(cursors_.count() - 1);
     }
@@ -1130,7 +1106,6 @@ int ObPLBlockNS::check_dup_symbol(const ObString &name, const ObPLDataType &type
   if (BLOCK_PACKAGE_BODY == type_) {
     if (!is_dup && !OB_ISNULL(external_ns_->get_parent_ns())) {
       if (OB_FAIL(external_ns_->get_parent_ns()->check_dup_symbol(name, type, is_dup))) {
-        LOG_WARN("check dup failed", K(ret));
       }
     }
   }
@@ -1244,7 +1219,6 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
       ObPLDependencyGuard guard(this, parent_ns_->get_external_ns());
       if (OB_FAIL(
           SMART_CALL(parent_ns_->resolve_symbol(name, type, data_type, parent_id, var_idx)))) {
-        LOG_WARN("resolve package symbol failed", K(ret));
       } else if (type == ObPLExternalNS::LOCAL_VAR) {
         type =
           ObPLBlockNS::BLOCK_ROUTINE == parent_ns_->get_block_type() ? SUBPROGRAM_VAR : PKG_VAR;
@@ -1265,7 +1239,6 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
         if (parent_id != OB_INVALID_INDEX) {
           db_id = parent_id;
         } else if (OB_FAIL(session_info.get_database_id(db_id))) {
-          LOG_WARN("failed to get session database id", K(ret), K(db_id));
         } 
         
         if (OB_SUCC(ret)) {
@@ -1290,7 +1263,6 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
                                                       share::schema::PACKAGE_TYPE,
                                                       compatible_mode,
                                                       package_info))) {
-              LOG_WARN("get package info failed", K(ret));
             }
           }
           if (OB_SUCC(ret) && OB_NOT_NULL(package_info)) {
@@ -1310,7 +1282,6 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
         
         uint64_t db_id = OB_INVALID_ID;
         if (OB_FAIL(schema_guard.get_database_id(name, db_id))) {
-          LOG_WARN("get database id failed", K(ret));
         } else if (OB_INVALID_ID == db_id) {
           type = ObPLExternalNS::INVALID_VAR;
         } else {
@@ -1337,7 +1308,6 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
                                                     name,
                                                     false /*is_index*/,
                                                     table))) {
-            LOG_WARN("fail to get table schema", K(ret));
           } else if (OB_NOT_NULL(table)) {
             table_id = table->get_table_id();
             parent_id = db_id;
@@ -1438,7 +1408,6 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
         type = SESSION_VAR;
         if (OB_FAIL(
             SMART_CALL(resolve_external_symbol(name, type, data_type, parent_id, var_idx)))) {
-          LOG_WARN("failed to resolve external symbol as global var", K(ret));
         }
       }
     }
@@ -1451,12 +1420,10 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
 
     if (OB_FAIL(schema_guard.get_package_id(parent_id, name, share::schema::PACKAGE_TYPE,
                                             compatible_mode, package_id))) {
-      LOG_WARN("get package id failed", K(ret));
     } else if (OB_INVALID_ID == package_id) {
       if (is_oceanbase_sys_database_id(parent_id)) {
         if (OB_FAIL(schema_guard.get_package_id(OB_SYS_DATABASE_ID,
             name, share::schema::PACKAGE_TYPE, compatible_mode, package_id))) {
-          LOG_WARN("get package id failed", K(ret));
         }
       }
     }
@@ -1480,7 +1447,6 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
       const share::schema::ObPackageInfo *package_info_resolve = NULL;
       
       if (OB_FAIL(schema_guard.get_package_info( parent_id, package_info_resolve))) {
-        LOG_WARN("get package info resolve failed", K(ret));
       } else if (NULL == package_info_resolve) {
         ret = OB_ERR_PACKAGE_DOSE_NOT_EXIST;
         LOG_WARN("self or resolve package not exist", K(ret));
@@ -1490,7 +1456,6 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
             && ObCharset::case_compat_mode_equal(parent_ns_->get_package_name(), package_info_resolve->get_package_name())) {
           if (OB_FAIL(
               SMART_CALL(parent_ns_->resolve_symbol(name, type, data_type, parent_id, var_idx)))) {
-            LOG_WARN("resolve package symbol failed", K(ret));
           } else if (OB_INVALID_INDEX == var_idx) {
             type = ObPLExternalNS::INVALID_VAR;
             LOG_WARN("package var not found", K(ret));
@@ -1501,7 +1466,6 @@ int ObPLExternalNS::resolve_external_symbol(const common::ObString &name,
           const ObPLVar *var = NULL;
           const ObUserDefinedType *user_type = NULL;
           if (OB_FAIL(package_manager.get_package_var(resolve_ctx_, parent_id, name, var, var_idx))) {
-            LOG_WARN("get package var failed", K(ret), K(parent_id), K(name));
           } else if (OB_ISNULL(var)) { // is not PackageVar, try if it is PackageType
             if (OB_FAIL(package_manager.get_package_type(resolve_ctx_,
                                                          parent_id,
@@ -1615,14 +1579,12 @@ int ObPLExternalNS::resolve_external_type_by_name(const ObString &db_name, const
     ObString type_name = org_type_name;
     if (db_name.empty()) {
       if (OB_FAIL(resolve_ctx_.session_info_.get_database_id(db_id))) {
-        LOG_WARN("get db id failed", K(ret));
       } else if (OB_INVALID_ID == db_id) {
         ret = OB_ERR_BAD_DATABASE;
         LOG_WARN("database not valid", K(ret), K(db_id));
       }
     } else {
       if (OB_FAIL(resolve_ctx_.schema_guard_.get_database_id(db_name, db_id))) {
-        LOG_WARN("get database id failed", K(ret));
       } else if (OB_INVALID_ID == db_id) {
         ret = OB_ERR_BAD_DATABASE;
         LOG_WARN("db name not found", K(ret));
@@ -1633,7 +1595,6 @@ int ObPLExternalNS::resolve_external_type_by_name(const ObString &db_name, const
       if (OB_FAIL(resolve_ctx_.schema_guard_.get_package_info( db_id, package_name,
                                                               share::schema::PACKAGE_TYPE, compatible_mode,
                                                               package_info))) {
-         LOG_WARN("get package id failed", K(ret));
       }
     }
     // Determine whether the package_name is the 'SYS' user in oracle mode
@@ -1647,7 +1608,6 @@ int ObPLExternalNS::resolve_external_type_by_name(const ObString &db_name, const
         if (db_name.empty() || 0 == db_name.case_compare(OB_SYS_DATABASE_NAME)) {
           if (OB_FAIL(resolve_ctx_.schema_guard_.get_package_info( OB_SYS_DATABASE_ID,
               package_name, share::schema::PACKAGE_TYPE, compatible_mode, package_info))) {
-            LOG_WARN("get package id failed", K(ret));
           }
         }
         if (OB_SUCC(ret) && OB_ISNULL(package_info)) {
@@ -1664,7 +1624,6 @@ int ObPLExternalNS::resolve_external_type_by_name(const ObString &db_name, const
         const ObUserDefinedType *package_user_type = NULL;
         ObPLDataType *copy_pl_type = NULL;
         if (OB_FAIL(package_manager.get_package_type(resolve_ctx_, package_id, type_name, package_user_type))) {
-          LOG_WARN("get package type failed", K(ret), K(package_id), K(type_name), K(package_user_type));
         } else if (OB_ISNULL(package_user_type)) {
           ret = OB_ERR_SP_UNDECLARED_TYPE;
           LOG_USER_ERROR(OB_ERR_SP_UNDECLARED_TYPE, type_name.length(), type_name.ptr());
@@ -1724,7 +1683,6 @@ int ObPLExternalNS::resolve_external_routine(const ObString &db_name,
                                                        expr_params,
                                                        routine_type,
                                                        routine_infos)))) {
-      LOG_WARN("resolve routine failed", K(routine_name), K(ret));
     }
   }
   if (OB_SUCC(ret) && routine_infos.empty()) {
@@ -1739,8 +1697,6 @@ int ObPLExternalNS::resolve_external_routine(const ObString &db_name,
                                           schema_routine_type,
                                           expr_params,
                                           schema_routine_info))) {
-      LOG_WARN("failed to get routine info",
-               K(ret), K(db_name), K(package_name), K(routine_name));
     } else {
       ObSchemaObjVersion obj_version;
       schema_routine_type = schema_routine_info->get_routine_type();
@@ -1751,7 +1707,6 @@ int ObPLExternalNS::resolve_external_routine(const ObString &db_name,
                                                                 schema_routine_info->get_package_id(),
                                                                 spec_info,
                                                                 body_info))) {
-          LOG_WARN("fail to get package info", K(ret));
         } else {
           if (OB_NOT_NULL(spec_info)) {
             obj_version.object_id_ = spec_info->get_package_id();
@@ -1764,7 +1719,6 @@ int ObPLExternalNS::resolve_external_routine(const ObString &db_name,
             ver.version_ = body_info->get_schema_version();
             ver.object_type_ = DEPENDENCY_PACKAGE_BODY;
             if (OB_FAIL(ObPLDependencyUtil::add_dependency_object_impl(get_dependency_table(), ver))) {
-              LOG_WARN("add dependency object failed", K(ret), K(ver));
             }
           }
         }
@@ -1792,9 +1746,7 @@ int ObPLExternalNS::resolve_external_routine(const ObString &db_name,
                                                     resolve_ctx_.sql_proxy_,
                                                     param_type,
                                                     &deps))) {
-          LOG_WARN("fail to transform iparam", K(ret));
         } else if (OB_FAIL(ObPLDependencyUtil::add_dependency_objects(get_dependency_table(), deps))) {
-          LOG_WARN("fail to add dependency table", K(ret));
         }
       }
       if (OB_SUCC(ret) && OB_FAIL(routine_infos.push_back(schema_routine_info))) {
@@ -1819,20 +1771,13 @@ int ObPLExternalNS::check_routine_exists(const ObString &db_name,
   if (OB_NOT_NULL(parent_ns_)) {
     if (OB_FAIL(parent_ns_->check_routine_exists(db_name, package_name, routine_name,
              routine_type, exists, proc_type, udt_id))) {
-      LOG_WARN("resolve routine failed",
-               K(db_name), K(package_name), K(routine_name),
-               K(routine_type), K(exists), K(proc_type), K(udt_id), K(ret));
     }
   }
   if (OB_SUCC(ret) && !exists) {
     ObSchemaChecker schema_checker;
     if (OB_FAIL(schema_checker.init(resolve_ctx_.schema_guard_, resolve_ctx_.session_info_.get_server_sid()))) {
-      LOG_WARN("schema checker init failed", K(ret));
     } else if (OB_FAIL(ObResolverUtils::check_routine_exists(schema_checker, resolve_ctx_.session_info_, db_name,
       package_name, routine_name, routine_type, exists, udt_id))) {
-      LOG_WARN("resolve routine failed",
-               K(db_name), K(package_name), K(routine_name),
-               K(routine_type), K(exists), K(proc_type), K(udt_id), K(ret));
     } else if (exists) {
       proc_type = ROUTINE_PROCEDURE_TYPE == routine_type ? STANDALONE_PROCEDURE : STANDALONE_FUNCTION;
     } else { /*do nothing*/ }
@@ -1845,7 +1790,7 @@ int ObPLBlockNS::find_sub_attr_by_name(const ObUserDefinedType &user_type,
                                        const ObObjAccessIdent &access_ident,
                                        ObSQLSessionInfo &session_info,
                                        ObRawExprFactory &expr_factory,
-                                       ObPLAstUnit &func,
+                                       ObPLCompileUnitAST &func,
                                        ObObjAccessIdx &access_idx,
                                        ObPLDataType &data_type,
                                        uint64_t &package_id,
@@ -2199,7 +2144,6 @@ int ObPLBlockNS::resolve_symbol(const ObString &var_name,
       if (OB_NOT_NULL(pre_ns_)) {
         ObPLDependencyGuard guard(external_ns_, pre_ns_->get_external_ns());
         if (OB_FAIL(SMART_CALL(pre_ns_->resolve_symbol(var_name, type, data_type, parent_id, var_idx)))) {
-          LOG_WARN("get var index by name failed", K(var_name), K(ret));
         }
       }
     }
@@ -2214,7 +2158,6 @@ int ObPLBlockNS::resolve_symbol(const ObString &var_name,
       if (!pl_type.is_udt_type() || pl_type.is_opaque_type()) {
         // type is invalid when create udt & opaque type has not attribute, so do nothing ...
       } else if (OB_FAIL(get_user_type(pl_type.get_user_type_id(), user_type))) {
-        LOG_WARN("failed to get user type", K(ret), KPC(user_type));
       } else if (OB_ISNULL(user_type) || !user_type->is_object_type()) {
         // do nothing ...
       } else if (OB_ISNULL(record_type = static_cast<const ObRecordType*>(user_type))) {
@@ -2273,7 +2216,6 @@ int ObPLBlockNS::get_routine_info(int64_t routine_idx, const ObPLRoutineInfo *&r
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(routine_table_->get_routine_info(routine_idx, routine))) {
-    LOG_WARN("get package routine failed", K(routine_idx), K(ret));
   }
   return ret;
 }
@@ -2282,7 +2224,6 @@ int ObPLBlockNS::get_routine_info(const ObString &routine_decl_str, ObPLRoutineI
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(routine_table_->get_routine_info(routine_decl_str, routine))) {
-    LOG_WARN("get package routine failed", K(routine_decl_str), K(ret));
   }
   return ret;
 }
@@ -2312,9 +2253,7 @@ int ObPLBlockNS::add_routine_info(ObPLRoutineInfo *routine_info)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("routine table is NULL", K(ret));
   } else if (OB_FAIL(routine_table_->add_routine_info(routine_info))) {
-    LOG_WARN("add routine signature to routine table failed", K(ret));
   } else if (OB_FAIL(routines_.push_back(routine_table_->get_count() - 1))) {
-    LOG_WARN("failed to add routine info to routines", K(ret));
   }
   return ret;
 }
@@ -2449,8 +2388,6 @@ int ObPLBlockNS::resolve_routine(const ObPLResolveCtx &resolve_ctx,
                                                         expr_params,
                                                         routine_type,
                                                         routine_infos)))) {
-          LOG_WARN("resolve routine failed", K(db_name), K(package_name), K(routine_name),
-                   K(expr_params), K(ret));
         }
       }
     }
@@ -2472,8 +2409,6 @@ int ObPLBlockNS::resolve_routine(const ObPLResolveCtx &resolve_ctx,
                                                         expr_params,
                                                         routine_type,
                                                         routine_infos)))) {
-          LOG_WARN("resolve routine failed", K(db_name), K(package_name), K(routine_name),
-                   K(expr_params), K(ret));
         }
         if (need_restore) {
           (const_cast<ObPLResolveCtx &>(external_ns_->get_resolve_ctx())).params_.secondary_namespace_ = second_ns;
@@ -2515,7 +2450,6 @@ int ObPLBlockNS::check_routine_exists(const ObString &db_name,
       for (; OB_SUCC(ret) && !exists && routine_idx < routine_count; ++routine_idx) {
         const ObPLRoutineInfo *pl_routine_info = NULL;
         if (OB_FAIL(routine_table->get_routine_info(routine_idx, pl_routine_info))) {
-          LOG_WARN("get package routine failed", K(ret));
         } else if (OB_NOT_NULL(pl_routine_info)) {
           if (ObCharset::case_compat_mode_equal(routine_name, pl_routine_info->get_name())
               && search_routine_type == pl_routine_info->get_type()) {
@@ -2529,9 +2463,6 @@ int ObPLBlockNS::check_routine_exists(const ObString &db_name,
       if (OB_NOT_NULL(pre_ns_)) {
         if (OB_FAIL(pre_ns_->check_routine_exists(db_name, package_name,
                                routine_name, routine_type, exists, proc_type, udt_id))) {
-          LOG_WARN("resolve routine failed",
-                   K(db_name), K(package_name), K(routine_name),
-                   K(routine_type), K(exists), K(proc_type), K(udt_id), K(ret));
         }
       }
     }
@@ -2539,9 +2470,6 @@ int ObPLBlockNS::check_routine_exists(const ObString &db_name,
       if (OB_NOT_NULL(external_ns_)) {
         if (OB_FAIL(external_ns_->check_routine_exists(db_name, package_name,
                                  routine_name, routine_type, exists, proc_type, udt_id))) {
-          LOG_WARN("resolve routine failed",
-                   K(db_name), K(package_name), K(routine_name),
-                   K(routine_type), K(exists), K(proc_type), K(udt_id), K(ret));
         }
       }
     }
@@ -2577,8 +2505,6 @@ int ObPLBlockNS::get_pl_data_type_by_name(const ObPLResolveCtx &resolve_ctx,
       if (OB_NOT_NULL(pre_ns_)) {
         if (OB_FAIL(SMART_CALL(pre_ns_->get_pl_data_type_by_name(
                                resolve_ctx, db_name, package_name, type_name, user_type)))) {
-          LOG_WARN("get pl data type by name in pre ns failed",
-                   K(ret), K(db_name), K(package_name), K(type_name));
         }
       }
     }
@@ -2587,21 +2513,16 @@ int ObPLBlockNS::get_pl_data_type_by_name(const ObPLResolveCtx &resolve_ctx,
         ObSEArray<ObDataType, 8> types;
         if (OB_FAIL(SMART_CALL(external_ns_->
             resolve_external_type_by_name(db_name, package_name, type_name, user_type)))) {
-          LOG_WARN("resolve external type failed",
-                   K(ret), K(db_name), K(package_name), K(type_name));
         } else if (OB_ISNULL(user_type)) {
           ret = OB_ERR_SP_UNDECLARED_TYPE;
           LOG_USER_ERROR(OB_ERR_SP_UNDECLARED_TYPE, type_name.length(), type_name.ptr());
         } else if (OB_FAIL(expand_data_type(user_type, types))) {
-          LOG_WARN("failed to expand data type", K(ret), KPC(user_type));
         } else if (OB_FAIL(type_table_->add_external_type(user_type))) {
-          LOG_WARN("add external type failed", K(ret), K(db_name), K(package_name), K(type_name));
         } else { /*do nothing*/ }
       }
     }
     if (OB_SUCC(ret) && OB_NOT_NULL(user_type)) {
       if (OB_FAIL(user_type->get_all_depended_user_type(resolve_ctx, *this))) {
-        LOG_WARN("get all depended user type failed", K(ret));
       }
     }
   }
@@ -2673,11 +2594,8 @@ int ObPLBlockNS::get_pl_data_type_by_id(uint64_t type_id, const ObUserDefinedTyp
         //external_ns_ is empty indicating that we have reached the top-level namespace of the package, return NULL immediately
       } else if (OB_FAIL(
           SMART_CALL(external_ns_->resolve_external_type_by_id(type_id, user_type)))) {
-        LOG_WARN("resolve external type by id failed", K(ret), K(type_id));
       } else if (OB_FAIL(expand_data_type(user_type, types))) {
-        LOG_WARN("failed to expand data type", K(ret), K(type_id));
       } else if (OB_FAIL(type_table_->add_external_type(user_type))) {
-        LOG_WARN("add external type failed", K(ret), K(type_id));
       } else if (user_type->is_record_type()) {
         const ObRecordType *rec_type = static_cast<const ObRecordType *>(user_type);
         for (int64_t i = 0; OB_SUCC(ret) && i < rec_type->get_member_count(); ++i) {
@@ -2712,7 +2630,6 @@ int ObPLBlockNS::get_cursor(uint64_t pkg_id, uint64_t routine_id, int64_t idx,
       //external_ns_ is empty indicating that we have reached the top-level namespace of the package, return NULL immediately
     } else if (OB_FAIL(external_ns_->get_parent_ns()->get_cursor(pkg_id, routine_id, idx,
                                                                  cursor))) {
-      LOG_WARN("resolve external type by id failed", K(ret), K(pkg_id), K(routine_id), K(idx));
     } else { /*do nothing*/ }
   } else { /*do nothing*/ }
   return ret;
@@ -2725,13 +2642,11 @@ int ObPLBlockNS::get_cursor_var(uint64_t pkg_id, uint64_t routine_id, int64_t id
   var = NULL;
   const ObPLCursor *cursor = NULL;
   if (OB_FAIL(get_cursor(pkg_id, routine_id, idx, cursor))) {
-    LOG_WARN("failed to get cursor", K(pkg_id), K(routine_id), K(idx), K(ret));
   } else if (NULL == cursor || pkg_id  != package_id_ || routine_id != routine_id_) {
     if (NULL == external_ns_ || NULL == external_ns_->get_parent_ns()) {
       //do nothing
     } else if (OB_FAIL(external_ns_->get_parent_ns()->get_cursor_var(pkg_id, routine_id, idx,
                                                                      var))) {
-      LOG_WARN("failed to get cursor", K(pkg_id), K(routine_id), K(idx), K(ret));
     } else { /*do nothing*/ }
   } else if (OB_ISNULL(get_symbol_table())) {
     ret = OB_ERR_UNEXPECTED;
@@ -2961,11 +2876,9 @@ int ObPLStmtBlock::add_stmt(ObPLStmt *stmt)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(stmts_.push_back(stmt))) {
-    LOG_WARN("failed push stmt", K(ret));
   } else {
     if (OB_NOT_NULL(stmt) && PL_CURSOR_FOR_LOOP == stmt->get_type()) {
       if (OB_FAIL(forloop_cursor_stmts_.push_back(stmt))) {
-        LOG_WARN("failed to push forloop stmt", K(ret));
       }
     }
   }
@@ -3150,7 +3063,6 @@ int ObPLInto::add_into(int64_t idx, ObPLBlockNS &ns, const ObRawExpr &expr)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(into_.push_back(idx))) {
-    LOG_WARN("Failed to add into", K(idx), K(ret));
   } else {
     OZ (generate_into_variable_info(ns, expr));
   }
@@ -3247,7 +3159,6 @@ int ObPLInto::set_into(const common::ObIArray<int64_t> &idxs, ObPLBlockNS &ns, c
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("expr is NULL", K(i), K(exprs), K(ret));
       } else if (OB_FAIL(add_into(idxs.at(i), ns, *exprs.at(i)))) {
-        LOG_WARN("Failed to add into", K(i), K(idxs.at(i)), K(*exprs.at(i)), K(ret));
       } else { /*do nothing*/ }
     }
   }
@@ -3405,7 +3316,6 @@ int ObPLFetchStmt::replace_questionmark_variable_type(ObPLFunctionAST &func,
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(current_block->get_namespace().get_user_type(cursor_type.get_user_type_id(),
                                                             cursor_user_type, allocator))) {
-    LOG_WARN("failed to get user type", K(cursor_type), K(ret));
   } else if (OB_ISNULL(cursor_user_type)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get cursor type", K(cursor_type), K(ret));
@@ -3465,7 +3375,7 @@ int ObPLFetchStmt::replace_questionmark_variable_type(ObPLFunctionAST &func,
   return ret;
 } 
 
-ObPLAstUnit::~ObPLAstUnit()
+ObPLCompileUnitAST::~ObPLCompileUnitAST()
 {
   if (NULL != body_) {
     body_->~ObPLStmtBlock();
@@ -3477,7 +3387,7 @@ ObPLAstUnit::~ObPLAstUnit()
   }
 }
 
-void ObPLAstUnit::process_default_compile_flag()
+void ObPLCompileUnitAST::process_default_compile_flag()
 {
   if (compile_flag_.has_flag()) {
     common::ObIArray<ObPLRoutineInfo *> &routine_infos = routine_table_.get_routine_infos();
@@ -3491,7 +3401,7 @@ void ObPLAstUnit::process_default_compile_flag()
   return ;
 }
 
-int ObPLAstUnit::extract_assoc_index(
+int ObPLCompileUnitAST::extract_assoc_index(
   sql::ObRawExpr &expr, ObIArray<sql::ObRawExpr *> &exprs)
 {
   int ret = OB_SUCCESS;
@@ -3503,14 +3413,13 @@ int ObPLAstUnit::extract_assoc_index(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("param expr is null", K(ret), K(i), K(expr.get_param_expr(i)));
     } else if (OB_FAIL(SMART_CALL(extract_assoc_index(*expr.get_param_expr(i), exprs)))) {
-      LOG_WARN("failed to extract assoc index", K(ret), K(i), KPC(expr.get_param_expr(i)));
     }
   }
   return ret;
 }
 
 
-int ObPLAstUnit::add_expr(sql::ObRawExpr* expr, bool is_simple_integer)
+int ObPLCompileUnitAST::add_expr(sql::ObRawExpr* expr, bool is_simple_integer)
 {
   int ret = OB_SUCCESS;
   bool exists = false;
@@ -3528,18 +3437,17 @@ int ObPLAstUnit::add_expr(sql::ObRawExpr* expr, bool is_simple_integer)
 }
 
 
-int ObPLAstUnit::add_exprs(common::ObIArray<sql::ObRawExpr*> &exprs)
+int ObPLCompileUnitAST::add_exprs(common::ObIArray<sql::ObRawExpr*> &exprs)
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); ++i) {
     if (OB_FAIL(add_expr(exprs.at(i)))) {
-      LOG_WARN("failed toadd expr", K(i), K(ret));
     }
   }
   return ret;
 }
 
-int ObPLAstUnit::add_sql_exprs(common::ObIArray<sql::ObRawExpr*> &exprs)
+int ObPLCompileUnitAST::add_sql_exprs(common::ObIArray<sql::ObRawExpr*> &exprs)
 {
   int ret = OB_SUCCESS;
   OZ (add_exprs(exprs));
@@ -3550,7 +3458,7 @@ int ObPLAstUnit::add_sql_exprs(common::ObIArray<sql::ObRawExpr*> &exprs)
   return ret;
 }
 
-int ObPLAstUnit::generate_symbol_debuginfo()
+int ObPLCompileUnitAST::generate_symbol_debuginfo()
 {
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < symbol_table_.get_count(); ++i) {
@@ -3668,8 +3576,7 @@ int ObPLFunctionAST::add_argument(const common::ObString &name,
                                                      OB_NOT_NULL(expr)?get_exprs().count()-1:-1,
                                                      is_read_only,
                                                      false, // not null
-                                                     false))) { // default construct
-      LOG_WARN("failed to add variable to sysbol table", K(ret));
+                                                     false))) {
     } else if(is_udt_self_param) {
       get_symbol_table().set_self_param_idx();
     } else if (type.is_cursor_type()) {
@@ -4069,7 +3976,6 @@ int lookup_pl_symbol(const void *pl_ns, const char *symbol, size_t len, int64_t 
    ObString var_name(len, symbol);
    const oceanbase::pl::ObPLBlockNS *ns = static_cast<const oceanbase::pl::ObPLBlockNS *>(pl_ns);
    if (OB_FAIL(ns->resolve_symbol(var_name, type, pl_data_type, parent_id, var_index))) {
-     LOG_WARN("failed to get var index", K(var_name), K(ret));
    } else if (oceanbase::pl::ObPLExternalNS::LOCAL_VAR == type
               && !pl_data_type.is_cursor_type()) { // mysql can not access explicit cursor in sql/expression
      *idx = var_index;

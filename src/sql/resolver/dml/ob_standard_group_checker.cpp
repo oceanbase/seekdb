@@ -41,7 +41,6 @@ int ObStandardGroupChecker::add_group_by_expr(ObRawExpr *expr)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("group by expr is null", K(ret));
   } else if (OB_FAIL(group_by_exprs_.push_back(expr))) {
-    LOG_WARN("add expr to settled exprs failed", K(ret));
   } else {
     //this stmt has group
     set_has_group(true);
@@ -61,7 +60,6 @@ int ObStandardGroupChecker::add_unsettled_expr(ObRawExpr *expr)
       set_has_group(true);
     }
     if (OB_FAIL(unsettled_exprs_.push_back(expr))) {
-      LOG_WARN("add unsettled exprs failed", K(ret));
     }
   }
   return ret;
@@ -84,17 +82,14 @@ int ObStandardGroupChecker::check_only_full_group_by()
     if (OB_FAIL(deduce_settled_exprs(&alloc,
                                      &expr_factory,
                                      &fd_item_factory))) {
-      LOG_WARN("failed to deduce settled exprs", K(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < unsettled_exprs_.count(); ++i) {
       ObRawExpr *unsettled_expr = unsettled_exprs_.at(i);
       bool is_valid = false;
       if (OB_FAIL(expr_exists_in_group_by(unsettled_expr, is_valid))) {
-        LOG_WARN("failed to check column in settled columns", K(ret));
       } else if (is_valid) {
         // expr exists in group by columns
       } else if (OB_FAIL(unsettled_expr->preorder_accept(visitor))) {
-        LOG_WARN("failed to check unsettled expr", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -139,23 +134,18 @@ int ObStandardGroupChecker::deduce_settled_exprs(ObArenaAllocator *alloc,
     ObSEArray<TableItem*, 8> from_tables;
     ObTransformUtils::UniqueCheckInfo unique_info;
     if (OB_FAIL(select_stmt_->get_from_tables(from_tables))) {
-      LOG_WARN("failed to get from tables", K(ret));
     } else if (OB_FAIL(ObTransformUtils::compute_tables_property(select_stmt_,
                                                                  check_helper,
                                                                  from_tables,
                                                                  select_stmt_->get_condition_exprs(),
                                                                  unique_info))) {
-      LOG_WARN("failed to compute tables property", K(ret));
     } else if (OB_FAIL(ObOptimizerUtil::append_exprs_no_dup(settled_exprs_, unique_info.const_exprs_))) {
-      LOG_WARN("failed to append const exprs", K(ret));
     } else if (OB_FAIL(ObOptimizerUtil::append_exprs_no_dup(settled_exprs_, group_by_exprs_))) {
-      LOG_WARN("failed to append group by exprs", K(ret));
     } else if (OB_FAIL(ObOptimizerUtil::deduce_determined_exprs(settled_exprs_,
                                                                 select_stmt_,
                                                                 unique_info.fd_sets_,
                                                                 unique_info.equal_sets_,
                                                                 unique_info.const_exprs_))) {
-      LOG_WARN("failed to deduce determined exprs", K(ret));
     }
   }
   return ret;
@@ -192,7 +182,6 @@ int ObStandardGroupVisitor::visit(ObColumnRefRawExpr &expr)
   } else if (is_in_subquery_) {
     // do nothing
   } else if (OB_FAIL(checker_->check_unsettled_column(&expr))) {
-    LOG_WARN("failed to visit column ref expr", K(ret));
   }
   return ret;
 }
@@ -219,7 +208,6 @@ int ObStandardGroupVisitor::visit(ObExecParamRawExpr &expr)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ref expr is invalid", K(ret));
   } else if (OB_FAIL(expr.get_ref_expr()->preorder_accept(exec_param_visitor))) {
-    LOG_WARN("failed to visit child", K(ret));
   } else {
     skip_expr_ = &expr;
   }
@@ -236,7 +224,6 @@ int ObStandardGroupVisitor::visit(ObQueryRefRawExpr &expr)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ref stmt is null", K(ret), K(expr));
   } else if (OB_FAIL(ref_stmt->get_relation_exprs(relation_exprs))) {
-    LOG_WARN("failed to get relation exprs", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < relation_exprs.count(); ++i) {
     if (OB_ISNULL(relation_exprs.at(i))) {
@@ -246,7 +233,6 @@ int ObStandardGroupVisitor::visit(ObQueryRefRawExpr &expr)
                && !relation_exprs.at(i)->has_flag(CNT_SUB_QUERY)) {
       // do nothing
     } else if (OB_FAIL(relation_exprs.at(i)->preorder_accept(sub_query_visitor))) {
-      LOG_WARN("failed to check unsettled expr", K(ret));
     }
   }
   if (OB_SUCC(ret)) {

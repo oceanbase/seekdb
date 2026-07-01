@@ -139,7 +139,6 @@ int ObOLAPAsyncJobResolver::resolve_submit_job_stmt(const ParseNode &parse_tree,
     if (OB_SUCC(ret)) {
       int64_t job_id = OB_INVALID_ID;
       if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::generate_job_id(job_id))) {
-          LOG_WARN("generate_job_id failed", KR(ret));
       } else {
         stmt.set_job_id(job_id);
         char *job_name_buf = static_cast<char*>(allocator_->alloc(OB_JOB_NAME_MAX_LENGTH));
@@ -231,10 +230,8 @@ int ObOLAPAsyncJobResolver::execute_submit_job(ObOLAPAsyncSubmitJobStmt &stmt)
 
       ObMySQLTransaction trans;
       if (OB_FAIL(trans.start(GCTX.sql_proxy_))) {
-        LOG_WARN("failed to start trans", KR(ret));
       } else if (OB_FAIL(dbms_scheduler::ObDBMSSchedJobUtils::create_dbms_sched_job(
           trans, stmt.get_job_id(), job_info))) {
-        LOG_WARN("failed to create dbms scheduler job", KR(ret));
       }
       if (trans.is_started()) {
         int tmp_ret = OB_SUCCESS;
@@ -260,16 +257,13 @@ int ObOLAPAsyncJobResolver::init_select_stmt(ObOLAPAsyncSubmitJobStmt &stmt)
     ObSqlString select_sql;
     if (OB_FAIL(select_sql.assign_fmt(
         "SELECT '%.*s' as job_id",stmt.get_job_name().length(), stmt.get_job_name().ptr()))) {
-      LOG_WARN("assign sql string failed", KR(ret), K(stmt.get_job_name()));
     } else if (OB_FAIL(parse_and_resolve_select_sql(select_sql.string()))) {
-      LOG_WARN("fail to parse and resolve select sql", K(ret), K(select_sql));
     } else if (OB_UNLIKELY(stmt::T_SELECT != stmt_->get_stmt_type())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected stmt type", K(stmt_->get_stmt_type()));
     } else {
       select_stmt->set_select_type(NOT_AFFECT_FOUND_ROWS);
       if(OB_FAIL(select_stmt->formalize_stmt(session_info_))) {
-        LOG_WARN("pull select stmt all expr relation ids failed", K(ret));
       }
     }
   }
@@ -287,7 +281,6 @@ int ObOLAPAsyncJobResolver::parse_and_resolve_select_sql(const ObString &select_
     ParseResult select_result;
     ObParser parser(*params_.allocator_, session_info_->get_sql_mode());
     if (OB_FAIL(parser.parse(select_sql, select_result))) {
-      LOG_WARN("parse select sql failed", K(select_sql), K(ret));
     } else {
       // use alias to make all columns number continued
       if (OB_ISNULL(select_result.result_tree_)) {
@@ -304,7 +297,6 @@ int ObOLAPAsyncJobResolver::parse_and_resolve_select_sql(const ObString &select_
       } else {
         ParseNode *select_stmt_node = select_result.result_tree_->children_[0];
         if (OB_FAIL(ObSelectResolver::resolve(*select_stmt_node))) {
-          LOG_WARN("resolve select in view definition failed", K(ret), K(select_stmt_node));
         }
       }
     }

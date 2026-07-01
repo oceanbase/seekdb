@@ -250,7 +250,6 @@ int process_thread_log_id_level_map(const char *str, const int32_t str_length)
   int32_t valid_length = 0;
   id_level_map.reset_level();
   if (OB_FAIL(OB_LOGGER.parse_set(str, str_length, valid_length, id_level_map))) {
-    LOG_WARN("Failed to parse set id_level_map", K(ret));
   } else {
     ObThreadLogLevelUtils::init(&id_level_map);
   }
@@ -343,7 +342,6 @@ int ObLogNameIdMap::get_mod_id(const char *mod_name,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", K(ret), KCSTRING(mod_name), KCSTRING(sub_mod_name));
   } else if (OB_FAIL(get_mod_id(mod_name, par_mod_id))) {
-    LOG_WARN("Failed to get mod id", K(ret), KCSTRING(mod_name));
   } else if (OB_UNLIKELY(par_mod_id >= MAX_PAR_MOD_SIZE)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("Get invalid par mod id", K(ret));
@@ -928,7 +926,6 @@ int ObLogger::set_max_file_index(int64_t max_file_index)
   max_file_index_ = max_file_index;
   if (max_file_index_ > 0) {
     if (OB_FAIL(record_old_log_file())) {
-      LOG_WARN("Record old log file error", K(ret));
     }
   }
   return ret;
@@ -939,7 +936,6 @@ int ObLogger::set_record_old_log_file()
   int ret = OB_SUCCESS;
   if (max_file_index_ > 0) {
     if (OB_FAIL(record_old_log_file())) {
-      LOG_WARN("Record old log file error", K(ret));
     }
   }
   return ret;
@@ -1027,7 +1023,6 @@ int ObLogger::parse_check(const char *str,
       if (strchr(buffer, ':') == NULL) {
         int8_t level_int = 0;
         if (OB_FAIL(level_str2int(buffer, level_int))) {
-          OB_LOG(WARN, "failed to get level_int", KCSTRING(buffer), K(str_length), K(ret));
         } else {
           if (NULL != list) {
             ModSetting mod_set(ModSetting::NON_SUBMOD_ID, ModSetting::NON_SUBMOD_ID, level_int);
@@ -1070,7 +1065,6 @@ int ObLogger::parse_check(const char *str,
             } else {
               if (NULL != list) {
                 if (OB_FAIL(list->push_back(mod_set))) {
-                  LOG_WARN("Failed to add mod set to list", K(ret));
                 }
               }
               int64_t valid_length_tmp = p_start - buffer;
@@ -1106,7 +1100,6 @@ int ObLogger::parse_check_alert(const char *str, const int32_t str_length)
       str_copy_trim(buffer, OB_MAX_CONFIG_VALUE_LEN, str, str_length);
       int8_t level_int = 0;
       if (OB_FAIL(level_str2int(buffer, level_int, true))) {
-        OB_LOG(WARN, "failed to get level_int", KCSTRING(buffer), K(str_length), K(ret));
       } else if (level_int >= OB_LOG_LEVEL_DBA_ERROR && level_int <= OB_LOG_LEVEL_DBA_INFO) {
         alert_log_level_ = level_int;
       } else {
@@ -1140,9 +1133,7 @@ int ObLogger::parse_set(const char *str,
     enable_perf_mode_ = true;
   } else {
     if (OB_FAIL(parse_check(str, str_length, valid_length, &mod_setting_list))) {
-      LOG_WARN("Failed to parse check log level", K(ret));
     } else if (OB_FAIL(setting_list_processing(id_level_map, &mod_setting_list))) {
-      LOG_WARN("Failed to process setting list", K(ret));
     } else {
       enable_perf_mode_ = false;
       //do nothing
@@ -1163,19 +1154,16 @@ int ObLogger::setting_list_processing(ObLogIdLevelMap &id_level_map, void *mod_s
     ObList<ModSetting> *list = static_cast<ObList<ModSetting> *>(mod_setting_list);
     for (; OB_SUCC(ret) && list->size() > 0;) {
       if (OB_FAIL(list->pop_front(mod_set))) {
-        LOG_WARN("Failed to pop mod set", K(ret));
       } else {
         if (ModSetting::NON_SUBMOD_ID == mod_set.par_mod_id_) {
           id_level_map.set_level(mod_set.level_);
         } else if (ModSetting::NON_SUBMOD_ID == mod_set.sub_mod_id_) {
           if (OB_FAIL(id_level_map.set_level(mod_set.par_mod_id_, mod_set.level_))) {
-            LOG_WARN("Failed to set log level", K(ret));
           }
         } else {
           if (OB_FAIL(id_level_map.set_level(mod_set.par_mod_id_,
                                              mod_set.sub_mod_id_,
                                              mod_set.level_))) {
-                LOG_WARN("Failed to set log level", K(ret));
           }
         }
       }
@@ -1189,20 +1177,17 @@ int ObLogger::get_mod_set(const char *par_mod, const char *sub_mod, const char *
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(level_str2int(level, mod_set.level_))) {
-    LOG_WARN("Failed to convert level", K(ret));
   } else {
     if (0 == STRCASECMP(par_mod, "ALL") &&  0 == STRCASECMP(sub_mod, "*")) {
       mod_set.par_mod_id_ = ModSetting::NON_SUBMOD_ID;
     } else if (0 == STRCASECMP(sub_mod, "*")) {
       if (OB_FAIL(name_id_map_.get_mod_id(par_mod, mod_set.par_mod_id_))) {
-        LOG_WARN("Failed to get mod id", K(ret), KCSTRING(par_mod));
       } else {
         mod_set.sub_mod_id_ = ModSetting::NON_SUBMOD_ID;
       }
     } else {
       if (OB_FAIL(name_id_map_.get_mod_id(par_mod, sub_mod, mod_set.par_mod_id_,
                                           mod_set.sub_mod_id_))) {
-        LOG_WARN("Failed to get mod id", K(ret), KCSTRING(par_mod), KCSTRING(sub_mod));
       }
     }
   }
@@ -1286,14 +1271,11 @@ int ObLogger::record_old_log_file()
     ObSEArray<FileName, 4> files;
     for (int type = FD_SVR_FILE; type < FD_AUDIT_FILE; ++type) {
       if (OB_TMP_FAIL(get_log_files_in_dir(log_file_[type].filename_, &files))) {
-        OB_LOG(WARN, "Get log files in log dir error", K(ret));
       }
     }
     if (OB_TMP_FAIL(get_log_files_in_dir(log_file_[FD_ALERT_FILE].filename_, &files))) {
-      OB_LOG(WARN, "Get log files in log dir error", K(ret));
     }
     if (OB_FAIL(add_files_to_list(&files, file_list_))) {
-        OB_LOG(WARN, "Add files to list error", K(ret));
     }
   }
   return ret;
@@ -1345,7 +1327,6 @@ int ObLogger::get_log_files_in_dir(const char *filename, void *files)
     }
 #else
     if (OB_FAIL(regcomp(&uncompressed_regex, OB_UNCOMPRESSED_SYSLOG_FILE_PATTERN, REG_EXTENDED))) {
-      OB_LOG(ERROR, "failed to compile regex pattern", K(ret));
     } else {
     char *dir_name = dirname(dirc);
     char *base_name = basename(basec);
@@ -1379,7 +1360,6 @@ int ObLogger::get_log_files_in_dir(const char *filename, void *files)
             print_len = snprintf(tmp_file.file_name_, ObPLogFileStruct::MAX_LOG_FILE_NAME_SIZE, "%s/%s", dir_name, dir_entry->d_name);
             if (OB_UNLIKELY(print_len <0) || OB_UNLIKELY(print_len >= ObPLogFileStruct::MAX_LOG_FILE_NAME_SIZE)) {
             } else if (OB_FAIL(files_arr->push_back(tmp_file))) {
-              LOG_WARN("Add file to files error", K(ret));
             }
           }
         }

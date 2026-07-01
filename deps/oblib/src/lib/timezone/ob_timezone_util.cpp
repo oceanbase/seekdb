@@ -134,7 +134,6 @@ int ObTimezoneUtils::parse_timezone_file(const ObString& timezone_file_name)
   _fd = fopen(timezone_file_name.ptr(), type);
   if(0 == _fd){
     ret = OB_IO_ERROR;
-    OB_LOG(ERROR, "cannot open the time zone file");
   } else {
     union{
       struct tzhead tzhead;
@@ -155,11 +154,9 @@ int ObTimezoneUtils::parse_timezone_file(const ObString& timezone_file_name)
     }
     if(0 != fclose(_fd)){
        ret = OB_IO_ERROR;
-       OB_LOG(ERROR, "cannot close the open time zone file");
     } else {
       if(readbytes < static_cast<int64_t>(sizeof(struct tzhead))){
         ret = OB_IO_ERROR;
-        OB_LOG(ERROR, "time zone file format is not correct");
       } else {
         ttisstdcnt = int4net(u.tzhead.tzh_ttisgmtcnt);
         ttisgmtcnt = int4net(u.tzhead.tzh_ttisstdcnt);
@@ -176,7 +173,6 @@ int ObTimezoneUtils::parse_timezone_file(const ObString& timezone_file_name)
         (ttisstdcnt != sp.typecnt && ttisstdcnt != 0) ||
         (ttisgmtcnt != sp.typecnt && ttisgmtcnt != 0)){
           ret = OB_ERROR;
-          OB_LOG(ERROR, "time zone file infomation error, please check");
         } else {
           if ((uint)(readbytes - (p - u.buf)) <
             sp.timecnt * 4 +                       /* ats */
@@ -187,7 +183,6 @@ int ObTimezoneUtils::parse_timezone_file(const ObString& timezone_file_name)
             ttisstdcnt +                            /* ttisstds */
             ttisgmtcnt) {
             ret = OB_ERROR;
-            OB_LOG(ERROR, "time zone file infomation error, please check");
           } else {
             int64_t bufSize = ALIGN_SIZE(sp.timecnt * sizeof(my_time_t))
                 + ALIGN_SIZE(sp.timecnt) +
@@ -213,7 +208,6 @@ int ObTimezoneUtils::parse_timezone_file(const ObString& timezone_file_name)
               for (uint i = 0; i < sp.timecnt; i++){
                 sp.types[i] = (uchar) *p++;
                 if (sp.types[i] >= sp.typecnt){
-                  OB_LOG(ERROR, "error time zone info types typecnt value not correct");
                   ret = OB_ERROR;
                   break;
                 }
@@ -227,13 +221,11 @@ int ObTimezoneUtils::parse_timezone_file(const ObString& timezone_file_name)
                   ttisp->tt_isdst= (unsigned char) *p++;
                   if (ttisp->tt_isdst != 0 && ttisp->tt_isdst != 1){
                     ret = OB_ERROR;
-                    OB_LOG(ERROR, "zone info error tt_isdst value not correct");
                     break;
                   }
                   ttisp->tt_abbrind= (unsigned char) *p++;
                   if(ttisp->tt_abbrind > sp.charcnt){
                     ret = OB_ERROR;
-                    OB_LOG(ERROR, "zone info error tt_abbrind value not correct");
                     break;
                   }
                 }
@@ -255,7 +247,6 @@ int ObTimezoneUtils::parse_timezone_file(const ObString& timezone_file_name)
                 }
                 if(OB_SUCCESS != prepare_tz_info(sp)){
                   ret = OB_ERROR;
-                  OB_LOG(ERROR, "prepare_tz_info failed");
                 }
               }
             }
@@ -393,7 +384,6 @@ int ObTimezoneUtils::prepare_tz_info(TIME_ZONE_INFO &tz_info)
   }
 
   if (tz_info.revcnt == TZ_MAX_REV_RANGES - 1){
-    OB_LOG(ERROR, "tz_info.revcnt error not enough space");
     ret = OB_ERROR;
   }
   /* set maximum end_l as finisher */
@@ -402,7 +392,6 @@ int ObTimezoneUtils::prepare_tz_info(TIME_ZONE_INFO &tz_info)
   } else if(!(tz_info.revts = (my_time_t*)ob_malloc(sizeof(my_time_t) * (tz_info.revcnt + 1), "TimeZoneUtils"))
       || !(tz_info.revtis = (REVT_INFO*)ob_malloc(sizeof(REVT_INFO) * tz_info.revcnt, "TimeZoneUtils"))
     ){
-    OB_LOG(ERROR, "ob_malloc for tz_info.revts tz_info.revtis failed");
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else {
     MEMCPY(tz_info.revts, revts, sizeof(my_time_t) * (tz_info.revcnt + 1));
@@ -420,26 +409,16 @@ int ObTimezoneUtils::print_tz_to_sql(const char* tz_name)
   TIME_ZONE_INFO &sp = _tz_info;
   uint64_t i = 0;
     /* Here we assume that all time zones have same leap correction tables */
-  _OB_LOG(INFO, "INSERT INTO time_zone (Use_leap_seconds) VALUES ('%s');", sp.leapcnt ? "Y" : "N");
-  _OB_LOG(INFO, "SET @time_zone_id= LAST_INSERT_ID();");
-  _OB_LOG(INFO, "INSERT INTO time_zone_name (Name, Time_zone_id) VALUES ('%s', @time_zone_id);", tz_name);
 
   if (0 != sp.timecnt)
   {
-    _OB_LOG(INFO, "INSERT INTO time_zone_transition (Time_zone_id, Transition_time, Transition_type_id) VALUES");
     for (i= 0; i < sp.timecnt; i++)
-      _OB_LOG(INFO, "%s(@time_zone_id, %ld, %u)", (i == 0 ? " " : ","), sp.ats[i], (uint)sp.types[i]);
-    _OB_LOG(INFO, ";");
+      (void)0;
   }
 
-  _OB_LOG(INFO, "INSERT INTO time_zone_transition_type (Time_zone_id, Transition_type_id, Offset, Is_DST, Abbreviation) VALUES");
 
   for (i= 0; i < sp.typecnt; i++)
-    _OB_LOG(INFO, "%s(@time_zone_id, %lu, %ld, %lu, '%s')",
-            (i == 0 ? " " : ","), i,
-            sp.ttis[i].tt_gmtoff, sp.ttis[i].tt_isdst,
-            sp.chars + sp.ttis[i].tt_abbrind);
-  _OB_LOG(INFO, ";");
+    (void)0;
 
   return ret;
 }

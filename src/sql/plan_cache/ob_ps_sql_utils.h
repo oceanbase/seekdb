@@ -56,19 +56,16 @@ int ObPsSqlUtils::alloc_new_var(common::ObIAllocator &allocator, const T &t, T *
   common::ObDataBuffer *data_buf = NULL;
   int64_t cv_size = 0;
   if (OB_FAIL(t.get_convert_size(cv_size))) {
-    SQL_PC_LOG(WARN, "get_convert_size failed", K(ret));
   } else {
     const int64_t size = cv_size + sizeof(common::ObDataBuffer);
     char *buf = static_cast<char *>(allocator.alloc(size));
     if (OB_ISNULL(buf)) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      SQL_PC_LOG(WARN, "failed to alloc memory");
     } else {
       data_buf = new (buf + sizeof(T)) common::ObDataBuffer(buf + sizeof(T) + sizeof(common::ObDataBuffer),
                                                             size - sizeof(T) - sizeof(common::ObDataBuffer));
       new_t = new (buf) T(data_buf, &allocator);
       if (OB_FAIL(new_t->deep_copy(t))) {
-        SQL_PC_LOG(WARN, "deep copy failed", K(ret), K(cv_size));
       }
     }
   }

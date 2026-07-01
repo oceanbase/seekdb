@@ -58,6 +58,7 @@
 #include "ddl/ob_drop_routine_resolver.h"
 #include "ddl/ob_alter_routine_resolver.h"
 #include "sql/resolver/ddl/ob_create_package_resolver.h"
+#include "sql/resolver/ddl/ob_alter_package_resolver.h"
 #include "sql/resolver/ddl/ob_drop_package_resolver.h"
 #include "sql/resolver/ddl/ob_flashback_resolver.h"
 #include "sql/resolver/ddl/ob_purge_resolver.h"
@@ -150,7 +151,6 @@ int ObResolver::stmt_resolver_func(ObResolverParams &params, const ParseNode &pa
   int ret = OB_SUCCESS;
   HEAP_VAR(ResolverType, stmt_resolver, params) {
     if (OB_FAIL(SMART_CALL(stmt_resolver.resolve(parse_tree)))) {
-      LOG_WARN("execute stmt_resolver failed", K(ret), K(parse_tree.type_));
     }
     stmt = stmt_resolver.get_basic_stmt();
   }
@@ -165,7 +165,6 @@ int ObResolver::select_stmt_resolver_func(ObResolverParams &params, const ParseN
     stmt_resolver.set_calc_found_rows(true);
     stmt_resolver.set_has_top_limit(true);
     if (OB_FAIL(SMART_CALL(stmt_resolver.resolve(parse_tree)))) {
-      LOG_WARN("execute stmt_resolver failed", K(ret), K(parse_tree.type_));
     }
     stmt = stmt_resolver.get_basic_stmt();
   }
@@ -691,6 +690,10 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
         REGISTER_STMT_RESOLVER(CreatePackageBody);
         break;
       }
+      case T_PACKAGE_ALTER: {
+        REGISTER_STMT_RESOLVER(AlterPackage);
+        break;
+      }
       case T_PACKAGE_DROP: {
         REGISTER_STMT_RESOLVER(DropPackage);
         break;
@@ -918,7 +921,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       ObDMLStmt *dml_stmt = static_cast<ObDMLStmt*>(stmt);
       ObRawExprWrapEnumSet enum_set_wrapper(*params_.expr_factory_, params_.session_info_);
       if (OB_FAIL(enum_set_wrapper.wrap_enum_set(*dml_stmt))) {
-        LOG_WARN("failed to wrap_enum_set", K(ret));
       }
     }
 
@@ -926,10 +928,8 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       if (OB_FAIL(params_.query_ctx_->query_hint_.init_query_hint(params_.allocator_,
                                                                   params_.session_info_,
                                                                   static_cast<ObDMLStmt*>(stmt)))) {
-        LOG_WARN("failed to init query hint.", K(ret));
       } else if (OB_FAIL(params_.query_ctx_->query_hint_.check_and_set_params_from_hint(params_,
                                                          *static_cast<ObDMLStmt*>(stmt)))) {
-        LOG_WARN("failed to check and set params from hint", K(ret));
       }
     }
 
@@ -938,10 +938,8 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
       bool is_contain_select_for_update = false;
       ObDMLStmt *dml_stmt = static_cast<ObDMLStmt*>(stmt);
       if (OB_FAIL(dml_stmt->check_if_contain_inner_table(is_contain_inner_table))) {
-        LOG_WARN("fail to check if contain inner table", K(ret));
       } else if (OB_FAIL(dml_stmt->check_if_contain_select_for_update(
                   is_contain_select_for_update))) {
-        LOG_WARN("fail to check if contain select for update", K(ret));
       } else {
         params_.query_ctx_->is_contain_inner_table_ = is_contain_inner_table;
         params_.query_ctx_->is_contain_select_for_update_ = is_contain_select_for_update;
@@ -958,7 +956,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
           if (OB_FAIL(opt_hint.check_and_get_bool_opt_param(ObOptParamHint::ENABLE_RICH_VECTOR_FORMAT,
                                                             has_rich_format_hint,
                                                             enable_rich_format))) {
-            LOG_WARN("check and get bool opt param failed", K(ret));
           } else if (has_rich_format_hint) {
             params_.session_info_->set_force_rich_format(
               enable_rich_format ? ObBasicSessionInfo::ForceRichFormatStatus::FORCE_ON :
@@ -980,7 +977,6 @@ int ObResolver::resolve(IsPrepared if_prepared, const ParseNode &parse_tree, ObS
           ddl_arg.ddl_stmt_str_ = params_.query_ctx_->get_sql_stmt();
         }
         if (OB_FAIL(ObResolverUtils::set_sync_ddl_id_str(params_.session_info_, ddl_arg.ddl_id_str_))) {
-          LOG_WARN("Failed to set_sync_ddl_id_str", K(ret));
         } else { } // do-nothing
       }
     }

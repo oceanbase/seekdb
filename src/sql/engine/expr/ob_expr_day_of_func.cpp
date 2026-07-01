@@ -52,7 +52,6 @@ int ObExprDayOfWeek::calc_dayofweek(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObExprTimeBase::calc(expr, ctx, expr_datum, DT_WDAY, true))) {
-    LOG_WARN("calc day of week failed", K(ret));
   } else if (!expr_datum.is_null()) {
     expr_datum.set_int32(expr_datum.get_int32() % 7 + 1);
   }
@@ -105,13 +104,10 @@ int ObExprToSeconds::calc_toseconds(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
-    LOG_WARN("eval param value failed");
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
-    LOG_WARN("get sql mode failed", K(ret));
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
-    LOG_WARN("get tz info failed", K(ret));
   } else {
     ObTime ot;
     ObDateSqlMode date_sql_mode;
@@ -191,11 +187,9 @@ int ObExprSecToTime::calc_sectotime(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
-    LOG_WARN("eval param value failed");
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
-    LOG_WARN("get sql mode failed", K(ret));
   } else {
     number::ObNumber num_usec;
     number::ObNumber num_sec;
@@ -204,13 +198,9 @@ int ObExprSecToTime::calc_sectotime(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
     char local_buff[number::ObNumber::MAX_BYTE_LEN * 3];
     ObDataBuffer local_alloc(local_buff, number::ObNumber::MAX_BYTE_LEN * 3);
     if (OB_FAIL(num_sec.from(param_datum->get_number(), local_alloc))) {
-      LOG_WARN("failed to create number", K(ret), K(number::ObNumber(param_datum->get_number())));
     } else if (OB_FAIL(million.from(static_cast<int64_t>(1000000), local_alloc))) {
-      LOG_WARN("failed to create number million", K(ret));
     } else if (OB_FAIL(num_sec.mul(million, num_usec, local_alloc))) {
-      LOG_WARN("failed to mul number", K(ret), K(num_sec), K(million));
     } else if (OB_FAIL(num_usec.round(0))) {
-      LOG_WARN("failed to round number", K(ret), K(num_usec));
     } else if (!num_usec.is_valid_int64(int_usec)) {
       int_usec = num_usec.is_negative() ? -INT64_MAX : INT64_MAX;
     }
@@ -283,7 +273,6 @@ int ObExprTimeToSec::calc_timetosec(const ObExpr &expr, ObEvalCtx &ctx, ObDatum 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
-    LOG_WARN("eval param value failed");
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();
   } else {
@@ -379,7 +368,6 @@ int ObExprSubAddtime::calc_result2(common::ObObj &result,
     if (ObVarcharType == result_type) {
       if (OB_FAIL(ob_obj_to_ob_time_without_date(date_arg,
             get_timezone_info(session), ot1))) {
-        LOG_WARN("obj to ob time without date failed", K(ret), K(date_arg));
       } else {
         if (0 == ot1.parts_[DT_YEAR] && 0 == ot1.parts_[DT_MON] && 0 == ot1.parts_[DT_MDAY]) {
           param_with_date = false;
@@ -393,7 +381,6 @@ int ObExprSubAddtime::calc_result2(common::ObObj &result,
       } else {
         ObTime ot2(DT_TYPE_TIME);
         if (OB_FAIL(ob_obj_to_ob_time_without_date(time_arg, get_timezone_info(session), ot2))) {
-          LOG_WARN("cast the second param failed", K(ret));
         } else {
           t_val2 = ObTimeConverter::ob_time_to_time(ot2);
         }
@@ -430,7 +417,6 @@ int ObExprSubAddtime::calc_result2(common::ObObj &result,
         } else if (ObVarcharType == result_type) {
           ObTimeConvertCtx cvrt_ctx(tz_info, false);
           if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ot1, cvrt_ctx, t_val1))) {
-            LOG_WARN("ob_time_to_datetime failed", K(ret));
           }
         } else {
           if (ObDateTimeType != date_arg.get_type() && ObTimestampType != date_arg.get_type()) {
@@ -452,7 +438,6 @@ int ObExprSubAddtime::calc_result2(common::ObObj &result,
       }
       if (OB_SUCC(ret) && ObVarcharType == result_type) {
         if (OB_FAIL(ObObjCaster::to_type(ObVarcharType, cast_ctx, result, result))) {
-          LOG_WARN("failed to cast object to ObVarcharType ", K(result), K(ret));
         }
       }
     }
@@ -541,9 +526,7 @@ int ObExprSubAddtime::subaddtime_common(const ObExpr &expr,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, date_arg))) {
-    LOG_WARN("eval the first param value failed");
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, time_arg))) {
-    LOG_WARN("eval the second param value failed");
   } else if (OB_UNLIKELY(date_arg->is_null() || time_arg->is_null())) {
     expr_datum.set_null();
     null_res = true;
@@ -585,20 +568,15 @@ int ObExprSubAddtime::subaddtime_datetime(const ObExpr &expr, ObEvalCtx &ctx, Ob
   const ObTimeZoneInfo *tz_info = NULL;
   ObSQLMode sql_mode = 0;
   if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
-    LOG_WARN("get time zone failed", K(ret));
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
-    LOG_WARN("get sql mode failed", K(ret));
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
-    LOG_WARN("failed to get time zone info", K(ret));
   } else if (OB_FAIL(subaddtime_common(expr, ctx, expr_datum, null_res, date_arg, time_arg, t_val2, tz_info, sql_mode))) {
-    LOG_WARN("calc subaddtime failed", K(ret));
   } else if (!null_res) {
     int64_t offset = ObTimestampType == expr.args_[0]->datum_meta_.type_
                                         ? tz_info->get_offset() : 0;
     int64_t dt_value;
     if (ObMySQLDateTimeType == expr.args_[0]->datum_meta_.type_) {
       if (OB_FAIL(ObTimeConverter::mdatetime_to_datetime_without_check(date_arg->get_mysql_datetime(), dt_value))) {
-        LOG_WARN("cast mdatetime to datetime fail", K(ret));
       }
     } else {
       dt_value = date_arg->get_datetime();
@@ -609,7 +587,6 @@ int ObExprSubAddtime::subaddtime_datetime(const ObExpr &expr, ObEvalCtx &ctx, Ob
       if (ObMySQLDateTimeType == expr.datum_meta_.type_) {
         ObMySQLDateTime mdt_value;
         if (OB_FAIL(ObTimeConverter::datetime_to_mdatetime(int_usec, mdt_value))) {
-          LOG_WARN("cast datetime to mdatetime fail", K(ret));
         } else {
           expr_datum.set_mysql_datetime(mdt_value);
         }
@@ -636,11 +613,8 @@ int ObExprSubAddtime::subaddtime_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObD
   const ObTimeZoneInfo *tz_info = NULL;
   ObSQLMode sql_mode = 0;
   if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
-    LOG_WARN("get time zone failed", K(ret));
   } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
-    LOG_WARN("get sql mode failed", K(ret));
   } else if (OB_FAIL(subaddtime_common(expr, ctx, expr_datum, null_res, date_arg, time_arg, t_val2, tz_info, sql_mode))) {
-    LOG_WARN("calc subaddtime failed", K(ret));
   } else if (!null_res) {
     ObTime ot1(DT_TYPE_TIME);
     if (OB_FAIL(ob_datum_to_ob_time_without_date(*date_arg, expr.args_[0]->datum_meta_.type_,
@@ -657,7 +631,6 @@ int ObExprSubAddtime::subaddtime_varchar(const ObExpr &expr, ObEvalCtx &ctx, ObD
       if (param_with_date) {
         ObTimeConvertCtx cvrt_ctx(tz_info, false);
         if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ot1, cvrt_ctx, t_val1))) {
-          LOG_WARN("ob_time_to_datetime failed", K(ret));
         }
       } else {
         t_val1 = ObTimeConverter::ob_time_to_time(ot1);
@@ -721,7 +694,6 @@ int ObExprDayName::calc_dayname(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &exp
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObExprTimeBase::calc(expr, ctx, expr_datum, DT_WDAY, true))) {
-    LOG_WARN("dayname calc day of dayweek failed", K(ret));
   }
   return ret;
 }
@@ -782,14 +754,11 @@ int vector_dayofyear(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip
   const common::ObTimeZoneInfo *tz_info = NULL;
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
   if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
-    LOG_WARN("get tz info failed", K(ret));
   } else {
     ObSQLMode sql_mode = 0;
     const ObTimeZoneInfo *local_tz_info = (ObTimestampType == expr.args_[0]->datum_meta_.type_) ? tz_info : NULL;
     if (OB_FAIL(get_tz_offset(local_tz_info, tz_offset))) {
-      LOG_WARN("get tz_info offset fail", K(ret));
     } else if (OB_FAIL(helper.get_sql_mode(sql_mode))) {
-      LOG_WARN("get sql mode failed", K(ret));
     } else {
       DateType date = 0;
       DateType dt_yday = 0;
@@ -853,7 +822,6 @@ int vector_dayofyear(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip
 int ObExprDayOfYear::calc_dayofyear_vector(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, const EvalBound &bound) {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval date_format param", K(ret));
   } else {
     VectorFormat arg_format = expr.args_[0]->get_format(ctx);
     VectorFormat res_format = expr.get_format(ctx);
@@ -869,7 +837,6 @@ int ObExprDayOfYear::calc_dayofyear_vector(const ObExpr &expr, ObEvalCtx &ctx, c
     }
 
     if (OB_FAIL(ret)) {
-      LOG_WARN("expr calculation failed", K(ret));
     }
   }
   return ret;
@@ -886,11 +853,9 @@ int vector_dayofmonth(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &ski
   const common::ObTimeZoneInfo *tz_info = NULL;
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
   if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
-    LOG_WARN("get tz info failed", K(ret));
   } else {
     const ObTimeZoneInfo *local_tz_info = (ObTimestampType == expr.args_[0]->datum_meta_.type_) ? tz_info : NULL;
     if (OB_FAIL(get_tz_offset(local_tz_info, tz_offset))) {
-      LOG_WARN("get tz_info offset fail", K(ret));
     } else {
       DateType date = 0;
       DateType dt_yday = 0;
@@ -925,7 +890,6 @@ int ObExprDayOfMonth::calc_dayofmonth_vector(const ObExpr &expr, ObEvalCtx &ctx,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval date_format param", K(ret));
   } else {
     VectorFormat arg_format = expr.args_[0]->get_format(ctx);
     VectorFormat res_format = expr.get_format(ctx);
@@ -941,7 +905,6 @@ int ObExprDayOfMonth::calc_dayofmonth_vector(const ObExpr &expr, ObEvalCtx &ctx,
     }
 
     if (OB_FAIL(ret)) {
-      LOG_WARN("expr calculation failed", K(ret));
     }
   }
   return ret;
@@ -958,11 +921,9 @@ int vector_dayofweek(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip
   const common::ObTimeZoneInfo *tz_info = NULL;
   ObSolidifiedVarsGetter helper(expr, ctx, ctx.exec_ctx_.get_my_session());
   if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
-    LOG_WARN("get tz info failed", K(ret));
   } else {
     const ObTimeZoneInfo *local_tz_info = (ObTimestampType == expr.args_[0]->datum_meta_.type_) ? tz_info : NULL;
     if (OB_FAIL(get_tz_offset(local_tz_info, tz_offset))) {
-      LOG_WARN("get tz_info offset fail", K(ret));
     } else {
       DateType days = 0;
       YearType year = 0;
@@ -991,7 +952,6 @@ int ObExprDayOfWeek::calc_dayofweek_vector(const ObExpr &expr, ObEvalCtx &ctx, c
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval date_format param", K(ret));
   } else {
     VectorFormat arg_format = expr.args_[0]->get_format(ctx);
     VectorFormat res_format = expr.get_format(ctx);
@@ -1007,7 +967,6 @@ int ObExprDayOfWeek::calc_dayofweek_vector(const ObExpr &expr, ObEvalCtx &ctx, c
     }
 
     if (OB_FAIL(ret)) {
-      LOG_WARN("expr calculation failed", K(ret));
     }
   }
   return ret;
@@ -1030,13 +989,10 @@ int vector_dayname(const ObExpr &expr, ObEvalCtx &ctx, const ObBitVector &skip, 
     ret = OB_NOT_INIT;
     LOG_WARN("session is null", K(ret), K(session));
   } else if (OB_FAIL(helper.get_time_zone_info(tz_info))) {
-    LOG_WARN("get tz info failed", K(ret));
   } else if (OB_FAIL(session->get_locale_name(locale_name))) {
-    LOG_WARN("failed to get locale time name", K(expr));
   } else {
     const ObTimeZoneInfo *local_tz_info = (ObTimestampType == expr.args_[0]->datum_meta_.type_) ? tz_info : NULL;
     if (OB_FAIL(get_tz_offset(local_tz_info, tz_offset))) {
-      LOG_WARN("get tz_info offset fail", K(ret));
     } else {
       DateType days = 0;
       UsecType usec = 0;
@@ -1096,7 +1052,6 @@ int ObExprDayName::calc_dayname_vector(const ObExpr &expr, ObEvalCtx &ctx, const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval date_format param", K(ret));
   } else {
     VectorFormat arg_format = expr.args_[0]->get_format(ctx);
     VectorFormat res_format = expr.get_format(ctx);
@@ -1112,7 +1067,6 @@ int ObExprDayName::calc_dayname_vector(const ObExpr &expr, ObEvalCtx &ctx, const
     }
 
     if (OB_FAIL(ret)) {
-      LOG_WARN("expr calculation failed", K(ret));
     }
   }
   return ret;

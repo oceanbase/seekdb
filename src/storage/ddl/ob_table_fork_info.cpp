@@ -72,9 +72,7 @@ int ObTableForkInfo::assign(const ObTableForkInfo &info)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(ret), K(info));
   } else if (OB_FAIL(source_tablet_ids_.assign(info.source_tablet_ids_))) {
-    LOG_WARN("failed to assign source tablet ids", K(ret));
   } else if (OB_FAIL(dest_tablet_ids_.assign(info.dest_tablet_ids_))) {
-    LOG_WARN("failed to assign dest tablet ids", K(ret));
   } else {
     
     ls_id_ = info.ls_id_;
@@ -129,7 +127,6 @@ int ObTableForkInfo::generate_fork_params(common::ObIArray<ObTabletForkParam> &p
       fork_param.consumer_group_id_ = consumer_group_id_;
       fork_param.is_inited_ = true;
       if (OB_FAIL(params.push_back(fork_param))) {
-        LOG_WARN("failed to push back fork param", K(ret));
       }
     }
   }

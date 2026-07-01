@@ -78,7 +78,6 @@ int ObAggCellBase::reserve_bitmap(const int64_t count)
     LOG_WARN("Invalid count", K(ret), K(count));
   } else if (OB_NOT_NULL(bitmap_)) {
     if (OB_FAIL(bitmap_->reserve(count))) {
-      LOG_WARN("Failed to reserve bitmap", K(ret));
     } else {
       bitmap_->reuse(); // all false
     }
@@ -87,8 +86,7 @@ int ObAggCellBase::reserve_bitmap(const int64_t count)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("Failed to alloc memory for bitmap", K(ret));
     } else if (FALSE_IT(bitmap_ = new (buf) ObBitmap(allocator_))) {
-    } else if (OB_FAIL(bitmap_->init(count))) { // all false
-      LOG_WARN("Failed to init bitmap", K(ret));
+    } else if (OB_FAIL(bitmap_->init(count))) {
     }
   }
   return ret;
@@ -222,16 +220,12 @@ int ObPushdownAggContext::init(const ObTableAccessParam &param, const int64_t ro
   if (nullptr == param.aggregate_exprs_ || param.aggregate_exprs_->count() == 0) {
     // no aggregate
   } else if (OB_FAIL(init_agg_infos(param))) {
-    LOG_WARN("Failed to init aggr infos", K(ret));
   } else if (OB_FAIL(agg_ctx_.init_row_meta(agg_ctx_.aggr_infos_, allocator_))) {
-    LOG_WARN("Failed to init row meta for agg ctx", K(ret));
   } else {
     ObSEArray<ObExpr *, 1> mock_exprs;
     row_meta_.reset();
     if (OB_FAIL(row_meta_.init(mock_exprs, agg_ctx_.row_meta().row_size_))) {
-      LOG_WARN("init row meta failed", K(ret));
     } else if (OB_FAIL(prepare_aggregate_rows(row_count))) {
-      LOG_WARN("Failed to prepare aggregate rows", K(ret), K(row_count));
     }
   }
   return ret;
@@ -245,9 +239,7 @@ int ObPushdownAggContext::init_agg_infos(const ObTableAccessParam &param)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid null aggr exprs", K(ret), KP(agg_exprs));
   } else if (OB_FAIL(agg_infos_.init(agg_exprs->count()))) {
-    LOG_WARN("Failed to init aggr infos array", K(ret), K(agg_exprs->count()));
   } else if (OB_FAIL(cols_offset_map_.init(agg_exprs->count()))) {
-    LOG_WARN("Failed to init column offset array", K(ret), K(agg_exprs->count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < agg_exprs->count(); ++i) {
       ObAggrInfo agg_info(allocator_);
@@ -257,16 +249,13 @@ int ObPushdownAggContext::init_agg_infos(const ObTableAccessParam &param)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("Invalie aggr expr", K(ret), KPC(agg_expr));
       } else if (OB_FAIL(agg_info.param_exprs_.init(agg_expr->arg_cnt_))) {
-        LOG_WARN("Failed to init param exprs array", K(ret));
       } else {
         agg_info.real_aggr_type_ = agg_expr->type_;
         agg_info.expr_ = agg_expr;
         if (agg_expr->arg_cnt_ > 0 && OB_FAIL(agg_info.param_exprs_.push_back(agg_expr->args_[0]))) {
           LOG_WARN("Failed to push back expr", K(ret), KPC(agg_expr));
         } else if (OB_FAIL(agg_infos_.push_back(agg_info))) {
-          LOG_WARN("Failed to push bach agg_info", K(ret), K(i), K(agg_info));
         } else if (OB_FAIL(cols_offset_map_.push_back(ObColOffsetMap(col_offset, i)))) {
-          LOG_WARN("Failed to push back col_offset map", K(ret), K(i), K(col_offset));
         }
       }
     }
@@ -440,7 +429,6 @@ int ObAggDatumBuf::new_agg_datum_buf(
       LOG_WARN("Failed to alloc agg datum buffer", K(ret));
     } else if (FALSE_IT(datum_buf = new (buf) ObAggDatumBuf(allocator))) {
     } else if (OB_FAIL(datum_buf->init(new_size, need_cell_data_ptr, datum_size))) {
-      LOG_WARN("Failed to init agg datum buf", K(ret));
     }
   }
   return ret;
@@ -486,7 +474,6 @@ int ObAggGroupByDatumBuf::reserve(const int32_t size)
       if (OB_ISNULL(result_datum_buf_)) {
         if (OB_FAIL(ObAggDatumBuf::new_agg_datum_buf(USE_GROUP_BY_MAX_DISTINCT_CNT,
             true, allocator_, result_datum_buf_, datum_size_))) {
-          LOG_WARN("Failed to alloc agg datum buf", K(ret));
         }
       }
     }

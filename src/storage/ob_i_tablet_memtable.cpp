@@ -32,10 +32,8 @@ int ObITabletMemtable::inc_unsubmitted_cnt()
   int ret = OB_SUCCESS;
   const share::ObLSID ls_id = get_ls_id();
   int64_t unsubmitted_cnt = inc_unsubmitted_cnt_();
-  TRANS_LOG(DEBUG, "inc_unsubmitted_cnt", K(ls_id), KPC(this), K(lbt()));
 
   if (OB_FAIL(get_unset_active_memtable_logging_blocked())) {
-    TRANS_LOG(WARN, "cannot inc unsubmitted_cnt", K(unsubmitted_cnt), K(ls_id), KPC(this));
   }
 
   return ret;
@@ -65,7 +63,6 @@ int ObITabletMemtable::dec_unsubmitted_cnt()
   bool is_frozen = is_frozen_memtable();
   int64_t write_ref_cnt = get_write_ref();
   int64_t new_unsubmitted_cnt = get_unsubmitted_cnt();
-  TRANS_LOG(DEBUG, "dec_unsubmitted_cnt", K(ls_id), KPC(this), K(lbt()));
 
   if (OB_UNLIKELY(old_unsubmitted_cnt < 0)) {
     TRANS_LOG(ERROR, "unsubmitted_cnt not match", K(ret), K(ls_id), KPC(this));
@@ -102,7 +99,6 @@ int ObITabletMemtable::resolve_left_boundary_for_active_memtable_()
 
   if (OB_NOT_NULL(memtable_mgr)) {
     if (OB_FAIL(memtable_mgr->resolve_left_boundary_for_active_memtable(this, get_end_scn()))) {
-      TRANS_LOG(WARN, "fail to resolve left boundary for active memtable", K(ret), K(ls_id_), KPC(this));
     }
   }
 
@@ -116,7 +112,6 @@ int ObITabletMemtable::get_ls_current_right_boundary_(SCN &current_right_boundar
     ret = OB_ENTRY_NOT_EXIST;
     TRANS_LOG(WARN, "freezer should not be null", K(ret));
   } else if (OB_FAIL(freezer_->get_max_consequent_callbacked_scn(current_right_boundary))) {
-    TRANS_LOG(WARN, "fail to get min_unreplay_scn", K(ret), K(current_right_boundary));
   }
 
   return ret;
@@ -262,11 +257,9 @@ int ObITabletMemtable::set_max_end_scn(const SCN scn, bool allow_backoff)
               K(ret), K(scn), K(ls_id), KPC(this));
   } else if (allow_backoff) {
     set_has_backoffed();
-    TRANS_LOG(INFO, "set max_end_scn force", K(scn), K(max_end_scn_.atomic_get()), K(key_), KPC(this));
     if (scn != max_end_scn_.atomic_get()) {
       max_end_scn_.dec_update(scn);
       if (rec_scn_.atomic_get() > max_end_scn_) {
-        TRANS_LOG(INFO, "rec_scn is greater than max_end_scn, set it to max", K_(rec_scn), K_(max_end_scn));
         rec_scn_.set_max();
       }
     }
@@ -315,7 +308,6 @@ int ObITabletMemtable::resolve_right_boundary()
   }
 
   if (OB_FAIL(set_end_scn(end_scn))) {
-    TRANS_LOG(ERROR, "fail to set end_scn", K(ret));
   }
 
   return ret;
@@ -339,7 +331,6 @@ int ObITabletMemtable::replay_schema_version_change_log(const int64_t schema_ver
 {
   int ret = OB_SUCCESS;
   if (OB_UNLIKELY(!is_inited())) {
-    TRANS_LOG(WARN, "not init", K(*this));
     ret = OB_NOT_INIT;
   } else if (schema_version < 0) {
     ret = OB_INVALID_ARGUMENT;

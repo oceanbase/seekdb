@@ -41,15 +41,12 @@ int ObCatalogDDLService::handle_catalog_ddl(const ObCatalogDDLArg &arg)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid input schema", K(ret));
   } else if (OB_FAIL(ddl_service_->get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
-    LOG_WARN("fail to get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
-    LOG_WARN("failed to get tenant schema version", K(ret));
   } else {
     ObDDLSQLTransaction trans(&ddl_service_->get_schema_service());
     ObCatalogDDLOperator ddl_operator(ddl_service_->get_schema_service(), ddl_service_->get_sql_proxy());
 
     if (OB_FAIL(trans.start(&ddl_service_->get_sql_proxy(), refreshed_schema_version))) {
-      LOG_WARN("start transaction failed", K(ret), K(refreshed_schema_version));
     } else if (OB_FAIL(ddl_operator.handle_catalog_function(schema,
                                                             trans,
                                                             arg.ddl_type_,
@@ -58,7 +55,6 @@ int ObCatalogDDLService::handle_catalog_ddl(const ObCatalogDDLArg &arg)
                                                             arg.if_not_exist_,
                                                             schema_guard,
                                                             arg.user_id_))) {
-      LOG_WARN("handle catalog function failed", K(ret), K(arg));
     }
 
     if (trans.is_started()) {
@@ -71,7 +67,6 @@ int ObCatalogDDLService::handle_catalog_ddl(const ObCatalogDDLArg &arg)
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ddl_service_->publish_schema())) {
-        LOG_WARN("publish schema failed", K(ret));
       }
     }
   }
@@ -105,22 +100,18 @@ int ObCatalogDDLService::grant_revoke_catalog(const ObCatalogPrivSortKey &catalo
     LOG_WARN("not support grant revoke catalog level privilege in oracle mode", K(ret));
     LOG_USER_ERROR(OB_NOT_SUPPORTED, "grant revoke catalog level privilege in oracle mode");
   } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
-    LOG_WARN("failed to get tenant schema version", K(ret));
   } else if (OB_FAIL(ObDDLSqlGenerator::gen_catalog_priv_sql(ObAccountArg(user_name, host_name),
                                                              need_priv,
                                                              true,
                                                              ddl_stmt_sql_str))) {
-    LOG_WARN("gen_catalog_priv sql failed", K(ret), K(user_name), K(host_name));
   } else {
     ddl_stmt_str = ddl_stmt_sql_str.string();
     ObDDLSQLTransaction trans(&ddl_service_->get_schema_service());
     ObCatalogDDLOperator ddl_operator(ddl_service_->get_schema_service(), ddl_service_->get_sql_proxy());
 
     if (OB_FAIL(trans.start(&ddl_service_->get_sql_proxy(), refreshed_schema_version))) {
-      LOG_WARN("start transaction failed", K(ret), K(refreshed_schema_version));
     } else if (OB_FAIL(ddl_operator.grant_revoke_catalog(catalog_priv_key, priv_set,
                                                          grant, ddl_stmt_str, trans))) {
-      LOG_WARN("failed to grant revoke catalog", K(ret), K(user_id), K(priv_set), K(grant));
     }
 
     if (trans.is_started()) {
@@ -133,7 +124,6 @@ int ObCatalogDDLService::grant_revoke_catalog(const ObCatalogPrivSortKey &catalo
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ddl_service_->publish_schema())) {
-        LOG_WARN("publish schema failed", K(ret));
       }
     }
   }
@@ -159,9 +149,7 @@ int ObCatalogDDLService::revoke_catalog(const ObRevokeCatalogArg &arg)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ddl_service_->get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
-    LOG_WARN("fail to get schema guard with version in inner table", K(ret));
   } else if (OB_FAIL(schema_guard.get_user_info(arg.user_id_, user_info))) {
-    LOG_WARN("get_user_info failed", K(arg), K(ret));
   } else if (OB_ISNULL(user_info)) {
     ret = OB_USER_NOT_EXIST;
     LOG_WARN("user not exist", K(ret), K(arg));
@@ -171,7 +159,6 @@ int ObCatalogDDLService::revoke_catalog(const ObRevokeCatalogArg &arg)
                                           need_priv,
                                           false,
                                           schema_guard))) {
-    LOG_WARN("Grant catalog error", K(ret), K(arg.user_id_), K(ddl_sql));
   }
   return ret;
 }

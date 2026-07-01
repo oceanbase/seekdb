@@ -51,24 +51,17 @@ int ObLocationDDLService::create_location(const obcall::ObCreateLocationArg &arg
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid input schema", K(ret));
   } else if (OB_FAIL(ddl_service_->get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
-    LOG_WARN("failed to get schema guard with version in inner table", K(ret));
   } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
-    LOG_WARN("failed to get tenant schema version", KR(ret));
   } else if (OB_FAIL(schema_guard.get_location_schema_by_name(location_name, schema_ptr))) {
-    LOG_WARN("failed to get location schema by name", K(ret), K(location_name));
   } else if (NULL != schema_ptr) {
     is_exist = true;
     loc_id = schema_ptr->get_location_id();
     if (OB_FAIL(new_schema.assign(*schema_ptr))) {
-      LOG_WARN("failed to assign new location schema", K(ret), K(*schema_ptr));
     } else if (OB_FAIL(new_schema.set_location_url(location_url))) {
-      LOG_WARN("failed to set location path", K(ret), K(location_url));
     } else if (OB_FAIL(new_schema.set_location_access_info(location_access_info))) {
-      LOG_WARN("failed to set location access id", K(ret), K(location_access_info));
     }
   } else if (NULL == schema_ptr) {
     if (OB_FAIL(new_schema.assign(arg.schema_))) {
-      LOG_WARN("failed to assign new location schema", K(ret), K(arg));
     }
   }
 
@@ -82,7 +75,6 @@ int ObLocationDDLService::create_location(const obcall::ObCreateLocationArg &arg
     ObDDLSQLTransaction trans(&ddl_service_->get_schema_service());
     ObLocationDDLOperator ddl_operator(ddl_service_->get_schema_service(), ddl_service_->get_sql_proxy());
     if (OB_FAIL(trans.start(&ddl_service_->get_sql_proxy(), refreshed_schema_version))) {
-      LOG_WARN("failed to start transaction", KR(ret), K(refreshed_schema_version));
     } else if (is_exist && is_or_replace
         && OB_FAIL(ddl_operator.alter_location(*ddl_stmt_str, new_schema, trans))) {
       LOG_WARN("failed to alter location", K(ret), K(new_schema));
@@ -101,7 +93,6 @@ int ObLocationDDLService::create_location(const obcall::ObCreateLocationArg &arg
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ddl_service_->publish_schema())) {
-      LOG_WARN("publish schema failed", K(ret));
     }
   }
   return ret;
@@ -124,11 +115,8 @@ int ObLocationDDLService::drop_location(const obcall::ObDropLocationArg &arg,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid input schema", K(ret));
   } else if (OB_FAIL(ddl_service_->get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
-    LOG_WARN("failed to get schema guard with version in inner table", K(ret));
   } else if (OB_FAIL(schema_guard.get_location_schema_by_name(location_name, schema_ptr))) {
-    LOG_WARN("failed to get schema by location name", K(ret), K(location_name));
   } else if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
-    LOG_WARN("failed to get tenant schema version", KR(ret));
   } else if (NULL != schema_ptr) {
     is_exist = true;
   }
@@ -146,11 +134,8 @@ int ObLocationDDLService::drop_location(const obcall::ObDropLocationArg &arg,
     ObLocationDDLOperator ddl_operator(ddl_service_->get_schema_service(), ddl_service_->get_sql_proxy());
     ObLocationSchema schema;
     if (OB_FAIL(schema.assign(*schema_ptr))) {
-      LOG_WARN("fail to assign location schema", K(ret), K(*schema_ptr));
     } else if (OB_FAIL(trans.start(&ddl_service_->get_sql_proxy(), refreshed_schema_version))) {
-      LOG_WARN("failed to start transaction", KR(ret), K(refreshed_schema_version));
     } else if (OB_FAIL(ddl_operator.drop_location(*ddl_stmt_str, schema, trans))) {
-      LOG_WARN("failed to drop location", K(ret), K(schema));
     }
 
     if (trans.is_started()) {
@@ -164,7 +149,6 @@ int ObLocationDDLService::drop_location(const obcall::ObDropLocationArg &arg,
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ddl_service_->publish_schema())) {
-      LOG_WARN("publish schema failed", K(ret));
     }
   }
   return ret;

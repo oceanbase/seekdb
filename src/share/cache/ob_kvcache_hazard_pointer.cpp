@@ -101,7 +101,6 @@ int SharedHazptr::make(HazardPointer& hazptr, SharedHazptr& shared_hazptr)
   if (OB_ISNULL(shared_hazptr.ctrl_ptr_ =
                            (typeof(shared_hazptr.ctrl_ptr_))ob_malloc(sizeof(*shared_hazptr.ctrl_ptr_), attr_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    COMMON_LOG(WARN, "failed to allocate memory for ctrl_ptr");
   } else {
     new (shared_hazptr.ctrl_ptr_) ControlPointer(hazptr);
   }

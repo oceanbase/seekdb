@@ -97,7 +97,6 @@ public:
     BtreeNode *p = nullptr;
     int ret = OB_SUCCESS;
     if (OB_FAIL(pop(p))) {
-      OB_LOG(WARN, "alloc_block fail", K(get_allocated()));
     }
     return p;
   }

@@ -33,7 +33,6 @@ int64_t VersionUtil::print_version_str(char *buf, const int64_t buf_len, uint64_
   const uint8_t minor_patch = OB_VSN_MINOR_PATCH(version);
   if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%u.%u.%u.%u",
               major, minor, major_patch, minor_patch))) {
-    COMMON_LOG(WARN, "fail to print version str", K(ret), K(version));
   }
   if (OB_FAIL(ret)) {
     pos = OB_INVALID_INDEX;

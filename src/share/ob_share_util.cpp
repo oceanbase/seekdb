@@ -147,8 +147,6 @@ int ObShareUtil::set_default_timeout_ctx(ObTimeoutCtx &ctx, const int64_t defaul
     abs_timeout_ts = ObTimeUtility::current_time() + default_timeout;
   }
   if (OB_FAIL(ctx.set_abs_timeout(abs_timeout_ts))) {
-    LOG_WARN("set timeout failed", KR(ret), K(abs_timeout_ts), K(ctx_timeout_ts),
-        K(worker_timeout_ts), K(default_timeout));
   } else if (ctx.is_timeouted()) {
     ret = OB_TIMEOUT;
     LOG_WARN("timeouted", KR(ret), K(abs_timeout_ts), K(ctx_timeout_ts),
@@ -165,7 +163,6 @@ int ObShareUtil::get_abs_timeout(const int64_t default_timeout, int64_t &abs_tim
   int ret = OB_SUCCESS;
   ObTimeoutCtx ctx;
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
-    LOG_WARN("fail to set default timeout ctx", KR(ret), K(default_timeout));
   } else {
     abs_timeout = ctx.get_abs_timeout();
   }
@@ -177,7 +174,6 @@ int ObShareUtil::get_ctx_timeout(const int64_t default_timeout, int64_t &timeout
   int ret = OB_SUCCESS;
   ObTimeoutCtx ctx;
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, default_timeout))) {
-    LOG_WARN("fail to set default timeout ctx", KR(ret), K(default_timeout));
   } else {
     timeout = ctx.get_timeout();
   }
@@ -204,16 +200,13 @@ int ObShareUtil::get_ora_rowscn(
   SMART_VAR(ObMySQLProxy::MySQLResult, res) {
     ObMySQLResult *result = NULL;
     if (OB_FAIL(client.read(res, sql.ptr()))) {
-      LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (NULL == (result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get sql result", KR(ret));
     } else if (OB_FAIL(result->next())) {
-      LOG_WARN("fail to get next row", KR(ret));
     } else {
       EXTRACT_INT_FIELD_MYSQL(*result, "ORA_ROWSCN", ora_rowscn_val, int64_t);
       if (FAILEDx(ora_rowscn.convert_for_inner_table_field(ora_rowscn_val))) {
-        LOG_WARN("fail to convert val to SCN", KR(ret), K(ora_rowscn_val));
       }
     }
 
@@ -252,7 +245,6 @@ int ObShareUtil::mtl_check_if_tenant_role_is_primary(bool &is_primary)
   is_primary = false;
   ObTenantRole::Role tenant_role;
   if (OB_FAIL(mtl_get_tenant_role( tenant_role))) {
-    LOG_WARN("fail to execute mtl_get_tenant_role", KR(ret));
   } else if (is_primary_tenant(tenant_role)) {
     is_primary = true;
   }
@@ -265,7 +257,6 @@ int ObShareUtil::mtl_check_if_tenant_role_is_standby(bool &is_standby)
   is_standby = false;
   ObTenantRole::Role tenant_role;
   if (OB_FAIL(mtl_get_tenant_role( tenant_role))) {
-    LOG_WARN("fail to execute mtl_get_tenant_role", KR(ret));
   } else if (is_standby_tenant(tenant_role)) {
     is_standby = true;
   }
@@ -278,7 +269,6 @@ int ObShareUtil::table_get_tenant_role(ObTenantRole &tenant_role)
   bool is_primary = true;
   if (true) {
     if (OB_FAIL(is_primary_cluster(is_primary))) {
-      LOG_WARN("fail to check whether is primary cluster", K(is_primary));
     } else if (is_primary) {
       tenant_role = ObTenantRole::PRIMARY_TENANT;
     } else {
@@ -295,7 +285,6 @@ int ObShareUtil::table_check_if_tenant_role_is_primary(bool &is_primary)
   share::ObTenantRole tenant_role;
   is_primary = false;
   if (OB_FAIL(table_get_tenant_role( tenant_role))) {
-    LOG_WARN("fail to execute table_get_tenant_role", KR(ret));
   } else if (tenant_role.is_primary()) {
     is_primary = true;
   }
@@ -307,7 +296,6 @@ int ObShareUtil::table_check_if_tenant_role_is_standby(bool &is_standby)
   share::ObTenantRole tenant_role;
   is_standby = false;
   if (OB_FAIL(table_get_tenant_role( tenant_role))) {
-    LOG_WARN("fail to execute table_get_tenant_role", KR(ret));
   } else if (tenant_role.is_standby()) {
     is_standby = true;
   }
@@ -396,12 +384,10 @@ int ObShareUtil::get_sys_ls_readable_scn(SCN &readable_scn)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("pointer is null", KR(ret), KP(ls_svr));
   } else if (OB_FAIL(ls_svr->get_ls(SYS_LS, ls_handle, ObLSGetMod::RS_MOD))) {
-      LOG_WARN("get log stream failed", KR(ret));
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("log stream is null", KR(ret), K(ls_handle));
   } else if (OB_FAIL(ls->get_max_decided_scn(readable_scn))) {
-    LOG_WARN("failed to get_max_decided_scn", KR(ret), KPC(ls));
   }
   return ret;
 }
@@ -421,9 +407,7 @@ int ObShareUtil::check_clog_disk_full_or_hang(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(log_service));
   } else if (OB_FAIL(log_service->get_io_start_time(clog_disk_last_working_time))) {
-    LOG_WARN("get_io_start_time failed", KR(ret));
   } else if (OB_FAIL(log_service->check_disk_space_enough(is_disk_enough))) {
-    LOG_WARN("check_disk_space_enough failed", KR(ret));
   } else {
     clog_disk_is_full = !is_disk_enough;
     clog_disk_is_hang = OB_INVALID_TIMESTAMP != clog_disk_last_working_time
@@ -489,9 +473,7 @@ int ObShareUtil::gen_sys_resource_pool(ObResourcePool &resource_pool)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid server", KR(ret), KP(GCTX.config_));
   } else if (OB_FAIL(resource_pool.zone_list_.push_back(GCTX.config_->zone.str()))) {
-    LOG_WARN("fail to push back zone into array", KR(ret));
   } else if (OB_FAIL(resource_pool.name_.assign("sys_pool"))) {
-    LOG_WARN("fail to construct pool name", KR(ret));
   } else {
     resource_pool.resource_pool_id_ = OB_SYS_RESOURCE_POOL_ID;
     resource_pool.unit_count_ = 1;
@@ -511,11 +493,8 @@ int ObShareUtil::gen_default_sys_tenant_schema(schema::ObTenantSchema &tenant_sc
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.config_), KP(GCTX.schema_service_));
   } else if (OB_FAIL(tenant_schema.set_tenant_name(OB_SYS_TENANT_NAME))) {
-    LOG_WARN("set_tenant_name failed", "tenant_name", OB_SYS_TENANT_NAME, KR(ret));
   } else if (OB_FAIL(tenant_schema.set_comment("system tenant"))) {
-    LOG_WARN("set_comment failed", "comment", "system tenant", KR(ret));
   } else if (OB_FAIL(tenant_schema.add_zone(GCTX.config_->zone.str()))) {
-    LOG_WARN("fail to push back zone", KR(ret));
   } else {
     if (OB_ISNULL(GCTX.sql_proxy_)) {
       ret = OB_INVALID_ARGUMENT;
@@ -523,7 +502,6 @@ int ObShareUtil::gen_default_sys_tenant_schema(schema::ObTenantSchema &tenant_sc
     } else {
       ObGlobalStatProxy proxy(*GCTX.sql_proxy_);
       if (OB_FAIL(proxy.get_baseline_schema_version(schema_version))) {
-        LOG_WARN("get_baseline_schema_version failed", KR(ret));
       } else if (-1 == schema_version) {
         // in bootstrap procedure, add_tenant may raise error, just mock schema_version = 1 is ok
         LOG_INFO("in bootstrap procedure, mock schema_version to 1", KR(ret));

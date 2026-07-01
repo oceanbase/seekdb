@@ -266,16 +266,12 @@ public:
     int64_t res_buf_len = 0;
     ObTextStringVectorResult<ResVec> str_result(expr.datum_meta_.type_, &expr, &ctx, res_vec, batch_idx);
     if (OB_FAIL(str_result.init_with_batch_idx(res_size, batch_idx))) {
-      SQL_ENG_LOG(WARN, "fail to init result", K(ret), K(res_size));
     } else if (OB_FAIL(str_result.get_reserved_buffer(res_buf, res_buf_len))) {
-      SQL_ENG_LOG(WARN, "fail to get reserver buffer", K(ret));
     } else if (res_buf_len < res_size) {
       ret = OB_ERR_UNEXPECTED;
       SQL_ENG_LOG(WARN, "get invalid res buf len", K(ret), K(res_buf_len), K(res_size));
     } else if (OB_FAIL(ObAIFuncJsonUtils::copy_raw_str_to_res(raw_str, res_buf, res_buf_len))) {
-      SQL_ENG_LOG(WARN, "get array raw binary failed", K(ret), K(res_buf_len), K(res_size));
     } else if (OB_FAIL(str_result.lseek(res_size, 0))) {
-      SQL_ENG_LOG(WARN, "failed to lseek res.", K(ret), K(str_result), K(res_size));
     } else {
       str_result.set_result();
     }
@@ -308,7 +304,6 @@ public:
       }
     }
     if (OB_FAIL(ret)) {
-      SQL_ENG_LOG(WARN, "fail to set json res", K(ret));
     }
     return ret;
   }

@@ -47,7 +47,6 @@ static int check_and_assign_ptr_(const char *others_ptr,
 
   if (nullptr == others_ptr) {
     ret = OB_INVALID_ARGUMENT;
-    DETECT_LOG(ERROR, "invalid argument", PRINT_WRAPPER);
   } else {
     if (calculated_len == 0) {
       calculated_len = strlen(others_ptr);
@@ -55,8 +54,6 @@ static int check_and_assign_ptr_(const char *others_ptr,
 
     if (calculated_len <= 0 || calculated_len >= STR_LEN_LIMIT) {
       ret = OB_ERR_UNEXPECTED;
-      DETECT_LOG(WARN, "string length is not satisfied length limit",
-                        PRINT_WRAPPER, K(STR_LEN_LIMIT));
     } else {
       self_string->assign_ptr(others_ptr, static_cast<int32_t>(calculated_len));
     }
@@ -295,10 +292,8 @@ int ObDetectorUserReportInfo::set_columns_(const int64_t idx,
 
   if (nullptr == column_info) {
     ret = OB_INVALID_ARGUMENT;
-    DETECT_LOG(WARN, "invalid argument", PRINT_WRAPPER);
   } else if (STR_LEN_LIMIT <= (str_len = strlen(column_info))) {
     ret = OB_INVALID_ARGUMENT;
-    DETECT_LOG(WARN, "string length reach limit", PRINT_WRAPPER, K(STR_LEN_LIMIT));
   } else if (ValueType::COLUMN_NAME == type) {
     ret = extra_columns_names_.push_back(ObString(str_len, column_info));
   } else if (ValueType::COLUMN_VALUE == type) {
@@ -306,7 +301,6 @@ int ObDetectorUserReportInfo::set_columns_(const int64_t idx,
   } else {
     ret = OB_ERR_UNEXPECTED;
     int type_ = static_cast<int>(type);
-    DETECT_LOG(ERROR, "code error! unknown type", PRINT_WRAPPER, K_(type));
   }
 
   return ret;
@@ -333,7 +327,6 @@ int ObDetectorUserReportInfo::set_columns_(const int64_t idx,
   } else {
     ret = OB_ERR_UNEXPECTED;
     int type_ = static_cast<int>(type);
-    DETECT_LOG(ERROR, "code error! unknown type", PRINT_WRAPPER, K_(type));
   }
 
   return ret;
@@ -344,13 +337,9 @@ int ObDetectorUserReportInfo::assign(const ObDetectorUserReportInfo &rhs)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(extra_columns_names_.assign(rhs.extra_columns_names_))) {
-    DETECT_LOG(WARN, "fail to copy array", K(rhs));
   } else if (OB_FAIL(extra_columns_values_.assign(rhs.extra_columns_values_))) {
-    DETECT_LOG(WARN, "fail to copy array", K(rhs));
   } else if (OB_FAIL(extra_columns_names_guard_.assign(rhs.extra_columns_names_guard_))) {
-    DETECT_LOG(WARN, "fail to copy array", K(rhs));
   } else if (OB_FAIL(extra_columns_values_guard_.assign(rhs.extra_columns_values_guard_))) {
-    DETECT_LOG(WARN, "fail to copy array", K(rhs));
   } else {
     module_name_ = rhs.module_name_;
     resource_visitor_ = rhs.resource_visitor_;
@@ -384,9 +373,7 @@ int ObDetectorInnerReportInfo::set_args(const UserBinaryKey &binary_key,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_and_assign_ptr_(role, 0, "ObDetectorInnerReportInfo::set_args", &role_))) {
-    DETECT_LOG(ERROR, "assign event field failed");
   } else if (OB_FAIL(user_report_info_.assign(user_report_info))) {
-    DETECT_LOG(WARN, "assign user_report_info field failed");
   } else {
     start_delay_ = start_delay;
     priority_ = priority;
@@ -455,7 +442,6 @@ int ObDetectorInnerReportInfo::assign(const ObDetectorInnerReportInfo &rhs)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(user_report_info_.assign(rhs.user_report_info_))) {
-    DETECT_LOG(WARN, "fail to assign user report info", K(rhs));
   } else {
     binary_key_ = rhs.binary_key_;
     addr_ = rhs.addr_;

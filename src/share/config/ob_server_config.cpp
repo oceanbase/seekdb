@@ -88,7 +88,6 @@ int ObServerConfig::read_config(const bool enable_static_effect)
     } else if (!it->second->reboot_effective() || !enable_static_effect) {
       temp_ret = system_config_->read_config(key, *(it->second));
       if (OB_SUCCESS != temp_ret) {
-        OB_LOG(DEBUG, "Read config error", "name", it->first.str(), K(temp_ret));
       }
     }
   }
@@ -116,16 +115,13 @@ int ObServerConfig::check_all() const
 
 void ObServerConfig::print() const
 {
-  OB_LOG(INFO, "===================== *begin server config report * =====================");
   ObConfigContainer::const_iterator it = container_.begin();
   for (; it != container_.end(); ++it) {
     if (OB_ISNULL(it->second)) {
       OB_LOG_RET(WARN, OB_ERROR, "config item is null", "name", it->first.str());
     } else {
-      _OB_LOG(INFO, "| %-36s = %s", it->first.str(), it->second->str());
     }
   }
-  OB_LOG(INFO, "===================== *stop server config report* =======================");
 }
 
 int ObServerConfig::add_extra_config(const char *config_str,

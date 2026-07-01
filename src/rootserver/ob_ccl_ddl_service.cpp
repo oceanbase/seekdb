@@ -43,7 +43,6 @@ int ObCclDDLService::check_create_ccl_valid(const obcall::ObCreateCCLRuleArg &ar
     if (OB_FAIL(
             ddl_service_->get_tenant_schema_guard_with_version_in_inner_table(
                 schema_guard))) {
-      LOG_WARN("get schema guard in inner table failed", K(ret));
     } else if (arg.affect_databases_name_.empty() &&
                !arg.affect_tables_name_.empty()) {
       ret = OB_ERR_UNEXPECTED;
@@ -55,15 +54,9 @@ int ObCclDDLService::check_create_ccl_valid(const obcall::ObCreateCCLRuleArg &ar
       if (arg.ccl_rule_schema_.get_affect_user_name() != "%") {
         if (OB_FAIL(schema_guard.get_user_info(arg.ccl_rule_schema_.get_affect_user_name(),
                 arg.ccl_rule_schema_.get_affect_host(), user_info))) {
-          LOG_WARN("get_user_id failed", K(ret),
-                   K(arg.ccl_rule_schema_.get_affect_user_name()),
-                   K(arg.ccl_rule_schema_.get_affect_host()));
         } else if (NULL == user_info) {
           if (OB_FAIL(schema_guard.get_user_info(arg.ccl_rule_schema_.get_affect_user_name(),
                 ObString("%"), user_info))) {
-            LOG_WARN("get_user_id failed", K(ret),
-                     K(arg.ccl_rule_schema_.get_affect_user_name()),
-                     K(arg.ccl_rule_schema_.get_affect_host()));
           } else if (NULL == user_info) {
             ret = OB_USER_NOT_EXIST; // no such user
             LOG_WARN("Try to create ccl rule on a not exist user", K(ret),
@@ -78,7 +71,6 @@ int ObCclDDLService::check_create_ccl_valid(const obcall::ObCreateCCLRuleArg &ar
         if (!database_name.empty()) {
           if (OB_FAIL(schema_guard.get_database_schema( database_name,
                                                        db_schema))) {
-            LOG_WARN("get database schema failed", K(ret));
           } else if (NULL == db_schema) {
             ret = OB_ERR_BAD_DATABASE;
             LOG_USER_ERROR(OB_ERR_BAD_DATABASE, database_name.length(),
@@ -96,7 +88,6 @@ int ObCclDDLService::check_create_ccl_valid(const obcall::ObCreateCCLRuleArg &ar
             if (!table_name.empty()) {
               if (OB_FAIL(schema_guard.get_table_schema( database_name, table_name, false,
                       table_schema))) {
-                LOG_WARN("get database schema failed", K(ret));
               } else if (NULL == table_schema) {
                 ret = OB_ERR_BAD_TABLE;
                 LOG_USER_ERROR(OB_ERR_BAD_TABLE, table_name.length(),
@@ -118,7 +109,6 @@ int ObCclDDLService::check_create_ccl_valid(const obcall::ObCreateCCLRuleArg &ar
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(schema_guard.get_ccl_rule_with_name(ccl_rule_schema->get_ccl_rule_name(),
                        exist_ccl_rule_schema))) {
-          LOG_WARN("failed to get ccl rule from shcema_guard", K(ret));
         } else if (OB_NOT_NULL(exist_ccl_rule_schema)) {
           if (arg.if_not_exist_) {
             ret = OB_SUCCESS;
@@ -145,7 +135,6 @@ int ObCclDDLService::check_drop_ccl_valid(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid input schema", K(ret));
   } else if (OB_FAIL(schema_guard.get_ccl_rule_with_name(arg.ccl_rule_name_, ccl_rule_schema))) {
-    LOG_WARN("failed to get ccl rule from shcema_guard", K(ret));
   } else if (OB_ISNULL(ccl_rule_schema)) {
     if (arg.if_exist_) {
       ret = OB_SUCCESS;
@@ -167,9 +156,7 @@ int ObCclDDLService::create_ccl_ddl(const obcall::ObCreateCCLRuleArg &arg) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ddl_service_->get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
-    LOG_WARN("get schema guard in inner table failed", K(ret));
   } else if (OB_FAIL(check_create_ccl_valid(arg, schema_guard, ccl_rule_schema))) {
-    LOG_WARN("fail to check create ccl valid", K(ret));
   } else if (OB_NOT_NULL(ccl_rule_schema)) {
     // create if not exists may reach here, ret == OB_SUCCESS
     LOG_WARN("ccl_rule_schema is not null", K(ret));
@@ -178,15 +165,9 @@ int ObCclDDLService::create_ccl_ddl(const obcall::ObCreateCCLRuleArg &arg) {
     ObCclDDLOperator ddl_operator(ddl_service_->get_schema_service(), ddl_service_->get_sql_proxy());
     int64_t refreshed_schema_version = 0;
     if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
-      LOG_WARN("failed to get tenant schema version", KR(ret),
-               K(1UL));
     } else if (OB_FAIL(trans.start(&ddl_service_->get_sql_proxy(), 
                                    refreshed_schema_version))) {
-      LOG_WARN("start transaction failed", KR(ret), K(1UL),
-               K(refreshed_schema_version));
     } else if (OB_FAIL(ddl_operator.create_ccl_rule(*const_cast<ObCCLRuleSchema*>(&arg.ccl_rule_schema_), trans, &arg.ddl_stmt_str_))) {
-      LOG_WARN("failed to create ccl rule", K(1UL),
-               K(ccl_rule_schema), K(ret));
     }
     if (trans.is_started()) {
       int temp_ret = OB_SUCCESS;
@@ -198,7 +179,6 @@ int ObCclDDLService::create_ccl_ddl(const obcall::ObCreateCCLRuleArg &arg) {
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ddl_service_->publish_schema())) {
-        LOG_WARN("publish schema failed", K(ret));
       }
     }
   }
@@ -214,23 +194,15 @@ int ObCclDDLService::drop_ccl_ddl(const obcall::ObDropCCLRuleArg &arg) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ddl_service_->get_tenant_schema_guard_with_version_in_inner_table(schema_guard))) {
-    LOG_WARN("get schema guard in inner table failed", K(ret));
   } else if (OB_FAIL(check_drop_ccl_valid(arg, schema_guard, ccl_rule_schema))) {
-    LOG_WARN("fail to check create ccl valid", K(ret));
   } else if (OB_NOT_NULL(ccl_rule_schema)) {
     ObDDLSQLTransaction trans(&ddl_service_->get_schema_service());
     ObCclDDLOperator ddl_operator(ddl_service_->get_schema_service(), ddl_service_->get_sql_proxy());
     int64_t refreshed_schema_version = 0;
     if (OB_FAIL(schema_guard.get_schema_version(refreshed_schema_version))) {
-      LOG_WARN("failed to get tenant schema version", KR(ret),
-               K(1UL));
     } else if (OB_FAIL(trans.start(&ddl_service_->get_sql_proxy(), 
                                    refreshed_schema_version))) {
-      LOG_WARN("start transaction failed", KR(ret), K(1UL),
-               K(refreshed_schema_version));
     } else if (OB_FAIL(ddl_operator.drop_ccl_rule(*ccl_rule_schema, trans, &arg.ddl_stmt_str_))) {
-      LOG_WARN("failed to drop ccl rule", K(1UL),
-               K(ccl_rule_schema), K(ret));
     }
     if (trans.is_started()) {
       int temp_ret = OB_SUCCESS;
@@ -242,7 +214,6 @@ int ObCclDDLService::drop_ccl_ddl(const obcall::ObDropCCLRuleArg &arg) {
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ddl_service_->publish_schema())) {
-        LOG_WARN("publish schema failed", K(ret));
       }
     }
   }

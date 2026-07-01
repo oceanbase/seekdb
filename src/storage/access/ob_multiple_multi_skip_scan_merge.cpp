@@ -40,7 +40,6 @@ int ObMultipleMultiSkipScanMerge::init(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObMultipleSkipScanMerge::init(param, context, get_table_param))) {
-    STORAGE_LOG(WARN, "Fail to init ObMultipleSkipScanMerge", K(ret), K(context), K(get_table_param));
   }
   return ret;
 }
@@ -75,12 +74,10 @@ int ObMultipleMultiSkipScanMerge::inner_get_next_row(blocksstable::ObDatumRow &r
           ret = OB_SUCCESS;
           ObMultipleSkipScanMerge::reuse();
           if (OB_FAIL(ObMultipleSkipScanMerge::open(ranges_->at(cur_range_idx_), skip_scan_ranges_->at(cur_range_idx_)))) {
-            STORAGE_LOG(WARN, "Fail to open cur range", K(ret), K(cur_range_idx_));
           }
         }
       }
     } else {
-      STORAGE_LOG(DEBUG, "get next row", K(row));
       break;
     }
   }
@@ -99,7 +96,6 @@ int ObMultipleMultiSkipScanMerge::inner_get_next_rows()
           ret = OB_SUCCESS;
           ObMultipleSkipScanMerge::reuse();
           if (OB_FAIL(ObMultipleSkipScanMerge::open(ranges_->at(cur_range_idx_), skip_scan_ranges_->at(cur_range_idx_)))) {
-            STORAGE_LOG(WARN, "Fail to open cur range", K(ret), K(cur_range_idx_));
           }
         }
       }

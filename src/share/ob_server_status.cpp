@@ -108,7 +108,6 @@ int ObServerStatus::display_status_str(const DisplayStatus status, const char *&
     LOG_WARN("invalid argument", K(ret), K(status));
   } else if (OB_FAIL(get_status_str(g_server_display_status_str,
       ARRAYSIZEOF(g_server_display_status_str), status, str))) {
-    LOG_WARN("get status str failed", K(ret), K(status));
   }
   return ret;
 }
@@ -144,7 +143,6 @@ int ObServerStatus::server_admin_status_str(const ServerAdminStatus status, cons
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(status));
   } else if (OB_FAIL(get_status_str(strs, ARRAYSIZEOF(strs), status, str))) {
-    LOG_WARN("get status str failed", K(ret), K(status));
   }
   return ret;
 }
@@ -159,7 +157,6 @@ int ObServerStatus::heartbeat_status_str(const HeartBeatStatus status, const cha
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(status));
   } else if (OB_FAIL(get_status_str(strs, ARRAYSIZEOF(strs), status, str))) {
-    LOG_WARN("get status str failed", K(ret), K(status));
   }
   return ret;
 }
@@ -208,10 +205,8 @@ int64_t ObServerStatus::to_string(char *buf, const int64_t buf_len) const
     // ignore get_xxx_str error, and do not check NULL str
     int tmp_ret = server_admin_status_str(admin_status_, admin_str);
     if (OB_SUCCESS != tmp_ret) {
-      LOG_WARN("get server admin status str failed", K(tmp_ret), K_(admin_status));
     }
     if (OB_SUCCESS != (tmp_ret = heartbeat_status_str(hb_status_, heartbeat_str))) {
-      LOG_WARN("get heartbeat status str failed", K(tmp_ret), K_(hb_status));
     }
     J_OBJ_START();
     J_KV("server", server_,

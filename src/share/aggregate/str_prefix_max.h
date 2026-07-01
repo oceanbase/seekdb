@@ -55,19 +55,16 @@ public:
         const char *agg_data = reinterpret_cast<const char *>(*reinterpret_cast<int64_t *>(agg_cell));
         int32_t equal_prefix_len = 0;
         if (OB_FAIL(prefix_data_cmp(obj_meta, agg_data, agg_cell_len, data, data_len, cmp_ret, equal_prefix_len))) {
-          SQL_LOG(WARN, "cmp failed", K(ret));
         } else if (cmp_ret < 0) {
           *reinterpret_cast<int64_t *>(agg_cell) = reinterpret_cast<int64_t>(data);
           *reinterpret_cast<int32_t *>(agg_cell + sizeof(char *)) = data_len;
           if (OB_FAIL(set_tmp_var_agg_data(obj_meta, agg_ctx, agg_col_idx, agg_cell, equal_prefix_len))) {
-            SQL_LOG(WARN, "set var aggregate data failed", K(ret));
           }
         }
       } else {
         *reinterpret_cast<int64_t *>(agg_cell) = reinterpret_cast<int64_t>(data);
         *reinterpret_cast<int32_t *>(agg_cell + sizeof(char *)) = data_len;
         if (OB_FAIL(set_tmp_var_agg_data(obj_meta, agg_ctx, agg_col_idx, agg_cell, 0))) {
-          SQL_LOG(WARN, "set agg data failed", K(ret));
         }
       }
       not_nulls.set(agg_col_idx);
@@ -102,7 +99,6 @@ public:
     if (first_calculated) {
       int32_t equal_prefix_len = 0;
       if (OB_FAIL(prefix_data_cmp(obj_meta, agg_data, agg_cell_len, row_data, row_len, cmp_ret, equal_prefix_len))) {
-        SQL_LOG(WARN, "compare failed", K(ret));
       } else if (cmp_ret < 0) {
         // row data larger than agg data
         *reinterpret_cast<int64_t *>(agg_cell) = reinterpret_cast<int64_t>(row_data);
@@ -111,7 +107,6 @@ public:
           if (VEC_TC_LOB == vec_tc) {
             // generate new prefix with lob format
             if (OB_FAIL(set_tmp_var_agg_data(obj_meta, agg_ctx, agg_col_id, agg_cell, equal_prefix_len))) {
-              SQL_LOG(WARN, "set lob var agg data failed", K(ret));
             }
           } else {
             *reinterpret_cast<int32_t *>(agg_cell + sizeof(char *)) = equal_prefix_len;
@@ -133,10 +128,8 @@ public:
     int ret = OB_SUCCESS;
     if (columns.is_null(row_num)) {
       // do nothing
-      SQL_LOG(DEBUG, "add null row", K(agg_col_id), K(row_num));
     } else if (OB_FAIL(
         add_row(agg_ctx, columns, row_num, agg_col_id, agg_cell, tmp_res, calc_info))) {
-      SQL_LOG(WARN, "add row failed", K(ret));
     } else {
       NotNullBitVector &not_nulls = agg_ctx.locate_notnulls_bitmap(agg_col_id, agg_cell);
       not_nulls.set(agg_col_id);
@@ -178,7 +171,6 @@ public:
       // do nothing
     } else if (not_nulls.at(agg_col_id)) {
       if (OB_FAIL(set_tmp_var_agg_data(obj_meta, agg_ctx, agg_col_id, agg_cell, 0))) {
-        SQL_LOG(WARN, "set variable aggregate data failed", K(ret));
       }
     }
     return ret;
@@ -234,7 +226,6 @@ private:
     if (OB_SUCC(ret)) {
       if (VEC_TC_LOB == vec_tc && has_lob_header && need_set_prefix) {
         if (OB_FAIL(set_tmp_lob_prefix(obj_meta, agg_data, agg_data_len, prefix_len, tmp_buf, agg_cell))) {
-          SQL_LOG(WARN, "failed to set tmp lob prefix", K(ret));
         }
       } else {
         MEMCPY(tmp_buf, agg_data, tmp_agg_data_len);
@@ -259,9 +250,7 @@ private:
       ObTextStringIter str_iter(ObLongTextType, obj_meta.get_collation_type(),
           ObString(agg_len, reinterpret_cast<const char *>(agg_data)), true);
       if (OB_FAIL(str_iter.init(0, NULL, &allocator))) {
-        SQL_LOG(WARN, "init lob str iter failed", K(ret), K(obj_meta));
       } else if (OB_FAIL(str_iter.get_full_data(lob_data))) {
-        SQL_LOG(WARN, "get left lob str iter full data failed ", K(ret), K(obj_meta), K(str_iter));
       } else {
         str = lob_data.ptr();
       }
@@ -294,7 +283,6 @@ private:
             llob->get_inrow_data_ptr(), static_cast<int32_t>(llob->get_byte_size(l_len)),
             rlob->get_inrow_data_ptr(), static_cast<int32_t>(rlob->get_byte_size(r_len)),
             cmp_ret, equal_prefix_length))) {
-          SQL_LOG(WARN, "prefix string comapre failed", K(ret));
         }
       } else {
         ObString l_data;
@@ -305,20 +293,14 @@ private:
         ObTextStringIter r_instr_iter(ObLongTextType, obj_meta.get_collation_type(),
                                       ObString(r_len, reinterpret_cast<const char *>(r_v)), true);
         if (OB_FAIL(l_instr_iter.init(0, NULL, &allocator))) {
-          SQL_LOG(WARN, "Lob: init left lob str iter failed", K(ret), K(obj_meta));
         } else if (OB_FAIL(l_instr_iter.get_full_data(l_data))) {
-          SQL_LOG(WARN, "Lob: get left lob str iter full data failed ", K(ret), K(obj_meta), K(l_instr_iter));
         } else if (OB_FAIL(r_instr_iter.init(0, NULL, &allocator))) {
-          SQL_LOG(WARN, "Lob: init right lob str iter failed", K(ret));
         } else if (OB_FAIL(r_instr_iter.get_full_data(r_data))) {
-          SQL_LOG(WARN, "Lob: get right lob str iter full data failed ", K(ret), K(obj_meta), K(r_instr_iter));
         } else if (OB_FAIL(prefix_str_cmp(
             obj_meta, l_data.ptr(), l_data.length(), r_data.ptr(), r_data.length(), cmp_ret, equal_prefix_length))) {
-          SQL_LOG(WARN, "prefix string comapre failed", K(ret));
         }
       }
     } else if (OB_FAIL(prefix_str_cmp(obj_meta, l_str, l_str_len, r_str, r_str_len, cmp_ret, equal_prefix_length))) {
-      SQL_LOG(WARN, "prefix string comapre failed", K(ret));
     }
     return ret;
   }

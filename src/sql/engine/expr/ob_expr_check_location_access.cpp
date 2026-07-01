@@ -68,16 +68,12 @@ int ObExprCheckLocationAccess::eval_check_location_access(const ObExpr &expr,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, location))) {
-    LOG_WARN("evaluate parameters failed", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("failed to get tenant schema guard", K(ret));
   } else if (OB_FAIL(session_info->get_session_priv_info(session_priv))) {
-    LOG_WARN("failed to get session priv info", K(ret));
   } else if (OB_FAIL(schema_guard.check_location_show(session_priv,
                                                     session_info->get_enable_role_array(),
                                                     location->is_null() ? ObString() : location->get_string(),
                                                     allow_show))) {
-    LOG_WARN("failed to check location show", K(ret));
   } else {
     expr_datum.set_bool(allow_show);
   }

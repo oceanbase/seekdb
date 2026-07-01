@@ -68,12 +68,10 @@ int ObCheckpointDList::insert(ObFreezeCheckpoint *ob_freeze_checkpoint, bool ord
   if (ordered) {
     ObFreezeCheckpoint *next = get_first_greater(ob_freeze_checkpoint->get_rec_scn());
     if (!checkpoint_list_.add_before(next, ob_freeze_checkpoint)) {
-      STORAGE_LOG(ERROR, "add_before failed");
       ret = OB_ERR_UNEXPECTED;
     }
   } else {
     if (!checkpoint_list_.add_last(ob_freeze_checkpoint)) {
-      STORAGE_LOG(ERROR, "add_last failed");
       ret = OB_ERR_UNEXPECTED;
     }
   }
@@ -110,8 +108,6 @@ SCN ObCheckpointDList::get_min_rec_scn_in_list(bool ordered)
       }
     }
     if (OB_NOT_NULL(freeze_checkpoint)) {
-      STORAGE_LOG(DEBUG, "[CHECKPOINT] get_min_rec_scn_in_list", K(min_rec_scn),
-                  K(*freeze_checkpoint));
     }
   }
   return min_rec_scn;
@@ -138,7 +134,6 @@ int ObCheckpointDList::get_need_freeze_checkpoints(const SCN rec_scn,
   ObFreezeCheckpoint *cur = head->get_next();
   while (cur != head && cur->get_rec_scn() <= rec_scn) {
     if (OB_FAIL(freeze_checkpoints.push_back(cur))) {
-      STORAGE_LOG(WARN, "push_back into freeze_checkpoints failed");
       break;
     } else {
       cur = cur->get_next();
@@ -260,30 +255,23 @@ SCN ObDataCheckpoint::get_active_rec_scn()
   return min_active_rec_scn;
 }
 
-int ObDataCheckpoint::flush(SCN recycle_scn, bool need_freeze)
+int ObDataCheckpoint::flush(SCN recycle_scn, int64_t trace_id, bool need_freeze)
 {
   int ret = OB_SUCCESS;
   if (is_tenant_freeze()) {
     const bool is_sync = false;
     const bool abs_timeout_ts = 0;
-    if (OB_FAIL(ls_->logstream_freeze(is_sync,
+    if (OB_FAIL(ls_->logstream_freeze(trace_id,
+                                      is_sync,
                                       abs_timeout_ts,
                                       get_freeze_source()))) {
-      STORAGE_LOG(WARN, "minor freeze failed", K(ret), K(ls_->get_ls_id()));
     }
   } else if (need_freeze) {
     SCN active_rec_scn = get_active_rec_scn();
     if (active_rec_scn > recycle_scn) {
-      STORAGE_LOG(INFO,
-                  "skip flush data checkpoint cause active_rec_scn is larger than recycle_scn",
-                  K(active_rec_scn),
-                  K(recycle_scn));
-    } else if (OB_FAIL(freeze_base_on_needs_(recycle_scn))) {
-      STORAGE_LOG(WARN, "freeze_base_on_needs failed",
-                  K(ret), K(ls_->get_ls_id()), K(recycle_scn));
+    } else if (OB_FAIL(freeze_base_on_needs_(trace_id, recycle_scn))) {
     }
   } else if (OB_FAIL(traversal_flush_())) {
-    STORAGE_LOG(WARN, "traversal_flush failed", K(ret), K(ls_->get_ls_id()));
   }
   return ret;
 }
@@ -356,19 +344,14 @@ void ObDataCheckpoint::road_to_flush(SCN rec_scn)
   if (OB_UNLIKELY(!is_inited_)) {
     STORAGE_LOG_RET(WARN, OB_NOT_INIT, "ObDataCheckpoint not init", K(is_inited_));
   } else {
-    STORAGE_LOG(INFO, "[Freezer] road_to_flush begin", K(ls_->get_ls_id()));
     // used to print log when stay at a cycle for a long time
     int64_t last_time = common::ObTimeUtility::fast_current_time();
 
     // new_create_list -> ls_frozen_list
     pop_new_create_to_ls_frozen_();
     last_time = common::ObTimeUtility::fast_current_time();
-    STORAGE_LOG(INFO, "[Freezer] new_create_list to ls_frozen_list success",
-                                                        K(ls_->get_ls_id()));
     // ls_frozen_list -> active_list
     ls_frozen_to_active_(last_time);
-    STORAGE_LOG(INFO, "[Freezer] ls_frozen_list to active_list success",
-                                                    K(ls_->get_ls_id()));
     // active_list -> ls_frozen_list
     ObFreezeCheckpoint *last = nullptr;
     {
@@ -376,15 +359,12 @@ void ObDataCheckpoint::road_to_flush(SCN rec_scn)
       last = active_list_.get_first_greater(rec_scn);
     }
     pop_active_list_to_ls_frozen_(last);
-    STORAGE_LOG(INFO, "[Freezer] active_list to ls_frozen_list success",
-                                                    K(ls_->get_ls_id()));
     // add diagnose info
     add_diagnose_info_for_ls_frozen_();
 
     // ls_frozen_list -> prepare_list
     last_time = common::ObTimeUtility::fast_current_time();
     ls_frozen_to_prepare_(last_time);
-    STORAGE_LOG(INFO, "[Freezer] road_to_flush end", K(ls_->get_ls_id()));
   }
   set_ls_freeze_finished_(true);
 }
@@ -399,7 +379,6 @@ void ObDataCheckpoint::pop_new_create_to_ls_frozen_()
     next = cur->get_next();
     {
       if (OB_FAIL(transfer_(cur, new_create_list_, ls_frozen_list_, LS_FROZEN))) {
-        STORAGE_LOG(ERROR, "Transfer To Ls_Frozen Failed", K(ret));
       }
     }
     cur = next;
@@ -416,7 +395,6 @@ void ObDataCheckpoint::pop_active_list_to_ls_frozen_(ObFreezeCheckpoint *last)
     next = cur->get_next();
     {
       if (OB_FAIL(transfer_(cur, active_list_, ls_frozen_list_, LS_FROZEN))) {
-        STORAGE_LOG(ERROR, "Transfer To Ls_Frozen Failed", K(ret));
       }
     }
     cur = next;
@@ -451,12 +429,9 @@ void ObDataCheckpoint::ls_frozen_to_active_(int64_t &last_time)
             // avoid new active ob_freeze_checkpoint block minor merge
             // push back to new_create_list and wait next freeze
             if (OB_FAIL(transfer_from_ls_frozen_to_new_created_without_src_lock_(ob_freeze_checkpoint))) {
-              STORAGE_LOG(
-                  WARN, "ob_freeze_checkpoint move to new_created_list failed", K(ret), K(*ob_freeze_checkpoint));
             }
           } else if (ob_freeze_checkpoint->rec_scn_is_stable()) {
             if (OB_FAIL(transfer_from_ls_frozen_to_active_without_src_lock_(ob_freeze_checkpoint))) {
-              STORAGE_LOG(WARN, "check can freeze failed", K(ret), K(*ob_freeze_checkpoint));
             }
           } else {
             // wait rec scn stable
@@ -511,14 +486,11 @@ void ObDataCheckpoint::ls_frozen_to_prepare_(int64_t &last_time)
           ObFreezeCheckpoint *ob_freeze_checkpoint = iterator.get_next();
           if (ob_freeze_checkpoint->ready_for_flush()) {
             if (OB_FAIL(ob_freeze_checkpoint->finish_freeze())) {
-              STORAGE_LOG(WARN, "finish freeze failed", K(ret));
             }
           } else if (ob_freeze_checkpoint->is_active_checkpoint()) {
             // avoid active ob_freeze_checkpoint block minor merge
             // push back to active_list and wait next freeze
             if(OB_SUCCESS != (tmp_ret = (transfer_from_ls_frozen_to_active_without_src_lock_(ob_freeze_checkpoint)))) {
-              STORAGE_LOG(WARN, "active ob_freeze_checkpoint move to active_list failed",
-                          K(tmp_ret), K(*ob_freeze_checkpoint));
             }
           }
         }
@@ -553,7 +525,6 @@ int ObDataCheckpoint::check_can_move_to_active_in_newcreate()
   int ret = OB_SUCCESS;
   WLOCK(NEW_CREATE);
   if (!ls_freeze_finished_) {
-    STORAGE_LOG(INFO, "skip check_can_move when ls freeze");
   } else {
     ObCheckpointIterator iterator;
     new_create_list_.get_iterator(iterator);
@@ -576,9 +547,7 @@ int ObDataCheckpoint::add_to_new_create(ObFreezeCheckpoint *ob_freeze_checkpoint
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(insert_(ob_freeze_checkpoint, new_create_list_, false))) {
-    STORAGE_LOG(ERROR, "Add To Active Failed");
   } else if (OB_FAIL(decide_freeze_clock_(ob_freeze_checkpoint))) {
-    STORAGE_LOG(WARN, "fail to decide freeze_clock", K(ret));
   } else {
     ob_freeze_checkpoint->location_ = NEW_CREATE;
   }
@@ -618,20 +587,12 @@ int ObDataCheckpoint::get_freezecheckpoint_info(
   RLOCK(LS_FROZEN | NEW_CREATE | ACTIVE | PREPARE);
   if (OB_FAIL(new_create_list_.get_freezecheckpoint_info(
     freeze_checkpoint_array))) {
-    STORAGE_LOG(ERROR, "iterator new_create_list fail",
-      K(ls_->get_ls_id()));
   } else if (OB_FAIL(active_list_.get_freezecheckpoint_info(
     freeze_checkpoint_array))) {
-    STORAGE_LOG(ERROR, "iterator active_list_list fail",
-      K(ls_->get_ls_id()));
   } else if (OB_FAIL(prepare_list_.get_freezecheckpoint_info(
     freeze_checkpoint_array))) {
-    STORAGE_LOG(ERROR, "iterator prepare_list_list fail",
-      K(ls_->get_ls_id()));
   } else if (OB_FAIL(ls_frozen_list_.get_freezecheckpoint_info(
     freeze_checkpoint_array))) {
-    STORAGE_LOG(ERROR, "iterator ls_frozen_list_list fail",
-      K(ls_->get_ls_id()));
   }
 
   return ret;
@@ -650,8 +611,6 @@ int ObDataCheckpoint::traversal_flush_()
   {
     RLOCK(PREPARE);
     if (prepare_list_.is_empty()) {
-      STORAGE_LOG(TRACE, "skip traversal_flush", K(ls_freeze_finished_),
-                  K(prepare_list_.is_empty()), K(ls_->get_ls_id()));
     } else {
       ObCheckpointIterator iterator;
       prepare_list_.get_iterator(iterator);
@@ -665,9 +624,7 @@ int ObDataCheckpoint::traversal_flush_()
         ObITabletMemtable *tablet_memtable = static_cast<ObITabletMemtable *>(ob_freeze_checkpoint);
         ObTableHandleV2 handle;
         if (OB_FAIL(handle.set_table(tablet_memtable, t3m, tablet_memtable->get_table_type()))) {
-          STORAGE_LOG(WARN, "set table handle fail", K(ret), KPC(tablet_memtable));
         } else if (!tablet_memtable->get_is_flushed() && OB_FAIL(flush_tasks.push_back(handle))) {
-          TRANS_LOG(WARN, "add table to flush tasks failed", KPC(tablet_memtable));
         }
       }
     }
@@ -685,7 +642,6 @@ int ObDataCheckpoint::traversal_flush_()
       }
     }
 
-    STORAGE_LOG(INFO, "traversal_flush successfully", K(ls_->get_ls_id()), K(flush_tasks));
   }
 
   return ret;
@@ -696,7 +652,6 @@ int ObDataCheckpoint::unlink_(ObFreezeCheckpoint *ob_freeze_checkpoint)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ob_freeze_checkpoint)) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(ERROR, "ob_freeze_checkpoint is NULL");
   } else {
     do {
       ObCheckpointDList *list = NULL;
@@ -712,7 +667,6 @@ int ObDataCheckpoint::unlink_(ObFreezeCheckpoint *ob_freeze_checkpoint)
             ret = OB_ERR_UNEXPECTED;
             STORAGE_LOG(ERROR, "list is NULL", K(ret), KPC(ob_freeze_checkpoint));
           } else if (OB_FAIL(list->unlink(ob_freeze_checkpoint))) {
-            STORAGE_LOG(ERROR, "failed to unlink from list", K(ret), KPC(ob_freeze_checkpoint));
           }
         } else {
           ret = OB_EAGAIN;
@@ -730,7 +684,6 @@ int ObDataCheckpoint::finish_freeze(ObFreezeCheckpoint *ob_freeze_checkpoint)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ob_freeze_checkpoint)) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(ERROR, "ob_freeze_checkpoint is NULL");
   } else {
     do {
       switch (ob_freeze_checkpoint->location_) {
@@ -760,7 +713,6 @@ int ObDataCheckpoint::finish_freeze(ObFreezeCheckpoint *ob_freeze_checkpoint)
           break;
         default:
           ret = OB_ERR_UNEXPECTED;
-          STORAGE_LOG(WARN, "Unknown ObFreezeCheckpoint State", KPC(ob_freeze_checkpoint));
           break;
       }
     } while (OB_EAGAIN == ret);
@@ -782,9 +734,7 @@ int ObDataCheckpoint::transfer_(ObFreezeCheckpoint *ob_freeze_checkpoint,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(src.unlink(ob_freeze_checkpoint))) {
-    STORAGE_LOG(ERROR, "Unlink From Dlist Failed");
   } else if (OB_FAIL(dst.insert(ob_freeze_checkpoint))) {
-    STORAGE_LOG(ERROR, "Insert Into Dlist Failed");
   } else {
     ob_freeze_checkpoint->location_ = location;
   }
@@ -796,14 +746,12 @@ int ObDataCheckpoint::transfer_from_new_create_to_active_without_src_lock_(ObFre
   int ret = OB_SUCCESS;
   if (OB_ISNULL(ob_freeze_checkpoint)) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(ERROR, "ob_freeze_checkpoint is NULL");
   } else if (NEW_CREATE != ob_freeze_checkpoint->location_) {
     ret = OB_EAGAIN;
     STORAGE_LOG(WARN, "ob_freeze_checkpoint is not in new_create", KR(ret), KPC(ob_freeze_checkpoint));
   } else {
     WLOCK(ACTIVE);
     if (OB_FAIL(transfer_(ob_freeze_checkpoint, new_create_list_, active_list_, ACTIVE))) {
-      STORAGE_LOG(ERROR, "Transfer From NewCreate To Active Failed");
     }
   }
   return ret;
@@ -815,14 +763,12 @@ int ObDataCheckpoint::transfer_from_new_create_to_prepare_(ObFreezeCheckpoint *o
   WLOCK(NEW_CREATE);
   if (OB_ISNULL(ob_freeze_checkpoint)) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(ERROR, "ob_freeze_checkpoint is NULL");
   } else if (NEW_CREATE != ob_freeze_checkpoint->location_) {
     ret = OB_EAGAIN;
     STORAGE_LOG(WARN, "ob_freeze_checkpoint is not in new_create", KR(ret), KPC(ob_freeze_checkpoint));
   } else {
     WLOCK(PREPARE);
     if (OB_FAIL(transfer_(ob_freeze_checkpoint, new_create_list_, prepare_list_, PREPARE))) {
-      STORAGE_LOG(ERROR, "Transfer From NewCreate To Prepare Failed");
     }
   }
   return ret;
@@ -834,14 +780,12 @@ int ObDataCheckpoint::transfer_from_active_to_prepare_(ObFreezeCheckpoint *ob_fr
   WLOCK(ACTIVE);
   if (OB_ISNULL(ob_freeze_checkpoint)) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(ERROR, "ob_freeze_checkpoint is NULL");
   } else if (ACTIVE != ob_freeze_checkpoint->location_) {
     ret = OB_EAGAIN;
     STORAGE_LOG(WARN, "ob_freeze_checkpoint is not in active", KR(ret), KPC(ob_freeze_checkpoint));
   } else {
     WLOCK(PREPARE);
     if (OB_FAIL(transfer_(ob_freeze_checkpoint, active_list_, prepare_list_, PREPARE))) {
-      STORAGE_LOG(ERROR, "Transfer From Active To Frozen Failed");
     }
   }
   return ret;
@@ -852,7 +796,6 @@ int ObDataCheckpoint::transfer_from_ls_frozen_to_active_without_src_lock_(ObFree
   int ret = OB_SUCCESS;
   WLOCK(ACTIVE);
   if (OB_FAIL(transfer_(ob_freeze_checkpoint, ls_frozen_list_, active_list_, ACTIVE))) {
-    STORAGE_LOG(ERROR, "Transfer From Active To Frozen Failed");
   }
   return ret;
 }
@@ -862,7 +805,6 @@ int ObDataCheckpoint::transfer_from_ls_frozen_to_new_created_without_src_lock_(O
   int ret = OB_SUCCESS;
   WLOCK(NEW_CREATE);
   if (OB_FAIL(transfer_(ob_freeze_checkpoint, ls_frozen_list_, new_create_list_, NEW_CREATE))) {
-    STORAGE_LOG(ERROR, "Transfer From LS Frozen To New_Created Failed");
   }
   return ret;
 }
@@ -872,7 +814,6 @@ int ObDataCheckpoint::transfer_from_ls_frozen_to_prepare_without_src_lock_(ObFre
   int ret = OB_SUCCESS;
   WLOCK(PREPARE);
   if (OB_FAIL(transfer_(ob_freeze_checkpoint, ls_frozen_list_, prepare_list_, PREPARE))) {
-    STORAGE_LOG(ERROR, "Transfer From LS Frozen To Prepare Failed");
   }
   return ret;
 }
@@ -885,15 +826,12 @@ int ObDataCheckpoint::get_need_flush_tablets_(const share::SCN recycle_scn,
   ObSArray<ObFreezeCheckpoint*> need_freeze_checkpoints;
   if (OB_FAIL(new_create_list_.get_need_freeze_checkpoints(
     recycle_scn, need_freeze_checkpoints))) {
-    STORAGE_LOG(WARN, "get_need_freeze_checkpoints failed", K(ret));
   } else if (OB_FAIL(active_list_.get_need_freeze_checkpoints(
     recycle_scn, need_freeze_checkpoints))) {
-    STORAGE_LOG(WARN, "get_need_freeze_checkpoints failed", K(ret));
   } else {
     for (int i = 0; OB_SUCC(ret) && i < need_freeze_checkpoints.count(); i++) {
       if (OB_FAIL(flush_tablets.push_back(
         need_freeze_checkpoints[i]->get_tablet_id()))) {
-        STORAGE_LOG(WARN, "get_flush_tablets failed", K(ret));
       }
     }
   }
@@ -901,7 +839,8 @@ int ObDataCheckpoint::get_need_flush_tablets_(const share::SCN recycle_scn,
   return ret;
 }
 
-int ObDataCheckpoint::freeze_base_on_needs_(share::SCN recycle_scn)
+int ObDataCheckpoint::freeze_base_on_needs_(const int64_t trace_id,
+    share::SCN recycle_scn)
 {
   int ret = OB_SUCCESS;
   if (get_rec_scn() <= recycle_scn && !is_flushing()) {
@@ -921,17 +860,17 @@ int ObDataCheckpoint::freeze_base_on_needs_(share::SCN recycle_scn)
     const bool abs_timeout_ts = 0;  // async freeze do not need
     if (OB_FAIL(ret)) {
     } else if (logstream_freeze) {
-      if (OB_FAIL(ls_->logstream_freeze(is_sync,
+      if (OB_FAIL(ls_->logstream_freeze(trace_id,
+                                        is_sync,
                                         abs_timeout_ts,
                                         get_freeze_source()))) {
-        STORAGE_LOG(WARN, "minor freeze failed", K(ret), K(ls_->get_ls_id()));
       }
-    } else if (OB_FAIL(ls_->tablet_freeze(need_flush_tablets,
+    } else if (OB_FAIL(ls_->tablet_freeze(trace_id,
+                                          need_flush_tablets,
                                           is_sync,
                                           abs_timeout_ts,
                                           false, /*need_rewrite_meta*/
                                           get_freeze_source()))) {
-      STORAGE_LOG(WARN, "batch tablet freeze failed", K(ret), K(ls_->get_ls_id()), K(need_flush_tablets));
     }
   }
   return ret;

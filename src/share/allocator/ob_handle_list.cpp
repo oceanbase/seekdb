@@ -65,7 +65,6 @@ int64_t ObHandleList::calc_hazard()
     Handle* handle = CONTAINER_OF(last, Handle, active_list_);
     x = handle->get_clock();
   }
-  COMMON_LOG(TRACE, "HandleList.calc_hazard", K(x));
   return x;
 }
 

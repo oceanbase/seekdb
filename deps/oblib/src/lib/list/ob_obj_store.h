@@ -118,12 +118,10 @@ inline int ObObjStore<T, BlockAllocatorT, auto_free>::store_obj(const T &obj)
   void *ptr = allocator_.alloc(sizeof(ObObjNode<T>));
   if (OB_UNLIKELY(NULL == ptr)) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LIB_LOG(ERROR, "no more memory to create obj node");
   } else {
     obj_node = new(ptr) ObObjNode<T>(obj);
     if (!obj_list_.add_last(obj_node)) {
       ret = OB_ERR_UNEXPECTED;
-      LIB_LOG(WARN, "add obj node to list failed");
     }
   }
   if (ret != OB_SUCCESS && obj_node != NULL) {

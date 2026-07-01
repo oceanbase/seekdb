@@ -157,7 +157,6 @@ public:
     new_estimator = NULL;
     if (OB_ISNULL(ptr)) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      SQL_OPT_LOG(ERROR, "no more memory to create estimator");
     } else {
       new_estimator = new (ptr) EstimatorType();
       if (OB_FAIL(estimator_store_.store_obj(new_estimator))) {
@@ -191,7 +190,6 @@ int create_simple_estimator(ObSelEstimatorFactory &factory,
   if (!ObTemplateEstimator::check_expr_valid(expr)) {
     // do nothing
   } else if (OB_FAIL(factory.create_estimator_inner(temp_estimator))) {
-    LOG_WARN("failed to create estimator ", K(ret));
   } else {
     temp_estimator->set_expr(&expr);
     temp_estimator->extract_default_eigen_expr(&expr);

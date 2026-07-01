@@ -67,7 +67,6 @@ int ObDirectLoadInsertLobTabletContext::init(ObDirectLoadInsertLobTableContext *
       slice_idx_ = param_->reserved_parallel_;
     }
     if (OB_FAIL(ObDDLUtil::init_macro_block_seq(param_->reserved_parallel_, start_seq_))) {
-      LOG_WARN("fail to init macro block seq", KR(ret), K(param_->reserved_parallel_));
     } else {
       data_tablet_ctx->set_lob_tablet_ctx(this);
       is_inited_ = true;
@@ -83,7 +82,6 @@ int ObDirectLoadInsertLobTabletContext::open()
     ret = OB_NOT_INIT;
     LOG_WARN("ObDirectLoadInsertLobTabletContext not init", KR(ret), KP(this));
   } else if (OB_FAIL(data_tablet_ctx_->open())) {
-    LOG_WARN("fail to open", KR(ret));
   }
   return ret;
 }
@@ -95,7 +93,6 @@ int ObDirectLoadInsertLobTabletContext::close()
     ret = OB_NOT_INIT;
     LOG_WARN("ObDirectLoadInsertLobTabletContext not init", KR(ret), KP(this));
   } else if (OB_FAIL(data_tablet_ctx_->close())) {
-    LOG_WARN("fail to close", KR(ret));
   }
   return ret;
 }
@@ -114,7 +111,6 @@ int ObDirectLoadInsertLobTabletContext::get_pk_interval(uint64_t count,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDirectLoadInsertTabletContext::get_pk_interval(count, pk_interval))) {
-    LOG_WARN("fail to get pk interval", KR(ret));
   }
   // set min_insert_lob_id_
   else if (!min_insert_lob_id_.is_valid()) {
@@ -144,7 +140,6 @@ int ObDirectLoadInsertLobTabletContext::open_sstable_slice(const ObMacroDataSeq 
     ret = OB_NOT_INIT;
     LOG_WARN("ObDirectLoadInsertLobTabletContext not init", KR(ret), KP(this));
   } else if (OB_FAIL(data_tablet_ctx_->open_lob_sstable_slice(start_seq, slice_id, ddl_agent))) {
-    LOG_WARN("fail to open lob sstabel slice", KR(ret));
   }
   return ret;
 }
@@ -160,7 +155,6 @@ int ObDirectLoadInsertLobTabletContext::fill_sstable_slice(const int64_t &slice_
     LOG_WARN("ObDirectLoadInsertLobTabletContext not init", KR(ret), KP(this));
   } else if (OB_FAIL(
                data_tablet_ctx_->fill_lob_meta_sstable_slice(slice_id, iter, affected_rows, ddl_agent))) {
-    LOG_WARN("fail to fill lob meta sstable slice", KR(ret));
   }
   return ret;
 }
@@ -184,7 +178,6 @@ int ObDirectLoadInsertLobTabletContext::fill_lob_sstable_slice(ObIAllocator &all
     LOG_WARN("ObDirectLoadInsertLobTabletContext not init", KR(ret), KP(this));
   } else if (OB_FAIL(data_tablet_ctx_->fill_lob_sstable_slice(allocator, lob_slice_id, pk_interval,
                                                               datum_row, ddl_agent))) {
-    LOG_WARN("fail to fill lob sstable slice", KR(ret));
   }
   return ret;
 }
@@ -201,7 +194,6 @@ int ObDirectLoadInsertLobTabletContext::fill_lob_sstable_slice(ObIAllocator &all
     LOG_WARN("ObDirectLoadInsertLobTabletContext not init", KR(ret), KP(this));
   } else if (OB_FAIL(data_tablet_ctx_->fill_lob_sstable_slice(allocator, lob_slice_id, pk_interval,
                                                               datum_rows, ddl_agent))) {
-    LOG_WARN("fail to fill lob sstable slice", KR(ret));
   }
   return ret;
 }
@@ -216,7 +208,6 @@ int ObDirectLoadInsertLobTabletContext::close_sstable_slice(const int64_t slice_
     ret = OB_NOT_INIT;
     LOG_WARN("ObDirectLoadInsertLobTabletContext not init", KR(ret), KP(this));
   } else if (OB_FAIL(data_tablet_ctx_->close_lob_sstable_slice(slice_id, ddl_agent))) {
-    LOG_WARN("fail to close lob sstabel slice", KR(ret));
   }
   return ret;
 }
@@ -248,12 +239,10 @@ int ObDirectLoadInsertLobTableContext::init(
   } else {
     param_ = param;
     if (OB_FAIL(inner_init())) {
-      LOG_WARN("fail to inner init", KR(ret));
     } else if (OB_FAIL(create_all_tablet_contexts(data_table_ctx,
                                                   ls_partition_ids,
                                                   target_ls_partition_ids,
                                                   data_ls_partition_ids))) {
-      LOG_WARN("fail to create all tablet contexts", KR(ret));
     } else {
       data_table_ctx->set_lob_table_ctx(this);
       data_table_ctx_ = data_table_ctx;
@@ -278,7 +267,6 @@ int ObDirectLoadInsertLobTableContext::create_all_tablet_contexts(
     ObDirectLoadInsertTabletContext *data_tablet_ctx = nullptr;
     ObDirectLoadInsertLobTabletContext *lob_tablet_ctx = nullptr;
     if (OB_FAIL(data_table_ctx->get_tablet_context(data_tablet_id, data_tablet_ctx))) {
-      LOG_WARN("fail to get tablet ctx", KR(ret), K(data_tablet_id));
     } else if (OB_ISNULL(lob_tablet_ctx =
                            OB_NEWx(ObDirectLoadInsertLobTabletContext, (&allocator_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -286,9 +274,7 @@ int ObDirectLoadInsertLobTableContext::create_all_tablet_contexts(
     } else if (OB_FAIL(lob_tablet_ctx->init(
                  this, static_cast<ObDirectLoadInsertDataTabletContext *>(data_tablet_ctx), ls_id,
                  origin_tablet_id, tablet_id))) {
-      LOG_WARN("fail to init tablet ctx", KR(ret));
     } else if (OB_FAIL(tablet_ctx_map_.set_refactored(origin_tablet_id, lob_tablet_ctx))) {
-      LOG_WARN("fail to set tablet ctx map", KR(ret));
     }
     if (OB_FAIL(ret)) {
       if (nullptr != lob_tablet_ctx) {
@@ -308,7 +294,6 @@ int ObDirectLoadInsertLobTabletContext::get_ddl_agent(ObDirectLoadMgrAgent &tmp_
     ret = OB_INIT_TWICE;
     LOG_WARN("tmp agent has been inited", K(ret), K(tmp_agent));
   } else if (OB_FAIL(data_tablet_ctx_->get_ddl_agent(tmp_agent))) {
-    LOG_WARN("failed to init tmp agent", K(ret));
   }
   return ret;
 }

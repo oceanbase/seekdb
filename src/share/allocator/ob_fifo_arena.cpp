@@ -63,7 +63,6 @@ int ObFifoArena::init()
 
 void ObFifoArena::reset()
 {
-  COMMON_LOG(INFO, "MTALLOC.reset");
   shrink_cached_page(0);
 }
 
@@ -114,7 +113,6 @@ void* ObFifoArena::alloc(int64_t adv_idx, Handle& handle, int64_t size)
   int64_t idx = get_idx(adv_idx, way_id);
   Page** paddr = cur_pages_ + idx;
   if (adv_idx < 0 || size < 0) {
-    COMMON_LOG(INFO, "invalid argument", K(adv_idx), K(size));
     ret = OB_INVALID_ARGUMENT;
   } else if (rsize > ALLOC_PAGE_SIZE) {
     Page* page = NULL;

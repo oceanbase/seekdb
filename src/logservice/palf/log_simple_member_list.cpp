@@ -79,9 +79,7 @@ int LogSimpleMemberList::deep_copy(const common::ObMemberList &member_list)
   ObAddr server;
   for (int64_t i = 0; OB_SUCC(ret) && i < member_list.get_member_number(); ++i) {
     if (OB_FAIL(member_list.get_server_by_index(i, server))) {
-      CLOG_LOG(ERROR, "get_server_by_index failed", K(ret));
     } else if (OB_FAIL(add_server(server))) {
-      CLOG_LOG(ERROR, "add_server failed", K(ret));
     }
   }
   if (OB_SUCC(ret) && get_count() != member_list.get_member_number()) {
@@ -98,7 +96,6 @@ int LogSimpleMemberList::deep_copy_to(common::ObMemberList &member_list)
   member_list.reset();
   for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
     if (OB_FAIL(member_list.add_server(server_[i]))) {
-      CLOG_LOG(ERROR, "add_server failed", K(ret));
     }
   }
   if (OB_SUCC(ret) && get_count() != member_list.get_member_number()) {
@@ -145,7 +142,6 @@ int LogAckList::add_server(const common::ObAddr &server)
   const int64_t count = get_count();
   if (!server.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
-    CLOG_LOG(ERROR, "add_server unexpected server");
   } else {
     for (int64_t i = 0; i < count; i++) {
       if (server_[i] == server) {
@@ -159,7 +155,6 @@ int LogAckList::add_server(const common::ObAddr &server)
         server_[count] = server;
       }
     }
-    PALF_LOG(INFO, "add_server success", K(count), K(server), K(count));
   }
   return ret;
 }

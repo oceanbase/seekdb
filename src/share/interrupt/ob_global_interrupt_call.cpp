@@ -123,13 +123,11 @@ int ObGlobalInterruptManager::register_checker(ObInterruptChecker *checker,
     LIB_LOG(ERROR, "interrupt manager not inited", K(ret));
   } else if (OB_ISNULL(checker)) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(ERROR, "invaild checker pointer");
   } else if (FALSE_IT(map_.read_atomic(tid, get_node_call))) {
   } else if (get_node_call.is_checker_exist()) {
     ret = OB_HASH_EXIST;
     LIB_LOG(ERROR, "the check has already registered", K(ret));
   } else if (OB_FAIL(create_checker_node(checker, checker_node))) {
-    LIB_LOG(ERROR, "fail to create checker node", K(ret));
   } else {
     // A slightly more complicated but safe inspection operation
     // Since map does not provide the operation of "create or modify", nor does it provide the ability to hold bucket locks
@@ -167,10 +165,8 @@ int ObGlobalInterruptManager::unregister_checker(ObInterruptChecker *checker,
   UNUSED(ignore);
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LIB_LOG(ERROR, "interrupt manager not inited");
   } else if (OB_ISNULL(checker)) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(ERROR, "invaild checker pointer");
   } else {
     ObInterruptGetCheckerNodeCall get_node_call(checker);
     if (OB_HASH_NOT_EXIST == (ret = map_.read_atomic(tid, get_node_call))) {
@@ -183,7 +179,6 @@ int ObGlobalInterruptManager::unregister_checker(ObInterruptChecker *checker,
       ObInterruptCheckerRemoveCall call(checker_node);
       ret = map_.atomic_refactored(tid, call);
       if (OB_LIKELY(OB_SUCCESS != ret)) {
-        LIB_LOG(ERROR, "unregister checker failed", K(ret));
       } else if (call.is_empty()) {
         // Delete here must be successful
         ignore = map_.erase_refactored(tid, nullptr);
@@ -210,7 +205,6 @@ int ObGlobalInterruptManager::interrupt(const ObInterruptibleTaskID &tid, ObInte
   int ret = OB_SUCCESS;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    LIB_LOG(ERROR, "interrupt manager not inited", K(tid));
   } else {
     ObInterruptCheckerUpdateCall updatecall(interrupt_code);
     ret = map_.atomic_refactored(tid, updatecall);

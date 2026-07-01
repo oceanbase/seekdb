@@ -58,7 +58,6 @@ int ObDirectLoadSSTableDataBlockWriter<T>::append_row(const T &row)
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(this->write_item(row))) {
-    STORAGE_LOG(WARN, "fail to write item", KR(ret));
   } else {
     last_row_pos_ = cur_row_pos_;
   }
@@ -76,7 +75,6 @@ int ObDirectLoadSSTableDataBlockWriter<T>::get_flush_last_row(T &row)
   } else {
     int64_t pos = header.last_row_pos_;
     if (OB_FAIL(this->data_block_writer_.read_item(pos, row))) {
-      STORAGE_LOG(WARN, "fail to read item", KR(ret), K(pos));
     }
   }
   return ret;

@@ -643,7 +643,6 @@ int ObIOResult::basic_init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(cond_.init(ObWaitEventIds::IO_CONTROLLER_COND_WAIT))) {
-    LOG_WARN("init result condition failed", K(ret));
   }
   return ret;
 }
@@ -662,7 +661,6 @@ int ObIOResult::init(const ObIOInfo &info)
   } else {
     if (info.flag_.is_sync()) {
       if (OB_FAIL(info.fd_.device_handle_->get_io_aligned_size(aligned_size_))) {
-        LOG_WARN("get io aligned size failed", K(ret));
       }
     } else {
       aligned_size_ = DIO_ALIGN_SIZE;
@@ -786,7 +784,6 @@ void ObIOResult::cancel()
     { // must check finished and set cancel in guard
       ObThreadCondGuard guard(cond_);
       if (OB_FAIL(guard.get_ret())) {
-        LOG_WARN("fail to guard condition", K(ret));
       } else if (is_finished_) {
         // do nothing
       } else {
@@ -803,12 +800,10 @@ int ObIOResult::wait(int64_t wait_ms)
   int ret = OB_SUCCESS;
   ObThreadCondGuard guard(cond_);
   if (OB_FAIL(guard.get_ret())) {
-    LOG_ERROR("fail to guard result condition", K(ret));
   } else {
     int64_t begin_ms = ObTimeUtility::current_time();
     while (OB_SUCC(ret) && !is_finished_ && wait_ms > 0) {
       if (OB_FAIL(cond_.wait(wait_ms))) {
-        LOG_WARN("fail to wait result condition", K(ret), K(wait_ms), K(*this));
       } else if (!is_finished_) {
         int64_t duration_ms = ObTimeUtility::current_time() - begin_ms;
         wait_ms -= duration_ms;
@@ -883,9 +878,7 @@ void ObIOResult::finish(const ObIORetCode &ret_code, ObIORequest *req)
         }
       }
       if (OB_FAIL(guard.get_ret())) {
-        LOG_ERROR("lock io result condition failed", K(ret), K(*this));
       } else if (OB_FAIL(cond_.signal())) {
-        LOG_ERROR("signal io result condition failed", K(ret), K(*this));
       }
     }
   }
@@ -924,9 +917,7 @@ void ObIOResult::finish_without_accumulate(const ObIORetCode &ret_code)
       ATOMIC_STORE(&is_finished_, true);
       time_log_.end_ts_ = ObTimeUtility::fast_current_time();
       if (OB_FAIL(guard.get_ret())) {
-        LOG_ERROR("lock io result condition failed", K(ret), K(*this));
       } else if (OB_FAIL(cond_.signal())) {
-        LOG_ERROR("signal io result condition failed", K(ret), K(*this));
       }
     }
   }
@@ -1028,11 +1019,8 @@ int ObIORequest::init(const ObIOInfo &info, ObIOResult *result)
     char *io_buf = nullptr;
     buf_size_ = 0;
     if (OB_FAIL(set_block_handle(info))) {
-      LOG_WARN("fail to set block handle", K(ret), K(info));
     } else if (OB_FAIL(set_fd_cache_handle(info))) {
-      LOG_WARN("fail to fd cache handle", K(ret), K(info));
     } else if (OB_FAIL(calc_io_offset_and_size_())) {
-      LOG_WARN("fail to calc io offset and size", K(ret), K(info));
     } else if (OB_ISNULL(fd_.device_handle_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("device handle is null", KR(ret), K(*this));
@@ -1052,7 +1040,6 @@ int ObIORequest::init(const ObIOInfo &info, ObIOResult *result)
                  && OB_FAIL(alloc_io_buf(io_buf))) {
         LOG_WARN("fail to alloc io buffer for sync read or write", K(ret), K(info));
       } else if (OB_FAIL(hold_storage_accesser(fd_, *obj_device_handle))) {
-        LOG_WARN("fail to hold storage accesser", K(ret), K_(fd), KP(obj_device_handle));
       }
     } else if (OB_UNLIKELY(!is_valid())) {
       ret = OB_INVALID_ARGUMENT;
@@ -1401,7 +1388,6 @@ int ObIORequest::prepare(char *next_buffer, int64_t next_size, int64_t next_offs
               io_offset,
               control_block_,
               this/*data*/))) {
-        LOG_WARN("prepare io read failed", K(ret), K(*this));
       }
       tg.click("prepare_read");
     } else if (io_result_->flag_.is_write()) {
@@ -1412,7 +1398,6 @@ int ObIORequest::prepare(char *next_buffer, int64_t next_size, int64_t next_offs
               io_offset,
               control_block_,
               this/*data*/))) {
-        LOG_WARN("prepare io write failed", K(ret), K(*this));
       }
       tg.click("prepare_write");
     } else {
@@ -1436,7 +1421,6 @@ int ObIORequest::recycle_buffer()
   } else {
     ObThreadCondGuard guard(io_result_->cond_);
     if (OB_FAIL(guard.get_ret())) {
-      LOG_WARN("fail to guard IOresult condition", K(ret));
     } else if (io_result_->flag_.is_detect()) {
       free_io_buffer();
     } else {
@@ -1548,7 +1532,6 @@ int ObIORequest::hold_storage_accesser(const ObIOFd &fd, ObObjectDevice &object_
   void *ctx = NULL;
   ObStorageAccesser *storage_accesser = nullptr;
   if (OB_FAIL(object_device.get_fd_mng().fd_to_ctx(fd, ctx))) {
-    LOG_WARN("fail to get ctx accroding fd", K(ret), K(fd));
   } else if (OB_ISNULL(ctx)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ctx is null", K(ret));
@@ -1646,7 +1629,6 @@ ObIOHandle& ObIOHandle::operator=(const ObIOHandle &other)
   	int ret = OB_SUCCESS;
     if (OB_NOT_NULL(other.result_)) {
     	if (OB_FAIL(set_result(*other.result_))) {
-    		LOG_ERROR("set io request failed", K(ret));
     	}
     }
   }
@@ -1727,7 +1709,6 @@ int ObIOHandle::wait(const int64_t wait_timeout_ms)
     ret = OB_NOT_INIT;
     LOG_WARN("The IOHandle has not been inited, ", K(ret));
   } else if (OB_FAIL(result_->ret_code_.io_ret_)) {
-    LOG_WARN("IO error, ", K(ret), K(*result_));
   } else if (result_->is_finished_) {
     // do nothing
   } else if (0 == wait_timeout_ms) {
@@ -1772,7 +1753,6 @@ int ObIOHandle::wait(const int64_t wait_timeout_ms)
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(ATOMIC_LOAD(&result_->ret_code_.io_ret_))) {
-      LOG_WARN("IO error, ", K(ret), K(*result_));
     }
   } else if (OB_TIMEOUT == ret || OB_IO_TIMEOUT == ret) {
     LOG_WARN("IO wait timeout", K(ret), K(*result_));
@@ -1958,7 +1938,6 @@ ObTenantIOConfig::ObTenantIOConfig()
     memcpy(tmp_group_config.group_name_, other_group_name.ptr(), other_group_name.length());
     tmp_group_config.group_name_[other_group_name.length()] = '\0';
     if (OB_FAIL(group_configs_.push_back(tmp_group_config))) {
-      LOG_WARN("push back group config failed", K(ret));
     }
   }
 }
@@ -2014,7 +1993,6 @@ int ObTenantIOConfig::deep_copy(const ObTenantIOConfig &other_config)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(group_configs_.assign(other_config.group_configs_))) {
-    LOG_WARN("fail to assign group_configs", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -2068,7 +2046,6 @@ int ObTenantIOConfig::parse_group_config(const char *config_str)
         if (0 == tmp_group_config.group_id_) {
           group_configs_.at((uint8_t)ObIOMode::MAX_MODE) = tmp_group_config;
         } else if (OB_FAIL(group_configs_.push_back(tmp_group_config))) {
-          LOG_WARN("push back group config failed", K(ret), K(tmp_group_config));
         }
         pos += strlen(tmp_config_str) + 1;
       }
@@ -2126,7 +2103,6 @@ int ObTenantIOConfig::add_single_group_config(const ObIOGroupKey &key,
       ret = OB_INVALID_CONFIG;
       LOG_WARN("invalid group config", K(ret), K(tmp_group_config));
     } else if (OB_FAIL(group_configs_.push_back(tmp_group_config))) {
-      LOG_WARN("push back group config failed", K(ret), K(tmp_group_config));
     }
   }
   return ret;

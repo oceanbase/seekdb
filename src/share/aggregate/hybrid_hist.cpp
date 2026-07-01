@@ -40,7 +40,6 @@ int init_hybrid_hist_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id
                                         allocator, 
                                         agg, 
                                         true))) {
-    SQL_LOG(WARN, "failed init agg func", K(ret));
   }
   return ret;
 }

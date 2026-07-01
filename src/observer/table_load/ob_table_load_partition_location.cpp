@@ -44,9 +44,7 @@ int ObTableLoadPartitionLocation::check_tablet_has_same_leader(const ObTableLoad
     PartitionLocationInfo info1;
     PartitionLocationInfo info2;
     if (OB_FAIL(partition_map_.get_refactored(tablet_ids_.at(i), info1))) {
-      LOG_WARN("fail to get location info", KR(ret));
     } else if (OB_FAIL(other.partition_map_.get_refactored(other.tablet_ids_.at(i), info2))) {
-      LOG_WARN("fail to get location info", KR(ret));
     } else if (info1.leader_addr_ != info2.leader_addr_) {
       result = false;
     }
@@ -68,11 +66,8 @@ int ObTableLoadPartitionLocation::init_partition_location(
     target_partition_location.reset();
     // init partition_location_
     if (OB_FAIL(partition_location.init(partition_ids))) {
-      LOG_WARN("fail to init partition location", KR(ret));
     } else if (OB_FAIL(target_partition_location.init(target_partition_ids))) {
-      LOG_WARN("fail to init origin partition location", KR(ret));
     } else if (OB_FAIL(partition_location.check_tablet_has_same_leader(target_partition_location, flag))) {
-      LOG_WARN("fail to check_tablet_has_same_leader", KR(ret));
     }
     if (OB_SUCC(ret)) {
       if (flag) {
@@ -103,9 +98,7 @@ int ObTableLoadPartitionLocation::fetch_ls_id(const ObTabletID &tablet_id,
   MAKE_TENANT_SWITCH_SCOPE_GUARD(tenant_guard);
   bool is_cache_hit = false;
   if (OB_FAIL(tenant_guard.switch_to())) {
-    LOG_WARN("fail to switch tenant", KR(ret));
   } else if (OB_FAIL(location_service.get(tablet_id, INT64_MAX, is_cache_hit, ls_id))) {
-    LOG_WARN("fail to get ls id", KR(ret));
   }
   return ret;
 }
@@ -119,12 +112,9 @@ int ObTableLoadPartitionLocation::fetch_ls_location(const ObTabletID &tablet_id,
   MAKE_TENANT_SWITCH_SCOPE_GUARD(tenant_guard);
   bool is_cache_hit = false;
   if (OB_FAIL(tenant_guard.switch_to())) {
-    LOG_WARN("fail to switch tenant", KR(ret));
   } else if (OB_FAIL(location_service.get(tablet_id, INT64_MAX, is_cache_hit, ls_id))) {
-    LOG_WARN("fail to get ls id", KR(ret));
   } else if (OB_FAIL(location_service.get(cluster_id, ls_id, INT64_MAX, is_cache_hit,
                                           ls_location))) {
-    LOG_WARN("fail to get location", KR(ret));
   }
   return ret;
 }
@@ -138,7 +128,6 @@ int ObTableLoadPartitionLocation::fetch_ls_locations(const ObIArray<ObTableLoadP
   for (int64_t i = 0; OB_SUCC(ret) && (i < partition_ids.count()); ++i) {
     const ObTabletID &tablet_id = partition_ids.at(i).tablet_id_;
     if (OB_FAIL(tablet_ids_.push_back(tablet_id))) {
-      LOG_WARN("failed to push back tablet_id", K(tablet_id), K(i));
     }
   }
 
@@ -157,9 +146,7 @@ int ObTableLoadPartitionLocation::fetch_ls_locations(const ObIArray<ObTableLoadP
     bool is_cache_hit = false;
 
     if (OB_FAIL(tenant_guard.switch_to())) {
-      LOG_WARN("fail to switch tenant", KR(ret));
     } else if (OB_FAIL(ls_location_map.create(1024, "TLD_PartLoc", "TLD_PartLoc"))) {
-      LOG_WARN("fail to create location info map", KR(ret));
     } else {
       // avoid redundant location info lookups
       for (int64_t i = 0; OB_SUCC(ret) && i < partition_ids.count(); ++i) {
@@ -172,17 +159,13 @@ int ObTableLoadPartitionLocation::fetch_ls_locations(const ObIArray<ObTableLoadP
           if (ret != OB_HASH_NOT_EXIST) {
             LOG_WARN("failed to get refactored", K(ret), K(i), K(ls_id));
           } else if (OB_FAIL(location_service.get(cluster_id, ls_id, INT64_MAX, is_cache_hit, location))) {
-            LOG_WARN("fail to get location", KR(ret));
           } else if (OB_FAIL(location.get_leader(info.leader_addr_))) {
-            LOG_WARN("fail to get leader", KR(ret));
           } else if (OB_FAIL(ls_location_map.set_refactored(ls_id, info.leader_addr_))) {
-            LOG_WARN("failed to set refactored", K(ret), K(ls_id), K(info));
           }
         }
 
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(partition_map_.set_refactored(tablet_ids_.at(i), info))) {
-          LOG_WARN("fail to set refactored", KR(ret), K(i), K(info));
         }
       }
     }
@@ -215,7 +198,6 @@ int ObTableLoadPartitionLocation::fetch_tablet_handle(const ObLSID &ls_id,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet service should not be NULL", KR(ret), KP(tablet_service));
   } else if (OB_FAIL(tablet_service->get_tablet(tablet_id, tablet_handle))) {
-    LOG_WARN("fail to get tablet", KR(ret));
   }
   return ret;
 }
@@ -233,11 +215,8 @@ int ObTableLoadPartitionLocation::init(
     LOG_WARN("invalid args", KR(ret), K(partition_ids));
   } else {
     if (OB_FAIL(partition_map_.create(1024, "TLD_PartLoc", "TLD_PartLoc"))) {
-      LOG_WARN("fail to create map", KR(ret));
     } else if (OB_FAIL(init_all_partition_location(partition_ids))) {
-      LOG_WARN("fail to init all partition location", KR(ret));
     } else if (OB_FAIL(init_all_leader_info())) {
-      LOG_WARN("fail to init all leader info", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -250,7 +229,6 @@ int ObTableLoadPartitionLocation::init_all_partition_location(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(fetch_ls_locations(partition_ids))) {
-    LOG_WARN("fail to fetch locations", KR(ret));
   }
   return ret;
 }
@@ -265,13 +243,11 @@ int ObTableLoadPartitionLocation::init_all_leader_info()
   
   // Store all addr in the set
   if (OB_FAIL(addr_map.create(64, "TLD_PL_Tmp", "TLD_PL_Tmp"))) {
-    LOG_WARN("fail to create hashmap", KR(ret));
   } else {
     ObHashMap<ObTabletID, PartitionLocationInfo>::const_iterator iter;
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ids_.count(); i ++) {
       PartitionLocationInfo info;
       if (OB_FAIL(partition_map_.get_refactored(tablet_ids_.at(i), info))) {
-        LOG_WARN("fail to get tablet info", K(tablet_ids_.at(i)), KR(ret));
       }
       const ObTableLoadLSIdAndPartitionId &partition_id = info.partition_id_;
       const ObAddr &addr = info.leader_addr_;
@@ -287,7 +263,6 @@ int ObTableLoadPartitionLocation::init_all_leader_info()
               ret = OB_ALLOCATE_MEMORY_FAILED;
               LOG_WARN("fail to new array", KR(ret));
             } else if (OB_FAIL(addr_map.set_refactored(addr, new_array))) {
-              LOG_WARN("fail to set refactored", KR(ret), K(addr));
             } else {
               
               partition_id_array = new_array;
@@ -303,7 +278,6 @@ int ObTableLoadPartitionLocation::init_all_leader_info()
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(partition_id_array->push_back(partition_id))) {
-            LOG_WARN("fail to push back partition id", KR(ret));
           }
         }
       }
@@ -312,9 +286,7 @@ int ObTableLoadPartitionLocation::init_all_leader_info()
 	// Store the addr in set to array
 	if (OB_SUCC(ret)) {
 		if (OB_FAIL(all_leader_addr_array_.create(addr_map.size(), allocator_))) {
-			LOG_WARN("fail to create leader addr array", KR(ret));
 		} else if (OB_FAIL(all_leader_info_array_.create(addr_map.size(), allocator_))) {
-			LOG_WARN("fail to create leader info array", KR(ret));
 		}
 	}
   ObArray<LeaderInfoForSort> sort_array;
@@ -324,7 +296,6 @@ int ObTableLoadPartitionLocation::init_all_leader_info()
     item.addr_ = addr_iter->first;
     item.partition_id_array_ptr_ = addr_iter->second;
     if (OB_FAIL(sort_array.push_back(item))) {
-      LOG_WARN("fail to push_back item", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -341,7 +312,6 @@ int ObTableLoadPartitionLocation::init_all_leader_info()
     leader_info.addr_ = addr;
     if (OB_FAIL(ObTableLoadUtils::deep_copy(*partition_id_array, leader_info.partition_id_array_,
                                             allocator_))) {
-      LOG_WARN("fail to deep copy partition id array", KR(ret));
     }
     partition_id_array->~ObIArray<ObTableLoadLSIdAndPartitionId>();
     tmp_allocator.free(partition_id_array);
@@ -358,7 +328,6 @@ int ObTableLoadPartitionLocation::get_leader(ObTabletID tablet_id, PartitionLoca
     LOG_WARN("ObTableLoadPartitionLocation not init", KR(ret));
   } else {
     if (OB_FAIL(partition_map_.get_refactored(tablet_id, info))) {
-      LOG_WARN("fail to get refactored", KR(ret), K(tablet_id));
     }
   }
   return ret;

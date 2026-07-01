@@ -71,7 +71,6 @@ int ObStorageLogWriter::init(
     STORAGE_REDO_LOG(WARN, "Invalid arguments", K(ret), KP(log_dir),
         K(log_file_size), K(max_log_size));
   } else if (OB_FAIL(ObBaseLogWriter::init(log_cfg, thread_name))) {
-    STORAGE_REDO_LOG(WARN, "Fail to init ObBaseLogWriter", K(ret));
   } else if (OB_FAIL(ObLogPolicyParser::parse_retry_write_policy(log_file_spec.retry_write_policy_,
       retry_write_policy_))) {
     ret = OB_INVALID_ARGUMENT;
@@ -81,13 +80,9 @@ int ObStorageLogWriter::init(
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "Fail to parse log write policy", K(ret), K(log_file_spec));
   } else if (OB_FAIL(nop_log_.init(ObLogConstants::LOG_FILE_ALIGN_SIZE))) {
-    STORAGE_REDO_LOG(WARN, "Fail to init nop log", K(ret));
   } else if (OB_FAIL(batch_write_buf_.init(ObLogConstants::LOG_FILE_ALIGN_SIZE, buf_size))) {
-    STORAGE_REDO_LOG(WARN, "Fail to init batch write buf", K(ret), K(buf_size));
   } else if (OB_FAIL(file_handler_.init(log_dir, log_file_size))) {
-    STORAGE_REDO_LOG(WARN, "Fail to create file handler", K(ret), KP(log_dir));
-  } else if (OB_FAIL(slog_write_runner_.init(this))) {  // seekdb: always init (was 500!=1)
-    STORAGE_REDO_LOG(WARN, "Fail to init slog write runner.", K(ret));
+  } else if (OB_FAIL(slog_write_runner_.init(this))) {
   } else {
     is_inited_ = true;
     STORAGE_REDO_LOG(INFO, "Successfully init slog writer", K(ret), KP(log_dir),
@@ -114,7 +109,6 @@ int ObStorageLogWriter::start()
     // has_stopped_ must be set before flush thread run. Otherwise it might caused thread exit
     // No worry about councurrent slog write, because the ObStorageLogger hasn't started yet.
   } else if (OB_FAIL(slog_write_runner_.start())) {
-    STORAGE_REDO_LOG(WARN, "fail to start ObSlogWriteRunner's thread", K(ret));
   }
   return ret;
 }
@@ -158,7 +152,6 @@ int ObStorageLogWriter::start_log(const ObLogCursor &start_cursor)
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "Invalid arguments.", K(ret));
   } else if (OB_FAIL(file_handler_.open(start_cursor.file_id_))) {
-    STORAGE_REDO_LOG(WARN, "Fail to open file", K(ret), K(cursor_.file_id_));
   } else {
     write_offset_ = start_cursor.offset_;
     cursor_ = start_cursor;
@@ -179,7 +172,6 @@ int ObStorageLogWriter::delete_log_file(int64_t file_id)
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "Invalid argument", K(ret), K(file_id));
   } else if (OB_FAIL(file_handler_.delete_file(file_id))) {
-    STORAGE_REDO_LOG(WARN, "Fail to delete log file", K(ret), K(file_id));
   }
 
   return ret;
@@ -192,7 +184,6 @@ int ObStorageLogWriter::get_using_disk_space(int64_t &using_space) const
     ret = OB_NOT_INIT;
     STORAGE_REDO_LOG(WARN, "Slog writer has not been inited", K(ret), K_(is_inited));
   } else if (OB_FAIL(file_handler_.get_total_used_size(using_space))) {
-    STORAGE_REDO_LOG(WARN, "Fail to get the used size", K(ret), K(using_space));
   }
   return ret;
 }
@@ -213,7 +204,6 @@ int ObStorageLogWriter::fill_nop_log(
       padding_buffer_size = write_align_size_;
     }
     if (OB_FAIL(nop_log_.set_needed_size(padding_buffer_size))) {
-      STORAGE_REDO_LOG(ERROR, "Fail to set nop_log's size", K(ret), K(padding_buffer_size));
     } else {
       nop_data_param_.reset();
       nop_data_param_.data_ = &nop_log_;
@@ -224,12 +214,9 @@ int ObStorageLogWriter::fill_nop_log(
       int64_t header_pos = log_item->get_data_len();
 
       if (OB_FAIL(log_item->set_data_len(header_pos + batch_header.get_serialize_size()))) {
-        STORAGE_REDO_LOG(WARN, "Fail to set log item's data length", K(ret));
       } else if (OB_FAIL(log_item->fill_log(ObLogConstants::NOP_SWITCH_LOG_SEQ, nop_data_param_, 0))) {
-        STORAGE_REDO_LOG(WARN, "Fail to fill log", K(ret));
       } else if (OB_FAIL(log_item->fill_batch_header(
           padding_buffer_size + entry.get_serialize_size(), 1, header_pos))) {
-        STORAGE_REDO_LOG(WARN, "Fail to fill batch header", K(ret), K(padding_buffer_size));
       }
     }
   }
@@ -248,7 +235,6 @@ void ObStorageLogWriter::process_log_items(ObIBaseLogItem **items,
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "Invalid arguments", K(ret), KP(items), K(item_cnt));
   } else if (OB_FAIL(batch_process_log_items(items, item_cnt, finish_cnt))) {
-    STORAGE_REDO_LOG(WARN, "Fail to batch process log items", K(ret), KP(items), K(item_cnt));
   }
 }
 
@@ -257,7 +243,6 @@ int ObStorageLogWriter::batch_process_log_items(ObIBaseLogItem **items,
 {
   int ret = OB_SUCCESS;
 
-  STORAGE_REDO_LOG(DEBUG, "batch process start", K(item_cnt), K(cursor_));
 
   finish_cnt = 0;
   int64_t batch_begin_index = 0;
@@ -279,7 +264,6 @@ int ObStorageLogWriter::batch_process_log_items(ObIBaseLogItem **items,
           // skip the reserved data and nop log, write at next 4K offset
           occupied_len = write_offset_ + batch_write_buf_.get_write_len();
           write_offset_ = occupied_len;
-          STORAGE_REDO_LOG(INFO, "Modify write_offset due to single large item", K_(write_offset));
         }
         file_end = is_log_file_reach_end(*log_item, occupied_len);
         if (!file_end) {
@@ -312,7 +296,6 @@ int ObStorageLogWriter::batch_process_log_items(ObIBaseLogItem **items,
         // end index is -1
         if (file_end) {
           if (OB_FAIL(advance_file_id())) {
-            STORAGE_REDO_LOG(ERROR, "Fail to switch file", K(ret), K(file_end));
           }
         } else {
           ret = OB_ERR_UNEXPECTED;
@@ -321,13 +304,9 @@ int ObStorageLogWriter::batch_process_log_items(ObIBaseLogItem **items,
         }
       } else if (OB_FAIL(batch_write_logs(items,
           batch_begin_index, batch_end_index, finish_cnt))) {
-        STORAGE_REDO_LOG(WARN, "Fail to write batch logs", K(ret), K(file_end),
-            K(batch_end_index), K(batch_begin_index));
       } else if (file_end && OB_FAIL(advance_file_id())) {
         STORAGE_REDO_LOG(ERROR, "Fail to switch file", K(ret), K(file_end));
       } else if (OB_FAIL(notify_flush(items, batch_begin_index, batch_end_index))) {
-        STORAGE_REDO_LOG(ERROR, "Fail to notify flush", K(ret),
-            K(batch_begin_index), K(batch_end_index));
       } else {
         batch_begin_index = batch_end_index + 1;
         batch_end_index = -1;
@@ -357,9 +336,7 @@ int ObStorageLogWriter::batch_write_logs(
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "Invalid arguments", K(ret), K(begin), KP(end), KP(items));
   } else if (OB_FAIL(aggregate_logs(items, begin, end, write_buf, write_len))) {
-    STORAGE_REDO_LOG(WARN, "Fail to aggregate logs", K(ret), K(begin), KP(end), KP(items));
   } else if (OB_FAIL(write_logs(items, begin, end, write_buf, write_len))) {
-    STORAGE_REDO_LOG(WARN, "Fail to write logs", K(ret), K(begin), KP(end), KP(items));
   } else {
     finish_cnt += (end - begin + 1);
   }
@@ -389,7 +366,6 @@ int ObStorageLogWriter::aggregate_logs(
       STORAGE_REDO_LOG(WARN, "Fail to aggregate multi log items", K(ret), KP(log_item));
     }
   } else if (OB_FAIL(aggregate_multi_log_items(items, begin, end, write_buf, write_len))) {
-    STORAGE_REDO_LOG(WARN, "Fail to aggregate multi log items", K(ret), K(begin), K(end));
   }
 
   return ret;
@@ -405,9 +381,7 @@ int ObStorageLogWriter::aggregate_single_large_log_item(
   int64_t begin_offset = write_offset_;
   int64_t occupied_len = write_offset_ + log_item->get_data_len();
   if (OB_FAIL(fill_nop_log(log_item, occupied_len))) {
-    STORAGE_REDO_LOG(WARN, "Fail to fill nop log", K(ret), KP(log_item), K(occupied_len));
   } else if (OB_FAIL(update_log_item_cursor(log_item, begin_offset))) {
-    STORAGE_REDO_LOG(WARN, "Fail to update log item cursor", K(ret), KP(log_item), K(begin_offset));
   }
 
   if (OB_FAIL(ret)) {
@@ -444,16 +418,12 @@ int ObStorageLogWriter::aggregate_multi_log_items(
     if (i == end) {
       int64_t occupied_len = begin_offset + log_item->get_data_len();
       if (OB_FAIL(fill_nop_log(log_item, occupied_len))) {
-        STORAGE_REDO_LOG(WARN, "Fail to fill nop log", K(ret), KP(log_item), K(occupied_len));
       }
     }
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(update_log_item_cursor(log_item, begin_offset))) {
-      STORAGE_REDO_LOG(WARN, "Fail to update log item's cursor",
-          K(ret), KP(log_item), K(begin_offset));
     } else if (OB_FAIL(batch_write_buf_.copy_log_item(log_item))) {
-      STORAGE_REDO_LOG(WARN, "Fail to copy log item to buffer", K(ret), KP(log_item));
     } else {
       begin_offset += log_item->get_data_len();
     }
@@ -493,14 +463,11 @@ int ObStorageLogWriter::write_logs(
     STORAGE_REDO_LOG(WARN, "Invalid arguments", K(ret), KP(items),
         K(begin), K(end), KP(write_buf), K(write_len));
   } else if (OB_FAIL(file_handler_.write(write_buf, write_len, write_offset_))) {
-    STORAGE_REDO_LOG(WARN, "Fail to write logs to disk",
-        K(ret), KP(write_buf), K(write_len), K_(write_offset));
   }
 
   if (OB_SUCC(ret)) {
     const int64_t duration = ObTimeUtility::fast_current_time() - start_ts;
     if (duration > TIME_THRESHOLD) {
-      STORAGE_REDO_LOG(INFO, "Slow write", K(duration), K(write_len));
     }
   }
 
@@ -512,8 +479,6 @@ int ObStorageLogWriter::write_logs(
       batch_write_buf_.reuse();
       write_offset_ += write_len;
     } else if (OB_FAIL(batch_write_buf_.move_buffer(backward_size))) {
-      STORAGE_REDO_LOG(WARN, "Fail to move buffer", K(ret), K(is_single_local_item),
-          K(backward_size));
     } else {
       write_offset_ += backward_size;
     }
@@ -536,11 +501,8 @@ int ObStorageLogWriter::notify_flush(
       ObStorageLogItem *log_item = static_cast<ObStorageLogItem *>(items[i]);
       if (OB_UNLIKELY(flush_seq_ != log_item->get_seq())) {
         ret = OB_ERR_UNEXPECTED;
-        STORAGE_REDO_LOG(ERROR, "The flush_seq_ doesn't match", K(flush_seq_),
-            K(log_item->start_cursor_), K(log_item->end_cursor_));
       } else {
         flush_seq_ += log_item->get_log_cnt();
-        STORAGE_REDO_LOG(INFO, "Successfully flush", "log_item", *log_item);
       }
       log_item->finish_flush(OB_SUCCESS);
     }
@@ -556,13 +518,11 @@ int ObStorageLogWriter::advance_file_id()
   if (file_handler_.is_opened() && OB_FAIL(file_handler_.close())) {
     STORAGE_REDO_LOG(WARN, "Fail to close file", K(ret), K(cursor_.file_id_));
   } else if (OB_FAIL(file_handler_.open(cursor_.file_id_ + 1))) {
-    STORAGE_REDO_LOG(WARN, "Fail to open file", K(ret), K(cursor_.file_id_));
   } else {
     cursor_.file_id_++;
     write_offset_ = 0;
     cursor_.offset_ = write_offset_;
     batch_write_buf_.reuse();
-    STORAGE_REDO_LOG(INFO, "Successfully open slog file", K(cursor_.file_id_));
   }
 
   return ret;
@@ -646,7 +606,6 @@ int ObStorageLogWriter::ObSLogWriteRunner::init(ObStorageLogWriter *log_writer)
   } else {
     log_writer_ = log_writer;
     if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::StorageLogWriter, tg_id_))) {
-      STORAGE_REDO_LOG(WARN, "Fail to create thread for log writer.", K(ret), K(tg_id_));
     } else {
       is_inited_ = true;
     }
@@ -661,7 +620,6 @@ int ObStorageLogWriter::ObSLogWriteRunner::start()
     ret = OB_NOT_INIT;
     STORAGE_REDO_LOG(WARN, "ObSLogWriteRunner hasn't been inited.", K(ret), K(is_inited_));
   } else if (OB_FAIL(TG_SET_RUNNABLE_AND_START(tg_id_, *this))) {
-    STORAGE_REDO_LOG(WARN, "Fail to start log writer thread.", K(ret), K(tg_id_));
   }
   return ret;
 }
@@ -686,7 +644,6 @@ void ObStorageLogWriter::ObSLogWriteRunner::wait()
 
 void ObStorageLogWriter::ObSLogWriteRunner::run1()
 {
-  STORAGE_REDO_LOG(INFO, "ObSLogWriteRunner run", K(tg_id_), K(is_inited_));
   lib::set_thread_name(log_writer_->get_thread_name());
   log_writer_->flush_log();
 }

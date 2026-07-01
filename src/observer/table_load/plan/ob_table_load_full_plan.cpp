@@ -63,7 +63,6 @@ int ObTableLoadFullPlan::generate()
       ObTableLoadFullDataTableOverwriteOp *data_table_overwrite_op = nullptr;
       if (OB_FAIL(ObTableLoadFullDataTableOverwriteOp::build(
             this, store_ctx_->data_store_table_ctx_, get_write_type(), data_table_overwrite_op))) {
-        LOG_WARN("fail to build full data table op", KR(ret));
       } else {
         data_table_op = data_table_overwrite_op;
       }
@@ -73,14 +72,12 @@ int ObTableLoadFullPlan::generate()
       ObTableLoadFullDataTableNormalOp *data_table_normal_op = nullptr;
       if (OB_FAIL(ObTableLoadFullDataTableNormalOp::build(
             this, store_ctx_->data_store_table_ctx_, get_write_type(), data_table_normal_op))) {
-        LOG_WARN("fail to build full data table op", KR(ret));
       } else {
         data_table_op = data_table_normal_op;
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(finish_generate(data_table_op))) {
-        LOG_WARN("fail to finish generate", KR(ret), KPC(data_table_op));
       }
     }
   }

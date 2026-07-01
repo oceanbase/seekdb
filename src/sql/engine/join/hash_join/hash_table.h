@@ -373,7 +373,6 @@ struct GenericProber final : public ProberBase<Bucket> {
                   r_len,
                   r_is_null,
                   cmp_ret))) {
-            LOG_WARN("failed to compare with cmp func", K(ret));
           }
           ctx.cmp_ret_map_[row_idx] |= (cmp_ret != 0);
         }
@@ -386,7 +385,6 @@ struct GenericProber final : public ProberBase<Bucket> {
                   build_col_idx,
                   ctx.build_row_meta_,
                   ctx.cmp_ret_for_one_col_))) {
-            LOG_WARN("failed to compare with ns equal cond", K(ret));
           }
         } else if (is_opt &&
                   (!ctx.build_cols_have_null_->at(i) && !ctx.probe_cols_have_null_->at(i))) {
@@ -397,7 +395,6 @@ struct GenericProber final : public ProberBase<Bucket> {
                   build_col_idx,
                   ctx.build_row_meta_,
                   ctx.cmp_ret_for_one_col_))) {
-            LOG_WARN("failed to compare with no null", K(ret));
           }
         } else {
           if (OB_FAIL(vec->null_first_cmp_batch_rows(*probe_key,
@@ -407,7 +404,6 @@ struct GenericProber final : public ProberBase<Bucket> {
                   build_col_idx,
                   ctx.build_row_meta_,
                   ctx.cmp_ret_for_one_col_))) {
-            LOG_WARN("failed to compare with have null", K(ret));
           }
           // have null and not ns equal, need to check null is not match null
           if (ctx.build_cols_have_null_->at(i)) {

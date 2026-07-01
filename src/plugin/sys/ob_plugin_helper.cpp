@@ -38,7 +38,6 @@ int ObPluginHelper::find_ftparser_entry(const ObString &parser_name, ObPluginEnt
   int ret = OB_SUCCESS;
   entry_handle = nullptr;
   if (OB_FAIL(GCTX.plugin_mgr_->find_plugin(OBP_PLUGIN_TYPE_FT_PARSER, parser_name, entry_handle))) {
-    LOG_DEBUG("failed to find parser", K(parser_name), K(ret));
   } else if (OB_ISNULL(entry_handle)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("find plugin success but got null", K(parser_name), K(ret));
@@ -126,7 +125,6 @@ int ObPluginHelper::register_plugin_entry(ObPluginParamPtr param,
     plugin_entry.plugin_handle     = param_ptr->plugin_handle_;
 
     if (OB_FAIL(param_ptr->plugin_mgr_->register_plugin(plugin_entry))) {
-      LOG_WARN("failed to register plugin", KPC(param_ptr->plugin_handle_), K(ret), K(plugin_entry));
     } else {
       LOG_INFO("register plugin susccess", K(plugin_entry));
     }

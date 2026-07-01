@@ -40,7 +40,6 @@ int ObMViewSchedJobUtils::generate_job_id(
   {
     ObCommonID raw_id;
     if (OB_FAIL(ObCommonIDUtils::gen_unique_id_by_rpc( raw_id))) {
-      LOG_WARN("failed to gen unique id by rpc", KR(ret));
     } else {
       job_id = raw_id.id() + ObDBMSSchedTableOperator::JOB_ID_OFFSET;
     }
@@ -68,7 +67,6 @@ int ObMViewSchedJobUtils::generate_job_name(
                                      name_prefix.length(),
                                      name_prefix.ptr(),
                                      job_id))) {
-    LOG_WARN("failed to generate name buf", KR(ret));
   } else {
     job_name.assign_ptr(name_buf, static_cast<ObString::obstr_size_t>(pos));
   }
@@ -100,7 +98,6 @@ int ObMViewSchedJobUtils::generate_job_action(
                               db_name.ptr(),
                               table_name.length(),
                               table_name.ptr()))) {
-    LOG_WARN("failed to generate job action str", KR(ret));
   } else {
     job_action.assign_ptr(job_action_buf, static_cast<ObString::obstr_size_t>(pos));
   }
@@ -143,7 +140,6 @@ int ObMViewSchedJobUtils::add_scheduler_job(
 
       if (OB_FAIL(ObDBMSSchedJobUtils::create_dbms_sched_job(
           sql_client, job_id, job_info))) {
-        LOG_WARN("failed to create dbms scheduler job", KR(ret));
       }
     }
   }
@@ -189,10 +185,8 @@ int ObMViewSchedJobUtils::create_mview_scheduler_job(
   // job_name is generated as "job_prefix+job_id"
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ObMViewSchedJobUtils::generate_job_id(job_id))) {
-    LOG_WARN("failed to generate mview job id", KR(ret));
   } else if (OB_FAIL(ObMViewSchedJobUtils::generate_job_name(allocator, job_id, job_prefix,
                                                              refresh_job))) {
-    LOG_WARN("failed to generate mview job name", KR(ret), K(job_id), K(job_prefix));
   } else {
     ObSqlString job_action;
     if (OB_FAIL(job_action.assign_fmt("DBMS_MVIEW.refresh('%.*s.%.*s',"
@@ -200,7 +194,6 @@ int ObMViewSchedJobUtils::create_mview_scheduler_job(
                                       static_cast<int>(db_name.length()), db_name.ptr(),
                                       static_cast<int>(table_name.length()), table_name.ptr(),
                                       static_cast<int>(nested.length()), nested.ptr()))) {
-      LOG_WARN("fail to assign job action", KR(ret), K(db_name), K(table_name));
     } else if (nested_refresh_mode == ObMVNestedRefreshMode::INDIVIDUAL &&
                OB_FAIL(job_action.append_fmt(")"))) {
       LOG_WARN("fail to append job action", KR(ret), K(db_name), K(table_name));
@@ -211,8 +204,6 @@ int ObMViewSchedJobUtils::create_mview_scheduler_job(
     } else if (OB_FAIL(ObMViewSchedJobUtils::add_scheduler_job(
                    sql_client, job_id, refresh_job, job_action.string(), start_date,
                    repeat_interval, exec_env))) {
-      LOG_WARN("failed to add mview scheduler job", KR(ret), K(refresh_job), K(job_action),
-               "start with", start_date, "next", repeat_interval);
     } else {
       job_name = refresh_job;
       LOG_INFO("succeed to add refresh mview scheduler job", K(refresh_job), K(job_action),
@@ -241,15 +232,10 @@ int ObMViewSchedJobUtils::create_mlog_scheduler_job(
   ObString job_action;
   ObString purge_job;
   if (OB_FAIL(generate_job_id(job_id))) {
-    LOG_WARN("failed to generate mview job id", KR(ret));
   } else if (OB_FAIL(generate_job_name(allocator, job_id, job_prefix, purge_job))) {
-    LOG_WARN("failed to generate mview job name", KR(ret), K(job_prefix));
   } else if (OB_FAIL(generate_job_action(allocator, mlog_purge_func, db_name, table_name, job_action))) {
-    LOG_WARN("failed to generate mview job action", KR(ret));
   } else if (OB_FAIL(add_scheduler_job(trans, job_id, purge_job, job_action, start_date,
                                        repeat_interval, exec_env))) {
-    LOG_WARN("failed to add mview scheduler job", KR(ret), K(purge_job), K(job_action),
-             K(start_date), K(repeat_interval));
   } else {
     job_name = purge_job;
   }
@@ -276,7 +262,6 @@ int ObMViewSchedJobUtils::add_mview_info_and_refresh_job(ObISQLClient &sql_clien
     LOG_WARN("refresh_info is null", KR(ret));
   } else if (ObMVRefreshMode::MAJOR_COMPACTION == refresh_info->refresh_mode_) {
     if (OB_FAIL(acquire_major_refresh_mv_merge_scn_(sql_client))) {
-      LOG_WARN("failed to acquire major refresh mv merge scn", KR(ret));
     }
   }
 
@@ -292,7 +277,6 @@ int ObMViewSchedJobUtils::add_mview_info_and_refresh_job(ObISQLClient &sql_clien
   if (OB_SUCC(ret)) {
     if (OB_FAIL(OB_TS_MGR.get_ts_sync(GCONF.rpc_timeout,
                                       curr_ts))) {
-      LOG_WARN("fail to get gts sync", K(ret));
     } else if (OB_UNLIKELY(!curr_ts.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected curr_scn", KR(ret), K(curr_ts));
@@ -323,7 +307,6 @@ int ObMViewSchedJobUtils::add_mview_info_and_refresh_job(ObISQLClient &sql_clien
         OB_FAIL(mview_info.set_refresh_next(refresh_info->next_time_expr_))) {
       LOG_WARN("fail to set refresh next", KR(ret));
     } else if (OB_FAIL(ObMViewInfo::insert_mview_info(sql_client, mview_info))) {
-      LOG_WARN("fail to insert mview info", KR(ret), K(mview_info));
     }
   }
   LOG_INFO("succeed to add mview info and refresh job", K(mview_info));
@@ -399,7 +382,6 @@ int ObMViewSchedJobUtils::calc_date_expr_from_str(
                                                                 session.get_charsets4parser(),
                                                                 allocator,
                                                                 expr_node))) {
-      LOG_WARN("failed to parse default expr from str", KR(ret), K(interval_str));
     } else if (OB_ISNULL(expr_node)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("expr node is null", KR(ret));
@@ -408,7 +390,6 @@ int ObMViewSchedJobUtils::calc_date_expr_from_str(
                                                       *expr_node,
                                                       allocator,
                                                       timestamp))) {
-      LOG_WARN("failed to resolve data expr to timestamp", KR(ret));
     } else {
       LOG_INFO("mview_sched_job_utils calc_date_expr_from_str end",
           KR(ret), K(interval_str), K(timestamp));
@@ -442,17 +423,12 @@ int ObMViewSchedJobUtils::calc_date_expression(
           ret = OB_INVALID_ERROR;
           LOG_WARN("null ptr", K(ret), K(GCTX.sql_proxy_), K(GCTX.schema_service_));
         } else if (OB_FAIL(executor.init(GCTX.sql_proxy_,GCTX.schema_service_))) {
-          LOG_WARN("fail to init dbms sched job executor", K(ret));
         } else if (OB_FAIL(session.init(1, &tmp_allocator))) {
-          LOG_WARN("failed to init session", KR(ret));
         } else if (OB_FAIL(executor.init_env(job_info, session))) {
-          LOG_WARN("failed to init env", KR(ret), K(job_info));
         } else {
           int64_t current_time = ObTimeUtility::current_time() / 1000000L * 1000000L; // ignore micro seconds
           int64_t next_time = 0;
           if (OB_FAIL(calc_date_expr_from_str(session, tmp_allocator, job_info.get_interval(), next_time))) {
-            LOG_WARN("failed to calc date expression from str", KR(ret),
-                K(1UL), K(job_info.get_interval()));
           } else if (next_time <= current_time) {
             ret = OB_ERR_TIME_EARLIER_THAN_SYSDATE;
             LOG_WARN("the parameter next date must evaluate to a time in the future",
@@ -483,10 +459,8 @@ int ObMViewSchedJobUtils::resolve_date_expr_to_timestamp(
   timestamp = 0;
   if (OB_FAIL(ObResolverUtils::resolve_const_expr(
       params, node, const_expr, nullptr))) {
-    LOG_WARN("fail to resolve const expr", KR(ret));
   } else if (OB_FAIL(ObSQLUtils::calc_const_expr(
       &session, *const_expr, obj, allocator, params_array))) {
-    LOG_WARN("fail to calc const expr", KR(ret));
   } else {
     if (obj.is_timestamp()) {
       timestamp = obj.get_timestamp();
@@ -494,8 +468,6 @@ int ObMViewSchedJobUtils::resolve_date_expr_to_timestamp(
       int64_t tmp_timestamp = 0;
       if (OB_FAIL(ObTimeConverter::datetime_to_timestamp(
           obj.get_datetime(), TZ_INFO(&session), tmp_timestamp))) {
-        LOG_WARN("failed to convert datetime to timestamp",
-            KR(ret), K(obj.get_datetime()));
       } else {
         timestamp = tmp_timestamp;
       }
@@ -503,8 +475,6 @@ int ObMViewSchedJobUtils::resolve_date_expr_to_timestamp(
       int64_t tmp_timestamp = 0;
       if (OB_FAIL(ObTimeConverter::mdatetime_to_timestamp(
           obj.get_mysql_datetime(), TZ_INFO(&session), tmp_timestamp))) {
-        LOG_WARN("failed to convert datetime to timestamp",
-            KR(ret), K(obj.get_mysql_datetime()));
       } else {
         timestamp = tmp_timestamp;
       }
@@ -529,7 +499,6 @@ int ObMViewSchedJobUtils::acquire_major_refresh_mv_merge_scn_(common::ObISQLClie
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", KR(ret));
   } else if (OB_FAIL(tmp_trans.start(sql_proxy))) {
-    LOG_WARN("fail to start trans", KR(ret));
   } else {
     share::ObGlobalStatProxy tmp_proxy(tmp_trans);
     if (OB_FAIL(tmp_proxy.get_major_refresh_mv_merge_scn(true /*select for update*/,
@@ -540,8 +509,6 @@ int ObMViewSchedJobUtils::acquire_major_refresh_mv_merge_scn_(common::ObISQLClie
         major_refresh_mv_merge_scn.set_min();
         if (OB_FAIL(tmp_proxy.update_major_refresh_mv_merge_scn(major_refresh_mv_merge_scn,
                                                                 false /*is incremental*/))) {
-          LOG_WARN("fail to update major_refresh_mv_merge_scn", KR(ret),
-                   K(major_refresh_mv_merge_scn));
         } else {
           LOG_INFO("[MAJ_REF_MV] init major_refresh_mv_merge_scn",
                    K(major_refresh_mv_merge_scn));
@@ -564,7 +531,6 @@ int ObMViewSchedJobUtils::acquire_major_refresh_mv_merge_scn_(common::ObISQLClie
     share::ObGlobalStatProxy stat_proxy(trans);
     if (OB_FAIL(stat_proxy.get_major_refresh_mv_merge_scn(true /*select for update*/,
                                                           major_refresh_mv_merge_scn))) {
-      LOG_WARN("fail to get major_refresh_mv_merge_scn", KR(ret));
     }
   }
 
@@ -590,10 +556,7 @@ int ObMViewSchedJobUtils::replace_mview_refresh_job(common::ObISQLClient &sql_cl
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("sql proxy is null", KR(ret));
     } else if (OB_FAIL(ObDBMSSchedJobUtils::remove_dbms_sched_job(sql_client, job_name, true /*if_exists*/))) {
-      LOG_WARN("failed to remove dbms sched job", KR(ret), K(1UL),
-             K(mview_info.get_refresh_job()));
     } else if (OB_FAIL(ObDBMSSchedJobUtils::get_dbms_sched_job_info(*GCTX.sql_proxy_, false, job_name, allocator, job_info))) {
-      LOG_WARN("fail to get job info", K(tmp_ret));
     } else if (OB_TMP_FAIL(ObDBMSSchedJobUtils::stop_dbms_sched_job(
                            *GCTX.sql_proxy_, job_info, false))) {
       if (tmp_ret == OB_ENTRY_NOT_EXIST) {
@@ -614,7 +577,6 @@ int ObMViewSchedJobUtils::replace_mview_refresh_job(common::ObISQLClient &sql_cl
             sql_client, mview_info.get_mview_id(), db_name, table_name, start_date,
             mview_info.get_refresh_next(), exec_env, mview_info.get_nested_refresh_mode(), 
             allocator, refresh_job))) {
-      LOG_WARN("failed to create scheduler job", KR(ret));
     } else {
       mview_info.set_refresh_job(refresh_job);
     }
@@ -645,7 +607,6 @@ int ObMViewSchedJobUtils::replace_mlog_purge_job(common::ObISQLClient &sql_clien
     if (OB_FAIL(create_mlog_scheduler_job(sql_client, mlog_info.get_mlog_id(), db_name,
                                           table_name, start_date, mlog_info.get_purge_next(),
                                           exec_env, allocator, purge_job))) {
-      LOG_WARN("failed to create scheduler job", KR(ret));
     } else {
       mlog_info.set_purge_job(purge_job);
     }
@@ -664,17 +625,14 @@ int ObMViewSchedJobUtils::disable_and_stop_job(const uint64_t mview_id)
     LOG_WARN("sql proxy is null", KR(ret));
   } else if (OB_FAIL(ObMViewInfo::fetch_mview_info(*GCTX.sql_proxy_,
                      mview_id, mview_info))) {
-    LOG_WARN("fail to fetch mview info", K(ret), K(mview_id));
   } else if (!mview_info.get_refresh_job().empty()) {
     ObDBMSSchedJobInfo job_info;
     ObString job_name = mview_info.get_refresh_job();
     ObObj obj;
     obj.set_bool(false);
     if (OB_FAIL(ObDBMSSchedJobUtils::get_dbms_sched_job_info(*GCTX.sql_proxy_, false, job_name, allocator, job_info))) {
-      LOG_WARN("fail to get job info", K(ret));
     } else if (OB_FAIL(ObDBMSSchedJobUtils::update_dbms_sched_job_info(
                        *GCTX.sql_proxy_, job_info,  ObString("enabled"), obj))) {
-      LOG_WARN("fail to disable job", K(ret), K(job_info));
     } else if (OB_FAIL(ObDBMSSchedJobUtils::stop_dbms_sched_job(
                        *GCTX.sql_proxy_, job_info, false))) {
       if (ret == OB_ENTRY_NOT_EXIST) {

@@ -145,7 +145,6 @@ int ObDirectLoadDatumArray::deep_copy(const ObDirectLoadDatumArray &src, char *b
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < datum_cnt; i++) {
       if (OB_FAIL(datums[i].deep_copy(src.datums_[i], buf, len, pos))) {
-        LOG_WARN("fail to deep copy storage datum", K(ret), K(i));
       }
     }
     if (OB_SUCC(ret)) {
@@ -163,7 +162,6 @@ OB_DEF_SERIALIZE_SIMPLE(ObDirectLoadDatumArray)
   OB_UNIS_ENCODE(count_);
   for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
     if (OB_FAIL(ObDirectLoadDatumSerialization::serialize(buf, buf_len, pos, datums_[i]))) {
-      LOG_WARN("fail to serialize datum", KR(ret));
     }
   }
   return ret;
@@ -187,7 +185,6 @@ OB_DEF_DESERIALIZE_SIMPLE(ObDirectLoadDatumArray)
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
     if (OB_FAIL(ObDirectLoadDatumSerialization::deserialize(buf, data_len, pos, datums_[i]))) {
-      LOG_WARN("fail to deserialize datum", KR(ret));
     }
   }
   return ret;
@@ -292,7 +289,6 @@ int ObDirectLoadConstDatumArray::deep_copy(const ObDirectLoadConstDatumArray &sr
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < datum_cnt; i++) {
       if (OB_FAIL(datums[i].deep_copy(src.datums_[i], buf, len, pos))) {
-        LOG_WARN("fail to deep copy storage datum", K(ret), K(i));
       }
     }
     if (OB_SUCC(ret)) {

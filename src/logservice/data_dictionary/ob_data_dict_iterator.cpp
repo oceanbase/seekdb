@@ -272,7 +272,6 @@ int ObDataDictIterator::memcpy_palf_buf_to_dict_buf_(const int64_t copy_size)
     DDLOG(WARN, "invalid copy_size, which may cause palf_buf/dict_buf overflow", KR(ret),
         K_(palf_pos), K_(palf_buf_len), K_(dict_pos), K_(dict_buf_len), K(copy_size));
   } else {
-    DDLOG(DEBUG, "memcpy_palf_buf_to_dict_buf_", K(copy_size), K_(palf_pos), K_(palf_buf_len), K_(dict_pos));
     MEMCPY(dict_buf_ + dict_pos_, palf_buf_ + palf_pos_, copy_size);
     palf_pos_ += copy_size;
     dict_pos_ += copy_size;

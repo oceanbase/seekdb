@@ -174,7 +174,6 @@ public:
   {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(dest.assign(ptr_, count_, allocator_))) {
-      OB_LOG(WARN, "fail to assign", KR(ret));
     } else {
       is_ref_ = true;
     }
@@ -276,7 +275,6 @@ int ObTableLoadArray<T>::deserialize(DESERIAL_PARAMS)
       OB_LOG(WARN, "allocator is null", KR(ret));
     } else if (count_ > 0) {
       if (OB_FAIL(create(count_, *allocator_))) {
-        OB_LOG(WARN, "fail to create", KR(ret));
       }
     }
   }

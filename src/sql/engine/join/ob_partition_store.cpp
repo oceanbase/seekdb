@@ -42,7 +42,6 @@ int ObPartitionStore::init(const ObExprPtrIArray &exprs, const int64_t max_batch
                               true,
                               extra_size_,
                               compressor_type))) {
-    LOG_WARN("failed to init chunk row store", K(ret));
   }
   return ret;
 }
@@ -80,7 +79,6 @@ int ObPartitionStore::dump(bool all_dump, int64_t dumped_size)
   if (0 >= row_store_.get_mem_used()) {
     // do nothing
   } else if (OB_FAIL(row_store_.dump(all_dump, dumped_size))) {
-    LOG_WARN("failed to dump data to chunk row store", K(ret));
   }
   return ret;
 }
@@ -89,7 +87,6 @@ int ObPartitionStore::finish_dump(bool memory_need_dump)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(row_store_.finish_add_row(memory_need_dump))) {
-    LOG_WARN("failed to finish chunk row store", K(ret));
   } else if (memory_need_dump && 0 != row_store_.get_mem_used()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expect memroy is 0", K(ret), K(row_store_.get_mem_used()));
@@ -101,7 +98,6 @@ int ObPartitionStore::finish_add_row(bool need_dump)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(row_store_.finish_add_row(need_dump))) {
-    LOG_WARN("failed to finish chunk row store", K(ret));
   } else if (need_dump && 0 != row_store_.get_mem_used()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expect memroy is 0", K(ret), K(row_store_.get_mem_used()));
@@ -168,7 +164,6 @@ int ObPartitionStore::begin_iterator()
   int ret = OB_SUCCESS;
   store_iter_.reset();
   if (OB_FAIL(row_store_.begin(store_iter_))) {
-    LOG_WARN("failed to set row store iterator", K(ret));
   }
   n_get_rows_ = 0;
   return ret;

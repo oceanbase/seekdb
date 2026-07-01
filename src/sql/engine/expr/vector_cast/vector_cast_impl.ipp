@@ -103,7 +103,6 @@ struct EvalArgCasterImpl<in_tc, out_tc, EXPLICIT_CAST_FLAG>
     int ret =
       EvalArgCasterImpl<in_tc, out_tc, IMPLICIT_CAST_FLAG>::eval_vector(expr, ctx, skip, bound);
     if (OB_FAIL(ret)) {
-      LOG_WARN("implicit eval arg for casting failed", K(ret));
     } else {
       VectorFormat out_fmt = expr.get_format(ctx);
       int warning = OB_SUCCESS;
@@ -145,7 +144,6 @@ struct EvalArgCasterImpl<in_tc, out_tc, EXPLICIT_CAST_FLAG>
       }
       }
       if (OB_FAIL(ret)) {
-        LOG_WARN("accuracy check failed", K(in_tc), K(out_tc), K(out_fmt), K(warning), K(ret));
       }
     }
     return ret;

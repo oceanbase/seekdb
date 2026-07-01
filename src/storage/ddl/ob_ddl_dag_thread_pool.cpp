@@ -36,7 +36,6 @@ int ObDDLDagThreadPool::init(const int64_t thread_count, ObDDLIndependentDag *dd
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invlaid argument", K(ret), K(thread_count), KP(ddl_dag), KP(session_info));
   } else if (OB_FAIL(set_thread_count(thread_count))) {
-    LOG_WARN("set thread count failed", K(ret));
   } else {
     set_run_wrapper(MTL_CTX());
     ddl_dag_ = ddl_dag;

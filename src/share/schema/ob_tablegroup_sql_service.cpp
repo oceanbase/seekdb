@@ -42,7 +42,6 @@ int ObTablegroupSqlService::insert_tablegroup(const ObTablegroupSchema &tablegro
     // add tablegroup/tablegroup_history
     const bool only_history = false;
     if (OB_FAIL(add_tablegroup(sql_client, tablegroup_schema, only_history))) {
-      LOG_WARN("fail to add tablegroup", K(ret));
     }
 
     // log operations
@@ -56,7 +55,6 @@ int ObTablegroupSqlService::insert_tablegroup(const ObTablegroupSchema &tablegro
       create_tg_op.schema_version_ = tablegroup_schema.get_schema_version();
       create_tg_op.ddl_stmt_str_ = ddl_stmt_str ? *ddl_stmt_str : ObString();
       if (OB_FAIL(log_operation(create_tg_op, sql_client))) {
-        LOG_WARN("log create tablegroup ddl operation failed, ", K(ret));
       }
     }
 
@@ -85,7 +83,6 @@ int ObTablegroupSqlService::update_tablegroup(ObTablegroupSchema &new_schema,
   ObDMLExecHelper exec(sql_client);                               
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(exec.exec_update(OB_ALL_TABLEGROUP_TNAME, dml, affected_rows))) {
-    LOG_WARN("fail to exec update", K(ret));
   } else if (affected_rows > 1) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error", K(affected_rows), K(ret));
@@ -93,7 +90,6 @@ int ObTablegroupSqlService::update_tablegroup(ObTablegroupSchema &new_schema,
   // add tablegroup_history
   const bool only_history = true;
   if (FAILEDx(add_tablegroup(sql_client, new_schema, only_history))) {
-    LOG_WARN("fail to add tablegroup history", K(ret));
   }
 
   // insert log
@@ -108,7 +104,6 @@ int ObTablegroupSqlService::update_tablegroup(ObTablegroupSchema &new_schema,
     create_tg_op.schema_version_ = new_schema.get_schema_version();
     create_tg_op.ddl_stmt_str_ = ddl_stmt_str ? *ddl_stmt_str : ObString();  //TODO: rongxuan
     if (OB_FAIL(log_operation(create_tg_op, sql_client))) {
-      LOG_WARN("log create tablegroup ddl operation failed, ", K(ret));
     }
   }
   return ret;
@@ -133,14 +128,11 @@ int ObTablegroupSqlService::delete_tablegroup(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tablegroup_id is invalid", K(ret), K(tablegroup_id));
   } else if (OB_FAIL(new_tablegroup_schema.assign(tablegroup_schema))) {
-    LOG_WARN("fail to assign schema", K(ret));
   } else if (FALSE_IT(new_tablegroup_schema.set_schema_version(new_schema_version))) {
   } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE tablegroup_id = %lu",
                                      OB_ALL_TABLEGROUP_TNAME,
                                      ObSchemaUtils::get_extract_schema_id(tablegroup_id)))) {
-    LOG_WARN("assign_fmt failed", K(ret));
   } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-    LOG_WARN("execute sql failed", K(sql), K(ret));
   } else if (!is_single_row(affected_rows)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("affected_rows is expected to one", K(affected_rows), K(ret));
@@ -154,9 +146,7 @@ int ObTablegroupSqlService::delete_tablegroup(
                       OB_ALL_TABLEGROUP_HISTORY_TNAME,
                       ObSchemaUtils::get_extract_schema_id(tablegroup_id),
                       new_tablegroup_schema.get_schema_version(), is_deleted))) {
-        LOG_WARN("assign_fmt failed", K(ret));
       } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-        LOG_WARN("execute sql failed", K(sql), K(ret));
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows is expected to one", K(affected_rows), K(ret));
@@ -181,9 +171,7 @@ int ObTablegroupSqlService::delete_tablegroup(
       } else if (OB_FAIL(sql.assign_fmt("DELETE FROM %s WHERE table_id=%lu",
                                         tname[i],
                                         ObSchemaUtils::get_extract_schema_id(tablegroup_id)))) {
-        LOG_WARN("append_fmt failed", K(ret));
       } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-        LOG_WARN("fail to execute sql", K(sql), K(ret));
       } else {}
     }
     //insert delete record in __all_part_info_history, __all_part_history,
@@ -191,9 +179,7 @@ int ObTablegroupSqlService::delete_tablegroup(
     const ObPartitionSchema *tg_schema = &new_tablegroup_schema;
     ObDropPartInfoHelper part_helper(sql_client);
     if (FAILEDx(part_helper.init(tg_schema))) {
-      LOG_WARN("failed to init part_helper", KR(ret), KPC(tg_schema));
     } else if (OB_FAIL(part_helper.delete_partition_info())) {
-      LOG_WARN("delete partition info failed", K(ret));
     }
   }
 
@@ -208,7 +194,6 @@ int ObTablegroupSqlService::delete_tablegroup(
     delete_tg_op.ddl_stmt_str_ = ddl_stmt_str ? *ddl_stmt_str : ObString();
     delete_tg_op.op_type_ = OB_DDL_DEL_TABLEGROUP;
     if (OB_FAIL(log_operation(delete_tg_op, sql_client))) {
-      LOG_WARN("log delete tablegroup ddl operation failed", K(delete_tg_op), K(ret));
     }
   }
 
@@ -226,13 +211,11 @@ int ObTablegroupSqlService::add_tablegroup(
 
   ObDMLSqlSplicer dml;
   if (OB_FAIL(gen_tablegroup_dml(tablegroup, dml))) {
-    LOG_WARN("gen tablegroup dml failed", K(ret));
   } else {
     ObDMLExecHelper exec(sql_client);
     int64_t affected_rows = 0;
     if (!only_history) {
       if (OB_FAIL(exec.exec_insert(OB_ALL_TABLEGROUP_TNAME, dml, affected_rows))) {
-        LOG_WARN("exec insert failed", K(ret));
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows unexpected to be one", K(affected_rows), K(ret));
@@ -241,9 +224,7 @@ int ObTablegroupSqlService::add_tablegroup(
     if (OB_SUCC(ret)) {
       const int64_t is_deleted = 0;
       if (OB_FAIL(dml.add_column("is_deleted", is_deleted))) {
-        LOG_WARN("add column failed", K(ret));
       } else if (OB_FAIL(exec.exec_insert(OB_ALL_TABLEGROUP_HISTORY_TNAME, dml, affected_rows))) {
-        LOG_WARN("execute insert failed", K(ret));
       } else if (!is_single_row(affected_rows)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows unexpected to be one", K(affected_rows), K(ret));

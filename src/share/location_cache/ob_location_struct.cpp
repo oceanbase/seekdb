@@ -201,7 +201,6 @@ int ObLSLocation::deep_copy(const ObLSLocation &ls_location)
    this->cache_key_ = ls_location.cache_key_;
    this->renew_time_ = ls_location.renew_time_;
    if (OB_FAIL(this->replica_locations_.assign(ls_location.replica_locations_))) {
-     LOG_WARN("ls location deep copy error", K(ret), K(*this), K(ls_location));
    }
  }
  return ret;
@@ -217,7 +216,6 @@ int ObLSLocation::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", KR(ret), K(ls_id), K(renew_time));
   } else if (OB_FAIL(cache_key_.init(cluster_id, ls_id))) {
-    LOG_WARN("cache key init error", K(ret), K(ls_id));
   } else {
     renew_time_ = renew_time;
     last_access_ts_ = 0;
@@ -248,10 +246,7 @@ int ObLSLocation::init_fake_location()
       property,
       restore_status,
       0 /*proposal_id*/))) {
-    LOG_WARN("fail to init replica location", KR(ret), K(server),
-        K(FOLLOWER), K(VIRTUAL_PORT), K(REPLICA_TYPE_FULL), K(property), K(restore_status));
   } else if (OB_FAIL(replica_locations_.push_back(replica_location))) {
-    LOG_WARN("fail to add replica location", KR(ret), K(replica_location));
   } else {
     LOG_INFO("success to init fake location", KPC(this));
   }
@@ -274,7 +269,6 @@ int ObLSLocation::assign(const ObLSLocation &other)
     cache_key_ = other.cache_key_;
     renew_time_ = other.renew_time_;
     if (OB_FAIL(replica_locations_.assign(other.replica_locations_))) {
-      LOG_WARN("Failed to assign replica locations", KR(ret), K(other));
     }
   }
   return ret;
@@ -355,7 +349,6 @@ int ObLSLocation::get_leader(ObLSReplicaLocation &leader) const
       ARRAY_FOREACH_X(replica_locations_, i, cnt, OB_LS_LOCATION_LEADER_NOT_EXIST == ret) {
       if (replica_locations_.at(i).is_strong_leader()) {
         if(OB_FAIL(leader.assign(replica_locations_.at(i)))) {
-          LOG_WARN("fail to assign leader", KR(ret), "leader", replica_locations_.at(i));
         }
       }
     }
@@ -371,7 +364,6 @@ int ObLSLocation::add_replica_location(const ObLSReplicaLocation &replica_locati
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid replica location", KR(ret), K(replica_location));
   } else if (OB_FAIL(replica_locations_.push_back(replica_location))) {
-    LOG_WARN("fail to do add replica location", KR(ret), K(replica_location));
   }
   return ret;
 }
@@ -418,10 +410,8 @@ int ObLSLocation::merge_leader_from(const ObLSLocation &new_location)
                 K(new_leader), KPC(old_leader), KPC(exist_replica), "old_location", *this);
       if (OB_ISNULL(exist_replica)) {
         if (OB_FAIL(add_replica_location(new_leader))) {
-          LOG_WARN("fail to add replica", KR(ret), K(new_leader));
         }
       } else if (OB_FAIL(exist_replica->assign(new_leader))) {
-        LOG_WARN("fail to assign new leader", KR(ret), K(new_leader));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < replica_locations_.count(); i++) {
         ObLSReplicaLocation &replica = replica_locations_.at(i);
@@ -480,7 +470,6 @@ int ObTabletLocation::assign(const ObTabletLocation &other)
     renew_time_ = other.renew_time_;
     tablet_id_ = other.tablet_id_;
     if (OB_FAIL(replica_locations_.assign(other.replica_locations_))) {
-      LOG_WARN("Failed to assign replica locations", KR(ret), K(other));
     }
   }
   return ret;
@@ -529,7 +518,6 @@ int ObTabletLocation::get_leader(ObLSReplicaLocation &leader) const
       ARRAY_FOREACH_X(replica_locations_, i, cnt, OB_LS_LOCATION_LEADER_NOT_EXIST == ret) {
       if (replica_locations_.at(i).is_strong_leader()) {
         if(OB_FAIL(leader.assign(replica_locations_.at(i)))) {
-          LOG_WARN("fail to assign leader", KR(ret), "leader", replica_locations_.at(i));
         }
       }
     }
@@ -544,7 +532,6 @@ int ObTabletLocation::add_replica_location(const ObLSReplicaLocation &replica_lo
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid replica location", KR(ret), K(replica_location));
   } else if (OB_FAIL(replica_locations_.push_back(replica_location))) {
-    LOG_WARN("fail to do add replica location", KR(ret), K(replica_location));
   }
   return ret;
 }
@@ -563,7 +550,6 @@ int ObTabletLocation::deep_copy(
   } else {
     ObTabletLocation *pvalue = new (buf) ObTabletLocation();
     if (OB_FAIL(pvalue->assign(*this))) {
-      LOG_WARN("fail to assign ObTabletLocation", KR(ret), KP(this), KP(pvalue));
     } else {
       value = pvalue;
     }
@@ -625,7 +611,6 @@ int ObTabletLSCache::init(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(cache_key_.init(tablet_id))) {
-    LOG_WARN("fail to init ObTabletLSCache", KR(ret), K(tablet_id));
   } else {
     ls_id_ = ls_id;
     renew_time_ = renew_time;

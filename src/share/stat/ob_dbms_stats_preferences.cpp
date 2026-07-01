@@ -55,11 +55,9 @@ int ObDbmsStatsPreferences::reset_global_pref_defaults(ObExecContext &ctx)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(mysql_proxy), K(session));
   } else if (OB_FAIL(gen_init_global_prefs_sql(raw_sql, true))) {
-    LOG_WARN("failed gen init global prefs sql", K(ret), K(raw_sql));
   } else if (OB_FAIL(mysql_proxy->write(
                                         raw_sql.ptr(),
                                         affected_rows))) {
-    LOG_WARN("fail to exec sql", K(raw_sql), K(ret));
   } else {
     LOG_TRACE("Succeed to reset global pref defaults", K(raw_sql));
   }
@@ -80,7 +78,6 @@ int ObDbmsStatsPreferences::get_prefs(ObMySQLProxy *mysql_proxy,
                                         share::OB_ALL_OPTSTAT_GLOBAL_PREFS_TNAME,
                                         opt_name.length(),
                                         opt_name.ptr()))) {
-    LOG_WARN("failed to append fmt", K(ret), K(get_global_sql));
   } else if (is_user_prefs) {
     
     if (OB_FAIL(get_user_sql.append_fmt(FETCH_USER_PREFS,
@@ -88,7 +85,6 @@ int ObDbmsStatsPreferences::get_prefs(ObMySQLProxy *mysql_proxy,
                                         share::schema::ObSchemaUtils::get_extract_schema_id(table_id),
                                         opt_name.length(),
                                         opt_name.ptr()))) {
-      LOG_WARN("failed to append fmt", K(ret), K(get_user_sql));
     }
   } else {/*do nothing*/}
   if (OB_SUCC(ret)) {
@@ -98,7 +94,6 @@ int ObDbmsStatsPreferences::get_prefs(ObMySQLProxy *mysql_proxy,
     } else if (got_result) {
       /*do nothing*/
     } else if OB_FAIL(do_get_prefs(mysql_proxy, allocator, get_global_sql, got_result, result)) {
-      LOG_WARN("failed to do get prefs", K(ret));
     } else if (got_result) {
       /*do nothing*/
     } else {
@@ -125,7 +120,6 @@ int ObDbmsStatsPreferences::set_prefs(ObExecContext &ctx,
     LOG_WARN("get unexpected error", K(ret), K(mysql_proxy), K(session));
   } else if (!table_ids.empty()) {//update user prefs
     if (OB_FAIL(raw_sql.append_fmt(UPDATE_USER_PREFS, share::OB_ALL_OPTSTAT_USER_PREFS_TNAME))) {
-      LOG_WARN("failed to append", K(ret), K(raw_sql));
     } else {
       ObSqlString val_sql;
       for (int64_t i = 0; OB_SUCC(ret) && i < table_ids.count(); ++i) {
@@ -133,17 +127,14 @@ int ObDbmsStatsPreferences::set_prefs(ObExecContext &ctx,
         if (OB_FAIL(get_user_prefs_sql(
                                        table_ids.at(i), opt_name, opt_value,
                                        current_time, val_sql))) {
-          LOG_WARN("failed to get user prefs sql", K(ret), K(val_sql));
         } else if (OB_FAIL(raw_sql.append_fmt("(%s)%c", val_sql.ptr(),
                                                        (i == table_ids.count() - 1 ? ';' : ',')))) {
-          LOG_WARN("failed to append fmt", K(ret), K(raw_sql));
         } else {/*do nothing*/}
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(mysql_proxy->write(
                                        raw_sql.ptr(),
                                        affected_rows))) {
-          LOG_WARN("fail to exec sql", K(raw_sql), K(ret));
         } else {
           LOG_TRACE("Succeed to set table prefs", K(raw_sql));
         }
@@ -157,11 +148,9 @@ int ObDbmsStatsPreferences::set_prefs(ObExecContext &ctx,
                                    current_time,
                                    opt_name.length(),
                                    opt_name.ptr()))) {
-      LOG_WARN("failed to append", K(ret), K(raw_sql));
     } else if (OB_FAIL(mysql_proxy->write(
                                           raw_sql.ptr(),
                                           affected_rows))) {
-      LOG_WARN("fail to exec sql", K(raw_sql), K(ret));
     } else {
       LOG_TRACE("Succeed to set table prefs", K(raw_sql), K(affected_rows));
     }
@@ -190,7 +179,6 @@ int ObDbmsStatsPreferences::delete_user_prefs(ObExecContext &ctx,
       char prefix = (i == 0 ? '(' : ' ');
       char suffix = (i == table_ids.count() - 1 ? ')' : ',');
       if (OB_FAIL(tbl_list_str.append_fmt("%c%lu%c", prefix, pure_table_id, suffix))) {
-        LOG_WARN("failed to append sql", K(ret));
       } else {/*do nothing*/}
     }
     if (OB_SUCC(ret)) {
@@ -202,11 +190,9 @@ int ObDbmsStatsPreferences::delete_user_prefs(ObExecContext &ctx,
                                             tbl_list_str.ptr(),
                                             condition_str.string().length(),
                                             condition_str.string().ptr()))) {
-        LOG_WARN("failed to append", K(ret), K(raw_sql));
       } else if (OB_FAIL(mysql_proxy->write(
                                             raw_sql.ptr(),
                                             affected_rows))) {
-        LOG_WARN("fail to exec sql", K(raw_sql), K(ret));
       } else {
         LOG_TRACE("Succeed to delete user prefs", K(raw_sql), K(affected_rows));
       }
@@ -231,7 +217,6 @@ int ObDbmsStatsPreferences::do_get_prefs(ObMySQLProxy *mysql_proxy,
       sqlclient::ObMySQLResult *client_result = NULL;
       ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy);
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
-        LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to execute sql", K(ret));
@@ -244,9 +229,7 @@ int ObDbmsStatsPreferences::do_get_prefs(ObMySQLProxy *mysql_proxy,
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("get unexpected error", K(ret), K(result), K(raw_sql));
           } else if (OB_FAIL(client_result->get_obj(idx, tmp))) {
-            LOG_WARN("failed to get object", K(ret));
           } else if (OB_FAIL(ob_write_obj(allocator, tmp, result))) {
-            LOG_WARN("failed to write object", K(ret));
           } else {
             is_first = false;
             get_result = true;
@@ -288,7 +271,6 @@ int ObDbmsStatsPreferences::get_user_prefs_sql(const uint64_t table_id,
       OB_FAIL(dml_splicer.add_time_column("last_analyzed", current_time))) {
     LOG_WARN("failed to add dml splicer column", K(ret));
   } else if (OB_FAIL(dml_splicer.splice_values(sql_string))) {
-    LOG_WARN("failed to get sql string", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -307,30 +289,23 @@ int ObDbmsStatsPreferences::get_sys_default_stat_options(ObExecContext &ctx,
   if (stat_prefs.empty()) {
     /*do nothing*/
   } else if (OB_FAIL(gen_sname_list_str(stat_prefs, sname_list))) {
-    LOG_WARN("failed to gen sname list str", K(ret), K(sname_list));
   } else if (OB_FAIL(raw_sql.append_fmt("SELECT pname, valchar FROM %s WHERE"\
                                         " table_id = %lu and pname in %s",
                                         share::OB_ALL_OPTSTAT_USER_PREFS_TNAME,
                                         pure_table_id,
                                         sname_list.ptr()))) {
-    LOG_WARN("failed to append fmt", K(ret), K(raw_sql));
   } else if (OB_FAIL(do_get_sys_perfs(ctx, raw_sql, stat_prefs, param))) {
-    LOG_WARN("failed to do get sys perfs", K(ret));
   } else if (OB_FAIL(get_no_acquired_prefs(stat_prefs, no_acquired_prefs))) {
-    LOG_WARN("failed to get no acquired prefs", K(ret));
   } else if (no_acquired_prefs.empty()) {//have got all expected sys prefs from user prefs sys table
     LOG_TRACE("succeed to get sys default stat options", K(param));
   } else {//try get sys prefs from global prefs sys table
     raw_sql.reset();
     sname_list.reset();
     if (OB_FAIL(gen_sname_list_str(no_acquired_prefs, sname_list))) {
-      LOG_WARN("failed to gen sname list str", K(ret), K(sname_list));
     } else if (OB_FAIL(raw_sql.append_fmt("SELECT sname, spare4 FROM %s WHERE sname in %s",
                                           share::OB_ALL_OPTSTAT_GLOBAL_PREFS_TNAME,
                                           sname_list.ptr()))) {
-      LOG_WARN("failed to append fmt", K(ret), K(raw_sql));
     } else if (OB_FAIL(do_get_sys_perfs(ctx, raw_sql, no_acquired_prefs, param))) {
-      LOG_WARN("failed to do get sys perfs", K(ret));
     }
   }
   return ret;
@@ -352,7 +327,6 @@ int ObDbmsStatsPreferences::gen_init_global_prefs_sql(ObSqlString &raw_sql,
                                      OPT_DEFAULT_STATS_RETENTION,
                                      time_str,
                                      null_str))) {
-      LOG_WARN("failed to append fmt", K(ret));
     } else {
       ++ total_rows;
     }
@@ -387,7 +361,6 @@ int ObDbmsStatsPreferences::gen_init_global_prefs_sql(ObSqlString &raw_sql,
                                             null_str,
                                             time_str,
                                             null_str))) {
-      LOG_WARN("failed to append", K(ret));
     } else {
       ++ total_rows;
     }
@@ -417,7 +390,6 @@ int ObDbmsStatsPreferences::gen_init_global_prefs_sql(ObSqlString &raw_sql,
     if (OB_FAIL(raw_sql.append_fmt(INIT_GLOBAL_PREFS,
                                    share::OB_ALL_OPTSTAT_GLOBAL_PREFS_TNAME,
                                    value_str.ptr()))) {
-      LOG_WARN("failed to append fmt", K(ret));
     } else {
       LOG_TRACE("Succeed gen init global prefs sql", K(raw_sql));
       if (expect_affected_rows != NULL) {
@@ -446,7 +418,6 @@ int ObDbmsStatsPreferences::gen_sname_list_str(ObIArray<ObStatPrefs*> &stat_pref
         char suffix = (i == stat_prefs.count() - 1 ? ')' : ',');
         if (OB_FAIL(sname_list.append_fmt("%c'%s'%c", prefix,
                                           stat_prefs.at(i)->get_stat_pref_name(), suffix))) {
-          LOG_WARN("failed to append sql", K(ret), K(sname_list));
         } else {/*do nothing*/}
       }
     }
@@ -471,7 +442,6 @@ int ObDbmsStatsPreferences::do_get_sys_perfs(ObExecContext &ctx,
       sqlclient::ObMySQLResult *client_result = NULL;
       ObSQLClientRetryWeak sql_client_retry_weak(mysql_proxy);
       if (OB_FAIL(sql_client_retry_weak.read(proxy_result, raw_sql.ptr()))) {
-        LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to execute sql", K(ret));
@@ -479,7 +449,6 @@ int ObDbmsStatsPreferences::do_get_sys_perfs(ObExecContext &ctx,
         while (OB_SUCC(ret) && OB_SUCC(client_result->next())) {
           if (OB_FAIL(decode_perfs_result(param.allocator_, *client_result,
                                           need_acquired_prefs, param))) {
-            LOG_WARN("failed to decode perfs result", K(ret));
           } else {/*do nothing*/}
         }
         if (OB_ITER_END != ret) {
@@ -514,9 +483,7 @@ int ObDbmsStatsPreferences::decode_perfs_result(ObIAllocator *allocator,
   ObString pname;
   ObString pvalue;
   if (OB_FAIL(client_result.get_obj(name_id, name_obj))) {
-    LOG_WARN("failed to get object", K(ret));
   } else if (OB_FAIL(client_result.get_obj(val_id, val_obj))) {
-    LOG_WARN("failed to get object", K(ret));
   } else {
     bool is_decoded = false;
     for (int64_t i = 0; OB_SUCC(ret) && !is_decoded && i < need_acquired_prefs.count(); ++i) {
@@ -529,7 +496,6 @@ int ObDbmsStatsPreferences::decode_perfs_result(ObIAllocator *allocator,
                                                                        name_obj,
                                                                        val_obj,
                                                                        param))) {
-        LOG_WARN("failed to decode pref result", K(ret));
       } else {
         is_decoded = need_acquired_prefs.at(i)->is_decoded();
       }
@@ -549,7 +515,6 @@ int ObDbmsStatsPreferences::get_no_acquired_prefs(ObIArray<ObStatPrefs*> &stat_p
     } else if (stat_prefs.at(i)->is_decoded()) {
       /*do nothing*/
     } else if (OB_FAIL(no_acquired_prefs.push_back(stat_prefs.at(i)))) {
-      LOG_WARN("failed to decode pref result", K(ret));
     } else {/*do nothing*/}
   }
   return ret;
@@ -599,7 +564,6 @@ int ObStatPrefs::decode_pref_result(ObIAllocator *allocator,
   ObString name_str;
   ObString val_str;
   if (OB_FAIL(name_obj.get_string(name_str))) {
-    LOG_WARN("failed to get string", K(ret));
   } else if (!val_obj.is_null() && (val_obj.get_string(val_str))) {
     LOG_WARN("failed to get string", K(ret));
   } else if (OB_ISNULL(get_stat_pref_name())) {
@@ -609,7 +573,6 @@ int ObStatPrefs::decode_pref_result(ObIAllocator *allocator,
     pvalue_ = val_str;
     allocator_ = allocator;
     if (OB_FAIL(check_pref_value_validity(&param))) {
-      LOG_WARN("failed to check pref value validity");
     } else {
       is_decoded_ = true;
     }
@@ -651,11 +614,8 @@ int ObDegreePrefs::check_pref_value_validity(ObTableStatParam *param/*default nu
     ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
     number::ObNumber num_degree;
     if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
-      LOG_WARN("failed to type", K(ret), K(src_obj));
     } else if (OB_FAIL(dest_obj.get_number(num_degree))) {
-      LOG_WARN("failed to get degree", K(ret));
     } else if (OB_FAIL(num_degree.extract_valid_int64_with_trunc(degree))) {
-      LOG_WARN("extract_valid_int64_with_trunc failed", K(ret), K(num_degree));
     } else {/*do noting*/}
   }
   if (OB_SUCC(ret)) {
@@ -686,9 +646,7 @@ int ObEstimatePercentPrefs::check_pref_value_validity(ObTableStatParam *param/*d
       ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
       double dst_val = 0.0;
       if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
-        LOG_WARN("failed to type", K(ret), K(src_obj));
       } else if (OB_FAIL(ObDbmsStatsUtils::cast_number_to_double(dest_obj.get_number(), dst_val))) {
-        LOG_WARN("failed to cast number to double", K(ret), K(src_obj));
       } else if (dst_val < 0.000001 || dst_val > 100.0) {
         ret = OB_ERR_DBMS_STATS_PL;
         LOG_WARN("Illegal value for estimate percent", K(ret), K(dst_val));
@@ -725,7 +683,6 @@ int ObGranularityPrefs::check_pref_value_validity(ObTableStatParam *param/*defau
   } else {
     ObGranularityType dummy_type = ObGranularityType::GRANULARITY_INVALID;
     if (OB_FAIL(ObDbmsStatsUtils::parse_granularity(pvalue_, dummy_type))) {
-      LOG_WARN("failed to parse granularity", K(ret), K(pvalue_));
     } else {/*do nothing*/}
   }
   return ret;
@@ -801,7 +758,6 @@ int ObMethodOptPrefs::check_pref_value_validity(ObTableStatParam *param/*default
     ParseMode parse_mode = DYNAMIC_SQL_MODE;
     ParseResult parse_result;
     if (OB_FAIL(parser.parse(pvalue_, parse_result, parse_mode))) {
-      LOG_WARN("failed to parse result", K(ret), K(pvalue_));
     } else {/*do nothing*/}
     if (OB_FAIL(ret)) {
       ret = OB_ERR_DBMS_STATS_PL;
@@ -865,9 +821,7 @@ int ObStalePercentPrefs::check_pref_value_validity(ObTableStatParam *param/*defa
     ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
     double dst_val = 0.0;
     if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
-      LOG_WARN("failed to type", K(ret), K(src_obj));
     } else if (OB_FAIL(ObDbmsStatsUtils::cast_number_to_double(dest_obj.get_number(), dst_val))) {
-      LOG_WARN("failed to cast number to double", K(ret), K(src_obj));
     } else if (dst_val < 0) {
       ret = OB_ERR_DBMS_STATS_PL;
       LOG_WARN("Illegal staleness percentage", K(ret), K(dst_val));
@@ -958,9 +912,7 @@ int ObAsyncGatherStaleRatioPrefs::check_pref_value_validity(ObTableStatParam *pa
     ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
     double dst_val = 0.0;
     if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
-      LOG_WARN("failed to type", K(ret), K(src_obj));
     } else if (OB_FAIL(ObDbmsStatsUtils::cast_number_to_double(dest_obj.get_number(), dst_val))) {
-      LOG_WARN("failed to cast number to double", K(ret), K(src_obj));
     } else if (dst_val <= MINIMUM_OF_ASYNC_GATHER_STALE_RATIO) {
       ret = OB_ERR_DBMS_STATS_PL;
       LOG_WARN("Illegal async gather stale ratio", K(ret), K(dst_val));
@@ -987,9 +939,7 @@ int ObAsyncGatherSampleSizePrefs::check_pref_value_validity(ObTableStatParam *pa
     ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
     int64_t sample_size = 0;
     if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
-      LOG_WARN("failed to type", K(ret), K(src_obj));
     } else if (OB_FAIL(dest_obj.get_number().extract_valid_int64_with_trunc(sample_size))) {
-      LOG_WARN("failed to extract valid int64 with trunc", K(ret), K(src_obj));
     } else if (sample_size < MAGIC_SAMPLE_SIZE) {
       ret = OB_ERR_DBMS_STATS_PL;
       LOG_WARN("Illegal async gather sample size", K(ret), K(sample_size));
@@ -1016,9 +966,7 @@ int ObAsyncGatherFullTableSizePrefs::check_pref_value_validity(ObTableStatParam 
     ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
     int64_t table_size = 0;
     if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
-      LOG_WARN("failed to type", K(ret), K(src_obj));
     } else if (OB_FAIL(dest_obj.get_number().extract_valid_int64_with_trunc(table_size))) {
-      LOG_WARN("failed to extract valid int64 with trunc", K(ret), K(src_obj));
     } else if (table_size < DEFAULT_ASYNC_MIN_TABLE_SIZE && table_size != 0) {
       ret = OB_ERR_DBMS_STATS_PL;
       LOG_WARN("Illegal async gather gather full table size", K(ret), K(table_size));
@@ -1045,9 +993,7 @@ int ObAsyncStaleMaxTableSizePrefs::check_pref_value_validity(ObTableStatParam *p
     ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
     int64_t table_size = 0;
     if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
-      LOG_WARN("failed to type", K(ret), K(src_obj));
     } else if (OB_FAIL(dest_obj.get_number().extract_valid_int64_with_trunc(table_size))) {
-      LOG_WARN("failed to extract valid int64 with trunc", K(ret), K(src_obj));
     } else if (table_size < DEFAULT_ASYNC_MIN_TABLE_SIZE && table_size != 0) {
       ret = OB_ERR_DBMS_STATS_PL;
       LOG_WARN("Illegal async stale max table size", K(ret), K(table_size));
@@ -1075,9 +1021,7 @@ int ObHistEstPercentPrefs::check_pref_value_validity(ObTableStatParam *param/*de
       ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
       double dst_val = 0.0;
       if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
-        LOG_WARN("failed to type", K(ret), K(src_obj));
       } else if (OB_FAIL(ObDbmsStatsUtils::cast_number_to_double(dest_obj.get_number(), dst_val))) {
-        LOG_WARN("failed to cast number to double", K(ret), K(src_obj));
       } else if (dst_val < 0.000001 || dst_val > 100.0) {
         ret = OB_ERR_DBMS_STATS_PL;
         LOG_WARN("Illegal value for hist est percent", K(ret), K(dst_val));
@@ -1124,12 +1068,10 @@ int ObGatherStatBatchSizePrefs::check_pref_value_validity(ObTableStatParam *para
     int64_t batch_part_size = 0; 
     int64_t int_part = 0;
     if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
-      LOG_WARN("failed to type", K(ret), K(src_obj));
     } else if (!dest_obj.get_number().is_valid_int64(int_part)) {
       ret = OB_ERR_DBMS_STATS_PL;
       LOG_WARN("Illegal auto gather stats batch size must be interger", K(ret));
     } else if (OB_FAIL(dest_obj.get_number().extract_valid_int64_with_trunc(batch_part_size))) {
-      LOG_WARN("failed to extract valid int64 with trunc", K(ret), K(src_obj));
     } else if (batch_part_size < 0) {
       ret = OB_ERR_DBMS_STATS_PL;
       LOG_WARN("Illegal auto gather stats batch size must greater than 0", K(ret), K(batch_part_size));
@@ -1158,12 +1100,10 @@ int ObAutoSampleRowCountPrefs::check_pref_value_validity(ObTableStatParam *param
     int64_t row_count = 0;
     int64_t int_part = 0;
     if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
-      LOG_WARN("failed to type", K(ret), K(src_obj));
     } else if (!dest_obj.get_number().is_valid_int64(int_part)) {
       ret = OB_ERR_DBMS_STATS_PL;
       LOG_WARN("Illegal auto sample row count must interger", K(ret));
     } else if (OB_FAIL(dest_obj.get_number().extract_valid_int64_with_trunc(row_count))) {
-      LOG_WARN("failed to extract valid int64 with trunc", K(ret), K(src_obj));
     } else if (row_count < -1 || (row_count > 0 && row_count < MAGIC_MIN_SAMPLE_SIZE)) {
       ret = OB_ERR_DBMS_STATS_PL;
       LOG_WARN("Illegal auto sample row count must greater than 2500", K(ret), K(row_count));
@@ -1193,12 +1133,10 @@ int ObSkipRateSamplePrefs::check_pref_value_validity(ObTableStatParam *param/*de
     //no gather skip rate with tracepoint to keep mysqltest stable
     bool no_cg_skip_rate = (OB_E(EventTable::EN_LEADER_STORAGE_ESTIMATION) OB_SUCCESS) != OB_SUCCESS;
     if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
-      LOG_WARN("failed to type", K(ret), K(src_obj));
     } else if (!dest_obj.get_number().is_valid_int64(int_part)) {
       ret = OB_ERR_DBMS_STATS_PL;
       LOG_WARN("Illegal skip rate sample count must interger", K(ret));
     } else if (OB_FAIL(dest_obj.get_number().extract_valid_int64_with_trunc(block_count))) {
-      LOG_WARN("failed to extract valid int64 with trunc", K(ret), K(src_obj));
     } else if (block_count < 0 || block_count > MAX_SKIP_RATE_SAMPLE_COUNT) {
       ret = OB_ERR_DBMS_STATS_PL;
       LOG_WARN( "Illegal skip rate sample count, must in [0,MAX_SKIP_RATE_SAMPLE_COUNT]", K(ret), K(block_count));
@@ -1264,9 +1202,7 @@ int ObOnlineEstimatePercentPrefs::check_pref_value_validity(ObTableStatParam *pa
     ObCastCtx cast_ctx(&calc_buf, NULL, CM_NONE, ObCharset::get_system_collation());
     double dst_val = 0.0;
     if (OB_FAIL(ObObjCaster::to_type(ObNumberType, cast_ctx, src_obj, dest_obj))) {
-      LOG_WARN("failed to type", K(ret), K(src_obj));
     } else if (OB_FAIL(ObDbmsStatsUtils::cast_number_to_double(dest_obj.get_number(), dst_val))) {
-      LOG_WARN("failed to cast number to double", K(ret), K(src_obj));
     } else if (dst_val < 0.000001 || dst_val > 100.0) {
       ret = OB_ERR_DBMS_STATS_PL;
       LOG_WARN("Illegal value for online estimate percent", K(ret), K(dst_val));
@@ -1299,7 +1235,6 @@ int ObDbmsStatsPreferences::get_extra_stats_perfs_for_upgrade(ObSqlString &raw_s
                                             null_str,
                                             time_str,
                                             prefs.get_stat_pref_default_value()))) {
-      LOG_WARN("failed to append", K(ret));
     }
   }
   if (OB_SUCC(ret)) {//init async gather sample size
@@ -1313,7 +1248,6 @@ int ObDbmsStatsPreferences::get_extra_stats_perfs_for_upgrade(ObSqlString &raw_s
                                             null_str,
                                             time_str,
                                             prefs.get_stat_pref_default_value()))) {
-      LOG_WARN("failed to append", K(ret));
     }
   }
   if (OB_SUCC(ret)) {//init async gather full table size
@@ -1327,7 +1261,6 @@ int ObDbmsStatsPreferences::get_extra_stats_perfs_for_upgrade(ObSqlString &raw_s
                                             null_str,
                                             time_str,
                                             prefs.get_stat_pref_default_value()))) {
-      LOG_WARN("failed to append", K(ret));
     }
   }
   if (OB_SUCC(ret)) {//init async stale max table size
@@ -1341,14 +1274,12 @@ int ObDbmsStatsPreferences::get_extra_stats_perfs_for_upgrade(ObSqlString &raw_s
                                             null_str,
                                             time_str,
                                             prefs.get_stat_pref_default_value()))) {
-      LOG_WARN("failed to append", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(raw_sql.append_fmt(UPGRADE_GLOBAL_PREFS,
                                    share::OB_ALL_OPTSTAT_GLOBAL_PREFS_TNAME,
                                    value_str.ptr()))) {
-      LOG_WARN("failed to append fmt", K(ret));
     }
   }
   return ret;
@@ -1370,11 +1301,9 @@ int ObDbmsStatsPreferences::get_online_estimate_percent_for_upgrade(ObSqlString 
                                           null_str,
                                           time_str,
                                           prefs.get_stat_pref_for_update()))) {
-    LOG_WARN("failed to append", K(ret));
   } else if (OB_FAIL(raw_sql.append_fmt(UPGRADE_GLOBAL_PREFS,
                                         share::OB_ALL_OPTSTAT_GLOBAL_PREFS_TNAME,
                                         value_str.ptr()))) {
-    LOG_WARN("failed to append fmt", K(ret));
   }
   return ret;
 }
@@ -1395,11 +1324,9 @@ int ObDbmsStatsPreferences::get_extra_stats_perfs_for_upgrade_425(ObSqlString &r
                                           null_str,
                                           time_str,
                                           "0"))) {
-    LOG_WARN("failed to append", K(ret));
   } else if (OB_FAIL(raw_sql.append_fmt(INIT_GLOBAL_PREFS,
                                         share::OB_ALL_OPTSTAT_GLOBAL_PREFS_TNAME,
                                         value_str.ptr()))) {
-    LOG_WARN("failed to append fmt", K(ret));
   }
   return ret;
 }
@@ -1420,11 +1347,9 @@ int ObDbmsStatsPreferences::get_extra_stats_perfs_for_upgrade_4351(ObSqlString &
                                           null_str,
                                           time_str,
                                           "0"))) {
-    LOG_WARN("failed to append", K(ret));
   } else if (OB_FAIL(raw_sql.append_fmt(INIT_GLOBAL_PREFS,
                                         share::OB_ALL_OPTSTAT_GLOBAL_PREFS_TNAME,
                                         value_str.ptr()))) {
-    LOG_WARN("failed to append fmt", K(ret));
   }
   return ret;
 }

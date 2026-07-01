@@ -70,12 +70,9 @@ int ObDirectLoadSSTableScanMergeLoserTreeCompare::cmp(
   } else {
     if (OB_FAIL(lhs_rowkey_.assign(lhs.external_row_->rowkey_datum_array_.datums_,
                                    lhs.external_row_->rowkey_datum_array_.count_))) {
-      LOG_WARN("fail to assign rowkey", KR(ret), K(lhs));
     } else if (OB_FAIL(rhs_rowkey_.assign(rhs.external_row_->rowkey_datum_array_.datums_,
                                           rhs.external_row_->rowkey_datum_array_.count_))) {
-      LOG_WARN("fail to assign rowkey", KR(ret), K(rhs));
     } else if (OB_FAIL(lhs_rowkey_.compare(rhs_rowkey_, *datum_utils_, tmp_cmp_ret))) {
-      LOG_WARN("fail to compare rowkey", K(ret), K(lhs_rowkey_), K(rhs_rowkey_), KPC(datum_utils_));
     } else {
       cmp_ret = tmp_cmp_ret;
     }

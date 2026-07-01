@@ -50,7 +50,6 @@ ObSimpleCCLRuleSchema &ObSimpleCCLRuleSchema::operator=(const ObSimpleCCLRuleSch
 
     // str
     if (OB_FAIL(set_ccl_rule_name(other.ccl_rule_name_))) {
-      LOG_WARN("Fail to deep copy ccl_rule name");
     }
 
     if (OB_FAIL(ret)) {
@@ -119,22 +118,15 @@ ObCCLRuleSchema &ObCCLRuleSchema::operator=(const ObCCLRuleSchema &other) {
       affect_scope_ = other.affect_scope_;
       max_concurrency_ = other.max_concurrency_;
       if (OB_FAIL(set_affect_database(other.affect_database_))) {
-        LOG_WARN("Fail to deep copy ccl_rule affect database");
       } else if (OB_FAIL(set_affect_table(other.affect_table_))) {
-        LOG_WARN("Fail to deep copy ccl_rule affect table");
       } else if (OB_FAIL(set_affect_user_name(other.affect_user_name_))) {
-        LOG_WARN("Fail to deep copy ccl_rule affect user name");
       } else if (OB_FAIL(set_affect_host(other.affect_host_))) {
-        LOG_WARN("Fail to deep copy ccl_rule affect host name");
       } else if (OB_FAIL(set_ccl_keywords(other.ccl_keywords_))) {
-        LOG_WARN("Fail to deep copy ccl_rule ccl_keywords");
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < other.ccl_keywords_array_.count(); i++) {
           ObString tmp_keyword;
           if (OB_FAIL(ob_write_string(*allocator_, other.ccl_keywords_array_.at(i), tmp_keyword))) {
-            LOG_WARN("ob write string failed", K(ret));
           } else if (OB_FAIL(ccl_keywords_array_.push_back(tmp_keyword))) {
-            LOG_WARN("push back failed", K(ret));
           }
         }
       }
@@ -201,49 +193,37 @@ int ObCCLRuleSchema::split_strings_with_escape(char separator,
       if (i + 1 >= ccl_keywords_.length()) {
         //do nothing
         if (OB_FAIL(current_token.append(&escape_char, 1))){
-          // normal character, add into current_token
-          LOG_WARN("fail to append escape_char to current_token", K(ret), K(current_token), K(escape_char));
         }
       } else {
         char next_char = ccl_keywords_[++i]; // move to next character
         if (next_char == separator) {
           // '\;' restore to ';'
           if (OB_FAIL(current_token.append(&separator, 1))) {
-            LOG_WARN("fail to append separator to current_token", K(ret), K(current_token), K(separator));
           }
         } else if (next_char == escape_char) {
           // '\\' restore to '\'
           if (OB_FAIL(current_token.append(&escape_char, 1))) {
-            LOG_WARN("fail to append separator to current_token", K(ret), K(current_token), K(escape_char));
           }
         } else {
           // meet '\X'，X is not '\' nor ';'
           if (OB_FAIL(current_token.append(&escape_char, 1))){
-            LOG_WARN("fail to append escape_char to current_token", K(ret), K(current_token), K(escape_char));
           } else if (OB_FAIL(current_token.append(&next_char, 1))){
-            LOG_WARN("fail to append next_char to current_token", K(ret), K(current_token), K(next_char));
           }
         }
       }
     } else if (current_char == separator) {
       if (OB_FAIL(ob_write_string(*allocator_, current_token.string(), keyword))) {
-        LOG_WARN("fail to deep copy str", K(ret));
       } else if (OB_FAIL(ccl_keywords_array_.push_back(keyword))) {
-        LOG_WARN("fail to push_back keyword string", K(ret), K(keyword));
       } else {
         current_token.reset();
       }
     } else if (OB_FAIL(current_token.append(&current_char, 1))){
-      // normal character, add into current_token
-      LOG_WARN("fail to append current_char to current_token", K(ret), K(current_token), K(current_char));
     }
   }
 
   // last token must be added into ccl_keywords_array_
   if (OB_FAIL(ob_write_string(*allocator_, current_token.string(), keyword))) {
-    LOG_WARN("fail to deep copy str", K(ret));
   } else if (OB_FAIL(ccl_keywords_array_.push_back(keyword))) {
-    LOG_WARN("fail to push_back keyword string", K(ret), K(keyword));
   }
 
   return ret;

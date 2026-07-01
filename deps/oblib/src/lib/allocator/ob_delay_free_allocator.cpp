@@ -57,15 +57,8 @@ int ObDelayFreeAllocator::init(
 
   if (inited_) {
     ret = OB_INIT_TWICE;
-    LIB_ALLOC_LOG(WARN, "The ObBlockLinkMemoryAllocator has been inited.");
   } else if (expire_duration_us < 0) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_ALLOC_LOG(WARN,
-                  "Invaid arguments, ",
-                  "label",
-                  label,
-                  "expire_duration_us",
-                  expire_duration_us);
   } else {
     label_ = label;
     allocator_.set_label(label);

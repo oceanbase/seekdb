@@ -48,7 +48,6 @@ int ObTransCond::wait(const int64_t wait_time_us, int &result)
   int ret = OB_SUCCESS;
 
   if (wait_time_us < 0) {
-    TRANS_LOG(WARN, "invalid argument", K(wait_time_us));
     ret = OB_INVALID_ARGUMENT;
   } else {
     int64_t left_time_us = wait_time_us;
@@ -77,7 +76,6 @@ void ObTransCond::notify(const int result)
 {
   ObMonitor<Mutex>::Lock guard(monitor_);
   if (finished_) {
-    TRANS_LOG(DEBUG, "transaction has already get result", "old_result", result_, "new_result", result);
   }
   finished_ = true;
   result_ = result;

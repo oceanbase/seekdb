@@ -87,15 +87,12 @@ int ObSSTableRowGetter::inner_open(
     if (!prefetcher_.is_valid()) {
       if (OB_FAIL(prefetcher_.init(
                   type_, *sstable_, iter_param, access_ctx, query_range))) {
-        LOG_WARN("fail to init prefetcher", K(ret));
       }
     } else if (OB_FAIL(prefetcher_.switch_context(
         type_, *sstable_, iter_param, access_ctx, query_range))) {
-      LOG_WARN("fail to switch context for prefetcher, ", K(ret));
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(prefetcher_.single_prefetch(read_handle_))) {
-        LOG_WARN("ObSSTableRowGetter prefetch failed ", K(ret));
       } else {
         is_opened_ = true;
       }
@@ -117,7 +114,6 @@ int ObSSTableRowGetter::inner_get_next_row(const ObDatumRow *&store_row)
   } else if (has_fetched_) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(prefetcher_.lookup_in_index_tree(read_handle_, true))) {
-    LOG_WARN("Fail to prefetch", K(ret), K_(read_handle));
   } else if (OB_FAIL(fetch_row(read_handle_, store_row))) {
     if (OB_ITER_END == ret) {
       has_fetched_ = true;
@@ -152,10 +148,8 @@ int ObSSTableRowGetter::fetch_row(ObSSTableReadHandle &read_handle, const ObDatu
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("Fail to allocate micro block row getter", K(ret));
     } else if (OB_FAIL(micro_getter_->init(*iter_param_, *access_ctx_, sstable_))) {
-      LOG_WARN("Fail to init micro block row getter", K(ret));
     }
   } else if (OB_FAIL(micro_getter_->switch_context(*iter_param_, *access_ctx_, sstable_))) {
-    LOG_WARN("Fail to switch context", K(ret));
   }
   if (OB_FAIL(ret)) {
   } else if (read_handle.need_read_block() && nullptr == macro_block_reader_) {
@@ -171,7 +165,6 @@ int ObSSTableRowGetter::fetch_row(ObSSTableReadHandle &read_handle, const ObDatu
               read_handle,
               store_row,
               macro_block_reader_))) {
-    LOG_WARN("Fail to get row", K(ret));
   } else {
     REALTIME_MONITOR_ADD_SSSTORE_READ_BYTES(access_ctx_, micro_getter_->get_average_row_length());
     has_fetched_ = true;

@@ -53,9 +53,7 @@ OB_DEF_DESERIALIZE(ObOptStatsGatherPieceMsg)
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to allocate memory", K(ret));
       } else if (OB_FAIL(tmp_stat->deserialize(buf, data_len, pos))) {
-        LOG_WARN("deserialize datum store failed", K(ret), K(i));
       } else if (OB_FAIL(table_stats_.push_back(tmp_stat))) {
-        LOG_WARN("push back datum store failed", K(ret), K(i));
       }
     }
     size = 0;  
@@ -68,9 +66,7 @@ OB_DEF_DESERIALIZE(ObOptStatsGatherPieceMsg)
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to create new col stat", K(ret));
       } else if (OB_FAIL(tmp_col_stat->deserialize(buf, data_len, pos))) {
-        LOG_WARN("deserialize datum store failed", K(ret), K(i));
       } else if (OB_FAIL(column_stats_.push_back(tmp_col_stat))) {
-        LOG_WARN("push back datum store failed", K(ret), K(i));
       }
     }
     OB_UNIS_DECODE(target_osg_id_);
@@ -121,7 +117,6 @@ int ObOptStatsGatherPieceMsgListener::on_message(
     } else {
       osg_op = static_cast<ObOptimizerStatsGatheringOp *>(kit->op_);
       if (OB_FAIL(osg_op->on_piece_msg(pkt))) {
-        LOG_WARN("fail to call on piece msg", K(ret));
       }
     }
   }

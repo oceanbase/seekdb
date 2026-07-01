@@ -68,7 +68,6 @@ int ObExprArrayRemove::calc_result_type2(ObExprResType &type,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, ob_obj_type_str(type1.get_type()), ob_obj_type_str(type2.get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::deduce_array_type(exec_ctx, type1, type2, subschema_id))) {
-    LOG_WARN("failed to get result array type subschema id", K(ret));
   } 
   if (OB_SUCC(ret) && !type1.is_null()) {
     type.set_collection(subschema_id);
@@ -149,13 +148,10 @@ int ObExprArrayRemove::eval_array_remove_array(const ObExpr &expr, ObEvalCtx &ct
   bool bret = true;
   bool changed = true;
   if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) {
-    LOG_WARN("failed to eval args", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, datum_val))) {
-    LOG_WARN("failed to eval args", K(ret));
   } else if (datum->is_null()) {
     res.set_null();
   } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, meta_id, datum->get_string(), arr_obj))) {
-    LOG_WARN("construct array obj failed", K(ret));
   } else if (datum_val->is_null() && !arr_obj->contain_null()) {
     changed = false;
     res_arr_obj = arr_obj;
@@ -171,14 +167,12 @@ int ObExprArrayRemove::eval_array_remove_array(const ObExpr &expr, ObEvalCtx &ct
   if (OB_SUCC(ret) && !datum->is_null()) {
     if (changed) {
       if (OB_FAIL(ObArrayUtil::clone_except(tmp_allocator, *arr_obj, remove_arr_obj, datum_val->is_null(), res_arr_obj))) {
-        LOG_WARN("array remove failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       ObString res_str;
       if (OB_FAIL(
               ObArrayExprUtils::set_array_res(res_arr_obj, res_arr_obj->get_raw_binary_len(), expr, ctx, res_str))) {
-        LOG_WARN("get array binary string failed", K(ret));
       } else {
         res.set_string(res_str);
       }
@@ -284,9 +278,7 @@ int ObExprArrayRemove::eval_array_remove_array_batch(
   ObIArrayType *remove_arr_obj = NULL;
   ObIArrayType *res_arr_obj = NULL;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("failed to eval args", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("failed to eval args", K(ret));
   } else {
     ObDatumVector src_array = expr.args_[0]->locate_expr_datumvector(ctx);
     ObDatumVector val_array = expr.args_[1]->locate_expr_datumvector(ctx);
@@ -301,7 +293,6 @@ int ObExprArrayRemove::eval_array_remove_array_batch(
         res_datum.at(j)->set_null();
       } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(
                      tmp_allocator, ctx, meta_id, src_array.at(j)->get_string(), arr_obj))) {
-        LOG_WARN("construct array obj failed", K(ret));
       } else if (val_array.at(j)->is_null() && !arr_obj->contain_null()) {
         changed = false;
         res_arr_obj = arr_obj;
@@ -319,7 +310,6 @@ int ObExprArrayRemove::eval_array_remove_array_batch(
         if (changed) {
           if (OB_FAIL(
                   ObArrayUtil::clone_except(tmp_allocator, *arr_obj, remove_arr_obj, val_array.at(j)->is_null(), res_arr_obj))) {
-            LOG_WARN("array remove failed", K(ret));
           }
         }
         if (OB_SUCC(ret)) {
@@ -328,16 +318,12 @@ int ObExprArrayRemove::eval_array_remove_array_batch(
           int64_t res_buf_len = 0;
           ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, res_datum.at(j));
           if (OB_FAIL(output_result.init_with_batch_idx(res_size, j))) {
-            LOG_WARN("fail to init result", K(ret), K(res_size));
           } else if (OB_FAIL(output_result.get_reserved_buffer(res_buf, res_buf_len))) {
-            LOG_WARN("fail to get reserver buffer", K(ret));
           } else if (res_buf_len < res_size) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("get invalid res buf len", K(ret), K(res_buf_len), K(res_size));
           } else if (OB_FAIL(res_arr_obj->get_raw_binary(res_buf, res_buf_len))) {
-            LOG_WARN("get array raw binary failed", K(ret), K(res_buf_len), K(res_size));
           } else if (OB_FAIL(output_result.lseek(res_size, 0))) {
-            LOG_WARN("failed to lseek res.", K(ret), K(output_result), K(res_size));
           } else {
             output_result.set_result();
             res_arr_obj->clear();
@@ -472,7 +458,6 @@ int ObExprArrayRemove::eval_array_remove_array_vector(const ObExpr &expr, ObEval
       } else {
         ObString left = left_vec->get_string(idx);
         if (OB_FAIL(ObNestedVectorFunc::construct_param(tmp_allocator, ctx, meta_id, left, arr_obj))) {
-          LOG_WARN("construct array obj failed", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -486,7 +471,6 @@ int ObExprArrayRemove::eval_array_remove_array_vector(const ObExpr &expr, ObEval
       } else {
         ObString right = right_vec->get_string(idx);
         if (OB_FAIL(ObNestedVectorFunc::construct_param(tmp_allocator, ctx, r_meta_id, right, arr_val))) {
-          LOG_WARN("construct array obj failed", K(ret));
         }
       }
 
@@ -504,20 +488,16 @@ int ObExprArrayRemove::eval_array_remove_array_vector(const ObExpr &expr, ObEval
       if (OB_SUCC(ret) && !is_null_res) {
         if (changed) {
           if (OB_FAIL(ObArrayUtil::clone_except(tmp_allocator, *arr_obj, arr_val, right_vec->is_null(idx), res_arr_obj))) {
-            LOG_WARN("array remove failed", K(ret));
           }
         }
         if (OB_SUCC(ret)) {
           if (res_format == VEC_DISCRETE) {
             if (OB_FAIL(ObArrayExprUtils::set_array_res<ObDiscreteFormat>(res_arr_obj, expr, ctx, static_cast<ObDiscreteFormat *>(res_vec), idx))) {
-              LOG_WARN("set array res failed", K(ret));
             }
           } else if (res_format == VEC_UNIFORM) {
             if (OB_FAIL(ObArrayExprUtils::set_array_res<ObUniformFormat<false>>(res_arr_obj, expr, ctx, static_cast<ObUniformFormat<false> *>(res_vec), idx))) {
-              LOG_WARN("set array res failed", K(ret));
             }
           } else if (OB_FAIL(ObArrayExprUtils::set_array_res<ObVectorBase>(res_arr_obj, expr, ctx, static_cast<ObVectorBase *>(res_vec), idx))) {
-            LOG_WARN("set array res failed", K(ret));
           } 
           if (OB_SUCC(ret)) {
             eval_flags.set(idx);
@@ -560,7 +540,6 @@ int ObExprArrayRemove::cg_expr(ObExprCGCtx &expr_cg_ctx,
         uint32_t unused;
         bool is_vec = false;
         if (OB_FAIL(ObArrayExprUtils::get_array_element_type(exec_ctx, sub_id, elem_type, unused, is_vec))) {
-          LOG_WARN("failed to get collection elem type", K(ret), K(sub_id));
         } else {
           right_tc = ob_obj_type_class(elem_type);
         }

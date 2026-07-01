@@ -77,7 +77,6 @@ int ObDropLocationResolver::resolve(const ParseNode &parse_tree)
     } else if (FALSE_IT(location_name.assign_ptr(child_node->str_value_, static_cast<int32_t>(child_node->str_len_)))){
       
     } else if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
-      LOG_WARN("failed to get name case mode", K(ret));
     } else if (OB_LOWERCASE_AND_INSENSITIVE == case_mode
                && OB_FAIL(ObCharset::tolower(cs_type, location_name, location_name, *allocator_))) {
       LOG_WARN("failed to lower string", K(ret));

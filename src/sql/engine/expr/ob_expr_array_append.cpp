@@ -67,7 +67,6 @@ int ObExprArrayAppendCommon::calc_result_type2(ObExprResType &type,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(type1.get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::deduce_array_type(exec_ctx, type1, type2, subschema_id))) {
-    LOG_WARN("failed to get result array type subschema id", K(ret));
   } 
   // set result type
   if (OB_FAIL(ret)) {
@@ -97,26 +96,18 @@ int ObExprArrayAppendCommon::eval_append(const ObExpr &expr, ObEvalCtx &ctx, ObD
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("subschema id not match", K(ret), K(subschema_id), K(expr.obj_meta_.get_subschema_id()));
   } else if (OB_FAIL(expr.args_[0]->eval(ctx, arr_datum))) {
-    LOG_WARN("failed to eval args", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, val_datum))) {
-    LOG_WARN("failed to eval args", K(ret));
   } else if (arr_datum->is_null()) {
     is_null_res = true;
   } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_datum->get_string(), src_arr))) {
-    LOG_WARN("construct array obj failed", K(ret));
   } else if (OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator, ctx, subschema_id, res_arr, false))) {
-    LOG_WARN("construct result array obj failed", K(ret));
   } else if (!is_prepend) {
     if (OB_FAIL(res_arr->insert_from(*src_arr))) {
-      LOG_WARN("failed to insert elements from array", K(ret));
     } else if (OB_FAIL(append_elem(tmp_allocator, ctx, val_datum, val_subschema_id, val_arr, res_arr))) {
-      LOG_WARN("failed to append element", K(ret));
     }
   } else {
     if (OB_FAIL(append_elem(tmp_allocator, ctx, val_datum, val_subschema_id, val_arr, res_arr))) {
-      LOG_WARN("failed to append element", K(ret));
     } else if (OB_FAIL(res_arr->insert_from(*src_arr))) {
-      LOG_WARN("failed to insert elements from array", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
@@ -126,7 +117,6 @@ int ObExprArrayAppendCommon::eval_append(const ObExpr &expr, ObEvalCtx &ctx, ObD
     ObString res_str;
     if (OB_FAIL(ObArrayExprUtils::set_array_res(
             res_arr, res_arr->get_raw_binary_len(), expr, ctx, res_str))) {
-      LOG_WARN("get array binary string failed", K(ret));
     } else {
       res.set_string(res_str);
     }
@@ -153,9 +143,7 @@ int ObExprArrayAppendCommon::eval_append_batch(const ObExpr &expr, ObEvalCtx &ct
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("subschema id not match", K(ret), K(subschema_id), K(expr.obj_meta_.get_subschema_id()));
   } else if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval source array failed", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval index failed", K(ret));
   } else {
     ObDatumVector arr_datum = expr.args_[0]->locate_expr_datumvector(ctx);
     ObDatumVector val_datum = expr.args_[1]->locate_expr_datumvector(ctx);
@@ -168,25 +156,19 @@ int ObExprArrayAppendCommon::eval_append_batch(const ObExpr &expr, ObEvalCtx &ct
       if (arr_datum.at(j)->is_null()) {
         is_null_res = true;
       } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id,
-                                                         arr_datum.at(j)->get_string(), src_arr))) { 
-        LOG_WARN("construct array obj failed", K(ret));
+                                                         arr_datum.at(j)->get_string(), src_arr))) {
       } else if (OB_NOT_NULL(res_arr)) {
         res_arr->clear();
       } else if (OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator,ctx, subschema_id, res_arr, false))) {
-        LOG_WARN("construct result array obj failed", K(ret));
       }
       if (OB_FAIL(ret) || is_null_res) {
       } else if (!is_prepend) {
         if (OB_FAIL(res_arr->insert_from(*src_arr))) {
-          LOG_WARN("failed to insert elements from array", K(ret));
         } else if (OB_FAIL(append_elem(tmp_allocator, ctx, val_datum.at(j), val_subschema_id, val_arr, res_arr))) {
-          LOG_WARN("failed to append element", K(ret));
         }
       } else {
         if (OB_FAIL(append_elem(tmp_allocator, ctx, val_datum.at(j), val_subschema_id, val_arr, res_arr))) {
-          LOG_WARN("failed to append element", K(ret));
         } else if (OB_FAIL(res_arr->insert_from(*src_arr))) {
-          LOG_WARN("failed to insert elements from array", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -198,16 +180,12 @@ int ObExprArrayAppendCommon::eval_append_batch(const ObExpr &expr, ObEvalCtx &ct
         int64_t res_buf_len = 0;
         ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, res_datum.at(j));
         if (OB_FAIL(output_result.init_with_batch_idx(res_size, j))) {
-          LOG_WARN("fail to init result", K(ret), K(res_size));
         } else if (OB_FAIL(output_result.get_reserved_buffer(res_buf, res_buf_len))) {
-          LOG_WARN("fail to get reserver buffer", K(ret));
         } else if (res_buf_len < res_size) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get invalid res buf len", K(ret), K(res_buf_len), K(res_size));
         } else if (OB_FAIL(res_arr->get_raw_binary(res_buf, res_buf_len))) {
-          LOG_WARN("get array raw binary failed", K(ret), K(res_buf_len), K(res_size));
         } else if (OB_FAIL(output_result.lseek(res_size, 0))) {
-          LOG_WARN("failed to lseek res.", K(ret), K(output_result), K(res_size));
         } else {
           output_result.set_result();
         }
@@ -233,9 +211,7 @@ int ObExprArrayAppendCommon::eval_append_vector(const ObExpr &expr, ObEvalCtx &c
   if (!ob_is_null(expr.obj_meta_.get_type()) && subschema_id != expr.obj_meta_.get_subschema_id()) {
     ret = OB_ERR_UNEXPECTED;
   } else if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval source array failed", K(ret));
   } else if (OB_FAIL(expr.args_[1]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval index failed", K(ret));
   } else {
     ObIVector *arr_vec = expr.args_[0]->get_vector(ctx);
     ObIVector *val_vec = expr.args_[1]->get_vector(ctx);
@@ -254,29 +230,23 @@ int ObExprArrayAppendCommon::eval_append_vector(const ObExpr &expr, ObEvalCtx &c
       } else {
         ObString arr_str = arr_vec->get_string(idx);
         if (OB_FAIL(ObNestedVectorFunc::construct_param(tmp_allocator, ctx, subschema_id, arr_str, src_arr))) {
-          LOG_WARN("construct array obj failed", K(ret));
         }
       }
       if (OB_FAIL(ret) || is_null_res) {
       } else if (OB_NOT_NULL(res_arr)) {
         res_arr->clear();
       } else if (OB_FAIL(ObArrayExprUtils::construct_array_obj(tmp_allocator,ctx, subschema_id, res_arr, false))) {
-        LOG_WARN("construct child array obj failed", K(ret));
       }
       if (OB_FAIL(ret) || is_null_res) {
       } else if (!is_prepend) {
         if (OB_FAIL(res_arr->insert_from(*src_arr))) {
-          LOG_WARN("failed to insert elements from array", K(ret));
         } else if (OB_FAIL(append_elem_vector(tmp_allocator, ctx, val_vec, idx,
                                               val_subschema_id, *expr.args_[1], val_arr, res_arr))){
-          LOG_WARN("append array element failed", K(ret));
         }
       } else {
         if (OB_FAIL(append_elem_vector(tmp_allocator, ctx, val_vec, idx,
                                               val_subschema_id, *expr.args_[1], val_arr, res_arr))){
-          LOG_WARN("failed to append element", K(ret));
         } else if (OB_FAIL(res_arr->insert_from(*src_arr))) {
-          LOG_WARN("failed to insert elements from array", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -284,14 +254,11 @@ int ObExprArrayAppendCommon::eval_append_vector(const ObExpr &expr, ObEvalCtx &c
         res_vec->set_null(idx);
       } else if (res_format == VEC_DISCRETE) {
         if (OB_FAIL(ObArrayExprUtils::set_array_res<ObDiscreteFormat>(res_arr, expr, ctx, static_cast<ObDiscreteFormat *>(res_vec), idx))) {
-          LOG_WARN("set array res failed", K(ret));
         }
       } else if (res_format == VEC_UNIFORM) {
         if (OB_FAIL(ObArrayExprUtils::set_array_res<ObUniformFormat<false>>(res_arr, expr, ctx, static_cast<ObUniformFormat<false> *>(res_vec), idx))) {
-          LOG_WARN("set array res failed", K(ret));
         }
       } else if (OB_FAIL(ObArrayExprUtils::set_array_res<ObVectorBase>(res_arr, expr, ctx, static_cast<ObVectorBase *>(res_vec), idx))) {
-        LOG_WARN("set array res failed", K(ret));
       }
     } //end for
   }
@@ -306,20 +273,16 @@ int ObExprArrayAppendCommon::append_elem(ObIAllocator &tmp_allocator, ObEvalCtx 
   if (res_arr->get_format() == Nested_Array) {
     if (val_datum->is_null()) {
       if (OB_FAIL(res_arr->push_null())) {
-        LOG_WARN("failed to push back null value", K(ret));
       }
     } else {
       ObArrayNested *nested_arr = dynamic_cast<ObArrayNested *>(res_arr);
       if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, val_subschema_id, val_datum->get_string(), val_arr))) {
-        LOG_WARN("construct array obj failed", K(ret));
       } else if (OB_FAIL(nested_arr->push_back(*val_arr))) {
-        LOG_WARN("failed to push back value", K(ret));
       }
     }
   } else {
     ObCollectionBasicType *elem_type = dynamic_cast<ObCollectionBasicType *>(dynamic_cast<const ObCollectionArrayType*>(res_arr->get_array_type())->element_type_);
     if (OB_FAIL(ObArrayUtil::append(*res_arr, elem_type->basic_meta_.get_obj_type(), val_datum))) {
-      LOG_WARN("failed to append array value", K(ret));
     }
   }
   return ret;
@@ -334,13 +297,11 @@ int ObExprArrayAppendCommon::append_elem_vector(ObIAllocator &tmp_allocator, ObE
   if (res_arr->get_format() == Nested_Array) {
     if (val_vec->is_null(idx)) {
       if (OB_FAIL(res_arr->push_null())) {
-        LOG_WARN("failed to push back null value", K(ret));
       }
     } else {
       ObArrayNested *nested_arr = dynamic_cast<ObArrayNested *>(res_arr);
       ObString val_arr_str = val_vec->get_string(idx);
       if (OB_FAIL(ObNestedVectorFunc::construct_param(tmp_allocator, ctx, val_subschema_id, val_arr_str, val_arr))) {
-        LOG_WARN("construct array obj failed", K(ret));
       }
       if (OB_SUCC(ret) && OB_FAIL(nested_arr->push_back(*val_arr))) {
         LOG_WARN("failed to push back value", K(ret));
@@ -359,7 +320,6 @@ int ObExprArrayAppendCommon::append_elem_vector(ObIAllocator &tmp_allocator, ObE
       val_datum.pack_ = payload_len;
     }
     if (OB_FAIL(ObArrayUtil::append(*res_arr, elem_type->basic_meta_.get_obj_type(), &val_datum))) {
-      LOG_WARN("failed to append array value", K(ret));
     }
   }
   return ret;

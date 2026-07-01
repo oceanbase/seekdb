@@ -68,16 +68,12 @@ int ObExprCheckCatalogAccess::eval_check_catalog_access(const ObExpr &expr,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(expr.eval_param_value(ctx, catalog))) {
-    LOG_WARN("evaluate parameters failed", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("failed to get tenant schema guard", K(ret));
   } else if (OB_FAIL(session_info->get_session_priv_info(session_priv))) {
-    LOG_WARN("failed to get session priv info", K(ret));
   } else if (OB_FAIL(schema_guard.check_catalog_show(session_priv,
                                                      session_info->get_enable_role_array(),
                                                      catalog->is_null() ? ObString() : catalog->get_string(),
                                                      allow_show))) {
-    LOG_WARN("failed to check catalog show", K(ret));
   } else {
     expr_datum.set_bool(allow_show);
   }

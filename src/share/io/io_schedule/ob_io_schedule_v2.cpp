@@ -59,10 +59,8 @@ int ObTenantIOSchedulerV2::schedule_request(ObIORequest &req)
   } else if (OB_UNLIKELY(req.is_canceled())) {
     ret = OB_CANCELED;
   } else if (OB_FAIL(req.prepare())) {
-    LOG_WARN("prepare io request failed", K(ret), K(req));
   } else if (FALSE_IT(time_guard.click("prepare_req"))) {
   } else if (OB_FAIL(OB_IO_MANAGER.get_device_channel(req, device_channel))) {
-    LOG_WARN("get device channel failed", K(ret), K(req));
   } else if (FALSE_IT(result->time_log_.dequeue_ts_ = ObTimeUtility::fast_current_time())) {
   } else {
     // Submit with bounded in-place retry on OB_EAGAIN (device queue / io depth full).
@@ -74,7 +72,6 @@ int ObTenantIOSchedulerV2::schedule_request(ObIORequest &req)
       {
         ObThreadCondGuard guard(result->get_cond());
         if (OB_FAIL(guard.get_ret())) {
-          LOG_ERROR("fail to guard master condition", K(ret));
         } else if (req.is_canceled()) {
           ret = OB_CANCELED;
         } else if (OB_FAIL(device_channel->submit(req))) {

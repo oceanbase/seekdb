@@ -131,7 +131,6 @@ int ObTabletLSPairCache::refresh()
   SMART_VAR(ObArray<ObTabletLSPair>, tablet_ls_pair_array) {
     tablet_ls_pair_array.set_attr(ObMemAttr("RSCompPairCache"));
     if (OB_FAIL(tablet_ls_pair_array.reserve(RANGE_SIZE))) {
-      LOG_WARN("failed to reserve array", KR(ret));
     }
     while (OB_SUCC(ret)) {
       tablet_ls_pair_array.reuse();
@@ -140,9 +139,6 @@ int ObTabletLSPairCache::refresh()
                                                 start_tablet_id,
                                                 RANGE_SIZE,
                                                 tablet_ls_pair_array))) {
-        LOG_WARN("fail to get a range of tablet through tablet_to_ls_table_operator",
-                KR(ret), K(start_tablet_id), K(RANGE_SIZE),
-                K(tablet_ls_pair_array));
       } else if (tablet_ls_pair_array.empty()) {
         break;
 #ifdef ERRSIM
@@ -154,7 +150,6 @@ int ObTabletLSPairCache::refresh()
         for (int64_t idx = 0; OB_SUCC(ret) && idx < tablet_ls_pair_array.count(); ++idx) {
           ObTabletLSPair &pair = tablet_ls_pair_array.at(idx);
           if (OB_FAIL(map_.set_refactored(pair.get_tablet_id(), pair.get_ls_id()))) {
-            LOG_WARN("fail set tablet ls map", KR(ret));
           }
         } // end of for
         if (OB_SUCC(ret)) {
@@ -177,7 +172,6 @@ int ObTabletLSPairCache::rebuild_map_by_tablet_cnt()
   int64_t tablet_cnt = 0;
   if (map_.empty()) {
     if (OB_FAIL(ObTabletToLSTableOperator::get_tablet_ls_pairs_cnt(*GCTX.sql_proxy_, tablet_cnt))) {
-      LOG_WARN("failed to get tablet_ls pair cnt", KR(ret));
     }
 #ifdef ERRSIM
     if (OB_FAIL(ret)) {
@@ -200,7 +194,6 @@ int ObTabletLSPairCache::rebuild_map_by_tablet_cnt()
         map_.destroy();
       }
       if (OB_FAIL(map_.create(recommend_map_bucked_cnt, "RSCompPairCache", "RSCompPairCache"))) {
-        LOG_WARN("fail to create tablet ls pair map", KR(ret), K(recommend_map_bucked_cnt));
       } else {
         LOG_INFO("success to rebuild or create map", KR(ret), K(tablet_cnt), K(map_.bucket_count()));
       }
@@ -216,7 +209,6 @@ int ObTabletLSPairCache::try_refresh(const bool force_refresh/* = false*/)
     LOG_WARN("failed to rebuild map by tablet cnt", KR(ret), K(force_refresh));
   } else if (force_refresh) {
     if (OB_FAIL(refresh())) {
-      LOG_WARN("failed to refresh", KR(ret));
     }
   }
   return ret;
@@ -232,7 +224,6 @@ int ObTabletLSPairCache::get_tablet_ls_pairs(
     ObLSID tmp_ls_id(ObLSID::SYS_LS_ID);
     for (int64_t idx = 0; OB_SUCC(ret) && idx < tablet_ids.count(); ++idx) {
       if (OB_FAIL(pairs.push_back(ObTabletLSPair(tablet_ids.at(idx), tmp_ls_id)))) {
-        LOG_WARN("fail to push back pair", KR(ret), K(table_id));
       }
     } // end of for
   } else {
@@ -245,7 +236,6 @@ int ObTabletLSPairCache::get_tablet_ls_pairs(
           LOG_WARN("failed to get ls id", KR(ret), K(idx), K(tablet_ids));
         }
       } else if (OB_FAIL(pairs.push_back(ObTabletLSPair(tablet_ids.at(idx), tmp_ls_id)))) {
-        LOG_WARN("fail to push back pair", KR(ret), K(table_id));
       }
     } // end of for
   }
@@ -343,9 +333,7 @@ int ObUncompactInfo::get_uncompact_info(
   int ret = OB_SUCCESS;
   SpinRLockGuard r_guard(diagnose_rw_lock_);
   if (OB_FAIL(input_tablets.assign(tablets_))) {
-    LOG_WARN("fail to assign uncompacted_tablets", KR(ret), K_(tablets));
   } else if (OB_FAIL(input_table_ids.assign(table_ids_))) {
-    LOG_WARN("fail to assign uncompacted_tablets", KR(ret), K_(table_ids));
   }
   return ret;
 }

@@ -103,22 +103,17 @@ private:
     bool update = false;
 
     if (!is_inited_) {
-      TRANS_LOG(WARN, "ObGtsRPCCB not inited");
       ret = OB_NOT_INIT;
     } else if (!true) {
-      TRANS_LOG(WARN, "invalid argument", K(dst));
       ret = OB_ERR_UNEXPECTED;
     } else if (OB_SUCCESS != rcode.rcode_) {
       status = rcode.rcode_;
-      TRANS_LOG(WARN, "gts rpc error", K(rcode), K(dst));
       if (EXECUTE_COUNT_PER_SEC(16)) {
-        TRANS_LOG(INFO, "get gts need refresh gts location", K(status), K(result));
       }
       if (NULL == ts_mgr_) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(WARN, "gts local cache mgr is NULL", K(ret));
       } else if (OB_FAIL(ts_mgr_->refresh_gts_location())) {
-        TRANS_LOG(WARN, "refresh gts location fail", K(ret));
       } else {
         // do nothing
       }
@@ -137,7 +132,6 @@ private:
                                                update))) {
         } else if (!update) {
           if (EXECUTE_COUNT_PER_SEC(16)) {
-            TRANS_LOG(INFO, "gts local cache not updated", K(result));
           }
         } else {
           transaction::ObTsResponseTask *task = NULL;
@@ -147,11 +141,8 @@ private:
               TRANS_LOG(ERROR, "alloc memory failed", KR(ret), KP(task));
             } else {
               if (OB_FAIL(task->init(i, ts_mgr_, transaction::TS_SOURCE_GTS))) {
-                TRANS_LOG(WARN, "gts task init error", KR(ret), KP(task), K(i), K(result));
               } else if (OB_FAIL(ts_worker_->push_task(task))) {
-                TRANS_LOG(WARN, "push gts task failed", KR(ret), KP(task), K(result));
               } else {
-                TRANS_LOG(DEBUG, "push gts task success", KP(task), K(result));
               }
               if (OB_SUCCESS != ret) {
                 transaction::ObTsResponseTaskFactory::free(task);

@@ -65,7 +65,6 @@ int ObExprRbBuild::calc_result_type1(ObExprResType &type,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_USER_ERROR(OB_ERR_INVALID_TYPE_FOR_OP, "ARRAY", ob_obj_type_str(type1.get_type()));
   } else if (OB_FAIL(exec_ctx->get_sqludt_meta_by_subschema_id(type1.get_subschema_id(), arr_meta))) {
-    LOG_WARN("failed to get elem meta.", K(ret), K(type1.get_subschema_id()));
   } else if (arr_meta.type_ != ObSubSchemaType::OB_SUBSCHEMA_COLLECTION_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("invalid subschema type", K(ret), K(arr_meta.type_));
@@ -81,7 +80,6 @@ int ObExprRbBuild::calc_result_type1(ObExprResType &type,
     uint32_t depth = 0;
     bool is_vec = false;
     if (OB_FAIL(ObArrayExprUtils::get_array_element_type(exec_ctx, type1.get_subschema_id(), data_type, depth, is_vec))) {
-      LOG_WARN("failed to get array element type", K(ret));
     } else if (!ob_is_integer_type(data_type.get_obj_type())) {
       ret = OB_ERR_INVALID_TYPE_FOR_OP;
       LOG_WARN("basic element type of array is not integer", K(ret), K(data_type.get_obj_type()));
@@ -109,11 +107,9 @@ int ObExprRbBuild::eval_rb_build(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
   bool is_null_res = false;
 
   if (OB_FAIL(expr.args_[0]->eval(ctx, arr_datum))) {
-    LOG_WARN("failed to eval source array arg", K(ret));
   } else if (arr_datum->is_null()) {
     is_null_res = true;
-  } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_datum->get_string(), arr_obj))) { 
-    LOG_WARN("construct array obj failed", K(ret));
+  } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, subschema_id, arr_datum->get_string(), arr_obj))) {
   } else if (OB_ISNULL(rb = OB_NEWx(ObRoaringBitmap, &tmp_allocator, (&tmp_allocator)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to create alloc memory to roaringbitmap", K(ret));
@@ -122,7 +118,6 @@ int ObExprRbBuild::eval_rb_build(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
       ObObj elem_obj;
       bool is_null_elem = false;
       if (OB_FAIL(ObArrayExprUtils::get_basic_elem(arr_obj, i, elem_obj, is_null_elem))) {
-        LOG_WARN("failed to cast get element", K(ret));
       } else if (is_null_elem) {
         ret = OB_ERR_NULL_VALUE;
         LOG_WARN("array contains null basic element", K(ret));
@@ -136,11 +131,9 @@ int ObExprRbBuild::eval_rb_build(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
         } else {
           uint32_t uint32_val = static_cast<uint32_t>(elem_obj.get_int());
           if (OB_FAIL(rb->value_add(static_cast<uint64_t>(uint32_val)))) {
-            LOG_WARN("failed to add value to roaringbtimap", K(ret), K(uint32_val));
           }
         }
       } else if (OB_FAIL(rb->value_add(elem_obj.get_uint64()))) {
-        LOG_WARN("failed to add value to roaringbtimap", K(ret), K(elem_obj.get_uint64()));
       }
     }
   }
@@ -149,9 +142,7 @@ int ObExprRbBuild::eval_rb_build(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &re
   } else if (is_null_res) {
     res.set_null();
   } else if (OB_FAIL(ObRbUtils::rb_serialize(tmp_allocator, rb_bin, rb))) {
-    LOG_WARN("failed to serialize roaringbitmap", K(ret));
   } else if (OB_FAIL(ObRbExprHelper::pack_rb_res(expr, ctx, res, rb_bin))) {
-    LOG_WARN("fail to pack roaringbitmap res", K(ret));
   }
   ObRbUtils::rb_destroy(rb);
 

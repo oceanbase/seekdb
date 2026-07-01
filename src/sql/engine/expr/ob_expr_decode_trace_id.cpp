@@ -55,14 +55,12 @@ int ObExprDecodeTraceId::calc_decode_trace_id_expr(const ObExpr &expr, ObEvalCtx
   int ret = OB_SUCCESS;
   ObDatum *trace_id_datum = nullptr;
   if (OB_FAIL(expr.args_[0]->eval(ctx, trace_id_datum))) {
-    LOG_WARN("eval trace_id failed", K(ret));
   } else if (OB_ISNULL(trace_id_datum)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("param datum is null pointer", K(ret));
   } else if (trace_id_datum->is_null()) {
     res_datum.set_null();
   } else if (OB_FAIL(calc_one_row(expr, ctx, *trace_id_datum, res_datum))) {
-    LOG_WARN("calc trace_id failed", K(ret));
   }
   return ret;
 }
@@ -75,7 +73,6 @@ int ObExprDecodeTraceId::calc_decode_trace_id_expr_batch(const ObExpr &expr, ObE
   ObDatum *trace_id_datum_array = nullptr;
   ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("batch eval trace_id failed", K(ret));
   } else if (OB_ISNULL(results = expr.locate_batch_datums(ctx))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("results datum is null pointer", K(ret));
@@ -93,7 +90,6 @@ int ObExprDecodeTraceId::calc_decode_trace_id_expr_batch(const ObExpr &expr, ObE
         results[idx].set_null();
         eval_flags.set(idx);
       } else if (OB_FAIL(calc_one_row(expr, ctx, trace_id_datum_array[idx], results[idx]))) {
-        LOG_WARN("calc trace_id failed", K(ret));
       } else {
         eval_flags.set(idx);
       }

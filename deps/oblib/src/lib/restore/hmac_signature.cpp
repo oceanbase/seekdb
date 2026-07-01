@@ -36,7 +36,6 @@ int generate_signature_nonce(char *nonce, const int64_t buf_size)
   } else {
     int64_t random_num = ObRandom::rand(0, OB_MAX_STS_SIGNATURE_RAND_NUM);
     if (OB_FAIL(databuff_printf(nonce, buf_size, "%ld%ld", curr_time_us, random_num))) {
-      OB_LOG(WARN, "failed to gen signature nonce", K(ret), K(nonce), K(buf_size), K(curr_time_us), K(random_num));
     }
   }
   return ret;
@@ -50,9 +49,7 @@ int generate_request_id(char *request_id, const int64_t buf_size)
   char signature_nonce[OB_MAX_STS_SIGNATURE_NONCE_LENTH] = {0};
   // Get current time
   if (OB_FAIL(generate_signature_nonce(signature_nonce, sizeof(signature_nonce)))) {
-    OB_LOG(WARN, "generage signature nonce failed", K(ret), K(signature_nonce), K(sizeof(signature_nonce)));
   } else if (OB_FAIL(databuff_printf(request_id, buf_size, "observer-%s", signature_nonce))) {
-    OB_LOG(WARN, "failed to generate request id", K(ret), K(request_id), K(buf_size), K(signature_nonce));
   }
   return ret;
 }
@@ -70,8 +67,6 @@ int base64_encoded(const char *input, const int64_t input_len, char *encoded_res
     ret = OB_SIZE_OVERFLOW;
     OB_LOG(WARN, "size overflow", K(ret), K(encoded_buf_len), K(encoded_result_buf_len));
   } else if (OB_FAIL(ObBase64Encoder::encode((const uint8_t *)input, input_len, encoded_result, encoded_result_buf_len, encoded_pos))) {
-    OB_LOG(WARN, "encode base64 fails", K(ret), KP(input), K(input_len), KP(encoded_result), K(encoded_result_buf_len),
-        K(encoded_buf_len), K(encoded_pos));
   } else if (OB_UNLIKELY(encoded_pos >= encoded_result_buf_len)) {
     ret = OB_SIZE_OVERFLOW;
     OB_LOG(WARN, "size overflow", K(ret), K(encoded_pos), K(encoded_result_buf_len));
@@ -270,34 +265,24 @@ int sign_request(
         }
         continue;
       } else if (OB_FAIL(percent_encode(first, encoded_key, sizeof(encoded_key)))) {
-        OB_LOG(WARN, "failed to percent encode", K(ret), K(i), K(first));
       } else if (OB_FAIL(percent_encode(second, encoded_value, sizeof(encoded_value)))) {
-        OB_LOG(WARN, "failed to percent encode", K(ret), K(i), KP(second));
       } else if (i != 0 && OB_FAIL(encoded_params.append("&"))) {
         OB_LOG(WARN, "failed to append", K(ret), K(i));
       } else if (OB_FAIL(encoded_params.append(encoded_key))) {
-        OB_LOG(WARN, "failed to append", K(ret), KP(encoded_key));
       } else if (OB_FAIL(encoded_params.append("="))) {
-        OB_LOG(WARN, "failed to append", K(ret));
       } else if (OB_FAIL(encoded_params.append(encoded_value))) {
-        OB_LOG(WARN, "failed to append", K(ret), KP(encoded_value));
       }
     }
     // e.g. params_to_sign="POST&%2F&Action%3DGetResourceSTSCredential%26CloudProvider%3Daliyun%26
     // RequestId%3Dobrequest%26RequestSource%3DOBSERVER%26ResourceAccount%3Doceanbase%26ResourceType%3DOSS%26SignatureNonce%3Dxxxxxx"
     if (FAILEDx(percent_encode("/", delimiter, sizeof(delimiter)))) {
-      OB_LOG(WARN, "failed to percent encode", K(ret), K(delimiter), K(sizeof(delimiter)));
     } else if (OB_FAIL(percent_encode(encoded_params.ptr(), concat_params, sizeof(concat_params)))) {
-      OB_LOG(WARN, "failed to percent encode", K(ret), KP(encoded_params.ptr()), K(encoded_params.length()), KP(concat_params));
     } else if (OB_FAIL(databuff_printf(
                    params_to_sign, sizeof(params_to_sign), "%s&%s&%s", method, delimiter, concat_params))) {
-      OB_LOG(WARN, "failed to percent encode", K(ret), K(method), K(delimiter), KP(concat_params), KP(params_to_sign));
     }
     // signature with HMAC-SHA1
     else if (OB_FAIL(hmac_sha1(sk, params_to_sign, sign_result, sizeof(sign_result), sign_result_len))) {
-      OB_LOG(WARN, "failed to hmac sha1", K(ret), KP(params_to_sign), K(sign_result), K(sign_result_len));
     } else if (OB_FAIL(base64_encoded(sign_result, sign_result_len, encoded_result, sizeof(encoded_result)))) {
-      OB_LOG(WARN, "failed to base64 encode", K(ret), K(sign_result));
     }
     const int64_t len = strlen(encoded_result);
     if (OB_FAIL(ret)) {

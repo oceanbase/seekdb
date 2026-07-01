@@ -42,7 +42,6 @@ int ObExprShadowUKProject::shadow_uk_project(const ObExpr &expr,
   int ret = OB_SUCCESS;
   bool need_shadow_columns = false;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("evaluate parameters values failed", K(ret));
   } else {
     // mysql compatibility: as long as there is a null column in the unique index key, the shadow column needs to be filled
     bool rowkey_has_null = false;

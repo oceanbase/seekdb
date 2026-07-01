@@ -136,7 +136,6 @@ int ObTruncateInfoCacheValue::deep_copy(char *buf, const int64_t buf_len, ObIKVC
     pos += sizeof(ObTruncateInfo) * count_;
     for (int64_t i = 0; OB_SUCC(ret) && i < count_; ++i) {
       if (OB_FAIL(truncate_info_array_[i].deep_copy(buf, buf_len, pos, pfuse_value->truncate_info_array_[i]))) {
-        STORAGE_LOG(WARN, "Failed to deep copy truncate info", K(ret), K(i), K(truncate_info_array_[i]));
       }
     }
 
@@ -157,7 +156,6 @@ int ObTruncateInfoKVCache::init(const char *cache_name)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL((ObKVCache<ObTruncateInfoCacheKey, ObTruncateInfoCacheValue>::init(cache_name)))) {
-    LOG_WARN("fail to init truncate info kv cache", K(ret));
   }
   return ret;
 }
@@ -216,7 +214,6 @@ int ObTruncateInfoKVCacheUtil::get_truncate_info_array(
       LOG_WARN("invalid data from truncate info kv cache", KR(ret), K(cache_key), K(cache_handle));
     } else if (OB_FAIL(input_array.init_with_kv_cache_array(
         allocator, ObArrayWrap<ObTruncateInfo>(cache_handle.value_->get_truncate_info_array(), cache_handle.value_->get_count())))) {
-      LOG_WARN("failed to init truncate info array", KR(ret), K(cache_key), K(cache_handle));
     }
   }
   return ret;
@@ -234,7 +231,6 @@ int ObTruncateInfoKVCacheUtil::put_truncate_info_array(
     LOG_WARN("invalid argument", KR(ret), K(cache_key), K(distinct_array));
   } else if (1 == distinct_array.count()) {
     if (OB_FAIL(cache_value.init(distinct_array.count(), distinct_array.at(0)))) {
-      LOG_WARN("failed to init truncate info value", KR(ret), K(distinct_array));
     }
   } else {
     const int64_t count = distinct_array.count();
@@ -251,12 +247,10 @@ int ObTruncateInfoKVCacheUtil::put_truncate_info_array(
           ret = OB_INVALID_DATA;
           LOG_WARN("invalid truncate info", KR(ret), K(idx), KPC(info));
         } else if (OB_FAIL(info->shallow_copy(dst_array[idx]))) {
-          LOG_WARN("failed to shallow copy truncate info", KR(ret), K(idx), KPC(info));
         }
       } // for
     }
     if (FAILEDx(cache_value.init(count, dst_array))) {
-      LOG_WARN("failed to init truncate info value", KR(ret), K(distinct_array));
     }
   }
   storage::ObTruncateInfoKVCache &truncate_info_cache = ObStorageCacheSuite::get_instance().get_truncate_info_cache();

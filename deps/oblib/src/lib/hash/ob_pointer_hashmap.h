@@ -168,7 +168,6 @@ public:
       } else if (is_full()) {
         // full but we found one erased pos
         if (pos < 0 || pos >= capacity_) {
-          COMMON_LOG(ERROR, "unexpected error", K(pos));
         } else if (cells_[pos] == erased_v_) {
           erased_pos = pos;
         } else {
@@ -189,7 +188,6 @@ public:
     over_write_value = empty_v_;
 
     if (pos < 0 || pos >= capacity_) {
-      COMMON_LOG(WARN, "invalid argument", K(pos));
       ret = OB_INVALID_ARGUMENT;
     } else {
       if (cells_[pos] == empty_v_) {
@@ -206,7 +204,6 @@ public:
       }
       cells_[pos] = value;
       if (item_count_ > count_) {
-        COMMON_LOG(ERROR, "unexpected error, item_count_ is less to count_");
         ret = OB_ERR_UNEXPECTED;
       }
     }
@@ -230,7 +227,6 @@ public:
     int64_t pos = 0;
     if (OB_SUCC(placement_hash_search(key, pos))) {
       if (pos < 0 || pos >= capacity_) {
-        COMMON_LOG(ERROR, "unexpected error", K(pos), K_(capacity));
         ret = OB_ERR_UNEXPECTED;
       } else {
         value = cells_[pos];
@@ -249,7 +245,6 @@ public:
     int64_t pos = 0;
     if (OB_SUCCESS == placement_hash_search(key, pos)) {
       if (pos < 0 || pos >= capacity_) {
-        COMMON_LOG(ERROR, "unexpected error", K(pos), K_(capacity));
       } else {
         ret = &cells_[pos];
       }
@@ -326,7 +321,6 @@ public:
   {
     for (int i = 0; i < capacity_; i++) {
       if (cells_[i] != empty_v_ && cells_[i] != erased_v_) {
-        COMMON_LOG(INFO, "", K(get_key_(cells_[i])));
       }
     }
   }
@@ -494,7 +488,6 @@ public:
   {
     int ret = assign(other);
     if (OB_FAIL(ret)) {
-      COMMON_LOG(WARN, "assign failed", K(ret), K(*this));
     }
     return *this;
   }
@@ -550,12 +543,10 @@ public:
     over_write_value = (V(0));
 
     if (OB_UNLIKELY(OB_SUCCESS != (ret = init()))) {
-      COMMON_LOG(WARN, "not initialize pointer hash map", K(ret), K(*this));
     } else {
       ret = find_set_pos(key, value, sub_map_idx, pos, overwrite);
       if (OB_SUCC(ret)) {
         if (sub_map_idx < 0 || sub_map_idx >= sub_map_count_) {
-          COMMON_LOG(ERROR, "unexpected error", K(*this), K(sub_map_idx), K_(sub_map_count));
           ret = OB_ERR_UNEXPECTED;
         } else {
           ret = sub_maps_[sub_map_idx]->set_value(pos, value, over_write_value);
@@ -673,7 +664,6 @@ public:
     int ret = OB_HASH_NOT_EXIST;
 
     if (OB_UNLIKELY(NULL == sub_maps_[0])) {
-      COMMON_LOG(WARN, "not initialize pointer hash map", K(*this));
       ret = OB_NOT_INIT;
     } else {
       // Check each map successively. If one succeeds, we're done!
@@ -889,8 +879,6 @@ private:
       // do nothing
     }
 
-    COMMON_LOG(INFO, "extend hash map", K(*this), K(add_sub_map), K(resize_to),
-        "count", count(), "item_count", item_count());
 
     if (add_sub_map) {
       if (sub_map_count_ < MAX_SUB_MAP_COUNT) {
@@ -909,8 +897,6 @@ private:
         this->swap(tmp);
         ret = sub_maps_[0];
       }
-      COMMON_LOG(INFO, "swap hash map", K(*this), K(add_sub_map), K(resize_to),
-          "count", count(), "item_count", item_count());
     }
 
     return ret;

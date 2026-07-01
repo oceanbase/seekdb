@@ -43,12 +43,10 @@ int ObCreateDirectoryExecutor::execute(ObExecContext &ctx, ObCreateDirectoryStmt
     // do nothing.
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-    SQL_ENG_LOG(WARN, "get task executor context failed");
   } else if (OB_ISNULL(ctx.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "fail to get physical plan ctx", K(ret), K(ctx));
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_directory(create_directory_arg); }))) {
-    SQL_ENG_LOG(WARN, "rpc proxy create directory failed", K(ret), K(create_directory_arg));
   } else {
     ctx.get_physical_plan_ctx()->set_affected_rows(1);
   }
@@ -72,12 +70,10 @@ int ObDropDirectoryExecutor::execute(ObExecContext &ctx, ObDropDirectoryStmt &st
     // do nothing.
   } else if (OB_ISNULL(task_exec_ctx = GET_TASK_EXECUTOR_CTX(ctx))) {
     ret = OB_NOT_INIT;
-    SQL_ENG_LOG(WARN, "get task executor context failed");
   } else if (OB_ISNULL(ctx.get_physical_plan_ctx())) {
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "fail to get physical plan ctx", K(ret), K(ctx));
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_directory(drop_directory_arg); }))) {
-    SQL_ENG_LOG(WARN, "rpc proxy drop directory failed", K(ret), K(drop_directory_arg));
    } else {
     ctx.get_physical_plan_ctx()->set_affected_rows(1);
   }

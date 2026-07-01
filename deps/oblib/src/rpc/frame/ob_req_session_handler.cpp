@@ -243,7 +243,6 @@ int ObReqSessionHandler::wait_for_next_request(int64_t sessid,
               if (OB_SUCCESS != tmp_ret) {
                 LOG_WARN("stream rpc sender has been aborted, unneed to wait", K(sessid), K(timeout), K(reverse_keepalive_arg));
                 if (OB_FAIL(next_wait_map_.get_refactored(sessid, wait_object))) {
-                  LOG_ERROR("wait object has been released", K(sessid), K(ret));
                 } else if (OB_ISNULL(wait_object.req_)) {
                   // keepalive faild and the req is null, set the error and break
                   ret = tmp_ret;

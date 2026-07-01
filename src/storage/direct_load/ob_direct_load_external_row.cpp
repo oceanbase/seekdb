@@ -77,7 +77,6 @@ int ObDirectLoadExternalRow::deep_copy(const ObDirectLoadExternalRow &src, char 
   } else {
     reuse();
     if (OB_FAIL(rowkey_datum_array_.deep_copy(src.rowkey_datum_array_, buf, len, pos))) {
-      LOG_WARN("fail to deep copy datum array", KR(ret));
     } else {
       seq_no_ = src.seq_no_;
       is_delete_ = src.is_delete_;
@@ -111,7 +110,6 @@ int ObDirectLoadExternalRow::from_datum_row(const ObDirectLoadDatumRow &datum_ro
       ObDirectLoadDatumArray serialize_datum_array;
       if (OB_FAIL(serialize_datum_array.assign(datum_row.storage_datums_ + rowkey_column_count,
                                                datum_row.count_ - rowkey_column_count))) {
-        LOG_WARN("fail to assign datum array", KR(ret));
       } else {
         const int64_t buf_size = serialize_datum_array.get_serialize_size();
         char *buf = nullptr;
@@ -120,7 +118,6 @@ int ObDirectLoadExternalRow::from_datum_row(const ObDirectLoadDatumRow &datum_ro
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to alloc memory", KR(ret), K(buf_size));
         } else if (OB_FAIL(serialize_datum_array.serialize(buf, buf_size, pos))) {
-          LOG_WARN("fail to serialize datum array", KR(ret));
         } else {
           buf_ = buf;
           buf_size_ = buf_size;
@@ -158,9 +155,7 @@ int ObDirectLoadExternalRow::to_datum_row(ObDirectLoadDatumRow &datum_row) const
       if (OB_FAIL(
             deserialize_datum_array.assign(datum_row.storage_datums_ + rowkey_datum_array_.count_,
                                            datum_row.count_ - rowkey_datum_array_.count_))) {
-        LOG_WARN("fail to assign datum array", KR(ret));
       } else if (OB_FAIL(deserialize_datum_array.deserialize(buf_, buf_size_, pos))) {
-        LOG_WARN("fail to deserialize datum array", KR(ret));
       } else if (OB_UNLIKELY(rowkey_datum_array_.count_ + deserialize_datum_array.count_ !=
                              datum_row.count_)) {
         ret = OB_ERR_UNEXPECTED;

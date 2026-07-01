@@ -224,14 +224,11 @@ public:
     int ret = OB_SUCCESS;
     if (d_.len_ > OB_MAX_DECIMAL_DIGIT) {
       ret = OB_ERR_UNEXPECTED;
-      _OB_LOG(WARN, "Invalid digit len %u", d_.len_);
     } else if (d_.len_ > 0 && digits_ != nullptr) {
       for (auto i = 0;  OB_SUCC(ret) && i < d_.len_; i++) {
         if (digits_[i] >= BASE) {
           ret = OB_ERR_UNEXPECTED;
-          _OB_LOG(WARN, "Invalid value %u", digits_[i]);
         } else {
-          _OB_LOG(DEBUG, "Digit value %u", digits_[i]);
         }
       }
     }
@@ -390,7 +387,6 @@ public:
   }
   inline int compare(const ObNumber &other) const __attribute__((always_inline))
   {
-    OB_LOG(DEBUG, "current info", KPC(this), K(other));
     return compare_v2(this->d_, this->digits_, other.d_, other.digits_);
   }
   inline bool is_equal(const ObNumber &other) const __attribute__((always_inline))
@@ -1730,15 +1726,10 @@ int ObNumber::add(const IntegerT param1, const IntegerT param2, ObNumber &result
   ObNumber param1_nmb;
   ObNumber param2_nmb;
   if (OB_FAIL(param1_nmb.from(param1, local_allocator))) {
-    LIB_LOG(WARN, "number add failed", K(ret), K(param1));
   } else if (OB_FAIL(param2_nmb.from(param2, local_allocator))) {
-    LIB_LOG(WARN, "number add failed", K(ret), K(param2));
   } else if (OB_FAIL(param1_nmb.add_v3(param2_nmb, param_result_nmb, local_allocator))) {
-    LIB_LOG(WARN, "number add failed", K(ret), K(param1_nmb), K(param2_nmb));
   } else if (OB_FAIL(add_v3(param_result_nmb, result, allocator))) {
-    LIB_LOG(WARN, "number add failed", K(ret), KPC(this), K(param_result_nmb));
   } else {
-    LIB_LOG(DEBUG, "succ add", K(param1), K(param2), KPC(this), K(param_result_nmb), K(result));
   }
   return ret;
 }
@@ -2014,7 +2005,6 @@ int ObNumber::is_in_uint(int64_t exp, bool &is_uint, uint64_t &num) const
   } else {
     if (OB_ISNULL(digits_)) {
       ret = OB_INVALID_ARGUMENT;
-      LIB_LOG(ERROR, "the pointer is null");
     } else {
       if (2 == exp) {
         static const uint32_t unum[3] = {18, 446744073, 709551615};
@@ -2314,7 +2304,6 @@ inline int ObNumber::round_v2(const int64_t scale, const bool for_oracle_to_char
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid param", K(scale), K(ret));
   } else if (OB_FAIL(round_scale_v2_(scale, false, for_oracle_to_char))) {
-    LIB_LOG(WARN, "fail to round_scale_oracle_", KPC(this), K(ret));
   }
   return ret;
 }
@@ -2330,7 +2319,6 @@ inline int ObNumber::round_v3(const int64_t scale, const bool for_oracle_to_char
     ret = OB_INVALID_ARGUMENT;
     LIB_LOG(WARN, "invalid param", K(scale), K(ret));
   } else if (OB_FAIL(round_scale_v3_(scale, false, for_oracle_to_char))) {
-    LIB_LOG(WARN, "fail to round_scale_oracle_", KPC(this), K(ret));
   }
   return ret;
 }
@@ -2690,7 +2678,6 @@ int poly_mono_mul(
       || 0 >= multiplicand_size
       || (multiplicand_size + 1) != product_size)) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(ERROR, "the input param is invalid");
   } else {
     uint64_t carry = 0;
     int64_t multiplicand_idx = multiplicand_size - 1;
@@ -2736,7 +2723,6 @@ int poly_mono_div(
       || 0 >= dividend_size
       || dividend_size != quotient_size)) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(ERROR, "the input param is invalid");
   } else {
     uint64_t carry = 0;
     int64_t dividend_idx = 0;
@@ -2779,7 +2765,6 @@ int poly_poly_add(
       || 0 >= addend_size
       || add_size != sum_size)) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(ERROR, "the input param is invalid", K(base), K(addend.base()), K(sum.base()), K(augend_size), K(addend_size), K(add_size), K(sum_size));
   } else {
     uint64_t carry = 0;
     int64_t augend_idx = augend_size - 1;
@@ -2834,7 +2819,6 @@ int poly_poly_sub(
       || 0 >= subtrahend_size
       || sub_size != remainder_size)) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(ERROR, "the input param is invalid");
   } else {
     uint64_t borrow = 0;
     int64_t minuend_idx = minuend_size - 1;
@@ -2932,7 +2916,6 @@ int poly_poly_mul(
       || 0 >= multiplier_size
       || mul_size != product_size)) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(ERROR, "the input param is invalid");
   } else {
     // [a, b, c] * [d, e, f]
     // = (a*B^2 + b*B^1 + c*B^0) * (d*B^2 + e^B^1 + f*B^0)
@@ -2948,7 +2931,6 @@ int poly_poly_mul(
         uint64_t tmp_product = multiplicand.at(multiplicand_idx) * multiplier.at(multiplier_idx);
 
         if (OB_FAIL(recursion_set_product(base, tmp_product, cur_product_idx, product))) {
-          LIB_LOG(WARN, "set product fail", K(tmp_product), K(product_idx));
           break;
         }
       }
@@ -3005,12 +2987,10 @@ int knuth_probe_quotient(
   bool negative = false;
   bool truevalue = false;
   if (OB_FAIL(qq_mul_v.ensure(v.size() + 1))) {
-    _OB_LOG(WARN, "ensure qq_mul_v fail, ret=%d size=%ld", ret, v.size() + 1);
   } else if (OB_FAIL(poly_mono_mul(v, qq, qq_mul_v))) {
     ObCStringHelper helper;
     _OB_LOG(WARN, "%lu mul %s u=%s fail, ret=%d", qq, helper.convert(v), helper.convert(u), ret);
   } else if (OB_FAIL(u_sub.ensure(n + 1))) {
-    _OB_LOG(WARN, "ensure u_sub fail, ret=%d size=%ld", ret, n + 1);
   } else if (OB_FAIL(poly_poly_sub(u.ref(j, j + n), qq_mul_v.ref(1, n + 1), u_sub,
                                                 negative, truevalue))) {
     ObCStringHelper helper;
@@ -3035,7 +3015,6 @@ int knuth_probe_quotient(
     T u_add;
     u_add.set_base(base);
     if (OB_FAIL(u_add.ensure(n + 2))) {
-      _OB_LOG(WARN, "ensure u_add fail, ret=%d size=%ld", ret, n + 2);
     } else if (OB_FAIL(poly_poly_add(u_sub, v, u_add))) {
       ObCStringHelper helper;
       _OB_LOG(WARN, "%s add %s fail, ret=%d", helper.convert(u_sub), helper.convert(v), ret);
@@ -3331,9 +3310,6 @@ OB_INLINE int64_t ObNumber::get_scale() const
       remove_back_zero(digits_[d_.len_ - 1], tail_decimal_zero_count);
     }
     decimal_count = decimal_length * DIGIT_LEN - tail_decimal_zero_count;
-    LIB_LOG(DEBUG, "get_scale", KPC(this), K(expr_value),
-            K(integer_length), K(valid_decimal_length), K(decimal_length),
-            K(tail_decimal_zero_count), K(decimal_count));
   }
   return decimal_count;
 }

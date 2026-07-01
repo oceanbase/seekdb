@@ -429,7 +429,6 @@ inline int split_on(ObString &src, const char sep, ObIArray<ObString> &result)
   ObString str = src.split_on(sep);
   while (OB_SUCC(ret) && !str.empty()) {
     if (OB_FAIL(result.push_back(str))) {
-      LIB_LOG(WARN, "push back error", K(ret));
     } else {
       str = src.split_on(sep);
     }
@@ -514,7 +513,6 @@ struct CountReporter
   ~CountReporter()
   {
     if (last_report_count_ > 0) {
-      _OB_LOG(INFO, "%s=%ld", id_, count_);
     }
   }
   bool has_reported() { return last_report_count_ > 0; }
@@ -718,15 +716,12 @@ int load_file_to_string(const char *path, Allocator &allocator, ObString &str)
   if (NULL == path || strlen(path) == 0) {
     ret = OB_INVALID_ARGUMENT;
   } else if ((fd = ::open(path, O_RDONLY)) < 0) {
-    _OB_LOG(WARN, "open file %s failed, errno %d", path, errno);
     ret = OB_ERROR;
   } else if (0 != ::fstat(fd, &st)) {
-    _OB_LOG(WARN, "fstat %s failed, errno %d", path, errno);
     ret = OB_ERROR;
   } else if (NULL == (buf = allocator.alloc(st.st_size + 1))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
   } else if ((size = static_cast<int64_t>(::read(fd, buf, st.st_size))) < 0) {
-    _OB_LOG(WARN, "read %s failed, errno %d", path, errno);
     ret = OB_ERROR;
   } else {
     buf[size] = '\0';
@@ -735,7 +730,6 @@ int load_file_to_string(const char *path, Allocator &allocator, ObString &str)
   if (fd >= 0) {
     int tmp_ret = close(fd);
     if (tmp_ret < 0) {
-      _OB_LOG(WARN, "close %s failed, errno %d", path, errno);
       ret = (OB_SUCCESS == ret) ? tmp_ret : ret;
     }
   }
@@ -756,7 +750,6 @@ inline int ob_cstrcopy(char *dest, int64_t dest_buflen, const char* src, int64_t
 {
   int ret = OB_SUCCESS;
   if (dest_buflen <= src_len) {
-    COMMON_LOG(WARN, "buffer not enough", K(dest_buflen), K(src_len));
     ret = OB_BUF_NOT_ENOUGH;
   } else {
     MEMCPY(dest, src, src_len);
@@ -833,7 +826,6 @@ int add_var_to_array_no_dup(ObIArray<T> &array, const T &var, int64_t *idx = NUL
   if (has_exist_in_array(array, var, idx)) {
     //do nothing
   } else if (OB_FAIL(array.push_back(var))) {
-    LIB_LOG(WARN, "Add var to array error", K(ret));
   } else if (idx != NULL) {
     *idx = array.count() - 1;
   }
@@ -849,7 +841,6 @@ int append_array_no_dup(ObIArray<T> &dst, const ObIArray<T> &src)
     if (has_exist_in_array(dst, var)) {
       //do nothing
     } else if (OB_FAIL(dst.push_back(var))) {
-      LIB_LOG(WARN, "Add var to array error", K(ret));
     } else { } //do nothing
   }
   return ret;
@@ -1263,8 +1254,6 @@ public:
       const int64_t cur_accum_count = ATOMIC_AAF(&accum_count_, count);
       if (ATOMIC_LOAD(&last_ts_) + stat_interval_ < cur_ts) {
         if (ATOMIC_BCAS(&lock_tag_, false, true)) {
-          LIB_LOG(INFO, NULL == item_ ? "" : item_, K(cur_stat_count), K_(stat_interval), "avg (count/cost)",
-              cur_accum_count / cur_stat_count, K(this), K_(extra_info));
           (void)ATOMIC_SET(&last_ts_, cur_ts);
           (void)ATOMIC_SET(&stat_count_, 0);
           (void)ATOMIC_SET(&accum_count_, 0);
@@ -1280,8 +1269,6 @@ public:
       const int64_t cur_accum_time = ATOMIC_AAF(&accum_count_, total_time_cost);
       if (ATOMIC_LOAD(&last_ts_) + stat_interval_ < cur_ts) {
         if (ATOMIC_BCAS(&lock_tag_, false, true)) {
-          LIB_LOG(INFO, NULL == item_ ? "" : item_, K(cur_stat_count), K_(stat_interval), "avg (count/cost)",
-              cur_accum_time / cur_stat_count, K(this), K_(extra_info));
           (void)ATOMIC_SET(&last_ts_, cur_ts);
           (void)ATOMIC_SET(&stat_count_, 0);
           (void)ATOMIC_SET(&accum_count_, 0);

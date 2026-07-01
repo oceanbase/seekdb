@@ -122,7 +122,6 @@ int ObAccessService::check_tenant_out_of_memstore_limit_(bool &is_out_of_mem)
   ObTenantFreezer *freezer = nullptr;
   freezer = share::g_mp->tenant_freezer();
   if (OB_FAIL(freezer->check_memstore_full(is_out_of_mem))) {
-    LOG_WARN("check tenant out of memstore limit", K(ret));
   } else {
     // do nothing
   }
@@ -167,7 +166,6 @@ int ObAccessService::pre_check_lock(
                                                 0,/*branch_id*/
                                                 write_flag,
                                                 ctx_guard))) {
-    LOG_WARN("fail to check query allowed", K(ret), K(ls_id));
   } else if (OB_ISNULL(ls = ctx_guard.get_ls_handle().get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ls should not be null", K(ret), KP(ls));
@@ -208,7 +206,6 @@ int ObAccessService::lock_obj(
                                                 0, /*branch_id*/
                                                 write_flag,
                                                 ctx_guard))) {
-    LOG_WARN("fail to check query allowed", K(ret), K(ls_id));
   } else if (OB_ISNULL(ls = ctx_guard.get_ls_handle().get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ls should not be null", K(ret), KP(ls));
@@ -247,7 +244,6 @@ int ObAccessService::unlock_obj(
                                                 0,/*branch_id*/
                                                 write_flag,
                                                 ctx_guard))) {
-    LOG_WARN("fail to check query allowed", K(ret), K(ls_id));
   } else if (OB_ISNULL(ls = ctx_guard.get_ls_handle().get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ls should not be null", K(ret), KP(ls));
@@ -293,7 +289,6 @@ int ObAccessService::replace_obj_lock(
                                                 0,/*branch_id*/
                                                 write_flag,
                                                 ctx_guard))) {
-    LOG_WARN("fail to check query allowed", K(ret), K(ls_id));
   } else if (OB_ISNULL(ls = ctx_guard.get_ls_handle().get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ls should not be null", K(ret), KP(ls));
@@ -330,7 +325,6 @@ int ObAccessService::add_lock_into_queue(const share::ObLSID &ls_id,
                                                 0, /*branch_id*/
                                                 write_flag,
                                                 ctx_guard))) {
-    LOG_WARN("fail to check query allowed", K(ret), K(ls_id));
   } else if (OB_ISNULL(ls = ctx_guard.get_ls_handle().get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ls should not be null", K(ret), KP(ls));
@@ -425,7 +419,6 @@ int ObAccessService::table_rescan(
     LOG_WARN("only table scan iter can be rescan", K(ret), K(result->get_type()));
   } else if (!param.need_switch_param_) {
     if (OB_FAIL(static_cast<ObTableScanIterator*>(result)->rescan(param))) {
-      LOG_WARN("rescan ObTableScanIterator failed", K(ret), K(result), K(vparam));
     }
   } else {
     ObTableScanIterator *iter =  static_cast<ObTableScanIterator*>(result);
@@ -484,7 +477,6 @@ int ObAccessService::table_advance_scan(ObVTableScanParam &vparam, ObNewRowItera
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("only table scan iter can be rescan", K(ret), K(result->get_type()));
   } else if (OB_FAIL(static_cast<ObTableScanIterator*>(result)->advance_scan(param))) {
-    LOG_WARN("advance scan ObTableScanIterator failed", K(ret), K(result), K(vparam));
   } else {
     LOG_DEBUG("table advance scan success", K(ret), K(result), K(vparam));
   }
@@ -511,7 +503,6 @@ int ObAccessService::get_write_store_ctx_guard(
     LOG_WARN("invalid argument", K(ret), K(ls_id), K(tx_desc), K(snapshot));
   } else if (OB_FAIL(get_write_store_ctx_guard_(
               ls_id, timeout, tx_desc, snapshot, branch_id, write_flag, ctx_guard, spec_seq_no))) {
-    LOG_WARN("fail to get write store ctx gurad", K(ret), K(ls_id), K(tx_desc));
   }
   return ret;
 }
@@ -529,10 +520,7 @@ int ObAccessService::get_write_store_ctx_guard_(
   int ret = OB_SUCCESS;
   ObLS *ls = nullptr;
   if (OB_FAIL(ctx_guard.init(ls_id))) {
-    LOG_WARN("ctx_guard init fail", K(ret), K(ls_id), K(tx_desc));
-  // DML statement will always use invalid snapshot
   } else if (OB_FAIL(ls_svr_->get_ls(ls_id, ctx_guard.get_ls_handle(), ObLSGetMod::DAS_MOD))) {
-    LOG_WARN("get log stream failed.", K(ret), K(ls_id));
   } else if (OB_ISNULL(ls = ctx_guard.get_ls_handle().get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ls should not be null", K(ret), K(ls_id));
@@ -542,7 +530,6 @@ int ObAccessService::get_write_store_ctx_guard_(
     ctx.timeout_ = timeout;
     ctx.branch_ = branch_id;
     if (OB_FAIL(ls->get_write_store_ctx(tx_desc, snapshot, write_flag, ctx, spec_seq_no))) {
-      LOG_WARN("can not get write store ctx", K(ret), K(ls_id), K(snapshot), K(tx_desc));
     }
   }
   if (OB_FAIL(ret)) {
@@ -570,7 +557,6 @@ int ObAccessService::get_source_ls_tx_table_guard_(
     // do nothing
   } else if (OB_FAIL(tablet->get_latest(user_data,
       unused_writer, trans_stat, unused_trans_version))) {
-    LOG_WARN("failed to get tablet status", K(ret), KPC(tablet), K(user_data));
   } else if (mds::TwoPhaseCommitState::ON_COMMIT != trans_stat && ctx.is_write()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet in transfer but user data is uncommit, unexpected", K(ret), K(trans_stat), K(user_data));
@@ -592,17 +578,14 @@ int ObAccessService::get_source_ls_tx_table_guard_(
     ObLSHandle ls_handle;
     ObTxTableGuard src_tx_table_guard;
     if (OB_FAIL(ls_service->get_ls(user_data.transfer_ls_id_, ls_handle, ObLSGetMod::HA_MOD))) {
-      LOG_WARN("failed to get ls", K(ret), K(user_data));
     } else if (OB_ISNULL(src_ls = ls_handle.get_ls())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ls should not be NULL", K(ret), KP(src_ls), K(user_data));
     } else if (OB_FAIL(src_ls->get_tx_table_guard(src_tx_table_guard))) {
-      LOG_WARN("failed to get tablet", K(ret));
     } else if (!user_data.transfer_scn_.is_valid() || !src_tx_table_guard.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("transfer_scn or source ls tx_table_guard is invalid", K(ret), K(src_tx_table_guard), K(user_data));
     } else if (OB_FAIL(src_ls->get_tx_svr()->start_request_for_transfer())) {
-      LOG_WARN("start request for transfer failed", KR(ret), K(user_data));
     } else {
       ObStoreCtx &ctx = ctx_guard.get_store_ctx();
       ctx.mvcc_acc_ctx_.set_src_tx_table_guard(src_tx_table_guard, ls_handle);
@@ -635,23 +618,18 @@ int ObAccessService::construct_store_ctx_other_variables_(
     }
   } else if (OB_FAIL(tablet_service->get_tablet_with_timeout(
       tablet_id, tablet_handle, timeout, ObMDSGetTabletMode::READ_READABLE_COMMITED, snapshot))) {
-    LOG_WARN("failed to check and get tablet", K(ret), K(ls_id), K(tablet_id), K(timeout), K(snapshot));
   } else if (OB_FAIL(get_source_ls_tx_table_guard_(tablet_handle, ctx_guard))) {
-    LOG_WARN("failed to get src ls tx table guard", K(ret), K(ls_id), K(tablet_id));
   }
   if (OB_TABLET_IS_SPLIT_SRC == ret) {
     ObArray<ObTabletID> tmp_tablet_ids;
     bool has_active_memtable = false;
     if (OB_FAIL(tmp_tablet_ids.push_back(tablet_id))) {
-      LOG_WARN("failed to push back", K(ret));
     } else if (OB_FAIL(ls.check_tablet_no_active_memtable(tmp_tablet_ids, has_active_memtable))) {
-      LOG_WARN("check tablet has active memtable failed", K(ret), K(tablet_id));
     } else if (OB_UNLIKELY(has_active_memtable)) {
       ret = OB_SCHEMA_EAGAIN;
       LOG_WARN("split src tablet has active memtable, retry", K(ret), K(tablet_id));
     } else if (OB_FAIL(tablet_service->get_tablet_with_timeout(
             tablet_id, tablet_handle, timeout, ObMDSGetTabletMode::READ_WITHOUT_CHECK, share::SCN::max_scn()))) {
-      LOG_WARN("failed to check and get tablet", K(ret), K(ls_id), K(tablet_id), K(timeout), K(snapshot));
     } else if (OB_UNLIKELY(tablet_handle.get_obj()->is_empty_shell())) {
       ret = OB_TABLET_NOT_EXIST;
       LOG_WARN("split src tablet is empty shell", K(ret), K(ls_id), K(tablet_id));
@@ -678,9 +656,7 @@ int ObAccessService::check_read_allowed_(
 
   LOG_TRACE("print check read allowed, scan param", K(ls_id), K(tablet_id), K(scan_param.fb_read_tx_uncommitted_));
   if (OB_FAIL(ctx_guard.init(ls_id))) {
-    LOG_WARN("ctx_guard init fail", K(ret), K(ls_id));
   } else if (OB_FAIL(ls_svr_->get_ls(ls_id, ctx_guard.get_ls_handle(), ObLSGetMod::DAS_MOD))) {
-    LOG_WARN("get log stream failed.", K(ret), K(ls_id));
   } else if (OB_ISNULL(ls = ctx_guard.get_ls_handle().get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ls should not be null", K(ret), K(ls_id));
@@ -693,27 +669,23 @@ int ObAccessService::check_read_allowed_(
       if (OB_FAIL(ls->get_read_store_ctx(user_specified_snapshot,
                                          scan_param.tx_lock_timeout_,
                                          ctx))) {
-        LOG_WARN("get read store ctx fail", K(user_specified_snapshot), K(ls_id), K(ret));
       }
     } else {
       bool read_latest = access_type == ObStoreAccessType::READ_LATEST;
       if (user_specified_snapshot.is_valid()) {
         transaction::ObTxReadSnapshot spec_snapshot;
         if (OB_FAIL(spec_snapshot.assign(scan_param.snapshot_))) {
-          LOG_WARN("copy snapshot fail", K(ret));
         } else if (FALSE_IT(spec_snapshot.specify_snapshot_scn(user_specified_snapshot))) {
         } else if (OB_FAIL(ls->get_read_store_ctx(spec_snapshot,
                                                   read_latest,
                                                   scan_param.tx_lock_timeout_,
                                                   ctx))) {
-          LOG_WARN("get read store ctx fail", K(ret), K(read_latest), K(spec_snapshot), K(user_specified_snapshot), K(ls_id));
         }
       } else if (OB_FAIL(ls->get_read_store_ctx(scan_param.snapshot_,
                                                 read_latest,
                                                 scan_param.tx_lock_timeout_,
                                                 ctx,
                                                 scan_param.trans_desc_))) {
-        LOG_WARN("get read store ctx fail", K(ret), K(read_latest), K(scan_param.snapshot_), K(ls_id));
       }
       if (OB_FAIL(ret)) {
       } else if (read_latest) {
@@ -754,7 +726,6 @@ int ObAccessService::check_read_allowed_(
         LOG_WARN("failed to check replica allow to read", K(ret), K(tablet_id), "timeout", scan_param.timeout_);
       }
     } else if (OB_FAIL(check_mlog_safe_(*tablet_handle.get_obj(), scan_param))) {
-      LOG_WARN("failed to check_mlog_safe", KR(ret), K(tablet_id), K(scan_param));
     }
   }
   return ret;
@@ -796,12 +767,10 @@ int ObAccessService::check_write_allowed_(
     ret = OB_SUCCESS;
   }
   if (OB_FAIL(check_tenant_out_of_memstore_limit_(is_out_of_mem))) {
-    LOG_WARN("fail to check tenant out of mem limit", K(ret));
   } else if (is_out_of_mem && !tablet_id.is_inner_tablet()) {
     ret = OB_TENANT_OUT_OF_MEM;
     LOG_WARN("this tenant is already out of memstore limit", K(ret));
   } else if (OB_FAIL(check_data_disk_full_(ls_id, is_disk_full))) {
-    LOG_WARN("fail to check data disk full", K(ret));
   } else if (is_disk_full) {
     ret = OB_USER_OUTOF_DATA_DISK_SPACE;
     LOG_WARN("data disk full, you should not do io now", K(ret));
@@ -826,7 +795,6 @@ int ObAccessService::check_write_allowed_(
     } else if (is_local_index_table) {
       // skip table lock
     } else if (OB_FAIL(get_lock_id(tablet_id, lock_id))) {
-      LOG_WARN("get lock id failed", K(ret), K(tablet_id));
     } else if (OB_FAIL(lock_param.set(lock_id,
                                       lock_mode,
                                       lock_owner,
@@ -840,10 +808,7 @@ int ObAccessService::check_write_allowed_(
                                       // timeout before meet lock conflict in tablelock,
                                       // so it will lead to incorrect error
                                       lock_expired_ts))) {
-      LOG_WARN("get lock param failed", K(ret), K(lock_id));
-    // When locking the table, the tablet is not detected to be deleted.
     } else if (OB_FAIL(ls->lock(ctx_guard.get_store_ctx(), lock_param))) {
-      LOG_WARN("lock tablet failed", K(ret), K(lock_param));
     } else {
       // do nothing
     }
@@ -894,7 +859,6 @@ int ObAccessService::delete_rows(
                                           tx_desc,
                                           tablet_handle,
                                           *dml_param.store_ctx_guard_))) {
-    LOG_WARN("fail to check query allowed", K(ret), K(ls_id), K(tablet_id));
   } else if (OB_ISNULL(ls = dml_param.store_ctx_guard_->get_ls_handle().get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ls should not be null", K(ret), KP(ls));
@@ -949,7 +913,6 @@ int ObAccessService::put_rows(
                                           tx_desc,
                                           tablet_handle,
                                           *dml_param.store_ctx_guard_))) {
-    LOG_WARN("fail to check query allowed", K(ret), K(ls_id), K(tablet_id));
   } else if (OB_ISNULL(ls = dml_param.store_ctx_guard_->get_ls_handle().get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ls should not be null", K(ret), KP(ls));
@@ -1004,7 +967,6 @@ int ObAccessService::insert_rows(
                                           tx_desc,
                                           tablet_handle,
                                           *dml_param.store_ctx_guard_))) {
-    LOG_WARN("fail to check query allowed", K(ret), K(ls_id), K(tablet_id));
   } else if (OB_ISNULL(ls = dml_param.store_ctx_guard_->get_ls_handle().get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ls should not be null", K(ret), KP(ls));
@@ -1061,7 +1023,6 @@ int ObAccessService::insert_rows_with_fetch_dup(const share::ObLSID &ls_id,
                                           tx_desc,
                                           tablet_handle,
                                           *dml_param.store_ctx_guard_))) {
-    LOG_WARN("fail to check query allowed", K(ret), K(ls_id), K(tablet_id));
   } else if (OB_ISNULL(ls = dml_param.store_ctx_guard_->get_ls_handle().get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ls should not be null", K(ret), KP(ls));
@@ -1121,7 +1082,6 @@ int ObAccessService::update_rows(
                                           tx_desc,
                                           tablet_handle,
                                           *dml_param.store_ctx_guard_))) {
-    LOG_WARN("fail to check query allowed", K(ret), K(ls_id), K(tablet_id));
   } else if (OB_ISNULL(ls = dml_param.store_ctx_guard_->get_ls_handle().get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ls should not be null", K(ret), KP(ls));
@@ -1178,7 +1138,6 @@ int ObAccessService::lock_rows(
                                           tx_desc,
                                           tablet_handle,
                                           *dml_param.store_ctx_guard_))) {
-    LOG_WARN("fail to check query allowed", K(ret), K(ls_id), K(tablet_id));
   } else if (OB_ISNULL(ls = dml_param.store_ctx_guard_->get_ls_handle().get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ls should not be null", K(ret), KP(ls));
@@ -1216,7 +1175,6 @@ int ObAccessService::estimate_row_count(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(param), K(scan_range), K(ret));
   } else if (OB_FAIL(ls_svr_->get_ls(param.ls_id_, ls_handle, ObLSGetMod::DAS_MOD))) {
-    LOG_WARN("failed to get log stream", K(ret), K(param.ls_id_));
   } else if (nullptr == (ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls is unexpected null", K(ret));
@@ -1251,7 +1209,6 @@ int ObAccessService::estimate_block_count_and_row_count(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ls_id), K(tablet_id), K(ret));
   } else if (OB_FAIL(ls_svr_->get_ls(ls_id, ls_handle, ObLSGetMod::DAS_MOD))) {
-    LOG_WARN("failed to get log stream", K(ret), K(ls_id));
   } else if (nullptr == (ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls is unexpected null", K(ret));
@@ -1260,7 +1217,6 @@ int ObAccessService::estimate_block_count_and_row_count(
       macro_block_count, micro_block_count,
       sstable_row_count, memtable_row_count,
       cg_macro_cnt_arr, cg_micro_cnt_arr))) {
-    LOG_WARN("failed to estimate block count and row count", K(ret), K(ls_id), K(tablet_id), K(timeout_us));
   }
   return ret;
 }
@@ -1285,7 +1241,6 @@ int ObAccessService::get_multi_ranges_cost(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(ls_id), K(tablet_id));
   } else if (OB_FAIL(ls_svr_->get_ls(ls_id, ls_handle, ObLSGetMod::DAS_MOD))) {
-    LOG_WARN("get log stream failed", K(ret), K(ls_id));
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ls hould not be null", K(ret), K(ls_id));
@@ -1293,7 +1248,6 @@ int ObAccessService::get_multi_ranges_cost(
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("tablet service should not be null", K(ret), K(ls_id));
   } else if (OB_FAIL(tablet_service->get_multi_ranges_cost(tablet_id, timeout_us, ranges, total_size))) {
-    LOG_WARN("Fail to get multi ranges cost", K(ret), K(ls_id), K(tablet_id));
   }
   return ret;
 }
@@ -1333,7 +1287,6 @@ int ObAccessService::revert_scan_iter(ObNewRowIterator *iter)
     ObTableScanIterator *table_scan_iter = nullptr;
     table_scan_iter = static_cast<ObTableScanIterator *>(iter);
     if (OB_FAIL(table_scan_iter->check_ls_offline_after_read())) {
-      LOG_WARN("discover ls offline after table scan", K(ret), KPC(table_scan_iter));
     }
     mtl_sop_return_checked(ObTableScanIterator, table_scan_iter);
   } else {
@@ -1366,7 +1319,6 @@ int ObAccessService::split_multi_ranges(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(ls_id), K(tablet_id));
   } else if (OB_FAIL(ls_svr_->get_ls(ls_id, ls_handle, ObLSGetMod::DAS_MOD))) {
-    LOG_WARN("get log stream failed", K(ret), K(ls_id));
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("ls hould not be null", K(ret), K(ls_id));
@@ -1376,7 +1328,6 @@ int ObAccessService::split_multi_ranges(
   } else if (OB_FAIL(tablet_service->split_multi_ranges(
       tablet_id, timeout_us, ranges,
       expected_task_count, allocator, multi_range_split_array))) {
-    LOG_WARN("Fail to split multi ranges", K(ret), K(ls_id), K(tablet_id));
   }
   return ret;
 }
@@ -1397,12 +1348,10 @@ int ObAccessService::check_mlog_safe_(
     } else if (OB_ISNULL(scan_param.op_filters_)) {
       // query has no filter
     } else if (OB_FAIL(get_query_begin_version_for_mlog(*scan_param.op_filters_, scan_param.op_->get_eval_ctx(), begin_version))) {
-      LOG_WARN("failed to get_query_begin_version_for_mlog", KR(ret), K(scan_param), K(tablet));
     } else if (-1 != begin_version) {
       ObTabletCreateDeleteMdsUserData user_data;
       if (OB_FAIL(tablet.ObITabletMdsInterface::get_tablet_status(
               share::SCN::max_scn(), user_data, ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US))) {
-        LOG_WARN("failed to get tablet status", KR(ret), K(tablet));
       } else if (begin_version < user_data.create_commit_version_) {
         ret = OB_INVALID_ARGUMENT;
         LOG_USER_ERROR(OB_INVALID_ARGUMENT, "mlog query begin version which is more than tablet create commit version, materialized view need complete fresh");
@@ -1437,7 +1386,6 @@ int ObAccessService::estimate_skip_index_sortedness(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument", KR(ret), K(ls_id), K(tablet_id));
   } else if (OB_FAIL(ls_svr_->get_ls(ls_id, ls_handle, ObLSGetMod::DAS_MOD))) {
-    LOG_WARN("Fail to get log stream", KR(ret), K(ls_id));
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("Ls should not be null", KR(ret), K(ls_id));
@@ -1451,13 +1399,6 @@ int ObAccessService::estimate_skip_index_sortedness(
                                                                     sample_counts,
                                                                     sortedness,
                                                                     res_sample_counts))) {
-    LOG_WARN("Fail to estimate skip index sortedness",
-             KR(ret),
-             K(ls_id),
-             K(tablet_id),
-             K(column_ids),
-             K(sortedness),
-             K(res_sample_counts));
   }
 
   return ret;
@@ -1479,7 +1420,6 @@ int ObAccessService::inner_tablet_scan(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(ls_id), K(tablet_id), K(lbt()));
   } else if (OB_FAIL(do_table_scan_(ls_id, tablet_id, param, result))) {
-    LOG_WARN("failed to do table scan", K(ret), K(ls_id), K(tablet_id));
   }
   return ret;
 }

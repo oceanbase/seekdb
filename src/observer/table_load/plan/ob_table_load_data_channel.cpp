@@ -56,9 +56,7 @@ int ObTableLoadTableChannel::open()
     LOG_WARN("ObTableLoadTableChannel init twice", KR(ret), KP(this));
   } else {
     if (OB_FAIL(down_table_op_->prepare())) {
-      LOG_WARN("fail to prepare", KR(ret));
     } else if (OB_FAIL(create_row_projector())) {
-      LOG_WARN("fail to create row projector", KR(ret));
     } else {
       if (down_table_op_->op_ctx_->table_store_.get_table_type() ==
           ObDirectLoadTableType::INVALID_TABLE_TYPE) {
@@ -74,7 +72,6 @@ int ObTableLoadTableChannel::open()
                  &down_table_op_->op_ctx_->table_store_,
                  down_table_op_->get_plan()->get_store_ctx()->tmp_file_mgr_,
                  down_table_op_->get_plan()->get_store_ctx()->table_mgr_))) {
-      LOG_WARN("fail to init table builder mgr", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -93,7 +90,6 @@ int ObTableLoadTableChannel::close()
     LOG_WARN("unexpected channel is closed", KR(ret), K(is_closed_));
   } else {
     if (OB_FAIL(table_builder_mgr_.close())) {
-      LOG_WARN("fail to close table builder mgr", KR(ret));
     } else {
       table_builder_mgr_.reset();
       is_closed_ = true;

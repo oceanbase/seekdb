@@ -209,7 +209,6 @@ int ObRawExprPartExprChecker::visit(ObOpRawExpr &expr)
       }
       default: {
         if (OB_FAIL(default_check_args(expr))) {
-          LOG_WARN("default_check_args failed", K(ret));
         }
       }
     }
@@ -250,7 +249,6 @@ int ObRawExprPartExprChecker::visit(ObSysFunRawExpr &expr)
     case T_FUN_SYS_MICROSECOND:
     {
      if (OB_FAIL(has_time_or_datetime_args(expr))) {
-       LOG_WARN("check args of time or datetime failed", K(ret));
      }
      break;
     }
@@ -274,7 +272,6 @@ int ObRawExprPartExprChecker::visit(ObSysFunRawExpr &expr)
    case T_FUN_SYS_QUARTER:
    {
      if (OB_FAIL(has_date_or_datetime_args(expr))) {
-       LOG_WARN("check_args_of_to_days failed", K(ret));
      }
      break;
    }
@@ -283,25 +280,21 @@ int ObRawExprPartExprChecker::visit(ObSysFunRawExpr &expr)
    case T_FUN_SYS_TIME_TO_USEC:
    case T_FUN_SYS_UNIX_TIMESTAMP: {
      if (OB_FAIL(has_timestamp_args(expr))) {
-       LOG_WARN("check_args_of_unix_timestamp failed", K(ret));
      }
      break;
    }
    case T_FUN_SYS_EXTRACT: {
      if (OB_FAIL(check_args_of_extract(expr))) {
-       LOG_WARN("check_args_of_extract_failed", K(ret));
      }
      break;
    }
    case T_FUN_SYS_FROM_DAYS: {
      if (OB_FAIL(check_args_of_from_days(expr))) {
-       LOG_WARN("check_args_of_from_days failed", K(ret));
      }
      break;
    }
    default : {
      if (OB_FAIL(default_check_args(expr))) {
-       LOG_WARN("default_check_args failed", K(ret));
      }
    }
   }

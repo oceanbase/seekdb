@@ -83,10 +83,8 @@ public:
         tmp_datum.ptr_ = payload;
         tmp_datum.pack_ = len;
         if (OB_FAIL(hash_func(tmp_datum, hash_val, hash_val))) {
-          SQL_LOG(WARN, "hash func failed", K(ret));
         } else if (OB_FAIL(
                      llc_add_value(hash_val, reinterpret_cast<char *>(tmp_res), LLC_NUM_BUCKETS))) {
-          SQL_LOG(WARN, "llc add value failed", K(ret));
         }
       }
     }
@@ -156,7 +154,6 @@ public:
       SQL_LOG(DEBUG, "add null row", K(ret), K(row_num));
     } else if (OB_FAIL(
                  add_row(agg_ctx, columns, row_num, agg_col_id, agg_cell, tmp_res, calc_info))) {
-      SQL_LOG(WARN, "add row failed", K(ret));
     } else {
       NotNullBitVector &not_nulls = agg_ctx.locate_notnulls_bitmap(agg_col_id, agg_cell);
       not_nulls.set(agg_col_id);
@@ -273,12 +270,10 @@ public:
             tmp_datum.ptr_ = payload;
             tmp_datum.pack_ = len;
             if (OB_FAIL(hash_func(tmp_datum, hash_val, hash_val))) {
-              SQL_LOG(WARN, "hash calculation failed", K(ret));
             }
           }
           if (OB_SUCC(ret)) {
             if (OB_FAIL(llc_add_value(hash_val, llc_bitmap_buf, LLC_NUM_BUCKETS))) {
-              SQL_LOG(WARN, "add llc value failed");
             }
           }
         }
@@ -296,12 +291,10 @@ public:
             tmp_datum.ptr_ = payload;
             tmp_datum.pack_ = len;
             if (OB_FAIL(hash_func(tmp_datum, hash_val, hash_val))) {
-              SQL_LOG(WARN, "hash calculation failed", K(ret));
             }
           }
           if (OB_SUCC(ret)) {
             if (OB_FAIL(llc_add_value(hash_val, llc_bitmap_buf, LLC_NUM_BUCKETS))) {
-              SQL_LOG(WARN, "add llc value failed");
             }
           }
         }
@@ -356,10 +349,8 @@ public:
           tmp_datum.pack_ = data_len;
           uint64_t hash_val = 0;
           if (OB_FAIL(hash_func(tmp_datum, hash_val, hash_val))) {
-            SQL_LOG(WARN, "hash calculation failed", K(ret));
           } else if (OB_FAIL(llc_add_value(hash_val, reinterpret_cast<char *>(llc_bitmap_buf),
                                            LLC_NUM_BUCKETS))) {
-            SQL_LOG(WARN, "llc add value failed", K(ret));
           } else {
             NotNullBitVector &not_nulls = agg_ctx.locate_notnulls_bitmap(agg_col_idx, agg_cell);
             not_nulls.set(agg_col_idx);
@@ -385,12 +376,10 @@ public:
           tmp_datum.ptr_ = payload;
           tmp_datum.pack_ = len;
           if (OB_FAIL(hash_func(tmp_datum, hash_val, hash_val))) {
-            SQL_LOG(WARN, "hash calculation failed", K(ret));
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(llc_add_value(hash_val, (char *)llc_bitmap_buf, LLC_NUM_BUCKETS))) {
-            SQL_LOG(WARN, "llc add value failed", K(ret));
           } else {
             agg_ctx.locate_notnulls_bitmap(agg_col_idx, agg_cell).set(agg_col_idx);
           }

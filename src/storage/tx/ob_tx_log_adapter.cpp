@@ -61,7 +61,6 @@ int ObLSTxLogAdapter::submit_log(const char *buf,
   if (base_scn.convert_to_ts() > cur_ts + 86400000000L) {
     // only print error log
     if (REACH_TIME_INTERVAL(1000000)) {
-      TRANS_LOG(ERROR, "base scn is too large", K(base_scn));
     }
   }
   if (NULL == buf || 0 >= size || OB_ISNULL(cb) || !base_scn.is_valid()
@@ -161,7 +160,6 @@ int ObLSTxLogAdapter::get_palf_committed_max_scn(share::SCN &scn) const
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", K(ret), KP(log_handler_));
   } else if (OB_FAIL(log_handler_->get_max_decided_scn_as_leader(scn))) {
-    TRANS_LOG(WARN, "get palf committed_max_scn fail", K(ret));
   } else if (!scn.is_valid_and_not_min()) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "get an invalid scn", K(ret), K(scn));

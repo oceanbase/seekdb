@@ -44,7 +44,6 @@ static int do_multi_difference(const ObSrsItem &srs,
     if (OB_FAIL(gis_context1.append_geo_arg(reinterpret_cast<ObGeometry *>(geo))) || OB_FAIL(gis_context1.append_geo_arg(mpt))) {
       LOG_WARN("build gis context failed", K(ret), K(gis_context1.get_geo_count()));
     } else if (OB_FAIL(ObGeoFuncDifference::eval(gis_context1, res_geo1))) {
-      LOG_WARN("eval st intersection failed", K(ret));
     }
   } else {
     res_geo1 = geo;
@@ -56,7 +55,6 @@ static int do_multi_difference(const ObSrsItem &srs,
     if (OB_FAIL(gis_context2.append_geo_arg(res_geo1)) || OB_FAIL(gis_context2.append_geo_arg(ml))) {
       LOG_WARN("build gis context failed", K(ret), K(gis_context2.get_geo_count()));
     } else if (OB_FAIL(ObGeoFuncDifference::eval(gis_context2, res_geo2))) {
-      LOG_WARN("eval st intersection failed", K(ret));
     }
   } else {
     res_geo2 = res_geo1;
@@ -68,7 +66,6 @@ static int do_multi_difference(const ObSrsItem &srs,
     if (OB_FAIL(gis_context3.append_geo_arg(res_geo2)) || OB_FAIL(gis_context3.append_geo_arg(mpo))) {
       LOG_WARN("build gis context failed", K(ret), K(gis_context3.get_geo_count()));
     } else if (OB_FAIL(ObGeoFuncDifference::eval(gis_context3, res_geo))) {
-      LOG_WARN("eval st intersection failed", K(ret));
     }
   } else {
     res_geo = res_geo2;
@@ -270,7 +267,6 @@ static int ob_caculate_ml_within_gc(const ObGeometry *g1, const ObGeometry *g2,
                                                     multi_point,
                                                     multi_line,
                                                     multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else {
     const ObSrsItem *srs = context.get_srs();
     ObIAllocator *allocator = context.get_allocator();
@@ -278,13 +274,11 @@ static int ob_caculate_ml_within_gc(const ObGeometry *g1, const ObGeometry *g2,
     ObGeoToTreeVisitor visitor(allocator);
     ObGeometry *i_geo1 = const_cast<ObGeometry *>(g1);
     if (OB_FAIL(i_geo1->do_visit(visitor))) {
-      LOG_WARN("failed to do geo2 to_tree visit", K(ret));
     } else if (OB_FAIL(do_multi_difference(*srs, context, visitor.get_geometry(),
                                            NULL,
                                            reinterpret_cast<ObGeometry *>(multi_line),
                                            reinterpret_cast<ObGeometry *>(multi_poly),
                                            res_geo2))) {
-      LOG_WARN("failed to do mulit difference", K(ret));
     } else {
       bg::de9im::mask mask("T********");
       result = res_geo2->is_empty() &&
@@ -314,7 +308,6 @@ static int ob_caculate_ml_within_gc_geog(const ObGeometry *g1, const ObGeometry 
                                                            multi_point,
                                                            multi_line,
                                                            multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else {
     const ObSrsItem *srs = context.get_srs();
     ObIAllocator *allocator = context.get_allocator();
@@ -322,13 +315,11 @@ static int ob_caculate_ml_within_gc_geog(const ObGeometry *g1, const ObGeometry 
     ObGeoToTreeVisitor visitor(allocator);
     ObGeometry *i_geo1 = const_cast<ObGeometry *>(g1);
     if (OB_FAIL(i_geo1->do_visit(visitor))) {
-      LOG_WARN("failed to do geo2 to_tree visit", K(ret));
     } else if (OB_FAIL(do_multi_difference(*srs, context, visitor.get_geometry(),
                                            NULL,
                                            reinterpret_cast<ObGeometry *>(multi_line),
                                            reinterpret_cast<ObGeometry *>(multi_poly),
                                            res_geo2))) {
-      LOG_WARN("failed to do mulit difference", K(ret));
     } else {
       bg::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
       ObLlLaAaStrategy geog_ll_la_aa_strategy(geog_sphere);
@@ -362,7 +353,6 @@ static int ob_caculate_mpl_within_gc(const ObGeometry *g1, const ObGeometry *g2,
                                                     multi_point,
                                                     multi_line,
                                                     multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else {
     result = bg::within(*geo1, *multi_poly);
   }
@@ -388,7 +378,6 @@ static int ob_caculate_mpl_within_gc_geog(const ObGeometry *g1, const ObGeometry
                                                            multi_point,
                                                            multi_line,
                                                            multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else {
     bg::srs::spheroid<double> geog_sphere(srs->semi_major_axis(), srs->semi_minor_axis());
     ObLlLaAaStrategy geog_ll_la_aa_strategy(geog_sphere);
@@ -416,7 +405,6 @@ static int ob_caculate_gc_within_p(const ObGeometry *g1, const ObGeometry *g2,
                                                     multi_point,
                                                     multi_line,
                                                     multi_poly))) {
-    LOG_WARN("failed to do gc prepare", K(ret));
   } else {
     bool ml_empty = !multi_line || multi_line->empty();
     bool mpy_empty = !multi_poly || multi_poly->empty();
@@ -487,7 +475,6 @@ private:
         ObGeometry *sub_g1 = NULL;
         bool is_geog = (g1->crs() == oceanbase::common::ObGeoCRS::Geographic);
         if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(*allocator, sub_type, is_geog, true, sub_g1))) {
-          LOG_WARN("failed to create wkb", K(ret), K(sub_type));
         } else {
           ObString wkb_nosrid(WKB_COMMON_WKB_HEADER_LEN, reinterpret_cast<const char *>(sub_ptr));
           sub_g1->set_data(wkb_nosrid);
@@ -504,7 +491,6 @@ private:
         ObGeometry *sub_g2 = NULL;
         bool is_geog = (g2->crs() == oceanbase::common::ObGeoCRS::Geographic);
         if (OB_FAIL(ObGeoTypeUtil::create_geo_by_type(*allocator, sub_type, is_geog, true, sub_g2))) {
-          LOG_WARN("failed to create wkb", K(ret), K(sub_type));
         } else {
           ObString wkb_nosrid(WKB_COMMON_WKB_HEADER_LEN, reinterpret_cast<const char *>(sub_ptr));
           sub_g2->set_data(wkb_nosrid);
@@ -543,18 +529,15 @@ private:
       if (!within) {
         ret = eval_wkb_fn(&i_point, g2, context, within);
         if (OB_FAIL(ret)) {
-          LOG_WARN("failed to do within by functor between Point and collection", K(ret));
         } else {
           if (!within) {
             if (OB_FAIL(ObGeoFuncIntersects::eval(intersects_context, intersects))) {
-              LOG_WARN("eval intersects for within failed", K(ret));
             }
           } else {
             intersects = true;
           }
         }
       } else if (OB_FAIL(ObGeoFuncIntersects::eval(intersects_context, intersects))) {
-        LOG_WARN("eval intersects for within failed", K(ret));
       }
       if (!intersects) break;
     }
@@ -575,19 +558,16 @@ private:
     ObGeometry *geo1 = const_cast<ObGeometry *>(reinterpret_cast<const ObGeometry *>(g1));
     const ObSrsItem *srs = context.get_srs();
     if (OB_FAIL(ObGeoFuncUtils::ob_gc_prepare<GCType>(context, geo1, multi_point, multi_line, multi_poly))) {
-      LOG_WARN("failed to do gc prepare", K(ret));
     } else {
       result = multi_line->empty() &&
                multi_poly->empty();
       if (result) {
         ObGeometry *multi_point_bin = NULL;
         if (OB_FAIL(ObGeoTypeUtil::tree_to_bin(*allocator, multi_point, multi_point_bin, srs))) {
-          LOG_WARN("failed to convert geo tree to binary", K(ret));
         } else {
           bool mp_within_mp = false;
           ret = eval_wkb_fn(multi_point_bin, g2, context, mp_within_mp);
           if (OB_FAIL(ret)) {
-            LOG_WARN("failed to do within by functor between MultiPoint and MultiPoint", K(ret));
           } else {
             result &= mp_within_mp;
           }

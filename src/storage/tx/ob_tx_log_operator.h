@@ -74,9 +74,7 @@ private:
     int ret = OB_SUCCESS;
 
     if (OB_FAIL(construct_log_object_())) {
-      TRANS_LOG(WARN, "construct log object failed", K(ret), KPC(this));
     } else if (OB_FAIL(log_block_->deserialize_log_body(*log_object_ptr_))) {
-      TRANS_LOG(WARN, "deserialize log body failed", K(ret), KPC(this));
     }
     return ret;
   }
@@ -103,20 +101,12 @@ private:
     int ret = OB_SUCCESS;
     int tmp_ret = OB_SUCCESS;
     if (OB_FAIL(deserialize_log_())) {
-      TRANS_LOG(WARN, "deserialize the log failed", K(ret), K(tx_ctx_->trans_id_),
-                K(tx_ctx_->ls_id_), KPC(this));
     } else if (OB_FAIL(replay_out_ctx_())) {
-      TRANS_LOG(WARN, "replay log out ctx failed", K(ret), K(tx_ctx_->trans_id_),
-                K(tx_ctx_->ls_id_), KPC(this));
     } else if (OB_FAIL(replay_in_ctx_())) {
-      TRANS_LOG(WARN, "replay log in ctx failed", K(ret), K(tx_ctx_->trans_id_), K(tx_ctx_->ls_id_),
-                KPC(this));
     }
 
     if (OB_FAIL(ret)) {
       if (OB_TMP_FAIL(replay_fail_out_ctx_())) {
-        TRANS_LOG(ERROR, "an error occurred while handling replay failure outside of the tx_ctx ",
-                  K(tmp_ret), K(ret), KPC(this));
       }
     }
     return ret;
@@ -221,7 +211,6 @@ OB_INLINE int ObTxCtxLogOperator<T>::prepare_generic_resource_()
                                                       ? ObTxAdaptiveLogBuf::NORMAL_LOG_BUF_SIZE
                                                       : log_op_arg_.submit_arg_.suggested_buf_size_;
     if (OB_FAIL(log_block_->init_for_fill(log_op_arg_.submit_arg_.suggested_buf_size_))) {
-      TRANS_LOG(WARN, "init log block for fill failed", K(ret), KPC(this));
     }
   }
 
@@ -232,8 +221,6 @@ OB_INLINE int ObTxCtxLogOperator<T>::prepare_generic_resource_()
       TRANS_LOG(WARN, "get log cb failed", K(ret), KPC(this));
     }
   } else if (OB_FAIL(tx_ctx_->acquire_ctx_ref_())) {
-    TRANS_LOG(ERROR, "acquire ctx ref failed", KR(ret), K(tx_ctx_->trans_id_), K(tx_ctx_->ls_id_),
-              KPC(this));
   } else if (OB_FALSE_IT(log_op_arg_.submit_arg_.hold_tx_ctx_ref_ = true)) {
     // do nothing
   }
@@ -339,7 +326,6 @@ OB_INLINE int ObTxCtxLogOperator<T>::submit_log_block_out_()
                                          : tx_ctx_->trans_id_.get_id();
     log_block_->get_header().set_log_entry_no(tx_ctx_->exec_info_.next_log_entry_no_);
     if (OB_FAIL(log_block_->seal(real_replay_hint, log_op_arg_.submit_arg_.replay_barrier_type_))) {
-      TRANS_LOG(WARN, "seal log block fail", K(ret));
     } else if (OB_SUCC(tx_ctx_->ls_tx_ctx_mgr_->get_ls_log_adapter()->submit_log(
                    log_block_->get_buf(), log_block_->get_size(), log_op_arg_.submit_arg_.base_scn_,
                    log_op_arg_.submit_arg_.log_cb_, false))) {
@@ -367,14 +353,12 @@ OB_INLINE int ObTxCtxLogOperator<T>::common_submit_log_succ_()
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "cb arg array is empty", K(ret), K(*this));
     } else if (OB_FAIL(log_op_arg_.submit_arg_.log_cb_->get_cb_arg_array().assign(cb_arg_array))) {
-      TRANS_LOG(WARN, "assign cb arg array failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (!tx_ctx_->ctx_tx_data_.get_start_log_ts().is_valid()) {
       if (OB_FAIL(tx_ctx_->ctx_tx_data_.set_start_log_ts(
               log_op_arg_.submit_arg_.log_cb_->get_log_ts()))) {
-        TRANS_LOG(WARN, "set tx data start log ts failed", K(ret), K(tx_ctx_->ctx_tx_data_));
       }
     }
   }
@@ -406,9 +390,6 @@ OB_INLINE void ObTxCtxLogOperator<T>::after_submit_log_fail_(const int submit_re
                   KPC(log_op_arg_.submit_arg_.log_cb_), K(T::LOG_TYPE), KPC(this));
       }
       if (OB_TMP_FAIL(tx_ctx_->return_log_cb_(log_op_arg_.submit_arg_.log_cb_))) {
-        TRANS_LOG(ERROR, "free the log cb failed", K(submit_ret), K(tmp_ret),
-                  K(tx_ctx_->get_trans_id()), K(tx_ctx_->get_ls_id()),
-                  KPC(log_op_arg_.submit_arg_.log_cb_), K(T::LOG_TYPE), KPC(this));
       }
     }
     if (log_op_arg_.submit_arg_.hold_tx_ctx_ref_) {
@@ -425,19 +406,15 @@ OB_INLINE int ObTxCtxLogOperator<T>::operator()(const ObTxLogOpType op_type)
   int tmp_ret = OB_SUCCESS;
   if (op_type == ObTxLogOpType::REPLAY) {
     if (OB_FAIL(replay_log_())) {
-      TRANS_LOG(WARN, "replay log failed", K(ret), K(T::LOG_TYPE), KPC(this));
     }
   } else if (op_type == ObTxLogOpType::SUBMIT) {
     if (OB_FAIL(prepare_special_resource_())) {
-      TRANS_LOG(WARN, "prepare special resource failed", K(ret), K(T::LOG_TYPE), KPC(this));
     } else if (OB_FAIL(prepare_generic_resource_())) {
       if (OB_TX_NOLOGCB != ret) {
         TRANS_LOG(WARN, "prepare generic resource failed", K(ret), K(T::LOG_TYPE), KPC(this));
       }
     } else if (OB_FAIL(construct_log_object_())) {
-      TRANS_LOG(WARN, "construct log object failed", K(ret), K(T::LOG_TYPE), KPC(this));
     } else if (OB_FAIL(insert_into_log_block_())) {
-      TRANS_LOG(WARN, "insert tx log into log block failed", K(ret), K(T::LOG_TYPE), KPC(this));
     } else {
       CtxLockGuard guard;
       if (!tx_ctx_->lock_.is_locked_by_self()) {
@@ -446,11 +423,8 @@ OB_INLINE int ObTxCtxLogOperator<T>::operator()(const ObTxLogOpType op_type)
 
       // TRANS_LOG(INFO, "<ObTxDirectLoadIncLog> prepare to submit log",K(ret),KPC(this));
       if (OB_FAIL(pre_check_for_log_submiting_())) {
-        TRANS_LOG(WARN, "pre check for log submitting",K(ret), K(T::LOG_TYPE), KPC(this));
       } else if (OB_FAIL(submit_log_block_out_())) {
-        TRANS_LOG(WARN, "submit tx log block into palf failed", K(ret), K(T::LOG_TYPE), KPC(this));
       } else if (OB_TMP_FAIL(common_submit_log_succ_())) {
-        TRANS_LOG(WARN, "common after_submit_log_succ failed", K(ret), K(T::LOG_TYPE), KPC(this));
       } else {
         (void)after_submit_log_succ_();
         tx_ctx_->exec_info_.next_log_entry_no_++;
@@ -465,13 +439,11 @@ OB_INLINE int ObTxCtxLogOperator<T>::operator()(const ObTxLogOpType op_type)
   } else if (op_type == ObTxLogOpType::APPLY_SUCC) {
 
     if (OB_FAIL(log_sync_succ_())) {
-      TRANS_LOG(ERROR, "invoke on_success for tx_log failed", K(ret), K(T::LOG_TYPE), KPC(this));
     }
 
   } else if (op_type == ObTxLogOpType::APPLY_FAIL) {
 
     if (OB_FAIL(log_sync_fail_())) {
-      TRANS_LOG(WARN, "invoke on_failure for tx_log failed", K(ret), K(T::LOG_TYPE), KPC(this));
     }
 
   } else {
@@ -505,7 +477,6 @@ OB_INLINE int ObTxCtxLogOperator<ObTxDirectLoadIncLog>::prepare_special_resource
     TRANS_LOG(WARN, "invalid extra_cb", K(ret), KPC(construct_arg_), K(log_op_arg_.submit_arg_));
   } else if (OB_FAIL(tx_ctx_->exec_info_.redo_lsns_.reserve(tx_ctx_->exec_info_.redo_lsns_.count()
                                                             + 1))) {
-    TRANS_LOG(WARN, "reserve memory for redo lsn failed", K(ret));
   }
 
   return ret;
@@ -535,8 +506,6 @@ OB_INLINE void ObTxCtxLogOperator<ObTxDirectLoadIncLog>::after_submit_log_succ_(
 
   if (OB_FAIL(
           tx_ctx_->exec_info_.redo_lsns_.push_back(log_op_arg_.submit_arg_.log_cb_->get_lsn()))) {
-    TRANS_LOG(WARN, "push back redo lsns failed", K(ret), KPC(this),
-              KPC(log_op_arg_.submit_arg_.log_cb_));
   } else if (construct_arg_->ddl_log_type_ == ObTxDirectLoadIncLog::DirectLoadIncLogType::DLI_START
              && OB_FAIL(tx_ctx_->exec_info_.dli_batch_set_.submit_ddl_start_succ(
                     construct_arg_->batch_key_, scn_))) {
@@ -585,8 +554,6 @@ OB_INLINE int ObTxCtxLogOperator<ObTxDirectLoadIncLog>::log_sync_succ_()
               KPC(log_op_arg_.submit_arg_.log_cb_));
 
   } else if (OB_FAIL(log_op_arg_.submit_arg_.log_cb_->get_extra_cb()->on_success())) {
-    TRANS_LOG(WARN, "invoke the on_success of a extra_cb_ failed", K(ret),
-              KPC(log_op_arg_.submit_arg_.log_cb_));
   } else {
     TRANS_LOG(DEBUG, "<ObTxDirectLoadIncLog> sync log succ", K(ret), KPC(this));
   }
@@ -605,8 +572,6 @@ OB_INLINE int ObTxCtxLogOperator<ObTxDirectLoadIncLog>::log_sync_fail_()
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid log_cb or extra_cb", K(ret), K(log_op_arg_.submit_arg_));
   } else if (OB_FAIL(log_op_arg_.submit_arg_.log_cb_->get_extra_cb()->on_failure())) {
-    TRANS_LOG(WARN, "invoke the on_failure of a extra_cb_ failed", K(ret),
-              KPC(log_op_arg_.submit_arg_.log_cb_));
   } else {
     CtxLockGuard guard;
     if (!tx_ctx_->lock_.is_locked_by_self()) {
@@ -618,14 +583,10 @@ OB_INLINE int ObTxCtxLogOperator<ObTxDirectLoadIncLog>::log_sync_fail_()
     } else if (ddl_log_type == ObTxDirectLoadIncLog::DirectLoadIncLogType::DLI_START) {
       if (OB_FAIL(tx_ctx_->exec_info_.dli_batch_set_.sync_ddl_start_fail(
               log_op_arg_.submit_arg_.log_cb_->get_batch_key()))) {
-        TRANS_LOG(WARN, "update ddl_start key after log_sync_fail failed", K(ret),
-                  KPC(log_op_arg_.submit_arg_.log_cb_), K(scn_), KPC(tx_ctx_));
       }
     } else if (ddl_log_type == ObTxDirectLoadIncLog::DirectLoadIncLogType::DLI_END) {
       if (OB_FAIL(tx_ctx_->exec_info_.dli_batch_set_.sync_ddl_end_fail(
               log_op_arg_.submit_arg_.log_cb_->get_batch_key()))) {
-        TRANS_LOG(WARN, "update ddl_end key after log_sync_fail failed", K(ret),
-                  KPC(log_op_arg_.submit_arg_.log_cb_), K(scn_), KPC(tx_ctx_));
       }
     }
     TRANS_LOG(INFO, "<ObTxDirectLoadIncLog> sync log fail", K(ret), KPC(this));
@@ -649,12 +610,8 @@ OB_INLINE int ObTxCtxLogOperator<ObTxDirectLoadIncLog>::replay_out_ctx_()
 
       storage::ObDDLRedoLog ddl_redo;
       if (OB_FAIL(log_object_ptr_->get_dli_buf().deserialize_log_object(&ddl_redo))) {
-        TRANS_LOG(WARN, "deserialize ddl redo log failed", K(ret), K(ddl_redo),
-                  K(log_op_arg_.replay_arg_));
       } else if (OB_FAIL(log_op_arg_.replay_arg_.ddl_log_handler_ptr_->get_ddl_log_replayer()
                              .replay_redo(ddl_redo, scn_))) {
-        TRANS_LOG(WARN, "replay direct_load_inc redo for ddl_log_handler failed", K(ret),
-                  KPC(log_object_ptr_), K(log_op_arg_.replay_arg_));
       }
 
     } else if (log_object_ptr_->get_ddl_log_type()
@@ -662,12 +619,8 @@ OB_INLINE int ObTxCtxLogOperator<ObTxDirectLoadIncLog>::replay_out_ctx_()
 
       storage::ObDDLIncStartLog ddl_start;
       if (OB_FAIL(log_object_ptr_->get_dli_buf().deserialize_log_object(&ddl_start))) {
-        TRANS_LOG(WARN, "deserialize ddl redo log failed", K(ret), K(ddl_start),
-                  K(log_op_arg_.replay_arg_));
       } else if (OB_FAIL(log_op_arg_.replay_arg_.ddl_log_handler_ptr_->get_ddl_log_replayer()
                              .replay_inc_start(ddl_start, scn_))) {
-        TRANS_LOG(WARN, "replay direct_load_inc redo for ddl_log_handler failed", K(ret),
-                  KPC(log_object_ptr_), K(log_op_arg_.replay_arg_));
       }
 
       construct_arg_->batch_key_ = ddl_start.get_log_basic();
@@ -677,12 +630,8 @@ OB_INLINE int ObTxCtxLogOperator<ObTxDirectLoadIncLog>::replay_out_ctx_()
 
       storage::ObDDLIncCommitLog ddl_commit;
       if (OB_FAIL(log_object_ptr_->get_dli_buf().deserialize_log_object(&ddl_commit))) {
-        TRANS_LOG(WARN, "deserialize ddl redo log failed", K(ret), K(ddl_commit),
-                  K(log_op_arg_.replay_arg_));
       } else if (OB_FAIL(log_op_arg_.replay_arg_.ddl_log_handler_ptr_->get_ddl_log_replayer()
                              .replay_inc_commit(ddl_commit, scn_))) {
-        TRANS_LOG(WARN, "replay direct_load_inc redo for ddl_log_handler failed", K(ret),
-                  KPC(log_object_ptr_), K(log_op_arg_.replay_arg_));
       }
 
       construct_arg_->batch_key_ = ddl_commit.get_log_basic();
@@ -690,8 +639,6 @@ OB_INLINE int ObTxCtxLogOperator<ObTxDirectLoadIncLog>::replay_out_ctx_()
   }
 
   if (OB_FAIL(ret)) {
-    TRANS_LOG(INFO, "<ObTxDirectLoadIncLog> replay out ctx", K(ret), KPC(this), K(log_object_ptr_),
-              K(log_op_arg_.replay_arg_));
   }
   return ret;
 }
@@ -720,25 +667,15 @@ OB_INLINE int ObTxCtxLogOperator<ObTxDirectLoadIncLog>::replay_in_ctx_()
   bool need_replay = true;
   if (OB_FAIL(tx_ctx_->check_replay_avaliable_(lsn_, scn_, log_op_arg_.replay_arg_.part_log_no_,
                                                need_replay))) {
-    TRANS_LOG(INFO, "check replay avaliable failed", K(ret), K(ObTxDirectLoadIncLog::LOG_TYPE),
-              KPC(this));
   } else if (!need_replay) {
-    TRANS_LOG(INFO, "need not replay log", KPC(log_object_ptr_), K(log_op_arg_.replay_arg_),
-              KPC(tx_ctx_));
   } else if (construct_arg_->ddl_log_type_
              == ObTxDirectLoadIncLog::DirectLoadIncLogType::DLI_START) {
     if (OB_FAIL(tx_ctx_->exec_info_.dli_batch_set_.before_submit_ddl_start(
             construct_arg_->batch_key_, scn_))) {
-      TRANS_LOG(WARN, "register ddl_start key failed", K(ret), KPC(construct_arg_), K(scn_),
-                KPC(tx_ctx_));
     } else if (OB_FAIL(tx_ctx_->exec_info_.dli_batch_set_.submit_ddl_start_succ(
                    construct_arg_->batch_key_, scn_))) {
-      TRANS_LOG(WARN, "update ddl_start key after submit_log failed", K(ret), KPC(construct_arg_),
-                K(scn_), KPC(tx_ctx_));
     } else if (OB_FAIL(tx_ctx_->exec_info_.dli_batch_set_.sync_ddl_start_succ(
                    construct_arg_->batch_key_, scn_))) {
-      TRANS_LOG(WARN, "update ddl_start key after log_sync_succ failed", K(ret),
-                KPC(construct_arg_), K(scn_), KPC(tx_ctx_));
     }
   } else if (construct_arg_->ddl_log_type_ == ObTxDirectLoadIncLog::DirectLoadIncLogType::DLI_END) {
     if (OB_FAIL(tx_ctx_->exec_info_.dli_batch_set_.before_submit_ddl_end(construct_arg_->batch_key_,
@@ -767,8 +704,6 @@ OB_INLINE int ObTxCtxLogOperator<ObTxDirectLoadIncLog>::replay_in_ctx_()
   }
 
   if (OB_FAIL(ret)) {
-    TRANS_LOG(INFO, "<ObTxDirectLoadIncLog> replay in ctx", K(ret), KPC(this), K(log_object_ptr_),
-              K(log_op_arg_.replay_arg_));
   }
   return ret;
 }

@@ -97,7 +97,6 @@ int ObStringBufT<PageAllocatorT, PageArenaT> :: write_number(const number::ObNum
     ret = OB_BAD_NULL_ERROR;
     _OB_LOG(WARN, "stored nmb is null, ret=%d", ret);
   } else if (OB_FAIL(stored_nmb->from(nmb, arena_))) {
-    _OB_LOG(WARN, "failed to construct number, ret=%d", ret);
   }
   return ret;
 }
@@ -122,7 +121,6 @@ int ObStringBufT<PageAllocatorT, PageArenaT> :: write_string(const ObRowkey &row
     } else {
       ObRawBufAllocatorWrapper allocator(buf, str_length);
       if (OB_FAIL(rowkey.deep_copy(*stored_rowkey, allocator))) {
-        _OB_LOG(WARN, "failed to deep copy rowkey, ret=%d", ret);
       } else {}
     }
   }
@@ -138,7 +136,6 @@ int ObStringBufT<PageAllocatorT, PageArenaT> :: write_obj(const ObObj &obj, ObOb
     ret = OB_BAD_NULL_ERROR;
     _OB_LOG(WARN, "stored obj is null, ret=%d", ret);
   } else if (OB_FAIL(ob_write_obj(arena_, obj, *stored_obj))) {
-    LIB_LOG(WARN, "write obj failed", K(ret), K(obj));
   }
   return ret;
 }

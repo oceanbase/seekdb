@@ -65,7 +65,6 @@ int ObCGRowFile::open(const ObIArray<ObColumnSchemaItem> &all_column_schema_its,
     } else {
       const ObColumnSchemaItem &column_schema_it = all_column_schema_its.at(column_idx);
       if (OB_FAIL(column_schema_its.push_back(column_schema_it))) {
-        LOG_WARN("fail to push back column schema item", K(ret), K(column_schema_it));
       }
     }
   }
@@ -74,14 +73,12 @@ int ObCGRowFile::open(const ObIArray<ObColumnSchemaItem> &all_column_schema_its,
     const int64_t skip_size = ObBitVector::memory_size(max_batch_size);
     void *skip_mem = nullptr;
     if (OB_FAIL(ObTempColumnStore::init_vectors(column_schema_its, allocator_, bdrs_.vectors_))) {
-      LOG_WARN("fail to initialize vectors", K(ret), K(column_schema_its));
     } else if (OB_FAIL(store_.init(bdrs_.vectors_,
                                    max_batch_size,
                                    ObMemAttr("CGRowFileStore"),
                                    memory_limit,
                                    true/*enable_dump*/,
                                    compressor_type))) {
-      LOG_WARN("fail to initialize temp column store", K(ret));
     } else if (OB_ISNULL(skip_mem = allocator_.alloc(skip_size))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to alloc skip buffer", K(ret), K(skip_size));
@@ -140,7 +137,6 @@ int ObCGRowFile::append_batch(const blocksstable::ObBatchDatumRows &bdrs)
     int64_t stored_row_count = 0;
     brs_.size_ = bdrs.row_count_;
     if (OB_FAIL(store_.add_batch(bdrs.vectors_, brs_, stored_row_count))) {
-      LOG_WARN("fail to add batch", K(ret));
     } else if (OB_UNLIKELY(stored_row_count != bdrs.row_count_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("the stored row count is not equal to the brs's row count",
@@ -180,7 +176,6 @@ int ObCGRowFile::dump(const bool all_dump, const int64_t target_dump_size)
     ret = OB_NOT_INIT;
     LOG_WARN("the ObCGRowFile is not opened", K(ret));
   } else if (OB_FAIL(store_.dump(all_dump, target_dump_size))) {
-    LOG_WARN("fail to dump", K(ret), K(all_dump), K(target_dump_size));
   }
   return ret;
 }
@@ -192,7 +187,6 @@ int ObCGRowFile::finish_append_batch(bool need_dump)
     ret = OB_NOT_INIT;
     LOG_WARN("the ObCGRowFile is not opened", K(ret));
   } else if (OB_FAIL(store_.finish_add_row(need_dump))) {
-    LOG_WARN("fail to finish add row", K(ret));
   }
   return ret;
 }
@@ -202,7 +196,6 @@ int ObCGRowFile::begin(sql::ObTempColumnStore::Iterator &iter, const bool async)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(store_.begin(iter, async))) {
-    LOG_WARN("fail to begin iterating", K(ret));
   } else {
     is_start_iterate_ = true;
   }
@@ -288,9 +281,7 @@ int ObCGRowFilesGenerater::init(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("the column group count is invalid", K(ret), K(cg_count));
     } else if (OB_FAIL(cg_row_file_arr_.prepare_allocate(cg_count))) {
-      LOG_WARN("fail to prepare allocate cg row file arr", K(ret), K(cg_count));
     } else if (OB_FAIL(all_column_schema_its_.assign(all_column_schema_its))) {
-      LOG_WARN("fail to assign all column schema its", K(ret), K(all_column_schema_its));
     } else {
       for (int64_t cg_idx = 0; cg_idx < cg_row_file_arr_.count(); ++cg_idx) {
         cg_row_file_arr_.at(cg_idx) = nullptr;
@@ -359,7 +350,6 @@ int ObCGRowFilesGenerater::append_batch(
                                                cg_schema,
                                                max_batch_size_,
                                                cg_row_file_memory_limit_))) {
-            LOG_WARN("fail to open cg block file", K(ret), K(tablet_id_), K(slice_idx_), K(cg_idx));
           } else {
             cg_row_file_arr_.at(cg_idx) = cg_row_file;
           }
@@ -378,12 +368,10 @@ int ObCGRowFilesGenerater::append_batch(
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("this is invalid column idx", K(ret), K(column_idx), K(cg_schema));
           } else if (OB_FAIL(cg_rows.vectors_.push_back(bdrs.vectors_.at(column_idx)))) {
-            LOG_WARN("push back vector failed", K(ret), K(column_idx));
           }
         }
         if (OB_SUCC(ret)) {
           if (OB_FAIL(cg_row_file->append_batch(cg_rows))) {
-            LOG_WARN("fail to append batch", K(ret));
           }
         }
       }
@@ -416,9 +404,7 @@ int ObCGRowFilesGenerater::try_generate_output_chunk(
           ((cg_row_file->get_mem_hold() > cg_row_file_memory_limit_ &&
             !is_sorted_table_load_with_column_store_replica_) || is_slice_end)) {
         if (OB_FAIL(cg_row_file->dump(true))) {
-          LOG_WARN("fail to dump cg row file", K(ret), KPC(cg_row_file));
         } else if (OB_FAIL(cg_row_file->finish_append_batch(true/*need_dump*/))) {
-          LOG_WARN("fail to finish add row", K(ret), KPC(cg_row_file));
         } else if (is_generation_sync_output_) {
           if (OB_UNLIKELY(nullptr == cg_row_file_arr_for_output_ ||
                           nullptr == sync_chunk_data_)) {
@@ -427,7 +413,6 @@ int ObCGRowFilesGenerater::try_generate_output_chunk(
                 K(ret), KP(cg_row_file_arr_for_output_), KP(sync_chunk_data_));
           } else {
             if (OB_FAIL(cg_row_file_arr_for_output_->push_back(cg_row_file))) {
-              LOG_WARN("fail to push back cg row file", K(ret), KPC(cg_row_file));
             } else {
               cg_row_file = nullptr;
             }
@@ -442,7 +427,6 @@ int ObCGRowFilesGenerater::try_generate_output_chunk(
             }
           }
           if (FAILEDx(cg_row_files_ptr->push_back(cg_row_file))) {
-            LOG_WARN("fail to push back cg row file", K(ret), KPC(cg_row_file));
           } else {
             cg_row_file = nullptr;
           }

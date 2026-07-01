@@ -76,19 +76,12 @@ int ObDropVecIVFIndexTask::init(
     ret = OB_ERR_SYS;
     LOG_WARN("error sys, root service is null", K(ret));
   } else if (OB_FAIL(deep_copy_index_arg(allocator_, drop_index_arg, drop_index_arg_))) {
-    LOG_WARN("deep copy drop index arg failed", K(ret));
   } else if (OB_FAIL(centroid_.deep_copy_from_other(centroid, allocator_))) {
-    LOG_WARN("fail to deep copy from other", K(ret), K(centroid));
   } else if (OB_FAIL(cid_vector_.deep_copy_from_other(cid_vector, allocator_))) {
-    LOG_WARN("fail to deep copy from other", K(ret), K(cid_vector));
   } else if (OB_FAIL(rowkey_cid_.deep_copy_from_other(rowkey_cid, allocator_))) {
-    LOG_WARN("fail to deep copy from other", K(ret), K(rowkey_cid));
   } else if (OB_FAIL(sq_meta_.deep_copy_from_other(sq_meta, allocator_))) {
-    LOG_WARN("fail to deep copy from other", K(ret), K(sq_meta));
   } else if (OB_FAIL(pq_centroid_.deep_copy_from_other(pq_centroid, allocator_))) {
-    LOG_WARN("fail to deep copy from other", K(ret), K(pq_centroid));
   } else if (OB_FAIL(pq_code_.deep_copy_from_other(pq_code, allocator_))) {
-    LOG_WARN("fail to deep copy from other", K(ret), K(pq_code));
   } else if (tenant_data_format_version <= 0 && OB_FAIL(GET_MIN_DATA_VERSION(tenant_data_format_version))) {
     LOG_WARN("get min data version failed", K(ret));
   } else {
@@ -160,7 +153,6 @@ int ObDropVecIVFIndexTask::init(const ObDDLTaskRecord &task_record)
       LOG_WARN("unexpected error, task record message is nullptr", K(ret), K(task_record));
     } else if (OB_FAIL(deserialize_params_from_message(task_record.message_.ptr(),
             task_record.message_.length(), pos))) {
-      LOG_WARN("deserialize params from message failed", K(ret));
     } else {
       is_inited_ = true;
       // set up span during recover task
@@ -179,34 +171,28 @@ int ObDropVecIVFIndexTask::process()
   } else if (!need_retry()) {
     // task is done
   } else if (OB_FAIL(check_switch_succ())) {
-    LOG_WARN("check need retry failed", K(ret));
   } else {
     ddl_tracing_.restore_span_hierarchy();
     const ObDDLTaskStatus status = static_cast<ObDDLTaskStatus>(task_status_);
     switch (status) {
       case ObDDLTaskStatus::PREPARE:
         if (OB_FAIL(prepare(ObDDLTaskStatus::DROP_AUX_INDEX_TABLE))) {
-          LOG_WARN("fail to prepare", K(ret));
         }
         break;
       case ObDDLTaskStatus::DROP_AUX_INDEX_TABLE:
         if (OB_FAIL(drop_aux_index_table(WAIT_CHILD_TASK_FINISH))) {
-          LOG_WARN("fail to prepare", K(ret));
         }
         break;
       case ObDDLTaskStatus::WAIT_CHILD_TASK_FINISH:
         if (OB_FAIL(wait_drop_task_finish(SUCCESS))) {
-          LOG_WARN("fail to check and wait task", K(ret));
         }
         break;
       case ObDDLTaskStatus::SUCCESS:
         if (OB_FAIL(succ())) {
-          LOG_WARN("do succ procedure failed", K(ret));
         }
         break;
       case ObDDLTaskStatus::FAIL:
         if (OB_FAIL(fail())) {
-          LOG_WARN("do fail procedure failed", K(ret));
         }
         break;
       default:
@@ -230,10 +216,8 @@ int ObDropVecIVFIndexTask::deep_copy_index_arg(common::ObIAllocator &allocator,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("alloc memory failed", K(ret), K(serialize_size));
   } else if (OB_FAIL(src_index_arg.serialize(buf, serialize_size, pos))) {
-    LOG_WARN("serialize source index arg failed", K(ret));
   } else if (OB_FALSE_IT(pos = 0)) {
   } else if (OB_FAIL(dst_index_arg.deserialize(buf, serialize_size, pos))) {
-    LOG_WARN("deserialize failed", K(ret));
   }
   if (OB_FAIL(ret) && nullptr != buf) {
     allocator.free(buf);
@@ -249,21 +233,13 @@ int ObDropVecIVFIndexTask::serialize_params_to_message(char *buf, const int64_t 
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(ObDDLTask::serialize_params_to_message(buf, buf_size, pos))) {
-    LOG_WARN("fail to ObDDLTask::serialize", K(ret));
-  } else if (OB_FAIL(centroid_.serialize(buf, buf_size, pos))) {    // domain index
-    LOG_WARN("fail to serialize centroid_ table info", K(ret), K(centroid_));
+  } else if (OB_FAIL(centroid_.serialize(buf, buf_size, pos))) {
   } else if (OB_FAIL(cid_vector_.serialize(buf, buf_size, pos))) {
-    LOG_WARN("fail to serialize cid_vector_ table info", K(ret), K(cid_vector_));
   } else if (OB_FAIL(rowkey_cid_.serialize(buf, buf_size, pos))) {
-    LOG_WARN("fail to serialize rowkey_cid table info", K(ret), K(rowkey_cid_));
   } else if (OB_FAIL(sq_meta_.serialize(buf, buf_size, pos))) {
-    LOG_WARN("fail to serialize sq_meta table info", K(ret), K(sq_meta_));
   } else if (OB_FAIL(pq_centroid_.serialize(buf, buf_size, pos))) {
-    LOG_WARN("fail to serialize pq_centroid_ table info", K(ret), K(pq_centroid_));
   } else if (OB_FAIL(pq_code_.serialize(buf, buf_size, pos))) {
-    LOG_WARN("fail to serialize pq_code_ table info", K(ret), K(pq_code_));
   } else if (OB_FAIL(drop_index_arg_.serialize(buf, buf_size, pos))) {
-    LOG_WARN("serialize failed", K(ret));
   } 
   return ret;
 }
@@ -280,35 +256,20 @@ int ObDropVecIVFIndexTask::deserialize_params_from_message(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(buf), K(buf_size));
   } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, buf_size, pos))) {
-    LOG_WARN("fail to ObDDLTask::deserialize", K(ret));
   } else if (OB_FAIL(tmp_info.deserialize(buf, buf_size, pos))) {
-    LOG_WARN("fail to deserialize rowkey vid table info", K(ret));
   } else if (OB_FAIL(centroid_.deep_copy_from_other(tmp_info, allocator_))) {
-    LOG_WARN("fail to deep copy from tmp info", K(ret), K(tmp_info));
   } else if (OB_FAIL(tmp_info.deserialize(buf, buf_size, pos))) {
-    LOG_WARN("fail to deserialize vid rowkey table info", K(ret));
   } else if (OB_FAIL(cid_vector_.deep_copy_from_other(tmp_info, allocator_))) {
-    LOG_WARN("fail to deep copy from tmp info", K(ret), K(tmp_info));
   } else if (OB_FAIL(tmp_info.deserialize(buf, buf_size, pos))) {
-    LOG_WARN("fail to deserialize index id table info", K(ret));
-  } else if (OB_FAIL(rowkey_cid_.deep_copy_from_other(tmp_info, allocator_))) { // delta_buffer_table
-    LOG_WARN("fail to deep copy from tmp info", K(ret), K(tmp_info));
+  } else if (OB_FAIL(rowkey_cid_.deep_copy_from_other(tmp_info, allocator_))) {
   } else if (OB_FAIL(tmp_info.deserialize(buf, buf_size, pos))) {
-    LOG_WARN("fail to deserialize delta buffer table info", K(ret));
   } else if (OB_FAIL(sq_meta_.deep_copy_from_other(tmp_info, allocator_))) {
-    LOG_WARN("fail to deep copy from tmp info", K(ret), K(tmp_info));
   } else if (OB_FAIL(tmp_info.deserialize(buf, buf_size, pos))) {
-    LOG_WARN("fail to deserialize index snapshot data table info", K(ret));
   } else if (OB_FAIL(pq_centroid_.deep_copy_from_other(tmp_info, allocator_))) {
-    LOG_WARN("fail to deep copy from tmp info", K(ret), K(tmp_info));
   } else if (OB_FAIL(tmp_info.deserialize(buf, buf_size, pos))) {
-    LOG_WARN("fail to deserialize index snapshot data table info", K(ret));
   } else if (OB_FAIL(pq_code_.deep_copy_from_other(tmp_info, allocator_))) {
-    LOG_WARN("fail to deep copy from tmp info", K(ret), K(tmp_info));
   } else if (OB_FAIL(tmp_drop_index_arg.deserialize(buf, buf_size, pos))) {
-    LOG_WARN("deserialize failed", K(ret));
   } else if (OB_FAIL(deep_copy_index_arg(allocator_, tmp_drop_index_arg, drop_index_arg_))) {
-    LOG_WARN("deep copy drop index arg failed", K(ret));
   }
   return ret;
 }
@@ -339,14 +300,12 @@ int ObDropVecIVFIndexTask::update_task_message()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory", KR(ret), K(serialize_param_size));
   } else if (OB_FAIL(serialize_params_to_message(buf, serialize_param_size, pos))) {
-    LOG_WARN("failed to serialize params to message", KR(ret));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else {
     msg.assign(buf, serialize_param_size);
     if (OB_FAIL(ObDDLTaskRecordOperator::update_message(*GCTX.sql_proxy_, task_id_, msg))) {
-      LOG_WARN("failed to update message", KR(ret));
     }
   }
   return ret;
@@ -370,9 +329,7 @@ int ObDropVecIVFIndexTask::check_switch_succ()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, root service is nullptr", K(ret), KP(root_service_));
   } else if (OB_FAIL(refresh_schema_version())) {
-    LOG_WARN("refresh schema version failed", K(ret));
   } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema", K(ret));
   } else if (centroid_.is_valid() 
           && OB_FAIL(schema_guard.check_table_exist(centroid_.table_id_, is_centroid_exist))) {
     LOG_WARN("fail to check table exist", K(ret), K(centroid_));
@@ -430,7 +387,6 @@ int ObDropVecIVFIndexTask::prepare(const share::ObDDLTaskStatus &new_status)
   }
   if (state_finished) {
     if (OB_FAIL(switch_status(new_status, true, ret))) {
-      LOG_WARN("switch status failed", K(ret), K(new_status), K(task_status_));
     } else {
       LOG_INFO("prepare success", K(ret), K(parent_task_id_), K(task_id_), K(*this));
     }
@@ -446,15 +402,12 @@ int ObDropVecIVFIndexTask::drop_aux_index_table(const share::ObDDLTaskStatus &ne
     LOG_WARN("ObDropVecIVFIndexTask has not been inited", K(ret));
   } else if (ObDDLType::DDL_DROP_VEC_IVFFLAT_INDEX == task_type_) {
     if (OB_FAIL(drop_aux_ivfflat_index_table(new_status))) {
-      LOG_WARN("fail to drop ivfflat index table", K(ret));
     }
   } else if (ObDDLType::DDL_DROP_VEC_IVFSQ8_INDEX == task_type_) {
     if (OB_FAIL(drop_aux_ivfsq8_index_table(new_status))) {
-      LOG_WARN("fail to drop ivfsq8 index table", K(ret));
     }
   } else if (ObDDLType::DDL_DROP_VEC_IVFPQ_INDEX == task_type_) {
     if (OB_FAIL(drop_aux_ivfpq_index_table(new_status))) {
-      LOG_WARN("fail to drop ivfpq index table", K(ret));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -464,7 +417,6 @@ int ObDropVecIVFIndexTask::drop_aux_index_table(const share::ObDDLTaskStatus &ne
   // state machine processing: directly switch status if success, otherwise retry if failed
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(switch_status(new_status, true, ret))) {
-    LOG_WARN("switch status failed", K(ret), K(new_status), K(task_status_));
   } else {
     LOG_INFO("drop_aux_index_table success", K(ret), K(parent_task_id_), K(task_id_), K(*this));
   }
@@ -484,7 +436,6 @@ int ObDropVecIVFIndexTask::drop_aux_ivfflat_index_table(const share::ObDDLTaskSt
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, root service is nullptr", K(ret), KP(root_service_));
   } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", K(ret));
   } else if (0 == centroid_.task_id_ && centroid_.is_valid()
       && OB_FAIL(create_drop_index_task(schema_guard, centroid_.table_id_, centroid_.index_name_, centroid_.task_id_, true/* is_domain_index */))) {
       LOG_WARN("fail to create drop index task", K(ret), K(centroid_));
@@ -495,7 +446,6 @@ int ObDropVecIVFIndexTask::drop_aux_ivfflat_index_table(const share::ObDDLTaskSt
       && OB_FAIL(create_drop_index_task(schema_guard, rowkey_cid_.table_id_, rowkey_cid_.index_name_, rowkey_cid_.task_id_))) {
     LOG_WARN("fail to create drop index task", K(ret), K(rowkey_cid_));
   } else if (OB_FAIL(update_task_message())) {
-    LOG_WARN("fail to update task message to __all_ddl_task_status", K(ret), K(centroid_), K(cid_vector_), K(rowkey_cid_));
   }
   return ret;
 }
@@ -512,7 +462,6 @@ int ObDropVecIVFIndexTask::drop_aux_ivfsq8_index_table(const share::ObDDLTaskSta
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, root service is nullptr", K(ret), KP(root_service_));
   } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", K(ret));
   } else if (0 == centroid_.task_id_ && centroid_.is_valid()
       && OB_FAIL(create_drop_index_task(schema_guard, centroid_.table_id_, centroid_.index_name_, centroid_.task_id_, true/* is_domain_index */))) {
       LOG_WARN("fail to create drop index task", K(ret), K(centroid_));
@@ -526,7 +475,6 @@ int ObDropVecIVFIndexTask::drop_aux_ivfsq8_index_table(const share::ObDDLTaskSta
       && OB_FAIL(create_drop_index_task(schema_guard, sq_meta_.table_id_, sq_meta_.index_name_, sq_meta_.task_id_))) {
      LOG_WARN("fail to create drop index task", K(ret), K(sq_meta_));
   } else if (OB_FAIL(update_task_message())) {
-    LOG_WARN("fail to update task message to __all_ddl_task_status", K(ret), K(centroid_), K(cid_vector_), K(rowkey_cid_), K(sq_meta_));
   }
   return ret;
 }
@@ -543,7 +491,6 @@ int ObDropVecIVFIndexTask::drop_aux_ivfpq_index_table(const share::ObDDLTaskStat
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, root service is nullptr", K(ret), KP(root_service_));
   } else if (OB_FAIL(root_service_->get_schema_service().get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", K(ret));
   } else if (0 == centroid_.task_id_ && centroid_.is_valid()
       && OB_FAIL(create_drop_index_task(schema_guard, centroid_.table_id_, centroid_.index_name_, centroid_.task_id_, true/* is_domain_index */))) {
       LOG_WARN("fail to create drop index task", K(ret), K(centroid_));
@@ -557,7 +504,6 @@ int ObDropVecIVFIndexTask::drop_aux_ivfpq_index_table(const share::ObDDLTaskStat
       && OB_FAIL(create_drop_index_task(schema_guard, rowkey_cid_.table_id_, rowkey_cid_.index_name_, rowkey_cid_.task_id_))) {
     LOG_WARN("fail to create drop index task", K(ret), K(rowkey_cid_));
   } else if (OB_FAIL(update_task_message())) {
-    LOG_WARN("fail to update task message to __all_ddl_task_status", K(ret), K(centroid_), K(pq_centroid_), K(rowkey_cid_), K(pq_code_));
   } 
   return ret;
 }
@@ -599,11 +545,9 @@ int ObDropVecIVFIndexTask::wait_drop_task_finish(const share::ObDDLTaskStatus &n
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(wait_child_task_finish(vec_child_tasks, has_finished))) {
-    LOG_WARN("fail to wait child task finish", K(ret), K(vec_child_tasks));
   } else if (has_finished) {
     // overwrite return code
     if (OB_FAIL(switch_status(new_status, true/*enable_flt*/, ret))) {
-      LOG_WARN("fail to switch status", K(ret), K(new_status));
     } else {
       LOG_INFO("wait_drop_task_finish success", K(ret), K(task_type_));
     }
@@ -658,7 +602,6 @@ int ObDropVecIVFIndexTask::wait_child_task_finish(
       if (-1 == task_info.task_id_) {
         finished = true;
       } else if (OB_FAIL(check_drop_index_finish(task_info.task_id_, task_info.table_id_, finished))) {
-        LOG_WARN("fail to check vec index child task finish", K(ret));
       } else if (!finished) { // nothing to do
         LOG_INFO("child task hasn't been finished", K(task_info));
       }
@@ -690,19 +633,15 @@ int ObDropVecIVFIndexTask::create_drop_index_task(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), K(index_tid), K(index_name));
   } else if (OB_FAIL(guard.check_table_exist(index_tid, is_index_exist))) {
-    LOG_WARN("fail to check table exist", K(ret), K(index_tid));
   } else if (!is_index_exist) {
     // nothing to do, just by pass.
     task_id = -1;
   } else if (OB_FAIL(guard.get_table_schema( index_tid, index_schema))) {
-    LOG_WARN("fail to get index table schema", K(ret), K(index_tid));
   } else if (OB_ISNULL(index_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected error, index schema is nullptr", K(ret), KP(index_schema));
   } else if (OB_FAIL(guard.get_database_schema( index_schema->get_database_id(), database_schema))) {
-    LOG_WARN("fail to get database schema", K(ret), K(index_schema->get_database_id()));
   } else if (OB_FAIL(guard.get_table_schema( index_schema->get_data_table_id(), data_table_schema))) {
-    LOG_WARN("fail to get data table schema", K(ret), K(index_schema->get_data_table_id()));
   } else if (OB_UNLIKELY(nullptr == database_schema || nullptr == data_table_schema)) {
     if (OB_ISNULL(data_table_schema) && drop_index_arg_.is_hidden_) {
       task_id = -1;
@@ -733,9 +672,7 @@ int ObDropVecIVFIndexTask::create_drop_index_task(
     arg.is_hidden_           = drop_index_arg_.is_hidden_;
     if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout(
             index_schema->get_all_part_num() + data_table_schema->get_all_part_num(), ddl_rpc_timeout_us))) {
-      LOG_WARN("fail to get ddl rpc timeout", K(ret));
     } else if (OB_FAIL(rootserver::serial_call([&]{ return root_service_->drop_index(arg, res); }))) {
-      LOG_WARN("fail to drop index", K(ret), K(ddl_rpc_timeout_us), K(arg), K(res.task_id_));
     } else {
       task_id = res.task_id_;
     }
@@ -767,12 +704,10 @@ int ObDropVecIVFIndexTask::cleanup_impl()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("rootservice is null", K(ret));
   } else if (OB_FAIL(report_error_code(unused_str))) {
-    LOG_WARN("report error code failed", K(ret));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(*GCTX.sql_proxy_, task_id_))) {
-    LOG_WARN("delete task record failed", K(ret), K(task_id_), K(schema_version_));
   } else {
     need_retry_ = false;
   }

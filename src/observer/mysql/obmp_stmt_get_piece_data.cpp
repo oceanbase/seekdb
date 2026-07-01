@@ -62,7 +62,6 @@ int ObMPStmtGetPieceData::before_process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObMPBase::before_process())) {
-    LOG_WARN("failed to pre processing packet", K(ret));
   } else {
     const ObMySQLRawPacket &pkt = reinterpret_cast<const ObMySQLRawPacket&>(req_->get_packet());
     const char* pos = pkt.get_cdata();
@@ -98,12 +97,10 @@ int ObMPStmtGetPieceData::process()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid tenant", K(conn->tenant_), K(ret), K(stmt_id_));
   } else if (OB_FAIL(get_session(sess))) {
-    LOG_WARN("get session fail", K(ret), K(stmt_id_));
   } else if (OB_ISNULL(sess)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL or invalid", K(sess), K(ret), K(stmt_id_));
   } else if (OB_FAIL(update_transmission_checksum_flag(*sess))) {
-    LOG_WARN("update transmisson checksum flag failed", K(ret), K(stmt_id_));
   } else {
     ObSQLSessionInfo &session = *sess;
     THIS_WORKER.set_session(sess);
@@ -122,7 +119,6 @@ int ObMPStmtGetPieceData::process()
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("invalid session", K_(stmt_id), K(ret));
     } else if (OB_FAIL(process_kill_client_session(session))) {
-      LOG_WARN("client session has been killed", K(ret));
     } else if (OB_UNLIKELY(session.is_zombie())) {
       ret = OB_ERR_SESSION_INTERRUPTED;
       LOG_WARN("session has been killed", K(session.get_session_state()), K_(stmt_id),
@@ -131,19 +127,15 @@ int ObMPStmtGetPieceData::process()
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
       LOG_WARN("packet too large than allowd for the session", K_(stmt_id), K(ret));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
-      LOG_WARN("fail to get query timeout", K_(stmt_id), K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
                 tenant_version))) {
-      LOG_WARN("fail get tenant broadcast version", K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
                 sys_version))) {
-      LOG_WARN("fail get tenant broadcast version", K(ret));
     } else if (pkt.exist_trace_info()
                && OB_FAIL(session.update_sys_variable(SYS_VAR_OB_TRACE_INFO,
                                                       pkt.get_trace_info()))) {
       LOG_WARN("fail to update trace info", K(ret));
     } else if (OB_FAIL(process_extra_info(session, pkt, need_response_error))) {
-      LOG_WARN("fail get process extra info", K(ret));
     } else if (OB_FAIL(session.check_tenant_status())) {
       need_disconnect = false;
       LOG_INFO("unit has been migrated, need deny new request", K(ret));
@@ -152,7 +144,6 @@ int ObMPStmtGetPieceData::process()
       THIS_WORKER.set_timeout_ts(get_receive_timestamp() + query_timeout);
       session.partition_hit().reset();
       if (OB_FAIL(process_get_piece_data_stmt(session))) {
-        LOG_WARN("execute sql failed", K_(stmt_id), K(ret));
       }
     }
 
@@ -219,7 +210,6 @@ int ObMPStmtGetPieceData::do_process(ObSQLSessionInfo &session)
       //nothing to do
     } else if (OB_FAIL(set_session_active(sql, session, ObTimeUtil::current_time(), 
                                           obmysql::ObMySQLCmd::COM_STMT_GET_PIECE_DATA))) {
-      LOG_WARN("fail to set session active", K(ret));
     } else if (OB_FAIL(response_result(session))) {
       exec_end_timestamp_ = ObTimeUtility::current_time();
     } else {
@@ -259,8 +249,7 @@ int ObMPStmtGetPieceData::do_process(ObSQLSessionInfo &session)
   if (OB_FAIL(ret)) {
     bool is_partition_hit = session.partition_hit().get_bool();
     int err = send_error_packet(ret, NULL, is_partition_hit);
-    if (OB_SUCCESS != err) {  // send error packet
-      LOG_WARN("send error packet failed", K(ret), K(err));
+    if (OB_SUCCESS != err) {
     }
   }
   clear_wb_content(session);
@@ -282,7 +271,6 @@ int ObMPStmtGetPieceData::response_result(ObSQLSessionInfo &session)
                                                   piece_size_, 
                                                   piece_buf,
                                                   session))) {
-    LOG_WARN("get piece buffer fail.", K(ret), K(stmt_id_));
   } else if (NULL == piece_buf.get_piece_buffer()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN(" piece buffer is null. ", K(ret));
@@ -293,13 +281,10 @@ int ObMPStmtGetPieceData::response_result(ObSQLSessionInfo &session)
                            piece_buf.get_piece_buffer()->length(),
                            *piece_buf.get_piece_buffer());
     if (OB_FAIL(response_packet(piece_packet, &session))) {
-      LOG_WARN("response piece packet fail.", K(ret), K(stmt_id_), K(column_id_));
     } else {
       ObPiece *piece = NULL;
       if (OB_FAIL(update_last_pkt_pos())) {
-        LOG_WARN("failed to update last packet pos", K(ret));
       } else if (OB_FAIL(piece_cache->get_piece(stmt_id_, column_id_, piece))) {
-        LOG_WARN("get piece fail", K(stmt_id_), K(column_id_), K(ret) );
       } else if (NULL != piece) {
         uint64_t count = NULL == piece->get_buffer_array() 
                           ? 0 
@@ -308,7 +293,6 @@ int ObMPStmtGetPieceData::response_result(ObSQLSessionInfo &session)
           // Prove that all data has been sent
           if (OB_FAIL(piece_cache->remove_piece(piece_cache->get_piece_key(stmt_id_, column_id_), 
                                                 session))) {
-            LOG_WARN("remove piece fail", K(stmt_id_), K(column_id_));
           }
         }
       }
@@ -321,7 +305,6 @@ int ObMPStmtGetPieceData::response_result(ObSQLSessionInfo &session)
           ok_param.is_partition_hit_ = session.partition_hit().get_bool();
           ok_param.has_more_result_ = false;
           if (OB_FAIL(send_ok_packet(session, ok_param))) {
-            LOG_WARN("fail to send ok packt", K(ok_param), K(ret));
           }
         }
       }

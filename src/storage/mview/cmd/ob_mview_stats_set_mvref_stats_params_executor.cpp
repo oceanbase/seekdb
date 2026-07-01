@@ -49,14 +49,11 @@ int ObMViewStatsSetMVRefStatsParamsExecutor::execute(ObExecContext &ctx,
   if (OB_SUCC(ret)) {
     ObMySQLTransaction trans;
     if (OB_FAIL(trans.start(ctx.get_sql_proxy()))) {
-      LOG_WARN("fail to start trans", KR(ret));
     } else if (OpType::SET_ALL_MVREF_STATS == op_type_) {
       int64_t affected_rows = 0;
       if (OB_FAIL(ObMViewRefreshStatsParams::set_sys_defaults(trans, stats_params_))) {
-        LOG_WARN("fail to set sys defaults", KR(ret), K(stats_params_));
       } else if (OB_FAIL(ObMViewRefreshStatsParams::drop_all_mview_refresh_stats_params(
                    trans, affected_rows))) {
-        LOG_WARN("fail to drop all mview refresh stats params", KR(ret));
       }
     } else if (OpType::SET_SPECIFY_MVREF_STATS == op_type_) {
       if (mview_ids_.count() > 1) {
@@ -68,8 +65,6 @@ int ObMViewStatsSetMVRefStatsParamsExecutor::execute(ObExecContext &ctx,
         const uint64_t mview_id = mview_ids_.at(i);
         if (OB_FAIL(ObMViewRefreshStatsParams::set_mview_refresh_stats_params(
               trans, mview_id, stats_params_))) {
-          LOG_WARN("fail to set mview refresh stats params", KR(ret), K(mview_id),
-                   K(stats_params_));
         }
       }
     }
@@ -93,16 +88,13 @@ int ObMViewStatsSetMVRefStatsParamsExecutor::resolve_arg(
   ObCollationType cs_type = CS_TYPE_INVALID;
   bool preserve_lettercase = false;
   if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
-    LOG_WARN("fail to get name case mode", KR(ret));
   } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-    LOG_WARN("fail to get collation_connection", KR(ret));
   }
   // resolve mv_list
   if (OB_SUCC(ret)) {
     ObArray<ObString> mview_names;
     op_type_ = arg.mv_list_.empty() ? OpType::SET_ALL_MVREF_STATS : OpType::SET_SPECIFY_MVREF_STATS;
     if (OB_FAIL(ObMViewExecutorUtil::split_table_list(arg.mv_list_, mview_names))) {
-      LOG_WARN("fail to split table list", KR(ret), K(arg.mv_list_));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < mview_names.count(); ++i) {
       ObString &mview_name = mview_names.at(i);
@@ -122,12 +114,10 @@ int ObMViewStatsSetMVRefStatsParamsExecutor::resolve_arg(
         LOG_WARN("No database selected", KR(ret));
       } else if (OB_FAIL(schema_checker_.get_table_schema_with_synonym(database_name, table_name, false /*is_index_table*/, has_synonym,
                    new_db_name, new_tbl_name, table_schema))) {
-        LOG_WARN("fail to get table schema with synonym", KR(ret), K(database_name), K(table_name));
       } else if (OB_ISNULL(table_schema) || OB_UNLIKELY(!table_schema->is_materialized_view())) {
         ret = OB_ERR_MVIEW_NOT_EXIST;
         LOG_WARN("mview not exist", KR(ret), K(database_name), K(table_name), KPC(table_schema));
       } else if (OB_FAIL(mview_ids_.push_back(table_schema->get_table_id()))) {
-        LOG_WARN("fail to push back", KR(ret));
       }
     }
   }
@@ -139,7 +129,6 @@ int ObMViewStatsSetMVRefStatsParamsExecutor::resolve_arg(
       ObMVRefreshStatsCollectionLevel collection_level;
       if (OB_FAIL(
             ObMViewExecutorUtil::to_collection_level(arg.collection_level_, collection_level))) {
-        LOG_WARN("fail to cast collection level", KR(ret), K(arg));
       } else {
         stats_params_.set_collection_level(collection_level);
       }

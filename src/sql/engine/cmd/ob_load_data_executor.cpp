@@ -37,7 +37,6 @@ int ObLoadDataExecutor::execute(ObExecContext &ctx, ObLoadDataStmt &stmt)
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("invalid resolver results", K(ret));
   } else if (OB_FAIL(optimizer_ctx.init_direct_load_ctx(&ctx, stmt))) {
-    LOG_WARN("fail to init direct load ctx", K(ret), K(stmt));
   } else {
     if (optimizer_ctx.can_use_direct_load()) {
       optimizer_ctx.set_use_direct_load();
@@ -60,7 +59,6 @@ int ObLoadDataExecutor::execute(ObExecContext &ctx, ObLoadDataStmt &stmt)
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(load_impl->execute(ctx, stmt))) {
-      LOG_WARN("failed to execute load data stmt", K(ret));
     } else {
       LOG_TRACE("load data success");
     }

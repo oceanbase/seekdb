@@ -60,7 +60,6 @@ int ObDirectLoadPartitionRescanTask::process()
   } else {
     ObDirectLoadInsertTabletContext *insert_tablet_ctx = merge_ctx_->get_insert_tablet_ctx();
     if (OB_FAIL(insert_tablet_ctx->fill_column_group(thread_cnt_, thread_idx_))) {
-      LOG_WARN("fail to fill column group", KR(ret));
     }
   }
   return ret;

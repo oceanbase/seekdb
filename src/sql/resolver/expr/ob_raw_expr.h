@@ -55,7 +55,7 @@ class ObSchemaGetterGuard;
 }
 namespace pl
 {
-class ObPLBuilder;
+class ObPLCompiler;
 }
 namespace sql
 {
@@ -262,7 +262,6 @@ public:
     int ret = OB_SUCCESS;
     if (!other.is_valid()) {
       desc_.init_errcode_ = other.desc_.init_errcode_;
-      SQL_RESV_LOG(WARN, "other not initied", K(other.desc_.init_errcode_));
     } else {
       int64_t cap = MAX(other.bitset_word_count(), MAX_BITSETWORD);
       if (OB_FAIL(init_buf(cap))) {
@@ -414,7 +413,6 @@ public:
     int ret = common::OB_SUCCESS;
     if (!is_valid()) {
       ret = desc_.init_errcode_;
-      SQL_RESV_LOG(WARN, "got init error", K(desc_.init_errcode_));
     } else if (OB_UNLIKELY (index < 0)) {
       ret = OB_INVALID_ARGUMENT;
       SQL_RESV_LOG(WARN, "negative bitmap member not allowed", K(ret), K(index));
@@ -426,7 +424,6 @@ public:
       } else if (OB_UNLIKELY(pos >= desc_.cap_)) {
         int64_t new_word_cnt = pos * 2;
         if (OB_FAIL(alloc_new_buf(new_word_cnt))) {
-          SQL_RESV_LOG(WARN, "failed to alloc new buf", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -443,7 +440,6 @@ public:
     int ret = common::OB_SUCCESS;
     if (!is_valid()) {
       ret = desc_.init_errcode_;
-      SQL_RESV_LOG(WARN, "got init error", K(desc_.init_errcode_));
     } else if (OB_UNLIKELY(index < 0)) {
       ret = common::OB_INVALID_ARGUMENT;
       SQL_RESV_LOG(WARN, "negative bitmap member not allowed", K(ret), K(index));
@@ -464,7 +460,6 @@ public:
     int64_t max_bit_count = static_cast<int64_t>(desc_.len_) * PER_BITSETWORD_BITS;
     if (!is_valid()) {
       ret = desc_.init_errcode_;
-      SQL_RESV_LOG(WARN, "got init error", K(desc_.init_errcode_));
     } else if (begin_index < 0 || begin_index >= max_bit_count
                || end_index < 0 || end_index >= max_bit_count) {
       ret = OB_INVALID_ARGUMENT;
@@ -496,7 +491,6 @@ public:
     int ret = OB_SUCCESS;
     if (!is_valid()) {
       ret = desc_.init_errcode_;
-      SQL_RESV_LOG(WARN, "got init error", K(desc_.init_errcode_));
     } else if (OB_UNLIKELY (mask_bits < 0)) {
       ret = OB_INVALID_ARGUMENT;
       SQL_RESV_LOG(WARN, "negative bitmap member not allowed", K(ret), K(mask_bits));
@@ -510,7 +504,6 @@ public:
       } else if (OB_UNLIKELY(pos >= desc_.cap_)) {
         int64_t new_word_cnt = pos + 1;
         if (OB_FAIL(alloc_new_buf(new_word_cnt))) {
-          SQL_RESV_LOG(WARN, "failed to alloc new buf", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -529,7 +522,6 @@ public:
     int ret = common::OB_SUCCESS;
     if (!is_valid()) {
       ret = desc_.init_errcode_;
-      SQL_RESV_LOG(WARN, "got init error", K(desc_.init_errcode_));
     } else if (OB_ISNULL(bit_set_word_array_)) {
       ret = common::OB_INVALID_ARGUMENT;
       SQL_RESV_LOG(WARN, "invalid argument", K(ret), K(bit_set_word_array_));
@@ -543,7 +535,6 @@ public:
         } else {
           int64_t new_word_cnt = that_count * 2;
           if (OB_FAIL(alloc_new_buf(new_word_cnt))) {
-            SQL_RESV_LOG(WARN, "failed to alloc new buffer", K(ret));
           }
         }
       }
@@ -575,7 +566,6 @@ public:
     int ret = common::OB_SUCCESS;
     if (!is_valid()) {
       ret = desc_.init_errcode_;
-      SQL_RESV_LOG(WARN, "got init error", K(desc_.init_errcode_));
     } else {
       for (int64_t i = 0; i < desc_.len_; i++) {
         bit_set_word_array_[i] &= ~(other.get_bitset_word(i));
@@ -717,7 +707,6 @@ public:
     int ret = common::OB_SUCCESS;
     if (!is_valid()) {
       ret = desc_.init_errcode_;
-      SQL_RESV_LOG(WARN, "got init error", K(desc_.init_errcode_));
     } else {
       arr.reuse();
       int64_t num = num_members();
@@ -726,7 +715,6 @@ public:
       for (int64_t i = 0; OB_SUCC(ret) && count < num && i < max_bit_count; i++) {
         if (has_member(i)) {
           if (OB_FAIL(arr.push_back(i))) {
-            SQL_RESV_LOG(WARN, "failed to push back element", K(ret));
           } else {
             count++;
           }
@@ -772,13 +760,10 @@ public:
     int ret = common::OB_SUCCESS;
     if (!is_valid()) {
       ret = desc_.init_errcode_;
-      SQL_RESV_LOG(WARN, "init error", K(desc_.init_errcode_));
     } else if (!left.is_valid()) {
       ret = left.desc_.init_errcode_;
-      SQL_RESV_LOG(WARN, "left init error", K(left.desc_.init_errcode_));
     } else if (!right.is_valid()) {
       ret = right.desc_.init_errcode_;
-      SQL_RESV_LOG(WARN, "right init error", K(right.desc_.init_errcode_));
     } else if (OB_ISNULL(bit_set_word_array_)) {
       ret = common::OB_INVALID_ARGUMENT;
       SQL_RESV_LOG(WARN, "invalid argument", K(ret), K(bit_set_word_array_));
@@ -789,7 +774,6 @@ public:
       if (desc_.cap_ < that_count) {
         int64_t new_word_cnt = that_count * 2;
         if (OB_FAIL(alloc_new_buf(new_word_cnt))) {
-          SQL_RESV_LOG(WARN, "failed to alloc new buffer", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -812,13 +796,10 @@ public:
     int ret = common::OB_SUCCESS;
     if (!is_valid()) {
       ret = desc_.init_errcode_;
-      SQL_RESV_LOG(WARN, "init error", K(desc_.init_errcode_));
     } else if (!left.is_valid()) {
       ret = left.desc_.init_errcode_;
-      SQL_RESV_LOG(WARN, "left init error", K(left.desc_.init_errcode_));
     } else if (!right.is_valid()) {
       ret = right.desc_.init_errcode_;
-      SQL_RESV_LOG(WARN, "right init error", K(right.desc_.init_errcode_));
     } else if (OB_ISNULL(bit_set_word_array_)) {
       ret = common::OB_INVALID_ARGUMENT;
       SQL_RESV_LOG(WARN, "invalid argument", K(ret), K(bit_set_word_array_));
@@ -828,7 +809,6 @@ public:
       if (desc_.cap_ < that_count) {
         int64_t new_word_cnt = that_count * 2;
         if (OB_FAIL(alloc_new_buf(new_word_cnt))) {
-          SQL_RESV_LOG(WARN, "failed to alloc new buffer", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -871,7 +851,6 @@ public:
         }
         FlagType flag = static_cast<FlagType>(i);
         if (OB_FAIL(databuff_print_obj(buf, buf_len, pos, flag))) {
-          SQL_RESV_LOG(WARN, "databuff print obj failed", K(ret));
         }
         ++count;
       }
@@ -885,17 +864,14 @@ public:
     int ret = OB_SUCCESS;
     if (!is_valid()) {
       ret = desc_.init_errcode_;
-      SQL_RESV_LOG(WARN, "init error", K(desc_.init_errcode_));
     } else if (!other.is_valid()) {
       ret = other.desc_.init_errcode_;
-      SQL_RESV_LOG(WARN, "init error", K(other.desc_.init_errcode_));
     } else if (&other == this) {
       // do nothing
     } else {
       if (other.bitset_word_count() > desc_.cap_) {
         int64_t new_word_cnt = other.bitset_word_count() * 2;
         if (OB_FAIL(alloc_new_buf(new_word_cnt))) {
-          SQL_RESV_LOG(WARN, "failed to alloc new buf", K(ret));
         }
       }
 
@@ -923,7 +899,6 @@ private:
       SQL_RESV_LOG(WARN, "not inited", K(ret));
     } else if (desc_.cap_ <= LOCAL_ARRAY_SIZE) {
       if (OB_FAIL(init_alloc_buf(word_cnt))) {
-        SQL_RESV_LOG(WARN, "failed to init array buf", K(ret));
       }
     } else if (OB_ISNULL(allocator = get_block_allocator())) {
       ret = OB_ERR_UNEXPECTED;
@@ -958,11 +933,9 @@ private:
     int ret = OB_SUCCESS;
     if (word_cnt <= LOCAL_ARRAY_SIZE) {
       if (OB_FAIL(init_local_buf())) {
-        SQL_RESV_LOG(WARN, "failed to init local buf", K(ret));
       }
     } else {
       if (OB_FAIL(init_alloc_buf(word_cnt))) {
-        SQL_RESV_LOG(WARN, "failed to init alloc buf", K(ret));
       }
     }
     return ret;
@@ -993,7 +966,6 @@ private:
       MEMCPY(old_data, bit_set_word_array_, desc_.len_ * sizeof(BitSetWord));
     }
     if (OB_FAIL(init_block_allocator())) {
-      SQL_RESV_LOG(WARN, "failed to init block allocator", K(ret));
     } else {
       int64_t words_size = sizeof(BitSetWord) * word_cnt;
       if (OB_ISNULL(bit_set_word_array_ = (BitSetWord *)block_allocator_->alloc(words_size))) {
@@ -1841,7 +1813,7 @@ class ObRawExpr
 public:
   friend sql::ObExpr *ObStaticEngineExprCG::get_rt_expr(const ObRawExpr &raw_expr);
   friend sql::ObExpr *ObExprOperator::get_rt_expr(const ObRawExpr &raw_expr) const;
-  friend class pl::ObPLBuilder;
+  friend class pl::ObPLCompiler;
   friend class sql::ObCallProcedureInfo;
   friend class sql::ObRTDatumArith;
 
@@ -5392,15 +5364,12 @@ public:
     bool is_overflow = false;
     if (OB_UNLIKELY(NULL == ptr)) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      SQL_RESV_LOG(ERROR, "no more memory to create raw expr");
     } else if (OB_NOT_NULL(proxy_)) {
       if (OB_FAIL(check_stack_overflow(is_overflow))) {
-        SQL_RESV_LOG(WARN, "failed to check stack overflow", K(ret));
       } else if (is_overflow) {
         ret = OB_SIZE_OVERFLOW;
         SQL_RESV_LOG(WARN, "too deep recursive", K(ret));
       } else if (OB_FAIL(proxy_->create_raw_expr(expr_type, raw_expr))) {
-        SQL_RESV_LOG(WARN, "failed to create raw expr by pl factory", K(ret));
       } else {
         raw_expr->set_is_called_in_sql(is_called_sql_);
       }
@@ -5419,8 +5388,6 @@ public:
         raw_expr->~ExprType();
         raw_expr = NULL;
       } else {
-        SQL_RESV_LOG(DEBUG, "create_raw_expr", K(expr_type), K(raw_expr),
-                     "expr_type", get_type_name(expr_type), K(lbt()));
       }
     }
     return ret;
@@ -5438,9 +5405,7 @@ public:
   {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(try_check_status())) {
-      SQL_RESV_LOG(WARN, "Exceeded memory usage limit", K(ret));
     } else if (OB_FAIL(create_raw_expr_inner(expr_type, raw_expr))) {
-      SQL_RESV_LOG(WARN, "failed to create raw expr", K(ret));
     }
     return ret;
   }

@@ -84,7 +84,6 @@ int ObDirectLoadOptimizerCtx::init_direct_load_ctx(ObExecContext *exec_ctx, ObLo
     } else if (direct_load_hint.has_direct()) {
       enable_by_direct_load_hint(direct_load_hint);
     } else if (OB_FAIL(load_data_hint.get_value(ObLoadDataHint::APPEND, append))) {
-      LOG_WARN("fail to get APPEND", K(ret));
     } else if (append != 0) {
       enable_by_append_hint();
     } else if (!session_info->is_inner()) {
@@ -98,9 +97,7 @@ int ObDirectLoadOptimizerCtx::init_direct_load_ctx(ObExecContext *exec_ctx, ObLo
         load_level_ = stmt.get_part_ids().empty() ? ObDirectLoadLevel::TABLE
                                                                              : ObDirectLoadLevel::PARTITION;
         if (OB_FAIL(check_semantics())) {
-          LOG_WARN("fail to check semantics", K(ret));
         } else if (OB_FAIL(check_support_direct_load(exec_ctx))) {
-          LOG_WARN("fail to check support direct load", K(ret));
         } else {
           dup_action_ = insert_mode_ == ObDirectLoadInsertMode::INC_REPLACE ?
               ObLoadDupActionType::LOAD_REPLACE : stmt.get_load_arguments().dupl_action_;   // rewrite to replace semantics
@@ -110,7 +107,6 @@ int ObDirectLoadOptimizerCtx::init_direct_load_ctx(ObExecContext *exec_ctx, ObLo
           bool allow_fallback = false;
           int tmp_ret = OB_SUCCESS;
           if (OB_TMP_FAIL(check_direct_load_allow_fallback(*this, exec_ctx, allow_fallback))) {
-            LOG_WARN("fail to check support direct load allow fallback", K(tmp_ret));
           } else if (allow_fallback) {
             LOG_INFO("direct load has been allowed fallback");
             ret = OB_SUCCESS;
@@ -152,7 +148,6 @@ int ObDirectLoadOptimizerCtx::init_direct_load_ctx(
         // do nothing
       } else if (stmt.is_normal_table_overwrite()) {
         if (OB_FAIL(check_support_insert_overwrite(global_hint))) {
-          LOG_WARN("fail to check support insert overwrite", K(ret), K(global_hint));
         } else {
           enable_by_overwrite();
         }
@@ -197,7 +192,6 @@ int ObDirectLoadOptimizerCtx::init_direct_load_ctx(
             if (ret == OB_NOT_SUPPORTED) {
               int tmp_ret = OB_SUCCESS;
               if (OB_TMP_FAIL(check_direct_load_allow_fallback(*this, exec_ctx, allow_fallback))) {
-                LOG_WARN("fail to check support direct load allow fallback", K(tmp_ret));
               } else if (allow_fallback) {
                 LOG_INFO("direct load has been allowed fallback");
                 ret = OB_SUCCESS;
@@ -356,7 +350,6 @@ int ObDirectLoadOptimizerCtx::check_support_direct_load(ObExecContext *exec_ctx)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected session info is null", K(ret));
       } else if (OB_FAIL(session_info->get_autocommit(auto_commit))) {
-        LOG_WARN("failed to get auto commit", K(ret));
       } else if (!auto_commit || session_info->is_in_transaction()) {
         if (is_insert_overwrite()) {
           ret = OB_NOT_SUPPORTED;
@@ -372,9 +365,7 @@ int ObDirectLoadOptimizerCtx::check_support_direct_load(ObExecContext *exec_ctx)
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObTableLoadSchema::get_table_schema(
         *schema_guard, table_id_, table_schema))) {
-      LOG_WARN("fail to get table schema", KR(ret));
     } else if (OB_FAIL(ObTableLoadSchema::get_column_ids(table_schema, column_ids))) {
-      LOG_WARN("fail to get column ids", KR(ret));
     } else if (OB_FAIL(ObTableLoadService::check_support_direct_load(
         *schema_guard, 
         table_id_,
@@ -383,7 +374,6 @@ int ObDirectLoadOptimizerCtx::check_support_direct_load(ObExecContext *exec_ctx)
         load_mode_,
         load_level_,
         column_ids))) {
-      LOG_WARN("fail to check support direct load", K(ret));
     }
   } 
   return ret;

@@ -397,7 +397,6 @@ int ObLobLocatorV2::get_disk_locator(ObLobCommon *&disk_loc) const
   } else if (loc->has_extern()) {
     ObString rowkey_str;
     if (OB_FAIL(get_rowkey(rowkey_str))) {
-      COMMON_LOG(WARN, "Lob: get rowkey failed", K(ret));
     } else {
       disk_loc = reinterpret_cast<ObLobCommon *>(rowkey_str.ptr() + rowkey_str.length());
     }
@@ -412,7 +411,6 @@ int ObLobLocatorV2::get_disk_locator(ObString &disc_loc_buff) const
   int ret = OB_SUCCESS;
   ObLobCommon *disk_loc = NULL;
   if (OB_FAIL(get_disk_locator(disk_loc))) {
-    COMMON_LOG(WARN, "Lob: get disk locator failed", K(ret));
   } else {
     int64_t handle_size = reinterpret_cast<intptr_t>(disk_loc) - reinterpret_cast<intptr_t>(ptr_);
     if (handle_size > size_) {
@@ -446,7 +444,6 @@ int ObLobLocatorV2::get_inrow_data(ObString &inrow_data) const
   } else if (!is_lob_disk_locator() && loc->is_simple()) {
     inrow_data.assign_ptr(ptr_ + MEM_LOB_COMMON_HEADER_LEN, size_ - MEM_LOB_COMMON_HEADER_LEN);
   } else if (OB_FAIL(get_disk_locator(disk_loc_buff))) {
-    COMMON_LOG(WARN, "Lob: get disk locator failed", K(ret));
   } else {
     ObLobCommon *disk_loc = reinterpret_cast<ObLobCommon *>(disk_loc_buff.ptr());
     if (disk_loc->in_row_) {
@@ -460,7 +457,6 @@ int ObLobLocatorV2::get_inrow_data(ObString &inrow_data) const
       if (has_extern()) {
         ObMemLobExternHeader *ext_header = nullptr;
         if (OB_FAIL(get_extern_header(ext_header))) {
-          COMMON_LOG(WARN, "Lob: fail to get extern header", K(ret));
         } else if (ext_header->payload_offset_ + ext_header->payload_size_ > size_) {
           ret = OB_INVALID_ARGUMENT;
           COMMON_LOG(WARN, "Lob: invalid payload data", K(ret), K(*ext_header), K(size_));
@@ -498,7 +494,6 @@ bool ObLobLocatorV2::is_inrow() const
   } else if (!is_lob_disk_locator() && loc->is_simple()) {
     bret = true;
   } else if (OB_FAIL(get_disk_locator(disk_loc_buff))) {
-    COMMON_LOG(WARN, "Lob: get disk locator failed", K(ret));
   } else {
     ObLobCommon *disk_loc = reinterpret_cast<ObLobCommon *>(disk_loc_buff.ptr());
     bret = disk_loc->in_row_;
@@ -517,7 +512,6 @@ bool ObLobLocatorV2::is_empty_lob() const
   } else if (!is_lob_disk_locator() && loc->is_simple()) {
     bret = (size_ - MEM_LOB_COMMON_HEADER_LEN == 0);
   } else if (OB_FAIL(get_disk_locator(disk_loc_buff))) {
-    COMMON_LOG(WARN, "Lob: get disk locator failed", K(ret));
   } else {
     ObLobCommon *disk_loc = reinterpret_cast<ObLobCommon *>(disk_loc_buff.ptr());
     if (disk_loc->in_row_) {
@@ -537,7 +531,6 @@ int ObLobLocatorV2::get_lob_data_byte_len(int64_t &len) const
   } else if (!is_lob_disk_locator() && loc->is_simple()) {
     len = size_ - MEM_LOB_COMMON_HEADER_LEN;
   } else if (OB_FAIL(get_disk_locator(disk_loc_buff))) {
-    COMMON_LOG(WARN, "Lob: get disk locator failed", K(ret));
   } else {
     ObLobCommon *disk_loc = reinterpret_cast<ObLobCommon *>(disk_loc_buff.ptr());
     len = disk_loc->get_byte_size(disk_loc_buff.length());
@@ -640,7 +633,6 @@ int ObLobLocatorV2::get_real_locator_len(int64_t &real_len) const
   if (!has_lob_header_ || size_ == 0 || OB_ISNULL(ptr_)) {
   } else if (!is_lob_disk_locator() && loc->is_simple_) {
   } else if (OB_FAIL(get_disk_locator(disk_loc))) {
-    COMMON_LOG(WARN, "Lob: get disk locator failed", K(ret), K(*this));
   } else {
     real_len = (uintptr_t)disk_loc - (uintptr_t)ptr_;
     if (disk_loc->in_row_) {
@@ -669,7 +661,6 @@ int ObLobLocatorV2::get_chunk_size(int64_t &chunk_size) const
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(WARN, "inrow-persist_lob should not call this function", K(ret), KPC(this));
   } else if (OB_FAIL(get_disk_locator(disk_loc))) {
-    COMMON_LOG(WARN, "get disk locator fail", K(ret), KPC(this));
   } else if(((uintptr_t)disk_loc - (uintptr_t)ptr_) < DISK_LOB_OUTROW_FULL_SIZE) {
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(WARN, "size overflow", K(ret), KPC(this), KP(disk_loc), KP(ptr_), "left_size", ((uintptr_t)disk_loc - (uintptr_t)ptr_));
@@ -1199,7 +1190,6 @@ int ObObj::build_not_strict_default_value(
       int32_t int_bytes = 0;
       if (OB_FAIL(wide::ObDecimalIntConstValue::get_zero_value_byte_precision(precision, decint,
                                                                               int_bytes))) {
-        _OB_LOG(WARN, "get zero value failed, ret=%u", ret);
       } else {
         set_decimal_int(int_bytes, 0, const_cast<ObDecimalInt *>(decint));
       }
@@ -1213,7 +1203,6 @@ int ObObj::build_not_strict_default_value(
       break;
     default:
       ret = OB_INVALID_ARGUMENT;
-      _OB_LOG(WARN, "unexpected data type=%u", data_type);
   }
   if (OB_FAIL(ret)) {
   } else if (is_string_type()) {
@@ -1561,8 +1550,6 @@ int ObObj::apply(const ObObj &mutation)
                       && ObExtendType != mut_type
                       && ObNullType != mut_type
                       && org_type != mut_type))) {
-    _OB_LOG(WARN, "type not coincident or invalid type[this->type:%d,mutation.type:%d]",
-              org_type, mut_type);
     ret = OB_INVALID_ARGUMENT;
   } else {
     switch (mut_type) {
@@ -1588,7 +1575,6 @@ int ObObj::apply(const ObObj &mutation)
             break;
           default:
             ret = OB_INVALID_ARGUMENT;
-            _OB_LOG(ERROR, "unsupported ext value [value:%ld]", mutation.get_ext());
             break;
         }  // end switch
         break;
@@ -1696,7 +1682,6 @@ int ObObj::print_sql_literal(char *&buffer, int64_t &length,
       if (OB_SIZE_OVERFLOW == ret) {
         ret = OB_SUCCESS;
         if (OB_FAIL(multiple_extend_buf(buffer, length, alloc))) {
-          LOG_WARN("failed to auto extend stmt buf", K(ret));
         } else {
           pos = saved_pos;
         }
@@ -1898,11 +1883,9 @@ int ObObj::print_varchar_literal(const ObIArray<ObString> &type_infos, char *buf
     LOG_WARN("unexpected obj type", KPC(this), K(ret));
   } else if (is_enum()) {
     if (OB_FAIL(get_enum_str_val(str_val, type_infos))) {
-      LOG_WARN("fail to get enum str val", K(str_val), K(type_infos), K(ret));
     }
   } else {
     if (OB_FAIL(get_set_str_val(str_val, type_infos))) {
-      LOG_WARN("fail to get set str val", K(str_val), K(type_infos), K(ret));
     }
   }
   if (OB_SUCC(ret) && databuff_printf(buffer, length, pos, "'%.*s'",
@@ -1921,11 +1904,9 @@ int ObObj::print_plain_str_literal(const ObIArray<ObString> &type_infos, char *b
     LOG_WARN("unexpected obj type", KPC(this), K(ret));
   } else if (is_enum()) {
     if (OB_FAIL(get_enum_str_val(str_val, type_infos))) {
-      LOG_WARN("fail to get enum str val", K(str_val), K(type_infos), K(ret));
     }
   } else {
     if (OB_FAIL(get_set_str_val(str_val, type_infos))) {
-      LOG_WARN("fail to get set str val", K(str_val), K(type_infos), K(ret));
     }
   }
   if (OB_SUCC(ret) && databuff_printf(buffer, length, pos, "%.*s",
@@ -1948,12 +1929,10 @@ int ObObj::get_enum_str_val(ObSqlString &str_val, const ObIArray<ObString> &type
       LOG_WARN("unexpected obj value", K(type_infos), KPC(this), K(ret));
     } else if (0 == val) {
       if (OB_FAIL(str_val.append(ObString("")))) {
-        LOG_WARN("fail to append string", K(str_val), K(ret));
       }
     } else {
       const ObString &type_info = type_infos.at(val - 1);//enum value start from 1
       if (OB_FAIL(str_val.append(type_info))) {
-        LOG_WARN("fail to append string", K(str_val), K(type_info), K(ret));
       }
     }
   }
@@ -1980,9 +1959,7 @@ int ObObj::get_set_str_val(ObSqlString &str_val, const ObIArray<ObString> &type_
     for (int64_t i = 0; OB_SUCC(ret) && i < type_info_cnt; ++i) {
       if (val & (1ULL << i)) {
         if (OB_FAIL(str_val.append(type_infos.at(i)))) {
-          LOG_WARN("fail to append string", K(str_val), K(type_infos.at(i)), K(ret));
         } else if (OB_FAIL(str_val.append(","))) {
-          LOG_WARN("fail to print string", K(str_val), K(ret));
         }
       }
     }
@@ -2019,7 +1996,6 @@ int ObObj::convert_string_value_charset(ObCharsetType charset_type, ObIAllocator
   int ret = OB_SUCCESS;
   ObString str;
   if (OB_FAIL(get_string(str))) {
-    LOG_WARN("Failed to get payload from string", K(ret), K(*this));
   } else if (ObCharset::is_valid_charset(charset_type) && CHARSET_BINARY != charset_type) {
     ObCollationType collation_type = ObCharset::get_default_collation(charset_type);
     const ObCharsetInfo *from_charset_info = ObCharset::get_charset(get_collation_type());
@@ -2114,10 +2090,8 @@ int ObObj::read_lob_data(ObIAllocator &allocator, ObString &data) const
     ObLobLocatorV2 locator(reinterpret_cast<char *>(v_.ptr_), val_len_, has_lob_header());
     if(locator.has_inrow_data()) {
       if (OB_FAIL(locator.get_inrow_data(data))) {
-        LOG_WARN("fail to get inrow data", K(ret), K(locator), KPC(this), K(lbt()));
       }
     } else if (OB_FAIL(ob_obj_read_lob_data(allocator, *this, data))) {
-      LOG_WARN("read data fail", K(ret), K(locator), KPC(this), K(lbt()));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -2343,7 +2317,6 @@ int ObSqlArrayObj::do_real_deserialize(common::ObIAllocator &allocator, char *bu
   } else {
     array_obj = new (array_buf) ObSqlArrayObj();
     if (OB_FAIL(array_obj->deserialize(allocator, buf, data_len, pos))) {
-      LOG_WARN("failed to deserialize ObSqlArrayObj", K(ret));
     }
   }
   return ret;
@@ -2441,13 +2414,9 @@ int ObObjCharacterUtil::print_safe_hex_represent_oracle(const ObObj &obj, char *
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(databuff_printf(buffer, length, pos, CAST_PREFIX, CAST_VARCHAR_TYPE_STR))) {
-    LOG_WARN("fail to print string", K(ret), KP(CAST_PREFIX), K(CAST_VARCHAR_TYPE_STR));
   } else if (OB_FAIL(hex_print(obj.get_string_ptr(), obj.get_string_len(), buffer, length, pos))) {
-    LOG_WARN("fail to print hex", K(ret));
   } else if (OB_FAIL(databuff_printf(buffer, length, pos, CAST_CHAR_SUFFIX, type_str,
     accuracy.get_length(), LENGTH_SEMANTICS_STR))) {
-      LOG_WARN("fail to print string", K(ret), K(CAST_CHAR_SUFFIX), K(type_str),
-        K(accuracy.get_length()), K(LENGTH_SEMANTICS_STR));
   }
   return ret;
 }
@@ -2470,11 +2439,8 @@ int ObObjCharacterUtil::print_safe_hex_represent_mysql(const ObObj &obj, char *b
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected collation name", K(ret), K(charset_type), K(collation_type));
   } else if (OB_FAIL(databuff_printf(buffer, length, pos, "%s", CAST_PREFIX))) {
-    LOG_WARN("fail to print string", K(ret), K(CAST_PREFIX));
   } else if (OB_FAIL(hex_print(obj.get_string_ptr(), obj.get_string_len(), buffer, length, pos))) {
-    LOG_WARN("fail to print hex", K(ret));
   } else if (OB_FAIL(databuff_printf(buffer, length, pos, CAST_SUFFIX, charset_name, collation_name))) {
-    LOG_WARN("fail to print string", K(ret), K(CAST_SUFFIX), K(charset_name), K(collation_name));
   }
   return ret;
 }

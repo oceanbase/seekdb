@@ -40,7 +40,6 @@ int ObAdaptiveQS<Store_Row>::init(common::ObIArray<Store_Row *> &sort_rows,
     ret = OB_INVALID_ARGUMENT;
     SQL_ENG_LOG(WARN, "invalid argument", K(rows_begin), K(rows_end), K(sort_rows.count()), K(ret));
   } else if (OB_FAIL(sort_rows_.prepare_allocate(rows_end - rows_begin))) {
-    SQL_ENG_LOG(WARN, "failed to init", K(ret));
   } else {
     for (int64_t i = 0; can_encode && i < rows_end - rows_begin; i++) {
       AQSItem &item = sort_rows_[i];
@@ -358,7 +357,6 @@ int ObFixedKeySort<StoreRow, SortingItem>::init(common::ObIArray<StoreRow *> &so
     ret = OB_INVALID_ARGUMENT;
     SQL_ENG_LOG(WARN, "invalid argument", K(rows_begin), K(rows_end), K(sort_rows.count()), K(ret));
   } else if (OB_FAIL(prepare_sorting_items(rows_begin, rows_end))) {
-    SQL_ENG_LOG(WARN, "failed to prepare items", K(ret));
   } else {
     for (int64_t i = 0; can_encode && i < item_cnt_; i++) {
       SortingItem &item = sorting_items_[i];

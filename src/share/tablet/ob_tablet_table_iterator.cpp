@@ -69,11 +69,9 @@ int ObTabletMetaIterator::next(ObTabletInfo &tablet_info)
         // directly get from prefetched tablet_info
         tablet_info.reset();
         if (OB_FAIL(tablet_info.assign(prefetched_tablets_.at(prefetch_tablet_idx_)))) {
-          LOG_WARN("fail to assign tablet_info", KR(ret), K_(prefetch_tablet_idx));
         } else if (tablet_info.replica_count() > 0) {
           //
           if (OB_FAIL(tablet_info.filter(filters_))) {
-            LOG_WARN("fail to filter tablet_info", KR(ret), K(tablet_info));
           } else {
             find = true;
           }
@@ -141,7 +139,6 @@ int ObCompactionTabletMetaIterator::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(batch_size));
   } else if (OB_FAIL(ObTabletMetaIterator::inner_init())) {
-    LOG_WARN("failed to init", KR(ret));
   } else {
     batch_size_ = batch_size;
     is_inited_ = true;
@@ -195,9 +192,7 @@ int ObTenantTabletMetaIterator::init(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTabletMetaIterator::inner_init())) {
-    LOG_WARN("fail to init", KR(ret));
   } else if (OB_FAIL(tablet_table_operator_.init(GCTX.meta_db_pool_))) {
-    LOG_WARN("fail to init tablet table operator", KR(ret));
   } else {
     sql_proxy_ = &sql_proxy;
     valid_tablet_ls_pairs_.reuse();
@@ -231,8 +226,6 @@ int ObTenantTabletMetaIterator::prefetch()
         K_(valid_tablet_ls_pairs_idx), K_(valid_tablet_ls_pairs));
     }
   } else if (OB_FAIL(prefetch_tablets())) {
-    LOG_WARN("fail to prefetch tablets", KR(ret),
-      K_(prefetch_tablet_idx), "prefetch count", prefetched_tablets_.count());
   }
   return ret;
 }
@@ -250,7 +243,6 @@ int ObTenantTabletMetaIterator::prefetch_valid_tablet_ids()
     // tables' tablet_ids if it has user tables.
     if (first_prefetch_) {
       if (OB_FAIL(prefetch_sys_table_tablet_ids())) {
-        LOG_WARN("fail to prefetch sys tables' tablet_id", KR(ret));
       } else {
         first_prefetch_ = false;
       }
@@ -277,8 +269,6 @@ int ObTenantTabletMetaIterator::prefetch_tablets()
 
     if (OB_FAIL(tablet_table_operator_.batch_get(valid_tablet_ls_pairs_,
                                                  prefetched_tablets_))) {
-      LOG_WARN("fail to do batch_get through tablet_table_operator", KR(ret),
-               K_(valid_tablet_ls_pairs), K_(prefetched_tablets));
     }
   }
   return ret;
@@ -290,9 +280,7 @@ int ObTenantTabletMetaIterator::prefetch_sys_table_tablet_ids()
   ObSchemaGetterGuard schema_guard;
   ObArray<const ObSimpleTableSchemaV2 *> table_schemas;
   if (OB_FAIL(ObMultiVersionSchemaService::get_instance().get_tenant_full_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schemas_in_tenant(table_schemas))) {
-    LOG_WARN("fail to get tenant table schemas", KR(ret));
   } else {
     ObTabletLSPair pair;
     for (int64_t i = 0; (i < table_schemas.count()) && OB_SUCC(ret); ++i) {
@@ -307,9 +295,7 @@ int ObTenantTabletMetaIterator::prefetch_sys_table_tablet_ids()
           const ObTabletID &tablet_id = simple_schema->get_tablet_id();
           pair.reset();
           if (OB_FAIL(pair.init(tablet_id, SYS_LS))) {
-            LOG_WARN("fail to init tablet_ls_pair", KR(ret), K(tablet_id));
           } else if (OB_FAIL(valid_tablet_ls_pairs_.push_back(pair))) {
-            LOG_WARN("fail to push back tablet_ls_pair", KR(ret), K(pair));
           }
         }
       }
@@ -335,9 +321,6 @@ int ObTenantTabletMetaIterator::prefetch_user_table_tablet_ids()
                                               start_tablet_id,
                                               range_count,
                                               valid_tablet_ls_pairs_))) {
-    LOG_WARN("fail to get a range of tablet through tablet_to_ls_table_operator",
-              KR(ret), K(start_tablet_id), K(range_count),
-              K_(valid_tablet_ls_pairs));
   } else if (valid_tablet_ls_pairs_.count() <= 0) {
     ret = OB_ITER_END;
   }
@@ -390,10 +373,7 @@ int ObTenantTabletTableIterator::next(ObTabletInfo &tablet_info)
       }
     }
     if (FAILEDx(tablet_info.assign(inner_tablet_infos_[inner_idx_]))) {
-      LOG_WARN("failed to assign tablet_info",
-          KR(ret), K_(inner_idx), K_(inner_tablet_infos));
     } else if (OB_FAIL(tablet_info.filter(filters_))) {
-      LOG_WARN("fail to filter tablet info", KR(ret), K(tablet_info));
     } else {
       ++inner_idx_;
     }
@@ -418,8 +398,6 @@ int ObTenantTabletTableIterator::prefetch_()
     if (OB_FAIL(tt_operator_->range_get(last_tablet_id,
         range_size,
         inner_tablet_infos_))) {
-      LOG_WARN("fail to range get by operator", KR(ret),
-          K(last_tablet_id), K(range_size), K_(inner_tablet_infos));
     } else if (inner_tablet_infos_.count() <= 0) {
       ret = OB_ITER_END;
     }

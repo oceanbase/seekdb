@@ -80,26 +80,18 @@ int ObColumnSchemaV2::assign(const ObColumnSchemaV2 &src_schema)
     lob_chunk_size_ = src_schema.lob_chunk_size_;
 
     if (OB_FAIL(deep_copy_obj(src_schema.orig_default_value_, orig_default_value_))) {
-      LOG_WARN("Fail to deepy copy orig_default_value, ", K(ret));
     } else if (OB_FAIL(deep_copy_obj(src_schema.cur_default_value_, cur_default_value_))) {
-      LOG_WARN("Fail to deep copy cur_default_value, ", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_schema.column_name_, column_name_))) {
-      LOG_WARN("Fail to deep copy column name, ", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_schema.comment_, comment_))) {
-      LOG_WARN("Fail to deep copy comment, ", K(ret));
     } else if (OB_FAIL(set_extended_type_info(src_schema.extended_type_info_))) {
-      LOG_WARN("set_extended_type_info failed", K(ret));
     } else if (src_schema.column_ref_idxs_ != NULL) {
       if (OB_FAIL(alloc_column_ref_set())) {
-        LOG_WARN("alloc column ref set failed", K(ret));
       } else if (OB_FAIL(column_ref_idxs_->add_members(*src_schema.column_ref_idxs_))) {
-        LOG_WARN("add members to column reference idxs failed", K(ret));
       }
     } else {/*do nothing*/}
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(local_session_vars_.deep_copy(src_schema.local_session_vars_))) {
-        LOG_WARN("fail to deep copy sys var info", K(ret));
       }
     }
 
@@ -240,7 +232,6 @@ OB_DEF_SERIALIZE(ObColumnSchemaV2)
   if (!OB_SUCC(ret)) {
     LOG_WARN("Fail to serialize fixed length data", K(ret));
   } else if (OB_FAIL(serialize_string_array(buf, buf_len, pos, extended_type_info_))) {
-    LOG_WARN("serialize_string_array failed", K(ret));
   } else {
     LST_DO_CODE(OB_UNIS_ENCODE,
                 sequence_id_,
@@ -289,7 +280,6 @@ OB_DEF_DESERIALIZE(ObColumnSchemaV2)
               has_column_ref);
   if (OB_SUCC(ret) && has_column_ref) {
     if (OB_FAIL(alloc_column_ref_set())) {
-      LOG_WARN("alloc column reference set failed", K(ret));
     }
     OB_UNIS_DECODE(*column_ref_idxs_);
   }
@@ -300,15 +290,10 @@ OB_DEF_DESERIALIZE(ObColumnSchemaV2)
   if (!OB_SUCC(ret)) {
     LOG_WARN("Fail to deserialize data, ", K(ret));
   } else if (OB_FAIL(deserialize_string_array(buf, data_len, pos, extended_type_info_, get_allocator()))) {
-    LOG_WARN("deserialize_string_array failed", K(ret));
   } else if (OB_FAIL(deep_copy_obj(orig_default_value, orig_default_value_))) {
-    LOG_WARN("Fail to deep copy orig_default_value, ", K(ret), K_(orig_default_value));
   } else if (OB_FAIL(deep_copy_obj(cur_default_value, cur_default_value_))) {
-    LOG_WARN("Fail to deep copy cur_default_value, ", K(ret), K_(cur_default_value));
   } else if (OB_FAIL(deep_copy_str(column_name, column_name_))) {
-    LOG_WARN("Fail to deep copy column_name, ", K(ret), K_(column_name));
   } else if (OB_FAIL(deep_copy_str(comment, comment_))) {
-    LOG_WARN("Fail to deep copy comment, ", K(ret), K_(comment));
   } else {
     LST_DO_CODE(OB_UNIS_DECODE,
                 sequence_id_,
@@ -487,13 +472,11 @@ int ObColumnSchemaV2::add_cascaded_column_id(uint64_t column_id)
   int ret = OB_SUCCESS;
   if (OB_ISNULL(column_ref_idxs_)) {
     if (OB_FAIL(alloc_column_ref_set())) {
-      LOG_WARN("alloc column ref set failed", K(ret));
     }
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(column_ref_idxs_->add_member(column_id - OB_APP_MIN_COLUMN_ID))) {
-      LOG_WARN("add member to cascaded column idxs failed", K(ret));
     } else {
       LOG_DEBUG("succ to add_cascaded_column_id", K(ret), K(*this), K(column_id), K(lbt()));
     }
@@ -511,7 +494,6 @@ int ObColumnSchemaV2::del_cascaded_column_id(const uint64_t column_id)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid column ref idxs", K(ret));
   } else if (OB_FAIL(column_ref_idxs_->del_member(column_id - OB_APP_MIN_COLUMN_ID))) {
-    LOG_WARN("failed to delete cascaded column id", K(ret));
   } else {
     // do nothing
   }
@@ -534,7 +516,6 @@ int ObColumnSchemaV2::get_cascaded_column_ids(ObIArray<uint64_t> &column_ids) co
     for (int64_t i = 0; OB_SUCC(ret) && i < column_ref_idxs_->bit_count(); ++i) {
       if (column_ref_idxs_->has_member(i)) {
         if (OB_FAIL(column_ids.push_back(i + OB_APP_MIN_COLUMN_ID))) {
-          LOG_WARN("store column id failed", K(i));
         }
       }
     }
@@ -557,21 +538,17 @@ int ObColumnSchemaV2::convert_column_id(const hash::ObHashMap<uint64_t, uint64_t
   int ret = OB_SUCCESS;
   ObSEArray<uint64_t, 1> old_column_ids;
   if (OB_FAIL(get_cascaded_column_ids(old_column_ids))) {
-    LOG_WARN("failed to get cascaded column ids", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < old_column_ids.count(); i++) {
       const uint64_t old_column_id = old_column_ids.at(i);
       if (OB_FAIL(del_cascaded_column_id(old_column_id))) {
-        LOG_WARN("failed to delete cascaded column id", K(ret), K(old_column_id));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < old_column_ids.count(); i++) {
       const uint64_t old_column_id = old_column_ids.at(i);
       uint64_t new_column_id = 0;
       if (OB_FAIL(column_id_map.get_refactored(old_column_id, new_column_id))) {
-        LOG_WARN("failed to get new column id", K(ret));
       } else if (OB_FAIL(add_cascaded_column_id(new_column_id))) {
-        LOG_WARN("failed to add cascaded column id", K(ret), K(old_column_id), K(new_column_id));
       }
     }
   }
@@ -580,7 +557,6 @@ int ObColumnSchemaV2::convert_column_id(const hash::ObHashMap<uint64_t, uint64_t
     const uint64_t old_column_id = get_column_id();
     uint64_t new_column_id = 0;
     if (OB_FAIL(column_id_map.get_refactored(old_column_id, new_column_id))) {
-      LOG_WARN("failed to get new column id", K(ret), K(old_column_id));
     } else {
       set_column_id(new_column_id);
     }
@@ -592,7 +568,6 @@ int ObColumnSchemaV2::convert_column_id(const hash::ObHashMap<uint64_t, uint64_t
     if (old_column_id == BORDER_COLUMN_ID || old_column_id == UINT64_MAX) {
       // do nothing
     } else if (OB_FAIL(column_id_map.get_refactored(old_column_id, new_column_id))) {
-      LOG_WARN("failed to get new prev column id", K(ret), K(old_column_id));
     } else {
       set_prev_column_id(new_column_id);
     }
@@ -604,7 +579,6 @@ int ObColumnSchemaV2::convert_column_id(const hash::ObHashMap<uint64_t, uint64_t
     if (old_column_id == BORDER_COLUMN_ID || old_column_id == UINT64_MAX) {
       // do nothing
     } else if (OB_FAIL(column_id_map.get_refactored(old_column_id, new_column_id))) {
-      LOG_WARN("failed to get new next column id", K(ret), K(old_column_id));
     } else {
       set_next_column_id(new_column_id);
     }
@@ -616,7 +590,6 @@ int ObColumnSchemaV2::serialize_extended_type_info(char *buf, const int64_t buf_
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(serialize_string_array(buf, buf_len, pos, extended_type_info_))) {
-    LOG_WARN("fail to serialize extended type info", K(ret));
   }
   return ret;
 }
@@ -627,7 +600,6 @@ int ObColumnSchemaV2::deserialize_extended_type_info(const char *buf,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(deserialize_string_array(buf, data_len, pos, extended_type_info_, get_allocator()))) {
-    LOG_WARN("fail to deserialize extended type info", K(ret));
   }
   return ret;
 }

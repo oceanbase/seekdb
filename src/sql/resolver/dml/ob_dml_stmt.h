@@ -1247,7 +1247,6 @@ int deep_copy_stmt_objects(ObIAllocator &allocator,
       } else {
         new_obj = new (ptr) T();
         if (OB_FAIL(new_obj->deep_copy(expr_copier, *obj))) {
-          SQL_RESV_LOG(WARN, "failed to deep copy obj", K(ret));
         }
       }
     }
@@ -1268,9 +1267,7 @@ int deep_copy_stmt_objects(ObIRawExprCopier &expr_copier,
     const T &obj = objs.at(i);
     T new_obj;
     if (OB_FAIL(new_obj.deep_copy(expr_copier, obj))) {
-      SQL_RESV_LOG(WARN, "failed to deep copy object", K(ret));
     } else if (OB_FAIL(new_objs.push_back(new_obj))) {
-      SQL_RESV_LOG(WARN, "failed to push back new obj", K(ret));
     }
   }
   return ret;
@@ -1283,7 +1280,6 @@ ObDMLStmt::get_column_exprs(ObIArray<T*> &column_exprs) const
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < column_items_.count(); ++i) {
     if (OB_FAIL(column_exprs.push_back(column_items_.at(i).expr_))) {
-      SQL_RESV_LOG(WARN, "failed to push back column exprs", K(ret));
     }
   }
   return ret;
@@ -1297,7 +1293,6 @@ ObDMLStmt::get_column_exprs(uint64_t table_id, ObIArray<T*> &table_cols) const
   for (int64_t i = 0; OB_SUCC(ret) && i < column_items_.count(); ++i) {
     if (column_items_.at(i).table_id_ == table_id) {
       if (OB_FAIL(table_cols.push_back(column_items_.at(i).expr_))) {
-        SQL_RESV_LOG(WARN, "failed to push back column exprs", K(ret));
       }
     }
   }

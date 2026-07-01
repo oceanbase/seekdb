@@ -50,7 +50,6 @@ int ObUdfCtxMgr::try_init_map()
     if (OB_FAIL(ctxs_.create(common::hash::cal_next_prime(BUKET_NUM),
                              common::ObModIds::OB_SQL_UDF,
                              common::ObModIds::OB_SQL_UDF))) {
-      LOG_WARN("create hash failed", K(ret));
     }
   }
   return ret;

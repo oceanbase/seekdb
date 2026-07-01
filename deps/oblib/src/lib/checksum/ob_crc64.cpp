@@ -1110,10 +1110,8 @@ uint64_t crc64_sse42_dispatch(uint64_t crc, const char *buf, int64_t len)
   #elif defined(__aarch64__)
     #if 1
     ob_crc64_sse42_func = &crc64_sse42;
-    _OB_LOG(INFO, "Use CPU crc32 instructs for crc64 calculate");
     #else
     ob_crc64_sse42_func = &fast_crc64_sse42_manually;
-    _OB_LOG(INFO, "Use manual crc32 table lookup for crc64 calculate");
     #endif
   #else
     #error arch unsupported
@@ -1130,9 +1128,7 @@ OB_DEF_SERIALIZE(ObBatchChecksum)
   if (NULL == buf || pos < 0 || pos > buf_len) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_SUCCESS != (ret = serialization::encode_i64(buf, buf_len, new_pos, pos_))) {
-    CLOG_LOG(WARN, "encode pos fail", K(ret));
   } else if (OB_SUCCESS != (ret = serialization::encode_i64(buf, buf_len, new_pos, base_))) {
-    CLOG_LOG(WARN, "encode base fail", K(ret));
   } else if (new_pos + BUFFER_SIZE > buf_len) {
     ret = OB_SERIALIZE_ERROR;
   } else {
@@ -1153,9 +1149,7 @@ OB_DEF_DESERIALIZE(ObBatchChecksum)
   if (NULL == buf || pos < 0 || pos > data_len) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_SUCCESS != (ret = serialization::decode_i64(buf, data_len, new_pos, &pos_))) {
-    CLOG_LOG(WARN, "decode pos fail", K(ret));
   } else if (OB_SUCCESS != (ret = serialization::decode_i64(buf, data_len, new_pos, &tmp_base))) {
-    CLOG_LOG(WARN, "decode base fail", K(ret));
   } else if (new_pos + BUFFER_SIZE > data_len) {
     ret = OB_DESERIALIZE_ERROR;
   } else {

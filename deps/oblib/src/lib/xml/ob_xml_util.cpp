@@ -133,14 +133,11 @@ int ObXmlUtil::append_newline_and_indent(ObStringBuffer &j_buf, uint64_t level, 
     ret = OB_ERR_JSON_OUT_OF_DEPTH;  // error code need change
     LOG_WARN("is_pretty level is too deep", K(ret), K(level));
   } else if (OB_FAIL(j_buf.append("\n"))) {
-    LOG_WARN("fail to append newline to buffer", K(ret), K(level), K(size));
   } else if (OB_FAIL(j_buf.reserve(level * size))) {
-    LOG_WARN("fail to reserve memory for buffer", K(ret), K(level), K(size));
   } else {
     char str[level * size];
     MEMSET(str, ' ', level * size);
     if (OB_FAIL(j_buf.append(str, level * size))) {
-      LOG_WARN("fail to append space to buffer", K(ret), K(level), K(size));
     }
   }
   
@@ -151,9 +148,7 @@ int ObXmlUtil::append_qname(ObStringBuffer &j_buf, const ObString& prefix, const
   INIT_SUCC(ret);
   if (!prefix.empty()) {
     if (OB_FAIL(j_buf.append(prefix))) {
-      LOG_WARN("fail to print prefix in attr", K(ret), K(prefix));
     } else if (OB_FAIL(j_buf.append(":"))) {
-      LOG_WARN("fail to print : in attr", K(ret));
     }
   }
   if (OB_SUCC(ret) && !localname.empty() && OB_FAIL(j_buf.append(localname))) {
@@ -189,7 +184,6 @@ int ObXmlUtil::xml_bin_type(const ObString& data, ObMulModeNodeType& type)
   INIT_SUCC(ret);
   ObMulBinHeaderSerializer desserializer(data.ptr(), data.length());
   if (OB_FAIL(desserializer.deserialize())) {
-    LOG_WARN("deserialize failed", K(ret), K(data));
   } else {
     type = desserializer.type();
   }
@@ -213,7 +207,6 @@ int ObMulModeFactory::add_unparsed_text_into_doc(ObMulModeMemCtx* ctx, ObString 
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to create document", K(ret));
   } else if(OB_FAIL(doc->append_unparse_text(text))) {
-    LOG_WARN("fail to add unparse text to doc", K(ret));
   }
   return ret;
 }
@@ -259,7 +252,6 @@ int ObMulModeFactory::get_xml_base(ObMulModeMemCtx* ctx, const char *ptr, uint64
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to alloc memory", K(ret), K(in_type), K(expect_type), K(sizeof(ObXmlBin)));
       } else if (OB_FAIL(bin->parse_tree(xnode))) {
-        LOG_WARN("fail to parse tree", K(ret), K(in_type), K(expect_type));
       } else {
         out = bin;
       }
@@ -268,7 +260,6 @@ int ObMulModeFactory::get_xml_base(ObMulModeMemCtx* ctx, const char *ptr, uint64
     ObXmlBin bin(ctx);
     ObXmlBin *bin_new = nullptr;
     if (OB_FAIL(bin.parse(ptr, length))) {
-      LOG_WARN("fail to reset iter", K(ret), K(in_type), K(expect_type));
     } else if (bin.type() == M_UNPARESED_DOC) {
       ObStringBuffer* buffer = nullptr;
       ObXmlDocument *x_doc = nullptr;
@@ -277,12 +268,10 @@ int ObMulModeFactory::get_xml_base(ObMulModeMemCtx* ctx, const char *ptr, uint64
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to allocate buffer", K(ret), K(in_type), K(expect_type));
       } else if (OB_FAIL(bin.print(*buffer, ObXmlFormatType::NO_FORMAT, 0, 0))) {
-        LOG_WARN("fail to print xml", K(ret), K(in_type), K(expect_type));
       } else if (OB_FALSE_IT(unparsed_text.assign_ptr(buffer->ptr(), buffer->length()))) {
       } else if (is_for_text && bin.type() == M_UNPARESED_DOC) {
         // special for text
         if (OB_FAIL(bin.construct(bin_new, ctx->allocator_))) {
-          LOG_WARN("fail to dup res", K(ret), K(in_type), K(expect_type));
         } else {
           out = bin_new;
         }
@@ -299,7 +288,6 @@ int ObMulModeFactory::get_xml_base(ObMulModeMemCtx* ctx, const char *ptr, uint64
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to alloc memory", K(ret), K(in_type), K(expect_type), K(sizeof(ObXmlBin)));
         } else if (OB_FAIL(bin_new->parse_tree(tree))) {
-          LOG_WARN("fail to reset iter", K(ret), K(in_type), K(expect_type));
         } else {
           out = bin_new;
         }
@@ -314,7 +302,6 @@ int ObMulModeFactory::get_xml_base(ObMulModeMemCtx* ctx, const char *ptr, uint64
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to allocate buffer", K(ret), K(in_type), K(expect_type));
       } else if (OB_FAIL(bin.print(*buffer, ObXmlFormatType::NO_FORMAT, 0, 0))) {
-        LOG_WARN("fail to print xml", K(ret), K(in_type), K(expect_type));
       } else if (OB_FALSE_IT(unparsed_text.assign_ptr(buffer->ptr(), buffer->length()))) {
       } else if (OB_FAIL(ObXmlParserUtils::parse_content_text(ctx, unparsed_text, x_doc))) {
         LOG_DEBUG("fail to parse unparse", K(ret), K(in_type), K(expect_type));
@@ -325,17 +312,14 @@ int ObMulModeFactory::get_xml_base(ObMulModeMemCtx* ctx, const char *ptr, uint64
           ret = OB_SUCCESS;
           if (expect_type == BINARY_TYPE) {
             if (OB_FAIL(bin.construct(bin_new, ctx->allocator_))) {
-              LOG_WARN("fail to dup res", K(ret), K(in_type), K(expect_type));
             } else {
               out = bin_new;
             }
           } else if (OB_FAIL(bin.to_tree(out))) {
-            LOG_WARN("fail to tree", K(ret), K(in_type), K(expect_type));
           }
         }
       } else if (expect_type == BINARY_TYPE) {
         if (OB_FAIL(bin.construct(bin_new, ctx->allocator_))) {
-          LOG_WARN("fail to dup res", K(ret), K(in_type), K(expect_type));
         } else {
           out = bin_new;
         }
@@ -345,11 +329,9 @@ int ObMulModeFactory::get_xml_base(ObMulModeMemCtx* ctx, const char *ptr, uint64
     } else {
       if (expect_type == TREE_TYPE) {
         if (OB_FAIL(bin.to_tree(out))) {
-          LOG_WARN("fail to tree", K(ret), K(in_type), K(expect_type));
         }
       } else {
         if (OB_FAIL(bin.construct(bin_new, ctx->allocator_))) {
-          LOG_WARN("fail to dup res", K(ret), K(in_type), K(expect_type));
         } else {
           out = bin_new;
         }
@@ -392,7 +374,6 @@ int ObMulModeFactory::transform(ObMulModeMemCtx* ctx, ObIMulModeBase *src,
       } else {
         ObXmlBin *bin = new (buf) ObXmlBin(ctx);
         if (OB_FAIL(bin->parse_tree(src, false))) {
-          LOG_WARN("fail to parse tree", K(ret), K(src_type), K(expect_type));
         } else {
           out = bin;
         }
@@ -404,7 +385,6 @@ int ObMulModeFactory::transform(ObMulModeMemCtx* ctx, ObIMulModeBase *src,
     if (expect_type == ObNodeMemType::TREE_TYPE) { // to tree
       ObXmlBin *bin = static_cast<ObXmlBin*>(src);
       if (OB_FAIL(bin->to_tree(out))) {
-        LOG_WARN("fail to change bin to tree", K(ret), K(src_type), K(expect_type));
       }
     } else { // to bin, itself
       out = src;
@@ -437,17 +417,13 @@ int ObXmlUtil::xml_bin_to_text(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to string buffer", K(ret));
   } else if (OB_FAIL(ObXmlUtil::create_mulmode_tree_context(&tmp_alloc, xml_mem_ctx))) {
-    LOG_WARN("fail to create tree memory context", K(ret));
   } else if (OB_FAIL(ObMulModeFactory::get_xml_base(xml_mem_ctx,
                                                     bin, 
                                                     ObNodeMemType::BINARY_TYPE,
                                                     ObNodeMemType::BINARY_TYPE, 
                                                     base))) {
-    LOG_WARN("fail to get xml base", K(ret), K(bin));
   } else if (OB_FAIL(base->print(*buffer, 0, 0, 0, CS_TYPE_UTF8MB4_GENERAL_CI))) {
-    LOG_WARN("print_document failed", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator, buffer->string(), text))) {
-    LOG_WARN("ob_write_string failed", K(ret), K(*buffer));
   }
   return ret;
 }
@@ -637,7 +613,6 @@ int ObXmlUtil::to_number(ObPathStr *in, double &out)
     ret = OB_OP_NOT_ALLOW;
 	  LOG_WARN("ArgNodeContent check bool rule invalid value", K(ret), K(in));
   } else if (OB_FAIL(to_number(in->name_, in->len_, out))) {
-		LOG_WARN("to number failed", K(ret));
 	}
 	return ret;
 }
@@ -809,7 +784,6 @@ int ObXmlUtil::init_print_ns(ObIAllocator *allocator, ObIMulModeBase *src, ObNsS
   INIT_SUCC(ret);
   if (OB_NOT_NULL(src) && src->check_extend()) {
     if (OB_FAIL(ObXmlUtil::init_extend_ns_vec(allocator, src, ns_vec))) {
-      LOG_WARN("fail to init ns vector by extend area", K(ret));
     } else {
       ns_vec_point = &ns_vec;
     }
@@ -849,9 +823,7 @@ int ObXmlUtil::dfs_xml_text_node(ObMulModeMemCtx *ctx, ObIMulModeBase *xml_doc, 
   ObString default_ns; // unused
   ObIMulModeBase *result_node = NULL;
   if (OB_FAIL(xpath_iter.init(ctx, xpath_str, default_ns, xml_doc, NULL))) {
-    LOG_WARN("fail to init xpath iterator", K(xpath_str), K(default_ns), K(ret));
   } else if (OB_FAIL(xpath_iter.open())) {
-    LOG_WARN("fail to open xpath iterator", K(ret));
   }
 	
   while (OB_SUCC(ret)) {
@@ -867,9 +839,7 @@ int ObXmlUtil::dfs_xml_text_node(ObMulModeMemCtx *ctx, ObIMulModeBase *xml_doc, 
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid xml node type", K(ret), K(result_node->type()));
     } else if (OB_FAIL(result_node->get_value(content))) {
-      LOG_WARN("fail to get text node content", K(ret));
     } else if (OB_FAIL(buff.append(content))) {
-      LOG_WARN("fail to append text node content", K(ret), K(content));
     }
   }
 
@@ -897,10 +867,8 @@ int ObXmlUtil::get_array_from_mode_base(ObIMulModeBase *node, ObIArray<ObIMulMod
 			LOG_WARN("xml node null", K(ret));
   } else if (!is_container_tc(node->type())) {
     if (OB_FAIL(res.push_back(node))) {
-      LOG_WARN("get child failed", K(ret), K(node->type()));
     }
-  } else if (OB_FAIL(node->get_children(res))) { // get children
-    LOG_WARN("get child failed", K(ret), K(node));
+  } else if (OB_FAIL(node->get_children(res))) {
   }
 	return ret;
 }
@@ -954,19 +922,13 @@ int ObXmlUtil::cast_to_string(const ObString &val, ObIAllocator &allocator, ObSt
   ObNsSortedVector ns_vec;
   
   if (OB_FAIL(ObXmlUtil::create_mulmode_tree_context(&allocator, mem_ctx))) {
-    LOG_WARN("fail to create tree memory context", K(ret));
   } else if (OB_FAIL(ObXmlUtil::xml_bin_type(val, node_type))) {
-    LOG_WARN("xml bin type failed", K(val));
   } else if (OB_FAIL(ObMulModeFactory::get_xml_base(mem_ctx, val,
                                                     ObNodeMemType::BINARY_TYPE, 
                                                     ObNodeMemType::BINARY_TYPE, 
                                                     node, M_DOCUMENT, true))) {
-    LOG_WARN("fail to get xml base", K(ret), K(val));
   } else if (OB_FAIL(ObXmlUtil::init_print_ns(&allocator, node, ns_vec, ns_vec_point))) {
-    LOG_WARN("fail to init ns vector by extend area", K(ret));
-  // default size value of print_document is 2
   } else if (OB_FAIL(node->print_document(result, cs_type, node_type == M_UNPARESED_DOC ? ObXmlFormatType::NO_FORMAT : ObXmlFormatType::WITH_FORMAT, 2, ns_vec_point))) {
-    LOG_WARN("print document failed", K(ret));
   }
 
   return ret;
@@ -989,12 +951,10 @@ int ObXmlUtil::revert_escape_character(ObIAllocator &allocator, ObString &input_
     if (*(ptr+idx) == '&' && ObXmlParserUtils::is_entity_ref(input_str, idx, ref, ref_len)) {
       // append entity ref and increment idx
       if (OB_FAIL(buff.append(ref))) {
-        LOG_WARN("fail to append ref char", K(ret));
       } else {
         idx += ref_len;
       }
     } else if (OB_FAIL(buff.append(ptr+idx, 1))) {
-      LOG_WARN("fail to append char", K(ret));
     } else {
       idx++;
     }
@@ -1003,7 +963,6 @@ int ObXmlUtil::revert_escape_character(ObIAllocator &allocator, ObString &input_
   if (OB_SUCC(ret)) {
     ObString res(buff.length(), buff.ptr());
     if (OB_FAIL(ob_write_string(allocator, res, output_str))) {
-      LOG_WARN("fail to write string", K(ret), K(res));
     }
   }
 
@@ -1021,7 +980,6 @@ int ObXmlUtil::init_extend_ns_vec(ObIAllocator *allocator, ObIMulModeBase *src, 
     ObXmlBin extend_bin;
     ns_vec.reset();
     if (OB_FAIL(bin->get_extend(extend_bin))) {
-      LOG_WARN("fail to get extend bin", K(ret));
     } else {
       ObNsPairCmp cmp;
       ObNsPairUnique unique;
@@ -1047,15 +1005,12 @@ int ObXmlUtil::init_extend_ns_vec(ObIAllocator *allocator, ObIMulModeBase *src, 
             tmp_ns = new (tmp_ns) ObNsPair();
             ObString tmp_key;
             if (OB_FAIL(cur->get_key(tmp_key))) {
-              LOG_WARN("failed to get ns", K(ret), K(i));
             } else {
               tmp_ns->set_xml_key(tmp_key);
             }
             if (OB_FAIL(ret)) {
             } else if (OB_FAIL(cur->get_value(tmp_ns->value_))) {
-              LOG_WARN("failed to get ns", K(ret), K(i));
             } else if (OB_FAIL(ns_vec.insert_unique(tmp_ns, pos, cmp, unique))) {
-              LOG_WARN("should notduplicated nodes", K(ret), K(i));
             } 
           }
         } 
@@ -1091,10 +1046,8 @@ int ObXmlUtil::delete_dup_ns_definition(ObIMulModeBase *data, ObNsSortedVector& 
         if (ret == OB_ENTRY_NOT_EXIST) { // didn't find, not duplicate ns, it's normal
           ret = OB_SUCCESS;
         }
-      } else if (OB_FAIL(delete_vec.push_back(*pos))) { // record ns that will be delete
-        LOG_WARN("failed to record", K(ret), K(i));
-      } else if (OB_FAIL(origin_vec.remove(pos))) { // remove duplicate ns
-        LOG_WARN("failed to remove duplicate", K(ret), K(i));
+      } else if (OB_FAIL(delete_vec.push_back(*pos))) {
+      } else if (OB_FAIL(origin_vec.remove(pos))) {
       }
     }
   }
@@ -1119,19 +1072,14 @@ int ObXmlUtil::check_ns_conflict(ObIMulModeBase* cur_parent,
       ObXmlBin buff(*cur);
       ObXmlBin* tmp = &buff;
       if (OB_FAIL(cur->construct(tmp, nullptr))) {
-        LOG_WARN("failed to dup bin.", K(ret));
       } else if (OB_FAIL(tmp->set_at(pos))) {
-        LOG_WARN("failed to set at child.", K(ret));
       } else if (tmp->type() == M_NAMESPACE) {
         ObString key;
         ObString value;
         // init ns node
         if (OB_FAIL(tmp->get_key(key))) {
-          LOG_WARN("failed to eval key.", K(ret));
         } else if (OB_FAIL(tmp->get_value(value))) {
-          LOG_WARN("failed to eval value.", K(ret));
         } else if (OB_FAIL(ns_map.set_refactored(key, value))) {
-          LOG_WARN("fail to add ns from map", K(ret), K(key));
         }
       } else if (tmp->type() == M_ATTRIBUTE) {
       } else {
@@ -1149,18 +1097,14 @@ int ObXmlUtil::check_ns_conflict(ObIMulModeBase* cur_parent,
       ObXmlBin buff(*cur);
       ObXmlBin* tmp = &buff;
       if (OB_FAIL(cur->construct(tmp, nullptr))) {
-        LOG_WARN("failed to dup bin.", K(ret));
       } else if (OB_FAIL(tmp->set_at(pos))) {
-        LOG_WARN("failed to set at child.", K(ret));
       } else if (tmp->type() == M_NAMESPACE) {
         ObString key;
         ObString value;
         ObString* find_val;
         // init ns node
         if (OB_FAIL(tmp->get_key(key))) {
-          LOG_WARN("failed to eval key.", K(ret));
         } else if (OB_FAIL(tmp->get_value(value))) {
-          LOG_WARN("failed to eval value.", K(ret));
         } 
         if (OB_FAIL(ret)) {
         } else if (OB_NOT_NULL(find_val = ns_map.get(key))) {
@@ -1168,7 +1112,6 @@ int ObXmlUtil::check_ns_conflict(ObIMulModeBase* cur_parent,
             conflict = true;
           }
         } else if (OB_FAIL(new_ns_idx.push_back(pos))){
-          LOG_WARN("failed to record idx.", K(ret));
         }
       } else if (tmp->type() == M_ATTRIBUTE) {
       } else {
@@ -1179,19 +1122,14 @@ int ObXmlUtil::check_ns_conflict(ObIMulModeBase* cur_parent,
       ObXmlBin buff(*cur);
       ObXmlBin* tmp = &buff;
       if (OB_FAIL(cur->construct(tmp, nullptr))) {
-        LOG_WARN("failed to dup bin.", K(ret));
       } else if (OB_FAIL(tmp->set_at(new_ns_idx[pos]))) {
-        LOG_WARN("failed to set at child.", K(ret));
       } else if (tmp->type() == M_NAMESPACE) {
         ObString key;
         ObString value;
         // init ns node
         if (OB_FAIL(tmp->get_key(key))) {
-          LOG_WARN("failed to eval key.", K(ret));
         } else if (OB_FAIL(tmp->get_value(value))) {
-          LOG_WARN("failed to eval value.", K(ret));
         } else if (OB_FAIL(ns_map.set_refactored(key, value))) {
-          LOG_WARN("fail to add ns from map", K(ret), K(key));
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -1225,7 +1163,6 @@ int ObXmlUtil::ns_to_extend(ObMulModeMemCtx* mem_ctx,
         ns_vec[ns_vec.size() - 1].set_xml_key(ns_map_iter->first);
         ns_vec[ns_vec.size() - 1].set_value(ns_map_iter->second);
         if (OB_FAIL(element_ns.add_attribute(&ns_vec[ns_vec.size() - 1]))) {
-          LOG_WARN("fail to add ns", K(ret));
         }
       }
     }
@@ -1233,7 +1170,6 @@ int ObXmlUtil::ns_to_extend(ObMulModeMemCtx* mem_ctx,
     if (OB_SUCC(ret)) {
       ObXmlElementSerializer serializer_element(&element_ns, buffer);
       if (OB_FAIL(serializer_element.serialize(0))) {
-        LOG_WARN("failed to serialize.", K(ret));
       }
     }
   }
@@ -1263,7 +1199,6 @@ int ObXmlUtil::add_ns_def_if_necessary(uint32_t format_flag, ObStringBuffer &x_b
       }
     } else if (OB_NOT_NULL(pos)) {
       if (OB_FAIL(x_buf.append(" "))) {
-        LOG_WARN("fail to print space in ns", K(ret));
       }
       // append default ns or prefix ns
       if (OB_FAIL(ret)) {
@@ -1271,30 +1206,22 @@ int ObXmlUtil::add_ns_def_if_necessary(uint32_t format_flag, ObStringBuffer &x_b
                 || (*pos)->key_.length() == 0 
                 || (*pos)->key_.case_compare("xmlns") == 0) {
         if (OB_FAIL(x_buf.append("xmlns"))) {
-          LOG_WARN("fail to append default ns", K(ret));
         }
       } else if (OB_FAIL(ObXmlUtil::append_qname(x_buf, "xmlns", (*pos)->key_))) {
-        LOG_WARN("fail to print prefix in ns", K(ret));
       }
       // append ns value
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(x_buf.append("=\""))) {
-        LOG_WARN("fail to print =\" in ns", K(ret));
       } else if (!(format_flag & NO_ENTITY_ESCAPE)) {
         if (OB_FAIL(ObXmlParserUtils::escape_xml_text((*pos)->value_, x_buf))) {
-          LOG_WARN("fail to print text with escape char", K(ret));
         }
       } else if (OB_FAIL(x_buf.append((*pos)->value_))) {
-        LOG_WARN("fail to print value in ns", K(ret), K((*pos)->value_));
       }
       // delete ns definition that already printed
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(x_buf.append("\""))) {
-        LOG_WARN("fail to print \" in ns", K(ret));
-      } else if (OB_FAIL(delete_ns_vec.push_back(*pos))) { // record duplicate ns
-        LOG_WARN("failed to record duplicate", K(ret));
-      } else if (OB_FAIL(element_ns_vec->remove(pos))) { // remove duplicate ns
-        LOG_WARN("failed to remove duplicate", K(ret));
+      } else if (OB_FAIL(delete_ns_vec.push_back(*pos))) {
+      } else if (OB_FAIL(element_ns_vec->remove(pos))) {
       }
     }
   }
@@ -1316,15 +1243,12 @@ int ObXmlUtil::add_attr_ns_def(ObIMulModeBase *cur, uint32_t format_flag, ObStri
       ObXmlBin buff(*bin);
       ObXmlBin* tmp = &buff;
       if (OB_FAIL(bin->construct(tmp, nullptr))) {
-        LOG_WARN("failed to dup bin.", K(ret));
       } else if (OB_FAIL(tmp->set_at(pos))) {
-        LOG_WARN("failed to set at child.", K(ret));
       } else if (tmp->type() == M_NAMESPACE) {
       } else if (tmp->type() == M_ATTRIBUTE) {
         ObString prefix = tmp->get_prefix();
         if (prefix.empty()) {
         } else if (OB_FAIL(ObXmlUtil::add_ns_def_if_necessary(format_flag, buf, prefix, element_ns_vec, delete_ns_vec))) {
-          LOG_WARN("failed to add attribute ns.", K(ret));
         }
       } else {
         end_check = true;  // neither ns nor attribute, stop searching
@@ -1345,7 +1269,6 @@ int ObXmlUtil::restore_ns_vec(ObNsSortedVector* element_ns_vec, ObVector<ObNsPai
     for (int i = 0; OB_SUCC(ret) && i < delete_ns_vec.size(); ++i) {
       ObNsSortedVector::iterator pos = element_ns_vec->end();
       if (OB_FAIL(element_ns_vec->insert_unique(delete_ns_vec[i], pos, cmp, unique))) {
-        LOG_WARN("failed to restore ns", K(ret), K(i));
       }
     }
   }

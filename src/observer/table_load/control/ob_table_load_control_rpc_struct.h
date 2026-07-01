@@ -82,7 +82,6 @@ public:
       ret = OB_ALLOCATE_MEMORY_FAILED;
       SERVER_LOG(WARN, "fail to alloc memory", KR(ret), K(size));
     } else if (OB_FAIL(arg.serialize(buf, size, pos))) {
-      SERVER_LOG(WARN, "fail to serialize arg", KR(ret), K(arg));
     } else {
       arg_content_.assign_ptr(buf, size);
     }
@@ -97,7 +96,6 @@ public:
       ret = OB_INVALID_ARGUMENT;
       SERVER_LOG(WARN, "invalid args", KR(ret), KPC(this));
     } else if (OB_FAIL(arg.deserialize(arg_content_.ptr(), arg_content_.length(), pos))) {
-      SERVER_LOG(WARN, "fail to deserialize arg content", KR(ret), KPC(this));
     }
     return ret;
   }
@@ -129,7 +127,6 @@ public:
         ret = OB_ALLOCATE_MEMORY_FAILED;
         SERVER_LOG(WARN, "fail to alloc memory", KR(ret), K(size));
       } else if (OB_FAIL(res.serialize(buf, size, pos))) {
-        SERVER_LOG(WARN, "fail to serialize res", KR(ret), K(res));
       } else {
         res_content_.assign_ptr(buf, size);
       }
@@ -145,7 +142,6 @@ public:
       ret = OB_INVALID_ARGUMENT;
       SERVER_LOG(WARN, "invalid args", KR(ret), KPC(this));
     } else if (OB_FAIL(res.deserialize(res_content_.ptr(), res_content_.length(), pos))) {
-      SERVER_LOG(WARN, "fail to deserialize res content", KR(ret), KPC(this));
     }
     return ret;
   }

@@ -37,7 +37,6 @@ int ObAllVirtualPsItemInfo::inner_get_next_row()
   } else {
     MOD_SCOPE {
       if (OB_FAIL(get_next_row_from_specified_tenant(is_sub_end))) {
-        SERVER_LOG(WARN, "get_next_row_from_specified_tenant failed", K(ret));
       } else if (is_sub_end) {
         iter_end_ = true;
         ret = OB_ITER_END;
@@ -93,7 +92,6 @@ int ObAllVirtualPsItemInfo::fill_cells(ObPsStmtId stmt_id,
       case share::ALL_VIRTUAL_PS_ITEM_INFO_CDE::PS_SQL: {
         ObString ps_sql;
         if (OB_FAIL(ob_write_string(*allocator_, stmt_info->get_ps_sql(), ps_sql))) {
-          SERVER_LOG(WARN, "copy ps_sql failed", K(ret), K(stmt_info->get_ps_sql()));
         } else {
           cells[i].set_lob_value(ObLongTextType, ps_sql.ptr(),
                                  static_cast<int32_t>(ps_sql.length()));
@@ -154,7 +152,6 @@ int ObAllVirtualPsItemInfo::get_next_row_from_specified_tenant(bool &is_end)
       is_end = true;
       SERVER_LOG(DEBUG, "ps cache is not ready, ignore this", K(ret), K(ps_cache_->is_inited()));
     } else if (OB_FAIL(ps_cache_->get_all_stmt_id(&stmt_id_array_))) {
-      SERVER_LOG(WARN, "get_all_stmt_id failed", K(ret));
     } else {
       stmt_id_array_idx_ = 0;
     }
@@ -164,7 +161,6 @@ int ObAllVirtualPsItemInfo::get_next_row_from_specified_tenant(bool &is_end)
     while (OB_SUCC(ret) && false == is_filled && false == is_end) {
       if (stmt_id_array_idx_ < 0) {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "invalid plan_stat_array index", K(stmt_id_array_idx_));
       } else if (stmt_id_array_idx_ >= stmt_id_array_.count()) {
         is_end = true;
         stmt_id_array_idx_ = OB_INVALID_ID;
@@ -207,7 +203,6 @@ int ObAllVirtualPsItemInfo::get_next_row_from_specified_tenant(bool &is_end)
         if (OB_NOT_NULL(stmt_info)) {
           if (OB_SUCC(ret)) {
             if (OB_FAIL(fill_cells(stmt_id, stmt_item, stmt_info))) {
-              SERVER_LOG(WARN, "fail to fill cells", K(ret), K(stmt_id));
             } else {
               is_filled = true;
             }

@@ -112,7 +112,6 @@ int ObDirectLoadMergeCtx::init(const ObDirectLoadMergeParam &param,
   } else {
     param_ = param;
     if (OB_FAIL(create_all_tablet_ctxs(ls_partition_ids))) {
-      LOG_WARN("fail to create all tablet ctxs", KR(ret));
     } else {
       struct
       {
@@ -141,9 +140,7 @@ int ObDirectLoadMergeCtx::create_all_tablet_ctxs(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadTabletMergeCtx", KR(ret));
     } else if (OB_FAIL(tablet_ctx->init(this, ls_partition_id))) {
-      LOG_WARN("fail to init tablet ctx", KR(ret), K(ls_partition_id));
     } else if (OB_FAIL(tablet_merge_ctx_array_.push_back(tablet_ctx))) {
-      LOG_WARN("fail to push back", KR(ret));
     }
     if (OB_FAIL(ret)) {
       if (nullptr != tablet_ctx) {
@@ -172,7 +169,6 @@ int ObDirectLoadMergeCtx::build_merge_task(ObDirectLoadTableStore &table_store, 
         ObDirectLoadTabletMergeCtx *tablet_merge_ctx = tablet_merge_ctx_array_.at(i);
         if (OB_FAIL(tablet_merge_ctx->build_empty_data_merge_task(table_store.get_table_data_desc(),
                                                                   thread_cnt))) {
-          LOG_WARN("fail to build empty data merge task", KR(ret));
         }
       }
     } else if (table_store.is_multiple_heap_table()) {
@@ -185,7 +181,6 @@ int ObDirectLoadMergeCtx::build_merge_task(ObDirectLoadTableStore &table_store, 
           ObDirectLoadTabletMergeCtx *tablet_merge_ctx = tablet_merge_ctx_array_.at(i);
           if (OB_FAIL(tablet_merge_ctx->build_aggregate_merge_task_for_multiple_heap_table(
                 table_store.get_table_data_desc(), multiple_heap_table_array))) {
-            LOG_WARN("fail to build aggregate merge task", KR(ret));
           }
         }
       } else {
@@ -194,7 +189,6 @@ int ObDirectLoadMergeCtx::build_merge_task(ObDirectLoadTableStore &table_store, 
           ObDirectLoadTabletMergeCtx *tablet_merge_ctx = tablet_merge_ctx_array_.at(i);
           if (OB_FAIL(tablet_merge_ctx->build_merge_task_for_multiple_heap_table(
                 table_store.get_table_data_desc(), multiple_heap_table_array, thread_cnt))) {
-            LOG_WARN("fail to build multiple heap table merge task", KR(ret));
           }
         }
       }
@@ -216,12 +210,10 @@ int ObDirectLoadMergeCtx::build_merge_task(ObDirectLoadTableStore &table_store, 
               ret = OB_SUCCESS;
               if (OB_FAIL(tablet_merge_ctx->build_empty_data_merge_task(
                     table_store.get_table_data_desc(), thread_cnt))) {
-                LOG_WARN("fail to build empty data merge task", KR(ret));
               }
             }
           } else if (OB_FAIL(tablet_merge_ctx->build_merge_task_for_sstable(
                        table_store.get_table_data_desc(), *sstable_array, thread_cnt))) {
-            LOG_WARN("fail to build sstable merge task", KR(ret));
           }
         }
       } else { // multipe_sstable
@@ -230,14 +222,12 @@ int ObDirectLoadMergeCtx::build_merge_task(ObDirectLoadTableStore &table_store, 
         ObDirectLoadMultipleMergeRangeSplitter range_splitter;
         if (OB_FAIL(range_splitter.init(multiple_sstable_array, table_store.get_table_data_desc(),
                                         param_.datum_utils_, *param_.col_descs_))) {
-          LOG_WARN("fail to init range splitter", KR(ret));
         }
         for (int64_t i = 0; OB_SUCC(ret) && i < tablet_merge_ctx_array_.count(); ++i) {
           ObDirectLoadTabletMergeCtx *tablet_merge_ctx = tablet_merge_ctx_array_.at(i);
           if (OB_FAIL(tablet_merge_ctx->build_merge_task_for_multiple_sstable(
                 table_store.get_table_data_desc(), multiple_sstable_array, range_splitter,
                 thread_cnt))) {
-            LOG_WARN("fail to build multiple sstable merge task", KR(ret));
           }
         }
       }
@@ -267,7 +257,6 @@ int ObDirectLoadMergeCtx::build_del_lob_task(ObDirectLoadTableStore &table_store
         ObDirectLoadTabletMergeCtx *tablet_merge_ctx = tablet_merge_ctx_array_.at(i);
         if (OB_FAIL(tablet_merge_ctx->build_empty_data_merge_task(table_store.get_table_data_desc(),
                                                                   thread_cnt))) {
-          LOG_WARN("fail to build empty data merge task", KR(ret));
         }
       }
     } else if (OB_UNLIKELY(!table_store.is_multiple_sstable())) {
@@ -279,7 +268,6 @@ int ObDirectLoadMergeCtx::build_del_lob_task(ObDirectLoadTableStore &table_store
       ObDirectLoadMultipleMergeRangeSplitter range_splitter;
       if (OB_FAIL(range_splitter.init(table_handle_array, table_store.get_table_data_desc(),
                                       param_.datum_utils_, *param_.col_descs_))) {
-        LOG_WARN("fail to init range splitter", KR(ret));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < tablet_merge_ctx_array_.count(); ++i) {
         ObDirectLoadTabletMergeCtx *tablet_merge_ctx = tablet_merge_ctx_array_.at(i);
@@ -288,12 +276,10 @@ int ObDirectLoadMergeCtx::build_del_lob_task(ObDirectLoadTableStore &table_store
         if (for_dag) {
           if (OB_FAIL(tablet_merge_ctx->build_del_lob_task_for_dag(
                 table_store.get_table_data_desc(), table_handle_array, range_splitter, thread_cnt))) {
-            LOG_WARN("fail to build del lob task", KR(ret));
           }
         } else {
           if (OB_FAIL(tablet_merge_ctx->build_del_lob_task(
                 table_store.get_table_data_desc(), table_handle_array, range_splitter, thread_cnt))) {
-            LOG_WARN("fail to build del lob task", KR(ret));
           }
         }
       }
@@ -312,7 +298,6 @@ int ObDirectLoadMergeCtx::build_rescan_task(int64_t thread_cnt)
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_merge_ctx_array_.count(); ++i) {
       ObDirectLoadTabletMergeCtx *tablet_merge_ctx = tablet_merge_ctx_array_.at(i);
       if (OB_FAIL(tablet_merge_ctx->build_rescan_task(thread_cnt))) {
-        LOG_WARN("fail to build rescan task", KR(ret));
       }
     }
   }
@@ -377,7 +362,6 @@ int ObDirectLoadTabletMergeCtx::init(ObDirectLoadMergeCtx *merge_ctx,
     param_ = &merge_ctx->param_;
     tablet_id_ = ls_partition_id.part_tablet_id_.tablet_id_;
     if (OB_FAIL(param_->insert_table_ctx_->get_tablet_context(tablet_id_, insert_tablet_ctx_))) {
-      LOG_WARN("fail to get insert tablet ctx", KR(ret), K(tablet_id_));
     } else if (ObDirectLoadMergeMode::merge_need_origin_table(param_->merge_mode_)) {
       ObDirectLoadOriginTableCreateParam origin_table_param;
       origin_table_param.table_id_ = param_->table_id_;
@@ -386,7 +370,6 @@ int ObDirectLoadTabletMergeCtx::init(ObDirectLoadMergeCtx *merge_ctx,
       origin_table_param.tx_id_ = param_->trans_param_.tx_id_;
       origin_table_param.tx_seq_ = param_->trans_param_.tx_seq_;
       if (OB_FAIL(origin_table_.init(origin_table_param))) {
-        LOG_WARN("fail to init origin table", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -405,9 +388,7 @@ int ObDirectLoadTabletMergeCtx::build_empty_merge_task()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new ObDirectLoadPartitionEmptyMergeTask", KR(ret));
   } else if (OB_FAIL(merge_task->init(this))) {
-    LOG_WARN("fail to init merge task", KR(ret));
   } else if (OB_FAIL(merge_task_array_.push_back(merge_task))) {
-    LOG_WARN("fail to push back merge task", KR(ret));
   }
   if (OB_FAIL(ret)) {
     if (nullptr != merge_task) {
@@ -428,16 +409,13 @@ int ObDirectLoadTabletMergeCtx::build_origin_data_merge_task(
     ObDatumRange whole_range;
     whole_range.set_whole_range();
     if (OB_FAIL(range_array_.push_back(whole_range))) {
-      LOG_WARN("fail to push back", KR(ret));
     }
   } else {
     ObDirectLoadTableHandleArray empty_table_array;
     ObDirectLoadMergeRangeSplitter range_splitter;
     if (OB_FAIL(range_splitter.init(tablet_id_, &origin_table_, empty_table_array, table_data_desc,
                                     param_->datum_utils_, *param_->col_descs_, max_parallel_degree))) {
-      LOG_WARN("fail to init range splitter", KR(ret));
     } else if (OB_FAIL(range_splitter.split_range(range_array_, allocator_))) {
-      LOG_WARN("fail to split range", KR(ret));
     } else if (OB_UNLIKELY(range_array_.count() > max_parallel_degree)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected range count", KR(ret), K(max_parallel_degree), K(range_array_.count()));
@@ -450,9 +428,7 @@ int ObDirectLoadTabletMergeCtx::build_origin_data_merge_task(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadPartitionOriginDataMergeTask", KR(ret));
     } else if (OB_FAIL(merge_task->init(this, origin_table_, range, parallel_idx_++))) {
-      LOG_WARN("fail to init merge task", KR(ret));
     } else if (OB_FAIL(merge_task_array_.push_back(merge_task))) {
-      LOG_WARN("fail to push back merge task", KR(ret));
     }
     if (OB_FAIL(ret)) {
       if (nullptr != merge_task) {
@@ -476,12 +452,10 @@ int ObDirectLoadTabletMergeCtx::build_empty_data_merge_task(
   } else if (!merge_with_origin_data()) {
     // construct empty merge task for close tablet
     if (OB_FAIL(build_empty_merge_task())) {
-      LOG_WARN("fail to build empty merge task", KR(ret));
     }
   } else {
     // only origin data, construct task by split range
     if (OB_FAIL(build_origin_data_merge_task(table_data_desc, max_parallel_degree))) {
-      LOG_WARN("fail to build origin data merge task", KR(ret));
     }
   }
   return ret;
@@ -520,10 +494,8 @@ int ObDirectLoadTabletMergeCtx::build_merge_task_for_sstable(
       if (OB_FAIL(range_splitter.init(
             tablet_id_, (merge_with_origin_data() ? &origin_table_ : nullptr), sstable_array,
             table_data_desc, param_->datum_utils_, *param_->col_descs_, max_parallel_degree))) {
-        LOG_WARN("fail to init range splitter", KR(ret));
       } else if (OB_FAIL(
                    range_splitter.split_range(range_array_, allocator_))) {
-        LOG_WARN("fail to split range", KR(ret));
       } else if (OB_UNLIKELY(range_array_.count() > max_parallel_degree)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected range count", KR(ret), K(max_parallel_degree),
@@ -540,9 +512,7 @@ int ObDirectLoadTabletMergeCtx::build_merge_task_for_sstable(
         LOG_WARN("fail to new ObDirectLoadPartitionRangeMultipleMergeTask", KR(ret));
       } else if (OB_FAIL(merge_task->init(this, origin_table_, table_data_desc, sstable_array,
                                           range, i))) {
-        LOG_WARN("fail to init merge task", KR(ret));
       } else if (OB_FAIL(merge_task_array_.push_back(merge_task))) {
-        LOG_WARN("fail to push back merge task", KR(ret));
       }
       if (OB_FAIL(ret)) {
         if (nullptr != merge_task) {
@@ -573,7 +543,6 @@ int ObDirectLoadTabletMergeCtx::build_merge_task_for_multiple_sstable(
     if (OB_FAIL(range_splitter.split_range(tablet_id_,
                                            (merge_with_origin_data() ? &origin_table_ : nullptr),
                                            max_parallel_degree, range_array_, allocator_))) {
-      LOG_WARN("fail to split range", KR(ret));
     } else if (OB_UNLIKELY(range_array_.count() > max_parallel_degree)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected range count", KR(ret), K(max_parallel_degree), K(range_array_.count()));
@@ -588,9 +557,7 @@ int ObDirectLoadTabletMergeCtx::build_merge_task_for_multiple_sstable(
         LOG_WARN("fail to new ObDirectLoadPartitionRangeMultipleMergeTask", KR(ret));
       } else if (OB_FAIL(merge_task->init(this, origin_table_, table_data_desc,
                                           multiple_sstable_array, range, i))) {
-        LOG_WARN("fail to init merge task", KR(ret));
       } else if (OB_FAIL(merge_task_array_.push_back(merge_task))) {
-        LOG_WARN("fail to push back merge task", KR(ret));
       }
       if (OB_FAIL(ret)) {
         if (nullptr != merge_task) {
@@ -628,20 +595,16 @@ int ObDirectLoadTabletMergeCtx::build_merge_task_for_multiple_heap_table(
     } else if (FALSE_IT(heap_table =
                           static_cast<ObDirectLoadMultipleHeapTable *>(table_handle.get_table()))) {
     } else if (OB_FAIL(heap_table->get_tablet_row_count(tablet_id_, table_data_desc, row_count))) {
-      LOG_WARN("fail to get tablet row count", KR(ret), K(tablet_id_));
     } else if (0 == row_count) {
       // ignore
     } else if (OB_FAIL(get_autoincrement_value(row_count, pk_interval))) {
-      LOG_WARN("fail to get autoincrement value", KR(ret), K(row_count));
     } else if (OB_ISNULL(merge_task = OB_NEWx(ObDirectLoadPartitionHeapTableMultipleMergeTask,
                                               (&allocator_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadPartitionHeapTableMultipleMergeTask", KR(ret));
     } else if (OB_FAIL(merge_task->init(this, table_data_desc, table_handle, pk_interval,
                                         parallel_idx_++))) {
-      LOG_WARN("fail to init merge task", KR(ret));
     } else if (OB_FAIL(merge_task_array_.push_back(merge_task))) {
-      LOG_WARN("fail to push back merge task", KR(ret));
     }
     if (OB_FAIL(ret)) {
       if (nullptr != merge_task) {
@@ -654,7 +617,6 @@ int ObDirectLoadTabletMergeCtx::build_merge_task_for_multiple_heap_table(
   // If the merge_task is not constructed, then an empty task needs to be added to close the tablet
   if (OB_SUCC(ret) && merge_task_array_.empty()) {
     if (OB_FAIL(build_empty_merge_task())) {
-      LOG_WARN("fail to build empty merge task", KR(ret));
     }
   }
   return ret;
@@ -678,7 +640,6 @@ int ObDirectLoadTabletMergeCtx::build_aggregate_merge_task_for_multiple_heap_tab
     } else if (FALSE_IT(heap_table =
                           static_cast<ObDirectLoadMultipleHeapTable *>(table_handle.get_table()))) {
     } else if (OB_FAIL(heap_table->get_tablet_row_count(tablet_id_, table_data_desc, row_count))) {
-      LOG_WARN("fail to get tablet row count", KR(ret), K(tablet_id_));
     } else {
       total_row_count += row_count;
     }
@@ -688,13 +649,11 @@ int ObDirectLoadTabletMergeCtx::build_aggregate_merge_task_for_multiple_heap_tab
     if (total_row_count == 0) {
       // There is no data for this partition
       if (OB_FAIL(build_empty_data_merge_task(table_data_desc, 1 /*max_parallel_degree*/))) {
-        LOG_WARN("fail to build empty data merge task", KR(ret));
       }
     } else {
       ObDirectLoadIMergeTask *merge_task = nullptr;
       ObTabletCacheInterval pk_interval;
       if (OB_FAIL(get_autoincrement_value(total_row_count, pk_interval))) {
-        LOG_WARN("fail to get autoincrement value", KR(ret), K(total_row_count));
       } else if (merge_with_origin_data()) { // origin + multiple_heap_tables
         ObDirectLoadPartitionHeapTableMultipleAggregateMergeTask *aggregate_merge_task = nullptr;
         if (OB_ISNULL(merge_task = aggregate_merge_task = OB_NEWx(
@@ -703,7 +662,6 @@ int ObDirectLoadTabletMergeCtx::build_aggregate_merge_task_for_multiple_heap_tab
           LOG_WARN("fail to new ObDirectLoadPartitionHeapTableMultipleAggregateMergeTask", KR(ret));
         } else if (OB_FAIL(aggregate_merge_task->init(this, origin_table_, table_data_desc,
                                                       multiple_heap_table_array, pk_interval))) {
-          LOG_WARN("fail to init merge task", KR(ret));
         }
       } else { // multiple_heap_tables only
         ObDirectLoadPartitionHeapTableMultipleMergeTask *multiple_merge_task = nullptr;
@@ -713,12 +671,10 @@ int ObDirectLoadTabletMergeCtx::build_aggregate_merge_task_for_multiple_heap_tab
           LOG_WARN("fail to new ObDirectLoadPartitionHeapTableMultipleMergeTask", KR(ret));
         } else if (OB_FAIL(multiple_merge_task->init(this, table_data_desc,
                                                      multiple_heap_table_array, pk_interval))) {
-          LOG_WARN("fail to init merge task", KR(ret));
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(merge_task_array_.push_back(merge_task))) {
-          LOG_WARN("fail to push back", KR(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -761,7 +717,6 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task(
     int64_t first_no_insert_front_idx = -1;
     if (OB_FAIL(range_splitter.split_range(tablet_id_, nullptr /*origin_table*/,
                                            max_parallel_degree, range_array_, allocator_))) {
-      LOG_WARN("fail to split range", KR(ret));
     } else if (OB_UNLIKELY(range_array_.count() > max_parallel_degree)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected range count", KR(ret), K(max_parallel_degree), K(range_array_.count()));
@@ -775,16 +730,13 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task(
       min_insert_lob_id_datum.set_string(reinterpret_cast<const char *>(&min_insert_lob_id),
                                          sizeof(ObLobId));
       if (OB_FAIL(tmp_min_insert_lob_id_rowkey.assign(&min_insert_lob_id_datum, 1))) {
-        LOG_WARN("fail to assign min insert lob id rowkey", KR(ret));
       } else if (OB_FAIL(
                    tmp_min_insert_lob_id_rowkey.deep_copy(min_insert_lob_id_rowkey, allocator_))) {
-        LOG_WARN("fail to deep copy rowkey", KR(ret), K(tmp_min_insert_lob_id_rowkey));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < range_array_.count(); ++i) {
         ObDatumRange &range = range_array_.at(i);
         const ObDatumRowkey &end_key = range.get_end_key();
         if (OB_FAIL(end_key.compare(min_insert_lob_id_rowkey, *param_->datum_utils_, cmp_ret))) {
-          LOG_WARN("fail to compare lob id", KR(ret), K(end_key), K(min_insert_lob_id_rowkey));
         } else if (cmp_ret > 0) {
           // Split the current range into 2 ranges: range, new_range
           ObDatumRange new_range = range;
@@ -793,7 +745,6 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task(
           new_range.start_key_ = min_insert_lob_id_rowkey;
           new_range.set_left_open();
           if (OB_FAIL(range_array_.push_back(new_range))) {
-            LOG_WARN("fail to push back", KR(ret));
           } else if (i < range_array_.count() - 1) {
             // The split range is not the last one, need to shift all subsequent ranges backward
             for (int64_t j = range_array_.count() - 1; j > i; --j) {
@@ -822,12 +773,10 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task(
       if (insert_front) {
         if (OB_FAIL(ObDDLUtil::init_macro_block_seq(parallel_idx,
                                                     data_seq))) {
-          LOG_WARN("fail to init macro block seq", KR(ret), K(parallel_idx));
         }
       } else {
         if (OB_FAIL(ObDDLUtil::init_macro_block_seq(last_parallel_idx + parallel_idx + 1,
                                                     data_seq))) {
-          LOG_WARN("fail to init macro block seq", KR(ret), K(last_parallel_idx), K(parallel_idx));
         }
       }
       if (OB_FAIL(ret)) {
@@ -838,9 +787,7 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task(
       } else if (OB_FAIL(del_lob_task->init(this, origin_table_, table_data_desc,
                                             multiple_sstable_array, range, data_seq,
                                             parallel_idx++))) {
-        LOG_WARN("fail to init del lob task", KR(ret));
       } else if (OB_FAIL(merge_task_array_.push_back(del_lob_task))) {
-        LOG_WARN("fail to push back del lob task", KR(ret));
       }
       if (OB_FAIL(ret)) {
         if (nullptr != del_lob_task) {
@@ -870,7 +817,6 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task_for_dag(
     LOG_WARN("invalid max parallel degree", KR(ret), K(max_parallel_degree));
   } else if (OB_FAIL(range_splitter.split_range(tablet_id_, nullptr /*origin_table*/,
                                                 max_parallel_degree, range_array_, allocator_))) {
-    LOG_WARN("fail to split range", KR(ret));
   } else if (OB_UNLIKELY(range_array_.count() > max_parallel_degree)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected range count", KR(ret), K(max_parallel_degree), K(range_array_.count()));
@@ -882,7 +828,6 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task_for_dag(
     ObDirectLoadPartitionDelLobTask *del_lob_task = nullptr;
     if (OB_FAIL(ObDDLUtil::init_macro_block_seq(parallel_idx,
                                                 data_seq))) {
-      LOG_WARN("fail to init macro block seq", KR(ret), K(parallel_idx));
     } else if (OB_ISNULL(del_lob_task =
                           OB_NEWx(ObDirectLoadPartitionDelLobTask, (&allocator_)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -890,9 +835,7 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task_for_dag(
     } else if (OB_FAIL(del_lob_task->init(this, origin_table_, table_data_desc,
                                           multiple_sstable_array, range, data_seq,
                                           parallel_idx++))) {
-      LOG_WARN("fail to init del lob task", KR(ret));
     } else if (OB_FAIL(merge_task_array_.push_back(del_lob_task))) {
-      LOG_WARN("fail to push back del lob task", KR(ret));
     }
     if (OB_FAIL(ret)) {
       if (nullptr != del_lob_task) {
@@ -921,9 +864,7 @@ int ObDirectLoadTabletMergeCtx::build_rescan_task(int64_t thread_cnt)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObDirectLoadPartitionRescanTask", KR(ret));
     } else if (OB_FAIL(rescan_task->init(this, thread_cnt, i))) {
-      LOG_WARN("fail to init merge task", KR(ret));
     } else if (OB_FAIL(merge_task_array_.push_back(rescan_task))) {
-      LOG_WARN("fail to push back rescan task", KR(ret));
     }
     if (OB_FAIL(ret)) {
       if (nullptr != rescan_task) {
@@ -949,7 +890,6 @@ int ObDirectLoadTabletMergeCtx::get_autoincrement_value(uint64_t count,
     interval.tablet_id_ = tablet_id_;
     interval.cache_size_ = count;
     if (OB_FAIL(auto_inc.get_tablet_cache_interval(interval))) {
-      LOG_WARN("fail to get tablet cache interval", K(ret), K_(tablet_id));
     } else if (OB_UNLIKELY(count > interval.count())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected autoincrement value count", K(ret), K(count), K(interval));

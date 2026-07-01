@@ -82,12 +82,10 @@ int ObGtsRequestRpc::init(const ObAddr &self,
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(self), KP(ts_mgr), KP(ts_worker));
   } else if (OB_SUCCESS != (ret = gts_request_cb_.init(ts_mgr, ts_worker))) {
-    TRANS_LOG(WARN, "gts request callback inited failed", KR(ret));
   } else {
     self_ = self;
     is_inited_ = true;
     ts_mgr_ = ts_mgr;
-    TRANS_LOG(INFO, "gts request rpc inited success", KP(this), K(self), KP(ts_mgr));
   }
   return ret;
 }
@@ -103,7 +101,6 @@ int ObGtsRequestRpc::start()
     TRANS_LOG(WARN, "gts request rpc already running", KR(ret));
   } else {
     is_running_ = true;
-    TRANS_LOG(INFO, "gts request rpc start success");
   }
   return ret;
 }
@@ -116,7 +113,6 @@ int ObGtsRequestRpc::stop()
     TRANS_LOG(WARN, "gts request rpc not inited", KR(ret));
   } else {
     is_running_ = false;
-    TRANS_LOG(INFO, "gts request rpc stop success");
   }
   return ret;
 }
@@ -131,7 +127,6 @@ int ObGtsRequestRpc::wait()
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(WARN, "gts request rpc is running", KR(ret));
   } else {
-    TRANS_LOG(INFO, "gts request rpc wait success");
   }
   return ret;
 }
@@ -151,7 +146,6 @@ void ObGtsRequestRpc::destroy()
     }
     is_inited_ = false;
     self_.reset();
-    TRANS_LOG(INFO, "gts request rpc destroy");
   }
 }
 
@@ -195,7 +189,6 @@ int ObGtsRequestRpc::post(const ObAddr &server,
           rcode.rcode_ = OB_SUCCESS;
           
           if (OB_FAIL(cb.process(gts_rpc_result, server, rcode))) {
-            TRANS_LOG(WARN, "post local gts request failed", KR(ret), K(server), K(m));
           } else {
             TRANS_LOG(DEBUG, "post local gts request success", KR(ret), K(server), K(m));
           }

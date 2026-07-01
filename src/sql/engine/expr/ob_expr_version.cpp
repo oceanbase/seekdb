@@ -56,7 +56,6 @@ int ObExprVersion::eval_version(const ObExpr &expr, ObEvalCtx &ctx,
   } else {
     ObString version;
     if (OB_FAIL(session->get_sys_variable(share::SYS_VAR_VERSION, version))) {
-      LOG_WARN("fail to get version", K(ret));
     } else {
       expr_datum.set_string(version);
     }

@@ -68,10 +68,8 @@ int ObDirectLoadMultipleDatumRange::assign(const ObTabletID &tablet_id,
     reset();
     if (OB_FAIL(
           start_key_.assign(tablet_id, range.start_key_.datums_, range.start_key_.datum_cnt_))) {
-      LOG_WARN("fail to assign rowkey", KR(ret));
     } else if (OB_FAIL(
                  end_key_.assign(tablet_id, range.end_key_.datums_, range.end_key_.datum_cnt_))) {
-      LOG_WARN("fail to assign rowkey", KR(ret));
     } else {
       border_flag_ = range.border_flag_;
     }

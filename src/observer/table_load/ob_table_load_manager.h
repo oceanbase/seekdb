@@ -220,7 +220,6 @@ private:
       int ret = OB_SUCCESS;
       const ObTableLoadUniqueKey &key = entry.first;
       if (OB_FAIL(list_.push_back(key))) {
-        SERVER_LOG(WARN, "fail to push back", KR(ret), K(key));
       }
       return ret;
     }
@@ -248,7 +247,6 @@ private:
         Value *value = handle.get_value();
         if (value->get_ref_count() > 1) {
         } else if (OB_FAIL(list_.push_back(key))) {
-          SERVER_LOG(WARN, "fail to push back", KR(ret));
         }
       }
       return ret;
@@ -276,7 +274,6 @@ private:
       } else {
         Value *value = handle.get_value();
         if (OB_FAIL(list_.push_back(value))) {
-          SERVER_LOG(WARN, "fail to push back", KR(ret), KP(value));
         } else {
           value->inc_ref_count();
         }

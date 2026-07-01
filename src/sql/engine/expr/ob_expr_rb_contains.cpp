@@ -85,7 +85,6 @@ int ObExprRbContains::eval_rb_contains(const ObExpr &expr,
   right_obj.set_meta_type(rb2_arg->obj_meta_);
 
   if (OB_FAIL(ObRbExprHelper::get_input_roaringbitmap_bin(ctx, tmp_allocator, rb1_arg, rb1_bin, is_rb1_null))) {
-    LOG_WARN("fail to get left input roaringbitmap", K(ret));
   } else if (is_rb1_null) {
     is_null_res = true;
   } else {
@@ -94,18 +93,15 @@ int ObExprRbContains::eval_rb_contains(const ObExpr &expr,
       ObString rb2_bin;
       bool is_rb2_null = false;
       if (OB_FAIL(ObRbExprHelper::get_input_roaringbitmap_bin(ctx, tmp_allocator, rb2_arg, rb2_bin, is_rb2_null))) {
-        LOG_WARN("fail to get right input roaringbitmap", K(ret));
       } else if (is_rb2_null) {
         is_null_res = true;
       } else if (OB_FAIL(rb_contains(tmp_allocator, rb1_bin, rb2_bin, is_contains))) {
-        LOG_WARN("failed to get roaringbitmap contains", K(ret));
       }
     } else {
       // rb_contains(roaringbitmap, bigint Offset)
       uint64_t offset = 0;
       ObDatum *datum = NULL;
       if (OB_FAIL(expr.args_[1]->eval(ctx, datum))) {
-        LOG_WARN("fail to eval arg", K(ret));
       } else if (datum->is_null()) {
         is_null_res = true;
       } else {
@@ -126,7 +122,6 @@ int ObExprRbContains::eval_rb_contains(const ObExpr &expr,
         }
         if (!OB_SUCC(ret)) {
         } else if (OB_FAIL(rb_contains(tmp_allocator, rb1_bin, rb1_bin, is_contains, true, offset))) {
-          LOG_WARN("failed to get roaringbitmap contains", K(ret));
         }
       }
     }
@@ -177,7 +172,6 @@ int ObExprRbContains::eval_rb_contains_vector(const ObExpr &expr,
               expr.args_[0]->obj_meta_.has_lob_header(),
               rb_bin,
               idx))){
-          LOG_WARN("fail to get real string data", K(ret), K(rb_bin));
         } else {
           if (!right_obj.is_integer_type()) {
             // rb_contains(roaringbitmap, roaringbitmap)
@@ -189,9 +183,7 @@ int ObExprRbContains::eval_rb_contains_vector(const ObExpr &expr,
                   expr.args_[1]->obj_meta_.has_lob_header(),
                   right_rb_bin,
                   idx))){
-              LOG_WARN("fail to get real string data", K(ret), K(right_rb_bin));
             } else if (OB_FAIL(rb_contains(tmp_allocator, rb_bin, right_rb_bin, is_contains))) {
-              LOG_WARN("failed to get roaringbitmap contains", K(ret));
             }
           } else {
             // rb_contains(roaringbitmap, bigint Offset)
@@ -213,7 +205,6 @@ int ObExprRbContains::eval_rb_contains_vector(const ObExpr &expr,
             }    
             if (!OB_SUCC(ret)) {
             } else if (OB_FAIL(rb_contains(tmp_allocator, rb_bin, rb_bin, is_contains, true, offset))) {
-              LOG_WARN("failed to get roaringbitmap contains", K(ret));
             }
           }
         }
@@ -241,7 +232,6 @@ int ObExprRbContains::rb_contains(ObIAllocator &allocator, ObString &rb1_bin, Ob
   ObRbBinType rb2_type;
 
   if (OB_FAIL(ObRbUtils::get_bin_type(rb1_bin, rb1_type))) {
-    LOG_WARN("invalid left roaringbitmap binary string", K(ret));
   } else if (is_offset){
     // rb_contains(roaringbitmap, bigint Offset)
     uint32_t rb_offset = RB_VERSION_SIZE + RB_BIN_TYPE_SIZE;
@@ -256,9 +246,7 @@ int ObExprRbContains::rb_contains(ObIAllocator &allocator, ObString &rb1_bin, Ob
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("failed to alloc memory for ObRoaringBin", K(ret));
         } else if (OB_FAIL(roaring_bin->init())) {
-          LOG_WARN("failed to init ObRoaringBin", K(ret), K(binary_str));
         } else if (OB_FAIL(roaring_bin->contains(static_cast<uint32_t>(offset), is_contains))) {
-          LOG_WARN("failed to get roaring card", K(ret), K(binary_str));
         }
       }
     } else if (rb1_type == ObRbBinType::BITMAP_64) {
@@ -269,15 +257,12 @@ int ObExprRbContains::rb_contains(ObIAllocator &allocator, ObString &rb1_bin, Ob
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("failed to alloc memory for ObRoaring64Bin", K(ret));
       } else if (OB_FAIL(roaring64_bin->init())) {
-        LOG_WARN("failed to init ObRoaring64Bin", K(ret), K(binary_str));
       } else if (OB_FAIL(roaring64_bin->contains(offset, is_contains))) {
-        LOG_WARN("failed to get roaring card", K(ret), K(binary_str));
       }
     } else {
       // deserialize roaringbitmap
       ObRoaringBitmap *rb1 = nullptr;
       if (OB_FAIL(ObRbUtils::rb_deserialize(allocator, rb1_bin, rb1))) {
-        LOG_WARN("failed to deserialize left roaringbitmap", K(ret));
       } else if (rb1->is_contains(offset)) {
         is_contains = true;
       } else is_contains = false;
@@ -289,7 +274,6 @@ int ObExprRbContains::rb_contains(ObIAllocator &allocator, ObString &rb1_bin, Ob
     uint64_t card_and = 0;
     uint64_t rb2_card = 0;
     if (OB_FAIL(ObRbUtils::get_calc_cardinality(allocator, rb1_bin, rb2_bin, card_and, ObRbOperation::AND))) {
-      LOG_WARN("failed to calculate and cardinality", K(ret));
     } else {
       ObRbUtils::get_cardinality(allocator, rb2_bin, rb2_card);
       is_contains = rb2_card == card_and ? true : false;

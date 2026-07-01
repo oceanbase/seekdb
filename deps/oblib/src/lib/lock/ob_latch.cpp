@@ -56,7 +56,6 @@ ObLatchMutex::ObLatchMutex()
 ObLatchMutex::~ObLatchMutex()
 {
   if (0 != lock_.val()) {
-    COMMON_LOG(DEBUG, "invalid lock,", K(lock_.val()), KCSTRING(lbt()));
   }
 }
 
@@ -622,7 +621,6 @@ int ObLatch::wr2rdlock(const uint32_t *puid)
     }
     bool only_rd_wait = true;
     if (OB_FAIL(ObLatchWaitQueue::get_instance().wake_up(*this, only_rd_wait))) {
-      COMMON_LOG(ERROR, "Fail to wake up latch wait queue, ", K(this), K(ret));
     }
   }
   return ret;
@@ -652,7 +650,6 @@ int ObLatch::unlock(const uint32_t *puid)
   }
   if (OB_SUCCESS == ret && WAIT_MASK == lock) {
     if (OB_FAIL(ObLatchWaitQueue::get_instance().wake_up(*this))) {
-      COMMON_LOG(ERROR, "Fail to wake up latch wait queue, ", K(this), K(ret));
     }
   }
   HOLD_LOCK_DEC();

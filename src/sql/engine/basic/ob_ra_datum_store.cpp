@@ -88,8 +88,6 @@ int ObRADatumStore::StoredRow::copy_datums(const common::ObIArray<ObExpr*> &expr
       ObDatum &in_datum = static_cast<ObDatum&>(exprs.at(i)->locate_expr_datum(ctx));
       ObDatum *datum = new (&cells()[i])ObDatum();
       if (OB_FAIL(datum->deep_copy(in_datum, buf, size, pos))) {
-        LOG_WARN("failed to copy datum", K(ret), K(i), K(pos), K(size), K(row_size),
-                 K(in_datum), K(*datum));
       }
     }
   }
@@ -113,8 +111,6 @@ int ObRADatumStore::StoredRow::copy_datums(const common::ObIArray<ObDatum> &datu
       const ObDatum &in_datum = datums.at(i);
       ObDatum *datum = new (&cells()[i])ObDatum();
       if (OB_FAIL(datum->deep_copy(in_datum, buf, size, pos))) {
-        LOG_WARN("failed to copy datum", K(ret), K(i), K(pos), K(size), K(row_size),
-                 K(in_datum), K(*datum));
       }
     }
   }
@@ -204,14 +200,11 @@ int ObRADatumStore::Block::add_row(ShrinkBuffer &buf,
                                 row_size - ROW_HEAD_SIZE - ROW_INDEX_SIZE,
                                 row_size,
                                 row_extend_size))) {
-      LOG_WARN("copy row failed", K(ret), K(row_size));
     } else if (OB_FAIL(buf.fill_tail(ROW_INDEX_SIZE))) {
-      LOG_WARN("fill buffer tail failed", K(ret), K(buf), LITERAL_K(ROW_INDEX_SIZE));
     } else {
       *reinterpret_cast<row_idx_t *>(buf.tail()) = static_cast<row_idx_t>(buf.head() - payload_);
       idx_off_ -= static_cast<int32_t>(ROW_INDEX_SIZE);
       if (OB_FAIL(buf.fill_head(row_size - ROW_INDEX_SIZE))) {
-        LOG_WARN("fill buffer head failed", K(ret), K(buf), K(row_size - ROW_INDEX_SIZE));
       } else {
         rows_++;
         LOG_DEBUG("finish add_row", K(rows_), K(row_size), KPC(sr));
@@ -246,14 +239,11 @@ int ObRADatumStore::Block::add_row(ShrinkBuffer &buf,
                                 row_size - ROW_HEAD_SIZE - ROW_INDEX_SIZE,
                                 row_size,
                                 row_extend_size))) {
-      LOG_WARN("copy row failed", K(ret), K(row_size));
     } else if (OB_FAIL(buf.fill_tail(ROW_INDEX_SIZE))) {
-      LOG_WARN("fill buffer tail failed", K(ret), K(buf), LITERAL_K(ROW_INDEX_SIZE));
     } else {
       *reinterpret_cast<row_idx_t *>(buf.tail()) = static_cast<row_idx_t>(buf.head() - payload_);
       idx_off_ -= static_cast<int32_t>(ROW_INDEX_SIZE);
       if (OB_FAIL(buf.fill_head(row_size - ROW_INDEX_SIZE))) {
-        LOG_WARN("fill buffer head failed", K(ret), K(buf), K(row_size - ROW_INDEX_SIZE));
       } else {
         rows_++;
         LOG_DEBUG("finish add_row", K(rows_), K(row_size), KPC(sr));
@@ -283,12 +273,10 @@ int ObRADatumStore::Block::copy_stored_row(ShrinkBuffer &buf, const StoredRow &s
     sr->assign(&stored_row);
 
     if (OB_FAIL(buf.fill_tail(ROW_INDEX_SIZE))) {
-      LOG_WARN("fill buffer tail failed", K(ret), K(buf), LITERAL_K(ROW_INDEX_SIZE));
     } else {
       *reinterpret_cast<row_idx_t *>(buf.tail()) = static_cast<row_idx_t>(buf.head() - payload_);
       idx_off_ -= static_cast<int32_t>(ROW_INDEX_SIZE);
       if (OB_FAIL(buf.fill_head(row_size - ROW_INDEX_SIZE))) {
-        LOG_WARN("fill buffer head failed", K(ret), K(buf), K(row_size - ROW_INDEX_SIZE));
       } else {
         rows_++;
         LOG_DEBUG("finish copy_stored_row", K(rows_), K(row_size), KPC(sr));
@@ -312,7 +300,6 @@ int ObRADatumStore::Block::get_store_row(const int64_t row_id, const StoredRow *
         &payload_[indexes()[rows_ - (row_id - row_id_) - 1]]);
     if (0 == row->readable_) {
       if (OB_FAIL(row->to_readable())) {
-        LOG_WARN("store row to readable failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -328,7 +315,6 @@ int ObRADatumStore::Block::compact(ShrinkBuffer &buf)
   if (OB_UNLIKELY(!buf.is_inited())) {
     LOG_WARN("invalid argument", K(ret), K(buf));
   } else if (OB_FAIL(buf.compact())) {
-    LOG_WARN("block buffer compact failed", K(ret));
   } else {
     idx_off_ = static_cast<int32_t>(buf.head() - rows_ * ROW_INDEX_SIZE - payload_);
   }
@@ -341,7 +327,6 @@ int ObRADatumStore::Block::to_copyable()
   for (int64_t i = 0; OB_SUCC(ret) && i < rows_; ++i) {
     StoredRow *sr = reinterpret_cast<StoredRow *>(&payload_[indexes()[i]]);
     if (OB_FAIL(sr->to_copyable())) {
-      LOG_WARN("convert store row to copyable row failed", K(ret));
     }
   }
   return ret;
@@ -411,7 +396,6 @@ void ObRADatumStore::reset()
 
   if (is_file_open()) {
     if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.remove(fd_))) {
-      LOG_WARN("remove file failed", K(ret), K_(fd));
     } else {
       LOG_INFO("close file success", K(ret), K_(fd));
     }
@@ -441,7 +425,6 @@ void ObRADatumStore::reuse()
   inner_reader_.reset();
   if (is_file_open()) {
     if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.remove(fd_))) {
-      LOG_WARN("remove file failed", K(ret), K_(fd));
     } else {
       LOG_INFO("close file success", K(ret), K_(fd));
     }
@@ -463,7 +446,6 @@ void ObRADatumStore::reuse()
   set_mem_hold(0);
   if (NULL != blkbuf_.buf_.data()) {
     if (OB_FAIL(setup_block(blkbuf_))) {
-      LOG_WARN("setup block failed", K(ret));
     }
     set_mem_hold(blkbuf_.buf_.capacity() + sizeof(LinkNode));
   }
@@ -486,7 +468,6 @@ int ObRADatumStore::setup_block(BlockBuffer &blkbuf) const
     blkbuf.blk_->idx_off_ = static_cast<int32_t>(
         blkbuf.buf_.tail() - blkbuf.blk_->payload_);
     if (OB_FAIL(blkbuf.buf_.fill_head(sizeof(Block)))) {
-      LOG_WARN("fill buffer head failed", K(ret), K(blkbuf.buf_), K(sizeof(Block)));
     }
   }
   return ret;
@@ -570,9 +551,7 @@ int ObRADatumStore::alloc_block(BlockBuffer &blkbuf, const int64_t min_size)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("alloc memory failed", K(ret), K(size));
     } else if (OB_FAIL(blkbuf.buf_.init(static_cast<char *>(mem), size))) {
-      LOG_WARN("init shrink buffer failed", K(ret));
     } else if (OB_FAIL(setup_block(blkbuf))) {
-      LOG_WARN("setup block buffer fail", K(ret));
     }
     if (OB_FAIL(ret) && !OB_ISNULL(mem)) {
       blkbuf.reset();
@@ -593,7 +572,6 @@ int ObRADatumStore::switch_block(const int64_t min_size)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(min_size));
   } else if (OB_FAIL(blkbuf_.blk_->compact(blkbuf_.buf_))) {
-    LOG_WARN("block compact failed", K(ret));
   } else if (!finish_add && OB_FAIL(dump_block_if_need(min_size))) {
     LOG_WARN("fail to dump block if need", K(ret), K(min_size));
   } else {
@@ -607,12 +585,10 @@ int ObRADatumStore::switch_block(const int64_t min_size)
     bi.capacity_ = static_cast<int32_t>(blkbuf_.buf_.capacity()); // used to calc mem_hold for dump
     if (OB_SUCC(ret) && !finish_add) { // need alloc new block
       if (OB_FAIL(alloc_block(new_blkbuf, min_size))) {
-        LOG_WARN("alloc block failed", K(ret), K(min_size));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(add_block_idx(bi))) {
-        LOG_WARN("add block index failed", K(ret));
       } else {
         save_row_cnt_ = row_cnt_;
         blkbuf_.reset();
@@ -620,7 +596,6 @@ int ObRADatumStore::switch_block(const int64_t min_size)
           blkbuf_ = new_blkbuf;
           new_blkbuf.reset();
           if (OB_FAIL(setup_block(blkbuf_))) {
-            LOG_WARN("setup block failed", K(ret));
           }
         }
       }
@@ -642,18 +617,15 @@ int ObRADatumStore::add_block_idx(const BlockIndex &bi)
   } else {
     if (!has_index_block()) {
       if (OB_FAIL(blocks_.push_back(bi))) {
-        LOG_WARN("add block index to array failed", K(ret));
       } else {
         if (blocks_.count() >= DEFAULT_BLOCK_CNT) {
           if (OB_FAIL(build_idx_block())) {
-            LOG_WARN("build index block failed", K(ret));
           }
         }
       }
     } else {
       if (idx_blk_->is_full()) {
         if (OB_FAIL(switch_idx_block())) {
-          LOG_WARN("switch index block failed", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -691,14 +663,12 @@ int ObRADatumStore::build_idx_block()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(alloc_idx_block(idx_blk_))) {
-    LOG_WARN("alloc idx block failed", K(ret));
   } else if (OB_UNLIKELY(NULL == idx_blk_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("alloc null index block", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < blocks_.count(); ++i) {
       if (OB_FAIL(add_block_idx(blocks_.at(i)))) {
-        LOG_WARN("add block idx failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -786,8 +756,7 @@ int ObRADatumStore::dump(const bool all_dump, const int64_t target_dump_size)
           LOG_WARN("remove node failed", K(ret), K(blk_mem_list_.get_size()));
         } else if (!is_ib && OB_FAIL(blk->to_copyable())) {
           LOG_WARN("convert block to copyable failed", K(ret));
-        } else if (OB_FAIL(write_file(*bi, mem, bi->length_))) { // write file and update bi
-          LOG_WARN("write block to file failed", K(ret), K(is_ib), KPC(bi));
+        } else if (OB_FAIL(write_file(*bi, mem, bi->length_))) {
         } else {
           if (blkbuf_.blk_ == blk) {
             blkbuf_.reset();
@@ -806,7 +775,6 @@ int ObRADatumStore::dump(const bool all_dump, const int64_t target_dump_size)
   if (OB_SUCC(ret) && all_dump && blk_mem_list_.is_empty() && is_file_open()) {
     int64_t timeout_ms = 0;
     if (OB_FAIL(get_timeout(timeout_ms))) {
-      LOG_WARN("get timeout failed", K(ret));
     }
   }
 
@@ -823,10 +791,7 @@ int ObRADatumStore::switch_idx_block(bool finish_add /* = false */)
   } else if (OB_ISNULL(idx_blk_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("idx_blk_ should not be null", K(ret));
-  } else if (OB_FAIL(link_idx_block(idx_blk_))) { // idx_blk is full or finish_add
-    // idx_blk must dump later than the corresponding data block
-    // so add the idx_blk in blk_mem_list after the corresponding data block
-    LOG_WARN("add_idx_blk_to_blk_mem_list failed", K(ret));
+  } else if (OB_FAIL(link_idx_block(idx_blk_))) {
   } else {
     IndexBlock *ib = NULL;
     BlockIndex bi;
@@ -838,7 +803,6 @@ int ObRADatumStore::switch_idx_block(bool finish_add /* = false */)
     bi.capacity_ = static_cast<int32_t>(IndexBlock::INDEX_BLOCK_SIZE);
     if (OB_SUCC(ret) && !finish_add) {
       if (OB_FAIL(alloc_idx_block(ib))) {
-        LOG_WARN("alloc index block failed", K(ret));
       } else if (OB_ISNULL(ib)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("alloc null block", K(ret));
@@ -846,7 +810,6 @@ int ObRADatumStore::switch_idx_block(bool finish_add /* = false */)
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(blocks_.push_back(bi))) {
-      LOG_WARN("add block index to array failed", K(ret));
     } else {
       idx_blk_ = NULL;
       if (NULL != ib) { // finish_add won't come here
@@ -878,13 +841,10 @@ int ObRADatumStore::add_row(const common::ObIArray<ObExpr*> &exprs,
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(Block::row_store_size<NEED_EVAL>(exprs, *ctx, row_size, row_extend_size_))) {
-    // row store size ensures exprs have been calculated
-    LOG_WARN("failed to calc store size");
   } else {
     const int64_t min_buf_size = Block::min_buf_size(row_size);
     if (OB_SUCC(ret) && NULL == blkbuf_.blk_) {
       if (OB_FAIL(alloc_block(blkbuf_, min_buf_size))) {
-        LOG_WARN("alloc block failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -892,7 +852,6 @@ int ObRADatumStore::add_row(const common::ObIArray<ObExpr*> &exprs,
         LOG_WARN("switch block failed", K(ret), K(row_size), K(min_buf_size));
       } else if (OB_FAIL(blkbuf_.blk_->add_row(blkbuf_.buf_, exprs, *ctx, row_size,
                                                row_extend_size_, stored_row))) {
-        LOG_WARN("add row to block failed", K(ret), K(exprs), K(row_size));
       } else {
         row_cnt_++;
       }
@@ -917,13 +876,10 @@ int ObRADatumStore::add_row(const common::ObIArray<ObDatum> &datums,
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(Block::row_store_size(datums, row_size, row_extend_size_))) {
-    // row store size ensures exprs have been calculated
-    LOG_WARN("failed to calc store size");
   } else {
     const int64_t min_buf_size = Block::min_buf_size(row_size);
     if (OB_SUCC(ret) && NULL == blkbuf_.blk_) {
       if (OB_FAIL(alloc_block(blkbuf_, min_buf_size))) {
-        LOG_WARN("alloc block failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -931,7 +887,6 @@ int ObRADatumStore::add_row(const common::ObIArray<ObDatum> &datums,
         LOG_WARN("switch block failed", K(ret), K(row_size), K(min_buf_size));
       } else if (OB_FAIL(blkbuf_.blk_->add_row(blkbuf_.buf_, datums, row_size,
                                                row_extend_size_, stored_row))) {
-        LOG_WARN("add row to block failed", K(ret), K(datums), K(row_size));
       } else {
         row_cnt_++;
       }
@@ -1012,7 +967,6 @@ int ObRADatumStore::find_block_idx(Reader &reader, const int64_t row_id, BlockIn
           found = true;
         } else {
           if (OB_FAIL(load_idx_block(reader, ib, *bi))) {
-            LOG_WARN("load index block failed", K(ret), K(bi));
           }
         }
       }
@@ -1053,10 +1007,8 @@ int ObRADatumStore::load_idx_block(Reader &reader, IndexBlock *&ib, const BlockI
         LOG_WARN("invalid argument", K(ret), K(bi));
       } else if (OB_FAIL(ensure_reader_buffer(
           reader, reader.idx_buf_, IndexBlock::INDEX_BLOCK_SIZE))) {
-        LOG_WARN("ensure reader buffer failed", K(ret));
       } else if (OB_FAIL(read_file(
           reader.idx_buf_.data(), bi.length_, bi.offset_))) {
-        LOG_WARN("read block index from file failed", K(ret), K(bi));
       } else {
         ib = reinterpret_cast<IndexBlock *>(reader.idx_buf_.data());
       }
@@ -1076,7 +1028,6 @@ int ObRADatumStore::load_block(Reader &reader, const int64_t row_id)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("row should be saved", K(ret), K(row_id), K_(save_row_cnt));
   } else if (OB_FAIL(find_block_idx(reader, row_id, bi))) {
-    LOG_WARN("find block index failed", K(ret), K(row_id));
   } else if (OB_ISNULL(bi)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("changeable_bi is nullptr", K(ret), K(row_id));
@@ -1094,9 +1045,7 @@ int ObRADatumStore::load_block(Reader &reader, const int64_t row_id)
       }
     } else {
       if (OB_FAIL(ensure_reader_buffer(reader, reader.buf_, bi->length_))) {
-        LOG_WARN("ensure reader buffer failed", K(ret));
       } else if (OB_FAIL(read_file(reader.buf_.data(), bi->length_, bi->offset_))) {
-        LOG_WARN("read block from file failed", K(ret), KPC(bi));
       } else {
         reader.blk_ = reinterpret_cast<Block *>(reader.buf_.data());
       }
@@ -1128,7 +1077,6 @@ int ObRADatumStore::get_store_row(Reader &reader, const int64_t row_id, const St
         reader.blk_ = NULL;
       }
       if (OB_FAIL(load_block(reader, row_id))) {
-        LOG_WARN("load block failed", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -1136,8 +1084,6 @@ int ObRADatumStore::get_store_row(Reader &reader, const int64_t row_id, const St
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("null block", K(ret), K(row_id), K(save_row_cnt_), K(row_cnt_), K(*this));
       } else if (OB_FAIL(reader.blk_->get_store_row(row_id, sr))) {
-        LOG_WARN("get row from block failed",
-            K(ret), K(row_id), K(save_row_cnt_), K(row_cnt_), K(*reader.blk_));
       }
     }
   }
@@ -1180,7 +1126,6 @@ int ObRADatumStore::Reader::get_row(const int64_t row_id, const StoredRow *&sr)
     ret = OB_INDEX_OUT_OF_RANGE;
     LOG_WARN("invalid row_id", K(ret), K(row_id), K(get_row_cnt()));
   } else if (OB_FAIL(store_.get_store_row(*this, row_id, sr))) {
-    LOG_WARN("get store row failed", K(ret), K(row_id));
   } else if (OB_ISNULL(sr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL store row returned", K(ret));
@@ -1212,13 +1157,10 @@ int ObRADatumStore::write_file(BlockIndex &bi, void *buf, int64_t size)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(size), KP(buf));
   } else if (OB_FAIL(get_timeout(timeout_ms))) {
-    LOG_WARN("get timeout failed", K(ret));
   } else {
     if (!is_file_open()) {
       if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.alloc_dir(dir_id_))) {
-        LOG_WARN("alloc file directory failed", K(ret));
       } else if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.open(fd_, dir_id_))) {
-        LOG_WARN("open file failed", K(ret));
       } else {
         file_size_ = 0;
         LOG_INFO("open file success", K_(fd), K_(dir_id));
@@ -1238,7 +1180,6 @@ int ObRADatumStore::write_file(BlockIndex &bi, void *buf, int64_t size)
     io.io_timeout_ms_ = timeout_ms;
     const uint64_t start = rdtsc();
     if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.write(io))) {
-      LOG_WARN("write to file failed", K(ret), K(io), K(timeout_ms));
     }
     if (NULL != io_observer_) {
       io_observer_->on_write_io(rdtsc() - start);
@@ -1265,7 +1206,6 @@ int ObRADatumStore::read_file(void *buf, const int64_t size, const int64_t offse
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(size), K(offset), KP(buf));
   } else if (OB_FAIL(get_timeout(timeout_ms))) {
-    LOG_WARN("get timeout failed", K(ret));
   }
 
   if (OB_SUCC(ret) && size > 0) {
@@ -1279,7 +1219,6 @@ int ObRADatumStore::read_file(void *buf, const int64_t size, const int64_t offse
     const uint64_t start = rdtsc();
     tmp_file::ObTmpFileIOHandle handle;
     if (OB_FAIL(FILE_MANAGER_INSTANCE_WITH_MTL_SWITCH.pread(io, offset, handle))) {
-      LOG_WARN("read form file failed", K(ret), K(io), K(offset), K(timeout_ms));
     } else if (OB_UNLIKELY(handle.get_done_size() != size)) {
       ret = OB_INNER_STAT_ERROR;
       LOG_WARN("read data less than expected",
@@ -1361,7 +1300,6 @@ int ObRADatumStore::dump_block_if_need(const int64_t extra_size)
       target_dump_size += IndexBlock::INDEX_BLOCK_SIZE;
     }
     if (OB_FAIL(dump(false, std::max(target_dump_size, BIG_BLOCK_SIZE)))) {
-      LOG_WARN("fail to dump block", K(ret), K(mem_hold_), K(mem_limit_));
     }
   }
   return ret;
@@ -1411,7 +1349,6 @@ int ObRADatumStore::finish_add_row()
     // do nothing if ObRADatumStore is empty or has called finish_add_row already
   } else {
     if (OB_FAIL(switch_block(0 /*finish_add_row*/))) {
-      LOG_WARN("write last block to file failed", K(ret));
     } else if (has_index_block() && OB_FAIL(switch_idx_block(true /* finish_add */))) {
       LOG_WARN("write last index block to file failed", K(ret));
     } else if (blkbuf_.buf_.is_inited()) {

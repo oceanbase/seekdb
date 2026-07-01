@@ -49,21 +49,16 @@ int ObShowCreateProcedure::inner_get_next_row(common::ObNewRow *&row)
     const ObRoutineInfo *proc_info = NULL;
     uint64_t show_procedure_id = OB_INVALID_ID;
     if (OB_FAIL(calc_show_procedure_id(show_procedure_id))) {
-      SERVER_LOG(WARN, "fail to calc show table id", K(ret), K(show_procedure_id));
     } else if (OB_UNLIKELY(OB_INVALID_ID == show_procedure_id)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_USER_ERROR(OB_ERR_UNEXPECTED, "this procedure is used for show clause, can't be selected");
     } else if (OB_FAIL(schema_guard_->get_routine_info( show_procedure_id, proc_info))) {
-      SERVER_LOG(WARN, "fail to get table schema", K(ret), K(show_procedure_id));
     } else if (OB_UNLIKELY(NULL == proc_info)) {
       ret = OB_ERR_SP_DOES_NOT_EXIST;
       SERVER_LOG(WARN, "fail to get procedure info", K(ret), K(show_procedure_id));
     } else {
       if (OB_FAIL(fill_row_cells(show_procedure_id, *proc_info))) {
-        SERVER_LOG(WARN, "fail to fill row cells", K(ret),
-                  K(show_procedure_id), K(proc_info->get_routine_name()));
       } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
-        SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
       } else {
         scanner_it_ = scanner_.begin();
         start_to_read_ = true;
@@ -134,7 +129,6 @@ int ObShowCreateProcedure::fill_row_cells(uint64_t show_procedure_id, const ObRo
     ret = OB_ALLOCATE_MEMORY_FAILED;
     SERVER_LOG(ERROR, "fail to alloc table_def_buf", K(ret));
   } else if (OB_FAIL(exec_env.init(proc_info.get_exec_env()))) {
-    SERVER_LOG(ERROR, "fail to load exec env", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < output_column_ids_.count(); ++i) {
       uint64_t col_id = output_column_ids_.at(i);
@@ -157,11 +151,9 @@ int ObShowCreateProcedure::fill_row_cells(uint64_t show_procedure_id, const ObRo
           bool ansi_quotes = false;
           bool print_column_priv = false;
           if (OB_FAIL(has_show_create_function_priv(proc_info, print_column_priv))) {
-            SERVER_LOG(WARN, "failed to check print column priv", K(ret), K(proc_info));
           } else if (!print_column_priv) {
             cur_row_.cells_[cell_idx].set_null();
           } else if (OB_FAIL(session_->get_sql_quote_show_create(sql_quote_show_create))) {
-            SERVER_LOG(WARN, "failed to get sql_quote_show_create", K(ret), K(session_));
           } else if (FALSE_IT(IS_ANSI_QUOTES(session_->get_sql_mode(), ansi_quotes))) {
             // do nothing
           } else {
@@ -173,7 +165,6 @@ int ObShowCreateProcedure::fill_row_cells(uint64_t show_procedure_id, const ObRo
                                                                 OB_MAX_VARCHAR_LENGTH,
                                                                 pos,
                                                                 TZ_INFO(session_)))) {
-              SERVER_LOG(WARN, "Generate routine definition failed");
             }
             if (OB_FAIL(ret)) {
               // do nothing
@@ -214,7 +205,6 @@ int ObShowCreateProcedure::fill_row_cells(uint64_t show_procedure_id, const ObRo
           ObObj int_value;
           int_value.set_int(exec_env.get_sql_mode());
           if (OB_FAIL(ob_sql_mode_to_str(int_value, cur_row_.cells_[cell_idx], allocator_))) {
-            SERVER_LOG(ERROR, "fail to convert sqlmode to string", K(int_value), K(ret));
           } else {
             cur_row_.cells_[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
           }
@@ -256,9 +246,7 @@ int ObShowCreateProcedure::has_show_create_function_priv(const ObRoutineInfo &pr
     stmt_need_privs.reset();
     ObNeedPriv need_priv("", "", OB_PRIV_USER_LEVEL, OB_PRIV_SELECT, false);
     if (OB_FAIL(stmt_need_privs.need_privs_.init(1))) {
-      SERVER_LOG(WARN, "fail to init need_privs", K(ret));
     } else if (OB_FAIL(stmt_need_privs.need_privs_.push_back(need_priv))) {
-      SERVER_LOG(WARN, "Add need priv to stmt_need_privs error", K(ret));
     } else if (OB_FAIL(schema_guard_->check_priv(session_priv_, enable_role_id_array_, stmt_need_privs))) {
       SERVER_LOG(WARN, "No privilege global-level select", K(ret));
       if (OB_ERR_NO_PRIVILEGE == ret) {

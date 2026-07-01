@@ -58,7 +58,6 @@ ObLocationMgr &ObLocationMgr::operator=(const ObLocationMgr &other)
     ret = OB_NOT_INIT;
     LOG_WARN("location manager not init", K(ret));
   } else if (OB_FAIL(assign(other))) {
-    LOG_WARN("assign failed", K(ret));
   }
   return *this;
 }
@@ -70,9 +69,7 @@ int ObLocationMgr::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("init private location schema manager twice", K(ret));
   } else if (OB_FAIL(location_name_map_.init())) {
-    LOG_WARN("init location name map failed", K(ret));
   } else if (OB_FAIL(location_id_map_.init())) {
-    LOG_WARN("init location id map failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -98,11 +95,8 @@ int ObLocationMgr::assign(const ObLocationMgr &other)
     LOG_WARN("location manager not init", K(ret));
   } else if (this != &other) {
     if (OB_FAIL(location_name_map_.assign(other.location_name_map_))) {
-      LOG_WARN("assign location name map failed", K(ret));
     } else if (OB_FAIL(location_id_map_.assign(other.location_id_map_))) {
-      LOG_WARN("assign location id map failed", K(ret));
     } else if (OB_FAIL(location_infos_.assign(other.location_infos_))) {
-      LOG_WARN("assign location schema vector failed", K(ret));
     }
   }
   return ret;
@@ -123,7 +117,6 @@ int ObLocationMgr::deep_copy(const ObLocationMgr &other)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", KP(schema), K(ret));
       } else if (OB_FAIL(add_location(*schema, schema->get_name_case_mode()))) {
-        LOG_WARN("add location failed", K(*schema), K(ret));
       }
     }
   }
@@ -145,7 +138,6 @@ int ObLocationMgr::add_location(const ObLocationSchema &schema, const ObNameCase
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_,
                                                 schema,
                                                 new_schema))) {
-    LOG_WARN("alloc schema failed", K(ret));
   } else if (OB_ISNULL(new_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("alloc schema is a NULL ptr", K(new_schema), K(ret));
@@ -155,16 +147,12 @@ int ObLocationMgr::add_location(const ObLocationSchema &schema, const ObNameCase
                                               schema_compare,
                                               schema_equal,
                                               old_schema))) {
-    LOG_WARN("failed to add location schema", K(ret));
   } else {
     int over_write = 1;
     ObLocationNameHashKey hash_wrapper(new_schema->get_name_case_mode(), 
                                        new_schema->get_location_name_str());
     if (OB_FAIL(location_name_map_.set_refactored(hash_wrapper, new_schema, over_write))) {
-      LOG_WARN("build location hash map failed", K(ret));
     } else if (OB_FAIL(location_id_map_.set_refactored(new_schema->get_location_id(), new_schema, over_write))) {
-      LOG_WARN("build location id hashmap failed", K(ret),
-              "location_id", new_schema->get_location_id());
     }
   }
   if ((location_infos_.count() != location_name_map_.item_count()
@@ -175,7 +163,6 @@ int ObLocationMgr::add_location(const ObLocationSchema &schema, const ObNameCase
             K(location_id_map_.item_count()));
     int rebuild_ret = OB_SUCCESS;
     if (OB_SUCCESS != (rebuild_ret = rebuild_location_hashmap())) {
-      LOG_WARN("rebuild location hashmap failed", K(rebuild_ret));
     }
     if (OB_SUCC(ret)) {
       ret = rebuild_ret;
@@ -242,7 +229,6 @@ int ObLocationMgr::del_location(const ObTenantLocationId &id)
         K(location_name_map_.item_count()), K(location_id_map_.item_count()));
     int rebuild_ret = OB_SUCCESS;
     if (OB_SUCCESS != (rebuild_ret = rebuild_location_hashmap())) {
-      LOG_WARN("rebuild location hashmap failed", K(rebuild_ret));
     }
     if (OB_SUCC(ret)) {
       ret = rebuild_ret;
@@ -324,7 +310,6 @@ int ObLocationMgr::get_location_schemas_in_tenant(common::ObIArray<const ObLocat
     } else if (false) {
       is_stop = true;
     } else if (OB_FAIL(schemas.push_back(schema))) {
-      LOG_WARN("push back location failed", K(ret));
     }
   }
   return ret;
@@ -388,12 +373,8 @@ int ObLocationMgr::rebuild_location_hashmap()
       // do nothing
     } else if (OB_FAIL(location_name_map_.set_refactored(hash_wrapper,
         location_schema, over_write))) {
-      LOG_WARN("build location name hashmap failed", K(ret),
-          "location_name", location_schema->get_location_name());
     } else if (OB_FAIL(location_id_map_.set_refactored(location_schema->get_location_id(),
         location_schema, over_write))) {
-      LOG_WARN("build location id hashmap failed", K(ret),
-          "location_id", location_schema->get_location_id());
     }
   }
   return ret;

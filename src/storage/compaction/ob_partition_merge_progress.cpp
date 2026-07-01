@@ -123,7 +123,6 @@ int ObPartitionMergeProgress::init(ObBasicTabletMergeCtx *ctx,
     end_cg_idx_ = end_cg_idx;
 
     if (OB_FAIL(inner_init_estimated_vals())) {
-      LOG_WARN("failed to init estimated vals", K(ret), KPC(ctx));
     } else {
       is_inited_ = true;
     }
@@ -213,13 +212,10 @@ int ObPartitionMergeProgress::inner_init_estimated_vals()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected empty tables handle", K(ret), KPC(ctx_));
   } else if (OB_FAIL(ctx_->get_tables_handle().get_tables(tables))) {
-    LOG_WARN("failed to get tables", K(ret), K(tables));
   } else if (is_mini_merge(ctx_->get_merge_type())) {
     if (OB_FAIL(estimate_memtables(tables))) {
-      LOG_WARN("fail to estimate memtables", K(ret), K(tables));
     }
   } else if (OB_FAIL(estimate_sstables(tables))) {
-    LOG_WARN("failed to estimate sstables", K(ret), K(tables));
   }
 
   if (OB_FAIL(ret)) {
@@ -368,8 +364,6 @@ int ObPartitionMajorMergeProgress::inner_update_progress_mgr(const int64_t total
           scan_data_size_delta,
           estimated_finish_time_,
           false/*finish_flag*/))) {
-    LOG_WARN("failed to update tenant compaction progress", K(ret),
-             K(scan_data_size_delta), K(is_first_update), KPC(this));
   }
   return ret;
 }
@@ -388,7 +382,6 @@ int ObPartitionMajorMergeProgress::finish_progress(
                                                                    true/*finish_flag*/,
                                                                    time_guard,
                                                                    is_co_merge))) {
-    LOG_WARN("failed to update progress mgr", K(ret), K(merge_version), K(is_co_merge), KPC(this));
   }
   return ret;
 }
@@ -407,11 +400,9 @@ int ObPartitionMajorMergeProgress::finish_merge_progress()
   } else if (OB_FAIL(finish_progress(ctx->get_merge_version(),
                                      &ctx->info_collector_.time_guard_,
                                      false/*is_co_merge*/))) {
-    LOG_WARN("failed to update progress", K(ret), KPC(this));
   } else if (OB_FAIL(share::g_mp->tenant_compaction_progress_mgr()->update_compression_ratio(
       ctx->get_merge_version(),
       ctx->get_merge_info().get_merge_history()))) {
-    LOG_WARN("failed to update progress", K(ret));
   } else {
     LOG_DEBUG("finish() success to update progress", K(ret),
               "param", ctx->get_dag_param(), KPC(this));
@@ -442,7 +433,6 @@ int ObCOMajorMergeProgress::finish_merge_progress()
     if (OB_FAIL(finish_progress(ctx->get_merge_version(),
                                 &merge_dag->get_time_guard(),
                                 true/*co_merge*/))) {
-      LOG_WARN("failed to update progress", K(ret), KPC(this));
     } else {
       for (int64_t i = start_cg_idx_; OB_SUCC(ret) && i < end_cg_idx_; ++i) {
         if (OB_UNLIKELY(OB_ISNULL(ctx->cg_merge_info_array_) || OB_ISNULL(ctx->cg_merge_info_array_[i]))) {
@@ -451,7 +441,6 @@ int ObCOMajorMergeProgress::finish_merge_progress()
         } else if (OB_FAIL(share::g_mp->tenant_compaction_progress_mgr()->update_compression_ratio(
           ctx->get_merge_version(),
           ctx->cg_merge_info_array_[i]->get_merge_history()))) {
-          LOG_WARN("failed to update progress", K(ret));
         }
       }
     }

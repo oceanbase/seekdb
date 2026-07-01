@@ -165,7 +165,6 @@ int ObSRTaaTIterImpl::get_next_rows(const int64_t capacity, int64_t &count)
       if (-1 != cur_map_idx_ && nullptr != cur_map_iter_
           && *cur_map_iter_ != hash_maps_[cur_map_idx_]->end()) {
         if (OB_FAIL(project_results(real_capacity, count))) {
-          LOG_WARN("failed to fill output exprs", K(ret));
         }
       } else if (OB_FAIL(load_next_hash_map())) {
         if (OB_ITER_END != ret) {
@@ -238,7 +237,6 @@ int ObSRTaaTIterImpl::init_chunk_stores()
       } else {
         ObSRTaaTHashMap *hash_map = new (buf) ObSRTaaTHashMap();
         if (OB_FAIL(hash_map->create(10, common::ObMemAttr("FTTaatMap")))) {
-          LOG_WARN("failed to create token map", K(ret));
         } else {
           hash_maps_[i] = hash_map;
         }
@@ -254,7 +252,6 @@ int ObSRTaaTIterImpl::init_chunk_stores()
             true /* enable dump */,
             0, /* row_extra_size */
             ObChunkDatumStore::BLOCK_SIZE))) {
-          LOG_WARN("init chunk datum store failed", K(ret));
         } else {
           store->alloc_dir_id();
           store->set_allocator(*iter_allocator_);
@@ -298,7 +295,6 @@ int ObSRTaaTIterImpl::fill_chunk_stores()
   } else {
     ObSEArray<ObExpr *, 2> exprs;
     if (OB_FAIL(exprs.push_back(iter_param_->id_proj_expr_))) {
-      LOG_WARN("failed to push back id expr", K(ret));
     } else if (iter_param_->need_project_relevance()
         && OB_FAIL(exprs.push_back(iter_param_->relevance_expr_))) {
       LOG_WARN("failed to push back relevance expr", K(ret));
@@ -338,7 +334,6 @@ int ObSRTaaTIterImpl::fill_chunk_stores()
             for (int64_t i = 0; OB_SUCC(ret) && i < partition_cnt_; ++i) {
               int64_t stored_count = 0;
               if (OB_FAIL(datum_stores_[i]->add_batch(exprs, *eval_ctx, *skips_[i], count, stored_count))) {
-                LOG_WARN("failed to add rows", K(ret));
               } else {
                 check_count += stored_count;
                 subtotal_count += stored_count;
@@ -366,7 +361,6 @@ int ObSRTaaTIterImpl::fill_chunk_stores()
               uint64_t partition = murmurhash(id_datum.ptr_, id_datum.len_, 0) % partition_cnt_;
               ObChunkDatumStore::StoredRow **sr = nullptr;
               if (OB_FAIL(datum_stores_[partition]->add_row(exprs, eval_ctx, sr))) {
-                LOG_WARN("failed to add row", K(ret));
               } else {
                 ++subtotal_count;
               }
@@ -394,7 +388,6 @@ int ObSRTaaTIterImpl::fill_chunk_stores()
       int64_t check_count = 0;
       for (int64_t i = 0; OB_SUCC(ret) && i < partition_cnt_; ++i) {
         if (OB_FAIL(datum_store_iters_[i]->init(datum_stores_[i]))) {
-          LOG_WARN("failed to init datum store iter", K(ret));
         } else {
           check_count += datum_stores_[i]->get_row_cnt();
         }
@@ -429,7 +422,6 @@ int ObSRTaaTIterImpl::load_next_hash_map()
 
     ObSEArray<ObExpr *, 2> exprs;
     if (OB_FAIL(exprs.push_back(iter_param_->id_proj_expr_))) {
-      LOG_WARN("failed to push back id expr", K(ret));
     } else if (iter_param_->need_project_relevance()
         && OB_FAIL(exprs.push_back(iter_param_->relevance_expr_))) {
       LOG_WARN("failed to push back relevance expr", K(ret));
@@ -449,7 +441,6 @@ int ObSRTaaTIterImpl::load_next_hash_map()
       } else {
         ObDatum &id_datum = iter_param_->id_proj_expr_->locate_expr_datum(*eval_ctx);
         if (OB_FAIL(id.from_datum(id_datum))) {
-          LOG_WARN("failed to get id from datum", K(ret));
         } else if (iter_param_->need_project_relevance()) {
           ObDatum &relevance_datum = iter_param_->relevance_expr_->locate_expr_datum(*eval_ctx);
           cur_relevance = relevance_datum.get_double();
@@ -457,14 +448,11 @@ int ObSRTaaTIterImpl::load_next_hash_map()
             if (OB_HASH_NOT_EXIST != ret) {
               LOG_WARN("failed to get relevance from hash map", K(ret));
             } else if (OB_FAIL(map->set_refactored(id, cur_relevance, 1 /* overwrite */))) {
-              LOG_WARN("failed to set relevance in hash map", K(ret));
             }
           } else if (OB_FAIL(map->set_refactored(id, cur_relevance + last_relevance, 1 /* overwrite */))) {
-            LOG_WARN("failed to set relevance in hash map", K(ret));
           }
         } else {
           if (OB_FAIL(map->set_refactored(id, 1.0, 0 /* overwrite */))) {
-            LOG_WARN("failed to set relevance in hash map", K(ret));
           }
         }
       }
@@ -523,7 +511,6 @@ int ObSRTaaTIterImpl::project_results(const int64_t safe_capacity, int64_t &coun
     } else {
       filter_expr->clear_evaluated_flag(*eval_ctx);
       if (OB_FAIL(filter_expr->eval(*eval_ctx, filter_res))) {
-        LOG_WARN("failed to evalaute filter", K(ret));
       } else {
         need_project = !(filter_res->is_null() || 0 == filter_res->get_int());
       }

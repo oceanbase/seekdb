@@ -40,7 +40,6 @@ int ObHashUnionVecOp::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObHashSetVecOp::inner_open())) {
-    LOG_WARN("failed to inner open", K(ret));
   } else {
     cur_child_op_ = left_;
   }
@@ -51,7 +50,6 @@ int ObHashUnionVecOp::inner_close()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObHashSetVecOp::inner_close())) {
-    LOG_WARN("failed to inner close", K(ret));
   }
   return ret;
 }
@@ -60,7 +58,6 @@ int ObHashUnionVecOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObHashSetVecOp::inner_rescan())) {
-    LOG_WARN("failed to rescan child operator", K(ret));
   } else {
     cur_child_op_ = left_;
   }
@@ -102,7 +99,6 @@ int ObHashUnionVecOp::inner_get_next_batch(const int64_t max_row_cnt)
     LOG_WARN("cur_child_op is null", K(ret));
   } else if (first_get_left_) {
     if (OB_FAIL(init_hash_partition_infras_for_batch())) {
-      LOG_WARN("failed to init hash partition infra batch", K(ret));
     }
     first_get_left_ = false;
   }
@@ -115,17 +111,14 @@ int ObHashUnionVecOp::inner_get_next_batch(const int64_t max_row_cnt)
       if (child_op_end) {
         end_to_process = true;
       } else if (OB_FAIL(get_child_next_batch(batch_size, child_brs))) {
-        LOG_WARN("failed to get child next batch", K(ret));
       } else if (OB_FAIL(convert_vector(cur_child_op_->get_spec().output_,
                               MY_SPEC.set_exprs_,
                               child_brs))) {
-        LOG_WARN("copy current row failed", K(ret));
       } else if (OB_FAIL(hp_infras_.calc_hash_value_for_batch(MY_SPEC.set_exprs_,
                                                               *child_brs->skip_,
                                                               child_brs->size_,
                                                               false /* all_rows_active */,
                                                               hash_values_for_batch_))) {
-        LOG_WARN("failed to calc hash value for batch", K(ret));
       } else {
         child_op_end = cur_child_op_ == right_ && child_brs->end_ && 0 != child_brs->size_;
         end_to_process = cur_child_op_ == right_ && child_brs->end_ && 0 == child_brs->size_;
@@ -145,27 +138,20 @@ int ObHashUnionVecOp::inner_get_next_batch(const int64_t max_row_cnt)
     if (OB_SUCC(ret) && end_to_process) {
       end_to_process = false;
       if (OB_FAIL(hp_infras_.finish_insert_row())) {
-        LOG_WARN("failed to finish insert row", K(ret));
       } else if (!has_got_part_) {
         has_got_part_ = true;
       } else if (OB_FAIL(hp_infras_.close_cur_part(InputSide::LEFT))) {
-        LOG_WARN("failed to close cur part", K(ret));
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(hp_infras_.end_round())) {
-        LOG_WARN("failed to end round", K(ret));
       } else if (OB_FAIL(try_check_status())) {
-        LOG_WARN("failed to check status", K(ret));
       } else if (OB_FAIL(hp_infras_.start_round())) {
-        LOG_WARN("failed to start round", K(ret));
       } else if (OB_FAIL(hp_infras_.get_next_partition(InputSide::LEFT))) {
         if (OB_ITER_END != ret) {
           LOG_WARN("failed to get next dumped partition", K(ret));
         }
       } else if (OB_FAIL(hp_infras_.open_cur_part(InputSide::LEFT))) {
-        LOG_WARN("failed to open cur part", K(ret));
       } else if (OB_FAIL(hp_infras_.resize(hp_infras_.get_cur_part_row_cnt(InputSide::LEFT)))) {
-        LOG_WARN("failed to resize cur part", K(ret));
       }
     } else if (OB_FAIL(ret)) {
     } else if (has_got_part_ && OB_FAIL(hp_infras_.insert_row_for_batch(MY_SPEC.set_exprs_,

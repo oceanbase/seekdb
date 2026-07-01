@@ -45,8 +45,6 @@ static inline int get_ls_leader(
       ls_id,
       addr,
       abs_timeout_ts))) {
-    LOG_WARN("failed to get ls leader with retry until timeout",
-        K(ret), K(cluster_id), K(ls_id), K(addr), K(abs_timeout_ts));
   } else {
     LOG_DEBUG("get ls leader from location_service",
         K(ret), K(cluster_id), K(ls_id), K(addr), K(abs_timeout_ts));

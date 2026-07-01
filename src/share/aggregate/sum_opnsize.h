@@ -43,7 +43,6 @@ public:
     ObLobLocatorV2 locator(lob_data, true);
     int64_t lob_data_byte_len = 0;
     if (OB_FAIL(locator.get_lob_data_byte_len(lob_data_byte_len))) {
-      SQL_LOG(WARN, "get lob data byte length failed", K(ret));
     } else {
       diff += sizeof(ObDatum) + lob_data_byte_len;
     }
@@ -120,7 +119,6 @@ public:
         else if (cur_vec.is_null(i)) {
           diff += sizeof(ObDatum);
         } else if (OB_FAIL(ObArrayExprUtils::calc_nested_expr_data_size(expr, ctx, i, data_len))) {
-          SQL_LOG(WARN, "calc collection cell size failed", K(ret));
         } else {
           diff += sizeof(ObDatum) + data_len;
         }
@@ -188,7 +186,6 @@ public:
           diff += sizeof(ObDatum);
         } else if (OB_FAIL(
                      ObArrayExprUtils::calc_nested_expr_data_size(expr, ctx, idx, data_len))) {
-          SQL_LOG(WARN, "calc nested expr data size failed", K(ret));
         } else {
           diff += sizeof(ObDatum) + data_len;
         }
@@ -246,7 +243,6 @@ public:
         if (cur_vec.is_null(batch_idx)) {
           sum += sizeof(ObDatum);
         } else if (OB_FAIL(ObArrayExprUtils::calc_nested_expr_data_size(*param_expr, agg_ctx.eval_ctx_, batch_idx, data_len))) {
-          SQL_LOG(WARN, "calc nested expr data size failed", K(ret));
         } else {
           sum += data_len + sizeof(ObDatum);
         }
@@ -421,7 +417,6 @@ public:
       ObLobLocatorV2 locator(lob_data, true);
       int64_t lob_data_byte_len = 0;
       if (OB_FAIL(locator.get_lob_data_byte_len(lob_data_byte_len))) {
-        SQL_LOG(WARN, "get lob data byte length failed", K(ret));
       } else {
         sum += sizeof(ObDatum) + static_cast<int64_t>(lob_data_byte_len);
       }
@@ -430,7 +425,6 @@ public:
       int32_t batch_idx = agg_ctx.eval_ctx_.get_batch_idx();
       if (OB_FAIL(ObArrayExprUtils::calc_nested_expr_data_size(*param_expr, agg_ctx.eval_ctx_,
                                                                batch_idx, collection_cell_len))) {
-        SQL_LOG(WARN, "calc nested expr data size failed", K(ret));
       } else {
         sum += sizeof(ObDatum) + collection_cell_len;
       }

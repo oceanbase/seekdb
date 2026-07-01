@@ -35,10 +35,7 @@ int ObArrayFixedSize<T>::push_null()
     ret = OB_SIZE_OVERFLOW;
     OB_LOG(WARN, "array element size exceed max", K(ret), K(this->length_), K(MAX_ARRAY_ELEMENT_SIZE));
   } else if (OB_FAIL(this->data_container_->raw_data_.push_back(0))) {
-    OB_LOG(WARN, "failed to push value to array data", K(ret));
   } else if (OB_FAIL(this->data_container_->null_bitmaps_.push_back(1))) {
-    // push back null
-    OB_LOG(WARN, "failed to push null", K(ret));
   } else if (get_raw_binary_len() > MAX_ARRAY_SIZE) {
     ret = OB_SIZE_OVERFLOW;
     OB_LOG(WARN, "array data length exceed max", K(ret), K(get_raw_binary_len()), K(MAX_ARRAY_SIZE));
@@ -60,15 +57,10 @@ int ObArrayFixedSize<T>::push_back(T value, bool is_null)
     OB_LOG(WARN, "array element size exceed max", K(ret), K(this->length_), K(MAX_ARRAY_ELEMENT_SIZE));
   } else if (is_null) {
     if (OB_FAIL(this->data_container_->raw_data_.push_back(0))) {
-      OB_LOG(WARN, "failed to push value to array data", K(ret));
     } else if (OB_FAIL(this->data_container_->null_bitmaps_.push_back(1))) {
-      // push back null
-      OB_LOG(WARN, "failed to push null", K(ret));
     }
   } else if (OB_FAIL(this->data_container_->raw_data_.push_back(value))) {
-    OB_LOG(WARN, "failed to push value to array data", K(ret));
   } else if (OB_FAIL(this->data_container_->null_bitmaps_.push_back(0))) {
-    OB_LOG(WARN, "failed to push null", K(ret));
   } else if (get_raw_binary_len() > MAX_ARRAY_SIZE) {
     ret = OB_SIZE_OVERFLOW;
     OB_LOG(WARN, "array data length exceed max", K(ret), K(get_raw_binary_len()), K(MAX_ARRAY_SIZE));
@@ -84,11 +76,8 @@ int ObArrayFixedSize<T>::print(ObStringBuffer &format_str, uint32_t begin, uint3
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(format_str.append("["))) {
-    OB_LOG(WARN, "fail to append [", K(ret));
   } else if (OB_FAIL(print_element(format_str, begin, print_size, print_whole))) {
-    OB_LOG(WARN, "fail to print element", K(ret));
   } else if (OB_FAIL(format_str.append("]"))) {
-    OB_LOG(WARN, "fail to append ]", K(ret));
   }
   return ret;
 }
@@ -116,12 +105,10 @@ int ObArrayFixedSize<T>::print_element(ObStringBuffer &format_str, uint32_t begi
       // value is null
       is_first_elem = false;
       if (OB_FAIL(format_str.append(null_str))) {
-        OB_LOG(WARN, "fail to append null string to buffer", K(ret), K(null_str));
       }
     } else {
       is_first_elem = false;
       if (OB_FAIL(ObArrayFixedSize<T>::print_element_at(format_str, i))) {
-        OB_LOG(WARN, "fail to print element", K(ret), K(i));
       }
     }
   }
@@ -149,7 +136,6 @@ int ObArrayFixedSize<T>::print_element_at(ObStringBuffer &format_str, uint32_t i
         char tmp_buf[ObFastFormatInt::MAX_DIGITS10_STR_SIZE] = {0};
         int64_t len = ObFastFormatInt::format_signed(data_[idx], tmp_buf);
         if (OB_FAIL(format_str.append(tmp_buf, len))) {
-          OB_LOG(WARN, "fail to append int to buffer", K(ret), K(data_[idx]));
         }
         break;
       }
@@ -160,7 +146,6 @@ int ObArrayFixedSize<T>::print_element_at(ObStringBuffer &format_str, uint32_t i
         char tmp_buf[ObFastFormatInt::MAX_DIGITS10_STR_SIZE] = {0};
         int64_t len = ObFastFormatInt::format_unsigned(data_[idx], tmp_buf);
         if (OB_FAIL(format_str.append(tmp_buf, len))) {
-          OB_LOG(WARN, "fail to append int to buffer", K(ret), K(data_[idx]));
         }
         break;
       }
@@ -170,14 +155,12 @@ int ObArrayFixedSize<T>::print_element_at(ObStringBuffer &format_str, uint32_t i
       case ObUDoubleType: {
         int buf_size = ob_is_float_tc(obj_type) ? FLOAT_TO_STRING_CONVERSION_BUFFER_SIZE : DOUBLE_TO_STRING_CONVERSION_BUFFER_SIZE;
         if (OB_FAIL(format_str.reserve(buf_size + 1))) {
-          OB_LOG(WARN, "fail to reserve memory for format_str", K(ret));
         } else {
           char *start = format_str.ptr() + format_str.length();
           uint64_t len = ob_gcvt(data_[idx],
                                   ob_is_float_tc(obj_type) ? ob_gcvt_arg_type::OB_GCVT_ARG_FLOAT : ob_gcvt_arg_type::OB_GCVT_ARG_DOUBLE,
                                   buf_size, start, NULL);
           if (OB_FAIL(format_str.set_length(format_str.length() + len))) {
-            OB_LOG(WARN, "fail to set format_str len", K(ret), K(format_str.length()), K(len));
           }
         }
         break;
@@ -187,9 +170,7 @@ int ObArrayFixedSize<T>::print_element_at(ObStringBuffer &format_str, uint32_t i
         char tmp_buf[ObFastFormatInt::MAX_DIGITS10_STR_SIZE] = {0};
         if (OB_FAIL(wide::to_string(reinterpret_cast<const ObDecimalInt *>(&data_[idx]), sizeof(data_[idx]), scale_,
                                     tmp_buf, ObFastFormatInt::MAX_DIGITS10_STR_SIZE, pos))) {
-          OB_LOG(WARN, "fail to format decimal int to string", K(ret), K(data_[idx]));
         } else if (OB_FAIL(format_str.append(tmp_buf, pos))) {
-          OB_LOG(WARN, "fail to append decimal int to buffer", K(ret), K(data_[idx]));
         }
         break;
       }
@@ -251,7 +232,6 @@ int ObArrayFixedSize<T>::get_raw_binary(char *res_buf, int64_t buf_len)
     MEMCPY(res_buf + pos, &this->length_, sizeof(this->length_));
     pos += sizeof(this->length_);
     if (OB_FAIL(get_data_binary(res_buf + pos, buf_len - pos))) {
-      OB_LOG(WARN, "get data binary failed", K(ret), K(buf_len), K(pos));
     }
   }
   return ret;
@@ -305,7 +285,6 @@ int ObArrayFixedSize<T>::init(ObString &raw_data)
     this->length_ = *reinterpret_cast<uint32_t *>(raw_str);
     ObString data_str(raw_data.length() - sizeof(this->length_), raw_data.ptr() + sizeof(this->length_));
     if (OB_FAIL(init(this->length_, data_str))) {
-      OB_LOG(WARN, "init failed", K(ret), K(this->length_), K(raw_data));
     }
   }
   return ret;
@@ -396,7 +375,6 @@ int ObArrayFixedSize<T>::insert_from(const ObIArrayType &src, uint32_t begin, ui
     int64_t curr_pos = this->data_container_->raw_data_.size();
     int64_t capacity = curr_pos + len;
     if (OB_FAIL(this->data_container_->raw_data_.prepare_allocate(capacity))) {
-      OB_LOG(WARN, "allocate memory failed", K(ret), K(capacity));
     } else {
       char *cur_data = reinterpret_cast<char *>(this->data_container_->raw_data_.get_data() + curr_pos);
       MEMCPY(cur_data, src.get_data() + src_data_offset, len * sizeof(T));
@@ -404,7 +382,6 @@ int ObArrayFixedSize<T>::insert_from(const ObIArrayType &src, uint32_t begin, ui
       curr_pos = this->data_container_->null_bitmaps_.size();
       capacity = curr_pos + len;
       if (OB_FAIL(this->data_container_->null_bitmaps_.prepare_allocate(capacity))) {
-        OB_LOG(WARN, "allocate memory failed", K(ret), K(capacity));
       } else {
         uint8_t *cur_null_bitmap = this->data_container_->null_bitmaps_.get_data() + curr_pos;
         MEMCPY(cur_null_bitmap, src.get_nullbitmap() + src_null_offset, len * sizeof(uint8_t));
@@ -574,7 +551,6 @@ int ObArrayFixedSize<T>::contains_all(const ObIArrayType &other, bool &bret) con
       if (right_data->is_null(i)) {
         // do nothings, checked already
       } else if (OB_FAIL(this->contains((*right_data)[i], pos))) {
-        OB_LOG(WARN, "check element contains failed", K(ret), K(i), K((*right_data)[i]));
       } else if (pos < 0) {
         bret = false;
       }
@@ -600,7 +576,6 @@ int ObArrayFixedSize<T>::overlaps(const ObIArrayType &other, bool &bret) const
       if (right_data->is_null(i)) {
         // do nothings, checked already
       } else if (OB_FAIL(this->contains((*right_data)[i], pos))) {
-        OB_LOG(WARN, "check element contains failed", K(ret), K(i), K((*right_data)[i]));
       } else if (pos >= 0) {
         bret = true;
       }
@@ -642,7 +617,6 @@ int ObArrayFixedSize<T>::distinct(ObIAllocator &alloc, ObIArrayType *&output) co
   int ret = OB_SUCCESS;
   ObIArrayType *arr_ptr = NULL;
   if (OB_FAIL(clone_empty(alloc, arr_ptr, false))) {
-    OB_LOG(WARN, "clone empty failed", K(ret));
   } else if (this->contain_null() && OB_FAIL(arr_ptr->push_null())) {
     OB_LOG(WARN, "push null failed", K(ret));
   } else if (this->length_ == 0) {
@@ -654,7 +628,6 @@ int ObArrayFixedSize<T>::distinct(ObIAllocator &alloc, ObIArrayType *&output) co
       ret = OB_ERR_ARRAY_TYPE_MISMATCH;
       OB_LOG(WARN, "invalid array type", K(ret), K(this->get_format()));
     } else if (OB_FAIL(elem_set.create(this->length_, ObMemAttr("ArrayDistSet")))) {
-      OB_LOG(WARN, "failed to create cellid set", K(ret));
     } else {
       for (uint32_t i = 0; i < this->length_ && OB_SUCC(ret); ++i) {
         ObString val;
@@ -664,9 +637,7 @@ int ObArrayFixedSize<T>::distinct(ObIAllocator &alloc, ObIArrayType *&output) co
         } else if (OB_FAIL(elem_set.exist_refactored(val))) {
           if (ret == OB_HASH_NOT_EXIST) {
             if (OB_FAIL(arr_data->push_back((*this)[i]))) {
-              OB_LOG(WARN, "failed to add element", K(ret));
             } else if (OB_FAIL(elem_set.set_refactored(val))) {
-              OB_LOG(WARN, "failed to add element into set", K(ret));
             }
           } else if (ret == OB_HASH_EXIST) {
             // duplicate element, do nothing
@@ -699,16 +670,13 @@ int ObArrayFixedSize<T>::push_not_in_set(const ObArrayFixedSize<T> *arr_bin_ptr,
       if (!contain_null && !arr_contain_null) {
         arr_contain_null = true;
         if (OB_FAIL(this->push_null())) {
-          OB_LOG(WARN, "push null failed", K(ret));
         }
       }
     } else if (FALSE_IT(val.assign_ptr(arr_bin_ptr->get_data() + i * sizeof(T), static_cast<ObString::obstr_size_t>(sizeof(T))))) {
     } else if (OB_FAIL(elem_set.exist_refactored(val))) {
       if (ret == OB_HASH_NOT_EXIST) {
         if (OB_FAIL(this->push_back((*arr_bin_ptr)[i]))) {
-          OB_LOG(WARN, "failed to add elemen", K(ret));
         } else if (OB_FAIL(elem_set.set_refactored(val))) {
-          OB_LOG(WARN, "failed to add elemen into set", K(ret));
         }
       } else if (ret == OB_HASH_EXIST) {
         // duplicate element, do nothing
@@ -733,7 +701,6 @@ int ObArrayFixedSize<T>::except(ObIAllocator &alloc, ObIArrayType *arr2, ObIArra
   ObArrayFixedSize<T> *arr2_bin_ptr = dynamic_cast<ObArrayFixedSize<T> *>(arr2);
 
   if (OB_FAIL(clone_empty(alloc, arr_ptr, false))) {
-    OB_LOG(WARN, "clone empty failed", K(ret));
   } else if (this->size() == 0) {
     output = arr_ptr;
   } else if (OB_ISNULL(arr_bin_ptr = dynamic_cast<ObArrayFixedSize<T> *>(arr_ptr)) 
@@ -742,7 +709,6 @@ int ObArrayFixedSize<T>::except(ObIAllocator &alloc, ObIArrayType *arr2, ObIArra
     OB_LOG(WARN, "invalid array type", K(ret), K(arr_ptr->get_format()), K(arr2->get_format())); 
   } else if (OB_FAIL(elem_set.create(arr2_bin_ptr->length_ + this->length_, 
                                   ObMemAttr("ArrayDistSet")))) {
-    OB_LOG(WARN, "failed to create cellid set", K(ret), K(arr2_bin_ptr->length_ + this->length_));
   } else {
     for (uint32_t i = 0; i < arr2_bin_ptr->length_ && OB_SUCC(ret); ++i) {
       ObString val;
@@ -752,7 +718,6 @@ int ObArrayFixedSize<T>::except(ObIAllocator &alloc, ObIArrayType *arr2, ObIArra
       } else if (OB_FAIL(elem_set.exist_refactored(val))) {
         if (ret == OB_HASH_NOT_EXIST) {
           if (OB_FAIL(elem_set.set_refactored(val))) {
-            OB_LOG(WARN, "failed to add elemen into set", K(ret));
           }
         } else if (ret == OB_HASH_EXIST) {
           // duplicate element, do nothing
@@ -764,7 +729,6 @@ int ObArrayFixedSize<T>::except(ObIAllocator &alloc, ObIArrayType *arr2, ObIArra
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(arr_bin_ptr->push_not_in_set(this, elem_set, arr1_contain_null, arr2_contain_null))) {
-      OB_LOG(WARN, "failed to push not in set", K(ret));
     } else {
       output = arr_ptr;
     }
@@ -790,7 +754,6 @@ int ObArrayFixedSize<T>::unionize(ObIAllocator &alloc, ObIArrayType **arr, uint3
                                             ObMemAttr("ArrayDistSet")))) {
       OB_LOG(WARN, "failed to create cellid set", K(ret));
     } else if (OB_FAIL(this->push_not_in_set(arr_bin_ptr, elem_set, arr_contain_null, false))) {
-      OB_LOG(WARN, "failed to push not in set", K(ret));
     }
   } // end for
   return ret;
@@ -843,14 +806,11 @@ int ObArrayFixedSize<T>::intersect(ObIAllocator &alloc, ObIArrayType **arr, uint
             if (i == arr_cnt - 1 && OB_FAIL(this->push_back((*arr_bin_ptr)[j]))) {
               OB_LOG(WARN, "failed to add elemen", K(ret));
             } else if (OB_FAIL(elem_map.erase_refactored(val))) {
-              OB_LOG(WARN, "failed to erase elemen from set", K(ret));
             } else if (OB_FAIL(elem_map.set_refactored(val, cnt + 1))) {
-              OB_LOG(WARN, "failed to add elemen into set", K(ret));
             }
           } else if (i + 1 == cnt) {
             // do nothing
           } else if (OB_FAIL(elem_map.erase_refactored(val))) {
-            OB_LOG(WARN, "failed to erase elemen from set", K(ret));
           }
         }
       } // end for

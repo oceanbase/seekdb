@@ -56,7 +56,6 @@ int ObExprCast::get_cast_inttc_len(ObExprResType &type1,
       length_semantics = type1.get_length_semantics();
     } else if (OB_FAIL(ObField::get_field_mb_length(type1.get_type(),
         type1.get_accuracy(), type1.get_collation_type(), res_len))) {
-      LOG_WARN("failed to get filed mb length");
     }
   } else {
     res_len = CAST_STRING_DEFUALT_LENGTH[type1.get_type()];
@@ -67,7 +66,6 @@ int ObExprCast::get_cast_inttc_len(ObExprResType &type1,
     } else if ((ObDateTimeTC == tc1 || ObMySQLDateTimeTC == tc1) && scale > 0) {
       res_len += scale - 1;
     } else if (OB_FAIL(get_cast_string_len(type1, type2, type_ctx, res_len, length_semantics, conn, cast_mode))) {
-      LOG_WARN("fail to get cast string length", K(ret));
     } else {
       // do nothing
     }
@@ -298,14 +296,11 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("invalid row_dimension_", K(row_dimension_), K(ret));
   } else if (OB_FAIL(ObSQLUtils::check_enable_decimalint(session, enable_decimalint))) {
-    LOG_WARN("fail to check_enable_decimalint", K(ret));
   } else if (OB_FAIL(get_cast_type(enable_decimalint,
                                    type2, cast_raw_expr->get_cast_mode(), type_ctx, dst_type))) {
-    LOG_WARN("get cast dest type failed", K(ret));
   } else if (OB_FAIL(ObSQLUtils::get_cs_level_from_cast_mode(cast_raw_expr->get_cast_mode(),
                                                              type1.get_collation_level(),
                                                              cs_level))) {
-    LOG_WARN("failed to get collation level", K(ret));
   } else if (!dst_type.is_collection_sql_type() && FALSE_IT(dst_type.set_collation_level(cs_level))) {
   } else if (OB_UNLIKELY(!cast_supported(type1.get_type(), type1.get_collation_type(),
                                         dst_type.get_type(), dst_type.get_collation_type()))) {
@@ -402,8 +397,7 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
           type.set_full_length(len, length_semantics);
         } else if (OB_FAIL(get_cast_string_len(type1, dst_type, type_ctx, len, length_semantics,
                                                collation_connection,
-                                               cast_raw_expr->get_cast_mode()))) { // cast (1 as char)
-          LOG_WARN("fail to get cast string length", K(ret));
+                                               cast_raw_expr->get_cast_mode()))) {
         } else {
           type.set_full_length(len, length_semantics);
         }
@@ -431,7 +425,6 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
           int16_t length_semantics = LS_BYTE;//unused
           if (OB_FAIL(get_cast_inttc_len(type1, dst_type, type_ctx, len, length_semantics,
                                          collation_connection, cast_raw_expr->get_cast_mode()))) {
-            LOG_WARN("fail to get cast inttc length", K(ret));
           } else {
             len = len > OB_LITERAL_MAX_INT_LEN ? OB_LITERAL_MAX_INT_LEN : len;
             type.set_precision(static_cast<int16_t>(len));
@@ -465,7 +458,6 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
                                      type_ctx.get_sql_mode(),
                                      *cast_raw_expr,
                                      explicit_cast_cm))) {
-      LOG_WARN("set cast mode failed", K(ret));
     } else if (CM_IS_EXPLICIT_CAST(explicit_cast_cm)) {
       // cast_raw_expr.extra_ store explicit cast's cast mode
       cast_raw_expr->set_cast_mode(explicit_cast_cm);
@@ -494,7 +486,6 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
           if (OB_FAIL(ObRawExprUtils::need_wrap_to_string(type1, type1.get_calc_type(),
                                           false, need_wrap,
                                           exec_ctx->support_enum_set_type_subschema(*session)))) {
-            LOG_WARN("need_wrap_to_string failed", K(ret), K(type1));
           } else if (!need_wrap) {
             // need_wrap is false, set calc_type to type1 itself.
             type1.set_calc_meta(type1.get_obj_meta());
@@ -511,7 +502,6 @@ int ObExprCast::calc_result_type2(ObExprResType &type,
             parse_node.value_ = param.get_int();
             ObGeoType geo_type = static_cast<ObGeoType>(parse_node.int16_values_[OB_NODE_CAST_GEO_TYPE_IDX]);
             if (OB_FAIL(ObGeoCastUtils::set_geo_type_to_cast_mode(geo_type, cast_mode))) {
-              LOG_WARN("fail to set geometry type to cast mode", K(ret), K(geo_type));
             } else {
               cast_raw_expr->set_cast_mode(cast_mode);
             }
@@ -731,7 +721,6 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
         LOG_WARN("unexpected null", K(ret));
       } else if (src_raw_expr->is_multiset_expr()) {
         if (OB_FAIL(cg_cast_multiset(op_cg_ctx, raw_expr, rt_expr))) {
-          LOG_WARN("failed to cg cast multiset", K(ret));
         }
       } else if (fast_cast_decint) {
         if (CM_IS_EXPLICIT_CAST(cast_mode)) {
@@ -749,7 +738,6 @@ int ObExprCast::cg_expr(ObExprCGCtx &op_cg_ctx,
         if (OB_FAIL(ObDatumCast::choose_cast_function(in_type, in_cs_type, out_type, out_cs_type,
                                                       cast_mode, *(op_cg_ctx.allocator_),
                                                       just_eval_arg, rt_expr))) {
-          LOG_WARN("choose_cast_func failed", K(ret));
         }
       }
       if (OB_SUCC(ret)) {

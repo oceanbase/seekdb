@@ -63,9 +63,7 @@ int ObCatalogMgr::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("init private catalog schema manager twice", K(ret));
   } else if (OB_FAIL(name_map_.init())) {
-    LOG_WARN("init hash map failed", K(ret));
   } else if (OB_FAIL(id_map_.init())) {
-    LOG_WARN("init hash map failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -92,11 +90,8 @@ int ObCatalogMgr::assign(const ObCatalogMgr &other)
     LOG_WARN("schema manager not init", K(ret));
   } else if (this != &other) {
     if (OB_FAIL(name_map_.assign(other.name_map_))) {
-      LOG_WARN("assign catalog name map failed", K(ret));
     } else if (OB_FAIL(id_map_.assign(other.id_map_))) {
-      LOG_WARN("assign catalog id map failed", K(ret));
     } else if (OB_FAIL(schema_infos_.assign(other.schema_infos_))) {
-      LOG_WARN("assign catalog schema vector failed", K(ret));
     }
   }
   return ret;
@@ -117,7 +112,6 @@ int ObCatalogMgr::deep_copy(const ObCatalogMgr &other)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", KP(schema), K(ret));
       } else if (OB_FAIL(add_catalog(*schema, schema->get_name_case_mode()))) {
-        LOG_WARN("add outline failed", K(*schema), K(ret));
       }
     }
   }
@@ -140,7 +134,6 @@ int ObCatalogMgr::add_catalog(const ObCatalogSchema &schema,
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_,
                                                  schema,
                                                  new_schema))) {
-    LOG_WARN("alloc schema failed", K(ret));
   } else if (OB_ISNULL(new_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("alloc schema is a NULL ptr", K(new_schema), K(ret));
@@ -150,16 +143,12 @@ int ObCatalogMgr::add_catalog(const ObCatalogSchema &schema,
                                            schema_cmp,
                                            schema_equal,
                                            old_schema))) {
-    LOG_WARN("failed to add catalog schema", K(ret));
   } else {
     int overwrite = 1;
     ObCatalogNameHashKey catalog_name_hash_key(new_schema->get_name_case_mode(),
                                                new_schema->get_catalog_name_str());
     if (OB_FAIL(name_map_.set_refactored(catalog_name_hash_key, new_schema, overwrite))) {
-      LOG_WARN("build catalog hash map failed", K(ret));
     } else if (OB_FAIL(id_map_.set_refactored(new_schema->get_catalog_id(), new_schema, overwrite))) {
-      LOG_WARN("build catalog id hashmap failed", K(ret),
-               "catalog_id", new_schema->get_catalog_id());
     }
   }
   if (OB_SUCC(ret) && (schema_infos_.count() != name_map_.item_count()
@@ -214,7 +203,6 @@ int ObCatalogMgr::del_catalog(const ObTenantCatalogId &id)
                                              compare_with_tenant_catalog_id,
                                              equal_to_tenant_catalog_id,
                                              schema))) {
-    LOG_WARN("failed to remove catalog schema", K(ret));
   } else if (OB_ISNULL(schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("removed catalog schema return NULL, ",
@@ -224,13 +212,11 @@ int ObCatalogMgr::del_catalog(const ObTenantCatalogId &id)
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(id_map_.erase_refactored(schema->get_catalog_id()))) {
-      LOG_WARN("failed delete catalog from hashmap", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(name_map_.erase_refactored(ObCatalogNameHashKey(schema->get_name_case_mode(),
                                                                 schema->get_catalog_name_str())))) {
-      LOG_WARN("failed delete catalog from hashmap", K(ret));
     }
   }
   if (OB_SUCC(ret) && OB_UNLIKELY(schema_infos_.count() != name_map_.item_count()
@@ -272,7 +258,6 @@ int ObCatalogMgr::get_schemas_in_tenant(ObIArray<const ObCatalogSchema *> &schem
     } else if (false) {
       is_stop = true;
     } else if (OB_FAIL(schemas.push_back(schema))) {
-      LOG_WARN("push back catalog failed", K(ret));
     }
   }
   return ret;

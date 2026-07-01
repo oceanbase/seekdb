@@ -1253,7 +1253,6 @@ int ObServerSchemaService::del_operation(SchemaKeys &keys)
        OB_SUCC(ret) && it != keys.end(); ++it) {
     {
       if (OB_FAIL(to_remove.push_back(it->first))) {
-        SHARE_SCHEMA_LOG(WARN, "push_back failed", KR(ret));
       }
     }
   }
@@ -1278,7 +1277,6 @@ int ObServerSchemaService::convert_schema_keys_to_array(
        OB_SUCC(ret) && it != key_set.end(); it++) {
     const SchemaKey &key = it->first;
     if (OB_FAIL(key_array.push_back(key))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to push back schema key", KR(ret), K(key));
     }
   }
   return ret;

@@ -74,13 +74,11 @@ int ObParallelMergeInfo::serialize(char *buf, const int64_t buf_len, int64_t &po
     if (PARALLEL_INFO_VERSION_V0 == compat_) {
       for (int i = 0; OB_SUCC(ret) && i < list_size_; ++i) {
         if (OB_FAIL(parallel_store_rowkey_list_[i].serialize(buf, buf_len, pos))) {
-          LOG_WARN("failed to encode concurrent cnt", K(ret), K(i), K(list_size_), K(parallel_store_rowkey_list_[i]));
         }
       }
     } else if (PARALLEL_INFO_VERSION_V1 == compat_) {
       for (int i = 0; OB_SUCC(ret) && i < list_size_; ++i) {
         if (OB_FAIL(parallel_datum_rowkey_list_[i].serialize(buf, buf_len, pos))) {
-          LOG_WARN("failed to encode concurrent cnt", K(ret), K(i), K(list_size_), K(parallel_datum_rowkey_list_[i]));
         }
       }
     } else {
@@ -124,7 +122,6 @@ int ObParallelMergeInfo::deserialize(
         for (int i = 0; OB_SUCC(ret) && i < list_size_; ++i) {
           // need to deserialize StoreRowkey
           if (OB_FAIL(parallel_store_rowkey_list_[i].deserialize(allocator, buf, data_len, pos))) {
-            LOG_WARN("failed to decode concurrent cnt", K(ret), K(i), K(list_size_), K(data_len), K(pos));
           }
         } // end of for
       } else if (PARALLEL_INFO_VERSION_V1 == compat_) {
@@ -134,9 +131,7 @@ int ObParallelMergeInfo::deserialize(
         tmp_datum_rowkey.assign(tmp_storage_datum, OB_INNER_MAX_ROWKEY_COLUMN_NUMBER);
         for (int i = 0; OB_SUCC(ret) && i < list_size_; ++i) {
           if (OB_FAIL(tmp_datum_rowkey.deserialize(buf, data_len, pos))) {
-            LOG_WARN("failed to decode concurrent cnt", K(ret), K(i), K(list_size_), K(data_len), K(pos));
           } else if (OB_FAIL(tmp_datum_rowkey.deep_copy(parallel_datum_rowkey_list_[i] /*dst*/, allocator))) {
-            LOG_WARN("failed to deep copy datum rowkey", KR(ret), K(i), K(tmp_datum_rowkey));
           }
         } // end of for
       } else {
@@ -191,7 +186,6 @@ int ObParallelMergeInfo::generate_from_range_array(
       list_size_ = sum_range_cnt - 1;
       uint64_t compat_version = 0;
       if (OB_FAIL(MERGE_SCHEDULER_PTR->get_min_data_version(compat_version))) {
-        LOG_WARN("failed to get min data version", KR(ret));
       } else { // sync datum_rowkey_list
         ret = generate_datum_rowkey_list(allocator, paral_range);
       }
@@ -216,7 +210,6 @@ int ObParallelMergeInfo::generate_datum_rowkey_list(
     const ObIArray<ObStoreRange> &range_array = paral_range.at(i);
     for (int64_t j = 0; OB_SUCC(ret) && j < range_array.count() && cnt < list_size_; ++j) {
       if (OB_FAIL(parallel_datum_rowkey_list_[cnt++].from_rowkey(range_array.at(j).get_end_key().get_rowkey(), allocator))) {
-        LOG_WARN("failed to deep copy end key", K(ret), K(j), "src_key", range_array.at(j).get_end_key());
       }
     }
   } // end of loop array
@@ -235,7 +228,6 @@ int ObParallelMergeInfo::generate_store_rowkey_list(
     const ObIArray<ObStoreRange> &range_array = paral_range.at(i);
     for (int64_t j = 0; OB_SUCC(ret) && j < range_array.count() && cnt < list_size_; ++j) {
       if (OB_FAIL(range_array.at(j).get_end_key().deep_copy(parallel_store_rowkey_list_[cnt++]/*dst*/, allocator))) {
-        LOG_WARN("failed to deep copy end key", K(ret), K(j), "src_key", range_array.at(j).get_end_key());
       }
     }
   } // end of loop array
@@ -249,7 +241,6 @@ int ObParallelMergeInfo::deep_copy_list(common::ObIAllocator &allocator, const T
   ALLOC_ROWKEY_ARRAY(dst, T);
   for (int i = 0; OB_SUCC(ret) && i < list_size_; ++i) {
     if (OB_FAIL(src[i].deep_copy(dst[i], allocator))) {
-      LOG_WARN("failed to deep copy end key", K(ret), K(i), K(src[i]));
     }
   }
   return ret;
@@ -296,13 +287,10 @@ int ObParallelMergeInfo::deep_copy_datum_rowkey(
     ObDatumRowkeyHelper rowkey_helper;
     ObDatumRowkey tmp_datum_rowkey;
     if (OB_FAIL(rowkey_helper.convert_datum_rowkey(parallel_store_rowkey_list_[idx].get_rowkey()/*src*/, tmp_datum_rowkey/*dst*/))) {
-      STORAGE_LOG(WARN, "failed to convert to datum rowkey", K(ret), K(idx), K(parallel_store_rowkey_list_[idx]));
     } else if (OB_FAIL(tmp_datum_rowkey.deep_copy(rowkey/*dst*/, input_allocator))) {
-      STORAGE_LOG(WARN, "failed to deep copy datum rowkey", KR(ret), K(tmp_datum_rowkey));
     }
   } else if (PARALLEL_INFO_VERSION_V1 == compat_) {
     if (OB_FAIL(parallel_datum_rowkey_list_[idx].deep_copy(rowkey/*dst*/, input_allocator))) {
-      STORAGE_LOG(WARN, "failed to deep copy end key", K(ret), K(idx), K(parallel_datum_rowkey_list_[idx]));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -401,7 +389,6 @@ int ObMediumCompactionInfo::init(
           && OB_FAIL(storage_schema_.init(allocator, medium_info.storage_schema_))) {
     LOG_WARN("failed to init storage schema", K(ret), K(medium_info));
   } else if (OB_FAIL(parallel_merge_info_.init(allocator, medium_info.parallel_merge_info_))) {
-    LOG_WARN("failed to init parallel merge info", K(ret), K(medium_info));
   } else if (medium_info.contain_mds_filter_info_
       && OB_FAIL(mds_filter_info_.assign(allocator, medium_info.mds_filter_info_))) {
     LOG_WARN("failed to init mds filter info", K(ret), K(medium_info));
@@ -572,7 +559,6 @@ int ObMediumCompactionInfo::deserialize(
       LOG_WARN("failed to deserialize storage schema", K(ret), K(buf), K(data_len), K(pos));
     } else if (contain_parallel_range_) {
       if (OB_FAIL(parallel_merge_info_.deserialize(allocator, buf, data_len, pos))) {
-        LOG_WARN("failed to deserialize parallel merge info", K(ret), K(buf), K(data_len), K(pos));
       }
     } else {
       clear_parallel_range();
@@ -589,7 +575,6 @@ int ObMediumCompactionInfo::deserialize(
         encoding_granularity_);
       if (OB_FAIL(ret) || !contain_mds_filter_info_) {
       } else if (OB_FAIL(mds_filter_info_.deserialize(allocator, buf, data_len, pos))) {
-        LOG_WARN("failed to deserialize mds filter info", K(ret), K(buf), K(data_len), K(pos));
       }
     }
     if (OB_FAIL(ret)) {

@@ -67,7 +67,6 @@ int ObPushDownTopNFilterInfo::init(int64_t p2p_dh_id, int64_t effective_sk_cnt,
   max_batch_size_ = max_batch_size;
   adaptive_filter_ratio_ = adaptive_filter_ratio;
   if (OB_FAIL(cmp_metas_.assign(cmp_metas))) {
-    LOG_WARN("failed to assign cmp_metas");
   } else {
     enabled_ = true;
   }
@@ -92,7 +91,6 @@ OB_DEF_DESERIALIZE(ObPushDownTopNFilterMsg)
               data_version_, is_fetch_with_ties_);
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(adjust_cell_size())) {
-    LOG_WARN("fail do adjust cell size", K(ret));
   }
   return ret;
 }
@@ -129,14 +127,10 @@ int ObPushDownTopNFilterMsg::init(const ObPushDownTopNFilterInfo *pd_topn_filter
   }
   if (OB_FAIL(ObP2PDatahubMsgBase::init(
           pd_topn_filter_info->p2p_dh_id_, px_seq_id, task_id, timeout_ts))) {
-    LOG_WARN("fail to init basic p2p msg", K(ret));
   } else if (FALSE_IT(total_sk_cnt_ = pd_topn_filter_info->total_sk_cnt_)) {
   } else if (OB_FAIL(heap_top_datums_.prepare_allocate(effective_sk_cnt))) {
-    LOG_WARN("fail to prepare allocate heap_top_datums_", K(ret));
   } else if (OB_FAIL(cells_size_.prepare_allocate(effective_sk_cnt))) {
-    LOG_WARN("fail to prepare allocate cells_size_", K(ret));
   } else if (OB_FAIL(compares_.prepare_allocate(effective_sk_cnt))) {
-    LOG_WARN("fail to prepare allocate compares_", K(ret));
   } else {
     for (int64_t i = 0; i < effective_sk_cnt && OB_SUCC(ret); ++i) {
       // TODO XUNSI: in join scene, if the sort key is the join key of the right table
@@ -173,16 +167,11 @@ int ObPushDownTopNFilterMsg::assign(const ObP2PDatahubMsgBase &src_msg)
   const ObPushDownTopNFilterMsg &src_topn_msg =
       static_cast<const ObPushDownTopNFilterMsg &>(src_msg);
   if (OB_FAIL(ObP2PDatahubMsgBase::assign(src_msg))) {
-    LOG_WARN("failed to assign base data", K(ret));
   } else if (FALSE_IT(total_sk_cnt_ = src_topn_msg.total_sk_cnt_)) {
   } else if (OB_FAIL(compares_.assign(src_topn_msg.compares_))) {
-    LOG_WARN("fail to assign compares_", K(ret));
   } else if (OB_FAIL(heap_top_datums_.assign(src_topn_msg.heap_top_datums_))) {
-    LOG_WARN("fail to assign heap top datums", K(ret));
   } else if (OB_FAIL(cells_size_.assign(src_topn_msg.cells_size_))) {
-    LOG_WARN("failed to assign cell size", K(ret));
   } else if (OB_FAIL(adjust_cell_size())) {
-    LOG_WARN("fail to adjust cell size", K(ret));
   } else if (FALSE_IT(data_version_ = src_topn_msg.data_version_)) {
   } else if (FALSE_IT(is_fetch_with_ties_ = src_topn_msg.is_fetch_with_ties_)) {
   } else {
@@ -190,7 +179,6 @@ int ObPushDownTopNFilterMsg::assign(const ObP2PDatahubMsgBase &src_msg)
     for (int i = 0; i < src_topn_msg.heap_top_datums_.count() && OB_SUCC(ret); ++i) {
       const ObDatum &src_datum = src_topn_msg.heap_top_datums_.at(i);
       if (OB_FAIL(heap_top_datums_.at(i).deep_copy(src_datum, allocator_))) {
-        LOG_WARN("fail to deep copy heap top datum", K(ret));
       }
     }
   }
@@ -203,9 +191,7 @@ int ObPushDownTopNFilterMsg::deep_copy_msg(ObP2PDatahubMsgBase *&dest_msg)
   ObPushDownTopNFilterMsg *new_topn_msg = nullptr;
   ObMemAttr attr("TOPNVECMSG");
   if (OB_FAIL(PX_P2P_DH.alloc_msg<ObPushDownTopNFilterMsg>(attr, new_topn_msg))) {
-    LOG_WARN("fail to alloc msg", K(ret));
   } else if (OB_FAIL(new_topn_msg->assign(*this))) {
-    LOG_WARN("fail to assign msg", K(ret));
   } else {
     dest_msg = new_topn_msg;
   }
@@ -225,7 +211,6 @@ int ObPushDownTopNFilterMsg::merge(ObP2PDatahubMsgBase &msg)
   } else {
     ObSpinLockGuard guard(lock_);
     if (OB_FAIL(merge_heap_top_datums(incomming_topn_msg.heap_top_datums_))) {
-      LOG_WARN("fail to merge heap top datums", K(ret));
     } else if (is_empty_) {
       is_empty_ = false;
     }
@@ -249,13 +234,11 @@ int ObPushDownTopNFilterMsg::filter_out_data(const ObExpr &expr, ObEvalCtx &ctx,
     filter_ctx.check_count_++;
     for (int i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
       if (OB_FAIL(expr.args_[i]->eval(ctx, datum))) {
-        LOG_WARN("failed to eval datum", K(ret));
       } else if (datum->is_null()) {
         cmp_res = -1;
         break;
       } else {
         if (OB_FAIL(get_compare_result(i, *datum, cmp_res))) {
-          LOG_WARN("fail to compare", K(ret));
         } else if (cmp_res > 0) {
           is_filtered = true;
           break;
@@ -295,7 +278,6 @@ int ObPushDownTopNFilterMsg::filter_out_data_batch(
     filter_ctx.check_count_ += batch_size;
     filter_ctx.filter_count_ += batch_size;
   } else if (OB_FAIL(do_filter_out_data_batch(expr, ctx, skip, batch_size, filter_ctx))) {
-    LOG_WARN("failed to do_filter_out_data_batch");
   }
   if (OB_SUCC(ret)) {
     eval_flags.set_all(batch_size);
@@ -330,12 +312,10 @@ int ObPushDownTopNFilterMsg::filter_out_data_vector(
     for (int64_t i = 0; OB_SUCC(ret) && i < expr.arg_cnt_; ++i) {
       ObExpr *e = expr.args_[i];
       if (OB_FAIL(e->eval_vector(ctx, skip, bound))) {
-        LOG_WARN("evaluate vector failed", K(ret), K(*e));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(do_filter_out_data_vector(expr, ctx, skip, bound, filter_ctx))) {
-      LOG_WARN("fail to do filter out data vector");
     }
   }
   return ret;
@@ -351,7 +331,6 @@ int ObPushDownTopNFilterMsg::update_filter_data(ObCompactRow *compact_row, const
   if (check_has_null(compact_row)) {
     // do nothing, null will not be updated into filter
   } else if (OB_FAIL(copy_heap_top_datums_from(compact_row, row_meta))) {
-    LOG_WARN("failed to copy");
   } else {
     is_updated = true;
     int64_t v = ATOMIC_AAF(&data_version_, 1);
@@ -373,7 +352,6 @@ int ObPushDownTopNFilterMsg::update_filter_data(ObChunkDatumStore::StoredRow *st
   if (check_has_null(store_row)) {
     // do nothing, null will not be updated into filter
   } else if (OB_FAIL(copy_heap_top_datums_from(store_row))) {
-    LOG_WARN("failed to copy");
   } else {
     is_updated = true;
     int64_t v = ATOMIC_AAF(&data_version_, 1);
@@ -426,7 +404,6 @@ int ObPushDownTopNFilterMsg::prepare_storage_white_filter_data(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expect no null in topn runtime filter");
   } else if (OB_FAIL(params.push_back(heap_top_datums_.at(col_idx)))) {
-    LOG_WARN("failed to push back bound data");
   } else {
     int64_t now_data_version = ATOMIC_LOAD(&data_version_);
     dynamic_filter.set_filter_action(DynamicFilterAction::DO_FILTER);
@@ -457,7 +434,6 @@ int ObPushDownTopNFilterMsg::update_storage_white_filter_data(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("expect no null in topn runtime filter");
   } else if (OB_FAIL(params.push_back(heap_top_datums_.at(col_idx)))) {
-    LOG_WARN("failed to push back bound data");
   } else {
     dynamic_filter.set_stored_data_version(now_data_version);
     is_update = true;
@@ -472,7 +448,6 @@ int ObPushDownTopNFilterMsg::merge_heap_top_datums(ObIArray<ObDatum> &incomming_
   if (OB_UNLIKELY(is_empty_)) {
     // if self is empty, directly copy data from the incomming msg
     if (OB_FAIL(copy_heap_top_datums_from(incomming_datums))) {
-      LOG_WARN("failed to copy");
     } else {
       is_empty_ = false;
     }
@@ -485,7 +460,6 @@ int ObPushDownTopNFilterMsg::merge_heap_top_datums(ObIArray<ObDatum> &incomming_
       ObDatum &origin_datum = heap_top_datums_.at(i);
       cmp_res = 0;
       if (OB_FAIL(compare.compare_for_build(incomming_datum, origin_datum, cmp_res))) {
-        LOG_WARN("fail to compare_for_build", K(ret));
       } else if (cmp_res < 0) {
         break;
       }
@@ -493,7 +467,6 @@ int ObPushDownTopNFilterMsg::merge_heap_top_datums(ObIArray<ObDatum> &incomming_
     // the new incomming_datums is less than self, we need copy it.
     if (OB_SUCC(ret) && cmp_res < 0) {
       if (OB_FAIL(copy_heap_top_datums_from(incomming_datums))) {
-        LOG_WARN("failed to copy");
       }
     }
   }
@@ -508,7 +481,6 @@ int ObPushDownTopNFilterMsg::copy_heap_top_datums_from(ObIArray<ObDatum> &incomm
     ObDatum &origin_datum = heap_top_datums_.at(i);
     int64_t &cell_size = cells_size_.at(i);
     if (OB_FAIL(dynamic_copy_cell(incomming_datum, origin_datum, cell_size))) {
-      LOG_WARN("fail to deep copy datum");
     }
   }
   return ret;
@@ -523,7 +495,6 @@ int ObPushDownTopNFilterMsg::copy_heap_top_datums_from(ObCompactRow *compact_row
     ObDatum &origin_datum = heap_top_datums_.at(i);
     int64_t &cell_size = cells_size_.at(i);
     if (OB_FAIL(dynamic_copy_cell(incomming_datum, origin_datum, cell_size))) {
-      LOG_WARN("fail to deep copy datum");
     }
   }
   return ret;
@@ -538,7 +509,6 @@ int ObPushDownTopNFilterMsg::copy_heap_top_datums_from(ObChunkDatumStore::Stored
     ObDatum &origin_datum = heap_top_datums_.at(i);
     int64_t &cell_size = cells_size_.at(i);
     if (OB_FAIL(dynamic_copy_cell(incomming_datum, origin_datum, cell_size))) {
-      LOG_WARN("fail to deep copy datum");
     }
   }
   return ret;
@@ -594,7 +564,6 @@ int ObPushDownTopNFilterMsg::do_filter_out_data_batch(
   batch_info_guard.set_batch_size(batch_size);
   for (int idx = 0; OB_SUCC(ret) && idx < expr.arg_cnt_; ++idx) {
     if (OB_FAIL(expr.args_[idx]->eval_batch(ctx, skip, batch_size))) {
-      LOG_WARN("eval_batch failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -615,7 +584,6 @@ int ObPushDownTopNFilterMsg::do_filter_out_data_batch(
           cmp_res = -1;
           break;
         } else if (OB_FAIL(get_compare_result(arg_i, *datum, cmp_res))) {
-          LOG_WARN("fail to compare", K(ret));
         } else if (cmp_res > 0) {
           // the data bigger than head top data should be filterd out.
           filter_count++;
@@ -790,7 +758,6 @@ int ObPushDownTopNFilterMsg::do_filter_out_data_vector(
   if (VEC_FIXED == res_format) {
     IntegerFixedVec *res_vec = static_cast<IntegerFixedVec *>(expr.get_vector(ctx));
     if (OB_FAIL(preset_not_match(res_vec, bound))) {
-      LOG_WARN("failed to preset_not_match", K(ret));
     }
   }
 

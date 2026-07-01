@@ -146,18 +146,15 @@ int ObFixedSizeBlockAllocator<SIZE>::init(const int64_t block_num, const lib::Ob
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid argument", K(ret), K(block_num));
   } else if (OB_FAIL(init_max_block_num())) {
-    COMMON_LOG(WARN, "init max block number fail", K(ret));
   } else {
     ObMemAttr attr(label);
     SET_USE_UNEXPECTED_500(attr);
     ObSpinLockGuard guard(lock_);
     if (IS_NOT_INIT) {
       if (OB_FAIL(free_blocks_.init(max_block_num_, global_default_allocator, attr))) {
-        COMMON_LOG(WARN, "fail to init free blocks queue", K(ret));
       } else {
         allocator_.set_attr(attr);
         if (OB_FAIL(expand(block_num))) {
-          COMMON_LOG(WARN, "fail to init cached block buffer", K(ret), K(block_num));
         }
       }
 
@@ -321,13 +318,10 @@ int ObFixedSizeBlockAllocator<SIZE>::expand(const int64_t block_num)
       COMMON_LOG(ERROR, "failed to allocate block buffer, ", K(ret));
     } else if (OB_FAIL(
         block_buf_list_.push_back(ObFixedSizeBufAllocInfo { expand_start, expand_len }))) {
-      COMMON_LOG(ERROR, "failed to push back cached block buffer, ", K(ret), K(expand_start),
-          K(expand_len));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < expand_num; ++i) {
         void * ptr = (void*) ((uint64_t) expand_start + i * SIZE);
         if (OB_FAIL(free_blocks_.push(ptr))) {
-          COMMON_LOG(WARN, "fail to push cached block ptr, ", K(ret), K(ptr));
         }
       }
       if (OB_SUCC(ret)) {

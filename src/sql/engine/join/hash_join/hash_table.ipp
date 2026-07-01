@@ -118,7 +118,6 @@ int HashTable<Bucket, Prober>::set(
     } else if (salt == bucket->get_salt()) {
       ObHJStoredRow *left_ptr = bucket->get_stored_row();
       if (OB_FAIL(key_equal(ctx, left_ptr, row_ptr, equal))) {
-        LOG_WARN("key equal error", K(ret));
       } else if (equal) {
         row_ptr->set_next(row_meta, left_ptr);
         bucket->set_row_ptr(row_ptr);
@@ -147,7 +146,6 @@ int HashTable<Bucket, Prober>::insert_batch(JoinTableCtx &ctx, ObHJStoredRow **s
   for (int64_t row_idx = 0; OB_SUCC(ret) && row_idx < size; ++row_idx) {
     ObHJStoredRow *row_ptr = stored_rows[row_idx];
     if (OB_FAIL(set(ctx, row_ptr, used_buckets, collisions))) {
-      LOG_WARN("set row error", K(ret));
     }
   }
   return ret;
@@ -182,7 +180,6 @@ int HashTable<Bucket, Prober>::key_equal(
                     r_len,
                     right_is_null,
                     cmp_ret))) {
-      LOG_WARN("row_cmp_func failed!", K(ret));
     } else if (cmp_ret != 0) {
       equal = false;
       break;
@@ -197,7 +194,6 @@ int HashTable<Bucket, Prober>::probe_prepare(JoinTableCtx &ctx, OutputInfo &outp
   int ret = OB_SUCCESS;
   if (!std::is_same<Bucket, GenericBucket>::value && !std::is_same<Bucket, RobinBucket>::value) {
     if (OB_FAIL(ctx.probe_batch_rows_->set_key_data(ctx.probe_keys_, ctx.eval_ctx_, output_info))) {
-      LOG_WARN("fail to init probe keys", K(ret));
     }
   }
   return ret;
@@ -229,7 +225,6 @@ int ProberBase<Bucket>::calc_other_join_conditions_batch(
 
   if (OB_FAIL(ObHJStoredRow::convert_rows_to_exprs(
           *ctx.build_output_, *ctx.eval_ctx_, ctx.build_row_meta_, rows, sel, sel_cnt))) {
-    LOG_WARN("failed to convert expr", K(ret));
   } else {
     const ExprFixedArray *conds = ctx.other_conds_;
     uint16_t remaining_cnt = sel_cnt;
@@ -243,7 +238,6 @@ int ProberBase<Bucket>::calc_other_join_conditions_batch(
               *ctx.eval_skip_,
               ctx.probe_batch_rows_->brs_.size_,
               all_rows_active))) {
-        LOG_WARN("fail to eval vector", K(ret));
       } else {
         if (is_uniform_format(expr->get_format(*ctx.eval_ctx_))) {
           ObUniformBase *uni_vec = static_cast<ObUniformBase *>(expr->get_vector(*ctx.eval_ctx_));
@@ -307,7 +301,6 @@ int HashTable<Bucket, Prober>::probe_batch_normal(
       // get batch buckets compare key with probe rows, cmp result is in cmp_ret_map
       find_batch(ctx, unmatched_cnt, false);
       if (OB_FAIL(prober_.equal_batch(ctx, ctx.unmatched_sel_, unmatched_cnt, false))) {
-        LOG_WARN("probe equal batch failed", K(ret), K(unmatched_cnt));
       }
       uint16_t unmatched_idx = 0;
       for (int64_t i = 0; i < unmatched_cnt; i++) {
@@ -388,7 +381,6 @@ int HashTable<Bucket, Prober>::probe_batch_normal(
               const_cast<const ObHJStoredRow **>(ctx.unmatched_rows_),
               ctx.unmatched_sel_,
               unmatched_cnt))) {
-        LOG_WARN("fail to calc conditions", K(ret));
       } else {
         for (int64_t i = 0; i < unmatched_cnt; i++) {
           int64_t batch_idx = ctx.unmatched_sel_[i];
@@ -419,7 +411,6 @@ int HashTable<Bucket, Prober>::probe_batch_normal(
                  output_info.left_result_rows_,
                  output_info.selector_,
                  output_info.selector_cnt_))) {
-    LOG_WARN("failed to convert expr", K(ret));
   }
   return ret;
 }
@@ -481,7 +472,6 @@ int HashTable<Bucket, Prober>::probe_batch_opt(JoinTableCtx &ctx, OutputInfo &ou
     while (OB_SUCC(ret) && unmatched_cnt > 0) {
       find_batch(ctx, unmatched_cnt, false);
       if (OB_FAIL(prober_.equal_batch(ctx, ctx.unmatched_sel_, unmatched_cnt, true))) {
-        LOG_WARN("probe equal batch failed", K(ret), K(unmatched_cnt));
       }
       uint16_t unmatched_idx = 0;
       for (int64_t i = 0; i < unmatched_cnt; i++) {
@@ -547,7 +537,6 @@ int HashTable<Bucket, Prober>::probe_batch_del_match(
     while (OB_SUCC(ret) && unmatched_cnt > 0) {
       find_batch(ctx, unmatched_cnt, true);
       if(OB_FAIL(prober_.equal_batch(ctx, ctx.unmatched_sel_, unmatched_cnt, false))) {
-        LOG_WARN("probe equal batch failed", K(ret), K(unmatched_cnt));
       }
       uint16_t unmatched_idx = 0;
       for (int64_t i = 0; i < unmatched_cnt; i++) {
@@ -633,7 +622,6 @@ int HashTable<Bucket, Prober>::probe_batch_del_match(
               const_cast<const ObHJStoredRow **>(ctx.del_rows_),
               ctx.del_sel_,
               unmatched_cnt))) {
-        LOG_WARN("fail to calc conditions", K(ret));
       } else {
         unmatched_idx = 0;
         for (uint16_t i = 0; i < unmatched_cnt; i++) {
@@ -684,7 +672,6 @@ int HashTable<Bucket, Prober>::probe_batch_del_match(
                  output_info.left_result_rows_,
                  output_info.selector_,
                  output_info.selector_cnt_))) {
-    LOG_WARN("failed to convert expr", K(ret));
   }
   return ret;
 }
@@ -699,7 +686,6 @@ int HashTable<Bucket, Prober>::project_matched_rows(JoinTableCtx &ctx, OutputInf
                                          output_info.left_result_rows_,
                                          output_info.selector_,
                                          output_info.selector_cnt_))) {
-    LOG_WARN("fail to attach rows",  K(ret));
   }
 
   return ret;
@@ -747,7 +733,6 @@ int ProberBase<Bucket>::calc_join_conditions(JoinTableCtx &ctx,
                                                       ctx.build_row_meta_,
                                                       left_row,
                                                       batch_idx))) {
-    LOG_WARN("failed to convert expr", K(ret));
   } else {
     const ExprFixedArray *conds = ctx.join_conds_;
     ARRAY_FOREACH(*conds, i) {
@@ -756,7 +741,6 @@ int ProberBase<Bucket>::calc_join_conditions(JoinTableCtx &ctx,
                                     *ctx.probe_batch_rows_->brs_.skip_,
                                     EvalBound(ctx.probe_batch_rows_->brs_.size_,
                                               batch_idx, batch_idx + 1, true)))) {
-        LOG_WARN("fail to eval vector", K(ret));
       } else {
         if (is_uniform_format(expr->get_format(*ctx.eval_ctx_))) {
           ObUniformBase *uni_vec = static_cast<ObUniformBase *>(
@@ -834,7 +818,6 @@ int RobinHashTable<Bucket, Prober>::insert_batch(JoinTableCtx &ctx, ObHJStoredRo
       } else if (salt == bucket->get_salt()) {
         ObHJStoredRow *left_ptr = bucket->get_stored_row();
         if (OB_FAIL(this->key_equal(ctx, left_ptr, row_ptr, equal))) {
-          LOG_WARN("key equal error", K(ret));
         } else if (equal) {
           row_ptr->set_next(row_meta, left_ptr);
           bucket->set_row_ptr(row_ptr);
@@ -910,7 +893,6 @@ inline int GenericSharedHashTable::atomic_set(JoinTableCtx &ctx, const uint64_t 
       } else if (salt == old_bucket.get_salt()) {
         ObHJStoredRow *left_ptr = reinterpret_cast<ObHJStoredRow *>(old_bucket.get_stored_row());
         if (OB_FAIL(this->key_equal(ctx, left_ptr, row_ptr, equal))) {
-          LOG_WARN("key equal error", K(ret));
         } else {
           if (!equal) {
             break;

@@ -64,11 +64,9 @@ int ObTableLoadMemSortOpTask::process()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObTableLoadHeapMemSorter", KR(ret));
     } else if (OB_FAIL(op->heap_mem_sorter_->init(dag_, op))) {
-      LOG_WARN("fail to init heap mem sorter", KR(ret));
     } else {
       ObTableLoadHeapMemSortTask *task = nullptr;
       if (OB_FAIL(dag_->alloc_task(task, dag_, op->heap_mem_sorter_))) {
-        LOG_WARN("fail to alloc task", KR(ret));
       } else {
         first_task = task;
       }
@@ -91,11 +89,9 @@ int ObTableLoadMemSortOpTask::process()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObTableLoadPKMemSorter", KR(ret));
     } else if (OB_FAIL(op->pk_mem_sorter_->init(dag_, op))) {
-      LOG_WARN("fail to init pk mem sorter", KR(ret));
     } else {
       ObTableLoadPKMemSortTask *task = nullptr;
       if (OB_FAIL(dag_->alloc_task(task, dag_, op->pk_mem_sorter_))) {
-        LOG_WARN("fail to alloc task", KR(ret));
       } else {
         first_task = task;
       }
@@ -104,19 +100,14 @@ int ObTableLoadMemSortOpTask::process()
   if (OB_SUCC(ret) && nullptr != first_task) {
     ObTableLoadMemSortOpFinishTask *finish_task = nullptr;
     if (OB_FAIL(dag_->alloc_task(finish_task, dag_, op_))) {
-      LOG_WARN("fail to alloc task", KR(ret));
     }
     // 建立依赖关系: first_task -> finish_task -> [next_op_task]
     else if (OB_FAIL(first_task->add_child(*finish_task))) {
-      LOG_WARN("fail to add child", KR(ret));
     } else if (OB_FAIL(finish_task->deep_copy_children(get_child_nodes()))) {
-      LOG_WARN("fail to deep copy children", KR(ret));
     }
     // 添加task
     else if (OB_FAIL(dag_->add_task(*finish_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     } else if (OB_FAIL(dag_->add_task(*first_task))) {
-      LOG_WARN("fail to add task", KR(ret));
     }
   }
   return ret;
@@ -138,11 +129,9 @@ int ObTableLoadMemSortOpFinishTask::process()
   ObTableLoadMemSortOp *op = static_cast<ObTableLoadMemSortOp *>(op_);
   if (nullptr != op->pk_mem_sorter_) {
     if (OB_FAIL(op->pk_mem_sorter_->close())) {
-      LOG_WARN("fail to close pk mem sorter", KR(ret));
     }
   } else if (nullptr != op->heap_mem_sorter_) {
     if (OB_FAIL(op->heap_mem_sorter_->close())) {
-      LOG_WARN("fail to close heap mem sorter", KR(ret));
     }
   }
 

@@ -112,7 +112,6 @@ int ObDataDictStorage::init()
     ret = OB_ERR_UNEXPECTED;
     DDLOG(WARN, "expect palf_buf and dict_buf NULL", KR(ret), KP_(palf_buf), KP_(dict_buf));
   } else {
-    DDLOG(INFO, "data_dict_storager init success");
   }
 
   return ret;
@@ -132,7 +131,6 @@ int ObDataDictStorage::prepare(const share::SCN &snapshot_scn, ObLogHandler *log
     reuse();
     snapshot_scn_ = snapshot_scn;
     log_handler_ = log_handler;
-    DDLOG(INFO, "data_dict_storager prepare success", K(snapshot_scn));
   }
 
   return ret;
@@ -175,7 +173,6 @@ int ObDataDictStorage::handle_dict_meta(
   }
 
   if (OB_SUCC(ret)) {
-    DDLOG(TRACE, "handle data_dict success", K(header), K(data_dict_meta));
   }
 
   return ret;
@@ -211,7 +208,6 @@ int ObDataDictStorage::finish(
     } else {
       start_lsn = start_lsn_;
       end_lsn = end_lsn_;
-      DDLOG(INFO, "finish persist data_dict", K_(total_log_cnt), K_(total_dict_size));
     }
   }
 
@@ -238,7 +234,6 @@ int ObDataDictStorage::gen_and_serialize_dict_metas(
   } else if (OB_UNLIKELY((0 >= tenant_schemas.count())
       && (0 >= database_schemas.count())
       && (0 >= table_schemas.count()))) {
-    DDLOG(INFO, "all schema_array is empty, use default msg", KCSTRING(DEFAULT_DDL_MDS_MSG));
     buf = static_cast<char*>(allocator.alloc(DEFAULT_DDL_MDS_MSG_LEN + 1)); // with '\0'
 
     if (OB_ISNULL(buf)) {
@@ -558,7 +553,6 @@ int ObDataDictStorage::submit_to_palf_()
     ret = OB_ERR_UNEXPECTED;
     DDLOG(WARN, "log_handler_ is not valid", KR(ret));
   } else if (OB_UNLIKELY(palf_pos_ == 0)) {
-    DDLOG(INFO, "empty palf_buf, do nothing", K_(palf_buf_len), K_(palf_pos));
   } else if (OB_FAIL(check_ls_leader(log_handler_, is_leader, proposal_id))) {
     DDLOG(WARN, "check_ls_leader failed", KR(ret), K(is_leader), K(proposal_id));
   } else if (OB_UNLIKELY(! is_leader)) {
@@ -583,7 +577,6 @@ int ObDataDictStorage::submit_to_palf_()
   } else {
     cb_queue_.push(callback);
     // submit to palf success
-    DDLOG(DEBUG, "submit palf_buf to palf succ", K(lsn), K(submit_scn), K_(palf_pos));
     total_log_cnt_++;
     total_dict_size_ += palf_pos_;
     palf_pos_ = 0;

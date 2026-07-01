@@ -31,7 +31,6 @@ int ObTenantTabletToLSMap::build(common::ObMySQLProxy &sql_proxy)
 
   ObTenantTabletToLSIterator iter;
   if (OB_FAIL(iter.init(sql_proxy))) {
-    LOG_WARN("init iter fail", KR(ret));
   } else {
     ObTabletLSPair tablet_ls_pair;
     while (OB_SUCC(ret)) {
@@ -43,7 +42,6 @@ int ObTenantTabletToLSMap::build(common::ObMySQLProxy &sql_proxy)
           break;
         }
       } else if (OB_FAIL(map_.set_refactored(tablet_ls_pair.get_tablet_id(), tablet_ls_pair.get_ls_id()))) {
-        LOG_WARN("tablet_to_ls map set fail", KR(ret), K(tablet_ls_pair));
       }
     }
   }

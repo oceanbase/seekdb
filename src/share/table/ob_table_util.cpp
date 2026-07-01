@@ -44,11 +44,9 @@ namespace table
     const ObSimpleTableSchemaV2 *table_schema = NULL;
     
     if (OB_FAIL(schema_guard.get_simple_table_schema( arg_table_id, table_schema))) {
-      LOG_WARN("failed to get table schema", K(ret), K(arg_table_id));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
     } else if (OB_FAIL(get_part_idx_by_tablet_id(*table_schema, arg_table_id, arg_tablet_id, part_idx, subpart_idx))) {
-      LOG_WARN("fail to get part idx by tablet id", K(ret), K(arg_table_id), K(arg_tablet_id));
     } else {}
     return ret;
   }
@@ -61,7 +59,6 @@ namespace table
     if (!table_schema.is_partitioned_table()) {
       // do nothing
     } else if (OB_FAIL(table_schema.get_part_idx_by_tablet(arg_tablet_id, part_idx, subpart_idx))) {
-      LOG_WARN("fail to get part idx by tablet", K(ret));
     }
     return ret;
   }
@@ -76,12 +73,10 @@ namespace table
     
     const ObSimpleTableSchemaV2 *table_schema = NULL;
     if (OB_FAIL(schema_guard.get_simple_table_schema( table_id, table_schema))) {
-      LOG_WARN("failed to get table schema", K(ret), K(table_id));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("get table schema failed", K(ret), K(table_id));
     } else if (OB_FAIL(get_tablet_id_by_part_idx(*table_schema, part_idx, subpart_idx, tablet_id))) {
-      LOG_WARN("fail to get tablet id by part idx", K(ret), K(table_id), K(part_idx), K(subpart_idx));
     }
     return ret;
   }
@@ -102,7 +97,6 @@ namespace table
                                                                      tmp_object_id,
                                                                      tmp_first_level_part_id,
                                                                      tablet_id))) {
-      LOG_WARN("fail to get tablet by idx", K(ret));
     }
     return ret;
   }

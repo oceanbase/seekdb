@@ -55,11 +55,8 @@ int ObExprRegexpReplace::calc_result_typeN(ObExprResType &type,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(type_ctx.get_session()));
   } else if (OB_FAIL(type_ctx.get_session()->get_max_allowed_packet(max_allowed_packet))) {
-    LOG_WARN("failed to get max allowed packet", K(ret));
   } else if (OB_FAIL(ObRawExprUtils::get_real_expr_without_cast(raw_expr->get_param_expr(0), real_text))) {
-    LOG_WARN("fail to get real expr without cast", K(ret));
   } else if (OB_FAIL(ObRawExprUtils::get_real_expr_without_cast(raw_expr->get_param_expr(1), real_pattern))) {
-    LOG_WARN("fail to get real expr without cast", K(ret));
   } else if (OB_ISNULL(real_text) || OB_ISNULL(real_pattern)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("real expr is invalid", K(ret), K(real_text), K(real_pattern));
@@ -88,9 +85,7 @@ int ObExprRegexpReplace::calc_result_typeN(ObExprResType &type,
       // The maximum length of table columns
       type.set_length(max_allowed_packet);
       if (OB_FAIL(ObExprRegexContext::check_binary_compatible(types, 3))) {
-        LOG_WARN("types are not compatible with binary.", K(ret));
       } else if (OB_FAIL(extract_enum_set_collation_for_args(text, pattern, type_ctx, real_types))) {
-        LOG_WARN("fail to extract enum set meta", K(ret));
       } else {
         ret = aggregate_charsets_for_string_result(type, real_types, 2, type_ctx);
         is_case_sensitive = ObCharset::is_bin_sort(type.get_collation_type());
@@ -119,7 +114,6 @@ int ObExprRegexpReplace::calc_result_typeN(ObExprResType &type,
           need_utf8 = false;
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(ObExprRegexContext::check_need_utf8(raw_expr->get_param_expr(2), need_utf8))) {
-            LOG_WARN("fail to check need utf8", K(ret));
           } else if (need_utf8) {
             types[2].set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF8MB4_BIN : CS_TYPE_UTF8MB4_GENERAL_CI);
           } else {
@@ -135,7 +129,6 @@ int ObExprRegexpReplace::calc_result_typeN(ObExprResType &type,
           need_utf8 = false;
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(ObExprRegexContext::check_need_utf8(raw_expr->get_param_expr(1), need_utf8))) {
-            LOG_WARN("fail to check need utf8", K(ret));
           } else if (need_utf8) {
             types[1].set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF8MB4_BIN : CS_TYPE_UTF8MB4_GENERAL_CI);
           } else {
@@ -144,7 +137,6 @@ int ObExprRegexpReplace::calc_result_typeN(ObExprResType &type,
           need_utf8 = false;
           if (OB_FAIL(ret)) {
           } else if (OB_FAIL(ObExprRegexContext::check_need_utf8(raw_expr->get_param_expr(0), need_utf8))) {
-            LOG_WARN("fail to check need utf8", K(ret));
           } else if (need_utf8) {
             types[0].set_calc_collation_type(is_case_sensitive ? CS_TYPE_UTF8MB4_BIN : CS_TYPE_UTF8MB4_GENERAL_CI);
           } else {
@@ -238,14 +230,12 @@ int ObExprRegexpReplace::vector_regexp_replace_convert(VECTOR_EVAL_FUNC_ARG_DECL
   ObString out;
   if (is_no_pattern_to_replace && ob_is_text_tc(expr.args_[0]->datum_meta_.type_)) {
     if (OB_FAIL(ObTextStringHelper::get_string(expr, tmp_alloc, 0, idx, text_vec, res_replace))) {
-      LOG_WARN("get text string failed", K(ret));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (!ob_is_text_tc(expr.datum_meta_.type_)) {
     if (OB_FAIL(ObExprUtil::convert_string_collation(res_replace, res_coll_type, out,
                                                      expr.datum_meta_.cs_type_, out_alloc))) {
-      LOG_WARN("convert charset failed", K(ret));
     } else if (out.ptr() == res_replace.ptr()) {
       // res_replace is allocated in temporary allocator, deep copy here.
       char *mem = expr.get_str_res_mem(ctx, res_replace.length(), idx);
@@ -266,11 +256,8 @@ int ObExprRegexpReplace::vector_regexp_replace_convert(VECTOR_EVAL_FUNC_ARG_DECL
                                                                 out,
                                                                 expr.datum_meta_.cs_type_,
                                                                 tmp_alloc))) {
-      LOG_WARN("convert charset failed", K(ret));
     } else if (OB_FAIL(text_res.init_with_batch_idx(out.length(), idx))) {
-      LOG_WARN("init lob result failed", K(ret), K(out.length()));
     } else if (OB_FAIL(text_res.append(out.ptr(), out.length()))) {
-      LOG_WARN("failed to append realdata", K(ret), K(out), K(text_res));
     } else {
       text_res.set_result();
     }
@@ -335,7 +322,6 @@ int ObExprRegexpReplace::vector_regexp_replace(VECTOR_EVAL_FUNC_ARG_DECL) {
       if (NULL == (regexp_ctx = static_cast<ObExprRegexContext *>(
                   ctx.exec_ctx_.get_expr_op_ctx(expr.expr_ctx_id_)))) {
         if (OB_FAIL(ctx.exec_ctx_.create_expr_op_ctx(expr.expr_ctx_id_, regexp_ctx))) {
-          LOG_WARN("create expr regex context failed", K(ret), K(expr));
         } else if (OB_ISNULL(regexp_ctx)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("NULL context returned", K(ret));
@@ -354,9 +340,7 @@ int ObExprRegexpReplace::vector_regexp_replace(VECTOR_EVAL_FUNC_ARG_DECL) {
     ObExprRegexpSessionVariables regexp_vars;
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObExprRegexContext::get_regexp_flags(match_param, is_case_sensitive, false, false, flags))) {
-      LOG_WARN("fail to get regexp flags", K(ret), K(match_param));
     } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_regexp_session_vars(regexp_vars))) {
-      LOG_WARN("fail to get regexp");
     } else if (!pattern->is_null(0) && !null_result &&
                 OB_FAIL(regexp_ctx->init(reusable ? ctx.exec_ctx_.get_allocator() : tmp_alloc,
                     regexp_vars, pattern->get_string(0), flags, reusable,
@@ -367,7 +351,6 @@ int ObExprRegexpReplace::vector_regexp_replace(VECTOR_EVAL_FUNC_ARG_DECL) {
       if (OB_FAIL(ObExprUtil::convert_string_collation(to_str, expr.args_[2]->datum_meta_.cs_type_,
             to_utf16, ObCharset::is_bin_sort(expr.args_[2]->datum_meta_.cs_type_) ?
             CS_TYPE_UTF16_BIN : CS_TYPE_UTF16_GENERAL_CI, tmp_alloc))) {
-        LOG_WARN("convert charset failed", K(ret));
       }
     } else {
       to_utf16 = to_str;
@@ -391,7 +374,6 @@ int ObExprRegexpReplace::vector_regexp_replace(VECTOR_EVAL_FUNC_ARG_DECL) {
         ObString text_str;
         if (ob_is_text_tc(expr.args_[0]->datum_meta_.type_)) {
           if (OB_FAIL(ObTextStringHelper::get_string(expr, tmp_alloc, 0, i, text_vec, text_str))) {
-            LOG_WARN("get text string failed", K(ret));
           }
         } else {
           text_str = text_vec->get_string(i);
@@ -404,7 +386,6 @@ int ObExprRegexpReplace::vector_regexp_replace(VECTOR_EVAL_FUNC_ARG_DECL) {
                             CS_TYPE_UTF16_GENERAL_CI;
           if (OB_FAIL(ObExprUtil::convert_string_collation(text_str,
               expr.args_[0]->datum_meta_.cs_type_, text_utf16, res_coll_type, tmp_alloc))) {
-            LOG_WARN("convert charset failed", K(ret));
           }
         } else {
           res_coll_type = expr.args_[0]->datum_meta_.cs_type_;
@@ -413,7 +394,6 @@ int ObExprRegexpReplace::vector_regexp_replace(VECTOR_EVAL_FUNC_ARG_DECL) {
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(regexp_ctx->replace(tmp_alloc, text_utf16, res_coll_type, to_utf16,
                                                pos - 1, occur, res_replace))) {
-          LOG_WARN("failed to regexp replace str", K(ret));
         } else {
           ret = vector_regexp_replace_convert<TextVec, ResVec>(VECTOR_EVAL_FUNC_ARG_LIST,
                     res_replace, is_no_pattern_to_replace, res_coll_type, out_alloc, tmp_alloc, i);
@@ -533,7 +513,6 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
         if (NULL == (regexp_ctx = static_cast<RegExpCtx *>(
                     ctx.exec_ctx_.get_expr_op_ctx(expr.expr_ctx_id_)))) {
           if (OB_FAIL(ctx.exec_ctx_.create_expr_op_ctx(expr.expr_ctx_id_, regexp_ctx))) {
-            LOG_WARN("create expr regex context failed", K(ret), K(expr));
           } else if (OB_ISNULL(regexp_ctx)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("NULL context returned", K(ret));
@@ -542,9 +521,7 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(RegExpCtx::get_regexp_flags(match_param, is_case_sensitive, true, false, flags))) {
-        LOG_WARN("fail to get regexp flags", K(ret), K(match_param));
       } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_regexp_session_vars(regexp_vars))) {
-        LOG_WARN("fail to get regexp");
       } else if (!pattern->is_null() && !null_result &&
                   OB_FAIL(regexp_ctx->init(reusable ? ctx.exec_ctx_.get_allocator() : tmp_alloc,
                                            regexp_vars,
@@ -566,7 +543,6 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
         ObString text_str;
         if (ob_is_text_tc(expr.args_[0]->datum_meta_.type_)) {
           if (OB_FAIL(ObTextStringHelper::get_string(expr, tmp_alloc, 0, text, text_str))) {
-            LOG_WARN("get text string failed", K(ret));
           }
         } else {
           text_str = text->get_string();
@@ -581,7 +557,6 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
                             expected_ci_coll;
           if (OB_FAIL(ObExprUtil::convert_string_collation(text_str, expr.args_[0]->datum_meta_.cs_type_, text_utf,
                                     res_coll_type, tmp_alloc))) {
-            LOG_WARN("convert charset failed", K(ret));
           }
         } else {
           res_coll_type = expr.args_[0]->datum_meta_.cs_type_;
@@ -596,7 +571,6 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
                 ObCharset::is_bin_sort(expr.args_[2]->datum_meta_.cs_type_) ? expected_bin_coll :
                                                                               expected_ci_coll,
                 tmp_alloc))) {
-            LOG_WARN("convert charset failed", K(ret));
           }
         } else {
           to_utf = to_str;
@@ -604,7 +578,6 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(regexp_ctx->replace(tmp_alloc, text_utf, res_coll_type, to_utf, pos - 1,
                                               occur, res_replace))) {
-          LOG_WARN("failed to regexp replace str", K(ret));
         } else {
           need_convert = true;
         }
@@ -617,14 +590,12 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
     ObString out;
     if (is_no_pattern_to_replace && ob_is_text_tc(expr.args_[0]->datum_meta_.type_)) {
       if (OB_FAIL(ObTextStringHelper::get_string(expr, tmp_alloc, 0, text, res_replace))) {
-        LOG_WARN("get text string failed", K(ret));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (!ob_is_text_tc(expr.datum_meta_.type_)) {
       if (OB_FAIL(ObExprUtil::convert_string_collation(res_replace, res_coll_type, out,
                                                        expr.datum_meta_.cs_type_, out_alloc))) {
-        LOG_WARN("convert charset failed", K(ret));
       } else if (out.ptr() == res_replace.ptr()) {
         // res_replace is allocated in temporary allocator, deep copy here.
         char *mem = expr.get_str_res_mem(ctx, res_replace.length());
@@ -646,11 +617,8 @@ int ObExprRegexpReplace::regexp_replace(const ObExpr &expr, ObEvalCtx &ctx, ObDa
                                                                   out,
                                                                   expr.datum_meta_.cs_type_,
                                                                   tmp_alloc))) {
-        LOG_WARN("convert charset failed", K(ret));
       } else if (OB_FAIL(text_res.init(out.length()))) {
-        LOG_WARN("init lob result failed", K(ret), K(out.length()));
       } else if (OB_FAIL(text_res.append(out.ptr(), out.length()))) {
-        LOG_WARN("failed to append realdata", K(ret), K(out), K(text_res));
       } else {
         text_res.set_result();
       }

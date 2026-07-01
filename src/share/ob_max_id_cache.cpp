@@ -45,12 +45,9 @@ int ObMaxIdCacheItem::fetch_max_id(const ObMaxIdType max_id_type,
   } else if (!cached_id_valid_() || size_ < size) {
     const uint64_t fetch_size = common::max(CACHE_SIZE, size);
     if (OB_FAIL(fetch_ids_from_inner_table_(fetch_size, sql_proxy))) {
-      LOG_WARN("failed to fetch ids from inner table", KR(ret), K(fetch_size),
-          K(max_id_type), K(size));
     }
   }
   if (FAILEDx(fetch_ids_by_cache_(size, id))) {
-    LOG_WARN("failed to fetch ids from cache", KR(ret), K(size), K(max_id_type));
   }
   return ret;
 }
@@ -66,7 +63,6 @@ int ObMaxIdCacheItem::fetch_ids_from_inner_table_(const uint64_t size, ObMySQLPr
     ObMaxIdFetcher id_fetcher(*sql_proxy);
     uint64_t old_min_id = ATOMIC_LOAD(&min_id_);
     if (OB_FAIL(id_fetcher.batch_fetch_new_max_id_from_inner_table( type_, id, size))) {
-      LOG_WARN("failed to batch fetch new max id from inner table", KR(ret), K(type_), K(size));
     } else if (OB_INVALID_ID == id) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("id is invalid", KR(ret), K(id), K(type_), K(size));
@@ -133,7 +129,6 @@ int ObMaxIdCache::fetch_max_id(const ObMaxIdType max_id_type,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("pointer is null", KR(ret), KP(item));
   } else if (OB_FAIL(item->fetch_max_id(max_id_type, id, size, sql_proxy))) {
-    LOG_WARN("failed to fetch max id in item", KR(ret), K(max_id_type), K(size));
   }
   return ret;
 }
@@ -169,7 +164,6 @@ void ObMaxIdCacheMgr::reset()
   ObLatchWGuard guard(latch_, ObLatchIds::MAX_ID_CACHE_LOCK);
   if (OB_NOT_NULL(tenant_cache_)) {
     if (OB_TMP_FAIL(remove_cache_(tenant_cache_))) {
-      LOG_WARN("failed to remove cache", KR(tmp_ret), KP(tenant_cache_));
     }
     tenant_cache_ = nullptr;
   }
@@ -217,7 +211,6 @@ int ObMaxIdCacheMgr::fetch_max_id(const ObMaxIdType max_id_type, uint64_t &id,
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("pointer is null", KR(ret), KP(cache));
     } else if (OB_FAIL(cache->fetch_max_id(max_id_type, id, size, sql_proxy_))) {
-      LOG_WARN("failed to fetch max id", KR(ret), K(max_id_type), K(size));
     }
   }
   if (OB_HASH_NOT_EXIST == ret && tenant_not_inited && init_tenant_if_not_exist) {
@@ -225,12 +218,9 @@ int ObMaxIdCacheMgr::fetch_max_id(const ObMaxIdType max_id_type, uint64_t &id,
     {
       ObLatchWGuard guard(latch_, ObLatchIds::MAX_ID_CACHE_LOCK);
       if (OB_TMP_FAIL(add_tenant_())) {
-        // other thread may init this tenant, ignore error
-        LOG_WARN("failed to init new tenant", KR(tmp_ret));
       }
     }
     if (OB_FAIL(fetch_max_id(max_id_type, id, size, false/*init_tenant_if_not_exist*/))) {
-      LOG_WARN("failed to fetch max id", KR(ret), K(max_id_type), K(size));
     }
   }
   return ret;

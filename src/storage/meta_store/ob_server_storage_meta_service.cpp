@@ -47,15 +47,10 @@ int ObServerStorageMetaService::init()
 	      OB_FILE_SYSTEM_ROUTER.get_sstable_dir(),
 	      ObLogConstants::MAX_LOG_FILE_SIZE,
         OB_FILE_SYSTEM_ROUTER.get_slog_file_spec()))) {
-    LOG_WARN("fail to init slogger manager", K(ret));
   } else if (OB_FAIL(slogger_mgr_.get_server_slogger(server_slogger_))) {
-    LOG_WARN("fail to get server slogger", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.init(server_slogger_))) {
-    LOG_WARN("fail to init server checkpoint slog hander", K(ret));
   } else if (OB_FAIL(persister_.init(server_slogger_))) {
-    LOG_WARN("fail to init persister", K(ret));
   } else if (OB_FAIL(replayer_.init(persister_, ckpt_slog_handler_))) {
-    LOG_WARN("fail to init replayer", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -70,11 +65,8 @@ int ObServerStorageMetaService::start()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(slogger_mgr_.start())) {
-    LOG_WARN("fail to start slogger mgr", K(ret));
   } else if (OB_FAIL(replayer_.start_replay()))  {
-    LOG_WARN("fail to start replayer", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.start())) {
-    LOG_WARN("fail to start ckpt slog handler", K(ret));
   } else {
     ATOMIC_STORE(&is_started_, true);
   }
@@ -115,7 +107,6 @@ int ObServerStorageMetaService::get_meta_block_list(
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.get_meta_block_list(meta_block_list))) {
-    LOG_WARN("fail to get meta block list", K(ret));
   }
   return ret;
 }
@@ -127,7 +118,6 @@ int ObServerStorageMetaService::get_reserved_size(int64_t &reserved_size) const
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(slogger_mgr_.get_reserved_size(reserved_size))) {
-    LOG_WARN("fail to get reserved size", K(ret));
   }
   return ret;
 }
@@ -151,7 +141,6 @@ int ObServerStorageMetaService::write_checkpoint(bool is_force)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(ckpt_slog_handler_.write_checkpoint(is_force))) {
-    LOG_WARN("fail to write checkpoint", K(ret));
   }
   return ret;
 }

@@ -118,12 +118,10 @@ int ObTableLoadMergeTableOp::switch_next_op(bool is_parent_called)
           if (ObTableLoadMergerPhaseType::INSERT == merge_phase_ctx_->phase_) {
             if (OB_FAIL(
                   store_ctx_->data_store_table_ctx_->lob_table_ctx_->close_build_delete_table())) {
-              LOG_WARN("fail to close build insert table", KR(ret));
             }
           } else if (ObTableLoadMergerPhaseType::DELETE == merge_phase_ctx_->phase_) {
             if (OB_FAIL(
                   store_ctx_->data_store_table_ctx_->lob_table_ctx_->close_build_delete_table())) {
-              LOG_WARN("fail to close build delete table", KR(ret));
             }
           } else {
             ret = OB_ERR_UNEXPECTED;
@@ -150,12 +148,9 @@ int ObTableLoadMergeTableOp::switch_next_op(bool is_parent_called)
     if (OB_SUCC(ret)) {
       if (Status::COMPLETED == status_) {
         if (OB_FAIL(inner_close())) {
-          LOG_WARN("fail to inner close", KR(ret));
         } else if (OB_FAIL(switch_parent_op())) {
-          LOG_WARN("fail to switch parent op", KR(ret));
         }
       } else if (OB_FAIL(switch_child_op(child_op_type))) {
-        LOG_WARN("fail to switch child op", KR(ret));
       }
     }
   }
@@ -197,7 +192,6 @@ int ObTableLoadMergeIndexTableOp::inner_init()
   } else if (OB_FAIL(store_table_ctx_->init_insert_table_ctx(merge_phase_ctx_->trans_param_,
                                                              false /*online_opt_stat_gather*/,
                                                              false /*is_insert_lob*/))) {
-    LOG_WARN("fail to init insert table ctx", KR(ret));
   } else {
     // store_table_ctx_
     inner_ctx_.store_table_ctx_ = store_table_ctx_;
@@ -224,7 +218,6 @@ int ObTableLoadMergeIndexTableOp::inner_init()
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to new ObTableLoadUniqueIndexRowHandler", KR(ret));
         } else if (OB_FAIL(index_row_handler->init(store_ctx_))) {
-          LOG_WARN("fail to init ObTableLoadUniqueIndexRowHandler", KR(ret));
         }
       } else {
         ObTableLoadIndexRowHandler *index_row_handler = nullptr;
@@ -256,10 +249,8 @@ int ObTableLoadMergeIndexTableOp::inner_init()
           ObTableLoadMergerPhaseType::INSERT == merge_phase_ctx_->phase_) {
         if (OB_FAIL(static_cast<ObTableLoadStoreDataTableCtx *>(store_ctx_->data_store_table_ctx_)
                       ->init_build_delete_table())) {
-          LOG_WARN("fail to init build delete table", KR(ret));
         } else if (OB_FAIL(static_cast<ObTableLoadStoreDataTableCtx *>(store_ctx_->data_store_table_ctx_)
                       ->init_build_ack_table())) {
-          LOG_WARN("fail to init build ack table", KR(ret));
         }
       }
     }
@@ -275,16 +266,13 @@ int ObTableLoadMergeIndexTableOp::inner_close()
       ObTableLoadMergerPhaseType::INSERT == merge_phase_ctx_->phase_) {
     if (OB_FAIL(static_cast<ObTableLoadStoreDataTableCtx *>(store_ctx_->data_store_table_ctx_)
                   ->close_build_delete_table())) {
-      LOG_WARN("fail to init build delete table", KR(ret));
     } else if (OB_FAIL(
                  static_cast<ObTableLoadStoreDataTableCtx *>(store_ctx_->data_store_table_ctx_)
                    ->close_build_ack_table())) {
-      LOG_WARN("fail to init build ack table", KR(ret));
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(store_table_ctx_->close_insert_table_ctx())) {
-    LOG_WARN("fail to close insert table ctx", KR(ret));
   }
   inner_ctx_.table_store_->clear();
   return ret;
@@ -319,11 +307,9 @@ int ObTableLoadMergeIndexesTableOp::switch_next_op(bool is_parent_called)
   ++pos_;
   if (pos_ >= store_ctx_->index_store_table_ctxs_.count()) {
     if (OB_FAIL(switch_parent_op())) {
-      LOG_WARN("fail to switch parent op", KR(ret));
     }
   } else {
     if (OB_FAIL(switch_child_op(ObTableLoadMergeOpType::INDEX_TABLE))) {
-      LOG_WARN("fail to switch child op", KR(ret));
     }
   }
   return ret;

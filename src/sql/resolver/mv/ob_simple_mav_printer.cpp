@@ -29,7 +29,6 @@ int ObSimpleMAVPrinter::gen_refresh_dmls(ObIArray<ObDMLStmt*> &dml_stmts)
   int ret = OB_SUCCESS;
   dml_stmts.reuse();
   if (OB_FAIL(gen_update_insert_delete_for_simple_mav(dml_stmts))) {
-    LOG_WARN("failed to gen update insert delete for simple mav", K(ret));
   }
   return ret;
 }
@@ -45,21 +44,16 @@ int ObSimpleMAVPrinter::gen_update_insert_delete_for_simple_mav(ObIArray<ObDMLSt
   ObSelectStmt *delta_mv_stmt = NULL;
   ObSEArray<ObRawExpr*, 16> values;
   if (OB_FAIL(gen_simple_mav_delta_mv_view(delta_mv_stmt))) {
-    LOG_WARN("failed gen simple source stmt", K(ret));
   } else if (OB_FAIL(gen_insert_for_mav(delta_mv_stmt, values, insert_stmt))) {
-    LOG_WARN("failed to gen insert for mav", K(ret));
   } else if (OB_FAIL(gen_update_for_mav(delta_mv_stmt, insert_stmt->get_values_desc(),
                                         values, update_stmt))) {
-    LOG_WARN("failed to gen update for mav", K(ret));
   } else if (OB_FAIL(dml_stmts.push_back(update_stmt))  // pushback and execute in this ordering
              || OB_FAIL(dml_stmts.push_back(insert_stmt))) {
     LOG_WARN("failed to push back", K(ret));
   } else if (mv_def_stmt_.is_scala_group_by()) {
     /* no need delete for scalar group by */
   } else if (OB_FAIL(gen_delete_for_mav(insert_stmt->get_values_desc(), delete_stmt))) {
-    LOG_WARN("failed gen delete for mav", K(ret));
-  } else if (OB_FAIL(dml_stmts.push_back(delete_stmt))) { // pushback and execute in this ordering
-    LOG_WARN("failed to push back", K(ret));
+  } else if (OB_FAIL(dml_stmts.push_back(delete_stmt))) {
   }
   return ret;
 }
@@ -82,20 +76,14 @@ int ObSimpleMAVPrinter::gen_insert_for_mav(ObSelectStmt *delta_mv_stmt,
       || OB_FAIL(create_simple_stmt(insert_stmt))) {
     LOG_WARN("failed to create simple stmt", K(ret));
   } else if (OB_FAIL(create_simple_table_item(sel_stmt, DELTA_BASIC_MV_VIEW_NAME, source_table, delta_mv_stmt))) {
-    LOG_WARN("failed to create simple table item", K(ret));
   } else if (OB_FAIL(create_simple_table_item(insert_stmt, mv_schema_.get_table_name(), target_table, NULL, false))) {
-    LOG_WARN("failed to create simple table item", K(ret));
   } else if (OB_FAIL(gen_insert_values_and_desc(target_table,
                                                 source_table,
                                                 insert_stmt->get_values_desc(),
                                                 values))) {
-    LOG_WARN("failed to gen insert values and desc", K(ret), K(*target_table), K(*source_table));
   } else if (OB_FAIL(create_simple_table_item(insert_stmt, DELTA_MV_VIEW_NAME, source_table, sel_stmt))) {
-    LOG_WARN("failed to create simple table item", K(ret));
   } else if (OB_FAIL(gen_select_for_insert_subquery(values, sel_stmt->get_select_items()))) {
-    LOG_WARN("failed to gen select for insert subquery ", K(ret));
   } else if (OB_FAIL(gen_exists_cond_for_insert(values, sel_stmt->get_condition_exprs()))) {
-    LOG_WARN("failed to gen conds for insert subquery", K(ret));
   } else {
     target_table->database_name_ = mv_db_name_;
   }
@@ -114,7 +102,6 @@ int ObSimpleMAVPrinter::gen_select_for_insert_subquery(const ObIArray<ObRawExpr*
     sel_item.is_real_alias_ = true;
     sel_item.alias_name_ = orig_select_items.at(i).alias_name_;
     if (OB_FAIL(select_items.push_back(sel_item))) {
-      LOG_WARN("failed to pushback", K(ret));
     }
   }
   return ret;
@@ -138,7 +125,6 @@ int ObSimpleMAVPrinter::gen_exists_cond_for_insert(const ObIArray<ObRawExpr*> &v
   if (OB_UNLIKELY(values.count() != select_items.count())) {
     LOG_WARN("unexpected params", K(ret), K(values.count()), K(select_items.count()));
   } else if (OB_FAIL(create_simple_stmt(subquery))) {
-    LOG_WARN("failed to create simple stmt", K(ret));
   } else if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(T_REF_QUERY, query_ref_expr))
              || OB_FAIL(ctx_.expr_factory_.create_raw_expr(T_OP_NOT_EXISTS, not_exists_expr))) {
     LOG_WARN("failed to create raw expr", K(ret));
@@ -146,13 +132,9 @@ int ObSimpleMAVPrinter::gen_exists_cond_for_insert(const ObIArray<ObRawExpr*> &v
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected NULL", K(ret), K(query_ref_expr), K(not_exists_expr));
   } else if (OB_FAIL(not_exists_expr->set_param_expr(query_ref_expr))) {
-    LOG_WARN("failed to set param expr", K(ret));
   } else if (OB_FAIL(conds.push_back(not_exists_expr))) {
-    LOG_WARN("failed to push back not exists expr", K(ret));
   } else if (OB_FAIL(create_simple_table_item(subquery, mv_schema_.get_table_name(), mv_table))) {
-    LOG_WARN("failed to create simple table item", K(ret));
   } else if (OB_FAIL(subquery->get_select_items().push_back(sel_item))) {
-    LOG_WARN("failed to push back not exists expr", K(ret));
   } else if (ctx_.for_union_all_child_query()
              && OB_FAIL(create_union_all_child_refresh_filter(ctx_.marker_idx_, mv_table, marker_filter))) {
     LOG_WARN("failed to create union all child refresh filter", K(ret));
@@ -168,11 +150,8 @@ int ObSimpleMAVPrinter::gen_exists_cond_for_insert(const ObIArray<ObRawExpr*> &v
       if (!ObOptimizerUtil::find_item(group_by_exprs, select_items.at(i).expr_)) {
         /* not group by exprs, do nothing */
       } else if (OB_FAIL(create_simple_column_expr(mv_table->get_table_name(), select_items.at(i).alias_name_, mv_table->table_id_, expr))) {
-        LOG_WARN("failed to create simple column exprs", K(ret));
       } else if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(ctx_.expr_factory_, T_OP_NSEQ, values.at(i), expr, match_cond))) {
-        LOG_WARN("failed to build null safe equal expr", K(ret));
       } else if (OB_FAIL(subquery->get_condition_exprs().push_back(match_cond))) {
-        LOG_WARN("failed to push back null safe equal expr", K(ret));
       }
     }
   }
@@ -198,21 +177,15 @@ int ObSimpleMAVPrinter::gen_update_for_mav(ObSelectStmt *delta_mv_stmt,
   ObUpdateTableInfo *table_info = NULL;
   ObRawExpr *marker_filter = NULL;
   if (OB_FAIL(create_simple_stmt(update_stmt))) {
-    LOG_WARN("failed to create simple stmt", K(ret));
   } else if (OB_ISNULL((ptr = ctx_.alloc_.alloc(sizeof(ObUpdateTableInfo))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate table info", K(ret));
   } else if (OB_FALSE_IT(table_info = new(ptr)ObUpdateTableInfo())) {
   } else if (OB_FAIL(update_stmt->get_update_table_info().push_back(table_info))) {
-    LOG_WARN("failed to push back", K(ret));
   } else if (OB_FAIL(create_simple_table_item(update_stmt, mv_schema_.get_table_name(), target_table))) {
-    LOG_WARN("failed to create simple table item", K(ret));
   } else if (OB_FAIL(create_simple_table_item(update_stmt, DELTA_BASIC_MV_VIEW_NAME, source_table, delta_mv_stmt))) {
-    LOG_WARN("failed to create simple table item", K(ret));
   } else if (OB_FAIL(gen_update_assignments(mv_columns, values, source_table, table_info->assignments_, true))) {
-    LOG_WARN("failed gen update assignments", K(ret));
   } else if (OB_FAIL(gen_update_conds(mv_columns, values, update_stmt->get_condition_exprs()))) {
-    LOG_WARN("failed gen update conds", K(ret));
   } else if (ctx_.for_union_all_child_query()
              && OB_FAIL(create_union_all_child_refresh_filter(ctx_.marker_idx_, target_table, marker_filter))) {
     LOG_WARN("failed to create union all child refresh filter", K(ret));
@@ -242,9 +215,7 @@ int ObSimpleMAVPrinter::gen_update_conds(const ObIArray<ObColumnRefRawExpr*> &mv
     if (!ObOptimizerUtil::find_item(group_by_exprs, select_items.at(i).expr_)) {
       /* do nothing */
     } else if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(ctx_.expr_factory_, T_OP_NSEQ, mv_columns.at(i), values.at(i), cond))) {
-      LOG_WARN("failed to build null safe equal expr", K(ret));
     } else if (OB_FAIL(conds.push_back(cond))) {
-      LOG_WARN("failed to push back null safe equal expr", K(ret));
     }
   }
   return ret;
@@ -258,11 +229,8 @@ int ObSimpleMAVPrinter::gen_delete_for_mav(const ObIArray<ObColumnRefRawExpr*> &
   TableItem *target_table = NULL;
   ObRawExpr *marker_filter = NULL;
   if (OB_FAIL(create_simple_stmt(delete_stmt))) {
-    LOG_WARN("failed to create simple stmt", K(ret));
   } else if (OB_FAIL(create_simple_table_item(delete_stmt, mv_schema_.get_table_name(), target_table))) {
-    LOG_WARN("failed to create simple table item", K(ret));
   } else if (OB_FAIL(gen_delete_conds(mv_columns, delete_stmt->get_condition_exprs()))) {
-    LOG_WARN("failed gen update conds", K(ret));
   } else if (ctx_.for_union_all_child_query()
              && OB_FAIL(create_union_all_child_refresh_filter(ctx_.marker_idx_, target_table, marker_filter))) {
     LOG_WARN("failed to create union all child refresh filter", K(ret));
@@ -295,9 +263,7 @@ int ObSimpleMAVPrinter::gen_delete_conds(const ObIArray<ObColumnRefRawExpr*> &mv
                0 != static_cast<ObAggFunRawExpr*>(expr)->get_real_param_count()) {
       /* do nothing */
     } else if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(ctx_.expr_factory_, T_OP_EQ, mv_columns.at(i), exprs_.int_zero_, cond))) {
-      LOG_WARN("failed to build equal expr", K(ret));
     } else if (OB_FAIL(conds.push_back(cond))) {
-      LOG_WARN("failed to push back expr", K(ret));
     }
   }
   return ret;
@@ -325,15 +291,11 @@ int ObSimpleMAVPrinter::gen_real_time_view(ObSelectStmt *&sel_stmt)
   TableItem *view_table = NULL;
   ObSelectStmt *view_stmt = NULL;
   if (OB_FAIL(create_simple_stmt(sel_stmt))) {
-    LOG_WARN("failed to create simple stmt", K(ret));
   } else if (OB_FAIL(gen_inner_real_time_view_for_mav(view_stmt))) {
-    LOG_WARN("failed to generate inner real time view for simple mav", K(ret));
   } else if (OB_FAIL(create_simple_table_item(sel_stmt, INNER_RT_MV_VIEW_NAME, view_table, view_stmt))) {
-    LOG_WARN("failed to create simple table item", K(ret));
   } else if (OB_FAIL(gen_select_items_for_mav(view_table->get_table_name(),
                                               view_table->table_id_,
                                               sel_stmt->get_select_items()))) {
-    LOG_WARN("failed to generate select items for mav", K(ret));
   } else if (!mv_def_stmt_.is_scala_group_by()
              && OB_FAIL(gen_real_time_view_filter_for_mav(*sel_stmt))) {
     LOG_WARN("failed to generate real time view filter", K(ret));
@@ -365,9 +327,7 @@ int ObSimpleMAVPrinter::gen_real_time_view_filter_for_mav(ObSelectStmt &sel_stmt
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected idx or select item count", K(ret), K(idx), K(orig_select_items.count()), K(select_items.count()));
   } else if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(ctx_.expr_factory_, T_OP_GT, select_items.at(idx).expr_, exprs_.int_zero_, filter_expr))) {
-    LOG_WARN("failed to build greater op expr", K(ret));
   } else if (OB_FAIL(sel_stmt.get_condition_exprs().push_back(filter_expr))) {
-    LOG_WARN("failed to push back where conds", K(ret));
   }
   return ret;
 }
@@ -402,20 +362,14 @@ int ObSimpleMAVPrinter::gen_inner_real_time_view_for_mav(ObSelectStmt *&inner_rt
       || OB_FAIL(create_simple_stmt(set_stmt))) {
     LOG_WARN("failed to create simple stmt", K(ret));
   } else if (OB_FAIL(create_simple_table_item(access_mv_stmt, mv_schema_.get_table_name(), mv_table))) {
-    LOG_WARN("failed to create simple table item", K(ret));
   } else if (OB_FAIL(gen_simple_join_mav_basic_select_list(*mv_table, access_mv_stmt->get_select_items(), NULL))) {
-    LOG_WARN("failed to generate simple join mav basic select list", K(ret));
   } else if (OB_FAIL(gen_inner_delta_mav_for_mav(inner_delta_mavs))) {
-    LOG_WARN("failed to gen inner delta mav for mav", K(ret));
   } else if (OB_FAIL(set_stmt->get_set_query().push_back(access_mv_stmt)
              || OB_FAIL(append(set_stmt->get_set_query(), inner_delta_mavs)))) {
-    LOG_WARN("failed to set set query", K(ret));
   } else if (OB_FAIL(create_simple_table_item(inner_rt_view, INNER_RT_MV_VIEW_NAME, view_table, set_stmt))) {
-    LOG_WARN("failed to create simple table item", K(ret));
   } else if (OB_FAIL(gen_simple_join_mav_basic_select_list(*view_table,
                                                            inner_rt_view->get_select_items(),
                                                            &inner_rt_view->get_group_exprs()))) {
-    LOG_WARN("failed to generate simple join mav basic select list", K(ret));
   } else {
     mv_table->database_name_ = mv_db_name_;
     set_stmt->assign_set_all();
@@ -430,9 +384,7 @@ int ObSimpleMAVPrinter::gen_inner_delta_mav_for_mav(ObIArray<ObSelectStmt*> &inn
   inner_delta_mavs.reuse();
   ObSelectStmt *inner_delta_mav = NULL;
   if (OB_FAIL(gen_simple_mav_delta_mv_view(inner_delta_mav))) {
-    LOG_WARN("failed gen simple mav delta mv view", K(ret));
   } else if (OB_FAIL(inner_delta_mavs.push_back(inner_delta_mav))) {
-    LOG_WARN("failed to push back", K(ret));
   }
   return ret;
 }
@@ -461,7 +413,6 @@ int ObSimpleMAVPrinter::gen_insert_values_and_desc(const TableItem *target_table
       for (int64_t i = 0; OB_SUCC(ret) && i < select_items.count(); ++i) {
         if (OB_FAIL(create_simple_column_expr(target_table->get_table_name(), select_items.at(i).alias_name_,
                                               target_table->table_id_, target_col))) {
-          LOG_WARN("failed to create simple column exprs", K(ret));
         } else {
           target_columns.at(i) = static_cast<ObColumnRefRawExpr*>(target_col);
           values_exprs.at(i) = select_items.at(i).expr_;
@@ -488,7 +439,6 @@ int ObSimpleMAVPrinter::gen_select_items_for_mav(const ObString &table_name,
   ObRawExpr *expr = NULL;
   ObRawExprCopier copier(ctx_.expr_factory_);
   if (OB_FAIL(select_items.prepare_allocate(orig_select_items.count()))) {
-    LOG_WARN("failed to prepare allocate arrays", K(ret));
   }
 
   // 1. add group by exprs and count aggr
@@ -503,9 +453,7 @@ int ObSimpleMAVPrinter::gen_select_items_for_mav(const ObString &table_name,
                 && T_FUN_COUNT != orig_expr->get_expr_type()) {
       select_item.expr_ = NULL;
     } else if (OB_FAIL(create_simple_column_expr(table_name, select_item.alias_name_, table_id, select_item.expr_))) {
-      LOG_WARN("failed to create simple column exprs", K(ret));
     } else if (OB_FAIL(copier.add_replaced_expr(orig_expr, select_item.expr_))) {
-      LOG_WARN("failed to add replace pair", K(ret));
     }
   }
 
@@ -520,16 +468,12 @@ int ObSimpleMAVPrinter::gen_select_items_for_mav(const ObString &table_name,
     } else if (NULL != select_item.expr_ || T_FUN_SUM != orig_expr->get_expr_type()) {
       /* do nothing */
     } else if (OB_FAIL(get_dependent_aggr_of_fun_sum(orig_expr, orig_select_items, idx))) {
-      LOG_WARN("failed to get dependent aggr of fun sum", K(ret));
     } else if (OB_UNLIKELY(0 > idx || select_items.count() <= idx)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected idx", K(ret), K(idx), K(select_items.count()));
     } else if (OB_FAIL(create_simple_column_expr(table_name, orig_select_items.at(i).alias_name_, table_id, expr))) {
-      LOG_WARN("failed to create simple column exprs", K(ret));
     } else if (OB_FAIL(gen_calc_expr_for_insert_clause_sum(select_items.at(idx).expr_, expr, select_item.expr_))) {
-      LOG_WARN("failed to gen calc expr for aggr sum", K(ret));
     } else if (OB_FAIL(copier.add_replaced_expr(orig_expr, select_item.expr_))) {
-      LOG_WARN("failed to add replace pair", K(ret));
     }
   }
 
@@ -538,9 +482,7 @@ int ObSimpleMAVPrinter::gen_select_items_for_mav(const ObString &table_name,
     const ObIArray<std::pair<ObAggFunRawExpr*, ObRawExpr*>> &expand_aggrs = get_expand_aggrs();
     for (int64_t i = 0; OB_SUCC(ret) && i < expand_aggrs.count(); ++i) {
       if (OB_FAIL(copier.copy_on_replace(expand_aggrs.at(i).second, expr))) {
-        LOG_WARN("failed to generate group by exprs", K(ret));
       } else if (OB_FAIL(copier.add_replaced_expr(expand_aggrs.at(i).first, expr))) {
-        LOG_WARN("failed to add replace pair", K(ret));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < select_items.count(); ++i) {
@@ -564,9 +506,7 @@ int ObSimpleMAVPrinter::gen_calc_expr_for_insert_clause_sum(ObRawExpr *source_co
   calc_sum = NULL;
   ObRawExpr *equal_expr = NULL;
   if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(ctx_.expr_factory_, T_OP_EQ, source_count, exprs_.int_zero_, equal_expr))) {
-      LOG_WARN("failed to build null safe equal expr", K(ret));
   } else if (OB_FAIL(ObRawExprUtils::build_case_when_expr(ctx_.expr_factory_, equal_expr, exprs_.null_expr_, source_sum, calc_sum))) {
-      LOG_WARN("failed to build case when expr", K(ret));
   }
   return ret;
 }
@@ -593,7 +533,6 @@ int ObSimpleMAVPrinter::gen_calc_expr_for_update_clause_sum(ObRawExpr *target_co
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected params", K(ret), K(target_count), K(source_count), K(target_sum), K(source_sum));
   } else if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(T_OP_CASE, case_when_expr))) {
-    LOG_WARN("create add expr failed", K(ret));
   } else if (OB_ISNULL(case_when_expr) || OB_ISNULL(exprs_.null_expr_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(case_when_expr));
@@ -606,7 +545,6 @@ int ObSimpleMAVPrinter::gen_calc_expr_for_update_clause_sum(ObRawExpr *target_co
              || OB_FAIL(add_nvl_above_exprs(source_sum, exprs_.int_zero_, nvl_source_sum))) {
     LOG_WARN("failed to add nvl above exprs", K(ret));
   } else if (OB_FAIL(ObRawExprUtils::build_add_expr(ctx_.expr_factory_, nvl_target_sum, nvl_source_sum, add_expr))) {
-    LOG_WARN("failed to build add expr", K(ret));
   } else {
     case_when_expr->set_default_param_expr(add_expr);
     calc_sum = case_when_expr;
@@ -627,7 +565,6 @@ int ObSimpleMAVPrinter::get_dependent_aggr_of_fun_sum(const ObRawExpr *expr,
   } else if (OB_FAIL(ObMVChecker::get_dependent_aggr_of_fun_sum(mv_def_stmt_,
                                         static_cast<const ObAggFunRawExpr*>(expr)->get_param_expr(0),
                                         dep_aggr))) {
-    LOG_WARN("failed to get dependent aggr of fun sum", K(ret));
   }
   for (int64_t i = 0; OB_INVALID_INDEX == idx && OB_SUCC(ret) && i < select_items.count(); ++i) {
     if (select_items.at(i).expr_ == dep_aggr) {
@@ -674,17 +611,13 @@ int ObSimpleMAVPrinter::gen_update_assignments(const ObIArray<ObColumnRefRawExpr
       LOG_WARN("unexpected select item", K(ret), K(i), K(select_items));
     } else if (ObOptimizerUtil::find_item(group_by_exprs, expr)) {
       if (OB_FAIL(copier.add_replaced_expr(expr, target_columns.at(i)))) {
-        LOG_WARN("failed to add replace pair", K(ret));
       }
     } else if (T_FUN_COUNT != expr->get_expr_type()) {
       /* do nothing */
     } else if (OB_FAIL(ObRawExprUtils::build_add_expr(ctx_.expr_factory_, target_columns.at(i), values_exprs.at(i), op_expr))) {
-      LOG_WARN("failed to build add expr", K(ret));
     } else if (OB_FALSE_IT(assign.expr_ = op_expr)) {
     } else if (OB_FAIL(inner_assigns.push_back(assign))) {
-      LOG_WARN("failed to push back", K(ret));
     } else if (OB_FAIL(copier.add_replaced_expr(expr, assign.expr_))) {
-      LOG_WARN("failed to add replace pair", K(ret));
     }
   }
 
@@ -698,21 +631,16 @@ int ObSimpleMAVPrinter::gen_update_assignments(const ObIArray<ObColumnRefRawExpr
     } else if (T_FUN_SUM != expr->get_expr_type()) {
       /* do nothing */
     } else if (OB_FAIL(get_dependent_aggr_of_fun_sum(expr, select_items, idx))) {
-      LOG_WARN("failed to get dependent aggr of fun sum", K(ret));
     } else if (OB_UNLIKELY(0 > idx || values_exprs.count() <= idx || target_columns.count() <= idx)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected idx", K(ret), K(idx), K(values_exprs.count()), K(target_columns.count()));
     } else if (OB_FAIL(create_simple_column_expr(source_table->get_table_name(), select_items.at(i).alias_name_,
                                                  source_table->table_id_, source_sum))) {
-      LOG_WARN("failed to create simple column exprs", K(ret));
     } else if (OB_FAIL(gen_calc_expr_for_update_clause_sum(target_columns.at(idx), values_exprs.at(idx),
                                                            target_columns.at(i),
                                                            source_sum, assign.expr_))) {
-      LOG_WARN("failed to gen calc expr for aggr sum", K(ret));
     } else if (OB_FAIL(inner_assigns.push_back(assign))) {
-      LOG_WARN("failed to push back", K(ret));
     } else if (OB_FAIL(copier.add_replaced_expr(expr, assign.expr_))) {
-      LOG_WARN("failed to add replace pair", K(ret));
     }
   }
 
@@ -721,9 +649,7 @@ int ObSimpleMAVPrinter::gen_update_assignments(const ObIArray<ObColumnRefRawExpr
     const ObIArray<std::pair<ObAggFunRawExpr*, ObRawExpr*>> &expand_aggrs = get_expand_aggrs();
     for (int64_t i = 0; OB_SUCC(ret) && i < expand_aggrs.count(); ++i) {
       if (OB_FAIL(copier.copy_on_replace(expand_aggrs.at(i).second, expr))) {
-        LOG_WARN("failed to generate group by exprs", K(ret));
       } else if (OB_FAIL(copier.add_replaced_expr(expand_aggrs.at(i).first, expr))) {
-        LOG_WARN("failed to add replace pair", K(ret));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < select_items.count(); ++i) {
@@ -737,9 +663,7 @@ int ObSimpleMAVPrinter::gen_update_assignments(const ObIArray<ObColumnRefRawExpr
                  || ObOptimizerUtil::find_item(group_by_exprs, expr)) {
         /* do nothing */
       } else if (OB_FAIL(copier.copy_on_replace(expr, assign.expr_))) {
-        LOG_WARN("failed to generate group by exprs", K(ret));
       } else if (OB_FAIL(inner_assigns.push_back(assign))) {
-        LOG_WARN("failed to push back", K(ret));
       }
     }
   }
@@ -747,15 +671,12 @@ int ObSimpleMAVPrinter::gen_update_assignments(const ObIArray<ObColumnRefRawExpr
   if (OB_SUCC(ret) && !inner_assigns.empty()) {
     if (!for_mysql_update) {
       if (OB_FAIL(assignments.assign(inner_assigns))) {
-        LOG_WARN("failed to assign array", K(ret));
       }
     } else if (OB_FAIL(assignments.prepare_allocate(inner_assigns.count()))) {
-      LOG_WARN("failed to prepare allocate array", K(ret));
     } else {
       int64_t idx = inner_assigns.count() - 1;
       for (int64_t i = 0; OB_SUCC(ret) && i < inner_assigns.count(); ++i) {
         if (OB_FAIL(assignments.at(i).assign(inner_assigns.at(idx - i)))) {
-          LOG_WARN("failed to assign ObAssignment", K(ret));
         }
       }
     }
@@ -789,24 +710,16 @@ int ObSimpleMAVPrinter::gen_simple_mav_delta_mv_view(ObSelectStmt *&view_stmt)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected stmt", K(ret), K(mv_def_stmt_));
   } else if (OB_FAIL(create_simple_stmt(view_stmt))) {
-    LOG_WARN("failed to create simple stmt", K(ret));
   } else if (OB_FAIL(gen_delta_table_view(*source_table, delta_view))) {
-    LOG_WARN("failed to gen delta table view", K(ret));
   } else if (OB_FAIL(create_simple_table_item(view_stmt, DELTA_TABLE_VIEW_NAME, table_item, delta_view))) {
-    LOG_WARN("failed to create simple table item", K(ret));
   } else if (OB_FAIL(init_expr_copier_for_stmt(*view_stmt, copier))) {
-    LOG_WARN("failed to init expr copier", K(ret));
   } else if (OB_FAIL(copier.copy_on_replace(mv_def_stmt_.get_group_exprs(),
                                             view_stmt->get_group_exprs()))) {
-    LOG_WARN("failed to generate group by exprs", K(ret));
   } else if (OB_FAIL(gen_simple_mav_delta_mv_select_list(copier, *table_item,
                                                          view_stmt->get_group_exprs(),
                                                          view_stmt->get_select_items()))) {
-    LOG_WARN("failed to gen select list ", K(ret));
   } else if (OB_FAIL(copier.copy_on_replace(mv_def_stmt_.get_condition_exprs(), view_stmt->get_condition_exprs()))) {
-    LOG_WARN("failed to convert conds exprs", K(ret));
   } else if (OB_FAIL(append_old_new_row_filter(*table_item, view_stmt->get_condition_exprs()))) {
-    LOG_WARN("failed to append old new row filter ", K(ret));
   }
   return ret;
 }
@@ -826,7 +739,6 @@ int ObSimpleMAVPrinter::gen_simple_mav_delta_mv_select_list(ObRawExprCopier &cop
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected group by size", K(ret), K(group_by_exprs), K(orig_group_by_exprs));
   } else if (OB_FAIL(create_simple_column_expr(table.get_table_name(), DML_FACTOR_COL_NAME, table.table_id_, dml_factor))) {
-    LOG_WARN("failed to create simple column expr", K(ret));
   }
   // add select list for group by
   for (int64_t i = 0; OB_SUCC(ret) && i < group_by_exprs.count(); ++i) {
@@ -834,9 +746,7 @@ int ObSimpleMAVPrinter::gen_simple_mav_delta_mv_select_list(ObRawExprCopier &cop
     sel_item.expr_ = group_by_exprs.at(i);
     sel_item.is_real_alias_ = true;
     if (OB_FAIL(get_mv_select_item_name(orig_group_by_exprs.at(i), sel_item.alias_name_))) {
-      LOG_WARN("failed to get mv select item name", K(ret));
     } else if (OB_FAIL(select_items.push_back(sel_item))) {
-      LOG_WARN("failed to pushback", K(ret));
     }
   }
   // add select list for basic aggr
@@ -849,11 +759,8 @@ int ObSimpleMAVPrinter::gen_simple_mav_delta_mv_select_list(ObRawExprCopier &cop
     } else if (!ObMVChecker::is_basic_aggr(aggr_expr->get_expr_type())) {
       /* do nothing */
     } else if (OB_FAIL(get_mv_select_item_name(aggr_expr, sel_item.alias_name_))) {
-      LOG_WARN("failed to get mv select item name", K(ret));
     } else if (OB_FAIL(gen_basic_aggr_expr(copier, dml_factor, *aggr_expr, sel_item.expr_))) {
-      LOG_WARN("failed to gen basic aggr expr", K(ret));
     } else if (OB_FAIL(select_items.push_back(sel_item))) {
-      LOG_WARN("failed to pushback", K(ret));
     }
   }
   return ret;
@@ -880,14 +787,11 @@ int ObSimpleMAVPrinter::gen_simple_join_mav_basic_select_list(const TableItem &t
     SelectItem sel_item;
     sel_item.is_real_alias_ = true;
     if (OB_FAIL(get_mv_select_item_name(orig_group_by_exprs.at(i), sel_item.alias_name_))) {
-      LOG_WARN("failed to get mv select item name", K(ret));
     } else if (OB_FAIL(create_simple_column_expr(table.get_table_name(),
                                                  sel_item.alias_name_,
                                                  table.table_id_,
                                                  sel_item.expr_))) {
-      LOG_WARN("failed to create simple column exprs", K(ret));
     } else if (OB_FAIL(select_items.push_back(sel_item))) {
-      LOG_WARN("failed to pushback", K(ret));
     } else if (stmt_need_aggr && OB_FAIL(group_by_exprs->push_back(sel_item.expr_))) {
       LOG_WARN("failed to pushback", K(ret));
     }
@@ -903,20 +807,16 @@ int ObSimpleMAVPrinter::gen_simple_join_mav_basic_select_list(const TableItem &t
     } else if (!ObMVChecker::is_basic_aggr(aggr_expr->get_expr_type())) {
       /* do nothing */
     } else if (OB_FAIL(get_mv_select_item_name(aggr_expr, sel_item.alias_name_))) {
-      LOG_WARN("failed to get mv select item name", K(ret));
     } else if (OB_FAIL(create_simple_column_expr(table.get_table_name(),
                                                  sel_item.alias_name_,
                                                  table.table_id_, col_expr))) {
-      LOG_WARN("failed to create simple column exprs", K(ret));
     } else if (!stmt_need_aggr) {
       sel_item.expr_ = col_expr;
     } else if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(T_FUN_SUM, aggr_expr))) {
-      LOG_WARN("create ObAggFunRawExpr failed", K(ret));
     } else if (OB_ISNULL(aggr_expr) || OB_ISNULL(col_expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret), K(aggr_expr), K(col_expr));
     } else if (OB_FAIL(aggr_expr->add_real_param_expr(col_expr))) {
-      LOG_WARN("failed to add param expr to agg expr", K(ret));
     } else {
       sel_item.expr_ = aggr_expr;
     }
@@ -948,20 +848,15 @@ int ObSimpleMAVPrinter::gen_basic_aggr_expr(ObRawExprCopier &copier,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected aggr", K(ret), K(aggr_expr));
   } else if (OB_FAIL(copier.copy_on_replace(param, param))) {
-    LOG_WARN("failed to generate group by exprs", K(ret));
   } else if (T_FUN_COUNT == aggr_expr.get_expr_type()) {
     ObRawExpr *is_null = NULL;
     ObRawExpr *case_when = NULL;
     if (OB_FAIL(ObRawExprUtils::build_is_not_null_expr(ctx_.expr_factory_, param, false, is_null))) {
-      LOG_WARN("failed to build is null expr", K(ret));
     } else if (OB_FAIL(ObRawExprUtils::build_case_when_expr(ctx_.expr_factory_, is_null, exprs_.int_zero_, exprs_.int_one_, case_when))) {
-      LOG_WARN("failed to build case when expr", K(ret));
     } else if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(ctx_.expr_factory_, T_OP_MUL, dml_factor, case_when, print_param))) {
-      LOG_WARN("failed to build mul expr", K(ret));
     }
   } else if (T_FUN_SUM == aggr_expr.get_expr_type()) {
     if (OB_FAIL(ObRawExprUtils::build_common_binary_op_expr(ctx_.expr_factory_, T_OP_MUL, dml_factor, param, print_param))) {
-      LOG_WARN("failed to build mul expr", K(ret));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -970,19 +865,13 @@ int ObSimpleMAVPrinter::gen_basic_aggr_expr(ObRawExprCopier &copier,
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(T_FUN_SUM, new_aggr_expr))) {
-    LOG_WARN("create ObAggFunRawExpr failed", K(ret));
   } else if (OB_ISNULL(new_aggr_expr) || OB_ISNULL(print_param)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), K(new_aggr_expr), K(print_param));
   } else if (OB_FAIL(new_aggr_expr->add_real_param_expr(print_param))) {
-    LOG_WARN("failed to add param expr to agg expr", K(ret));
   } else if (T_FUN_COUNT != aggr_expr.get_expr_type() || !mv_def_stmt_.is_scala_group_by()) {
     aggr_print_expr = new_aggr_expr;
   } else if (OB_FAIL(add_nvl_above_exprs(new_aggr_expr, exprs_.int_zero_, aggr_print_expr))) {
-    //  for scalar group by, d_cnt from sum(dml_factor) may get null, need convert null to 0
-    //  count(*) --> nvl(d_cnt, 0)
-    //  count(c3) --> nvl(d_cnt_3, 0)
-    LOG_WARN("failed to gen calc expr for scalar count", K(ret));
   }
   return ret;
 }
@@ -993,12 +882,10 @@ int ObSimpleMAVPrinter::add_nvl_above_exprs(ObRawExpr *expr, ObRawExpr *default_
   res_expr = NULL;
   ObSysFunRawExpr *nvl_expr = NULL;
   if (OB_FAIL(ctx_.expr_factory_.create_raw_expr(T_FUN_SYS_NVL, nvl_expr))) {
-    LOG_WARN("fail to create nvl expr", K(ret));
   } else if (OB_ISNULL(expr) || OB_ISNULL(default_expr) || OB_ISNULL(nvl_expr)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), K(expr), K(default_expr), K(nvl_expr));
   } else if (OB_FAIL(nvl_expr->set_param_exprs(expr, default_expr))) {
-    LOG_WARN("fail to set param exprs", K(ret));
   } else {
     nvl_expr->set_expr_type(T_FUN_SYS_NVL);
     nvl_expr->set_func_name(ObString::make_string(N_NVL));

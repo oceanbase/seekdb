@@ -84,7 +84,6 @@ int ObExprUtil::get_int64_from_num(number::ObNumber &nmb,
     EXPR_DEFINE_CAST_CTX(expr_ctx, CM_NONE);
     //copy is essential since if we did not do that, obj will be modified
     if (OB_FAIL(newmb.from(nmb, cast_ctx))) {
-      LOG_WARN("copy nmb failed", K(ret), K(nmb));
     } else if (is_trunc && OB_FAIL(newmb.trunc(0))) {
       LOG_WARN("trunc failed", K(ret), K(nmb));
     } else if (!is_trunc && OB_FAIL(newmb.round(0))) {
@@ -124,9 +123,7 @@ int ObExprUtil::trunc_num2int64(const common::number::ObNumber &nmb, int64_t &v)
 
   if (OB_UNLIKELY(!nmb.is_integer())) {
     if (OB_FAIL(trunc_nmb.from(nmb, tmp_alloc))) {
-      LOG_WARN("copy number failed", K(ret));
     } else if (OB_FAIL(trunc_nmb.trunc(0))) {
-      LOG_WARN("truncate number failed");
     } else {
       nmb_val = &trunc_nmb;
     }
@@ -165,9 +162,7 @@ int ObExprUtil::trunc_decint2int64(const ObDecimalInt *decint, const int32_t int
   }
   }
   if (OB_FAIL(ret)) {
-    LOG_WARN("scale down decimal int for truncating failed", K(ret), K(int_bytes), K(scale));
   } else if (OB_FAIL(wide::check_range_valid_int64(tmp_res.get_decimal_int(), tmp_res.get_int_bytes(), is_valid, v))) {
-    LOG_WARN("check valid int64_t failed", K(ret));
   } else if (is_valid) {
     // do nothing
   } else {
@@ -187,9 +182,7 @@ int ObExprUtil::round_num2int64(const common::number::ObNumber &nmb, int64_t &v)
 
   if (OB_UNLIKELY(!nmb.is_integer())) {
     if (OB_FAIL(round_nmb.from(nmb, tmp_alloc))) {
-      LOG_WARN("copy number failed", K(ret));
     } else if (OB_FAIL(round_nmb.round(0))) {
-      LOG_WARN("truncate number failed");
     } else {
       nmb_val = &round_nmb;
     }
@@ -215,7 +208,6 @@ int ObExprUtil::get_int_param_val(ObDatum *datum, bool is_decint, int64_t &int_v
       bool is_valid_int64 = false;
       if (OB_FAIL(wide::check_range_valid_int64(datum->get_decimal_int(), datum->get_int_bytes(),
                                                 is_valid_int64, int_val))) {
-        LOG_WARN("check valid int64 failed", K(ret));
       } else if (OB_UNLIKELY(!is_valid_int64)) {
         if (wide::is_negative(datum->get_decimal_int(), datum->get_int_bytes())) {
           int_val = INT64_MIN;
@@ -382,10 +374,8 @@ int ObExprUtil::get_mb_str_info(const ObString &str,
                                                 str.ptr(),
                                                 str.length(),
                                                 well_formed_len))) {
-    LOG_WARN("invalid string for charset", K(str), K(well_formed_len));
   } else {
     if (OB_FAIL(byte_offsets.push_back(0))) {
-      LOG_WARN("byte_offsets.push_back failed", K(ret), K(byte_offsets));
     } else {
       str_char_len = ObCharset::strlen_char(cs_type, str.ptr(), str.length());
       int64_t last_byte_index = 0;
@@ -395,13 +385,11 @@ int ObExprUtil::get_mb_str_info(const ObString &str,
         byte_index = last_byte_index + byte_index;
         last_byte_index = byte_index;
         if (OB_FAIL(byte_offsets.push_back(byte_index))) {
-          LOG_WARN("byte_offsets.push_back failed", K(ret), K(byte_offsets));
         }
       }
       // Get the number of bytes each character occupies
       for (size_t i = 1; OB_SUCC(ret) && (i < byte_offsets.count()); ++i) {
         if (OB_FAIL(byte_num.push_back(byte_offsets.at(i) - byte_offsets.at(i-1)))) {
-          LOG_WARN("byte_num.push_back failed", K(ret), K(byte_num));
         }
       }
       LOG_DEBUG("get_byte_offset", K(ret), K(str), K(byte_offsets), K(byte_num));
@@ -484,7 +472,6 @@ int ObExprUtil::set_expr_asscii_result(const ObExpr &expr, ObEvalCtx &ctx,
   ObString out;
   if (ascii.empty()) {
     if (OB_FAIL(out_res.init_with_batch_idx(0, datum_idx))) {
-      LOG_WARN("init text str result failed", K(ret));
     } else {
       out_res.set_result();
     }
@@ -493,13 +480,10 @@ int ObExprUtil::set_expr_asscii_result(const ObExpr &expr, ObEvalCtx &ctx,
       out = ascii;
     } else if (OB_FAIL(ObCharset::charset_convert(temp_allocator, ascii, src_coll_type,
                                                   expr.datum_meta_.cs_type_, out))) {
-      LOG_WARN("charset convert failed", K(ret));
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(out_res.init_with_batch_idx(out.length(), datum_idx))) {
-      LOG_WARN("init text str result failed");
     } else if (OB_FAIL(out_res.append(out.ptr(), out.length()))) {
-      LOG_WARN("append text str result failed", K(ret));
     } else {
       out_res.set_result();
     }
@@ -524,7 +508,6 @@ int ObExprUtil::set_expr_ascii_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
         out = ascii;
       } else if (OB_FAIL(ObCharset::charset_convert(temp_allocator, ascii, src_coll_type,
                                             expr.datum_meta_.cs_type_, out))) {
-        LOG_WARN("charset convert failed", K(ret));
       }
       if (OB_FAIL(ret)) {
       } else if (OB_ISNULL(buf = expr.get_str_res_mem(ctx, out.length(), datum_idx))) {
@@ -542,7 +525,6 @@ int ObExprUtil::set_expr_ascii_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
     ObTextStringDatumResult res(expr.datum_meta_.type_, &expr, &ctx, &expr_datum);
     if (ascii.empty()) {
       if (OB_FAIL(res.init_with_batch_idx(0, datum_idx))) {
-        LOG_WARN("init text str result failed", K(ret));
       } else {
         res.set_result();
       }
@@ -551,13 +533,10 @@ int ObExprUtil::set_expr_ascii_result(const ObExpr &expr, ObEvalCtx &ctx, ObDatu
         out = ascii;
       } else if (OB_FAIL(ObCharset::charset_convert(temp_allocator, ascii, src_coll_type,
                                                     expr.datum_meta_.cs_type_, out))) {
-        LOG_WARN("charset convert failed", K(ret));
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(res.init_with_batch_idx(out.length(), datum_idx))) {
-        LOG_WARN("init text str result failed");
       } else if (OB_FAIL(res.append(out.ptr(), out.length()))) {
-        LOG_WARN("append text str result failed", K(ret));
       } else {
         res.set_result();
       }
@@ -609,7 +588,6 @@ int ObExprUtil::convert_string_collation(const ObString &in_str,
     out_str.reset();
   } else if (OB_FAIL(need_convert_string_collation(in_collation, out_collation,
                                                    need_convert))) {
-    LOG_WARN("check need_convert_string_collation failed", K(ret));
   } else if (!need_convert) {
     out_str = in_str;
   } else {
@@ -622,7 +600,6 @@ int ObExprUtil::convert_string_collation(const ObString &in_str,
     } else if (OB_FAIL(ObCharset::charset_convert(in_collation, in_str.ptr(), in_str.length(),
                                                   out_collation, buf, buf_len,
                                                   result_len))) {
-      LOG_WARN("charset convert failed", K(ret));
     } else {
       out_str.assign_ptr(buf, result_len);
     }
@@ -656,7 +633,6 @@ int ObExprUtil::convert_string_collation_for_regexp(const ObString &in_str,
     } else if (OB_FAIL(ObCharset::charset_convert(in_collation, in_str.ptr(), in_str.length(),
                                                   out_collation, buf, buf_len,
                                                   result_len))) {
-      LOG_WARN("charset convert failed", K(ret));
     } else {
       out_str.assign_ptr(buf, result_len);
     }
@@ -691,7 +667,6 @@ int ObExprUtil::eval_stack_overflow_check(const ObExpr &expr,
   }
 
   if (OB_FAIL(SMART_CALL(expr.eval_param_value(ctx)))) {
-    LOG_WARN("evaluate parameters value failed", K(ret), KP(cur_stack));
   } else {
     // Since stack overflow check expr has the same ObDatum with child,
     // need do nothing here.
@@ -706,9 +681,7 @@ int ObExprUtil::eval_batch_stack_overflow_check(const ObExpr &expr,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stack_overflow())) {
-    LOG_WARN("stack overflow check failed", K(ret));
   } else if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("evaluate batch failed", K(ret));
   } else {
     // do nothing
   }
@@ -748,7 +721,6 @@ int ObSolidifiedVarsContext::get_local_tz_info(const sql::ObBasicSessionInfo *se
     ObSessionSysVar *local_var = NULL;
     //init local tz_wrap
     if (OB_FAIL(local_session_var_->get_local_var(SYS_VAR_TIME_ZONE, local_var))) {
-      LOG_WARN("get local var failed", K(ret));
     } else if (NULL != local_var) {
       const ObTZInfoMap *tz_info_map = NULL;
       if (OB_ISNULL(tz_info_map = session->get_timezone_info()->get_tz_info_map())) {
@@ -766,7 +738,6 @@ int ObSolidifiedVarsContext::get_local_tz_info(const sql::ObBasicSessionInfo *se
         } else if (OB_FAIL(local_tz_wrap_->init_time_zone(local_var->val_.get_string(),
                                         OB_INVALID_VERSION,
                                         *(const_cast<ObTZInfoMap *>(tz_info_map))))) {
-          LOG_WARN("tz_wrap init_time_zone failed", K(ret), K(local_var->val_.get_string()));
         }
       }
     }
@@ -807,7 +778,6 @@ int ObSolidifiedVarsGetter::get_dtc_params(ObDataTypeCastParams &dtc_params)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(get_time_zone_info(tz_info))) {
-    LOG_WARN("get time zone info failed", K(ret));
   } else if (NULL != local_session_var_
              && OB_FAIL(ObSQLUtils::merge_solidified_var_into_dtc_params(local_session_var_->get_local_vars(),
                                                                   tz_info,
@@ -859,10 +829,8 @@ int ObSolidifiedVarsGetter::get_local_nls_date_format(ObString &format)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(get_local_var(SYS_VAR_NLS_DATE_FORMAT, sys_var))) {
-    LOG_WARN("fail to get local var", K(ret));
   } else if (NULL != sys_var) {
     if (OB_FAIL(sys_var->val_.get_string(format))) {
-      LOG_WARN("fail to get nls_timestamp_tz_format str value", K(ret), KPC(sys_var));
     }
   } else {
     format = session_->get_local_nls_date_format();
@@ -905,7 +873,6 @@ int ObSolidifiedVarsGetter::get_compat_version(uint64_t &compat_version)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret));
   } else if (OB_FAIL(session_->get_compatibility_version(compat_version))) {
-    LOG_WARN("failed to get compat version", K(ret));
   } else if (NULL != local_session_var_
              && OB_FAIL(ObSQLUtils::merge_solidified_var_into_compat_version(local_session_var_->get_local_vars(),
                                                                              compat_version))) {

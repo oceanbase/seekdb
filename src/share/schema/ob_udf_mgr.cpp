@@ -99,9 +99,7 @@ ObSimpleUDFSchema &ObSimpleUDFSchema::operator =(const ObSimpleUDFSchema &other)
     ret_ = other.ret_;
     type_ = other.type_;
     if (OB_FAIL(deep_copy_str(other.udf_name_, udf_name_))) {
-      LOG_WARN("Fail to deep copy udf name", K(ret));
     } else if (OB_FAIL(deep_copy_str(other.dl_, dl_))) {
-      LOG_WARN("Fail to deep copy udf name", K(ret));
     }
     if (OB_FAIL(ret)) {
       error_ret_ = ret;
@@ -143,7 +141,6 @@ int ObUDFMgr::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("init private udf manager twice", K(ret));
   } else if (OB_FAIL(udf_map_.init())) {
-    LOG_WARN("init private udf map failed", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -169,9 +166,7 @@ int ObUDFMgr::assign(const ObUDFMgr &other)
     LOG_WARN("udf manager not init", K(ret));
   } else if (this != &other) {
     if (OB_FAIL(udf_map_.assign(other.udf_map_))) {
-      LOG_WARN("assign udf map failed", K(ret));
     } else if (OB_FAIL(udf_infos_.assign(other.udf_infos_))) {
-      LOG_WARN("assign udf infos vector failed", K(ret));
     }
   }
   return ret;
@@ -193,7 +188,6 @@ int ObUDFMgr::deep_copy(const ObUDFMgr &other)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("NULL ptr", K(udf_info), K(ret));
       } else if (OB_FAIL(add_udf(*udf_info))) {
-        LOG_WARN("add outline failed", K(*udf_info), K(ret));
       }
     }
   }
@@ -240,7 +234,6 @@ int ObUDFMgr::add_udf(const ObSimpleUDFSchema &udf_schema)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(udf_schema));
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_, udf_schema, new_udf_schema))) {
-    LOG_WARN("alloca udf schema failed", K(ret));
   } else if (OB_ISNULL(new_udf_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("NULL ptr", K(new_udf_schema), K(ret));
@@ -249,11 +242,9 @@ int ObUDFMgr::add_udf(const ObSimpleUDFSchema &udf_schema)
                                         compare_udf,
                                         equal_udf,
                                         replaced_udf))) {
-      LOG_WARN("failed to add udf schema", K(ret));
   } else {
     ObUDFHashWrapper hash_wrapper(new_udf_schema->get_udf_name());
     if (OB_FAIL(udf_map_.set_refactored(hash_wrapper, new_udf_schema, overwrite))) {
-      LOG_WARN("build udf hash map failed", K(ret));
     }
   }
   if (udf_infos_.count() != udf_map_.item_count()) {
@@ -263,7 +254,6 @@ int ObUDFMgr::add_udf(const ObSimpleUDFSchema &udf_schema)
              "udf name", udf_schema.get_udf_name());
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = ObUDFMgr::rebuild_udf_hashmap(udf_infos_, udf_map_))) {
-      LOG_WARN("rebuild udf hashmap failed", K(tmp_ret));
     }
   }
   return ret;
@@ -283,7 +273,6 @@ int ObUDFMgr::rebuild_udf_hashmap(const UDFInfos &udf_infos, ObUDFMap& udf_map)
       bool overwrite = true;
       ObUDFHashWrapper hash_wrapper(udf_schema->get_udf_name());
       if (OB_FAIL(udf_map.set_refactored(hash_wrapper, udf_schema, overwrite))) {
-        LOG_WARN("build udf hash map failed", K(ret));
       }
     }
   }
@@ -296,7 +285,6 @@ int ObUDFMgr::add_udfs(const common::ObIArray<ObSimpleUDFSchema> &udf_schemas)
   int ret = OB_SUCCESS;
   for (int64_t i = 0; i < udf_schemas.count() && OB_SUCC(ret); ++i) {
     if (OB_FAIL(add_udf(udf_schemas.at(i)))) {
-      LOG_WARN("push udf failed", K(ret));
     }
   }
   return ret;
@@ -314,9 +302,6 @@ int ObUDFMgr::del_udf(const ObTenantUDFId &udf)
                                           compare_with_tenant_udf_id,
                                           equal_to_tenant_udf_id,
                                           schema_to_del))) {
-    LOG_WARN("failed to remove udf schema, ",
-             "udf name", udf.udf_name_,
-             K(ret));
   } else if (OB_ISNULL(schema_to_del)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("removed udf schema return NULL, ",
@@ -340,7 +325,6 @@ int ObUDFMgr::del_udf(const ObTenantUDFId &udf)
              "udf name", udf.udf_name_);
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = ObUDFMgr::rebuild_udf_hashmap(udf_infos_, udf_map_))) {
-      LOG_WARN("rebuild udf hashmap failed", K(tmp_ret));
     }
   }
   return ret;
@@ -374,7 +358,6 @@ int ObUDFMgr::get_udf_schemas_in_tenant(ObIArray<const ObSimpleUDFSchema *> &udf
     } else if (false) {
       //do nothing
     } else if (OB_FAIL(udf_schemas.push_back(udf))) {
-      LOG_WARN("push back udf failed", K(ret));
     }
   }
 

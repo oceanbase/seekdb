@@ -55,7 +55,6 @@ int ObInfoSchemaPartitionsTable::inner_get_next_row(common::ObNewRow *&row)
   if (OB_SUCCESS == ret && !start_to_read_) {
     ObSArray<const ObDatabaseSchema *> database_schemas;
     if (OB_FAIL(schema_guard_->get_database_schemas_in_tenant(database_schemas))) {
-      SERVER_LOG(WARN, "failed to get database schema of tenant");
     } else {
       const int64_t col_count = output_column_ids_.count();
       ObObj *cells = NULL;
@@ -79,8 +78,6 @@ int ObInfoSchemaPartitionsTable::inner_get_next_row(common::ObNewRow *&row)
                      || ObString(OB_PUBLIC_SCHEMA_NAME) == database_schema->get_database_name_str()) {
             continue;
           } else if (OB_FAIL(add_partitions(*database_schema,cells, output_column_ids_.count()))) {
-            SERVER_LOG(WARN, "failed to add table constraint of database schema!",
-                       K(ret));
           }
         }
         if (OB_SUCC(ret)) {
@@ -115,7 +112,6 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObDatabaseSchema &database
     SERVER_LOG(WARN, "schema manager or cells should not be null", K(ret));
   } else if (OB_FAIL(schema_guard_->get_table_schemas_in_database(database_schema.get_database_id(),
                                                                     table_schemas))) {
-    SERVER_LOG(WARN, "failed to get table schema in database", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); ++i) {
       const ObSimpleTableSchemaV2 *table_schema = table_schemas.at(i);
@@ -130,16 +126,12 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObDatabaseSchema &database
                                  database_schema.get_database_name_str(),
                                  table_schema->get_table_name_str(),
                                  priv_passed))) {
-        SERVER_LOG(WARN, "failed to check priv", K(ret), K(database_schema.get_database_name_str()),
-        K(table_schema->get_table_name_str()));
       } else if (!priv_passed) {
         continue;
       } else if (OB_FAIL(add_partitions(*table_schema,
                                         database_schema.get_database_name_str(),
                                         cells,
                                         col_count))){
-        SERVER_LOG(WARN, "failed to add table constraint of table schema",
-                   "table_schema", *table_schema, K(ret));
       }
     }
   }
@@ -332,14 +324,12 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObSimpleTableSchemaV2 &tab
           ObString desc;
           if (table_schema.is_range_part()) {
             if (OB_FAIL(gen_high_bound_val_str(part_info.part_, desc))) {
-              SERVER_LOG(WARN, "fail to generate PARTITION_DESCRIPTION", K(ret), K(part_info));
             } else {
               cells[cell_idx].set_varchar(desc);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
             }
           } else if (table_schema.is_list_part()) {
             if (OB_FAIL(gen_list_bound_val_str(part_info.part_, desc))) {
-              SERVER_LOG(WARN, "fail to generate PARTITION_DESCRIPTION", K(ret), K(part_info));
             } else {
               cells[cell_idx].set_varchar(desc);
               cells[cell_idx].set_collation_type(ObCharset::get_default_collation(ObCharset::get_default_charset()));
@@ -422,7 +412,6 @@ int ObInfoSchemaPartitionsTable::add_partitions(const ObSimpleTableSchemaV2 &tab
       }
     }
     if (FAILEDx(scanner_.add_row(cur_row_))) {
-      SERVER_LOG(WARN, "fail to add row", K(ret), K(cur_row_));
     }
 
   }
@@ -455,11 +444,9 @@ int ObInfoSchemaPartitionsTable::gen_high_bound_val_str(
       ObTimeZoneInfo tz_info;
       tz_info.set_offset(0);
       if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_info.get_tz_map_wrap()))) {
-        SERVER_LOG(WARN, "get tenant timezone map failed", K(ret));
       } else if (OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(
           part->get_high_bound_val(), high_bound_val,
           OB_MAX_B_HIGH_BOUND_VAL_LENGTH, pos, false, &tz_info))) {
-        SERVER_LOG(WARN, "Failed to convert rowkey to sql text", K(tz_info), K(ret));
       } else {
         val_str.assign_ptr(high_bound_val, pos);
       }
@@ -486,11 +473,9 @@ int ObInfoSchemaPartitionsTable::gen_list_bound_val_str(
       ObTimeZoneInfo tz_info;
       tz_info.set_offset(0);
       if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_info.get_tz_map_wrap()))) {
-        SERVER_LOG(WARN, "get tenant timezone map failed", K(ret));
       } else if (OB_FAIL(ObPartitionUtils::convert_rows_to_sql_literal(
           part->get_list_row_values(), list_val,
           OB_MAX_B_PARTITION_EXPR_LENGTH, pos, false, &tz_info))) {
-        SERVER_LOG(WARN, "Failed to convert rowkey to sql text", K(tz_info), K(ret));
       } else {
         val_str.assign_ptr(list_val, pos);
       }

@@ -35,7 +35,6 @@ int ObDASSortIter::inner_init(ObDASIterParam &param)
     context_param.set_mem_attr("DASSortIter", ObCtxIds::DEFAULT_CTX_ID)
         .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(sort_memctx_, context_param))) {
-      LOG_WARN("failed to create lookup memctx", K(ret));
     } else {
       ObDASSortIterParam &sort_param = static_cast<ObDASSortIterParam&>(param);
       sort_ctdef_ = sort_param.sort_ctdef_;
@@ -53,7 +52,6 @@ int ObDASSortIter::inner_init(ObDASIterParam &param)
         if (nullptr != sort_ctdef_->limit_expr_) {
           ObDatum *limit_datum = nullptr;
           if (OB_FAIL(sort_ctdef_->limit_expr_->eval(*eval_ctx_, limit_datum))) {
-            LOG_WARN("failed to eval limit expr", K(ret));
           } else {
             limit_param_.limit_ = (limit_datum->is_null() || limit_datum->get_int() < 0) ? 0 : limit_datum->get_int();
           }
@@ -61,7 +59,6 @@ int ObDASSortIter::inner_init(ObDASIterParam &param)
         if (nullptr != sort_ctdef_->offset_expr_) {
           ObDatum *offset_datum = nullptr;
           if (OB_FAIL(sort_ctdef_->offset_expr_->eval(*eval_ctx_, offset_datum))) {
-            LOG_WARN("failed to eval limit expr", K(ret));
           } else if (offset_datum->is_null()) {
             limit_param_.limit_ = 0;
             limit_param_.offset_ = 0;
@@ -73,11 +70,8 @@ int ObDASSortIter::inner_init(ObDASIterParam &param)
 
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(init_sort_impl())) {
-        LOG_WARN("failed to init sort impl", K(ret));
       } else if (OB_FAIL(append(sort_row_, sort_ctdef_->sort_exprs_))) {
-        LOG_WARN("failed to append sort exprs", K(ret));
       } else if (OB_FAIL(append_array_no_dup(sort_row_, *child_->get_output()))) {
-        LOG_WARN("failed to append sort rows", K(ret));
       }
     }
   }
@@ -127,7 +121,6 @@ int ObDASSortIter::init_sort_impl()
                                         0,      // part cnt
                                         top_k,
                                         sort_ctdef_->fetch_with_ties_))) {
-        LOG_WARN("failed to init sort impl", K(ret));
       }
     }
   }
@@ -140,7 +133,6 @@ int ObDASSortIter::inner_reuse()
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(child_)) {
     if (OB_FAIL(child_->reuse())) {
-      LOG_WARN("failed to reuse child iter", K(ret));
     }
   }
   // TODO: check if we can reuse sort impl here
@@ -181,7 +173,6 @@ int ObDASSortIter::do_table_scan()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(child_->do_table_scan())) {
-    LOG_WARN("failed to do table scan", K(ret));
   }
   return ret;
 }
@@ -191,9 +182,7 @@ int ObDASSortIter::rescan()
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(child_->rescan())) {
-    LOG_WARN("failed to rescan child", K(ret));
   } else if (OB_FAIL(init_sort_impl())) {
-    LOG_WARN("failed to init sort impl", K(ret));
   }
 
   return ret;
@@ -292,13 +281,11 @@ int ObDASSortIter::do_sort(bool is_vectorized)
           LOG_WARN("failed ro get next rows from child iter", K(ret));
         } else if (read_size != 0) {
           if (OB_FAIL(sort_impl_->add_batch(sort_row_, *fake_skip_, read_size, 0, nullptr))) {
-            LOG_WARN("failed to add batch to sort impl", K(ret));
           } else {
             ret = OB_ITER_END;
           }
         }
       } else if (OB_FAIL(sort_impl_->add_batch(sort_row_, *fake_skip_, read_size, 0, nullptr))) {
-        LOG_WARN("failed to add batch to sort impl", K(ret));
       }
     }
   } else {
@@ -308,7 +295,6 @@ int ObDASSortIter::do_sort(bool is_vectorized)
           LOG_WARN("failed ro get next rows from child iter", K(ret));
         }
       } else if (OB_FAIL(sort_impl_->add_row(sort_row_))) {
-        LOG_WARN("failed to add row to sort impl", K(ret));
       }
     }
   }
@@ -316,7 +302,6 @@ int ObDASSortIter::do_sort(bool is_vectorized)
   if (OB_LIKELY(OB_ITER_END == ret)) {
     ret = OB_SUCCESS;
     if (OB_FAIL(sort_impl_->sort())) {
-      LOG_WARN("failed to do sort", K(ret));
     } else {
       sort_finished_ = true;
     }

@@ -62,13 +62,11 @@ int ObTxDataHashMap::insert(const transaction::ObTransID &key, ObTxData *value)
   int ret = OB_SUCCESS;
   if (!key.is_valid() || OB_ISNULL(value)) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid argument", K(key), KP(value));
   } else {
     int64_t pos = get_pos(key);
 
     if (OB_UNLIKELY(ObTxData::ExclusiveType::NORMAL != value->exclusive_flag_)) {
       if (ObTxData::ExclusiveType::EXCLUSIVE != value->exclusive_flag_) {
-        STORAGE_LOG(ERROR, "invalid exclusive flag", KPC(value));
       } else {
         ObTxData *iter = buckets_[pos].next_;
         while (OB_NOT_NULL(iter)) {
@@ -105,7 +103,6 @@ int ObTxDataHashMap::get(const transaction::ObTransID &key, ObTxDataGuard &guard
 
   if (!key.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid argument", K(key));
   } else {
     const int64_t pos = get_pos(key);
     ObTxData *cache_val = buckets_[pos].hot_cache_val_;
@@ -129,7 +126,6 @@ int ObTxDataHashMap::get(const transaction::ObTransID &key, ObTxDataGuard &guard
   if (OB_ISNULL(value)) {
     ret = OB_ENTRY_NOT_EXIST;
   } else if (OB_FAIL(guard.init(value))) {
-    STORAGE_LOG(WARN, "get tx data from tx data hash map failed", KR(ret), KP(this), KPC(value));
   }
   return ret;
 }

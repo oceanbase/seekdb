@@ -48,7 +48,6 @@ public:
       } else if (str_.length() == 0) {
         (void)logdata_printf(buf, len, pos, ""); 
       } else if (OB_FAIL(ob_dup_cstring(allocator, str_, ptr))) {
-        LIB_LOG(ERROR, "ob_dup_cstring failed", K(ret));
       } else {
         if (OB_ISNULL(ptr)) {
           (void)logdata_printf(buf, len, pos, "NULL");

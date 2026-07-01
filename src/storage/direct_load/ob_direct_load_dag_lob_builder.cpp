@@ -77,7 +77,6 @@ int ObDirectLoadDagLobBuilder::switch_slice(const int64_t slice_idx)
     } else if (OB_FAIL(ObDDLUtil::fill_writer_param(insert_tablet_ctx_->get_tablet_id(), slice_idx,
                                                     -1 /*cg_idx*/, insert_tablet_ctx_->get_dag(),
                                                     0 /*max_batch_size*/, write_param_))) {
-      LOG_WARN("fail to fill writer param", K(ret));
     } else {
       slice_idx_ = slice_idx;
       // 清理上一轮的lob_writer_
@@ -98,7 +97,6 @@ int ObDirectLoadDagLobBuilder::append_lob(ObDatumRow &datum_row)
     if (OB_FAIL(ObDDLUtil::handle_lob_columns(insert_tablet_ctx_->get_tablet_id(), slice_idx_,
                                               write_param_, lob_writer_, lob_allocator_,
                                               datum_row))) {
-      LOG_WARN("fail to handle lob column", KR(ret), K(datum_row));
     }
   }
   return ret;
@@ -115,7 +113,6 @@ int ObDirectLoadDagLobBuilder::append_lob(ObBatchDatumRows &datum_rows)
     if (OB_FAIL(ObDDLUtil::handle_lob_columns(insert_tablet_ctx_->get_tablet_id(), slice_idx_,
                                               write_param_, lob_writer_, lob_allocator_,
                                               datum_rows))) {
-      LOG_WARN("fail to convert to storage row", KR(ret), K(datum_rows));
     }
   }
   return ret;

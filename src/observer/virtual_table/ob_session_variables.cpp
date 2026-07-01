@@ -94,12 +94,10 @@ int ObSessionVariables::inner_get_next_row(ObNewRow *&row)
                            || share::SYS_VAR_OB_PLAN_CACHE_EVICT_HIGH_PERCENTAGE == sys_var->get_type()
                            || share::SYS_VAR_OB_PLAN_CACHE_EVICT_LOW_PERCENTAGE == sys_var->get_type()) {
                   if (OB_FAIL(set_pc_conf(sys_var, cells[cell_idx]))) {
-                    SERVER_LOG(WARN, "fail to set plan cache conf", K(ret), K(*sys_var));
                   }
                 } else {
                   sys_var_show_str.reset();
                   if (OB_FAIL(sys_var->to_show_str(*allocator_, *session_, sys_var_show_str))) {
-                    SERVER_LOG(WARN, "fail to convert to show string", K(ret), K(*sys_var));
                   } else {
                     cells[cell_idx].set_varchar(sys_var_show_str);
                   }

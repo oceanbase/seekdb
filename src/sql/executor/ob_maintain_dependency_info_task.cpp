@@ -47,7 +47,6 @@ int ObMaintainObjDepInfoTask::check_cur_maintain_task_is_valid(
     const share::schema::ObSimpleTableSchemaV2 *table_schema = nullptr;
     if (OB_FAIL(schema_guard.get_simple_table_schema(
                 dep_obj_key.dep_obj_id_, table_schema))) {
-      LOG_WARN("failed to get table schema", K(ret), K(dep_obj_key));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("schema is null", K(ret));
@@ -86,7 +85,6 @@ int ObMaintainObjDepInfoTask::check_and_build_dep_info_arg(
                 dep_objs.at(i).dep_obj_item_.dep_obj_schema_version_,
                 schema_guard,
                 is_valid))) {
-      LOG_WARN("failed to check current maintain task is valid");
     } else if (is_valid) {
       switch (op) {
       case share::schema::ObReferenceObjTable::INSERT_OP:
@@ -156,7 +154,6 @@ int ObMaintainObjDepInfoTask::process()
               && !dep_obj_info_arg.schema_.is_valid()) {
       // do nothing
     } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->maintain_obj_dependency_info(dep_obj_info_arg); }))) {
-      LOG_WARN("failed to maintain_obj_dependency_info", K(ret), K(dep_obj_info_arg));
     }
   }
   return ret;
@@ -166,7 +163,6 @@ int ObMaintainObjDepInfoTask::assign_view_schema(const ObTableSchema &view_schem
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(view_schema_.assign(view_schema))) {
-    LOG_WARN("failed to copy view schema", K(ret));
   }
   return ret;
 }
@@ -176,11 +172,8 @@ int ObMaintainDepInfoTaskQueue::init(const int64_t thread_cnt, const int64_t que
   int ret = OB_SUCCESS;
   auto attr = SET_USE_500("DepInfoTaskQ");
   if (OB_FAIL(ObAsyncTaskQueue::init(thread_cnt, queue_size, "MaintainDepInfoTaskQueue", OB_MALLOC_MIDDLE_BLOCK_SIZE))) {
-    LOG_WARN("failed to init base queue", K(ret));
   } else if (OB_FAIL(view_info_set_.create(INIT_BKT_SIZE, attr, attr))) {
-    LOG_WARN("failed to init view set", K(ret));
   } else if (OB_FAIL(sys_view_consistent_.create(INIT_BKT_SIZE, attr, attr))) {
-    LOG_WARN("failed to init sys view set", K(ret));
   }
   return ret;
 }
@@ -260,7 +253,6 @@ void ObMaintainDepInfoTaskQueue::run2()
               ret = OB_SIZE_OVERFLOW;
               LOG_WARN("push task to queue failed", K(ret));
             } else if (OB_FAIL(queue_.push(task))) {
-              LOG_WARN("push task to queue failed", K(ret));
             } else {
               rescheduled = true;
             }
@@ -271,7 +263,6 @@ void ObMaintainDepInfoTaskQueue::run2()
             // ignore ret
             int tmp_ret = OB_SUCCESS;
             if (OB_SUCCESS != (tmp_ret = view_info_set_.erase_refactored(view_schema.get_table_id()))) {
-              LOG_WARN("failed to erase obj id", K(tmp_ret), K(view_schema.get_table_id()));
             }
           }
         }

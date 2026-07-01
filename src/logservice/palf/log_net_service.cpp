@@ -49,7 +49,6 @@ int LogNetService::init(const int64_t palf_id,
 void LogNetService::destroy()
 {
   if (IS_INIT) {
-    PALF_LOG(INFO, "LogNetService destroy success", K(palf_id_));
     is_inited_ = false;
     log_rpc_ = NULL;
     palf_id_ = 0;;

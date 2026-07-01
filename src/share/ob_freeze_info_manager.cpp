@@ -133,9 +133,7 @@ int ObFreezeInfoManager::reload(const share::SCN &min_frozen_scn)
   share::SCN latest_snapshot_gc_scn;
 
   if (OB_FAIL(fetch_new_freeze_info(min_frozen_scn, *sql_proxy_, freeze_infos, latest_snapshot_gc_scn))) {
-    LOG_WARN("failed to load updated info", K(ret));
   } else if (OB_FAIL(update_freeze_info(freeze_infos, latest_snapshot_gc_scn))) {
-    LOG_WARN("failed to update freeze info", K(ret));
   }
 
   if (OB_FAIL(ret)) {
@@ -156,11 +154,8 @@ int ObFreezeInfoManager::fetch_new_freeze_info(
   // 1. get snapshot_gc_scn
   if (OB_FAIL(ObGlobalStatProxy::get_snapshot_gc_scn(
              sql_proxy, latest_snapshot_gc_scn))) {
-    LOG_WARN("fail to select for update snapshot_gc_scn", KR(ret));
-  // 2. acquire freeze info in same trans, ensure we can get the latest freeze info
   } else if (OB_FAIL(freeze_info_proxy.get_freeze_info_larger_or_equal_than(
              sql_proxy, min_frozen_scn, freeze_infos))) {
-    LOG_WARN("fail to get freeze info", KR(ret), K(min_frozen_scn));
   } else if (OB_UNLIKELY(freeze_infos.empty())) {
     ret = OB_ENTRY_NOT_EXIST;
     LOG_WARN("no freeze info in inner table", KR(ret), K(min_frozen_scn));
@@ -179,9 +174,7 @@ int ObFreezeInfoManager::update_freeze_info(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get invalid arguments", K(ret), K(freeze_infos), K(latest_snapshot_gc_scn));
   } else if (OB_FAIL(freeze_info_.frozen_statuses_.prepare_allocate(freeze_info_cnt))) {
-    LOG_WARN("failed to prepare allocate mem for new freeze info", KR(ret), K(freeze_infos), K(freeze_info_));
   } else if (OB_FAIL(freeze_info_.frozen_statuses_.assign(freeze_infos))) {
-    LOG_WARN("fail to assign", KR(ret), K(freeze_infos));
   } else if (freeze_info_.frozen_statuses_.count() > 1) {
     lib::ob_sort(freeze_info_.frozen_statuses_.begin(), freeze_info_.frozen_statuses_.end(),
               [](const ObFreezeInfo &a, const ObFreezeInfo &b)
@@ -207,7 +200,6 @@ int ObFreezeInfoManager::add_freeze_info(const share::ObFreezeInfo &frozen_statu
   }
 
   if (FAILEDx(freeze_info_.frozen_statuses_.push_back(frozen_status))) {
-    LOG_WARN("fail to push back", KR(ret), K(frozen_status));
   }
   return ret;
 }
@@ -234,7 +226,6 @@ int ObFreezeInfoManager::get_freeze_info(
   if (SCN::base_scn() == frozen_scn) {
     frozen_status.frozen_scn_ = SCN::base_scn();
   } else if (OB_FAIL(freeze_info_.get_freeze_info(frozen_scn, frozen_status, idx/*placeholder*/))) {
-    LOG_WARN("fail to get frozen status", KR(ret), K(frozen_scn), K_(freeze_info));
   }
   return ret;
 }
@@ -257,7 +248,6 @@ int ObFreezeInfoManager::get_latest_freeze_info(share::ObFreezeInfo &frozen_stat
     ret = OB_NOT_INIT;
     LOG_WARN("freeze info mgr not inited", KR(ret));
   } else if (OB_FAIL(freeze_info_.get_latest_freeze_info(frozen_status))) {
-    LOG_WARN("fail to get latest frozen status", KR(ret));
   }
   return ret;
 }
@@ -296,9 +286,7 @@ int ObFreezeInfoManager::get_freeze_info_by_major_snapshot(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("get invalid arguments", K(ret), K(snapshot_version));
   } else if (OB_FAIL(frozen_scn.convert_for_tx(snapshot_version))) {
-    LOG_WARN("failed to convert snapshot version to scn", K(ret), K(snapshot_version));
   } else if (OB_FAIL(freeze_info_.get_freeze_info(frozen_scn, frozen_status, ret_pos))) {
-    LOG_WARN("failed to get frozen status", K(ret), K(frozen_scn));
   } else if (ret_pos < 0 || ret_pos >= freeze_info_.count()) {
     ret = OB_ENTRY_NOT_EXIST;
     LOG_DEBUG("can not find the freeze info", K(ret), K(snapshot_version), K(freeze_info_));
@@ -329,7 +317,6 @@ int ObFreezeInfoManager::get_freeze_info_behind_snapshot_version(
     } else if (!include_equal && snapshot_version == cur_info.frozen_scn_.get_val_for_tx()) {
       // do nothing
     } else if (OB_FAIL(freeze_infos.push_back(cur_info))) {
-      LOG_WARN("failed to add cur info", K(ret), K(cur_info));
     }
   }
 

@@ -59,7 +59,6 @@ int ObExprFromDays::calc_fromdays(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &e
   int ret = OB_SUCCESS;
   ObDatum *param_datum = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, param_datum))) {
-    LOG_WARN("eval param value failed", K(ret));
   } else if (OB_UNLIKELY(param_datum->is_null())) {
     expr_datum.set_null();
   } else {
@@ -119,7 +118,6 @@ int ObExprFromDays::calc_fromdays_vector(const ObExpr &expr, ObEvalCtx &ctx, con
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval date_format param", K(ret));
   } else {
     VectorFormat arg_format = expr.args_[0]->get_format(ctx);
     VectorFormat res_format = expr.get_format(ctx);
@@ -146,7 +144,6 @@ int ObExprFromDays::calc_fromdays_vector(const ObExpr &expr, ObEvalCtx &ctx, con
     }
 
     if (OB_FAIL(ret)) {
-      LOG_WARN("expr calculation failed", K(ret));
     }
   }
   return ret;

@@ -403,7 +403,6 @@ public:
     int ret = common::OB_ERR_UNEXPECTED;
     const int64_t count = ATOMIC_AAF(&total_active_readonly_request_count_, -1);
     if (OB_UNLIKELY(count < 0)) {
-      TRANS_LOG(ERROR, "unexpected total_active_readonly_request_count", KP(this), K(count));
     }
   }
   int64_t get_total_active_readonly_request_count() { return ATOMIC_LOAD(&total_active_readonly_request_count_); }
@@ -767,7 +766,6 @@ public:
   static void free_value(ObLSTxCtxMgr* p)
   {
     if (NULL != p) {
-      TRANS_LOG(INFO, "ObLSTxCtxMgr release", K(*p));
       ObLSTxCtxMgrFactory::release(p);
     }
   }

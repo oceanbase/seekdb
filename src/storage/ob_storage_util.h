@@ -110,7 +110,6 @@ OB_INLINE int init_expr_vector_header(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.init_vector(eval_ctx, format, size, true))) {
-    STORAGE_LOG(WARN, "Failed to init vector", K(ret), K(expr));
   }
   return ret;
 }
@@ -128,7 +127,6 @@ OB_INLINE int init_exprs_uniform_header(
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "Unexpected null expr", K(ret), KPC(exprs));
       } else if (OB_FAIL(init_expr_vector_header(*expr, eval_ctx, size))) {
-        STORAGE_LOG(WARN, "Failed to init vector", K(ret), K(i), KPC(expr));
       }
     }
   }
@@ -148,7 +146,6 @@ OB_INLINE int init_exprs_vector_header(
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "Unexpected null expr", K(ret), KPC(exprs));
       } else if (OB_FAIL(init_expr_vector_header(*expr, eval_ctx, size, expr->get_default_res_format()))) {
-        STORAGE_LOG(WARN, "Failed to init vector", K(ret), K(i), KPC(expr));
       }
     }
   }
@@ -164,7 +161,6 @@ OB_INLINE int init_exprs_new_format_header(
   for (int64_t i = 0; OB_SUCC(ret) && i < cols_projector.count(); ++i) {
     sql::ObExpr *expr = exprs.at(i);
     if (OB_FAIL(expr->init_vector_default(eval_ctx, eval_ctx.max_batch_size_))) {
-      STORAGE_LOG(WARN, "Failed to init vector", K(ret), K(i), KPC(exprs.at(i)));
     }
   }
   return ret;

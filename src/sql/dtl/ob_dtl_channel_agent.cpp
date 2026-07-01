@@ -76,7 +76,6 @@ int ObDtlBufEncoder::need_new_buffer(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(msg_writer_->need_new_buffer(msg, eval_ctx, need_size, need_new))) {
-    LOG_WARN("failed to calc need new buffer", K(ret));
   }
   return ret;
 }
@@ -177,14 +176,12 @@ int ObDtlChanAgent::init(dtl::ObDtlFlowControl &dfc,
 
     ObDtlChannelInfo ch_info;
     if (OB_FAIL(task_ch_set.get_channel_info(i, ch_info))) {
-      LOG_WARN("failed to get channel info", K(ret));
     }
     dtl_buf_allocator_.set_sys_buffer_size(sys_buffer_size);
     UNUSED(find_bc_service);
     if (OB_FAIL(ret)) {
     } else if (ObDtlChannel::DtlChannelType::LOCAL_CHANNEL == data_ch->get_channel_type()) {
       if (OB_FAIL(local_channels_.push_back((ObDtlLocalChannel *)data_ch))) {
-        LOG_WARN("failed to push back server_ch", K(ret));
       }
       LOG_DEBUG("channel info by server", KP(data_ch->get_id()), K(data_ch->get_channel_type()));
     } else {
@@ -211,12 +208,9 @@ int ObDtlChanAgent::inner_broadcast_row(
   bool need_new = false;
   LOG_DEBUG("[DTL BROADCAST] broadcast", K(is_eof), K(msg.get_type()));
   if (OB_FAIL(dtl_buf_encoder_.switch_writer(msg))) {
-    LOG_WARN("failed to switch msg writer", K(ret));
   } else if (OB_FAIL(dtl_buf_encoder_.need_new_buffer(msg, eval_ctx, need_size, need_new))) {
-    LOG_WARN("failed to calc need new buffer", K(ret));
   } else if (need_new) {
     if (OB_FAIL(switch_buffer(need_size))) {
-      LOG_WARN("failed to switch buffer", K(ret));
     } else {
       dtl_buf_encoder_.write_msg_type(current_buffer_);
       current_buffer_->set_data_msg(msg.is_data_msg());
@@ -240,7 +234,6 @@ int ObDtlChanAgent::broadcast_row(const ObDtlMsg &msg, ObEvalCtx *eval_ctx, bool
   if (OB_FAIL(inner_broadcast_row(msg, eval_ctx, is_eof))) {
     if (OB_BUF_NOT_ENOUGH == ret) {
       if (OB_FAIL(inner_broadcast_row(msg, eval_ctx, is_eof))) {
-        LOG_WARN("failed to broadcast row", K(ret));
       }
     } else {
       LOG_WARN("failed to broadcast row", K(ret));
@@ -265,9 +258,7 @@ int ObDtlChanAgent::switch_buffer(int64_t need_size)
   if (OB_SUCC(ret) && OB_NOT_NULL(last_buffer)) {
     if (0 != last_buffer->pos()) {
       if (OB_FAIL(dtl_buf_encoder_.serialize())) {
-        LOG_WARN("failed to do serialize", K(ret));
       } else if (OB_FAIL(send_last_buffer(last_buffer))) {
-        LOG_WARN("failed to send last buffer", K(ret));
       } else {
         dtl_buf_encoder_.reset_writer();
       }
@@ -300,7 +291,6 @@ int ObDtlChanAgent::flush()
   // } else if (OB_FAIL(dtl_buf_encoder_.serialize())) {
   //   LOG_WARN("failed to do serialize", K(ret));
   } else if (OB_FAIL(send_last_buffer(last_buffer))) {
-    LOG_WARN("failed to send last buffer", K(ret));
   } else {
     dtl_buf_encoder_.reset_writer();
     current_buffer_ = nullptr;
@@ -328,9 +318,7 @@ int ObDtlChanAgent::send_last_buffer(ObDtlLinkedBuffer *&last_buffer)
         last_buffer->size() = size;
         last_buffer->pos() = pos;
         if (OB_FAIL(ObDtlLinkedBuffer::assign(*last_buffer, buf))) {
-          LOG_WARN("failed to assign buffer", K(ret));
         } else if (OB_FAIL(ch->send_buffer(buf))) {
-          LOG_WARN("failed to send buffer", K(ret));
         }
         if (nullptr != buf) {
           dtl_buf_allocator_.free_buf(*ch, buf);

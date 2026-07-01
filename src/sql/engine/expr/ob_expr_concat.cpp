@@ -52,13 +52,9 @@ int ObExprConcat::calc_text(common::ObObj &result,
   int64_t str1_byte_len = 0;
   int64_t str2_byte_len = 0;
   if (OB_FAIL(str_iter1.init(0, NULL, &temp_allocator))) {
-    LOG_WARN("init str_iter1 failed ", K(ret), K(str_iter1));
   } else if (OB_FAIL(str_iter2.init(0, NULL, &temp_allocator))) {
-    LOG_WARN("init str_iter2 failed ", K(ret), K(str_iter2));
   } else if (OB_FAIL(str_iter1.get_byte_len(str1_byte_len))) {
-    LOG_WARN("init str_iter1 failed ", K(ret), K(str_iter1));
   } else if (OB_FAIL(str_iter2.get_byte_len(str2_byte_len))) {
-    LOG_WARN("init str_iter1 failed ", K(ret), K(str_iter2));
   } else {
     bool has_lob_header = obj1.has_lob_header() || obj2.has_lob_header();
     ObTextStringResult tmp_lob(ObLongTextType, has_lob_header, allocator);
@@ -68,14 +64,12 @@ int ObExprConcat::calc_text(common::ObObj &result,
       ret = OB_SIZE_OVERFLOW;
       LOG_WARN("length overflow", K(ret), K(str1_byte_len), K(str2_byte_len), K(max_length));
     } else if (OB_FAIL(tmp_lob.init(res_data_byte_len))) {
-      LOG_WARN("init tmp lob failed", K(ret), K(res_data_byte_len));
     } else {
       ObTextStringIterState state;
       ObString src_block_data;
       while (OB_SUCC(ret)
              && (state = str_iter1.get_next_block(src_block_data)) == TEXTSTRING_ITER_NEXT) {
         if (OB_FAIL(tmp_lob.append(src_block_data))) {
-          LOG_WARN("output_result append failed", K(ret), K(src_block_data));
         }
       }
       if (OB_FAIL(ret)) {
@@ -87,7 +81,6 @@ int ObExprConcat::calc_text(common::ObObj &result,
       while (OB_SUCC(ret)
              && (state = str_iter2.get_next_block(src_block_data)) == TEXTSTRING_ITER_NEXT) {
         if (OB_FAIL(tmp_lob.append(src_block_data))) {
-          LOG_WARN("output_result append failed", K(ret), K(src_block_data));
         }
       }
       if (OB_FAIL(ret)) {
@@ -218,7 +211,6 @@ static int eval_concat_text(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_da
   int ret = OB_SUCCESS;
   ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, &expr_datum);
   if (OB_FAIL(output_result.init(res_len))) {
-    LOG_WARN("init lob result failed");
   } else {
     int64_t off = 0;
     ObString v_str;
@@ -234,12 +226,10 @@ static int eval_concat_text(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_da
         ObTextStringIterState state;
         ObString src_block_data;
         if (OB_FAIL(input_iter.init(0, NULL, &calc_alloc))) {
-          LOG_WARN("init input_iter failed ", K(ret), K(input_iter));
         }
         while (OB_SUCC(ret)
                 && (state = input_iter.get_next_block(src_block_data)) == TEXTSTRING_ITER_NEXT) {
           if (OB_FAIL(output_result.append(src_block_data))) {
-            LOG_WARN("output_result append failed", K(ret), K(src_block_data));
           } else {
             off += src_block_data.length();
           }
@@ -264,7 +254,6 @@ int ObExprConcat::eval_concat(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.eval_param_value(ctx))) {
-    LOG_WARN("evaluate parameters values failed", K(ret));
   } else {
     ObDatum *first_not_null = NULL;
     int64_t null_cnt = 0;
@@ -282,7 +271,6 @@ int ObExprConcat::eval_concat(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_
         } else {
           ObLobLocatorV2 locator(v.get_string(), expr.args_[i]->obj_meta_.has_lob_header());
           if (OB_FAIL(locator.get_lob_data_byte_len(lob_data_byte_len))) {
-            LOG_WARN("get lob data byte length failed", K(ret), K(locator));
           } else {
             res_len += lob_data_byte_len;
           }

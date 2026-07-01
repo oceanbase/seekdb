@@ -33,18 +33,15 @@ int ObDSResultItem::append_exprs(const ObIArray<ObRawExpr *> &exprs)
   for (int64_t i = 0; OB_SUCC(ret) && i < exprs.count(); i ++) {
     bool invalid = false;
     if (OB_FAIL(ObDynamicSamplingUtils::check_ds_can_be_applied_to_filter(exprs.at(i), invalid))) {
-      LOG_WARN("failed to check ds can use filter", K(ret));
     } else if (invalid) {
       if (ObOptimizerUtil::find_equal_expr(non_ds_exprs_, exprs.at(i))) {
         //do nothing
       } else if (OB_FAIL(non_ds_exprs_.push_back(exprs.at(i)))) {
-        LOG_WARN("failed to push back", K(ret));
       }
     } else {
       if (ObOptimizerUtil::find_equal_expr(exprs_, exprs.at(i))) {
         //do nothing
       } else if (OB_FAIL(exprs_.push_back(exprs.at(i)))) {
-        LOG_WARN("failed to push back", K(ret));
       }
     }
   }
@@ -62,7 +59,6 @@ int ObDynamicSampling::add_ds_stat_item(const T &item)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to copy stat item", K(ret));
   } else if (OB_FAIL(ds_stat_items_.push_back(cpy))) {
-    LOG_WARN("failed to push back stat item", K(ret));
   }
   return ret;
 }
@@ -75,14 +71,11 @@ int ObDynamicSampling::estimate_table_rowcount(const ObDSTableParam &param,
   throw_ds_error = false;
   LOG_TRACE("begine to estimate table rowcount", K(param), K(ds_result_items));
   if (OB_FAIL(get_ds_stat_items(param, ds_result_items))) {
-    LOG_WARN("failed to get ds stat items");
   } else if (get_ds_item_size() == 0) {
     //all ds item can get from cache.
     LOG_TRACE("succeed to get ds item from cache", K(param));
   } else if (OB_FAIL(do_estimate_table_rowcount(param, throw_ds_error))) {
-    LOG_WARN("failed to do estimate table rowcount", K(ret));
   } else if (OB_FAIL(add_ds_result_cache(ds_result_items))) {
-    LOG_WARN("failed to ds result cache", K(ret));
   }
   return ret;
 }
@@ -113,7 +106,6 @@ int ObDynamicSampling::add_ds_result_cache(ObIArray<ObDSResultItem> &ds_result_i
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get unexpected error", K(ret), K(logical_idx), K(ds_result_items));
         } else if (OB_FAIL(ds_result_items.at(i).stat_handle_.assign(ds_result_items.at(logical_idx).stat_handle_))) {
-          LOG_WARN("failed to assign stat handle", K(ret));
         } else {
           ds_result_items.at(i).stat_ = NULL;
         }
@@ -126,14 +118,12 @@ int ObDynamicSampling::add_ds_result_cache(ObIArray<ObDSResultItem> &ds_result_i
         } else if (OB_FAIL(query_ctx->filter_ds_stat_cache_.set_refactored(ds_result_items.at(i).stat_key_,
                                                                            *ds_result_items.at(i).stat_,
                                                                            /*overwrite*/1))) {
-          LOG_WARN("failed to add ds stat cache", K(ret));
         } else {
           ds_result_items.at(i).stat_handle_.stat_ = ds_result_items.at(i).stat_;
         }
       } else if (OB_FAIL(ctx_->get_opt_stat_manager()->add_ds_stat_cache(ds_result_items.at(i).stat_key_,
                                                                          *ds_result_items.at(i).stat_,
                                                                          ds_result_items.at(i).stat_handle_))) {
-        LOG_WARN("failed to add ds stat cache", K(ret));
       } else {
         ds_result_items.at(i).stat_ = NULL;//reset and the memory will free togther after ds.
         if (ds_result_items.at(i).type_ == ObDSResultItemType::OB_DS_BASIC_STAT) {
@@ -169,7 +159,6 @@ int ObDynamicSampling::get_ds_stat_items(const ObDSTableParam &param,
       ObOptDSStatHandle &handle = ds_result_items.at(i).stat_handle_;
       if (OB_FAIL(construct_ds_stat_key(param, ds_result_items.at(i).type_,
                                         ds_result_items.at(i).exprs_, key))) {
-        LOG_WARN("failed to construct ds stat key", K(ret));
       } else if (allow_cache_ds_result_to_sql_ctx() &&
                  !ds_result_items.at(i).exprs_.empty() &&
                  ds_result_items.at(i).type_ != ObDSResultItemType::OB_DS_BASIC_STAT) {
@@ -210,7 +199,6 @@ int ObDynamicSampling::get_ds_stat_items(const ObDSTableParam &param,
                                                          cur_modified_dml_cnt,
                                                          stale_percent_threshold,
                                                          ds_result_items))) {
-          LOG_WARN("failed to try add ds stat item by dml info", K(ret));
         } else {/*do nothing*/}
       } else {
         OPT_TRACE("succeed to get ds table result from cache");
@@ -287,7 +275,6 @@ int ObDynamicSampling::add_ds_stat_items_by_dml_info(const ObDSTableParam &param
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(do_add_ds_stat_item(param, ds_result_items.at(i), ds_column_cnt))) {
-          LOG_WARN("failed to do add ds stat item", K(ret));
         }
       }
     }
@@ -313,7 +300,6 @@ int ObDynamicSampling::do_add_ds_stat_item(const ObDSTableParam &param,
                                                        ObDSStatItemType::OB_DS_ROWCOUNT)))) {
         LOG_WARN("failed to add ds stat item", K(ret));
       } else if (OB_FAIL(add_ds_col_stat_item(param, result_item, ds_column_cnt))) {
-        LOG_WARN("failed to add ds col stat item", K(ret));
       } else if (param.degree_ > result_item.stat_->get_ds_degree()) {
         result_item.stat_->set_ds_degree(param.degree_);
       }
@@ -332,14 +318,11 @@ int ObDynamicSampling::do_add_ds_stat_item(const ObDSTableParam &param,
                                             result_item.exprs_,
                                             true,
                                             filters_str))) {
-        LOG_WARN("failed to print filter exprs", K(ret));
       } else if (OB_FAIL(ob_write_string(allocator_, filters_str.string(), tmp_str))) {
-        LOG_WARN("failed to write string", K(ret), K(tmp_str));
       } else if (OB_FAIL(add_ds_stat_item(ObDSStatItem(&result_item,
                                                        tmp_str,
                                                        result_item.type_ == OB_DS_OUTPUT_STAT ? ObDSStatItemType::OB_DS_OUTPUT_COUNT :
                                                        ObDSStatItemType::OB_DS_FILTER_OUTPUT)))) {
-        LOG_WARN("failed to add ds stat item", K(ret));
       } else {/*do nothing*/}
       break;
     }
@@ -364,7 +347,6 @@ int ObDynamicSampling::add_ds_col_stat_item(const ObDSTableParam &param,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(tmp_col_stats.allocate_array(allocator_, ds_column_cnt))) {
-    LOG_WARN("failed to prepare allocate count", K(ret));
   } else {
     int64_t idx = 0;
     //add ds column item
@@ -389,12 +371,10 @@ int ObDynamicSampling::add_ds_col_stat_item(const ObDSTableParam &param,
                                                            tmp_str,
                                                            col_expr,
                                                            ObDSStatItemType::OB_DS_COLUMN_NUM_DISTINCT)))) {
-            LOG_WARN("failed to add num distinct stat item", K(ret));
           } else if (OB_FAIL(add_ds_stat_item(ObDSStatItem(&result_item,
                                                            tmp_str,
                                                            col_expr,
                                                            ObDSStatItemType::OB_DS_COLUMN_NUM_NULL)))) {
-            LOG_WARN("failed to add num null stat item", K(ret));
           } else if (OB_UNLIKELY(idx >= tmp_col_stats.count())) {
            ret = OB_ERR_UNEXPECTED;
            LOG_WARN("get unexpected error", K(ret), K(idx), K(result_item), K(ds_column_cnt));
@@ -457,11 +437,9 @@ int ObDynamicSampling::get_table_dml_info(const uint64_t table_id,
                                                                     table_id,
                                                                     cur_modified_dml_cnt,
                                                                     false))) {
-    LOG_WARN("failed to estimate modified count", K(ret));
   } else if (OB_FAIL(pl::ObDbmsStats::get_table_stale_percent_threshold(ctx_->get_exec_ctx()->get_sql_proxy(),
                                                                         table_id,
                                                                         stale_percent_threshold))) {
-    LOG_WARN("failed to get table stale percent threshold", K(ret));
   } else {
     LOG_TRACE("succeed to get table dml info", K(table_id), K(cur_modified_dml_cnt),
                                                K(stale_percent_threshold));
@@ -488,7 +466,6 @@ int ObDynamicSampling::construct_ds_stat_key(const ObDSTableParam &param,
                                         type == ObDSResultItemType::OB_DS_BASIC_STAT ? empty_exprs : filter_exprs,
                                         true,
                                         expr_str))) {
-    LOG_WARN("failed to print filter exprs", K(ret));
   } else if (param.need_specify_partition_ &&
              OB_FAIL(gen_partition_str(param.partition_infos_, partition_str))) {
     LOG_WARN("failed to print filter exprs", K(ret));
@@ -523,18 +500,14 @@ int ObDynamicSampling::do_estimate_table_rowcount(const ObDSTableParam &param, b
   if (OB_FAIL(add_table_info(param.db_name_,
                              param.table_name_,
                              param.alias_name_))) {
-    LOG_WARN("failed to add table info", K(ret));
   } else if (param.need_specify_partition_ &&
              OB_FAIL(add_partition_info(param.partition_infos_,
                                         partition_str,
                                         partition_list_))) {
     LOG_WARN("failed to add partition info", K(ret));
   } else if (OB_FAIL(calc_table_sample_block_ratio(param))) {
-    LOG_WARN("failed to calc sample block ratio", K(ret));
   } else if (OB_FAIL(add_block_info_for_stat_items())) {
-    LOG_WARN("failed to add block info for stat items", K(ret));
   } else if (OB_FAIL(estimte_rowcount(param.max_ds_timeout_, param.degree_, throw_ds_error))) {
-    LOG_WARN("failed to estimate rowcount", K(ret));
   }
   return ret;
 }
@@ -560,11 +533,8 @@ int ObDynamicSampling::estimte_rowcount(int64_t max_ds_timeout,
   if (!is_big_table_ && OB_FAIL(add_block_sample_info(sample_block_ratio_, seed_, sample_str))) {
     LOG_WARN("failed to add block sample info", K(ret));
   } else if (OB_FAIL(add_basic_hint_info(basic_hint_str, max_ds_timeout, is_big_table_ ? 1 : degree))) {
-    LOG_WARN("failed to add basic hint info", K(ret));
   } else if (OB_FAIL(add_table_clause(table_str))) {
-    LOG_WARN("failed to add table clause", K(ret));
   } else if (OB_FAIL(pack(raw_sql_str))) {
-    LOG_WARN("failed to pack dynamic sampling", K(ret));
   } else if (OB_FAIL(prepare_and_store_session(session_info, session_value,
                                                nested_count, is_no_backslash_escapes, tx_desc,
                                                is_sess_in_retry,
@@ -578,7 +548,6 @@ int ObDynamicSampling::estimte_rowcount(int64_t max_ds_timeout,
     //do not trace dynamic sample sql execute
     STOP_OPT_TRACE;
     if (OB_FAIL(do_estimate_rowcount(session_info, raw_sql_str))) {
-      LOG_WARN("failed to do estimate rowcount", K(ret));
     }
     RESUME_OPT_TRACE;
   }
@@ -616,12 +585,10 @@ int ObDSStatItem::gen_expr(common::ObIAllocator &allocator, char *buf, const int
       case OB_DS_FILTER_OUTPUT: {
       if (filter_string_.empty()) {
         if (OB_FAIL(databuff_printf(buf, buf_len, pos, "COUNT(*)"))) {
-          LOG_WARN("failed to print buf", K(ret));
         } else {/*do nothing*/}
       } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "SUM(CASE WHEN %.*s THEN 1 ELSE 0 END)",
                                          filter_string_.length(),
                                          filter_string_.ptr()))) {
-        LOG_WARN("failed to print buf", K(ret));
       }
       break;
     }
@@ -633,12 +600,10 @@ int ObDSStatItem::gen_expr(common::ObIAllocator &allocator, char *buf, const int
                                                           allocator,
                                                           column_expr_->get_column_name(),
                                                           new_col_name))) {
-        LOG_WARN("fail to generate new name with escape character", K(ret), K(column_expr_->get_column_name()));
       } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                          "APPROX_COUNT_DISTINCT(`%.*s`)",
                                          new_col_name.length(),
                                          new_col_name.ptr()))) {
-        LOG_WARN("failed to print buf", K(ret));
       }
       break;
     }
@@ -650,12 +615,10 @@ int ObDSStatItem::gen_expr(common::ObIAllocator &allocator, char *buf, const int
                                                           allocator,
                                                           column_expr_->get_column_name(),
                                                           new_col_name))) {
-        LOG_WARN("fail to generate new name with escape character", K(ret), K(column_expr_->get_column_name()));
       } else if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                          "SUM(CASE WHEN `%.*s` IS NULL THEN 1 ELSE 0 END)",
                                           new_col_name.length(),
                                           new_col_name.ptr()))) {
-        LOG_WARN("failed to print buf", K(ret));
       }
       break;
     }
@@ -678,7 +641,6 @@ int ObDynamicSampling::pack(ObSqlString &raw_sql_str)
   int ret = OB_SUCCESS;
   ObSqlString select_fields;
   if (OB_FAIL(gen_select_filed(select_fields))) {
-    LOG_WARN("failed to generate select filed", K(ret));
   } else if (OB_FAIL(raw_sql_str.append_fmt("SELECT %.*s %.*s FROM %.*s %s %.*s" ,
                                             basic_hints_.length(),
                                             basic_hints_.ptr(),
@@ -689,7 +651,6 @@ int ObDynamicSampling::pack(ObSqlString &raw_sql_str)
                                             where_conditions_.empty() ? " " : "WHERE",
                                             where_conditions_.length(),
                                             where_conditions_.ptr()))) {
-    LOG_WARN("failed to build query sql stmt", K(ret));
   } else {
     LOG_TRACE("OptStat: dynamic sampling query sql", K(raw_sql_str));
     OPT_TRACE("dynamic sampling query sql:", raw_sql_str.string());
@@ -706,9 +667,7 @@ int ObDynamicSampling::gen_select_filed(ObSqlString &select_fields)
       if (i != 0 && OB_FAIL(select_fields.append(", "))) {
         LOG_WARN("failed to append delimiter", K(ret));
       } else if (OB_FAIL(ds_stat_items_.at(i)->gen_expr(allocator_, buf, OB_MAX_SQL_LENGTH, pos))) {
-        LOG_WARN("failed to gen select expr", K(ret));
       } else if (OB_FAIL(select_fields.append(buf, pos))) {
-        LOG_WARN("failed to append stat item expr", K(ret));
       }
     }
   }
@@ -727,17 +686,14 @@ int ObDynamicSampling::add_table_info(const ObString &db_name,
               allocator_,
               db_name,
               new_db_name))) {
-    LOG_WARN("fail to generate new name with escape character", K(ret), K(db_name));
   } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                     allocator_,
                     table_name,
                     new_tbl_name))) {
-    LOG_WARN("fail to generate new name with escape character", K(ret), K(table_name));
   } else if (OB_FAIL(sql::ObSQLUtils::generate_new_name_with_escape_character(
                     allocator_,
                     alias_name,
                     new_alias_name))) {
-    LOG_WARN("fail to generate new name with escape character", K(ret), K(alias_name));
   } else {
     db_name_ = new_db_name;
     table_name_ = new_tbl_name;
@@ -751,26 +707,17 @@ int ObDynamicSampling::add_basic_hint_info(ObSqlString &basic_hint_str,
                                            int64_t degree)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(basic_hint_str.append("/*+ NO_REWRITE"))) {//hint begin
-    LOG_WARN("failed to append", K(ret));
-  //add suite degree
+  if (OB_FAIL(basic_hint_str.append("/*+ NO_REWRITE"))) {
   } else if (degree <= 1 && OB_FAIL(basic_hint_str.append(" NO_PARALLEL "))) {
     LOG_WARN("failed to append", K(ret));
   } else if (degree > 1 && OB_FAIL(basic_hint_str.append_fmt(" PARALLEL(%ld) ", degree))) {
     LOG_WARN("failed to append", K(ret));
   //Dynamic Sampling SQL shouldn't dynamic sampling
   } else if (OB_FAIL(basic_hint_str.append(" DYNAMIC_SAMPLING(0) "))) {
-    LOG_WARN("failed to append", K(ret));
   } else if (OB_FAIL(basic_hint_str.append(" DBMS_STATS "))) {
-    LOG_WARN("failed to append", K(ret));
-  //add query timeout control Dynamic Sampling SQL execute time.
   } else if (OB_FAIL(basic_hint_str.append_fmt(" QUERY_TIMEOUT(%ld) ", query_timeout))) {
-    LOG_WARN("failed to append", K(ret));
-  //use defualt stat
   } else if (OB_FAIL(basic_hint_str.append(" OPT_PARAM(\'USE_DEFAULT_OPT_STAT\',\'TRUE\') "))) {
-    LOG_WARN("failed to append", K(ret));
-  } else if (OB_FAIL(basic_hint_str.append("*/"))) {//hint end
-    LOG_WARN("failed to append", K(ret));
+  } else if (OB_FAIL(basic_hint_str.append("*/"))) {
   } else {
     basic_hints_ = basic_hint_str.string();
   }
@@ -782,12 +729,9 @@ int ObDynamicSampling::add_partition_info(const ObIArray<PartInfo> &partition_in
                                           ObString &partition_str)
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(partition_sql_str.append("partition("))) {//partition begin
-    LOG_WARN("failed to append", K(ret));
+  if (OB_FAIL(partition_sql_str.append("partition("))) {
   } else if (OB_FAIL(gen_partition_str(partition_infos, partition_sql_str))) {
-    LOG_WARN("failed to gen partition str", K(ret));
-  } else if (OB_FAIL(partition_sql_str.append(")"))) {//partition end
-    LOG_WARN("failed to append", K(ret));
+  } else if (OB_FAIL(partition_sql_str.append(")"))) {
   } else {
     partition_str = partition_sql_str.string();
   }
@@ -807,7 +751,6 @@ int ObDynamicSampling::print_filter_exprs(const ObSQLSessionInfo *session_info,
   for (int64_t i = 0; OB_SUCC(ret) && i < filter_exprs.count(); ++i) {
     ObRawExpr *new_expr = NULL;
     if (OB_FAIL(ObRawExprCopier::copy_expr(expr_factory, filter_exprs.at(i), new_expr))) {
-      LOG_WARN("failed to copy raw expr", K(ret));
     } else if (OB_ISNULL(new_expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret), K(new_expr));
@@ -821,10 +764,8 @@ int ObDynamicSampling::print_filter_exprs(const ObSQLSessionInfo *session_info,
                                       TZ_INFO(session_info),
                                       param_store);
         if (OB_FAIL(expr_printer.do_print(new_expr, T_WHERE_SCOPE, only_column_namespace))) {
-          LOG_WARN("failed to print expr", KPC(new_expr), K(ret));
         } else if (OB_FAIL(expr_str.append_fmt("%s%.*s", i == 0 ? " " : " and ",
                                                static_cast<int32_t>(pos), expr_str_buf))) {
-          LOG_WARN("failed to append fmt", K(ret));
         } else {/*do nothing*/}
       }
     }
@@ -850,7 +791,6 @@ int ObDynamicSampling::calc_table_sample_block_ratio(const ObDSTableParam &param
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(param));
   } else if (OB_FAIL(estimate_table_block_count_and_row_count(param))) {
-    LOG_WARN("failed to estimate table block count and row count", K(ret));
   } else if (sstable_row_count_ + memtable_row_count_ <= MAGIC_MAX_AUTO_SAMPLE_SIZE) {
     sample_block_ratio_ = 100.0;
   } else {
@@ -935,7 +875,6 @@ int ObDynamicSampling::estimate_table_block_count_and_row_count(const ObDSTableP
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret), K(ctx_->get_exec_ctx()), K(ctx_->get_session_info()));
   } else if (OB_FAIL(get_all_tablet_id_and_object_id(param, tablet_ids, partition_ids))) {
-    LOG_WARN("failed to get all tablet id and object id", K(ret));
   } else if (OB_FAIL(ObBasicStatsEstimator::do_estimate_block_count_and_row_count(*ctx_->get_exec_ctx(),
                                                                                   param.table_id_,
                                                                                   false,
@@ -954,7 +893,6 @@ int ObDynamicSampling::estimate_table_block_count_and_row_count(const ObDSTableP
                                                                                     partition_ids,
                                                                                     column_group_ids,
                                                                                     estimate_result))) {
-      LOG_WARN("failed to do estimate block count and row count use leader replication", K(ret));
     }
   } 
 
@@ -987,23 +925,17 @@ int ObDynamicSampling::get_all_tablet_id_and_object_id(const ObDSTableParam &par
       LOG_WARN("get unexpected null", K(ret), K(ctx_->get_exec_ctx()));
     } else if (OB_FAIL(ctx_->get_exec_ctx()->get_das_ctx().get_das_tablet_mapper(param.table_id_,
                                                                                 tablet_mapper))) {
-      LOG_WARN("fail to get das tablet mapper", K(ret));
     } else if (OB_FAIL(tablet_mapper.get_non_partition_tablet_id(tmp_tablet_ids, tmp_part_ids))) {
-      LOG_WARN("failed to get non partition tablet id", K(ret));
     } else if (OB_UNLIKELY(tmp_part_ids.count() != 1 || tmp_tablet_ids.count() != 1)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected error", K(ret), K(tmp_part_ids), K(tmp_tablet_ids));
     } else if (OB_FAIL(tablet_ids.push_back(tmp_tablet_ids.at(0)))) {
-      LOG_WARN("failed to push back", K(ret));
     } else if (OB_FAIL(partition_ids.push_back(tmp_part_ids.at(0)))) {
-      LOG_WARN("failed to push back", K(ret));
     } else {/*do nothing*/}
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < param.partition_infos_.count(); ++i) {
       if (OB_FAIL(tablet_ids.push_back(param.partition_infos_.at(i).tablet_id_))) {
-        LOG_WARN("failed to push back", K(ret));
       } else if (OB_FAIL(partition_ids.push_back(static_cast<ObObjectID>(param.partition_infos_.at(i).part_id_)))) {
-        LOG_WARN("failed to push back", K(ret));
       }
     }
   }
@@ -1027,7 +959,6 @@ int ObDynamicSampling::add_block_sample_info(const double &sample_block_ratio,
   } else if (OB_FAIL(sample_str.append_fmt(" SAMPLE BLOCK(%lf) %s ",
                                            sample_block_ratio,
                                            seed_str.empty() ? " " : seed_str.ptr()))) {
-    LOG_WARN("failed to append fmt", K(ret));
   } else {
     sample_block_ = sample_str.string();
   }
@@ -1055,13 +986,11 @@ int ObDynamicSampling::do_estimate_rowcount(ObSQLSessionInfo *session_info,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected empty", K(ret));
       } else if (OB_FAIL(pool->acquire(session_info, conn))) {
-        LOG_WARN("failed to acquire inner connection", K(ret));
       } else if (OB_ISNULL(conn)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("conn is null", K(ret));
       } else if (OB_FAIL(conn->execute_read(raw_sql.ptr(),
                                             proxy_result))) {
-        LOG_WARN("failed to execute sql", K(ret), K(raw_sql));
       } else if (OB_ISNULL(client_result = proxy_result.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to execute sql", K(ret));
@@ -1077,16 +1006,12 @@ int ObDynamicSampling::do_estimate_rowcount(ObSQLSessionInfo *session_info,
             ObObj tmp;
             ObObj val;
             if (OB_FAIL(client_result->get_obj(i, tmp))) {
-              LOG_WARN("failed to get object", K(ret));
             } else if (OB_FAIL(ob_write_obj(allocator_, tmp, val))) {
-              LOG_WARN("failed to write object", K(ret));
             } else if (OB_FAIL(add_result(val))) {
-              LOG_WARN("failed to add result", K(ret));
             }
           }
           if (OB_SUCC(ret)) {
             if (OB_FAIL(decode(sample_block_ratio_ / 100.0))) {
-              LOG_WARN("failed to decode results", K(ret));
             } else {
               results_.reset();
             }
@@ -1129,7 +1054,6 @@ int ObDynamicSampling::prepare_and_store_session(ObSQLSessionInfo *session,
   } else {
     session_value = new(ptr)sql::ObSQLSessionInfo::StmtSavedValue();
     if (OB_FAIL(session->save_session(*session_value))) {
-      LOG_WARN("failed to save session", K(ret));
     } else if (session->is_in_external_catalog()
                && OB_FAIL(session->set_internal_catalog_db())) {
       LOG_WARN("failed to set catalog", K(ret));
@@ -1168,7 +1092,6 @@ int ObDynamicSampling::restore_session(ObSQLSessionInfo *session,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(session), K(session_value));
   } else if (OB_FAIL(session->restore_session(*session_value))) {
-    LOG_WARN("failed to restore session", K(ret));
   } else if (OB_FALSE_IT(session->set_session_in_retry(is_sess_in_retry, last_query_retry_err))) {
   } else {
     ObSQLSessionInfo::LockGuard data_lock_guard(session->get_thread_data_lock());
@@ -1203,7 +1126,6 @@ int ObDynamicSampling::decode(double sample_ratio)
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < ds_stat_items_.count(); ++i) {
     if (OB_FAIL(ds_stat_items_.at(i)->decode(sample_ratio, results_.at(i)))) {
-      LOG_WARN("failed to decode statistic result", K(ret));
     }
   }
   return ret;
@@ -1218,7 +1140,6 @@ int ObDSStatItem::decode(double sample_ratio, ObObj &obj)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(result_item_->stat_), K(sample_ratio));
   } else if (OB_FAIL(cast_int(obj, res))) {
-    LOG_WARN("failed to cast int", K(ret));
   } else {
     switch (type_) {
       case OB_DS_ROWCOUNT:
@@ -1267,11 +1188,9 @@ int ObDSStatItem::cast_int(const ObObj &obj, int64_t &ret_value)
   ObArenaAllocator calc_buffer("ObOptDS");
   ObCastCtx cast_ctx(&calc_buffer, NULL, CM_NONE, ObCharset::get_system_collation());
   if (OB_FAIL(ObObjCaster::to_type(ObIntType, cast_ctx, obj, dest_obj))) {
-    LOG_WARN("cast to int value failed", K(ret), K(obj));
   } else if (dest_obj.is_null()) {
     /*do nothing*/
   } else if (OB_FAIL(dest_obj.get_int(ret_value))) {
-    LOG_WARN("get int value failed", K(ret), K(dest_obj), K(obj));
   }
   return ret;
 }
@@ -1291,15 +1210,11 @@ int ObDynamicSampling::gen_partition_str(const ObIArray<PartInfo> &partition_inf
       if (i > 0 && OB_FAIL(partition_str.append(","))) {
         LOG_WARN("failed to append", K(ret));
       } else if (OB_FAIL(partition_str.append(quot))) {
-        LOG_WARN("failed to append", K(ret));
       } else if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(allocator,
                                                                              partition_infos.at(i).part_name_,
                                                                              print_name))) {
-        LOG_WARN("failed to generate new name with escape character", K(ret));
       } else if (OB_FAIL(partition_str.append(print_name))) {
-        LOG_WARN("failed to append", K(ret));
       } else if (OB_FAIL(partition_str.append(quot))) {
-        LOG_WARN("failed to append", K(ret));
       }
     }
   }
@@ -1449,13 +1364,11 @@ int ObDynamicSamplingUtils::get_ds_table_param(ObOptimizerContext &ctx,
                                                       ds_level,
                                                       sample_block_cnt,
                                                       specify_ds))) {
-    LOG_WARN("failed to get valid dynamic sampling level", K(ret));
   } else if (ds_level == ObDynamicSamplingLevel::BASIC_DYNAMIC_SAMPLING) {
     if (OB_FAIL(get_ds_table_part_info(ctx, table_meta->get_ref_table_id(),
                                        table_meta->get_all_used_tablets(),
                                        ds_table_param.need_specify_partition_,
                                        ds_table_param.partition_infos_))) {
-      LOG_WARN("failed to get ds table part info", K(ret));
     } else if (check_is_failed_ds_table(table_meta->get_ref_table_id(),
                                         table_meta->get_all_used_parts(),
                                         ctx.get_failed_ds_tab_list())) {
@@ -1464,7 +1377,6 @@ int ObDynamicSamplingUtils::get_ds_table_param(ObOptimizerContext &ctx,
                                            table_meta->get_table_id(),
                                            table_meta->get_ref_table_id(),
                                            ds_table_param.degree_))) {
-      LOG_WARN("failed to get ds table degree", K(ret));
     } else if ((ds_table_param.max_ds_timeout_ = get_dynamic_sampling_max_timeout(ctx)) > 0) {
       
       ds_table_param.table_id_ = table_meta->get_ref_table_id();
@@ -1493,7 +1405,6 @@ int ObDynamicSamplingUtils::check_ds_can_be_applied_to_filters(const ObIArray<Ob
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret), K(filters.at(i)));
     } else if (OB_FAIL(check_ds_can_be_applied_to_filter(filters.at(i), no_use, total_expr_cnt))) {
-      LOG_WARN("failed to check ds can use filter", K(ret));
     }
   }
   return ret;
@@ -1524,7 +1435,6 @@ int ObDynamicSamplingUtils::check_ds_can_be_applied_to_filter(const ObRawExpr *f
   } else if (filter->get_expr_type() == T_FUN_SYS_LNNVL) {
     const ObRawExpr *real_expr = NULL;
     if (OB_FAIL(ObRawExprUtils::get_real_expr_without_cast(filter->get_param_expr(0), real_expr))) {
-      LOG_WARN("fail to get real expr without cast", K(ret));
     } else if (OB_ISNULL(real_expr)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("real expr is invalid", K(ret), K(real_expr));
@@ -1546,7 +1456,6 @@ int ObDynamicSamplingUtils::check_ds_can_be_applied_to_filter(const ObRawExpr *f
     no_use = total_expr_cnt > OB_DS_MAX_FILTER_EXPR_COUNT;
     for (int64_t i = 0; !no_use && OB_SUCC(ret) && i < filter->get_param_count(); ++i) {
       if (OB_FAIL(SMART_CALL(check_ds_can_be_applied_to_filter(filter->get_param_expr(i), no_use, total_expr_cnt)))) {
-        LOG_WARN("failed to check ds can use filter", K(ret));
       }
     }
   }
@@ -1578,7 +1487,6 @@ int ObDynamicSamplingUtils::get_ds_table_part_info(ObOptimizerContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema(ref_table_id, table_schema))) {
-    LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(table_schema));
@@ -1591,7 +1499,6 @@ int ObDynamicSamplingUtils::get_ds_table_part_info(ObOptimizerContext &ctx,
                                                       tmp_subpart_infos,
                                                       tmp_part_ids,
                                                       tmp_subpart_ids))) {
-    LOG_WARN("failed to get table part infos", K(ret));
   } else if ((table_schema->get_part_level() == share::schema::PARTITION_LEVEL_ONE &&
               tmp_part_infos.count() == used_tablets.count()) ||
              (table_schema->get_part_level() == share::schema::PARTITION_LEVEL_TWO &&
@@ -1611,7 +1518,6 @@ int ObDynamicSamplingUtils::get_ds_table_part_info(ObOptimizerContext &ctx,
           if (tmp_part_infos.at(j).tablet_id_ == used_tablets.at(i)) {
             found_it = true;
             if (OB_FAIL(partition_infos.push_back(tmp_part_infos.at(j)))) {
-              LOG_WARN("failed to push back", K(ret));
             }
           }
         }
@@ -1621,7 +1527,6 @@ int ObDynamicSamplingUtils::get_ds_table_part_info(ObOptimizerContext &ctx,
           if (tmp_subpart_infos.at(j).tablet_id_ == used_tablets.at(i)) {
             found_it = true;
             if (OB_FAIL(partition_infos.push_back(tmp_subpart_infos.at(j)))) {
-              LOG_WARN("failed to push back", K(ret));
             }
           }
         }
@@ -1649,7 +1554,6 @@ int ObDynamicSamplingUtils::get_ds_table_degree(ObOptimizerContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret));
   } else if (OB_FAIL(schema_guard->get_table_schema(ref_table_id, table_schema))) {
-    LOG_WARN("failed to get table schema", K(ret));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected error", K(ret), K(table_schema));
@@ -1704,9 +1608,7 @@ int ObDynamicSamplingUtils::add_failed_ds_table_list(const uint64_t table_id,
   ObDSFailTabInfo info;
   info.table_id_ = table_id;
   if (OB_FAIL(info.part_ids_.assign(used_part_id))) {
-    LOG_WARN("failed to assign", K(ret));
   } else if (OB_FAIL(failed_list.push_back(info))) {
-    LOG_WARN("failed to push back");
   } else {/*do nothing*/}
   return ret;
 }

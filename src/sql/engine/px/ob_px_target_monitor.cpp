@@ -151,7 +151,6 @@ int ObPxTargetMonitor::get_all_target_info(common::ObIArray<ObPxTargetInfo> &tar
   monitor_info.local_target_used_ = px_target_used_;
   monitor_info.local_parallel_session_count_ = parallel_session_count_;
   if (OB_FAIL(target_info_array.push_back(monitor_info))) {
-    LOG_WARN("target_info_array push_back failed", K(ret), K(monitor_info));
   }
   return ret;
 }
@@ -160,7 +159,6 @@ int ObPxTargetCond::wait(const int64_t wait_time_us)
 {
   int ret = OB_SUCCESS; 
   if (wait_time_us < 0) {
-    TRANS_LOG(WARN, "invalid argument", K(wait_time_us));
     ret = OB_INVALID_ARGUMENT;
   } else {
     THIS_WORKER.sched_wait();

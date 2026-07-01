@@ -134,8 +134,6 @@ int ObRevokeResolver::resolve_revoke_role_inner(
     } else if (OB_FAIL(check_dcl_on_inner_user(revoke_role->type_,
                                                params_.session_info_->get_priv_user_id(),
                                                user_id))) {
-      LOG_WARN("failed to check dcl on inner-user or unsupport to modify reserved user", K(ret),
-               K(session_info_->get_priv_user_id()), K(user_name));
     }
     OZ (revoke_stmt->add_grantee(user_name));
     OZ (params_.schema_checker_->get_user_info(user_id, user_info), user_id);
@@ -249,18 +247,14 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
                         grant_level,
                         *allocator_,
                         catalog))) {
-              LOG_WARN("Resolve priv_level node error", K(ret));
             } else {
               revoke_stmt->set_grant_level(grant_level);
             }
 
             if (OB_SUCC(ret) && grant_level != OB_PRIV_CATALOG_LEVEL) {
               if (OB_FAIL(check_and_convert_name(db, table))) {
-                LOG_WARN("Check and convert name error", K(db), K(table), K(ret));
               } else if (OB_FAIL(revoke_stmt->set_database_name(db))) {
-                LOG_WARN("Failed to set database_name to revoke_stmt", K(ret));
               } else if (OB_FAIL(revoke_stmt->set_table_name(table))) {
-                LOG_WARN("Failed to set table_name to revoke_stmt", K(ret));
               }
             }
 
@@ -296,7 +290,6 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
               stmt_need_privs.need_privs_.at(0) =
                   ObNeedPriv("", "", OB_PRIV_USER_LEVEL, OB_PRIV_CREATE_USER, false);
               if (OB_FAIL(schema_checker_->check_priv(session_priv, enable_role_id_array, stmt_need_privs))) {
-                LOG_WARN("no priv", K(ret));
               }
             }
           }
@@ -311,7 +304,6 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
           } else if (OB_FAIL(ObGrantResolver::resolve_priv_set(privs_node, grant_level, priv_set, revoke_stmt, 
                                                         params_.schema_checker_, params_.session_info_,
                                                         *allocator_))) {
-            LOG_WARN("Resolve priv set error", K(ret));
           }
           if (OB_FAIL(ret)) {
           } else {
@@ -363,7 +355,6 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
                   ret = OB_WRONG_USER_NAME_LENGTH;
                   LOG_USER_ERROR(OB_WRONG_USER_NAME_LENGTH, user_name.length(), user_name.ptr());
                 } else if (OB_FAIL(revoke_stmt->add_grantee(user_name))) {
-                  SQL_RESV_LOG(WARN, "fail to add grantee", K(ret), K(user_name), K(host_name));
                 } else if (OB_FAIL(
                     params_.schema_checker_->get_user_id(user_name, 
                                                          host_name, user_id))) {
@@ -382,10 +373,7 @@ int ObRevokeResolver::resolve_mysql(const ParseNode &parse_tree)
                 } else if (OB_FAIL(check_dcl_on_inner_user(node->type_,
                                                           params_.session_info_->get_priv_user_id(),
                                                           user_id))) {
-                  LOG_WARN("failed to check dcl on inner-user or unsupport to modify reserved user",
-                           K(ret), K(session_info_->get_priv_user_id()), K(user_name));
                 } else if (OB_FAIL(revoke_stmt->add_user(user_id))) {
-                  LOG_WARN("Add user to grant_stmt error", K(ret), K(user_id));
                 } else {
                   //do nothing
                 }

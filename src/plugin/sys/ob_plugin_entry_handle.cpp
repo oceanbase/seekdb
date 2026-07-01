@@ -84,7 +84,6 @@ int ObPluginEntryHandle::init_plugin()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("can't call plugin init", K(ret), K(plugin_entry_));
   } else if (OB_FAIL(plugin_entry_.descriptor->init(&plugin_entry_.plugin_handle->plugin_param()))) {
-    LOG_WARN("failed to init plugin descriptor", K(ret));
   } else {
     state_ = ObPluginState::READY;
   }
@@ -99,7 +98,6 @@ void ObPluginEntryHandle::deinit_plugin()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("can't call plugin deinit", K(ret), K(plugin_entry_));
   } else if (OB_FAIL(plugin_entry_.descriptor->deinit(&plugin_entry_.plugin_handle->plugin_param()))) {
-    LOG_WARN("failed to run plugin descriptor deinit", K(ret));
   } else {
     OB_DELETE(ObIPluginDescriptor, OB_PLUGIN_MEMORY_LABEL, plugin_entry_.descriptor);
     plugin_entry_.descriptor = nullptr;

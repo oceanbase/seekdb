@@ -1811,8 +1811,6 @@ int ObSchema::set_charset_and_collation_options(common::ObCharsetType src_charse
     common::ObCharsetType charset_type = dst.get_charset_type();
     common::ObCollationType collation_type = dst.get_collation_type();
     if (OB_FAIL(common::ObCharset::check_and_fill_info(charset_type, collation_type))) {
-      SHARE_SCHEMA_LOG(WARN, "fail to check charset collation",
-                       K(charset_type), K(collation_type), K(ret));
     } else {
       dst.set_charset_type(charset_type);
       dst.set_collation_type(collation_type);
@@ -1840,7 +1838,6 @@ struct SchemaObj
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(this->handle_.assign(other.handle_))) {
-      COMMON_LOG(WARN, "fail to assign handle");
       this->schema_type_ = OB_MAX_SCHEMA;
       
       this->schema_id_ = common::OB_INVALID_ID;
@@ -3599,7 +3596,6 @@ int ObPartitionUtils::get_end_(
       rrow.projector_size_ = end_part.projector_size_;
       int cmp = 0;
       if (common::OB_SUCCESS != common::ObRowUtil::compare_row(lrow, rrow, cmp)) {
-        SHARE_SCHEMA_LOG(ERROR, "lhs or rhs is invalid");
       }
       if (0 == cmp) {
         if (pos == partition_num - 1) {
@@ -3629,8 +3625,6 @@ int ObPartitionUtils::get_end_(
     rrow.projector_size_ = partition_array[end_pos]->projector_size_;
     int cmp = 0;
     if (OB_SUCCESS != ObRowUtil::compare_row(lrow, rrow, cmp)) {
-      SHARE_SCHEMA_LOG(ERROR, "lhs or rhs is invalid", K(lrow), K(rrow), K(end_part),
-                       KPC(partition_array[end_pos]));
     } else if (cmp < 0) {
       end_pos--;
     }
@@ -4755,7 +4749,6 @@ struct ObOriginalDBKey
     
     user_id_ = src.user_id_;
     if (OB_FAIL(common::ob_write_string(allocator, src.db_, db_))) {
-      SHARE_SCHEMA_LOG(WARN,"failed to deep copy db", KR(ret), K(src.db_));
     }
     return ret;
   }
@@ -4946,9 +4939,7 @@ struct ObTablePrivSortKey
     
     user_id_ = src.user_id_;
     if (OB_FAIL(common::ob_write_string(allocator, src.db_, db_))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to deep copy db", KR(ret), K(src.db_));
     } else if (OB_FAIL(common::ob_write_string(allocator, src.table_, table_))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to deep copy table", KR(ret), K(src.table_));
     }
     return ret;
   }
@@ -5058,9 +5049,7 @@ struct ObRoutinePrivSortKey
     user_id_ = src.user_id_;
     routine_type_ = src.routine_type_;
     if (OB_FAIL(common::ob_write_string(allocator, src.db_, db_))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to deep copy db", KR(ret), K(src.db_));
     } else if (OB_FAIL(common::ob_write_string(allocator, src.routine_, routine_))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to deep copy routine", KR(ret), K(src.routine_));
     }
     return ret;
   }
@@ -5158,11 +5147,8 @@ struct ObColumnPrivSortKey
     int ret = OB_SUCCESS;
     user_id_ = src.user_id_;
     if (OB_FAIL(common::ob_write_string(allocator, src.db_, db_))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to deep copy db", KR(ret), K(src.db_));
     } else if (OB_FAIL(common::ob_write_string(allocator, src.table_, table_))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to deep copy table", KR(ret), K(src.table_));
     } else if (OB_FAIL(common::ob_write_string(allocator, src.column_, column_))) {
-      SHARE_SCHEMA_LOG(WARN, "failed to deep copy table", KR(ret), K(src.column_));
     }
     return ret;
   }
@@ -6821,9 +6807,6 @@ int ObPartitionUtils::check_partition_value(
     if (l_part.get_high_bound_val().get_obj_cnt() != r_part.get_high_bound_val().get_obj_cnt()) {
       is_equal = false;
       ASSIGN_PARTITION_ERROR(user_error, "range_part partition value count not equal");
-      SHARE_SCHEMA_LOG(TRACE, "fail to check partition value, value count not equal",
-                       "left", l_part.get_high_bound_val(),
-                       "right", r_part.get_high_bound_val());
     } else {
       for (int64_t i = 0; i < l_part.get_high_bound_val().get_obj_cnt() && is_equal; i++) {
         const common::ObObjMeta meta1 = l_part.get_high_bound_val().get_obj_ptr()[i].get_meta();
@@ -6833,15 +6816,10 @@ int ObPartitionUtils::check_partition_value(
           is_equal = is_types_equal_for_partition_check(meta1.get_type(), meta2.get_type());
           if (!is_equal) {
             ASSIGN_PARTITION_ERROR(user_error, "range_part partition meta type not equal");
-            SHARE_SCHEMA_LOG(TRACE, "fail to check partition values, value meta not equal",
-                           "left", l_part.get_high_bound_val().get_obj_ptr()[i],
-                           "right", r_part.get_high_bound_val().get_obj_ptr()[i]);
           }
         } else {
           is_equal = false;
           ASSIGN_PARTITION_ERROR(user_error, "range_part partition collation type not matched");
-          SHARE_SCHEMA_LOG(TRACE, "collation type not matched", "left", meta1.get_collation_type(),
-                           "right", meta2.get_collation_type());
         }
         if (!is_equal) {
           //do nothing
@@ -6849,9 +6827,6 @@ int ObPartitionUtils::check_partition_value(
                                                                       r_part.get_high_bound_val().get_obj_ptr()[i].get_collation_type())) {
           is_equal = false;
           ASSIGN_PARTITION_ERROR(user_error, "range_part partition value not equal");
-          SHARE_SCHEMA_LOG(TRACE, "fail to check partition values, value not equal",
-                           "left", l_part.get_high_bound_val().get_obj_ptr()[i],
-                           "right", r_part.get_high_bound_val().get_obj_ptr()[i]);
         }
       }
     }
@@ -6861,9 +6836,6 @@ int ObPartitionUtils::check_partition_value(
     if (l_list_values.count() != r_list_values.count()) {
       is_equal = false;
       ASSIGN_PARTITION_ERROR(user_error, "list_part partition value count not equal");
-      SHARE_SCHEMA_LOG(TRACE, "fail to check list_part partition value, value count not equal",
-                       "left", l_list_values,
-                       "right", r_list_values);
     } else {
       for (int64_t i = 0; i < l_list_values.count() && is_equal; i++) {
         const common::ObNewRow &l_rowkey = l_list_values.at(i);
@@ -6874,8 +6846,6 @@ int ObPartitionUtils::check_partition_value(
           if (l_rowkey.get_count() != r_rowkey.get_count()) {
             is_equal = false;
             ASSIGN_PARTITION_ERROR(user_error, "list_part partition value count not equal");
-            SHARE_SCHEMA_LOG(TRACE, "fail to check partition value, value count not equal",
-                            "left", l_rowkey, "right", r_rowkey);
           } else {
             for (int64_t z = 0; z < l_rowkey.get_count() && is_equal; z++) {
               const common::ObObjMeta meta1 = l_rowkey.get_cell(z).get_meta();
@@ -6885,14 +6855,10 @@ int ObPartitionUtils::check_partition_value(
                 is_equal = is_types_equal_for_partition_check(meta1.get_type(), meta2.get_type());
                 if (!is_equal) {
                   ASSIGN_PARTITION_ERROR(user_error, "list_part partition meta type not equal");
-                  SHARE_SCHEMA_LOG(TRACE, "fail to check partition values, value meta not equal",
-                                 "left", l_rowkey.get_cell(z), "right", r_rowkey.get_cell(z));
                 }
               } else {
                 is_equal = false;
                 ASSIGN_PARTITION_ERROR(user_error, "list_part partition collation type not matched");
-                SHARE_SCHEMA_LOG(TRACE,"collation type not matched", "left", meta1.get_collation_type(),
-                                 "right", meta2.get_collation_type());
               }
             }
           }
@@ -6904,7 +6870,6 @@ int ObPartitionUtils::check_partition_value(
         if (!find_equal_item) {
           is_equal = false;
           ASSIGN_PARTITION_ERROR(user_error, "list_part partition value not equal");
-          SHARE_SCHEMA_LOG(TRACE,"list_part partition value not equal");
         }
       } //end for (int64_t i = 0;
     }

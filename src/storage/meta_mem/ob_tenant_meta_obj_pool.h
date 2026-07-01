@@ -209,7 +209,6 @@ int ObTenantMetaObjPool<T>::alloc_obj(void *&obj)
   int ret = OB_SUCCESS;
   T *t = nullptr;
   if (OB_FAIL(acquire(t))) {
-    STORAGE_LOG(WARN, "fail to acquire object", K(ret));
   } else {
     obj = static_cast<void *>(t);
   }
@@ -297,7 +296,6 @@ ObTenantMetaObjPool<T>::ObTenantMetaObjPool(
     STORAGE_LOG(WARN, "fail to set meta object memory limit", K(ret), K(mem_limit));
   } else if (OB_FAIL(allocator_.init(lib::ObMallocAllocator::get_instance(), common::OB_MALLOC_MIDDLE_BLOCK_SIZE,
       lib::ObMemAttr(label, ctx_id)))) {
-    STORAGE_LOG(WARN, "fail to initialize pool FIFO allocator", K(ret));
   }
   abort_unless(OB_SUCCESS == ret);
 }

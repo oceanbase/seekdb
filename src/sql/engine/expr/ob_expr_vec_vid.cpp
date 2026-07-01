@@ -85,12 +85,10 @@ int ObExprVecVid::cg_expr(
     ObObjectID partition_id = OB_INVALID_ID;
     ObTabletID tablet_id;
     if (OB_FAIL(ObExprCalcPartitionBase::calc_part_and_tablet_id(calc_part_id_expr, eval_ctx, partition_id, tablet_id))) {
-      LOG_WARN("calc part and tablet id by expr failed", K(ret));
     } else {
       share::ObTabletAutoincrementService &auto_inc = share::ObTabletAutoincrementService::get_instance();
       uint64_t seq_id = 0;
       if (OB_FAIL(auto_inc.get_autoinc_seq(tablet_id, seq_id))) {
-        LOG_WARN("fail to get tablet autoinc seq", K(ret), K(tablet_id));
       } else {
         expr_datum.set_int(seq_id);
         LOG_DEBUG("succeed to genearte vector id", K(tablet_id), K(seq_id));

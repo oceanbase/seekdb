@@ -73,7 +73,6 @@ int ObLoadDataUtils::build_insert_sql_string_head(ObLoadDupActionType insert_mod
   OZ (insertsql_keys.append(")"));
 
   if (OB_FAIL(ret)) {
-    LOG_WARN("append failed", K(ret), K(insertsql_keys.length()));
   }
 
   return ret;
@@ -97,7 +96,6 @@ int ObLoadDataUtils::append_values_in_remote_process(int64_t table_column_count,
   } else {
     int64_t row_count = append_values_count/table_column_count;
     if (OB_FAIL(insertsql.append(" values "))) {
-      LOG_WARN("append failed", K(ret), K(insertsql.length()));
     }
     for (int64_t row_idx = 0; OB_SUCC(ret) && row_idx < row_count; ++row_idx) {
       if (OB_FAIL(append_values_for_one_row(table_column_count,
@@ -106,11 +104,9 @@ int ObLoadDataUtils::append_values_in_remote_process(int64_t table_column_count,
                                             insertsql,
                                             data_buffer,
                                             row_idx + skipped_row_count))) {
-        LOG_WARN("append values for one row in remote process failed", K(ret));
       } else {
         if (row_idx + 1 != row_count) {
           if (OB_FAIL(insertsql.append(","))) {
-            LOG_WARN("append failed", K(ret), K(insertsql.length()));
           }
         }
       }
@@ -136,7 +132,6 @@ int ObLoadDataUtils::append_values_for_one_row(const int64_t table_column_count,
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(insertsql.append("("))) {
-      LOG_WARN("append failed", K(ret), K(insertsql.length()));
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < table_column_count; ++i) {
@@ -151,18 +146,15 @@ int ObLoadDataUtils::append_values_for_one_row(const int64_t table_column_count,
     }
     if (i != 0) {
       if (OB_FAIL(insertsql.append(","))) {
-        LOG_WARN("append failed", K(ret), K(insertsql.length()));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(append_value(cur_column_str, insertsql, is_expr_value))) {
-        LOG_WARN("append failed", K(ret), K(insertsql.length()), K(cur_column_str));
       }
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(insertsql.append(")"))) {
-      LOG_WARN("append failed", K(ret), K(insertsql.length()));
     }
   }
   return ret;
@@ -174,16 +166,13 @@ int ObLoadDataUtils::append_value(const ObString &cur_column_str, ObSqlString &s
   if (!is_expr_value) {
     if (is_null_field(cur_column_str)) {
       if (OB_FAIL(sqlstr_values.append(NULL_STRING))) {
-        LOG_WARN("append failed", K(ret));
       }
     } else {
       if (OB_FAIL(sqlstr_values.append_fmt("'%.*s'", cur_column_str.length(), cur_column_str.ptr()))) {
-        LOG_WARN("append failed", K(ret));
       }
     }
   } else {
     if (OB_FAIL(sqlstr_values.append(cur_column_str))) {
-      LOG_WARN("append failed", K(ret));
     }
   }
   return ret;
@@ -247,7 +236,6 @@ int ObLoadDataUtils::check_session_status(ObSQLSessionInfo &session, int64_t res
   int64_t current_time = ObTimeUtil::current_time();
 
   if (OB_FAIL(session.is_timeout(is_timeout))) {
-    LOG_WARN("get session timeout info failed", K(ret));
   } else if (OB_UNLIKELY(worker_query_timeout < current_time + reserved_us)) {
     ret = OB_TIMEOUT;
     LOG_WARN("query is timeout", K(ret));
@@ -255,10 +243,8 @@ int ObLoadDataUtils::check_session_status(ObSQLSessionInfo &session, int64_t res
     ret = OB_TIMEOUT;
     LOG_WARN("session is timeout", K(ret));
   } else if (OB_FAIL(session.check_session_status())) {
-    LOG_WARN("session's state is not OB_SUCCESS", K(ret));
   }
   if (OB_FAIL(ret)) {
-    LOG_WARN("LOAD DATA timeout", K(ret), K(session.get_server_sid()), K(worker_query_timeout), K(current_time), K(reserved_us));
   }
   return ret;
 }
@@ -278,11 +264,8 @@ int ObLoadDataUtils::check_need_opt_stat_gather(ObExecContext &ctx,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is null", KR(ret));
   } else if (OB_FAIL(session->get_sys_variable(share::SYS_VAR__OPTIMIZER_GATHER_STATS_ON_LOAD, obj))) {
-    LOG_WARN("fail to get sys variable", K(ret));
   } else if (OB_FAIL(hint.get_value(ObLoadDataHint::APPEND, append))) {
-    LOG_WARN("fail to get value of APPEND", K(ret));
   } else if (OB_FAIL(hint.get_value(ObLoadDataHint::GATHER_OPTIMIZER_STATISTICS, gather_optimizer_statistics))) {
-    LOG_WARN("fail to get value of APPEND", K(ret));
   } else if (((append != 0) || (gather_optimizer_statistics != 0)) && obj.get_bool()) {
     need_opt_stat_gather = true;
   }

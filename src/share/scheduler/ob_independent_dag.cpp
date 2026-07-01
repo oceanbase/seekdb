@@ -79,7 +79,6 @@ int ObIndependentDag::basic_init(ObIAllocator &allocator)
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(WARN, "dag scheduler is nullptr", K(ret));
   } else if (OB_FAIL(cond_.init(ObWaitEventIds::INDEPENDENT_DAG_COND_WAIT))) {
-    COMMON_LOG(WARN, "failed to init cond", K(ret));
   } else {
     allocator_ = &dag_scheduler->get_independent_allocator();
     is_inited_ = true;
@@ -99,14 +98,11 @@ int ObIndependentDag::add_task(ObITask &task)
     lib::ObMutexGuard guard(lock_);
     task.set_status(ObITask::TASK_STATUS_WAITING);
     if (OB_FAIL(check_task_status())) {
-      COMMON_LOG(WARN, "check task status failed", K(ret), K(task));
     } else {
       if (0 == task.get_indegree()) {
         ObThreadCondGuard guard(cond_);
-        if (OB_TMP_FAIL(cond_.signal())) { 
-          COMMON_LOG(WARN, "failed to signal cond", K(tmp_ret));
+        if (OB_TMP_FAIL(cond_.signal())) {
         } else {
-          COMMON_LOG(TRACE, "add task and wake up cond", K(task));
         }
       }
       COMMON_LOG(INFO, "independent dag add task success", K(ret), KTASK(task));
@@ -126,13 +122,10 @@ int ObIndependentDag::batch_add_task(const ObIArray<ObITask *> &task_array)
     // after add task, the task maybe schedule and destroy immediately, so print log first
     // COMMON_LOG(INFO, "independent dag batch add task", K(ret), K(task_array.count()), K(task_array));
     if (OB_FAIL(ObIDag::batch_add_task(task_array))) {
-      LOG_WARN("batch add task failed", K(ret));
     } else {
       ObThreadCondGuard guard(cond_);
       if (OB_TMP_FAIL(cond_.broadcast())) {
-        COMMON_LOG(WARN, "failed to broadcast cond", K(tmp_ret));
       } else {
-        COMMON_LOG(TRACE, "batch add task and wake up cond");
       }
     }
   }
@@ -155,9 +148,7 @@ int ObIndependentDag::init(
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid args", K(ret), KP(param), KPC(dag_id));
   } else if (OB_FAIL(init_by_param(param))) {
-    COMMON_LOG(WARN, "failed to init dag", K(ret));
   } else if (OB_FAIL(create_first_task())) {
-    COMMON_LOG(WARN, "failed to create first task", K(ret), KPC(this));
   } else if (OB_NOT_NULL(dag_id)) {
     cur_dag_id.set(*dag_id);
   } else if (inherit_trace_id) {
@@ -168,14 +159,12 @@ int ObIndependentDag::init(
       COMMON_LOG(WARN, "current trace id is not set", K(ret));
     }
   } else if (OB_FAIL(ObSysTaskStatMgr::get_instance().generate_task_id(cur_dag_id))) {
-    COMMON_LOG(WARN, "failed to generate dag id", K(ret));
   } else {
     // no need to start a background sys task like ObIDag
   }
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(set_dag_id(cur_dag_id))) {
-    COMMON_LOG(WARN, "failed to set dag id", K(ret), K(cur_dag_id));
   } else {
     set_dag_status(ObIDag::DAG_STATUS_NODE_RUNNING);
   }
@@ -190,7 +179,6 @@ void ObIndependentDag::dump_dag_status(const char *log_info /*= "Print the statu
     COMMON_LOG(WARN, "dag is not inited, can not dump dag status", K(ret));
   } else {
     lib::ObMutexGuard guard(lock_);
-    COMMON_LOG(INFO, log_info, K(ObPrintIndependentDag(*this)));
   }
 }
 
@@ -206,12 +194,10 @@ int ObIndependentDag::process()
     COMMON_LOG(WARN, "invalid dag status", K(ret), K_(is_independent));
   } else {
     ObTraceIdGuard trace_id_guard(id_);
-    COMMON_LOG(INFO, "dag start process", KPC(this));
     int task_ret = OB_SUCCESS;
     while (OB_SUCC(ret) && OB_SUCCESS == task_ret && !is_final_status()) {
       ObITask *task = nullptr;
       if (OB_FAIL(THIS_WORKER.check_status())) {
-        LOG_WARN("check status failed", K(ret));
       } else if (OB_FAIL(schedule_one(task))) {
         if (OB_ITER_END == ret) {
           ret = OB_SUCCESS;
@@ -220,7 +206,6 @@ int ObIndependentDag::process()
           COMMON_LOG(WARN, "failed to schedule one task", K(ret));
         }
       } else if (OB_FAIL(process_task(task, task_ret))) {
-        COMMON_LOG(WARN, "failed to process task", K(ret));
       }
       if (OB_FAIL(ret)) {
         simply_set_stop(ret); // set this dag stop to notify other threads
@@ -284,9 +269,7 @@ int ObIndependentDag::check_cycle()
   prepare_check_cycle(task_list_);
   prepare_check_cycle(waiting_task_list_);
   if (OB_FAIL(do_check_cycle(stack, task_list_))) {
-    COMMON_LOG(WARN, "failed to do check cycle", K(ret));
   } else if (OB_FAIL(do_check_cycle(stack, waiting_task_list_))) {
-    COMMON_LOG(WARN, "failed to do check cycle", K(ret));
   }
   return ret;
 }
@@ -328,7 +311,6 @@ int ObIndependentDag::update_ready_task_list()
     {
       ObThreadCondGuard guard(cond_);
       if (OB_TMP_FAIL(new_ready_cnt > 1 ? cond_.broadcast() : cond_.signal())) {
-        COMMON_LOG(WARN, "failed to wake up cond", K(tmp_ret));
       }
     }
     COMMON_LOG(TRACE, "finish update ready task list and wake up cond", K(ret), K(new_ready_cnt), "ready_task_list_cnt", task_list_.get_size(), "waiting_task_list_cnt", waiting_task_list_.get_size());
@@ -352,7 +334,6 @@ int ObIndependentDag::try_get_next_ready_task(ObITask *&task)
     } else if (waiting_task_list_.is_empty()) {
     } else if (FALSE_IT(ret = OB_SUCCESS)) {
     } else if (OB_FAIL(update_ready_task_list())) {
-      COMMON_LOG(WARN, "failed to update ready task list", K(ret));
     } else if (OB_FAIL(get_next_ready_task(task))) {
       if (OB_ITER_END != ret) {
         COMMON_LOG(WARN, "failed to get next ready task", K(ret));
@@ -404,7 +385,6 @@ void ObIndependentDag::wait_signal()
     }
   } else {
     const int64_t cost_time_us = ObTimeUtility::fast_current_time() - begin_wait_time;
-    COMMON_LOG(TRACE, "wait cond success", K(cost_time_us));
   }
 }
 int ObIndependentDag::execute_task(ObITask &task)
@@ -415,7 +395,6 @@ int ObIndependentDag::execute_task(ObITask &task)
       COMMON_LOG(WARN, "failed to execute task", K(ret), K(task));
     }
   } else if (OB_FAIL(task.post_generate_next_task())) {
-    COMMON_LOG(WARN, "failed to generate next task", K(ret), K(task));
   }
 
   if (OB_DAG_TASK_IS_SUSPENDED == ret) {
@@ -439,7 +418,6 @@ int ObIndependentDag::process_task(ObITask *&task, int &task_ret)
     COMMON_LOG(WARN, "task is null", K(ret));
   } else if (FALSE_IT(task_ret = execute_task(*task))) {
   } else if (OB_FAIL(deal_with_finish_task(task, task_ret /*error_code*/, task_is_suspended))) {
-    COMMON_LOG(WARN, "failed to deal with finish task", K(ret), K(task_ret), KPC(task));
   } else if (OB_DAG_TASK_IS_SUSPENDED == task_ret && task_is_suspended) {
     task_ret = OB_SUCCESS;
   }
@@ -474,13 +452,10 @@ int ObIndependentDag::deal_with_finish_task(
     // not support retry independent dag now
     // ATTENTION!! if task is finished, it will be set to nullptr here
     if (OB_FAIL(inner_finish_task(task, &ready_task_cnt))) {
-      COMMON_LOG(WARN, "failed to finish task", K(ret));
     } else if (ready_task_cnt >= 1) {
       ObThreadCondGuard guard(cond_);
       if (OB_TMP_FAIL(ready_task_cnt == 1 ? cond_.signal() : cond_.broadcast())) {
-        COMMON_LOG(WARN, "failed to wake up cond", K(tmp_ret));
       } else {
-        COMMON_LOG(TRACE, "task execute success, wake up cond", K(ready_task_cnt));
       }
     }
 
@@ -503,7 +478,6 @@ int ObIndependentDag::deal_with_suspended_task(
   task_is_suspended = false;
   lib::ObMutexGuard guard(lock_);
   if (OB_FAIL(task.reset_status_for_suspend())) {
-    COMMON_LOG(WARN, "failed to reset status for suspend", K(ret), K(task));
   } else if (OB_ISNULL(task_list_.remove(&task))) {
     ret = OB_ERR_UNEXPECTED;
     COMMON_LOG(ERROR, "failed to remove suspended task from task list", K(ret), K(task));
@@ -557,7 +531,6 @@ int ObDagExecutor::run()
     }
   } else {
     if (OB_FAIL(dag_->process())) {
-      COMMON_LOG(WARN, "failed to process dag", K(ret), K_(dag_status), K_(ref_cnt), KPC_(dag));
     } else {
       COMMON_LOG(INFO, "dag executor process success", K(ret), K_(dag_status), K_(ref_cnt), KPC_(dag));
     }
@@ -598,7 +571,6 @@ void ObDagExecutor::release_()
     --ref_cnt_;
     if (0 == ref_cnt_) {
       dag_status_ = dag_->get_dag_status();
-      COMMON_LOG(INFO, "dag run finish and destory it", K_(dag_status));
       dag_->~ObIndependentDag();
       allocator_->free(dag_);
       dag_ = nullptr;

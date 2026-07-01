@@ -123,18 +123,10 @@ int ObTxLSLogCb::serialize_ls_log(T &ls_log,
     ObTxLogBlockHeader block_header(1, 1, 1, fake_tx_id, ObAddr());
     ObTxLogHeader tx_header(T::LOG_TYPE);
     if (OB_FAIL(block_header.before_serialize())) {
-      TRANS_LOG(WARN, "[TxLsLogWriter] before serialize block header error", KR(ret),
-                K(block_header));
     } else if (OB_FAIL(base_header.serialize(log_buf_, ObTxLSLogLimit::LOG_BUF_SIZE, pos_))) {
-      TRANS_LOG(WARN, "[TxLsLogWriter] serialize base header error", KR(ret), KP(log_buf_),
-                K(pos_));
     } else if (OB_FAIL(block_header.serialize(log_buf_, ObTxLSLogLimit::LOG_BUF_SIZE, pos_))) {
-      TRANS_LOG(WARN, "[TxLsLogWriter] serialize block header error", KR(ret), KP(log_buf_),
-                K(pos_));
     } else if (OB_FAIL(tx_header.serialize(log_buf_, ObTxLSLogLimit::LOG_BUF_SIZE, pos_))) {
-      TRANS_LOG(WARN, "[TxLsLogWriter] serialize tx header error", KR(ret), KP(log_buf_), K(pos_));
     } else if (OB_FAIL(ls_log.serialize(log_buf_, ObTxLSLogLimit::LOG_BUF_SIZE, pos_))) {
-      TRANS_LOG(WARN, "[TxLsLogWriter] serialize ls_log error", KR(ret), KP(log_buf_), K(pos_));
     }
   }
   return ret;

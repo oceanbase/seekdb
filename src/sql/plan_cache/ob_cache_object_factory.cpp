@@ -37,7 +37,6 @@ int ObCacheObjectFactory::alloc(ObCacheObjGuard& guard, ObLibCacheNameSpace ns)
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid null plan cache", K(ret));
     } else if (OB_FAIL(lib_cache->alloc_cache_obj(guard, ns))) {
-      LOG_WARN("failed to alloc cache obj", K(ret), K(ns));
     }
   }
   return ret;
@@ -78,7 +77,6 @@ int ObCacheObjectFactory::destroy_cache_obj(const bool is_leaked,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid null plan cache", K(ret));
   } else if (OB_FAIL(lib_cache->destroy_cache_obj(is_leaked, obj_id))) {
-    LOG_WARN("failed to destory cache obj", K(ret), K(is_leaked), K(obj_id));
   }
   return ret;
 }

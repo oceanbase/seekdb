@@ -72,7 +72,6 @@ int ObTempTableInsertVecOp::inner_open()
     param.set_mem_attr("TempTableInsert", ObCtxIds::WORK_AREA)
       .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
-      LOG_WARN("create entity failed", K(ret));
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null memory entity returned", K(ret));
@@ -82,7 +81,6 @@ int ObTempTableInsertVecOp::inner_open()
         MY_SPEC.type_,
         MY_SPEC.id_,
         &ctx_))) {
-      LOG_WARN("failed to init sql memory manager processor", K(ret));
     }
   }
   return ret;
@@ -100,14 +98,11 @@ int ObTempTableInsertVecOp::inner_close()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("result ids should be empty", K(ret));
   } else if (OB_FAIL(task_->interm_result_ids_.assign(interm_result_ids_))) {
-    LOG_WARN("failed to assign result ids", K(ret));
   } else {
     task_->temp_table_id_ = MY_SPEC.temp_table_id_;
   }
   int temp_ret = ret;
   if (OB_FAIL(clear_all_interm_res_info())) {
-    // overwrite ret, has temp_ret
-    LOG_WARN("failed to clear row store", K(ret));
   }
   ret = temp_ret;
   sql_mem_processor_.unregister_profile();
@@ -134,9 +129,7 @@ int ObTempTableInsertVecOp::inner_get_next_batch(const int64_t max_row_cnt)
   int ret = OB_SUCCESS;
   if (init_temp_table_) {
     if (OB_FAIL(do_get_next_vector(max_row_cnt))) {
-      LOG_WARN("failed to insert chunk row to temp table in vectorized mode", K(ret));
     } else if (OB_FAIL(insert_interm_result_info())) {
-      LOG_WARN("failed to insert chunk row store to dtl", K(ret));
     } else {
       init_temp_table_ = false;
     }
@@ -154,9 +147,7 @@ int ObTempTableInsertVecOp::do_get_next_vector(const int64_t max_row_cnt)
   while (OB_SUCC(ret)) {
     clear_evaluated_flag();
     if (OB_FAIL(child_->get_next_batch(max_row_cnt, child_brs))) {
-      LOG_WARN("fail to get next row from child.", K(ret));
     } else if (OB_FAIL(add_rows_to_temp_table(result_info, child_brs))) {
-      LOG_WARN("failed to add row to chunk row store.", K(ret));
     }
     if (child_brs->end_) {
       break;
@@ -174,10 +165,8 @@ int ObTempTableInsertVecOp::add_rows_to_temp_table(
   if (NULL == interm_res_info && OB_FAIL(create_interm_result_info(interm_res_info))) {
     LOG_WARN("failed to init chunk row store", K(ret));
   } else if (OB_FAIL(process_dump(*interm_res_info))) {
-    LOG_WARN("failed to process dump", K(ret));
   } else if (OB_FAIL(interm_res_info->get_column_store()->add_batch(
                  MY_SPEC.get_child()->output_, eval_ctx_, *brs, read_rows))) {
-    LOG_WARN("failed to add rows to chunk row store.", K(ret), KPC(brs));
   } else if (!MY_SPEC.is_distributed_) {
     //do nothing
   } else if (interm_res_info->get_column_store()->get_row_cnt() <
@@ -206,7 +195,6 @@ int ObTempTableInsertVecOp::create_interm_result_info(ObDTLIntermResultInfo *&in
                                             MY_INPUT.dfo_id_,
                                             MY_INPUT.sqc_id_),
                                           ObDTLIntermResultInfo::StoreType::COLUMN))) {
-      LOG_WARN("failed to create row store.", K(ret));
     } else if (FALSE_IT(interm_res_info = result_info_guard.result_info_)) {
     } else if (OB_FAIL(interm_res_info->get_column_store()->init(MY_SPEC.get_child()->output_,
                                                  MY_SPEC.max_batch_size_,
@@ -215,9 +203,7 @@ int ObTempTableInsertVecOp::create_interm_result_info(ObDTLIntermResultInfo *&in
                                                  true /*enable_dump*/,
                                                  false /*reuse_vector_array*/,
                                                  MY_SPEC.compress_type_))) {
-      LOG_WARN("failed to init the chunk row store.", K(ret));
     } else if (OB_FAIL(all_interm_res_info_.push_back(interm_res_info))) {
-      LOG_WARN("failed to push back row store", K(ret));
     } else {
       interm_res_info->get_column_store()->set_callback(&sql_mem_processor_);
       interm_res_info->get_column_store()->set_dir_id(sql_mem_processor_.get_dir_id());
@@ -264,7 +250,6 @@ int ObTempTableInsertVecOp::insert_interm_result_info()
               OB_FAIL(prepare_interm_result_id_for_distribute(interm_result_id))) {
       LOG_WARN("failed to prepare interm result id", K(ret));
     } else if (OB_FAIL(cur_interm_res_info->get_column_store()->finish_add_row())) {
-      LOG_WARN("failed to finish add row", K(ret));
     } else {
       dtl_int_key.channel_id_ = interm_result_id;
       dtl_int_key.start_time_ = oceanbase::common::ObTimeUtility::current_time();
@@ -274,7 +259,6 @@ int ObTempTableInsertVecOp::insert_interm_result_info()
       cur_interm_res_info->is_read_ = true;
       if (OB_FAIL(share::g_mp->dtl_interm_result_manager()->insert_interm_result_info(
                                         dtl_int_key, cur_interm_res_info))) {
-        LOG_WARN("failed to insert row store.", K(ret), K(dtl_int_key.channel_id_));
       } else if (OB_FAIL(keys_insert.push_back(dtl_int_key))) {
         LOG_WARN("failed to push back key", K(ret));
         share::g_mp->dtl_interm_result_manager()->erase_interm_result_info(dtl_int_key);
@@ -318,11 +302,8 @@ int ObTempTableInsertVecOp::prepare_interm_result_id_for_local(uint64_t &interm_
   ObTempTableResultInfo info;
   info.addr_ = GCTX.self_addr();
   if (OB_FAIL(info.interm_result_ids_.push_back(interm_result_id))) {
-    LOG_WARN("failed to push back", K(ret));
   } else if (OB_FAIL(temp_table_ctx.interm_result_infos_.push_back(info))) {
-    LOG_WARN("failed to push back info", K(ret));
   } else if (OB_FAIL(get_exec_ctx().get_temp_table_ctx().push_back(temp_table_ctx))) {
-    LOG_WARN("failed to push back", K(ret));
   }
   return ret;
 }
@@ -332,7 +313,6 @@ int ObTempTableInsertVecOp::prepare_interm_result_id_for_distribute(uint64_t &in
   int ret = OB_SUCCESS;
   interm_result_id = dtl::ObDtlChannel::generate_id();
   if (OB_FAIL(interm_result_ids_.push_back(interm_result_id))) {
-    LOG_WARN("failed to push back result id", K(ret));
   }
   return ret;
 }
@@ -352,7 +332,6 @@ int ObTempTableInsertVecOp::process_dump(dtl::ObDTLIntermResultInfo &interm_res_
       &mem_context_->get_malloc_allocator(),
       [&](int64_t cur_cnt){ return interm_res_info.get_column_store()->get_row_cnt_in_memory() > cur_cnt; },
       updated))) {
-    LOG_WARN("failed to update max available memory size periodically", K(ret));
   } else if (need_dump() && GCONF.is_sql_operator_dump_enabled()
           && OB_FAIL(sql_mem_processor_.extend_max_memory_size(
             &mem_context_->get_malloc_allocator(),
@@ -368,7 +347,6 @@ int ObTempTableInsertVecOp::process_dump(dtl::ObDTLIntermResultInfo &interm_res_
       // The last block of the last chunk may still need to insert data and should not be dumped.
       bool dump_last_block = i < all_interm_res_info_.count() - 1;
       if (OB_FAIL(all_interm_res_info_.at(i)->get_column_store()->dump(dump_last_block))) {
-        LOG_WARN("failed to dump row store", K(ret));
       } else {
         dump_end_time = oceanbase::common::ObTimeUtility::current_time();
         all_interm_res_info_.at(i)->dump_time_ = 0 == all_interm_res_info_.at(i)->dump_time_ ?

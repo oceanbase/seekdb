@@ -49,7 +49,6 @@ void ObStorageAppender::reset()
   ObBackupIoAdapter adapter;
   if (is_opened_) {
     if (OB_FAIL(adapter.close_device_and_fd(device_handle_, fd_))) {
-      LOG_WARN("fail to close device and fd", KR(ret), K_(fd), KP_(device_handle));
     }
   }
   offset_ = 0;
@@ -77,7 +76,6 @@ int ObStorageAppender::open(const share::ObBackupStorageInfo *storage_info,
   } else if (OB_FAIL(adapter.open_with_access_type(device_handle_, fd_,
       storage_info, uri, access_type,
       ObStorageIdMod(OB_STORAGE_ID_EXPORT, ObStorageUsedMod::STORAGE_USED_EXPORT)))) {
-    LOG_WARN("fail to open appender", KR(ret), KPC(storage_info), K(uri), K(access_type));
   } else {
     offset_ = 0;
     access_type_ = access_type;
@@ -103,8 +101,6 @@ int ObStorageAppender::append(const char *buf, const int64_t size, int64_t &writ
   } else if (OB_STORAGE_ACCESS_APPENDER == access_type_) {
     if (OB_FAIL(adapter.pwrite(*device_handle_, fd_,
         buf, offset_, size, write_size, false/*is_can_seal*/))) {
-      LOG_WARN("fail to append data",
-          KR(ret), KP_(device_handle), K_(fd), KP(buf), K_(offset), K(size));
     } else if (OB_UNLIKELY(size != write_size)) {
       ret = OB_IO_ERROR;
       LOG_WARN("write size not equal to expected size",
@@ -117,11 +113,7 @@ int ObStorageAppender::append(const char *buf, const int64_t size, int64_t &writ
     // Therefore, the return value of io_handle.get_data_size() may be 0
     // or the total size of the buffer during upload.
     if (OB_FAIL(adapter.async_upload_data(*device_handle_, fd_, buf, offset_, size, io_handle))) {
-      LOG_WARN("fail to upload data",
-          KR(ret), KP_(device_handle), K_(fd), KP(buf), K_(offset), K(size));
     } else if (OB_FAIL(io_handle.wait())) {
-      LOG_WARN("fail to wait uploading data",
-          KR(ret), KP_(device_handle), K_(fd), KP(buf), K_(offset), K(size));
     } else {
       write_size = io_handle.get_data_size();
     }
@@ -147,20 +139,14 @@ int ObStorageAppender::close()
   if (OB_LIKELY(is_opened_)) {
     if (OB_STORAGE_ACCESS_APPENDER == access_type_) {
       if (OB_FAIL(device_handle_->seal_file(fd_))) {
-        LOG_WARN("fail to seal file",
-            KR(ret), K_(fd), KP_(device_handle), K_(offset), K_(access_type));
       }
     } else if (OB_STORAGE_ACCESS_BUFFERED_MULTIPART_WRITER == access_type_) {
       if (OB_FAIL(adapter.complete(*device_handle_, fd_))) {
-        LOG_WARN("fail to complete",
-            KR(ret), K_(fd), KP_(device_handle), K_(offset), K_(access_type));
       }
 
       // if complete failed, need to abort
       if (OB_FAIL(ret)) {
         if (OB_TMP_FAIL(adapter.abort(*device_handle_, fd_))) {
-          LOG_WARN("fail to abort",
-              KR(ret), KR(tmp_ret), K_(fd), KP_(device_handle), K_(offset), K_(access_type));
         }
       }
     } else {
@@ -197,13 +183,11 @@ int ObCompressStreamWriter::write(const char *src, size_t length, bool is_file_e
       int64_t compressed_size = 0;
       if (OB_FAIL(compressor_->compress(src, length, consumed_size, buf_ + curr_pos_, buf_len_ - curr_pos_,
                                         compressed_size, is_file_end, compress_ended))) {
-        LOG_WARN("failed to compress data", K(ret), K(length), K(consumed_size));
       } else {
         curr_pos_ += compressed_size;
         total_compressed_bytes_ += compressed_size;
         if (curr_pos_ >= buf_len_) {
           if (OB_FAIL(flush_to_storage(buf_, curr_pos_))) {
-            LOG_WARN("failed to flush data to storage", K(ret), K(curr_pos_));
           } else {
             curr_pos_ = 0;
           }
@@ -220,10 +204,8 @@ int ObCompressStreamWriter::flush_to_storage(const char *data, size_t length)
   int64_t write_size = 0;
   if (IntoFileLocation::SERVER_DISK == file_location_) {
     if (OB_FAIL(file_appender_->append(data, length, false))) {
-      LOG_WARN("failed to append file", K(ret), K(length));
     }
   } else if (OB_FAIL(storage_appender_->append(static_cast<const char*>(data), length, write_size))) {
-    LOG_WARN("fail to append data", K(ret), KP(data), K(length));
   }
   return ret;
 }
@@ -233,11 +215,9 @@ int ObCompressStreamWriter::finish_file_compress()
   int ret = OB_SUCCESS;
   if (compress_stream_finished_) {
   } else if (OB_FAIL(finish_compress_stream())) {
-    LOG_WARN("failed to finish compress stream", K(ret));
   } else {
     if (curr_pos_ > 0) {
       if (OB_FAIL(flush_to_storage(buf_, curr_pos_))) {
-        LOG_WARN("failed to flush buf to storage", K(ret), K(curr_pos_));
       }
     }
     if (OB_SUCC(ret)) {
@@ -254,7 +234,6 @@ int ObCompressStreamWriter::finish_compress_stream()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("compressor is null", KR(ret));
   } else if (OB_FAIL(write(NULL, 0, true))) {
-    LOG_WARN("failed to finish compress", K(ret));
   }
   return ret;
 }
@@ -297,7 +276,6 @@ int ObCompressStreamWriter::init(ObFileAppender *file_appender,
     LOG_WARN("invalid compress type", K(ret), K(compress_type_));
   } else {
     if (OB_FAIL(ObOutfileStreamCompressor::create(compress_type_, *allocator_, compressor_))) {
-      LOG_WARN("failed to create decompressor", K(compress_type_), K(ret));
     } else if (OB_ISNULL(buf_ = (char *)allocator_->alloc(buf_len_))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to allocate buffer.", K(buf_len_));
@@ -380,7 +358,6 @@ int ObOutfileZstdStreamCompressor::init()
 
     ret = ObZstdWrapper::create_cctx(allocator, zstd_cctx_);
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to create zstd compress context", K(ret));
     }
   }
 

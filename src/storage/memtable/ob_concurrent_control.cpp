@@ -157,9 +157,6 @@ int check_sequence_set_violation(const concurrent_control::ObWriteFlag write_fla
         // Others: It will never happen that two operaions on the same row for the
         // same txn except the above cases. So we should report unexpected error.
         ret = OB_ERR_UNEXPECTED;
-        TRANS_LOG(ERROR, "multiple modification on one row found", K(reader_seq_no),
-                  K(writer_tx_id), K(writer_dml_flag), K(writer_seq_no),
-                  K(locker_tx_id), K(locker_dml_flag), K(locker_seq_no));
 #ifdef ENABLE_DEBUG_LOG
         ob_abort();
 #endif
@@ -174,9 +171,6 @@ int check_sequence_set_violation(const concurrent_control::ObWriteFlag write_fla
       // may break the promise of the memtable semantics. We need to be aware of
       // this situation and retry the entire SQL statement in such cases.
       ret = OB_SEQ_NO_REORDER_UNDER_PDML;
-      TRANS_LOG(WARN, "wrong row of sequence on one row found", K(reader_seq_no),
-                K(writer_tx_id), K(writer_dml_flag), K(writer_seq_no),
-                K(locker_tx_id), K(locker_dml_flag), K(locker_seq_no));
     }
   }
 

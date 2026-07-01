@@ -118,7 +118,6 @@ public:
     int ret = 0;
     int64_t tid = get_itid();
     if (OB_UNLIKELY(tid >= MAX_THREAD_NUM)) {
-      COMMON_LOG(ERROR, "TcRef do ref error");
       ret = -ERANGE;
     } else {
       Item *item = ref_ + tid;

@@ -44,9 +44,7 @@ int ObMemtableSingleRowReader::init(ObMemtable *memtable, const ObTableIterParam
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "fail to alloc memory", K(ret));
   } else if (OB_FAIL(private_row_.init(*context.allocator_, read_info_->get_request_count(), trans_info_ptr))) {
-    TRANS_LOG(WARN, "Failed to init datum row", K(ret), K(param.need_trans_info()));
   } else {
-    TRANS_LOG(DEBUG, "scan iterator init succ", K(param.tablet_id_));
     param_ = &param;
     context_ = &context;
     memtable_ = memtable;
@@ -92,7 +90,6 @@ int ObMemtableSingleRowReader::init_a_new_range(const ObDatumRange &new_range_to
     STORAGE_LOG(WARN, "Unexpected null out_cols", KR(ret), K_(param));
   } else if (FALSE_IT(cur_range_ = new_range_to_scan)) {
   } else if (OB_FAIL(check_is_range_scan_(new_range_to_scan))) {
-    STORAGE_LOG(WARN, "check is range scan failed", KR(ret), K(new_range_to_scan));
   } else if (!is_range_scan_) {
     // This range is a single rowkey or Delete-Insert table. Do not need construct a ObMvccRowIterator.
     // ObMemtable::get() function will be called instead
@@ -108,12 +105,10 @@ int ObMemtableSingleRowReader::init_a_new_range(const ObDatumRange &new_range_to
                                           *out_cols,
                                           &real_range.get_start_key().get_store_rowkey(),
                                           *context_->get_range_allocator()))) {
-    TRANS_LOG(WARN, "start key build fail", K(param_->table_id_), K(real_range));
   } else if (OB_FAIL(ObMemtableKey::build(end_key,
                                           *out_cols,
                                           &real_range.get_end_key().get_store_rowkey(), 
                                           *context_->get_range_allocator()))) {
-    TRANS_LOG(WARN, "end key build fail", K(param_->table_id_), K(real_range));
   } else {
     ObMvccEngine& mvcc_engine = memtable_->get_mvcc_engine();
     ObMvccScanRange mvcc_scan_range;
@@ -126,13 +121,8 @@ int ObMemtableSingleRowReader::init_a_new_range(const ObDatumRange &new_range_to
                                  mvcc_scan_range,
                                  memtable_->get_ls_id(),
                                  row_iter_))) {
-      TRANS_LOG(WARN, "mvcc engine scan fail", K(ret), K(mvcc_scan_range));
     } else if (OB_FAIL(bitmap_.init(read_info_->get_request_count(), read_info_->get_schema_rowkey_count()))) {
-      TRANS_LOG(WARN, "Failed to init bitmap ", K(ret));
     } else {
-      TRANS_LOG(DEBUG, "mvcc engine scan success",
-                K_(memtable), K(mvcc_scan_range), KPC(context_->store_ctx_),
-                K(*start_key), K(*end_key));
     }
   }
   if (OB_FAIL(ret) && OB_ITER_END != ret) {
@@ -152,7 +142,6 @@ int ObMemtableSingleRowReader::check_is_range_scan_(const blocksstable::ObDatumR
               read_info_->get_schema_rowkey_count(),
               read_info_->get_datum_utils(),
               is_single))) {
-    STORAGE_LOG(WARN, "check range failed", KR(ret));
   } else {
     // ObStoreRange store_range;
     // store_range.set_start_key(new_range_to_scan.get_start_key().get_store_rowkey());
@@ -251,7 +240,6 @@ int ObMemtableSingleRowReader::fill_in_next_delete_insert_row(ObDatumRow &next_r
         STORAGE_LOG(WARN, "fill in next row failed", KR(ret), K(next_row));
       }
     } else if (next_row.row_flag_.is_not_exist()) {
-      STORAGE_LOG(DEBUG, "meet a Insert-Delete row, try get next row");
     } else {
       got_a_new_row = true;
     }
@@ -274,9 +262,7 @@ int ObMemtableSingleRowReader::inner_fill_in_next_row_(ObDatumRow &next_row,
         STORAGE_LOG(WARN, "get next value iterator failed", KR(ret), KPC(key));
       }
     } else if (OB_FAIL(fill_in_next_row_by_value_iter_(key, value_iter, next_row, delete_row, acquired_row_cnt))) {
-      STORAGE_LOG(WARN, "fill in new row by value iter failed", KR(ret), KPC(key));
     } else if (next_row.row_flag_.is_not_exist()) {
-      STORAGE_LOG(DEBUG, "meet a Insert-Delete row, try get next row");
     }
     STORAGE_LOG(DEBUG, "fill in row for range scan", K(ret), K(is_range_scan_), K(cur_range_), K(next_row), K(delete_row), K(acquired_row_cnt));
   } else {
@@ -284,12 +270,10 @@ int ObMemtableSingleRowReader::inner_fill_in_next_row_(ObDatumRow &next_row,
     if (row_has_been_gotten_) {
       ret = OB_ITER_END;
     } else if (OB_FAIL(memtable_->get(*param_, *context_, cur_range_.get_start_key(), next_row))) {
-      STORAGE_LOG(WARN, "fail to get memtable row", K(ret), K(param_), K(cur_range_));
     } else {
       // set row_has_been_gotten flag after get operation
       row_has_been_gotten_ = true;
       acquired_row_cnt = 1;
-      STORAGE_LOG(DEBUG, "fill in row for single rowkey scan(get)", K(next_row), K(next_row.scan_index_));
     }
   }
   return ret;
@@ -332,7 +316,6 @@ int ObMemtableSingleRowReader::fill_in_next_row_by_value_iter_(const ObMemtableK
                                                                int64_t &acquired_row_cnt)
 {
   int ret = OB_SUCCESS;
-  TRANS_LOG(DEBUG, "chaser debug memtable next row", KPC(key), K(bitmap_.get_nop_cnt()));
   // generate trans stat datum for 4377 check
   if (param_->need_trans_info() && OB_NOT_NULL(next_row.trans_info_)) {
     concurrency_control::ObTransStatRow trans_stat_row;
@@ -355,12 +338,10 @@ int ObMemtableSingleRowReader::fill_in_next_row_by_value_iter_(const ObMemtableK
                                                      next_row_scn,
                                                      delete_row_scn,
                                                      acquired_row_cnt))) {
-      STORAGE_LOG(WARN, "iterate delete insert row fail", K(ret), K(*rowkey), KP(value_iter));
     }
   } else {
     // normal read
     if (OB_FAIL(ObReadRow::iterate_row(*read_info_, *rowkey, *value_iter, next_row, bitmap_, next_row_scn))) {
-      STORAGE_LOG(WARN, "iterate_row fail", K(ret), K(*rowkey), KP(value_iter));
     } else {
       acquired_row_cnt = 1;
     }
@@ -388,7 +369,6 @@ int ObMemtableSingleRowReader::fill_in_row_scn_(const int64_t row_scn,
   int ret = OB_SUCCESS;
   if (row_scn == share::SCN::max_scn().get_val_for_tx()) {
     // TODO(handora.qc): remove it as if we confirmed no problem according to row_scn
-    STORAGE_LOG(INFO, "use max row scn", KPC(value_iter->get_mvcc_acc_ctx()));
   }
 
   int trans_idx = read_info_->get_trans_col_index();
@@ -398,7 +378,6 @@ int ObMemtableSingleRowReader::fill_in_row_scn_(const int64_t row_scn,
   } else {
     new_row.storage_datums_[trans_idx].reuse();
     new_row.storage_datums_[trans_idx].set_int(row_scn);
-    STORAGE_LOG(DEBUG, "set row scn is", K(trans_idx), K(row_scn), K_(private_row));
   }
   return ret;
 }

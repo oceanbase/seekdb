@@ -115,7 +115,6 @@ private:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(decode_body<UintType>(data, ctx, uint_arr, alloc))) {
-      STORAGE_LOG(WARN, "fail to encode to int", KR(ret), K(sizeof(UintType)));
     } else {
       ctx.meta_.set_raw_encoding();
     }
@@ -145,7 +144,6 @@ private:
     codec.set_uint_bytes(sizeof(T));
     codec.set_pfor_packing_type(ctx.meta_.get_pfor_packing_type());
     if (OB_FAIL(codec.decode(in, in_len, in_pos, uint_count, out, out_len, out_pos))) {
-      STORAGE_LOG(WARN, "fail to deocde array", K(in_len), K(uint_count), K(out_len), KR(ret));
     }
     return ret;
   };
@@ -163,42 +161,36 @@ private:
         ObSimpleBitPacking codec;
         codec.set_uint_packing_bits(ctx.meta_.get_uint_width_size() * CHAR_BIT);
         if (OB_FAIL((do_decode<T>(codec, data, ctx, int_arr)))) {
-          STORAGE_LOG(WARN,"fail to do raw decode", KR(ret), K(ctx));
         }
         break;
       }
       case ObIntegerStream::EncodingType::SIMD_FIXEDPFOR: {
         ObCompositeCodec<ObSIMDFixedPFor, ObSimpleBitPacking> codec;
         if (OB_FAIL((do_decode<T>(codec, data, ctx, int_arr)))) {
-          STORAGE_LOG(WARN, "fail to do simd fixedpfor decode", KR(ret), K(ctx));
         }
         break;
       }
       case ObIntegerStream::EncodingType::DOUBLE_DELTA_ZIGZAG_RLE: {
         ObDoubleDeltaZigzagRle codec;
         if (OB_FAIL((do_decode<T>(codec, data, ctx, int_arr)))) {
-          STORAGE_LOG(WARN, "fail to do double delta zigzig rle decode", KR(ret), K(ctx));
         }
         break;
       }
       case ObIntegerStream::EncodingType::DOUBLE_DELTA_ZIGZAG_PFOR: {
         ObDoubleDeltaZigzagPFor codec;
         if (OB_FAIL((do_decode<T>(codec, data, ctx, int_arr)))) {
-          STORAGE_LOG(WARN, "fail to do double delta zigzag pfor deocde", KR(ret), K(ctx));
         }
         break;
       }
       case ObIntegerStream::EncodingType::DELTA_ZIGZAG_RLE: {
         ObDeltaZigzagRle codec;
         if (OB_FAIL((do_decode<T>(codec, data, ctx, int_arr)))) {
-          STORAGE_LOG(WARN, "fail to do delta zigzag pfor decode", KR(ret), K(ctx));
         }
         break;
       }
       case ObIntegerStream::EncodingType::DELTA_ZIGZAG_PFOR: {
         ObDeltaZigzagPFor codec;
         if (OB_FAIL((do_decode<T>(codec, data, ctx, int_arr)))) {
-          STORAGE_LOG(WARN, "fail to do delta zigzag pfor decode", KR(ret), K(ctx));
         }
         break;
       }
@@ -206,14 +198,12 @@ private:
         ObUniversalCompression codec;
         codec.set_compressor_type(ctx.compressor_type_);
         if (OB_FAIL((do_decode<T>(codec, data, ctx, int_arr)))) {
-          STORAGE_LOG(WARN,"fail to do universal compression decode", KR(ret), K(ctx));
         }
         break;
       }
       case ObIntegerStream::EncodingType::XOR_FIXED_PFOR : {
         ObXorFixedPfor codec;
         if (OB_FAIL((do_decode<T>(codec, data, ctx, int_arr)))) {
-          STORAGE_LOG(WARN,"fail to do universal compression decode", KR(ret), K(ctx));
         }
         break;
       }

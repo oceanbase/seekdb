@@ -89,14 +89,8 @@ void ObBalanceFilter::run1()
           && 0 < bucket_nodes_[min_bucket_pos].cnt) {
         migrate(min_bucket_pos, min_thread_pos);
       } else {
-        _OB_LOG(INFO, "thread=%ld cnt=%ld has only one bucket=%ld cnt=%ld, need not rebalance",
-                  max_thread_pos, thread_nodes_[max_thread_pos].cnt, min_bucket_pos,
-                  bucket_nodes_[min_bucket_pos].cnt);
       }
     } else {
-      _OB_LOG(INFO, "max thread=%ld cnt=%ld, min thread=%ld cnt=%ld, need not rebalance",
-                max_thread_pos, thread_nodes_[max_thread_pos].cnt, min_thread_pos,
-                thread_nodes_[min_thread_pos].cnt);
     }
     for (int64_t i = 0; i < thread_node_num_; i++) {
       thread_nodes_[i].cnt = 0;
@@ -119,10 +113,6 @@ void ObBalanceFilter::migrate(const int64_t bucket_pos, const int64_t thread_pos
              || thread_node_num_ <= thread_pos) {
     _OB_LOG_RET(WARN, OB_NOT_INIT, "invalid param, bucket_pos=%ld thread_pos=%ld", bucket_pos, thread_pos);
   } else {
-    _OB_LOG(INFO, "migrate bucket_pos=%ld bucket_cnt=%ld thread_pos from %ld:%ld to %ld:%ld",
-              bucket_pos, bucket_nodes_[bucket_pos].cnt,
-              bucket_nodes_[bucket_pos].thread_pos, thread_nodes_[bucket_nodes_[bucket_pos].thread_pos].cnt,
-              thread_pos, thread_nodes_[thread_pos].cnt);
     bucket_nodes_[bucket_pos].thread_pos = thread_pos;
   }
 }

@@ -177,7 +177,6 @@ public:
       SHARE_LOG(WARN, "ObLightHashMap not init", K(ret), KP(value));
     } else if (!key.is_valid() || OB_ISNULL(value)) {
       ret = OB_INVALID_ARGUMENT;
-      SHARE_LOG(WARN, "invalid argument", K(key), KP(value));
     } else {
       int64_t pos = key.hash() % BUCKETS_CNT;
       BucketWLockGuard guard(locks_[pos % LOCKS_CNT], get_itid());
@@ -220,7 +219,6 @@ public:
       SHARE_LOG(WARN, "ObLightHashMap not init", K(ret), KP(value));
     } else if (!key.is_valid() || OB_ISNULL(value)) {
       ret = OB_INVALID_ARGUMENT;
-      SHARE_LOG(ERROR, "invalid argument", K(key), KP(value));
     } else {
       int64_t pos = key.hash() % BUCKETS_CNT;
       BucketWLockGuard guard(locks_[pos % LOCKS_CNT], get_itid());
@@ -263,7 +261,6 @@ public:
       SHARE_LOG(WARN, "ObLightHashMap not init", K(ret), K(key));
     } else if (!key.is_valid()) {
       ret = OB_INVALID_ARGUMENT;
-      SHARE_LOG(WARN, "invalid argument", K(key));
     } else {
       Value *tmp_value = NULL;
       int64_t pos = key.hash() % BUCKETS_CNT;
@@ -328,7 +325,6 @@ public:
     } else {
       ValueArray array;
       if (OB_FAIL(generate_value_arr_(bucket_pos, array))) {
-        SHARE_LOG(WARN, "generate value array error", K(ret));
       } else {
         const int64_t cnt = array.count();
         for (int64_t i = 0; i < cnt; ++i) {
@@ -357,7 +353,6 @@ public:
       }
       array.reset();
       if (OB_FAIL(generate_value_arr_(pos, array))) {
-        SHARE_LOG(WARN, "generate value array error", K(ret));
       } else {
         const int64_t cnt = array.count();
         for (int64_t i = 0; i < cnt; ++i) {

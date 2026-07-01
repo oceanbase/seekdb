@@ -125,16 +125,12 @@ int AlterTableSchema::deserialize_columns(const char *buf, const int64_t data_le
   } else if (pos == data_len) {
     //do nothing
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &count))) {
-    SHARE_SCHEMA_LOG(WARN, "Fail to decode column count, ", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < count; ++i) {
       column.reset();
       if (OB_FAIL(column.deserialize(buf, data_len, pos))) {
-        SHARE_SCHEMA_LOG(WARN, "fail to deserialize", K(ret), K(column));
       } else if (OB_FAIL(add_alter_column(column, true))) {
-        SHARE_SCHEMA_LOG(WARN, "Fail to add column, ", K(ret));
       } else {
-        SHARE_SCHEMA_LOG(DEBUG, "add alter column", K(column));
       }
     }
   }
@@ -184,25 +180,15 @@ DEFINE_SERIALIZE(AlterTableSchema)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableSchema::serialize(buf, buf_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to serialize ObTableSchema, ", K(ret));
   } else if (OB_FAIL(serialization::encode_vi32(buf, buf_len, pos, alter_type_))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to serialize alter_type_, ", K(ret));
   } else if (OB_FAIL(origin_table_name_.serialize(buf, buf_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to serialize origin_table_name_, ", K(ret));
   } else if (OB_FAIL(new_database_name_.serialize(buf, buf_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to serialize new_datbase_name, ", K(ret));
   } else if (OB_FAIL(origin_database_name_.serialize(buf, buf_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to serialize origin_database_name, ", K(ret));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, origin_tablegroup_id_))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to serialize origin_tablegroup_id_", K(ret));
   } else if (OB_FAIL(alter_option_bitset_.serialize(buf, buf_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to serialized bitset", K(ret));
   } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, sql_mode_))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to serialize sql_mode_", K(ret));
   } else if (OB_FAIL(split_partition_name_.serialize(buf, buf_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to serialize partition_name", K(ret));
   } else if (OB_FAIL(new_part_name_.serialize(buf, buf_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to serialize new_part_name", K(ret));
   }
   return ret;
 }
@@ -211,27 +197,15 @@ DEFINE_DESERIALIZE(AlterTableSchema)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableSchema::deserialize(buf, data_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to deserialize ObTableSchema", K(ret));
   } else if (OB_FAIL(serialization::decode_vi32(buf, data_len, pos, ((int32_t *)(&alter_type_))))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to deserialize alter_type_, ", K(ret));
   } else if (OB_FAIL(origin_table_name_.deserialize(buf, data_len, pos))) {
-    //do not deep copy becasue AlterTableSchema are not used after this
-    //alter table request
-    SHARE_SCHEMA_LOG(WARN, "fail to deserialize origin_table_name, ", K(ret));
   } else if (OB_FAIL(new_database_name_.deserialize(buf, data_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to deserialize new_database_name, ", K(ret));
   } else if (OB_FAIL(origin_database_name_.deserialize(buf, data_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to deserialize origin_database_name, ", K(ret));
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, ((int64_t *)(&origin_tablegroup_id_))))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to deserialize origin_tablegroup_id");
   } else if (OB_FAIL(alter_option_bitset_.deserialize(buf, data_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to deserialize bitset", K(ret));
   } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, ((int64_t *)(&sql_mode_))))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to deserialize sql mode", K(ret));
   } else if (OB_FAIL(split_partition_name_.deserialize(buf, data_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to deserialize split_partition_name", K(ret));
   } else if (OB_FAIL(new_part_name_.deserialize(buf, data_len, pos))) {
-    SHARE_SCHEMA_LOG(WARN, "fail to serialize new_part_name", K(ret));
   }
   return ret;
 }
@@ -300,7 +274,6 @@ int AlterColumnSchema::assign(const ObColumnSchemaV2 &other)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObColumnSchemaV2::assign(other))) {
-    LOG_WARN("fail to assign column", KR(ret), K(other));
   }
   return ret;
 }
@@ -320,15 +293,10 @@ AlterColumnSchema &AlterColumnSchema::operator=(const AlterColumnSchema &src_sch
     check_timestamp_column_order_ = src_schema.check_timestamp_column_order_;
     is_no_zero_date_ = src_schema.is_no_zero_date_;
     if (OB_FAIL(ObColumnSchemaV2::assign(src_schema))) {
-      LOG_WARN("fail to assign column", KR(ret), K(src_schema));
     } else if (OB_FAIL(deep_copy_str(src_schema.get_origin_column_name(), origin_column_name_))) {
-      SHARE_LOG(WARN, "failed to deep copy origin_column_name", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_schema.get_next_column_name(), next_column_name_))) {
-      SHARE_LOG(WARN, "failed to deep copy next_column_name", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_schema.get_prev_column_name(), prev_column_name_))) {
-      SHARE_LOG(WARN, "failed to deep copy prev_column_name", K(ret));
     } else if (OB_FAIL(deep_copy_str(src_schema.get_column_group_name(), column_group_name_))) {
-      SHARE_LOG(WARN, "failed to deep copy column_group_name", K(ret));
     } else {
       is_first_ = src_schema.is_first_;
       is_set_comment_ = src_schema.is_set_comment_;
@@ -351,7 +319,6 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
     int64_t column_cnt = 0;
 
     if (OB_FAIL(ObSimpleTableSchemaV2::assign(src_schema))) {
-      LOG_WARN("fail to assign schema", K(ret));
     } else {
       error_ret_ = src_schema.error_ret_;
       max_used_column_id_ = src_schema.max_used_column_id_;
@@ -385,27 +352,16 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
       merge_engine_type_ = src_schema.merge_engine_type_;
       external_location_id_ = src_schema.external_location_id_;
       if (OB_FAIL(deep_copy_str(src_schema.tablegroup_name_, tablegroup_name_))) {
-        LOG_WARN("Fail to deep copy tablegroup_name", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.comment_, comment_))) {
-        LOG_WARN("Fail to deep copy comment", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.expire_info_, expire_info_))) {
-        LOG_WARN("Fail to deep copy expire info string", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.parser_name_, parser_name_))) {
-        LOG_WARN("deep copy parser name failed", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.parser_properties_, parser_properties_))) {
-        LOG_WARN("fail to deep copy parser properties", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.external_file_location_, external_file_location_))) {
-        LOG_WARN("deep copy external_file_location failed", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.external_file_location_access_info_, external_file_location_access_info_))) {
-        LOG_WARN("deep copy external_file_location_access_info failed", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.external_file_format_, external_file_format_))) {
-        LOG_WARN("deep copy external_file_format failed", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.external_file_pattern_, external_file_pattern_))) {
-        LOG_WARN("deep copy external_file_pattern failed", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.external_properties_, external_properties_))) {
-        LOG_WARN("deep copy external_properties failed", K(ret));
       } else if (OB_FAIL(deep_copy_str(src_schema.external_sub_path_, external_sub_path_))) {
-        LOG_WARN("deep copy external_sub_path failed", K(ret));
       }
 
       //view schema
@@ -427,43 +383,36 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(set_simple_index_infos(src_schema.get_simple_index_infos()))) {
-        LOG_WARN("fail to set simple index infos", K(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(assign_constraint(src_schema))) {
-        LOG_WARN("failed to assign constraint", K(ret), K(src_schema), K(*this));
       }
     }
 
     //prepare memory
     if (OB_SUCC(ret)) {
       if (OB_FAIL(rowkey_info_.reserve(src_schema.rowkey_info_.get_size()))) {
-        LOG_WARN("Fail to reserve rowkey_info", K(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(shadow_rowkey_info_.reserve(src_schema.shadow_rowkey_info_.get_size()))) {
-        LOG_WARN("Fail to reserve shadow_rowkey_info", K(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(index_info_.reserve(src_schema.index_info_.get_size()))) {
-        LOG_WARN("Fail to reserve index_info", K(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(partition_key_info_.reserve(src_schema.partition_key_info_.get_size()))) {
-        LOG_WARN("Fail to reserve partition_key_info", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(subpartition_key_info_.reserve(src_schema.subpartition_key_info_.get_size()))) {
-        LOG_WARN("Fail to reserve partition_key_info", K(ret));
       }
     }
 
@@ -503,9 +452,7 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
     for (int64_t i = 0; OB_SUCC(ret) && i < column_cnt; ++i) {
       AlterColumnSchema column;
       if (OB_FAIL(column.assign(*src_schema.column_array_[i]))) {
-        LOG_WARN("fail to assign", K(ret));
       } else if (OB_FAIL(add_column<AlterColumnSchema>(column))) {
-        LOG_WARN("Fail to add column", K(ret));
       } else {
         LOG_DEBUG("add column success", K(column));
       }
@@ -513,7 +460,6 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(assign_column_group(src_schema))) {
-        LOG_WARN("fail to assign column_group", KR(ret), K(src_schema));
       }
     }
   }
@@ -524,7 +470,6 @@ int AlterTableSchema::assign(const ObTableSchema &src_schema)
     LOG_WARN("Fail to deep copy storage_cache_policy string", K(ret));
   }
   if (FAILEDx(mv_mode_.assign(src_schema.mv_mode_))) {
-    LOG_WARN("fail to assign mv_mode", K(ret));
   }
   if (OB_SUCC(ret) && OB_FAIL(deep_copy_str(src_schema.index_params_, index_params_))) {
     LOG_WARN("Fail to deep copy vector index param string", K(ret));
@@ -564,15 +509,12 @@ int AlterTableSchema::add_alter_column(const AlterColumnSchema &alter_column_sch
           ret = OB_ERR_UNEXPECTED;
           SHARE_LOG(WARN, "The local column is not valid, ", K(ret));
         } else if (OB_FAIL(add_col_to_column_array(local_column))) {
-          SHARE_LOG(WARN, "Fail to push column to array, ", K(ret));
         } else {
-          SHARE_SCHEMA_LOG(DEBUG, "add column", K(local_column));
         }
       }
     }
   } else {
     if (OB_FAIL(add_col_to_column_array(const_cast<AlterColumnSchema *>(&alter_column_schema)))) {
-      SHARE_LOG(WARN, "Fail to push column to array, ", K(ret));
     }
   }
   return ret;
@@ -583,13 +525,11 @@ int AlterTableSchema::assign_subpartition_key_info(const common::ObPartitionKeyI
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(subpartition_key_info_.reserve(src_info.get_size()))) {
-    SHARE_SCHEMA_LOG(WARN, "reserve subpartition key info", K(ret));
   } else {
     const ObRowkeyColumn *ObRowkeyInfo = NULL;
     for (int i = 0; OB_SUCC(ret) && i < src_info.get_size(); i++) {
       ObRowkeyInfo = src_info.get_column(i);
       if (OB_FAIL(subpartition_key_info_.set_column(i, *ObRowkeyInfo))) {
-        SHARE_SCHEMA_LOG(WARN, "set column fail", K(ret));
       }
     }
   }
@@ -658,7 +598,6 @@ int ObSchemaService::alloc_table_schema(const ObTableSchema &table,
     ret = OB_ERR_UNEXPECTED;
     SHARE_SCHEMA_LOG(WARN, "placement new failed", K(ret));
   } else if (OB_FAIL((*allocated_table_schema).assign(table))){
-    LOG_WARN("fail to assign schema", K(ret));
   }
   return ret;
 }

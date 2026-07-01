@@ -98,7 +98,6 @@ int ObSrvXlator::th_init()
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(mysql_xlator_.th_init())) {
-    LOG_ERROR("init mysql translator for thread fail", K(ret));
   }
   return ret;
 }
@@ -107,7 +106,6 @@ int ObSrvXlator::th_destroy()
 {
   int ret = common::OB_SUCCESS;
   if (OB_FAIL(mysql_xlator_.th_destroy())) {
-    LOG_ERROR("destroy mysql translator for thread fail", K(ret));
   }
   return ret;
 }

@@ -157,7 +157,6 @@ void dispatch_rollback_sp_async_(const transaction::ObTxRollbackSPMsg &msg)
         if (!m.is_valid()) {
           ret = OB_INVALID_ARGUMENT; TRANS_LOG(ERROR, "msg is invalid", K(ret), K(m));
         } else if (OB_FAIL(txs->handle_sp_rollback_request(m, result))) {
-          TRANS_LOG(WARN, "handle txn message fail", K(ret), "msg", m);
         }
         (void)obcall::handle_sp_rollback_resp(m.get_receiver(), m.get_epoch(),
                 m.get_trans_id(), result.get_status(), m.get_request_id(), result);
@@ -180,7 +179,6 @@ void dispatch_tx_2pc_async_(const transaction::ObTxMsg &msg)
   char *buf = NULL;
   int64_t filled = 0;
   if (size <= 0) {
-    TRANS_LOG(WARN, "invalid 2pc msg size", K(size), K(msg_type));
   } else if (OB_ISNULL(buf = static_cast<char *>(ob_malloc(size, SET_USE_500("TxRpc2pc"))))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     TRANS_LOG(WARN, "alloc 2pc msg buffer fail", K(ret), K(size), K(msg_type));
@@ -197,7 +195,6 @@ void dispatch_tx_2pc_async_(const transaction::ObTxMsg &msg)
         if (OB_ISNULL(txs)) {
           ret = OB_ERR_UNEXPECTED; TRANS_LOG(WARN, "get tx service fail", K(ret));
         } else if (OB_FAIL(txs->handle_tx_batch_req(msg_type, buf, data_size))) {
-          TRANS_LOG(WARN, "handle 2pc msg fail", K(ret), K(msg_type));
         }
       }
       ob_free(buf);
@@ -213,18 +210,15 @@ int ObTransRpc::init(ObTransService *trans_service,
 {
   int ret = OB_SUCCESS;
   if (is_inited_) {
-    TRANS_LOG(WARN, "ObTransRpc inited twice");
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(trans_service)
           || !self.is_valid()) {
-    TRANS_LOG(WARN, "invalid argument", KP(trans_service), K(self));
     ret = OB_INVALID_ARGUMENT;
   } else {
     
     trans_service_ = trans_service;
     last_stat_ts_ = ObTimeUtility::current_time();
     is_inited_ = true;
-    TRANS_LOG(INFO, "transaction rpc inited success");
   }
   return ret;
 }
@@ -234,14 +228,11 @@ int ObTransRpc::start()
   int ret = OB_SUCCESS;
 
   if (!is_inited_) {
-    TRANS_LOG(WARN, "ObTransRpc is not inited");
     ret = OB_NOT_INIT;
   } else if (is_running_) {
-    TRANS_LOG(WARN, "ObTransRpc is already running");
     ret = OB_ERR_UNEXPECTED;
   } else {
     is_running_ = true;
-    TRANS_LOG(INFO, "ObTransRpc start success");
   }
 
   return ret;
@@ -255,7 +246,6 @@ void ObTransRpc::stop()
     TRANS_LOG_RET(WARN, OB_IN_STOP_STATE, "ObTransRpc already has been stopped");
   } else {
     is_running_ = false;
-    TRANS_LOG(INFO, "ObTransRpc stop success");
   }
 }
 
@@ -266,7 +256,6 @@ void ObTransRpc::wait()
   } else if (is_running_) {
     TRANS_LOG_RET(WARN, OB_IN_STOP_STATE, "ObTransRpc is already running");
   } else {
-    TRANS_LOG(INFO, "ObTransRpc wait success");
   }
 }
 
@@ -279,7 +268,6 @@ void ObTransRpc::destroy()
     }
     is_inited_ = false;
     trans_service_ = NULL;
-    TRANS_LOG(INFO, "transaction rpc destroyed");
   }
 }
 int ObTransRpc::post_commit_msg_(const ObAddr &server, ObTxMsg &msg)
@@ -309,7 +297,6 @@ int ObTransRpc::post_commit_msg_(const ObAddr &server, ObTxMsg &msg)
     }
     default:
       ret = OB_NOT_SUPPORTED;
-      TRANS_LOG(WARN, "rpc proxy not supported", K(server), K(msg));
       break;
   }
   return ret;
@@ -378,7 +365,6 @@ int ObTransRpc::post_(const ObAddr &server, ObTxMsg &msg)
     }
     default:
       ret = OB_NOT_SUPPORTED;
-      TRANS_LOG(WARN, "rpc proxy not supported", K(server), K(msg));
       break;
   }
   return ret;
@@ -390,19 +376,15 @@ int ObTransRpc::post_msg(const ObAddr &server, ObTxMsg &msg)
   
 
   if (OB_UNLIKELY(!is_inited_)) {
-    TRANS_LOG(WARN, "ObTransRpc not inited");
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!is_running_)) {
-    TRANS_LOG(WARN, "ObTransRpc is not running");
     ret = OB_NOT_RUNNING;
   } else if (OB_UNLIKELY(!true) ||
       OB_UNLIKELY(!server.is_valid()) || OB_UNLIKELY(!msg.is_valid())) {
-    TRANS_LOG(WARN, "invalid argument", K(server), K(msg));
     ret = OB_INVALID_ARGUMENT;
   } else if (ObTxMsgTypeChecker::is_2pc_msg_type(msg.get_msg_type())) {
     dispatch_tx_2pc_async_(msg);
   } else if (OB_FAIL(post_(server, msg))) {
-    TRANS_LOG(WARN, "post msg error", K(ret), K(server), K(msg));
   } else {
     // do nothing
   }
@@ -410,7 +392,6 @@ int ObTransRpc::post_msg(const ObAddr &server, ObTxMsg &msg)
   if (OB_SUCC(ret)) {
     total_trans_msg_count_++;
     statistics_();
-    TRANS_LOG(DEBUG, "post transaction message success", K(msg));
   }
 
   return ret;
@@ -423,10 +404,8 @@ int ObTransRpc::post_msg(const ObLSID &ls_id, ObTxMsg &msg)
   const int64_t random = ObRandom::rand(1, 100);
   if (0 == random % 20) {
     //mock package drop: 5%
-    TRANS_LOG(INFO, "post trans msg failed for random error (discard msg)", K(server), K(msg));
     return ret;
   } else if (0 == random % 50) {
-    TRANS_LOG(INFO, "post trans msg failed for random error (delayed msg)", K(server), K(msg));
   } else {
     // do nothing
   }
@@ -437,13 +416,10 @@ int ObTransRpc::post_msg(const ObLSID &ls_id, ObTxMsg &msg)
   ObAddr server;
 
   if (OB_UNLIKELY(!is_inited_)) {
-    TRANS_LOG(WARN, "ObTransRpc not inited");
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!is_running_)) {
-    TRANS_LOG(WARN, "ObTransRpc is not running");
     ret = OB_NOT_RUNNING;
   } else if (OB_UNLIKELY(!true) || OB_UNLIKELY(!msg.is_valid())) {
-    TRANS_LOG(WARN, "invalid argument", K(msg));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(trans_service_->get_location_adapter()->nonblock_get_leader(cluster_id, ls_id, server))) {
     TRANS_LOG(WARN, "get leader failed", KR(ret), K(msg), K(cluster_id), K(ls_id));
@@ -459,7 +435,6 @@ int ObTransRpc::post_msg(const ObLSID &ls_id, ObTxMsg &msg)
     // 2pc msg: in-process async dispatch (single-replica leader is local)
     dispatch_tx_2pc_async_(msg);
   } else if (OB_FAIL(post_(server, msg))) {
-    TRANS_LOG(WARN, "post msg error", K(ret), K(server), K(msg));
   } else {
     // do nothing
   }
@@ -467,7 +442,6 @@ int ObTransRpc::post_msg(const ObLSID &ls_id, ObTxMsg &msg)
   if (OB_SUCC(ret)) {
     total_trans_msg_count_++;
     statistics_();
-    TRANS_LOG(DEBUG, "post transaction message success", K(msg));
   }
 
   return ret;
@@ -496,7 +470,6 @@ int ObTransRpc::post_sub_request_msg_(const ObAddr &server, ObTxMsg &msg)
     }
     default: {
       ret = OB_NOT_SUPPORTED;
-      TRANS_LOG(WARN, "rpc proxy not supported", K(server), K(msg));
       break;
     }
   }
@@ -526,7 +499,6 @@ int ObTransRpc::post_sub_response_msg_(const ObAddr &server, ObTxMsg &msg)
     }
     default: {
       ret = OB_NOT_SUPPORTED;
-      TRANS_LOG(WARN, "rpc proxy not supported", K(server), K(msg));
       break;
     }
   }
@@ -543,19 +515,15 @@ int ObTransRpc::ask_tx_state_for_4377(const ObAskTxStateFor4377Msg &msg,
   ObAddr server;
 
   if (OB_UNLIKELY(!is_inited_)) {
-    TRANS_LOG(WARN, "ObTransRpc not inited");
     ret = OB_NOT_INIT;
   } else if (OB_UNLIKELY(!is_running_)) {
-    TRANS_LOG(WARN, "ObTransRpc is not running");
     ret = OB_NOT_RUNNING;
   } else if (OB_UNLIKELY(!true)
              || OB_UNLIKELY(!msg.is_valid())) {
-    TRANS_LOG(WARN, "invalid argument", K(msg));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(trans_service_->get_location_adapter()->nonblock_get_leader(cluster_id,
                                                                                  msg.ls_id_,
                                                                                  server))) {
-    TRANS_LOG(WARN, "get leader failed", KR(ret), K(msg), K(cluster_id));
   } else {
     // single-replica: the target LS leader is local, dispatch in-process
     // (mirrors ObAskTxStateFor4377P::process: the handler status is carried back
@@ -564,7 +532,6 @@ int ObTransRpc::ask_tx_state_for_4377(const ObAskTxStateFor4377Msg &msg,
       int ret = OB_SUCCESS;
       bool is_alive = false;
       if (OB_FAIL(trans_service_->handle_ask_tx_state_for_4377(msg, is_alive))) {
-        TRANS_LOG(WARN, "handle ask tx state for 4377 failed", K(ret), K(msg));
       }
       resp.is_alive_ = is_alive;
       resp.ret_ = ret;
@@ -604,7 +571,6 @@ int ObTransRpc::post_standby_msg_(const ObAddr &server, ObTxMsg &msg)
     }
     default: {
       ret = OB_NOT_SUPPORTED;
-      TRANS_LOG(WARN, "rpc proxy not supported", K(server), K(msg));
       break;
     }
   }
@@ -615,7 +581,6 @@ void ObTransRpc::statistics_()
 {
   const int64_t cur_ts = ObTimeUtility::current_time();
   if (cur_ts - last_stat_ts_ > STAT_INTERVAL) {
-    TRANS_LOG(INFO, "rpc statistics", K_(total_trans_msg_count));
     total_trans_msg_count_ = 0;
     last_stat_ts_ = cur_ts;
   }

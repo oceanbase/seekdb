@@ -141,7 +141,6 @@ int ObGeoSimplifyVisitor::multi_point_visit(LINE &geo, int32_t min_point)
   } else {
     ObArray<bool> kept_idx;
     if (OB_FAIL(kept_idx.prepare_allocate(sz))) {
-      LOG_WARN("fail to alloc memory", K(ret), K(sz));
     } else {
       // must keep first and last point (kept_idx default false)
       kept_idx[0] = true;
@@ -175,11 +174,9 @@ int ObGeoSimplifyVisitor::visit(ObCartesianLineString *geo)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(multi_point_visit(*geo, LINESTRING_MIN_POINT))) {
-    LOG_WARN("fail to do multi point visit", K(ret));
   } else if (geo->size() == 1) {
     if (keep_collapsed_) {
       if (OB_FAIL(geo->push_back(geo->front()))) {
-        LOG_WARN("fail to push back geometry", K(ret), K(geo->size()));
       }
     } else {
       geo->clear();
@@ -198,7 +195,6 @@ int ObGeoSimplifyVisitor::polygon_visit(POLYGON &geo)
     RING &ext_ring = geo.exterior_ring();
     uint32_t min_point = keep_collapsed_ ? RING_MIN_POINT : 0;
     if (OB_FAIL(multi_point_visit(ext_ring, min_point))) {
-      LOG_WARN("fail to do multi point visit", K(ret));
     } else if (ext_ring.size() < RING_MIN_POINT) {
       // if ext ring is invalid, then total polygon is invalid
       ext_ring.clear();
@@ -209,7 +205,6 @@ int ObGeoSimplifyVisitor::polygon_visit(POLYGON &geo)
       for (uint32_t i = 0; OB_SUCC(ret) && i < inner_sz; ++i) {
         RING &inner_ring = geo.inner_ring(i);
         if (OB_FAIL(multi_point_visit(inner_ring, min_point))) {
-          LOG_WARN("fail to do multi point visit", K(ret));
         } else if (inner_ring.size() >= RING_MIN_POINT) {
           if (valid_inner_ring != i) {
             geo.interior_rings()[valid_inner_ring] = inner_ring;
@@ -242,7 +237,6 @@ int ObGeoSimplifyVisitor::visit(ObCartesianMultilinestring *geo)
   uint64_t sz = line.size();
   for (int32_t i = 0; i < sz && OB_SUCC(ret); ++i) {
     if (OB_FAIL(multi_point_visit(line[i], LINESTRING_MIN_POINT))) {
-      LOG_WARN("fail to do multi point visit", K(ret), K(i), K(sz));
     } else if (line[i].size() != 0) {
       if (valid_line != i) {
         line[valid_line] = line[i];
@@ -266,7 +260,6 @@ int ObGeoSimplifyVisitor::visit(ObCartesianMultipolygon *geo)
   uint64_t sz = poly.size();
   for (int32_t i = 0; i < sz && OB_SUCC(ret); ++i) {
     if (OB_FAIL((polygon_visit<ObCartesianPolygon, ObCartesianLinearring>(poly[i])))) {
-      LOG_WARN("fail to do polygon visit", K(ret));
     } else if (poly[i].size() != 0) {
       if (valid_poly != i) {
         poly[valid_poly] = poly[i];
@@ -288,7 +281,6 @@ int ObGeoSimplifyVisitor::visit(ObCartesianGeometrycollection *geo)
   int32_t valid_geo = 0;
   for (int32_t i = 0; i < geo->size() && OB_SUCC(ret); i++) {
     if (OB_FAIL((*geo)[i].do_visit(*this))) {
-      LOG_WARN("failed to do tree item visit", K(ret));
     } else if (!(*geo)[i].is_empty()) {
       if (valid_geo != i) {
         (*geo)[valid_geo] = (*geo)[i];

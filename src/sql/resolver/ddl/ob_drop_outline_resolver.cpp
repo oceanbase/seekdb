@@ -48,7 +48,6 @@ int ObDropOutlineResolver::resolve(const ParseNode &parse_tree)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_ERROR("failed to create drop_outline_stmt", K(ret));
   } else if (OB_FAIL(GET_MIN_DATA_VERSION(compat_version))) {
-    LOG_WARN("fail to get data version", KR(ret));
   } else {
     stmt_ = drop_outline_stmt;
     //resolve database_name and outline_name
@@ -59,7 +58,6 @@ int ObDropOutlineResolver::resolve(const ParseNode &parse_tree)
       bool is_format_otl = false;
 
       if (OB_FAIL(resolve_outline_name(node->children_[0], db_name, outline_name))) {
-        LOG_WARN("fail to resolve outline name", K(ret));
       } else if (OB_ISNULL(node->children_[1])) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid node children", K(node->children_[1]), K(node->children_));

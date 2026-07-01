@@ -145,7 +145,6 @@ public:
     int ret = OB_SUCCESS;
     if(col_count < 1) {
       ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(WARN, "column count is less than 1", K(col_count));
     } else {
       col_count_ = col_count;
     }

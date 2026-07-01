@@ -52,9 +52,7 @@ int ObValuesTableAccessOp::inner_open()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("should have one column at least", K(ret));
   } else if (OB_FAIL(datum_caster_.init(eval_ctx_.exec_ctx_))) {
-    LOG_WARN("fail to init datum_caster", K(ret));
   } else if (OB_FAIL(ObSQLUtils::get_default_cast_mode(false, 0, GET_MY_SESSION(ctx_), cm_))) {
-    LOG_WARN("fail to get_default_cast_mode", K(ret));
   } else {
     cm_ = cm_ | CM_COLUMN_CONVERT;
     if (OB_SUCC(ret)) {
@@ -67,7 +65,6 @@ int ObValuesTableAccessOp::inner_open()
         } else {
           const ObObj &first_column_node = plan_ctx->get_param_store().at(MY_SPEC.start_param_idx_);
           if (OB_FAIL(first_column_node.get_real_param_count(row_cnt_))) {
-            LOG_WARN("failed to get row", K(ret));
           }
         }
       } else if (ObValuesTableDef::ACCESS_PARAM == MY_SPEC.access_type_) {
@@ -91,7 +88,6 @@ int ObValuesTableAccessOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOperator::inner_rescan())) {
-    LOG_WARN("failed to do inner rescan", K(ret));
   } else {
     row_idx_ = 0;
   }
@@ -102,7 +98,6 @@ int ObValuesTableAccessOp::switch_iterator()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObOperator::inner_switch_iterator())) {
-    LOG_WARN("failed to do inner rescan", K(ret));
   } else {
     row_idx_ = 0;
   }
@@ -113,7 +108,6 @@ int ObValuesTableAccessOp::inner_get_next_row()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(try_check_status())) {
-    LOG_WARN("check physical plan status faild", K(ret));
   } else {
     do {
       clear_evaluated_flag();
@@ -207,7 +201,6 @@ int ObValuesTableAccessOp::calc_datum_from_expr(const int64_t col_idx,
              !need_adjust_decimal_int) {
     // when type and collation_type is same. src has the same type to dst;
     if (OB_FAIL(src_expr->eval(eval_ctx_, datum))) {
-      LOG_WARN("failed to get src datum", K(ret));
     } else {
       dst_expr->locate_datum_for_write(eval_ctx_) = *datum;
       dst_expr->set_evaluated_projected(eval_ctx_);
@@ -215,25 +208,21 @@ int ObValuesTableAccessOp::calc_datum_from_expr(const int64_t col_idx,
   } else {
     if (OB_FAIL(ObCharset::check_valid_implicit_convert(src_meta.cs_type_,
                                                         dst_expr->datum_meta_.cs_type_))) {
-      LOG_WARN("failed to check valid implicit convert", K(ret));
     } else {
       ObExpr real_src_expr = *src_expr;
       real_src_expr.datum_meta_ = src_meta;
       real_src_expr.obj_meta_ = src_obj_meta;
       real_src_expr.obj_datum_map_ = ObDatum::get_obj_datum_map_type(src_meta.type_);
       if (OB_FAIL(datum_caster_.to_type(dst_expr->datum_meta_, real_src_expr, cm_, datum))) {
-        LOG_WARN("fail to dynamic cast", K(ret), K(dst_expr->datum_meta_), K(real_src_expr), K(cm_));
       } else {
         ObDatum &dst_datum = dst_expr->locate_datum_for_write(eval_ctx_);
         if (ObObjDatumMapType::OBJ_DATUM_STRING == dst_expr->obj_datum_map_) {
           ObExprStrResAlloc res_alloc(*dst_expr, eval_ctx_);
           if (OB_FAIL(dst_datum.deep_copy(*datum, res_alloc))) {
-            LOG_WARN("fail to deep copy datum from cast res datum", K(ret), KP(datum));
           }
         } else {
           ObDataBuffer res_alloc(const_cast<char*>(dst_datum.ptr_), dst_expr->res_buf_len_);
           if (OB_FAIL(dst_datum.deep_copy(*datum, res_alloc))) {
-            LOG_WARN("fail to deep copy datum from cast res datum", K(ret), KP(datum));
           }
         }
         dst_expr->set_evaluated_projected(eval_ctx_);
@@ -268,14 +257,11 @@ int ObValuesTableAccessOp::calc_datum_from_param(const ObObj &src_obj, ObExpr *d
     cast_ctx.exec_ctx_ = &eval_ctx_.exec_ctx_;
     if (OB_FAIL(ObObjCaster::to_type(dst_type, dst_expr->obj_meta_.get_collation_type(), cast_ctx,
                                      src_obj, dst_obj))) {
-      LOG_WARN("failed to cast obj", K(ret), K(src_type), K(dst_type), K(src_obj), K(dst_obj));
     } else if (OB_FAIL(dst_datum.from_obj(dst_obj))) {
-      LOG_WARN("failed to from obj", K(ret));
     } else {
       dst_expr->set_evaluated_projected(eval_ctx_);
     }
   } else if (OB_FAIL(dst_datum.from_obj(src_obj))) {
-    LOG_WARN("failed to from obj", K(ret));
   } else {
     dst_expr->set_evaluated_projected(eval_ctx_);
   }
@@ -304,14 +290,12 @@ OB_INLINE int ObValuesTableAccessOp::calc_next_row()
           int64_t idx = row_idx_ * col_num + col_idx;
           ObExpr *src_expr = MY_SPEC.value_exprs_.at(idx);
           if (OB_FAIL(calc_datum_from_expr(col_idx, row_idx_, src_expr, col_expr))) {
-            LOG_WARN("failed to calc datum from expr", K(ret));
           }
           break;
         }
         case ObValuesTableDef::FOLD_ACCESS_EXPR : {
           ObExpr *src_expr = MY_SPEC.value_exprs_.at(col_idx);
           if (OB_FAIL(calc_datum_from_expr(col_idx, row_idx_, src_expr, col_expr))) {
-            LOG_WARN("failed to calc datum from expr", K(ret));
           }
           break;
         }
@@ -319,7 +303,6 @@ OB_INLINE int ObValuesTableAccessOp::calc_next_row()
           int64_t param_idx = MY_SPEC.start_param_idx_ + col_idx + row_idx_ * col_num;
           const ObObjParam &param = plan_ctx->get_param_store().at(param_idx);
           if (OB_FAIL(calc_datum_from_param(param, col_expr))) {
-            LOG_WARN("failed to calc datum from expr", K(ret));
           }
           break;
         }
@@ -327,7 +310,6 @@ OB_INLINE int ObValuesTableAccessOp::calc_next_row()
           int64_t idx = row_idx_ * col_num + col_idx;
           const ObObj &param = MY_SPEC.obj_params_.at(idx);
           if (OB_FAIL(calc_datum_from_param(param, col_expr))) {
-            LOG_WARN("failed to calc datum from expr", K(ret));
           }
           break;
         }
@@ -356,7 +338,6 @@ int ObValuesTableAccessOp::inner_close()
   int ret = OB_SUCCESS;
   row_idx_ = 0;
   if (OB_FAIL(datum_caster_.destroy())) {
-    LOG_WARN("fail to destroy datum_caster", K(ret));
   }
   return ret;
 }

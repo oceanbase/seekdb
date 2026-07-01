@@ -105,7 +105,6 @@ int ObDirectLoadDataWithOriginQuery::get_next_row(const ObDirectLoadDatumRow *&r
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected column count", KR(ret), KPC(datum_row), K(param_.table_data_desc_));
     } else if (OB_FAIL(query_full_row(*datum_row, full_row))) {
-      LOG_WARN("fail to query full row", KR(ret));
     } else if (OB_UNLIKELY(full_row->count_ != param_.store_column_count_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected column count", KR(ret), KPC(full_row), K(param_.store_column_count_));
@@ -117,11 +116,9 @@ int ObDirectLoadDataWithOriginQuery::get_next_row(const ObDirectLoadDatumRow *&r
       result_row = &datum_row_;
       if (result_row->is_delete_) {
         if (OB_FAIL(param_.dml_row_handler_->handle_delete_row(param_.tablet_id_, *result_row))) {
-          LOG_WARN("fail to handle delete row", KR(ret));
         }
       } else {
         if (OB_FAIL(param_.dml_row_handler_->handle_insert_row(param_.tablet_id_, *result_row))) {
-          LOG_WARN("fail to handle insert row", KR(ret));
         }
       }
     }
@@ -136,17 +133,13 @@ int ObDirectLoadDataWithOriginQuery::query_full_row(const ObDirectLoadDatumRow &
   full_row = nullptr;
   rowkey_allocator_.reuse();
   if (OB_FAIL(rowkey_.assign(rowkey_row.storage_datums_, param_.rowkey_count_))) {
-    LOG_WARN("fail to assign rowkey", KR(ret), K(rowkey_row), K(param_));
   } else if (OB_FAIL(rowkey_.prepare_memtable_readable(*param_.col_descs_, rowkey_allocator_))) {
-    LOG_WARN("fail to prepare_memtable_readable", KR(ret));
   } else {
     if (nullptr == origin_getter_) {
       if (OB_FAIL(param_.origin_table_->get(rowkey_, allocator_, origin_getter_, true/*skip_read_lob*/))) {
-        LOG_WARN("fail to get origin table", KR(ret));
       }
     } else {
       if (OB_FAIL(origin_getter_->open(rowkey_))) {
-        LOG_WARN("fail to open origin getter", KR(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -190,11 +183,8 @@ int ObDirectLoadMultipleSSTableDataWithOriginQuery::init(const ObDirectLoadDataW
     scan_merge_param.datum_utils_ = param.datum_utils_;
     scan_merge_param.dml_row_handler_ = param.dml_row_handler_;
     if (OB_FAIL(range_.assign(param.tablet_id_, range))) {
-      LOG_WARN("fail to assign range", KR(ret));
     } else if (OB_FAIL(scan_merge_.init(scan_merge_param, sstable_array, range_))) {
-      LOG_WARN("fail to init scan merge", KR(ret));
     } else if (OB_FAIL(data_delete_.init(param, &scan_merge_))) {
-      LOG_WARN("fail to init data insert", KR(ret));
     } else {
       // set parent params
       row_flag_ = param.table_data_desc_.row_flag_;

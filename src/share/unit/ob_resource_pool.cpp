@@ -51,7 +51,6 @@ int ObResourcePool::assign(const ObResourcePool &other)
   unit_count_ = other.unit_count_;
   unit_config_id_ = other.unit_config_id_;
   if (OB_FAIL(copy_assign(zone_list_, other.zone_list_))) {
-   SHARE_LOG(WARN, "failed to assign zone_list_", KR(ret));
   }
   
   replica_type_ = other.replica_type_;

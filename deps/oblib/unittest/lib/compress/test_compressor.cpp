@@ -73,7 +73,6 @@ int TestCompressorStress::init(
     ret = OB_INIT_TWICE;
     COMMON_LOG(WARN, "The TestCompressorStress has been inited, ", K(ret));
   } else if (OB_FAIL(map_.create(sample_size, ObModIds::TEST))) {
-    COMMON_LOG(WARN, "Fail to create map, ", K(ret));
   } else {
     int64_t pos = 0;
     char word[64];
@@ -91,7 +90,6 @@ int TestCompressorStress::init(
       } else {
         memcpy(buf, word, pos);
         if (OB_FAIL(dict_.push_back(buf))) {
-          COMMON_LOG(WARN, "Fail to push buf to dict array, ", K(ret));
         }
       }
     }

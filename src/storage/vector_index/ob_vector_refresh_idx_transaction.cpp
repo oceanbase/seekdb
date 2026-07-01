@@ -39,7 +39,6 @@ ObVectorRefreshIdxTransaction::ObSessionParamSaved::~ObSessionParamSaved()
   int ret = OB_SUCCESS;
   if (nullptr != session_info_) {
     if (OB_FAIL(restore())) {
-      LOG_WARN("fail to restore session param", KR(ret));
     }
   }
 }
@@ -56,7 +55,6 @@ int ObVectorRefreshIdxTransaction::ObSessionParamSaved::save(ObSQLSessionInfo *s
   } else {
     bool autocommit = false;
     if (OB_FAIL(session_info->get_autocommit(autocommit))) {
-      LOG_WARN("fail to get autocommit", KR(ret));
     } else {
       session_info_ = session_info;
       is_inner_ = session_info->is_inner();
@@ -95,7 +93,6 @@ ObVectorRefreshIdxTransaction::~ObVectorRefreshIdxTransaction()
   int ret = OB_SUCCESS;
   if (in_trans_) {
     if (OB_FAIL(end(OB_SUCCESS == get_errno()))) {
-      LOG_WARN("fail to end", KR(ret));
     }
   }
 }
@@ -116,7 +113,6 @@ int ObVectorRefreshIdxTransaction::connect(ObSQLSessionInfo *session_info, ObISQ
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected connection pool", KR(ret));
     } else if (OB_FAIL(pool->acquire_spi_conn(session_info, conn))) {
-      LOG_WARN("acquire connection failed", KR(ret), K(pool), K(session_info));
     } else if (OB_ISNULL(conn)) {
       ret = OB_INNER_STAT_ERROR;
       LOG_WARN("connection can not be NULL", KR(ret), K_(pool));
@@ -125,7 +121,6 @@ int ObVectorRefreshIdxTransaction::connect(ObSQLSessionInfo *session_info, ObISQ
       LOG_WARN("inactive sql client", KR(ret));
       int tmp_ret = pool->release(conn, OB_SUCCESS == ret);
       if (OB_SUCCESS != tmp_ret) {
-        LOG_WARN("release connection failed", K(tmp_ret));
       }
       conn = nullptr;
     } else {
@@ -149,7 +144,6 @@ int ObVectorRefreshIdxTransaction::start_transaction()
     LOG_WARN("conn_ is NULL", KR(ret));
   } else {
     if (OB_FAIL(conn->start_transaction(false /*with_snapshot*/))) {
-      LOG_WARN("fail to start transaction", KR(ret));
     }
     if (OB_SUCCESS == get_errno()) {
       set_errno(ret);
@@ -168,11 +162,9 @@ int ObVectorRefreshIdxTransaction::end_transaction(const bool commit)
   } else {
     if (commit) {
       if (OB_FAIL(conn->commit())) {
-        LOG_WARN("fail to do commit", KR(ret));
       }
     } else {
       if (OB_FAIL(conn->rollback())) {
-        LOG_WARN("fail to do rollback", KR(ret));
       }
     }
     if (OB_SUCCESS == get_errno()) {
@@ -195,14 +187,11 @@ int ObVectorRefreshIdxTransaction::start(ObSQLSessionInfo *session_info, ObISQLC
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected session is in trans", KR(ret));
   } else if (OB_FAIL(session_param_saved_.save(session_info))) {
-    LOG_WARN("fail to save session param", KR(ret));
   } else if (OB_FAIL(connect(session_info, sql_client))) {
-    LOG_WARN("fail to connect", KR(ret));
   } else {
     
     start_time_ = ObTimeUtility::current_time();
     if (OB_FAIL(start_transaction())) {
-      LOG_WARN("failed to start transaction", KR(ret));
     } else {
       session_info_ = session_info;
       in_trans_ = true;
@@ -213,7 +202,6 @@ int ObVectorRefreshIdxTransaction::start(ObSQLSessionInfo *session_info, ObISQLC
     int tmp_ret = OB_SUCCESS;
     close();
     if (OB_TMP_FAIL(session_param_saved_.restore())) {
-      LOG_WARN("fail to restore session param", KR(tmp_ret));
     }
   }
   return ret;
@@ -225,7 +213,6 @@ int ObVectorRefreshIdxTransaction::end(const bool commit)
   int tmp_ret = OB_SUCCESS;
   if (in_trans_) {
     if (OB_FAIL(end_transaction(commit))) {
-      LOG_WARN("fail to end transation", KR(ret));
     } else {
       LOG_DEBUG("end transaction success", K(commit));
     }

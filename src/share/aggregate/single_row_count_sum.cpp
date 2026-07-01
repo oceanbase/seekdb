@@ -37,12 +37,10 @@ int init_single_row_count_sum_aggregate(RuntimeContext &agg_ctx, const int col_i
       LST_DO_CODE(INIT_GENERAL_COUNT_SUM_CASE, AGG_VEC_TC_LIST);
       default: {
         ret = OB_ERR_UNEXPECTED;
-        SQL_LOG(WARN, "unexpected vector type class", K(param_vec), K(*aggr_info.expr_));
       }
     }
   }
   if (OB_FAIL(ret)) {
-    SQL_LOG(WARN, "init count aggregate failed", K(ret));
   }
   return ret;
 }

@@ -45,7 +45,6 @@ int ObReservedSnapshotTableStorage::init(ObSQLiteConnectionPool *pool)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid pool", K(ret));
   } else if (OB_FAIL(create_table_if_not_exists())) {
-    LOG_WARN("failed to create table", K(ret));
   }
   if (OB_FAIL(ret)) {
     pool_ = NULL;
@@ -65,7 +64,6 @@ int ObReservedSnapshotTableStorage::create_table_if_not_exists()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_RESERVED_SNAPSHOT, nullptr))) {
-      LOG_WARN("failed to create table", K(ret));
     }
   }
   return ret;
@@ -98,11 +96,9 @@ int ObReservedSnapshotTableStorage::insert_or_update(
       
       // Begin transaction for batch insert
       if (OB_FAIL(guard->begin_transaction())) {
-        LOG_WARN("failed to begin transaction", K(ret));
       } else {
         ObSQLiteStmt *stmt = nullptr;
         if (OB_FAIL(guard->prepare_execute(insert_sql, stmt))) {
-          LOG_WARN("failed to prepare execute", K(ret));
         } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < entries.count(); ++i) {
             const ObReservedSnapshotEntry &entry = entries.at(i);
@@ -116,7 +112,6 @@ int ObReservedSnapshotTableStorage::insert_or_update(
             
             int64_t affected_rows = 0;
             if (OB_FAIL(guard->step_execute(stmt, binder, &affected_rows))) {
-              LOG_WARN("failed to step execute", K(ret), K(i));
             }
           }
           
@@ -127,11 +122,9 @@ int ObReservedSnapshotTableStorage::insert_or_update(
           if (OB_FAIL(ret)) {
             int rollback_ret = guard->rollback();
             if (OB_SUCCESS != rollback_ret) {
-              LOG_WARN("failed to rollback", K(rollback_ret));
             }
           } else {
             if (OB_FAIL(guard->commit())) {
-              LOG_WARN("failed to commit", K(ret));
             }
           }
         }
@@ -167,7 +160,6 @@ int ObReservedSnapshotTableStorage::update_status(
       
       int64_t affected_rows = 0;
       if (OB_FAIL(guard->execute(update_sql, binder, &affected_rows))) {
-        LOG_WARN("failed to execute update", K(ret));
       }
     }
   }
@@ -245,7 +237,6 @@ int ObReservedSnapshotTableStorage::get_all(ObIArray<ObReservedSnapshotEntry> &e
       
       ObSQLiteStmt *stmt = nullptr;
       if (OB_FAIL(guard->prepare_query(select_sql, nullptr, stmt))) {
-        LOG_WARN("failed to prepare query", K(ret));
       } else {
         ObSQLiteRowReader reader;
         while (OB_SUCC(ret)) {
@@ -254,7 +245,6 @@ int ObReservedSnapshotTableStorage::get_all(ObIArray<ObReservedSnapshotEntry> &e
             ret = OB_SUCCESS;
             break;
           } else if (OB_FAIL(ret)) {
-            LOG_WARN("failed to step query", K(ret));
           } else {
             ObReservedSnapshotEntry entry;
             entry.snapshot_type_ = reader.get_int64();
@@ -265,7 +255,6 @@ int ObReservedSnapshotTableStorage::get_all(ObIArray<ObReservedSnapshotEntry> &e
             entry.svr_addr_.reset();
             
             if (OB_FAIL(entries.push_back(entry))) {
-              LOG_WARN("failed to push back entry", K(ret));
             }
           }
         }
@@ -297,7 +286,6 @@ int ObReservedSnapshotTableStorage::delete_expired(
       
       int64_t affected_rows = 0;
       if (OB_FAIL(guard->execute(delete_sql, nullptr, &affected_rows))) {
-        LOG_WARN("failed to execute delete", K(ret));
       }
     }
   }

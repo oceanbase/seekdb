@@ -79,7 +79,6 @@ public:
       ret = OB_SIZE_OVERFLOW;
       SQL_ENG_LOG(WARN, "sql fixed array size overflow", K(ret), K(cap_), K(count_));
     } else if (OB_FAIL(copy_assign(data_[count_], obj))) {
-      SQL_ENG_LOG(WARN, "failed to copy assign data", K(ret));
     } else {
       count_++;
     }
@@ -108,7 +107,6 @@ public:
       SQL_ENG_LOG(WARN, "invalid argument", K(ret), K(cap));
     } else if (NULL == data_) {
       if (OB_FAIL(init(cap, allocator))) {
-        SQL_ENG_LOG(WARN, "failed to init array", K(ret));
       }
     } else {
       if (cap > cap_) {
@@ -251,7 +249,6 @@ OB_INLINE int ObPostExprItem::get_item_value_directly(const ObPhysicalPlanCtx &p
     case T_QUESTIONMARK: {
       // column convert's value comes from param store or itself
       if (OB_FAIL(get_indirect_const(plan_ctx, value))) {
-        SQL_ENG_LOG(WARN, "get indirect const from value item failed", K(ret), K(*this));
       }
       break;
     }
@@ -260,7 +257,6 @@ OB_INLINE int ObPostExprItem::get_item_value_directly(const ObPhysicalPlanCtx &p
         value = &get_obj();
       } else {
         ret = common::OB_ERR_UNEXPECTED;
-        SQL_ENG_LOG(WARN, "invalid item type", K(item_type_));
       }
       break;
     }
@@ -276,10 +272,8 @@ OB_INLINE int ObPostExprItem::get_indirect_const(const ObPhysicalPlanCtx &plan_c
       int64_t param_idx = -1;
       const auto &param_store = plan_ctx.get_param_store();
       if (OB_FAIL(get_obj().get_unknown(param_idx))) {
-        SQL_ENG_LOG(WARN, "fail to get unknown", K(ret), K(get_obj()));
       } else if (OB_UNLIKELY(param_idx < 0 || param_idx >= param_store.count())) {
         ret = common::OB_ARRAY_OUT_OF_RANGE;
-        SQL_ENG_LOG(WARN, "wrong index of question mark position", K(param_idx), "param_count", param_store.count());
       } else {
         val = &param_store.at(param_idx);
       }

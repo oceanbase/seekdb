@@ -46,7 +46,6 @@ int ObAllVirtualOptStatGatherMonitor::set_ip()
   if (NULL == addr_) {
     ret = OB_ENTRY_NOT_EXIST;
   } else if (!addr_->ip_to_string(svr_ip_, sizeof(svr_ip_))) {
-    SERVER_LOG(ERROR, "ip to string failed");
     ret = OB_ERR_UNEXPECTED;
   } else {
     ipstr_ = ObString::make_string(svr_ip_);
@@ -79,10 +78,8 @@ int ObAllVirtualOptStatGatherMonitor::inner_get_next_row(ObNewRow *&row)
   } else {
     if (!start_to_read_) {
       if (OB_FAIL(set_ip())) {
-        SERVER_LOG(WARN, "failed to set ip", K(ret));
       } else if (OB_FAIL(ObOptStatGatherStatList::instance().list_to_array(*allocator_,
                                                                            stat_array_))) {
-        SERVER_LOG(WARN, "failed to list to array", K(ret));
       }
     }
     if (OB_SUCC(ret) && index_ >= stat_array_.size()) {

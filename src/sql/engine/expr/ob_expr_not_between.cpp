@@ -40,13 +40,10 @@ int calc_not_between_expr(const ObExpr &expr,
   ObDatum *left = NULL;
   ObDatum *right = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, val))) {
-    LOG_WARN("eval arg 0 failed", K(ret));
   } else if (val->is_null()) {
     res_datum.set_null();
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, left))) {
-    LOG_WARN("eval arg 1 failed", K(ret));
   } else if (OB_FAIL(expr.args_[2]->eval(ctx, right))) {
-    LOG_WARN("eval arg 2 failed", K(ret));
   } else if (left->is_null() && right->is_null()) {
     res_datum.set_null();
   } else {
@@ -55,7 +52,6 @@ int calc_not_between_expr(const ObExpr &expr,
     int cmp_ret = 0;
     if (!left->is_null()) {
       if (OB_FAIL((reinterpret_cast<DatumCmpFunc>(expr.inner_functions_[0]))(*val, *left, cmp_ret))) {
-        LOG_WARN("cmp left failed", K(ret));
       } else {
         left_cmp_succ = cmp_ret < 0 ? true : false;
       }
@@ -63,7 +59,6 @@ int calc_not_between_expr(const ObExpr &expr,
     if (OB_FAIL(ret)) {
     } else if (left->is_null() || (!left_cmp_succ && !right->is_null())) {
       if (OB_FAIL((reinterpret_cast<DatumCmpFunc>(expr.inner_functions_[1]))(*right, *val, cmp_ret))) {
-        LOG_WARN("cmp right failed", K(ret));
       } else {
         right_cmp_succ = cmp_ret < 0 ? true : false;
       }
@@ -185,11 +180,8 @@ int ObExprNotBetween::eval_not_between_vector(const ObExpr &expr,
   ObBitVector &my_skip = expr.get_pvt_skip(ctx);
   my_skip.deep_copy(skip, bound.start(), bound.end());
   if (OB_FAIL(val_expr.eval_vector(ctx, my_skip, bound))) {
-    LOG_WARN("eval left operand failed", K(ret));
   } else if (OB_FAIL(left_expr.eval_vector(ctx, my_skip, bound))) {
-    LOG_WARN("eval left operand failed", K(ret));
   } else if (OB_FAIL(right_expr.eval_vector(ctx, my_skip, bound))) {
-    LOG_WARN("eval left operand failed", K(ret));
   } else {
     VectorFormat val_format = val_expr.get_format(ctx);
     VectorFormat left_format = left_expr.get_format(ctx);
@@ -199,13 +191,11 @@ int ObExprNotBetween::eval_not_between_vector(const ObExpr &expr,
           inner_eval_not_between_vector, BETWEEN_LEFT,
           left_format, val_format);
     if (OB_FAIL(ret)) {
-      LOG_WARN("compare left and val failed", K(ret));
     } else {
       BETWEEN_DISPATCH_VECTOR_IN_RES_ARG_FORMAT(
           inner_eval_not_between_vector, BETWEEN_RIGHT,
           val_format, right_format);
       if (OB_FAIL(ret)) {
-        LOG_WARN("compare val and right failed", K(ret));
       } else {
         ObBitVector &eval_flags = expr.get_evaluated_flags(ctx);
         eval_flags.bit_not(skip, bound);

@@ -55,11 +55,8 @@ int ObGVTxStat::prepare_start_to_read_()
   int ret = OB_SUCCESS;
   tx_stat_iter_.reset();
   if (NULL == allocator_) {
-    SERVER_LOG(WARN, "invalid argument, allocator_ or txs_ is null", "allocator",
-        OB_P(allocator_));
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_SUCCESS != (ret = fill_ids_())) {
-    SERVER_LOG(WARN, "fail to fill tenant ids", K(ret));
   } else {
     {
       MOD_SCOPE {
@@ -76,8 +73,7 @@ int ObGVTxStat::prepare_start_to_read_()
   }
   if (OB_SUCCESS != ret) {
     // SERVER_LOG(WARN, "fail to prepare start to read", K(ret));
-  } else if (OB_SUCCESS != (ret = tx_stat_iter_.set_ready())) { // set ready for the first count
-    SERVER_LOG(WARN, "ObTransStatIterator set ready error", K(ret));
+  } else if (OB_SUCCESS != (ret = tx_stat_iter_.set_ready())) {
   } else {
     start_to_read_ = true;
   }
@@ -136,7 +132,6 @@ int ObGVTxStat::inner_get_next_row(ObNewRow *&row)
     if (OB_ITER_END != ret) {
       SERVER_LOG(WARN, "ObGVTxStat iter error", K(ret));
     } else {
-      SERVER_LOG(DEBUG, "ObGVTxStat iter end success");
     }
   } else {
     const int64_t col_count = output_column_ids_.count();
@@ -282,7 +277,6 @@ int ObGVTxStat::inner_get_next_row(ObNewRow *&row)
           {
             const char *buf = NULL;
             if (OB_FAIL(cstring_helper_.convert(tx_stat.get_callback_list_stats_displayer(), buf))) {
-              SERVER_LOG(WARN, "convert failed", K(ret));
             } else {
               const int32_t buf_len = static_cast<int32_t>(strlen(buf));
               cur_row_.cells_[i].set_lob_value(ObLongTextType, buf, buf_len);

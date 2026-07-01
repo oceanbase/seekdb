@@ -69,13 +69,10 @@ int ObTabletToTableHistoryOperator::create_tablet_to_table_history(
                    ) {
           LOG_WARN("fail to add column", KR(ret), K(schema_version), K(pair));
         } else if (OB_FAIL(dml_splicer.finish_row())) {
-          LOG_WARN("fail to finish row", KR(ret));
         }
       } // end for
       if (FAILEDx(dml_splicer.splice_batch_insert_sql(OB_ALL_TABLET_TO_TABLE_HISTORY_TNAME, sql))) {
-        LOG_WARN("fail to generate sql", KR(ret));
       } else if (OB_FAIL(sql_proxy.write(sql.ptr(), affected_rows))) {
-        LOG_WARN("fail to execute sql", KR(ret), K(sql));
       } else if (affected_rows != (end_idx - start_idx)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows not match", KR(ret),
@@ -129,13 +126,10 @@ int ObTabletToTableHistoryOperator::drop_tablet_to_table_history(
                    ) {
           LOG_WARN("fail to add column", KR(ret), K(schema_version), K(tablet_id));
         } else if (OB_FAIL(dml_splicer.finish_row())) {
-          LOG_WARN("fail to finish row", KR(ret));
         }
       } // end for
       if (FAILEDx(dml_splicer.splice_batch_insert_sql(OB_ALL_TABLET_TO_TABLE_HISTORY_TNAME, sql))) {
-        LOG_WARN("fail to generate sql", KR(ret));
       } else if (OB_FAIL(sql_proxy.write(sql.ptr(), affected_rows))) {
-        LOG_WARN("fail to execute sql", KR(ret), K(sql));
       } else if (affected_rows != (end_idx - start_idx)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows not match", KR(ret),

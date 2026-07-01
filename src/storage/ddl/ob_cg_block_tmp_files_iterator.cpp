@@ -50,7 +50,6 @@ int ObCGBlockFilesIterator::push_back_cg_block_files(ObIArray<ObCGBlockFile *> &
     for (int64_t i = 0; OB_SUCC(ret) && i < cg_block_files.count(); ++i) {
       ObCGBlockFile *cg_block_file = cg_block_files.at(i);
       if (OB_FAIL(push_back_cg_block_file(cg_block_file))) {
-        LOG_WARN("fail to push back cg block file", K(ret));
       }
     }
   }
@@ -69,7 +68,6 @@ int ObCGBlockFilesIterator::push_back_cg_block_file(ObCGBlockFile *cg_block_file
     LOG_WARN("cg block file is not opened or has not data",
         K(ret), K(cg_block_file->is_opened()), K(cg_block_file->get_data_size()));
   } else if (OB_FAIL(cg_block_files_.push_back(cg_block_file))) {
-    LOG_WARN("fail to push back cg block file", K(ret), KPC(cg_block_file));
   } else {
     total_data_size_ += cg_block_file->get_data_size();
   }
@@ -92,9 +90,7 @@ int ObCGBlockFilesIterator::get_next_cg_block(ObCGBlock &cg_block)
         if (OB_ITER_END == ret) {
           ret = OB_SUCCESS;
           if (OB_FAIL(cg_block_files_.pop_front())) {
-            LOG_WARN("fail to pop front cg block file", K(ret));
           } else if (OB_FAIL(cg_block_file->close())) {
-            LOG_WARN("fail to close cg block file", K(ret), KPC(cg_block_file));
           } else {
             cg_block_file->~ObCGBlockFile();
             ob_free(cg_block_file);
@@ -136,7 +132,6 @@ int ObCGBlockFilesIterator::put_cg_block_back(const ObCGBlock &cg_block)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("cg block file is null", K(ret));
       } else if (OB_FAIL(cg_block_file->put_cg_block_back(cg_block))) {
-        LOG_WARN("fail to put cg block back", K(ret));
       } else {
         total_data_size_ += (cg_block.get_macro_buffer_size() - cg_block.get_cg_block_offset());
         can_put_cg_block_back_ = false;
@@ -156,9 +151,7 @@ int ObCGBlockFilesIterator::get_remain_block_files(ObIArray<ObCGBlockFile *> &bl
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("cg block file is null", K(ret));
     } else if (OB_FAIL(block_files.push_back(cg_block_file))) {
-      LOG_WARN("push back block file failed", K(ret), KPC(cg_block_file));
     } else if (OB_FAIL(cg_block_files_.pop_front())) {
-      LOG_WARN("fail to pop front cg block file", K(ret));
     }
   }
   if (OB_FAIL(ret) && block_files.count() > 0) {

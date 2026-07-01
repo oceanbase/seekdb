@@ -42,13 +42,10 @@ int ObLongopsMgr::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObLongopsMgr has been inited", K(ret));
   } else if (OB_FAIL(bucket_lock_.init(DEFAULT_BUCKET_NUM))) {
-    LOG_WARN("failed to init bucket lock", K(ret));
   } else if (OB_FAIL(map_.create(DEFAULT_BUCKET_NUM, "ObLongopsMgr"))) {
-    LOG_WARN("failed to init resource map", K(ret));
   } else if (OB_FAIL(allocator_.init(DEFAULT_ALLOCATOR_PAGE_SIZE,
                                      lib::ObLabel("LongopsMgr"),
                                      memory_limit))) {
-    LOG_WARN("failed to init allocator", K(ret));
   } else {
     is_inited_ = true;
   }
@@ -138,7 +135,6 @@ int ObLongopsMgr::get_longops(const ObILongopsKey &key, ObLongopsValue &value)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("longops stat is null", K(ret));
     } else if (OB_FAIL(stat->get_longops_value(value))) {
-      LOG_WARN("failed to get longops value", K(ret), KPC(stat));
     }
   }
   return ret;
@@ -152,7 +148,6 @@ int ObLongopsMgr::begin_iter(ObLongopsIterator &iter)
     ret = OB_NOT_INIT;
     LOG_WARN("ObLongopsMgr has not been inited", K(ret));
   } else if (OB_FAIL(iter.init(this))) {
-    LOG_WARN("failed to init longops iter", K(ret));
   }
   return ret;
 }
@@ -165,7 +160,6 @@ int ObLongopsMgr::foreach(Callback &callback)
     ret = OB_NOT_INIT;
     LOG_WARN("ObLongopsMgr has not been inited", K(ret));
   } else if (OB_FAIL(map_.foreach_refactored(callback))) {
-    LOG_WARN("fail to foreach map", K(ret));
   }
   return ret;
 }
@@ -180,7 +174,6 @@ int ObLongopsIterator::ObKeySnapshotCallback::operator()(PAIR &pair)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(key_snapshot_.push_back(pair.first))) {
-    LOG_WARN("fail to push back key", K(ret));
   }
   return ret;
 }
@@ -215,7 +208,6 @@ int ObLongopsIterator::init(ObLongopsMgr *longops_mgr)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(longops_mgr));
   } else if (OB_FAIL(longops_mgr->foreach(callback))) {
-    LOG_WARN("failed to do foreach map", K(ret));
   } else {
     key_cursor_ = 0;
     longops_mgr_ = longops_mgr;

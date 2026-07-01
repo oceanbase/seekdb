@@ -70,10 +70,8 @@ int ObBuildMViewTask::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(task_id), KP(mview_schema), K(schema_version), K(task_status));
   } else if (OB_FAIL(deep_copy_table_arg(allocator_, mview_complete_refresh_arg, arg_))) {
-    LOG_WARN("failed to copy mview complete refresh arg", KR(ret), K(mview_complete_refresh_arg));
   } else if (OB_FAIL(ObShareUtil::fetch_current_data_version(
       *GCTX.sql_proxy_, tenant_data_format_version))) {
-    LOG_WARN("get min data version failed", KR(ret));
   } else {
     int64_t now = ObTimeUtility::current_time();
     set_gmt_create(now);
@@ -94,7 +92,6 @@ int ObBuildMViewTask::init(
     data_format_version_ = tenant_data_format_version;
     task_status_ = static_cast<ObDDLTaskStatus>(task_status);
     if (OB_FAIL(init_ddl_task_monitor_info(mview_schema->get_table_id()))) {
-      LOG_WARN("failed to init ddl task monitor info", KR(ret));
     } else {
       
       dst_schema_version_ = schema_version_;
@@ -130,7 +127,6 @@ int ObBuildMViewTask::init(const ObDDLTaskRecord &task_record)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", KR(ret), K(task_record));
   } else if (OB_FAIL(deserialize_params_from_message(task_record.message_.ptr(), task_record.message_.length(), pos))) {
-    LOG_WARN("deserialize params from message failed", KR(ret));
   } else {
     int64_t now = ObTimeUtility::current_time();
     set_gmt_create(now);
@@ -145,7 +141,6 @@ int ObBuildMViewTask::init(const ObDDLTaskRecord &task_record)
     ret_code_ = task_record.ret_code_;
     start_time_ = now;
     if (OB_FAIL(init_ddl_task_monitor_info(mview_table_id))) {
-      LOG_WARN("failed to init ddl task monitor info", KR(ret));
     } else {
       
       dst_schema_version_ = schema_version_;
@@ -163,7 +158,6 @@ int ObBuildMViewTask::process()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
   } else if (OB_FAIL(check_health())) {
-    LOG_WARN("failed to check health", KR(ret));
   } else if (!need_retry()) {
     // by pass
   } else {
@@ -171,27 +165,22 @@ int ObBuildMViewTask::process()
     switch (task_status_) {
       case ObDDLTaskStatus::START_REFRESH_MVIEW_TASK:
         if (OB_FAIL(start_refresh_mview_task())) {
-          LOG_WARN("start refresh mview task failed", KR(ret), K(*this));
         }
         break;
       case ObDDLTaskStatus::WAIT_CHILD_TASK_FINISH:
         if (OB_FAIL(wait_child_task_finish())) {
-          LOG_WARN("wait trans end failed", KR(ret), K(*this));
         }
         break;
       case ObDDLTaskStatus::TAKE_EFFECT:
         if (OB_FAIL(enable_mview())) {
-          LOG_WARN("enable_mview failed", KR(ret), K(*this));
         }
         break;
       case ObDDLTaskStatus::FAIL:
         if (OB_FAIL(clean_on_fail())) {
-          LOG_WARN("failed to do cleanup", KR(ret), K(*this));
         }
         break;
       case ObDDLTaskStatus::SUCCESS:
         if (OB_FAIL(succ())) {
-          LOG_WARN("clean failed_task failed", KR(ret), K(*this));
         }
         break;
       default:
@@ -216,20 +205,16 @@ int ObBuildMViewTask::clean_on_fail()
     LOG_WARN("root_service_ is null", KR(ret), KP(root_service_));
   } else if (OB_FAIL(root_service_->get_ddl_service().get_tenant_schema_guard_with_version_in_inner_table(
       schema_guard))) {
-    LOG_WARN("failed to get tenant schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.check_table_exist(mview_table_id_, is_mv_exist))) {
-    LOG_WARN("check table exist failed", KR(ret), K(mview_table_id_));
   } else if (!is_mv_exist) {
     // by pass
   } else if (OB_FAIL(schema_guard.get_table_schema(
       mview_table_id_, mview_schema))) {
-    LOG_WARN("failed to get table schema", KR(ret), K(mview_table_id_));
   } else if (OB_ISNULL(mview_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("mview schema is null", KR(ret), K(mview_table_id_));
   } else if (OB_FAIL(schema_guard.get_database_schema(
       mview_schema->get_database_id(), database_schema))) {
-    LOG_WARN("failed to get database_schema", KR(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("database schema is null", KR(ret), K(mview_schema->get_database_id()));
@@ -246,15 +231,12 @@ int ObBuildMViewTask::clean_on_fail()
     table_item.database_name_ = database_schema->get_database_name();
     table_item.table_name_ = mview_schema->get_table_name();
     if (OB_FAIL(drop_table_arg.tables_.push_back(table_item))) {
-      LOG_WARN("failed to add table item!", K(table_item), KR(ret));
     } else {
       drop_table_arg.table_type_ = MATERIALIZED_VIEW;
       obcall::ObDDLRes drop_table_res;
       int64_t ddl_rpc_timeout = 0;
       if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(mview_table_id_, ddl_rpc_timeout))) {
-        LOG_WARN("failed to get ddl rpc timeout", KR(ret));
       } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_table(drop_table_arg, drop_table_res); }))) {
-        LOG_WARN("failed to drop materialized view", KR(tmp_ret), K(drop_table_arg));
       } else {
         LOG_INFO("materialized view is successfully dropped",
             K(drop_table_arg), K(drop_table_res));
@@ -263,7 +245,6 @@ int ObBuildMViewTask::clean_on_fail()
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(cleanup())) {
-      LOG_WARN("cleanup failed", KR(ret));
     }
   }
   return ret;
@@ -277,10 +258,8 @@ int ObBuildMViewTask::cleanup_impl()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(report_error_code(unused_str))) {
-    LOG_WARN("failed to report error code", KR(ret));
   } else if (OB_FAIL(ObDDLTaskRecordOperator::delete_record(
       *GCTX.sql_proxy_, task_id_))) {
-    LOG_WARN("delete task record failed", KR(ret), K(task_id_), K(schema_version_));
   } else {
     need_retry_ = false;      // clean succ, stop the task
   }
@@ -292,9 +271,7 @@ int ObBuildMViewTask::mview_complete_refresh(obcall::ObMViewCompleteRefreshRes &
   int ret = OB_SUCCESS;
   int64_t ddl_rpc_timeout = 0;
   if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(arg_.table_id_, ddl_rpc_timeout))) {
-    LOG_WARN("failed to get ddl rpc timeout", KR(ret));
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->mview_complete_refresh(arg_, res); }))) {
-    LOG_WARN("failed to update mview status", KR(ret), K(arg_));
   }
   return ret;
 }
@@ -312,18 +289,15 @@ int ObBuildMViewTask::start_refresh_mview_task()
   } else if (ATOMIC_LOAD(&mview_complete_refresh_task_id_) == 0) {
     ObMViewCompleteRefreshRes res;
     if (OB_FAIL(mview_complete_refresh(res))) {
-      LOG_WARN("failed to do mview complete refresh", KR(ret));
     } else {
       LOG_INFO("start mview complete refresh", K(mview_complete_refresh_task_id_));
       if (OB_FAIL(set_mview_complete_refresh_task_id(res.task_id_))) {
-        LOG_WARN("fail to set mview_complete_refresh_task_id", KR(ret));
       }
     }
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(update_task_message())) {
-      LOG_WARN("fail to update task message", KR(ret));
     }
   }
 
@@ -348,14 +322,12 @@ int ObBuildMViewTask::update_task_message()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to allocate memory", KR(ret), K(serialize_param_size));
   } else if (OB_FAIL(serialize_params_to_message(buf, serialize_param_size, pos))) {
-    LOG_WARN("failed to serialize params to message", KR(ret));
   } else if (OB_ISNULL(GCTX.sql_proxy_)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.sql_proxy_));
   } else {
     msg.assign(buf, serialize_param_size);
     if (OB_FAIL(ObDDLTaskRecordOperator::update_message(*GCTX.sql_proxy_, task_id_, msg))) {
-      LOG_WARN("failed to update message", KR(ret));
     }
   }
   return ret;
@@ -386,7 +358,6 @@ int ObBuildMViewTask::on_child_task_prepare(const int64_t task_id)
   } else if (ATOMIC_LOAD(&mview_complete_refresh_task_id_) == 0) {
     LOG_INFO("mview refresh task prepare", K(task_id));
     if (OB_FAIL(set_mview_complete_refresh_task_id(task_id))) {
-      LOG_WARN("fail to set mview refresh task id", KR(ret));
     } 
   } else if (task_id != mview_complete_refresh_task_id_) {
     ret = OB_ERR_UNEXPECTED;
@@ -459,20 +430,16 @@ int ObBuildMViewTask::enable_mview()
     bool mview_table_exist = false;
     bool is_primary = false;
     if (OB_FAIL(ObShareUtil::table_check_if_tenant_role_is_primary( is_primary))) {
-      LOG_WARN("fail to execute table_check_if_tenant_role_is_primary", KR(ret));
     } else if (!is_primary) {
       ret = OB_OP_NOT_ALLOW;
       LOG_WARN("create mview in non-primary tenant is not allowed", KR(ret), K(is_primary), K(mview_table_id_));
     } else if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("failed to get schema guard", KR(ret));
     } else if (OB_FAIL(schema_guard.check_table_exist(mview_table_id_, mview_table_exist))) {
-      LOG_WARN("failed to check table exist", KR(ret), K(mview_table_id_));
     } else if (!mview_table_exist) {
       ret = OB_SCHEMA_ERROR;
       LOG_WARN("mview table does not exist", KR(ret));
     } else if (OB_FAIL(schema_guard.get_table_schema(
         mview_table_id_, mview_schema))) {
-      LOG_WARN("failed to get table schema", KR(ret), K(mview_table_id_));
     } else if (OB_ISNULL(mview_schema)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("mview schema is null", KR(ret), K(mview_table_id_));
@@ -488,9 +455,7 @@ int ObBuildMViewTask::enable_mview()
       arg.in_offline_ddl_white_list_ = mview_schema->get_table_state_flag() != TABLE_STATE_NORMAL;
       int64_t ddl_rpc_timeout = 0;
       if (OB_FAIL(ObDDLUtil::get_ddl_rpc_timeout_by_table(mview_schema->get_table_id(), ddl_rpc_timeout))) {
-        LOG_WARN("failed to get ddl rpc timeout", KR(ret));
       } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->update_mview_status(arg); }))) {
-        LOG_WARN("failed to update mview status", KR(ret), K(arg));
       }
     }
   }
@@ -518,23 +483,18 @@ int ObBuildMViewTask::check_health()
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret), KP(GCTX.schema_service_));
   } else if (OB_FAIL(refresh_status())) {
-    LOG_WARN("failed to refresh status", KR(ret));
   } else if (OB_FAIL(refresh_schema_version())) {
-    LOG_WARN("failed to refresh schema version", KR(ret));
   } else {
     ObMultiVersionSchemaService &schema_service = *GCTX.schema_service_;
     ObSchemaGetterGuard schema_guard;
     const ObTableSchema *mview_schema = nullptr;
     bool is_mview_table_exist = false;
     if (OB_FAIL(schema_service.get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("failed to get tenant schema guard", KR(ret));
     } else if (OB_FAIL(schema_guard.check_table_exist(mview_table_id_, is_mview_table_exist))) {
-      LOG_WARN("failed to check mview table exist", KR(ret), K(mview_table_id_));
     } else if (!is_mview_table_exist) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("data table or mview table not exist", KR(ret), K(is_mview_table_exist));
     } else if (OB_FAIL(schema_guard.get_table_schema( mview_table_id_, mview_schema))) {
-      LOG_WARN("failed to get table schema", KR(ret), K(mview_table_id_));
     } else if (OB_ISNULL(mview_schema)) {
       ret = OB_SCHEMA_ERROR;
       LOG_WARN("mview schema is null, but mview table exist", KR(ret), K(mview_table_id_));
@@ -562,9 +522,7 @@ int ObBuildMViewTask::serialize_params_to_message(char *buf, const int64_t buf_l
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", KR(ret), KP(buf), K(buf_len));
   } else if (OB_FAIL(ObDDLTask::serialize_params_to_message(buf, buf_len, pos))) {
-    LOG_WARN("ObDDLTask serialize failed", KR(ret));
   } else if (OB_FAIL(arg_.serialize(buf, buf_len, pos))) {
-    LOG_WARN("serialize create index arg failed", KR(ret));
   } else {
     LST_DO_CODE(OB_UNIS_ENCODE, mview_complete_refresh_task_id_);
   }
@@ -582,17 +540,13 @@ int ObBuildMViewTask::deserialize_params_from_message(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", K(ret), KP(buf), K(data_len));
   } else if (OB_FAIL(ObDDLTask::deserialize_params_from_message(buf, data_len, pos))) {
-    LOG_WARN("ObDDLTask deserlize failed", K(ret));
   } else if (OB_FAIL(tmp_arg.deserialize(buf, data_len, pos))) {
-    LOG_WARN("deserialize table failed", K(ret));
   } else if (OB_FAIL(deep_copy_table_arg(allocator_, tmp_arg, arg_))) {
-    LOG_WARN("deep copy build mv arg failed", K(ret));
   } else {
     int64_t mview_complete_refresh_task_id = 0;
     LST_DO_CODE(OB_UNIS_DECODE, mview_complete_refresh_task_id);
     if (mview_complete_refresh_task_id > 0) {
       if (OB_FAIL(set_mview_complete_refresh_task_id(mview_complete_refresh_task_id))) {
-        LOG_WARN("fail to set mview_complete_refresh_task_id", KR(ret));
       }
     }
   }

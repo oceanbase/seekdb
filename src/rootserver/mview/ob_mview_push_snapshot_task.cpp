@@ -97,14 +97,12 @@ void ObMViewPushSnapshotTask::runTimerTask()
   } else if (OB_UNLIKELY(is_stop_)) {
 
   } else if (OB_FAIL(need_schedule_major_refresh_mv_task( need_schedule))) {
-    LOG_WARN("fail to check need schedule major refresh mv task", KR(ret));
   } else if (!need_schedule) {
 
   } else if (OB_UNLIKELY(OB_ISNULL(sql_proxy) || OB_ISNULL(mgr))) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql_proxy or mgr is null", KR(ret), K(sql_proxy), K(mgr));
   } else if (OB_FAIL(trans.start(sql_proxy))) {
-    LOG_WARN("fail to start trans", KR(ret));
   } else {
     share::ObGlobalStatProxy stat_proxy(trans);
     share::SCN major_refresh_mv_merge_scn;
@@ -116,7 +114,6 @@ void ObMViewPushSnapshotTask::runTimerTask()
     // process.
     if (OB_FAIL(stat_proxy.get_major_refresh_mv_merge_scn(select_for_update,
                                                           major_refresh_mv_merge_scn))) {
-      LOG_WARN("fail to get major_refresh_mv_merge_scn", KR(ret));
     } else if (OB_UNLIKELY(!major_refresh_mv_merge_scn.is_valid())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("major_refresh_mv_merge_scn is invalid", KR(ret),
@@ -134,8 +131,6 @@ void ObMViewPushSnapshotTask::runTimerTask()
       }
     } else if (OB_FAIL(snapshot_proxy.push_snapshot_for_major_refresh_mv(trans,
                                                                          min_refresh_scn))) {
-      LOG_WARN("fail to push snapshot for major refresh mv", KR(ret),
-                K(min_refresh_scn));
     } else {
       LOG_INFO("[MAJ_REF_MV] successfully push major refresh mview snapshot",
                 K(snapshot_for_tx), K(min_refresh_scn));
@@ -161,14 +156,11 @@ int ObMViewPushSnapshotTask::check_space_occupy_(bool &space_danger)
   {
     common::sqlclient::ObMySQLResult *result = nullptr;
     if (OB_FAIL(sql.assign("select CAST(max(DATA_DISK_IN_USE/DATA_DISK_ALLOCATED)*100 as SIGNED) occupy from oceanbase.gv$ob_servers"))) {
-      LOG_WARN("fail to assign sql", KR(ret));
     } else if (OB_FAIL(GCTX.sql_proxy_->read(res, sql.ptr()))) {
-      LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("result is null", KR(ret));
     } else if (OB_FAIL(result->next())) {
-      LOG_WARN("fail to get next", KR(ret));
     } else {
       int64_t occupy = 0;
       EXTRACT_INT_FIELD_MYSQL(*result, "occupy", occupy, int64_t);

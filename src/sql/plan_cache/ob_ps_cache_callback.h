@@ -45,10 +45,8 @@ public:
     int &ret = callback_ret_;
     if (OB_ISNULL(closed_ps_) || OB_ISNULL(expired_ps_)) {
       callback_ret_ = common::OB_NOT_INIT;
-      SQL_PC_LOG(WARN, "key_array not inited", K(callback_ret_));
     } else if (OB_ISNULL(entry.second)) {
       callback_ret_ = common::OB_INVALID_ARGUMENT;
-      SQL_PC_LOG(WARN, "ps session info is null", KP(entry.second), K_(callback_ret));
     } else if (1 == entry.second->get_ref_count()) {
       std::pair<ObPsStmtId, int64_t> id_time;
       id_time.first = entry.first;
@@ -58,12 +56,10 @@ public:
         // use cas, because auto cache evict and flush ps cache may concurrent processing
         if (ATOMIC_BCAS(entry.second->get_is_expired_evicted_ptr(), false, true)) {
           if (OB_SUCCESS != (callback_ret_ = expired_ps_->push_back(id_time))) {
-            SQL_PC_LOG(WARN, "fail to push back key", K_(callback_ret));
           }
         }
       } else {
         if (OB_SUCCESS != (callback_ret_ = closed_ps_->push_back(id_time))) {
-          SQL_PC_LOG(WARN, "fail to push back key", K_(callback_ret));
         } else {
           used_size_ += entry.second->get_item_and_info_size();
         }

@@ -95,9 +95,7 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
     ret = OB_ERR_INVALID_TYPE_FOR_OP;   
     LOG_WARN("invalid type", K(ret));
   } else if (OB_FAIL(temp_allocator.eval_arg(expr.args_[0], ctx, gis_datum))) {
-    LOG_WARN("eval geo arg failed", K(ret));
   } else if (OB_FAIL(temp_allocator.eval_arg(expr.args_[1], ctx, datum2))) {
-    LOG_WARN("eval sird arg failed", K(ret));
   } else if (gis_datum->is_null() || datum2->is_null()) {
     res.set_null();
   } else {
@@ -107,14 +105,12 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
     const ObSrsItem *dest_srs_item = NULL;
     if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *gis_datum,
                 expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), wkb))) {
-      LOG_WARN("fail to get real data.", K(ret), K(wkb));
     } else if (FALSE_IT(temp_allocator.add_baseline_size(wkb.length()))) {
     } else if (OB_FAIL(ObGeoTypeUtil::get_srid_from_wkb(wkb, src_srid))) {
       ret = OB_ERR_GIS_INVALID_DATA;
       LOG_USER_ERROR(OB_ERR_GIS_INVALID_DATA, N_PRIV_ST_TRANSFORM);
       LOG_WARN("get srid from wkb failed", K(wkb), K(ret));
     } else if (OB_FAIL(OTSRS_MGR->get_tenant_srs_guard(srs_guard))) {
-      LOG_WARN("get tenant srs guard failed", K(src_srid), K(ret));
     } else if (src_srid != 0 && OB_FAIL(srs_guard.get_srs_item(src_srid, src_srs_item))) {
       LOG_WARN("failed to get srs item", K(ret), K(src_srid));
     } else if (OB_FAIL(ObGeoExprUtils::build_geometry(temp_allocator, wkb, src_geo, src_srs_item, N_PRIV_ST_TRANSFORM, 
@@ -142,15 +138,12 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
             } else if (dest_srid == src_srid) { // return src geo directly
               ObString res_wkb;
               if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*src_geo, expr, ctx, src_srs_item, res_wkb))) {
-                LOG_WARN("failed to write geometry to wkb", K(ret));
               } else {
                 res.set_string(res_wkb);
                 need_eval = false;
               }
             } else if (OB_FAIL(srs_guard.get_srs_item(dest_srid, dest_srs_item))) {
-              LOG_WARN("failed to get dest srs", K(ret), K(dest_srid));
             } else if (OB_FAIL(dest_srs_item->get_proj4_param(&temp_allocator, dest_proj4_param))) {
-              LOG_WARN("failed to get proj4 prams from dest srs", K(ret), K(dest_srid));
             }
           }
         } else {
@@ -161,7 +154,6 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
             dest_proj4_param = datum2->get_string(); 
             if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *datum2,
                         expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), dest_proj4_param))) {
-              LOG_WARN("fail to get real data.", K(ret), K(dest_proj4_param));
             } else if (FALSE_IT(temp_allocator.add_baseline_size(dest_proj4_param.length()))) {
             } 
           }
@@ -169,7 +161,6 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
 
         if (OB_SUCC(ret) && need_eval && src_srid != 0) {
           if (OB_FAIL(src_srs_item->get_proj4_param(&temp_allocator, src_proj4_param))) {
-            LOG_WARN("failed to get proj4 prams from srs", K(ret), K(src_srid));
           }
         }
       }
@@ -180,10 +171,8 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
         src_srs_item = NULL;
         if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *datum2,
                     expr.args_[1]->datum_meta_, expr.args_[1]->obj_meta_.has_lob_header(), src_proj4_param))) {
-          LOG_WARN("fail to get real data.", K(ret), K(src_proj4_param));
         } else if (FALSE_IT(temp_allocator.add_baseline_size(src_proj4_param.length()))) {
         } else if (OB_FAIL(temp_allocator.eval_arg(expr.args_[2], ctx, datum3))) {
-          LOG_WARN("failed to eval datum", K(ret));
         } else if (ob_is_integer_type(expr.args_[2]->datum_meta_.type_)) {
           dest_srid = datum3->get_int();
           if (datum3->get_int() < 0 || datum3->get_int() > UINT_MAX32) {
@@ -196,16 +185,13 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
               ret = OB_ERR_TRANSFORM_TARGET_SRS_NOT_SUPPORTED;
               LOG_USER_ERROR(OB_ERR_TRANSFORM_TARGET_SRS_NOT_SUPPORTED, dest_srid);
             } else if (OB_FAIL(srs_guard.get_srs_item(dest_srid, dest_srs_item))) {
-              LOG_WARN("failed to get dest srs", K(ret), K(dest_srid));
             } else if (OB_FAIL(dest_srs_item->get_proj4_param(&temp_allocator, dest_proj4_param))) {
-              LOG_WARN("failed to get proj4 prams from dest srs", K(ret), K(dest_srid));
             }
           }
         } else {
           dest_proj4_param = datum3->get_string();
           if (OB_FAIL(ObTextStringHelper::read_real_string_data_with_copy(temp_allocator, *datum3,
                       expr.args_[2]->datum_meta_, expr.args_[2]->obj_meta_.has_lob_header(), dest_proj4_param))) {
-            LOG_WARN("fail to get real data.", K(ret), K(dest_proj4_param));
           } else if (FALSE_IT(temp_allocator.add_baseline_size(dest_proj4_param.length()))) {
           } 
         }
@@ -216,7 +202,6 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
       lib::MemoryContext *mem_ctx = nullptr;
       if (OB_FAIL(ret) || !need_eval) {
       } else if (OB_FAIL(guard.init())) {
-        LOG_WARN("fail to init geo allocator guard", K(ret));
       } else if (OB_ISNULL(mem_ctx = guard.get_memory_ctx())) {
         ret = OB_ERR_NULL_VALUE;
         LOG_WARN("fail to get mem ctx", K(ret));
@@ -233,19 +218,12 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
           ret = OB_ERR_TRANSFORM_TARGET_SRS_NOT_SUPPORTED;
           LOG_USER_ERROR(OB_ERR_TRANSFORM_TARGET_SRS_NOT_SUPPORTED, dest_srid);
         } else if (OB_FAIL(ob_write_string(temp_allocator, src_proj4_param, src_proj4, true))) {
-          LOG_WARN("failed to transform proj4 to c style", K(ret), K(src_proj4));
         } else if (OB_FAIL(ob_write_string(temp_allocator, dest_proj4_param, dest_proj4, true))) {
-          LOG_WARN("failed to transform proj4 to c style", K(ret), K(dest_proj4));
         } else if (OB_FAIL(ObGeoExprUtils::normalize_wkb(src_proj4, src_geo))) {
-          LOG_WARN("failed to do normalize wkb", K(ret), K(src_proj4));
         } else if (OB_FAIL(correct_context.append_geo_arg(src_geo))) {
-          LOG_WARN("failed to append geo arg to gis context", K(ret), K(correct_context.get_geo_count()));
         } else if (OB_FAIL(transform_context.append_geo_arg(src_geo))) {
-          LOG_WARN("failed to append geo arg to gis context", K(ret), K(transform_context.get_geo_count()));
         } else if (OB_FAIL(transform_context.append_val_arg(&src_proj4))) {
-          LOG_WARN("failed to append src_proj4_param to gis context", K(ret), K(transform_context.get_geo_count()));
         } else if (OB_FAIL(transform_context.append_val_arg(&dest_proj4))) {
-          LOG_WARN("failed to append dest_proj4_param to gis context", K(ret), K(transform_context.get_geo_count()));
         } else if (OB_NOT_NULL(src_srs_item) && OB_FAIL(ObGeoFunc<ObGeoFuncType::Correct>::geo_func::eval(correct_context, correct_result))) {
           LOG_WARN("eval boost correct failed", K(ret));
         } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Transform>::geo_func::eval(transform_context, dest_geo))) {
@@ -259,7 +237,6 @@ int ObExprPrivSTTransform::eval_priv_st_transform(const ObExpr &expr, ObEvalCtx 
         } else {
           ObString res_wkb;
           if (OB_FAIL(ObGeoExprUtils::geo_to_wkb(*dest_geo, expr, ctx, dest_srs_item, res_wkb, dest_srid))){
-            LOG_WARN("failed to write geometry to wkb", K(ret));
           } else {
             res.set_string(res_wkb);
           }

@@ -88,22 +88,16 @@ int ObForkDatabaseResolver::resolve(const ParseNode &parse_tree)
       // Check and convert database names
       ObNameCaseMode mode = OB_NAME_CASE_INVALID;
       if (OB_FAIL(session_info_->get_name_case_mode(mode))) {
-        SQL_RESV_LOG(WARN, "fail to get name case mode", K(mode), K(ret));
       } else {
         bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
         ObCollationType cs_type = CS_TYPE_INVALID;
         if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-          SQL_RESV_LOG(WARN, "fail to get collation_connection", K(ret));
         } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
                     cs_type, perserve_lettercase, dst_database_name))) {
-          SQL_RESV_LOG(WARN, "fail to check and convert dst database name", K(dst_database_name), K(ret));
         } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
                     cs_type, perserve_lettercase, src_database_name))) {
-          SQL_RESV_LOG(WARN, "fail to check and convert src database name", K(src_database_name), K(ret));
         } else if (OB_FAIL(deep_copy_str(dst_database_name, fork_database_arg.dst_database_name_))) {
-          SQL_RESV_LOG(WARN, "failed to deep copy dst database name", K(ret));
         } else if (OB_FAIL(deep_copy_str(src_database_name, fork_database_arg.src_database_name_))) {
-          SQL_RESV_LOG(WARN, "failed to deep copy src database name", K(ret));
         }
       }
     }

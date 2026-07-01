@@ -144,7 +144,6 @@ public:
       reset();
     }
     if (OB_FAIL(prepare_allocate(capacity))) {
-      OB_LOG(WARN, "fail to prepare allocate", K(ret), K(capacity));
     }
     return ret;
   }
@@ -387,13 +386,11 @@ int malloc_store_row(
   row = NULL;
   if (cell_count <= 0) {
     ret = common::OB_INVALID_ARGUMENT;
-    STORAGE_LOG(WARN, "invalid args", K(cell_count));
   } else {
     void *ptr = NULL;
     int64_t size = sizeof(ObStoreRow) + sizeof(common::ObObj) * cell_count;
     if (NULL == (ptr = allocator.alloc(size))) {
       ret = common::OB_ALLOCATE_MEMORY_FAILED;
-      STORAGE_LOG(ERROR, "fail to alloc ObStoreRow", K(size), K(cell_count));
     } else {
       void *cell_ptr = static_cast<char *>(ptr) + sizeof(ObStoreRow);
       row = new (ptr) ObStoreRow;

@@ -52,7 +52,6 @@ int ObSetCommentHelper::check_inner_stat_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDDLHelper::check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (!arg_.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("arg is invalid", KR(ret), K(arg_));
@@ -67,20 +66,14 @@ int ObSetCommentHelper::lock_objects_()
   DEBUG_SYNC(BEFORE_PARALLEL_DDL_LOCK);
   const ObDatabaseSchema *database_schema = nullptr;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
-  } else if (OB_FAIL(lock_databases_by_obj_name_())) { // lock database name
-    LOG_WARN("fail to lock databases by obj name", KR(ret));
-  } else if (OB_FAIL(check_database_legitimacy_())) { // check database legitimacy
-    LOG_WARN("fail to check database legitimacy", KR(ret));
-  } else if (OB_FAIL(lock_objects_by_name_())) { // lock object name
-    LOG_WARN("fail to lock objects by name", KR(ret));
-  } else if (OB_FAIL(lock_objects_by_id_())) { // lock objects by id
-    LOG_WARN("fail to lock objects by id" , KR(ret));
+  } else if (OB_FAIL(lock_databases_by_obj_name_())) {
+  } else if (OB_FAIL(check_database_legitimacy_())) {
+  } else if (OB_FAIL(lock_objects_by_name_())) {
+  } else if (OB_FAIL(lock_objects_by_id_())) {
   }
   DEBUG_SYNC(AFTER_PARALLEL_DDL_LOCK);
   RS_TRACE(lock_objects);
-  if (FAILEDx(lock_for_common_ddl_())) { // online ddl lock & table lock
-    LOG_WARN("fail to lock for common ddl", KR(ret));
+  if (FAILEDx(lock_for_common_ddl_())) {
   } else if (OB_ISNULL(orig_table_schema_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("orig_table_schema_ is null", KR(ret));
@@ -89,7 +82,6 @@ int ObSetCommentHelper::lock_objects_()
     LOG_WARN("database_id_ is not equal to table schema's databse_id",
              KR(ret), K_(database_id), K(orig_table_schema_->get_database_id()));
   } else if (OB_FAIL(schema_guard_wrapper_.get_database_schema(database_id_, database_schema))) {
-    LOG_WARN("fail to get database schema", KR(ret), K_(database_id));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("databse_schema is null", KR(ret));
@@ -108,13 +100,10 @@ int ObSetCommentHelper::lock_databases_by_obj_name_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     const ObString &database_name = arg_.database_name_;
     if (OB_FAIL(add_lock_object_by_database_name_(database_name, transaction::tablelock::SHARE))) {
-      LOG_WARN("fail to add lock database by name", KR(ret), K(database_name));
     } else if (OB_FAIL(lock_databases_by_name_())) {
-      LOG_WARN("fail to lock databases by name", KR(ret));
     }
   }
   return ret;
@@ -125,9 +114,7 @@ int ObSetCommentHelper::check_database_legitimacy_()
   int ret = OB_SUCCESS;
   const ObString &database_name = arg_.database_name_;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(ObDDLHelper::check_database_legitimacy_(database_name, database_id_))) {
-    LOG_WARN("fail to check database legitimacy", KR(ret), K(database_name));
   }
   return ret;
 }
@@ -138,12 +125,9 @@ int ObSetCommentHelper::lock_objects_by_name_()
   const ObString &database_name = arg_.database_name_;
   const ObString &table_name = arg_.table_name_;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(add_lock_object_by_name_(database_name, table_name,
       share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
-    LOG_WARN("fail to lock object by table name", KR(ret), K(database_name), K(table_name));
   } else if (OB_FAIL(lock_existed_objects_by_name_())) {
-    LOG_WARN("fail to lock objects by name", KR(ret));
   }
   return ret;
 }
@@ -155,23 +139,18 @@ int ObSetCommentHelper::lock_objects_by_id_()
   ObTableType table_type;
   int64_t schema_version = OB_INVALID_VERSION;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_UNLIKELY(OB_INVALID_ID == database_id_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("database is not exist", KR(ret), K_(arg_.database_name));
   } else if (OB_FAIL(add_lock_object_by_id_(database_id_,
     share::schema::DATABASE_SCHEMA, transaction::tablelock::SHARE))) {
-    LOG_WARN("fail to lock database id", KR(ret), K_(database_id));
   } else if (OB_FAIL(schema_guard_wrapper_.get_table_id(database_id_, arg_.session_id_, arg_.table_name_, table_id_, table_type, schema_version))) {
-    LOG_WARN("fail to get table id", KR(ret), K_(database_id), K_(arg_.session_id), K_(arg_.table_name));
   } else if (OB_UNLIKELY(OB_INVALID_ID == table_id_)) {
     ret = OB_ERR_OBJECT_NOT_EXIST;
     LOG_WARN("table not exist", KR(ret), K_(database_id), K_(arg_.session_id), K_(arg_.table_name));
   } else if (OB_FAIL(add_lock_object_by_id_(table_id_,
     share::schema::TABLE_SCHEMA, transaction::tablelock::EXCLUSIVE))) {
-    LOG_WARN("fail to lock table id", KR(ret));
   } else if (OB_FAIL(lock_existed_objects_by_id_())) {
-    LOG_WARN("fail to lock objects by id", KR(ret));
   }
   return ret;
 }
@@ -182,7 +161,6 @@ int ObSetCommentHelper::check_table_legitimacy_()
   int64_t schema_version = OB_INVALID_VERSION;
   bool is_exist = false;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_ISNULL(orig_table_schema_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("orig_table_schema_ is nullptr", KR(ret), K_(table_id));
@@ -233,7 +211,6 @@ int ObSetCommentHelper::lock_for_common_ddl_()
     ret = OB_ERR_OBJECT_NOT_EXIST;
     LOG_WARN("table not exist", KR(ret), K_(database_id), K_(arg_.session_id), K_(arg_.table_name));
   } else if (OB_FAIL(schema_guard_wrapper_.get_table_schema(table_id_, orig_table_schema_))) {
-    LOG_WARN("fail to get orig table schema", KR(ret), K_(table_id));
   } else if (OB_ISNULL(orig_table_schema_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("orig_table_schema_ is nullptr", KR(ret), K_(table_id));
@@ -242,7 +219,6 @@ int ObSetCommentHelper::lock_for_common_ddl_()
     LOG_WARN("offline ddl is being executed, other ddl operations are not allowed", KR(ret), KP(orig_table_schema_));
   } else {
     if (OB_FAIL(ObDDLLock::lock_for_common_ddl_in_trans(*orig_table_schema_, false/*require_strict_binary_format*/,get_trans_()))) {
-      LOG_WARN("fail to lock for common ddl", KR(ret));
     }
   }
   RS_TRACE(lock_common_ddl);
@@ -253,21 +229,17 @@ int ObSetCommentHelper::generate_schemas_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(check_table_legitimacy_())) {
-    LOG_WARN("fail to check table legitimacy", KR(ret));
   } else if (OB_ISNULL(orig_table_schema_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("orig table schema is nullptr", KR(ret));
   } else if (OB_FAIL(ObSchemaUtils::alloc_schema(allocator_, *orig_table_schema_, new_table_schema_))) {
-    LOG_WARN("fail to alloc schema", KR(ret));
   } else if (OB_ISNULL(new_table_schema_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("new table schema is nullptr", KR(ret));
   } else {
     if (obcall::ObSetCommentArg::COMMENT_TABLE == arg_.op_type_) {
       if (OB_FAIL(new_table_schema_->set_comment(arg_.table_comment_))) {
-        LOG_WARN("fail to set table comment", KR(ret));
       }
     } else if (obcall::ObSetCommentArg::COMMENT_COLUMN == arg_.op_type_) {
       for (uint64_t column_idx = 0; OB_SUCC(ret) && column_idx < arg_.column_name_list_.size(); column_idx++) {
@@ -282,7 +254,6 @@ int ObSetCommentHelper::generate_schemas_()
           LOG_WARN("failed to find old column schema", KR(ret), K(orig_column_name));
         } else if (FALSE_IT(new_column_schema->set_comment(arg_.column_comment_list_.at(column_idx)))){
         } else if (OB_FAIL(new_column_schemas_.push_back(new_column_schema))) {
-          LOG_WARN("fail to assign column schema", KR(ret));
         }
       }
     }
@@ -295,7 +266,6 @@ int ObSetCommentHelper::calc_schema_version_cnt_()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     // 0. data table
     // for now just one comment at a once
@@ -314,7 +284,6 @@ int ObSetCommentHelper::operate_schemas_()
   int64_t new_schema_version = OB_INVALID_VERSION;
   const ObString *ddl_stmt_str = &arg_.ddl_stmt_str_;
   if (OB_FAIL(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_ISNULL(orig_table_schema_) || OB_ISNULL(new_table_schema_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("orig table schema or new table schema is null", KR(ret), KP(orig_table_schema_), KP(new_table_schema_));
@@ -322,7 +291,6 @@ int ObSetCommentHelper::operate_schemas_()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema_service impl is null", KR(ret));
   } else if (OB_FAIL(schema_service_->gen_new_schema_version(new_schema_version))) {
-    LOG_WARN("fail to gen new schema version", KR(ret));
   } else {
     const bool need_del_stat = false;
     for (uint64_t column_idx = 0; OB_SUCC(ret) && column_idx < arg_.column_name_list_.size(); column_idx++) {
@@ -330,7 +298,6 @@ int ObSetCommentHelper::operate_schemas_()
       if (OB_FAIL(schema_service_impl->get_table_sql_service().update_single_column(
                 get_trans_(), *orig_table_schema_, *new_table_schema_,
                 *new_column_schemas_.at(column_idx), false /* record ddl operation*/, need_del_stat))) {
-        LOG_WARN("fail to update single column", KR(ret));
       }
     }
     new_table_schema_->set_schema_version(new_schema_version);
@@ -339,7 +306,6 @@ int ObSetCommentHelper::operate_schemas_()
                                                              *new_table_schema_,
                                                              OB_DDL_ALTER_TABLE,
                                                              ddl_stmt_str))) {
-      LOG_WARN("fail to alter table option", KR(ret));
     }
   }
   RS_TRACE(alter_schemas);
@@ -356,7 +322,6 @@ int ObSetCommentHelper::construct_and_adjust_result_(int &return_ret)
 {
   int ret = return_ret;
   if (FAILEDx(check_inner_stat_())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     ObSchemaVersionGenerator *tsi_generator = GET_TSI(TSISchemaVersionGenerator);
     if (OB_ISNULL(tsi_generator)) {

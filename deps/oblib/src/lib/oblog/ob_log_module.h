@@ -272,6 +272,19 @@ LOG_MOD_END(PL)
 #define MACRO_ARGS_DEBUG , FOR_DEBUG
 #define MACRO_ARGS_DBA_WARN , FOR_DBA_WARN
 #define MACRO_ARGS_DBA_ERROR , FOR_DBA_ERROR
+#define MACRO_ARGS_ERROR , FOR_ERROR
+#define MACRO_ARGS_WARN , FOR_WARN
+#define MACRO_ARGS_INFO , FOR_INFO
+#define MACRO_ARGS_TRACE , FOR_TRACE
+
+// Compile-time log level threshold. Logs with numeric level > OB_LOG_COMPILE_LEVEL
+// are eliminated at compile time (dead code + string literals removed by optimizer).
+// Default OB_LOG_LEVEL_DEBUG(6) = all enabled. Set to OB_LOG_LEVEL_ERROR(3) for lite builds
+// to eliminate WARN(~164K calls), TRACE, and DEBUG, saving ~80-130MB binary size.
+// DBA/USER log macros are not affected (they bypass IS_LOG_ENABLED).
+#ifndef OB_LOG_COMPILE_LEVEL
+#define OB_LOG_COMPILE_LEVEL OB_LOG_LEVEL_DEBUG
+#endif
 
 #ifdef ENABLE_DEBUG_LOG
 #define IS_LOG_ENABLED_FOR_DEBUG true
@@ -282,6 +295,31 @@ LOG_MOD_END(PL)
 #define IS_LOG_ENABLED_FOR_DEBUG true
 #endif
 #endif
+
+#if OB_LOG_COMPILE_LEVEL >= OB_LOG_LEVEL_INFO
+#define IS_LOG_ENABLED_FOR_INFO true
+#else
+#define IS_LOG_ENABLED_FOR_INFO false
+#endif
+
+#if OB_LOG_COMPILE_LEVEL >= OB_LOG_LEVEL_ERROR
+#define IS_LOG_ENABLED_FOR_ERROR true
+#else
+#define IS_LOG_ENABLED_FOR_ERROR false
+#endif
+
+#if OB_LOG_COMPILE_LEVEL >= OB_LOG_LEVEL_WARN
+#define IS_LOG_ENABLED_FOR_WARN true
+#else
+#define IS_LOG_ENABLED_FOR_WARN false
+#endif
+
+#if OB_LOG_COMPILE_LEVEL >= OB_LOG_LEVEL_TRACE
+#define IS_LOG_ENABLED_FOR_TRACE true
+#else
+#define IS_LOG_ENABLED_FOR_TRACE false
+#endif
+
 #define IS_LOG_ENABLED_FOR_DBA_WARN PLEASE_USE___LOG_DBA_WARN____MACRO
 #define IS_LOG_ENABLED_FOR_DBA_ERROR PLEASE_USE___LOG_DBA_ERROR___MACRO
 #define IS_LOG_ENABLED_FOR_DEFAULT true
@@ -291,6 +329,10 @@ LOG_MOD_END(PL)
 #define GET_LOG_FUNC_ATTR_FOR_DEFAULT noinline,cold
 #define GET_LOG_FUNC_ATTR_FOR_DBA_WARN noinline,cold
 #define GET_LOG_FUNC_ATTR_FOR_DBA_ERROR noinline,cold
+#define GET_LOG_FUNC_ATTR_FOR_ERROR noinline,cold
+#define GET_LOG_FUNC_ATTR_FOR_WARN noinline,cold
+#define GET_LOG_FUNC_ATTR_FOR_INFO noinline,cold
+#define GET_LOG_FUNC_ATTR_FOR_TRACE noinline,cold
 #define GET_LOG_FUNC_ATTR(level) LOG_MACRO_JOIN(GET_LOG_FUNC_ATTR_, MACRO_CALL(GET_SECOND, MACRO_ARGS(level)))
 
 #define LOG_ERRCODE_FOR_ERROR ret

@@ -68,15 +68,10 @@ int ObMdsRowIterator::init(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid version range", K(ret), K(scan_param.read_version_range_));
     } else if (OB_FAIL(access_param_.init(scan_param, nullptr/*tablet_handle*/, rowkey_read_info))) {
-      LOG_WARN("fail to init access param", K(ret), K(scan_param));
     } else if (OB_FAIL(access_ctx_.init(scan_param, store_ctx, scan_param.read_version_range_, nullptr/*cached_iter_node*/))) {
-      LOG_WARN("fail to init access ctx", K(ret), K(scan_param), K(store_ctx), K(scan_param.read_version_range_));
     } else if (OB_FAIL(init_get_table_param(scan_param, tablet_handle))) {
-      LOG_WARN("fail to init get table param", K(ret), K(scan_param));
     } else if (OB_FAIL(table_scan_range_.init(scan_param, *tablet_handle.get_obj(), false/*is_tablet_spliting*/))) {
-      LOG_WARN("fail to init table scan range", K(ret), K(scan_param));
     } else if (OB_FAIL(init_and_open_iter(scan_param))) {
-      LOG_WARN("fail to init and open iter", K(ret));
     } else {
       table_scan_param_ = &scan_param;
       is_inited_ = true;
@@ -170,7 +165,6 @@ int ObMdsRowIterator::get_next_mds_kv(common::ObIAllocator &allocator, mds::MdsD
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("row is null", K(ret), KP(row), KPC(this));
   } else if (OB_FAIL(convert(allocator, *row, kv))) {
-    LOG_WARN("fail to convert datum row to mds dump kv", K(ret), KPC(row));
   }
 
   return ret;
@@ -186,9 +180,7 @@ int ObMdsRowIterator::convert(
 
   // TODO(@gaishun.gs): avoid memory copy
   if (OB_FAIL(adapter.convert_from_mds_row(row))) {
-    LOG_WARN("fail to convert from mds row", K(ret), K(row));
   } else if (OB_FAIL(kv.convert_from_adapter(allocator, adapter))) {
-    LOG_WARN("fail to convert from adapter", K(ret), K(adapter));
   } else {
     LOG_DEBUG("succeed to convert row to mds dump kv", K(ret), K(kv));
   }
@@ -202,7 +194,6 @@ int ObMdsRowIterator::init_get_table_param(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(get_table_param_.tablet_iter_.set_tablet_handle(tablet_handle))) {
-    LOG_WARN("fail to set tablet handle", K(ret), K(tablet_handle));
   } else {
     get_table_param_.frozen_version_ = scan_param.frozen_version_;
     get_table_param_.sample_info_ = scan_param.sample_info_;
@@ -258,9 +249,7 @@ int ObMdsRowIterator::init_and_open_single_get_merge(ObTableScanParam &scan_para
     ObSingleMerge *single_merge = new (buf) ObSingleMerge();
     const blocksstable::ObDatumRowkey &rowkey = table_scan_range_.get_rowkeys().at(0);
     if (OB_FAIL(single_merge->init(access_param_, access_ctx_, get_table_param_))) {
-      LOG_WARN("fail to init single merge", K(ret));
     } else if (OB_FAIL(single_merge->open(rowkey))) {
-      LOG_WARN("fail to open single merge", K(ret), K(rowkey));
     } else {
       multiple_merge_ = single_merge;
     }
@@ -287,9 +276,7 @@ int ObMdsRowIterator::init_and_open_multiple_get_merge(ObTableScanParam &scan_pa
     ObMultipleGetMerge *multiple_get_merge = new (buf) ObMultipleGetMerge();
     const common::ObIArray<blocksstable::ObDatumRowkey> &rowkeys = table_scan_range_.get_rowkeys();
     if (OB_FAIL(multiple_get_merge->init(access_param_, access_ctx_, get_table_param_))) {
-      LOG_WARN("fail to init multiple get merge", K(ret));
     } else if (OB_FAIL(multiple_get_merge->open(rowkeys))) {
-      LOG_WARN("fail to open multiple get merge", K(ret), K(rowkeys));
     } else {
       multiple_merge_ = multiple_get_merge;
     }
@@ -316,9 +303,7 @@ int ObMdsRowIterator::init_and_open_multiple_scan_merge(ObTableScanParam &scan_p
     ObMultipleScanMerge *multiple_scan_merge = new (buf) ObMultipleScanMerge();
     const blocksstable::ObDatumRange &datum_range = table_scan_range_.get_ranges().at(0);
     if (OB_FAIL(multiple_scan_merge->init(access_param_, access_ctx_, get_table_param_))) {
-      LOG_WARN("fail to init multiple scan merge", K(ret));
     } else if (OB_FAIL(multiple_scan_merge->open(datum_range))) {
-      LOG_WARN("fail to open multiple scan merge", K(ret), K(datum_range));
     } else {
       multiple_merge_ = multiple_scan_merge;
     }

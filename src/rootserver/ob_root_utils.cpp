@@ -38,7 +38,6 @@ int ObRootUtils::get_rs_default_timeout_ctx(ObTimeoutCtx &ctx)
 #endif
 
   if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, DEFAULT_TIMEOUT_US))) {
-    LOG_WARN("fail to set default_timeout_ctx", KR(ret));
   }
   return ret;
 }

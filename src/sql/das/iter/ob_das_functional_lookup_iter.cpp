@@ -55,9 +55,7 @@ int ObDASFuncLookupIter::inner_init(ObDASIterParam &param)
     param.set_mem_attr(ObModIds::OB_SQL_TABLE_LOOKUP, ObCtxIds::DEFAULT_CTX_ID)
          .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(lookup_memctx_, param))) {
-      LOG_WARN("failed to create lookup memctx", K(ret));
     } else if (OB_FAIL(rowkey_exprs_.push_back(lookup_param.doc_id_expr_))) {
-      LOG_WARN("failed to assign rowkey exprs", K(ret));
     } else if (rowkey_exprs_.count() != 1) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected rowkey exprs count", K(rowkey_exprs_.count()), K(ret));
@@ -91,11 +89,9 @@ int ObDASFuncLookupIter::inner_reuse()
   }
   if (start_table_scan_) {
     if (OB_FAIL(index_table_iter_->reuse())) {
-      LOG_WARN("failed to reuse index table iter", K(ret));
     } else if (is_first_lookup_ && OB_FAIL(data_table_iter_->reuse())) {
       LOG_WARN("failed to reuse data table iter", K(ret));
     } else if (OB_FAIL(ObDASLookupIter::inner_reuse())) {
-      LOG_WARN("failed to reuse das lookup iter", K(ret));
     } else {
       trans_info_array_.reuse();
     }
@@ -109,7 +105,6 @@ int ObDASFuncLookupIter::inner_release()
   int ret = OB_SUCCESS;
   start_table_scan_ = false;
   if (OB_FAIL(ObDASLocalLookupIter::inner_release())) {
-    LOG_WARN("failed to release lookup iter", K(ret));
   }
   data_scan_read_rowsize_ = 0;
   return ret;
@@ -150,7 +145,6 @@ int ObDASFuncLookupIter::rescan()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected key ranges count", K(index_scan_param.key_ranges_.count()), K(ret));
   } else if (OB_FAIL(index_table_iter_->rescan())) {
-    LOG_WARN("failed to rescan index table iter", K(ret));
   }
   return ret;
 }
@@ -216,7 +210,6 @@ int ObDASFuncLookupIter::add_rowkey()
   int ret = OB_SUCCESS;
   OB_ASSERT(data_table_iter_->get_type() == DAS_ITER_FUNC_DATA);
   if (OB_FAIL(data_table_iter_->set_scan_rowkey(eval_ctx_, rowkey_exprs_, nullptr, nullptr, 0))) {
-    LOG_WARN("failed to set scan rowkey of data table iter", K(ret));
   }
   return ret;
 }
@@ -228,7 +221,6 @@ int ObDASFuncLookupIter::add_rowkeys(int64_t storage_count)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected count", K(storage_count), K(index_scan_rowsize_));
   } else if (OB_FAIL(ObDASLocalLookupIter::add_rowkeys(storage_count))) {
-    LOG_WARN("failed to add rowkeys", K(ret));
   }
   return ret;
 }
@@ -287,7 +279,6 @@ int ObDASFuncLookupIter::do_index_lookup()
       }
     }
   } else if (OB_FAIL(data_table_iter_->rescan())) {
-    LOG_WARN("failed to rescan data table", K(ret));
   }
   return ret;
 }
@@ -322,7 +313,6 @@ int ObDASFuncLookupIter::set_scan_rowkey(ObEvalCtx *eval_ctx,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(index_table_iter_->set_scan_rowkey(eval_ctx, rowkey_exprs, lookup_ctdef, alloc, group_id))) {
-    LOG_WARN("failed to set scan rowkey of index table iter", K(ret));
   }
   return ret;
 }

@@ -548,7 +548,6 @@ int ObRefCursorType::init_obj(ObSchemaGetterGuard &schema_guard,
     new(data) ObPLCursorInfo(&allocator);
     obj.set_ext(reinterpret_cast<int64_t>(data));
   } else if (OB_FAIL(get_size(PL_TYPE_INIT_SIZE, init_size))) {
-    LOG_WARN("get init size failed", K(ret));
   } else if (OB_ISNULL(data = static_cast<char *>(allocator.alloc(init_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("memory allocate failed", K(ret));
@@ -572,7 +571,6 @@ int ObRefCursorType::init_session_var(const ObPLResolveCtx &resolve_ctx,
   char *data = NULL;
   int64_t init_size = 0;
   if (OB_FAIL(get_size(PL_TYPE_INIT_SIZE, init_size))) {
-    LOG_WARN("get init size failed", K(ret));
   } else if (OB_ISNULL(data = static_cast<char *>(obj_allocator.alloc(init_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("memory allocate failed", K(ret));
@@ -632,7 +630,6 @@ int ObRecordType::record_members_init(common::ObIAllocator *alloc, int64_t size)
   int ret = OB_SUCCESS;
   record_members_.set_allocator(alloc);
   if (OB_FAIL(record_members_.init(size))) {
-    LOG_WARN("failed to init record_members_ count", K(ret));
   }
 
   return ret;
@@ -942,7 +939,6 @@ int ObRecordType::init_session_var(const ObPLResolveCtx &resolve_ctx,
   if (OB_FAIL(ret) || obj.is_pl_extend()) {
     // do nothing ...
   } else if (OB_FAIL(get_size(PL_TYPE_INIT_SIZE, init_size))) {
-    LOG_WARN("get init size failed", K(ret));
   } else if (OB_ISNULL(data = static_cast<char *>(obj_allocator.alloc(init_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("memory allocate failed", K(ret));
@@ -1116,7 +1112,6 @@ int ObRecordType::get_all_depended_user_type(const ObPLResolveCtx &resolve_ctx,
     const ObRecordMember* record_member = get_record_member(i);
     const ObPLDataType &type = record_member->member_type_;
     if (OB_FAIL(type.get_all_depended_user_type(resolve_ctx, current_ns))) {
-       LOG_WARN("failed to add user type", K(*this), K(ret));
     }
   }
   return ret;
@@ -1131,7 +1126,6 @@ int ObRecordType::init_obj(ObSchemaGetterGuard &schema_guard,
   char *data = NULL;
   init_size = 0;
   if (OB_FAIL(get_size(PL_TYPE_INIT_SIZE, init_size))) {
-    LOG_WARN("get init size failed", K(ret));
   } else if (OB_ISNULL(data = static_cast<char *>(allocator.alloc(init_size)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("memory allocate failed", K(ret));
@@ -1361,8 +1355,7 @@ int ObPLComposite::assign(ObPLComposite *src, ObIAllocator *allocator)
 }
 
 /*
- * To preserve the expected memory layout between ObPLComposite and its derived
- * classes, this function cannot be virtual.
+ * For memory mapping between ObPLComposite and its derived classes and LLVM, this function cannot implement a virtual function
  * */
 int64_t ObPLComposite::get_init_size() const
 {

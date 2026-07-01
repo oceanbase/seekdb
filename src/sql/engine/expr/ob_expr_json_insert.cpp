@@ -58,12 +58,10 @@ int ObExprJsonInsert::calc_result_typeN(ObExprResType& type,
     type.set_json();
     type.set_length((ObAccuracy::DDL_DEFAULT_ACCURACY[ObJsonType]).get_length());
     if (OB_FAIL(ObJsonExprHelper::is_valid_for_json(types_stack, 0, N_JSON_INSERT))) {
-      LOG_WARN("wrong type for json doc.", K(ret), K(types_stack[0].get_type()));
     } else {
       for (int64_t i = 1; OB_SUCC(ret) && i < param_num; i += 2) {
         //path type
         if (OB_FAIL(ObJsonExprHelper::is_valid_for_path(types_stack, i))) {
-          LOG_WARN("wrong type for json path.", K(ret), K(types_stack[i].get_type()));
         }
 
         if (OB_SUCC(ret)) {
@@ -99,7 +97,6 @@ int ObExprJsonInsert::eval_json_insert(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     ret = OB_ERR_INVALID_JSON_CHARSET;
     LOG_WARN("invalid out put charset", K(ret), K(expr.datum_meta_.cs_type_));
   } else if (OB_FAIL(ObJsonExprHelper::get_json_doc(expr, ctx, temp_allocator, 0, j_base, is_null))) {
-    LOG_WARN("get_json_doc failed", K(ret));
   }
 
   ObJsonPathCache ctx_cache(&temp_allocator);
@@ -113,33 +110,27 @@ int ObExprJsonInsert::eval_json_insert(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     ObExpr *arg = expr.args_[i];
     json_datum = NULL;
     if (OB_FAIL(temp_allocator.eval_arg(expr.args_[i], ctx, json_datum))) {
-      LOG_WARN("failed: eval json path datum.", K(ret));
     } else if (arg->datum_meta_.type_ == ObNullType || json_datum->is_null()) {
       is_null = true;
     } else {
       ObString j_path_text = json_datum->get_string();
       ObJsonPath *j_path;
       if (OB_FAIL(ObJsonExprHelper::get_json_or_str_data(arg, ctx, temp_allocator, j_path_text, is_null))) {
-        LOG_WARN("fail to get real data.", K(ret), K(j_path_text));
       } else if (OB_FAIL(ObJsonExprHelper::find_and_add_cache(path_cache, j_path, j_path_text, i, false))) {
-        LOG_WARN("failed: parse text to path.", K(j_path_text), K(ret));
       } else if (j_path->path_node_cnt() == 0) {
         // do nothing
       } else {
         ObJsonSeekResult hit;
         // if target exists continue, don't replace
         if (OB_FAIL(j_base->seek(*j_path, j_path->path_node_cnt(), true, true, hit))) {
-          LOG_WARN("failed: json seek.", K(j_path_text), K(ret));
         } else if (hit.size()) {
           // do nothing
         } else if (OB_FAIL(j_base->seek(*j_path, j_path->path_node_cnt() - 1, true, true, hit))) {
-          LOG_WARN("failed: json seek.", K(j_path_text), K(ret));
         } else if (hit.size() == 0) {
           // do nothing
         } else {
           ObIJsonBase *j_val;
           if (OB_FAIL(temp_allocator.add_baseline_size(expr.args_[i+1], ctx))) {
-            LOG_WARN("add baseline size failed.", K(ret), K(i + 1));
           } else if (OB_FAIL(ObJsonExprHelper::get_json_val(expr, ctx, &temp_allocator, i+1, j_val))) {
             ret = OB_ERR_INVALID_JSON_TEXT_IN_PARAM;
             LOG_WARN("failed: get_json_val.", K(ret));
@@ -151,9 +142,7 @@ int ObExprJsonInsert::eval_json_insert(const ObExpr &expr, ObEvalCtx &ctx, ObDat
                 ObJsonArrayIndex array_index;
                 size_t length = j_pos_node->element_count();
                 if (OB_FAIL(path_last->get_first_array_index(length, array_index))) {
-                  LOG_WARN("failed: get array insert.", K(ret), K(length));
                 } else if (OB_FAIL(j_pos_node->array_insert(array_index.get_array_index(), j_val))) {
-                  LOG_WARN("failed: insert array node.", K(ret));
                 }
               } else if (!path_last->is_autowrap()) {
                 void *buf = temp_allocator.alloc(sizeof(ObJsonArray));
@@ -170,8 +159,7 @@ int ObExprJsonInsert::eval_json_insert(const ObExpr &expr, ObEvalCtx &ctx, ObDat
                     LOG_WARN("failed: array append node.", K(ret), K(*j_pos_node), K(*j_val));
                   } else if (OB_ISNULL(jb_parent)) { // root
                     j_base = jb_new_arr;
-                  } else if (OB_FAIL(jb_parent->replace(j_pos_node, jb_new_arr))){ //  not root, replace pos node with new array
-                    LOG_WARN("fail to replace pos node with new array", K(ret), K(*jb_new_arr));
+                  } else if (OB_FAIL(jb_parent->replace(j_pos_node, jb_new_arr))){
                   }
                 }
               }
@@ -180,7 +168,6 @@ int ObExprJsonInsert::eval_json_insert(const ObExpr &expr, ObEvalCtx &ctx, ObDat
               ObString key;
               key.assign_ptr(path_last->get_object().object_name_, path_last->get_object().len_);
               if (OB_FAIL(j_pos_node->object_add(key, j_val))) {
-                LOG_WARN("error, json object add kv pair failed", K(ret), K(*j_val));
               }
             }
           }
@@ -194,9 +181,7 @@ int ObExprJsonInsert::eval_json_insert(const ObExpr &expr, ObEvalCtx &ctx, ObDat
     if (is_null) {
       res.set_null();
     } else if (OB_FAIL(ObJsonWrapper::get_raw_binary(j_base, raw_bin, &temp_allocator))) {
-      LOG_WARN("failed: get json raw binary", K(ret));
     } else if (OB_FAIL(ObJsonExprHelper::pack_json_str_res(expr, ctx, res, raw_bin))) {
-      LOG_WARN("fail to pack json result", K(ret));
     }
   }
 

@@ -55,9 +55,7 @@ int ObExprRbBuildEmpty::eval_rb_build_empty(const ObExpr &expr,
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("ROARINGBITMAP"));
   ObString rb_bin;
   if (OB_FAIL(ObRbUtils::build_empty_binary(tmp_allocator, rb_bin))) {
-    LOG_WARN("fail to build empty rb binary", K(ret));
   } else if (OB_FAIL(ObRbExprHelper::pack_rb_res(expr, ctx, res, rb_bin))) {
-    LOG_WARN("fail to pack roaringbitmap res", K(ret));
   }
   return ret;
 }

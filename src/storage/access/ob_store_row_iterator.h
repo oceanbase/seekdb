@@ -391,7 +391,6 @@ void ObStoreRowIterPool<T>::inner_return_iter(T *iter, const uint32_t cg_idx)
         STORAGE_LOG(WARN, "Failed to alloc memory", K(ret));
       } else if (FALSE_IT(typed_iters = new(buf) TableTypedIters<T>(typeid(*iter), cg_idx, allocator_))) {
       } else if (OB_FAIL(table_iters_array_.push_back(typed_iters))) {
-        STORAGE_LOG(WARN, "Failed to push back new typed_iters", K(ret), K(typeid(*iter).name()), K(*iter));
       }
     }
     if (OB_SUCC(ret)) {
@@ -399,7 +398,6 @@ void ObStoreRowIterPool<T>::inner_return_iter(T *iter, const uint32_t cg_idx)
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "Unexpected null typed_iters", K(ret));
       } else if (OB_FAIL(typed_iters->iters_.push_back(iter))) {
-        STORAGE_LOG(WARN, "Failed to push back iter", K(ret), K(typeid(*iter).name()), K(*iter));
       }
     }
     if (OB_FAIL(ret)) {
@@ -420,7 +418,6 @@ int ObStoreRowIterPool<T>::get_iter(const std::type_info &type, T *&iter, const 
     if (OB_NOT_NULL(typed_iters) && typed_iters->is_type(type, cg_idx)) {
       if (typed_iters->iters_.count() > 0) {
         if (OB_FAIL(typed_iters->iters_.pop_back(iter))) {
-          STORAGE_LOG(WARN, "Failed to pop back", K(ret), K(typed_iters->iters_));
         }
       }
       break;

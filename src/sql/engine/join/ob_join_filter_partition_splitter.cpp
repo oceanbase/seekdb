@@ -138,9 +138,7 @@ int ObJoinFilterPartitionSplitter::prepare_join_partitions(ObIOEventObserver *io
   part_count_ = calc_partition_count_by_cache_aware(row_count, global_mem_bound_size);
   first_dumped_part_idx_ = part_count_;
   if (OB_FAIL(create_partitions(io_event_observer, output_exprs_))) {
-    LOG_WARN("failed to create_partitions", K(part_count_));
   } else if (OB_FAIL(stores_mgr_.init(max_batch_size_, part_count_, *malloc_alloc_))) {
-    LOG_WARN("failed to init stores manager");
   } else {
     for (int64_t part_idx = 0; OB_SUCC(ret) && part_idx < part_count_; ++part_idx) {
       OZ(stores_mgr_.set_temp_store(part_idx, &partition_array_[part_idx]->get_row_store()));
@@ -176,7 +174,6 @@ int ObJoinFilterPartitionSplitter::create_partitions(ObIOEventObserver *io_event
     char *mem = nullptr;
     // create partition ptr array
     if (OB_FAIL(partition_array_.init(part_count_))) {
-      LOG_WARN("failed to init partition_array_");
     } else {
       // create real partition
       char *mem = static_cast<char *>(malloc_alloc_->alloc(sizeof(ObPartitionStore) * part_count_));
@@ -188,10 +185,8 @@ int ObJoinFilterPartitionSplitter::create_partitions(ObIOEventObserver *io_event
         ObPartitionStore *part_store =
             new (mem + sizeof(ObPartitionStore) * i) ObPartitionStore(*malloc_alloc_);
         if (OB_FAIL(partition_array_.push_back(part_store))) {
-          LOG_WARN("failed to push_back part_store");
         } else if (OB_FAIL(part_store->init(*exprs, max_batch_size_, compress_type_,
                                             row_extra_size_))) {
-          LOG_WARN("failed to init partition");
         } else {
           part_store->get_row_store().set_dir_id(sql_mem_processor_->get_dir_id());
           part_store->get_row_store().set_io_event_observer(io_event_observer);
@@ -227,7 +222,6 @@ int ObJoinFilterPartitionSplitter::calc_partition_hash_value(
   for (int64_t idx = 0; OB_SUCC(ret) && idx < hash_join_hash_exprs_->count() ; ++idx) {
     ObExpr *expr = hash_join_hash_exprs_->at(idx);
     if (OB_FAIL(expr->eval_vector(eval_ctx, *brs))) {
-      LOG_WARN("eval failed", K(ret));
     } else {
       const bool is_batch_seed = (idx > 0);
       ObIVector *vector = expr->get_vector(eval_ctx);
@@ -278,7 +272,6 @@ int ObJoinFilterPartitionSplitter::add_batch(
   int ret = OB_SUCCESS;
   uint16_t extra_hash_count = group_controller.extra_hash_count_;
   if (OB_FAIL(calc_part_selector(hash_join_hash_values, brs, part_shift))) {
-    LOG_WARN("failed to calc_part_selector");
   }
   if (OB_SUCC(ret)) {
     if (extra_hash_count > 1) {
@@ -302,7 +295,6 @@ int ObJoinFilterPartitionSplitter::add_batch_inner(
   int16_t hash_id = 0;
   if (OB_FAIL(stores_mgr_.add_batch(part_idxes_, output_vectors_, brs,
                                     reinterpret_cast<ObCompactRow **>(part_added_rows_)))) {
-    LOG_WARN("failed to add batch", K(ret));
   } else {
     for (int64_t i = 0; i < brs.size_; i++) {
       if (brs.skip_->at(i)) {
@@ -333,7 +325,6 @@ int ObJoinFilterPartitionSplitter::calc_part_selector(uint64_t *hash_vals,
   int ret = OB_SUCCESS;
   CalcPartSelectorOP op(part_idxes_, part_shift, hash_vals, part_count_, max_batch_size_);
   if (OB_FAIL(ObBitVector::flip_foreach(*brs.skip_, brs.size_, op))) {
-    LOG_WARN("fail to convert skip to selector", K(ret));
   }
   return ret;
 }
@@ -364,7 +355,6 @@ int ObJoinFilterPartitionSplitter::dump_from_back_to_front(int64_t need_dump_siz
       bool has_been_dumped = dump_part->is_dumped();
       if (dump_part->has_switch_block() || 0 < dump_part->get_size_in_memory()) {
         if (OB_FAIL(dump_part->dump(dump_all, 1))) {
-          LOG_WARN("failed to dump partition", K(i));
         } else if (dump_part->is_dumped() && !has_been_dumped) {
           // if this partition is first time be dumped, set limit 1 to let it auto dump later
           dump_part->set_memory_limit(1);
@@ -377,7 +367,6 @@ int ObJoinFilterPartitionSplitter::dump_from_back_to_front(int64_t need_dump_siz
                 sql_mem_processor_->get_data_size());
             if (OB_FAIL(sql_mem_processor_->update_max_available_mem_size_periodically(
                     &mem_context_->get_malloc_allocator(), max_available_mem_checker, updated))) {
-              LOG_WARN("failed to update remain memory size periodically", K(ret));
             } else if ((updated || need_dump())
                        && OB_FAIL(sql_mem_processor_->extend_max_memory_size(
                               &mem_context_->get_malloc_allocator(), extend_max_mem_checker,
@@ -412,7 +401,6 @@ int ObJoinFilterPartitionSplitter::finish_add_row()
     bool need_dump = i >= first_dumped_part_idx_;
     if (need_dump && !part->is_dumped()) {
       if ( OB_FAIL(part->dump(true, INT64_MAX))) {
-        LOG_WARN("failed to dump partition", K(i));
       } else {
         part->set_memory_limit(1);
         sql_mem_processor_->set_number_pass(1);
@@ -420,7 +408,6 @@ int ObJoinFilterPartitionSplitter::finish_add_row()
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(part->finish_add_row(need_dump))) {
-      LOG_WARN("failed to finish add row", K(i), K(first_dumped_part_idx_), K(part_count_));
     }
   }
   return ret;
@@ -432,7 +419,6 @@ int ObJoinFilterPartitionSplitter::force_dump_all_partition()
   for (int64_t i = 0; i < part_count_ && OB_SUCC(ret); ++i) {
     ObPartitionStore *part = partition_array_.at(i);
     if (OB_FAIL(part->dump(true, INT64_MAX))) {
-      LOG_WARN("failed to dump", K(ret));
     }
   }
   if (OB_SUCC(ret)) {

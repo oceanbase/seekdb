@@ -51,7 +51,6 @@ int ObShowCreateTablegroup::inner_get_next_row(common::ObNewRow *&row)
       const ObTablegroupSchema *tg_schema = NULL;
       uint64_t show_tablegroup_id = OB_INVALID_ID;
       if (OB_FAIL(calc_show_tablegroup_id(show_tablegroup_id))) {
-        LOG_WARN("fail to calc show tablegroup id", K(ret));
       } else if (OB_UNLIKELY(OB_INVALID_ID == show_tablegroup_id)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_USER_ERROR(OB_ERR_UNEXPECTED, "this table is used for show clause, can't be selected");
@@ -60,10 +59,7 @@ int ObShowCreateTablegroup::inner_get_next_row(common::ObNewRow *&row)
         LOG_WARN("fail to get tablegroup schema", K(ret), K(show_tablegroup_id));
       } else {
         if (OB_FAIL(fill_row_cells(show_tablegroup_id, tg_schema->get_tablegroup_name_str()))) {
-          LOG_WARN("fail to fill row cells", K(ret),
-                     K(show_tablegroup_id), K(tg_schema->get_tablegroup_name_str()));
         } else if (OB_FAIL(scanner_.add_row(cur_row_))) {
-          LOG_WARN("fail to add row", K(ret), K(cur_row_));
         } else {
           scanner_it_ = scanner_.begin();
           start_to_read_ = true;
@@ -155,8 +151,6 @@ int ObShowCreateTablegroup::fill_row_cells(uint64_t show_tablegroup_id,
                                                                  pos,
                                                                  false,
                                                                  TZ_INFO(session_)))) {
-            LOG_WARN("Generate tablegroup definition failed",
-                     KR(ret), K(show_tablegroup_id));
           } else {
             const ObColumnSchemaV2 *column_schema = NULL;
             if (OB_ISNULL(table_schema_) ||

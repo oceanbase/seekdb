@@ -522,8 +522,6 @@ protected:
 
     int64_t avg_mem_bound = get_each_slice_avg_size(sql_mem_processor_->get_mem_bound());
     avg_mem_bound = avg_mem_bound > MIN_MEM_BOUND ? avg_mem_bound : MIN_MEM_BOUND;
-    SQL_ENG_LOG(TRACE, "check need dump", K(period_row_cnt_), K(est_part_cnt_), K(slice_cnt),
-      K(avg_mem_bound), K(sql_mem_processor_->get_mem_bound()));
     return (avg_mem_bound <= est_part_cnt_ * BLOCK_SIZE + get_mem_used()) && (period_row_cnt_ > MIN_PERIOD_ROW_CNT);
   }
 
@@ -881,7 +879,6 @@ int ObHashPartInfrastructureVec<HashBucket>::rewind()
   int ret = OB_SUCCESS;
   hash_table_.reuse();
   if (OB_FAIL(ObIHashPartInfrastructure::rewind())) {
-    SQL_ENG_LOG(WARN, "failed to rewind", K(ret));
   }
   return ret;
 }
@@ -905,13 +902,11 @@ int ObHashPartInfrastructureVec<HashBucket>::dump_preprocess_part()
                    hash_value, cur_dumped_parts_[part_idx]->store_.get_row_meta()))) {
       } else if (OB_FAIL(cur_dumped_parts_[part_idx]->store_.add_row(
                    static_cast<ObCompactRow *>(&bucket.get_item()), sr))) {
-        SQL_ENG_LOG(WARN, "failed to add row", K(ret));
       }
     }
     return ret;
   };
   if (OB_FAIL(hash_table_.foreach(func))) {
-    SQL_ENG_LOG(WARN, "failed to do foreach", K(ret));
   } else {
     has_dump_preprocess_part_ = true;
   }
@@ -926,7 +921,6 @@ int ObHashPartInfrastructureVec<HashBucket>::resize(int64_t bucket_cnt)
     ret = OB_ERR_UNEXPECTED;
     SQL_ENG_LOG(WARN, "allocator is null or it don'e start to round", K(ret), K(start_round_));
   } else if (OB_FAIL(hash_table_.resize(alloc_, max(2, bucket_cnt)))) {
-    SQL_ENG_LOG(WARN, "failed to init hash table", K(ret), K(bucket_cnt));
   }
   return ret;
 }
@@ -951,9 +945,7 @@ int ObHashPartInfrastructureVec<HashBucket>::init_hash_table(int64_t initial_siz
   } else if (OB_FAIL(hash_table_.init(alloc_, mem_attr, *exprs_, sort_collations_->count(),
                                       eval_ctx_, max_batch_size_, nullable, all_int64, 0, false, 0,
                                       hash_bucket_cnt))) {
-    SQL_ENG_LOG(WARN, "failed to init hash table", K(ret), K(hash_bucket_cnt));
   } else if (OB_FAIL(vector_ptrs_.prepare_allocate(exprs_->count()))) {
-    SQL_ENG_LOG(WARN, "failed to alloc ptrs", K(ret));
   }
   return ret;
 }
@@ -1001,7 +993,6 @@ set_distinct_batch(const common::ObIArray<ObExpr *> &exprs,
   } else if (OB_FAIL(hash_table_.set_distinct_batch(
                preprocess_part_.store_.get_row_meta(), batch_size, skip, my_skip,
                hash_values_for_batch, StoreRowFunctor(preprocess_part_.store_)))) {
-    LOG_WARN("failed to set batch", K(ret));
   }
   return ret;
 }
@@ -1021,13 +1012,11 @@ int ObHashPartInfrastructureVec<HashBucket>::exists_batch(
     SQL_ENG_LOG(WARN, "skip vector is null", K(ret));
   } else if (OB_FAIL(calc_hash_value_for_batch(
                exprs, *brs.skip_, brs.size_, false /* all_rows_active */, hash_values_for_batch))) {
-    SQL_ENG_LOG(WARN, "failed to calc hash values", K(ret));
   } else {
     const ObHashPartItem *exists_item = nullptr;
     ObBitVector &skip_for_dump = *my_skip_;
     skip_for_dump.reset(brs.size_);
     if (OB_FAIL(prefetch<HashBucket>(hash_values_for_batch, brs.size_, brs.skip_))) {
-      SQL_ENG_LOG(WARN, "failed to prefetch", K(ret));
     } else {
       ObEvalCtx::BatchInfoScopeGuard guard(*eval_ctx_);
       for (int64_t i = 0; OB_SUCC(ret) && i < brs.size_; ++i) {
@@ -1041,7 +1030,6 @@ int ObHashPartInfrastructureVec<HashBucket>::exists_batch(
         if (OB_FAIL(hash_table_.get(preprocess_part_.store_.get_row_meta(),
                                 i, hash_values_for_batch[i],
                                 exists_item))) {
-          SQL_ENG_LOG(WARN, "failed to get item", K(ret));
         } else if (OB_ISNULL(exists_item)) {
           skip->set(i);
         } else if (exists_item->is_match(preprocess_part_.store_.get_row_meta())) {
@@ -1062,7 +1050,6 @@ int ObHashPartInfrastructureVec<HashBucket>::exists_batch(
         SQL_ENG_LOG(WARN, "failed to create dump partitions", K(ret));
       } else if (OB_FAIL(insert_batch_on_partitions(exprs, skip_for_dump,
                                                     brs.size_, hash_values_for_batch))) {
-        SQL_ENG_LOG(WARN, "failed to insert row into partitions", K(ret));
       }
     }
     my_skip_->reset(brs.size_);
@@ -1095,7 +1082,6 @@ probe_batch(uint64_t *hash_values_for_batch,
     if (OB_FAIL(hash_table_.get(preprocess_part_.store_.get_row_meta(),
                                 i, hash_values_for_batch[i],
                                 exists_item))) {
-      SQL_ENG_LOG(WARN, "failed to get item", K(ret));
     } else if (OB_NOT_NULL(exists_item)) {
       my_skip.set(i);
     }

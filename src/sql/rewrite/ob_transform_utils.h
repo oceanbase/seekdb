@@ -2124,14 +2124,11 @@ int ObTransformUtils::replace_exprs(const common::ObIArray<ObRawExpr *> &other_e
     } else if (OB_FAIL(ObTransformUtils::replace_expr(other_exprs,
                                                       new_exprs,
                                                       temp_expr))) {
-      SQL_LOG(WARN, "failed to replace expr", K(ret));
     } else if (OB_FAIL(temp_expr_array.push_back(static_cast<T*>(temp_expr)))) {
-      SQL_LOG(WARN, "failed to push back expr", K(ret));
     } else { /*do nothing*/}
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(exprs.assign(temp_expr_array))) {
-      SQL_LOG(WARN, "failed to assign expr", K(ret));
     } else { /*do nothing*/ }
   }
   return ret;
@@ -2199,15 +2196,12 @@ int ObTransformUtils::remove_dup_expr(common::ObIArray<T *> &check,
   for (int64_t i = 0; i < base.count(); i++) {
     int64_t idx = -1;
     if (OB_FAIL(ObTransformUtils::get_expr_idx(check, base.at(i), idx))) {
-      LOG_WARN("find expr failed", K(ret));
     } else if (idx != -1) {
     } else if (OB_FAIL(no_dup.push_back(base.at(i)))) {
-      LOG_WARN("push back failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(base.assign(no_dup))) {
-      LOG_WARN("assign failed", K(ret));
     }
   }
   return ret;

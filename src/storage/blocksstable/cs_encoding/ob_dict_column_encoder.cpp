@@ -91,15 +91,12 @@ int ObDictColumnEncoder::build_ref_encoder_ctx_()
       if (OB_FAIL(ref_enc_ctx_.build_unsigned_stream_meta(
           0, max_ref_, is_replace_null, null_replaced_value, true,
           ctx_->encoding_ctx_->major_working_cluster_version_, range))) {
-        LOG_WARN("fail to build_unsigned_stream_meta", K(ret));
       }
     } else {
       if (OB_FAIL(try_const_encoding_ref_())) {
-        LOG_WARN("fail to try_use_const_ref", K(ret));
       } else if (OB_FAIL(ref_enc_ctx_.build_unsigned_stream_meta(0, ref_stream_max_value_,
           is_replace_null, null_replaced_value, false,
           ctx_->encoding_ctx_->major_working_cluster_version_, range))) {
-        LOG_WARN("fail to build_unsigned_stream_meta", K(ret));
       }
     }
 
@@ -113,14 +110,12 @@ int ObDictColumnEncoder::build_ref_encoder_ctx_()
       ++int_stream_count_;
       ObPreviousColumnEncoding *pre_col_encoding = nullptr;
       if (OB_FAIL(get_previous_cs_encoding(pre_col_encoding))) {
-        LOG_WARN("get_previous_cs_encoding fail", K(ret));
       } else if (OB_FAIL(ref_enc_ctx_.build_stream_encoder_info(
           false/*has_null*/,
           false/*not monotonic*/,
           &ctx_->encoding_ctx_->cs_encoding_opt_,
           pre_col_encoding,
           ref_stream_idx, ctx_->encoding_ctx_->compressor_type_, ctx_->allocator_))) {
-        LOG_WARN("fail to build_stream_encoder_info", K(ret));
       }
     }
   }
@@ -183,7 +178,6 @@ int ObDictColumnEncoder::do_sort_dict_()
   ObCmpFunc cmp_func;
   cmp_func.cmp_func_ = basic_funcs->null_first_cmp_;
   if (OB_FAIL(ctx_->ht_->sort_dict(cmp_func))) {
-    LOG_WARN("fail to sort dict", K(ret));
   } else {
     // update dict ref for const node
     if (dict_encoding_meta_.is_const_encoding_ref() && !const_node_.datum_.is_null()) {
@@ -199,7 +193,6 @@ int ObDictColumnEncoder::store_dict_encoding_meta_(ObMicroBufferWriter &buf_writ
   int ret = OB_SUCCESS;
   ObDictEncodingMeta *dict_encoding_meta = reinterpret_cast<ObDictEncodingMeta*>(buf_writer.current());
   if (OB_FAIL(buf_writer.advance(sizeof(ObDictEncodingMeta)))) {
-    LOG_WARN("buffer advance failed", K(ret), K(sizeof(ObDictEncodingMeta)));
   } else {
     *dict_encoding_meta = dict_encoding_meta_;
     LOG_DEBUG("store dict meta", KPC(dict_encoding_meta), K(buf_writer.length()), K(sizeof(ObDictEncodingMeta)));
@@ -222,25 +215,21 @@ int ObDictColumnEncoder::store_dict_ref_(ObMicroBufferWriter &buf_writer)
     switch(width_size) {
     case 1 : {
       if (OB_FAIL(do_store_dict_ref_<uint8_t>(buf_writer))) {
-        LOG_WARN("fail to do_store_dict_ref_", K(ret), K_(ref_enc_ctx));
       }
       break;
     }
     case 2 : {
       if (OB_FAIL(do_store_dict_ref_<uint16_t>(buf_writer))) {
-        LOG_WARN("fail to do_store_dict_ref_", K(ret), K_(ref_enc_ctx));
       }
       break;
     }
     case 4 : {
       if (OB_FAIL(do_store_dict_ref_<uint32_t>(buf_writer))) {
-        LOG_WARN("fail to do_store_dict_ref_", K(ret), K_(ref_enc_ctx));
       }
       break;
     }
     case 8 : {
       if (OB_FAIL(do_store_dict_ref_<uint64_t>(buf_writer))) {
-        LOG_WARN("fail to do_store_dict_ref_", K(ret), K_(ref_enc_ctx));
       }
       break;
     }

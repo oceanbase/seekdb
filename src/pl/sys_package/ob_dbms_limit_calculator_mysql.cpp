@@ -52,7 +52,6 @@ int ObDBMSLimitCalculator::phy_res_calculate_by_logic_res(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("params not valid", KR(ret), K(params));
   } else if (OB_FAIL(params.at(0).get_varchar(str_arg))) {
-    LOG_WARN("get parameter failed", K(ret));
   } else if (str_arg.empty()) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(str_arg));
@@ -60,13 +59,9 @@ int ObDBMSLimitCalculator::phy_res_calculate_by_logic_res(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memory failed", K(ret), K(MAX_RES_LEN));
   } else if (OB_FAIL(helper.convert(str_arg, str))) {
-    LOG_WARN("convert cstring failed", K(ret));
   } else if (OB_FAIL(parse_dict_like_args_(str, arg))) {
-    LOG_WARN("parse argument failed", K(ret));
   } else if (OB_FAIL(share::g_mp->resource_limit_calculator()->get_tenant_min_phy_resource_value(arg, res))) {
-    LOG_WARN("get tenant min physical resource needed failed", K(ret));
   } else if (OB_FAIL(get_json_result_(res, ptr, MAX_RES_LEN, pos))) {
-    LOG_WARN("get json result failed", K(ret), K(res), K(pos));
   } else {
     params.at(1).set_varchar(ptr, pos);
     LOG_INFO("phy_res_calculate_by_logic_res success", K(arg), K(res),
@@ -99,7 +94,6 @@ int ObDBMSLimitCalculator::phy_res_calculate_by_unit(
     LOG_WARN("params not valid", KR(ret), K(params));
   } else if (FALSE_IT(addr_str = params.at(0).get_varchar())) {
   } else if (OB_FAIL(addr.parse_from_string(addr_str))) {
-    LOG_WARN("parse address failed", K(ret), K(addr_str));
   }
   if (OB_FAIL(ret)) {
   } else if (OB_ISNULL(ptr = static_cast<char *>(ctx.get_allocator().alloc(MAX_RES_LEN)))) {
@@ -121,7 +115,6 @@ int ObDBMSLimitCalculator::phy_res_calculate_by_unit(
     LOG_USER_ERROR(OB_INVALID_ARGUMENT, "calculate physical resource needed by unit. "
                                         "Please check the tenant id and observer address and retry.");
   } else if (OB_FAIL(get_json_result_(addr, res, ptr, MAX_RES_LEN, pos))) {
-    LOG_WARN("get json result failed", K(ret), K(addr), K(res), K(pos), K(MAX_RES_LEN));
   } else {
     params.at(1).set_varchar(ptr, pos);
     LOG_INFO("phy_res_calculate_by_unit success",
@@ -154,7 +147,6 @@ int ObDBMSLimitCalculator::parse_dict_like_args_(
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid argument", K(ret), K(type), K(key));
     } else if (OB_FAIL(arg.set_type_value(type, value))) {
-      LOG_WARN("set type value failed", K(ret), K(type), K(value));
     }
     while (*ptr != '\0' && *ptr != ',') ptr++;
     while (*ptr != '\0' && (*ptr == ' ' || *ptr == ',')) ptr++;
@@ -172,27 +164,23 @@ int ObDBMSLimitCalculator::get_json_result_(
   int64_t i = PHY_RESOURCE_MEMSTORE;
   int64_t value = 0;
   if (OB_FAIL(res.get_type_value(i, value))) {
-    LOG_WARN("get_type_value failed", K(ret), K(get_phy_res_type_name(i)), K(value));
   } else if (OB_FAIL(databuff_printf(buf,
                                      buf_len,
                                      pos,
                                      "[{\"physical_resource_name\": \"%s\", \"min_value\": \"%ld\"}",
                                      get_phy_res_type_name(i),
                                      value))) {
-    LOG_WARN("get result buffer failed", K(ret), K(pos), K(buf_len));
   } else {
     // get next type
     i++;
     for (; OB_SUCC(ret) && i < MAX_PHY_RESOURCE; i++) {
       if (OB_FAIL(res.get_type_value(i, value))) {
-        LOG_WARN("get_type_value failed", K(ret), K(get_phy_res_type_name(i)), K(value));
       } else if (OB_FAIL(databuff_printf(buf,
                                          buf_len,
                                          pos,
                                          ", {\"physical_resource_name\": \"%s\", \"min_value\": \"%ld\"}",
                                          get_phy_res_type_name(i),
                                          value))) {
-        LOG_WARN("get result buffer failed", K(ret), K(pos), K(buf_len));
       }
     }
     if (OB_SUCC(ret)) {
@@ -200,7 +188,6 @@ int ObDBMSLimitCalculator::get_json_result_(
                                   buf_len,
                                   pos,
                                   "]"))) {
-        LOG_WARN("get result buffer failed", K(ret), K(pos), K(buf_len));
       }
     }
   }
@@ -224,7 +211,6 @@ int ObDBMSLimitCalculator::get_json_result_(
     LOG_WARN("get ip string failed", K(ret), K(addr));
   } else if (FALSE_IT(port = addr.get_port())) {
   } else if (OB_FAIL(res.get_type_value(i, value))) {
-    LOG_WARN("get_type_value failed", K(ret), K(get_phy_res_type_name(i)), K(value));
   } else if (OB_FAIL(databuff_printf(buf,
                                      buf_len,
                                      pos,
@@ -233,13 +219,11 @@ int ObDBMSLimitCalculator::get_json_result_(
                                      port,
                                      get_phy_res_type_name(i),
                                      value))) {
-    LOG_WARN("get result buffer failed", K(ret), K(pos), K(buf_len));
   } else {
     // get next type
     i++;
     for (; OB_SUCC(ret) && i < MAX_PHY_RESOURCE; i++) {
       if (OB_FAIL(res.get_type_value(i, value))) {
-        LOG_WARN("get_type_value failed", K(ret), K(get_phy_res_type_name(i)), K(value));
       } else if (OB_FAIL(databuff_printf(buf,
                                          buf_len,
                                          pos,
@@ -248,7 +232,6 @@ int ObDBMSLimitCalculator::get_json_result_(
                                          port,
                                          get_phy_res_type_name(i),
                                          value))) {
-        LOG_WARN("get result buffer failed", K(ret), K(pos), K(buf_len));
       }
     }
     if (OB_SUCC(ret)) {
@@ -256,7 +239,6 @@ int ObDBMSLimitCalculator::get_json_result_(
                                   buf_len,
                                   pos,
                                   "]"))) {
-        LOG_WARN("get result buffer failed", K(ret), K(pos), K(buf_len));
       }
     }
   }

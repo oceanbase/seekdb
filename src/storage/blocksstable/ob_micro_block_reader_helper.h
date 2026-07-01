@@ -52,7 +52,6 @@ int ObMicroBlockReaderHelper::init(ObIAllocator &allocator)
   int ret = OB_SUCCESS;
   if (OB_NOT_NULL(allocator_)) {
     ret = OB_INIT_TWICE;
-    STORAGE_LOG(WARN, "allocator is not null, might double init", KP(allocator_));
   } else {
     allocator_ = &allocator;
   }
@@ -90,20 +89,17 @@ int ObMicroBlockReaderHelper::get_reader(
   switch (store_type) {
   case FLAT_ROW_STORE: {
     if (OB_FAIL(init_reader(flat_reader_, reader))) {
-      STORAGE_LOG(WARN, "Fail to initialize flat micro block reader", K(ret));
     }
     break;
   }
   case ENCODING_ROW_STORE:
   case SELECTIVE_ENCODING_ROW_STORE: {
     if (OB_FAIL(init_reader(decoder_, reader))) {
-      STORAGE_LOG(WARN, "Fail to initialize micro block decoder", K(ret));
     }
     break;
   }
   case CS_ENCODING_ROW_STORE: {
     if (OB_FAIL(init_reader(cs_decoder_, reader))) {
-      STORAGE_LOG(WARN, "Fail to initialize micro block cs decoder", K(ret));
     }
     break;
   }

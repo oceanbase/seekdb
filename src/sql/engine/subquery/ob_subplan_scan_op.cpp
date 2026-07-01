@@ -49,7 +49,6 @@ int ObSubPlanScanOp::inner_open()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("projector array size should be multiples of 2", K(ret));
   } else if (OB_FAIL(init_monitor_info())) {
-    LOG_WARN("init monitor info failed", K(ret));
   }
   return ret;
 }
@@ -76,7 +75,6 @@ int ObSubPlanScanOp::inner_get_next_row()
       ObExpr *expr = child_->get_spec().output_[i];
       ObDatum *datum = NULL;
       if (OB_FAIL(expr->eval(eval_ctx_, datum))) {
-        LOG_WARN("expr evaluate failed", K(ret), K(*expr));
       }
     }
 
@@ -86,7 +84,6 @@ int ObSubPlanScanOp::inner_get_next_row()
       ObExpr *to = MY_SPEC.projector_[i + 1];
       ObDatum *datum = NULL;
       if (OB_FAIL(from->eval(eval_ctx_, datum))) {
-        LOG_WARN("expr evaluate failed", K(ret), K(*from));
       } else {
         to->locate_expr_datum(eval_ctx_) = *datum;
         to->set_evaluated_projected(eval_ctx_);
@@ -107,7 +104,6 @@ int ObSubPlanScanOp::next_batch(const int64_t max_row_cnt)
   clear_evaluated_flag();
   const ObBatchRows *child_brs = nullptr;
   if (OB_FAIL(child_->get_next_batch(max_row_cnt, child_brs))) {
-    LOG_WARN("get child next batch failed", K(ret));
   } else if (child_brs->end_ && 0 == child_brs->size_) {
     brs_.copy(child_brs);
   } else {
@@ -116,7 +112,6 @@ int ObSubPlanScanOp::next_batch(const int64_t max_row_cnt)
       ObExpr *from = MY_SPEC.projector_[i];
       ObExpr *to = MY_SPEC.projector_[i + 1];
       if (OB_FAIL(from->eval_batch(eval_ctx_, *brs_.skip_, brs_.size_))) {
-        LOG_WARN("eval batch failed", K(ret));
       } else {
         ObDatum *from_datums = from->locate_batch_datums(eval_ctx_);
         ObDatum *to_datums = to->locate_batch_datums(eval_ctx_);
@@ -152,7 +147,6 @@ int ObSubPlanScanOp::next_vector(const int64_t max_row_cnt)
   clear_evaluated_flag();
   const ObBatchRows *child_brs = nullptr;
   if (OB_FAIL(child_->get_next_batch(max_row_cnt, child_brs))) {
-    LOG_WARN("get child next batch failed", K(ret));
   } else if (child_brs->end_ && 0 == child_brs->size_) {
     brs_.copy(child_brs);
   } else {
@@ -161,7 +155,6 @@ int ObSubPlanScanOp::next_vector(const int64_t max_row_cnt)
       ObExpr *from = MY_SPEC.projector_[i];
       ObExpr *to = MY_SPEC.projector_[i + 1];
       if (OB_FAIL(from->eval_vector(eval_ctx_, brs_))) {
-        LOG_WARN("eval batch failed", K(ret));
       } else {
         VectorHeader &from_vec_header = from->get_vector_header(eval_ctx_);
         VectorHeader &to_vec_header = to->get_vector_header(eval_ctx_);
@@ -183,7 +176,6 @@ int ObSubPlanScanOp::next_vector(const int64_t max_row_cnt)
           }
           OZ(to->init_vector(eval_ctx_, VEC_UNIFORM, brs_.size_));
         } else if (OB_FAIL(to_vec_header.assign(from_vec_header))) {
-          LOG_WARN("assign vector header failed", K(ret));
         }
         // init eval info
         if (OB_SUCC(ret)) {

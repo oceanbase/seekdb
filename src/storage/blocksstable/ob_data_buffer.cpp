@@ -30,7 +30,6 @@ ObSelfBufferWriter::ObSelfBufferWriter(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ensure_space(size))) {
-    STORAGE_LOG(WARN, "cannot allocate memory for data buffer.", K(size), K(ret));
   }
 }
 
@@ -74,7 +73,6 @@ int ObSelfBufferWriter::ensure_space(int64_t size)
   if (size <= 0) {
     // do nothing.
   } else if (is_aligned_ && size % BUFFER_ALIGN_SIZE != 0) {
-    STORAGE_LOG(WARN, "not aligned buffer size", K(is_aligned_), K(size));
     ret = OB_INVALID_ARGUMENT;
   } else if (NULL == data_) {
     if (NULL == (data_ = alloc(size))) {

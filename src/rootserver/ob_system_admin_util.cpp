@@ -54,7 +54,6 @@ int ObAdminCallServer::get_server_list(const ObServerZoneArg &arg, ObIArray<ObAd
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), KR(ret));
   } else if (OB_FAIL(server_list.push_back(GCTX.self_addr()))) {
-    LOG_WARN("fail to push back server", KR(ret));
   }
   return ret;
 }
@@ -64,7 +63,6 @@ int ObAdminCallServer::call_all(const ObServerZoneArg &arg)
   int ret = OB_SUCCESS;
   ObArray<ObAddr> server_list;
   if (OB_FAIL(get_server_list(arg, server_list))) {
-    LOG_WARN("get server list failed", K(ret), K(arg));
   } else {
     FOREACH_CNT(server, server_list) {
       int tmp_ret = call_server(*server);
@@ -110,7 +108,6 @@ int ObAdminClearMergeError::execute(const obcall::ObAdminMergeArg &arg)
       param.specified_ = true;
     }
     if (FAILEDx(ObMajorFreezeHelper::clear_merge_error(param))) {
-      LOG_WARN("fail to clear merge error", KR(ret), K(param));
     }
   }
   return ret;
@@ -157,7 +154,6 @@ int ObAdminMerge::execute(const obcall::ObAdminMergeArg &arg)
           param.specified_ = true;
         }
         if (FAILEDx(ObMajorFreezeHelper::suspend_merge(param))) {
-          LOG_WARN("fail to suspend merge", KR(ret), K(param));
         }
         break;
       }
@@ -184,7 +180,6 @@ int ObAdminMerge::execute(const obcall::ObAdminMergeArg &arg)
           param.specified_ = true;
         }
         if (FAILEDx(ObMajorFreezeHelper::resume_merge(param))) {
-          LOG_WARN("fail to resume merge", KR(ret), K(param));
         }
         break;
       }
@@ -216,18 +211,14 @@ int ObAdminRefreshSchema::execute(const obcall::ObAdminRefreshSchemaArg &arg)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), KR(ret));
   } else if (OB_FAIL(ctx_.ddl_service_->refresh_schema())) {
-    LOG_WARN("refresh schema failed", KR(ret));
   } else {
     if (OB_FAIL(ctx_.schema_service_->get_tenant_schema_version(schema_version_))) {
-      LOG_WARN("fail to get schema version", KR(ret));
      } else if (OB_FAIL(ctx_.schema_service_->get_refresh_schema_info(schema_info_))) {
-       LOG_WARN("fail to get refresh schema info", KR(ret), K(schema_info_));
      } else if (!schema_info_.is_valid()) {
        schema_info_.set_schema_version(schema_version_);
      }
      if (OB_FAIL(ret)) {
      } else if (OB_FAIL(call_all(arg))) {
-      LOG_WARN("execute notify refresh schema failed", KR(ret), K(arg));
     }
   }
   return ret;
@@ -244,7 +235,6 @@ int ObAdminRefreshSchema::call_server(const ObAddr &server)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid server", KR(ret), K(server));
   } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, GCONF.rpc_timeout))) {
-    LOG_WARN("fail to set timeout ctx", KR(ret));
   } else {
     ObSwitchSchemaArg arg;
     arg.schema_info_ = schema_info_;
@@ -264,7 +254,6 @@ int ObAdminRefreshMemStat::execute(const ObAdminRefreshMemStatArg &arg)
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));
   } else if (OB_FAIL(call_all(arg))) {
-   LOG_WARN("execute notify refresh memory stat failed", KR(ret));
   }
   return ret;
 }
@@ -279,7 +268,6 @@ int ObAdminRefreshMemStat::call_server(const ObAddr &server)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid server", K(server), KR(ret));
   } else if (OB_FAIL(GCTX.ob_service_->refresh_memory_stat())) {
-    LOG_WARN("notify refresh memory stat failed", KR(ret), K(server));
   }
   return ret;
 }
@@ -292,7 +280,6 @@ int ObAdminWashMemFragmentation::execute(const ObAdminWashMemFragmentationArg &a
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else if (OB_FAIL(call_all(arg))) {
-    LOG_WARN("execute notify sync wash fragment failed", K(ret));
   }
   return ret;
 }
@@ -307,7 +294,6 @@ int ObAdminWashMemFragmentation::call_server(const ObAddr &server)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid server", K(server), K(ret));
   } else if (OB_FAIL(GCTX.ob_service_->wash_memory_fragmentation())) {
-    LOG_WARN("notify sync wash fragment failed", K(ret), K(server));
   }
   return ret;
 }
@@ -364,7 +350,6 @@ int ObAdminSetConfig::verify_config(obcall::ObAdminSetConfigArg &arg)
               ret = OB_INVALID_ARGUMENT;
               LOG_WARN("invalid argument", KR(ret), KP(GCTX.schema_service_));
             } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-              LOG_WARN("fail to get sys tenant schema guard", KR(ret));
             } else if (true &&
                       (0 == item->tenant_name_.str().case_compare(NAME_ALL) ||
                        0 == item->tenant_name_.str().case_compare(NAME_ALL_USER) ||
@@ -381,12 +366,10 @@ int ObAdminSetConfig::verify_config(obcall::ObAdminSetConfigArg &arg)
               const ObTenantSchema *tenant_schema = nullptr;
               if (OB_FAIL(ret)) {
               } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_schema))) {
-                LOG_WARN("fail to get tenant info", KR(ret));
               } else if (OB_ISNULL(tenant_schema)) {
                 ret = OB_ERR_UNEXPECTED;
                 LOG_WARN("tenant_schema is null", KR(ret));
               } else if (OB_FAIL(item->batch_ids_.push_back(1UL))) {
-                LOG_WARN("add id failed", KR(ret));
               }
             } // else
           } // else
@@ -462,7 +445,6 @@ int ObAdminSetConfig::update_config(obcall::ObAdminSetConfigArg &arg)
       const ObAdminSetConfigItem &item = arg.items_.at(i);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(update_sys_config_(item))) {
-        LOG_WARN("fail to update sys config", KR(ret), K(item));
       }
     } // end for each item
   }
@@ -481,16 +463,13 @@ int ObAdminSetConfig::update_sys_config_(const obcall::ObAdminSetConfigItem &ite
     if (OB_SUCC(ret) && OB_NOT_NULL(GCTX.config_mgr_)) {
       if (OB_FAIL(GCTX.config_mgr_->save_config(
                     item.name_.ptr(), item.value_.ptr()))) {
-        LOG_WARN("failed to save config", KR(ret), K(item));
       }
     }
   }
   // try update local memory and trigger remote server to refresh this change
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(GCTX.config_mgr_->got_version())) {
-    LOG_WARN("config mgr got version failed", KR(ret));
   } else if (OB_FAIL(GCTX.config_mgr_->reload_config())) {
-    LOG_WARN("reload configuration failed", K(ret));
   } else {
     LOG_INFO("got new sys config", K(item));
   }
@@ -509,12 +488,9 @@ int ObAdminSetConfig::execute(obcall::ObAdminSetConfigArg &arg)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), KR(ret), KP(GCTX.sql_proxy_));
   } else if (OB_FAIL(verify_config(arg))) {
-    LOG_WARN("verify config failed", KR(ret), K(arg));
   } else {
     if (OB_FAIL(ctx_.root_service_->set_config_pre_hook(arg))) {
-      LOG_WARN("fail to process pre hook", K(arg), KR(ret));
     } else if (OB_FAIL(update_config(arg))) {
-      LOG_WARN("update config failed", KR(ret), K(arg));
     } else {
       LOG_INFO("set config succ", K(arg));
     }
@@ -535,7 +511,6 @@ int ObAdminRefreshIOCalibration::execute(const obcall::ObAdminRefreshIOCalibrati
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(arg));
   } else if (OB_FAIL(get_server_list(arg, server_list))) {
-    LOG_WARN("get server list failed", K(ret), K(arg));
   } else if (arg.only_refresh_) {
     // do nothing
   } else {
@@ -543,7 +518,6 @@ int ObAdminRefreshIOCalibration::execute(const obcall::ObAdminRefreshIOCalibrati
     for (int64_t i = 0; OB_SUCC(ret) && i < arg.calibration_list_.count(); ++i) {
       const ObIOBenchResult &item = arg.calibration_list_.at(i);
       if (OB_FAIL(io_ability.add_measure_item(item))) {
-        LOG_WARN("add item failed", K(ret), K(item));
       }
     }
     if (OB_SUCC(ret)) {
@@ -559,13 +533,11 @@ int ObAdminRefreshIOCalibration::execute(const obcall::ObAdminRefreshIOCalibrati
     refresh_arg.storage_name_ = arg.storage_name_;
     refresh_arg.only_refresh_ = arg.only_refresh_;
     if (OB_FAIL(refresh_arg.calibration_list_.assign(arg.calibration_list_))) {
-      LOG_WARN("assign calibration list failed", K(ret), K(arg.calibration_list_));
     } else {
       int64_t succ_count = 0;
       FOREACH_CNT(server, server_list) {
         int tmp_ret = ObIOCalibration::get_instance().refresh(refresh_arg.only_refresh_, refresh_arg.calibration_list_);
         if (OB_UNLIKELY(OB_SUCCESS != tmp_ret)) {
-          LOG_WARN("request io calibration failed", KR(tmp_ret), K(*server), K(refresh_arg));
         } else {
           ++succ_count;
         }
@@ -600,7 +572,6 @@ int ObAdminFlushCache::execute(const obcall::ObAdminFlushCacheArg &arg)
     for (int64_t i = 0; OB_SUCC(ret) && i < tenant_num; ++i) {
       //get tenant server list;
       if (OB_FAIL(get_tenant_servers(server_list))) {
-        LOG_WARN("fail to get tenant servers", K(i));
       } else {
         //call tenant servers;
         fc_arg.is_all_tenant_ = false;
@@ -613,7 +584,6 @@ int ObAdminFlushCache::execute(const obcall::ObAdminFlushCacheArg &arg)
           fc_arg.schema_id_ = arg.schema_id_;
           for(int64_t j=0; OB_SUCC(ret) && j<arg.db_ids_.count(); j++) {
             if (OB_FAIL(fc_arg.push_database(arg.db_ids_.at(j)))) {
-              LOG_WARN("fail to add db ids", KR(ret));
             }
           }
         }
@@ -622,8 +592,6 @@ int ObAdminFlushCache::execute(const obcall::ObAdminFlushCacheArg &arg)
           
           LOG_INFO("flush server cache", K(fc_arg), K(server_list.at(j)));
           if (OB_FAIL(call_server(server_list.at(j), fc_arg))) {
-            LOG_WARN("fail to call tenant server",
-                     "server addr", server_list.at(j));
           }
         }
       }
@@ -632,7 +600,6 @@ int ObAdminFlushCache::execute(const obcall::ObAdminFlushCacheArg &arg)
   } else { // flush all tenant
     //get all server list, server_mgr_.get_alive_servers
     if (OB_FAIL(get_all_servers(server_list))) {
-      LOG_WARN("fail to get all servers", KR(ret));
     } else {
       fc_arg.is_all_tenant_ = true;
       
@@ -642,8 +609,6 @@ int ObAdminFlushCache::execute(const obcall::ObAdminFlushCacheArg &arg)
       for (int64_t j = 0; OB_SUCC(ret) && j < server_list.count(); ++j) {
         LOG_INFO("flush server cache", K(fc_arg), K(server_list.at(j)));
         if (OB_FAIL(call_server(server_list.at(j), fc_arg))) {
-          LOG_WARN("fail to call tenant server",
-                   "server addr", server_list.at(j));
         }
       }
     }
@@ -659,7 +624,6 @@ int ObTenantServerAdminUtil::get_tenant_servers(common::ObIArray<ObAddr> &server
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret));
   } else if (OB_FAIL(servers.push_back(GCTX.self_addr()))) {
-    LOG_WARN("fail to push back self addr to array", KR(ret));
   }
 
   return ret;
@@ -669,7 +633,6 @@ int ObTenantServerAdminUtil::get_all_servers(common::ObIArray<ObAddr> &servers)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(servers.push_back(GCTX.self_addr()))) {
-    LOG_WARN("fail to get all servers", KR(ret));
   }
   return ret;
 }
@@ -825,7 +788,6 @@ int do_flush_cache_local(obcall::ObFlushCacheArg arg)
     case CACHE_TYPE_SCHEMA: {
       // this option is only used for upgrade now
       if (OB_FAIL(common::ObKVGlobalCache::get_instance().erase_cache(OB_SCHEMA_CACHE_NAME))) {
-        LOG_WARN("clear kv cache failed", K(ret));
       } else {
         LOG_INFO("success erase kvcache", K(ret), K(OB_SCHEMA_CACHE_NAME));
       }
@@ -862,7 +824,6 @@ int ObAdminFlushCache::call_server(const common::ObAddr &server, const obcall::O
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid server", K(server), KR(ret));
   } else if (OB_FAIL(ex_rpc::sync_call([&]{ return do_flush_cache_local(arg); }))) {
-    LOG_WARN("request server flush cache failed", KR(ret), K(server));
   }
   return ret;
 }
@@ -878,7 +839,6 @@ int ObAdminSetTP::execute(const obcall::ObAdminSetTPArg &arg)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", K(arg), KR(ret));
   } else if (OB_FAIL(call_all(arg))) {
-    LOG_WARN("execute report replica failed", KR(ret), K(arg));
   }
   LOG_INFO("end execute set_tp request", K(arg));
   return ret;
@@ -894,7 +854,6 @@ int ObAdminSetTP::call_server(const ObAddr &server)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid server", K(server), KR(ret));
   } else if (OB_FAIL(GCTX.ob_service_->set_tracepoint(arg_))) {
-    LOG_WARN("request server report replica failed", KR(ret), K(server));
   }
   return ret;
 }

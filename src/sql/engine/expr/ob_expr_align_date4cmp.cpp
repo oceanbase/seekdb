@@ -121,16 +121,12 @@ int ObExprAlignDate4Cmp::eval_align_date4cmp(const ObExpr &expr, ObEvalCtx &ctx,
   ObObjType date_arg_obj_type = ObMaxType;
 
   if (OB_FAIL(expr.args_[0]->eval(ctx, date_datum))) {
-    LOG_WARN("expr_align_date4cmp eval arg[0] date fail.", K(ret), K(expr));
   } else if (OB_FAIL(expr.args_[1]->eval(ctx, cmp_type_datum))) {
-    LOG_WARN("expr_align_date4cmp eval arg[1] cmp_type fail.", K(ret), K(expr));
   } else if (OB_FAIL(expr.args_[2]->eval(ctx, res_type_datum))) {
-    LOG_WARN("expr_align_date4cmp eval arg[2] res_type fail.", K(ret), K(expr));
   } else {
     date_arg_obj_type = expr.args_[0]->datum_meta_.type_;
     res_type = ObObjType(res_type_datum->get_int());
     if(OB_FAIL(datum_to_ob_time(expr, date_datum, date_arg_obj_type, date_arg_type, ob_time))) {
-      LOG_WARN("datum_to_ob_time fail.", K(ret), K(date_datum), K(date_arg_obj_type));
     }
   }
 
@@ -145,8 +141,6 @@ int ObExprAlignDate4Cmp::eval_align_date4cmp(const ObExpr &expr, ObEvalCtx &ctx,
         const bool is_valid_time = true;
         if (OB_FAIL(set_res(res, ob_time, res_type, is_valid_time, offset,
                             is_zero_on_warn, is_no_zero_date, is_warn_on_fail))) {
-          LOG_WARN("set_res fail.", K(ret), K(ob_time), K(res_type),
-                                    K(date_arg_type), K(is_valid_time));
         }
         break;
       }
@@ -172,8 +166,6 @@ int ObExprAlignDate4Cmp::eval_align_date4cmp(const ObExpr &expr, ObEvalCtx &ctx,
         }
         if (OB_FAIL(set_res(res, ob_time, res_type, is_valid_time, offset,
                             is_zero_on_warn, is_no_zero_date, is_warn_on_fail))) {
-          LOG_WARN("set_res fail.", K(ret), K(ob_time), K(res_type),
-                                    K(date_arg_type), K(is_valid_time));
         }
         break;
       }
@@ -181,8 +173,6 @@ int ObExprAlignDate4Cmp::eval_align_date4cmp(const ObExpr &expr, ObEvalCtx &ctx,
         const bool is_valid_time = false;
         if (OB_FAIL(set_res(res, ob_time, res_type, is_valid_time, offset,
                             is_zero_on_warn, is_no_zero_date, is_warn_on_fail))) {
-          LOG_WARN("set_res fail.", K(ret), K(ob_time), K(res_type),
-                                        K(date_arg_type), K(is_valid_time));
         }
         break;
       }
@@ -192,7 +182,6 @@ int ObExprAlignDate4Cmp::eval_align_date4cmp(const ObExpr &expr, ObEvalCtx &ctx,
       }
       case ZERO_DATE: {
         if (OB_FAIL(set_zero_res(res, ob_time, res_type, is_no_zero_date))) {
-          LOG_WARN("set_zero_res fail.", K(ret), K(ob_time), K(res_type));
         }
       }
     }
@@ -338,7 +327,6 @@ int ObExprAlignDate4Cmp::double_to_ob_time(const double &date, DateArgType &date
     ret = OB_SUCCESS;
     date_arg_type = NON_DATE;
   } else if (OB_FAIL(number_to_ob_time(number, date_arg_type, ob_time))) {
-    LOG_WARN("number to ob_time failed", K(ret), K(number));
   }
   return ret;
 }
@@ -350,7 +338,6 @@ int ObExprAlignDate4Cmp::number_to_ob_time(const number::ObNumber &date, DateArg
   if (!date.is_int_parts_valid_int64(int_part, dec_part)) {
     date_arg_type = NON_DATE;
   } else if (OB_FAIL(integer_to_ob_time(int_part, date_arg_type, ob_time))) {
-    LOG_WARN("cast integer to ob_time fail.", K(ret), K(int_part));
   } else {
     ob_time.parts_[DT_USEC] = (dec_part + 500) / 1000;
   }
@@ -386,9 +373,7 @@ int ObExprAlignDate4Cmp::datum_to_ob_time(const ObExpr &expr,
     ObString str = date_datum->get_string();
     if (OB_FAIL(ObTextStringHelper::read_real_string_data(&lob_allocator, date_arg_obj_type,
                               CS_TYPE_BINARY, expr.args_[0]->obj_meta_.has_lob_header(), str))) {
-      LOG_WARN("fail to get real string data", K(ret), K(date_datum));
     } else if (OB_FAIL(str_to_ob_time(str, date_arg_type, ob_time))) {
-      LOG_WARN("str_to_ob_time fail.", K(ret), K(date_datum));
     }
   } else {  // numeric
     switch(date_arg_obj_type) {
@@ -402,7 +387,6 @@ int ObExprAlignDate4Cmp::datum_to_ob_time(const ObExpr &expr,
       case ObInt32Type:
       case ObIntType: {
         if (OB_FAIL(integer_to_ob_time(date_datum->get_int(), date_arg_type, ob_time))) {
-          LOG_WARN("integer_to_ob_time fail.", K(ret), K(date_datum));
         }
         break;
       }
@@ -413,7 +397,6 @@ int ObExprAlignDate4Cmp::datum_to_ob_time(const ObExpr &expr,
       case ObUInt64Type: {
         if (OB_FAIL(integer_to_ob_time(static_cast<int64_t>(date_datum->get_uint()),
                                        date_arg_type, ob_time))) {
-          LOG_WARN("integer_to_ob_time fail.", K(ret), K(date_datum));
         }
         break;
       }
@@ -421,21 +404,18 @@ int ObExprAlignDate4Cmp::datum_to_ob_time(const ObExpr &expr,
       case ObUFloatType: {
         if (OB_FAIL(double_to_ob_time(static_cast<double>(date_datum->get_float()),
                                       date_arg_type, ob_time))) {
-          LOG_WARN("integer_to_ob_time fail.", K(ret), K(date_datum));
         }
         break;
       }
       case ObDoubleType:
       case ObUDoubleType: {
         if (OB_FAIL(double_to_ob_time(date_datum->get_double(), date_arg_type, ob_time))) {
-          LOG_WARN("double_to_ob_time fail.", K(ret), K(date_datum));
         }
         break;
       }
       case ObNumberType:
       case ObUNumberType: {
         if (OB_FAIL(number_to_ob_time(date_datum->get_number(), date_arg_type, ob_time))) {
-          LOG_WARN("number_to_ob_time fail.", K(ret), K(date_datum));
         }
         break;
       }
@@ -444,9 +424,7 @@ int ObExprAlignDate4Cmp::datum_to_ob_time(const ObExpr &expr,
         number::ObNumber nmb;
         if (OB_FAIL(wide::to_number(date_datum->get_decimal_int(), date_datum->get_int_bytes(),
                                     expr.args_[0]->datum_meta_.scale_, tmp_alloc, nmb))) {
-          LOG_WARN("to_number failed", K(ret), K(date_datum));
         } else if (OB_FAIL(number_to_ob_time(nmb, date_arg_type, ob_time))) {
-          LOG_WARN("number_to_ob_time fail.", K(ret), K(nmb));
         }
         break;
       }
@@ -487,7 +465,6 @@ int ObExprAlignDate4Cmp::set_res(ObDatum &res, ObTime &ob_time,
         int64_t datetime_value = 0;
         ObTimeConvertCtx cvrt_ctx(NULL, false);
         if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ob_time, cvrt_ctx, datetime_value))) {
-          LOG_WARN("ob_time convert to datetime fail.", K(ret), K(ob_time));
         } else {
           res.set_datetime(datetime_value + offset);
         }

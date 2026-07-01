@@ -63,7 +63,6 @@ int ObXATransID::set(const ObString &gtrid_str,
   if (0 > gtrid_str.length() || 0 > bqual_str.length()
       || MAX_GTRID_LENGTH < gtrid_str.length()
       || MAX_BQUAL_LENGTH < bqual_str.length()) {
-    TRANS_LOG(WARN, "invalid arguments", K(gtrid_str), K(bqual_str), K(format_id));
     ret = OB_INVALID_ARGUMENT;
   } else {
     format_id_ = format_id;
@@ -83,7 +82,6 @@ int ObXATransID::set(const ObXATransID &xid)
 {
   int ret = OB_SUCCESS;
   if (!xid.is_valid()) {
-    TRANS_LOG(WARN, "invalid xid", K(xid));
     ret = OB_INVALID_ARGUMENT;
   } else {
     format_id_ = xid.format_id_;
@@ -186,7 +184,6 @@ bool ObXAFlag::is_valid(const int64_t flag, const int64_t xa_req_type)
     case ObXAReqType::XA_PREPARE: {
       // oracle would not carry flag in a xa prepare req
       ret_bool = true;
-      TRANS_LOG(INFO, "no need to check flag for xa prepare", K(xa_req_type), K(flag));
       break;
     }
     case ObXAReqType::XA_COMMIT: {
@@ -201,7 +198,6 @@ bool ObXAFlag::is_valid(const int64_t flag, const int64_t xa_req_type)
     case ObXAReqType::XA_ROLLBACK: {
       // oracle would not carry flag in a xa rollback req
       ret_bool = true;
-      TRANS_LOG(INFO, "no need to check flag for xa rollback", K(xa_req_type), K(flag));
       break;
     }
     default: {
@@ -209,7 +205,6 @@ bool ObXAFlag::is_valid(const int64_t flag, const int64_t xa_req_type)
       TRANS_LOG_RET(WARN, OB_INVALID_ARGUMENT, "invalid xa request type", K(xa_req_type), K(flag));
     }
   }
-  TRANS_LOG(INFO, "check xa flag", K(ret_bool), K(xa_req_type), KPHEX(&flag, sizeof(int64_t)));
 
   return ret_bool;
 }

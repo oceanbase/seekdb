@@ -35,7 +35,6 @@ struct LightControlBlock
 {
   LightControlBlock(ObIAllocator &alloc) : ref_(1), alloc_(alloc), p_data_block_(nullptr) {}
   ~LightControlBlock() {
-    OCCAM_LOG(DEBUG, "control block is dec to 0, execute destruct action", K(*this), K(lbt()));
     p_data_block_->~IData();
     p_data_block_ = nullptr;
     alloc_.free(this);
@@ -106,7 +105,6 @@ struct ObLightSharedPtr// RAII used
   ~ObLightSharedPtr() { reset(); }
   void reset() {
     if (OB_NOT_NULL(ctrl_ptr_)) {
-      OCCAM_LOG(DEBUG, "ObLightSharedPtr destructed", KPC_(ctrl_ptr));
       if (0 == ctrl_ptr_->dec_ref()) {
         ctrl_ptr_->~LightControlBlock();
       }
@@ -153,8 +151,6 @@ struct ObLightSharedPtr// RAII used
       int64_t ref_cnt;
       while (1 != (ref_cnt = ctrl_ptr_->get_ref())) {
         if ((++loop_times % 100000) == 0) {
-          OCCAM_LOG(WARN, "sync wait too long",
-                    KTIME(start_sync_time), K(loop_times), K(ref_cnt), K(lbt()));
         }
         PAUSE();
       }

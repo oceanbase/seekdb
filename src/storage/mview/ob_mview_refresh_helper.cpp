@@ -52,10 +52,8 @@ int ObMViewRefreshHelper::get_current_scn(SCN &current_scn)
   } else {
     ObTimeoutCtx timeout_ctx;
     if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(timeout_ctx, DEFAULT_TIMEOUT))) {
-      LOG_WARN("fail to set default timeout ctx", KR(ret));
     } else if (OB_FAIL(
                  txs->get_read_snapshot_version(timeout_ctx.get_abs_timeout(), current_scn))) {
-      LOG_WARN("get read snapshot version", KR(ret));
     }
   }
   return ret;
@@ -72,7 +70,6 @@ int ObMViewRefreshHelper::lock_mview(ObMViewTransaction &trans,
     LOG_WARN("invalid args", KR(ret), K(trans.is_started()), K(mview_id));
   } else if (OB_FAIL(owner_id.convert_from_value(ObLockOwnerType::DEFAULT_OWNER_TYPE,
                                                  get_tid_cache()))) {
-    LOG_WARN("failed to get owner id", K(ret), K(get_tid_cache()));
   } else {
     const int64_t DEFAULT_TIMEOUT = GCONF.internal_sql_execute_timeout;
     ObInnerSQLConnection *conn = nullptr;
@@ -90,7 +87,6 @@ int ObMViewRefreshHelper::lock_mview(ObMViewTransaction &trans,
     } else {
       ObTimeoutCtx timeout_ctx;
       if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(timeout_ctx, DEFAULT_TIMEOUT))) {
-        LOG_WARN("fail to set default timeout ctx", KR(ret));
       } else {
         lock_arg.timeout_us_ = timeout_ctx.get_timeout();
       }
@@ -98,7 +94,6 @@ int ObMViewRefreshHelper::lock_mview(ObMViewTransaction &trans,
     if (OB_SUCC(ret)) {
       LOG_DEBUG("lock obj start", K(lock_arg));
       if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(lock_arg, conn))) {
-        LOG_WARN("fail to lock obj", KR(ret));
       }
       LOG_DEBUG("lock obj end", KR(ret));
     }
@@ -119,7 +114,6 @@ int ObMViewRefreshHelper::generate_purge_mlog_sql(ObSchemaGetterGuard &schema_gu
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(mlog_id), K(purge_scn));
   } else if (OB_FAIL(schema_guard.get_table_schema( mlog_id, table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(mlog_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table schema is nullptr", KR(ret), K(mlog_id));
@@ -128,7 +122,6 @@ int ObMViewRefreshHelper::generate_purge_mlog_sql(ObSchemaGetterGuard &schema_gu
     LOG_WARN("unexpected table type not mlog", KR(ret), KPC(table_schema));
   } else if (OB_FAIL(schema_guard.get_database_schema( table_schema->get_database_id(),
                                                       database_schema))) {
-    LOG_WARN("fail to get database schema", KR(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("database schema is nullptr", KR(ret));
@@ -138,12 +131,8 @@ int ObMViewRefreshHelper::generate_purge_mlog_sql(ObSchemaGetterGuard &schema_gu
     ObString table_name;
     if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(
           allocator, database_schema->get_database_name_str(), database_name))) {
-      LOG_WARN("fail to generate new name with escape character", KR(ret),
-               K(database_schema->get_database_name_str()));
     } else if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(
                  allocator, table_schema->get_table_name_str(), table_name))) {
-      LOG_WARN("fail to generate new name with escape character", KR(ret),
-               K(table_schema->get_table_name_str()));
     } else {
       if (OB_FAIL(sql_string.assign_fmt("DELETE /*+ ENABLE_PARALLEL_DML PARALLEL(%d)*/ FROM `%.*s`.`%.*s` WHERE ora_rowscn <= %lu;",
                                           static_cast<int>(purge_log_parallel),
@@ -151,7 +140,6 @@ int ObMViewRefreshHelper::generate_purge_mlog_sql(ObSchemaGetterGuard &schema_gu
                                           database_name.ptr(),
                                           static_cast<int>(table_name.length()), table_name.ptr(),
                                           purge_scn.get_val_for_sql()))) {
-          LOG_WARN("fail to assign sql", KR(ret));
       }
     }
   }
@@ -170,15 +158,12 @@ int ObMViewRefreshHelper::get_table_row_num(ObMViewTransaction &trans,
     ret = OB_ERR_SYS;
     LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table schema is nullptr", KR(ret), K(table_id));
   } else if (OB_FAIL(schema_guard.get_database_schema( table_schema->get_database_id(),
                                                       database_schema))) {
-    LOG_WARN("fail to get database schema", KR(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("database schema is nullptr", KR(ret));
@@ -188,12 +173,8 @@ int ObMViewRefreshHelper::get_table_row_num(ObMViewTransaction &trans,
     ObString table_name;
     if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(
           allocator, database_schema->get_database_name_str(), database_name))) {
-      LOG_WARN("fail to generate new name with escape character", KR(ret),
-               K(database_schema->get_database_name_str()));
     } else if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(
                  allocator, table_schema->get_table_name_str(), table_name))) {
-      LOG_WARN("fail to generate new name with escape character", KR(ret),
-               K(table_schema->get_table_name_str()));
     } else {
       SMART_VAR(ObMySQLProxy::MySQLResult, res)
       {
@@ -203,7 +184,6 @@ int ObMViewRefreshHelper::get_table_row_num(ObMViewTransaction &trans,
         if (OB_FAIL(sql.assign_fmt("select count(*) as COUNT from `%.*s`.`%.*s`",
                                    static_cast<int>(database_name.length()), database_name.ptr(),
                                    static_cast<int>(table_name.length()), table_name.ptr()))) {
-          LOG_WARN("fail to assign sql", KR(ret));
         } else if (scn.is_valid() &&
                    OB_FAIL(sql.append_fmt(" as of snapshot %ld", scn.get_val_for_sql()))) {
           LOG_WARN("fail to append sql", KR(ret));
@@ -233,9 +213,7 @@ int ObMViewRefreshHelper::get_mlog_dml_row_num(ObMViewTransaction &trans,
     ret = OB_ERR_SYS;
     LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get tenant schema guard", KR(ret));
   } else if (OB_FAIL(schema_guard.get_table_schema( table_id, table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(table_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table schema is nullptr", KR(ret), K(table_id));
@@ -244,7 +222,6 @@ int ObMViewRefreshHelper::get_mlog_dml_row_num(ObMViewTransaction &trans,
     LOG_WARN("unexpected not materialized view log", KR(ret), KPC(table_schema));
   } else if (OB_FAIL(schema_guard.get_database_schema( table_schema->get_database_id(),
                                                       database_schema))) {
-    LOG_WARN("fail to get database schema", KR(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("database schema is nullptr", KR(ret));
@@ -254,12 +231,8 @@ int ObMViewRefreshHelper::get_mlog_dml_row_num(ObMViewTransaction &trans,
     ObString table_name;
     if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(
           allocator, database_schema->get_database_name_str(), database_name))) {
-      LOG_WARN("fail to generate new name with escape character", KR(ret),
-               K(database_schema->get_database_name_str()));
     } else if (OB_FAIL(ObSQLUtils::generate_new_name_with_escape_character(
                  allocator, table_schema->get_table_name_str(), table_name))) {
-      LOG_WARN("fail to generate new name with escape character", KR(ret),
-               K(table_schema->get_table_name_str()));
     } else {
       SMART_VAR(ObMySQLProxy::MySQLResult, res)
       {
@@ -345,8 +318,6 @@ int ObMViewRefreshHelper::sync_post_nested_mview_rpc(
     LOG_WARN("location_service is NULL", K(ret), KP(location_service));
   } else if (OB_FAIL(location_service->get_leader_with_retry_until_timeout(
              GCONF.cluster_id, share::SYS_LS, leader, abs_timeout_ts))) {
-    LOG_WARN("failed to get ls leader with retry until timeout",
-             K(ret), K(leader), K(abs_timeout_ts));
   } else if (OB_FAIL(ex_rpc::sync_call([&]() -> int {
       int ret = OB_SUCCESS;
       MOD_SCOPE {
@@ -373,9 +344,7 @@ int ObMViewRefreshHelper::sync_post_nested_mview_rpc(
       }
       return ret;
     }))) {
-    LOG_WARN("fail to check nested mview mds", K(ret), K(arg), K(res), K(leader));
   } else if (OB_FAIL(res.ret_)) {
-    LOG_WARN("check nested mview mds failed", K(ret), K(res), K(arg), K(leader));
   }
   return ret;
 }
@@ -400,7 +369,6 @@ int ObMViewRefreshHelper::sync_get_min_target_data_sync_scn(const uint64_t mview
   } else {
     do {
       if (OB_FAIL(ObMViewRefreshHelper::sync_post_nested_mview_rpc(arg, res))) {
-        LOG_WARN("fail to post nested mview rpc", K(ret));
       } else {
         ret = res.ret_;
       }
@@ -433,7 +401,6 @@ int ObMViewRefreshHelper::get_dep_mviews_from_dep_info(const ObIArray<share::sch
     const ObDependencyInfo &dep_info = dependency_infos.at(idx);
     const ObTableSchema *table_schema = nullptr;
     if (OB_FAIL(schema_guard.get_table_schema( dep_info.get_ref_obj_id(), table_schema))) {
-      LOG_WARN("fail to get table schema", K(ret));
     } else if (OB_ISNULL(table_schema)) {
       LOG_INFO("table schema is null, maybe dep container tale not exist",
                 K(ret), K(dep_info.get_ref_obj_id()));
@@ -466,7 +433,6 @@ int ObMViewRefreshHelper::check_dep_mviews_satisfy_target_scn(const share::SCN &
       LOG_INFO("no dep mview");
     } else if (OB_FAIL(ObMViewInfo::bacth_fetch_mview_infos(sql_proxy,
                        read_snapshot.get_val_for_sql(), dep_mview_ids, dep_mview_infos))) {
-      LOG_WARN("fail to batch fetch mview info", K(ret));
     } else {
       const uint64_t target_data_sync_ts = target_data_sync_scn.get_val_for_gts();
       satisfy = true;
@@ -505,16 +471,11 @@ int ObMViewRefreshHelper::collect_deps_and_check_satisfy(const uint64_t mview_id
     LOG_WARN("invalid argument", K(mview_id),
              K(target_data_sync_ts), K(snapshot_version));
   } else if (OB_FAIL(target_data_sync_scn.convert_for_sql(target_data_sync_ts))) {
-    LOG_WARN("failed to convert to scn", K(target_data_sync_ts));
   } else if (OB_FAIL(read_snapshot.convert_for_sql(snapshot_version))) {
-    LOG_WARN("failed to convert to scn", K(snapshot_version));
   } else if (OB_FAIL(ObDependencyInfo::collect_ref_infos(mview_id, sql_proxy, dep_infos))) {
-    LOG_WARN("fail to collect mview ref infos", KR(ret), K(mview_id));
   } else if (OB_FAIL(ObMViewRefreshHelper::get_dep_mviews_from_dep_info(dep_infos, schema_guard, dep_mview_ids))) {
-    LOG_WARN("fail to get dep mview ids", K(ret));
   } else if (OB_FAIL(ObMViewRefreshHelper::check_dep_mviews_satisfy_target_scn(target_data_sync_scn, read_snapshot,
                      dep_mview_ids, sql_proxy, satisfy))) {
-    LOG_WARN("fail to target data sync scn satisfied", K(ret));
   } else if (!satisfy) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("dep mviews not satisfy target data sync scn, need retry",

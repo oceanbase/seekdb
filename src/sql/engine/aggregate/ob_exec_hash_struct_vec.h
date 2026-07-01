@@ -329,7 +329,6 @@ public:
                                             &row_idx,
                                             1,
                                             &srow))) {
-            SQL_ENG_LOG(WARN, "failed to add new rows", K(ret));
           } else {
             ObGroupRowItemVec *new_item = static_cast<ObGroupRowItemVec *> (&srow[0]);
             batch_new_rows[i] = new_item->get_aggr_row(group_store_.get_row_meta());
@@ -445,9 +444,7 @@ public:
       ret = OB_ALLOCATE_MEMORY_FAILED;
       SQL_ENG_LOG(WARN, "failed to alloc bucket ptrs", K(ret), K(max_batch_size_));
     } else if (OB_FAIL(new_row_selector_.prepare_allocate(eval_ctx.max_batch_size_))) {
-      SQL_ENG_LOG(WARN, "failed to init selector", K(ret));
     } else if (OB_FAIL(vector_ptrs_.prepare_allocate(group_exprs.count()))) {
-      SQL_ENG_LOG(WARN, "failed to init vector ptrs", K(ret));
     } else {
       alloc_ = &allocator;
       groupby_cnt_ = group_exprs.count();
@@ -719,7 +716,6 @@ public:
               if (cnt > max(SKEW_ITEM_CNT_TOLERANCE, (int) (probe_cnt * 0.01 + 1))) {
                 if (popular_array_temp.count() <= SKEW_HEAP_SIZE - 1) {
                   if (OB_FAIL(popular_array_temp.push_back(std::make_pair(const_cast<ObCompactRow*>(rows[i]), cnt)))) {
-                    SQL_ENG_LOG(WARN, "popular array temp push back failed", K(ret));
                   } else if (popular_array_temp.count() == SKEW_HEAP_SIZE) {
                     // Create a small top heap based on the number of occurrences of the element cnt
                     std::make_heap(popular_array_temp.begin(), popular_array_temp.end(),
@@ -906,7 +902,6 @@ public:
       int64_t bucket_num = get_bucket_num();
       buckets_->reuse();
       if (OB_FAIL(buckets_->init(bucket_num))) {
-        SQL_ENG_LOG(ERROR, "resize bucket array failed", K(size_), K(bucket_num), K(get_bucket_num()));
       }
     }
     if (col_has_null_.count() > 0) {
@@ -996,7 +991,6 @@ public:
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < get_bucket_num(); i++) {
       if (OB_FAIL(cb(buckets_->at(i)))) {
-        SQL_ENG_LOG(WARN, "call back failed", K(ret));
       }
     }
     return ret;
@@ -1145,7 +1139,6 @@ int ObExtendHashTableVec<GroupRowBucket>::resize(ObIAllocator *allocator, int64_
       if (OB_FAIL(ret)) {
         // do nothing
       } else if (OB_FAIL(extend())) {
-        SQL_ENG_LOG(WARN, "extend failed", K(ret));
       }
     }
   } else {
@@ -1177,7 +1170,6 @@ int ObExtendHashTableVec<GroupRowBucket>::extend(const int64_t new_bucket_num)
       ret = OB_INVALID_ARGUMENT;
       SQL_ENG_LOG(WARN, "invalid argument", K(ret), K(buckets_));
     } else if (OB_FAIL(new_buckets->init(new_bucket_num))) {
-      SQL_ENG_LOG(WARN, "resize bucket array failed", K(ret), K(new_bucket_num));
     } else {
       const int64_t size = get_bucket_num();
       for (int64_t i = 0; i < size; i++) {
@@ -1186,7 +1178,6 @@ int ObExtendHashTableVec<GroupRowBucket>::extend(const int64_t new_bucket_num)
           const_cast<GroupRowBucket &>(locate_empty_bucket(*new_buckets, old.get_hash())) = old;
         } else if (old.is_occupyed()) {
           ret = OB_ERR_UNEXPECTED;
-          SQL_ENG_LOG(WARN, "extend is prepare allocated", K(old.get_hash()));
         }
       }
       buckets_->destroy();
@@ -1219,7 +1210,6 @@ int ObExtendHashTableVec<GroupRowBucket>::extend()
   SQL_ENG_LOG(DEBUG, "extend hash table", K(ret), K(new_bucket_num), K(initial_bucket_num_),
               K(pre_bucket_num));
   if (OB_FAIL(extend(new_bucket_num))) {
-    SQL_ENG_LOG(WARN, "failed to extend hash table", K(ret));
   }
   return ret;
 }
@@ -1246,7 +1236,6 @@ int ObExtendHashTableVec<GroupRowBucket>::get(const RowMeta &row_meta,
       } else {
         RowItemType *it = &(bucket->get_item());
         if (OB_FAIL(likely_equal_nullable(row_meta, static_cast<ObCompactRow&>(*it), batch_idx, result))) {
-          SQL_ENG_LOG(WARN, "failed to cmp", K(ret));
         } else if (result) {
           item = it;
           find_bkt = true;
@@ -1285,7 +1274,6 @@ public:
     } else {
       cnt_ = next_pow2(ratio * size);
       if (OB_FAIL(bits_.reserve(cnt_))) {
-        SQL_ENG_LOG(WARN, "bit set reserve failed", K(ret));
       } else {
         // see note in ob_exec_hash_struct.h: use clzll for 64-bit cnt_
         // because Windows LLP64 has 32-bit `unsigned long`.
@@ -1365,7 +1353,6 @@ int ObExtendHashTableVec<GroupRowBucket>::set_unique_batch(const common::ObIArra
                                                       * SIZE_BUCKET_SCALE >= get_bucket_num())) {
     int64_t pre_bkt_num = get_bucket_num();
     if (OB_FAIL(extend())) {
-      SQL_ENG_LOG(WARN, "extend failed", K(ret));
     } else if (get_bucket_num() <= pre_bkt_num) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to extend table", K(ret), K(pre_bkt_num), K(get_bucket_num()));
@@ -1414,7 +1401,6 @@ int ObExtendHashTableVec<GroupRowBucket>::append_batch(const common::ObIArray<Ob
                      new_row_selector_cnt_,
                      srows_,
                      &lengths))) {
-    LOG_WARN("failed to add batch rows", K(ret));
   } else {
     agg_group_cnt += new_row_selector_cnt_;
     for (int64_t i = 0; OB_SUCC(ret) && i < new_row_selector_cnt_; ++i) {
@@ -1474,7 +1460,6 @@ int ObExtendHashTableVec<GroupRowBucket>::process_batch(const common::ObIArray<O
                                                         * SIZE_BUCKET_SCALE >= get_bucket_num())) {
       int64_t pre_bkt_num = get_bucket_num();
       if (OB_FAIL(extend())) {
-        SQL_ENG_LOG(WARN, "extend failed", K(ret));
       } else if (get_bucket_num() <= pre_bkt_num) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("failed to extend table", K(ret), K(pre_bkt_num), K(get_bucket_num()));
@@ -1534,13 +1519,10 @@ int ObExtendHashTableVec<GroupRowBucket>::process_batch(const common::ObIArray<O
                                    agg_row_cnt, agg_group_cnt, batch_aggr_rows,
                                    has_new_row, new_row_pos, old_row_pos,
                                    new_row_cnt, old_row_cnt))) {
-      LOG_WARN("failed to process batch", K(ret));
     } else if (has_new_row) {
       if (OB_FAIL(ShortStringAggregator::fallback_calc_hash_value_batch(gby_exprs, child_brs, *eval_ctx_,
                                                  const_cast<uint64_t *> (hash_values)))) {
-        LOG_WARN("failed to calc hash values", K(ret));
       } else if (OB_FAIL(set_unique_batch(gby_exprs, child_brs, hash_values, batch_new_rows))) {
-        LOG_WARN("failed to set unique batch", K(ret));
       }
     }
   }
@@ -1587,7 +1569,6 @@ int ObExtendHashTableVec<GroupRowBucket>::process_popular_value_batch(ObBatchRow
                                                       * SIZE_BUCKET_SCALE >= get_bucket_num())) {
     int64_t pre_bkt_num = get_bucket_num();
     if (OB_FAIL(extend())) {
-      SQL_ENG_LOG(WARN, "extend failed", K(ret));
     } else if (get_bucket_num() <= pre_bkt_num) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to extend table", K(ret), K(pre_bkt_num), K(get_bucket_num()));
@@ -1631,7 +1612,6 @@ int ObExtendHashTableVec<GroupRowBucket>::process_popular_value_batch(ObBatchRow
             RowItemType *it = &(now_bucket->get_item());
             if (OB_FAIL(likely_equal_nullable(group_store_.get_row_meta(), 
                                     static_cast<ObCompactRow&>(*it), i, result))) {
-              LOG_WARN("failed to cmp", K(ret));
             } else if (result) {
               exist_curr_gr_item = it;
               find_bkt = true;
@@ -1639,7 +1619,6 @@ int ObExtendHashTableVec<GroupRowBucket>::process_popular_value_batch(ObBatchRow
           }
         }
         if (OB_FAIL(ret)) {
-          LOG_WARN("locate curr item fail", K(ret), K(i));
         } else if (exist_curr_gr_item != NULL) {
           // old row
           ++probe_cnt_;
@@ -1656,7 +1635,6 @@ int ObExtendHashTableVec<GroupRowBucket>::process_popular_value_batch(ObBatchRow
           new_row_selector_.at(new_row_selector_cnt_++) = i;
           if (OB_FAIL(group_store_.add_batch(vector_ptrs_, &new_row_selector_.at(0),
                      new_row_selector_cnt_, srows_, &lengths))) {
-            LOG_WARN("failed to add row", K(ret));
           }
           ++agg_group_cnt;
           now_bucket->set_hash(hash_vals[i]);
@@ -1796,7 +1774,6 @@ int ObExtendHashTableVec<GroupRowBucket>::inner_process_batch(const common::ObIA
                     if (OB_FAIL(r_vec->null_last_cmp(*gby_exprs.at(i), curr_idx, false,
                                                     it->get_cell_payload(group_store_.get_row_meta(), i),
                                                     l_len, cmp_res))) {
-                      LOG_WARN("failed to cmp left and right", K(ret));
                     } else {
                       result = (0 == cmp_res);
                     }
@@ -1852,7 +1829,6 @@ int ObExtendHashTableVec<GroupRowBucket>::inner_process_batch(const common::ObIA
         if (OB_FAIL(col_has_null_.at(i) ?
                     inner_process_column(gby_exprs, group_store_.get_row_meta(), i, need_fallback)
                     : inner_process_column_not_null(gby_exprs, group_store_.get_row_meta(), i, need_fallback))) {
-          LOG_WARN("failed to process column", K(ret), K(i));
         }
       }
       if (OB_SUCC(ret)) {
@@ -2000,7 +1976,6 @@ int ObExtendHashTableVec<GroupRowBucket>::inner_process_column(const common::ObI
             if (OB_FAIL(r_vec->null_last_cmp(*gby_exprs.at(col_idx), curr_idx, false,
                                             it->get_cell_payload(row_meta, col_idx),
                                             l_len, cmp_res))) {
-              LOG_WARN("failed to cmp left and right", K(ret));
             } else {
               need_fallback = static_cast<bool> (cmp_res);
             }
@@ -2033,7 +2008,6 @@ int ObExtendHashTableVec<GroupRowBucket>::inner_process_column(const common::ObI
             if (OB_FAIL(r_vec->null_last_cmp(*gby_exprs.at(col_idx), curr_idx, false,
                                             it->get_cell_payload(row_meta, col_idx),
                                             l_len, cmp_res))) {
-              LOG_WARN("failed to cmp left and right", K(ret));
             } else {
               need_fallback = static_cast<bool> (cmp_res);
             }
@@ -2128,7 +2102,6 @@ int ObExtendHashTableVec<GroupRowBucket>::inner_process_column_not_null(const co
           if (OB_FAIL(r_vec->null_last_cmp(*gby_exprs.at(col_idx), curr_idx, false,
                                           it->get_cell_payload(row_meta, col_idx),
                                           l_len, cmp_res))) {
-            LOG_WARN("failed to cmp left and right", K(ret));
           } else {
             need_fallback = static_cast<bool> (cmp_res);
           }
@@ -2177,13 +2150,9 @@ int ObExtendHashTableVec<GroupRowBucket>::init(ObIAllocator *allocator,
     if (use_sstr_aggr && OB_FAIL(sstr_aggr_.init(allocator_, *eval_ctx, gby_exprs, aggr_row_size))) {
       LOG_WARN("failed to init short string aggr", K(ret));
     } else if (OB_FAIL(vector_ptrs_.prepare_allocate(gby_exprs.count()))) {
-      SQL_ENG_LOG(WARN, "failed to alloc ptrs", K(ret));
     } else if (OB_FAIL(new_row_selector_.prepare_allocate(max_batch_size))) {
-      SQL_ENG_LOG(WARN, "failed to alloc array", K(ret));
     } else if (OB_FAIL(old_row_selector_.prepare_allocate(max_batch_size))) {
-      SQL_ENG_LOG(WARN, "failed to alloc array", K(ret));
     } else if (OB_FAIL(col_has_null_.prepare_allocate(gby_exprs.count()))) {
-      SQL_ENG_LOG(WARN, "failed to alloc array", K(ret));
     } else if (OB_ISNULL(buckets_buf = allocator_.alloc(sizeof(BucketArray), mem_attr))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       SQL_ENG_LOG(WARN, "failed to allocate memory", K(ret));
@@ -2200,7 +2169,6 @@ int ObExtendHashTableVec<GroupRowBucket>::init(ObIAllocator *allocator,
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(extend())) {
-      SQL_ENG_LOG(WARN, "extend failed", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -2227,7 +2195,6 @@ int ObExtendHashTableVec<GroupRowBucket>::set_distinct_batch(const RowMeta &row_
     int64_t new_bucket_num = common::next_pow2((size_ + real_batch_size) * SIZE_BUCKET_SCALE);
     int64_t pre_bkt_num = get_bucket_num();
     if (OB_FAIL(extend(new_bucket_num))) {
-      SQL_ENG_LOG(WARN, "extend failed", K(ret));
     } else if (get_bucket_num() <= pre_bkt_num) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to extend table", K(ret), K(pre_bkt_num), K(get_bucket_num()));
@@ -2258,7 +2225,6 @@ int ObExtendHashTableVec<GroupRowBucket>::set_distinct_batch(const RowMeta &row_
     if (OB_FAIL(inner_process_batch(row_meta, batch_size, child_skip,
                                     my_skip, hash_values, sf,
                                     true, start_idx, processed_idx))) {
-      LOG_WARN("failed to process batch", K(ret));
     } else if (processed_idx < batch_size
                 && OB_FAIL(inner_process_batch(row_meta, batch_size, child_skip,
                                                my_skip, hash_values, sf,
@@ -2325,7 +2291,6 @@ int ObExtendHashTableVec<GroupRowBucket>::inner_process_batch(const RowMeta &row
                   if (OB_FAIL(r_vec->null_last_cmp(*gby_exprs_->at(i), curr_idx, false,
                                                   it->get_cell_payload(row_meta, i),
                                                   l_len, cmp_res))) {
-                    LOG_WARN("failed to cmp left and right", K(ret));
                   } else {
                     result = (0 == cmp_res);
                   }
@@ -2379,7 +2344,6 @@ int ObExtendHashTableVec<GroupRowBucket>::inner_process_batch(const RowMeta &row
     }
     if (OB_FAIL(ret) || 0 == new_row_selector_cnt_) {
     } else if (OB_FAIL(sf(vector_ptrs_, &new_row_selector_.at(0), new_row_selector_cnt_, srows_))) {
-      LOG_WARN("failed to append batch", K(ret));
     } else {
       for (int64_t i = 0; i < hash_expr_cnt_; ++i) {
         col_has_null_.at(i) |= gby_exprs_->at(i)->get_vector(*eval_ctx_)->has_null();
@@ -2430,7 +2394,6 @@ int ObExtendHashTableVec<GroupRowBucket>::likely_equal_nullable(const RowMeta &r
           if (OB_FAIL(r_vec->null_last_cmp(*gby_exprs_->at(i), right_idx, false,
                                            left_row.get_cell_payload(row_meta, i),
                                            l_len, cmp_res))) {
-            LOG_WARN("failed to cmp left and right", K(ret));
           } else {
             result = (0 == cmp_res);
           }

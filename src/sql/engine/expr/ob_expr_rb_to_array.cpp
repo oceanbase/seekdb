@@ -62,7 +62,6 @@ int ObExprRbToArray::calc_result_type1(ObExprResType &type,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ObExecContext is null", K(ret));
   } else if (OB_FAIL(exec_ctx->get_subschema_id_by_type_string(res_type_info, subschema_id))) {
-    LOG_WARN("failed get subschema id", K(ret), K(res_type_info));
   } else {
     type.set_collection(subschema_id);
     type.set_length((ObAccuracy::DDL_DEFAULT_ACCURACY[ObCollectionSQLType]).get_length());
@@ -83,17 +82,14 @@ int ObExprRbToArray::eval_rb_to_array(const ObExpr &expr,
   ObRoaringBitmap *rb = nullptr;
 
   if (OB_FAIL(ObRbExprHelper::get_input_roaringbitmap(ctx, tmp_allocator, rb_arg, rb, is_rb_null))) {
-    LOG_WARN("fail to get input roaringbitmap", K(ret));
   } else if (is_rb_null) {
     res.set_null();
   } else {
     ObIArrayType *arr_res = NULL;
     if (OB_FAIL(rb_to_array(expr, ctx, tmp_allocator, rb, arr_res))) {
-      LOG_WARN("fail to convert to array", K(ret));
     } else {
       ObString res_str;
       if (OB_FAIL(ObArrayExprUtils::set_array_res(arr_res, arr_res->get_raw_binary_len(), expr, ctx, res_str))) {
-        LOG_WARN("get array binary string failed", K(ret));
       } else {
         res.set_string(res_str);
       }
@@ -113,7 +109,6 @@ int ObExprRbToArray::eval_rb_to_array_vector(const ObExpr &expr,
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("ROARINGBITMAP"));
 
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("eval source array failed", K(ret));
   } else {
     ObIVector *rb_vec = expr.args_[0]->get_vector(ctx);
     ObIVector *res_vec = expr.get_vector(ctx);
@@ -133,9 +128,7 @@ int ObExprRbToArray::eval_rb_to_array_vector(const ObExpr &expr,
       } else {
         ObString arr_str;
         if (OB_FAIL(ObRbExprHelper::get_input_roaringbitmap(ctx, tmp_allocator, expr.args_[0], rb_vec, rb, is_rb_null, idx))) {
-          LOG_WARN("fail to get input roaringbitmap", K(ret));
         } else if (OB_FAIL(rb_to_array(expr, ctx, tmp_allocator, rb, arr_res))) {
-          LOG_WARN("fail to convert to array", K(ret));
         } 
       }
 
@@ -146,14 +139,11 @@ int ObExprRbToArray::eval_rb_to_array_vector(const ObExpr &expr,
       } else {
         if (res_format == VEC_DISCRETE) {
           if (OB_FAIL(ObArrayExprUtils::set_array_res<ObDiscreteFormat>(arr_res, expr, ctx, static_cast<ObDiscreteFormat *>(res_vec), idx))) {
-            LOG_WARN("set array res failed", K(ret));
           }
         } else if (res_format == VEC_UNIFORM) {
           if (OB_FAIL(ObArrayExprUtils::set_array_res<ObUniformFormat<false>>(arr_res, expr, ctx, static_cast<ObUniformFormat<false> *>(res_vec), idx))) {
-            LOG_WARN("set array res failed", K(ret));
           }
         } else if (OB_FAIL(ObArrayExprUtils::set_array_res<ObVectorBase>(arr_res, expr, ctx, static_cast<ObVectorBase *>(res_vec), idx))) {
-          LOG_WARN("set array res failed", K(ret));
         } else {
           eval_flags.set(idx);
         }
@@ -173,7 +163,6 @@ int ObExprRbToArray::rb_to_array(const ObExpr &expr,
   void *iter_buff = nullptr;
   const uint16_t meta_id = expr.obj_meta_.get_subschema_id();   
   if (OB_FAIL(ObArrayExprUtils::construct_array_obj(alloc, ctx, meta_id, arr_res, false))){
-    LOG_WARN("fail to construct array obj.", K(ret));
   } else if(rb->get_cardinality() == 0) {
     // init empty array
   } else {
@@ -183,7 +172,6 @@ int ObExprRbToArray::rb_to_array(const ObExpr &expr,
       LOG_WARN("failed to allocate result iter", K(ret));
     } else if (OB_FALSE_IT(rb_iter = new(iter_buff) ObRoaringBitmapIter(rb))){
     } else if (OB_FAIL(rb_iter->init())) {
-      LOG_WARN("failed to init roaringbitmap iter", K(ret));
     } else {
       ObArrayFixedSize<uint64_t> *arr_data = dynamic_cast<ObArrayFixedSize<uint64_t> *>(arr_res);
       if (OB_UNLIKELY(OB_ISNULL(arr_data))) {
@@ -193,7 +181,6 @@ int ObExprRbToArray::rb_to_array(const ObExpr &expr,
           uint64_t curr_val = rb_iter->get_curr_value();
           // push_back
           if (OB_FAIL(arr_data->push_back(curr_val))) {
-            LOG_WARN("failed to push back value into array", K(ret), K(curr_val));
           } else if (OB_FAIL(rb_iter->get_next())) {
             // do nothing
           }

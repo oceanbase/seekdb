@@ -548,7 +548,6 @@ void ObTrace::dump_span()
     }
     span = span->get_next();
   }
-  _LIB_LOG(WARN, "%s backtrace: %s", buf, lbt());
 }
 
 OB_SERIALIZE_MEMBER(FltTransCtx,

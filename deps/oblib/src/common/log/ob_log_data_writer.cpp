@@ -89,7 +89,6 @@ ObLogDataWriter::~ObLogDataWriter()
       SHARE_LOG(ERROR, "write_buffer_ flush error", K(fd_), K(ret));
     }
     if (0 != close(fd_)) {
-      SHARE_LOG(ERROR, "close error", K(fd_), KERRMSG);
     }
   }
 }
@@ -127,9 +126,6 @@ int myfallocate(int fd, int mode, off_t offset, off_t len)
   static bool syscall_supported = true;
   if (syscall_supported && 0 != (ret = fallocate(fd, mode, offset, len))) {
     syscall_supported = false;
-    SHARE_LOG(WARN, "glibc support fallocate(), but fallocate still fail, "
-              "fallback to call myfallocate_by_append()",
-              KERRMSG);
   }
   if (!syscall_supported) {
     ret = myfallocate_by_append(fd, mode, offset, len);
@@ -151,21 +147,15 @@ int file_expand_by_fallocate(const int fd, const int64_t file_size)
     SHARE_LOG(ERROR, "invalid argument", K(fd), K(file_size), K(ret));
   } else if (0 != fstat(fd, &st)) {
     ret = OB_IO_ERROR;
-    SHARE_LOG(ERROR, "fstat failed", K(fd), KERRMSG);
   } else if (0 != (st.st_size & ObLogConstants::LOG_FILE_ALIGN_MASK)
              || 0 != (file_size & ObLogConstants::LOG_FILE_ALIGN_MASK)) {
     ret = OB_LOG_NOT_ALIGN;
-    _SHARE_LOG(ERROR, "file_size[%ld] or file_size[%ld] not align by %lx",
-               st.st_size, file_size,
-               ObLogConstants::LOG_FILE_ALIGN_MASK);
   } else if (st.st_size >= file_size) {
     //do nothing
   } else if (0 != myfallocate(fd, 0, st.st_size, file_size - st.st_size)) {
     ret = OB_IO_ERROR;
-    SHARE_LOG(ERROR, "fallocate error", K(fd), KERRMSG);
   } else if (0 != fsync(fd)) {
     ret = OB_IO_ERROR;
-    SHARE_LOG(ERROR, "fsync error", K(fd), KERRMSG);
   } else {}
   return ret;
 }
@@ -191,29 +181,23 @@ int ObLogDataWriter::reuse(const char *pool_file, const char *fname)
     ret = OB_BUF_NOT_ENOUGH;
   } else if (0 != rename(pool_file, tmp_pool_file)) {
     ret = OB_IO_ERROR;
-    SHARE_LOG(WARN, "rename error", KCSTRING(pool_file), KCSTRING(tmp_pool_file), KERRMSG);
   } else if ((fd = ::open(tmp_pool_file, OPEN_FLAG
 #ifdef _WIN32
                           | _O_BINARY
 #endif
                           )) < 0) {
     ret = OB_IO_ERROR;
-    SHARE_LOG(ERROR, "open file failed", KCSTRING(tmp_pool_file), KERRMSG);
   } else if (unintr_pwrite(fd, ObLogGenerator::eof_flag_buf_,
                            sizeof(ObLogGenerator::eof_flag_buf_),
                            0) != sizeof(ObLogGenerator::eof_flag_buf_)) {
     ret = OB_IO_ERROR;
-    SHARE_LOG(ERROR, "write_eof_flag fail", KCSTRING(tmp_pool_file), KERRMSG);
   } else if (0 != fsync(fd)) {
     ret = OB_IO_ERROR;
-    SHARE_LOG(ERROR, "fdatasync error", KCSTRING(tmp_pool_file), KERRMSG);
   } else if (0 != rename(tmp_pool_file, fname)) {
     ret = OB_IO_ERROR;
-    SHARE_LOG(ERROR, "rename error", KCSTRING(pool_file), KCSTRING(fname), KERRMSG);
   }
   if (OB_SUCCESS != ret && fd > 0) {
     if (0 != close(fd)) {
-      SHARE_LOG(ERROR, "close error", K(fd), KERRMSG);
     } else {
       fd = -1;
     }
@@ -231,13 +215,10 @@ const char *ObLogDataWriter::select_pool_file(char *buf, const int64_t buf_len)
     // do nothing
   } else if (0 == min_file_id_) {
     num_file_to_add_--;
-    SHARE_LOG(INFO, "min_file_id has not inited, can not reuse file, "
-              "will create new file num_file_to_add", K(num_file_to_add_));
   } else if (min_file_id_ < 0) {
     SHARE_LOG_RET(ERROR, OB_ERROR, "min_file_id < 0", K(min_file_id_));
   } else if (num_file_to_add_ > 0) {
     num_file_to_add_--;
-    SHARE_LOG(INFO, "num_file_to_add >= 0 will create new file.", K(num_file_to_add_));
   } else if (min_file_id_ > min_avail_file_id_
              && min_file_id_ > (min_avail_file_id_ = min_avail_file_id_getter_->get())) {
     SHARE_LOG_RET(WARN, OB_ERROR, "can not select pool_file", K(min_file_id_), K(min_avail_file_id_));
@@ -248,8 +229,6 @@ const char *ObLogDataWriter::select_pool_file(char *buf, const int64_t buf_len)
     result = buf;
     min_file_id_++;
   }
-  SHARE_LOG(INFO, "select_pool_file", K(num_file_to_add_), K(min_file_id_),
-            K(min_avail_file_id_), KCSTRING(result));
   return result;
 }
 

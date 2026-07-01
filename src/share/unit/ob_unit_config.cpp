@@ -65,7 +65,6 @@ int ObUnitConfig::assign(const ObUnitConfig &other)
   int ret = OB_SUCCESS;
   if (this == &other) {
   } else if (OB_FAIL(name_.assign(other.name_))) {
-    LOG_WARN("fail to assign config name", KR(ret), K(other));
   } else {
     unit_config_id_ = other.unit_config_id_;
     resource_ = other.resource_;
@@ -80,7 +79,6 @@ int ObUnitConfig::set(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(name_.assign(name))) {
-    LOG_WARN("assign name fail", KR(ret), K(name));
   } else {
     unit_config_id_ = unit_config_id;
     resource_ = resource;
@@ -100,7 +98,6 @@ int ObUnitConfig::init(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arguments", KR(ret), K(unit_config_id), K(name), K(resource));
   } else if (OB_FAIL(name_.assign(name))) {
-    LOG_WARN("fail to assign config name", KR(ret), K(name));
   } else {
     unit_config_id_ = unit_config_id;
     resource_ = resource;
@@ -131,9 +128,7 @@ int ObUnitConfig::gen_sys_tenant_unit_config(const bool is_hidden_sys, const int
   const uint64_t unit_config_id = is_hidden_sys ? HIDDEN_SYS_UNIT_CONFIG_ID : SYS_UNIT_CONFIG_ID;
 
   if (OB_FAIL(ur.gen_sys_tenant_default_unit_resource(is_hidden_sys, log_disk_size))) {
-    LOG_WARN("generate sys tenant default unit resource fail", KR(ret), K(ur));
   } else if (OB_FAIL(init(unit_config_id, name, ur))) {
-    LOG_WARN("init unit config fail", KR(ret), K(unit_config_id), K(name), K(ur));
   }
   return ret;
 }

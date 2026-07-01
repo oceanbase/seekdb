@@ -42,14 +42,12 @@ int ObLineIntersectionAnalyzer::segment_intersection_query(ObGeometry *geo)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("should not be null", K(ret));
     } else if (OB_FAIL(rtree_index_.construct_rtree_index(line_segs->segs_))) {
-      LOG_WARN("construct rtree index failed", K(ret));
     }
   } 
   if (OB_SUCC(ret)) {
     ObLineSegments input_segments;
     ObGeoSegmentCollectVisitor seg_visitor(&input_segments);
     if (OB_FAIL(geo->do_visit(seg_visitor))) {
-      LOG_WARN("failed to get input segment", K(ret));
     } else {
       LineIntersect inter_res = LineIntersect::NO_INTERSCT;
       // query rtree to check intersesctiion
@@ -58,14 +56,11 @@ int ObLineIntersectionAnalyzer::segment_intersection_query(ObGeometry *geo)
         std::vector<RtreeNodeValue> res;
         inter_res = LineIntersect::NO_INTERSCT;
         if (OB_FAIL(input_segments.segs_[i].get_box(box))) {
-          LOG_WARN("failed to get segment box", K(ret));
         } else if (OB_FAIL(rtree_index_.query(QueryRelation::INTERSECTS, box, res))) {
-          LOG_WARN("failed to query rtree", K(ret));
         } else {
           for (uint32_t j = 0; j < res.size() && OB_SUCC(ret) && !is_check_done(inter_res); j++) {
             const ObLineSegment* seg1 = res[j].second;
             if (OB_FAIL(ObGeoTopology::calculate_line_segments_intersect(*seg1, input_segments.segs_[i], inter_res))) {
-              LOG_WARN("failed to get segment box", K(ret));
             } else if (inter_res != LineIntersect::NO_INTERSCT) {
               is_intersect_ = true;
               if (inter_res == LineIntersect::POINT_INTERSECT) {

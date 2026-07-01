@@ -144,10 +144,8 @@ int ObTmpFileWBPIndexCache::push(const uint32_t page_index)
   } else if (0 == capacity_ || is_full()) {
     if (max_bucket_array_capacity_ <= capacity_) {
       if (OB_FAIL(sparsify_())) {
-        LOG_WARN("fail to sparsify", KR(ret), KPC(this));
       }
     } else if (OB_FAIL(expand_())) {
-      LOG_WARN("fail to expand array", KR(ret), KPC(this));
     }
   }
 
@@ -168,9 +166,7 @@ int ObTmpFileWBPIndexCache::push(const uint32_t page_index)
                  KR(ret), K(sizeof(ObTmpFilePageIndexBucket)), KPC(this));
       } else if (FALSE_IT(bucket = new (buf) ObTmpFilePageIndexBucket())) {
       } else if (OB_FAIL(bucket->init(fd_, wbp_))) {
-        LOG_WARN("fail to init temporary file page index bucket", KR(ret), KPC(this));
       } else if (OB_FAIL(bucket->push(page_index))) {
-        LOG_WARN("fail to push page_index", KR(ret), K(page_index), KPC(this));
       } else {
         page_buckets_->at(right_) = bucket;
       }
@@ -188,8 +184,7 @@ int ObTmpFileWBPIndexCache::push(const uint32_t page_index)
     } else if (OB_ISNULL(page_buckets_->at(right_))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", KR(ret), K(page_buckets_->count()), KPC(this));
-    } else if (OB_FAIL(page_buckets_->at(right_)->push(page_index))) { // bucket is not full
-      LOG_WARN("fail to push page index", KR(ret), K(page_index), KPC(page_buckets_->at(right_)), KPC(this));
+    } else if (OB_FAIL(page_buckets_->at(right_)->push(page_index))) {
     }
   }
 
@@ -219,7 +214,6 @@ int ObTmpFileWBPIndexCache::truncate(const int64_t truncate_page_virtual_id)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected invalid page index", KR(ret), KPC(cur_bucket), KPC(this));
       } else if (OB_FAIL(wbp_->get_page_virtual_id(fd_, bkt_min_page_index, bkt_min_page_virtual_id))) {
-        LOG_WARN("fail to get page virtual id in file", KR(ret), K(bkt_min_page_index), KPC(this));
       } else if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_VIRTUAL_PAGE_ID == bkt_min_page_virtual_id)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected invalid page virtual id", KR(ret), K(bkt_min_page_virtual_id), KPC(this));
@@ -234,8 +228,6 @@ int ObTmpFileWBPIndexCache::truncate(const int64_t truncate_page_virtual_id)
                      K(truncate_page_virtual_id), K(bkt_min_page_virtual_id),
                      K(logic_begin_pos), K(logic_end_pos), KPC(this));
           } else if (OB_FAIL(previous_bucket->truncate(truncate_page_virtual_id))) {
-            LOG_WARN("fail to truncate bucket", KR(ret), K(fd_), K(truncate_page_virtual_id),
-                     K(bkt_min_page_virtual_id), KPC(previous_bucket), KPC(this));
           } else if (OB_UNLIKELY(previous_bucket->is_empty())) {
             // when truncate_page_virtual_id is smaller than min_page_virtual_id of cur bucket,
             // there must exist at least one page in previous bucket whose virtual page id is larger than
@@ -266,8 +258,6 @@ int ObTmpFileWBPIndexCache::truncate(const int64_t truncate_page_virtual_id)
       }
       if (i == logic_end_pos && truncate_page_virtual_id > bkt_min_page_virtual_id) {
         if (FAILEDx(cur_bucket->truncate(truncate_page_virtual_id))) {
-          LOG_WARN("fail to truncate bucket", KR(ret), K(fd_), K(truncate_page_virtual_id),
-                   K(logic_begin_pos), K(logic_end_pos), K(bkt_min_page_virtual_id), KPC(cur_bucket), KPC(this));
         } else if (cur_bucket->is_empty()) {
           cur_bucket->destroy();
           bucket_allocator_->free(cur_bucket);
@@ -323,8 +313,6 @@ int ObTmpFileWBPIndexCache::binary_search(const int64_t target_page_virtual_id, 
         LOG_WARN("unexpected invalid page index", KR(ret), K(left_pos), K(right_pos),
                  K(logic_mid), K(mid), KPC(mid_bucket), KPC(this));
       } else if (OB_FAIL(wbp_->get_page_virtual_id(fd_, mid_bucket->get_min_page_index(), min_page_virtual_id))) {
-        LOG_WARN("fail to get page virtual id in file", KR(ret), K(fd_), K(left_pos), K(right_pos),
-                 K(logic_mid), K(mid), KPC(mid_bucket), KPC(this));
       } else if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_VIRTUAL_PAGE_ID == min_page_virtual_id)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected invalid page virtual id", KR(ret), K(fd_), K(min_page_virtual_id), KPC(mid_bucket), KPC(this));
@@ -348,8 +336,6 @@ int ObTmpFileWBPIndexCache::binary_search(const int64_t target_page_virtual_id, 
       // page_index = ObTmpFileGlobal::INVALID_PAGE_ID;
       LOG_DEBUG("the target page_index might be removed from cache", K(fd_), K(target_page_virtual_id), KPC(this));
     } else if (OB_FAIL(target_bucket->binary_search(target_page_virtual_id, page_index))) {
-      LOG_WARN("fail to binary search page index", KR(ret), K(fd_), K(target_page_virtual_id),
-               KPC(target_bucket), KPC(this));
     }
   }
   return ret;
@@ -373,7 +359,6 @@ int ObTmpFileWBPIndexCache::expand_()
                            INIT_BUCKET_ARRAY_CAPACITY:
                            MIN(capacity_ * 2, max_bucket_array_capacity_);
     if (OB_FAIL(page_buckets_->prepare_allocate(new_capacity, nullptr))) {
-      LOG_WARN("fail to prepare allocate array", KR(ret), K(fd_), K(new_capacity));
     } else if (!is_empty() && right_ < left_) {
       if (OB_UNLIKELY(right_ + capacity_ >= new_capacity)) {
         ret = OB_ERR_UNEXPECTED;
@@ -467,15 +452,10 @@ int ObTmpFileWBPIndexCache::sparsify_()
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null", KR(ret), K(fd_), K(cur_bucket_pos), K(i), KPC(this));
       } else if (OB_FAIL(page_buckets_->at(i % capacity_)->shrink_half())) {
-        LOG_WARN("fail to shrink half", KR(ret), K(fd_), K(cur_bucket_pos), K(i),
-                 KPC(page_buckets_->at(i % capacity_)), KPC(this));
       } else if ((i - left_) % 2 == 0) {
         page_buckets_->at(cur_bucket_pos % capacity_) = page_buckets_->at(i % capacity_);
       } else {
         if (OB_FAIL(page_buckets_->at(cur_bucket_pos % capacity_)->merge(*page_buckets_->at(i % capacity_)))) {
-          LOG_WARN("fail to merge two buckets", KR(ret), K(fd_), K(cur_bucket_pos), K(i),
-                   KPC(page_buckets_->at(cur_bucket_pos % capacity_)), KPC(page_buckets_->at(i % capacity_)),
-                   KPC(this));
         } else {
           page_buckets_->at(i % capacity_)->destroy();
           bucket_allocator_->free(page_buckets_->at(i % capacity_));
@@ -519,7 +499,6 @@ int ObTmpFileWBPIndexCache::ObTmpFilePageIndexBucket::init(int64_t fd, ObTmpWrit
     LOG_WARN("invalid argument", KR(ret), K(fd), KP(wbp));
   } else if (FALSE_IT(page_indexes_.set_attr(ObMemAttr("TmpFileIdxBkt")))) {
   } else if (OB_FAIL(page_indexes_.prepare_allocate(BUCKET_CAPACITY, ObTmpFileGlobal::INVALID_PAGE_ID))) {
-    LOG_WARN("fail to prepare allocate array", KR(ret));
   } else {
     is_inited_ = true;
     fd_ = fd;
@@ -612,13 +591,11 @@ int ObTmpFileWBPIndexCache::ObTmpFilePageIndexBucket::truncate(const int64_t tru
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected invalid page index", KR(ret), K(page_indexes_[i % capacity_]), KPC(this));
       } else if (OB_FAIL(wbp_->get_page_virtual_id(fd_, page_indexes_[i % capacity_], page_virtual_id))) {
-        LOG_WARN("fail to get page virtual id in file", KR(ret), K(page_indexes_[i % capacity_]), KPC(this));
       } else if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_VIRTUAL_PAGE_ID == page_virtual_id)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected invalid page virtual id", KR(ret), K(page_virtual_id), KPC(this));
       } else if (page_virtual_id < truncate_page_virtual_id) {
         if (OB_FAIL(pop_())) {
-          LOG_WARN("fail to pop", KR(ret), KPC(this));
         }
       } else {
         truncate_over = true;
@@ -649,7 +626,6 @@ int ObTmpFileWBPIndexCache::ObTmpFilePageIndexBucket::binary_search(
       const int64_t mid = logic_mid % capacity_;
       const uint32_t mid_page = page_indexes_[mid];
       if (OB_FAIL(wbp_->get_page_virtual_id(fd_, mid_page, cur_page_virtual_id))) {
-        LOG_WARN("fail to get page virtual id in file", KR(ret), K(logic_mid), K(mid), K(mid_page), KPC(this));
       } else if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_VIRTUAL_PAGE_ID == cur_page_virtual_id)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected invalid page virtual id", KR(ret), K(cur_page_virtual_id), KPC(this));
@@ -683,19 +659,16 @@ int ObTmpFileWBPIndexCache::ObTmpFilePageIndexBucket::binary_search(
         uint32_t next_page_index = ObTmpFileGlobal::INVALID_PAGE_ID;
         int64_t page_virtual_id = ObTmpFileGlobal::INVALID_VIRTUAL_PAGE_ID;
         if (OB_FAIL(wbp_->get_page_virtual_id(fd_, cur_page_index, cur_page_virtual_id))) {
-          LOG_WARN("fail to get virtual page id", KR(ret), K(fd_), K(cur_page_index), KPC(this));
         } else if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_VIRTUAL_PAGE_ID == cur_page_virtual_id)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected invalid page virtual id", KR(ret), K(cur_page_virtual_id), KPC(this));
         } else if (OB_FAIL(wbp_->get_next_page_id(fd_, cur_page_index, ObTmpFilePageUniqKey(cur_page_virtual_id),
                                                   next_page_index))) {
-          LOG_WARN("fail to get next page id", KR(ret), K(fd_), K(cur_page_index), K(cur_page_virtual_id), KPC(this));
         } else if (ObTmpFileGlobal::INVALID_PAGE_ID == next_page_index) {
           ret = OB_ENTRY_NOT_EXIST;
           LOG_WARN("attempt to find a non-existent page in write buffer pool", KR(ret),
                     K(target_page_virtual_id), KPC(this));
         } else if (OB_FAIL(wbp_->get_page_virtual_id(fd_, next_page_index, page_virtual_id))) {
-          LOG_WARN("fail to get virtual page id", KR(ret), K(fd_), K(next_page_index), KPC(this));
         } else if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_VIRTUAL_PAGE_ID == page_virtual_id)) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected invalid page virtual id", KR(ret), K(page_virtual_id), KPC(this));
@@ -768,12 +741,10 @@ int ObTmpFileWBPIndexCache::ObTmpFilePageIndexBucket::merge(ObTmpFilePageIndexBu
     int64_t bkt_min_page_virtual_id = ObTmpFileGlobal::INVALID_VIRTUAL_PAGE_ID;
     int64_t other_bkt_min_page_virtual_id = ObTmpFileGlobal::INVALID_VIRTUAL_PAGE_ID;
     if (OB_FAIL(wbp_->get_page_virtual_id(fd_, min_page_index_, bkt_min_page_virtual_id))) {
-      LOG_WARN("fail to get page virtual id", KR(ret), K(bkt_min_page_virtual_id), KPC(this));
     } else if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_VIRTUAL_PAGE_ID == bkt_min_page_virtual_id)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected invalid page virtual id", KR(ret), K(bkt_min_page_virtual_id), KPC(this));
     } else if (OB_FAIL(wbp_->get_page_virtual_id(fd_, other.min_page_index_, other_bkt_min_page_virtual_id))) {
-      LOG_WARN("fail to get page virtual id", KR(ret), K(other_bkt_min_page_virtual_id), KPC(this));
     } else if (OB_UNLIKELY(ObTmpFileGlobal::INVALID_VIRTUAL_PAGE_ID == other_bkt_min_page_virtual_id)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected invalid page virtual id", KR(ret), K(other_bkt_min_page_virtual_id), KPC(this));
@@ -791,7 +762,6 @@ int ObTmpFileWBPIndexCache::ObTmpFilePageIndexBucket::merge(ObTmpFilePageIndexBu
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("invalid page index", KR(ret), K(page_index), K(i), KPC(this));
       } else if (OB_FAIL(push(page_index))) {
-        LOG_WARN("fail to push a page index", KR(ret), K(page_index), KPC(this));
       }
     }
   }

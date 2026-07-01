@@ -72,7 +72,6 @@ int ObExprCharLength::eval_char_length(const ObExpr &expr, ObEvalCtx &ctx,
   if (!ob_is_castable_type_class(in_tc)) {
     res.set_null();
   } else if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
-    LOG_WARN("eval arg failed", K(ret));
   } else if (arg->is_null()) {
     res.set_null();
   } else if (in_tc != ObTextTC) {
@@ -84,7 +83,6 @@ int ObExprCharLength::eval_char_length(const ObExpr &expr, ObEvalCtx &ctx,
     int64_t char_len = 0;
     if (OB_FAIL(ObTextStringHelper::get_char_len(ctx, *arg,
                 expr.args_[0]->datum_meta_, expr.args_[0]->obj_meta_.has_lob_header(), char_len))) {
-      LOG_WARN("failed to read realdata", K(ret));
     } else {
       res.set_int(static_cast<size_t>(char_len));
     }

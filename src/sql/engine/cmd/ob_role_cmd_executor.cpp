@@ -101,7 +101,6 @@ int ObAlterRoleExecutor::execute(ObExecContext &ctx, ObAlterRoleStmt &stmt)
   if (pwd.length() > 0 && stmt.get_need_enc()) {
     // Adopt OB unified encryption method
     if (OB_FAIL(ObCreateUserExecutor::encrypt_passwd(pwd, pwd_enc, enc_buf, ENC_BUF_LEN))) {
-      LOG_WARN("Encrypt password failed", K(ret));
     }
   } else {
     pwd_enc = pwd;
@@ -110,7 +109,6 @@ int ObAlterRoleExecutor::execute(ObExecContext &ctx, ObAlterRoleStmt &stmt)
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->alter_role(arg); }))) {
-    LOG_WARN("Alter user error", K(ret));
   }
   return ret;
 }

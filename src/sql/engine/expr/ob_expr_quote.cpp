@@ -40,7 +40,6 @@ int ObExprQuote::calc_result_type1(ObExprResType &type, ObExprResType &type1,
   type.set_varchar();
   type.set_length(2 * type1.get_length() + 2);
   if OB_FAIL(aggregate_charsets_for_string_result(type, &type1, 1, type_ctx)) {
-    LOG_WARN("aggregate charset for res failed", K(ret));
   } else {
     type1.set_calc_type(ObVarcharType);
     type1.set_calc_collation_type(type.get_collation_type());
@@ -125,7 +124,6 @@ int ObExprQuote::calc_quote_expr(const ObExpr &expr, ObEvalCtx &ctx,
   int ret = OB_SUCCESS;
   ObDatum *arg = NULL;
   if (OB_FAIL(expr.eval_param_value(ctx, arg))) {
-    LOG_WARN("eval param failed", K(ret));
   } else if (arg->is_null()) {
     // in mysql, quote(null) does not return nulltype but 'null'
     // (without enclosing single quotation marks)

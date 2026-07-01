@@ -76,11 +76,8 @@ int ObStoragePath::init(const common::ObString &uri)
     OB_LOG(WARN, "already inited", K(ret));
   } else if (OB_FAIL(databuff_printf(path_, common::OB_MAX_URI_LENGTH, cur_pos_, "%.*s",
       uri.length(), uri.ptr()))) {
-    OB_LOG(WARN, "fail to save header uri", K(ret), K(uri));
   } else if (OB_FAIL(trim_right_delim())) {
-    OB_LOG(WARN, "fail to trim right delim", K(ret));
   }
-  OB_LOG(DEBUG, "", KCSTRING(path_), K(cur_pos_));
   return ret;
 }
 
@@ -97,14 +94,10 @@ int ObStoragePath::join(const common::ObString &path)
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "argument is invalid", K(ret), K(path));
   } else if (OB_FAIL(trim_left_delim(path, left_delim_pos))) {
-    OB_LOG(WARN, "fail to trim left delim", K(ret), K(path));
   } else if (OB_FAIL(databuff_printf(path_, common::OB_MAX_CONFIG_URL_LENGTH, cur_pos_, "/%.*s",
       static_cast<int>(path.length() - left_delim_pos), path.ptr() + left_delim_pos))) {
-    OB_LOG(WARN, "fail to join path", K(ret), K(path));
   } else if (OB_FAIL(trim_right_delim())) {
-    OB_LOG(WARN, "fail to trim right delim", K(ret));
   }
-  OB_LOG(DEBUG, "", KCSTRING(path_), K(cur_pos_));
   return ret;
 }
 
@@ -121,7 +114,6 @@ int ObStoragePath::join_simple_object_definition(uint64_t object_id)
     OB_LOG(WARN, "argument is invalid", K(ret), K(object_id));
   } else if (OB_FAIL(databuff_printf(path_, common::OB_MAX_URI_LENGTH, cur_pos_,
                                      "/%ld_definition", object_id))) {
-    OB_LOG(WARN, "fail to join simple object definition", K(ret), KCSTRING(path_), K(object_id));
   }
   return ret;
 }

@@ -63,7 +63,6 @@ public:
     if (other.n_bit_ == 0) {
       //do nothing
     } else if(OB_FAIL(init(alloc_, other.n_bit_))) {
-      COMMON_LOG(WARN, "fail to init hyperloglog", K(ret));
     } else {
       merge(other);
     }
@@ -195,15 +194,10 @@ inline void ObHyperLogLogCalculator::set(uint64_t hash_value)
   uint64_t bucket_index = hash_value >> (MAX_HASH_VALUE_LENGTH - n_bit_);
   if (n_bucket_ <= bucket_index) {
     ret = OB_ERR_UNEXPECTED;
-    COMMON_LOG(DEBUG, "unexpected status: hash value is invalid",
-      K(n_leading_zero), K(bucket_index), K(n_bucket_), K(hash_value));
   } else if (n_leading_zero > static_cast<uint8_t>(buckets_[bucket_index])) {
     // Theoretically, pmax will not exceed 65.
     buckets_[bucket_index] = n_leading_zero;
-    COMMON_LOG(DEBUG, "hll add value", K(n_leading_zero), K(bucket_index));
   } else if (n_leading_zero >= MAX_HASH_VALUE_LENGTH) {
-    COMMON_LOG(ERROR, "unexpected status: bucket exceed max bucket",
-      K(n_leading_zero), K(static_cast<uint8_t>(buckets_[bucket_index])));
   }
   ++n_count_;
 }
@@ -219,15 +213,10 @@ inline void ObHyperLogLogCalculator::sets(uint64_t *hash_vals, int64_t count)
     bucket_index = hash_value >> (MAX_HASH_VALUE_LENGTH - n_bit_);
     if (n_bucket_ <= bucket_index) {
       ret = OB_ERR_UNEXPECTED;
-      COMMON_LOG(DEBUG, "unexpected status: hash value is invalid",
-        K(n_leading_zero), K(bucket_index), K(n_bucket_), K(hash_value));
     } else if (n_leading_zero > static_cast<uint8_t>(buckets_[bucket_index])) {
       // Theoretically, pmax will not exceed 65.
       buckets_[bucket_index] = n_leading_zero;
-      COMMON_LOG(DEBUG, "hll add value", K(n_leading_zero), K(bucket_index));
     } else if (n_leading_zero >= MAX_HASH_VALUE_LENGTH) {
-      COMMON_LOG(ERROR, "unexpected status: bucket exceed max bucket",
-        K(n_leading_zero), K(static_cast<uint8_t>(buckets_[bucket_index])));
     }
     ++n_count_;
   }

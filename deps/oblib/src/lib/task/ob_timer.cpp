@@ -48,7 +48,6 @@ int ObTimer::init(const char* timer_name, const ObMemAttr &attr)
     IRunWrapper *expect_wrapper = Threads::get_expect_run_wrapper();
     if (expect_wrapper != nullptr && expect_wrapper != run_wrapper_) {
       ret = OB_ERR_UNEXPECTED;
-      OB_LOG(ERROR, "ObTimer::init tenant ctx not match", KP(expect_wrapper), KP(run_wrapper_));
     } else {
       is_inited_ = true;
       is_stopped_ = false;
@@ -147,7 +146,6 @@ int ObTimer::schedule(ObTimerTask &task, const int64_t delay, const bool repeate
     ret = OB_ERR_NULL_VALUE;
     OB_LOG(WARN, "timer_service is NULL", K(ret), K(task));
   } else if (OB_FAIL(timer_service_->schedule_task(this, task, delay, repeate, immediate))) {
-    OB_LOG(WARN, "timer_service_.schedule_task failed", K(ret), K(task));
   } else {}
   return ret;
 }
@@ -167,7 +165,6 @@ int ObTimer::cancel_task(const ObTimerTask &task)
     ret = OB_ERR_NULL_VALUE;
     OB_LOG(WARN, "timer_service is NULL", K(ret), K(task));
   } else if (OB_FAIL(timer_service_->cancel_task(this, &task))) {
-    OB_LOG(WARN, "timer_service_.cancel_task failed", K(ret), K(task));
   } else {}
   return ret;
 }
@@ -183,7 +180,6 @@ int ObTimer::wait_task(const ObTimerTask &task)
     ret = OB_ERR_NULL_VALUE;
     OB_LOG(WARN, "timer_service is NULL", K(ret), K(task));
   } else if (OB_FAIL(timer_service_->wait_task(this, &task))) {
-    OB_LOG(WARN, "timer_service_.wait_task failed", K(ret), K(task));
   } else {}
   return ret;
 }
@@ -198,7 +194,6 @@ int ObTimer::cancel(const ObTimerTask &task)
     ret = OB_ERR_NULL_VALUE;
     OB_LOG(WARN, "timer_service is NULL", K(ret), K(task));
   } else if (OB_FAIL(timer_service_->cancel_task(this, &task))) {
-    OB_LOG(WARN, "timer_service_.cancel_task failed", K(ret), K(task));
   } else {}
   return ret;
 }
@@ -213,7 +208,6 @@ void ObTimer::cancel_all()
     ret = OB_ERR_NULL_VALUE;
     OB_LOG(WARN, "timer_service is NULL", K(ret));
   } else if (OB_FAIL(timer_service_->cancel_task(this, nullptr))) {
-    OB_LOG(WARN, "timer_service_.cancel_task failed", K(ret));
   } else {
     wait();
   }

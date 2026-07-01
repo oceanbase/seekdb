@@ -56,9 +56,7 @@ int ObMViewPurgeLogExecutor::execute(ObExecContext &ctx, const ObMViewPurgeLogAr
     purge_param.master_table_id_ = master_table_id_;
     purge_param.purge_log_parallel_ = arg.purge_log_parallel_;
     if (OB_FAIL(purger.init(ctx, purge_param))) {
-      LOG_WARN("fail to init mlog purger", KR(ret), K(purge_param));
     } else if (OB_FAIL(purger.purge())) {
-      LOG_WARN("fail to do purge", KR(ret), K(purge_param));
     }
   }
   return ret;
@@ -70,9 +68,7 @@ int ObMViewPurgeLogExecutor::resolve_arg(const ObMViewPurgeLogArg &arg)
   ObNameCaseMode case_mode = OB_NAME_CASE_INVALID;
   ObCollationType cs_type = CS_TYPE_INVALID;
   if (OB_FAIL(session_info_->get_name_case_mode(case_mode))) {
-    LOG_WARN("fail to get name case mode", KR(ret));
   } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-    LOG_WARN("fail to get collation_connection", KR(ret));
   }
   // resolve master
   if (OB_SUCC(ret)) {
@@ -92,7 +88,6 @@ int ObMViewPurgeLogExecutor::resolve_arg(const ObMViewPurgeLogArg &arg)
       LOG_WARN("No database selected", KR(ret));
     } else if (OB_FAIL(schema_checker_.get_table_schema_with_synonym(database_name, table_name, false /*is_index_table*/, has_synonym,
                  new_db_name, new_tbl_name, table_schema))) {
-      LOG_WARN("fail to get table schema with synonym", KR(ret), K(database_name), K(table_name));
     } else if (OB_ISNULL(table_schema)) {
       ret = OB_TABLE_NOT_EXIST;
       LOG_WARN("table not exist", KR(ret), K(arg));
@@ -101,8 +96,6 @@ int ObMViewPurgeLogExecutor::resolve_arg(const ObMViewPurgeLogArg &arg)
       const share::schema::ObTableSchema *container_table_schema = nullptr;
       if (OB_FAIL(schema_checker_.get_table_schema( table_schema->get_data_table_id(),
                                                    container_table_schema))) {
-        LOG_WARN("fail to get table schema", KR(ret),
-                 K(table_schema->get_data_table_id()));
       } else {
         table_schema = container_table_schema;
       }

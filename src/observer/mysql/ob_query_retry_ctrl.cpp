@@ -433,11 +433,8 @@ public:
       const ObTenantSchema *tenant_schema = NULL;
       if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
           schema_guard))) {
-        LOG_TRACE("get sys tenant schema guard failed", KR(ret), K(v));
       } else if (OB_FAIL(schema_guard.get_tenant_info(
           tenant_schema))) {
-        LOG_TRACE("fail get tenant info", KR(ret),
-             K(v));
       } else if (OB_ISNULL(tenant_schema) || !tenant_schema->is_normal()) {
         // use LOG_TRACE to prevent too much warning during creating tenant
         LOG_TRACE("tenant status is abnormal, do not retry",
@@ -1232,9 +1229,6 @@ void ObQueryRetryCtrl::test_and_save_retry_state(const ObGlobalContext &gctx,
     // this is possible. #issue/43953721
     LOG_WARN("session is null in exec_context. maybe OOM. don't retry", K(err));
   } else if (OB_FAIL(get_func(err, is_inner_sql, func))) {
-    // note: if no err proc registered, a default handler
-    // 'empty_proc' is used as processor func
-    LOG_WARN("fail get retry func", K(err), K(ret));
   } else if (OB_ISNULL(func)) {
     client_ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid retry processor, no retry", K(err));

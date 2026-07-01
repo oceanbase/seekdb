@@ -40,21 +40,13 @@ ObSequenceMaxMinInitializer::ObSequenceMaxMinInitializer()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(MAX_VALUE.set("9999999999999999999999999999"))) {
-    LOG_ERROR("fail set max value", K(ret));
   } else if (OB_FAIL(MIN_VALUE.set("-999999999999999999999999999"))) {
-    LOG_ERROR("fail set min value", K(ret));
   } else if (OB_FAIL(NO_MAX_VALUE.set("10000000000000000000000000000"))) {
-    LOG_ERROR("fail set max value", K(ret));
   } else if (OB_FAIL(NO_MIN_VALUE.set("-1000000000000000000000000000"))) {
-    LOG_ERROR("fail set min value", K(ret));
   } else if (OB_FAIL(MYSQL_MAX_VALUE.set("9223372036854775807"))) {
-    LOG_ERROR("fail set max value", K(ret));
   } else if (OB_FAIL(MYSQL_MIN_VALUE.set("-9223372036854775808"))) {
-    LOG_ERROR("fail set min value", K(ret));
   } else if (OB_FAIL(MYSQL_NO_MAX_VALUE.set("9223372036854775808"))) {
-    LOG_ERROR("fail set max value", K(ret));
   } else if (OB_FAIL(MYSQL_NO_MIN_VALUE.set("-9223372036854775809"))) {
-    LOG_ERROR("fail set min value", K(ret));
   }
 }
 
@@ -83,8 +75,6 @@ ObSequenceValue::ObSequenceValue(int64_t int_val)
   int ret = OB_SUCCESS;
   ObDataBuffer allocator(static_cast<char *>(buf_), ObNumber::MAX_BYTE_LEN);
   if (OB_SUCCESS != (ret = val_.from(int_val, allocator))) {
-    LOG_ERROR("set a int value to number should never fail with current allocator",
-              K(int_val), K(ret));
   }
 }
 
@@ -105,8 +95,6 @@ int ObSequenceValue::set(int64_t val)
   int ret = OB_SUCCESS;
   ObDataBuffer allocator(static_cast<char *>(buf_), ObNumber::MAX_BYTE_LEN);
   if (OB_SUCCESS != (ret = val_.from(val, allocator))) {
-    LOG_ERROR("set a int value to number should never fail with current allocator",
-              K(val), K(ret));
   }
   return ret;
 }

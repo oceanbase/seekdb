@@ -71,13 +71,10 @@ public:
         recycle_buffer_size_each < 1 ||
         hash_idx_bkt_num_each < 1) {
       ret = OB_INVALID_ARGUMENT;
-      OCCAM_LOG(WARN, "invalid argument", PRINT_WRAPPER);
     } else if (OB_NOT_NULL(alloc_)) {
       ret = OB_INIT_TWICE;
-      OCCAM_LOG(WARN, "invalid argument", PRINT_WRAPPER);
     } else if (nullptr == (buffer_bkt_ = (ObRecycleMultiKVCacheAligedWrapper<K, V> *)alloc.alloc(sizeof(ObRecycleMultiKVCacheAligedWrapper<K, V>) * recycle_buffer_number))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      OCCAM_LOG(WARN, "fail to allocate", PRINT_WRAPPER);
     } else {
       alloc_ = &alloc;
       for (int64_t idx = 0; idx < recycle_buffer_number && OB_SUCC(ret); ++idx) {
@@ -87,7 +84,6 @@ public:
                                           recycle_buffer_size_each,
                                           hash_idx_bkt_num_each,
                                           idx))) {
-          OCCAM_LOG(WARN, "fail init cache", PRINT_WRAPPER, K(idx));
         } else {
           bkt_len_ = idx + 1;
         }
@@ -107,7 +103,6 @@ public:
       ret = OB_NOT_INIT;
       // OCCAM_LOG(WARN, "not init", K(ret), K(key), K(event));
     } else if (OB_FAIL(buffer_bkt_[key.hash() % bkt_len_].append(key, std::forward<Value>(event)))) {
-      OCCAM_LOG(WARN, "fail to append event", K(ret), K(key), K(event));
     } else {
       OCCAM_LOG(TRACE, "succ to append event", K(ret), K(key), K(event));
     }
@@ -165,7 +160,6 @@ public:
       }
       databuff_printf(info, stack_buffer_size, pos, ", buffer_size_each:");
       databuff_printf(info, stack_buffer_size, pos, ObSizeLiteralPrettyPrinter(buffer_size));
-      OCCAM_LOG(INFO, "DUMP VTableBuffer STATISTICS", K(info));
     }
   }
 private:

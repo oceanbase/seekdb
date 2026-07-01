@@ -35,11 +35,9 @@ int ObLocalSessionVar::set_local_vars(T &var_array)
     local_session_vars_.reset();
   }
   if (OB_FAIL(local_session_vars_.reserve(var_array.count()))) {
-    LOG_WARN("fail to reserve for local_session_vars", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < var_array.count(); ++i) {
       if (OB_FAIL(add_local_var(var_array.at(i)))) {
-        LOG_WARN("fail to add session var", K(ret));
       }
     }
   }
@@ -53,7 +51,6 @@ int ObLocalSessionVar::add_local_var(const ObSessionSysVar *var)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), KP(var));
   } else if (OB_FAIL(add_local_var(var->type_, var->val_))) {
-    LOG_WARN("fail to add local session var", K(ret));
   }
   return ret;
 }
@@ -66,16 +63,13 @@ int ObLocalSessionVar::add_local_var(ObSysVarClassType var_type, const ObObj &va
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", K(ret), KP(alloc_));
   } else if (OB_FAIL(get_local_var(var_type, cur_var))) {
-    LOG_WARN("get local var failed", K(ret));
   } else if (NULL == cur_var) {
     ObSessionSysVar *new_var = OB_NEWx(ObSessionSysVar, alloc_);
     if (OB_ISNULL(new_var)) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("alloc new var failed.", K(ret));
     } else if (OB_FAIL(local_session_vars_.push_back(new_var))) {
-      LOG_WARN("push back new var failed", K(ret));
     } else if (OB_FAIL(deep_copy_obj(*alloc_, value, new_var->val_))) {
-      LOG_WARN("fail to deep copy obj", K(ret));
     } else {
       new_var->type_ = var_type;
     }
@@ -108,7 +102,6 @@ int ObLocalSessionVar::get_local_vars(ObIArray<const ObSessionSysVar *> &var_arr
   var_array.reset();
   for (int64_t i = 0; OB_SUCC(ret) && i < local_session_vars_.count(); ++i){
     if (OB_FAIL(var_array.push_back(local_session_vars_.at(i)))) {
-      LOG_WARN("push back local session vars failed", K(ret));
     }
   }
   return ret;
@@ -125,16 +118,13 @@ int ObLocalSessionVar::remove_vars_same_with_session(const sql::ObBasicSessionIn
     ObSEArray<ObSessionSysVar *, 4> new_var_array;
     for (int64_t i = 0; OB_SUCC(ret) && i < local_session_vars_.count(); ++i) {
       if (OB_FAIL(check_var_same_with_session(*session, local_session_vars_.at(i), is_same))) {
-        LOG_WARN("fail to check var same with session", K(ret));
       } else if (is_same) {
         /* do nothing */
       } else if (OB_FAIL(new_var_array.push_back(local_session_vars_.at(i)))) {
-        LOG_WARN("fail to push into new var array", K(ret));
       }
     }
     if (OB_SUCC(ret) && new_var_array.count() != local_session_vars_.count()) {
       if (OB_FAIL(local_session_vars_.assign(new_var_array))) {
-        LOG_WARN("fail to set local session vars.", K(ret));
       }
     }
   }
@@ -160,13 +150,10 @@ int ObLocalSessionVar::get_different_vars_from_session(const sql::ObBasicSession
       } else if (SYS_VAR_SQL_MODE == local_session_vars_.at(i)->type_) {
         /* just ignore sql mode now */
       } else if (OB_FAIL(check_var_same_with_session(*session, local_session_vars_.at(i), is_same, &session_val))) {
-        LOG_WARN("fail to check var same with session", K(ret));
       } else if (is_same) {
         /* do nothing */
       } else if (OB_FAIL(local_diff_vars.push_back(local_session_vars_.at(i)))) {
-        LOG_WARN("fail to push back sys var", K(ret));
       } else if (OB_FAIL(session_vals.push_back(session_val))) {
-        LOG_WARN("fail to push back obj", K(ret));
       }
     }
   }
@@ -190,7 +177,6 @@ int ObLocalSessionVar::check_var_same_with_session(const sql::ObBasicSessionInfo
       diff_val->set_uint64(session.get_sql_mode());
     }
   } else if (OB_FAIL(session.get_sys_variable(local_var->type_, session_val))) {
-    LOG_WARN("fail to get session variable", K(ret));
   } else {
     is_same = local_var->is_equal(session_val);
     if (!is_same && NULL != diff_val) {
@@ -215,9 +201,7 @@ int ObLocalSessionVar::gen_local_session_var_str(ObIAllocator &allocator,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("allocate memory for local_session_var failed", K(ret), KP(binary_str), KP(hex_str));
   } else if (OB_FAIL(serialize_(binary_str, buf_len, pos))) {
-    LOG_WARN("fail to serialize local_session_var", K(ret));
   } else if (OB_FAIL(common::hex_print(binary_str, pos, hex_str, buf_len * 2, hex_pos))) {
-    LOG_WARN("print hex string failed", K(ret));
   } else {
     local_session_var_str.assign(hex_str, hex_pos);
   }
@@ -241,7 +225,6 @@ int ObLocalSessionVar::fill_local_session_var_from_str(const ObString &local_ses
   } else if (OB_FALSE_IT(len = common::str_to_hex(local_session_var_str.ptr(), local_session_var_str.length(),
                                                   value_buf, local_session_var_str.length()))) {
   } else if (OB_FAIL(deserialize_(value_buf, static_cast<int64_t>(len), pos))) {
-    LOG_WARN("fail to deserialize local_session_var", K(ret));
   }
   return ret;
 }
@@ -259,7 +242,6 @@ int ObLocalSessionVar::deep_copy(const ObLocalSessionVar &other)
     }
   }
   if (OB_FAIL(set_local_vars(other.local_session_vars_))) {
-    LOG_WARN("fail to add session var", K(ret));
   }
   return ret;
 }
@@ -275,9 +257,7 @@ int ObLocalSessionVar::assign(const ObLocalSessionVar &other)
       local_session_vars_.set_allocator(other.alloc_);
     }
     if (OB_FAIL(local_session_vars_.reserve(other.local_session_vars_.count()))) {
-      LOG_WARN("reserve failed", K(ret));
     } else if (OB_FAIL(local_session_vars_.assign(other.local_session_vars_))) {
-      LOG_WARN("fail to push back local var", K(ret));
     }
   } else {
     //do nothing, other is not inited
@@ -294,7 +274,6 @@ int ObLocalSessionVar::set_local_var_capacity(int64_t sz)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(local_session_vars_.reserve(sz))) {
-    LOG_WARN("reserve failed", K(ret), K(sz));
   }
   return ret;
 }
@@ -363,12 +342,9 @@ int ObSessionSysVar::get_sys_var_val_str(const ObSysVarClassType var_type,
   if (SYS_VAR_SQL_MODE == var_type) {
     ObObj res_obj;
     if (OB_FAIL(ob_sql_mode_to_str(var_val, res_obj, &allocator))) {
-      LOG_WARN("fail to convert sql mode to str", K(ret), K(var_val));
     } else if (OB_FAIL(res_obj.get_string(val_str))) {
-      LOG_WARN("fail to get string form obj", K(ret), K(res_obj));
     }
   } else if (OB_FAIL(var_val.print_sql_literal(buffer, length, pos, allocator))) {
-    LOG_WARN("print value failed", K(ret));
   } else {
     val_str.assign(buffer, pos);
   }
@@ -422,14 +398,11 @@ int ObLocalSessionVar::load_session_vars(const sql::ObBasicSessionInfo *session)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("local_session_vars can only be inited once", K(ret));
   } else if (OB_FAIL(local_session_vars_.reserve(var_num))) {
-    LOG_WARN("reserve failed", K(ret), K(var_num));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < var_num; ++i) {
       ObObj var;
       if (OB_FAIL(session->get_sys_variable(ALL_LOCAL_VARS[i], var))) {
-        LOG_WARN("fail to get session variable", K(ret));
       } else if (OB_FAIL(add_local_var(ALL_LOCAL_VARS[i], var))) {
-        LOG_WARN("fail to add session var", K(ret), K(var));
       }
     }
   }
@@ -443,7 +416,6 @@ int ObLocalSessionVar::reserve_max_local_vars_capacity() {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("local_session_vars can only be inited once", K(ret));
   } else if (OB_FAIL(local_session_vars_.reserve(var_num))) {
-    LOG_WARN("reserve failed", K(ret), K(var_num));
   }
   return ret;
 }
@@ -455,7 +427,6 @@ int ObLocalSessionVar::update_session_vars_with_local(sql::ObBasicSessionInfo &s
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected null", K(ret));
     } else if (OB_FAIL(session.update_sys_variable(local_session_vars_.at(i)->type_, local_session_vars_.at(i)->val_))) {
-      LOG_WARN("fail to update sys variable", K(ret));
     }
   }
   return ret;
@@ -495,7 +466,6 @@ OB_DEF_DESERIALIZE(ObLocalSessionVar)
   OB_UNIS_DECODE(cnt);
   if (OB_SUCC(ret)) {
     if (OB_FAIL(local_session_vars_.reserve(cnt))) {
-      LOG_WARN("reserve failed", K(ret));
     }
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < cnt; ++i) {
@@ -503,7 +473,6 @@ OB_DEF_DESERIALIZE(ObLocalSessionVar)
     LST_DO_CODE(OB_UNIS_DECODE, var);
     if (OB_SUCC(ret)) {
       if (OB_FAIL(add_local_var(&var))) {
-        LOG_WARN("fail to add local session var", K(ret));
       }
     }
   }

@@ -60,9 +60,7 @@ int ObTableLoadCoordinatorTrans::init()
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("fail to new ObTableLoadTransBucketWriter", KR(ret));
     } else if (OB_FAIL(trans_bucket_writer_->init())) {
-      LOG_WARN("fail to init trans bucket writer", KR(ret));
     } else if (OB_FAIL(set_trans_status_inited())) {
-      LOG_WARN("fail to set trans status inited", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -74,7 +72,6 @@ int ObTableLoadCoordinatorTrans::advance_trans_status(ObTableLoadTransStatusType
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(trans_ctx_->advance_trans_status(trans_status))) {
-    LOG_WARN("fail to advance trans status", KR(ret), K(trans_status));
   } else {
     table_load_trans_status_to_string(trans_status,
                                       trans_ctx_->ctx_->job_stat_->coordinator_.trans_status_);
@@ -86,7 +83,6 @@ int ObTableLoadCoordinatorTrans::set_trans_status_error(int error_code)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(trans_ctx_->set_trans_status_error(error_code))) {
-    LOG_WARN("fail to set trans status error", KR(ret));
   } else {
     table_load_trans_status_to_string(ObTableLoadTransStatusType::ERROR,
                                       trans_ctx_->ctx_->job_stat_->coordinator_.trans_status_);
@@ -98,7 +94,6 @@ int ObTableLoadCoordinatorTrans::set_trans_status_abort()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(trans_ctx_->set_trans_status_abort())) {
-    LOG_WARN("fail to set trans status abort", KR(ret));
   } else {
     table_load_trans_status_to_string(ObTableLoadTransStatusType::ABORT,
                                       trans_ctx_->ctx_->job_stat_->coordinator_.trans_status_);

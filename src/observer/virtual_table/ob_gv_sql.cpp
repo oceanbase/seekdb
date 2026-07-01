@@ -64,7 +64,6 @@ int ObGVSql::get_row_from_specified_tenant(bool &is_end)
     NG_TRACE(trav_ps_map_start);
     ObGetAllCacheIdOp plan_id_op(&plan_id_array_);
     if (OB_FAIL(plan_cache_->foreach_alloc_cache_obj(plan_id_op))) {
-      SERVER_LOG(WARN, "fail to traverse id2stat_map");
     } else {
       plan_id_array_idx_ = 0;
     }
@@ -78,7 +77,6 @@ int ObGVSql::get_row_from_specified_tenant(bool &is_end)
     while (OB_SUCC(ret) && false == is_filled && false == is_end) {
       if (plan_id_array_idx_ < 0) {
         ret = OB_ERR_UNEXPECTED;
-        SERVER_LOG(WARN, "invalid plan_stat_array index", K(plan_id_array_idx_));
       } else if (plan_id_array_idx_ >= plan_id_array_.count()) {
         is_end = true;
         plan_id_array_idx_ = OB_INVALID_ID;
@@ -103,8 +101,7 @@ int ObGVSql::get_row_from_specified_tenant(bool &is_end)
         } else if (OB_ISNULL(guard.get_cache_obj())) {
           ret = OB_ERR_UNEXPECTED;
           //SERVER_LOG(WARN, "cache object is NULL", K(ret));
-        } else if (OB_FAIL(fill_cells(guard.get_cache_obj(), *plan_cache_))) { //plan exist
-          SERVER_LOG(WARN, "fail to fill cells", KPC(guard.get_cache_obj()));
+        } else if (OB_FAIL(fill_cells(guard.get_cache_obj(), *plan_cache_))) {
         } else {
           is_filled = true;
         }
@@ -166,7 +163,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
             if (OB_FAIL(ob_write_string(*allocator_,
                                         pl_object->get_stat().sql_id_,
                                         sql_id))) {
-              SERVER_LOG(ERROR, "copy sql_id failed", K(ret));
             } else {
               cells[i].set_varchar(sql_id);
               cells[i].set_collation_type(ObCharset::get_default_collation(
@@ -177,7 +173,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
         } else if (OB_FAIL(ob_write_string(*allocator_,
                                            plan->stat_.sql_id_,
                                            sql_id))) {
-          SERVER_LOG(ERROR, "copy sql_id failed", K(ret));
         } else {
           cells[i].set_varchar(sql_id);
           cells[i].set_collation_type(ObCharset::get_default_collation(
@@ -251,7 +246,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
                 ObCharset::get_system_collation(),
                 statement,
                 ObCharset::COPY_STRING_ON_SAME_CHARSET | ObCharset::REPLACE_UNKNOWN_CHARACTER))) {
-          SERVER_LOG(WARN, "convert raw_sql failed", K(ret));
         } else {
           cells[i].set_lob_value(ObLongTextType, statement.ptr(),
                                  static_cast<int32_t>(statement.length()));
@@ -265,7 +259,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
                 ObCharset::get_system_collation(),
                 statement,
                 ObCharset::COPY_STRING_ON_SAME_CHARSET | ObCharset::REPLACE_UNKNOWN_CHARACTER))) {
-          SERVER_LOG(WARN, "convert raw_sql failed", K(ret));
         } else {
           cells[i].set_lob_value(ObLongTextType, statement.ptr(),
                                  static_cast<int32_t>(statement.length()));
@@ -279,7 +272,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
                 ObCharset::get_system_collation(),
                 statement,
                 ObCharset::COPY_STRING_ON_SAME_CHARSET | ObCharset::REPLACE_UNKNOWN_CHARACTER))) {
-          SERVER_LOG(WARN, "convert raw_sql failed", K(ret));
         } else {
           cells[i].set_lob_value(ObLongTextType, statement.ptr(),
                                  static_cast<int32_t>(statement.length()));
@@ -314,7 +306,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
                                                ObCharset::get_system_collation(),
                                                raw_sql,
                                                ObCharset::COPY_STRING_ON_SAME_CHARSET | ObCharset::REPLACE_UNKNOWN_CHARACTER))) {
-          SERVER_LOG(WARN, "convert raw_sql failed", K(ret));
         } else {
           cells[i].set_lob_value(ObLongTextType, raw_sql.ptr(),
                                  static_cast<int32_t>(raw_sql.length()));
@@ -361,7 +352,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
         if (OB_FAIL(ob_write_string(*allocator_,
                                     param_infos,
                                     param_info_lob_str))) {
-          SERVER_LOG(ERROR, "copy param_infos failed", K(ret));
         } else {
           cells[i].set_lob_value(ObLongTextType, param_info_lob_str.ptr(),
                                   static_cast<int32_t>(param_info_lob_str.length()));
@@ -498,7 +488,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
         int64_t execute_times = 0;
         int64_t elapsed_time = 0;
         if (OB_FAIL(ObPLCacheObject::get_times(pl_object, execute_times, elapsed_time))) {
-          SERVER_LOG(WARN, "failed to get real AVG_EXE_USEC for package", K(ret), K(*pl_object));
         } else if (execute_times != 0) {
           cells[i].set_int(elapsed_time / execute_times);
         } else {
@@ -586,7 +575,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
         int64_t execute_times = 0;
         int64_t elapsed_time = 0;
         if (OB_FAIL(ObPLCacheObject::get_times(pl_object, execute_times, elapsed_time))) {
-          SERVER_LOG(WARN, "failed to get real AVG_EXE_USEC for package", K(ret), K(*pl_object));
         } else {
           cells[i].set_int(execute_times);
         }
@@ -674,7 +662,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
         int64_t execute_times = 0;
         int64_t elapsed_time = 0;
         if (OB_FAIL(ObPLCacheObject::get_times(pl_object, execute_times, elapsed_time))) {
-          SERVER_LOG(WARN, "failed to get real AVG_EXE_USEC for package", K(ret), K(*pl_object));
         } else {
           cells[i].set_uint64(static_cast<uint64_t>(elapsed_time));
         }
@@ -745,7 +732,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
         if (OB_FAIL(ob_write_string(*allocator_,
                                     plan->stat_.hints_info_,
                                     hints_info))) {
-          SERVER_LOG(ERROR, "copy hints_info failed", K(ret));
         } else {
           cells[i].set_lob_value(ObLongTextType, hints_info.ptr(),
                                  static_cast<int32_t>(hints_info.length()));
@@ -771,14 +757,11 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
             SERVER_LOG(WARN, "fail to alloc memory for OUTLINE_DATA", K(ret));
           } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, 
                   "/*+max_concurrent(%ld)*/", pl_object->get_max_concurrent_num()))) {
-            SERVER_LOG(WARN, "fail to print string of concurrent", K(ret));  
           } else if (OB_FAIL(ob_write_string(*allocator_, ObString(pos, buf), outline_data))) {
-            SERVER_LOG(ERROR, "copy outline_data failed", K(ret));
           }
         } else if (OB_FAIL(ob_write_string(*allocator_,
                                     plan->stat_.outline_data_,
                                     outline_data))) {
-          SERVER_LOG(ERROR, "copy outline_data failed", K(ret));
         }
         if (OB_SUCC(ret)) {
           cells[i].set_lob_value(ObLongTextType, outline_data.ptr(),
@@ -800,7 +783,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
         if (OB_FAIL(ob_write_string(*allocator_,
                                     stmt,
                                     acs_info))) {
-          SERVER_LOG(ERROR, "copy acs_info failed", K(ret));
         } else {
           cells[i].set_lob_value(ObLongTextType, acs_info.ptr(),
                                static_cast<int32_t>(acs_info.length()));
@@ -901,7 +883,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
         if (OB_FAIL(ob_write_string(*allocator_,
                                     stmt,
                                     tmp_tbls))) {
-          SERVER_LOG(ERROR, "copy acs_info failed", K(ret));
         } else {
           cells[i].set_lob_value(ObLongTextType, tmp_tbls.ptr(),
                                  static_cast<int32_t>(tmp_tbls.length()));
@@ -909,6 +890,16 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
         }
       } else {
         cells[i].set_null();
+      }
+      break;
+    }
+    case share::ALL_VIRTUAL_PLAN_STAT_CDE::IS_USE_JIT: {
+      if (!cache_stat_updated) {
+        cells[i].set_null();
+      } else if (cache_obj->is_sql_crsr()) {
+        cells[i].set_bool(plan->stat_.is_use_jit_);
+      } else {
+        cells[i].set_bool(false);
       }
       break;
     }
@@ -928,7 +919,6 @@ int ObGVSql::fill_cells(const ObILibCacheObject *cache_obj, const ObPlanCache &p
           type_name = is_body ? "PACKAGE BODY" : "PACKAGE";
         }
       } else if (OB_FAIL(ObPlanCacheObject::type_to_name(cache_obj->get_ns(), *allocator_, type_name))) {
-        SERVER_LOG(ERROR, "failed to get type_name", K(ret));
       } else {
         // do nothing
       }
@@ -1134,7 +1124,6 @@ int ObGVSql::get_row_from_tenants()
   } else {
     MOD_SCOPE {
       if (OB_FAIL(get_row_from_specified_tenant(is_sub_end))) {
-        SERVER_LOG(WARN, "fail to insert plan by tenant id", K(ret));
       } else if (is_sub_end) {
         iter_end_ = true;
         ret = OB_ITER_END;

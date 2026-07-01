@@ -56,7 +56,6 @@ int ObFreezeExecutor::execute(ObExecContext &ctx, ObFreezeStmt &stmt)
     if (!stmt.is_major_freeze()) {
       ObRootMinorFreezeArg arg;
       if (OB_FAIL(arg.server_list_.assign(stmt.get_server_list()))) {
-        LOG_WARN("failed to assign server_list", K(ret));
       } else {
         arg.zone_ = stmt.get_zone();
         arg.tablet_id_ = stmt.get_tablet_id();
@@ -66,7 +65,6 @@ int ObFreezeExecutor::execute(ObExecContext &ctx, ObFreezeStmt &stmt)
       // not allow user_tenant to freeze other tenants
       if (OB_SUCC(ret)) {
         if (OB_FAIL(GCTX.root_service_->root_minor_freeze(arg))) {
-          LOG_WARN("minor freeze failed", K(arg), K(ret), "dst", GCTX.self_addr());
         }
       }
     } else if (stmt.get_tablet_id().is_valid()) {
@@ -79,7 +77,6 @@ int ObFreezeExecutor::execute(ObExecContext &ctx, ObFreezeStmt &stmt)
         param.tablet_id_ = stmt.get_tablet_id();
         param.is_rebuild_column_group_ = stmt.is_rebuild_column_group();
         if (OB_FAIL(rootserver::ObMajorFreezeHelper::tablet_major_freeze(param))) {
-          LOG_WARN("failed to schedule tablet major freeze", K(ret), K(param));
         }
       }
     } else { // tenant major freeze
@@ -90,13 +87,11 @@ int ObFreezeExecutor::execute(ObExecContext &ctx, ObFreezeStmt &stmt)
       param.freeze_reason_ = rootserver::MF_USER_REQUEST;
       for (int64_t i = 0; i < stmt.get_tenant_count() && OB_SUCC(ret); ++i) {
         if (OB_FAIL(param.add_freeze_info())) {
-          LOG_WARN("fail to assign", KR(ret));
         }
       }
       if (OB_SUCC(ret)) {
         ObArray<int> merge_results; // save each tenant's major_freeze result, so use 'int' type
         if (OB_FAIL(rootserver::ObMajorFreezeHelper::major_freeze(param, merge_results))) {
-          LOG_WARN("fail to major freeze", KR(ret), K(param), K(merge_results));
         } else if (merge_results.count() > 0) {
           bool is_frozen_exist = false;
           bool is_merge_not_finish = false;
@@ -354,7 +349,6 @@ int ObFlushCacheExecutor::execute(ObExecContext &ctx, ObFlushCacheStmt &stmt)
       LOG_WARN("get task executor context failed");
     } else if (OB_FAIL(GCTX.root_service_->admin_flush_cache(
                            stmt.flush_cache_arg_))) {
-      LOG_WARN("flush cache failed", K(ret), "rpc_arg", stmt.flush_cache_arg_);
     }
   }
   return ret;
@@ -372,17 +366,14 @@ int ObFlushKVCacheExecutor::execute(ObExecContext &ctx, ObFlushKVCacheStmt &stmt
     share::schema::ObSchemaGetterGuard schema_guard;
     if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
                 schema_guard))) {
-      LOG_WARN("get_schema_guard failed", K(ret));
     } else {
       if (stmt.cache_name_.is_empty()) {
         if (OB_FAIL(common::ObKVGlobalCache::get_instance().erase_cache())) {
-          LOG_WARN("clear kv cache  failed", K(ret));
         } else {
           LOG_INFO("success erase all kvcache", K(ret));
         }
       } else {
         if (OB_FAIL(common::ObKVGlobalCache::get_instance().erase_cache(stmt.cache_name_.ptr()))) {
-          LOG_WARN("clear kv cache  failed", K(ret));
         } else {
           LOG_INFO("success erase kvcache", K(ret), K(stmt.cache_name_));
         }
@@ -452,7 +443,6 @@ int ObAdminMergeExecutor::execute(ObExecContext &ctx, ObAdminMergeStmt &stmt)
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(GCTX.root_service_->admin_merge(arg))) {
-    LOG_WARN("admin merge failed", K(ret), "rpc_arg", arg);
   }
   return ret;
 }
@@ -469,7 +459,6 @@ int ObRefreshMemStatExecutor::execute(ObExecContext &ctx, ObRefreshMemStatStmt &
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(GCTX.root_service_->admin_refresh_memory_stat(
                          stmt.get_rpc_arg()))) {
-    LOG_WARN("refresh memory stat failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
   }
   return ret;
 }
@@ -483,7 +472,6 @@ int ObWashMemFragmentationExecutor::execute(ObExecContext &ctx, ObWashMemFragmen
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(GCTX.root_service_->admin_wash_memory_fragmentation(
                          stmt.get_rpc_arg()))) {
-    LOG_WARN("wash memory fragmentation failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
   }
   return ret;
 }
@@ -496,7 +484,6 @@ int ObRefreshIOCalibraitonExecutor::execute(ObExecContext &ctx, ObRefreshIOCalib
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(GCTX.root_service_->admin_refresh_io_calibration(stmt.get_rpc_arg()))) {
-    LOG_WARN("refresh io calibration failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
   }
   return ret;
 }
@@ -529,7 +516,6 @@ int ObSetTPExecutor::execute(ObExecContext &ctx, ObSetTPStmt &stmt)
     ret = OB_NOT_INIT;
     LOG_WARN("ob_service_ is null", K(ret));
   } else if (OB_FAIL(GCTX.ob_service_->set_tracepoint(stmt.get_rpc_arg()))) {
-    LOG_WARN("set tracepoint failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
   } else {
     LOG_INFO("set tracepoint locally", K(stmt.get_rpc_arg()));
   }
@@ -546,7 +532,6 @@ int ObClearMergeErrorExecutor::execute(ObExecContext &ctx, ObClearMergeErrorStmt
 		ret = OB_NOT_INIT;
 		LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(GCTX.root_service_->admin_clear_merge_error(arg))) {
-		LOG_WARN("clear merge error failed", K(ret), "rpc_arg", arg);
 	}
   return ret;
 }
@@ -561,7 +546,6 @@ int ObUpgradeVirtualSchemaExecutor ::execute(
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->admin_upgrade_virtual_schema(); }))) {
-    LOG_WARN("upgrade virtual schema failed", K(ret));
   }
   return ret;
 }
@@ -592,12 +576,10 @@ int ObEnableSqlThrottleExecutor::execute(ObExecContext &ctx, ObEnableSqlThrottle
                          stmt.get_io(),
                          stmt.get_queue_time(),
                          stmt.get_logical_reads()))) {
-    LOG_WARN("assign_fmt failed", K(stmt), K(ret));
   } else {
     int64_t affected_rows = 0;
     if (OB_FAIL(sql_proxy->write(sql.ptr(),
                     affected_rows))) {
-      LOG_WARN("execute sql fail", K(sql), K(stmt), K(ret));
     }
   }
   return ret;
@@ -625,12 +607,10 @@ int ObDisableSqlThrottleExecutor::execute(ObExecContext &ctx, ObDisableSqlThrott
                          -1L,
                          -1.0,
                          -1L))) {
-    LOG_WARN("assign_fmt failed", K(stmt), K(ret));
   } else {
     int64_t affected_rows = 0;
     if (OB_FAIL(sql_proxy->write(sql.ptr(),
                     affected_rows))) {
-      LOG_WARN("execute sql fail", K(sql), K(stmt), K(ret));
     }
   }
   return ret;
@@ -648,11 +628,9 @@ int ObCancelTaskExecutor::execute(ObExecContext &ctx, ObCancelTaskStmt &stmt)
     ret = OB_ERR_SYS;
     LOG_ERROR("GCTX must not inited", K(ret), KP(GCTX.ob_service_));
   } else if (OB_FAIL(parse_task_id(stmt.get_task_id(), task_id))) {
-    LOG_WARN("failed to parse task id", K(ret), K(stmt.get_task_id()));
   } else if (OB_FAIL(ex_rpc::sync_call([&]{
     return GCTX.ob_service_->cancel_sys_task(task_id);
   }))) {
-    LOG_WARN("failed to cancel sys task", K(ret), K(task_id));
   }
   return ret;
 }
@@ -682,9 +660,7 @@ int ObCancelTaskExecutor::fetch_sys_task_info(
 	  	ret = OB_ERR_UNEXPECTED;
 	  	LOG_WARN("sql proxy or session from exec context is NULL", K(ret), K(sql_proxy), K(cur_sess));
 	  } else if (OB_FAIL(read_sql.append_fmt(sql_str, task_id.length(), task_id.ptr()))) {
-	  	LOG_WARN("fail to generate sql", K(ret), K(read_sql), K(*cur_sess), K(task_id));
 	  } else if (OB_FAIL(sql_proxy->read(res, read_sql.ptr()))) {
-	  	LOG_WARN("fail to read by sql proxy", K(ret), K(read_sql));
 	  } else if (OB_ISNULL(result_set = res.get_result())) {
 	  	ret = OB_ERR_UNEXPECTED;
 	  	LOG_WARN("result set is NULL", K(ret), K(read_sql));
@@ -752,7 +728,6 @@ int ObAddDiskExecutor::execute(ObExecContext &ctx, ObAddDiskStmt &stmt)
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(ex_rpc::sync_call([]{ return OB_NOT_SUPPORTED; }))) {
-    LOG_WARN("add_disk failed", K(ret), "arg", stmt.arg_);
   }
   return ret;
 }
@@ -765,7 +740,6 @@ int ObDropDiskExecutor::execute(ObExecContext &ctx, ObDropDiskStmt &stmt)
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(ex_rpc::sync_call([]{ return OB_NOT_SUPPORTED; }))) {
-    LOG_WARN("drop_disk failed", K(ret), "arg", stmt.arg_);
   }
   return ret;
 }
@@ -781,7 +755,6 @@ int ObResetConfigExecutor::execute(ObExecContext &ctx, ObResetConfigStmt &stmt)
     ret = OB_NOT_INIT;
     LOG_WARN("get task executor context failed");
   } else if (OB_FAIL(GCTX.root_service_->admin_set_config(stmt.get_rpc_arg()))) {
-    LOG_WARN("set config rpc failed", K(ret), "rpc_arg", stmt.get_rpc_arg());
   }
   return ret;
 }

@@ -150,7 +150,6 @@ int ObShowGrants::add_priv_map_recursively(uint64_t user_id, PRIV_MAP &priv_map,
         if (OB_FAIL(SMART_CALL(add_priv_map_recursively(user_info->get_role_id_array().at(i),
                                                         priv_map,
                                                         expand_roles)))) {
-          LOG_WARN("fail to add_priv_map_recursively", K(ret));
         }
       }
     }
@@ -174,11 +173,9 @@ int ObShowGrants::inner_get_next_row(common::ObNewRow *&row)
       uint64_t show_user_id = OB_INVALID_ID;
       ObArray<uint64_t> role_ids;
       if (OB_FAIL(calc_show_user_id(show_user_id, role_ids))) {
-        SERVER_LOG(WARN, "fail to calc show user id", K(ret));
       } else if (OB_UNLIKELY(OB_INVALID_ID == show_user_id)) {
         ret = OB_ITER_END;//FIXME Not supported yet, return empty set
       } else if (OB_FAIL(has_show_grants_priv(show_user_id))) {
-        SERVER_LOG(WARN, "There is no show grants priv", K(ret));
       } else if (OB_ISNULL(cells = cur_row_.cells_)) {
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(ERROR, "cur row cell is NULL", K(ret));
@@ -208,26 +205,19 @@ int ObShowGrants::inner_get_next_row(common::ObNewRow *&row)
           SERVER_LOG(WARN, "User not exist", K(ret));
         } else if (OB_FAIL(schema_guard_->get_catalog_priv_with_user_id(show_user_id,
                                                                         catalog_priv_array))) {
-          SERVER_LOG(WARN, "Get catalog priv with user id error", K(ret));
         } else if (OB_FAIL(schema_guard_->get_db_priv_with_user_id(show_user_id,
                                                                    db_priv_array))) {
-          SERVER_LOG(WARN, "Get db priv with user id error", K(ret));
         } else if (OB_FAIL(schema_guard_->get_table_priv_with_user_id(show_user_id,
                                                                       table_priv_array))) {
-          SERVER_LOG(WARN, "Get table priv with user id error", K(ret));
         } else if (OB_FAIL(schema_guard_->get_routine_priv_with_user_id(show_user_id,
                                                                        routine_priv_array))) {
-          SERVER_LOG(WARN, "Get routine priv with user id error", K(ret));
         } else if (OB_FAIL(schema_guard_->get_column_priv_with_user_id(show_user_id,
                                                                       column_priv_array))) {
-          SERVER_LOG(WARN, "Get table priv with user id error", K(ret));
         } else if (OB_FAIL(schema_guard_->get_obj_priv_with_grantee_id(show_user_id,
                                                                        obj_priv_array))) {
-          SERVER_LOG(WARN, "Get table priv with user id error", K(ret));
         } else if (OB_FAIL(schema_guard_->get_obj_mysql_priv_with_user_id(
                                                                           show_user_id,
                                                                           obj_mysql_priv_array))) {
-          SERVER_LOG(WARN, "Get obj mysql priv with user id error", K(ret));
         } else {
           user_name = user_info->get_user_name_str();
           host_name = user_info->get_host_name_str();
@@ -300,7 +290,6 @@ int ObShowGrants::inner_get_next_row(common::ObNewRow *&row)
                 || ObObjectType::INVALID != iter->first.obj_type_) {
               //do nothing
             } else if (OB_FAIL(priv_key_array.push_back(std::make_pair(iter->first, iter->second)))) {
-              LOG_WARN("push back failed", K(ret));
             }
           }
           lib::ob_sort(priv_key_array.begin(), priv_key_array.end(), PrivKey::cmp);
@@ -308,7 +297,6 @@ int ObShowGrants::inner_get_next_row(common::ObNewRow *&row)
           for (int64_t i = 0; OB_SUCC(ret) && i < priv_key_array.count(); i++) {
             bool need_print = false;
             if (OB_FAIL(priv_key_value_set.push_back(priv_key_array.at(i)))) {
-              LOG_WARN("push back failed", K(ret));
             } else if (i + 1 < priv_key_array.count()) {
               if (priv_key_array.at(i).first.db_name_ != priv_key_array.at(i + 1).first.db_name_ 
                  || priv_key_array.at(i).first.table_name_ != priv_key_array.at(i + 1).first.table_name_) {
@@ -432,14 +420,11 @@ int ObShowGrants::get_grants_string(
     ret = OB_INVALID_ARGUMENT;
     SERVER_LOG(WARN, "invalid column privilege", K(ret));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, "GRANT"))) {
-    SERVER_LOG(WARN, "Fill buffer failed", K(ret));
   } else if (OB_FAIL(print_privs_to_buff(buf, buf_len, pos,
                                          have_priv.priv_level_,
                                          have_priv.priv_set_,
                                          priv_key_array))) {
-    SERVER_LOG(WARN, "Fill privs to buffer failed", K(ret));
   } else if (OB_FAIL(priv_level_printf(buf, buf_len, pos, have_priv))) {
-    SERVER_LOG(WARN, "Fill privs to buffer failed", K(ret));
   } else if (NULL == user_name.ptr() && 0 != user_name.length()) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "ObString ptr is NULL, but length is not 0", K(ret), K(user_name));
@@ -450,20 +435,17 @@ int ObShowGrants::get_grants_string(
     if (0 == host_name.compare(OB_DEFAULT_HOST_NAME)) {
       if (OB_FAIL(databuff_printf(buf, buf_len, pos, " TO '%.*s'",
                                   user_name.length(), user_name.ptr()))) {
-        SERVER_LOG(WARN, "Fill priv to buffer failed", K(ret));
       }
     } else {
       if (OB_FAIL(databuff_printf(buf, buf_len, pos, " TO '%.*s'@'%.*s'",
                                   user_name.length(), user_name.ptr(),
                                   host_name.length(), host_name.ptr()))) {
-        SERVER_LOG(WARN, "Fill priv to buffer failed", K(ret));
       }
     }
   }
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(grant_priv_to_buff(buf, buf_len, pos, have_priv.priv_set_))) {
-      SERVER_LOG(WARN, "Fill priv to buffer failed", K(ret));
     } else {
       //do nothing
     }
@@ -488,7 +470,6 @@ int ObShowGrants::print_column_privs_to_buff(
   for (int64_t i = 0; OB_SUCC(ret) && i < priv_key_array.count(); i++) {
     if ((priv_key_array.at(i).second & priv_type) != 0) {
       if (OB_FAIL(cols.push_back(priv_key_array.at(i).first.column_name_))) {
-        LOG_WARN("push back failed", K(ret));
       }
     }
   }
@@ -496,19 +477,15 @@ int ObShowGrants::print_column_privs_to_buff(
   if (OB_SUCC(ret) && cols.count() > 0) {
     if (priv_type == OB_PRIV_SELECT) {
       if (OB_FAIL(BUF_PRINTF(" SELECT ("))) {
-        LOG_WARN("buf print failed", K(ret));
       }
     } else if (priv_type == OB_PRIV_INSERT) {
       if (OB_FAIL(BUF_PRINTF(" INSERT ("))) {
-        LOG_WARN("buf print failed", K(ret));
       }
     } else if (priv_type == OB_PRIV_UPDATE) {
       if (OB_FAIL(BUF_PRINTF(" UPDATE ("))) {
-        LOG_WARN("buf print failed", K(ret));
       }
     } else if (priv_type == OB_PRIV_REFERENCES) {
       if (OB_FAIL(BUF_PRINTF(" REFERENCES ("))) {
-        LOG_WARN("buf print failed", K(ret));
       }
     } else {
       ret = OB_INVALID_ARGUMENT;
@@ -517,7 +494,6 @@ int ObShowGrants::print_column_privs_to_buff(
     for (int64_t i = 0; OB_SUCC(ret) && i < cols.count(); i++) {
       if (OB_FAIL(databuff_printf(buf, buf_len, pos, "`%.*s`, ",
                                   cols.at(i).length(), cols.at(i).ptr()))) {
-        LOG_WARN("Fill priv to buffer failed", K(ret));
       }
     }
     if (OB_SUCC(ret) && cols.count() > 0 && pos > 1) {
@@ -528,7 +504,6 @@ int ObShowGrants::print_column_privs_to_buff(
     }
   }
   if (OB_FAIL(ret)) {
-    LOG_WARN("Fill buff failed", K(ret));
   }
   return ret;
 }
@@ -742,7 +717,6 @@ int ObShowGrants::print_privs_to_buff(
     }
   }
   if (OB_FAIL(ret)) {
-    SERVER_LOG(WARN, "Fill buff failed", K(ret));
   }
   return ret;
 }
@@ -759,38 +733,32 @@ int ObShowGrants::priv_level_printf(
     SERVER_LOG(WARN, "Buf is NULL", K(ret));
   } else if (OB_PRIV_USER_LEVEL == have_priv.priv_level_) {
     if (OB_SUCCESS != (ret = databuff_printf(buf, buf_len, pos, " ON *.*"))) {
-      SERVER_LOG(WARN, "Fill privs to buffer failed", K(ret));
     }
   } else if (OB_PRIV_CATALOG_LEVEL == have_priv.priv_level_) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                 " ON CATALOG `%.*s`",
                                 have_priv.catalog_.length(), have_priv.catalog_.ptr()))) {
-      SERVER_LOG(WARN, "Fill privs to buffer failed", K(ret));
     }
   } else if (OB_PRIV_DB_LEVEL == have_priv.priv_level_) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                 " ON `%.*s`.*",
                                 have_priv.db_.length(), have_priv.db_.ptr()))) {
-      SERVER_LOG(WARN, "Fill privs to buffer failed", K(ret));
     }
   } else if (OB_PRIV_TABLE_LEVEL == have_priv.priv_level_) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos,
                                 " ON `%.*s`.`%.*s`",
                                 have_priv.db_.length(), have_priv.db_.ptr(),
                                 have_priv.table_.length(), have_priv.table_.ptr()))) {
-      SERVER_LOG(WARN, "Fill privs to buffer failed", K(ret));
     }
   } else if (OB_PRIV_ROUTINE_LEVEL == have_priv.priv_level_) {
     if (OB_FAIL(databuff_printf(buf, buf_len, pos, have_priv.obj_type_ == ObObjectType::PROCEDURE ? " ON PROCEDURE `%.*s`.`%.*s`" :
                                                                         " ON FUNCTION `%.*s`.`%.*s`",
                                 have_priv.db_.length(), have_priv.db_.ptr(),
                                 have_priv.table_.length(), have_priv.table_.ptr()))) {
-      SERVER_LOG(WARN, "Fill privs to buffer failed", K(ret));
     }
   } else if (OB_PRIV_OBJECT_LEVEL == have_priv.priv_level_) {
     if (ObObjectType::LOCATION == have_priv.obj_type_) {
       if (OB_FAIL(databuff_printf(buf, buf_len, pos, " ON LOCATION `%.*s`", have_priv.table_.length(), have_priv.table_.ptr()))) {
-        SERVER_LOG(WARN, "Fill privs to buffer failed", K(ret));
       }
     }
   }
@@ -825,7 +793,6 @@ int ObShowGrants::grant_priv_to_buff(char *buf, const int64_t buf_len, int64_t &
     SERVER_LOG(WARN, "Buf is NULL", K(ret));
   } else if (0 != (OB_PRIV_GRANT & priv_set)) {
     if (OB_SUCCESS != (ret = databuff_printf(buf, buf_len, pos, " WITH GRANT OPTION"))) {
-      SERVER_LOG(WARN, "Fill privs to buffer failed", K(ret));
     }
   } else {
     //do nothing
@@ -929,11 +896,8 @@ int ObShowGrants::has_show_grants_priv(uint64_t show_user_id) const
     ObStmtNeedPrivs stmt_need_privs(alloc);
     ObNeedPriv need_priv("mysql", "user", OB_PRIV_TABLE_LEVEL, OB_PRIV_SELECT, false);
     if (OB_FAIL(stmt_need_privs.need_privs_.init(1))) {
-      SERVER_LOG(WARN, "fail to init need_privs", K(ret));
     } else if (OB_FAIL(stmt_need_privs.need_privs_.push_back(need_priv))) {
-      SERVER_LOG(WARN, "Add need priv to stmt_need_privs error", K(ret));
     } else if (OB_FAIL(schema_guard_->check_priv(session_priv_, enable_role_id_array_, stmt_need_privs))) {
-      SERVER_LOG(WARN, "No privilege show grants", K(ret));
     } else {
       //do nothing
     }

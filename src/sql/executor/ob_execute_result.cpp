@@ -61,10 +61,8 @@ int ObExecuteResult::get_next_row(ObExecContext &ctx, const common::ObNewRow *&r
         ObDatum *datum = NULL;
         ObExpr *expr = spec.output_.at(i);
         if (OB_FAIL(expr->eval(static_engine_root_->get_eval_ctx(), datum))) {
-          LOG_WARN("expr evaluate failed", K(ret));
         } else if (OB_FAIL(datum->to_obj(
                     row_.cells_[i], expr->obj_meta_, expr->obj_datum_map_))) {
-          LOG_WARN("convert datum to obj failed", K(ret));
         }
       }
     }
@@ -79,7 +77,6 @@ int ObExecuteResult::get_next_row(ObExecContext &ctx, const common::ObNewRow *&r
             static_engine_root_->get_eval_ctx()) + (expr->is_batch_result() ? idx : 0);
         if (OB_FAIL(datum->to_obj(
                     row_.cells_[i], expr->obj_meta_, expr->obj_datum_map_))) {
-          LOG_WARN("convert datum to obj failed", K(ret));
         }
       }
     }
@@ -113,7 +110,6 @@ int ObExecuteResult::open() const
       ObDatum *datum = NULL;
       ObExpr *expr = var_init_exprs.at(i);
       if (OB_FAIL(expr->eval(static_engine_root_->get_eval_ctx(), datum))) {
-        LOG_WARN("expr evaluate failed", K(ret));
       }
     }
   }
@@ -160,7 +156,6 @@ int ObExecuteResult::close() const
   int ret = OB_SUCCESS;
   if (NULL != static_engine_root_) {
     if (OB_FAIL(static_engine_root_->close())) {
-      LOG_WARN("close failed", K(ret));
     }
   }
   return ret;
@@ -183,19 +178,15 @@ int ObAsyncExecuteResult::open(ObExecContext &ctx)
     ret = OB_NOT_INIT;
     LOG_WARN("scanner is invalid", K(ret), K(scanner_), K(plan_ctx), K(session));
   } else if (OB_FAIL(ObTaskExecutorCtxUtil::merge_task_result_meta(*plan_ctx, *scanner_))) {
-    LOG_WARN("merge task result meta failed", K(ret), KPC_(scanner));
   } else if (OB_FAIL(session->replace_user_variables(ctx, scanner_->get_session_var_map()))) {
-    LOG_WARN("replace user variables failed", K(ret));
   } else if (field_count_ <= 0) {
     // Remote did not return data, therefore no need to create row buffer
   } else if (OB_FAIL(ob_create_row(ctx.get_allocator(), field_count_, cur_row_))) {
-    LOG_WARN("create current row failed", K(ret), K(field_count_));
   } else {
     if (nullptr == spec_) {
       row_iter_ = scanner_->begin();
     } else {
       if (OB_FAIL(scanner_->get_datum_store().begin(datum_iter_))) {
-        LOG_WARN("fail to init datum iter", K(ret));
       }
     }
   }
@@ -235,7 +226,6 @@ int ObAsyncExecuteResult::get_next_row(ObExecContext &ctx, const ObNewRow *&row)
         if (OB_FAIL(sr->cells()[i].to_obj(cur_row_->cells_[i],
                                           e->obj_meta_,
                                           e->obj_datum_map_))) {
-          LOG_WARN("convert datum to obj failed", K(ret));
         }
       }
     }

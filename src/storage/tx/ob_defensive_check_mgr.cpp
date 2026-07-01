@@ -43,11 +43,8 @@ int SingleRowDefensiveRecord::deep_copy(const blocksstable::ObDatumRow &row,
   int ret = OB_SUCCESS;
   
   if (OB_FAIL(rowkey.deep_copy(rowkey_, allocator_))) {
-    TRANS_LOG(WARN, "rowkey deep copy error", K(ret), K(rowkey));
   } else if (OB_FAIL(row_.init(row.count_))) {
-    TRANS_LOG(WARN, "datum row init error", K(ret), K(row));
   } else if (OB_FAIL(row_.deep_copy(row, allocator_))) {
-    TRANS_LOG(WARN, "datum row deep copy error", K(ret), K(row));
   } else {
     extend_info_ = extend_info;
     tablet_id_ = tablet_id;
@@ -90,7 +87,6 @@ int ObSingleTabletDefensiveCheckInfo::add_record(SingleRowDefensiveRecord *recor
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", K(ret), KP(record));
   } else if (OB_FAIL(record_arr_.push_back(record))) {
-    TRANS_LOG(WARN, "record arr push back error", K(ret), K(*record));
   } else {
     // do nothing
   }

@@ -97,7 +97,6 @@ int ObTxCtxMemtableMgr::create_memtable(const CreateMemtableArg &arg)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tx ctx memtable already exists, should not create again", K(ret), K_(ls_id));
   } else if (OB_FAIL(t3m_->acquire_tx_ctx_memtable(handle))) {
-    LOG_WARN("failed to create memtable", K(ret));
   } else if (OB_ISNULL(table = handle.get_table())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("table is nullptr", K(ret));
@@ -107,14 +106,11 @@ int ObTxCtxMemtableMgr::create_memtable(const CreateMemtableArg &arg)
       ret = OB_INVALID_ARGUMENT;
       TRANS_LOG(WARN, "invalid tx_ctx_memtable", K(ret), KPC(table));
     } else if (OB_FAIL(tx_ctx_memtable->init(table_key, ls_id_))) {
-      LOG_WARN("memtable init fail.", KR(ret));
     } else if (OB_FAIL(add_memtable_(handle))) {
-      LOG_WARN("add memtable fail.", KR(ret));
     } else if (OB_ISNULL(ls_tx_svr = freezer_->get_ls_tx_svr())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("ls_tx_svr is null", K(ret));
     } else if (OB_FAIL(ls_tx_svr->register_common_checkpoint(checkpoint::TX_CTX_MEMTABLE_TYPE, tx_ctx_memtable))) {
-      LOG_WARN("tx ctx memtable register_common_checkpoint failed", K(ret), K(ls_id_));
     } else {
       LOG_INFO("tx ctx memtable mgr create memtable successfully",
                K(ls_id_), KPC(tx_ctx_memtable));
@@ -174,7 +170,6 @@ int ObTxCtxMemtableMgr::unregister_from_common_checkpoint_(const ObTxCtxMemtable
     LOG_WARN("ls_tx_svr is null", K(ret));
   } else if (OB_FAIL(ls_tx_svr->unregister_common_checkpoint(checkpoint::TX_CTX_MEMTABLE_TYPE,
                                                              memtable))) {
-    LOG_WARN("tx ctx unregister_common_checkpoint failed", K(ret), K(ls_id_), K(memtable));
   } else {
     LOG_INFO("unregister from common checkpoint successfully", K_(ls_id), K(memtable));
   }
@@ -195,7 +190,6 @@ int ObTxCtxMemtableMgr::release_head_memtable_(ObIMemtable *imemtable,
     if (nullptr != tables_[idx] && memtable == tables_[idx]) {
       LOG_INFO("release head memtable", K(ret), K_(ls_id), KP(memtable));
       if (OB_TMP_FAIL(unregister_from_common_checkpoint_(memtable))) {
-        LOG_WARN("unregister from common checkpoint failed", K(tmp_ret), K_(ls_id), K(memtable));
       }
       release_head_memtable();
       FLOG_INFO("succeed to release tx ctx memtable", K(ret), K_(ls_id));

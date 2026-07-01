@@ -259,7 +259,6 @@ int ObTabletCreateDeleteMdsUserData::set_tablet_gc_trigger(
   ObLS *ls = nullptr;
   ObLSService *ls_service = share::g_mp->ls_service();
   if (OB_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::MDS_TABLE_MOD))) {
-    LOG_WARN("failed to get ls", K(ret), K(ls_id));
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls is null", K(ret), K(ls_id), K(ls_handle));
@@ -277,7 +276,6 @@ int ObTabletCreateDeleteMdsUserData::set_tablet_empty_shell_trigger(
   ObLS *ls = nullptr;
   ObLSService *ls_service = share::g_mp->ls_service();
   if (OB_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::MDS_TABLE_MOD))) {
-    LOG_WARN("failed to get ls", K(ret), K(ls_id));
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls is null", K(ret), K(ls_id), K(ls_handle));

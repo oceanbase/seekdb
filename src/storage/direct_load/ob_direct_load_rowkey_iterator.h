@@ -108,7 +108,6 @@ public:
       STORAGE_LOG(WARN, "invalid args", KR(ret), KP(iter));
     } else {
       if (OB_FAIL(iters_.push_back(iter))) {
-        STORAGE_LOG(WARN, "fail to push back", KR(ret));
       } else if (OB_FAIL(all_iters_.push_back(iter))) {
         STORAGE_LOG(WARN, "fail to push back", KR(ret));
         iters_.pop_back();

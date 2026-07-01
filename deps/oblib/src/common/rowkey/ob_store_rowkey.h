@@ -57,7 +57,6 @@ public:
     int ret = OB_SUCCESS;
     if (OB_UNLIKELY(nullptr == ptr || cnt <= 0)) {
       ret = OB_INVALID_ARGUMENT;
-      COMMON_LOG(ERROR, "Invalid argument to assign store rowkey", KP(ptr), K(cnt));
     } else {
       key_.assign(ptr, cnt);
       hash_ = 0;
@@ -162,7 +161,6 @@ public:
     if (hash() != rhs.hash()) {
       is_equal = false;
     } else if (OB_FAIL(key_.equal(rhs.key_, is_equal))) {
-      COMMON_LOG(ERROR, "failed to compare", K(ret), K(key_), K(rhs.key_));
     } else {
       // do nothing
     }
@@ -249,7 +247,6 @@ public:
     if (OB_FAIL(ret)) {
       // do nothing
     } else if (OB_FAIL(lhs.compare(rhs, cmp_ret))) {
-      COMMON_LOG(WARN, "fail to compare rowkey ", K(ret), K(lhs), K(rhs));
     }
     return cmp_ret < 0;
   }

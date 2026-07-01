@@ -50,7 +50,6 @@ int ObTableLoadClientService::alloc_task(ObTableLoadClientTask *&client_task)
     ret = OB_IN_STOP_STATE;
     LOG_WARN("service is stop", KR(ret));
   } else if (OB_FAIL(service->get_manager().acquire_client_task(client_task))) {
-    LOG_WARN("fail to acquire client task", KR(ret));
   }
   return ret;
 }
@@ -114,7 +113,6 @@ int ObTableLoadClientService::get_task_brief(const ObTableLoadUniqueKey &key,
     LOG_WARN("service is stop", KR(ret));
   } else {
     if (OB_FAIL(service->get_manager().get_client_task_brief(key, client_task_brief))) {
-      LOG_WARN("fail to get client task brief", KR(ret), K(key));
     } else {
       // update active time
       client_task_brief->active_time_ = ObTimeUtil::current_time();

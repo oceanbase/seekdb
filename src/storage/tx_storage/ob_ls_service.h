@@ -246,7 +246,6 @@ int ObLSService::foreach_ls(FUNC &func)
   ObLSIterator *iter = NULL;
   common::ObSharedGuard<ObLSIterator> guard;
   if (OB_FAIL(get_ls_iter(guard, ObLSGetMod::TXSTORAGE_MOD))) {
-    STORAGE_LOG(WARN, "get log stream iter failed", K(ret));
   } else if (OB_ISNULL(iter = guard.get_ptr())) {
     ret = OB_ERR_UNEXPECTED;
     STORAGE_LOG(WARN, "iter is NULL", K(ret));
@@ -261,7 +260,6 @@ int ObLSService::foreach_ls(FUNC &func)
           STORAGE_LOG(WARN, "iter next ls failed", KR(ret), KP(this));
         }
       } else if (OB_FAIL(func(*ls))) {
-        STORAGE_LOG(WARN, "do function on ls failed", K(ret));
       }
     }
   }

@@ -152,12 +152,10 @@ public:
     cmp_end_space_ = cmp_end_space;
     if (inited_) {
       ret = OB_INIT_TWICE;
-      COMMON_LOG(WARN, "init twice");
     } else {
       
       alloc_.set_label("ObColumnHashSet");
       if (OB_FAIL(alloc_mem(capacity))) {
-        COMMON_LOG(WARN, "failed to alloc when init");
       } else {
         inited_ = true;
       }
@@ -222,7 +220,6 @@ private:
     void *buf = nullptr;
     if (OB_ISNULL(buf = alloc_.alloc_aligned(sizeof(bucket_t) * new_capacity, CACHE_LINE_SIZE))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      COMMON_LOG(WARN, "failed to allocate bucket memory", K(new_capacity));
     } else {
       buckets_ = static_cast<bucket_t *>(buf);
       capacity_ = new_capacity;
@@ -230,7 +227,6 @@ private:
       for (size_t i = 0; i < new_capacity; ++i) {
         new (&buckets_[i]) bucket_t();
       }
-      COMMON_LOG(DEBUG, "alloc capacity ", K(capacity_));
     }
     return ret;
   }

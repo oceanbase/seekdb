@@ -95,7 +95,6 @@ int ObAutoSplitTaskCache::init(const int64_t capacity)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(capacity));
   } else if (OB_FAIL(tasks_set_.create(capacity, ObMemAttr("task_cache")))) {
-    LOG_WARN("fail to create hashset", KR(ret));
   } else {
     inited_ = true;
     
@@ -112,7 +111,6 @@ int ObAutoSplitTaskCache::mtl_init(ObAutoSplitTaskCache *&task_cache)
     ret = OB_NULL_CHECK_ERROR;
     LOG_WARN("unexpeted null ptr of task_cache", K(ret), KP(task_cache));
   } else if (OB_FAIL(task_cache->init(ObAutoSplitTaskCache::CACHE_MAX_CAPACITY))) {
-    LOG_WARN("failed to init ObAutoSplitTaskCache", K(ret));
   }
   return ret;
 }
@@ -168,7 +166,6 @@ int ObAutoSplitTaskCache::remove_tasks(const int64_t num_tasks_to_rem)
     int64_t num_tasks_can_rem = min(get_tasks_num(), num_tasks_to_rem);
     for (; OB_SUCC(ret) && num_tasks_can_rem > 0; --num_tasks_can_rem) {
       if (OB_FAIL(atomic_remove_task())) {
-        LOG_WARN("atomic remove task failed", K(ret));
       }
     }
   }
@@ -191,7 +188,6 @@ int ObAutoSplitTaskCache::atomic_remove_task()
       LOG_ERROR("ptr_task_wrapper is nullptr", K(ret));
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(min_heap_.pop())) {
-        LOG_WARN("pop from min heap failed", K(ret));
       }
     } else if (OB_FAIL(tasks_set_.erase_refactored(ObAutoSplitTaskKey(ptr_task_wrapper->task_.tablet_id_))) && OB_HASH_NOT_EXIST != ret) {
       LOG_WARN("remove key from task_set_ failed", K(ret));
@@ -204,7 +200,6 @@ int ObAutoSplitTaskCache::atomic_remove_task()
       int64_t pos_at_max_heap = ptr_task_wrapper->pos_at_max_heap_;
       if (pos_at_max_heap >= 0 && pos_at_max_heap < max_heap_.count() && max_heap_.at(pos_at_max_heap) == ptr_task_wrapper) {
         if (OB_FAIL(max_heap_.remove(ptr_task_wrapper))) {
-          LOG_ERROR("remove from max_heap failed", K(ret));
         }
       } else {
         ret = OB_ERR_UNEXPECTED;
@@ -214,7 +209,6 @@ int ObAutoSplitTaskCache::atomic_remove_task()
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(min_heap_.pop())) {
-          LOG_ERROR("pop from min heap failed", K(ret));
         } else {
           (*ptr_task_wrapper).~ObAutoSplitTaskWrapper();
           cache_malloc_.free(ptr_task_wrapper);
@@ -247,16 +241,12 @@ int ObAutoSplitTaskCache::atomic_push_task(const ObAutoSplitTask &task)
     int tmp_ret = OB_SUCCESS;
     (void) ATOMIC_FAA(&total_tasks_, 1);
     if (OB_FAIL(ptr_t_wra_to_min->task_.assign(task))) {
-      LOG_WARN("task assign failed", K(ret), K(task));
     } else if (OB_FAIL(min_heap_.push(ptr_t_wra_to_min))) {
-      LOG_WARN("push task into min_heap_ failed", K(ret), K(task));
     } else if (OB_FALSE_IT(ptr_t_wra_to_max = ptr_t_wra_to_min)) {
     } else if (OB_FALSE_IT(ptr_t_wra_to_min = nullptr)) {
     } else if (OB_FAIL(max_heap_.push(ptr_t_wra_to_max))) {
-      LOG_WARN("push task into max_heap_ failed", K(ret), K(task));
     } else if (OB_FALSE_IT(ptr_t_wra_to_max = nullptr)) {
     } else if (OB_FAIL(tasks_set_.set_refactored(ObAutoSplitTaskKey (task.tablet_id_)))) {
-      LOG_WARN("push into task_set_ failed", K(ret));
     }
     if (OB_NOT_NULL(ptr_t_wra_to_min)) {
       (void) ATOMIC_FAA(&total_tasks_, -1);
@@ -285,10 +275,8 @@ int ObAutoSplitTaskCache::atomic_pop_task(ObAutoSplitTask &task)
       LOG_WARN("ptr_task_wrapper is nullptr", K(ret));
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(max_heap_.pop())) {
-        LOG_WARN("pop from min heap failed", K(ret));
       }
     } else if (OB_FAIL(task.assign(ptr_task_wrapper->task_))) {
-      LOG_WARN("assign task failed", K(ret), K(task));
     } else if (OB_FAIL(tasks_set_.erase_refactored(ObAutoSplitTaskKey(task.tablet_id_))) && OB_HASH_NOT_EXIST != ret) {
       LOG_WARN("remove key from task_set_ failed", K(ret));
     } else {
@@ -298,11 +286,7 @@ int ObAutoSplitTaskCache::atomic_pop_task(ObAutoSplitTask &task)
         ret = OB_SUCCESS;
       }
       if (OB_FAIL(max_heap_.pop())) {
-        //overwrite ret
-        LOG_ERROR("max_heap_ pop failed", K(ret));
       } else if (OB_FAIL(min_heap_.remove(ptr_task_wrapper))) {
-        //overwrite ret
-        LOG_WARN("remove from min_heap_ failed", K(ret));
       } else {
         (*ptr_task_wrapper).~ObAutoSplitTaskWrapper();
         cache_malloc_.free(ptr_task_wrapper);
@@ -335,9 +319,7 @@ int ObAutoSplitTaskCache::pop_tasks(const int64_t num_tasks_to_pop, ObArray<ObAu
     for (; OB_SUCC(ret) && num_tasks_can_pop > 0; --num_tasks_can_pop) {
       task.reset();
       if (OB_FAIL(atomic_pop_task(task))) {
-        LOG_WARN("pop task failed", K(ret));
       } else if (OB_FAIL(task_array.push_back(task))) {
-        LOG_WARN("push back into task array failed", K(ret));
       }
     }
   }
@@ -369,7 +351,6 @@ int ObAutoSplitTaskCache::push_tasks(const ObArray<ObAutoSplitTask> &task_array)
         if (OB_HASH_NOT_EXIST == tmp_ret) {
           tmp_ret = OB_SUCCESS;
           if (OB_TMP_FAIL(atomic_push_task(task))) {
-            LOG_WARN("atomic push task failed", K(tmp_ret));
           }
         } else if (OB_HASH_EXIST == tmp_ret) {
           tmp_ret = OB_SUCCESS;
@@ -401,7 +382,6 @@ int ObAutoSpTaskSchedEntry::assign(const ObAutoSpTaskSchedEntry &other)
     table_id_ = other.table_id_;
     next_valid_schedule_time_ = other.next_valid_schedule_time_;
     if (OB_FAIL(task_.assign(other.task_))) {
-      LOG_WARN("failed to assign", K(ret), K(task_), K(other.task_));
     }
   }
   return ret;
@@ -417,25 +397,19 @@ int ObRsAutoSplitScheduler::pop_tasks(const int64_t num_tasks_can_pop, const boo
     if (polling_mgr_.empty()) {
       //do nothing
     } else if (OB_FAIL(polling_mgr_.pop_tasks(num_tasks_pop_from_poll_mgr, tenant_task_arrays))) {
-      LOG_WARN("fail to pop tasks from tree", K(ret));
     } else if (OB_FAIL(push_to_direct_cache(tenant_task_arrays))) {
-      LOG_WARN("failed to push to direct cache", K(ret));
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(pop_from_direct_cache(num_tasks_can_pop, task_array))) {
-      LOG_WARN("failed ot pop from direct cache", K(ret));
     }
   } else {
     if (OB_FAIL(pop_from_direct_cache(num_tasks_can_pop, task_array))) {
-      LOG_WARN("failed ot pop from direct cache", K(ret));
     } else if (task_array.size() < num_tasks_can_pop) {
       if (OB_FAIL(polling_mgr_.pop_tasks(num_tasks_can_pop - task_array.size(), tenant_task_arrays))) {
-        LOG_WARN("fail to pop tasks from tree", K(ret));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < tenant_task_arrays.count(); i++) {
           for (int64_t j = 0; OB_SUCC(ret) && j < tenant_task_arrays.at(i).count(); j++) {
             if (OB_FAIL(task_array.push_back((tenant_task_arrays.at(i).at(j))))) {
-              LOG_WARN("failed to append tasks from polling mgr", K(ret));
             }
           }
         }
@@ -452,7 +426,6 @@ int ObRsAutoSplitScheduler::push_tasks(const ObArray<ObAutoSplitTask> &task_arra
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(task_array));
   } else if (OB_FAIL(polling_mgr_.push_tasks(task_array))) {
-    LOG_WARN("fail to push tasks into polling_mgr_", K(ret));
   }
   return ret;
 }
@@ -545,7 +518,6 @@ int ObServerAutoSplitScheduler::check_tablet_creation_limit(const int64_t inc_ta
       LOG_WARN("unexpected value of max_tablet_cnt", K(ret), K(max_tablet_cnt));
     } else if (OB_FALSE_IT(cur_ratio = static_cast<double>(cur_tablet_cnt + inc_tablet_cnt) / max_tablet_cnt)) {
     } else if (OB_FAIL(cal_real_auto_split_size(0.5/*base_ratio*/, cur_ratio, split_size, real_split_size))) {
-      LOG_WARN("failed to cal tablet limit penalty", K(ret));
     }
   }
   return ret;
@@ -563,7 +535,6 @@ int ObRsAutoSplitScheduler::gc_deleted_tenant_caches()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(polling_mgr_.gc_deleted_tenant_caches())) {
-    LOG_WARN("failed to gc deleted tenant caches", K(ret));
   }
   return ret;
 }
@@ -582,10 +553,8 @@ int ObRsAutoSplitScheduler::pop_from_direct_cache(const int64_t num_tasks_can_po
       ObAutoSpTaskSchedEntry &task_record = task_direct_cache_.at(i);
       if (task_record.next_valid_schedule_time_ > cur_time || budget == 0) {
         if (OB_FAIL(unavailable_tasks.push_back(task_record))) {
-          LOG_WARN("failed to push back", K(ret), K(task_record));
         }
       } else if (OB_FAIL(task_array.push_back(task_record.task_))) {
-        LOG_WARN("failed to push back", K(ret));
       } else {
         --budget;
       }
@@ -595,7 +564,6 @@ int ObRsAutoSplitScheduler::pop_from_direct_cache(const int64_t num_tasks_can_po
   } else {
     task_direct_cache_.reuse();
     if (OB_FAIL(append(task_direct_cache_, unavailable_tasks))) {
-      LOG_WARN("failed to append", K(ret), K(task_direct_cache_), K(unavailable_tasks));
     }
   }
   return ret;
@@ -617,12 +585,10 @@ int ObRsAutoSplitScheduler::push_to_direct_cache(ObArray<ObArray<ObAutoSplitTask
     for (int64_t j = 0; OB_SUCC(ret) && j < split_task_array.count(); ++j) {
       ObAutoSplitTask &auto_split_task = split_task_array.at(j);
       if (OB_FAIL(tablet_ids.push_back(auto_split_task.tablet_id_))) {
-        LOG_WARN("failed to push back", K(ret), K(tablet_ids));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(ObAutoSplitArgBuilder::acquire_table_id_of_tablets(tablet_ids, table_ids))) {
-      LOG_WARN("failed to acquire table ids", K(ret));
     } else if (OB_UNLIKELY(tablet_ids.count() != split_task_array.count() || table_ids.count() != split_task_array.count())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected error", K(ret), K(tablet_ids), K(split_task_array), K(table_ids));
@@ -634,7 +600,6 @@ int ObRsAutoSplitScheduler::push_to_direct_cache(ObArray<ObArray<ObAutoSplitTask
         split_task_sched_entry.table_id_ = table_ids.at(m);
         split_task_sched_entry.next_valid_schedule_time_ = cur_time;
         if (OB_FAIL(split_task_sched_entry.task_.assign(auto_split_task))) {
-          LOG_WARN("failed to assgin auto split task", K(ret), K(auto_split_task));
         }
         bool duplicated = false;
         for (int64_t n = 0; !duplicated && OB_SUCC(ret) && n < task_direct_cache_.count(); ++n) {
@@ -667,7 +632,6 @@ int ObServerAutoSplitScheduler::check_sstable_limit(const storage::ObTablet &tab
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(tablet));
   } else if (OB_FAIL(tablet.get_all_sstables(iter))) {
-    LOG_WARN("get all sstables failed", K(ret), K(tablet));
   }
   while (OB_SUCC(ret)) {
     if (OB_FAIL(iter.get_next(unused_table))) {
@@ -722,7 +686,6 @@ int ObServerAutoSplitScheduler::check_and_fetch_tablet_split_info(const storage:
       LOG_WARN("fail to get split data", K(ret), KP(tablet));
     }
   } else if (OB_FAIL(split_data.get_auto_part_size(auto_split_tablet_size))) {
-    LOG_WARN("fail to get auto part size", K(ret), K(split_data));
   }
 
 
@@ -740,9 +703,7 @@ int ObServerAutoSplitScheduler::check_and_fetch_tablet_split_info(const storage:
   } else if (OB_INVALID_SIZE == auto_split_tablet_size) {
     can_split = false;
   } else if (OB_FAIL(check_sstable_limit(*tablet, num_sstables_exceed_limit))) {
-    LOG_WARN("fail to check sstable limit", K(ret), KPC(tablet));
   } else if (OB_FAIL(ls.get_ls_role(role))) {
-    LOG_WARN("get role failed", K(ret), K(ls_id));
   } else if (OB_FAIL(check_tablet_creation_limit(ObAutoSplitArgBuilder::get_max_split_partition_num(), 0.8/*safe_ratio*/, auto_split_tablet_size, real_auto_split_size))) {
     LOG_WARN("check_create_new_tablets fail", K(ret));
     if (OB_TOO_MANY_PARTITIONS_ERROR == ret) {
@@ -809,7 +770,6 @@ int ObServerAutoSplitScheduler::push_task(const storage::ObTabletHandle &tablet_
     } else if (task_array.count() == 0) {
       //do nothing
     } else if (OB_FAIL(batch_send_split_request(tenant_task_arrays))) {
-      LOG_WARN("fail to send split request", K(ret), K(tenant_task_arrays));
     }
   }
   return ret;
@@ -836,14 +796,12 @@ int ObServerAutoSplitScheduler::batch_send_split_request(const ObArray<ObArray<O
         
         single_arg.used_disk_space_ = task.used_disk_space_;
         if (OB_FAIL(args.args_.push_back(single_arg))) {
-          LOG_WARN("push task failed", K(ret), K(task), K(j));
         }
       }
     }
     obcall::ObAutoSplitTabletBatchRes results;
     if (OB_SUCC(ret)) {
       if (OB_FAIL(GCTX.root_service_->send_auto_split_tablet_task_request(args, results))) {
-        LOG_WARN("failed to send_auto_split_tablet_task_request", KR(ret), K(args), K(results));
       } else if (OB_UNLIKELY(results.rets_.count() != args.args_.count())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("send_auto_split_tablet_task_request rpc failed, the number of results doesn't match the number of arguments",
@@ -1006,18 +964,14 @@ int ObAutoSplitTaskPollingMgr::pop_tasks(const int64_t num_tasks_can_pop, ObArra
           tenant_cache_ = nullptr;
         } else if (OB_FALSE_IT(tenant_cache = share::g_mp->auto_split_task_cache())) {
         } else if (OB_TMP_FAIL(pop_tasks_from_tenant_cache(tasks_pop_this_round, tmp_array, tenant_cache))) {
-          LOG_WARN("failed to pop tasks from tenant cache", K(tmp_ret));
         }
       } else if (OB_TMP_FAIL(get_tenant_cache(tenant_cache))) {
-        LOG_WARN("get tenant cache failed", K(tmp_ret));
       } else if (OB_TMP_FAIL(pop_tasks_from_tenant_cache(tasks_pop_this_round, tmp_array, tenant_cache))) {
-        LOG_WARN("failed to pop tasks from tenant cache", K(tmp_ret));
       }
       if OB_FAIL(ret) {
       } else {
         tasks_pop_this_round -= tmp_array.count();
         if (OB_FAIL(tmp_array.count() > 0 && OB_FAIL(task_array.push_back(tmp_array)))) {
-          LOG_WARN("failed to push tasks into task_array", K(ret));
         }
       }
     }
@@ -1079,7 +1033,6 @@ int ObAutoSplitTaskPollingMgr::push_tasks(const ObArray<ObAutoSplitTask> &task_a
         tenant_cache_ = nullptr;
       } else if (OB_FALSE_IT(cache_total_task_old = tenant_cache->get_tasks_num())) {
       } else if (OB_FAIL(tenant_cache->push_tasks(task_array))) {
-        LOG_WARN("push tasks into tenant cache failed", K(ret));
       }
       if (OB_NOT_NULL(tenant_cache) && cache_total_task_old != OB_INVALID_SIZE) {
         const int64_t cache_total_task_new = tenant_cache->get_tasks_num();
@@ -1105,7 +1058,6 @@ int ObAutoSplitTaskPollingMgr::create_tenant_cache(ObAutoSplitTaskCache *&tenant
     LOG_WARN("allocate memory failed", K(ret), KP(buf));
   } else if (FALSE_IT(tenant_cache = new (buf) ObAutoSplitTaskCache())) {
   } else if (OB_FAIL(tenant_cache->init(ObAutoSplitTaskCache::CACHE_MAX_CAPACITY))) {
-    LOG_WARN("failed to init ", K(ret));
   }
   if (OB_FAIL(ret) && OB_NOT_NULL(tenant_cache)) {
     tenant_cache->destroy();
@@ -1157,7 +1109,6 @@ int ObAutoSplitArgBuilder::build_arg(const share::ObLSID ls_id,
   } else if (FALSE_IT(ranges_num = MAX_SPLIT_PARTITION_NUM > ranges_num ?
                                    ranges_num : MAX_SPLIT_PARTITION_NUM)) {
   } else if (OB_FAIL(acquire_schema_info_of_tablet_( tablet_id, table_schema, db_schema, guard, arg))) {
-    LOG_WARN("fail to acquire schema info of tablet", KR(ret), K(tablet_id));
   } else if (OB_ISNULL(table_schema) || OB_ISNULL(db_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", KR(ret), K(tablet_id), KPC(table_schema), KPC(db_schema));
@@ -1165,7 +1116,6 @@ int ObAutoSplitArgBuilder::build_arg(const share::ObLSID ls_id,
     ret = OB_OP_NOT_ALLOW;
     LOG_WARN("attempt to auto split tablet of a non-auto-partitioned table", KR(ret), KPC(table_schema));
   } else if (OB_FAIL(table_schema->check_validity_for_auto_partition())) {
-    LOG_WARN("table is invalid for auto partition", KR(ret), K(tablet_id), KPC(table_schema));
   } else if (OB_FAIL(sampler.query_ranges(db_schema->get_database_name_str(),
                                           *table_schema,
                                           tablet_id,
@@ -1173,15 +1123,12 @@ int ObAutoSplitArgBuilder::build_arg(const share::ObLSID ls_id,
                                           used_disk_space,
                                           range_allocator,
                                           ranges))) {
-    LOG_WARN("fail to acquire ranges for split partition", KR(ret));
   } else if (OB_UNLIKELY(ranges.empty())) { // fail to sample
     ret = OB_EAGAIN;
     LOG_WARN("partition is empty or all data have same partition key", KR(ret));
   } else {
     if (OB_FAIL(build_arg_( db_schema->get_database_name_str(),
                             *table_schema, tablet_id, ranges, arg))) {
-      LOG_WARN("fail to build split arg", KR(ret), KPC(db_schema),
-                                          KPC(table_schema), K(tablet_id), K(ranges));
     }
   }
 
@@ -1204,26 +1151,20 @@ int ObAutoSplitArgBuilder::acquire_schema_info_of_tablet_(const ObTabletID table
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", KR(ret), K(tablet_id));
   } else if (OB_FAIL(tablet_ids.push_back(tablet_id))) {
-    LOG_WARN("failed to push back", K(ret), K(tablet_id));
   } else if (OB_FAIL(acquire_table_id_of_tablets(tablet_ids, table_ids))) {
-    LOG_WARN("fail to acquire tablet info", KR(ret), K(tablet_id));
   } else if (table_ids.count() != 1) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected count of the table_ids", K(ret), K(table_ids));
   } else if (OB_FALSE_IT(table_id = table_ids.at(0))) {
   } else if (OB_FAIL(schema_service->get_tenant_schema_guard(guard))){
-    LOG_WARN("fail to get tenant schema guard", KR(ret));
   } else if (OB_FAIL(guard.get_table_schema( table_id, table_schema))){
-    LOG_WARN("fail to get table schema", KR(ret), K(table_id), K(tablet_id));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", KR(ret), K(table_id), K(tablet_id));
   } else if (OB_FAIL(arg.based_schema_object_infos_.push_back(ObBasedSchemaObjectInfo(table_schema->get_table_id(),
       schema::TABLE_SCHEMA, table_schema->get_schema_version())))) {
-    LOG_WARN("fail to push back into based_schema_object_infos_", K(ret));
   } else if (FALSE_IT(db_id = table_schema->get_database_id())){
   } else if (OB_FAIL(guard.get_database_schema( db_id, db_schema))) {
-    LOG_WARN("fail to get database schema", KR(ret), K(table_id), K(tablet_id));
   } else if (OB_ISNULL(db_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null", KR(ret), K(db_id), K(table_id), K(tablet_id));
@@ -1256,24 +1197,20 @@ int ObAutoSplitArgBuilder::acquire_table_id_of_tablets(const ObIArray<ObTabletID
     } else if (OB_FAIL(sql.assign_fmt("SELECT table_id, tablet_id FROM oceanbase.%s "
                                       "WHERE tablet_id in (",
                                       share::OB_ALL_TABLET_TO_LS_TNAME))) {
-      LOG_WARN("failed to assign sql", KR(ret));
     } else {
       for (int64_t idx = 0; OB_SUCC(ret) && (idx < tablet_ids.count()); ++idx) {
         if (OB_FAIL(sql.append_fmt(
           "%lu%s",
           tablet_ids.at(idx).id(),
           ((idx == tablet_ids.count() - 1) ? ")" : ",")))) {
-          LOG_WARN("assign sql string failed", K(ret), K(tablet_ids.at(idx).id()));
         }
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(mysql_proxy->read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", KR(ret), K(sql));
       } else if (OB_ISNULL(sql_result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("result is null", KR(ret), K(sql));
       } else if (OB_FAIL(table_ids.prepare_allocate(tablet_ids.count()))) {
-        LOG_WARN("failed to prepare_allocate", K(ret), K(tablet_ids.count()));
       } else if (table_ids.count() != tablet_ids.count()) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected diff length of table_ids and tablet_ids", K(ret), K(table_ids), K(tablet_ids));
@@ -1319,11 +1256,7 @@ int ObAutoSplitArgBuilder::build_arg_(const ObString &db_name,
                                                ranges,
                                                arg.tz_info_wrap_.get_time_zone_info(),
                                                alter_table_schema))) {
-    LOG_WARN("fail to build alter_table_schema", KR(ret), K(db_name),
-                                                 K(table_schema), K(split_source_tablet_id),
-                                                 K(ranges));
   } else if (OB_FAIL(OTTZ_MGR.get_tenant_tz(tz_map_wrap))) {
-    LOG_WARN("get tenant timezone map failed", KR(ret));
   } else {
     arg.alter_part_type_ = obcall::ObAlterTableArg::AlterPartitionType::AUTO_SPLIT_PARTITION;
     
@@ -1356,11 +1289,8 @@ int ObAutoSplitArgBuilder::print_identifier(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alloc", KR(ret));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, ObString(quote)))) {
-    LOG_WARN("failed to print quote", K(ret));
   } else if (OB_FAIL(sql::ObSQLUtils::print_identifier(buf, buf_len, pos, CS_TYPE_UTF8MB4_GENERAL_CI, name))) {
-    LOG_WARN("print partition name failed", K(ret), K(name));
   } else if (OB_FAIL(databuff_printf(buf, buf_len, pos, ObString(quote)))) {
-    LOG_WARN("failed to print quote", K(ret));
   } else {
     ident.assign_ptr(buf, pos);
   }
@@ -1381,7 +1311,6 @@ int ObAutoSplitArgBuilder::convert_rowkey_to_sql_literal(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("failed to alloc", K(ret), K(buf_len));
   } else if (OB_FAIL(ObPartitionUtils::convert_rowkey_to_sql_literal(rowkey, buf, buf_len, pos, false/*print_collation*/, tz_info))) {
-    LOG_WARN("failed to convert rowkey to sql text", K(tz_info), K(ret));
   } else {
     rowkey_str.assign_ptr(buf, pos);
   }
@@ -1407,15 +1336,11 @@ int ObAutoSplitArgBuilder::build_ddl_stmt_str_(
   share::schema::ObSchemaPrinter schema_printer(mock_schema_guard);
 
   if (OB_FAIL(sql_string.append_fmt("/*ob_auto_split*/ "))) {
-    LOG_WARN("failed to append fmt", K(ret));
   } else if (OB_FAIL(print_identifier(allocator, orig_table_schema.get_table_name_str(), table_name))) {
-    LOG_WARN("failed to generate new name with escape character", K(ret), K(orig_table_schema.get_table_name()));
   } else if (from_non_partitioned_table) {
     ObArray<uint64_t> presetting_partition_keys;
     if (OB_FAIL(sql_string.append_fmt("ALTER TABLE %.*s", table_name.length(), table_name.ptr()))) {
-      LOG_WARN("failed to append fmt", K(ret));
     } else if (OB_FAIL(orig_table_schema.get_presetting_partition_keys(presetting_partition_keys))) {
-      LOG_WARN("failed to get presetting partition key columns", KR(ret), K(orig_table_schema));
     } else if (presetting_partition_keys.empty()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid schema for auto partitioning", KR(ret), K(orig_table_schema));
@@ -1432,7 +1357,6 @@ int ObAutoSplitArgBuilder::build_ddl_stmt_str_(
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to alloc", KR(ret));
         } else if (OB_FAIL(schema_printer.print_column_list(orig_table_schema, presetting_partition_keys, buf, buf_len, pos))) {
-          LOG_WARN("failed to print part func expr", K(ret), K(orig_table_schema.get_table_id()), K(presetting_partition_keys));
         } else {
           part_func_expr.assign_ptr(buf, pos);
         }
@@ -1459,18 +1383,14 @@ int ObAutoSplitArgBuilder::build_ddl_stmt_str_(
     ObBasePartition *src_partition = nullptr;
     ObString part_name;
     if (OB_FAIL(orig_table_schema.get_part_idx_by_tablet(src_tablet_id, part_idx, subpart_idx))) {
-      LOG_WARN("failed to get part idx", K(ret), K(src_tablet_id));
     } else if (OB_FAIL(orig_table_schema.get_part_by_idx(part_idx, subpart_idx, src_partition))) {
-      LOG_WARN("failed to get part by idx", K(ret), K(part_idx), K(subpart_idx));
     } else if (OB_ISNULL(src_partition)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("invalid partition", K(ret), K(part_idx), K(subpart_idx));
     } else if (OB_FAIL(print_identifier(tmp_allocator, src_partition->get_part_name(), part_name))) {
-      LOG_WARN("print partition name failed", K(ret), KPC(src_partition));
     } else if (OB_FAIL(sql_string.append_fmt("ALTER TABLE %.*s REORGANIZE PARTITION %.*s INTO (",
         table_name.length(), table_name.ptr(),
         part_name.length(), part_name.ptr()))) {
-      LOG_WARN("failed to append fmt", K(ret));
     }
   }
 
@@ -1488,24 +1408,18 @@ int ObAutoSplitArgBuilder::build_ddl_stmt_str_(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("part is null", K(ret), K(part_array[i]));
     } else if (OB_FAIL(print_identifier(tmp_allocator, part_array[i]->get_part_name(), part_name))) {
-      LOG_WARN("print partition name failed", K(ret), KPC(part_array[i]));
     } else if (OB_FAIL(sql_string.append_fmt("PARTITION %.*s", part_name.length(), part_name.ptr()))) {
-      LOG_WARN("failed to append fmt", K(ret), K(part_name));
     } else if (OB_FAIL(convert_rowkey_to_sql_literal(part_array[i]->get_high_bound_val(), tz_info, tmp_allocator, high_bound_val_str))) {
-      LOG_WARN("failed to convert high bound val", K(ret), KPC(part_array[i]));
     } else {
       if (OB_FAIL(sql_string.append_fmt(" VALUES LESS THAN (%.*s)%s",
               high_bound_val_str.length(), high_bound_val_str.ptr(),
               is_last_part ? "" : ", "))) {
-        LOG_WARN("failed to append fmt", K(ret));
       }
     }
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(sql_string.append_fmt(")"))) {
-    LOG_WARN("failed to append fmt", K(ret));
   } else if (OB_FAIL(ob_write_string(allocator, sql_string.string(), ddl_stmt_str, true/*c_style*/))) {
-    LOG_WARN("failed to write string", K(ret));
   }
   return ret;
 }
@@ -1525,11 +1439,8 @@ int ObAutoSplitArgBuilder::build_alter_table_schema_(const ObString &db_name,
   const ObPartitionFuncType part_func_type = table_schema.get_part_option().get_part_func_type();
   ObPartitionLevel target_part_level = PARTITION_LEVEL_MAX;
   if (OB_FAIL(table_schema.get_target_part_level_for_auto_partitioned_table(target_part_level))) {
-    LOG_WARN("fail to get target part level for auto partitioned table", KR(ret), K(table_schema));
   } else if (OB_FAIL(alter_table_schema.set_origin_database_name(db_name))) {
-    LOG_WARN("fail to set origin database name", KR(ret), K(db_name));
   } else if (OB_FAIL(alter_table_schema.set_origin_table_name(table_name))) {
-    LOG_WARN("fail to set origin table name", KR(ret), K(table_name));
   } else if (OB_UNLIKELY(target_part_level == ObPartitionLevel::PARTITION_LEVEL_MAX)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid target part level", KR(ret), K(table_schema));
@@ -1548,10 +1459,7 @@ int ObAutoSplitArgBuilder::build_alter_table_schema_(const ObString &db_name,
       if (OB_FAIL(build_partition_( table_id,
                                    split_source_tablet_id, high_bound_val, tz_info,
                                    new_part))) {
-        LOG_WARN("fail to build partition", KR(ret), K(table_id), K(split_source_tablet_id),
-                                            K(high_bound_val), K(table_schema));
       } else if (OB_FAIL(alter_table_schema.add_partition(new_part))) {
-        LOG_WARN("fail to add partition", KR(ret), K(new_part));
       } else {
         new_part.reset();
       }
@@ -1560,7 +1468,6 @@ int ObAutoSplitArgBuilder::build_alter_table_schema_(const ObString &db_name,
 
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(rootserver::ObDDLService::fill_part_name(table_schema, alter_table_schema))) {
-      LOG_WARN("failed to fill part name", K(ret));
     } else {
       const int64_t part_num = alter_table_schema.get_partition_num();
       share::schema::ObPartition **part_array = alter_table_schema.get_part_array();
@@ -1595,7 +1502,6 @@ int ObAutoSplitArgBuilder::build_partition_(const uint64_t table_id,
   ObRowkey cast_high_bound_val;
   common::ObArenaAllocator cast_allocator;
   if (OB_FAIL(check_and_cast_high_bound(high_bound_val, tz_info, cast_high_bound_val, need_cast, cast_allocator))) {
-    LOG_WARN("failed to check cast high bound", K(ret));
   } else if (need_cast && OB_FAIL(new_part.set_high_bound_val(cast_high_bound_val))) {
     LOG_WARN("failed to set high_bound_val", KR(ret));
   } else if (!need_cast && OB_FAIL(new_part.set_high_bound_val(high_bound_val))) {
@@ -1631,13 +1537,11 @@ int ObAutoSplitArgBuilder::check_and_cast_high_bound(const ObRowkey &origin_high
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && !need_cast && i < obj_count; ++i) {
       if (OB_FAIL(check_need_to_cast(ori_obj_ptr[i], need_cast))) {
-        LOG_WARN("fail to check need to cast", K(ret), K(ori_obj_ptr[i]));
       }
     }
     if (OB_SUCC(ret) && need_cast) {
       ObObj *cast_obj_ptr = nullptr;
       if (OB_FAIL(origin_high_bound_val.deep_copy(cast_hight_bound_val, allocator))) {
-        LOG_WARN("failed to copy rowkey", K(origin_high_bound_val));
       } else if (OB_ISNULL(cast_obj_ptr = cast_hight_bound_val.get_obj_ptr())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("object ptr should not be null", K(ret), K(cast_obj_ptr));
@@ -1650,7 +1554,6 @@ int ObAutoSplitArgBuilder::check_and_cast_high_bound(const ObRowkey &origin_high
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("ptr should not be null", K(ret), K(c_obj_ptr), K(o_obj_ptr));
           } else if (OB_FAIL(check_need_to_cast(*o_obj_ptr, need_to_cast))) {
-            LOG_WARN("fail to check need to cast", K(ret), K(*o_obj_ptr));
           } else if (need_to_cast) {
             const ObObjType expected_obj_type = (ob_is_int_tc(c_obj_ptr->get_type()) ? ObIntType : ObUInt64Type);
             int64_t cm_mode = CM_NONE;
@@ -1658,10 +1561,6 @@ int ObAutoSplitArgBuilder::check_and_cast_high_bound(const ObRowkey &origin_high
             dtc_params.tz_info_ = tz_info;
             ObCastCtx cast_ctx(&allocator, &dtc_params, cm_mode, c_obj_ptr->get_meta().get_collation_type());
             if (OB_FAIL(ObObjCaster::to_type(expected_obj_type, cast_ctx, *o_obj_ptr, *c_obj_ptr))) {
-              STORAGE_LOG(WARN, "fail to cast obj",
-                  K(ret), K(*o_obj_ptr), K(*c_obj_ptr), K(o_obj_ptr->get_type()),
-                  K(ob_obj_type_str(o_obj_ptr->get_type())),
-                  K(o_obj_ptr->get_meta().get_type()), K(ob_obj_type_str(o_obj_ptr->get_meta().get_type())));
             }
           }
         }
@@ -1716,13 +1615,11 @@ int ObSplitSampler::query_ranges(const ObString &db_name,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("only support to sample data_table or global index", KR(ret), K(table_schema));
   } else if (OB_FAIL(acquire_partition_key_name_(table_schema, column_names))){
-    LOG_WARN("fail to acquire partition key name", KR(ret), K(table_schema));
   } else if (OB_UNLIKELY(column_names.empty())){
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid array count", KR(ret), K(column_names));
   } else if (table_schema.is_partitioned_table()) {
     if (OB_FAIL(acquire_partition_meta_(table_schema, tablet_id, part_meta))) {
-      LOG_WARN("fail to acquire partition meta", KR(ret), K(table_id), K(tablet_id));
     } else if (nullptr == part_meta.part_) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("meta's partition is NULL", KR(ret), K(table_id), K(tablet_id), K(part_meta));
@@ -1730,17 +1627,12 @@ int ObSplitSampler::query_ranges(const ObString &db_name,
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(fill_query_range_bounder(part_meta, unused_column_ranges, column_names.count(), low_bound_val, high_bound_val, range_allocator))) {
-    LOG_WARN("fail to fill query range bounder", K(ret));
   } else if (OB_FAIL(query_ranges_(db_name, table_schema.get_table_name_str(), part_meta,
                             column_names, unused_column_ranges,
                             range_num, used_disk_space,
                             table_schema.is_global_index_table(),
                             low_bound_val, high_bound_val,
                             range_allocator, ranges))) {
-    LOG_WARN("fail to acquire ranges for split partition", KR(ret), K(db_name),
-                                                           K(table_schema), K(part_meta),
-                                                           K(range_num), K(used_disk_space),
-                                                           K(ranges));
   }
   LOG_DEBUG("query range result", K(ret), K(ranges));
   return ret;
@@ -1782,7 +1674,6 @@ int ObSplitSampler::query_ranges(const ObString &db_name,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid array count", KR(ret), K(column_names), K(column_ranges));
   } else if (OB_FAIL(fill_query_range_bounder(unused_part_meta, column_ranges, unused_presetting_column_cnt, low_bound_val, high_bound_val, range_allocator))) {
-    LOG_WARN("fail to fill query range bounder", K(ret), K(column_ranges));
   } else if (OB_FAIL(query_ranges_(db_name, data_table_schema.get_table_name_str(),
                                    unused_part_meta,
                                    column_names, column_ranges,
@@ -1790,10 +1681,6 @@ int ObSplitSampler::query_ranges(const ObString &db_name,
                                    false /*query_index*/,
                                    low_bound_val, high_bound_val,
                                    range_allocator, ranges))) {
-    LOG_WARN("fail to acquire ranges for split partition", KR(ret), K(db_name),
-                                                           K(data_table_schema), K(range_num),
-                                                           K(used_disk_space),
-                                                           K(ranges));
   }
   LOG_DEBUG("query range result", K(ret), K(column_ranges), K(ranges));
   return ret;
@@ -1855,9 +1742,7 @@ int ObSplitSampler::fill_query_range_bounder(
       ObRowkey l_rowkey(l_obj_buf, copy_key_length);
       ObRowkey h_rowkey(h_obj_buf, copy_key_length);
       if (OB_FAIL(l_rowkey.deep_copy(l_bound_val, allocator))) {
-        LOG_WARN("fail to set low bound val", K(ret), K(l_rowkey));
       } else if (OB_FAIL(h_rowkey.deep_copy(h_bound_val, allocator))) {
-        LOG_WARN("fail to set high bound val", K(ret), K(h_rowkey));
       }
     }
   } else {
@@ -1919,16 +1804,13 @@ int ObSplitSampler::query_ranges_(const ObString &db_name,
   ranges.reset();
 
   if (OB_FAIL(single_conn_proxy.connect(0/*group_id*/, GCTX.sql_proxy_))) {
-    LOG_WARN("failed to get mysql connect", KR(ret));
   }
   if (OB_FAIL(ret)) {
   } else if (query_index) {
     ObSqlString set_sql;
     int64_t affected_rows = 0;
     if (OB_FAIL(set_sql.assign_fmt("SET session %s = true", share::OB_SV_ENABLE_INDEX_DIRECT_SELECT))) {
-      LOG_WARN("failed to assign sql", KR(ret));
     } else if (OB_FAIL(single_conn_proxy.write(set_sql.ptr(), affected_rows))) {
-      LOG_WARN("single_conn_proxy write failed", KR(ret), K(set_sql));
     }
   }
 
@@ -1937,14 +1819,10 @@ int ObSplitSampler::query_ranges_(const ObString &db_name,
   } else if (OB_FAIL(build_sample_sql_(db_name, table_name, part_name,
                                        column_names, column_ranges,
                                        range_num, sample_pct, sql))) {
-    LOG_WARN("fail to build sample sql", KR(ret), K(db_name), K(table_name), K(part_name),
-                                         K(column_names), K(column_ranges),
-                                         K(range_num), K(sample_pct));
   } else {
     SMART_VAR(ObMySQLProxy::MySQLResult, res) {
       sqlclient::ObMySQLResult *sql_result = nullptr;
       if (OB_FAIL(single_conn_proxy.read(res, sql.ptr()))) {
-        LOG_WARN("execute sql failed", KR(ret), K(sql));
       } else if (OB_ISNULL(sql_result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("result is null", KR(ret), K(sql));
@@ -1977,7 +1855,6 @@ int ObSplitSampler::query_ranges_(const ObString &db_name,
             if (ranges.size() == 0) {
               // copy low_bound_val to range.start_key_
               if (OB_FAIL(low_bound_val.deep_copy(range.start_key_, range_allocator))) {
-                LOG_WARN("fail to copy low_bound_val to range.start_key_", KR(ret));
               }
             } else {
               ObRowkey& old_end = ranges[ranges.size()-1].end_key_;
@@ -1994,7 +1871,6 @@ int ObSplitSampler::query_ranges_(const ObString &db_name,
               ObRowkey end(objs, column_count);
               // copy end to range.end_key_
               if (OB_FAIL(end.deep_copy(range.end_key_, range_allocator))) {
-                LOG_WARN("fail to copy ObRowkey", KR(ret));
               } else {
                 range.border_flag_.set_inclusive_end();
               }
@@ -2002,7 +1878,6 @@ int ObSplitSampler::query_ranges_(const ObString &db_name,
 
             if (OB_FAIL(ret)) {
             } else if (OB_FAIL(ranges.push_back(range))) {
-              LOG_WARN("range push back failed", KR(ret));
             }
           }
         } // end while
@@ -2014,9 +1889,7 @@ int ObSplitSampler::query_ranges_(const ObString &db_name,
             range.start_key_.assign(old_end.get_obj_ptr(), column_count);
 
             if (OB_FAIL(high_bound_val.deep_copy(range.end_key_, range_allocator))) {
-              LOG_WARN("fail to copy high_bound_val to range.end_key_", KR(ret));
             } else if (OB_FAIL(ranges.push_back(range))) {
-              LOG_WARN("range push back failed", KR(ret));
             }
           }
         }
@@ -2041,11 +1914,8 @@ int ObSplitSampler::build_sample_sql_(const ObString &db_name, const ObString &t
   ObSqlString col_name_alias_str;
 
   if (OB_FAIL(gen_column_alias_(column_names, col_alias_str, col_name_alias_str))) {
-    LOG_WARN("fail to gen column alias", KR(ret), K(column_names));
   } else if (OB_FAIL(ObAutoSplitArgBuilder::print_identifier(tmp_allocator, db_name, db_name_quoted))) {
-    LOG_WARN("failed to generate new name with escape character", K(ret), K(db_name));
   } else if (OB_FAIL(ObAutoSplitArgBuilder::print_identifier(tmp_allocator, table_name, table_name_quoted))) {
-    LOG_WARN("failed to generate new name with escape character", K(ret), K(table_name));
   } else if (OB_FAIL(sql.assign_fmt(
       "SELECT %.*s FROM "
       "(SELECT %.*s, bucket, ROW_NUMBER() OVER (PARTITION BY bucket ORDER BY %.*s) rn FROM "
@@ -2064,16 +1934,13 @@ int ObSplitSampler::build_sample_sql_(const ObString &db_name, const ObString &t
       static_cast<int>(col_name_alias_str.length()), col_name_alias_str.ptr(),
       db_name_quoted.length(), db_name_quoted.ptr(),
       table_name_quoted.length(), table_name_quoted.ptr()))) {
-    LOG_WARN("string assign failed", KR(ret), K(col_alias_str), K(col_name_alias_str), K(db_name_quoted), K(table_name_quoted));
   }
 
   if (OB_FAIL(ret)){
   } else if (part_name != nullptr) {
     ObString part_name_quoted;
     if (OB_FAIL(ObAutoSplitArgBuilder::print_identifier(tmp_allocator, *part_name, part_name_quoted))) {
-      LOG_WARN("failed to print identifier", K(ret), KPC(part_name));
     } else if (OB_FAIL(sql.append_fmt("PARTITION (%.*s) ", part_name_quoted.length(), part_name_quoted.ptr()))) {
-      LOG_WARN("string assign failed", KR(ret), K(part_name_quoted));
     }
   }
 
@@ -2081,11 +1948,9 @@ int ObSplitSampler::build_sample_sql_(const ObString &db_name, const ObString &t
   } else if (sample_pct < 100 && OB_FAIL(sql.append_fmt("SAMPLE BLOCK(%g) ", sample_pct))) {
     LOG_WARN("string assign failed", KR(ret), K(sample_pct));
   } else if (OB_FAIL(add_sample_condition_sqls_(column_names, column_ranges, sql))) {
-    LOG_WARN("fail to add sample conditions", KR(ret), K(column_names), K(column_ranges));
   } else if (OB_FAIL(sql.append_fmt(") a) b) c WHERE rn = 1 GROUP BY %.*s ORDER BY %.*s",
                       static_cast<int>(col_alias_str.length()), col_alias_str.ptr(),
                       static_cast<int>(col_alias_str.length()), col_alias_str.ptr()))) {
-    LOG_WARN("string assign failed", KR(ret), K(col_alias_str));
   }
   return ret;
 }
@@ -2100,16 +1965,13 @@ int ObSplitSampler::add_sample_condition_sqls_(const ObIArray<ObString> &columns
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid count", KR(ret), K(columns), K(column_ranges));
   } else if (OB_FAIL(sql.append_fmt("WHERE 1=1 "))) {
-    LOG_WARN("string assign failed", KR(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < columns.count(); i++) {
       const ObString& column = columns.at(i);
       const ObNewRange& range = column_ranges.at(i);
       if (range.start_key_.is_min_row() && range.end_key_.is_max_row()) {
       } else if (OB_FAIL(sql.append_fmt("AND "))) {
-        LOG_WARN("string assign failed", KR(ret));
       } else if (OB_FAIL(add_sample_condition_sql_(column, range, sql))) {
-        LOG_WARN("fail to add sample condition", KR(ret), K(column), K(range));
       }
     }
   }
@@ -2148,7 +2010,6 @@ int ObSplitSampler::add_sample_condition_sql_(const ObString &column,
                                         range.border_flag_.inclusive_start() ? ">=" : ">",
                                         min_val.length(), min_val.ptr()
                                         ))) {
-        LOG_WARN("string assign failed", KR(ret), K(column), K(range));
       }
     }
 
@@ -2170,7 +2031,6 @@ int ObSplitSampler::add_sample_condition_sql_(const ObString &column,
                                           range.border_flag_.inclusive_end() ? "<=" : "<",
                                           max_val.length(), max_val.ptr()
                                           ))) {
-          LOG_WARN("string assign failed", KR(ret), K(column), K(range));
         }
       }
     }
@@ -2198,7 +2058,6 @@ int ObSplitSampler::acquire_partition_key_name_(const share::schema::ObTableSche
         LOG_WARN("get column schema failed", KR(ret), "col", column_names.at(i));
       } else if (OB_FAIL(column_names.push_back(ObString(col->get_column_name_str().length(),
                                                          col->get_column_name_str().ptr())))) {
-        LOG_WARN("append string failed", KR(ret), KPC(col));
       }
     }
   }
@@ -2218,9 +2077,7 @@ int ObSplitSampler::gen_column_alias_(const ObIArray<ObString> &columns,
     tmp_allocator.reuse();
     if (i > 0) {
       if (OB_FAIL(col_alias_str.append(", "))) {
-        LOG_WARN("string append failed", KR(ret));
       } else if (OB_FAIL(col_name_alias_str.append(", "))) {
-        LOG_WARN("string append failed", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -2228,17 +2085,13 @@ int ObSplitSampler::gen_column_alias_(const ObIArray<ObString> &columns,
       ObSqlString alias;
       ObString column_name_quoted;
       if (OB_FAIL(alias.append_fmt("col%ld", i))) {
-        LOG_WARN("append string failed", KR(ret));
       } else if (OB_FAIL(col_alias_str.append(alias.string()))) {
-        LOG_WARN("append string failed", KR(ret));
       } else if (OB_FAIL(ObAutoSplitArgBuilder::print_identifier(tmp_allocator, column_name, column_name_quoted))) {
-        LOG_WARN("failed to generate new name with escape character", K(ret), K(column_name));
       } else if (OB_FAIL(col_name_alias_str.append_fmt(
                                               "%.*s AS %.*s",
                                               column_name_quoted.length(), column_name_quoted.ptr(),
                                               alias.string().length(),
                                               alias.string().ptr()))) {
-        LOG_WARN("append string failed", KR(ret));
       }
     }
   }

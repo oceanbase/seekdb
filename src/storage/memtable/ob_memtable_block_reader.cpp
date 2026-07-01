@@ -37,7 +37,6 @@ int ObMemtableBlockReader::init(const bool is_delete_insert)
     int64_t request_cnt = read_info_->get_request_count();
     for (int i = 0; OB_SUCC(ret) && i < MAX_BATCH_SIZE; ++i) {
       if (OB_FAIL(rows_[i].init(allocator_, request_cnt))) {
-        LOG_WARN("init datum row failed", KR(ret), K(i), K(request_cnt));
       }
     }
   }
@@ -84,7 +83,6 @@ int ObMemtableBlockReader::get_row(const int64_t index, ObDatumRow &row)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("invalid argument", K(ret), K(index), K_(row_count));
   } else if (OB_FAIL(row.shallow_copy(rows_[index]))) {
-    LOG_WARN("failed to shallow copy datum row", K(ret), K(rows_[index]));
   } else {
     row.fast_filter_skipped_ = false;
   }
@@ -180,12 +178,10 @@ int ObMemtableBlockReader::filter_pushdown_filter(
               ret = OB_ERR_UNEXPECTED;
               LOG_WARN("Unexpected nop value", K(ret), K(col_offsets.at(i)), K(row_idx), K(rows_[row_idx]));
             } else if (OB_FAIL(datum.from_storage_datum(default_datums.at(i), map_type))) {
-              LOG_WARN("Failed to convert storage datum", K(ret), K(i), K(default_datums.at(i)), K(obj_type), K(map_type));
             }
           } else if (ob_is_decimal_int(obj_type)) {
             // deep copy for decimal int
             if (OB_FAIL(datum.from_storage_datum(src_datum, map_type))) {
-              LOG_WARN("Failed to convert storage datum", K(ret), K(i), K(src_datum), K(obj_type), K(map_type));
             }
           } else {
             datum.shallow_copy_from_datum(src_datum);
@@ -197,11 +193,9 @@ int ObMemtableBlockReader::filter_pushdown_filter(
                         col_params.at(i)->get_accuracy(),
                         inner_allocator_,
                         datum))) {
-              LOG_WARN("Failed to pad column", K(ret), K(i), K(col_offsets.at(i)), K(row_idx), K(datum));
             }
           } else if (has_lob_out_row && col_params.at(i)->get_meta_type().is_lob_storage() && !datum.get_lob_data().in_row_) {
             if (OB_FAIL(context->lob_locator_helper_->fill_lob_locator_v2(datum, *col_params.at(i), *param, *context))) {
-              LOG_WARN("Failed to fill lob loactor", K(ret), K(has_lob_out_row), K(datum), KPC(context), KPC(param));
             } else {
               found_lob_out_row = true;
             }
@@ -214,7 +208,6 @@ int ObMemtableBlockReader::filter_pushdown_filter(
         if (filter.is_filter_black_node() || found_lob_out_row) {
           sql::ObPhysicalFilterExecutor &physical_filter = static_cast<sql::ObPhysicalFilterExecutor &>(filter);
           if (OB_FAIL(physical_filter.filter(datum_buf, col_count, *pd_filter_info.skip_bit_, filtered))) {
-            LOG_WARN("Failed to filter row with black filter", K(ret), K(row_idx), K(rows_[row_idx]));
           }
           if (found_lob_out_row) {
             context->lob_locator_helper_->reuse();
@@ -225,13 +218,11 @@ int ObMemtableBlockReader::filter_pushdown_filter(
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("Unexpected col_ids count: not 1", K(ret), K(filter));
           } else if (OB_FAIL(filter_white_filter(white_filter, datum_buf[0], filtered))) {
-            LOG_WARN("Failed to filter row with white filter", K(ret), K(row_idx), K(rows_[row_idx]));
           }
         }
         if (OB_FAIL(ret)) {
         } else if (!filtered) {
           if (OB_FAIL(result_bitmap.set(offset))) {
-            LOG_WARN("Failed to set result bitmap", K(ret), K(offset));
           }
         }
       }
@@ -248,7 +239,6 @@ int ObMemtableBlockReader::get_next_di_row(const ObFilterResult &filter_res,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(get_row(current, row))) {
-    LOG_WARN("Fail to get current row", K(ret), K(current));
   } else if (row.row_flag_.is_delete()) {
     row.delete_version_ = rows_[current].snapshot_version_;
     row.is_delete_filtered_ = !filter_res.test(current);

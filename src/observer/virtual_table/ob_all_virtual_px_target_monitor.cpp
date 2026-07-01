@@ -46,7 +46,6 @@ int ObAllVirtualPxTargetMonitor::inner_open()
   int ret = OB_SUCCESS;
   // single server: one row set, no per-server iteration
   if (OB_FAIL(OB_PX_TARGET_MONITOR.get_all_target_info(target_info_array_))) {
-    LOG_WARN("get all target_info failed", K(ret));
   }
   return ret;
 }

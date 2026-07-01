@@ -65,19 +65,12 @@ int ObDirectLoadSSTableBuilder::init(const ObDirectLoadSSTableBuildParam &param)
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("invalid file mgr", KR(ret), K(file_mgr_));
     } else if (OB_FAIL(param_.file_mgr_->alloc_dir(dir_id))) {
-      LOG_WARN("fail to alloc dir", KR(ret));
     } else if (OB_FAIL(param_.file_mgr_->alloc_file(dir_id, data_file_handle_))) {
-      LOG_WARN("fail to alloc datafragment", KR(ret));
     } else if (OB_FAIL(param_.file_mgr_->alloc_file(dir_id, index_file_handle_))) {
-      LOG_WARN("fail to alloc index fragment", KR(ret));
     } else if (OB_FAIL(index_block_writer_.init(param_.table_data_desc_.sstable_index_block_size_,
                                                 index_file_handle_))) {
-      LOG_WARN("fail to init index block writer", KR(ret),
-               K(param_.table_data_desc_.sstable_index_block_size_), K(index_file_handle_));
     } else if (OB_FAIL(data_block_writer_.init(param_.table_data_desc_.sstable_data_block_size_,
                                                data_file_handle_, &index_block_writer_))) {
-      LOG_WARN("fail to init data block writer", KR(ret),
-               K(param_.table_data_desc_.sstable_data_block_size_), K(data_file_handle_));
     } else {
       is_inited_ = true;
     }
@@ -104,15 +97,11 @@ int ObDirectLoadSSTableBuilder::append_row(const ObTabletID &tablet_id,
     ObDirectLoadExternalRow external_row;
     OB_TABLE_LOAD_STATISTICS_TIME_COST(DEBUG, simple_sstable_append_row_time_us);
     if (OB_FAIL(check_rowkey_order(key))) {
-      LOG_WARN("fail to check rowkey order", KR(ret), K(datum_row));
     } else if (OB_FAIL(external_row.from_datum_row(datum_row,
                                                    param_.table_data_desc_.rowkey_column_num_))) {
-      LOG_WARN("fail to from datum row", KR(ret));
     } else if (OB_FAIL(data_block_writer_.append_row(external_row))) {
-      LOG_WARN("fail to append row to data block writer", KR(ret), K(external_row));
     } else if (start_key_.is_min_rowkey()) {
       if (OB_FAIL(key.deep_copy(start_key_, allocator_))) {
-        LOG_WARN("fail to deep copy", KR(ret));
       }
     }
   }
@@ -132,9 +121,7 @@ int ObDirectLoadSSTableBuilder::close()
   } else {
     OB_TABLE_LOAD_STATISTICS_TIME_COST(DEBUG, simple_sstable_append_row_time_us);
     if (OB_FAIL(data_block_writer_.close())) {
-      LOG_WARN("fail to close data block writer", KR(ret), K(data_block_writer_));
     } else if (OB_FAIL(index_block_writer_.close())) {
-      LOG_WARN("fail to close index block writer", KR(ret), K(index_block_writer_));
     }
   }
   if (OB_SUCC(ret)) {
@@ -175,23 +162,17 @@ int ObDirectLoadSSTableBuilder::get_tables(ObDirectLoadTableHandleArray &table_a
       fragment.meta_.occupy_size_ = data_block_writer_.get_file_size();
       fragment.meta_.index_block_count_ = param.index_block_count_;
       if (OB_FAIL(fragment.data_file_handle_.assign(data_file_handle_))) {
-        LOG_WARN("fail to assign data file handle", KR(ret));
       } else if (OB_FAIL(fragment.index_file_handle_.assign(index_file_handle_))) {
-        LOG_WARN("fail to assign index file handle", KR(ret));
       } else if (OB_FAIL(param.fragments_.push_back(fragment))) {
-        LOG_WARN("fail to push back", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
       ObDirectLoadTableHandle table_handle;
       ObDirectLoadSSTable *sstable = nullptr;
       if (OB_FAIL(table_manager->alloc_sstable(table_handle))) {
-        LOG_WARN("fail to alloc sstable", KR(ret));
       } else if (FALSE_IT(sstable = static_cast<ObDirectLoadSSTable *>(table_handle.get_table()))) {
       } else if (OB_FAIL(sstable->init(param))) {
-        LOG_WARN("fail to init sstable", KR(ret));
       } else if (OB_FAIL(table_array.add(table_handle))) {
-        LOG_WARN("fail to push back sstable", KR(ret));
       }
     }
   }
@@ -203,11 +184,9 @@ int ObDirectLoadSSTableBuilder::check_rowkey_order(const ObDatumRowkey &rowkey)
   int ret = OB_SUCCESS;
   int cmp_ret = 1;
   if (OB_FAIL(rowkey.compare(end_key_, *param_.datum_utils_, cmp_ret))) {
-    LOG_WARN("fail to compare", KR(ret));
   } else if (cmp_ret > 0) {
     rowkey_allocator_.reuse();
     if (OB_FAIL(rowkey.deep_copy(end_key_, rowkey_allocator_))) {
-      LOG_WARN("fail to deep copy", KR(ret));
     }
   } else if (cmp_ret == 0) {
     ret = OB_ERR_PRIMARY_KEY_DUPLICATE;
@@ -269,7 +248,6 @@ int ObDirectLoadDataBlockWriter2::init(int64_t buf_size,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(buf_size));
   } else if (OB_FAIL(file_io_handle_.open(file_handle))) {
-    LOG_WARN("fail to open file handle", KR(ret));
   } else {
     if (OB_ISNULL(buf_ = static_cast<char *>(allocator_.alloc(buf_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -292,7 +270,6 @@ int ObDirectLoadDataBlockWriter2::write_item(const ObDirectLoadExternalRow &exte
   if (data_size + buf_pos_ > buf_size_) {
     ret = OB_BUF_NOT_ENOUGH;
   } else if (OB_FAIL(external_row.serialize(buf_, buf_size_, buf_pos_))) {
-    LOG_WARN("fail to serialize datum_row", KR(ret), KP(buf_), K(buf_size_), K(buf_pos_));
   }
   if (OB_SUCC(ret)) {
     row_count_++;
@@ -314,13 +291,11 @@ int ObDirectLoadDataBlockWriter2::write_large_item(const ObDirectLoadExternalRow
   } else {
     int64_t new_buf_pos = header_length_;
     if (OB_FAIL(external_row.serialize(new_buf, align_buf_size, new_buf_pos))) {
-      LOG_WARN("fail to serialize datum_row", KR(ret), K(align_buf_size), K(new_buf_pos));
     } else {
       header_.last_row_offset_ = header_length_;
       buf_pos_ = new_buf_pos;
       row_count_++;
       if (OB_FAIL(flush_buffer(align_buf_size, new_buf))) {
-        LOG_WARN("fail to flush buffer", KR(ret));
       }
     }
   }
@@ -347,11 +322,9 @@ int ObDirectLoadDataBlockWriter2::append_row(const ObDirectLoadExternalRow &exte
           int64_t total_size = external_row.get_serialize_size() + header_length_;
           if (total_size > buf_size_) {
             if (OB_FAIL(write_large_item(external_row, total_size))) {
-              LOG_WARN("fail to write item", KR(ret), K(external_row), K(total_size));
             }
           } else {
             if (OB_FAIL(write_item(external_row))) {
-              LOG_WARN("fail to write item", KR(ret), K(external_row));
             }
           }
         }
@@ -376,7 +349,6 @@ int ObDirectLoadDataBlockWriter2::close()
   } else if (buf_pos_ > header_length_ && OB_FAIL(flush_buffer(buf_size_, buf_))) {
     LOG_WARN("fail to flush buffer", KR(ret));
   } else if (OB_FAIL(file_io_handle_.wait())) {
-    LOG_WARN("fail to wait io finish", KR(ret));
   } else {
     reset();
     is_closed_ = true;
@@ -391,17 +363,14 @@ int ObDirectLoadDataBlockWriter2::flush_buffer(int64_t buf_size, char *buf)
   header_.occupy_size_ = buf_size;
   int64_t pos = 0;
   if (OB_FAIL(header_.serialize(buf, buf_size, pos))) {
-    LOG_WARN("fail to serialize data block header", KR(ret), K(buf_size), KP(buf_), K(pos));
   } else {
     if (OB_FAIL(file_io_handle_.write(buf, buf_size))) {
-      LOG_WARN("fail to do aio write data file", KR(ret));
     } else {
       ObDirectLoadIndexBlockItem item;
       assign(header_length_, buf_size_, buf_);
       file_size_ += buf_size;
       item.end_offset_ = file_size_;
       if (OB_FAIL(index_block_writer_->append_row(row_count_, item))) {
-        LOG_WARN("fail to append row index", KR(ret));
       } else {
         row_count_ = 0;
       }
@@ -461,7 +430,6 @@ int ObDirectLoadIndexBlockWriter::init(int64_t buf_size,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(buf_size));
   } else if (OB_FAIL(file_io_handle_.open(file_handle))) {
-    LOG_WARN("fail to open file handle", KR(ret));
   } else {
     if (OB_ISNULL(buf_ = static_cast<char *>(allocator_.alloc(buf_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -488,9 +456,7 @@ int ObDirectLoadIndexBlockWriter::append_row(int64_t row_count,
         LOG_WARN("fail to write item", KR(ret), K(item));
       } else {
         if (OB_FAIL(flush_buffer())) {
-          LOG_WARN("fail to flush buffer", KR(ret));
         } else if (OB_FAIL(write_item(item))) {
-          LOG_WARN("fail to write item", KR(ret), K(item));
         }
       }
     }
@@ -510,7 +476,6 @@ int ObDirectLoadIndexBlockWriter::write_item(const ObDirectLoadIndexBlockItem &i
   if (data_size + buf_pos_ > buf_size_) {
     ret = OB_BUF_NOT_ENOUGH;
   } else if (OB_FAIL(item.serialize(buf_, buf_size_, buf_pos_))) {
-    LOG_WARN("fail to serialize datum_row", KR(ret));
   }
   return ret;
 }
@@ -521,10 +486,8 @@ int ObDirectLoadIndexBlockWriter::flush_buffer()
   int64_t pos = 0;
   header_.row_count_ = row_count_;
   if (OB_FAIL(header_.serialize(buf_, buf_size_, pos))) {
-    LOG_WARN("fail to serialize data block header", KR(ret), K(buf_size_), K(pos), KP(buf_));
   } else {
     if (OB_FAIL(file_io_handle_.write(buf_, buf_size_))) {
-      LOG_WARN("fail to do aio write index file", KR(ret));
     } else {
       header_.start_offset_ = offset_;
       total_index_size_ += item_size_;
@@ -548,7 +511,6 @@ int ObDirectLoadIndexBlockWriter::close()
   } else if (buf_pos_ > header_length_ && OB_FAIL(flush_buffer())) {
     LOG_WARN("fail to flush buffer", KR(ret));
   } else if (OB_FAIL(file_io_handle_.wait())) {
-    LOG_WARN("fail to wait io finish", KR(ret));
   } else {
     reset();
     is_closed_ = true;
@@ -584,7 +546,6 @@ int ObDirectLoadIndexBlockReader::init(int64_t buf_size,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), K(buf_size));
   } else if (OB_FAIL(file_io_handle_.open(file_handle))) {
-    LOG_WARN("fail to open file handle", KR(ret));
   } else {
     if (OB_ISNULL(buf_ = static_cast<char *>(allocator_.alloc(buf_size)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -617,7 +578,6 @@ int ObDirectLoadIndexBlockReader::change_fragment(const ObDirectLoadTmpFileHandl
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(file_io_handle_.open(file_handle))) {
-    LOG_WARN("fail to change file handle", KR(ret));
   }
   return ret;
 }
@@ -644,23 +604,19 @@ int ObDirectLoadIndexBlockReader::get_index_info(int64_t idx, ObDirectLoadIndexI
   int64_t offset = idx % index_item_num_per_block_;
   int64_t buf_pos = 0;
   if (OB_FAIL(read_buffer(num_index))) {
-    LOG_WARN("fail to read buffer", KR(ret));
   } else if (OB_FAIL(header_.deserialize(buf_, buf_size_, buf_pos))) {
-    LOG_WARN("fail to deserialize header", KR(ret));
   } else {
     if (0 == offset) {
       info.offset_ = header_.start_offset_;
     } else {
       buf_pos = header_length_ + (offset - 1) * item_size_;
       if (OB_FAIL(start_item.deserialize(buf_, buf_size_, buf_pos))) {
-        LOG_WARN("fail to deserialize item", KR(ret), K(buf_size_), K(buf_pos));
       } else {
         info.offset_ = start_item.end_offset_;
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(end_item.deserialize(buf_, buf_size_, buf_pos))) {
-        LOG_WARN("fail to deserialize item", KR(ret), K(buf_size_), K(buf_pos));
       } else {
         info.size_ = end_item.end_offset_ - info.offset_;
       }
@@ -704,7 +660,6 @@ int ObDirectLoadDataBlockReader2::init(int64_t buf_size, char *buf, int64_t cols
   } else {
     assign(0, buf_size, buf);
     if (OB_FAIL(header_.deserialize(buf_, buf_size_, buf_pos_))) {
-      LOG_WARN("fail to deserialize header", KR(ret), K(buf_), K(buf_size_), K(buf_pos_));
     } else if (header_.occupy_size_ > buf_size_) {
       ret = OB_BUF_NOT_ENOUGH;
       LOG_WARN("buf is not enough", KR(ret), K(header_.occupy_size_), K(buf_size_));
@@ -725,7 +680,6 @@ int ObDirectLoadDataBlockReader2::get_next_item(const ObDirectLoadExternalRow *&
   } else if (buf_pos_ == header_.size_) {
     ret = OB_ITER_END;
   } else if (OB_FAIL(curr_row_.deserialize(buf_, buf_size_, buf_pos_))) {
-    LOG_WARN("fail to deserialize buffer", KR(ret), K(buf_size_), K(buf_pos_));
   } else {
     item = &curr_row_;
   }

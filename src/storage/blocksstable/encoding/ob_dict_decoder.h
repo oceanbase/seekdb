@@ -444,8 +444,6 @@ OB_INLINE int ObDictDecoder::read_ref(
   if (is_bit_packing) {
     if (OB_FAIL(ObBitStream::get(col_data, row_id * meta_header_->row_ref_size_,
           meta_header_->row_ref_size_, ref))) {
-      STORAGE_LOG(WARN, "Failed to get bit packing value",
-          K(ret), K(row_id), K_(*meta_header), K(ref));
     }
   } else {
     MEMCPY(&ref, col_data + row_id * meta_header_->row_ref_size_,

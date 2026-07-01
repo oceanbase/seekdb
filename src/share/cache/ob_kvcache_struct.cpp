@@ -161,13 +161,11 @@ int ObKVStoreMemBlock::store(
     if (OB_FAIL(key.deep_copy(&(buffer_[old_atomic_pos.buffer + sizeof(ObKVCachePair)]),
             key.size(),
             store_pair.key_))) {
-      COMMON_LOG(WARN, "Fail to deep copy key, ", K(ret));
     } else if (OB_FAIL(value.deep_copy(&buffer_[old_atomic_pos.buffer
             + sizeof(ObKVCachePair)
             + key.size()],
             value.size(),
             store_pair.value_))) {
-      COMMON_LOG(WARN, "Fail to deep copy value, ", K(ret));
     } else {
       MEMCPY(&(buffer_[old_atomic_pos.buffer]), &store_pair, sizeof(ObKVCachePair));
       kvpair = reinterpret_cast<ObKVCachePair*>(&(buffer_[old_atomic_pos.buffer]));

@@ -57,7 +57,6 @@ int ObSetTransactionResolver::resolve(const ParseNode &parse_tree)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("inalid scope node", K(scope_node), K(characteristics_node));
     } else if (OB_FAIL(scope_resolve(*scope_node, scope))) {
-      LOG_WARN("fail to scope resolve", K(ret));
     } else if (OB_ISNULL(allocator_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("invalid allocator in resolver", K(allocator_));
@@ -68,10 +67,8 @@ int ObSetTransactionResolver::resolve(const ParseNode &parse_tree)
       isolation_var_node.is_system_variable_ = true;
       if (OB_FAIL(ob_write_string(
                   *allocator_, OB_SV_TX_ISOLATION, isolation_var_node.variable_name_))) {
-        LOG_WARN("fail to write string", K(ret));
       } else if (OB_FAIL(ob_write_string(
                   *allocator_, OB_SV_TX_READ_ONLY, access_var_node.variable_name_))) {
-        LOG_WARN("fail to write string", K(ret));
       } else {
         ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, isolation_var_node.variable_name_);
         ObCharset::casedn(CS_TYPE_UTF8MB4_GENERAL_CI, access_var_node.variable_name_);
@@ -86,14 +83,12 @@ int ObSetTransactionResolver::resolve(const ParseNode &parse_tree)
       } else {
         if (NULL != characteristics_node->children_[0]) {
           if (OB_FAIL(access_mode_resolve(*characteristics_node->children_[0], is_read_only))) {
-            LOG_WARN("fail to resolve access mode", K(ret));
           } else {
             set_access_mode = true;
           }
         }
         if (NULL != characteristics_node->children_[1]) {
           if (OB_FAIL(isolation_level_resolve(*characteristics_node->children_[1], isolation_level))) {
-            LOG_WARN("fail to resolve isolation level", K(ret));
           } else {
             set_isolation_level = true;
           }
@@ -102,16 +97,12 @@ int ObSetTransactionResolver::resolve(const ParseNode &parse_tree)
     }
     if (OB_SUCC(ret) && set_isolation_level) {
       if (OB_FAIL(build_isolation_expr(isolation_var_node.value_expr_, isolation_level)) ) {
-        LOG_WARN("fail to build isolation expr", K(ret));
       } else if (OB_FAIL(stmt->add_variable_node(isolation_var_node))) {
-        LOG_WARN("fail to add variable node", K(ret));
       }
     }
     if (OB_SUCC(ret) && set_access_mode) {
       if (OB_FAIL(build_access_expr(access_var_node.value_expr_, is_read_only))) {
-        LOG_WARN("fail to build access expr", K(ret));
       } else if (OB_FAIL(stmt->add_variable_node(access_var_node))) {
-        LOG_WARN("fail to add variable node", K(ret));
       } else {
         LOG_DEBUG("add variable node", K(is_read_only));
       }
@@ -140,7 +131,6 @@ int ObSetTransactionResolver::build_isolation_expr(ObRawExpr *&expr, int32_t lev
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("isolation level is not invalid", K(ret), K(level));
   } else if (OB_FAIL(params_.expr_factory_->create_raw_expr(T_VARCHAR, c_expr))) {
-    LOG_WARN("fail to create raw expr", K(ret));
   } else {
     // we use int type to represent isolation level, except for system variable tx_isolation,
     // which use varchar type, so we need cast int to varchar here.
@@ -170,7 +160,6 @@ int ObSetTransactionResolver::build_access_expr(ObRawExpr *&expr, const bool is_
     ret = OB_NOT_INIT;
     LOG_WARN("invalid stmt", K_(stmt));
   } else if (OB_FAIL(params_.expr_factory_->create_raw_expr(T_INT, c_expr))) {
-    LOG_WARN("create raw expr failed", K(ret));
   } else {
     c_expr->set_value(val);
     c_expr->set_data_type(ObIntType);

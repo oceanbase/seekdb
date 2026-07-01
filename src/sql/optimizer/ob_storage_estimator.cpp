@@ -34,7 +34,6 @@ int ObStorageEstimator::estimate_row_count(const obcall::ObEstPartArg &arg,
   ObTableScanParam param;
   share::SCN max_readable_scn;
   if (OB_FAIL(OB_TS_MGR.get_gts(nullptr, max_readable_scn))) {
-    LOG_WARN("failed to get gts", K(ret));
   } else {
     param.frozen_version_ = static_cast<int64_t>(max_readable_scn.get_val_for_sql());
     param.schema_version_ = arg.schema_version_;
@@ -49,9 +48,7 @@ int ObStorageEstimator::estimate_row_count(const obcall::ObEstPartArg &arg,
     if (OB_FAIL(storage_estimate_rowcount(param,
                   arg.index_params_.at(i).batch_,
                   est_res))) {
-      LOG_WARN("failed to estimate index row count", K(ret));
     } else if (OB_FAIL(res.index_param_res_.push_back(est_res))) {
-      LOG_WARN("failed to push back result", K(ret));
     } else {
       LOG_TRACE("[OPT EST]: row count stat", K(est_res), K(i), K(param));
     }
@@ -71,9 +68,7 @@ int ObStorageEstimator::estimate_block_count_and_row_count(const obcall::ObEstBl
   for (int64_t i = 0; OB_SUCC(ret) && i < arg.tablet_params_arg_.count(); ++i) {
     obcall::ObEstBlockResElement est_res;
     if (OB_FAIL(storage_estimate_block_count_and_row_count(arg.tablet_params_arg_.at(i), est_res))) {
-      LOG_WARN("failed to estimate tablet block count and row count", K(ret));
     } else if (OB_FAIL(res.tablet_params_res_.push_back(est_res))) {
-      LOG_WARN("failed to push back result", K(ret));
     } else {
       LOG_TRACE("[OPT EST]: block count and row count stat", K(est_res), K(i), "param", arg.tablet_params_arg_.at(i));
     }
@@ -135,14 +130,12 @@ int ObStorageEstimator::storage_estimate_partition_batch_rowcount(const ObSimple
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("get unexpected null", K(ret), K(access_service));
     } else if (OB_FAIL(table_scan_range.init(table_scan_param, batch, allocator))) {
-      STORAGE_LOG(WARN, "Failed to init table scan range", K(ret), K(batch));
     } else if (OB_FAIL(access_service->estimate_row_count(table_scan_param,
                                                           table_scan_range,
                                                           timeout_us,
                                                           est_records,
                                                           rc_logical,
                                                           rc_physical))) {
-      LOG_TRACE("OPT:[STORAGE EST FAILED, USE STAT EST]", "storage_ret", ret);
     } else {
       LOG_TRACE("storage estimate row count result", K(rc_logical), K(rc_physical),
                 K(table_scan_param), K(table_scan_range), K(timeout_us), K(ret));
@@ -190,7 +183,6 @@ int ObStorageEstimator::storage_estimate_block_count_and_row_count(
                                                                             memtable_row_count,
                                                                             cg_macro_cnt_arr,
                                                                             cg_micro_cnt_arr))) {
-        LOG_WARN("OPT:[STORAGE EST BLOCK COUNT FAILED]", "storage_ret", ret);
       } else if (OB_UNLIKELY(cg_count != 0 &&
                              (cg_macro_cnt_arr.count() > cg_count
                               || cg_micro_cnt_arr.count() > cg_count
@@ -206,9 +198,7 @@ int ObStorageEstimator::storage_estimate_block_count_and_row_count(
         res.memtable_row_count_ = memtable_row_count;
         for (int64_t i = cg_macro_cnt_arr.count(); OB_SUCC(ret) && i < cg_count; i++) {
           if (OB_FAIL(cg_macro_cnt_arr.push_back(0))) {
-            LOG_WARN("fail to push macro count", K(ret));
           } else if (OB_FAIL(cg_micro_cnt_arr.push_back(0))) {
-            LOG_WARN("fail to push micro count", K(ret));
           }
         }
       }
@@ -246,7 +236,6 @@ int ObStorageEstimator::storage_estimate_skip_rate(
                                                                         timeout_us,
                                                                         cg_skip_rate_arr,
                                                                         res_sample_count))) {
-        LOG_WARN("OPT:[STORAGE EST SKIP RATE FAILED]", "storage_ret", ret);
       } else if (OB_UNLIKELY(column_count != 0 &&
                              (cg_skip_rate_arr.count() != arg.column_ids_.count()))) {
         ret = OB_ERR_UNEXPECTED;
@@ -271,9 +260,7 @@ int ObStorageEstimator::estimate_skip_rate(const obcall::ObEstSkipRateArg &arg,
   for (int64_t i = 0; OB_SUCC(ret) && i < arg.tablet_params_arg_.count(); ++i) {
     obcall::ObEstSkipRateResElement est_res;
     if (OB_FAIL(storage_estimate_skip_rate(arg.tablet_params_arg_.at(i), est_res))) {
-      LOG_WARN("failed to estimate skip rate", K(ret));
     } else if (OB_FAIL(res.tablet_params_res_.push_back(est_res))) {
-      LOG_WARN("failed to push back result", K(ret));
     }
   }
   //for debug, change to trace later

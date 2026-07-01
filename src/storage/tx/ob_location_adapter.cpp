@@ -36,16 +36,13 @@ int ObLocationAdapter::init(share::schema::ObMultiVersionSchemaService *schema_s
   int ret = OB_SUCCESS;
 
   if (is_inited_) {
-    TRANS_LOG(WARN, "ob location adapter inited twice");
     ret = OB_INIT_TWICE;
   } else if (OB_ISNULL(schema_service) || OB_ISNULL(location_service)) {
-    TRANS_LOG(WARN, "invalid argument", KP(schema_service), KP(location_service));
     ret = OB_INVALID_ARGUMENT;
   } else {
     schema_service_ = schema_service;
     location_service_ = location_service;
     is_inited_ = true;
-    TRANS_LOG(INFO, "ob location cache adapter inited success");
   }
 
   return ret;
@@ -55,7 +52,6 @@ void ObLocationAdapter::destroy()
 {
   if (is_inited_) {
     is_inited_ = false;
-    TRANS_LOG(INFO, "ob location cache adapter destroyed");
   }
 }
 
@@ -69,9 +65,6 @@ void ObLocationAdapter::reset_statistics()
 void ObLocationAdapter::statistics()
 {
   if (REACH_TIME_INTERVAL(TRANS_ACCESS_STAT_INTERVAL)) {
-    TRANS_LOG(INFO, "location adapter statistics",
-        K_(renew_access), K_(total_access), K_(error_count),
-        "renew_rate", static_cast<float>(renew_access_) / static_cast<float>(total_access_ + 1));
     reset_statistics();
   }
 }
@@ -91,18 +84,14 @@ int ObLocationAdapter::nonblock_get_leader(const int64_t cluster_id,
     ret = OB_LS_LOCATION_NOT_EXIST;
     ++random_cnt;
     if (EXECUTE_COUNT_PER_SEC(16)) {
-      TRANS_LOG(INFO, "get error for random", K(ls_id),
-          K(total_alloc_cnt), K(random_cnt));
     }
     return ret;
   }
 #endif
 
   if (!is_inited_) {
-    TRANS_LOG(WARN, "ob location adapter not inited");
     ret = OB_NOT_INIT;
   } else if (!ls_id.is_valid()) {
-    TRANS_LOG(WARN, "invalid argument", K(ls_id));
     ret = OB_INVALID_ARGUMENT;
   } else {
     ret = get_leader_(cluster_id, ls_id, leader, is_sync);
@@ -119,10 +108,8 @@ int ObLocationAdapter::get_leader_(const int64_t cluster_id,
   int ret = OB_SUCCESS;
 
   if (!is_inited_) {
-    TRANS_LOG(WARN, "ob location adapter not inited");
     ret = OB_NOT_INIT;
   } else if (!ls_id.is_valid()) {
-    TRANS_LOG(WARN, "invalid argument", K(ls_id));
     ret = OB_INVALID_ARGUMENT;
   } else if (is_sync) {
     bool force_renew = false;
@@ -130,19 +117,15 @@ int ObLocationAdapter::get_leader_(const int64_t cluster_id,
       TRANS_LOG(WARN, "get leader from locatition cache error", K(ret), K(ls_id));
       force_renew = true;
       if (OB_SUCCESS != (ret = location_service_->get_leader(cluster_id, ls_id, force_renew, leader))) {
-        TRANS_LOG(WARN, "get leader from locatition cache error again",
-            KR(ret), K(ls_id), K(force_renew));
       }
       renew_access_++;
     }
   } else {
     if (OB_FAIL(location_service_->nonblock_get_leader(cluster_id, ls_id, leader))) {
-      TRANS_LOG(DEBUG, "nonblock get leader from locatition cache error", K(ret), K(ls_id));
     }
   }
   if (OB_SUCC(ret)) {
     if (!leader.is_valid()) {
-      TRANS_LOG(WARN, "invalid server", K(ls_id), K(leader));
       ret = OB_ERR_UNEXPECTED;
     }
   }
@@ -170,20 +153,16 @@ int ObLocationAdapter::nonblock_get(const int64_t cluster_id,
     ret = OB_LS_LOCATION_NOT_EXIST;
     ++random_cnt;
     if (EXECUTE_COUNT_PER_SEC(16)) {
-      TRANS_LOG(INFO, "get error for random", K(ls_id),
-          K(total_alloc_cnt), K(random_cnt));
     }
     return ret;
   }
 #endif
   if (!is_inited_) {
-    TRANS_LOG(WARN, "ob location adapter not inited");
     ret = OB_NOT_INIT;
   } else if (!(is_valid_cluster_id(cluster_id) && ls_id.is_valid())) {
     ret = OB_INVALID_ARGUMENT;
     TRANS_LOG(WARN, "invalid argument", KR(ret), K(cluster_id), K(ls_id));
   } else if (OB_FAIL(location_service_->nonblock_get(cluster_id, ls_id, location))) {
-    TRANS_LOG(WARN, "nonblock get failed", KR(ret), K(cluster_id), K(ls_id));
   }
   return ret;
 }

@@ -42,7 +42,6 @@ int ObRemoteJobControl::get_ready_jobs(ObIArray<ObJob*> &jobs, bool serial_sched
       LOG_WARN("job is NULL", K(ret));
     } else if (OB_JOB_STATE_INITED == job->get_state()) {
       if (OB_FAIL(jobs.push_back(job))) {
-        LOG_WARN("fail to push back job", K(ret), K(i));
       }
     }
   }

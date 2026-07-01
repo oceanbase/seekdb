@@ -42,7 +42,6 @@ int ObDDLEmptyShellChecker::init(storage::ObLS *ls)
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid arg", K(ret));
   } else if (OB_FAIL(delayed_gc_tablet_infos_.create(128/*bucket_num*/, lib::ObLabel("DDLDelayedGC")))) {
-    STORAGE_LOG(WARN, "create ddl tablet delayed gc infos failed", K(ret));
   } else {
     ls_ = ls;
     last_check_normal_time_ = ObClockGenerator::getClock();
@@ -90,7 +89,6 @@ int ObDDLEmptyShellChecker::periodic_check_normal()
         // override ret to release leak tablets more.
         const ObTabletID &tablet_id = leak_tablets.at(i);
         if (OB_FAIL(delayed_gc_tablet_infos_.erase_refactored(tablet_id))) {
-          STORAGE_LOG(WARN, "erase leak ddl tablet failed", K(ret), K(tablet_id));
         }
       }
     }
@@ -110,7 +108,6 @@ int ObDDLEmptyShellChecker::check_disk_space_exceeds(
       if (OB_SERVER_OUTOF_DISK_SPACE == ret) {
         ret = OB_SUCCESS;
         can_become_empty_shell = true;
-        STORAGE_LOG(INFO, "delete split src tablet when reaching data disk used limit", K(tablet_id), K(required_size));
       } else {
         STORAGE_LOG(WARN, "check data disk space full failed", K(ret), K(required_size));
       }
@@ -130,7 +127,6 @@ int ObDDLEmptyShellChecker::check_tablets_cnt_exceeds(
     if (OB_TOO_MANY_PARTITIONS_ERROR == ret) {
       ret = OB_SUCCESS;
       can_become_empty_shell = true;
-      STORAGE_LOG(INFO, "delete split src tablet when reaching unit tablet cnt limit", K(tablet_id));
     } else {
       STORAGE_LOG(WARN, "check tablet cnt reach limit failed", K(ret), K(tablet_id));
     }
@@ -153,7 +149,6 @@ int ObDDLEmptyShellChecker::check_delay_deleted_time_exceeds(
   if (OB_FAIL(delayed_gc_tablet_infos_.get_refactored(tablet_id, tag_deleted_us))) {
     if (OB_HASH_NOT_EXIST == ret) {
       if (OB_FAIL(delayed_gc_tablet_infos_.set_refactored(tablet_id, ObClockGenerator::getClock()))) {
-        STORAGE_LOG(WARN, "update tablet tag deleted time failed", K(ret), K(tablet_id));
       }
     } else {
       STORAGE_LOG(WARN, "get refactored failed", K(ret), K(tablet_id));
@@ -162,7 +157,6 @@ int ObDDLEmptyShellChecker::check_delay_deleted_time_exceeds(
     can_become_empty_shell = true;
     STORAGE_LOG(INFO, "delete split src tablet when reaching predefined time limit", K(ret), K(tablet_id));
   } else {
-    STORAGE_LOG(TRACE, "can not change to empty shell", K(tablet_id), K(tag_deleted_us));
   }
   return ret;
 }
@@ -203,28 +197,22 @@ int ObDDLEmptyShellChecker::check_split_src_deleted_tablet(
   } else if (ObTabletStatus::SPLIT_SRC_DELETED != user_data.get_tablet_status()) {
     // not split source tablet, ignore.
   } else if (OB_FAIL(ls_->get_max_decided_scn(decided_scn))) {
-    STORAGE_LOG(WARN, "failed to get max decided scn", K(ret), K(user_data));
   } else if (decided_scn < user_data.delete_commit_scn_) {
     need_retry = true;
     if (REACH_THREAD_TIME_INTERVAL(1 * 1000 * 1000/*1s*/)) {
-      STORAGE_LOG(INFO, "decided_scn is smaller than tablet delete commit scn",
-        K(ls_id), K(tablet_id), K(user_data), K(decided_scn));
     }
   } else {
     int tmp_ret = OB_SUCCESS;
     if (!can_become_empty_shell) {
       if (OB_TMP_FAIL(check_disk_space_exceeds(tablet_id, can_become_empty_shell))) {
-        STORAGE_LOG(WARN, "check data disk space full failed", K(tmp_ret), K(tablet_id));
       }
     }
     if (!can_become_empty_shell) {
       if (OB_TMP_FAIL(check_tablets_cnt_exceeds(tablet_id, can_become_empty_shell))) {
-        STORAGE_LOG(WARN, "check tablet cnt reach limit failed", K(tmp_ret), K(tablet_id), K(user_data));
       }
     }
     if (!can_become_empty_shell) {
       if (OB_TMP_FAIL(check_delay_deleted_time_exceeds(tablet_id, can_become_empty_shell))) {
-        STORAGE_LOG(WARN, "update tablet tag deleted time failed", K(tmp_ret), K(tablet_id));
       }
     }
     need_retry = !can_become_empty_shell ? true : need_retry;

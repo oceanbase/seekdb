@@ -42,19 +42,13 @@ int ObMonitorInfoManager::init()
   int ret = OB_SUCCESS;
   int64_t delay = 5 * 1000 * 1000;
   if (OB_FAIL(allocator_.init(memory_limit_, memory_limit_, ALLOC_PAGE_SIZE))) {
-    LOG_WARN("fail to init allocator", K(ret));
   } else if (OB_FAIL(slow_query_queue_.init(ObModIds::OB_SQL_PLAN_MONITOR, OB_MAX_QUEUE_SIZE))) {
-    LOG_WARN("fail to init history info", K(ret));
   } else if (OB_FAIL(timer_.init("MonInfoEvict"))) {
-    LOG_WARN("fail to init timer", K(ret));
   } else if (OB_FAIL(elimination_task_.init(this))){
-    LOG_WARN("fail to init elimination task", K(ret));
   } else if (OB_FAIL(plan_execution_time_map_.init(ObModIds::OB_SQL_PLAN_MONITOR))) {
-    LOG_WARN("fail to init plan execution time map", K(ret));
   } else {
     allocator_.set_label(ObModIds::OB_SQL_PLAN_MONITOR);
     if (OB_FAIL(timer_.schedule(elimination_task_, delay, true))) {
-      LOG_WARN("fail to schedule timer task", K(ret));
     }
   }
   return ret;
@@ -194,7 +188,6 @@ int ObMonitorInfoManager::reclain_map()
   int64_t timestamp = ObTimeUtility::current_time();
   ReclainCond cond(timestamp, max_push_interval_);
   if (OB_FAIL(plan_execution_time_map_.remove_if(cond))) {
-    LOG_WARN("fail to remove map", K(ret));
   }
   return ret;
 }
@@ -212,7 +205,6 @@ int ObMonitorInfoManager::gc()
     }
   }
   if (OB_FAIL(reclain_map())) {
-    LOG_WARN("fail to reclaim map", K(ret));
   }
   return ret;
 }

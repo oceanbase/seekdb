@@ -196,13 +196,11 @@ protected:
   int acquire_ctx_ref_()
   {
     ObLightHashLink::inc_ref(1);
-    TRANS_LOG(DEBUG, "inc tx ctx ref", KPC(this));
     return OB_SUCCESS;
   }
   void release_ctx_ref_()
   {
     ObLightHashLink::dec_ref(1);
-    TRANS_LOG(DEBUG, "dec tx ctx ref", KPC(this));
   }
   virtual int register_timeout_task_(const int64_t interval_us);
   virtual int unregister_timeout_task_();

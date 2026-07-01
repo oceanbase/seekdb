@@ -143,14 +143,6 @@ int ObPhyPlanExecInfo::add_exec_record(const ObExecRecord &exec_record)
 int ObPhyPlanExecInfo::add_exec_timestamp(const ObExecTimestamp &exec_timestamp)
 {
   int ret = common::OB_SUCCESS;
-  SQL_MONITOR_LOG(DEBUG, "add exec timestamp", K(exec_timestamp.exec_type_),
-           K(exec_timestamp.before_process_ts_),
-           K(exec_timestamp.process_executor_ts_),
-           K(exec_timestamp.executor_end_ts_),
-           K(exec_timestamp.receive_ts_),
-           K(exec_timestamp.enter_queue_ts_),
-           K(exec_timestamp.run_ts_),
-           K(exec_timestamp.single_process_ts_));
   set_value(QUERY_TYPE, exec_timestamp.exec_type_);
   set_value(BEFORE_PROCESS_TIME, exec_timestamp.before_process_ts_);
   set_value(PROCESS_EXECUTOR_TIME, exec_timestamp.process_executor_ts_);

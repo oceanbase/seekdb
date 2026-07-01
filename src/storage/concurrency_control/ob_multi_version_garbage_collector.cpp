@@ -65,7 +65,6 @@ int ObMultiVersionGarbageCollector::init()
     ret = OB_NOT_INIT;
     MVCC_LOG(WARN, "meta_db_pool_ is not initialized", K(ret));
   } else if (OB_FAIL(snapshot_storage_.init(GCTX.meta_db_pool_))) {
-    MVCC_LOG(WARN, "failed to init snapshot storage", K(ret));
   } else {
     last_study_timestamp_ = 0;
     last_refresh_timestamp_ = 0;
@@ -77,7 +76,6 @@ int ObMultiVersionGarbageCollector::init()
     gc_is_disabled_ = false;
     global_reserved_snapshot_ = share::SCN::min_scn();
     is_inited_ = true;
-    MVCC_LOG(INFO, "multi version garbage collector init", KP(this));
   }
   return ret;
 }
@@ -103,16 +101,10 @@ int ObMultiVersionGarbageCollector::start()
     ret = OB_NOT_INIT;
     MVCC_LOG(ERROR, "has not been inited", KR(ret));
   } else if (OB_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::MultiVersionGarbageCollector, timer_tg_id_))) {
-    MVCC_LOG(ERROR, "fail to create MultiVersionGarbageCollector tg", KR(ret));
   } else if (OB_FAIL(TG_START(timer_tg_id_))) {
-    MVCC_LOG(ERROR, "fail to start MultiVersionGarbageCollector timer", KR(ret));
   } else if (OB_FAIL(TG_SCHEDULE(timer_tg_id_, timer_task_,
                                  GARBAGE_COLLECT_RETRY_INTERVAL, true/*repeat*/, false/*immediate*/))) {
-    MVCC_LOG(ERROR, "fail to schdule MultiVersionGarbageCollector timer", KR(ret));
   } else {
-    MVCC_LOG(INFO, "multi version garbage collector start", KPC(this),
-             K(GARBAGE_COLLECT_RETRY_INTERVAL), K(GARBAGE_COLLECT_EXEC_INTERVAL),
-             K(GARBAGE_COLLECT_PRECISION), K(GARBAGE_COLLECT_RECLAIM_DURATION));
   }
 
   return ret;
@@ -141,7 +133,6 @@ int ObMultiVersionGarbageCollector::stop()
     gc_is_disabled_ = false;
     global_reserved_snapshot_ = share::SCN::min_scn();
     is_inited_ = false;
-    MVCC_LOG(INFO, "multi version garbage collector stop", KPC(this));
   }
 
   return ret;
@@ -150,14 +141,12 @@ int ObMultiVersionGarbageCollector::stop()
 void ObMultiVersionGarbageCollector::wait()
 {
   TG_WAIT(timer_tg_id_);
-  MVCC_LOG(INFO, "multi version garbage collector wait", KPC(this));
 }
 
 void ObMultiVersionGarbageCollector::destroy()
 {
   TG_DESTROY(timer_tg_id_);
   timer_tg_id_ = -1;
-  MVCC_LOG(INFO, "multi version garbage collector destroy", KPC(this));
 }
 
 void ObMultiVersionGarbageCollector::run_timer_task()
@@ -327,7 +316,6 @@ int ObMultiVersionGarbageCollector::study()
 
   // standby cluster uses the same interface for GTS
   if (OB_FAIL(study_min_unallocated_GTS(min_unallocated_GTS))) {
-    MVCC_LOG(WARN, "study min unallocated GTS failed", K(ret));
   } else if (!min_unallocated_GTS.is_valid()
              || min_unallocated_GTS.is_min()
              || min_unallocated_GTS.is_max()) {
@@ -345,7 +333,6 @@ int ObMultiVersionGarbageCollector::study()
     bool is_primary = true;
     
     if (OB_FAIL(ObShareUtil::mtl_check_if_tenant_role_is_primary(is_primary))) {
-      MVCC_LOG(WARN, "fail to execute mtl_check_if_tenant_role_is_primary", KR(ret));
     } else if (is_primary && OB_FAIL(study_min_unallocated_WRS(min_unallocated_WRS))) {
       MVCC_LOG(WARN, "study min unallocated GTS failed", K(ret), K(is_primary));
     } else if (!min_unallocated_WRS.is_valid() || min_unallocated_WRS.is_min()) {
@@ -362,7 +349,6 @@ int ObMultiVersionGarbageCollector::study()
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(study_max_committed_txn_version(max_committed_txn_version))) {
-      MVCC_LOG(WARN, "study max committed txn version failed", K(ret));
     } else if (!max_committed_txn_version.is_valid()
                || max_committed_txn_version.is_max()) {
       ret = OB_ERR_UNEXPECTED;
@@ -378,7 +364,6 @@ int ObMultiVersionGarbageCollector::study()
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(study_min_active_txn_version(min_active_txn_version))) {
-      MVCC_LOG(WARN, "study min active txn version failed", K(ret));
     } else {
       MVCC_LOG(INFO, "study min active txn version succeed",
                K(ret), K(min_active_txn_version), KPC(this));
@@ -430,7 +415,6 @@ int ObMultiVersionGarbageCollector::study_min_unallocated_GTS(share::SCN &min_un
         ob_usleep(10 * 1000/*10ms*/);
       }
     } else if (OB_FAIL(ret)) {
-      MVCC_LOG(WARN, "get gts fail", KR(ret));
     } else if (!gts_scn.is_valid()) {
       ret = OB_ERR_UNEXPECTED;
       MVCC_LOG(ERROR, "get gts fail", K(gts_scn), K(ret));
@@ -509,17 +493,13 @@ int ObMultiVersionGarbageCollector::study_min_active_txn_version(
   int ret = OB_SUCCESS;
   if (OB_ISNULL(GCTX.session_mgr_)) {
     ret = OB_INVALID_ARGUMENT;
-    MVCC_LOG(WARN, "session mgr is nullptr");
   } else if (OB_FAIL(GCTX.session_mgr_->
                      get_min_active_snapshot_version(min_active_txn_version))) {
-    MVCC_LOG(WARN, "get min active snaphot version failed", K(ret));
   }
 
   share::SCN min_mview_mds_snapshot;
   if (FAILEDx(share::g_mp->m_view_maintenance_service()->get_min_mview_mds_snapshot(min_mview_mds_snapshot))) {
-    MVCC_LOG(WARN, "get min mview active snaphot version failed", K(ret));
   } else if (min_mview_mds_snapshot.is_valid() && min_mview_mds_snapshot < min_active_txn_version) {
-    MVCC_LOG(INFO, "study_min_active_txn_version", K(min_active_txn_version), K(min_mview_mds_snapshot));
     min_active_txn_version = min_mview_mds_snapshot;
   }
   return ret;
@@ -541,7 +521,6 @@ int ObMultiVersionGarbageCollector::refresh_()
     ret = OB_EAGAIN;
     MVCC_LOG(WARN, "mock refresh failed", K(ret), KPC(this), K(collector));
   } else if (OB_FAIL(share::g_mp->multi_version_garbage_collector()->collect(collector))) {
-    MVCC_LOG(WARN, "collect snapshot info sql failed", K(ret), KPC(this), K(collector));
   } else {
     // Step1: check whether gc status is disabled, then set or reset the gc
     // status based on the collector's result;
@@ -553,7 +532,6 @@ int ObMultiVersionGarbageCollector::refresh_()
     // effect the refresh result.
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(disk_monitor_(collector.is_this_server_disabled()))) {
-      MVCC_LOG(WARN, "disk mintor failed", KPC(this), K(collector), K(tmp_ret));
     }
 
     timeguard.click("disk_mointor_");
@@ -565,8 +543,6 @@ int ObMultiVersionGarbageCollector::refresh_()
 
     timeguard.click("decide_reserved_snapshot_");
 
-    MVCC_LOG(INFO, "multi-version garbage collector refresh successfully",
-             KPC(this), K(collector));
   }
 
   return ret;
@@ -579,8 +555,6 @@ void ObMultiVersionGarbageCollector::decide_gc_status_(const ObMultiVersionGCSta
              K(global_reserved_snapshot_), K(gc_status));
     gc_is_disabled_ = true;
   } else if (gc_is_disabled_) {
-    MVCC_LOG(INFO, "gc status is enabled", KPC(this),
-             K(global_reserved_snapshot_), K(gc_status));
     gc_is_disabled_ = false;
   }
 }
@@ -677,24 +651,18 @@ int ObMultiVersionGarbageCollector::collect(ObMultiVersionGCSnapshotFunctor& cal
   } else {
     ObArray<share::ObReservedSnapshotEntry> entries;
     if (OB_FAIL(snapshot_storage_.get_all(entries))) {
-      MVCC_LOG(WARN, "failed to get all snapshot entries", KR(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < entries.count(); ++i) {
         const share::ObReservedSnapshotEntry &entry = entries.at(i);
         share::SCN snapshot_version_scn;
         
         if (OB_FAIL(snapshot_version_scn.convert_for_inner_table_field(entry.snapshot_version_))) {
-          MVCC_LOG(WARN, "set min snapshot version scn failed", K(ret), K(entry.snapshot_version_));
         } else if (OB_FAIL(calculator(snapshot_version_scn,
                                       static_cast<ObMultiVersionSnapshotType>(entry.snapshot_type_),
                                       static_cast<ObMultiVersionGCStatus>(entry.status_),
                                       entry.create_time_,
                                       entry.svr_addr_))) {
-          MVCC_LOG(WARN, "calculate snapshot version failed", K(ret));
         } else {
-          MVCC_LOG(INFO, "multi version garbage collector collects successfully",
-                   K(entry.snapshot_version_), K(entry.snapshot_type_), 
-                   K(entry.create_time_), K(entry.svr_addr_), K(entry.status_));
         }
       }
     }
@@ -743,7 +711,6 @@ int ObMultiVersionGarbageCollector::report(const share::SCN min_unallocated_GTS,
     entry.snapshot_version_ = min_unallocated_GTS.get_val_for_inner_table_field();
     entry.status_ = (uint64_t)(ObMultiVersionGCStatus::NORMAL_GC_STATUS);
     if (OB_FAIL(entries.push_back(entry))) {
-      MVCC_LOG(WARN, "failed to push back entry", KR(ret));
     }
 
     // MIN_UNALLOCATED_WRS
@@ -751,7 +718,6 @@ int ObMultiVersionGarbageCollector::report(const share::SCN min_unallocated_GTS,
       entry.snapshot_type_ = (uint64_t)(ObMultiVersionSnapshotType::MIN_UNALLOCATED_WRS);
       entry.snapshot_version_ = min_unallocated_WRS.get_val_for_inner_table_field();
       if (OB_FAIL(entries.push_back(entry))) {
-        MVCC_LOG(WARN, "failed to push back entry", KR(ret));
       }
     }
 
@@ -760,7 +726,6 @@ int ObMultiVersionGarbageCollector::report(const share::SCN min_unallocated_GTS,
       entry.snapshot_type_ = (uint64_t)(ObMultiVersionSnapshotType::MAX_COMMITTED_TXN_VERSION);
       entry.snapshot_version_ = max_committed_txn_version.get_val_for_inner_table_field();
       if (OB_FAIL(entries.push_back(entry))) {
-        MVCC_LOG(WARN, "failed to push back entry", KR(ret));
       }
     }
 
@@ -769,13 +734,11 @@ int ObMultiVersionGarbageCollector::report(const share::SCN min_unallocated_GTS,
       entry.snapshot_type_ = (uint64_t)(ObMultiVersionSnapshotType::ACTIVE_TXN_SNAPSHOT);
       entry.snapshot_version_ = min_active_txn_version.get_val_for_inner_table_field();
       if (OB_FAIL(entries.push_back(entry))) {
-        MVCC_LOG(WARN, "failed to push back entry", KR(ret));
       }
     }
 
     if (OB_SUCC(ret)) {
       if (OB_FAIL(snapshot_storage_.insert_or_update(entries))) {
-        MVCC_LOG(WARN, "failed to insert or update snapshot entries", KR(ret));
       } else {
         MVCC_LOG(INFO, "report multi version snapshot success", KR(ret), K(entries.count()));
       }
@@ -798,7 +761,6 @@ int ObMultiVersionGarbageCollector::update_status(const ObMultiVersionGCStatus s
     ret = OB_NOT_INIT;
     MVCC_LOG(WARN, "snapshot storage not init", KR(ret));
   } else if (OB_FAIL(snapshot_storage_.update_status(self_addr, (uint64_t)(status)))) {
-    MVCC_LOG(WARN, "failed to update status", KR(ret), K(status));
   } else {
     MVCC_LOG(INFO, "update multi version snapshot status success", KR(ret), K(status));
   }
@@ -855,7 +817,6 @@ int ObMultiVersionGarbageCollector::reclaim()
     ret = OB_ERR_UNEXPECTED;
     MVCC_LOG(ERROR, "log stream is NULL", K(ret), K(ls));
   } else if (OB_FAIL(handler->get_role(role, old_proposal_id))) {
-    MVCC_LOG(WARN, "fail to get role", KR(ret));
   } else if (common::is_leader_like(role)) {
     timeguard.click("get_leader");
 
@@ -876,7 +837,6 @@ int ObMultiVersionGarbageCollector::reclaim()
         bool need_reclaim = false;
 
         if (OB_FAIL(snapshot_servers.push_back(addr))) {
-          MVCC_LOG(WARN, "push array failed", K(ret));
         } else {
           // TODO(handora.qc): use a better time monitor for the node lost for a long time
           if (current_timestamp > create_time
@@ -908,14 +868,12 @@ int ObMultiVersionGarbageCollector::reclaim()
 
     // collect all info for reclaimable servers and all reported servers
     if (OB_FAIL(collect(collector))) {
-      MVCC_LOG(WARN, "collect snapshot info failed", K(ret));
     } else {
       int tmp_ret = OB_SUCCESS;
       timeguard.click("collect");
 
       if (0 == reclaimable_servers.count()) {
         // all snapshot info is not reclaimable
-        MVCC_LOG(INFO, "skip all alivavle snapshots info");
         // reclaim all uncessary servers
       } else if (OB_TMP_FAIL((reclaim_(reclaimable_servers)))) {
         MVCC_LOG(WARN, "reclaim snapshot info failed", K(tmp_ret),
@@ -928,8 +886,6 @@ int ObMultiVersionGarbageCollector::reclaim()
       timeguard.click("reclaim_");
 
       if (0 == snapshot_servers.count()) {
-        MVCC_LOG(WARN, "no alive servers now, please check it clearly",
-                 KPC(this), K(snapshot_servers), K(reclaimable_servers));
         // monitor all servers
       } else if (OB_TMP_FAIL(monitor_(snapshot_servers))) {
         MVCC_LOG(WARN, "snapshots servers are mintor failed",
@@ -975,7 +931,6 @@ int ObMultiVersionGarbageCollector::disk_monitor_(const bool is_this_server_alom
   bool need_report = false;
 
   if (OB_FAIL(is_disk_almost_full_(is_almost_full))) {
-    MVCC_LOG(WARN, "check disk almost full failed", K(ret), KPC(this));
   } else if (is_this_server_alomost_full && is_almost_full) {
     need_report = false;
     MVCC_LOG(WARN, "the disk still be full of the disk", K(ret), KPC(this));
@@ -995,7 +950,6 @@ int ObMultiVersionGarbageCollector::disk_monitor_(const bool is_this_server_alom
       ObMultiVersionGCStatus::DISABLED_GC_STATUS :
       ObMultiVersionGCStatus::NORMAL_GC_STATUS;
     if (OB_FAIL(update_status(status))) {
-      MVCC_LOG(WARN, "disk monitor failed", K(ret), K(status));
     } else {
       MVCC_LOG(INFO, "report disk monitor succeed", K(ret), K(status),
                K(is_this_server_alomost_full), K(is_almost_full));
@@ -1018,7 +972,6 @@ int ObMultiVersionGarbageCollector::reclaim_(const ObArray<ObAddr> &reclaimable_
     for (int64_t i = 0; OB_SUCC(ret) && i < reclaimable_servers.count(); ++i) {
       const ObAddr &addr = reclaimable_servers[i];
       if (OB_FAIL(snapshot_storage_.delete_expired(addr))) {
-        MVCC_LOG(WARN, "failed to delete expired snapshot", KR(ret), K(addr));
       } else {
         MVCC_LOG(INFO, "reclaim expired multi version snapshot success", KR(ret), K(addr));
       }
@@ -1045,7 +998,6 @@ int ObMultiVersionGarbageCollector::is_disk_almost_full_(bool &is_almost_full)
     if (OB_SERVER_OUTOF_DISK_SPACE == ret) {
       ret = OB_SUCCESS;
       is_almost_full = true;
-      MVCC_LOG(WARN, "disk is almost full, we should give up", KPC(this));
     } else {
       MVCC_LOG(WARN, "failed to check space full", K(ret));
     }
@@ -1055,7 +1007,6 @@ int ObMultiVersionGarbageCollector::is_disk_almost_full_(bool &is_almost_full)
   if (!is_almost_full
       && is_sstable_overflow_()) {
     is_almost_full = true;
-    MVCC_LOG(WARN, "disk is almost full, we should give up", KPC(this));
   }
 
   return ret;
@@ -1122,8 +1073,6 @@ int ObMultiVersionGCSnapshotCalculator::operator()(const share::SCN snapshot_ver
       // we report WARN here because there may be servers offline and online
       // suddenly and report a stale txn or there may be tenant being dropped
       // and alived server may fetch the tenant info
-      MVCC_LOG(WARN, "ignore too old version", K(snapshot_version),
-               K(snapshot_type), K(current_ts), K(create_time), K(addr));
     } else {
       reserved_snapshot_version_ = snapshot_version;
       reserved_snapshot_type_ = snapshot_type;
@@ -1197,7 +1146,6 @@ int ObMultiVersionGCSnapshotCollector::operator()(const share::SCN snapshot_vers
                                                                    status,
                                                                    create_time,
                                                                    addr)))) {
-    MVCC_LOG(WARN, "push back to snapshots info failed", K(ret));
   }
 
   return ret;
@@ -1226,7 +1174,6 @@ bool GetMinActiveSnapshotVersionFunctor::operator()(sql::ObSQLSessionMgr::Key ke
 
   if (OB_ISNULL(sess_info)) {
     ret = OB_NOT_INIT;
-    MVCC_LOG(WARN, "session info is NULL");
   } else if (false == sess_info->is_valid()) {
     ret = OB_INVALID_ARGUMENT;
     MVCC_LOG(WARN, "session info is not valid", K(ret));
@@ -1250,9 +1197,6 @@ bool GetMinActiveSnapshotVersionFunctor::operator()(sql::ObSQLSessionMgr::Key ke
         if (desc_snapshot.is_valid()) {
           snapshot_version = desc_snapshot;
         }
-        MVCC_LOG(DEBUG, "RR/SI txn with tx_desc", KPC(sess_info),
-                 K(snapshot_version), K(min_active_snapshot_version_), K(desc_snapshot),
-                 K(sess_snapshot), K(desc_snapshot));
       } else if (tx_desc->is_RC_isolevel()) {
         // Case 2: RC with tx desc exists, it may exists that snapshot is get from
         // the executor and not maintained in the session and tx desc. So we need
@@ -1268,18 +1212,9 @@ bool GetMinActiveSnapshotVersionFunctor::operator()(sql::ObSQLSessionMgr::Key ke
             // is unusable
             snapshot_version.convert_from_ts(sess_info->get_cur_state_start_time()
                                              - 5L * 1000L * 1000L * 60L);
-            MVCC_LOG(INFO, "RC txn with tx_desc while from session start time",
-                     KPC(sess_info), K(snapshot_version),
-                     K(min_active_snapshot_version_),
-                     K(sess_info->get_cur_state_start_time()));
           }
         }
-        MVCC_LOG(DEBUG, "RC txn with tx_desc", KPC(sess_info),
-                 K(snapshot_version), K(min_active_snapshot_version_), K(desc_snapshot),
-                 K(sess_snapshot), K(desc_snapshot));
       } else {
-        MVCC_LOG(INFO, "unknown txn with tx_desc", KPC(sess_info),
-                 K(snapshot_version), K(min_active_snapshot_version_), K(desc_snapshot));
       }
     } else {
       share::SCN sess_snapshot = sess_info->get_reserved_snapshot_version();
@@ -1296,13 +1231,8 @@ bool GetMinActiveSnapshotVersionFunctor::operator()(sql::ObSQLSessionMgr::Key ke
             // is unusable
             snapshot_version.convert_from_ts(sess_info->get_cur_state_start_time()
                                              - 5L * 1000L * 1000L * 60L);
-            MVCC_LOG(INFO, "RR/SI txn with non tx_desc while from session start time",
-                     KPC(sess_info), K(snapshot_version), K(sess_snapshot),
-                     K(min_active_snapshot_version_), K(sess_info->get_cur_state_start_time()));
           }
         }
-        MVCC_LOG(DEBUG, "RR/SI txn with non tx_desc", KPC(sess_info),
-                 K(snapshot_version), K(min_active_snapshot_version_), K(sess_snapshot));
       } else if (transaction::ObTxIsolationLevel::RC == sess_info->get_tx_isolation()) {
         // Case 4: RC with tx desc does not exist, and the snapshot version may not
         // maintained, so we use query start time instead
@@ -1315,16 +1245,9 @@ bool GetMinActiveSnapshotVersionFunctor::operator()(sql::ObSQLSessionMgr::Key ke
             // is unusable
             snapshot_version.convert_from_ts(sess_info->get_cur_state_start_time()
                                              - 5L * 1000L * 1000L * 60L);
-            MVCC_LOG(INFO, "RC txn with non tx_desc while from session start time",
-                     KPC(sess_info), K(snapshot_version), K(sess_snapshot),
-                     K(min_active_snapshot_version_), K(sess_info->get_cur_state_start_time()));
           }
         }
-        MVCC_LOG(DEBUG, "RC txn with non tx_desc", KPC(sess_info),
-                 K(snapshot_version), K(min_active_snapshot_version_), K(sess_snapshot));
       } else {
-        MVCC_LOG(INFO, "unknown txn with non tx_desc", KPC(sess_info),
-                 K(snapshot_version), K(min_active_snapshot_version_));
       }
     }
 
@@ -1335,9 +1258,6 @@ bool GetMinActiveSnapshotVersionFunctor::operator()(sql::ObSQLSessionMgr::Key ke
       const int64_t snapshot_version_ts = snapshot_version.get_val_for_tx() / 1000;
       if (snapshot_version_ts < current_timestamp
           && current_timestamp - snapshot_version_ts > 100 * 1_min) {
-        MVCC_LOG(INFO, "GetMinActiveSnapshotVersionFunctor find a small snapshot txn",
-                 KPC(sess_info), K(snapshot_version),
-                 K(current_timestamp), K(min_active_snapshot_version_));
       }
       min_active_snapshot_version_ = snapshot_version;
     }

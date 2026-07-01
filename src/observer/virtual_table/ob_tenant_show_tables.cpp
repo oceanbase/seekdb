@@ -75,15 +75,12 @@ int ObTenantShowTables::inner_open()
         LOG_USER_ERROR(OB_NOT_SUPPORTED, "select a table which is used for show clause");
       } else if (is_external_object_id(database_id_)) {
         if (OB_FAIL(fetch_catalog_table_schemas_( database_id_, database_name_, table_schemas_))) {
-          SERVER_LOG(WARN, "fail to get catalog table schemas in database", K(ret), K(database_id_));
         }
       } else {
         const ObDatabaseSchema *db_schema = NULL;
         if (OB_FAIL(schema_guard_->get_table_schemas_in_database(database_id_,
                                                                  table_schemas_))) {
-          SERVER_LOG(WARN, "fail to get table schemas in database", K(ret), K(database_id_));
         } else if (OB_FAIL(schema_guard_->get_database_schema( database_id_, db_schema))) {
-          SERVER_LOG(WARN, "Failed to get database schema", K(ret), K_(database_id));
         } else if (OB_ISNULL(db_schema)) {
           ret = OB_ERR_UNEXPECTED;
           SERVER_LOG(WARN, "db_schema should not be null", K(ret), K_(database_id));
@@ -205,10 +202,8 @@ int ObTenantShowTables::inner_get_next_row()
               } else {
                 priv_info.reset();
                 if (OB_FAIL(session_->get_session_priv_info(priv_info))) {
-                  SERVER_LOG(WARN, "fail to get session priv info", K(ret));
                 } else if (OB_FAIL(schema_guard_->check_table_show(priv_info, session_->get_enable_role_array(), database_name_,
                                                             table_schema->get_table_name_str(), is_allow))) {
-                  SERVER_LOG(WARN, "check show table priv failed", K(ret));
                 }
               }
             }
@@ -236,18 +231,15 @@ int ObTenantShowTables::fetch_catalog_table_schemas_(const uint64_t database_id,
     SERVER_LOG(WARN, "invalid argument", K(ret));
   } else if (OB_FALSE_IT(external_object_ctx = get_scan_param()->external_object_ctx_)) {
   } else if (OB_FAIL(external_object_ctx->get_database_schema(database_id, external_object))) {
-    SERVER_LOG(WARN, "failed to get object id's ctx", K(ret));
   } else if (OB_ISNULL(external_object)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "unexpected", K(ret));
   } else if (OB_FAIL(session_->get_name_case_mode(case_mode))) {
-    SERVER_LOG(WARN, "failed to get session variable", K(ret));
   } else {
     uint64_t catalog_id = external_object->catalog_id;
     database_name = external_object->database_name;
     ObCachedCatalogMetaGetter ob_catalog_meta_getter{*schema_guard_, *allocator_};
     if (OB_FAIL(ob_catalog_meta_getter.list_table_names(catalog_id, database_name, case_mode, tbl_names))) {
-      SERVER_LOG(WARN, "list_table_names failed", K(ret), K(catalog_id), K(database_name));
     }
   }
 
@@ -259,9 +251,7 @@ int ObTenantShowTables::fetch_catalog_table_schemas_(const uint64_t database_id,
 
     share::schema::ObSimpleTableSchemaV2 *allocated_schema = NULL;
     if (OB_FAIL(ObSchemaUtils::alloc_schema(*allocator_, table_schema, allocated_schema))) {
-      SERVER_LOG(WARN, "fail to alloc schema", K(ret));
     } else if (OB_FAIL(table_schemas.push_back(allocated_schema))) {
-      SERVER_LOG(WARN, "fail to push back schema", K(ret));
     }
   }
   return ret;

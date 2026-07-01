@@ -32,7 +32,6 @@ int ObCatalogMetaGetter::list_namespace_names(const uint64_t catalog_id, ObIArra
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(catalog_id));
   } else if (OB_FAIL(get_catalog_( catalog_id, catalog))) {
-    LOG_WARN("failed to get catalog", K(ret), K(catalog_id));
   } else if (OB_ISNULL(catalog)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("catalog is nullptr", K(ret));
@@ -54,7 +53,6 @@ int ObCatalogMetaGetter::list_table_names(const uint64_t catalog_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid case mode", K(ret), K(catalog_id), K(ns_name), K(case_mode));
   } else if (OB_FAIL(get_catalog_( catalog_id, catalog))) {
-    LOG_WARN("failed to get catalog", K(ret), K(catalog_id));
   } else if (OB_ISNULL(catalog)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("catalog is nullptr", K(ret));
@@ -78,12 +76,10 @@ int ObCatalogMetaGetter::fetch_namespace_schema(const uint64_t catalog_id,
     LOG_WARN("invalid argument", K(ret), K(catalog_id), K(ns_name), K(case_mode), K(database_schema.get_database_id()));
   } else if (OB_FALSE_IT(database_schema.set_catalog_id(catalog_id))) {
   } else if (OB_FAIL(get_catalog_( catalog_id, catalog))) {
-    LOG_WARN("failed to get catalog", K(ret));
   } else if (OB_ISNULL(catalog)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("catalog is nullptr", K(ret));
   } else if (OB_FAIL(catalog->fetch_namespace_schema(ns_name, case_mode, database_schema))) {
-    LOG_WARN("failed to fetch namespace", K(ret));
   } else {
     database_schema.set_charset_type(common::ObCharsetType::CHARSET_UTF8MB4);
     database_schema.set_collation_type(common::ObCollationType::CS_TYPE_UTF8MB4_GENERAL_CI);
@@ -115,12 +111,10 @@ int ObCatalogMetaGetter::fetch_table_schema(const uint64_t catalog_id,
              K(table_schema.get_table_id()));
   } else if (OB_FALSE_IT(table_schema.set_catalog_id(catalog_id))) {
   } else if (OB_FAIL(get_catalog_( catalog_id, catalog))) {
-    LOG_WARN("failed to get catalog", K(ret));
   } else if (OB_ISNULL(catalog)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("catalog is nullptr", K(ret));
   } else if (OB_FAIL(catalog->fetch_table_schema(ns_name, tbl_name, case_mode, table_schema))) {
-    LOG_WARN("fetch_table_schema failed", K(ret));
   } else {
     // append mocked pk column
     uint64_t COL_IDS[2] = {OB_HIDDEN_FILE_ID_COLUMN_ID, OB_HIDDEN_LINE_NUMBER_COLUMN_ID};
@@ -135,11 +129,9 @@ int ObCatalogMetaGetter::fetch_table_schema(const uint64_t catalog_id,
       hidden_pk.set_charset_type(CHARSET_BINARY);
       hidden_pk.set_collation_type(CS_TYPE_BINARY);
       if (OB_FAIL(hidden_pk.set_column_name(COL_NAMES[i]))) {
-        LOG_WARN("failed to set column name", K(ret));
       } else {
         hidden_pk.set_rowkey_position(i + 1);
         if (OB_FAIL(table_schema.add_column(hidden_pk))) {
-          LOG_WARN("add column to table_schema failed", K(ret), K(hidden_pk));
         }
       }
     }
@@ -161,12 +153,10 @@ int ObCatalogMetaGetter::fetch_basic_table_info(const uint64_t catalog_id,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(catalog_id), K(ns_name), K(tbl_name), K(case_mode));
   } else if (OB_FAIL(get_catalog_( catalog_id, catalog))) {
-    LOG_WARN("failed to get catalog", K(ret));
   } else if (OB_ISNULL(catalog)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("catalog is nullptr", K(ret));
   } else if (OB_FAIL(catalog->fetch_basic_table_info(ns_name, tbl_name, case_mode, table_info))) {
-    LOG_WARN("fetch_basic_table_info failed", K(ret));
   }
   return ret;
 }
@@ -178,12 +168,10 @@ int ObCatalogMetaGetter::get_catalog_(const uint64_t catalog_id, ObIExternalCata
   const schema::ObCatalogSchema *schema = nullptr;
   ObCatalogProperties::CatalogType catalog_type = ObCatalogProperties::CatalogType::INVALID_TYPE;
   if (OB_FAIL(schema_getter_guard_.get_catalog_schema_by_id( catalog_id, schema))) {
-    LOG_WARN("failed to get catalog schema", K(ret), K(catalog_id));
   } else if (OB_ISNULL(schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema is nullptr", K(ret));
   } else if (OB_FAIL(ObCatalogProperties::parse_catalog_type(schema->get_catalog_properties_str(), catalog_type))) {
-    LOG_WARN("failed to parse catalog type", K(ret));
   } else {
     switch (catalog_type) {
       case ObCatalogProperties::CatalogType::ODPS_TYPE: {

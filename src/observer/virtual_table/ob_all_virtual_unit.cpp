@@ -73,7 +73,6 @@ int ObAllVirtualUnit::inner_open()
   } else {
     bool exist = false;
     if (OB_FAIL(GCTX.omt_->get_tenant_meta(tenant_meta_, exist))) {
-      SERVER_LOG(WARN, "fail to get tenant meta", K(ret));
     } else {
       has_row_ = exist;
     }
@@ -132,7 +131,6 @@ int ObAllVirtualUnit::inner_get_next_row(ObNewRow *&row)
           int64_t clog_disk_in_use = 0;
           
           if (OB_FAIL(get_clog_disk_used_size_( clog_disk_in_use))) {
-            SERVER_LOG(WARN, "fail to get clog disk in use", K(ret), K(tenant_meta));
           } else {
             cur_row_.cells_[i].set_int(clog_disk_in_use);
           }
@@ -150,7 +148,6 @@ int ObAllVirtualUnit::inner_get_next_row(ObNewRow *&row)
               SERVER_LOG(WARN, "disk_reporter_ is nullptr", KR(ret), KP(GCTX.disk_reporter_));
             } else if (OB_FAIL(static_cast<ObDiskUsageReportTask*>(GCTX.disk_reporter_)
                                ->get_data_disk_used_size( data_disk_in_use))) {
-              SERVER_LOG(WARN, "fail to get data disk in use", K(ret), K(tenant_meta));
             }
           }
           if (OB_SUCC(ret)) {
@@ -199,10 +196,8 @@ int ObAllVirtualUnit::get_clog_disk_used_size_(int64_t &log_used_size)
     int64_t unused_log_disk_total_size = 0;
     if (OB_ISNULL(log_service)) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(WARN, "ObLogService is nullptr", KP(log_service));
     } else if (OB_FAIL(log_service->get_palf_stable_disk_usage(log_used_size,
                                                                unused_log_disk_total_size))) {
-      SERVER_LOG(WARN, "get_palf_stable_disk_usage failed", KP(log_service));
     }
   }
   // return OB_SUCCESS whatever.

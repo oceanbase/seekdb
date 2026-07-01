@@ -43,7 +43,6 @@ int ObCGAggCells::can_use_index_info(const blocksstable::ObMicroIndexInfo &index
   can_agg = true;
   for (int i = 0; OB_SUCC(ret) && can_agg && i < agg_cells_.count(); ++i) {
     if (OB_FAIL(agg_cells_.at(i)->can_use_index_info(index_info, true, can_agg))) {
-      LOG_WARN("fail to check can use index info", K(i), KPC(agg_cells_.at(i)), K(index_info));
     }
   }
   return ret;
@@ -56,7 +55,6 @@ int ObCGAggCells::add_agg_cell(ObAggCell *cell)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Invalid argument, cell is null", K(ret));
   } else if (OB_FAIL(agg_cells_.push_back(cell))) {
-    LOG_WARN("Fail to push back", K(ret));
   }
   return ret;
 }
@@ -66,7 +64,6 @@ int ObCGAggCells::fill_index_info(const blocksstable::ObMicroIndexInfo &index_in
   int ret = OB_SUCCESS;
   for (int64_t i = 0; OB_SUCC(ret) && i < agg_cells_.count(); ++i) {
     if (OB_FAIL(agg_cells_.at(i)->eval_index_info(index_info, is_cg))) {
-      LOG_WARN("Fail to agg index info", K(ret), KPC(agg_cells_.at(i)));
     }
   }
   return ret;
@@ -78,7 +75,6 @@ int ObCGAggCells::eval(blocksstable::ObStorageDatum &datum, const int64_t row_co
   for (int64_t i = 0; OB_SUCC(ret) && i < agg_cells_.count(); ++i) {
     if (agg_cells_.at(i)->finished()) {
     } else if (OB_FAIL(agg_cells_.at(i)->eval(datum, row_count))) {
-      LOG_WARN("Fail to eval agg cell", K(ret), K(datum), K(row_count));
     }
   }
   return ret;
@@ -102,7 +98,6 @@ int ObCGAggCells::eval_batch(
     if (agg_cells_.at(i)->finished()) {
     } else if (OB_FAIL(agg_cells_.at(i)->eval_micro_block(*iter_param, *context, col_offset, reader,
                                                           pd_row_id_ctx.row_ids_, pd_row_id_ctx.get_row_count()))) {
-      LOG_WARN("Fail to eval micro", K(ret));
     }
   }
   return ret;
@@ -152,9 +147,7 @@ int ObAggRow::init(const ObTableAccessParam &param, const ObTableAccessContext &
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected null out cols param", K(ret), K_(param.iter_param));
   } else if (OB_FAIL(agg_cells_.init(param.aggregate_exprs_->count()))) {
-    LOG_WARN("Failed to init agg cells array", K(ret), K(param.aggregate_exprs_->count()));
   } else if (OB_FAIL(dummy_agg_cells_.init(param.output_exprs_->count()))) {
-    LOG_WARN("Failed to init first row agg cells array", K(ret), K(param.output_exprs_->count()));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < param.output_exprs_->count(); ++i) {
       // mysql compatibility, select a,count(a), output the first value of a
@@ -172,7 +165,6 @@ int ObAggRow::init(const ObTableAccessParam &param, const ObTableAccessContext &
         ObAggCellBasicInfo basic_info(col_offset, col_index, col_param, expr, 
                                       batch_size, is_pad_char_to_full_length(context.sql_mode_));
         if (OB_FAIL(agg_cell_factory_.alloc_cell(basic_info, dummy_agg_cells_))) {
-          LOG_WARN("Failed to alloc agg cell", K(ret), K(i));
         } else if (FALSE_IT(cell = dummy_agg_cells_.at(dummy_agg_cells_.count() - 1))) {
         } else if (OB_UNLIKELY(PD_FIRST_ROW != cell->get_type())) {
           ret = OB_ERR_UNEXPECTED;
@@ -206,7 +198,6 @@ int ObAggRow::init(const ObTableAccessParam &param, const ObTableAccessContext &
         ObAggCellBasicInfo basic_info(col_offset, col_index, col_param, agg_expr, 
                                       batch_size, is_pad_char_to_full_length(context.sql_mode_));
         if (OB_FAIL(agg_cell_factory_.alloc_cell(basic_info, agg_cells_, exclude_null))) {
-          LOG_WARN("Failed to alloc agg cell", K(ret), K(i));
         }
       }
     }
@@ -288,11 +279,8 @@ int ObAggregatedStore::init(const ObTableAccessParam &param, common::hash::ObHas
         K(param.iter_param_.out_cols_project_->count()),
         K(param.aggregate_exprs_->count()), K(param.iter_param_.agg_cols_project_->count()));
   } else if (OB_FAIL(ObBlockBatchedRowStore::init(param))) {
-    LOG_WARN("Failed to init ObBlockBatchedRowStore", K(ret));
   } else if (OB_FAIL(agg_row_.init(param, context_, batch_size_))) {
-    LOG_WARN("Failed to init agg cells", K(ret));
   } else if (OB_FAIL(check_agg_in_row_mode(param.iter_param_))) {
-    LOG_WARN("Failed to check agg in row mode", K(ret));
   } else if (agg_flat_row_mode_ &&
              OB_FAIL(row_buf_.init(*context_.stmt_allocator_, param.iter_param_.get_max_out_col_cnt()))) {
     LOG_WARN("Fail to init datum row buf", K(ret));
@@ -344,7 +332,6 @@ int ObAggregatedStore::fill_index_info(const blocksstable::ObMicroIndexInfo &ind
     for (int64_t i = 0; OB_SUCC(ret) && i < agg_row_.get_agg_count(); ++i) {
        ObAggCell *cell = agg_row_.at(i);
        if (OB_FAIL(cell->eval_index_info(index_info, is_cg))) {
-         LOG_WARN("Failed to eval index info", K(ret), K(i), K(*cell));
        }
     }
   }
@@ -373,7 +360,6 @@ int ObAggregatedStore::fill_rows(
     int64_t micro_row_count = 0;
     blocksstable::ObIMicroBlockReader *reader = scanner.get_reader();
     if (OB_FAIL(reader->get_row_count(micro_row_count))) {
-      LOG_WARN("Failed to get micro row count", K(ret));
     } else if(FALSE_IT(need_get_row_ids = agg_row_.check_need_access_data() || micro_row_count != covered_row_count)) {
     } else if (!need_get_row_ids) {
       row_count = nullptr == res.bitmap_ ? covered_row_count : res.bitmap_->popcnt();
@@ -382,7 +368,6 @@ int ObAggregatedStore::fill_rows(
         for (int64_t i = 0; OB_SUCC(ret) && i < agg_row_.get_agg_count(); ++i) {
           ObAggCell *cell = agg_row_.at(i);
           if (OB_FAIL(cell->eval_micro_block(*iter_param_, context_, cell->get_col_offset(), reader, nullptr, row_count))) {
-            LOG_WARN("Failed to eval micro", K(ret), K(i), K(*cell), K(begin_index), K(end_index));
           }
         }
       }
@@ -400,13 +385,11 @@ int ObAggregatedStore::fill_rows(
           // for flat block, do aggregate in row mode in some case
            blocksstable::ObMicroBlockReader *block_reader = static_cast<blocksstable::ObMicroBlockReader*>(reader);
            if (OB_FAIL(block_reader->get_aggregate_result(*iter_param_, context_, row_ids_, row_count, row_buf_, agg_row_.get_agg_cells()))) {
-             LOG_WARN("Failed to get aggregate", K(ret));
            }
         } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < agg_row_.get_agg_count(); ++i) {
             ObAggCell *cell = agg_row_.at(i);
             if (OB_FAIL(cell->eval_micro_block(*iter_param_, context_, cell->get_col_offset(), reader, row_ids_, row_count))) {
-              LOG_WARN("Failed to eval micro", K(ret), K(i), K(*cell), K(begin_index), K(end_index));
             }
           }
         }
@@ -432,7 +415,6 @@ int ObAggregatedStore::fill_row(blocksstable::ObDatumRow &row)
     for (int64_t i = 0; OB_SUCC(ret) && i < agg_row_.get_agg_count(); ++i) {
       ObAggCell *cell = agg_row_.at(i);
       if (OB_FAIL(cell->eval(row.storage_datums_[cell->get_col_offset()]))) {
-        LOG_WARN("Failed to eval agg cell", K(ret), K(i), K(row), K(*cell));
       }
     }
   }
@@ -452,13 +434,11 @@ int ObAggregatedStore::collect_aggregated_result()
     for (int64_t i = 0; OB_SUCC(ret) && i < agg_row_.get_agg_count(); ++i) {
       ObAggCell *cell = agg_row_.at(i);
       if (OB_FAIL(cell->collect_result(eval_ctx_))) {
-        LOG_WARN("Failed to fill agg result", K(ret), K(i), K(*cell));
       }
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < agg_row_.get_dummy_agg_count(); ++i) {
       ObAggCell *cell = agg_row_.at_dummy(i);
       if (OB_FAIL(cell->collect_result(eval_ctx_))) {
-        LOG_WARN("Failed to fill agg result", K(ret), K(i), K(*cell));
       }
     }
   }

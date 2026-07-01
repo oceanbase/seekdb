@@ -60,14 +60,11 @@ int ObMPInitDB::process()
   bool is_packet_retry = false;
   bool need_response_error = true; //temporary placeholder
   if (OB_FAIL(get_session(session))) {
-    LOG_WARN("get session  fail", K(ret));
   } else if (OB_ISNULL(session)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("null pointer");
   } else if (OB_FAIL(process_kill_client_session(*session))) {
-    LOG_WARN("client session has been killed", K(ret));
   } else if (OB_FAIL(session->get_query_timeout(query_timeout))) {
-    LOG_WARN("fail to get query timeout", K(ret));
   } else if (OB_ISNULL(gctx_.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema_service is null", K(ret));
@@ -89,29 +86,20 @@ int ObMPInitDB::process()
       ret = OB_ERR_SESSION_INTERRUPTED;
       LOG_WARN("session has been killed", K(ret), KPC(session));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(global_version))) {
-      LOG_WARN("fail to get global_version", K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_refreshed_schema_version(local_version))) {
-      LOG_WARN("fail to get local_version", K(ret));
     } else if (OB_FAIL(session->get_collation_database(old_db_coll_type))) {
-      LOG_WARN("fail to get collation_database", K(ret));
     } else if (OB_FAIL(session->get_collation_connection(collation_connection))) {
-      LOG_WARN("fail to get collation_connection", K(ret));
     } else if (OB_FAIL(session->get_name_case_mode(mode))) {
-      LOG_WARN("fail to get name case mode", K(mode), K(ret));
     } else if (OB_FAIL(update_transmission_checksum_flag(*session))) {
-      LOG_WARN("update transmisson checksum flag failed", K(ret));
     } else if (OB_FAIL(process_extra_info(*session, pkt, need_response_error))) {
-      LOG_WARN("fail get process extra info", K(ret));
     } else {
       need_disconnect = false;
       bool perserve_lettercase = (mode != OB_LOWERCASE_AND_INSENSITIVE);
       if (OB_FAIL(ObSQLUtils::convert_sql_text_to_schema_for_storing(allocator,
                                                                      session->get_dtc_params(),
                                                                      db_name_))) {
-        LOG_WARN("fail to convert db name", K(ret), KPHEX(db_name_.ptr(), db_name_.length()));
       } else if (OB_FAIL(ObSQLUtils::check_and_convert_db_name(
                   collation_connection, perserve_lettercase, db_name_))) {
-        LOG_WARN("failed to check database name", K(db_name_), K(ret));
       } else {
         bool force_local_retry = false;
         do {
@@ -133,7 +121,6 @@ int ObMPInitDB::process()
                 }
                 int tmp_ret = gctx_.schema_service_->get_tenant_refreshed_schema_version(local_version);
                 if (OB_SUCCESS != tmp_ret) {
-                  LOG_WARN("fail to get local_version", K(ret), K(tmp_ret));
                 }
               }
               LOG_WARN("schema err, need retry", K(ret),
@@ -170,7 +157,6 @@ int ObMPInitDB::process()
     if (OB_FAIL(ret)) {
       int set_db_ret = OB_SUCCESS;
       if (OB_SUCCESS != (set_db_ret = session->set_default_database(tmp_db_name, old_db_coll_type))) {
-        LOG_WARN("failed to set default database", K(ret), K(set_db_ret), K(tmp_db_name));
       }
     }
 
@@ -189,12 +175,10 @@ int ObMPInitDB::process()
   } else if (OB_LIKELY(NULL != session)) {
     ObOKPParam ok_param; // use defualt value
     if (OB_FAIL(send_ok_packet(*session, ok_param))) {
-      LOG_WARN("fail to send ok packet", K(ok_param), K(ret));
     }
   }
   if (session != NULL) {
     if (OB_FAIL(revert_session(session))) {
-      LOG_ERROR("failed to revert session", K(ret));
     }
   }
   return ret;
@@ -214,17 +198,13 @@ int ObMPInitDB::do_process(sql::ObSQLSessionInfo *session)
     ret = OB_NOT_INIT;
     LOG_WARN("session not init", K(ret), K(session), K(gctx_.schema_service_));
   } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("fail to get schema guard", K(ret));
   } else if (session->is_tenant_changed() && 0 != db_name_.case_compare(OB_SYS_DATABASE_NAME)) {
     ret = OB_ERR_NO_DB_PRIVILEGE;
     LOG_WARN("can only access oceanbase database when tenant changed", K(ret));
   } else if (OB_FALSE_IT(sql_schema_guard.set_schema_guard(&schema_guard))) {
   } else if (OB_FAIL(get_catalog_id_(*session, schema_guard, catalog_id))) {
-    LOG_WARN("failed to get catalog id", K(ret));
   } else if (OB_FAIL(session->get_session_priv_info(session_priv))) {
-    LOG_WARN("fail to get session priv info", K(ret));
   } else if (OB_FAIL(ObSQLUtils::cvt_db_name_to_org(sql_schema_guard, session, catalog_id, db_name_, NULL /*allocator*/))) {
-    LOG_WARN("fail to cvt db name to original", K(catalog_id), K(db_name_), K(ret));
   } else if (OB_FAIL(schema_guard.check_db_access(session_priv, session->get_enable_role_array(), catalog_id, db_name_))) {
     LOG_WARN("fail to check db access.", K(catalog_id), K_(db_name), K(ret));
     if (OB_ERR_NO_DB_SELECTED == ret) {
@@ -239,11 +219,8 @@ int ObMPInitDB::do_process(sql::ObSQLSessionInfo *session)
     ObObj catalog_id_obj;
     catalog_id_obj.set_uint64(catalog_id);
     if (OB_FAIL(session->update_sys_variable(ObSysVarClassType::SYS_VAR__CURRENT_DEFAULT_CATALOG, catalog_id_obj))) {
-      LOG_WARN("set catalog id session variable failed", K(ret));
     } else if (OB_FAIL(session->set_default_database(db_name_))) {
-      LOG_WARN("failed to set default database", K(ret), K(catalog_id), K(db_name_));
     } else if (OB_FAIL(session->update_database_variables(&schema_guard))) {
-      LOG_WARN("failed to update database variables", K(ret));
     } else if (is_internal_catalog_id(catalog_id)
                && OB_FAIL(schema_guard.get_database_id(session->get_database_name(), db_id))) {
       LOG_WARN("failed to get database id", K(ret));
@@ -261,14 +238,12 @@ int ObMPInitDB::get_catalog_id_(sql::ObSQLSessionInfo &session, ObSchemaGetterGu
   ObNameCaseMode case_mode = ObNameCaseMode::OB_NAME_CASE_INVALID;
   if (!catalog_name_.empty()) {
     if (OB_FAIL(session.get_name_case_mode(case_mode))) {
-      LOG_WARN("fail to get name case", K(ret));
     } else if (ObCatalogUtils::is_internal_catalog_name(catalog_name_, case_mode)) {
       // is internal catalog
       catalog_id = OB_INTERNAL_CATALOG_ID;
     } else {
       const ObCatalogSchema *catalog_schema = NULL;
       if (OB_FAIL(schema_guard.get_catalog_schema_by_name( catalog_name_, catalog_schema))) {
-        LOG_WARN("fail to get catalog schema", K(ret));
       } else if (OB_ISNULL(catalog_schema)) {
         ret = OB_CATALOG_NOT_EXIST;
         LOG_USER_ERROR(OB_CATALOG_NOT_EXIST, catalog_name_.length(), catalog_name_.ptr());

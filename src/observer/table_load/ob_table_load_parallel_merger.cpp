@@ -62,7 +62,6 @@ int ObTableLoadParallelMerger::init_merge_ctx(ObTableLoadMergeTableBaseOp *op)
   param.file_mgr_ = op->store_ctx_->tmp_file_mgr_;
   param.ctx_ = op->ctx_;
   if (OB_FAIL(merge_ctx_.init(param, store_table_ctx->ls_partition_ids_))) {
-    LOG_WARN("fail to init merge ctx", KR(ret), K(param));
   }
   return ret;
 }
@@ -77,22 +76,18 @@ int ObTableLoadParallelMerger::init_merge_task(ObTableLoadMergeTableBaseOp *op)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KP(op));
   } else if (OB_FAIL(init_merge_ctx(op))) {
-    LOG_WARN("fail to init merge ctx", KR(ret));
   } else {
     ObDirectLoadTableStore *table_store = op->merge_table_ctx_->table_store_;
     const int64_t thread_cnt = op->store_ctx_->thread_cnt_;
     if (op->merge_table_ctx_->is_del_lob_) {
       if (OB_FAIL(merge_ctx_.build_del_lob_task(*table_store, thread_cnt, false/*for_dag*/))) {
-        LOG_WARN("fail to build del lob task", KR(ret));
       }
     } else {
       if (OB_FAIL(merge_ctx_.build_merge_task(*table_store, thread_cnt))) {
-        LOG_WARN("fail to build merge task", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(task_iter_.init(&merge_ctx_))) {
-        LOG_WARN("fail to init task iter", KR(ret));
       } else {
         // merge_task will hold a reference count to the table, so we can clear it here
         table_store->clear();
@@ -115,11 +110,8 @@ int ObTableLoadParallelMerger::init_rescan_task(ObTableLoadMergeTableBaseOp *op)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), KP(op));
   } else if (OB_FAIL(init_merge_ctx(op))) {
-    LOG_WARN("fail to init merge ctx", KR(ret));
   } else if (OB_FAIL(merge_ctx_.build_rescan_task(op->store_ctx_->thread_cnt_))) {
-    LOG_WARN("fail to build rescan task", KR(ret));
   } else if (OB_FAIL(task_iter_.init(&merge_ctx_))) {
-    LOG_WARN("fail to init task iter", KR(ret));
   } else {
     store_ctx_ = op->store_ctx_;
     op_ = op;
@@ -145,19 +137,15 @@ int ObTableLoadParallelMerger::start()
       ObTableLoadTask *task = nullptr;
       // 1. assign task
       if (OB_FAIL(ctx->alloc_task(task))) {
-        LOG_WARN("fail to alloc task", KR(ret));
       }
       // 2. Set processor
       else if (OB_FAIL(task->set_processor<MergeTaskProcessor>(ctx, this))) {
-        LOG_WARN("fail to set merge task processor", KR(ret));
       }
       // 3. Set callback
       else if (OB_FAIL(task->set_callback<MergeTaskCallback>(ctx, this))) {
-        LOG_WARN("fail to set merge task callback", KR(ret));
       }
       // 4. Put task into scheduler
       else if (OB_FAIL(store_ctx_->task_scheduler_->add_task(i, task))) {
-        LOG_WARN("fail to add task", KR(ret), K(i), KPC(task));
       }
       if (OB_FAIL(ret)) {
         if (nullptr != task) {
@@ -216,7 +204,6 @@ int ObTableLoadParallelMerger::handle_merge_task_finish(ObDirectLoadIMergeTask *
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("tablet merge ctx is null", KR(ret), KP(tablet_merge_ctx));
   } else if (OB_FAIL(tablet_merge_ctx->inc_finish_count(ret_code, is_ready))) {
-    LOG_WARN("fail to inc finish count", KR(ret));
   } else if (is_ready) {
     ObDirectLoadInsertTabletContext *insert_tablet_ctx = tablet_merge_ctx->get_insert_tablet_ctx();
     if (op_->merge_table_ctx_->need_calc_range_ &&
@@ -246,7 +233,6 @@ int ObTableLoadParallelMerger::handle_merge_thread_finish(int ret_code)
       // cleanup merge ctx
       merge_ctx_.reset();
       if (OB_FAIL(op_->on_success())) {
-        LOG_WARN("fail to handle success", KR(ret));
       }
     }
   }
@@ -279,7 +265,6 @@ public:
           break;
         }
       } else if (OB_FAIL(merge_task->process())) {
-        LOG_WARN("fail to process merge task", KR(ret));
       }
       if (nullptr != merge_task) {
         if (OB_TMP_FAIL(parallel_merger_->handle_merge_task_finish(merge_task, ret))) {
@@ -309,7 +294,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_FAIL(parallel_merger_->handle_merge_thread_finish(ret_code))) {
-      LOG_WARN("fail to handle merge thread finish", KR(ret));
     }
     if (OB_FAIL(ret)) {
       ctx_->store_ctx_->set_status_error(ret);

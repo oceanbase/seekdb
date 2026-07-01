@@ -39,7 +39,6 @@ int ObExprMakeTime::fetch_second_quotient(int64_t &quotient, number::ObNumber &s
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(sec.extract_valid_int64_with_trunc(quotient))) {
-    LOG_WARN("fail to get second quotient", K(ret));
   }
   return ret;
 }
@@ -104,7 +103,6 @@ int ObExprMakeTime::eval_batch_maketime(const ObExpr &expr, ObEvalCtx &ctx,
         int64_t second_remainder = 0;
         ObEvalCtx::TempAllocGuard alloc_guard(ctx);
         if (OB_FAIL(fetch_second_quotient(second_quotient, s))) {
-          LOG_WARN("failed to fetch data from ObNumber obj sec", K(ret));
         } else if (OB_UNLIKELY(m < 0) ||
                    OB_UNLIKELY(m > 59) ||
                    OB_UNLIKELY(second_quotient < 0) ||
@@ -114,7 +112,6 @@ int ObExprMakeTime::eval_batch_maketime(const ObExpr &expr, ObEvalCtx &ctx,
           results.datums_[i].set_null();
         } else if (OB_FAIL(fetch_second_remainder(second_quotient, second_remainder,
                                                   alloc_guard.get_allocator(), s))) {
-          LOG_WARN("failed to fetch data from ObNumber obj sec", K(ret));
         } else {
           if (h < (-TIME_MAX_HOUR)) {
             h = -(TIME_MAX_HOUR + 1);
@@ -124,7 +121,6 @@ int ObExprMakeTime::eval_batch_maketime(const ObExpr &expr, ObEvalCtx &ctx,
           ob_time.parts_[DT_SEC]   = (int32_t)second_quotient;  // value < 60, no impact
           ob_time.parts_[DT_USEC]  = (int32_t)second_remainder; // value < 999999, no impact
           if (OB_FAIL(ObTimeConverter::validate_time(ob_time))) {
-            LOG_WARN("time value is invalid or out of range", K(ret));
           } else {
             int64_t value = ObTimeConverter::ob_time_to_time(ob_time);
             (void)ObTimeConverter::time_overflow_trunc(value);
@@ -148,7 +144,6 @@ int ObExprMakeTime::eval_maketime(const ObExpr &expr, ObEvalCtx &ctx,
   ObDatum * second = NULL;
   // Fetch input argument, hour, minute, second
   if (OB_FAIL(expr.eval_param_value(ctx, hour, minute, second))) {
-    LOG_WARN("unexpected input value ", K(ret));
   } else if (OB_UNLIKELY(hour->is_null()) ||
              OB_UNLIKELY(minute->is_null()) ||
              OB_UNLIKELY(second->is_null())) {
@@ -166,7 +161,6 @@ int ObExprMakeTime::eval_maketime(const ObExpr &expr, ObEvalCtx &ctx,
     int64_t second_quotient = 0;
     int64_t second_remainder = 0;
     if (OB_FAIL(fetch_second_quotient(second_quotient, sec))) {
-      LOG_WARN("failed to fetch data from ObNumber obj sec", K(ret));
     } else if (OB_UNLIKELY(min < 0) ||
         OB_UNLIKELY(min > 59) ||
         OB_UNLIKELY(second_quotient < 0) ||
@@ -174,7 +168,6 @@ int ObExprMakeTime::eval_maketime(const ObExpr &expr, ObEvalCtx &ctx,
         OB_UNLIKELY(sec.is_negative())) {
       result.set_null();
     } else if (OB_FAIL(fetch_second_remainder(second_quotient, second_remainder, alloc, sec))) {
-      LOG_WARN("failed to fetch data from ObNumber obj sec", K(ret));
     } else {
       if (h < (-TIME_MAX_HOUR)) {
         h = -(TIME_MAX_HOUR + 1);
@@ -184,7 +177,6 @@ int ObExprMakeTime::eval_maketime(const ObExpr &expr, ObEvalCtx &ctx,
       ob_time.parts_[DT_SEC]   = (int32_t)second_quotient;  // value < 60, no impact
       ob_time.parts_[DT_USEC]  = (int32_t)second_remainder; // value < 999999, no impact
       if (OB_FAIL(ObTimeConverter::validate_time(ob_time))) {
-        LOG_WARN("time value is invalid or out of range", K(ret));
       } else {
         int64_t value = ObTimeConverter::ob_time_to_time(ob_time);
         (void)ObTimeConverter::time_overflow_trunc(value);

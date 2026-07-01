@@ -39,7 +39,6 @@ int check_exist(const share::ObLSID &ls_id, ObLSHandle &ls_handle)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("failed to get ObLSService from MTL", K(ret), KP(ls_service));
   } else if (OB_FAIL(ls_service->get_ls(ls_id, ls_handle, ObLSGetMod::TABLELOCK_MOD))) {
-    LOG_WARN("failed to get ls", K(ret), K(ls_id));
   } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ls should not be NULL", K(ret), KP(ls));
@@ -73,7 +72,6 @@ int check_exist(const ObLockTaskBatchRequest<T> &arg,
                                     tablet_handle,
                                     0,
                                     ObMDSGetTabletMode::READ_WITHOUT_CHECK))) {
-    LOG_WARN("get tablet with timeout failed", K(ret), "ls_id", ls->get_ls_id(), K(tablet_id));
   } else if (OB_FAIL(tablet_handle.get_obj()->get_latest(
       data, unused_writer, unused_trans_stat, unused_trans_version))) {
     if (OB_EMPTY_RESULT == ret) {
@@ -182,7 +180,6 @@ int handle_batch_lock_task(const ObLockTaskBatchRequest<ObLockParam> &arg,
       case ObTableLockTaskType::LOCK_OBJECT:
       case ObTableLockTaskType::LOCK_ALONE_TABLET: {
         if (OB_FAIL(BATCH_PROCESS(arg, lock_obj, result))) {
-          LOG_WARN("failed to exec lock obj operation", K(ret), K(arg));
         }
         break;
       }
@@ -233,7 +230,6 @@ int handle_batch_replace_lock_task(const ObLockTaskBatchRequest<ObReplaceLockPar
     switch (arg.task_type_) {
       case ObTableLockTaskType::REPLACE_LOCK_TABLE: {
         if (OB_FAIL(process_for_replace_lock_table_(arg, result))) {
-          LOG_WARN("failed to exec replace_obj_lock operation for table", K(ret), K(arg));
         }
         break;
       }
@@ -243,7 +239,6 @@ int handle_batch_replace_lock_task(const ObLockTaskBatchRequest<ObReplaceLockPar
       case ObTableLockTaskType::REPLACE_LOCK_OBJECTS:
       case ObTableLockTaskType::REPLACE_LOCK_ALONE_TABLET: {
         if (OB_FAIL(BATCH_PROCESS(arg, replace_obj_lock, result))) {
-          LOG_WARN("failed to exec replace_obj_lock operation", K(ret), K(arg));
         }
         break;
       }
@@ -285,21 +280,17 @@ static int process_for_replace_lock_table_(const ObLockTaskBatchRequest<ObReplac
     for (int i = 0; i < arg.params_.count() && OB_SUCC(ret); i++) {
       if (arg.params_[i].lock_id_.is_tablet_lock()) {
         if (OB_FAIL(arg.params_[i].lock_id_.convert_to(tablet_id))) {
-          LOG_WARN("convert lock id to tablet id failed", K(ret), K(arg.params_[i].lock_id_));
         } else if (OB_FAIL(check_exist(arg, tablet_id, ls_handle))) {
           LOG_WARN("check tablet failed", K(ret), K(tablet_id), K(arg.params_[i].expired_time_), K(ls_handle));
           if (OB_TABLET_NOT_EXIST == ret) {
             result.can_retry_ = true;
           }
         } else if (OB_FAIL(replace_lock_for_tablet_in_table_(arg.lsid_, *(arg.tx_desc_), arg.params_[i]))) {
-          LOG_WARN("failed to replace lock for tablet in table", K(ret), K(arg.params_[i]));
         } else if (OB_FAIL(check_exist(arg, tablet_id, ls_handle))) {
-          LOG_WARN("check tablet failed", K(ret), K(tablet_id), K(arg.params_[i].expired_time_), K(ls_handle));
         } else {
           result.success_pos_ = i;
         }
       } else if (OB_FAIL(access_srv->replace_obj_lock(arg.lsid_, *(arg.tx_desc_), arg.params_[i]))) {
-        LOG_WARN("failed to replace lock table", K(ret), K(arg.params_[i]));
       }
     }
   }
@@ -325,7 +316,6 @@ static int replace_lock_for_tablet_in_table_(const share::ObLSID &ls_id,
                                    lock_param.is_deadlock_avoid_enabled_,
                                    lock_param.is_try_lock_,
                                    lock_param.expired_time_))) {
-      LOG_WARN("set lock_param for replace tablet lock failed", K(ret), K(lock_param));
     } else {
       ret = access_srv->lock_obj(ls_id, tx_desc, new_lock_param);
     }
@@ -359,7 +349,6 @@ int handle_high_priority_batch_lock_task(const ObLockTaskBatchRequest<ObLockPara
       case ObTableLockTaskType::UNLOCK_OBJECT:
       case ObTableLockTaskType::UNLOCK_ALONE_TABLET: {
         if (OB_FAIL(BATCH_PROCESS(arg, unlock_obj, result))) {
-          LOG_WARN("failed to exec unlock obj operation", K(ret), K(arg));
         }
         break;
       }

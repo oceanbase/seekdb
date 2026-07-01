@@ -1551,12 +1551,10 @@ int ObOptimizerUtil::remove_item(common::ObIArray<T> &items,
     if (v == item) {
       tmp_removed = true;
     } else if (OB_FAIL(new_arr.push_back(items.at(i)))) {
-      SQL_OPT_LOG(WARN, "failed to push back expr to array", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(items.assign(new_arr))) {
-      SQL_OPT_LOG(WARN, "failed to reset exprs array", K(ret));
     } else if (NULL != removed) {
       *removed = tmp_removed;
     }
@@ -1576,7 +1574,6 @@ int ObOptimizerUtil::remove_item(common::ObIArray<T> &items,
   for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
     if (!find_item(rm_items, items.at(i))) {
       if (OB_FAIL(new_arr.push_back(items.at(i)))) {
-        SQL_OPT_LOG(WARN, "failed to push back expr to array", K(ret));
       }
     } else {
       tmp_removed = true;
@@ -1584,7 +1581,6 @@ int ObOptimizerUtil::remove_item(common::ObIArray<T> &items,
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(items.assign(new_arr))) {
-      SQL_OPT_LOG(WARN, "failed to reset exprs array", K(ret));
     } else if (NULL != removed) {
       *removed = tmp_removed;
     }
@@ -1603,13 +1599,11 @@ int ObOptimizerUtil::intersect(const ObIArray<T> &first,
   for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
     if (find_item(second, first.at(i))) {
       if (OB_FAIL(new_arr.push_back(first.at(i)))) {
-        SQL_OPT_LOG(WARN, "failed to push back item to array", K(ret));
       }
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(third.assign(new_arr))) {
-      SQL_OPT_LOG(WARN, "failed to assign item array", K(ret));
     }
   }
   return ret;
@@ -1632,24 +1626,20 @@ int ObOptimizerUtil::intersect(const ObIArray<ObSEArray<T, 4>> &sets,
   } else {
     common::ObSEArray<common::ObSEArray<T, 8> , 2> intersection;
     if (OB_FAIL(intersection.prepare_allocate(2))) {
-      SQL_OPT_LOG(WARN, "failed to pre allocate array", K(ret));
     } else {
       bool cur = 0;
       if (OB_FAIL(intersection.at(cur^1).assign(sets.at(0)))) {
-        SQL_OPT_LOG(WARN, "failed to assign item array", K(ret));
       }
       for (int64_t i = 1; OB_SUCC(ret) && intersection.at(cur^1).count() > 0 && i < N; ++i, cur^=1) {
         for (int64_t j =0; OB_SUCC(ret) && j < sets.at(i).count(); j++) {
           if (find_item(intersection.at(cur^1), sets.at(i).at(j))) {
             if (OB_FAIL(intersection.at(cur).push_back(sets.at(i).at(j)))) {
-              SQL_OPT_LOG(WARN, "failed to push back item to array", K(ret));
             }
           }
         }
       }
       if (OB_SUCC(ret)){
         if (OB_FAIL(result.assign(intersection.at(cur^1)))) {
-          SQL_OPT_LOG(WARN, "failed to assign item array", K(ret));
         }
       }
     }
@@ -1713,7 +1703,6 @@ int ObOptimizerUtil::choose_random_members(const uint64_t seed,
     // do nothing
   } else if (choose_cnt >= input_array.count()) {
     if (OB_FAIL(output_array.assign(input_array))) {
-      SQL_OPT_LOG(WARN, "failed to assign", K(ret));
     }
   } else {
     ObSEArray<int64_t, 8> indices; // shuffle indices and choose the first `choose_cnt` members
@@ -1722,7 +1711,6 @@ int ObOptimizerUtil::choose_random_members(const uint64_t seed,
     int64_t already_choose = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < input_array.count(); i ++) {
       if (OB_FAIL(indices.push_back(i))) {
-        SQL_OPT_LOG(WARN, "failed to push back", K(ret));
       }
     }
     if (NULL != priority_indices) {
@@ -1742,12 +1730,9 @@ int ObOptimizerUtil::choose_random_members(const uint64_t seed,
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < choose_cnt; i ++) {
       if (OB_FAIL(output_array.push_back(input_array.at(indices.at(i))))) {
-        SQL_OPT_LOG(WARN, "failed to push back", K(ret));
       }
     }
   }
-  SQL_OPT_LOG(DEBUG, "succeed to choose random members",
-      K(choose_cnt), KPC(priority_indices), K(output_array));
   return ret;
 }
 

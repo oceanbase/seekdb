@@ -100,7 +100,6 @@ public:
   int add_dag_warning_info(ObDagWarningInfo &input_info);
   void destroy() {
     ObIDiagnoseInfoMgr::destroy();
-    COMMON_LOG(INFO, "ObDagWarningHistoryManager destroy finish");
   }
 
 public:

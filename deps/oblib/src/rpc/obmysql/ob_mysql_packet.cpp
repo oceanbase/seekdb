@@ -32,9 +32,7 @@ int ObMySQLPacket::store_string_kv(char *buf, int64_t len, const ObStringKV &str
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObMySQLUtil::store_obstr(buf, len, str.key_, pos))) {
-    LOG_WARN("store stringkv key fail", K(ret));
   } else if (OB_FAIL(ObMySQLUtil::store_obstr(buf, len, str.value_, pos))) {
-    LOG_WARN("store stringkv value fail", K(ret));
   }
   return ret;
 }
@@ -177,9 +175,7 @@ int ObMySQLPacket::encode(char *buffer, int64_t length, int64_t &pos, int64_t &p
           curr_payload_len = ((i == (sub_pkt_count - 1)) ? delta_len : OB_MYSQL_MAX_PAYLOAD_LENGTH);
 
           if (OB_FAIL(ObMySQLUtil::store_int3(buffer, length, static_cast<int32_t>(curr_payload_len), pos))) {
-            LOG_ERROR("failed to encode int3", K(ret));
           } else if (OB_FAIL(ObMySQLUtil::store_int1(buffer, length, tmp_seq, pos))) {
-            LOG_ERROR("failed to encode int1", K(ret));
           } else {
             if ((i > 0) && (NULL != tmp_buffer)) { // the first packet no need copy
               MEMCPY(buffer + pos, tmp_buffer + ((i - 1) * OB_MYSQL_MAX_PAYLOAD_LENGTH), curr_payload_len);
@@ -227,9 +223,7 @@ int ObMySQLRawPacket::serialize(char *buf, const int64_t length, int64_t &pos) c
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KP(buf), K(length), K(get_serialize_size()), K(pos), K(ret));
   } else if (OB_FAIL(ObMySQLUtil::store_int1(buf, length, cmd_, pos))) {
-    LOG_WARN("fail to store cmd", K(length), K(cmd_), K(pos), K(ret));
   } else if (OB_FAIL(ObMySQLUtil::store_str_vnzt(buf, length, get_cdata(), get_clen(), pos))) {
-    LOG_WARN("fail to store content", K(length), KP(get_cdata()), K(get_clen()), K(pos), K(ret));
   }
   return ret;
 }

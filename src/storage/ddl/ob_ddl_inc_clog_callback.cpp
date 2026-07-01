@@ -111,7 +111,6 @@
      ret = OB_INVALID_ARGUMENT;
      LOG_WARN("invalid argument", K(ret), K(ls_id), K(redo_info), K(macro_block_id));
    } else if (OB_FAIL(OB_STORAGE_OBJECT_MGR.inc_ref(macro_block_id))) {
-     LOG_WARN("inc reference count failed", K(ret), K(macro_block_id));
    } else {
      redo_info_ = redo_info;
      ls_id_ = ls_id;
@@ -144,17 +143,11 @@
      if (is_data_buffer_freed_) {
        LOG_INFO("data buffer is freed, do not need to callback");
      } else if (OB_FAIL(macro_block.block_handle_.set_block_id(macro_block_id_))) {
-       LOG_WARN("set macro block id failed", K(ret), K(macro_block_id_));
      } else if (OB_FAIL(macro_block.set_data_macro_meta(macro_block_id_, 
                                                         redo_info_.data_buffer_.ptr(), 
                                                         redo_info_.data_buffer_.length(),
                                                         redo_info_.block_type_,
                                                         true))) {
-       LOG_WARN("fail to set data macro meta", K(ret), K(macro_block_id_), 
-                                                       KP(redo_info_.data_buffer_.ptr()), 
-                                                       K(redo_info_.data_buffer_.length()),
-                                                       K(redo_info_.block_type_));
- 
      } else {
        macro_block.block_type_ = redo_info_.block_type_;
        macro_block.logic_id_ = redo_info_.logic_id_;
@@ -167,7 +160,6 @@
        const int64_t snapshot_version = redo_info_.table_key_.get_snapshot_version();
        const uint64_t data_format_version = redo_info_.data_format_version_;
        if (OB_FAIL(tablet_handle_.get_obj()->set_macro_block(macro_block, snapshot_version, data_format_version))) {
-         LOG_WARN("fail to set macro block", K(ret));
        }
      }
    }
@@ -215,7 +207,6 @@
    ObLS *ls = nullptr;
    ObLSHandle ls_handle;
    if (OB_FAIL(share::g_mp->ls_service()->get_ls(ls_id_, ls_handle, ObLSGetMod::DDL_MOD))) {
-     LOG_WARN("get ls failed", K(ret), K(ls_id_));
    } else if (OB_ISNULL(ls = ls_handle.get_ls())) {
      ret = OB_ERR_UNEXPECTED;
      LOG_ERROR("ls should not be null", K(ret), K(log_basic_.get_tablet_id()));

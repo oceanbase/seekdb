@@ -125,9 +125,7 @@ int ObExprPrivSTPoint::eval_priv_st_point(const ObExpr &expr,
   } else if (ob_is_null(type_x) || ob_is_null(type_y)) {
     is_null_result = true;
   } else if (OB_FAIL(arg_x->eval(ctx, datum_x))) {
-    LOG_WARN("fail to eval point x arg", K(ret), K(type_x));
   } else if (OB_FAIL(arg_y->eval(ctx, datum_y))) {
-    LOG_WARN("fail to eval point y arg", K(ret), K(type_y));
   } else if (datum_x->is_null() || datum_y->is_null()) {
     is_null_result = true;
   }
@@ -138,7 +136,6 @@ int ObExprPrivSTPoint::eval_priv_st_point(const ObExpr &expr,
       ret = OB_ERR_INVALID_TYPE_FOR_OP;   
       LOG_WARN("invalid type", K(ret));
     } else if (OB_FAIL(expr.args_[2]->eval(ctx, datum_srid))) {
-      LOG_WARN("fail to eval second argument", K(ret));
     } else if (datum_srid->is_null()) {
       is_null_result = true;
     } else if (datum_srid->get_int() < 0 || datum_srid->get_int() > UINT_MAX32) {
@@ -147,9 +144,7 @@ int ObExprPrivSTPoint::eval_priv_st_point(const ObExpr &expr,
       LOG_WARN("srid input value out of range", K(ret), K(datum_srid->get_int()));
     } else if (0 != (srid = datum_srid->get_uint32())) {
       if (OB_FAIL(OTSRS_MGR->get_tenant_srs_guard(srs_guard))) {
-        LOG_WARN("fail to get srs guard", K(ret));
       } else if (OB_FAIL(srs_guard.get_srs_item(srid, srs_item))) {
-        LOG_WARN("fail to get srs item", K(ret));
       } else if (OB_ISNULL(srs_item)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null srs item", K(ret));
@@ -173,17 +168,11 @@ int ObExprPrivSTPoint::eval_priv_st_point(const ObExpr &expr,
     } else if (ob_is_string_type(type_y) && OB_FAIL(ObGeoExprUtils::string_to_double(datum_y->get_string(), arg_y->datum_meta_.cs_type_, y))) {
       LOG_WARN("fail to get y", K(ret), K(type_y));
     } else if (OB_FAIL(res_wkb_buf.append(srid))) {
-      LOG_WARN("fail to append srid to point wkb buf", K(ret), K(srid));
     } else if (OB_FAIL(res_wkb_buf.append(static_cast<char>(ENCODE_GEO_VERSION(GEO_VESION_1))))) {
-      LOG_WARN("fail to append version to point wkb buf", K(ret));
     } else if (OB_FAIL(res_wkb_buf.append(static_cast<char>(ObGeoWkbByteOrder::LittleEndian)))) {
-      LOG_WARN("fail to append little endian byte order to point wkb buf", K(ret));
     } else if (OB_FAIL(res_wkb_buf.append(static_cast<uint32_t>(ObGeoType::POINT)))) {
-      LOG_WARN("fail to append geo type to point wkb buf", K(ret));
     } else if (OB_FAIL(res_wkb_buf.append(x))) {
-      LOG_WARN("fail to append x to point wkb buf", K(ret), K(x));
     } else if (OB_FAIL(res_wkb_buf.append(y))) {
-      LOG_WARN("fail to append y to point wkb buf", K(ret), K(y));
     }
 
     if (OB_SUCC(ret) && is_geog) {
@@ -194,11 +183,8 @@ int ObExprPrivSTPoint::eval_priv_st_point(const ObExpr &expr,
         double min_long_val = 0.0;
         double max_long_val = 0.0;
         if (OB_FAIL(srs_item->from_radians_to_srs_unit(longti, out_of_range_val))) {
-          LOG_WARN("fail to convert radians to srs unit", K(ret), K(longti), K(srs_item));
         } else if (OB_FAIL(srs_item->longtitude_convert_from_radians(-M_PI, min_long_val))) {
-          LOG_WARN("fail to convert longitude from radians", K(ret));
         } else if (OB_FAIL(srs_item->longtitude_convert_from_radians(M_PI, max_long_val))) {
-          LOG_WARN("fail to convert longitude from radians", K(ret));
         } else {
           ret = OB_ERR_LONGITUDE_OUT_OF_RANGE;
           LOG_USER_ERROR(OB_ERR_LONGITUDE_OUT_OF_RANGE, out_of_range_val, N_PRIV_ST_POINT, min_long_val, max_long_val);
@@ -211,11 +197,8 @@ int ObExprPrivSTPoint::eval_priv_st_point(const ObExpr &expr,
           double min_lat_val = 0.0;
           double max_lat_val = 0.0;
           if (OB_FAIL(srs_item->from_radians_to_srs_unit(lati, out_of_range_val))) {
-            LOG_WARN("fail to convert radians to srs unit", K(ret), K(lati), K(srs_item));
           } else if (OB_FAIL(srs_item->latitude_convert_from_radians(-M_PI_2, min_lat_val))) {
-            LOG_WARN("fail to convert latitude from radians", K(ret));
           } else if (OB_FAIL(srs_item->latitude_convert_from_radians(M_PI_2, max_lat_val))) {
-            LOG_WARN("fail to convert latitude from radians", K(ret));
           } else {
             ret = OB_ERR_LATITUDE_OUT_OF_RANGE;
             LOG_USER_ERROR(OB_ERR_LATITUDE_OUT_OF_RANGE, out_of_range_val, N_PRIV_ST_POINT, min_lat_val, max_lat_val);
@@ -230,7 +213,6 @@ int ObExprPrivSTPoint::eval_priv_st_point(const ObExpr &expr,
     if (is_null_result) {
       res.set_null();
     } else if (OB_FAIL(ObGeoExprUtils::pack_geo_res(expr, ctx, res, res_wkb_buf.string()))) {
-      LOG_WARN("fail to pack geo res", K(ret));
     }
   }
 

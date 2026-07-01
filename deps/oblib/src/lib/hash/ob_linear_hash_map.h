@@ -392,7 +392,6 @@ public:
   {
     int ret = OB_SUCCESS;
     if (OB_SUCCESS != (ret = destroy())) {
-      LIB_LOG(WARN, "failed to destroy hash map", K(ret));
     }
   }
   // Initialization & destruction.
@@ -659,7 +658,6 @@ int ObLinearHashMap<Key, Value, MemMgrTag>::HashMapMemMgrCore::init()
   ret = node_alloc_.init(static_cast<int64_t>(sizeof(Node)),
                          SET_USE_500(ObMemAttr("LinearHashMapNo")));
   if (OB_FAIL(ret)) {
-    LIB_LOG(WARN, "failed to init node alloc", K(ret));
   }
   return ret;
 }
@@ -670,11 +668,9 @@ ObLinearHashMap<Key, Value, MemMgrTag>::HashMapMemMgrCore::~HashMapMemMgrCore()
   int ret = OB_SUCCESS;
   if (0 < map_array_.count()) {
     for (int64_t i = 0; (i < map_array_.count()); ++i) {
-      LIB_LOG(WARN, "hash map not destroy", "map_ptr", map_array_.at(i));
     }
   }
   if (OB_SUCCESS != (ret = node_alloc_.destroy())) {
-    LIB_LOG(ERROR, "failed to destroy node alloc", K(ret));
   }
 }
 
@@ -688,7 +684,6 @@ ObLinearHashMap<Key, Value, MemMgrTag>::HashMapMemMgrCore::get_instance()
     {
       int ret = OB_SUCCESS;
       if (OB_FAIL(core.init())) {
-        LIB_LOG(ERROR, "failed to init MemMgrCore", K(ret));
       }
     }
   };
@@ -728,13 +723,10 @@ void ObLinearHashMap<Key, Value, MemMgrTag>::HashMapMemMgrCore::add_map(void *pt
   int ret = OB_SUCCESS;
   int lock_ret = OB_SUCCESS;
   if (OB_SUCCESS != (lock_ret = map_array_lock_.lock())) {
-    LIB_LOG(ERROR, "err lock map array lock", K(lock_ret));
   }
   if (OB_SUCCESS != (ret = map_array_.push_back(ptr))) {
-    LIB_LOG(WARN, "failed to push back map array", K(ret), K(ptr));
   }
   if (OB_SUCCESS != (lock_ret = map_array_lock_.unlock())) {
-    LIB_LOG(ERROR, "err unlock map array lock", K(lock_ret));
   }
 };
 
@@ -744,7 +736,6 @@ void ObLinearHashMap<Key, Value, MemMgrTag>::HashMapMemMgrCore::rm_map(void *ptr
   int ret = OB_SUCCESS;
   int lock_ret = OB_SUCCESS;
   if (OB_SUCCESS != (lock_ret = map_array_lock_.lock())) {
-    LIB_LOG(ERROR, "err lock map array lock", K(lock_ret));
   }
   int64_t idx = -1;
   for (int64_t i = 0; (i < map_array_.count()) && (-1 == idx); ++i) {
@@ -756,7 +747,6 @@ void ObLinearHashMap<Key, Value, MemMgrTag>::HashMapMemMgrCore::rm_map(void *ptr
     LIB_LOG(WARN, "failed to remove map array", K(ret), K(idx), K(ptr));
   }
   if (OB_SUCCESS != (lock_ret = map_array_lock_.unlock())) {
-    LIB_LOG(ERROR, "err unlock map array lock", K(lock_ret));
   }
 };
 
@@ -772,14 +762,12 @@ int ObLinearHashMap<Key, Value, MemMgrTag>::Cnter::init(HashMapMemMgr<MemMgrTag>
 {
   int ret = OB_SUCCESS;
   if (NULL != cnter_) {
-    LIB_LOG(ERROR, "init twice", K(cnter_));
     ret = OB_INIT_TWICE;
   } else {
     mem_mgr_ = &mem_mgr;
     int64_t sz = static_cast<int64_t>(CNTER_CNT * sizeof(Counter));
     if (NULL == (cnter_ = static_cast<Counter*>(mem_mgr_->get_cnter_alloc().alloc(sz)))) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
-      LIB_LOG(ERROR, "failed to alloc counter", K(sz));
     } else {
       for (int64_t idx = 0; idx < CNTER_CNT; ++idx) {
         Counter &cnter = cnter_[idx];
@@ -939,7 +927,6 @@ int ObLinearHashMap<Key, Value, MemMgrTag>::init(uint64_t m_seg_sz, uint64_t s_s
   if (!init_) {
     int tmp_ret = OB_SUCCESS;
     if (OB_SUCCESS != (tmp_ret = destroy())) {
-      LIB_LOG(ERROR, "clear init fail memory failed", K(tmp_ret), K(ret));
     } else {
       LIB_LOG(ERROR, "init counter failed", K(ret));
     }
@@ -1132,7 +1119,6 @@ void ObLinearHashMap<Key, Value, MemMgrTag>::es_lock_()
 {
   int ret = eslock_.lock();
   if (OB_SUCCESS != ret) {
-    LIB_LOG(ERROR, "err lock eslock", K(ret));
   }
 }
 
@@ -1141,7 +1127,6 @@ void ObLinearHashMap<Key, Value, MemMgrTag>::es_unlock_()
 {
   int ret = eslock_.unlock();
   if (OB_SUCCESS != ret) {
-    LIB_LOG(ERROR, "err unlock eslock", K(ret));
   }
 }
 
@@ -1153,20 +1138,15 @@ int ObLinearHashMap<Key, Value, MemMgrTag>::init_d_arr_(uint64_t m_seg_sz, uint6
   // Param validation.
   if (sizeof(Bucket) > BKT_SZ_LMT) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(ERROR, "can't support large key value pair");
   } else if (!(m_seg_sz == 0 || (m_seg_sz >= M_SEG_SZ_L_LMT && m_seg_sz <= M_SEG_SZ_U_LMT))) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(ERROR, "invalid micro-segment size", K(m_seg_sz));
   } else if (!(s_seg_sz >= S_SEG_SZ_L_LMT && s_seg_sz <= S_SEG_SZ_U_LMT)) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(ERROR, "invalid standard-segment size", K(s_seg_sz));
   } else if (!(dir_init_sz >= DIR_SZ_L_LMT)) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(ERROR, "invalid initial directory size", K(dir_init_sz));
   } else if (m_seg_sz != 0
         && (s_seg_sz / m_seg_sz > S_M_SEG_RATIO_U_LMT || s_seg_sz / m_seg_sz < S_M_SEG_RATIO_L_LMT)) {
     ret = OB_INVALID_ARGUMENT;
-    LIB_LOG(ERROR, "invalid standard-micro segment size ratio", K(s_seg_sz), K(m_seg_sz));
   }
   // Settings.
   if (OB_SUCC(ret)) {
@@ -1601,7 +1581,6 @@ int ObLinearHashMap<Key, Value, MemMgrTag>::unite_shrink_d_seg_bkts_(Bucket *src
   int ret = ES_SUCCESS;
   Node *node = NULL;
   if (NULL == src_bkt || NULL == dst_bkt) {
-    LIB_LOG(ERROR, "err bkt ptr", K(src_bkt), K(dst_bkt));
   } else {
     if (is_bkt_nonempty_(src_bkt) && is_bkt_nonempty_(dst_bkt)
         && NULL == (node = static_cast<Node *>(mem_mgr_.get_node_alloc().alloc()))) {
@@ -2432,7 +2411,6 @@ bool ObLinearHashMap<Key, Value, MemMgrTag>::DoForeachOnBkt<Function>::operator(
 {
   bool ret = true;
   if (NULL == bkt) {
-    LIB_LOG(ERROR, "err bkt", K(bkt));
   } else {
     if (host.is_bkt_nonempty_(bkt)) {
       ret = fn(const_cast<const Key &>(bkt->key_), bkt->value_);

@@ -122,7 +122,6 @@ OB_INLINE int ObTableInsertOp::inner_open_with_das()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(open_table_for_each())) {
-    LOG_WARN("open table for each failed", K(ret), K(MY_SPEC.ins_ctdefs_.count()));
   }
   return ret;
 }
@@ -131,7 +130,6 @@ OB_INLINE int ObTableInsertOp::open_table_for_each()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ins_rtdefs_.allocate_array(ctx_.get_allocator(), MY_SPEC.ins_ctdefs_.count()))) {
-    LOG_WARN("allocate insert rtdef failed", K(ret), K(MY_SPEC.ins_ctdefs_.count()));
   }
   trigger_clear_exprs_.reset();
   fk_checkers_.reset();
@@ -139,13 +137,11 @@ OB_INLINE int ObTableInsertOp::open_table_for_each()
     InsRtDefArray &rtdefs = ins_rtdefs_.at(i);
     const ObTableInsertSpec::InsCtDefArray &ctdefs = MY_SPEC.ins_ctdefs_.at(i);
     if (OB_FAIL(rtdefs.allocate_array(ctx_.get_allocator(), ctdefs.count()))) {
-      LOG_WARN("allocate update rtdefs failed", K(ret), K(ctdefs.count()));
     }
     for (int64_t j = 0; OB_SUCC(ret) && j < rtdefs.count(); ++j) {
       ObInsRtDef &ins_rtdef = rtdefs.at(j);
       const ObInsCtDef &ins_ctdef = *ctdefs.at(j);
       if (OB_FAIL(ObDMLService::init_ins_rtdef(dml_rtctx_, ins_rtdef, ins_ctdef, trigger_clear_exprs_, fk_checkers_))) {
-        LOG_WARN("init insert rtdef failed", K(ret));
       }
     }
     if (OB_SUCC(ret) && !rtdefs.empty()) {
@@ -158,7 +154,6 @@ OB_INLINE int ObTableInsertOp::open_table_for_each()
                                                             primary_ins_rtdef,
                                                             dml_rtctx_,
                                                             ObDmlEventType::DE_INSERTING))) {
-        LOG_WARN("process before stmt trigger failed", K(ret));
       } else {
         //this table is being accessed by dml operator, mark its table location as writing
         //but single value insert in oracle allow the nested sql modify its insert table
@@ -182,14 +177,12 @@ int ObTableInsertOp::calc_tablet_loc(const ObInsCtDef &ins_ctdef,
     ObTabletID tablet_id;
     ObDASTableLoc &table_loc = *ins_rtdef.das_rtdef_.table_loc_;
     if (OB_FAIL(ObExprCalcPartitionBase::calc_part_and_tablet_id(calc_part_id_expr, eval_ctx_, partition_id, tablet_id))) {
-      LOG_WARN("calc part and tablet id by expr failed", K(ret));
     } else if (!ins_ctdef.multi_ctdef_->hint_part_ids_.empty()
         && !has_exist_in_array(ins_ctdef.multi_ctdef_->hint_part_ids_, partition_id)) {
       ret = OB_PARTITION_NOT_MATCH;
       LOG_DEBUG("Partition not match", K(ret),
                 K(partition_id), K(ins_ctdef.multi_ctdef_->hint_part_ids_));
     } else if (OB_FAIL(DAS_CTX(ctx_).extended_tablet_loc(table_loc, tablet_id, tablet_loc))) {
-      LOG_WARN("extended tablet loc failed", K(ret));
     }
   } else {
     //direct write insert row to storage
@@ -243,7 +236,6 @@ OB_INLINE int ObTableInsertOp::insert_row_to_das()
         ++ins_rtdef.cur_row_num_;
       }
       if (OB_FAIL(ObDMLService::init_heap_table_pk_for_ins(ins_ctdef, eval_ctx_))) {
-        LOG_WARN("fail to init heap table pk to null", K(ret));
       } else if (OB_FAIL(ObDMLService::process_insert_row(ins_ctdef, ins_rtdef, *this, is_skipped))) {
         if (is_error_logging_ && err_log_rt_def_.first_err_ret_ != OB_SUCCESS) {
           // It means that error logging has caught the error, and the log will not be printed temporarily
@@ -253,14 +245,10 @@ OB_INLINE int ObTableInsertOp::insert_row_to_das()
       } else if (OB_UNLIKELY(is_skipped)) {
         break;
       } else if (OB_FAIL(calc_tablet_loc(ins_ctdef, ins_rtdef, tablet_loc))) {
-        LOG_WARN("calc partition key failed", K(ret));
       } else if (OB_FAIL(ObDMLService::set_heap_table_hidden_pk(ins_ctdef,
                                                                 tablet_loc->tablet_id_,
                                                                 eval_ctx_))) {
-        LOG_WARN("set_heap_table_hidden_pk failed", K(ret), KPC(tablet_loc));
       } else if (OB_FAIL(ObDMLService::insert_row(ins_ctdef, ins_rtdef, tablet_loc, dml_rtctx_, modify_row.new_row_))) {
-        LOG_WARN("insert row with das failed", K(ret));
-      // TODO(yikang): fix trigger related for heap table
       } else if (need_after_row_process(ins_ctdef) && OB_FAIL(dml_modify_rows_.push_back(modify_row))) {
         LOG_WARN("failed to push dml modify row to modified row list", K(ret));
       }
@@ -271,7 +259,6 @@ OB_INLINE int ObTableInsertOp::insert_row_to_das()
     if (OB_SUCC(ret)) {
       int64_t insert_rows = is_skipped ? 0 : 1;
       if (OB_FAIL(merge_implict_cursor(insert_rows, 0, 0, 0))) {
-        LOG_WARN("merge implict cursor failed", K(ret));
       }
     }
 
@@ -286,7 +273,6 @@ OB_INLINE int ObTableInsertOp::insert_row_to_das()
                                                   MY_SPEC.ins_ctdefs_.at(0).at(0)->error_logging_ctdef_,
                                                   err_log_service_,
                                                   ObDASOpType::DAS_OP_TABLE_INSERT))) {
-      LOG_WARN("fail to catch violate error", K(err_ret), K(ret));
     }
   }
 
@@ -319,12 +305,10 @@ int ObTableInsertOp::write_rows_post_proc(int last_errno)
       plan_ctx->add_affected_rows(changed_rows);
       // sync last user specified value after iter ends(compatible with MySQL)
       if (OB_FAIL(plan_ctx->sync_last_value_local())) {
-        LOG_WARN("failed to sync last value", K(ret));
       }
     }
     int sync_ret = OB_SUCCESS;
     if (OB_SUCCESS != (sync_ret = plan_ctx->sync_last_value_global())) {
-      LOG_WARN("failed to sync value globally", K(sync_ret));
     }
     NG_TRACE(sync_auto_value);
     if (OB_SUCC(ret)) {
@@ -332,7 +316,6 @@ int ObTableInsertOp::write_rows_post_proc(int last_errno)
     }
     if (OB_SUCC(ret) && GCONF.enable_defensive_check() && !is_error_logging_) {
       if (OB_FAIL(check_insert_affected_row())) {
-        LOG_WARN("check index insert consistency failed", K(ret));
       }
     }
   }
@@ -394,14 +377,12 @@ int ObTableInsertOp::inner_open()
   //execute insert with das
   //calc partition by table location info
   if (OB_FAIL(ObTableModifyOp::inner_open())) {
-    LOG_WARN("inner open ObTableModifyOp failed", K(ret));
   } else if (OB_UNLIKELY(MY_SPEC.ins_ctdefs_.empty())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("ins ctdef is invalid", K(ret), KP(this));
   } else if (OB_UNLIKELY(iter_end_)) {
     //do nothing
   } else if (OB_FAIL(inner_open_with_das())) {
-    LOG_WARN("inner open with das failed", K(ret));
   }
   return ret;
 }
@@ -410,13 +391,10 @@ int ObTableInsertOp::inner_rescan()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObTableModifyOp::inner_rescan())) {
-    LOG_WARN("rescan child operator failed", K(ret));
   } else if (OB_UNLIKELY(iter_end_)) {
     //do nothing
   } else if (OB_FAIL(close_table_for_each())) {
-    LOG_WARN("close table for each failed", K(ret));
   } else if (OB_FAIL(open_table_for_each())) {
-    LOG_WARN("open table for each failed", K(ret));
   }
   return ret;
 }
@@ -426,7 +404,6 @@ int ObTableInsertOp::inner_close()
   NG_TRACE(insert_close);
   int ret = OB_SUCCESS;
   if (OB_FAIL(close_table_for_each())) {
-    LOG_WARN("close table for each failed", K(ret));
   }
   int close_ret = ObTableModifyOp::inner_close();
   return (OB_SUCCESS == ret) ? close_ret : ret;
@@ -447,7 +424,6 @@ OB_INLINE int ObTableInsertOp::close_table_for_each()
                                                              primary_ins_rtdef,
                                                              dml_rtctx_,
                                                              ObDmlEventType::DE_INSERTING))) {
-          LOG_WARN("process after stmt trigger failed", K(ret));
         }
       }
     }

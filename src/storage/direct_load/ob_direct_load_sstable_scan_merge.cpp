@@ -117,7 +117,6 @@ int ObDirectLoadSSTableScanMerge::init(const ObDirectLoadSSTableScanMergeParam &
       ObDirectLoadSSTable *sstable = nullptr;
       ObDirectLoadSSTableScanner *scanner = nullptr;
       if (OB_FAIL(sstable_array.get_table(i, sstable_handle))) {
-        LOG_WARN("fail to get sstable handle", KR(ret));
       } else if (OB_UNLIKELY(!sstable_handle.is_valid() || !sstable_handle.get_table()->is_sstable())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null sstable", KR(ret));
@@ -125,9 +124,7 @@ int ObDirectLoadSSTableScanMerge::init(const ObDirectLoadSSTableScanMergeParam &
       } else if (sstable->is_empty()) {
       } else if (OB_FAIL(sstable->scan(param.table_data_desc_, range, param.datum_utils_,
                                        allocator_, scanner))) {
-        LOG_WARN("fail to scan sstable", KR(ret));
       } else if (OB_FAIL(scanners_.push_back(scanner))) {
-        LOG_WARN("fail to push back scanner", KR(ret));
       }
     }
     if (OB_SUCC(ret) && !scanners_.empty()) {
@@ -145,11 +142,8 @@ int ObDirectLoadSSTableScanMerge::init(const ObDirectLoadSSTableScanMergeParam &
       // init rows merger
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(compare_.init(param.datum_utils_))) {
-        LOG_WARN("fail to init compare", KR(ret));
       } else if (OB_FAIL(init_rows_merger(scanners_.count()))) {
-        LOG_WARN("fail to init rows merger", KR(ret));
       } else if (OB_FAIL(datum_row_.init(param.table_data_desc_.column_count_))) {
-        LOG_WARN("fail to init datum row", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
@@ -187,10 +181,8 @@ int ObDirectLoadSSTableScanMerge::init_rows_merger(int64_t sstable_count)
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(rows_merger_->init(MAX_SSTABLE_COUNT, sstable_count, allocator_))) {
-      LOG_WARN("fail to init rows merger", KR(ret), K(sstable_count));
     } else if (FALSE_IT(rows_merger_->reuse())) {
     } else if (OB_FAIL(rows_merger_->open(sstable_count))) {
-      LOG_WARN("fail to open rows merger", KR(ret), K(sstable_count));
     }
   }
   return ret;
@@ -212,14 +204,12 @@ int ObDirectLoadSSTableScanMerge::supply_consume()
     } else {
       item.iter_idx_ = iter_idx;
       if (OB_FAIL(rows_merger_->push(item))) {
-        LOG_WARN("fail to push to loser tree", KR(ret));
       }
     }
   }
   if (OB_SUCC(ret)) {
     // no worry, if no new items pushed, the rebuild will quickly exit
     if (OB_FAIL(rows_merger_->rebuild())) {
-      LOG_WARN("fail to rebuild loser tree", KR(ret), K(consumer_cnt_));
     } else {
       consumer_cnt_ = 0;
     }
@@ -238,20 +228,16 @@ int ObDirectLoadSSTableScanMerge::inner_get_next_row(const ObDirectLoadExternalR
     rows_.reuse();
     while (OB_SUCC(ret) && !rows_merger_->empty() && nullptr == external_row) {
       if (OB_FAIL(rows_merger_->top(top_item))) {
-        LOG_WARN("fail to get top item", KR(ret));
       } else if (OB_FAIL(rows_.push_back(top_item->external_row_))) {
-        LOG_WARN("fail to push back", KR(ret));
       } else if (OB_LIKELY(rows_merger_->is_unique_champion())) {
         if (OB_LIKELY(rows_.count() == 1)) {
           external_row = rows_.at(0);
         } else if (OB_FAIL(dml_row_handler_->handle_update_row(tablet_id_, rows_, external_row))) {
-          LOG_WARN("fail to handle update row", KR(ret), K(rows_));
         }
       }
       if (OB_SUCC(ret)) {
         consumers_[consumer_cnt_++] = top_item->iter_idx_;
         if (OB_FAIL(rows_merger_->pop())) {
-          LOG_WARN("fail to pop item", KR(ret));
         }
       }
     }
@@ -300,7 +286,6 @@ int ObDirectLoadSSTableScanMerge::get_next_row(const ObDirectLoadDatumRow *&datu
         LOG_WARN("fail to get next external row", KR(ret));
       }
     } else if (OB_FAIL(external_row->to_datum_row(datum_row_))) {
-      LOG_WARN("fail to transfer datum row", KR(ret));
     } else {
       datum_row = &datum_row_;
     }

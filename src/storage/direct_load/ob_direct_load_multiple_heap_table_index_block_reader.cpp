@@ -71,7 +71,6 @@ int ObDirectLoadMultipleHeapTableIndexBlockReader::get_index(
                         ObDirectLoadMultipleHeapTableIndexBlock::get_entry_size() * idx;
     Entry item;
     if (OB_FAIL(this->data_block_reader_.read_item(pos, item))) {
-      STORAGE_LOG(WARN, "fail to read item", KR(ret));
     } else {
       index_.tablet_id_ = item.tablet_id_;
       index_.row_count_ = item.row_count_;
@@ -94,7 +93,6 @@ int ObDirectLoadMultipleHeapTableIndexBlockReader::seek_index(int64_t idx)
     const int64_t pos = ObDirectLoadMultipleHeapTableIndexBlock::get_header_size() +
                         ObDirectLoadMultipleHeapTableIndexBlock::get_entry_size() * idx;
     if (OB_FAIL(this->data_block_reader_.set_pos(pos))) {
-      STORAGE_LOG(WARN, "fail to set pos", KR(ret));
     }
   }
   return ret;

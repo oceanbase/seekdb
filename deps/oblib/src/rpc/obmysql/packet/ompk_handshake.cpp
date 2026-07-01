@@ -98,36 +98,23 @@ int OMPKHandshake::serialize(char *buffer, int64_t len, int64_t &pos) const
   } else {
     // buffer is definitely enough
     if (OB_FAIL(ObMySQLUtil::store_int1(buffer, len, protocol_version_, pos))) {
-      LOG_WARN("store fail", KP(buffer), K(len), K(protocol_version_), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_obstr_zt(buffer, len, server_version_, pos))) {
-      LOG_WARN("store fail", KP(buffer), K(len), K(server_version_), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_int4(buffer, len, thread_id_, pos))) {
-      LOG_WARN("store fail", KP(buffer), K(len), K(thread_id_), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_str_vnzt(buffer, len, scramble_buff_, SCRAMBLE_SIZE, pos))) {
-      LOG_WARN("store fail", KP(buffer), K(len), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_int1(buffer, len, filler_, pos))) {
-      LOG_WARN("store fail", KP(buffer), K(filler_), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_int2(buffer, len, server_capabilities_lower_.capability_, pos))) {
-      LOG_WARN("store fail", KP(buffer), K(server_capabilities_lower_.capability_), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_int1(buffer, len, server_language_, pos))) {
-      LOG_WARN("store fail", KP(buffer), K(server_language_), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_int2(buffer, len, server_status_, pos))) {
-      LOG_WARN("store fail", KP(buffer), K(server_status_), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_int2(buffer, len, server_capabilities_upper_.capability_, pos))) {
-      LOG_WARN("store fail", KP(buffer), K(server_capabilities_upper_.capability_), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_int1(buffer, len, auth_plugin_data_len_, pos))) {
-      LOG_WARN("store fail", KP(buffer), K(auth_plugin_data_len_), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_str_vnzt(buffer, len, reserved_, sizeof (reserved_), pos))) {
-      LOG_WARN("store fail", KP(buffer), K(pos));
     } else if (OB_FAIL(ObMySQLUtil::store_str_vnzt(buffer, len, auth_plugin_data2_, sizeof (auth_plugin_data2_), pos))) {
-      LOG_WARN("store fail", KP(buffer), K(pos));
     }
 
     if (OB_SUCC(ret)) {
       if (server_capabilities_upper_.capability_flag_.OB_SERVER_PLUGIN_AUTH) {
         // auth-plugin name, NULL terminated
         if (OB_FAIL(ObMySQLUtil::store_obstr_zt(buffer, len, auth_plugin_name_, pos))) {
-          LOG_WARN("store fail", KP(buffer), K(pos));
         }
       }
     }

@@ -83,7 +83,6 @@ int ObTabletTableOperator::init(share::ObSQLiteConnectionPool *pool)
   } else {
     // Initialize storage with shared instance
     if (OB_FAIL(storage_.init(pool))) {
-      LOG_WARN("failed to init storage", K(ret));
     } else {
       batch_size_ = MAX_BATCH_COUNT;
       group_id_ = 0; /*OBCG_DEFAULT*/
@@ -115,7 +114,6 @@ int ObTabletTableOperator::get(
   } else {
     ret = storage_.get(tablet_id, ls_id, addr, tablet_replica);
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to get tablet replica from storage", K(ret), K(tablet_id), K(ls_id), K(addr));
     }
   }
   return ret;
@@ -154,25 +152,21 @@ int ObTabletTableOperator::batch_get_tablet_info(
   // Legacy method: ignore sql_proxy and use SQLite storage
   ObTabletMetaTableStorage *storage = nullptr;
   if (OB_FAIL(get_shared_storage(storage))) {
-    LOG_WARN("failed to get shared storage", K(ret));
   } else {
     // Convert ObTabletCheckInfo to ObTabletLSPair
     ObSEArray<ObTabletLSPair, 64> tablet_ls_pairs;
     for (int64_t i = 0; OB_SUCC(ret) && i < tablet_ls_infos.count(); ++i) {
       const compaction::ObTabletCheckInfo &check_info = tablet_ls_infos.at(i);
       if (OB_FAIL(tablet_ls_pairs.push_back(ObTabletLSPair(check_info.get_tablet_id(), check_info.get_ls_id())))) {
-        LOG_WARN("failed to push back tablet ls pair", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       ObSEArray<ObTabletInfo, 64> infos;
       if (OB_FAIL(storage->batch_get(tablet_ls_pairs, infos))) {
-        LOG_WARN("failed to batch get from storage", K(ret));
       } else {
         // Convert to ObArrayWithMap
         for (int64_t i = 0; OB_SUCC(ret) && i < infos.count(); ++i) {
           if (OB_FAIL(tablet_infos.push_back(infos.at(i)))) {
-            LOG_WARN("failed to push back tablet info", K(ret));
           }
         }
       }
@@ -200,7 +194,6 @@ int ObTabletTableOperator::batch_get(
   if (FAILEDx(pairs_map.create(
       hash::cal_next_prime(pairs_cnt * 2),
       ObModIds::OB_HASH_BUCKET))) {
-    LOG_WARN("fail to create pairs_map", KR(ret), K(pairs_cnt));
   } else {
     ARRAY_FOREACH_N(tablet_ls_pairs, idx, cnt) {
       // if same talet_id exist, return error
@@ -222,7 +215,6 @@ int ObTabletTableOperator::batch_get(
   // Step 2: get from SQLite storage
   if (OB_SUCC(ret)) {
     if (OB_FAIL(storage_.batch_get(tablet_ls_pairs, tablet_infos))) {
-      LOG_WARN("fail to batch get from storage", KR(ret), K(tablet_ls_pairs));
     }
   }
   // Step 3: check tablet_infos and push back empty tablet_info for tablets not exist
@@ -233,7 +225,6 @@ int ObTabletTableOperator::batch_get(
       const ObTabletID &tablet_id = tablet_infos.at(idx).get_tablet_id();
       const ObLSID &ls_id = tablet_infos.at(idx).get_ls_id();
       if (OB_FAIL(pairs_map.set_refactored(ObTabletLSPair(tablet_id, ls_id), true, overwrite_flag))) {
-        LOG_WARN("fail to set_fefactored", KR(ret), K(tablet_id), K(ls_id));
       }
     }
     // push back empty tablet_info
@@ -246,7 +237,6 @@ int ObTabletTableOperator::batch_get(
               iter->first.get_ls_id(),
               replica);
           if (OB_FAIL(tablet_infos.push_back(tablet_info))) {
-            LOG_WARN("fail to push back tablet info", KR(ret), K(tablet_info));
           }
           LOG_TRACE("tablet not exist in meta table",
               KR(ret), "tablet_id", iter->first);
@@ -275,23 +265,19 @@ int ObTabletTableOperator::construct_tablet_infos(
     } else {
       replica.reset();
       if (OB_FAIL(construct_tablet_replica_(res, replica))) {
-        LOG_WARN("fail to construct tablet replica", KR(ret));
       } else if (OB_UNLIKELY(!replica.is_valid())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("construct invalid replica", KR(ret), K(replica));
       } else if (tablet_info.is_self_replica(replica)) {
         if (OB_FAIL(tablet_info.add_replica(replica))) {
-          LOG_WARN("fail to add replica", KR(ret), K(replica));
         }
       } else {
         if (tablet_info.is_valid()) {
           if (OB_FAIL(push_tablet(tablet_info))) {
-            LOG_WARN("fail to push back", KR(ret), K(tablet_info));
           }
         }
         tablet_info.reset();
         if (FAILEDx(tablet_info.init_by_replica(replica))) {
-          LOG_WARN("fail to init tablet_info by replica", KR(ret), K(replica));
         }
       }
     }
@@ -299,7 +285,6 @@ int ObTabletTableOperator::construct_tablet_infos(
   if (OB_SUCC(ret) && tablet_info.is_valid()) {
     // last tablet info
     if (OB_FAIL(push_tablet(tablet_info))) {
-      LOG_WARN("fail to push back", KR(ret), K(tablet_info));
     }
   }
   return ret;
@@ -355,8 +340,6 @@ int ObTabletTableOperator::construct_tablet_replica_(
           required_size,
           (int64_t)uint_report_scn,
           status))) {
-    LOG_WARN("fail to init replica", KR(ret),
-        K(tablet_id), K(server), K(ls_id), K(data_size), K(required_size));
   }
   LOG_TRACE("construct tablet replica", KR(ret), K(replica));
   return ret;
@@ -373,7 +356,6 @@ int ObTabletTableOperator::batch_update(
   } else {
     ret = storage_.batch_update(replicas);
     if (OB_FAIL(ret)) {
-      LOG_WARN("fail to batch update in storage", KR(ret));
     }
   }
   return ret;
@@ -393,7 +375,6 @@ int ObTabletTableOperator::batch_update(
   } else {
     ret = storage_.batch_update(conn, replicas);
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to batch update", K(ret));
     }
   }
   return ret;
@@ -416,7 +397,6 @@ int ObTabletTableOperator::range_get(const common::ObTabletID &start_tablet_id,
   } else {
     ret = storage_.range_get(start_tablet_id, range_size, tablet_infos);
     if (OB_FAIL(ret)) {
-      LOG_WARN("fail to range get from storage", KR(ret), K(start_tablet_id), K(range_size));
     }
   }
   return ret;
@@ -438,7 +418,6 @@ int ObTabletTableOperator::batch_remove(
   } else {
     ret = storage_.batch_remove(conn, replicas);
     if (OB_FAIL(ret)) {
-      LOG_WARN("failed to batch remove", K(ret));
     }
   }
   return ret;
@@ -454,7 +433,6 @@ int ObTabletTableOperator::batch_remove(
   } else {
     ret = storage_.batch_remove(replicas);
     if (OB_FAIL(ret)) {
-      LOG_WARN("fail to batch remove in storage", KR(ret));
     }
   }
   return ret;
@@ -480,7 +458,6 @@ int ObTabletTableOperator::remove_residual_tablet(
   } else {
     ret = storage_.remove_residual_tablet(server, limit, affected_rows);
     if (OB_FAIL(ret)) {
-      LOG_WARN("fail to remove residual tablet in storage", KR(ret), K(server));
     }
   }
   return ret;

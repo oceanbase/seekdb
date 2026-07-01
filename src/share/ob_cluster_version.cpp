@@ -32,10 +32,8 @@ static int parse_version(const char *str, uint64_t *versions, const int64_t size
   const int64_t LAST_VERSION_ITEM = VERSION_ITEM - 1;
 
   if (NULL == str || NULL == versions || VERSION_ITEM > size) {
-    COMMON_LOG(WARN, "invalid argument", KP(str), KP(versions), K(size));
     ret = OB_INVALID_ARGUMENT;
   } else if (strlen(str) >= sizeof(buf)) {
-    COMMON_LOG(WARN, "invalid version", "version", str);
     ret = OB_INVALID_ARGUMENT;
   } else {
     strncpy(buf, str, sizeof(buf) - 1);
@@ -91,7 +89,6 @@ int ObClusterVersion::init(const uint64_t cluster_version)
     COMMON_LOG(ERROR, "cluster version init twice", KR(ret), K(cluster_version));
   } else {
     ATOMIC_SET(&cluster_version_, cluster_version);
-    COMMON_LOG(INFO, "cluster version inited success", K(cluster_version));
     is_inited_ = true;
   }
 
@@ -109,10 +106,8 @@ int ObClusterVersion::init(const ObServerConfig *config)
     ret = OB_INVALID_ARGUMENT;
     COMMON_LOG(WARN, "invalid argument", KR(ret), KP(config));
   } else if (OB_FAIL(refresh_cluster_version(config->min_observer_version.str()))) {
-    COMMON_LOG(WARN, "refresh cluster version error", KR(ret));
   } else {
     config_ = config;
-    COMMON_LOG(INFO, "cluster version inited success", K_(cluster_version));
     is_inited_ = true;
   }
 
@@ -145,7 +140,6 @@ int64_t ObClusterVersion::print_vsn(char *buf, const int64_t buf_len, uint64_t v
   const uint8_t minor_patch = OB_VSN_MINOR_PATCH(version);
   if (OB_FAIL(databuff_printf(buf, buf_len, pos, "%lu(%u, %u, %u, %u)",
               version, major, minor, major_patch, minor_patch))) {
-    COMMON_LOG(WARN, "fail to print vsn", KR(ret), K(version));
   }
   if (OB_FAIL(ret)) {
     pos = OB_INVALID_INDEX;
@@ -172,7 +166,6 @@ int ObClusterVersion::refresh_cluster_version(const char *verstr)
                                          items[ObClusterVersion::MAJOR_PATCH_POS],
                                          items[ObClusterVersion::MINOR_PATCH_POS]);
     ATOMIC_SET(&cluster_version_, version);
-    COMMON_LOG(INFO, "refresh cluster version", "cluster_version", *this);
   }
 
   return ret;
@@ -183,7 +176,6 @@ int ObClusterVersion::reload_config()
   int ret = OB_SUCCESS;
 
   if (NULL == config_) {
-    COMMON_LOG(WARN, "config is null", KP_(config));
     ret = OB_ERR_UNEXPECTED;
   } else {
     ret = refresh_cluster_version(config_->min_observer_version.str());
@@ -222,7 +214,6 @@ int ObClusterVersion::tenant_need_upgrade(bool &need_upgrade)
   int ret = OB_SUCCESS;
   uint64_t data_version = 0;
   if (OB_FAIL(get_tenant_data_version(data_version))) {
-    COMMON_LOG(WARN, "fail to get tenant data version", KR(ret));
   } else {
     need_upgrade = (data_version < DATA_CURRENT_VERSION);
   }
@@ -237,7 +228,6 @@ int ObClusterVersion::is_valid(const char *verstr)
   if (NULL == verstr) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(parse_version(verstr, items, MAX_VERSION_ITEM))) {
-    COMMON_LOG(WARN, "invalid version", "version_str", verstr);
   }
   return ret;
 }
@@ -249,9 +239,7 @@ int ObClusterVersion::get_version(const common::ObString &verstr, uint64_t &vers
   version = 0;
 
   if (OB_FAIL(databuff_printf(buf, OB_CLUSTER_VERSION_LENGTH, "%.*s", verstr.length(), verstr.ptr()))) {
-    COMMON_LOG(WARN, "failed to print version", K(ret), K(verstr));
   } else if (OB_FAIL(get_version(buf, version))) {
-    COMMON_LOG(WARN, "failed to get version", K(ret), K(buf));
   }
 
   return ret;
@@ -264,7 +252,6 @@ int ObClusterVersion::get_version(const char *verstr, uint64_t &version)
   if (NULL == verstr) {
     ret = OB_INVALID_ARGUMENT;
   } else if (OB_FAIL(parse_version(verstr, items, MAX_VERSION_ITEM))) {
-    COMMON_LOG(WARN, "invalid version", "version_str", verstr);
   } else {
     version = cal_version(items[ObClusterVersion::MAJOR_POS],
                           items[ObClusterVersion::MINOR_POS],

@@ -37,7 +37,6 @@ int ob_obj_read_lob_data(
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("lob manager is null", K(ret), K(obj), K(lbt()));
   } else if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator, obj, data, nullptr))) {
-    LOG_WARN("read_real_string_data fail", K(ret), K(obj), K(lbt()));
   }
   return ret;
 }
@@ -58,7 +57,6 @@ int ObTextStringObObjResult::init(int64_t res_len, ObIAllocator *allocator)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("Lob: invalid arguments", K(ret), K(type_), KP(res_obj_));
   } else if (OB_FAIL(ObTextStringResult::calc_buffer_len(res_len))) {
-    LOG_WARN("Lob: calc buffer len failed", K(ret), K(type_), KP(res_len));
   } else if (buff_len_ == 0) {
     OB_ASSERT(has_lob_header_ == false); // empty result without header
   } else {
@@ -68,7 +66,6 @@ int ObTextStringObObjResult::init(int64_t res_len, ObIAllocator *allocator)
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("Lob: alloc buffer failed", K(ret), KP(params_), KP(allocator), K(buff_len_));
     } else if (OB_FAIL(fill_temp_lob_header(res_len))) {
-      LOG_WARN("Lob: fill_temp_lob_header failed", K(ret), K(type_), K(res_len));
     }
     if (OB_SUCC(ret)) {
       is_init_ = true;
@@ -98,7 +95,6 @@ int ObTextStringHelper::build_text_iter(
   if (OB_NOT_NULL(exec_ctx) && OB_FAIL(exec_ctx->get_lob_access_ctx(lob_access_ctx))) {
     LOG_WARN("get_lob_access_ctx fail", K(ret));
   } else if (OB_FAIL(text_iter.init(0/*buffer_len*/, session, res_allocator, tmp_allocator, lob_access_ctx))) {
-    LOG_WARN("init lob str iter fail", K(ret), K(text_iter));
   }
   return ret;
 }
@@ -121,9 +117,7 @@ int ObTextStringHelper::read_real_string_data(
     }
     ObTextStringIter str_iter(type, cs_type, str, has_lob_header);
     if (OB_FAIL(build_text_iter(str_iter, exec_ctx, nullptr/*session*/, allocator, tmp_alloc_ptr))) {
-      LOG_WARN("Lob: init lob str iter failed ", K(ret), K(str_iter));
     } else if (OB_FAIL(str_iter.get_full_data(str))) {
-      COMMON_LOG(WARN, "Lob: str iter get full data failed ", K(ret), K(str_iter));
     }
   }
   return ret;
@@ -152,7 +146,6 @@ int ObTextStringHelper::read_real_string_data(
       obj.has_lob_header(),
       str,
       exec_ctx))) {
-    COMMON_LOG(WARN, "read_real_string_data fail", K(ret));
   }
   return ret;
 }
@@ -172,7 +165,6 @@ int ob_adjust_lob_datum(const ObObj &origin_obj,
 
       ObString full_data;
       if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator, origin_obj, full_data))) {
-        LOG_WARN("Lob: failed to get full data", K(ret));
       } else {
         out_datum.set_string(full_data);
       }
@@ -212,7 +204,6 @@ int ob_adjust_lob_datum(const ObObj &origin_obj,
 
       ObString full_data;
       if (OB_FAIL(ObTextStringHelper::read_real_string_data(&allocator, origin_obj, full_data))) {
-        LOG_WARN("Lob: failed to get full data", K(ret));
       } else {
         out_datum->set_string(full_data);
       }
@@ -220,9 +211,7 @@ int ob_adjust_lob_datum(const ObObj &origin_obj,
       // use by not strict default value add lob header
       ObObj out_obj(origin_obj);
       if (OB_FAIL(ObTextStringResult::ob_convert_obj_temporay_lob(out_obj, allocator))) {
-        LOG_WARN("Lob: failed to convert plain lob data to temp lob", K(ret));
       } else if (OB_FAIL(out_datum->from_obj(out_obj))) {
-        LOG_WARN("convert lob obj to datum failed", K(ret), K(out_obj));
       }
     }
   }
@@ -250,7 +239,6 @@ int ob_adjust_lob_datum(ObDatum &datum,
                                                             in_obj_meta.get_collation_type(),
                                                             in_obj_meta.has_lob_header(),
                                                             full_data))) {
-        LOG_WARN("Lob: failed to get full data", K(ret));
       } else {
         datum.set_string(full_data);
       }
@@ -259,7 +247,6 @@ int ob_adjust_lob_datum(ObDatum &datum,
                                                                     in_obj_meta,
                                                                     out_obj_meta,
                                                                     allocator))) {
-        LOG_WARN("Lob: failed to convert plain lob data to temp lob", K(ret));
       }
     }
   }

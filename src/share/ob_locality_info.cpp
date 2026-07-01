@@ -44,14 +44,12 @@ void ObLocalityInfo::reset()
 void ObLocalityInfo::destroy()
 {
   locality_zone_array_.destroy();
-  STORAGE_LOG(INFO, "ObLocalityInfo destroy finished");
 }
 
 int ObLocalityInfo::add_locality_zone(const ObLocalityZone &item)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(locality_zone_array_.push_back(item))) {
-    STORAGE_LOG(WARN, "push to locality info failed", K(ret), K(item));
   } else {
     // do nothing
   }
@@ -110,9 +108,7 @@ int ObLocalityInfo::copy_to(ObLocalityInfo &locality_info)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(locality_info.local_zone_.assign(local_zone_))) {
-    LOG_WARN("copy local zone fail", K(ret), K_(local_zone));
   } else if (OB_FAIL(locality_info.locality_zone_array_.assign(locality_zone_array_))) {
-    LOG_WARN("copy locality_zone_array fail", K(ret), K_(locality_zone_array));
   } else {
     locality_info.local_zone_type_ = local_zone_type_;
     locality_info.local_zone_status_ = local_zone_status_;

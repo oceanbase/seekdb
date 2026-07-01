@@ -55,7 +55,6 @@ int ObMPError::process()
     SERVER_LOG(ERROR, "error packet will not be sended for ret_ is succ", K(ret));
   } else {
     if (OB_FAIL(send_error_packet(ret_, NULL))) {
-      SERVER_LOG(WARN, "send error packet fail", K(ret_), K(ret));
     }
     // connect request reaching this means that no prio memory left
     if (need_disconnect_) {

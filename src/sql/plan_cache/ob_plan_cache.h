@@ -88,10 +88,8 @@ struct ObKVEntryTraverseOp
       PL_CACHE_LOG(WARN, "invalid argument",
       K(key_value_list_), K(entry.first), K(entry.second), K(ret));
     } else if (OB_FAIL(check_entry_match(entry, is_match))) {
-      PL_CACHE_LOG(WARN, "failed to check entry match", K(ret));
     } else if (is_match) {
       if (OB_FAIL(key_value_list_->push_back(ObLCKeyValue(entry.first, entry.second)))) {
-        PL_CACHE_LOG(WARN, "fail to push back key", K(ret));
       } else {
         entry.second->inc_ref_count(ref_handle_);
         total_mem_used_ += entry.second->get_mem_size();
@@ -315,12 +313,10 @@ public:
 
   uint64_t inc_mem_used(uint64_t mem_delta)
   {
-    SQL_PC_LOG(DEBUG, "before inc mem_used", K(mem_used_));
     return ATOMIC_FAA((uint64_t*)&mem_used_, mem_delta);
   };
   uint64_t dec_mem_used(uint64_t mem_delta)
   {
-    SQL_PC_LOG(DEBUG, "before dec mem_used, mem_used", K(mem_used_));
     int64_t old_val = 0;
     int64_t new_val = 0;
     do {
@@ -450,6 +446,11 @@ private:
                                       ObLibCacheNameSpace ns,
                                       ObPlanCacheKey &pc_key,
                                       bool is_weak);
+  /**
+   * @brief wether jit compilation is needed in this sql
+   *
+   */
+  int need_late_compile(ObPhysicalPlan *plan, bool &need_late_compilation);
   int add_stat_for_cache_obj(ObILibCacheCtx &ctx, ObILibCacheObject *cache_obj);
   int create_node_and_add_cache_obj(ObILibCacheKey *key,
                                     ObILibCacheCtx &ctx,
@@ -493,7 +494,6 @@ int ObPlanCache::foreach_cache_obj(_callback &callback) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(co_mgr_.foreach_cache_obj(callback))) {
-    _OB_LOG(WARN, "fail to traverse cache obj map");
   }
   return ret;
 }
@@ -503,7 +503,6 @@ int ObPlanCache::foreach_alloc_cache_obj(_callback &callback) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(co_mgr_.foreach_alloc_cache_obj(callback))) {
-    _OB_LOG(WARN, "fail to traverse alloc cache obj map");
   }
   return ret;
 }

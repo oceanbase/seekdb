@@ -93,11 +93,8 @@ int ObLogCursor::next_entry(ObLogEntry &entry, const LogCommand cmd, const char 
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(entry.set_log_seq(log_id_))) {
-    SHARE_LOG(WARN, "set_log_seq error", K(log_id_), K(ret));
   } else if (OB_FAIL(entry.set_log_command(cmd))) {
-    SHARE_LOG(WARN, "set_log_command error", K(cmd), K(ret));
   } else if (OB_FAIL(entry.fill_header(log_data, data_len, 0))) {
-    SHARE_LOG(WARN, "fill_header error", KP(log_data), K(data_len), K(ret));
   }
   return ret;
 }
@@ -108,7 +105,6 @@ int ObLogCursor:: advance(LogCommand cmd, int64_t seq, const int64_t data_len)
   ObLogEntry entry;
   if (OB_UNLIKELY(cmd < 0) || OB_UNLIKELY(seq < 0) || OB_UNLIKELY(data_len < 0)) {
     ret = OB_INVALID_ARGUMENT;
-    SHARE_LOG(WARN, "invalid arguments", K(cmd), K(seq), K(data_len));
   } else if (OB_LIKELY(log_id_ > 0) && OB_UNLIKELY(seq != log_id_)) {
     ret = OB_DISCONTINUOUS_LOG;
     SHARE_LOG(ERROR, "entry.advance", K_(log_id), K(seq), K(ret));

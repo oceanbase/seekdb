@@ -54,7 +54,6 @@ int ObInfoSchemaTableConstraintsTable::inner_get_next_row(common::ObNewRow *&row
   if (OB_SUCC(ret) && !start_to_read_) {
     ObSArray<const ObDatabaseSchema *> database_schemas;
     if (OB_FAIL(schema_guard_->get_database_schemas_in_tenant(database_schemas))) {
-      SERVER_LOG(WARN, "failed to get database schema of tenant");
     } else {
       ObObj *cells = NULL;
       const int64_t col_count = output_column_ids_.count();
@@ -78,8 +77,6 @@ int ObInfoSchemaTableConstraintsTable::inner_get_next_row(common::ObNewRow *&row
                    || database_schema->get_database_name_str() == OB_PUBLIC_SCHEMA_NAME) {
           continue;
         } else if (OB_FAIL(add_table_constraints(*database_schema, cells, output_column_ids_.count()))) {
-          SERVER_LOG(WARN, "failed to add table constraint of database schema!",
-                     K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -112,7 +109,6 @@ int ObInfoSchemaTableConstraintsTable::add_table_constraints(const ObDatabaseSch
     SERVER_LOG(WARN, "schema guard should not be null", K(ret));
   } else if (OB_FAIL(schema_guard_->get_table_schemas_in_database(database_schema.get_database_id(),
                                                              table_schemas))) {
-    SERVER_LOG(WARN, "failed to get table schema in database", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); ++i) {
       const ObTableSchema *table_schema = table_schemas.at(i);
@@ -125,8 +121,6 @@ int ObInfoSchemaTableConstraintsTable::add_table_constraints(const ObDatabaseSch
                                                database_schema.get_database_name_str(),
                                                cells,
                                                col_count))){
-        SERVER_LOG(WARN, "failed to add table constraint of table schema",
-                   "table_schema", *table_schema, K(ret));
       }
     }
   }
@@ -142,7 +136,6 @@ int ObInfoSchemaTableConstraintsTable::add_table_constraints(const ObTableSchema
   //add rowkey constraints
   if (table_schema.is_table_with_pk()) {
     if (OB_FAIL(add_rowkey_constraints(table_schema, database_name, cells, col_count))) {
-      SERVER_LOG(WARN, "fail to add rowkey indexes", K(ret));
     }
   }
   if (OB_SUCC(ret) && OB_FAIL(add_index_constraints(table_schema,
@@ -248,19 +241,14 @@ int ObInfoSchemaTableConstraintsTable::add_index_constraints(const ObTableSchema
     SERVER_LOG(WARN, "schema guard or cells should not be null", K(ret));
   } else if (OB_FAIL(table_schema.get_simple_index_infos(
                      simple_index_infos))) {
-    SERVER_LOG(WARN, "get simple_index_infos failed", K(ret));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < simple_index_infos.count(); i++) {
     const ObTableSchema *index_schema = NULL;
     if (OB_FAIL(schema_guard_->get_table_schema(
                 simple_index_infos.at(i).table_id_,
                 index_schema))) {
-      SERVER_LOG(WARN, "get index schema failed",
-                 K(ret), K(simple_index_infos.at(i).table_id_));
     } else if (OB_ISNULL(index_schema)) {
       ret = OB_ERR_UNEXPECTED;
-      SERVER_LOG(ERROR, "invalid index table id",
-                 "index_table_id", simple_index_infos.at(i).table_id_);
     } else {
       if (!index_schema->is_unique_index()) {
         continue;

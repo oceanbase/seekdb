@@ -53,7 +53,6 @@ ObVector<T, Allocator>::ObVector(int64_t size, Allocator *alloc, const lib::ObMe
   }
   int ret = expand(size);
   if (OB_FAIL(ret)) {
-    COMMON_LOG(WARN, "expand failed", K(ret), K(size));
   }
 }
 
@@ -80,7 +79,6 @@ int ObVector<T, Allocator>::assign(const ObVector<T, Allocator> &other)
     destroy();
     if (other.size() > 0) {
       if (OB_SUCCESS != (ret = expand(other.size()))) {
-        COMMON_LOG(WARN, "expand failed", K(ret), "size", other.size());
       } else {
         copy(mem_begin_, other.begin(), other.end());
         mem_end_ = mem_begin_ + other.size();
@@ -95,7 +93,6 @@ ObVector<T, Allocator> &ObVector<T, Allocator>::operator=(const ObVector<T, Allo
 {
   int ret = assign(other);
   if (OB_FAIL(ret)) {
-    COMMON_LOG(WARN, "assign vector failed", K(ret));
   }
   return *this;
 }

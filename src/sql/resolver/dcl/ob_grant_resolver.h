@@ -134,15 +134,12 @@ int ObGrantResolver::resolve_col_names_mysql(
       const ParseNode *child_node = NULL;
       if (OB_ISNULL(child_node = column_list->children_[i])) {
         ret = OB_ERR_UNEXPECTED;
-        SQL_RESV_LOG(WARN, "child node is null");
       } else {
         const share::schema::ObColumnSchemaV2 *column_schema = NULL;
         const ObSimpleTableSchemaV2 *table_schema = NULL;
         if (OB_FAIL(ob_write_string(allocator, ObString(static_cast<int32_t>(child_node->str_len_), 
                                             const_cast<char *>(child_node->str_value_)), column_name))) {
-          SQL_RESV_LOG(WARN, "ob write string failed", K(ret));
         } else if (OB_FAIL(grant_stmt->add_column_privs(column_name, priv_type))) {
-          SQL_RESV_LOG(WARN, "push back failed", K(ret));
         }
       }
     }
@@ -197,7 +194,6 @@ int ObGrantResolver::resolve_priv_set(
             if (OB_FAIL(resolve_col_names_mysql(grant_stmt, priv_type,
                                                 privs_node->children_[i]->children_[0],
                                                 schema_checker, session_info, allocator))) {
-              SQL_RESV_LOG(WARN, "resolve col names failed", K(ret));
             }
           } else {
             priv_set |= priv_type;
@@ -296,14 +292,12 @@ int ObGrantResolver::resolve_priv_object(const ParseNode *priv_object_node,
     } else if (priv_object_node->value_ == 4) {
       object_type = ObObjectType::CATALOG;
       if (OB_FAIL(schema_checker->get_catalog_id_name(catalog, object_id, allocator, !is_grant))) {
-        LOG_WARN("failed to get catalog id", K(ret));
       } else {
         grant_stmt->set_catalog_name(catalog);
       }
     } else if (priv_object_node->value_ == 5) {
       object_type = ObObjectType::LOCATION;
       if (OB_FAIL(schema_checker->get_location_id(table, object_id))) {
-        LOG_WARN("failed to get location id", K(ret));
       }
     }
   } else {

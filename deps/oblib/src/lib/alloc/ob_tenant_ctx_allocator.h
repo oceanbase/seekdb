@@ -91,7 +91,6 @@ public:
       LIB_LOG(WARN, "resource_handle is already valid", K(ret), K_(ctx_id));
     } else if (OB_FAIL(ObResourceMgr::get_instance().get_tenant_resource_mgr(
         resource_handle_))) {
-      LIB_LOG(ERROR, "get_tenant_resource_mgr failed", K(ret));
     }
     return ret;
   }
@@ -103,7 +102,6 @@ public:
       ret = common::OB_ERR_UNEXPECTED;
       LIB_LOG(ERROR, "resource_handle is invalid", K(ret), K_(ctx_id));
     } else if (OB_FAIL(resource_handle_.get_memory_mgr()->set_ctx_hard_limit(ctx_id_, bytes))) {
-      LIB_LOG(WARN, "memory manager set_ctx_limit failed", K(ret), K(ctx_id_), K(bytes));
     }
     return ret;
   }
@@ -115,7 +113,6 @@ public:
       ret = common::OB_ERR_UNEXPECTED;
       LIB_LOG(ERROR, "resource_handle is invalid", K(ret), K_(ctx_id));
     } else if (OB_FAIL(resource_handle_.get_memory_mgr()->set_ctx_limit(ctx_id_, bytes))) {
-      LIB_LOG(WARN, "memory manager set_ctx_limit failed", K(ret), K(ctx_id_), K(bytes));
     }
     return ret;
   }
@@ -172,7 +169,6 @@ private:
     int ret = common::OB_SUCCESS;
     if (!resource_handle_.is_valid()) {
       ret = common::OB_ERR_UNEXPECTED;
-      LIB_LOG(ERROR, "resource_handle is invalid");
     } else {
       ret = func(resource_handle_.get_memory_mgr());
     }

@@ -71,7 +71,6 @@ int ObTableLoadUniqueIndexTableInsertRowHandler::handle_insert_row(
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadUniqueIndexTableInsertRowHandler not init", KR(ret), KP(this));
   } else if (OB_FAIL(push_insert_row(tablet_id, datum_row))) {
-    LOG_WARN("fail to push insert row", KR(ret));
   }
   return ret;
 }
@@ -87,7 +86,6 @@ int ObTableLoadUniqueIndexTableInsertRowHandler::handle_update_row(
     if (ObLoadDupActionType::LOAD_STOP_ON_DUP == dup_action_) {
       LOG_INFO("duplicate row", K(tablet_id), K(datum_row));
       if (OB_FAIL(error_row_handler_->handle_error_row(OB_ERR_PRIMARY_KEY_DUPLICATE))) {
-        LOG_WARN("fail to handle error row", KR(ret));
       } else {
         ATOMIC_DEC(&result_info_->rows_affected_); // delete one row in load data
       }
@@ -103,7 +101,6 @@ int ObTableLoadUniqueIndexTableInsertRowHandler::handle_update_row(
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(push_update_row(tablet_id, datum_row))) {
-      LOG_WARN("fail to push update row", KR(ret));
     }
   }
   return ret;
@@ -134,7 +131,6 @@ int ObTableLoadUniqueIndexTableInsertRowHandler::handle_update_row(
     if (ObLoadDupActionType::LOAD_STOP_ON_DUP == dup_action_) {
       if (OB_FAIL(error_row_handler_->handle_error_row(OB_ERR_PRIMARY_KEY_DUPLICATE,
                                                        duplicate_row_count))) {
-        LOG_WARN("fail to handle error row", KR(ret));
       } else {
         row = rows.at(0);
         ATOMIC_FAS(&result_info_->rows_affected_, duplicate_row_count);
@@ -156,7 +152,6 @@ int ObTableLoadUniqueIndexTableInsertRowHandler::handle_update_row(
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(push_update_row(tablet_id, rows, row))) {
-      LOG_WARN("fail to push update row", K(ret));
     }
   }
   return ret;
@@ -187,7 +182,6 @@ int ObTableLoadUniqueIndexTableInsertRowHandler::handle_update_row(
     if (ObLoadDupActionType::LOAD_STOP_ON_DUP == dup_action_) {
       if (OB_FAIL(error_row_handler_->handle_error_row(OB_ERR_PRIMARY_KEY_DUPLICATE,
                                                        duplicate_row_count))) {
-        LOG_WARN("fail to handle error row", KR(ret));
       } else {
         row = rows.at(0);
         ATOMIC_FAS(&result_info_->rows_affected_, duplicate_row_count);
@@ -209,7 +203,6 @@ int ObTableLoadUniqueIndexTableInsertRowHandler::handle_update_row(
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(push_update_row(rows, row))) {
-      LOG_WARN("fail to push update row", K(ret));
     }
   }
   return ret;
@@ -227,7 +220,6 @@ int ObTableLoadUniqueIndexTableInsertRowHandler::handle_update_row(
     if (ObLoadDupActionType::LOAD_STOP_ON_DUP == dup_action_) {
       LOG_INFO("duplicate row", K(tablet_id), K(old_row), K(new_row));
       if (OB_FAIL(error_row_handler_->handle_error_row(OB_ERR_PRIMARY_KEY_DUPLICATE))) {
-        LOG_WARN("fail to handle error row", KR(ret));
       } else {
         result_row = &old_row;
         ATOMIC_DEC(&result_info_->rows_affected_); // delete one row in load data
@@ -247,7 +239,6 @@ int ObTableLoadUniqueIndexTableInsertRowHandler::handle_update_row(
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(push_update_row(tablet_id, old_row, new_row, result_row))) {
-      LOG_WARN("fail to push update row", KR(ret));
     }
   }
   return ret;
@@ -261,7 +252,6 @@ int ObTableLoadUniqueIndexTableInsertRowHandler::handle_insert_delete_conflict(c
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadUniqueIndexTableInsertRowHandler not init", KR(ret), KP(this));
   } else if (OB_FAIL(push_insert_delete_conflict(tablet_id, datum_row))) {
-    LOG_WARN("fail to push insert delete conflict", KR(ret));
   }
   return ret;
 }

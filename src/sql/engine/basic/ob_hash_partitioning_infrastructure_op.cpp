@@ -53,7 +53,6 @@ int ObHashPartCols::equal_distinct(
       batch_info_guard.set_batch_idx(right_batch_idx);
       r_cell = &exprs->at(idx)->locate_expr_datum(*eval_ctx);
       if (OB_FAIL(cmp_funcs->at(i).cmp_func_(*l_cell, *r_cell, cmp_result))) {
-        LOG_WARN("do cmp failed", K(ret));
       }
     }
     //reset batch_idx before return 
@@ -67,7 +66,6 @@ int ObHashPartCols::equal_distinct(
       int64_t idx = sort_collations->at(i).field_idx_;
       r_cell = &exprs->at(idx)->locate_expr_datum(*eval_ctx);
       if (OB_FAIL(cmp_funcs->at(i).cmp_func_(l_cells[idx], *r_cell, cmp_result))) {
-        LOG_WARN("do cmp failed", K(ret));
       }
     }
     result = (0 == cmp_result);

@@ -80,7 +80,6 @@ struct ToDecimalintCastImpl
             }
           } else if (OB_FAIL(ObDataTypeCastUtil::common_string_decimalint_wrap(expr, in_str, ctx_.exec_ctx_.get_user_logging_ctx(),
                                                                             res_val))) {
-            SQL_LOG(WARN, "cast string to decimal int failed", K(ret));
           } else {
             res_vec_->set_decimal_int(idx, res_val.get_decimal_int(), res_val.get_int_bytes());
           }
@@ -96,7 +95,6 @@ struct ToDecimalintCastImpl
       StringToDecimalintFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec, sf);
       if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-        SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
       }
     }
     return ret;
@@ -137,13 +135,11 @@ struct ToDecimalintCastImpl
               in_scale_ = in_prec_ = 0;
               if (OB_FAIL(ObDataTypeCastUtil::common_floating_decimalint_wrap(
                             in_val, arg_type, tmp_alloc, decint, val_len, in_scale_, in_prec_))) {
-                SQL_LOG(WARN, "common_floating_decimalint failed", K(ret), K(in_val));
               } else if (ObDatumCast::need_scale_decimalint(in_scale_, in_prec_, out_scale_, out_prec_)) {
                 ObDecimalIntBuilder res_val;
                 if (OB_FAIL(ObDatumCast::common_scale_decimalint(decint, val_len, in_scale_, out_scale_,
                                                                 out_prec_, expr.extra_, res_val,
                                                                 ctx_.exec_ctx_.get_user_logging_ctx()))) {
-                  SQL_LOG(WARN, "scale decimalint failed", K(ret));
                 } else {
                   res_vec_->set_payload(idx, res_val.get_decimal_int(), res_val.get_int_bytes());
                 }
@@ -162,7 +158,6 @@ struct ToDecimalintCastImpl
       FloatDoubleToDecimalintFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec);
       if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-        SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
       }
     }
     return ret;
@@ -188,12 +183,10 @@ struct ToDecimalintCastImpl
           in_scale_ = nmb.get_scale();
           int32_t out_bytes = wide::ObDecimalIntConstValue::get_int_bytes_by_precision(out_prec_);
           if (OB_FAIL(wide::from_number(nmb, tmp_alloc, in_scale_, decint, int_bytes))) {
-            SQL_LOG(WARN, "from_number failed", K(ret), K(out_scale_));
           } else if (ObDatumCast::need_scale_decimalint(in_scale_, int_bytes, out_scale_, out_bytes)) {
             ObDecimalIntBuilder res_val;
             if (OB_FAIL(ObDatumCast::common_scale_decimalint(decint, int_bytes, in_scale_, out_scale_, out_prec_,
                                                 expr.extra_, res_val, ctx_.exec_ctx_.get_user_logging_ctx()))) {
-              SQL_LOG(WARN, "scale decimal int failed", K(ret), K(in_scale_), K(out_scale_));
             } else {
               res_vec_->set_payload(idx, res_val.get_decimal_int(), res_val.get_int_bytes());
             }
@@ -210,7 +203,6 @@ struct ToDecimalintCastImpl
       NumberToDecimalintFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec);
       if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-        SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
       }
     }
     return ret;
@@ -235,16 +227,13 @@ struct ToDecimalintCastImpl
           int64_t out_val = 0;
           in_scale_ = 0;
           if (OB_FAIL(ObTimeConverter::date_to_int(arg_vec_->get_date(idx), out_val))) {
-            SQL_LOG(WARN, "convert date to int failed", K(ret));
           } else if (CAST_FAIL(numeric_negative_check(out_val))) {
-            SQL_LOG(WARN, "numeric_negative_check failed", K(ret), K(out_val));
           } else {
             ObDecimalIntBuilder res_val;
             if (OB_FAIL(ObDatumCast::common_scale_decimalint(reinterpret_cast<const ObDecimalInt *>(&out_val),
                                                              8, in_scale_, out_scale_, out_prec_,
                                                              expr.extra_, res_val,
                                                              ctx_.exec_ctx_.get_user_logging_ctx()))) {
-              SQL_LOG(WARN, "scale decimal int failed", K(ret), K(in_scale_), K(out_scale_));
             } else {
               res_vec_->set_payload(idx, res_val.get_decimal_int(), res_val.get_int_bytes());
             }
@@ -263,7 +252,6 @@ struct ToDecimalintCastImpl
         DateToDecimalintFn cast_fn(CAST_ARG_DECL, arg_vec, res_vec);
         if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-          SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
         }
       }
     }
@@ -293,7 +281,6 @@ struct ToDecimalintCastImpl
         ret = OB_INVALID_ARGUMENT;
         SQL_LOG(WARN, "Invalid argument", K(ret), K(in_scale_));
       } else if (OB_FAIL(ObTimeConverter::datetime_to_ob_time(in_val, tz_info_, ob_time))) {
-        SQL_LOG(WARN, "failed to convert seconds to int", K(ret));
       } else {
         out_val = parts[DT_YEAR] * CastHelperImpl::pow10(4)
                 + parts[DT_MON] * CastHelperImpl::pow10(2)
@@ -311,7 +298,6 @@ struct ToDecimalintCastImpl
                                                           sizeof(INT_TYPE), in_scale_, out_scale_, out_prec_,
                                                           expr.extra_, res_val,
                                                           ctx_.exec_ctx_.get_user_logging_ctx()))) {
-          SQL_LOG(WARN, "scale decimal int failed", K(ret), K(in_scale_), K(out_scale_));
         } else {
           res_vec_->set_payload(idx, res_val.get_decimal_int(), res_val.get_int_bytes());
         }
@@ -337,7 +323,6 @@ struct ToDecimalintCastImpl
         ret = OB_ERR_UNEXPECTED;
         SQL_LOG(WARN, "session is NULL", K(ret));
       } else if (OB_FAIL(helper.get_time_zone_info(tz_info_local))) {
-        SQL_LOG(WARN, "get time zone info failed", K(ret));
       } else {
         const ObTimeZoneInfo *tz_info = (ObTimestampType == in_type)
                                          ? tz_info_local : NULL;
@@ -349,13 +334,11 @@ struct ToDecimalintCastImpl
             DatetimeToDecimalintFn<int64_t> cast_fn(CAST_ARG_DECL, arg_vec, res_vec, tz_info);
             if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-              SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
             }
           } else {
             DatetimeToDecimalintFn<int128_t> cast_fn(CAST_ARG_DECL, arg_vec, res_vec, tz_info);
             if (OB_FAIL(CastHelperImpl::batch_cast(cast_fn, expr, arg_vec, res_vec, eval_flags,
                                             skip, bound, is_diagnosis, diagnosis_manager))) {
-              SQL_LOG(WARN, "cast failed", K(ret), K(in_type), K(out_type));
             }
           }
         }

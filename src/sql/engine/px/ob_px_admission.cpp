@@ -70,9 +70,7 @@ int64_t ObPxAdmission::admit(ObSQLSessionInfo &session, ObExecContext &exec_ctx,
   bool need_retry = false;
   do {
     if (OB_FAIL(THIS_WORKER.check_status())) {
-      LOG_WARN("fail check query status", K(ret));
     } else if (OB_FAIL(OB_PX_TARGET_MONITOR.apply_target(worker_map, wait_time_us, session_target, req_cnt, admit_cnt))) {
-      LOG_WARN("apply target failed", K(ret), K(req_cnt));
     } else if (0 != admit_cnt) {
       exec_ctx.set_admission_acquired(true);
       LOG_TRACE("after enter admission", K(ret), K(req_cnt), K(admit_cnt));
@@ -89,7 +87,6 @@ int64_t ObPxAdmission::admit(ObSQLSessionInfo &session, ObExecContext &exec_ctx,
       }
       // parallel server target may changed
       if (OB_FAIL(get_parallel_session_target(session, minimal_px_worker_count, session_target))) {
-        LOG_WARN("fail get session target", K(ret));
       } else {
         need_retry = true;
       }
@@ -116,20 +113,17 @@ int ObPxAdmission::enter_query_admission(ObSQLSessionInfo &session,
     const auto &req_px_worker_map = plan.get_expected_worker_map();
     ObHashMap<ObAddr, int64_t> *acl_px_worker_map = nullptr;
     if (OB_FAIL(exec_ctx.get_admission_addr_map(acl_px_worker_map))) {
-      LOG_WARN("failed to get acl_px_worker_map");
     } else if (OB_ISNULL(acl_px_worker_map)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("acl_px_worker_map is null");
     } else if (acl_px_worker_map->created()) {
       acl_px_worker_map->clear();
     } else if (OB_FAIL(acl_px_worker_map->create(hash::cal_next_prime(10), ObModIds::OB_SQL_PX, ObModIds::OB_SQL_PX))){
-      LOG_WARN("create hash map failed", K(ret));
     }
     if (OB_SUCC(ret)) {
       for (auto it = req_px_worker_map.begin(); 
           OB_SUCC(ret) && it != req_px_worker_map.end(); ++it) {
         if (OB_FAIL(acl_px_worker_map->set_refactored(it->first, it->second))){
-          LOG_WARN("set refactored failed", K(ret), K(it->first), K(it->second));
         }
       }
       // use for exec
@@ -145,14 +139,10 @@ int ObPxAdmission::enter_query_admission(ObSQLSessionInfo &session,
       int64_t wait_time_us = THIS_WORKER.get_timeout_remain();
       int64_t session_target = INT64_MAX;
       if (OB_FAIL(get_parallel_session_target(session, minimal_px_worker_count, session_target))) {
-        LOG_WARN("fail get session target", K(ret));
       } else if (OB_FAIL(THIS_WORKER.check_status())) {
-        LOG_WARN("fail check query status", K(ret));
       } else if (OB_FAIL(ObPxAdmission::admit(session, exec_ctx,
                                               wait_time_us, minimal_px_worker_count, session_target,
                                               *acl_px_worker_map, req_worker_count, admit_worker_count))) {
-        LOG_WARN("fail do px admission",
-                K(ret), K(wait_time_us), K(session_target));
       } else if (admit_worker_count <= 0) {
         plan.inc_delayed_px_querys();
         ret = OB_ERR_INSUFFICIENT_PX_WORKER;
@@ -205,12 +195,10 @@ void ObPxAdmission::exit_query_admission(ObSQLSessionInfo &session,
     
     hash::ObHashMap<ObAddr, int64_t> *addr_map = nullptr;
     if (OB_FAIL(exec_ctx.get_admission_addr_map(addr_map))) {
-      LOG_WARN("failed to get addr_map");
     } else if (OB_ISNULL(addr_map)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("addr_map is null");
     } else if (OB_FAIL(OB_PX_TARGET_MONITOR.release_target(*addr_map))) {
-      LOG_WARN("release target failed", K(ret));
     }
     (void)addr_map->destroy();
     LOG_DEBUG("release resource, notify wait threads");

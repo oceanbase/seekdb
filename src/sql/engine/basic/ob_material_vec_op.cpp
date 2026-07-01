@@ -37,7 +37,6 @@ int ObMaterialVecOp::inner_open()
     LOG_WARN("invalid argument", KP(child_), K(ret));
   } else if (OB_FAIL(ObPxEstimateSizeUtil::get_px_size(
       &ctx_, MY_SPEC.px_est_size_factor_, row_count, row_count))) {
-    LOG_WARN("failed to get px size", K(ret));
   } else {
     
     lib::ContextParam param;
@@ -45,7 +44,6 @@ int ObMaterialVecOp::inner_open()
       .set_properties(lib::USE_TL_PAGE_OPTIONAL);
     ObMemAttr mem_attr(ObModIds::OB_SQL_SORT_ROW, ObCtxIds::WORK_AREA);
     if (OB_FAIL(CURRENT_CONTEXT->CREATE_CONTEXT(mem_context_, param))) {
-      LOG_WARN("create entity failed");
     } else if (OB_ISNULL(mem_context_)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("null memory entity returned");
@@ -56,11 +54,9 @@ int ObMaterialVecOp::inner_open()
                                    true /*enable_dump*/,
                                    true /*reuse_vector_array*/,
                                    MY_SPEC.compress_type_))) {
-      LOG_WARN("init row store failed");
     } else {
       const int64_t size = OB_INVALID_ID == row_count ? 0 : row_count * MY_SPEC.width_;
       if (OB_FAIL(sql_mem_processor_.init(&mem_context_->get_malloc_allocator(), size, MY_SPEC.type_, MY_SPEC.id_, &ctx_))) {
-        LOG_WARN("failed to init sql memory manager processor", K(ret));
       } else {
         store_.set_allocator(mem_context_->get_malloc_allocator());
         store_.set_callback(&sql_mem_processor_);
@@ -98,14 +94,11 @@ int ObMaterialVecOp::get_all_batch_from_child()
     int64_t add_row_size = -1;
     clear_evaluated_flag();
     if (OB_FAIL(child_->get_next_batch(MY_SPEC.max_batch_size_, input_brs))) {
-      LOG_WARN("failed to get next batch", K(ret));
     } else if (OB_FAIL(process_dump())) {
-      LOG_WARN("failed to process dump", K(ret));
     } else if (OB_FAIL(store_.add_batch(child_->get_spec().output_,
                                         eval_ctx_,
                                         *input_brs,
                                         add_row_size))) {
-      LOG_WARN("failed to add row to row store", K(ret));
     } else {
       iter_end = input_brs->end_;
     }
@@ -121,9 +114,7 @@ int ObMaterialVecOp::get_all_batch_from_child()
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(store_.finish_add_row(false))) {
-      LOG_WARN("failed to finish add row to row store", K(ret));
     } else if (OB_FAIL(store_.begin(store_it_))) {
-      LOG_WARN("failed to begin iterator for chunk row store", K(ret));
     } else {
       is_first_ = false;
     }
@@ -137,7 +128,6 @@ int ObMaterialVecOp::inner_rescan()
   reset();
   // restart material op
   if (OB_FAIL(ObOperator::inner_rescan())) {
-    LOG_WARN("operator rescan failed", K(ret));
   }
   return ret;
 }
@@ -145,8 +135,7 @@ int ObMaterialVecOp::inner_rescan()
 int ObMaterialVecOp::rewind()
 {
   int ret = OB_SUCCESS;
-  if (OB_FAIL(ObOperator::inner_rescan())) {//do not cascade rescan
-    LOG_WARN("failed to do inner rescan", K(ret));
+  if (OB_FAIL(ObOperator::inner_rescan())) {
   } else {
     store_it_.reset();
   }
@@ -179,7 +168,6 @@ int ObMaterialVecOp::inner_get_next_batch(int64_t max_row_cnt)
   int64_t read_rows = -1;
   int64_t max_batch_size = std::min(MY_SPEC.max_batch_size_, max_row_cnt);
   if (OB_FAIL(THIS_WORKER.check_status())) {
-    LOG_WARN("check physical plan status failed", K(ret));
   } else if (static_cast<ObMaterialVecOpInput *>(input_)->is_bypass()) {
     clear_evaluated_flag();
     const ObBatchRows *input_brs = nullptr;
@@ -224,7 +212,6 @@ int ObMaterialVecOp::process_dump()
       &mem_context_->get_malloc_allocator(),
       [&](int64_t cur_cnt){ return store_.get_row_cnt_in_memory() > cur_cnt; },
       updated))) {
-    LOG_WARN("failed to update max available memory size periodically", K(ret));
   } else if (need_dump() && GCONF.is_sql_operator_dump_enabled()
           && OB_FAIL(sql_mem_processor_.extend_max_memory_size(
             &mem_context_->get_malloc_allocator(),
@@ -235,7 +222,6 @@ int ObMaterialVecOp::process_dump()
     LOG_WARN("failed to extend max memory size", K(ret));
   } else if (dumped) {
     if (OB_FAIL(store_.dump(false))) {
-      LOG_WARN("failed to dump row store", K(ret));
     } else {
       sql_mem_processor_.reset();
       sql_mem_processor_.set_number_pass(1);

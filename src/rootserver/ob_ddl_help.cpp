@@ -75,10 +75,7 @@ int ObTableGroupHelp::add_tables_to_tablegroup(ObMySQLTransaction &trans,
       //check database exist
       if (OB_FAIL(schema_guard.get_database_id(
                   table_item.database_name_, database_id))) {
-        LOG_WARN("failed to get database schema!", K(database_id),
-                 K(table_item));
       } else if (OB_FAIL(schema_guard.get_table_schema( database_id, table_item.table_name_, is_index, table_schema))) {
-        LOG_WARN("fail to get table schema", KR(ret), K(database_id), K(table_item));
       } else if (OB_ISNULL(table_schema)) {
         ret = OB_TABLE_NOT_EXIST;
         ObCStringHelper helper;
@@ -108,20 +105,17 @@ int ObTableGroupHelp::add_tables_to_tablegroup(ObMySQLTransaction &trans,
         if (is_contain(table_ids, table_schema->get_table_id())) {
           duplicate_table = true;
         } else if (OB_FAIL(table_ids.push_back(table_schema->get_table_id()))) {
-          LOG_WARN("fail to push back table", KR(ret));
         }
       }
       if (OB_SUCC(ret) && !duplicate_table) {
         ObTableSchema new_table_schema;
         ObSqlString sql;
         if (OB_FAIL(new_table_schema.assign(*table_schema))) {
-          LOG_WARN("fail to assign schema", KR(ret));
         } else {
           new_table_schema.set_tablegroup_id(tablegroup_id);
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(check_table_alter_tablegroup(schema_guard, first_table_schema, *table_schema, new_table_schema))) {
-          LOG_WARN("fail to check primary zone and locality", KR(ret));
         } else if (OB_FAIL(sql.append_fmt("ALTER TABLEGROUP %.*s ADD TABLE %.*s.%.*s",
                                           tablegroup_name.length(),
                                           tablegroup_name.ptr(),
@@ -129,11 +123,9 @@ int ObTableGroupHelp::add_tables_to_tablegroup(ObMySQLTransaction &trans,
                                           table_item.database_name_.ptr(),
                                           table_item.table_name_.length(),
                                           table_item.table_name_.ptr()))) {
-          LOG_WARN("failed to append sql", KR(ret));
         } else {
           ObString sql_str = sql.string();
           if (OB_FAIL(ddl_operator.alter_tablegroup(schema_guard, new_table_schema, trans, &sql_str))) {
-            LOG_WARN("ddl operator alter tablegroup failed", KR(ret), K(tablegroup_id));
           } else if (table_items_count >= 2 && i == 0) {
             first_table_schema = table_schema;
           }
@@ -167,7 +159,6 @@ int ObTableGroupHelp::check_table_alter_tablegroup(
     // skip
   } else {
     if (OB_FAIL(check_table_partition_in_tablegroup(first_table_schema, new_table_schema, schema_guard))) {
-      LOG_WARN("fail to check table partition in tablegroup", KR(ret), K(new_table_schema));
     }
   }
   if (OB_SUCC(ret)) {
@@ -179,7 +170,6 @@ int ObTableGroupHelp::check_table_alter_tablegroup(
     if (OB_INVALID_ID == orig_tg_id) {
       // Did not belong to any tablegroup
     } else if (OB_FAIL(schema_guard.get_tablegroup_schema( orig_tg_id, orig_tg))) {
-      LOG_WARN("fail to get tablegroup schema", KR(ret), K(orig_tg_id));
     } else if (OB_UNLIKELY(nullptr == orig_tg)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("orig tg ptr is null", KR(ret), K(orig_tg_id));
@@ -188,7 +178,6 @@ int ObTableGroupHelp::check_table_alter_tablegroup(
     } else if (OB_INVALID_ID == new_tg_id) {
       // Did not belong to any tablegroup
     } else if (OB_FAIL(schema_guard.get_tablegroup_schema( new_tg_id, new_tg))) {
-      LOG_WARN("fail to get tablegroup schema", KR(ret), K(new_tg_id));
     } else if (OB_UNLIKELY(nullptr == new_tg)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("orig tg ptr is null", KR(ret), K(new_tg_id));
@@ -239,9 +228,7 @@ int ObTableGroupHelp::check_table_partition_in_tablegroup(const ObTableSchema *f
   } else {
     // sort partition info in order, to prevent same value not in order from being misjudged
     if (OB_FAIL(ObSchemaServiceSQLImpl::sort_table_partition_info_v2(table))) {
-      LOG_WARN("fail to sort table partition", K(ret));
     } else if (OB_FAIL(check_partition_option(*tablegroup_schema, first_table_schema, table, schema_guard))) {
-      LOG_WARN("fail to check partition option", KR(ret), KPC(tablegroup_schema), K(table));
     }
   }
   return ret;
@@ -270,7 +257,6 @@ int ObTableGroupHelp::check_all_table_partition_option(const ObTablegroupSchema 
   ObArray<const schema::ObSimpleTableSchemaV2 *> table_schemas;
 
   if (OB_FAIL(schema_guard.get_table_schemas_in_tablegroup(tablegroup_id, table_schemas))) {
-    LOG_WARN("fail get table schemas from tablegroup", KR(ret), K(tablegroup_id));
   } else if (0 == table_schemas.count()) {
     // do nothing
   } else {
@@ -284,7 +270,6 @@ int ObTableGroupHelp::check_all_table_partition_option(const ObTablegroupSchema 
         primary_table_schema = table_schemas.at(i);
       } else if (OB_FAIL(ObSimpleTableSchemaV2::compare_partition_option(*table_schemas.at(i), *primary_table_schema,
                                                                         check_subpart, is_matched, &user_error))) {
-        LOG_WARN("fail to check partition option", KR(ret), K(*table_schemas.at(i)), K(*primary_table_schema));
       } else if (!is_matched) {
         LOG_WARN("two tables’ part method not consistent, not suit sharding type",
                 K(tablegroup_id), K(*table_schemas.at(i)),
@@ -315,7 +300,6 @@ int ObTableGroupHelp::check_table_partition_option(const ObTableSchema *table_sc
     LOG_WARN("table schema is NULL", KR(ret));
   } else if (OB_FAIL(schema_guard.get_primary_table_schema_in_tablegroup(table_schema->get_tablegroup_id(),
                                                                          tmp_table_schema))) {
-    LOG_WARN("fail get table schemas from tablegroup", KR(ret), K(table_schema->get_tablegroup_id()));
   } else if (OB_ISNULL(first_table_schema) && OB_ISNULL(tmp_table_schema)) {
     // do nothing
   } else {
@@ -329,7 +313,6 @@ int ObTableGroupHelp::check_table_partition_option(const ObTableSchema *table_sc
     }
     if (OB_FAIL(ObSimpleTableSchemaV2::compare_partition_option(*primary_table_schema, *table_schema,
                                                                 check_subpart, is_matched, &user_error))) {
-      LOG_WARN("fail to check partition option", KR(ret), K(*primary_table_schema), K(*table_schema));
     } else if (!is_matched) {
       LOG_WARN("two tables’ part method not consistent, not suit sharding type",
             K(table_schema->get_tablegroup_id()), K(*primary_table_schema),
@@ -372,12 +355,10 @@ int ObTableGroupHelp::check_partition_option(
   } else if (tablegroup.get_sharding() == OB_PARTITION_SHARDING_PARTITION) {
     // check level one partitions info
     if (OB_FAIL(check_table_partition_option(&table, first_table_schema, schema_guard, false, is_matched))) {
-      LOG_WARN("fail to check partition sharding type", KR(ret), K(tablegroup_id), K(table_id), K(is_matched));
     }
   } else if (tablegroup.get_sharding() == OB_PARTITION_SHARDING_ADAPTIVE) {
     //check level one and two partitions info
     if (OB_FAIL(check_table_partition_option(&table, first_table_schema, schema_guard, true, is_matched))) {
-      LOG_WARN("fail to check adaptive sharding type", KR(ret), K(tablegroup_id), K(table_id), K(is_matched));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -404,9 +385,7 @@ int ObTableGroupHelp::modify_sharding_type(const ObAlterTablegroupArg &arg,
       LOG_WARN("modify sys tablegroup's sharding type is not allowed", KR(ret), K(tablegroup_schema.get_tablegroup_id()));
       LOG_USER_ERROR(OB_OP_NOT_ALLOW, "modify sys tablegroup's sharding type");
     } else if (OB_FAIL(new_tablegroup_schema.assign(tablegroup_schema))) {
-      LOG_WARN("fail to assign tablegroup schema", KR(ret), K(tablegroup_schema));
     } else if (OB_FAIL(new_tablegroup_schema.set_sharding(arg.alter_tablegroup_schema_.get_sharding()))) {
-      LOG_WARN("fail to set tablegroup name", KR(ret), K(tablegroup_schema));
     } else if (new_tablegroup_schema.get_sharding().empty()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("new tablegroup schema's sharding should not be empty", KR(ret));
@@ -414,18 +393,15 @@ int ObTableGroupHelp::modify_sharding_type(const ObAlterTablegroupArg &arg,
       is_matched = true;
     } else if (new_tablegroup_schema.get_sharding() == OB_PARTITION_SHARDING_PARTITION) {
       if (OB_FAIL(check_all_table_partition_option(new_tablegroup_schema, schema_guard, false, is_matched))) {
-        LOG_WARN("fail to check table sharding partition", KR(ret), K(new_tablegroup_schema));
       }
     } else if (new_tablegroup_schema.get_sharding() == OB_PARTITION_SHARDING_ADAPTIVE) {
       if (OB_FAIL(check_all_table_partition_option(new_tablegroup_schema, schema_guard, true, is_matched))) {
-        LOG_WARN("fail to check table sharding adaptive", KR(ret), K(new_tablegroup_schema));
       }
     }
     if (OB_SUCC(ret) && is_matched) {
       ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
       // update sharding type
       if (OB_FAIL(ddl_operator.alter_tablegroup(new_tablegroup_schema, trans, &arg.ddl_stmt_str_))) {
-        LOG_WARN("fail to alter tablegroup sharding type", KR(ret), K(new_tablegroup_schema));
       }
     } else if (OB_SUCC(ret) && !is_matched) {
       ret = OB_OP_NOT_ALLOW;

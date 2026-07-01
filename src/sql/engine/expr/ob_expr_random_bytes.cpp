@@ -88,7 +88,6 @@ int ObExprRandomBytes::generate_random_bytes(const ObExpr &expr, ObEvalCtx &ctx,
   if (ObInt32Type == expr.args_[0]->datum_meta_.type_) {
     ObDatum *num_datum = NULL;
     if (OB_FAIL(expr.args_[0]->eval(ctx, num_datum))) {
-      LOG_WARN("eval param value failed", K(ret));
     } else if (num_datum->is_null()) {
       expr_datum.set_null();
     } else {

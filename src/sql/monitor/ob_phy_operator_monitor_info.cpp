@@ -206,9 +206,7 @@ OB_DEF_SERIALIZE(ObPhyOperatorMonitorInfo)
   for (int64_t i = 0; i < OB_MAX_INFORMATION_COUNT && OB_SUCC(ret); i++) {
     if (info_array_[i] != 0) {
       if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, i))) {
-        LOG_WARN("fail to encode vi64", K(ret), K(i), K(buf), K(buf_len), K(pos));
       } else if (OB_FAIL(serialization::encode_vi64(buf, buf_len, pos, info_array_[i]))) {
-        LOG_WARN("fail to encode vi64", K(ret), K(i), K(buf), K(buf_len), K(pos), K(info_array_[i]));
       }
     }
   }
@@ -228,9 +226,7 @@ OB_DEF_DESERIALIZE(ObPhyOperatorMonitorInfo)
   int64_t value = 0;
   for (int64_t i = 0; i < valid_count && OB_SUCC(ret); i++) {
     if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &index))) {
-      LOG_WARN("fail to decode index", K(ret), K(pos));
     } else if (OB_FAIL(serialization::decode_vi64(buf, data_len, pos, &value))) {
-      LOG_WARN("fail to decode value", K(ret), K(pos));
     } else {
       if (index >= OB_MAX_INFORMATION_COUNT) {
         //nothing to do, maybe received a new version of statistics information

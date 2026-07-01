@@ -186,7 +186,6 @@ int ObMemtableRowCompactor::try_cleanout_tx_node_during_compact_(ObTxTableGuard 
       // ret = OB_ERR_UNEXPECTED;
       // TRANS_LOG(ERROR, "unexpected non cleanout uncommitted node", KPC(tnode), KPC(row_));
     } else if (OB_FAIL(tx_table_guard.cleanout_tx_node(tnode->tx_id_, *row_, *tnode, false /*need_row_latch*/))) {
-      TRANS_LOG(WARN, "cleanout tx state failed", K(ret), KPC(row_), KPC(tnode));
     }
   }
 
@@ -210,17 +209,13 @@ ObMvccTransNode *ObMemtableRowCompactor::construct_compact_node_(const SCN snaps
 
   if (NULL == memtable_) {
     ret = OB_ERR_UNEXPECTED;
-    TRANS_LOG(ERROR, "memtable is NULL");
   } else if (OB_FAIL(memtable_->get_tx_table_guard(tx_table_guard))) {
-    TRANS_LOG(WARN, "get tx table guard failed", K(ret), KPC(memtable_));
   } else if (!tx_table_guard.is_valid()) {
     ret = OB_ERR_UNEXPECTED;
     TRANS_LOG(ERROR, "get tx table failed", K(ret), KPC(memtable_));
   } else if (OB_FAIL(compact_datum_row.init(OB_ROW_DEFAULT_COLUMNS_COUNT))) {
-    STORAGE_LOG(WARN, "Failed to init datum row", K(ret));
   }
 
-  TRANS_LOG(DEBUG, "chaser debug start compact memtable row", K(memtable_->get_key()));
   // Scan nodes till tail OR a previous compact node OR a delete node.
   bool giveup_compaction = false;
   while (OB_SUCCESS == ret && NULL != cur) {
@@ -228,7 +223,6 @@ ObMvccTransNode *ObMemtableRowCompactor::construct_compact_node_(const SCN snaps
     const ObMemtableDataHeader *mtd = NULL;
     bool find_committed_tnode = true;
     if (OB_FAIL(try_cleanout_tx_node_during_compact_(tx_table_guard, cur))) {
-      TRANS_LOG(WARN, "cleanout tx state failed", K(ret), KPC(row_), KPC(cur));
     } else if (!(cur->is_aborted() || cur->is_committed() || cur->is_elr())) {
       ObMvccTransNode *next = cur->next_;
       if (next && (next->is_aborted() || next->is_committed() || next->is_elr())) {
@@ -237,19 +231,15 @@ ObMvccTransNode *ObMemtableRowCompactor::construct_compact_node_(const SCN snaps
         ret = OB_ITER_END;
       } else {
         ret = OB_ERR_UNEXPECTED;
-        TRANS_LOG(ERROR, "unexpected cleanout state", K(snapshot_version), KP(next), K(*cur), K(*row_));
       }
     } else if (cur->is_aborted()) {
-      TRANS_LOG(INFO, "ignore aborted node when compact", K(*cur), K(*row_));
       cur = cur->prev_;
       find_committed_tnode = false;
     } else if (snapshot_version < cur->trans_version_) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(ERROR, "unexpected snapshot version", K(snapshot_version), K(*cur), K(*row_));
     } else if (NULL == (mtd = reinterpret_cast<const ObMemtableDataHeader *>(cur->buf_))) {
       ret = OB_ERR_UNEXPECTED;
     } else if (blocksstable::ObDmlFlag::DF_LOCK == mtd->dml_flag_) {
-      TRANS_LOG(INFO, "ignore lock node when compact", K(*cur), K(*row_));
       cur = cur->prev_;
       find_committed_tnode = false;
     } else if (compact_row_cnt <= 0 && NDT_COMPACT == cur->type_) {
@@ -257,7 +247,6 @@ ObMvccTransNode *ObMemtableRowCompactor::construct_compact_node_(const SCN snaps
     } else if (rowkey_cnt == 0) {
       const ObRowHeader *row_header = nullptr;
       if (OB_FAIL(row_reader.read_row_header(mtd->buf_, mtd->buf_len_, row_header))) {
-        TRANS_LOG(WARN, "Failed to read row header", K(ret));
       } else if (OB_ISNULL(row_header)) {
         ret = OB_ERR_UNEXPECTED;
         STORAGE_LOG(WARN, "Unexpected null row header", K(ret));
@@ -275,7 +264,6 @@ ObMvccTransNode *ObMemtableRowCompactor::construct_compact_node_(const SCN snaps
         // DELETE node & its previous ones are ignored.
         if (0 == compact_row_cnt) {
           if (OB_FAIL(row_reader.read_row(mtd->buf_, mtd->buf_len_, nullptr, compact_datum_row))) {
-            TRANS_LOG(WARN, "Failed to read delete row", K(ret), KPC(mtd));
           } else {
             //force compact
             dml_flag = ObDmlFlag::DF_DELETE;
@@ -290,9 +278,7 @@ ObMvccTransNode *ObMemtableRowCompactor::construct_compact_node_(const SCN snaps
         ret = OB_ALLOCATE_MEMORY_FAILED;
         TRANS_LOG(WARN, "allocate memory for datum row failed", KR(ret), KP(this));
       } else if (OB_FAIL(row_reader.read_row(mtd->buf_, mtd->buf_len_, nullptr, *datum_row))) {
-        TRANS_LOG(WARN, "Failed to read datum row", K(ret));
       } else if (OB_FAIL(compact_datum_row.reserve(datum_row->get_column_count(), true))) {
-          STORAGE_LOG(WARN, "Failed to reserve datum row", K(ret), KPC(datum_row));
       } else {
         compact_datum_row.count_ = MAX(datum_row->get_column_count(), compact_datum_row.count_);
         if (ObDmlFlag::DF_NOT_EXIST == dml_flag) {
@@ -304,7 +290,6 @@ ObMvccTransNode *ObMemtableRowCompactor::construct_compact_node_(const SCN snaps
             compact_datum_row.storage_datums_[i] = datum_row->storage_datums_[i];
           }
         }
-        TRANS_LOG(DEBUG, "chaser debug compact memtable row", KPC(datum_row), K(dml_flag), K(compact_datum_row));
         compact_row_cnt++;
         if (NDT_COMPACT == cur->type_) {
           // Stop at compact node.
@@ -327,7 +312,6 @@ ObMvccTransNode *ObMemtableRowCompactor::construct_compact_node_(const SCN snaps
       char *buf = nullptr;
       int64_t len = 0;
       if (OB_FAIL(row_writer.write(rowkey_cnt, compact_datum_row, buf, len))) {
-        TRANS_LOG(WARN, "Failed to writer compact row", K(ret));
       } else if (OB_UNLIKELY(ObDmlFlag::DF_NOT_EXIST == dml_flag)) {
         ret = OB_ERR_UNEXPECTED;
         TRANS_LOG(ERROR, "Unexpected not exist trans node", K(ret), K(dml_flag), K(compact_datum_row), K(snapshot_version));
@@ -341,9 +325,7 @@ ObMvccTransNode *ObMemtableRowCompactor::construct_compact_node_(const SCN snaps
           ret = OB_ALLOCATE_MEMORY_FAILED;
           TRANS_LOG(WARN, "failed to alloc trans node", K(ret), K(node_size));
         } else if (OB_FAIL(ObMemtableDataHeader::build(reinterpret_cast<ObMemtableDataHeader *>(trans_node->buf_), &mtd))) {
-          TRANS_LOG(WARN, "failed to dup data to trans node", K(ret), K(trans_node->buf_));
         } else if (OB_FAIL(save->is_lock_node(is_lock_node))) {
-          TRANS_LOG(ERROR, "unexpected lock node", K(ret), "node", *save);
         } else if (is_lock_node) {
           ret = OB_ERR_UNEXPECTED;
           TRANS_LOG(ERROR, "unexpected lock node", K(ret), "node", *save);
@@ -361,7 +343,6 @@ ObMvccTransNode *ObMemtableRowCompactor::construct_compact_node_(const SCN snaps
           trans_node->flag_ = save->flag_;
           trans_node->scn_ = save->scn_;
           trans_node->set_snapshot_version_barrier(snapshot_version, flag);
-          TRANS_LOG(DEBUG, "success to compact row, ", K(trans_node->tx_id_), K(dml_flag), K(compact_row_cnt), KPC(save));
         }
       }
     }

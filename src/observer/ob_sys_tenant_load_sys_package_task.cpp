@@ -64,12 +64,10 @@ int ObSysTenantLoadSysPackageTask::start(const int tg_id)
   } else {
     bool is_exist = false;
     if (OB_FAIL(TG_TASK_EXIST(tg_id, *this, is_exist))) {
-      LOG_WARN("failed to check task existence", KR(ret), K(tg_id));
     } else if (is_exist) {
       // ignore duplicate schedule
       LOG_TRACE("timer task already exist", K(tg_id));
     } else if (OB_FAIL(TG_SCHEDULE(tg_id, *this, SCHEDULE_INTERVAL_US, did_repeat))) {
-      LOG_WARN("failed to schedule timer task", KR(ret), K(tg_id), K(SCHEDULE_INTERVAL_US), K(did_repeat));
     } else {
       LOG_INFO("finish schedule timer task", K(tg_id), K(SCHEDULE_INTERVAL_US));
     }
@@ -105,11 +103,9 @@ int ObSysTenantLoadSysPackageTask::do_sys_tenant_load_sys_package_()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("sql proxy is null", KR(ret), KP(sql_proxy));
   } else if (OB_FAIL(GET_RS_JOB_COUNT(LOAD_MYSQL_SYS_PACKAGE, job_count))) {
-    LOG_WARN("fail to get rs job count", KR(ret), K(job_count));
   } else if (0 == job_count) {
     // job not exists, try insert inprogress job
     if (OB_FAIL(RS_JOB_CREATE_WITH_RET(job_id, JOB_TYPE_LOAD_MYSQL_SYS_PACKAGE))) {
-      LOG_WARN("failed to create load mysql sys package job", KR(ret));
     }
   } else if (OB_FAIL(RS_JOB_FIND(LOAD_MYSQL_SYS_PACKAGE, job_id))) {
     if (ret == OB_ENTRY_NOT_EXIST) {
@@ -123,11 +119,8 @@ int ObSysTenantLoadSysPackageTask::do_sys_tenant_load_sys_package_()
                          *sql_proxy,
                          ObCompatibilityMode::MYSQL_MODE,
                          false/*from_file*/))) {
-    LOG_WARN("failed to load package", KR(ret));
   } else if (OB_FAIL(ERRSIM_LOAD_PACKAGE_ERROR)) {
-    LOG_WARN("ERRSIM_LOAD_PACKAGE_ERROR", KR(ret));
   } else if (OB_FAIL(RS_JOB_COMPLETE(job_id, 0/*result_code*/))) {
-    LOG_WARN("failed to complete rs job", KR(ret), K(job_id));
   } else {
     GCTX.sys_package_ready_ = true;
   }

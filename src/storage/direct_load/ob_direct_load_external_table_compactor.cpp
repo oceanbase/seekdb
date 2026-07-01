@@ -83,12 +83,10 @@ int ObDirectLoadExternalTableCompactor::add_table(const ObDirectLoadTableHandle 
   } else {
     ObDirectLoadExternalTable *external_table = static_cast<ObDirectLoadExternalTable*>(table_handle.get_table());
     if (OB_FAIL(check_table_compactable(external_table))) {
-      LOG_WARN("fail to check table compactable", KR(ret), KPC(external_table));
     } else {
       row_count_ += external_table->get_meta().row_count_;
       max_data_block_size_ = MAX(max_data_block_size_, external_table->get_meta().max_data_block_size_);
       if (OB_FAIL(fragments_.push_back(external_table->get_fragments()))) {
-        LOG_WARN("fail to push back fragments", KR(ret));
       }
     }
   }
@@ -141,12 +139,9 @@ int ObDirectLoadExternalTableCompactor::get_table(ObDirectLoadTableHandle &table
     create_param.row_count_ = row_count_;
     create_param.max_data_block_size_ = max_data_block_size_;
     if (OB_FAIL(create_param.fragments_.assign(fragments_))) {
-      LOG_WARN("fail to assign fragments", KR(ret));
     } else if (OB_FAIL(table_manager->alloc_external_table(table_handle))) {
-      LOG_WARN("fail to alloc external table", KR(ret));
     } else if (FALSE_IT(external_table = static_cast<ObDirectLoadExternalTable*>(table_handle.get_table()))) { 
     } else if (OB_FAIL(external_table->init(create_param))) {
-      LOG_WARN("fail to init external table", KR(ret));
     }
   }
   return ret;

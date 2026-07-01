@@ -35,7 +35,6 @@ int ObTableLoadTaskThreadPoolScheduler::MyThreadPool::init()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(pool_cond_.init(1/*default_event_id*/))) {
-    LOG_WARN("init pool condition failed", K(ret));
   }
   return ret;
 }
@@ -114,9 +113,7 @@ int ObTableLoadTaskThreadPoolScheduler::init_worker_ctx_array()
       WorkerContext *worker_ctx = worker_ctx_array_ + i;
       worker_ctx->worker_id_ = i;
       if (OB_FAIL(worker_ctx->cond_.init(1))) {
-        LOG_WARN("fail to init thread cond", KR(ret));
       } else if (OB_FAIL(worker_ctx->task_queue_.init(session_queue_size_, "TLD_Queue"))) {
-        LOG_WARN("fail to init task queue", KR(ret), K(i));
       }
     }
   }
@@ -130,7 +127,6 @@ int ObTableLoadTaskThreadPoolScheduler::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTableLoadTaskThreadPoolScheduler init twice", KR(ret), KP(this));
   } else if (OB_FAIL(thread_pool_.init())) {
-    LOG_WARN("init thread pool failed", K(ret));
   } else {
     thread_pool_.set_thread_count(thread_count_);
     thread_pool_.set_run_wrapper(MTL_CTX());
@@ -144,7 +140,6 @@ int ObTableLoadTaskThreadPoolScheduler::init()
     }
     timeout_ts_ = THIS_WORKER.get_timeout_ts();
     if (OB_FAIL(init_worker_ctx_array())) {
-      LOG_WARN("fail to init worker ctx array", KR(ret));
     } else {
       is_inited_ = true;
     }
@@ -165,7 +160,6 @@ int ObTableLoadTaskThreadPoolScheduler::start()
   } else {
     state_ = STATE_STARTING;
     if (OB_FAIL(thread_pool_.start())) {
-      LOG_WARN("fail to start thread pool", KR(ret));
     } else {
       while (STATE_STARTING == state_) {
         PAUSE();
@@ -269,7 +263,6 @@ void ObTableLoadTaskThreadPoolScheduler::run(uint64_t thread_idx)
   WorkerContext &worker_ctx = worker_ctx_array_[thread_idx];
   while (OB_SUCC(ret) && OB_LIKELY(STATE_RUNNING == state_)) {
     if (OB_FAIL(execute_worker_tasks(worker_ctx))) {
-      LOG_WARN("fail to execute worker tasks", KR(ret));
     } else {
       ObThreadCondGuard guard(worker_ctx.cond_);
       if (OB_LIKELY(STATE_RUNNING == state_) && 0 == worker_ctx.task_queue_.size()) {
@@ -307,7 +300,6 @@ int ObTableLoadTaskThreadPoolScheduler::add_task(int64_t thread_idx, ObTableLoad
   } else {
     ObTimeoutCtx ctx;
     if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, DEFAULT_TIMEOUT_US))) {
-      LOG_WARN("fail to set default timeout ctx", KR(ret));
     } else {
       OB_TABLE_LOAD_STATISTICS_TIME_COST(DEBUG, add_task_time_us);
       WorkerContext &worker_ctx = worker_ctx_array_[thread_idx];
@@ -337,7 +329,6 @@ int ObTableLoadTaskThreadPoolScheduler::execute_worker_tasks(WorkerContext &work
     while (OB_SUCC(ret) && size-- > 0) {
       void *tmp = nullptr;
       if (OB_FAIL(worker_ctx.task_queue_.pop(tmp))) {
-        LOG_WARN("fail to pop queue", KR(ret), K(worker_ctx.worker_id_));
       } else {
         // The task's execution result does not affect the operation of the worker thread
         ObTableLoadTask *task = (ObTableLoadTask *)tmp;
@@ -365,7 +356,6 @@ void ObTableLoadTaskThreadPoolScheduler::clear_all_task()
       while (worker_ctx.task_queue_.size() > 0) {
         void *tmp = nullptr;
         if (OB_FAIL(worker_ctx.task_queue_.pop(tmp))) {
-          LOG_WARN("fail to pop queue", KR(ret), K(i));
         } else {
           // trigger task callback
           ObTableLoadTask *task = (ObTableLoadTask *)tmp;

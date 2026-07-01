@@ -151,7 +151,6 @@ int ObAlterMviewUtils::resolve_mv_options(const ParseNode &node,
           LOG_WARN("unexpected null", KR(ret));
         } else if (OB_FAIL(resolve_interval_node(*interval_node, session_info, allocator,
                                                  resolver_params, alter_mview_arg))) {
-          LOG_WARN("failed to resolve interval node", KR(ret));
         }
       }
     }
@@ -166,7 +165,6 @@ int ObAlterMviewUtils::resolve_mv_options(const ParseNode &node,
                                                        schema_guard,
                                                        can_fast_refresh,
                                                        note))) {
-          LOG_WARN("fail to check refresh type", KR(ret));
         } else if (!can_fast_refresh) {
           if (alter_mview_arg.get_enable_on_query_computation()) {
             ret = OB_ERR_MVIEW_CAN_NOT_ON_QUERY_COMPUTE;
@@ -231,7 +229,6 @@ int ObAlterMviewUtils::resolve_mlog_options(const ParseNode &node,
         LOG_WARN("unexpected null", KR(ret));
       } else if (OB_FAIL(resolve_interval_node(*interval_node, session_info, allocator,
                                                resolver_params, alter_mlog_arg))) {
-        LOG_WARN("failed to resolve interval node", KR(ret));
       }
     } else if (node.value_ == 3) {
       ParseNode *thres_node = node.children_[0];
@@ -349,7 +346,6 @@ int ObAlterMviewUtils::resolve_interval_node(const ParseNode &node,
       } else if (OB_FAIL(ObMViewSchedJobUtils::resolve_date_expr_to_timestamp(
                      resolver_params, *session_info, *(start_date->children_[0]), *allocator,
                      start_time))) {
-        LOG_WARN("failed to resolve date expr to timestamp", KR(ret));
       } else if (start_time < current_time) {
         ret = OB_ERR_TIME_EARLIER_THAN_SYSDATE;
         LOG_WARN("the parameter start date must evaluate to a time in the future", KR(ret),
@@ -361,7 +357,6 @@ int ObAlterMviewUtils::resolve_interval_node(const ParseNode &node,
       int64_t next_time = OB_INVALID_TIMESTAMP;
       if (OB_FAIL(ObMViewSchedJobUtils::resolve_date_expr_to_timestamp(
               resolver_params, *session_info, *next_date, *allocator, next_time))) {
-        LOG_WARN("failed to resolve date expr to timestamp", KR(ret));
       } else if (next_time < current_time) {
         ret = OB_ERR_TIME_EARLIER_THAN_SYSDATE;
         LOG_WARN("the parameter next date must evaluate to a time in the future", KR(ret),
@@ -374,7 +369,6 @@ int ObAlterMviewUtils::resolve_interval_node(const ParseNode &node,
       if (OB_SUCC(ret)) {
         ObString next_date_str(next_date->str_len_, next_date->str_value_);
         if (OB_FAIL(ob_write_string(*allocator, next_date_str, next_date_str))) {
-          LOG_WARN("fail to write string", KR(ret));
         } else {
           arg.set_next_time_expr(next_date_str);
         }

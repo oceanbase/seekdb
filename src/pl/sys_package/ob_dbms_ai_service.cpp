@@ -55,27 +55,22 @@ int ObDBMSAiService::check_ai_model_privilege_(ObPLExecCtx &ctx, ObPrivSet requi
                                                     ctx.exec_ctx_->get_my_session()->get_priv_user_id(),
                                                     ctx.exec_ctx_->get_my_session()->get_database_name(),
                                                     session_priv))) {
-        LOG_WARN("failed to get session priv info", K(ret));
       } else {
         switch (required_priv) {
           case OB_PRIV_CREATE_AI_MODEL:
             if (OB_FAIL(priv_util.check_create_ai_model_priv(tmp_allocator, session_priv, has_priv))) {
-              LOG_WARN("failed to check create ai model privilege", K(ret));
             }
             break;
           case OB_PRIV_ALTER_AI_MODEL:
             if (OB_FAIL(priv_util.check_alter_ai_model_priv(tmp_allocator, session_priv, has_priv))) {
-              LOG_WARN("failed to check alter ai model privilege", K(ret));
             }
             break;
           case OB_PRIV_DROP_AI_MODEL:
             if (OB_FAIL(priv_util.check_drop_ai_model_priv(tmp_allocator, session_priv, has_priv))) {
-              LOG_WARN("failed to check drop ai model privilege", K(ret));
             }
             break;
           case OB_PRIV_ACCESS_AI_MODEL:
             if (OB_FAIL(priv_util.check_access_ai_model_priv(tmp_allocator, session_priv, has_priv))) {
-              LOG_WARN("failed to check access ai model privilege", K(ret));
             }
             break;
           default:
@@ -102,7 +97,6 @@ int ObDBMSAiService::create_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore 
   ctx.set_is_sensitive(true);
 
   if (OB_FAIL(precheck_version_and_param_count_(2, params))) {
-    LOG_WARN("failed to pre check", K(ret));
   } else if (OB_FAIL(ObDBMSAiService::check_ai_model_privilege_(ctx, OB_PRIV_CREATE_AI_MODEL))) {
     if (OB_ERR_NO_PRIVILEGE == ret) {
       ret = OB_ERR_NO_PRIVILEGE;
@@ -112,7 +106,6 @@ int ObDBMSAiService::create_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore 
       LOG_WARN("failed to check create ai model privilege", K(ret));
     }
   } else if (OB_FAIL(params.at(0).get_string(endpoint_name))) {
-    LOG_WARN("failed to get name string", K(ret), K(params.at(0)));
   } else if (endpoint_name.empty()) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_WARN("ai service endpoint name is empty", K(ret), K(params));
@@ -127,9 +120,7 @@ int ObDBMSAiService::create_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore 
     ObArenaAllocator tmp_allocator;
     ObIJsonBase *j_base = nullptr;
     if (OB_FAIL(get_json_base_(tmp_allocator, params, j_base))) {
-      LOG_WARN("failed to get json base", K(ret), K(params));
     } else if (OB_FAIL(ObAiServiceExecutor::create_ai_model_endpoint(tmp_allocator, endpoint_name, *j_base))) {
-      LOG_WARN("failed to insert ai service endpoint", K(ret), K(endpoint_name));
     }
   }
 
@@ -143,7 +134,6 @@ int ObDBMSAiService::alter_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &
   ObString endpoint_name;
 
   if (OB_FAIL(precheck_version_and_param_count_(2, params))) {
-    LOG_WARN("failed to pre check", K(ret));
   } else if (OB_FAIL(ObDBMSAiService::check_ai_model_privilege_(ctx, OB_PRIV_ALTER_AI_MODEL))) {
     if (OB_ERR_NO_PRIVILEGE == ret) {
       LOG_WARN("failed to check alter ai model privilege", K(ret));
@@ -152,7 +142,6 @@ int ObDBMSAiService::alter_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &
       LOG_WARN("failed to check alter ai model privilege", K(ret));
     }
   } else if (OB_FAIL(params.at(0).get_string(endpoint_name))) {
-    LOG_WARN("failed to get name string", K(ret), K(params.at(0)));
   } else if (endpoint_name.empty()) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_WARN("ai service endpoint name is empty", K(ret), K(params), K(endpoint_name));
@@ -167,9 +156,7 @@ int ObDBMSAiService::alter_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &
     ObIJsonBase *j_base = nullptr;
     ObArenaAllocator tmp_allocator;
     if (OB_FAIL(get_json_base_(tmp_allocator, params, j_base))) {
-      LOG_WARN("failed to get json base", K(ret), K(params));
     } else if (OB_FAIL(ObAiServiceExecutor::alter_ai_model_endpoint(tmp_allocator, endpoint_name, *j_base))) {
-      LOG_WARN("failed to alter ai service endpoint", K(ret), K(endpoint_name));
     }
   }
 
@@ -183,7 +170,6 @@ int ObDBMSAiService::drop_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &p
   ObString endpoint_name;
 
   if (OB_FAIL(precheck_version_and_param_count_(1, params))) {
-    LOG_WARN("failed to pre check", K(ret));
   } else if (OB_FAIL(ObDBMSAiService::check_ai_model_privilege_(ctx, OB_PRIV_DROP_AI_MODEL))) {
     if (OB_ERR_NO_PRIVILEGE == ret) {
       LOG_WARN("failed to check drop ai model privilege", K(ret));
@@ -192,14 +178,12 @@ int ObDBMSAiService::drop_ai_model_endpoint(ObPLExecCtx &ctx, sql::ParamStore &p
       LOG_WARN("failed to check drop ai model privilege", K(ret));
     }
   } else if (OB_FAIL(params.at(0).get_string(endpoint_name))) {
-    LOG_WARN("failed to get name string", K(ret), K(params.at(0)));
   } else if (endpoint_name.empty()) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_WARN("ai service endpoint name is empty", K(ret), K(params), K(endpoint_name));
     ObString var_name = "name";
     LOG_USER_ERROR(OB_AI_FUNC_PARAM_EMPTY, var_name.length(), var_name.ptr());
   } else if (OB_FAIL(ObAiServiceExecutor::drop_ai_model_endpoint(endpoint_name))) {
-    LOG_WARN("failed to drop ai service endpoint", K(ret), K(endpoint_name));
   }
 
   LOG_DEBUG("finished to drop ai service endpoint", K(ret), K(endpoint_name));
@@ -227,9 +211,7 @@ int ObDBMSAiService::get_json_base_(ObArenaAllocator &allocator, sql::ParamStore
   uint32_t parse_flag = 0; // mysql mode 
 
   if (OB_FAIL(sql::ObTextStringHelper::read_real_string_data(&allocator, params.at(1), j_str))) {
-    LOG_WARN("fail to read real string data", K(ret), K(params.at(1)));
   } else if (OB_FAIL(ObJsonBaseFactory::get_json_base(&allocator, j_str, in_type, in_type, j_base, parse_flag))) {
-    LOG_WARN("fail to get json base", K(ret), K(j_str));
   } else if (j_base->json_type() != ObJsonNodeType::J_OBJECT) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("ai service endpoint params is not a json object", K(ret), K(params));
@@ -247,7 +229,6 @@ int ObDBMSAiService::create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, 
   const ObAiModelSchema *ai_model_schema = nullptr;
 
   if (OB_FAIL(precheck_version_and_param_count_(2, params))) {
-    LOG_WARN("failed to pre check", K(ret));
   } else if (OB_FAIL(ObDBMSAiService::check_ai_model_privilege_(ctx, OB_PRIV_CREATE_AI_MODEL))) {
     if (OB_ERR_NO_PRIVILEGE == ret) {
       LOG_WARN("failed to check create ai model privilege", K(ret));
@@ -256,7 +237,6 @@ int ObDBMSAiService::create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, 
       LOG_WARN("failed to check create ai model privilege", K(ret));
     }
   } else if (OB_FAIL(params.at(0).get_string(model_name))) {
-    LOG_WARN("failed to get name string", K(ret), K(params.at(0)));
   } else if (model_name.empty()) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_WARN("ai model name is empty", K(ret), K(params), K(model_name));
@@ -271,9 +251,7 @@ int ObDBMSAiService::create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, 
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("failed to get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_ai_model_schema( model_name, ai_model_schema))) {
-    LOG_WARN("failed to get ai model schema", K(ret), K(model_name));
   } else if (OB_NOT_NULL(ai_model_schema)) {
     ret = OB_AI_FUNC_MODEL_EXISTS;
     LOG_WARN("ai model already exists", K(ret), K(model_name));
@@ -289,16 +267,12 @@ int ObDBMSAiService::create_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, 
     ObIJsonBase *j_base = nullptr;
     ObAiServiceModelInfo model_info;
     if (OB_FAIL(get_json_base_(tmp_allocator, params, j_base))) {
-      LOG_WARN("failed to get json base", K(ret), K(params));
     } else if (OB_FAIL(model_info.parse_from_json_base(model_name, *j_base))) {
-      LOG_WARN("failed to parse ai model info", K(ret), K(model_name)); 
     } else {
       ObCreateAiModelArg arg(model_info);
       arg.ddl_stmt_str_ = ctx.exec_ctx_->get_sql_ctx()->cur_sql_;
       if (OB_FAIL(arg.check_valid())) {
-        LOG_WARN("invalid create ai model arg", K(ret), K(arg));
       } else if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->create_ai_model(arg); }))) {
-        LOG_WARN("failed to create ai model", K(ret), K(arg));
       }
     }
 
@@ -316,7 +290,6 @@ int ObDBMSAiService::drop_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, co
   const ObAiModelSchema *ai_model_schema = nullptr;
 
   if (OB_FAIL(precheck_version_and_param_count_(1, params))) {
-    LOG_WARN("failed to pre check", K(ret));
   } else if (OB_FAIL(ObDBMSAiService::check_ai_model_privilege_(ctx, OB_PRIV_DROP_AI_MODEL))) {
     if (OB_ERR_NO_PRIVILEGE == ret) {
       LOG_WARN("failed to check drop ai model privilege", K(ret));
@@ -325,7 +298,6 @@ int ObDBMSAiService::drop_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, co
       LOG_WARN("failed to check drop ai model privilege", K(ret));
     }
   } else if (OB_FAIL(params.at(0).get_string(model_name))) {
-    LOG_WARN("failed to get name string", K(ret), K(params.at(0)));
   } else if (model_name.empty()) {
     ret = OB_AI_FUNC_PARAM_EMPTY;
     LOG_WARN("ai model name is empty", K(ret), K(params), K(model_name));
@@ -335,9 +307,7 @@ int ObDBMSAiService::drop_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, co
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema service is null", K(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-    LOG_WARN("failed to get schema guard", K(ret));
   } else if (OB_FAIL(schema_guard.get_ai_model_schema( model_name, ai_model_schema))) {
-    LOG_WARN("failed to get ai model schema", K(ret), K(model_name));
   } else if (OB_ISNULL(ai_model_schema)) {
     ret = OB_AI_FUNC_MODEL_NOT_FOUND;
     LOG_WARN("ai model not exists", K(ret), K(model_name));
@@ -352,7 +322,6 @@ int ObDBMSAiService::drop_ai_model(ObPLExecCtx &ctx, sql::ParamStore &params, co
     ObDropAiModelArg arg(model_name);
     arg.ddl_stmt_str_ = ctx.exec_ctx_->get_sql_ctx()->cur_sql_;
       if (OB_FAIL(rootserver::serial_call([&]{ return GCTX.root_service_->drop_ai_model(arg); }))) {
-      LOG_WARN("failed to drop ai model", K(ret), K(arg));
     }
 
     LOG_INFO("finished to drop ai model", K(ret), K(params), K(model_name));

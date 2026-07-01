@@ -95,7 +95,6 @@ int ObReferedMap<K, V>::Item::assign(const ObReferedMap<K, V>::Item &other)
   ref_cnt_ = other.ref_cnt_;
   map_ = other.map_;
   if (OB_FAIL(common::copy_assign(v_, other.v_))) {
-    LIB_LOG(WARN, "failed to copy v_", K(ret));
   }
   return ret;
 }
@@ -126,7 +125,6 @@ int ObReferedMap<K, V>::init(const int64_t bucket_num)
     bucket_allocator_.set_label(ObModIds::OB_REFERED_MAP);
     if (OB_FAIL(hash_table_.create(common::hash::cal_next_prime(bucket_num),
         &allocator_, &bucket_allocator_))) {
-      LIB_LOG(WARN, "create hash table failed", K(bucket_num), K(ret));
     } else {
       inited_ = true;
     }
@@ -151,7 +149,6 @@ int ObReferedMap<K, V>::locate(const K &key, ObReferedMap<K, V>::Item *&value)
     Item item;
     item.v_.set_key(key);
     if (OB_FAIL(hash_table_.set_refactored(key, item))) {
-      LIB_LOG(WARN, "insert to hash table failed", K(ret), K(key));
     } else {
       ret = hash_table_.get_refactored(key, const_value);
       if (OB_FAIL(ret) || NULL == const_value) {

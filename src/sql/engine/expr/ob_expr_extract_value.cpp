@@ -94,7 +94,6 @@ int ObExprExtractValue::eval_mysql_extract_value(const ObExpr &expr, ObEvalCtx &
   ObMulModeMemCtx* xml_mem_ctx = nullptr;
   lib::ObMallocHookAttrGuard malloc_guard(lib::ObMemAttr("XMLModule"));
   if (OB_FAIL(ObXmlUtil::create_mulmode_tree_context(&allocator, xml_mem_ctx))) {
-    LOG_WARN("fail to create tree memory context", K(ret));
   } else if (expr.arg_cnt_ != 2) {
     ret = OB_ERR_PARAM_SIZE;
     LOG_WARN("invalid arg_cnt_", K(ret), K(expr.arg_cnt_));
@@ -102,12 +101,10 @@ int ObExprExtractValue::eval_mysql_extract_value(const ObExpr &expr, ObEvalCtx &
     ret = OB_XPATH_EXPRESSION_UNSUPPORTED;
     LOG_WARN("args_[1] get const expr invalid", K(ret), K(expr.args_[1]));
   } else if (OB_FAIL(ObXMLExprHelper::get_str_from_expr(expr.args_[0], ctx, xml_frag, allocator))) {
-    LOG_WARN("get xml frag string failed", K(ret));
   } else if (xml_frag.empty()) {
     // do nothing
   } else if (OB_FALSE_IT(allocator.set_baseline_size(xml_frag.length()))) {
   } else if (OB_FAIL(ObXMLExprHelper::get_str_from_expr(expr.args_[1], ctx, xpath_expr, allocator))) {
-    LOG_WARN("get xpath expr failed.", K(ret));
   } else if (OB_FAIL(ObMulModeFactory::get_xml_base(xml_mem_ctx, xml_frag, ObNodeMemType::TREE_TYPE, ObNodeMemType::BINARY_TYPE, xml_base, M_DOCUMENT))) {
     ret = OB_SUCCESS;
     if (OB_FAIL(ObMulModeFactory::get_xml_base(xml_mem_ctx, xml_frag, ObNodeMemType::TREE_TYPE, ObNodeMemType::BINARY_TYPE, xml_base, M_CONTENT))) {
@@ -119,7 +116,6 @@ int ObExprExtractValue::eval_mysql_extract_value(const ObExpr &expr, ObEvalCtx &
 
   if (OB_FAIL(ret) || OB_ISNULL(xml_base)) {
   } else if (OB_FAIL(extract_mysql_xpath_result(xml_mem_ctx, xpath_expr, xml_base, xml_res))) {
-    LOG_WARN("failed to extract xpath result.", K(ret), K(xpath_expr));
   }
 
   ObString value = xml_res.string();
@@ -127,13 +123,11 @@ int ObExprExtractValue::eval_mysql_extract_value(const ObExpr &expr, ObEvalCtx &
   } else if (OB_ISNULL(xml_base)) {
     if (xml_frag.empty()) {
       if (OB_FAIL(ObXMLExprHelper::set_string_result(expr, ctx, res, value))) {
-        LOG_WARN("failed to set res when xml frag empty.", K(ret), K(xml_res));
       }
     } else {
       res.set_null();
     }
   } else if (OB_FAIL(ObXMLExprHelper::set_string_result(expr, ctx, res, value))) {
-    LOG_WARN("failed to set res", K(ret), K(xml_res));
   }
 
   return ret;
@@ -179,7 +173,6 @@ int ObExprExtractValue::extract_mysql_xpath_result(ObMulModeMemCtx *xml_mem_ctx,
   ObString new_xpath = xpath_str;
   bool cal_count = false;
   if (OB_FAIL(get_new_xpath(xpath_str, new_xpath, cal_count))) {
-    LOG_WARN("get new xpath failed.", K(ret));
   } else if (OB_FAIL(xpath_iter.init(xml_mem_ctx, new_xpath, default_ns, xml_doc, &prefix_ns))) {
     LOG_WARN("fail to init xpath iterator", K(new_xpath), K(default_ns), K(ret));
     ObXMLExprHelper::replace_xpath_ret_code(ret);
@@ -198,12 +191,10 @@ int ObExprExtractValue::extract_mysql_xpath_result(ObMulModeMemCtx *xml_mem_ctx,
       LOG_WARN("xpath result node is null", K(ret));
     } else if (ObXMLExprHelper::is_xml_text_node(node->type())) {
       if (OB_FAIL(result_nodes.push_back(node))) {
-        LOG_WARN("fail to push back result node", K(ret));
       }
     } else if (ObXMLExprHelper::is_xml_element_node(node->type()) ||
                ObXMLExprHelper::is_xml_attribute_node(node->type())) {
       if (OB_FAIL(result_nodes.push_back(node))) {
-        LOG_WARN("fail to push back result node", K(ret));
       }
     }
   }
@@ -221,10 +212,8 @@ int ObExprExtractValue::extract_mysql_xpath_result(ObMulModeMemCtx *xml_mem_ctx,
     common::ObSqlString sql_string;
     sql_string.assign_fmt("%ld", result_nodes.count());
     if (OB_FAIL(xml_res.append(sql_string.ptr(), sql_string.length()))) {
-      LOG_WARN("failed to append sql str", K(ret), K(sql_string));
     }
   } else if (OB_FAIL(append_text_into_buffer(xml_mem_ctx->allocator_, result_nodes, xml_res))) {
-    LOG_WARN("fail to merge text nodes", K(ret), K(result_nodes.count()));
   }
 
   int tmp_ret = OB_SUCCESS;
@@ -254,7 +243,6 @@ int ObExprExtractValue::merge_text_nodes_with_same_parent(ObIAllocator *allocato
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("node is NULL", K(ret));
     } else if (OB_FAIL(append_text_value(*buffer, child_node))) {
-      LOG_WARN("fail to append text value", K(ret));
     }
   } // end for
   
@@ -274,9 +262,7 @@ int ObExprExtractValue::append_text_value(ObStringBuffer &buffer, ObIMulModeBase
   } else if (ObXMLExprHelper::is_xml_leaf_node(node->type())) {
     ObString tmp_res;
     if (OB_FAIL(node->get_value(tmp_res))) {
-      LOG_WARN("fail to get node value", K(ret));
     } else if (OB_FAIL(buffer.append(tmp_res))) {
-      LOG_WARN("fail to append buffer", K(ret), K(buffer));
     }     
   }
   return ret;
@@ -296,11 +282,9 @@ int ObExprExtractValue::append_text_into_buffer(ObIAllocator *allocator,
       LOG_WARN("get child node null", K(ret), K(i));
     } else if (ObXMLExprHelper::is_xml_leaf_node(child_node->type())) {
       if (OB_FAIL(child_node->get_value(res_str))) {
-        LOG_WARN("failed to get node values.", K(ret), K(i));
       } else if (!buffer.empty() && OB_FAIL(buffer.append(&space, 1))) {
         LOG_WARN("failed to add space into buffer.", K(ret), K(buffer), K(i));
       } else if (OB_FAIL(buffer.append(res_str))) {
-        LOG_WARN("append res into buffer failed", K(ret), K(i), K(res_str));
       }
     } else if (ObXMLExprHelper::is_xml_element_node(child_node->type())) {
       for (int64_t j = 0; OB_SUCC(ret) && j < child_node->size(); j++) {
@@ -311,11 +295,9 @@ int ObExprExtractValue::append_text_into_buffer(ObIAllocator *allocator,
           LOG_WARN("get grand child null", K(ret), K(i), K(j));
         } else if (grand_child->type() == M_TEXT || grand_child->type() == M_CDATA) {
           if (OB_FAIL(grand_child->get_value(tmp_str))) {
-            LOG_WARN("get grand child value failed", K(ret), K(i), K(j), K(grand_child->type()));
           } else if (!buffer.empty() && OB_FAIL(buffer.append(&space, 1))) {
             LOG_WARN("failed to add space into buffer.", K(ret), K(buffer), K(i));
           } else if (OB_FAIL(buffer.append(tmp_str))) {
-            LOG_WARN("failed to append str", K(ret), K(tmp_str), K(i), K(j));
           }
         }
       }
@@ -333,7 +315,6 @@ int ObExprExtractValue::extract_node_value(ObIAllocator &allocator, ObIMulModeBa
     LOG_WARN("extract node is NULL", K(ret));
   } else if (ObXMLExprHelper::is_xml_leaf_node(node->type())) {
     if (OB_FAIL(node->get_value(xml_res))) {
-      LOG_WARN("fail to get node value", K(ret));
     }
   } else if (ObXMLExprHelper::is_xml_element_node(node->type())) {
     int64_t child_size = node->size();
@@ -353,7 +334,6 @@ int ObExprExtractValue::extract_node_value(ObIAllocator &allocator, ObIMulModeBa
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("node is NULL", K(ret));
         } else if (OB_FAIL(append_text_value(*buffer, child_node))) {
-           LOG_WARN("fail to append text value", K(ret));
         } else if (ObXMLExprHelper::is_xml_element_node(child_node->type())) {
           ele_node_num++;
         } else {
@@ -381,9 +361,7 @@ int ObExprExtractValue::has_same_parent_node(ObMulModeMemCtx *xml_mem_ctx, ObStr
   ObStringBuffer buffer(xml_mem_ctx->allocator_);  
   ObString parent_xpath;
   if (OB_FAIL(buffer.append(xpath_str))) {
-    LOG_WARN("fail to append buffer", K(ret));
   } else if (OB_FAIL(buffer.append("/parent::node()"))) {
-    LOG_WARN("fail to append buffer", K(ret));
   } else {
     parent_xpath.assign_ptr(buffer.ptr(), buffer.length());
   }

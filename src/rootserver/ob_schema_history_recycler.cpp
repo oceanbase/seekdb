@@ -57,7 +57,6 @@ ObRecycleSchemaValue &ObRecycleSchemaValue::operator=(const ObRecycleSchemaValue
   int ret = OB_SUCCESS;
   if (this == &other) {
   } else if (OB_FAIL(assign(other))) {
-    LOG_WARN("fail to assign ObRecycleSchemaValue", K(ret), K(other));
   }
   return *this;
 }
@@ -107,9 +106,7 @@ int ObSchemaHistoryRecycler::init(
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", KR(ret));
   } else if (OB_FAIL(TG_START(lib::TGDefIDs::SchemaRecTimer))) {
-    LOG_WARN("start schema recycler timer failed", KR(ret));
   } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::SchemaRecTimer, *this, 1 * 1000 * 1000L, true/*is_repeat*/))) {
-    LOG_WARN("schedule schema recycler timer failed", KR(ret));
   } else {
     schema_service_ = &schema_service;
     //freeze_info_mgr_ = &freeze_info_manager;
@@ -188,7 +185,6 @@ int ObSchemaHistoryRecycler::check_stop()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   }
   return ret;
 }
@@ -211,7 +207,6 @@ void ObSchemaHistoryRecycler::runTimerTask()
         ObCurTraceId::init(GCTX.self_addr());
         LOG_INFO("[SCHEMA_RECYCLE] recycle schema history start");
         if (OB_FAIL(try_recycle_schema_history())) {
-          LOG_WARN("fail to recycle schema history", KR(ret));
         }
         LOG_INFO("[SCHEMA_RECYCLE] recycle schema history finish", KR(ret));
       }
@@ -251,8 +246,6 @@ int ObSchemaHistoryRecycler::get_recycle_schema_versions(
         recycle_schema_version.schema_version_ = OB_INVALID_VERSION;
       }
       if (FAILEDx(result.recycle_schema_versions_.push_back(recycle_schema_version))) {
-        LOG_WARN("fail to push back recycle schema version",
-                 KR(ret), K(recycle_schema_version));
       }
     }
     if (OB_SUCC(ret) && arg.batch_ids_.count() != result.recycle_schema_versions_.count()) {
@@ -269,21 +262,17 @@ int ObSchemaHistoryRecycler::try_recycle_schema_history()
   int ret = OB_SUCCESS;
   ObArray<uint64_t> batch_ids;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     
     bool skip = true;
     if (OB_FAIL(check_can_skip_tenant(skip))) {
-      LOG_WARN("fail to check tenant can skip", KR(ret));
     } else if (!skip && OB_FAIL(batch_ids.push_back(1UL))) {
       LOG_WARN("fail to push back id", KR(ret));
     }
   }
   if (OB_FAIL(ret) || batch_ids.count() <= 0 ) {
   } else if (OB_FAIL(calc_recycle_schema_versions(batch_ids))) {
-    LOG_WARN("fail to fetch recycle schema version", KR(ret));
   } else if (OB_FAIL(try_recycle_schema_history(batch_ids))) {
-    LOG_WARN("fail to recycle schema history", KR(ret));
   }
   return ret;
 }
@@ -293,12 +282,10 @@ int ObSchemaHistoryRecycler::try_recycle_schema_history(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", KR(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < batch_ids.count(); i++) {
       
       if (OB_FAIL(check_stop())) {
-        LOG_WARN("schema history recycler is stopped", KR(ret));
       } else {
         int64_t recycle_schema_version = OB_INVALID_VERSION;
         if (!recycle_schema_version_valid_) {
@@ -308,8 +295,6 @@ int ObSchemaHistoryRecycler::try_recycle_schema_history(
         } else if (FALSE_IT(recycle_schema_version = recycle_schema_version_member_)) {
         } else if (is_valid_recycle_schema_version(recycle_schema_version)) {
           if (OB_FAIL(try_recycle_schema_history(recycle_schema_version))) {
-            LOG_WARN("fail to recycle schema history by tenant",
-                     KR(ret), K(recycle_schema_version));
           }
         }
         ret = OB_SUCCESS; // ignore tenant's failure
@@ -335,16 +320,13 @@ int ObSchemaHistoryRecycler::check_can_skip_tenant(
     // 1. Other tenant's schema history(except tenant schema history and system table's schema history) generated before schema split.
     skip = true;
   } else if (OB_FAIL(ObShareUtil::table_check_if_tenant_role_is_primary( is_primary))) {
-    LOG_WARN("fail to execute table_check_if_tenant_role_is_primary", KR(ret));
   } else if (!is_primary) {
     skip = true;
   } else {
     ObSchemaGetterGuard schema_guard;
     const ObSimpleTenantSchema *tenant_schema = NULL;
     if (OB_FAIL(schema_service_->get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("fail to get schema_guard", K(ret));
     } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_schema))) {
-      LOG_WARN("fail to get schema guard", K(ret));
     } else if (OB_ISNULL(tenant_schema)) {
       ret = OB_TENANT_NOT_EXIST;
       LOG_WARN("tenant not exist", K(ret));
@@ -365,9 +347,7 @@ int ObSchemaHistoryRecycler::get_recycle_schema_version_by_server(
   int ret = OB_SUCCESS;
   obcall::ObGetMinSSTableSchemaVersionArg arg;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(arg.batch_id_arg_list_.assign(batch_ids))) {
-    LOG_WARN("fail to assign arg", KR(ret));
   } else {
     // single-server: dispatch directly to local ObService instead of going through
     // the removed ObGetMinSSTableSchemaVersionProxy / RPC transport.
@@ -375,7 +355,6 @@ int ObSchemaHistoryRecycler::get_recycle_schema_version_by_server(
     obcall::ObGetMinSSTableSchemaVersionRes result;
     if (OB_FAIL(ex_rpc::sync_call([&]{
           return GCTX.ob_service_->get_min_sstable_schema_version(arg, result); }))) {
-      LOG_WARN("fail to get min sstable schema version", KR(ret), K(addr), K(arg));
     } else if (result.ret_list_.count() != arg.batch_id_arg_list_.count()) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("cnt not match", KR(ret),
@@ -387,8 +366,6 @@ int ObSchemaHistoryRecycler::get_recycle_schema_version_by_server(
         
         if (FAILEDx(fill_recycle_schema_versions(
             schema_version))) {
-          LOG_WARN("fail to fill recycle schema versions",
-                   KR(ret), K(schema_version));
         }
         LOG_INFO("[SCHEMA_RECYCLE] get recycle schema version from observer",
                  KR(ret), K(addr), K(schema_version));
@@ -409,16 +386,13 @@ int ObSchemaHistoryRecycler::get_recycle_schema_version_for_ddl(
       
       sqlclient::ObMySQLResult *result = NULL;
       if (OB_FAIL(check_inner_stat())) {
-        LOG_WARN("fail to check inner stat", KR(ret));
       } else if (OB_UNLIKELY(OB_ISNULL(sql_proxy_))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("mysql proxy ptr is null", KR(ret));
       } else if (OB_FAIL(sql.assign_fmt(
               "SELECT min(schema_version) as min_schema_version FROM %s",
               OB_ALL_DDL_TASK_STATUS_TNAME))) {
-        LOG_WARN("fail to append sql", KR(ret));
       } else if (OB_FAIL(sql_proxy_->read(res, sql.ptr()))) {
-        LOG_WARN("fail to execute sql", KR(ret), K(sql));
       } else if (OB_UNLIKELY(OB_ISNULL(result = res.get_result()))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("fail to get sql result", KR(ret));
@@ -429,8 +403,6 @@ int ObSchemaHistoryRecycler::get_recycle_schema_version_for_ddl(
           EXTRACT_INT_FIELD_MYSQL(*result, "min_schema_version", schema_version, int64_t);
           if (FAILEDx(fill_recycle_schema_versions(
                   schema_version))) {
-            LOG_WARN("fail to fill recycle schema versions",
-                KR(ret), K(schema_version));
           }
           LOG_INFO("[SCHEMA_RECYCLE] get recycle schema version from __all_ddl_task_status",
               KR(ret), K(schema_version));
@@ -453,7 +425,6 @@ int ObSchemaHistoryRecycler::get_recycle_schema_version_by_global_stat(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     if (OB_SUCC(ret)) {
       // step 1. calc by schema_history_expire_time
@@ -471,8 +442,6 @@ int ObSchemaHistoryRecycler::get_recycle_schema_version_by_global_stat(
           // use strong read
         if (OB_FAIL(schema_service_->get_schema_version_by_timestamp(
                     schema_status, expire_time, expire_schema_version))) {
-          LOG_WARN("fail to get schema version by timestamp",
-                   KR(ret), K(schema_status), K(expire_time));
         }
         
         // if get_schema_version_by_timestamp failed, do not recycle this tenant's schema history in this round
@@ -481,8 +450,6 @@ int ObSchemaHistoryRecycler::get_recycle_schema_version_by_global_stat(
         // overwrite ret, so other tenants could recycle normally
         if (OB_FAIL(fill_recycle_schema_versions(
                   expire_schema_version))) {
-          LOG_WARN("fail to fill recycle schema versions",
-                   KR(ret), K(expire_schema_version));
         }
         LOG_INFO("[SCHEMA_RECYCLE] get recycle schema version by timestamp", KR(ret),
                  K(schema_status), K(conf_expire_time), K(expire_time),
@@ -495,7 +462,6 @@ int ObSchemaHistoryRecycler::get_recycle_schema_version_by_global_stat(
       int64_t reserved_num = MIN_RESERVED_MAJOR_SCN_NUM;
 
       if (OB_FAIL(check_inner_stat())) {
-        LOG_WARN("schema history recycler is stopped", KR(ret));
       } else {
         SCN spec_frozen_scn;
         for (int64_t i = 0; OB_SUCC(ret) && i < batch_ids.count(); i++) {
@@ -507,25 +473,21 @@ int ObSchemaHistoryRecycler::get_recycle_schema_version_by_global_stat(
           int64_t specific_schema_version = OB_INVALID_VERSION;
 
           if (OB_FAIL(ObGlobalMergeTableOperator::load_global_merge_info(*sql_proxy_, global_info))) {
-            LOG_WARN("fail to get global merge info", KR(ret));
           } else if (!global_info.is_valid()) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("invalid global merge info", KR(ret), K(global_info));
           } else if (OB_FAIL(freeze_info_proxy.get_frozen_info_less_than(*sql_proxy_, global_info.last_merged_scn(),
               frozen_status_arr))) {
-            LOG_WARN("fail to get all freeze info", KR(ret), K(global_info));
           } else if (frozen_status_arr.count() < reserved_num + 1) {
             // skip, so other tenant could recycle normally
             LOG_INFO("[SCHEMA_RECYCLE] not exist enough frozen_scn to reserve", KR(ret), K(reserved_num), K(frozen_status_arr));
             specific_schema_version = OB_INVALID_VERSION;
             // fill OB_INVALID_VERSION, do not recycle this tenant's schema history in this round
             if (OB_FAIL(fill_recycle_schema_versions(specific_schema_version))) {
-              LOG_WARN("fail to fill recycle schema versions", KR(ret), K(specific_schema_version));
             }
           } else if (FALSE_IT(spec_frozen_scn = frozen_status_arr.at(reserved_num).frozen_scn_)) {
           } else if (OB_FAIL(freeze_info_proxy.get_freeze_schema_info(*sql_proxy_,
                      spec_frozen_scn, schema_version))) {
-            LOG_WARN("fail to get freeze schema info", KR(ret), K(spec_frozen_scn));
           } else if (!schema_version.is_valid()) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("schema version is invalid", KR(ret), K(spec_frozen_scn));
@@ -533,8 +495,6 @@ int ObSchemaHistoryRecycler::get_recycle_schema_version_by_global_stat(
             specific_schema_version = schema_version.schema_version_;
             if (OB_FAIL(fill_recycle_schema_versions(
                 specific_schema_version))) {
-              LOG_WARN("fail to fill recycle schema versions",
-                       KR(ret), K(specific_schema_version));
             }
             LOG_INFO("[SCHEMA_RECYCLE] get recycle schema version by major version",
                      KR(ret), K(spec_frozen_scn), K(specific_schema_version));
@@ -575,7 +535,6 @@ int ObSchemaHistoryRecycler::update_recycle_schema_versions(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < batch_ids.count(); i++) {
       
@@ -589,7 +548,6 @@ int ObSchemaHistoryRecycler::update_recycle_schema_versions(
 
       int64_t new_value = OB_INVALID_VERSION;
       if (OB_FAIL(check_stop())) {
-        LOG_WARN("schema history recycler is stopped", KR(ret), K(old_value));
       } else if (FALSE_IT(new_value = tmp_recycle_schema_version_valid_ ? tmp_recycle_schema_version_ : OB_INVALID_VERSION)) {
       } else if (new_value >= old_value) {
         // can't fallback recycle schema version
@@ -619,7 +577,6 @@ int ObSchemaHistoryRecycler::fill_recycle_schema_versions(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (!tmp_recycle_schema_version_valid_) {
     // first fill in this round: take the value
     tmp_recycle_schema_version_ = schema_version;
@@ -641,18 +598,13 @@ int ObSchemaHistoryRecycler::calc_recycle_schema_versions(
   tmp_recycle_schema_version_ = OB_INVALID_VERSION;
   tmp_recycle_schema_version_valid_ = false;
   if (OB_FAIL(check_inner_stat())) {
-    LOG_WARN("fail to check inner stat", KR(ret));
   } else if (OB_FAIL(get_recycle_schema_version_by_server(
              batch_ids))) {
-    LOG_WARN("fail to get recycle schema version by server", KR(ret));
   } else if (OB_FAIL(get_recycle_schema_version_for_ddl(batch_ids))) {
-    LOG_WARN("fail to get recycle schema version for ddl", KR(ret));
   } else if (OB_FAIL(get_recycle_schema_version_by_global_stat(
              batch_ids))) {
-    LOG_WARN("fail to get recycle schema version by global stat", KR(ret));
   } else if (OB_FAIL(update_recycle_schema_versions(
              batch_ids))) {
-    LOG_WARN("fail to update recycle schema versions", KR(ret));
   }
   return ret;
 }
@@ -673,7 +625,6 @@ int ObSchemaHistoryRecycler::try_recycle_schema_history(
     ret = OB_EAGAIN;
     LOG_WARN("fail to get recycle schema version", KR(ret), K(recycle_schema_version));
   } else if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", KR(ret));
   } else {
     int64_t start_ts = ObTimeUtility::current_time();
     LOG_INFO("[SCHEMA_RECYCLE] recycle schema history by tenant start",
@@ -805,9 +756,7 @@ int ObSchemaHistoryRecycler::try_recycle_schema_history(
                                                      OB_ALL_SYS_VARIABLE_HISTORY_TNAME,
                                                      sql_proxy_,
                                                      this);
-      if (OB_FAIL(executor.execute())) { // overwrite ret
-        LOG_WARN("fail to recycle schema history",
-                 KR(ret), "type", "system_variable", K(recycle_schema_version));
+      if (OB_FAIL(executor.execute())) {
       }
       ret = OB_SUCCESS;
     }
@@ -821,9 +770,7 @@ int ObSchemaHistoryRecycler::try_recycle_schema_history(
                                                  OB_ALL_OBJAUTH_HISTORY_TNAME,
                                                  sql_proxy_,
                                                  this);
-      if (OB_FAIL(executor.execute())) { // overwrite ret
-        LOG_WARN("fail to recycle schema history",
-                 KR(ret), "type", "object_priv", K(recycle_schema_version));
+      if (OB_FAIL(executor.execute())) {
       }
       ret = OB_SUCCESS;
     }
@@ -860,9 +807,7 @@ int ObSchemaHistoryRecycler::try_recycle_schema_history(
                                                  OB_ALL_OBJAUTH_MYSQL_HISTORY_TNAME,
                                                  sql_proxy_,
                                                  this);
-      if (OB_FAIL(executor.execute())) { // overwrite ret
-        LOG_WARN("fail to recycle schema history",
-                 KR(ret), "type", "object_priv_mysql", K(recycle_schema_version));
+      if (OB_FAIL(executor.execute())) {
       }
       ret = OB_SUCCESS;
     }
@@ -1100,13 +1045,9 @@ int ObIRecycleSchemaExecutor::execute()
   LOG_INFO("[SCHEMA_RECYCLE] recycle schema history by table start",
            K(ret), K_(table_name), K_(schema_version));
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", K(ret));
   } else if (OB_FAIL(fill_schema_history_map())) {
-    LOG_WARN("fail to fill schema history", K(ret), K_(schema_version));
   } else if (OB_FAIL(recycle_schema_history())) {
-    LOG_WARN("fail to recycle  schema history", K(ret), K_(schema_version));
   } else if (OB_FAIL(compress_schema_history())) {
-    LOG_WARN("fail to compress  schema history", K(ret), K_(schema_version));
   }
   int64_t cost_ts = ObTimeUtility::current_time() - start_ts;
   LOG_INFO("[SCHEMA_RECYCLE] recycle schema history by table end",
@@ -1159,9 +1100,7 @@ int ObRecycleSchemaExecutor::execute()
   LOG_INFO("[SCHEMA_RECYCLE] recycle schema history by table start",
            K(ret), K_(table_name), K_(schema_version));
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", K(ret));
   } else if (OB_FAIL(fill_schema_history_map())) {
-    LOG_WARN("fail to fill schema history", K(ret), K_(schema_version));
   } else if (need_recycle(mode_) && OB_FAIL(recycle_schema_history())) {
     LOG_WARN("fail to recycle  schema history", K(ret), K_(schema_version));
   } else if (need_compress(mode_) && OB_FAIL(compress_schema_history())) {
@@ -1183,7 +1122,6 @@ int ObRecycleSchemaExecutor::gen_fill_schema_history_sql(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", K(ret));
   } else if (OB_FAIL(sql.assign_fmt("select %s, schema_version, is_deleted from %s "
                                     "where schema_version <= %ld "
                                     "order by %s, schema_version "
@@ -1191,7 +1129,6 @@ int ObRecycleSchemaExecutor::gen_fill_schema_history_sql(
                                     schema_key_name_, table_name_,
                                     schema_version_, schema_key_name_, start_idx,
                                     SCHEMA_HISTORY_BATCH_FETCH_NUM))) {
-    LOG_WARN("fail to assign sql", K(ret), K_(schema_version));
   }
   return ret;
 }
@@ -1203,7 +1140,6 @@ int ObRecycleSchemaExecutor::retrieve_schema_history(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", K(ret));
   } else {
     EXTRACT_INT_FIELD_MYSQL(result, schema_key_name_, cur_key.first_schema_id_, int64_t);
     EXTRACT_INT_FIELD_MYSQL(result, "schema_version", cur_value.max_schema_version_, int64_t);
@@ -1438,26 +1374,21 @@ int ObRecycleSchemaExecutor::gen_batch_recycle_schema_history_sql(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", K(ret));
   } else if (dropped_schema_keys.count() <= 0) {
     // skip
   } else {
     if (OB_FAIL(sql.assign_fmt("delete from %s where (%s) in ( ",
                                 table_name_, schema_key_name_))) {
-      LOG_WARN("fail to assign sql", K(ret), K_(schema_version));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < dropped_schema_keys.count(); i++) {
       const ObFirstSchemaKey &key = dropped_schema_keys.at(i);
       if (OB_FAIL(check_stop())) {
-        LOG_WARN("schema history recycler is stopped", K(ret));
       } else if (OB_FAIL(sql.append_fmt("%s (%ld)", 0 == i ? "" : ",",
                                         key.first_schema_id_))) {
-        LOG_WARN("fail to append fmt", K(ret), K(key));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(sql.append_fmt(") and schema_version <= %ld", schema_version_))) {
-      LOG_WARN("fail to append fmt", K(ret), K_(schema_version));
     }
   }
   return ret;
@@ -1496,27 +1427,22 @@ int ObRecycleSchemaExecutor::gen_batch_compress_schema_history_sql(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", K(ret));
   } else if (compress_schema_infos.count() <= 0) {
     // skip
   } else {
     if (OB_FAIL(sql.assign_fmt("delete from %s where 0 = 0 and ( ",
                                 table_name_))) {
-      LOG_WARN("fail to assign sql", K(ret), K_(schema_version));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < compress_schema_infos.count(); i++) {
       if (OB_FAIL(check_stop())) {
-        LOG_WARN("schema history recycler is stopped", K(ret));
       } else if (OB_FAIL(sql.append_fmt("%s (%s = %ld and schema_version < %ld)",
                                         0 == i ? "" : "or", schema_key_name_,
                                         compress_schema_infos.at(i).key_.first_schema_id_,
                                         compress_schema_infos.at(i).max_schema_version_))) {
-        LOG_WARN("fail to append fmt", K(ret), "schema_info", compress_schema_infos.at(i));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(sql.append_fmt(")"))) {
-      LOG_WARN("fail to append fmt", K(ret), K_(schema_version));
     }
   }
   return ret;
@@ -1666,7 +1592,6 @@ int ObSecondRecycleSchemaExecutor::gen_fill_schema_history_sql(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", K(ret));
   } else if (OB_FAIL(sql.assign_fmt("select %s, %s, schema_version, is_deleted from %s "
                                     "where schema_version <= %ld "
                                     "order by %s, %s, schema_version "
@@ -1675,7 +1600,6 @@ int ObSecondRecycleSchemaExecutor::gen_fill_schema_history_sql(
                                     table_name_, schema_version_,
                                     schema_key_name_, second_schema_key_name_,
                                     start_idx, SCHEMA_HISTORY_BATCH_FETCH_NUM))) {
-    LOG_WARN("fail to assign sql", K(ret), K_(schema_version));
   }
   return ret;
 }
@@ -1687,7 +1611,6 @@ int ObSecondRecycleSchemaExecutor::retrieve_schema_history(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", K(ret));
   } else {
     EXTRACT_INT_FIELD_MYSQL(result, schema_key_name_, cur_key.first_schema_id_, int64_t);
     EXTRACT_INT_FIELD_MYSQL(result, second_schema_key_name_,
@@ -1704,27 +1627,22 @@ int ObSecondRecycleSchemaExecutor::gen_batch_recycle_schema_history_sql(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", K(ret));
   } else if (dropped_schema_keys.count() <= 0) {
     // skip
   } else {
     if (OB_FAIL(sql.assign_fmt("delete from %s where (%s, %s) in ( ",
                                 table_name_, schema_key_name_, second_schema_key_name_))) {
-      LOG_WARN("fail to assign sql", K(ret), K_(schema_version));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < dropped_schema_keys.count(); i++) {
       const ObSecondSchemaKey &key = dropped_schema_keys.at(i);
       if (OB_FAIL(check_stop())) {
-        LOG_WARN("schema history recycler is stopped", K(ret));
       } else if (OB_FAIL(sql.append_fmt("%s (%ld, %ld)", 0 == i ? "" : ",",
                                         key.first_schema_id_,
                                         key.second_schema_id_))) {
-        LOG_WARN("fail to append fmt", K(ret), K(key));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(sql.append_fmt(") and schema_version <= %ld", schema_version_))) {
-      LOG_WARN("fail to append fmt", K(ret), K_(schema_version));
     }
   }
   return ret;
@@ -1781,7 +1699,6 @@ int ObThirdRecycleSchemaExecutor::gen_fill_schema_history_sql(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", K(ret));
   } else if (OB_FAIL(sql.assign_fmt("select %s, %s, %s, schema_version, is_deleted from %s "
                                     "where schema_version <= %ld "
                                     "order by %s, %s, %s, schema_version "
@@ -1791,7 +1708,6 @@ int ObThirdRecycleSchemaExecutor::gen_fill_schema_history_sql(
                                     schema_version_, schema_key_name_,
                                     second_schema_key_name_, third_schema_key_name_,
                                     start_idx, SCHEMA_HISTORY_BATCH_FETCH_NUM))) {
-    LOG_WARN("fail to assign sql", K(ret), K_(schema_version));
   }
   return ret;
 }
@@ -1803,7 +1719,6 @@ int ObThirdRecycleSchemaExecutor::retrieve_schema_history(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", K(ret));
   } else {
     EXTRACT_INT_FIELD_MYSQL(result, schema_key_name_, cur_key.first_schema_id_, int64_t);
     EXTRACT_INT_FIELD_MYSQL(result, second_schema_key_name_,
@@ -1822,29 +1737,24 @@ int ObThirdRecycleSchemaExecutor::gen_batch_recycle_schema_history_sql(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", K(ret));
   } else if (dropped_schema_keys.count() <= 0) {
     // skip
   } else {
     if (OB_FAIL(sql.assign_fmt("delete from %s where (%s, %s, %s) in ( ",
                                 table_name_, schema_key_name_, second_schema_key_name_,
                                 third_schema_key_name_))) {
-      LOG_WARN("fail to assign sql", K(ret), K_(schema_version));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < dropped_schema_keys.count(); i++) {
       const ObThirdSchemaKey &key = dropped_schema_keys.at(i);
       if (OB_FAIL(check_stop())) {
-        LOG_WARN("schema history recycler is stopped", K(ret));
       } else if (OB_FAIL(sql.append_fmt("%s (%ld, %ld, %ld)", 0 == i ? "" : ",",
                                         key.first_schema_id_,
                                         key.second_schema_id_,
                                         key.third_schema_id_))) {
-        LOG_WARN("fail to append fmt", K(ret), K(key));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(sql.append_fmt(") and schema_version <= %ld", schema_version_))) {
-      LOG_WARN("fail to append fmt", K(ret), K_(schema_version));
     }
   }
   return ret;
@@ -1953,14 +1863,12 @@ int ObSystemVariableRecycleSchemaExecutor::gen_fill_schema_history_sql(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", K(ret));
   } else if (OB_FAIL(sql.assign_fmt("select name, schema_version, is_deleted from %s "
                                     "where schema_version <= %ld "
                                     "order by name, schema_version "
                                     "limit %ld, %ld",
                                     table_name_, schema_version_,
                                     start_idx, SCHEMA_HISTORY_BATCH_FETCH_NUM))) {
-    LOG_WARN("fail to assign sql", K(ret), K_(schema_version));
   }
   return ret;
 }
@@ -1972,7 +1880,6 @@ int ObSystemVariableRecycleSchemaExecutor::retrieve_schema_history(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", K(ret));
   } else {
     EXTRACT_VARCHAR_FIELD_MYSQL(result, "name", cur_key.name_);
     EXTRACT_INT_FIELD_MYSQL(result, "schema_version", cur_value.max_schema_version_, int64_t);
@@ -1992,7 +1899,6 @@ int ObSystemVariableRecycleSchemaExecutor::fill_schema_history_key(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ob_write_string(allocator_, cur_key.name_, key.name_))) {
-    LOG_WARN("fail to write string", K(ret), K(cur_key));
   }
   return ret;
 }
@@ -2003,29 +1909,24 @@ int ObSystemVariableRecycleSchemaExecutor::gen_batch_compress_schema_history_sql
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", K(ret));
   } else if (compress_schema_infos.count() <= 0) {
     // skip
   } else {
     if (OB_FAIL(sql.assign_fmt("delete from %s where 0 = 0 and ( ",
                                 table_name_))) {
-      LOG_WARN("fail to assign sql", K(ret), K_(schema_version));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < compress_schema_infos.count(); i++) {
       const ObSystemVariableCompressSchemaInfo &info = compress_schema_infos.at(i);
       if (OB_FAIL(check_stop())) {
-        LOG_WARN("schema history recycler is stopped", K(ret));
       } else if (OB_FAIL(sql.append_fmt("%s (name = '%.*s' and schema_version < %ld)",
                                         0 == i ? "" : "or",
                                         info.key_.name_.length(),
                                         info.key_.name_.ptr(),
                                         info.max_schema_version_))) {
-        LOG_WARN("fail to append fmt", K(ret), K(info));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(sql.append_fmt(")"))) {
-      LOG_WARN("fail to append fmt", K(ret), K_(schema_version));
     }
   }
   return ret;
@@ -2165,7 +2066,6 @@ int ObObjectPrivRecycleSchemaExecutor::gen_fill_schema_history_sql(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", KR(ret));
   } else if (OB_FAIL(sql.assign_fmt(
     "select obj_id, objtype, col_id, grantor_id, grantee_id, priv_id, schema_version, is_deleted "
     "from %s where schema_version <= %ld "
@@ -2173,7 +2073,6 @@ int ObObjectPrivRecycleSchemaExecutor::gen_fill_schema_history_sql(
     "limit %ld, %ld",
     table_name_, schema_version_,
     start_idx, SCHEMA_HISTORY_BATCH_FETCH_NUM))) {
-    LOG_WARN("fail to assign sql", KR(ret), K_(schema_version));
   }
   return ret;
 }
@@ -2185,7 +2084,6 @@ int ObObjectPrivRecycleSchemaExecutor::retrieve_schema_history(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", KR(ret));
   } else {
     EXTRACT_INT_FIELD_MYSQL(result, "obj_id",         cur_key.obj_id_,               int64_t);
     EXTRACT_INT_FIELD_MYSQL(result, "objtype",        cur_key.obj_type_,             int64_t);
@@ -2205,7 +2103,6 @@ int ObObjectPrivRecycleSchemaExecutor::gen_batch_recycle_schema_history_sql(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", KR(ret));
   } else if (dropped_schema_keys.count() <= 0) {
     // skip
   } else {
@@ -2213,12 +2110,10 @@ int ObObjectPrivRecycleSchemaExecutor::gen_batch_recycle_schema_history_sql(
         " delete from %s where schema_version <= %ld"
         " and (obj_id, objtype, col_id, grantor_id, grantee_id, priv_id) in ( ",
          table_name_, schema_version_))) {
-      LOG_WARN("fail to assign sql", KR(ret), K_(schema_version));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < dropped_schema_keys.count(); i++) {
       const ObObjectPrivSchemaKey &key = dropped_schema_keys.at(i);
       if (OB_FAIL(check_stop())) {
-        LOG_WARN("schema history recycler is stopped", KR(ret));
       } else if (OB_FAIL(sql.append_fmt("%s (%ld, %ld, %ld, %ld, %ld, %ld)", 0 == i ? "" : ",",
                                         key.obj_id_,
                                         key.obj_type_,
@@ -2226,12 +2121,10 @@ int ObObjectPrivRecycleSchemaExecutor::gen_batch_recycle_schema_history_sql(
                                         key.grantor_id_,
                                         key.grantee_id_,
                                         key.priv_id_))) {
-        LOG_WARN("fail to append fmt", KR(ret), K(key));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(sql.append_fmt(")"))) {
-      LOG_WARN("fail to append fmt", KR(ret), K_(schema_version));
     }
   }
   return ret;
@@ -2243,17 +2136,14 @@ int ObObjectPrivRecycleSchemaExecutor::gen_batch_compress_schema_history_sql(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_stop())) {
-    LOG_WARN("schema history recycler is stopped", KR(ret));
   } else if (compress_schema_infos.count() <= 0) {
     // skip
   } else {
     if (OB_FAIL(sql.assign_fmt("delete from %s where 0 = 0 and ( ",
                                 table_name_))) {
-      LOG_WARN("fail to assign sql", KR(ret), K_(schema_version));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < compress_schema_infos.count(); i++) {
       if (OB_FAIL(check_stop())) {
-        LOG_WARN("schema history recycler is stopped", KR(ret));
       } else if (OB_FAIL(sql.append_fmt("%s (obj_id  = %ld "
                                         "and objtype = %ld "
                                         "and col_id  = %ld "
@@ -2269,12 +2159,10 @@ int ObObjectPrivRecycleSchemaExecutor::gen_batch_compress_schema_history_sql(
                                         compress_schema_infos.at(i).key_.grantee_id_,
                                         compress_schema_infos.at(i).key_.priv_id_,
                                         compress_schema_infos.at(i).max_schema_version_))) {
-        LOG_WARN("fail to append fmt", KR(ret), "schema_info", compress_schema_infos.at(i));
       }
     }
     if (OB_FAIL(ret)) {
     } else if (OB_FAIL(sql.append_fmt(")"))) {
-      LOG_WARN("fail to append fmt", KR(ret), K_(schema_version));
     }
   }
   return ret;

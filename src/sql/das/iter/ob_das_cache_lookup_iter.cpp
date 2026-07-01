@@ -41,7 +41,6 @@ int ObDASCacheLookupIter::IndexProjRowStore::init(common::ObIAllocator &allocato
     LOG_WARN("failed to allocate memory", K(max_size), K(ret));
   } else if (FALSE_IT(index_scan_proj_exprs_.set_allocator(&allocator))) {
   } else if (OB_FAIL(index_scan_proj_exprs_.assign(exprs))) {
-    LOG_WARN("failed to assign index scan proj exprs", K(max_size), K(ret));
   } else {
     eval_ctx_ = eval_ctx;
     max_size_ = max_size;
@@ -70,11 +69,9 @@ int ObDASCacheLookupIter::IndexProjRowStore::save(bool is_vectorized, int64_t si
       for (int64_t i = 0; OB_SUCC(ret) && i < size; i++) {
         batch_info_guard.set_batch_idx(i);
         if (OB_FAIL(store_rows_[i + saved_size_].save_store_row(index_scan_proj_exprs_, *eval_ctx_))) {
-          LOG_WARN("cache lookup iter failed to store rows", K(ret));
         }
       }
     } else if (OB_FAIL(store_rows_[saved_size_].save_store_row(index_scan_proj_exprs_, *eval_ctx_))) {
-      LOG_WARN("cache lookup iter failed to store rows", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -101,7 +98,6 @@ int ObDASCacheLookupIter::IndexProjRowStore::to_expr(int64_t size)
     for (int64_t i = 0; OB_SUCC(ret) && i < size; i++) {
       batch_info_guard.set_batch_idx(i);
       if (OB_FAIL(store_rows_[cur_idx_].store_row_->to_expr<true>(index_scan_proj_exprs_, *eval_ctx_))) {
-        LOG_WARN("cache lookup iter failed to convert store row to expr", K(ret));
       } else {
         cur_idx_++;
       }
@@ -145,7 +141,6 @@ int ObDASCacheLookupIter::inner_init(ObDASIterParam &param)
   LOG_DEBUG("simulate lookup row batch count", K(simulate_batch_row_cnt), K(default_batch_row_count));
 
   if (OB_FAIL(ObDASLocalLookupIter::inner_init(param))) {
-    LOG_WARN("failed to init das lookup iter", K(ret));
   } else if (lookup_param.index_scan_proj_exprs_.count() > 0 &&
              OB_FAIL(index_proj_rows_.init(store_allocator_,
                                            lookup_param.index_scan_proj_exprs_, 
@@ -161,7 +156,6 @@ int ObDASCacheLookupIter::inner_reuse()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDASLocalLookupIter::inner_reuse())) {
-    LOG_WARN("failed to reuse das lookup iter", K(ret));
   } else {
     index_proj_rows_.reuse();
   }
@@ -172,7 +166,6 @@ int ObDASCacheLookupIter::inner_release()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObDASLocalLookupIter::inner_release())) {
-    LOG_WARN("failed to release das lookup iter", K(ret));
   } else {
     index_proj_rows_.reset();
     store_allocator_.reset();
@@ -207,7 +200,6 @@ int ObDASCacheLookupIter::inner_get_next_row()
               ret = OB_SUCCESS;
             }
           } else if (OB_FAIL(add_rowkey())) {
-            LOG_WARN("failed to add row key", K(ret));
           } else if (need_index_proj && OB_FAIL(index_proj_rows_.save(false, 1))) { // if need to project, save it
               LOG_WARN("save index proj rows failed", K(ret));
           } else {
@@ -227,7 +219,6 @@ int ObDASCacheLookupIter::inner_get_next_row()
 
       case DO_LOOKUP: {
         if (OB_FAIL(do_index_lookup())) {
-          LOG_WARN("failed to do index lookup", K(ret));
         } else {
           state_ = OUTPUT_ROWS;
         }
@@ -240,7 +231,6 @@ int ObDASCacheLookupIter::inner_get_next_row()
           if (OB_LIKELY(OB_ITER_END == ret)) {
             ret = OB_SUCCESS;
             if (OB_FAIL(check_index_lookup())) {
-              LOG_WARN("failed to check table lookup", K(ret));
             } else {
               state_ = INDEX_SCAN;
             }
@@ -300,7 +290,6 @@ int ObDASCacheLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
           }
           if (OB_SUCC(ret) && storage_count > 0) {
             if (OB_FAIL(add_rowkeys(storage_count))) {
-              LOG_WARN("failed to add row keys", K(ret));
             } else if (need_index_proj && OB_FAIL(index_proj_rows_.save(true, storage_count))) { // if need to project, save it
               LOG_WARN("save index proj rows failed", K(ret));
             } else {
@@ -321,7 +310,6 @@ int ObDASCacheLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
 
       case DO_LOOKUP: {
         if (OB_FAIL(do_index_lookup())) {
-          LOG_WARN("failed to do index lookup", K(ret));
         } else {
           state_ = OUTPUT_ROWS;
         }
@@ -339,7 +327,6 @@ int ObDASCacheLookupIter::inner_get_next_rows(int64_t &count, int64_t capacity)
               get_next_rows = true;
             } else {
               if (OB_FAIL(check_index_lookup())) {
-                LOG_WARN("failed to check table lookup", K(ret));
               } else {
                 state_ = INDEX_SCAN;
               }

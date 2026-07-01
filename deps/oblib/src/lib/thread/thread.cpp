@@ -140,7 +140,6 @@ int Thread::start()
           sched_yield();
         }
         if (OB_FAIL(create_ret_)) {
-          LOG_ERROR("thread create failed", K(create_ret_));
         }
       }
     } else {
@@ -390,7 +389,6 @@ void* Thread::__th_start(void *arg)
     ObPageManager pm;
     ret = pm.set_tenant_ctx(common::ObCtxIds::GLIBC);
     if (OB_FAIL(ret)) {
-      LOG_ERROR("set tenant ctx failed", K(ret));
     } else {
       ObPageManager::set_thread_local_instance(pm);
       MemoryContext *mem_context = GET_TSI0(MemoryContext);
@@ -400,7 +398,6 @@ void* Thread::__th_start(void *arg)
       } else if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(*mem_context,
                          ContextParam().set_properties(RETURN_MALLOC_DEFAULT)
                                        .set_label("ThreadRoot")))) {
-        LOG_ERROR("create memory context failed", K(ret));
       } else {
         WITH_CONTEXT(*mem_context) {
           try {

@@ -87,11 +87,9 @@ int ObTableLoadMemCompactCtx::init()
              KP(datum_utils_), KP(dml_row_handler_), K(max_round_ctx_cnt_), K(compact_chunk_cnt_),
              K(range_cnt_));
   } else if (OB_FAIL(chunk_allocator_.init("TLD_MCChunk"))) {
-    LOG_WARN("fail to init chunk allocator", KR(ret));
   } else if (OB_FAIL(ObDirectLoadMemContext::init_enc_params(
                *column_descs_, table_data_desc_.rowkey_column_num_,
                store_ctx_->ctx_->param_.dup_action_, enc_params_))) {
-    LOG_WARN("fail to init enc params", KR(ret));
   } else {
     is_inited_ = true;
   }
@@ -110,14 +108,12 @@ int ObTableLoadMemCompactCtx::acquire_chunk(ChunkType *&chunk)
     if (ObTableLoadExeMode::MAX_TYPE == store_ctx_->ctx_->param_.exe_mode_) {
       sort_memory = store_ctx_->mem_chunk_size_;
     } else if (OB_FAIL(ObTableLoadService::get_sort_memory(sort_memory))) {
-      LOG_WARN("fail to get sort memory", KR(ret));
     }
     if (OB_SUCC(ret)) {
       if (OB_ISNULL(chunk = chunk_allocator_.alloc())) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to alloc chunk", KR(ret));
       } else if (OB_FAIL(chunk->init(sort_memory))) {
-        LOG_WARN("fail to init chunk", KR(ret));
       }
     }
     if (OB_FAIL(ret)) {
@@ -158,9 +154,7 @@ int ObTableLoadMemCompactCtx::make_round_ctx(ObTableLoadMemCompactRoundCtxHandle
       LOG_WARN("unexpected round ctx full", KR(ret));
     } else {
       if (OB_FAIL(ObTableLoadMemCompactRoundCtxHandle::make_handle(round_ctx, this))) {
-        LOG_WARN("fail to make round ctx handle", KR(ret));
       } else if (OB_FAIL(round_ctx->init())) {
-        LOG_WARN("fail to init ctx", KR(ret));
       }
     }
   }
@@ -180,7 +174,6 @@ int ObTableLoadMemCompactCtx::add_result_table(const ObDirectLoadTableHandle &ta
   } else {
     ObMutexGuard guard(mutex_);
     if (OB_FAIL(result_tables_handle_.add(table_handle))) {
-      LOG_WARN("fail to add table", KR(ret));
     }
   }
   return ret;
@@ -215,7 +208,6 @@ int ObTableLoadMemCompactRoundCtx::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("ObTableLoadMemCompactRoundCtx init twice", KR(ret), KP(this));
   } else if (OB_FAIL(table_handles_.prepare_allocate(ctx_->range_cnt_))) {
-    LOG_WARN("fail to prepare allocate", KR(ret));
   } else {
     is_inited_ = true;
   }
@@ -234,7 +226,6 @@ int ObTableLoadMemCompactRoundCtx::add_chunk(ChunkType *chunk)
   } else {
     ObMutexGuard guard(mutex_);
     if (OB_FAIL(chunks_.push_back(chunk))) {
-      LOG_WARN("fail to push back", KR(ret));
     }
   }
   return ret;
@@ -250,7 +241,6 @@ int ObTableLoadMemCompactRoundCtx::add_range(const RangeType &range)
     // 只有一个sampe_task会添加range, 可以不加锁
     ObMutexGuard guard(mutex_);
     if (OB_FAIL(ranges_.push_back(range))) {
-      LOG_WARN("fail to push back", KR(ret));
     }
   }
   return ret;
@@ -331,7 +321,6 @@ int ObTableLoadMemCompactSampleTask::process()
       const int row_idx = ObRandom::rand(0, chunk->get_size() - 1);
       ConstRowType *row = chunk->get_item(row_idx);
       if (OB_FAIL(sample_rows.push_back(row))) {
-        LOG_WARN("fail to push row", KR(ret));
       }
     }
 
@@ -339,7 +328,6 @@ int ObTableLoadMemCompactSampleTask::process()
     if (OB_SUCC(ret)) {
       CompareType compare;
       if (OB_FAIL(compare.init(*ctx_->datum_utils_, store_ctx_->ctx_->param_.dup_action_))) {
-        LOG_WARN("fail to init compare", KR(ret));
       } else {
         lib::ob_sort(sample_rows.begin(), sample_rows.end(), compare);
       }
@@ -353,13 +341,11 @@ int ObTableLoadMemCompactSampleTask::process()
       if (i != range_cnt) {
         ConstRowType *row = sample_rows.at(i * step);
         if (OB_FAIL(round_ctx_->add_range(RangeType(last_row, row)))) {
-          LOG_WARN("fail to add range", KR(ret));
         } else {
           last_row = row;
         }
       } else {
         if (OB_FAIL(round_ctx_->add_range(RangeType(last_row, nullptr)))) {
-          LOG_WARN("fail to add range", KR(ret));
         } else {
           last_row = nullptr;
         }
@@ -391,7 +377,6 @@ int ObTableLoadMemCompactDumpTask::generate_next_task(ObITask *&next_task)
   } else {
     ObTableLoadMemCompactDumpTask *task = nullptr;
     if (OB_FAIL(dag_->alloc_task(task, this, next_range_idx))) {
-      LOG_WARN("failed to alloc task", KR(ret));
     } else {
       next_task = task;
     }
@@ -416,7 +401,6 @@ int ObTableLoadMemCompactDumpTask::process()
     ObDirectLoadDatumRow datum_row;
 
     if (OB_FAIL(datum_row.init(ctx_->table_data_desc_.column_count_))) {
-      LOG_WARN("fail to init datum row", KR(ret));
     }
 
     // init merger
@@ -427,27 +411,22 @@ int ObTableLoadMemCompactDumpTask::process()
     CompareType compare1; // 不带上seq_no的排序
     if (OB_SUCC(ret)) {
       if (OB_FAIL(compare.init(*ctx_->datum_utils_, store_ctx_->ctx_->param_.dup_action_))) {
-        LOG_WARN("fail to init compare", KR(ret));
       } else if (OB_FAIL(compare1.init(*ctx_->datum_utils_, store_ctx_->ctx_->param_.dup_action_,
                                        true))) {
-        LOG_WARN("fail to init compare1", KR(ret));
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < chunks.count(); ++i) {
         ChunkType *chunk = chunks.at(i);
         ChunkIteratorType iter = chunk->scan(range.start_, range.end_, compare1);
         if (OB_FAIL(chunk_iters.push_back(iter))) {
-          LOG_WARN("fail to push back", KR(ret));
         }
       }
       for (int64_t i = 0; OB_SUCC(ret) && i < chunk_iters.size(); ++i) {
         ChunkIteratorType &chunk_iter = chunk_iters.at(i);
         if (OB_FAIL(iters.push_back(&chunk_iter))) {
-          LOG_WARN("fail to push back", KR(ret));
         }
       }
       if (OB_SUCC(ret)) {
         if (OB_FAIL(merger.init(iters, &compare))) {
-          LOG_WARN("fail to init merger", KR(ret));
         }
       }
     }
@@ -462,13 +441,11 @@ int ObTableLoadMemCompactDumpTask::process()
     sstable_build_param.extra_buf_size_ = 4096;
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sstable_builder.init(sstable_build_param))) {
-        LOG_WARN("fail to init sstable builder", KR(ret));
       }
     }
 
     while (OB_SUCC(ret)) {
       if (OB_FAIL(dag_->check_status())) {
-        LOG_WARN("fail to check status", KR(ret));
       } else if (OB_FAIL(merger.get_next_item(row))) {
         if (OB_UNLIKELY(OB_ITER_END != ret)) {
           LOG_WARN("fail to get next row");
@@ -477,11 +454,9 @@ int ObTableLoadMemCompactDumpTask::process()
           break;
         }
       } else if (OB_FAIL(row->to_datum_row(datum_row))) {
-        LOG_WARN("fail to transfer dataum row", KR(ret));
       } else if (OB_FAIL(sstable_builder.append_row(row->tablet_id_, datum_row))) {
         if (OB_LIKELY(OB_ERR_PRIMARY_KEY_DUPLICATE == ret)) {
           if (OB_FAIL(ctx_->dml_row_handler_->handle_update_row(row->tablet_id_, datum_row))) {
-            LOG_WARN("fail to handle update row", KR(ret), K(datum_row));
           }
         } else {
           LOG_WARN("fail to append row", KR(ret), K(datum_row));
@@ -494,11 +469,9 @@ int ObTableLoadMemCompactDumpTask::process()
     ObDirectLoadTableHandle table_handle;
     if (OB_SUCC(ret)) {
       if (OB_FAIL(sstable_builder.close())) {
-        LOG_WARN("fail to close sstable builder", KR(ret));
       } else if (sstable_builder.get_row_count() > 0) {
         ObDirectLoadTableHandleArray table_handle_array;
         if (OB_FAIL(sstable_builder.get_tables(table_handle_array, store_ctx_->table_mgr_))) {
-          LOG_WARN("fail to get tables", KR(ret));
         } else if (OB_UNLIKELY(1 != table_handle_array.count())) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected table count not equal 1", KR(ret));
@@ -509,7 +482,6 @@ int ObTableLoadMemCompactDumpTask::process()
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(round_ctx_->add_table(range_idx_, table_handle))) {
-        LOG_WARN("fail to add table", KR(ret));
       }
     }
   }
@@ -538,24 +510,19 @@ int ObTableLoadMemCompactCompactTask::process()
     param.table_data_desc_ = ctx_->table_data_desc_;
     param.datum_utils_ = ctx_->datum_utils_;
     if (OB_FAIL(sstable_compactor.init(param))) {
-      LOG_WARN("fail to init compactor", KR(ret));
     }
     for (int64_t i = 0; OB_SUCC(ret) && i < table_handles.count(); ++i) {
       const ObDirectLoadTableHandle &table_handle = table_handles.at(i);
       if (!table_handle.is_valid()) {
       } else if (OB_FAIL(sstable_compactor.add_table(table_handle))) {
-        LOG_WARN("fail to add table", KR(ret));
       }
     }
     if (OB_SUCC(ret)) {
       ObDirectLoadTableHandle result_table_handle;
       if (OB_FAIL(sstable_compactor.compact())) {
-        LOG_WARN("fail to compact sstables", KR(ret));
       } else if (OB_FAIL(
                    sstable_compactor.get_table(result_table_handle, store_ctx_->table_mgr_))) {
-        LOG_WARN("fail to get table", KR(ret));
       } else if (OB_FAIL(ctx_->add_result_table(result_table_handle))) {
-        LOG_WARN("fail to add result table", KR(ret));
       }
     }
   }

@@ -51,7 +51,6 @@ int ObMPStmtFetch::before_process()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObMPBase::before_process())) {
-    LOG_WARN("fail to call before process", K(ret));
   } else if ((OB_ISNULL(req_))) {
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("request should not be null", K(ret));
@@ -89,7 +88,6 @@ int ObMPStmtFetch::set_session_active(ObSQLSessionInfo &session) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(session.set_session_state(QUERY_ACTIVE))) {
-    LOG_WARN("fail to set session state", K(ret));
   } else {
     session.set_query_start_time(get_receive_timestamp());
     session.set_mysql_cmd(obmysql::COM_STMT_FETCH);
@@ -134,7 +132,6 @@ int ObMPStmtFetch::do_process(ObSQLSessionInfo &session,
       } else if (FALSE_IT(execution_id = gctx_.sql_engine_->get_execution_id())) {
         //nothing to do
       } else if (OB_FAIL(set_session_active(session))) {
-        LOG_WARN("fail to set session active", K(ret));
       } else {
         exec_start_timestamp_ = ObTimeUtility::current_time();
       }
@@ -215,7 +212,6 @@ int ObMPStmtFetch::response_query_header(ObSQLSessionInfo &session,
   } else if (OB_FAIL(drv.response_query_header(*fields,
                                                has_ok_packet(),
                                                false))) {
-    LOG_WARN("fail to get autocommit", K(ret));
   }
   return ret;
 }
@@ -242,7 +238,6 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
   row_num = 0;
 
   if (OB_FAIL(session.get_autocommit(ac))) {
-    LOG_WARN("fail to get autocommit", K(ret));
   } else {
     CK (OB_NOT_NULL(cursor.get_cursor_entity()));
     if (OB_SUCC(ret)) {
@@ -333,12 +328,10 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
                       cur = max_count - 1;
                       if (cursor.get_last_row().is_invalid()) {
                         if (OB_FAIL(spi_cursor->row_store_.get_row(row_id, row))){
-                          LOG_WARN("get first row fail.", K(ret), K(cursor.get_id()));
                         } else {
                           if (OB_FAIL(ob_write_row(cursor.get_cursor_entity()->get_arena_allocator(),
                                                     *row,
                                                     cursor.get_last_row()))){
-                            LOG_WARN("Fail to get last row", K(ret), K(cursor.get_id()));
                           }
                         }
                       } else {
@@ -390,7 +383,6 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
           if (OB_FAIL(ret)) {
             // do nothing
           } else if (OB_FAIL(gctx_.schema_service_->get_tenant_schema_guard(schema_guard))) {
-            LOG_WARN("get tenant schema guard failed ", K(ret));
           } else if (!need_fetch && NULL != row) {
             if (has_long_data()) {
               OZ (response_row(session, *(const_cast<common::ObNewRow*>(row)), 
@@ -399,7 +391,6 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
               OZ (response_row(session, *(const_cast<common::ObNewRow*>(row)), fields, cursor.is_packed(), NULL, &schema_guard));
             }
             if (OB_FAIL(ret)) {
-              LOG_WARN("response row fail.", K(ret));
             }
           }
           ObPLExecCtx pl_ctx(cursor.get_allocator(), exec_ctx, &params,
@@ -446,7 +437,6 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
         }
       }
       if (OB_FAIL(ret)) {
-        LOG_WARN("response query result fail", K(ret));
       } else {
         process_ok = true;
         OMPKEOF eofp;
@@ -481,7 +471,6 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
         // in multi-stmt, send extra ok packet in the last stmt(has no more result)
         if (OB_SUCC(ret)) {
           if (OB_FAIL(packet_sender_.alloc_ezbuf())) {
-            LOG_WARN("failed to alloc easy buf", K(ret));
           } else if (!has_ok_packet() && OB_FAIL(update_last_pkt_pos())) {
             LOG_WARN("failed to update last packet pos", K(ret));
           }
@@ -506,11 +495,9 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
             ok_param.is_partition_hit_ = session.partition_hit().get_bool();
             ok_param.has_more_result_ = false;
             if (OB_FAIL(send_ok_packet(session, ok_param, &eofp))) {
-              LOG_WARN("fail to send ok packt", K(ok_param), K(ret));
             }
           } else {
             if (OB_FAIL(response_packet(eofp, &session))) {
-              LOG_WARN("response packet fail", K(ret));
             }
           }
         }
@@ -523,7 +510,6 @@ int ObMPStmtFetch::response_result(pl::ObPLCursorInfo &cursor,
     int sret = OB_SUCCESS;
     bool is_partition_hit = session.partition_hit().get_bool();
     if (OB_SUCCESS != (sret = send_error_packet(ret, NULL, is_partition_hit))) {
-      LOG_WARN("send error packet fail", K(sret), K(ret));
     }
   }
   return ret;
@@ -540,11 +526,9 @@ int ObMPStmtFetch::process_fetch_stmt(ObSQLSessionInfo &session,
   // obproxy may use 'SET @@last_schema_version = xxxx' to set newest schema,
   // observer will force refresh schema if local_schema_version < last_schema_version;
   if (OB_FAIL(check_and_refresh_schema())) {
-    LOG_WARN("failed to check_and_refresh_schema", K(ret));
   } else {
     //Each execution of different SQL requires an update
     if (OB_FAIL(update_transmission_checksum_flag(session))) {
-      LOG_WARN("update transmisson checksum flag failed", K(ret));
     } else {
       // do the real work
       ret = do_process(session, need_response_error);
@@ -557,7 +541,6 @@ int ObMPStmtFetch::process_fetch_stmt(ObSQLSessionInfo &session,
     int tmp_ret = OB_SUCCESS;
     tmp_ret = GDS.collect_result_actions(session.get_debug_sync_actions());
     if (OB_UNLIKELY(OB_SUCCESS != tmp_ret)) {
-      LOG_WARN("set thread local debug sync actions to session actions failed", K(tmp_ret));
     }
   }
   //For the handling of tracelog, it does not affect the normal logic, and the error code does not need to be assigned to ret
@@ -592,12 +575,10 @@ int ObMPStmtFetch::process()
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("invalid tenant", K_(cursor_id), K(conn->tenant_), K(ret));
   } else if (OB_FAIL(get_session(sess))) {
-    LOG_WARN("get session fail", K_(cursor_id), K(ret));
   } else if (OB_ISNULL(sess)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("session is NULL or invalid", K_(cursor_id), K(sess), K(ret));
   } else if (OB_FAIL(update_transmission_checksum_flag(*sess))) {
-    LOG_WARN("update transmisson checksum flag failed", K(ret));
   } else {
     ObSQLSessionInfo &session = *sess;
     int64_t tenant_version = 0;
@@ -615,7 +596,6 @@ int ObMPStmtFetch::process()
       ret = OB_ERR_UNEXPECTED;
       LOG_ERROR("invalid session", K_(cursor_id), K(ret));
     } else if (OB_FAIL(process_kill_client_session(session))) {
-      LOG_WARN("client session has been killed", K(ret));
     } else if (OB_UNLIKELY(session.is_zombie())) {
       //session has been killed some moment ago
       ret = OB_ERR_SESSION_INTERRUPTED;
@@ -626,15 +606,11 @@ int ObMPStmtFetch::process()
       ret = OB_ERR_NET_PACKET_TOO_LARGE;
       LOG_WARN("packet too large than allowed for the session", K_(cursor_id), K(ret));
     } else if (OB_FAIL(session.get_query_timeout(query_timeout))) {
-      LOG_WARN("fail to get query timeout", K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
                 tenant_version))) {
-      LOG_WARN("fail get tenant broadcast version", K(ret));
     } else if (OB_FAIL(gctx_.schema_service_->get_tenant_received_broadcast_version(
                 sys_version))) {
-      LOG_WARN("fail get tenant broadcast version", K(ret));
     } else if (OB_FAIL(process_extra_info(session, pkt, need_response_error))) {
-      LOG_WARN("fail get process extra info", K(ret));
     } else if (OB_FAIL(session.check_tenant_status())) {
       need_disconnect = false;
       LOG_INFO("unit has been migrated, need deny new request", K(ret));
@@ -654,7 +630,6 @@ int ObMPStmtFetch::process()
         int tmp_ret = session.close_cursor(cursor_id_);
         ret = ret == OB_SUCCESS ? tmp_ret : ret;
         if (OB_SUCCESS != tmp_ret) {
-          LOG_WARN("no scrollable cursor close cursor failed at last row.", K(tmp_ret));
         }
       }
     }
@@ -714,9 +689,7 @@ int ObMPStmtFetch::response_row(ObSQLSessionInfo &session,
     LOG_WARN("piece cache is null.", K(ret), K(stmt_id));
   } else if (NULL != column_map) {
     if (OB_FAIL(ob_create_row(arena_allocator, src_row.get_count(), row))) {
-      LOG_WARN("create row fail.", K(ret), K(stmt_id));
     } else if (OB_FAIL(ob_write_row_by_projector(arena_allocator, src_row, row))) {
-      LOG_WARN("wirte tmp row fail.", K(stmt_id));
     }
   } else {
     ret = OB_ERR_UNEXPECTED;
@@ -725,9 +698,7 @@ int ObMPStmtFetch::response_row(ObSQLSessionInfo &session,
 
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(session.get_character_set_results(charset_type))) {
-    LOG_WARN("fail to get result charset", K(ret));
   } else if (OB_FAIL(session.get_ncharacter_set_connection(ncharset_type))) {
-    LOG_WARN("fail to get result charset", K(ret));
   }
 
   for (int64_t i = 0; OB_SUCC(ret) && i < row.get_count(); ++i) {
@@ -739,16 +710,13 @@ int ObMPStmtFetch::response_row(ObSQLSessionInfo &session,
       ObCharsetType target_charset_type = charset_type;
 
       if (OB_FAIL(piece_cache->get_piece(stmt_id, i, piece))) {
-        LOG_WARN("get piece fail", K(stmt_id), K(i), K(ret));
       } else if (first_time) {
         if (NULL != piece) {
           if (OB_FAIL(piece_cache->remove_piece(piece_cache->get_piece_key(stmt_id, i), session))) {
-            LOG_WARN("remove old piece fail.", K(ret), K(stmt_id), K(i));
           }
         }
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(piece_cache->make_piece(stmt_id, i, piece, session))) {
-          LOG_WARN("make piece fail.", K(ret), K(stmt_id), K(i));
         }
       }
       if (OB_FAIL(ret)) {
@@ -759,13 +727,10 @@ int ObMPStmtFetch::response_row(ObSQLSessionInfo &session,
       } else if (is_lob_storage(value.get_type())) {
         if (OB_FAIL(ObQueryDriver::convert_text_value_charset(
                 value, target_charset_type, arena_allocator, &session))) {
-          LOG_WARN("convert text value charset failed", K(ret), K(value));
         } else {
           ObTextStringIter iter(value);
           if (OB_FAIL(iter.init(0, &session, &arena_allocator))) {
-            LOG_WARN("Lob: init lob str iter failed ", K(ret), K(value));
           } else if (OB_FAIL(iter.get_full_data(str))) {
-            LOG_WARN("Lob: get full data failed ", K(ret), K(value));
           }
         }
       } else if (ob_is_string_type(value.get_type())) {
@@ -773,7 +738,6 @@ int ObMPStmtFetch::response_row(ObSQLSessionInfo &session,
             && OB_FAIL(value.convert_string_value_charset(target_charset_type, arena_allocator))) {
           LOG_WARN("convert string value charset failed", K(ret), K(value));
         } else if (OB_FAIL(value.get_string(str))) {
-          LOG_WARN("get string failed", K(ret), K(value));
         }
       } else if (ob_is_null(value.get_type())) {
         str.assign(NULL, 0);
@@ -801,7 +765,6 @@ int ObMPStmtFetch::response_row(ObSQLSessionInfo &session,
       if (OB_FAIL(ret)) {
         // do nothing
       } else if (OB_FAIL(piece_cache->add_piece_buffer(piece, ObInvalidPiece, &str))) {
-        LOG_WARN("add piece buffer fail.", K(ret), K(stmt_id));
       } else {
         value.set_null();
       }
@@ -811,7 +774,6 @@ int ObMPStmtFetch::response_row(ObSQLSessionInfo &session,
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(response_row(session, row, fields, is_packed, NULL, schema_guard))) {
-    LOG_WARN("response row fail.", K(ret), K(stmt_id));
   } else {
     LOG_DEBUG("response row success.", K(stmt_id));
   }

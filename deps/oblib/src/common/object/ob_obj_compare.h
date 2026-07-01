@@ -241,7 +241,6 @@ public:
     double p = 0;
     if (cmp_scale <= 0 || cmp_scale > OB_NOT_FIXED_SCALE) {
       p = P[OB_NOT_FIXED_SCALE];
-      COMMON_LOG(ERROR, "not fixed obj", K(obj1), K(obj2), K(lbt()));
     } else {
       p = P[cmp_scale];
     }

@@ -45,7 +45,6 @@ int ObExprInnerDecimalToYear::eval_inner_decimal_to_year(const ObExpr &expr, ObE
   bool is_start = (expr.extra_ & 1) == 1;
   bool is_equal = (expr.extra_ & 2) == 2;
   if (OB_FAIL(expr.args_[0]->eval(ctx, val_datum))) {
-    LOG_WARN("fail to eval conv", K(ret), K(expr));
   } else if (val_datum->is_null()) {
     expr_datum.set_null();
   } else {
@@ -57,7 +56,6 @@ int ObExprInnerDecimalToYear::eval_inner_decimal_to_year(const ObExpr &expr, ObE
         expr_datum.set_year((int8_t)OBJ_YEAR_LOW);
       }
     } else if (OB_FAIL(val.extract_valid_int64_with_trunc(year_int))) {
-      LOG_WARN("extract_valid_int64_with_trunc fail.", K(ret), K(year_int));
     } else if (val.is_valid_int()) {
       if (year_int > YEAR_BASE && year_int <= YEAR_MAX) {
         expr_datum.set_year((int8_t)(year_int - YEAR_BASE));

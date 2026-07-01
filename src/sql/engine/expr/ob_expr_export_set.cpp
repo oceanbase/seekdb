@@ -168,7 +168,6 @@ int ObExprExportSet::eval_export_set(const ObExpr& expr, ObEvalCtx& ctx, ObDatum
   ObDatum* n_bits = NULL;
   int64_t max_size = 0;
   if (OB_FAIL(expr.eval_param_value(ctx, bits, on, off, sep, n_bits))) {
-    LOG_WARN("evaluate parameters failed", K(ret));
   } else if (bits->is_null() || on->is_null() || off->is_null()) {
     expr_datum.set_null();
   } else if (OB_NOT_NULL(sep) && sep->is_null()) {
@@ -176,7 +175,6 @@ int ObExprExportSet::eval_export_set(const ObExpr& expr, ObEvalCtx& ctx, ObDatum
   } else if (OB_NOT_NULL(n_bits) && n_bits->is_null()) {
     expr_datum.set_null();
   } else if (OB_FAIL(ctx.exec_ctx_.get_my_session()->get_max_allowed_packet(max_size))) {
-    LOG_WARN("get max length failed", K(ret));
   } else {
     ObExprStrResAlloc expr_res_alloc(expr, ctx);
     ObString output;
@@ -195,7 +193,6 @@ int ObExprExportSet::eval_export_set(const ObExpr& expr, ObEvalCtx& ctx, ObDatum
     }
     if (OB_FAIL(calc_export_set_inner(max_size, output, bits->get_uint64(), on->get_string(),
         off->get_string(), sep_parm, n_bits_parm, expr_res_alloc))) {
-      LOG_WARN("do export set failed", K(ret));
     } else {
       expr_datum.set_string(output);
     }

@@ -115,7 +115,6 @@ int ObDirectLoadMacroBlockEndKeyIterator::get_next_rowkey(const ObDatumRowkey *&
     } else if (OB_FAIL(rowkey_.assign(macro_meta.end_key_.datums_,
                                       macro_meta.val_.rowkey_count_ -
                                         ObMultiVersionRowkeyHelpper::get_extra_rowkey_col_cnt()))) {
-      LOG_WARN("fail to get datum rowkey", KR(ret));
     } else {
       rowkey = &rowkey_;
     }

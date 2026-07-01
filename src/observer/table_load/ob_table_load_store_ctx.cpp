@@ -221,21 +221,17 @@ int ObTableLoadStoreCtx::init(
   }
   // init trans_allocator_
   else if (OB_FAIL(trans_allocator_.init("TLD_STransPool"))) {
-    LOG_WARN("fail to init trans allocator", KR(ret));
   }
   // init trans_map_
   else if (OB_FAIL(
              trans_map_.create(1024, "TLD_STransMap", "TLD_STransMap"))) {
-    LOG_WARN("fail to create trans map", KR(ret));
   }
   // init trans_ctx_map_
   else if (OB_FAIL(
              trans_ctx_map_.create(1024, "TLD_TCtxMap", "TLD_TCtxMap"))) {
-    LOG_WARN("fail to create trans ctx map", KR(ret));
   }
   // init segment_trans_ctx_map_
   else if (OB_FAIL(segment_ctx_map_.init("TLD_SegCtxMap"))) {
-    LOG_WARN("fail to init segment ctx map", KR(ret));
   }
   else if (FALSE_IT(thread_cnt_ = ctx_->param_.session_count_)) {
   // init task_scheduler_
@@ -245,48 +241,38 @@ int ObTableLoadStoreCtx::init(
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new ObTableLoadTaskThreadPoolScheduler", KR(ret));
   } else if (OB_FAIL(task_scheduler_->init())) {
-    LOG_WARN("fail to init task scheduler", KR(ret));
   } else if (OB_FAIL(task_scheduler_->start())) {
-    LOG_WARN("fail to start task scheduler", KR(ret));
-  // init dag_task_scheduler_
   } else if (OB_ISNULL(dag_task_scheduler_ =
                          OB_NEWx(ObTableLoadTaskThreadPoolScheduler, (&allocator_), thread_cnt_,
                                  ctx_->param_.table_id_, "DagStore", ctx_->session_info_))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new ObTableLoadTaskThreadPoolScheduler", KR(ret));
   } else if (OB_FAIL(dag_task_scheduler_->init())) {
-    LOG_WARN("fail to init dag task scheduler", KR(ret));
   } else if (OB_FAIL(dag_task_scheduler_->start())) {
-    LOG_WARN("fail to start dag task scheduler", KR(ret));
   }
   // init error_row_handler_
   else if (OB_ISNULL(error_row_handler_ = OB_NEWx(ObTableLoadErrorRowHandler, (&allocator_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new ObTableLoadErrorRowHandler", KR(ret));
   } else if (OB_FAIL(error_row_handler_->init(ctx_->param_, result_info_, ctx_->job_stat_))) {
-    LOG_WARN("fail to init error row handler", KR(ret));
   }
   // init tmp_file_mgr_
   else if (OB_ISNULL(tmp_file_mgr_ = OB_NEWx(ObDirectLoadTmpFileManager, (&allocator_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new ObDirectLoadTmpFileManager", KR(ret));
   } else if (OB_FAIL(tmp_file_mgr_->init())) {
-    LOG_WARN("fail to init tmp file manager", KR(ret));
   }
   // init table_mgr_
   else if (OB_ISNULL(table_mgr_ = OB_NEWx(ObDirectLoadTableManager, (&allocator_)))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new ObDirectLoadTableManager", KR(ret));
   } else if (OB_FAIL(table_mgr_->init())) {
-    LOG_WARN("fail to init table mgr", KR(ret));
   }
   // init data_store_table_ctx_, index_store_table_ctxs_
   else if (OB_FAIL(init_store_table_ctxs(partition_id_array, target_partition_id_array))) {
-    LOG_WARN("fail to init store table ctxs", KR(ret));
   }
   // init session_ctx_array_
   else if (OB_FAIL(init_session_ctx_array())) {
-    LOG_WARN("fail to init session ctx array", KR(ret));
   }
   // init sequence_cache_ and sequence_schema_
   else if (data_store_table_ctx_->schema_->has_identity_column_ && OB_FAIL(init_sequence())) {
@@ -294,15 +280,11 @@ int ObTableLoadStoreCtx::init(
   }
   // init sort param
   else if (OB_FAIL(init_sort_param())) {
-    LOG_WARN("fail to init sort param", KR(ret));
   } else if (OB_FAIL(init_collection_subschema())) {
-    LOG_WARN("fail to init subschema for collection type", KR(ret));
   }
   else if (enable_dag_) {
     if (OB_FAIL(init_write_ctx_for_dag())) {
-      LOG_WARN("fail to init write ctx", KR(ret));
     } else if (OB_FAIL(init_dag())) {
-      LOG_WARN("fail to init dag", KR(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -481,7 +463,6 @@ int ObTableLoadStoreCtx::init_store_table_ctxs(
     LOG_WARN("fail to new ObTableLoadStoreDataTableCtx", KR(ret));
   } else if (OB_FAIL(data_store_table_ctx_->init(ctx_->param_.table_id_, partition_id_array,
                                                  target_partition_id_array))) {
-    LOG_WARN("fail to init data table", KR(ret));
   }
   // init indexs store_table_ctx_
   if (OB_SUCC(ret) && ObDirectLoadMethod::is_incremental(ctx_->param_.method_)) {
@@ -495,9 +476,7 @@ int ObTableLoadStoreCtx::init_store_table_ctxs(
         LOG_WARN("fail to new ObTableLoadStoreIndexTableCtx", KR(ret));
       } else if (OB_FAIL(index_table_ctx->init(index_table_id, partition_id_array,
                                                target_partition_id_array))) {
-        LOG_WARN("fail to init index table", KR(ret));
       } else if (OB_FAIL(index_store_table_ctxs_.push_back(index_table_ctx))) {
-        LOG_WARN("fail to push back", KR(ret));
       }
       if (OB_FAIL(ret)) {
         if (nullptr != index_table_ctx) {
@@ -531,7 +510,6 @@ int ObTableLoadStoreCtx::init_sort_param()
   if (ctx_->param_.exe_mode_ == ObTableLoadExeMode::MAX_TYPE) {
     // No resource control mode
     if (OB_FAIL(ObTableLoadService::get_memory_limit(wa_mem_limit))) {
-      LOG_WARN("fail to get memory limit", KR(ret));
     } else if (wa_mem_limit < ObDirectLoadMemContext::MIN_MEM_LIMIT) {
       ret = OB_INVALID_ARGUMENT;
       LOG_WARN("wa_mem_limit is too small", KR(ret), K(wa_mem_limit));
@@ -589,7 +567,6 @@ int ObTableLoadStoreCtx::init_write_ctx()
         ret = OB_ALLOCATE_MEMORY_FAILED;
         LOG_WARN("fail to new ObTableLoadDataRowInsertHandler", KR(ret));
       } else if (OB_FAIL(data_row_handler->init(this))) {
-        LOG_WARN("fail to init data row handler", KR(ret));
       }
     }
     // is_fast_heap_table_, is_multiple_mode_
@@ -612,7 +589,6 @@ int ObTableLoadStoreCtx::init_write_ctx()
         const int64_t part_cnt = data_store_table_ctx_->ls_partition_ids_.count();
         int64_t wa_mem_limit = 0;
         if (OB_FAIL(ObTableLoadService::get_memory_limit(wa_mem_limit))) {
-          LOG_WARN("fail to get memory limit", KR(ret));
         } else if (wa_mem_limit < ObDirectLoadMemContext::MIN_MEM_LIMIT) {
           ret = OB_INVALID_ARGUMENT;
           LOG_WARN("wa_mem_limit is too small", KR(ret), K(wa_mem_limit));
@@ -657,9 +633,7 @@ int ObTableLoadStoreCtx::init_write_ctx()
           ret = OB_ALLOCATE_MEMORY_FAILED;
           LOG_WARN("fail to new TableLoadPreSorter", KR(ret));
         } else if (OB_FAIL(write_ctx_.pre_sorter_->init())) {
-          LOG_WARN("fail to init pre sorter", KR(ret));
         } else if (OB_FAIL(write_ctx_.pre_sorter_->start())) {
-          LOG_WARN("fail to start pre_sorter", KR(ret));
         }
       }
     }
@@ -672,13 +646,10 @@ int ObTableLoadStoreCtx::init_write_ctx()
                                                       ctx_->param_.table_id_,
                                                       schema_guard,
                                                       table_schema))) {
-        LOG_WARN("fail to get table schema", KR(ret), K(ctx_->param_));
       }
       // In MySQL mode, the SQL execution plan will include virtual generated columns
       else if (OB_FAIL(table_schema->get_column_ids(col_descs, false/*no_virtual*/))) {
-        LOG_WARN("fail to get column ids", KR(ret));
       } else if (OB_FAIL(ObTableLoadSchema::prepare_col_descs(table_schema, col_descs))) {
-        LOG_WARN("fail to prepare col descs", KR(ret), KPC(table_schema), K(col_descs));
       } else {
         const bool is_table_without_pk = data_store_table_ctx_->schema_->is_table_without_pk_;
         const ObColumnSchemaV2 *col_schema = nullptr;
@@ -694,24 +665,19 @@ int ObTableLoadStoreCtx::init_write_ctx()
           }
           // SQL execution plan includes hidden primary key columns, virtual generated columns, and other ordinary columns
           else if (OB_FAIL(write_ctx_.px_column_descs_.push_back(col_desc))) {
-            LOG_WARN("fail to push back", KR(ret));
           } else if (OB_FAIL(write_ctx_.px_column_accuracys_.push_back(col_schema->get_accuracy()))) {
-            LOG_WARN("fail to push back", KR(ret));
           }
           // Storage layer does not write virtual generated columns
           else if (col_schema->is_virtual_generated_column()) {
             if (OB_FAIL(write_ctx_.px_column_project_idxs_.push_back(-1))) {
-              LOG_WARN("fail to push back", KR(ret));
             }
           } else {
             // Bypass does not receive hidden primary key column
             if (ObColumnSchemaV2::is_hidden_pk_column_id(col_desc.col_id_)) {
               if (OB_FAIL(write_ctx_.px_column_project_idxs_.push_back(-1))) {
-                LOG_WARN("fail to push back", KR(ret));
               }
             } else {
               if (OB_FAIL(write_ctx_.px_column_project_idxs_.push_back(project_idx))) {
-                LOG_WARN("fail to push back", KR(ret));
               }
             }
             ++project_idx;
@@ -728,11 +694,9 @@ int ObTableLoadStoreCtx::init_write_ctx()
         if (OB_FAIL(ObDirectLoadVectorUtils::make_const_tablet_id_vector(write_ctx_.single_tablet_id_,
                                                                          allocator_,
                                                                          write_ctx_.single_tablet_id_vector_))) {
-          LOG_WARN("fail to make const tablet id vector", KR(ret), K(write_ctx_.single_tablet_id_));
         }
       } else {
         if (OB_FAIL(write_ctx_.tablet_idx_map_.create(1024, "TLD_TbtIdxMap", "TLD_TbtIdxMap"))) {
-          LOG_WARN("fail to create hashmap", KR(ret));
         } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < ls_partition_ids.count(); ++i) {
             const ObTabletID &tablet_id = ls_partition_ids[i].part_tablet_id_.tablet_id_;
@@ -755,12 +719,10 @@ int ObTableLoadStoreCtx::init_write_ctx()
       } else if (OB_FAIL(data_store_table_ctx_->init_insert_table_ctx(
                    write_ctx_.trans_param_, true /*online_opt_stat_gather*/,
                    true /*is_insert_lob*/))) {
-        LOG_WARN("fail to init insert table ctx", KR(ret));
       } else if (ObDirectLoadMethod::is_incremental(ctx_->param_.method_)) {
         for (int64_t i = 0; OB_SUCC(ret) && i < index_store_table_ctxs_.count(); ++i) {
           ObTableLoadStoreIndexTableCtx *index_table_ctx = index_store_table_ctxs_.at(i);
           if (OB_FAIL(index_table_ctx->init_build_insert_table())) {
-            LOG_WARN("fail to init build index table", KR(ret));
           }
         }
       }
@@ -794,7 +756,6 @@ int ObTableLoadStoreCtx::init_write_ctx_for_dag()
       const int64_t part_cnt = data_store_table_ctx_->ls_partition_ids_.count();
       int64_t wa_mem_limit = 0;
       if (OB_FAIL(ObTableLoadService::get_memory_limit(wa_mem_limit))) {
-        LOG_WARN("fail to get memory limit", KR(ret));
       } else if (wa_mem_limit < ObDirectLoadMemContext::MIN_MEM_LIMIT) {
         ret = OB_INVALID_ARGUMENT;
         LOG_WARN("wa_mem_limit is too small", KR(ret), K(wa_mem_limit));
@@ -841,14 +802,11 @@ int ObTableLoadStoreCtx::init_write_ctx_for_dag()
     ObArray<ObColDesc> col_descs;
     if (OB_FAIL(ObTableLoadSchema::get_table_schema( ctx_->param_.table_id_,
                                                     schema_guard, table_schema))) {
-      LOG_WARN("fail to get table schema", KR(ret), K(ctx_->param_));
     }
     // In MySQL mode, SQL execution plan includes virtual generated columns
     else if (OB_FAIL(
                table_schema->get_column_ids(col_descs, false /*no_virtual*/))) {
-      LOG_WARN("fail to get column ids", KR(ret));
     } else if (OB_FAIL(ObTableLoadSchema::prepare_col_descs(table_schema, col_descs))) {
-      LOG_WARN("fail to prepare col descs", KR(ret), KPC(table_schema), K(col_descs));
    } else {
       const bool is_table_without_pk = data_store_table_ctx_->schema_->is_table_without_pk_;
       const ObColumnSchemaV2 *col_schema = nullptr;
@@ -864,24 +822,19 @@ int ObTableLoadStoreCtx::init_write_ctx_for_dag()
         }
         // SQL execution plan includes hidden primary key columns, virtual generated columns and other normal columns
         else if (OB_FAIL(write_ctx_.px_column_descs_.push_back(col_desc))) {
-          LOG_WARN("fail to push back", KR(ret));
         } else if (OB_FAIL(write_ctx_.px_column_accuracys_.push_back(col_schema->get_accuracy()))) {
-          LOG_WARN("fail to push back", KR(ret));
         }
         // Storage layer does not write virtual generated columns
         else if (col_schema->is_virtual_generated_column()) {
           if (OB_FAIL(write_ctx_.px_column_project_idxs_.push_back(-1))) {
-            LOG_WARN("fail to push back", KR(ret));
           }
         } else {
           // Bypass does not accept hidden primary key columns
           if (ObColumnSchemaV2::is_hidden_pk_column_id(col_desc.col_id_)) {
             if (OB_FAIL(write_ctx_.px_column_project_idxs_.push_back(-1))) {
-              LOG_WARN("fail to push back", KR(ret));
             }
           } else {
             if (OB_FAIL(write_ctx_.px_column_project_idxs_.push_back(project_idx))) {
-              LOG_WARN("fail to push back", KR(ret));
             }
           }
           ++project_idx;
@@ -897,12 +850,10 @@ int ObTableLoadStoreCtx::init_write_ctx_for_dag()
       write_ctx_.single_tablet_id_ = ls_partition_ids[0].part_tablet_id_.tablet_id_;
       if (OB_FAIL(ObDirectLoadVectorUtils::make_const_tablet_id_vector(
             write_ctx_.single_tablet_id_, allocator_, write_ctx_.single_tablet_id_vector_))) {
-        LOG_WARN("fail to make const tablet id vector", KR(ret), K(write_ctx_.single_tablet_id_));
       }
     } else {
       if (OB_FAIL(
             write_ctx_.tablet_idx_map_.create(1024, "TLD_TbtIdxMap", "TLD_TbtIdxMap"))) {
-        LOG_WARN("fail to create hashmap", KR(ret));
       } else {
         for (int64_t i = 0; OB_SUCC(ret) && i < ls_partition_ids.count(); ++i) {
           const ObTabletID &tablet_id = ls_partition_ids[i].part_tablet_id_.tablet_id_;
@@ -925,21 +876,15 @@ int ObTableLoadStoreCtx::init_dag()
   int ret = OB_SUCCESS;
   // generate plan
   if (OB_FAIL(ObTableLoadPlan::create_plan(this, allocator_, dag_exec_ctx_.plan_))) {
-    LOG_WARN("fail to create plan", KR(ret));
   }
   // Depends on information in write_ctx_
   else if (OB_FAIL(dag_exec_ctx_.plan_->generate())) {
-    LOG_WARN("fail to generate plan", KR(ret));
   }
   // generate dag
   else if (OB_FAIL(ObTenantDagScheduler::alloc_dag(allocator_, false /*is_ha_dag*/, dag_exec_ctx_.dag_))) {
-    LOG_WARN("fail to alloc dag", K(ret));
   } else if (OB_FAIL(dag_exec_ctx_.dag_->init(this))) {
-    LOG_WARN("fail to init dag", KR(ret));
   } else if (OB_FAIL(ObTableLoadDagGenerator::generate(dag_exec_ctx_))) {
-    LOG_WARN("fail to generate dag", KR(ret));
   } else if (OB_FAIL(dag_exec_ctx_.dag_->start())) {
-    LOG_WARN("fail to start dag", KR(ret));
   }
   return ret;
 }
@@ -952,8 +897,6 @@ int ObTableLoadStoreCtx::generate_autoinc_params(AutoincParam &autoinc_param)
   if (OB_FAIL(ObTableLoadSchema::get_table_schema(
                                                   ctx_->param_.table_id_,
                                                   schema_guard, table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret),
-                                         K(ctx_->param_.table_id_));
   } else if (OB_ISNULL(table_schema)) {
     ret = OB_TABLE_NOT_EXIST;
     LOG_WARN("table not exist", KR(ret), K(ctx_->param_.table_id_));
@@ -1018,7 +961,6 @@ int ObTableLoadStoreCtx::init_sequence()
   uint64_t sequence_id = OB_INVALID_ID;
   if (OB_FAIL(ObTableLoadSchema::get_table_schema( table_id, table_schema_guard,
                                                   target_table_schema))) {
-    LOG_WARN("fail to get table schema", KR(ret), K(table_id));
   } else {
     //ddl for identity is to synchronize the auto-increment value when creating a table, for sequence parameter initialization must use the hidden table's table schema of table id
     for (ObTableSchema::const_column_iterator iter = target_table_schema->column_begin();
@@ -1042,16 +984,13 @@ int ObTableLoadStoreCtx::init_sequence()
     LOG_WARN("schema service is null", KR(ret));
   } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
                      sequence_schema_guard))) {
-    LOG_WARN("get schema guard failed", KR(ret));
   } else if (OB_FAIL(sequence_schema_guard.get_sequence_schema(
                      sequence_id,
                      sequence_schema))) {
-    LOG_WARN("fail get sequence schema", K(sequence_id), KR(ret));
   } else if (OB_ISNULL(sequence_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("null unexpected", KR(ret));
   } else if (OB_FAIL(sequence_schema_.assign(*sequence_schema))) {
-    LOG_WARN("cache sequence_schema fail", K(sequence_id), KR(ret));
   }
   return ret;
 }
@@ -1063,9 +1002,7 @@ int ObTableLoadStoreCtx::commit_autoinc_value()
   for (int64_t i = 0; OB_SUCC(ret) && i < ctx_->param_.write_session_count_; ++i) {
     SessionContext *session_ctx = session_ctx_array_ + i;
     if (OB_FAIL(auto_service.sync_insert_value_local(session_ctx->autoinc_param_))) {
-      LOG_WARN("fail to sync insert auto increment value local", KR(ret), K(session_ctx->autoinc_param_));
     } else if (OB_FAIL(auto_service.sync_insert_value_global(session_ctx->autoinc_param_))) {
-      LOG_WARN("fail to sync insert auto increment value global", KR(ret), K(session_ctx->autoinc_param_));
     }
   }
   return ret;
@@ -1103,7 +1040,6 @@ int ObTableLoadStoreCtx::alloc_trans_ctx(const ObTableLoadTransId &trans_id,
   }
   // Insert trans_ctx into map
   else if (OB_FAIL(trans_ctx_map_.set_refactored(trans_ctx->trans_id_, trans_ctx))) {
-    LOG_WARN("fail to set trans ctx", KR(ret), K(trans_ctx->trans_id_));
   }
   if (OB_FAIL(ret)) {
     if (nullptr != trans_ctx) {
@@ -1122,14 +1058,12 @@ int ObTableLoadStoreCtx::alloc_trans(const ObTableLoadTransId &trans_id,
   ObTableLoadTransCtx *trans_ctx = nullptr;
   // allocate trans_ctx
   if (OB_FAIL(alloc_trans_ctx(trans_id, trans_ctx))) {
-    LOG_WARN("fail to alloc trans ctx", KR(ret), K(trans_id));
   }
   // construct trans
   else if (OB_ISNULL(trans = trans_allocator_.alloc(trans_ctx))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc ObTableLoadStoreTrans", KR(ret));
   } else if (OB_FAIL(trans_map_.set_refactored(trans_id, trans))) {
-    LOG_WARN("fail to set_refactored", KR(ret), K(trans_id));
   } else {
     trans->inc_ref_count();
   }
@@ -1150,7 +1084,6 @@ int ObTableLoadStoreCtx::start_trans(const ObTableLoadTransId &trans_id,
     ret = OB_NOT_INIT;
     LOG_WARN("ObTableLoadStoreCtx not init", KR(ret));
   } else if (OB_FAIL(check_status(ObTableLoadStatusType::LOADING))) {
-    LOG_WARN("fail to check status", KR(ret), K_(status));
   } else {
     obsys::ObWLockGuard guard(rwlock_);
     const ObTableLoadSegmentID &segment_id = trans_id.segment_id_;
@@ -1160,7 +1093,6 @@ int ObTableLoadStoreCtx::start_trans(const ObTableLoadTransId &trans_id,
         LOG_WARN("fail to get segment ctx", KR(ret));
       } else {
         if (OB_FAIL(segment_ctx_map_.create(segment_id, segment_ctx))) {
-          LOG_WARN("fail to create", KR(ret));
         } else {
           segment_ctx->segment_id_ = segment_id;
         }
@@ -1173,12 +1105,10 @@ int ObTableLoadStoreCtx::start_trans(const ObTableLoadTransId &trans_id,
         LOG_WARN("trans already exist", KR(ret), KPC(segment_ctx));
       } else {
         if (OB_FAIL(alloc_trans(trans_id, trans))) {
-          LOG_WARN("fail to alloc trans", KR(ret));
         }
         // Trans initialization creates background pipeline, pipeline ensures channel lifecycle through holding trans reference count
         // In initialization failure scenario, pipeline may be created, trans cannot be released immediately
         else if (OB_FAIL(trans->init())) {
-          LOG_WARN("fail to init trans", KR(ret), K(trans_id));
         } else {
           segment_ctx->current_trans_ = trans;
         }
@@ -1216,11 +1146,8 @@ int ObTableLoadStoreCtx::commit_trans(ObTableLoadStoreTrans *trans)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected trans", KR(ret));
     } else if (OB_FAIL(trans->check_trans_status(ObTableLoadTransStatusType::COMMIT))) {
-      LOG_WARN("fail to check trans status commit", KR(ret));
     } else if (OB_FAIL(trans->output_store(trans_store))) {
-      LOG_WARN("fail to output store", KR(ret));
     } else if (OB_FAIL(committed_trans_store_array_.push_back(trans_store))) {
-      LOG_WARN("fail to push back trans store", KR(ret));
     } else {
       segment_ctx->current_trans_ = nullptr;
       segment_ctx->committed_trans_store_ = trans_store;
@@ -1263,7 +1190,6 @@ int ObTableLoadStoreCtx::abort_trans(ObTableLoadStoreTrans *trans)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected trans", KR(ret));
     } else if (OB_FAIL(trans->check_trans_status(ObTableLoadTransStatusType::ABORT))) {
-      LOG_WARN("fail to check trans status abort", KR(ret));
     } else {
       segment_ctx->current_trans_ = nullptr;
       trans->set_dirty();
@@ -1292,7 +1218,6 @@ void ObTableLoadStoreCtx::put_trans(ObTableLoadStoreTrans *trans)
                 ObTableLoadTransStatusType::ABORT == trans_status);
       obsys::ObWLockGuard guard(rwlock_);
       if (OB_FAIL(trans_map_.erase_refactored(trans->get_trans_id()))) {
-        LOG_WARN("fail to erase_refactored", KR(ret));
       } else {
         trans_allocator_.free(trans);
         trans = nullptr;
@@ -1387,7 +1312,6 @@ int ObTableLoadStoreCtx::get_active_trans_ids(ObIArray<ObTableLoadTransId> &tran
     for (TransMap::const_iterator trans_iter = trans_map_.begin();
          OB_SUCC(ret) && trans_iter != trans_map_.end(); ++trans_iter) {
       if (OB_FAIL(trans_id_array.push_back(trans_iter->first))) {
-        LOG_WARN("fail to push back", KR(ret));
       }
     }
   }
@@ -1404,7 +1328,6 @@ int ObTableLoadStoreCtx::get_committed_trans_ids(
   } else {
     obsys::ObRLockGuard guard(rwlock_);
     if (OB_FAIL(trans_id_array.create(committed_trans_store_array_.count(), allocator))) {
-      LOG_WARN("fail to create trans id array", KR(ret));
     } else {
       for (int64_t i = 0; i < committed_trans_store_array_.count(); ++i) {
         ObTableLoadTransStore *trans_store = committed_trans_store_array_.at(i);
@@ -1451,7 +1374,6 @@ int ObTableLoadStoreCtx::get_table_store_from_committed_trans_stores(ObDirectLoa
       const ObTableLoadTransStore::SessionStore *session_store =
         trans_store->session_store_array_.at(j);
       if (OB_FAIL(table_store.add_tables(session_store->tables_handle_))) {
-        LOG_WARN("fail to add tables", KR(ret));
       }
     }
   }
@@ -1476,7 +1398,6 @@ int ObTableLoadStoreCtx::get_table_store_for_store_write(ObDirectLoadTableStore 
       const ObTableLoadTransStore::SessionStore *session_store =
         trans_store->session_store_array_.at(j);
       if (OB_FAIL(table_store.add_tables(session_store->tables_handle_))) {
-        LOG_WARN("fail to add tables", KR(ret));
       }
     }
   }
@@ -1505,9 +1426,7 @@ int ObTableLoadStoreCtx::start_merge()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpectedpre sort is enabled", KR(ret));
   } else if (OB_FAIL(get_table_store_from_committed_trans_stores(data_store_table_ctx_->insert_table_store_))) {
-    LOG_WARN("fail to get table store from committed trans stores", KR(ret));
   } else if (OB_FAIL(start_merge_op())) {
-    LOG_WARN("fail to start merge op", KR(ret));
   } else {
     // Clear trans store, in order to release disk space during the merge process
     clear_committed_trans_stores();
@@ -1525,7 +1444,6 @@ int ObTableLoadStoreCtx::handle_pre_sort_success()
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected pre sort not enabled", KR(ret));
   } else if (OB_FAIL(start_merge_op())) {
-    LOG_WARN("fail to start merge op", KR(ret));
   } else {
     // Clear trans store, release memory, there's nothing much in it
     clear_committed_trans_stores();
@@ -1543,7 +1461,6 @@ int ObTableLoadStoreCtx::start_merge_op()
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to new ObTableLoadMergeRootOp", KR(ret));
   } else if (OB_FAIL(merge_root_op_->start())) {
-    LOG_WARN("fail to start merge op", KR(ret));
   }
   return ret;
 }
@@ -1556,7 +1473,6 @@ int ObTableLoadStoreCtx::init_collection_subschema()
   sql::ObExecContext *exec_ctx = ctx_->exec_ctx_;
   if (OB_FAIL(ObTableLoadSchema::get_table_schema( ctx_->param_.table_id_,
                                                   schema_guard, table_schema))) {
-    LOG_WARN("fail to get database and table schema", K(ret));
   }
   for (ObTableSchema::const_column_iterator iter = table_schema->column_begin();
        OB_SUCC(ret) && iter != table_schema->column_end(); ++iter) {
@@ -1576,7 +1492,6 @@ int ObTableLoadStoreCtx::init_collection_subschema()
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("unexpected type name", K(ret), K(extended_type_info.count()));
         } else if (OB_FAIL(exec_ctx->get_subschema_id_by_type_string(extended_type_info.at(0), subschema_id))) {
-          LOG_WARN("failed to get array type subschema id", K(ret));
         }
       }
     }

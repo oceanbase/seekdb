@@ -48,7 +48,6 @@ int ObInnerTableLockUtil::lock_inner_table_in_trans(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("connection is null", KR(ret));
   } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, DEFAULT_TIMEOUT))) {
-    LOG_WARN("fail to set default_timeout_ctx", KR(ret));
   } else {
     ObLockTableRequest table_lock_arg;
     table_lock_arg.lock_mode_ = lock_mode;
@@ -57,7 +56,6 @@ int ObInnerTableLockUtil::lock_inner_table_in_trans(
     table_lock_arg.op_type_ = IN_TRANS_COMMON_LOCK;
     table_lock_arg.is_from_sql_ = is_from_sql;
     if (OB_FAIL(ObInnerConnectionLockUtil::lock_table(table_lock_arg, conn))) {
-      LOG_WARN("lock table failed", KR(ret), K(table_lock_arg));
     }
   }
   return ret;
@@ -79,7 +77,6 @@ int ObLSObjLockUtil::lock_ls_in_trans(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("connection is null", KR(ret), K(ls_id));
   } else if (OB_FAIL(ObShareUtil::set_default_timeout_ctx(ctx, DEFAULT_TIMEOUT))) {
-    LOG_WARN("fail to set default_timeout_ctx", KR(ret));
   } else {
     ObLockObjRequest lock_arg;
     lock_arg.lock_mode_ = lock_mode;
@@ -88,7 +85,6 @@ int ObLSObjLockUtil::lock_ls_in_trans(
     lock_arg.obj_type_ = ObLockOBJType::OBJ_TYPE_LS;
     lock_arg.obj_id_ = ls_id.id();
     if (OB_FAIL(ObInnerConnectionLockUtil::lock_obj(lock_arg, conn))) {
-      LOG_WARN("lock obj failed", KR(ret), K(lock_arg));
     }
   }
   return ret;

@@ -163,8 +163,6 @@ int ObAllVirtualLockWaitStat::inner_get_next_row(ObNewRow *&row)
                 if (OB_FAIL(lock_mode_to_string(node_iter_->lock_mode_,
                                                 lock_mode_tmp,
                                                 sizeof(lock_mode_tmp)))) {
-                  SERVER_LOG(WARN, "get lock mode failed", K(ret),
-                              K(node_iter_));
                 } else {
                   snprintf(lock_mode_, sizeof(lock_mode_), "%s",
                             lock_mode_tmp);
@@ -205,9 +203,6 @@ int ObAllVirtualLockWaitStat::inner_get_next_row(ObNewRow *&row)
             // TODO(yangyifei.yyf): rowkey holder is unstable now, so we use
             // tmp ret to catch error code here. We we fix it in the future.
             if (OB_TMP_FAIL(get_rowkey_holder(node_iter_->hash_, holder_tx_id))) {
-              SERVER_LOG(WARN, "can not get the hash holder from lock wait mgr",
-                         K_(node_iter_->tablet_id), K_(node_iter_->key),
-                         K_(node_iter_->tx_id), K_(node_iter_->hash));
             }
           }
           cur_row_.cells_[i].set_int(holder_tx_id.get_id());
@@ -278,9 +273,7 @@ int ObAllVirtualLockWaitStat::get_rowkey_holder(int64_t hash, transaction::ObTra
   ObLockWaitMgr *lwm = NULL;
   if (OB_ISNULL(lwm = share::g_mp->lock_wait_mgr())) {
     ret = OB_ERR_UNEXPECTED;
-    SERVER_LOG(ERROR, "MTL(LockWaitMgr) is null");
   } else if (OB_FAIL(lwm->get_hash_holder(hash, holder))){
-    SERVER_LOG(WARN, "get rowkey holder from lock wait mgr failed", K(ret), K(hash));
   }
   return ret;
 }

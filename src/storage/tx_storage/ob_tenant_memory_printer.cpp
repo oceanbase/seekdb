@@ -48,7 +48,6 @@ int ObTenantMemoryPrinter::register_timer_task(int tg_id)
                           print_task_,
                           print_delay,
                           is_repeated))) {
-    LOG_WARN("fail to schedule print task of tenant manager", K(ret));
   }
   return ret;
 }
@@ -69,14 +68,12 @@ int ObTenantMemoryPrinter::print_tenant_usage()
                                 "=== TENANTS MEMORY INFO ===\n"
                                 "unmanaged_memory_size=% '15ld\n",
                                 lib::get_unmanaged_memory_size()))) {
-      LOG_WARN("print failed", K(ret));
     } else if (OB_ISNULL(omt)) {
       // do nothing
     } else {
       if (OB_SUCCESS != (tmp_ret = print_tenant_usage_(print_buf,
                                                        BUF_LEN,
                                                        pos))) {
-        LOG_WARN("print mtl tenant usage failed", K(tmp_ret));
       }
     }
 
@@ -87,7 +84,6 @@ int ObTenantMemoryPrinter::print_tenant_usage()
       print_buf[BUF_LEN - 1] = '\0';
     }
     if (OB_SUCCESS == ret) {
-      _STORAGE_LOG(INFO, "====== tenants memory info ======\n%s", print_buf);
     }
 
     print_mutex_.unlock();
@@ -110,7 +106,6 @@ int ObTenantMemoryPrinter::print_tenant_usage_(
     } else if (OB_FAIL(freezer->print_tenant_usage(print_buf,
                                                    buf_len,
                                                    pos))) {
-      LOG_WARN("print tenant usage failed", K(ret));
     } else {
       // do nothing
     }

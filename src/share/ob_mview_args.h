@@ -386,11 +386,8 @@ public:
   int assign(const ObCreateMLogArg &other) {
     int ret = common::OB_SUCCESS;
     if (OB_FAIL(ObDDLArg::assign(other))) {
-      SHARE_LOG(WARN, "failed to assign base", KR(ret));
     } else if (OB_FAIL(mlog_schema_.assign(other.mlog_schema_))) {
-      SHARE_LOG(WARN, "failed to assign mlog schema", KR(ret));
     } else if (OB_FAIL(store_columns_.assign(other.store_columns_))) {
-      SHARE_LOG(WARN, "failed to assign store columns", KR(ret));
     } else {
       database_name_ = other.database_name_;
       table_name_ = other.table_name_;

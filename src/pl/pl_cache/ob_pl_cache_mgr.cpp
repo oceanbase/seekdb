@@ -52,9 +52,7 @@ int ObPLCacheMgr::get_sys_var_in_pl_cache_str(ObBasicSessionInfo &session,
   for (int64_t i = 0; OB_SUCC(ret) && i < PL_CACHE_SYS_VAR_COUNT; ++i) {
     val.reset();
     if (OB_FAIL(session.get_sys_variable(InfluencePLMap[i], val))) {
-      LOG_WARN("failed to get sys_variable", K(InfluencePLMap[i]), K(ret));
     } else if (OB_FAIL(sys_vars.push_back(val))) {
-      LOG_WARN("fail to push back", K(ret));
     }
   }
   if (OB_SUCC(ret)) {
@@ -109,7 +107,6 @@ int ObPLCacheMgr::get_pl_object(ObPlanCache *lib_cache, ObILibCacheCtx &ctx, ObC
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lib cache is null");
   } else if (OB_FAIL(get_sys_var_in_pl_cache_str(*pc_ctx.session_info_, tmp_alloc, pc_ctx.key_.sys_vars_str_))) {
-    LOG_WARN("fail to gen sys var", K(ret));
   } else {
     if (OB_FAIL(lib_cache->get_cache_obj(ctx, &pc_ctx.key_, guard))) {
       PL_CACHE_LOG(DEBUG, "failed to get plan", K(ret));
@@ -117,7 +114,6 @@ int ObPLCacheMgr::get_pl_object(ObPlanCache *lib_cache, ObILibCacheCtx &ctx, ObC
       if (OB_OLD_SCHEMA_VERSION == ret) {
         PL_CACHE_LOG(WARN, "start to remove pl object", K(ret), K(pc_ctx.key_));
         if (OB_FAIL(lib_cache->remove_cache_node(&pc_ctx.key_))) {
-          PL_CACHE_LOG(WARN, "fail to remove pcv set when schema/plan expired", K(ret));
         } else {
           ret = OB_SQL_PC_NOT_EXIST;
         }
@@ -134,7 +130,6 @@ int ObPLCacheMgr::get_pl_object(ObPlanCache *lib_cache, ObILibCacheCtx &ctx, ObC
                 !guard.get_cache_obj()->is_anon() &&
                 guard.get_cache_obj()->get_ns() != ObLibCacheNameSpace::NS_CALLSTMT)) {
       ret = OB_ERR_UNEXPECTED;
-      PL_CACHE_LOG(WARN, "cache obj is invalid", KPC(guard.get_cache_obj()));
     }
 
     if (OB_FAIL(ret) && OB_NOT_NULL(guard.get_cache_obj())) {
@@ -163,12 +158,9 @@ int ObPLCacheMgr::get_pl_cache(ObPlanCache *lib_cache, ObCacheObjGuard& guard, O
       false == pc_ctx.session_info_->get_local_ob_enable_pl_cache()) {
     // do nothing
   } else if (OB_FAIL(pc_ctx.adjust_definer_database_id())) {
-    LOG_WARN("reset db_id failed!", K(ret));
   } else if (OB_FAIL(get_pl_object(lib_cache, pc_ctx, guard))) {
-    PL_CACHE_LOG(DEBUG, "fail to get plan", K(ret));
   } else if (OB_ISNULL(guard.get_cache_obj())) {
     ret = OB_ERR_UNEXPECTED;
-    PL_CACHE_LOG(WARN, "cache obj is invalid", KPC(guard.get_cache_obj()));
   } else {
     // update pl func/package stat
     pl::PLCacheObjStat *stat = NULL;
@@ -195,7 +187,6 @@ int ObPLCacheMgr::add_pl_object(ObPlanCache *lib_cache,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lib cache is null");
   } else if (OB_FAIL(get_sys_var_in_pl_cache_str(*pc_ctx.session_info_, tmp_alloc, pc_ctx.key_.sys_vars_str_))) {
-    LOG_WARN("fail to gen sys var", K(ret));
   } else {
     pl::PLCacheObjStat *stat = NULL;
     pl::ObPLCacheObject* pl_object = static_cast<pl::ObPLCacheObject*>(cache_obj);
@@ -264,7 +255,6 @@ int ObPLCacheMgr::add_pl_cache(ObPlanCache *lib_cache, ObILibCacheObject *pl_obj
     if (OB_FAIL(ret)) {
     } else if (FALSE_IT(pc_ctx.key_.namespace_ = ns)) {
     } else if (OB_FAIL(pc_ctx.adjust_definer_database_id())) {
-      LOG_WARN("reset db_id failed!", K(ret));
     } else if (OB_FAIL(add_pl_object(lib_cache, pc_ctx, pl_object))) {
       if (!is_not_supported_err(ret)
           && OB_SQL_PC_PLAN_DUPLICATE != ret) {
@@ -292,9 +282,7 @@ int ObPLCacheMgr::flush_pl_cache_by_sql(
   ObString tenant_name;
   //get tenant name
   if (OB_FAIL(schema_service.get_tenant_schema_guard(tenant_schema_guard))) {
-      LOG_WARN("failed to get tenant schema guard", KR(ret));
   } else if (OB_FAIL(tenant_schema_guard.get_tenant_info(tenant))) {
-    LOG_WARN("failed get tenant info", K(ret));
   } else if (OB_ISNULL(tenant)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tenant is null", K(ret));
@@ -306,7 +294,6 @@ int ObPLCacheMgr::flush_pl_cache_by_sql(
   if (OB_FAIL(ret)) {
     // do nothing
   } else if (OB_FAIL(tenant_schema_guard.get_database_schema( db_id, database_schema))) {
-    LOG_WARN("failed get db schema", K(ret));
   } else if (OB_ISNULL(database_schema)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tenant is null", K(ret));
@@ -327,10 +314,8 @@ int ObPLCacheMgr::flush_pl_cache_by_sql(
     LOG_WARN("unexpected sql proxy", K(ret));
   } else if (OB_FAIL(sql.assign_fmt("alter system flush pl cache schema_id = %lu databases = \"%.*s\" TENANT = \"%.*s\" global", key_id, 
                                       db_name.length(), db_name.ptr(), tenant_name.length(), tenant_name.ptr()))) {
-    LOG_WARN("alter system flush pl cache failed.", K(ret), K(key_id));
   } else {
     if (OB_FAIL(sql_proxy->write(sql.ptr(), affected_rows))) {
-      LOG_WARN("execute query failed", K(ret), K(sql));
     } else {
       // do nothing
       LOG_INFO("succ to flush pl cache", K(key_id), K(affected_rows));
@@ -343,7 +328,6 @@ int ObPLCacheMgr::flush_pl_cache_by_sql(
 int ObPLCacheMgr::cache_evict_all_pl(ObPlanCache *lib_cache)
 {
   int ret = OB_SUCCESS;
-  PL_CACHE_LOG(TRACE, "cache evict all pl cache start");
   if (OB_ISNULL(lib_cache)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lib cache is null");
@@ -351,9 +335,7 @@ int ObPLCacheMgr::cache_evict_all_pl(ObPlanCache *lib_cache)
     LCKeyValueArray to_evict_keys;
     ObGetPLKVEntryOp get_ids_op(&to_evict_keys, PCV_GET_PL_KEY_HANDLE);
     if (OB_FAIL(lib_cache->foreach_cache_evict(get_ids_op))) {
-      PL_CACHE_LOG(WARN, "failed to foreach cache evict", K(ret));
     }
-    PL_CACHE_LOG(TRACE, "cache evict all pl end");
   }
 
   return ret;
@@ -363,7 +345,6 @@ template<typename GETPLKVEntryOp, typename EvictAttr>
 int ObPLCacheMgr::cache_evict_pl_cache_single(ObPlanCache *lib_cache, uint64_t db_id, EvictAttr &attr)
 {
   int ret = OB_SUCCESS;
-  PL_CACHE_LOG(TRACE, "cache evict single plan start");
   if (OB_ISNULL(lib_cache)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lib cache is null");
@@ -371,10 +352,8 @@ int ObPLCacheMgr::cache_evict_pl_cache_single(ObPlanCache *lib_cache, uint64_t d
     LCKeyValueArray to_evict_keys;
     GETPLKVEntryOp get_ids_op(db_id, attr, &to_evict_keys, PCV_GET_PL_KEY_HANDLE);
     if (OB_FAIL(lib_cache->foreach_cache_evict(get_ids_op))) {
-      PL_CACHE_LOG(WARN, "failed to foreach cache evict", K(ret));
     }
   }
-  PL_CACHE_LOG(TRACE, "cache evict single plan end");
   return ret;
 }
 

@@ -63,7 +63,6 @@ int ObGlobalStatProxy::set_init_value(
     ObGlobalStatItem change_stream_min_dep_lsn_item(list, "change_stream_min_dep_lsn", 0);
 
     if (OB_FAIL(update(list))) {
-      LOG_WARN("update failed", KR(ret), K(list));
     }
   }
   return ret;
@@ -106,7 +105,6 @@ int ObGlobalStatProxy::set_tenant_init_global_stat(
     ObGlobalStatItem change_stream_refresh_scn_item(list, "change_stream_refresh_scn", 0);
     ObGlobalStatItem change_stream_min_dep_lsn_item(list, "change_stream_min_dep_lsn", 0);
     if (OB_FAIL(update(list))) {
-      LOG_WARN("update failed", KR(ret), K(list));
     }
   }
   return ret;
@@ -171,11 +169,9 @@ int ObGlobalStatProxy::get_snapshot_gc_scn(SCN &snapshot_gc_scn)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), "self valid", is_valid());
   } else if (OB_FAIL(get(list))) {
-    LOG_WARN("get failed", K(ret));
   } else {
     snapshot_gc_scn_val = (uint64_t)(snapshot_gc_scn_item.value_);
     if (OB_FAIL(snapshot_gc_scn.convert_for_inner_table_field(snapshot_gc_scn_val))) {
-      LOG_WARN("fail to convert val to SCN", KR(ret), K(snapshot_gc_scn_val));
     }
   }
   return ret;
@@ -203,7 +199,6 @@ int ObGlobalStatProxy::update_major_refresh_mv_merge_scn(const share::SCN &scn, 
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid arg", KR(ret), "valid", is_valid(), K(scn));
   } else if (OB_FAIL(update(list, is_incremental))) {
-    LOG_WARN("update failed", KR(ret), K(list));
   }
   return ret;
 }
@@ -218,7 +213,6 @@ int ObGlobalStatProxy::get_major_refresh_mv_merge_scn(const bool for_update, sha
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), "self valid", is_valid());
   } else if (OB_FAIL(get(list, for_update))) {
-    LOG_WARN("get failed", KR(ret));
   } else {
     scn.convert_for_inner_table_field(static_cast<uint64_t>(scn_item.value_));
   }
@@ -233,7 +227,6 @@ int ObGlobalStatProxy::inc_rootservice_epoch()
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), "self valid", is_valid());
   } else if (OB_FAIL(get_rootservice_epoch(rootservice_epoch))) {
-    LOG_WARN("fail to get rootservice_epoch", K(ret), K(rootservice_epoch));
   } else if (rootservice_epoch < 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("rootservice_epoch is invalid", K(ret), K(rootservice_epoch));
@@ -257,7 +250,6 @@ int ObGlobalStatProxy::get_snapshot_info(int64_t &snapshot_gc_scn,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), "self valid", is_valid());
   } else if (OB_FAIL(get(list))) {
-    LOG_WARN("get failed", K(ret));
   } else {
     snapshot_gc_scn = snapshot_gc_scn_item.value_;
     gc_schema_version = gc_schema_version_item.value_;
@@ -279,9 +271,7 @@ int ObGlobalStatProxy::update(const ObGlobalStatItem::ItemList &list,
     LOG_WARN("invalid argument", K(ret), "self valid", is_valid(),
         "list size", list.get_size());
   } else if (OB_FAIL(rootserver::ObRootUtils::get_rs_default_timeout_ctx(ctx))) {
-    LOG_WARN("fail to get timeout ctx", KR(ret), K(ctx));
   } else if (OB_FAIL(core_table_.load_for_update())) {
-    LOG_WARN("core_table_load_for_update failed", K(ret));
   } else {
     const ObGlobalStatItem *it = list.get_first();
     if (NULL == it) {
@@ -290,7 +280,6 @@ int ObGlobalStatProxy::update(const ObGlobalStatItem::ItemList &list,
     }
     while (OB_SUCCESS == ret && it != list.get_header()) {
       if (OB_FAIL(dml.add_column(it->name_, it->value_))) {
-        LOG_WARN("add column failed", K(ret));
       } else {
         it = it->get_next();
         if (NULL == it) {
@@ -302,7 +291,6 @@ int ObGlobalStatProxy::update(const ObGlobalStatItem::ItemList &list,
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(dml.splice_core_cells(core_table_, cells))) {
-    LOG_WARN("splice_core_cells failed", K(ret));
   } else if (!is_incremental && OB_FAIL(core_table_.replace_row(cells, affected_rows))) {
     LOG_WARN("replace_row failed", K(ret));
   } else if (is_incremental && OB_FAIL(core_table_.incremental_replace_row(cells, affected_rows))) {
@@ -327,7 +315,6 @@ int ObGlobalStatProxy::get_core_schema_version(int64_t &core_schema_version)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), "self valid", is_valid());
   } else if (OB_FAIL(get(list))) {
-    LOG_WARN("get failed", K(ret));
   } else {
     core_schema_version = core_schema_version_item.value_;
   }
@@ -353,7 +340,6 @@ int ObGlobalStatProxy::get_core_and_sys_schema_version(int64_t &core_schema_vers
       sys_schema_version = OB_INVALID_VERSION;
       // rewrite errcode
       if (OB_FAIL(get_core_schema_version(core_schema_version))) {
-        LOG_WARN("failed to get core schema version", KR(ret));
       } else {
         core_schema_version = core_schema_version_item.value_;
       }
@@ -374,7 +360,6 @@ int ObGlobalStatProxy::get_baseline_schema_version(int64_t &baseline_schema_vers
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), "self valid", is_valid());
   } else if (OB_FAIL(get(list))) {
-    LOG_WARN("get failed", K(ret));
   } else {
     baseline_schema_version = baseline_schema_version_item.value_;
   }
@@ -390,7 +375,6 @@ int ObGlobalStatProxy::get_rootservice_epoch(int64_t &rootservice_epoch)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), "self valid", is_valid());
   } else if (OB_FAIL(get(list))) {
-    LOG_WARN("get failed", K(ret));
   } else {
     rootservice_epoch = rootservice_epoch_item.value_;
   }
@@ -408,7 +392,6 @@ int ObGlobalStatProxy::get(
     LOG_WARN("invalid argument", KR(ret), "self valid", is_valid(),
         "list size", list.get_size());
   } else if (OB_FAIL(rootserver::ObRootUtils::get_rs_default_timeout_ctx(ctx))) {
-    LOG_WARN("fail to get timeout ctx", KR(ret), K(ctx));
   } else if (!for_update && OB_FAIL(core_table_.load())) {
     LOG_WARN("core_table load failed", KR(ret));
   } else if (for_update && OB_FAIL(core_table_.load_for_update())) {
@@ -429,7 +412,6 @@ int ObGlobalStatProxy::get(
       }
       while (OB_SUCCESS == ret && it != list.get_header()) {
         if (OB_FAIL(core_table_.get_int(it->name_, it->value_))) {
-          LOG_WARN("get int failed", "name", it->name_, KR(ret));
         } else {
           it = it->get_next();
           if (NULL == it) {
@@ -488,14 +470,11 @@ int ObGlobalStatProxy::inner_get_snapshot_gc_scn_(
     if (OB_FAIL(sql.assign_fmt(
                 "SELECT column_value FROM %s WHERE TABLE_NAME = '__all_global_stat' AND COLUMN_NAME"
                 " = 'snapshot_gc_scn' %s", OB_ALL_CORE_TABLE_TNAME, for_update_str))) {
-      LOG_WARN("assign sql failed", K(ret));
     } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-      LOG_WARN("execute sql failed", K(ret), K(sql));
     } else if (NULL == (result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get sql result", K(ret));
     } else if (OB_FAIL(result->next())) {
-      LOG_WARN("fail to get next row", K(ret));
     } else {
       ObString snapshot_gc_scn_str;
       EXTRACT_VARCHAR_FIELD_MYSQL(*result, "column_value", snapshot_gc_scn_str);
@@ -520,7 +499,6 @@ int ObGlobalStatProxy::inner_get_snapshot_gc_scn_(
             LOG_WARN("invalid data, is not int value", KR(ret), K(snapshot_gc_scn_str),
               K(snapshot_gc_scn_str.ptr()), K(strlen(snapshot_gc_scn_str.ptr())));
           } else if (OB_FAIL(snapshot_gc_scn.convert_for_inner_table_field(snapshot_gc_scn_val))) {
-            LOG_WARN("fail to convert val to SCN", KR(ret), K(snapshot_gc_scn_val));
           }
         }
       }
@@ -552,9 +530,7 @@ int ObGlobalStatProxy::update_snapshot_gc_scn(
     if (OB_FAIL(sql.assign_fmt("UPDATE %s SET column_value = %lu WHERE table_name = '%s' AND "
         "column_name = '%s' AND column_value < %lu", OB_ALL_CORE_TABLE_TNAME, snapshot_gc_scn_val,
         "__all_global_stat", "snapshot_gc_scn", snapshot_gc_scn_val))) {
-      LOG_WARN("fail to append sql", KR(ret), K(snapshot_gc_scn_val));
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", KR(ret), K(sql));
     }
   }
   return ret;
@@ -572,14 +548,11 @@ int ObGlobalStatProxy::select_ddl_epoch_for_update(
     if (OB_FAIL(sql.assign_fmt(
                 "SELECT column_value FROM %s WHERE TABLE_NAME = '__all_global_stat' AND COLUMN_NAME"
                 " = 'ddl_epoch' FOR UPDATE", OB_ALL_CORE_TABLE_TNAME))) {
-      LOG_WARN("assign sql failed", K(ret));
     } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-      LOG_WARN("execute sql failed", K(ret), K(sql));
     } else if (NULL == (result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to get sql result", K(ret));
     } else if (OB_FAIL(result->next())) {
-      LOG_WARN("fail to get next row", K(ret));
     } else {
       ObString ddl_epoch_str;
       EXTRACT_VARCHAR_FIELD_MYSQL(*result, "column_value", ddl_epoch_str);
@@ -642,9 +615,7 @@ int ObGlobalStatProxy::advance_change_stream_refresh_scn(
         "column_name = '%s' AND column_value < %lu",
         OB_ALL_CORE_TABLE_TNAME, scn_val,
         "__all_global_stat", "change_stream_refresh_scn", scn_val))) {
-      LOG_WARN("fail to assign sql", KR(ret), K(scn_val));
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", KR(ret), K(sql));
     }
   }
   return ret;
@@ -666,14 +637,11 @@ int ObGlobalStatProxy::get_change_stream_refresh_scn(
           "SELECT column_value FROM %s WHERE table_name = '%s' AND column_name = '%s' %s",
           OB_ALL_CORE_TABLE_TNAME,
           "__all_global_stat", "change_stream_refresh_scn", for_update_str))) {
-        LOG_WARN("fail to assign sql", KR(ret));
       } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-        LOG_WARN("fail to execute sql", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("result is null", KR(ret));
       } else if (OB_FAIL(result->next())) {
-        LOG_WARN("fail to get next row", KR(ret));
       } else {
         ObString column_value_str;
         EXTRACT_VARCHAR_FIELD_MYSQL(*result, "column_value", column_value_str);
@@ -695,7 +663,6 @@ int ObGlobalStatProxy::get_change_stream_refresh_scn(
               ret = OB_INVALID_DATA;
               LOG_WARN("invalid column_value for change_stream_refresh_scn", KR(ret), K(column_value_str));
             } else if (OB_FAIL(refresh_scn.convert_for_inner_table_field(scn_val))) {
-              LOG_WARN("fail to convert val to SCN", KR(ret), K(scn_val));
             }
           }
         }
@@ -726,9 +693,7 @@ int ObGlobalStatProxy::advance_change_stream_min_dep_lsn(
         "column_name = '%s' AND column_value < %ld",
         OB_ALL_CORE_TABLE_TNAME, min_dep_lsn,
         "__all_global_stat", "change_stream_min_dep_lsn", min_dep_lsn))) {
-      LOG_WARN("fail to assign sql", KR(ret), K(min_dep_lsn));
     } else if (OB_FAIL(sql_client.write(sql.ptr(), affected_rows))) {
-      LOG_WARN("fail to execute sql", KR(ret), K(sql));
     }
   }
   return ret;
@@ -750,14 +715,11 @@ int ObGlobalStatProxy::get_change_stream_min_dep_lsn(
           "SELECT column_value FROM %s WHERE table_name = '%s' AND column_name = '%s' %s",
           OB_ALL_CORE_TABLE_TNAME,
           "__all_global_stat", "change_stream_min_dep_lsn", for_update_str))) {
-        LOG_WARN("fail to assign sql", KR(ret));
       } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-        LOG_WARN("fail to execute sql", KR(ret), K(sql));
       } else if (OB_ISNULL(result = res.get_result())) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("result is null", KR(ret));
       } else if (OB_FAIL(result->next())) {
-        LOG_WARN("fail to get next row", KR(ret));
       } else {
         ObString column_value_str;
         EXTRACT_VARCHAR_FIELD_MYSQL(*result, "column_value", column_value_str);

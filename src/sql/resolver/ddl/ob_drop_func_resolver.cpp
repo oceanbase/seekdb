@@ -48,7 +48,6 @@ int ObDropFuncResolver::resolve(const ParseNode &parse_tree)
     ret = OB_ERR_UNEXPECTED;
     SQL_RESV_LOG(WARN, "invalid parse tree!", K(ret));
   } else if (OB_FAIL(session_info_->get_collation_connection(cs_type))) {
-    LOG_WARN("failed to get collation", K(ret));
   } else {
     ObString udf_name(parse_tree.children_[1]->str_len_, parse_tree.children_[1]->str_value_);
     if (OB_FAIL(ob_write_string(*allocator_, udf_name, lower_name))) {
@@ -64,12 +63,10 @@ int ObDropFuncResolver::resolve(const ParseNode &parse_tree)
     const share::schema::ObUDF *udf_info = nullptr;
     
     if (OB_FAIL(schema_checker_->get_udf_info( lower_name, udf_info, exist))) {
-      LOG_WARN("failed to get udf info", K(ret));
     } else if (exist) {
       // dll udf
       if (OB_ISNULL(drop_func_stmt = create_stmt<ObDropFuncStmt>())) {
         ret = OB_ALLOCATE_MEMORY_FAILED;
-        SQL_RESV_LOG(ERROR, "create drop func stmt failed");
       }
       //stmt_ = drop_func_stmt;
     } else {

@@ -45,7 +45,6 @@ int ObZoneMergeInfoTableStorage::init(ObSQLiteConnectionPool *pool)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid pool", K(ret));
   } else if (OB_FAIL(create_table_if_not_exists())) {
-    LOG_WARN("failed to create table", K(ret));
   }
   if (OB_FAIL(ret)) {
     pool_ = NULL;
@@ -65,7 +64,6 @@ int ObZoneMergeInfoTableStorage::create_table_if_not_exists()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_ZONE_MERGE_INFO, nullptr))) {
-      LOG_WARN("failed to create table", K(ret));
     }
   }
   return ret;
@@ -110,7 +108,6 @@ int ObZoneMergeInfoTableStorage::insert_or_update(const ObZoneMergeInfo &zone_me
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(upsert_sql, binder))) {
-      LOG_WARN("failed to execute upsert", K(ret));
     }
   }
   return ret;
@@ -126,11 +123,9 @@ int ObZoneMergeInfoTableStorage::get(ObZoneMergeInfo &zone_merge_info)
     // Reuse get_all since table is keyed only by tenant
     ObSEArray<ObZoneMergeInfo, 1> infos;
     if (OB_FAIL(get_all(infos))) {
-      LOG_WARN("failed to get all zone merge infos", K(ret));
     } else if (infos.empty()) {
       ret = OB_ENTRY_NOT_EXIST;
     } else if (OB_FAIL(zone_merge_info.assign_value(infos.at(0)))) {
-      LOG_WARN("fail to assign zone merge info value", KR(ret));
     }
   }
   return ret;
@@ -170,7 +165,6 @@ int ObZoneMergeInfoTableStorage::get_all(ObIArray<ObZoneMergeInfo> &zone_merge_i
       zone_merge_info.merge_status_.set_val(merge_status, false);
 
       if (OB_FAIL(zone_merge_infos.push_back(zone_merge_info))) {
-        LOG_WARN("failed to push back zone merge info", K(ret));
       }
       return ret;
     };
@@ -204,7 +198,6 @@ int ObZoneMergeInfoTableStorage::remove()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(delete_sql, nullptr))) {
-      LOG_WARN("failed to execute delete", K(ret));
     }
   }
   return ret;

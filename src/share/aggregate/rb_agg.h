@@ -73,21 +73,17 @@ public:
     if (OB_LIKELY(! agg_ctx.locate_notnulls_bitmap(agg_col_id, agg_cell).at(agg_col_id))) {
       res_vec->set_null(output_idx);
     } else if (OB_FAIL(get_rb(agg_ctx, agg_col_id, const_cast<char *>(agg_cell), false/*create_if_not_exist*/, rb) )) {
-      SQL_LOG(WARN, "failed to get roaringbitmap", K(ret), K(agg_col_id), KP(agg_cell));
     } else if (OB_ISNULL(rb_allocator = agg_ctx.get_rb_allocator())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       SQL_LOG(WARN, "get rb allocator fail", K(ret));
     } else if (OB_FAIL(rb_allocator->rb_serialize(rb_bin, rb))) {
-      SQL_LOG(WARN, "failed to serialize roaringbitmap", K(ret));
     } else {
       ObString blob_locator;
       ObExprStrResAlloc expr_res_alloc(agg_expr, agg_ctx.eval_ctx_);
       ObTextStringResult blob_res(ObRoaringBitmapType, true, &expr_res_alloc);
       int64_t total_length = rb_bin.length();
       if (OB_FAIL(blob_res.init(total_length))) {
-        SQL_LOG(WARN, "failed to init blob res", K(ret), K(rb_bin), K(total_length));
       } else if (OB_FAIL(blob_res.append(rb_bin))) {
-        SQL_LOG(WARN, "failed to append roaringbitmap binary data", K(ret), K(rb_bin));
       } else {
         blob_res.get_result_buffer(blob_locator);
         res_vec->set_payload_shallow(output_idx, blob_locator.ptr(), blob_locator.length());
@@ -134,13 +130,10 @@ public:
     ObRbAggCell *rb = nullptr;
     ObArenaAllocator tmp_alloc;
     if (OB_FAIL(get_rb(agg_ctx, agg_col_id, agg_cell, true/*create_if_not_exist*/, rb))) {
-      SQL_LOG(WARN, "failed to get roaringbitmap", K(ret), K(agg_col_id), KP(agg_cell));
     } else if (func_type == T_FUN_SYS_RB_BUILD_AGG) {
       uint64_t val = 0;
       if (OB_FAIL(get_value(data, data_len, val))) {
-        SQL_LOG(WARN, "get value fail", K(ret), K(data_len), KP(data));
       } else if (OB_FAIL(rb->value_add(val))) {
-        SQL_LOG(WARN, "failed to add value to roaringbitmap", K(ret), K(val));
       }
     } else {
       // T_FUN_SYS_RB_OR_AGG or T_FUN_SYS_RB_AND_AGG
@@ -152,7 +145,6 @@ public:
                                                                   value_rb_bin))) {
         SQL_LOG(WARN, "fail to get real data.", K(ret), K(value_rb_bin));
       } else if (OB_FAIL(rb->value_calc(value_rb_bin, func_type, in_tc != VEC_TC_ROARINGBITMAP))) {
-        SQL_LOG(WARN, "failed to add value to roaringbitmap", K(ret));
       }
     }
     return ret;
@@ -165,7 +157,6 @@ public:
     int ret = OB_SUCCESS;
     if (! is_null) {
       if (OB_FAIL(add_value(agg_ctx, agg_col_idx, agg_cell, data, data_len))) {
-        SQL_LOG(WARN, "add value fail", K(ret), K(agg_col_idx), KP(agg_cell), KP(data), K(data_len));
       } else {
         agg_ctx.locate_notnulls_bitmap(agg_col_idx, agg_cell).set(agg_col_idx);
       }
@@ -184,7 +175,6 @@ public:
     int32_t len = 0;
     columns.get_payload(row_num, payload, len);
     if (OB_FAIL(add_value(agg_ctx, agg_col_id, agg_cell, payload, len))) {
-      SQL_LOG(WARN, "add value fail", K(ret), K(agg_col_id), KP(agg_cell), KP(payload), K(len));
     }
     return ret;
   }
@@ -201,7 +191,6 @@ public:
       int32_t len = 0;
       columns.get_payload(row_num, payload, len);
       if (OB_FAIL(add_value(agg_ctx, agg_col_id, agg_cell, payload, len))) {
-        SQL_LOG(WARN, "add value fail", K(ret), K(agg_col_id), KP(agg_cell), KP(payload), K(len));
       } else {
         agg_ctx.locate_notnulls_bitmap(agg_col_id, agg_cell).set(agg_col_id);
       }
@@ -224,11 +213,8 @@ public:
     if (OB_UNLIKELY(! curr_not_nulls.at(agg_col_idx))) {
       // do noting, keep null
     } else if (OB_FAIL(get_rb(agg_ctx, agg_col_idx, const_cast<char *>(curr_agg_cell), false/*create_if_not_exist*/, curr_rb))) {
-      SQL_LOG(WARN, "cur rb is null", K(ret), KP(curr_rb), KP(rollup_rb));
     } else if (OB_FAIL(get_rb(agg_ctx, agg_col_idx, const_cast<char *>(rollup_agg_cell), true/*create_if_not_exist*/, rollup_rb))) {
-      SQL_LOG(WARN, "rollup rb is null", K(ret), KP(curr_rb), KP(rollup_rb));
     } else if (OB_FAIL(rollup_rb->rollup(curr_rb, func_type))) {
-      SQL_LOG(WARN, "rb rollup fail", K(ret), KP(curr_rb), KP(rollup_rb));
     } else {
       agg_ctx.locate_notnulls_bitmap(agg_col_idx, rollup_agg_cell).set(agg_col_idx);
     }
@@ -251,12 +237,10 @@ public:
     } else if (OB_LIKELY(! agg_ctx.locate_notnulls_bitmap(agg_col_id, agg_cell).at(agg_col_id))) {
       // skip null
     } else if (OB_FAIL(get_rb(agg_ctx, agg_col_id, const_cast<char *>(agg_cell), false/*create_if_not_exist*/, curr_rb))) {
-      SQL_LOG(WARN, "cur rb is null", K(ret), KP(curr_rb));
     } else if (OB_ISNULL(rb_allocator = agg_ctx.get_rb_allocator())) {
       ret = OB_ALLOCATE_MEMORY_FAILED;
       SQL_LOG(WARN, "get rb allocator fail", K(ret));
     } else if (OB_FAIL(rb_allocator->rb_serialize(curr_rb))) {
-      SQL_LOG(WARN, "failed to serialize roaringbitmap", K(ret));
     }
     return ret;
   }
@@ -287,7 +271,6 @@ inline int init_rb_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
   VecValueTypeClass out_tc = get_vec_value_tc(out_meta.type_, out_meta.scale_, out_meta.precision_);
   if (out_tc != VEC_TC_ROARINGBITMAP) {
     ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-    SQL_LOG(WARN, "invalid output type", K(in_tc), K(in_meta), K(out_tc));
   } else if (func_type == T_FUN_SYS_RB_BUILD_AGG) {
     switch (in_tc) {
       INIT_AGGREGATE_CASE(T_FUN_SYS_RB_BUILD_AGG, VEC_TC_NULL)
@@ -295,7 +278,6 @@ inline int init_rb_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
       INIT_AGGREGATE_CASE(T_FUN_SYS_RB_BUILD_AGG, VEC_TC_UINTEGER)
       default: {
         ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-        SQL_LOG(WARN, "invalid input type", K(in_tc), K(in_meta));
       }
     }
   } else if (func_type == T_FUN_SYS_RB_AND_AGG) {
@@ -305,7 +287,6 @@ inline int init_rb_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
       INIT_AGGREGATE_CASE(T_FUN_SYS_RB_AND_AGG, VEC_TC_ROARINGBITMAP)
       default: {
         ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-        SQL_LOG(WARN, "invalid input type", K(in_tc), K(in_meta));
       }
     }
   } else if (func_type == T_FUN_SYS_RB_OR_AGG) {
@@ -315,7 +296,6 @@ inline int init_rb_aggregate(RuntimeContext &agg_ctx, const int64_t agg_col_id,
       INIT_AGGREGATE_CASE(T_FUN_SYS_RB_OR_AGG, VEC_TC_ROARINGBITMAP)
       default: {
         ret = OB_ERR_INVALID_TYPE_FOR_ARGUMENT;
-        SQL_LOG(WARN, "invalid input type", K(in_tc), K(in_meta));
       }
     }
   } else {

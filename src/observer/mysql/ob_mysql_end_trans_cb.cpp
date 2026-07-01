@@ -103,13 +103,11 @@ void ObSqlEndTransCb::callback(int cb_param)
         ok_param.warnings_count_ = static_cast<uint16_t>(session_info->get_warnings_buffer().get_readable_warning_count());
         ok_param.is_partition_hit_ = pkt_param_.get_is_partition_hit();
         if (OB_SUCCESS != (ret = packet_sender_.send_ok_packet(*session_info, ok_param))) {
-          SERVER_LOG(WARN, "encode ok packet fail", K(ok_param), "ret", ret);
         }
       } else {
         //error + possible ok packet
         const char *error_msg = session_info->get_warnings_buffer().get_err_msg();
         if (OB_SUCCESS != (ret = packet_sender_.send_error_packet(cb_param, error_msg, pkt_param_.get_is_partition_hit()))) {
-          SERVER_LOG(WARN, "encode error packet fail", "ret", ret);
         }
       }
       //succ or not reset warning buffer

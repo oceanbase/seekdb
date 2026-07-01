@@ -158,7 +158,6 @@ protected:
       p_future_base_->stop_ = false;
       new(&(p_future_base_->cv_)) ObThreadCond();
       if (OB_FAIL(p_future_base_->cv_.init(ObWaitEventIds::DYNAMIC_THREAD_POOL_COND_WAIT))) {
-        OCCAM_LOG(WARN, "condition var init failed", K(ret));
       }
     }
     return ret;
@@ -198,7 +197,6 @@ protected:
         } else if (!p_future_base_->ready_) {
           ret = OB_TIMEOUT;
         } else {
-          OCCAM_LOG(WARN, "data is ready");
         }
       }
     } else {
@@ -225,7 +223,6 @@ protected:
       ObThreadCondGuard guard(p_future_base_->cv_);
       ret = p_future_base_->ready_;
     } else {
-      OCCAM_LOG(WARN, "p_future_base_ not init yet", K(lbt()));
     }
     return ret;
   }
@@ -285,7 +282,6 @@ protected:
     CHECK_INITED();
     int ret = OB_SUCCESS;
     if (OB_FAIL(ObFutureBaseBase::wait())) {
-      OCCAM_LOG(WARN, "something wrong happened while waiting", K(ret));
     } else {
       ptr = &(data_shared_ptr_->data_);
     }
@@ -308,9 +304,6 @@ int ObFutureBase<T>::init(ObIAllocator &alloc)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     OCCAM_LOG(WARN, "alloc shared failed", K(ret));
   } else if (OB_FAIL(ObFutureBaseBase::init(&(temp_shared_ptr->future_base_block_)))) {
-    // do nothing, temp_shared_ptr is the last guard who hold the ref of FutureBlock
-    // allocated memory will auto free when this method return through RAII
-    OCCAM_LOG(WARN, "init ObFutureBaseBase failed", K(ret));
   } else {
     data_shared_ptr_ = temp_shared_ptr;
   }
@@ -373,9 +366,6 @@ protected:
       ret = OB_ALLOCATE_MEMORY_FAILED;
       OCCAM_LOG(WARN, "alloc shared failed", K(ret));
     } else if (OB_FAIL(ObFutureBaseBase::init(&(temp_shared_ptr->future_base_block_)))) {
-      // do nothing, temp_shared_ptr is the last guard who hold the ref of FutureBlock
-      // allocated memory will auto free when this method return through RAII
-      OCCAM_LOG(WARN, "init ObFutureBaseBase failed", K(ret));
     } else {
       data_shared_ptr_ = temp_shared_ptr;
     }
@@ -404,7 +394,6 @@ protected:
     CHECK_INITED();
     int ret = OB_SUCCESS;
     if (OB_FAIL(ObFutureBaseBase::wait())) {
-      OCCAM_LOG(WARN, "something wrong happened while waiting", K(ret));
     }
     return ret;
   }

@@ -100,7 +100,6 @@ class ObOccamTimerTask : public ObTimeWheelTask
       }
       if (need_delete_) {// can use task_ pointer here, cause it;s promised it won't be free in other place
         CLICK();
-        OCCAM_LOG(DEBUG, "delete task in thread pool", K(*p_task_), K(function_));
         {
           ObSpinLockGuard lg(p_task_->lock_);// make sure runTimerTask() finished, or just hang here(expected very quickly)
         }
@@ -224,14 +223,12 @@ public:
             if (OB_UNLIKELY(OB_SUCCESS !=
               (temp_ret =
               time_wheel_->schedule(this, next_expected_run_ts_us - ObClockGenerator::getRealClock())))) {
-              OCCAM_LOG(WARN, "timer schedule task failed", K(temp_ret), KR(ret), K(*this));
             } else {
               OCCAM_LOG(DEBUG, "schedule task", KR(ret), K(*this));
             }
           } while (OB_INVALID_ARGUMENT == temp_ret);// means time delay arg is negative
           CLICK();
-          if (OB_UNLIKELY(OB_SUCCESS != ret)) {// register next task failed
-            OCCAM_LOG(ERROR, "fail to register next timer task", K(temp_ret), KR(ret), K(*this));
+          if (OB_UNLIKELY(OB_SUCCESS != ret)) {
           } else {
             expected_run_ts_us_ = next_expected_run_ts_us;
           }
@@ -274,7 +271,6 @@ public:
       int64_t schedule_time = ObClockGenerator::getRealClock();
       TaskWrapper commit_task(func_shared_ptr_, task, need_delete, schedule_time);
 #ifdef UNITTEST_DEBUG
-      OCCAM_LOG(DEBUG, "print size of", K(sizeof(commit_task)));
 #endif
       switch (task_priority_) {
         case occam::TASK_PRIORITY::EXTREMELY_HIGH:
@@ -378,7 +374,7 @@ class ObOccamTimerTaskRAIIHandle
 {
   friend class ObOccamTimer;
 public:
-  ObOccamTimerTaskRAIIHandle() : task_(nullptr), is_inited_(false), is_running_(false), lock_(ObLatchIds::TIME_WHEEL_TASK_LOCK) { OCCAM_LOG(INFO, "task handle constructed", K(*this)); }
+  ObOccamTimerTaskRAIIHandle() : task_(nullptr), is_inited_(false), is_running_(false), lock_(ObLatchIds::TIME_WHEEL_TASK_LOCK) {  }
   ObOccamTimerTaskRAIIHandle(ObOccamTimerTaskRAIIHandle&&) = delete;
   ObOccamTimerTaskRAIIHandle(const ObOccamTimerTaskRAIIHandle&) = delete;
   ObOccamTimerTaskRAIIHandle& operator=(const ObOccamTimerTaskRAIIHandle&) = delete;
@@ -388,7 +384,6 @@ public:
       (void)stop_and_wait();
     }
     is_inited_ = false;
-    OCCAM_LOG(INFO, "task handle destructed", K(*this));
   }
   bool is_running() const {
     bool ret = false;
@@ -451,9 +446,7 @@ public:
     } else {
       ret = remove_task_from_timewheel_();// promise won't schedule the task again
       if (CLICK_FAIL(ret) && ret != OB_OP_NOT_ALLOW) {
-        OCCAM_LOG(ERROR, "fail to remove task from timewheel", K(*this));
       } else {
-        OCCAM_LOG(INFO, "stop task", K(*this));
         ObSpinLockGuard lg(task_->lock_);
         task_->func_shared_ptr_.~ObSharedGuard();
         is_running_ = false;
@@ -480,11 +473,8 @@ public:
       // meaning this function is executing on thread pool, waiting it done
       while (function_weak_guard_.upgradeable()) { ob_usleep(5); }
       int64_t end_waiting_time = ObClockGenerator::getRealClock();
-      OCCAM_LOG(INFO, "waiting for task executing done, cost time:",
-                   K(end_waiting_time - start_waiting_time), K(*this));
     }
     if (OB_SUCC(ret)) {
-      OCCAM_LOG(INFO, "free task", K(*this));
       task_->~ObOccamTimerTask();
       DEFAULT_ALLOCATOR.free(task_);
       task_ = nullptr;
@@ -516,17 +506,13 @@ private:
       function_weak_guard_ = task_->func_shared_ptr_;
       if (OB_ISNULL(task_->time_wheel_)) {
         ret = OB_OP_NOT_ALLOW;
-        OCCAM_LOG(INFO, "task stopped inside itself", K(*this));
         break;// no need cancle task, cause the task stop itself already, and time wheel may not exist anymore
       } else {
         task_->set_scheduled();
         ret = task_->time_wheel_->cancel(task_);
         if (OB_TIMER_TASK_HAS_NOT_SCHEDULED == ret) {
-          OCCAM_LOG(INFO, "task return not scheduled, need try again", K(*this));
         } else if (OB_SUCCESS != ret) {
-          OCCAM_LOG(ERROR, "cancel error", K(*this));
         } else if (!task_->is_running()) {
-          OCCAM_LOG(DEBUG, "cancel task success", K(*this));
           break;// successfully cancle task, others maybe failed
         }
       }
@@ -598,8 +584,6 @@ public:
       int64_t current_time = ObClockGenerator::getClock();
       if (current_time - last_print_time > 500_ms) {// print log every 500ms
         last_print_time = current_time;
-        OCCAM_LOG(INFO, "OccamTimr waiting running task finished",
-                    K(ATOMIC_LOAD(&total_running_task_count_)), KP(this));
       }
     }
     if (timer_shared_ptr_.is_valid()) {
@@ -882,7 +866,6 @@ private:
             if (CLICK_FAIL(timer_shared_ptr_->schedule(task_scop_guard.resource(), first_time_delay))) {
               OCCAM_LOG(ERROR, "schdule task failed", K(ret));
             } else {
-              OCCAM_LOG(DEBUG, "create task and scheduled success", K(*task_scop_guard.resource()));
               task_desc.task_ = task_scop_guard.fetch_resource();
               task_desc.is_inited_ = true;
               task_desc.is_running_ = true;

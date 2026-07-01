@@ -95,7 +95,6 @@ int ObFixedMetaObjArray<T>::init(const int64_t capacity, ObIAllocator &allocator
     STORAGE_LOG(WARN, "double initialization", K(ret), KPC(this));
   } else if (OB_UNLIKELY(capacity < 0)) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "invalid argument", K(capacity));
   } else {
     allocator_ = &allocator;
     count_ = 0;
@@ -126,7 +125,6 @@ int ObFixedMetaObjArray<T>::init(
     STORAGE_LOG(WARN, "init twice", K(ret), KPC(this));
   } else if (OB_UNLIKELY(capacity < 0 || (buf_len - pos) < inner_array_size) || OB_ISNULL(data_buf)) {
     ret = OB_ERR_UNEXPECTED;
-    STORAGE_LOG(WARN, "invalid argument", K(capacity), K(buf_len), K(pos), K(inner_array_size), KP(data_buf));
   } else {
     allocator_ = nullptr;
     count_ = 0;
@@ -145,9 +143,7 @@ int ObFixedMetaObjArray<T>::init_and_assign(
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(init(other.count(), allocator))) {
-    STORAGE_LOG(WARN, "failed to init fixed array", K(ret));
   } else if (OB_FAIL(assign(other))) {
-    STORAGE_LOG(WARN, "failed to assign from other array", K(ret), K(other));
   }
   return ret;
 }
@@ -184,9 +180,7 @@ int ObFixedMetaObjArray<T>::deserialize(
   OB_UNIS_DECODE(count);
   if (OB_SUCC(ret) && count > 0) {
     if (OB_FAIL(init(count, allocator))) {
-      STORAGE_LOG(WARN, "fail to init array", K(ret));
     } else if (OB_FAIL(prepare_allocate(count))) {
-      STORAGE_LOG(WARN, "fail to init array item", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < count; i ++) {
         OB_UNIS_DECODE(at(i));
@@ -218,9 +212,7 @@ int ObFixedMetaObjArray<T>::deep_copy(
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "can not copy to inited array with this deep copy interface", K(ret), K(dst_array));
   } else if (OB_FAIL(dst_array.init(count_, buf_size, dst_buf, pos))) {
-    STORAGE_LOG(WARN, "fail to init dst array with copy buf", K(ret), KP(dst_buf), K_(count));
   } else if (OB_FAIL(dst_array.assign(*this))) {
-    STORAGE_LOG(WARN, "fail to copy local data to dest array", K(ret));
   }
   return ret;
 }
@@ -264,12 +256,10 @@ int ObFixedMetaObjArray<T>::push_back(const T &obj)
     STORAGE_LOG(WARN, "array not inited", K(ret));
   } else if (OB_LIKELY(count_ >= init_cnt_)) {
     if (OB_FAIL(common::construct_assign(data_[count_], obj))) {
-      STORAGE_LOG(WARN, "failed to copy data", K(ret));
     } else {
       ++init_cnt_;
     }
   } else if (OB_FAIL(common::copy_assign(data_[count_], obj))) {
-    STORAGE_LOG(WARN, "failed to copy data", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -308,7 +298,6 @@ int ObFixedMetaObjArray<T>::at(int64_t idx, T &obj) const
     ret = OB_ARRAY_OUT_OF_RANGE;
   } else {
     if (OB_FAIL(common::copy_assign(obj, data_[idx]))) {
-      OB_LOG(WARN, "failed to copy obj", K(ret));
     }
   }
   return ret;
@@ -348,7 +337,6 @@ int ObFixedMetaObjArray<T>::assign(const common::ObIArray<T> &other)
   } else if (this != &other) {
     for (int64_t i = 0; OB_SUCC(ret) && i < other.count(); ++i) {
       if (OB_FAIL(push_back(other.at(i)))) {
-        STORAGE_LOG(WARN, "failed to push item in array", K(ret), K(i));
       }
     }
   }

@@ -82,14 +82,10 @@ int LogReader::pread(const block_id_t block_id,
   char block_path[OB_MAX_FILE_NAME_LENGTH] = {'\0'};
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
-    PALF_LOG(WARN, "pread failed", K(block_id), K(offset), K(in_read_size), K(read_buf));
   } else if (!is_valid_block_id(block_id) || offset >= block_size_ || 0 >= in_read_size || !read_buf.is_valid()) {
     ret = OB_INVALID_ARGUMENT;
-    PALF_LOG(WARN, "invalid argument", K(block_id), K(offset), K(in_read_size), K(read_buf));
   } else if (OB_FAIL(convert_to_normal_block(log_dir_, block_id, block_path, OB_MAX_FILE_NAME_LENGTH))) {
-    PALF_LOG(ERROR, "convert_to_normal_block failed", K(ret));
   } else if (OB_FAIL(io_adapter_->open(block_path, LOG_READ_FLAG, FILE_OPEN_MODE, io_fd))) {
-    PALF_LOG(WARN, "LogReader open block failed", K(ret), K(block_path), K(io_fd));
   } else {
     const int64_t start_ts = ObTimeUtility::fast_current_time();
     int64_t remained_read_size = in_read_size;
@@ -102,9 +98,6 @@ int LogReader::pread(const block_id_t block_id,
       const int64_t curr_read_buf_len = remained_read_buf_len - out_read_size;
       int64_t curr_out_read_size = 0;
       if (OB_FAIL(inner_pread_(io_fd, curr_read_offset, curr_in_read_size, curr_read_buf, curr_read_buf_len, curr_out_read_size, io_ctx))) {
-        PALF_LOG(WARN, "LogReader inner_pread_ failed", K(ret), K(io_fd), K(block_id), K(offset),
-            K(in_read_size), K(read_buf), K(curr_in_read_size), K(curr_read_offset), K(curr_out_read_size),
-            K(remained_read_size), K(block_path));
       } else {
         out_read_size += curr_out_read_size;
         remained_read_size -= curr_out_read_size;
@@ -125,8 +118,6 @@ int LogReader::pread(const block_id_t block_id,
       const int64_t accum_read_cost_ts = ATOMIC_AAF(&accum_read_cost_ts_, cost_ts);
       if (palf_reach_time_interval(PALF_IO_STAT_PRINT_INTERVAL_US, last_accum_read_statistic_time_)) {
         const int64_t avg_pread_cost = accum_read_cost_ts / accum_read_io_count;
-        PALF_LOG(INFO, "[PALF STAT READ LOG INFO FROM DISK]", K(accum_read_io_count), 
-                 K(accum_read_log_size), K(avg_pread_cost));
         ATOMIC_STORE(&accum_read_io_count_, 0);
         ATOMIC_STORE(&accum_read_log_size_, 0);
         ATOMIC_STORE(&accum_read_cost_ts_, 0);
@@ -137,7 +128,6 @@ int LogReader::pread(const block_id_t block_id,
   if (io_fd.is_valid()) {
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(io_adapter_->close(io_fd))) {
-      PALF_LOG(WARN, "close io_fd failed", K(tmp_ret), K(io_fd));
     }
     ret = OB_SUCCESS == ret ? tmp_ret : ret;
   }
@@ -159,12 +149,8 @@ int LogReader::inner_pread_(const ObIOFd &read_io_fd,
   int64_t limited_and_aligned_in_read_size = 0;
   if (OB_FAIL(limit_and_align_in_read_size_by_block_size_(
           aligned_start_offset, aligned_in_read_size,  limited_and_aligned_in_read_size))) {
-    PALF_LOG(WARN, "limited_and_aligned_in_read_size failed, maybe read offset exceed block size",
-        K(ret), K(start_offset), K(in_read_size), K(aligned_start_offset), K(aligned_in_read_size),
-        K(limited_and_aligned_in_read_size));
   } else if (limited_and_aligned_in_read_size > read_buf_len) {
     ret = OB_BUF_NOT_ENOUGH;
-    PALF_LOG(WARN, "buffer not enough to hold read result");
   } else {
     int64_t retry_interval = 10 * 1000L;
     do {

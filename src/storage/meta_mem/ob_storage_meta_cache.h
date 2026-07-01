@@ -292,7 +292,6 @@ int ObStorageMetaValue::bypass_process_storage_meta(
     ret = OB_INVALID_ARGUMENT;
     STORAGE_LOG(WARN, "invalid arguments", K(ret), KP(buf), K(size), K(handle));
   } else if (OB_FAIL(t.deserialize(tmp_allocator, buf, size, pos))) {
-    STORAGE_LOG(WARN, "fail to deserialize ", K(ret), KP(buf), K(size));
   } else {
     time_guard.click("deserialize");
     ObIStorageMetaObj *tiny_meta = nullptr;
@@ -302,7 +301,6 @@ int ObStorageMetaValue::bypass_process_storage_meta(
       ret = OB_ALLOCATE_MEMORY_FAILED;
       STORAGE_LOG(WARN, "fail to allocate memory", K(ret), K(buffer_size));
     } else if (OB_FAIL(t.deep_copy(buffer + buffer_pos, t.get_deep_copy_size(), tiny_meta))) {
-      STORAGE_LOG(WARN, "fail to deserialize T", K(ret), KP(buf), K(size));
     } else {
       time_guard.click("deep_copy");
       handle.get_cache_value()->value_ = new (buffer) ObStorageMetaValue(type, tiny_meta);

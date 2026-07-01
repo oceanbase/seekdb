@@ -94,13 +94,11 @@ public:
         for (int64_t i = 0; i < LEAK_CHECK_OBJ_MAX_NUM; i++) {
           auto &obj_map = it->second.at(i);
           for (auto &pair : obj_map) {
-            SHARE_LOG(INFO, "dump leak obj", K(pair.first), K(pair.second.c_str()));
           }
         }
       } else {
         auto &obj_map = it->second.at(obj_type);
         for (auto &pair : obj_map) {
-          SHARE_LOG(INFO, "dump leak obj", K(pair.first), K(pair.second.c_str()));
         }
       }
     }

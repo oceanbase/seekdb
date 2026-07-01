@@ -131,14 +131,12 @@ int ObDirectLoadMemChunk<T, Compare>::sort(Compare &compare, const ObArray<share
       common::ObArray<sql::ObChunkDatumStore::StoredRow *> sort_item_list;
       for (int i = 0; OB_SUCC(ret) && i < enc_params.count(); i++) {
         if (OB_FAIL(enc_params_copy.push_back(enc_params[i]))) {
-          STORAGE_LOG(WARN, "fail to push back enc param", KR(ret));
         }
       }
       // allocator encode buf
       unsigned char *encode_buf = nullptr;
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(sort_item_list.prepare_allocate(item_list_.count()))) {
-        STORAGE_LOG(WARN, "fail to prepare allocate", KR(ret));
       } else if (OB_ISNULL(encode_buf = static_cast<unsigned char *>(
                              encode_buffer_allocator.alloc(ADS_ENCODE_BUFFER_LIMIT)))) {
         ret = common::OB_ALLOCATE_MEMORY_FAILED;
@@ -150,7 +148,6 @@ int ObDirectLoadMemChunk<T, Compare>::sort(Compare &compare, const ObArray<share
         if (OB_FAIL(item_list_[i]->generate_aqs_store_row(encode_buf, ADS_ENCODE_BUFFER_LIMIT,
                                                           enc_params_copy, sort_allocator,
                                                           sort_item_list[i], has_invalid_uni))) {
-          STORAGE_LOG(WARN, "fail to generate aqs store row", KR(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -167,7 +164,6 @@ int ObDirectLoadMemChunk<T, Compare>::sort(Compare &compare, const ObArray<share
         if (OB_FAIL(ret)) {
         } else if (OB_FAIL(aqs.init(sort_item_list, sort_allocator, 0, sort_item_list.count(),
                                     can_encode))) {
-          STORAGE_LOG(WARN, "fail to init aqs", KR(ret));
         } else if (!can_encode) {
           ret = OB_ERR_UNEXPECTED;
           STORAGE_LOG(WARN, "unexpected can_encode", KR(ret));
@@ -233,9 +229,7 @@ int ObDirectLoadMemChunk<T, Compare>::add_item(const T &item)
         new_item = new (buf) T();
         int64_t buf_pos = sizeof(T);
         if (OB_FAIL(new_item->deep_copy(item, buf, item_size, buf_pos))) {
-          STORAGE_LOG(WARN, "fail to deep copy item", KR(ret));
         } else if (OB_FAIL(item_list_.push_back(new_item))) {
-          STORAGE_LOG(WARN, "fail to push back new item", KR(ret));
         }
       }
     }

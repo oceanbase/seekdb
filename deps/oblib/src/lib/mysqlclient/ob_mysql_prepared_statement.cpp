@@ -106,7 +106,6 @@ int ObBindParamEncode::encode_uint(ENCODE_FUNC_ARG_DECL)
   UNUSEDx(is_output_param, tz_info, allocator);
   int ret = OB_SUCCESS;
   if (OB_FAIL(encode_int(col_idx, is_output_param, tz_info, param, bind_param, allocator, buffer_type))) {
-    LOG_WARN("fail to encode", K(ret));
   } else {
     bind_param.is_unsigned_ = 1;
   }
@@ -134,7 +133,6 @@ int ObBindParamEncode::encode_ufloat(ENCODE_FUNC_ARG_DECL)
   UNUSEDx(is_output_param, tz_info, allocator);
   int ret = OB_SUCCESS;
   if (OB_FAIL(encode_float(col_idx, is_output_param, tz_info, param, bind_param, allocator, buffer_type))) {
-    LOG_WARN("fail to encode", K(ret));
   } else {
     bind_param.is_unsigned_ = 1;
   }
@@ -162,7 +160,6 @@ int ObBindParamEncode::encode_udouble(ENCODE_FUNC_ARG_DECL)
   UNUSEDx(is_output_param, tz_info, allocator);
   int ret = OB_SUCCESS;
   if (OB_FAIL(encode_double(col_idx, is_output_param, tz_info, param, bind_param, allocator, buffer_type))) {
-    LOG_WARN("fail to encode", K(ret));
   } else {
     bind_param.is_unsigned_ = 1;
   }
@@ -184,9 +181,7 @@ int ObBindParamEncode::encode_number(ENCODE_FUNC_ARG_DECL)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc memory", K(ret), K(buf_len));
   } else if (OB_FAIL(param.get_number(num))) {
-    LOG_WARN("fail to get number", K(ret), K(param));
   } else if (OB_FAIL(num.format(buf, buf_len, pos, param.get_scale()))) {
-    LOG_WARN("fail to convert number to string", K(ret));
   } else {
     bind_param.buffer_ = buf;
     bind_param.buffer_len_ = buf_len;
@@ -200,7 +195,6 @@ int ObBindParamEncode::encode_unumber(ENCODE_FUNC_ARG_DECL)
   UNUSEDx(is_output_param, tz_info);
   int ret = OB_SUCCESS;
   if (OB_FAIL(encode_number(col_idx, is_output_param, tz_info, param, bind_param, allocator, buffer_type))) {
-    LOG_WARN("fail to encode", K(ret));
   } else {
     bind_param.is_unsigned_ = 1;
   }
@@ -224,7 +218,6 @@ int ObBindParamEncode::encode_datetime(ENCODE_FUNC_ARG_DECL)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc memory", K(ret));
   } else if (OB_FAIL(ObTimeConverter::datetime_to_ob_time(param.get_datetime(), tmp_tz, ob_time))) {
-    LOG_WARN("convert usec ", K(ret));
   } else {
     MEMSET(tm, 0, sizeof(MYSQL_TIME));
     tm->year = ob_time.parts_[DT_YEAR];
@@ -255,7 +248,6 @@ int ObBindParamEncode::encode_date(ENCODE_FUNC_ARG_DECL)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc memory", K(ret));
   } else if (OB_FAIL(ObTimeConverter::date_to_ob_time(param.get_date(), ob_time))) {
-    LOG_WARN("convert usec ", K(ret));
   } else {
     MEMSET(tm, 0, sizeof(MYSQL_TIME));
     tm->year = ob_time.parts_[DT_YEAR];
@@ -281,7 +273,6 @@ int ObBindParamEncode::encode_time(ENCODE_FUNC_ARG_DECL)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc memory", K(ret));
   } else if (OB_FAIL(ObTimeConverter::time_to_ob_time(param.get_time(), ob_time))) {
-    LOG_WARN("convert usec ", K(ret));
   } else {
     MEMSET(tm, 0, sizeof(MYSQL_TIME));
     tm->day = ob_time.parts_[DT_DATE];
@@ -308,7 +299,6 @@ int ObBindParamEncode::encode_year(ENCODE_FUNC_ARG_DECL)
     ret = OB_ALLOCATE_MEMORY_FAILED;
     LOG_WARN("fail to alloc memory", K(ret));
   } else if (OB_FAIL(ObTimeConverter::year_to_int(param.get_year(), *year))) {
-    LOG_WARN("convert usec ", K(ret));
   } else {
     bind_param.col_idx_ = col_idx;
     bind_param.buffer_type_ = buffer_type;
@@ -487,7 +477,6 @@ int ObBindParamDecode::decode_number(DECODE_FUNC_ARG_DECL)
   int ret = OB_SUCCESS;
   number::ObNumber nb;
   if (OB_FAIL(nb.from(reinterpret_cast<char *>(bind_param.buffer_), bind_param.length_, allocator))) {
-    LOG_WARN("decode param to number failed", K(ret), K(bind_param));
   } else {
     param.set_number(nb);
   }
@@ -500,7 +489,6 @@ int ObBindParamDecode::decode_unumber(DECODE_FUNC_ARG_DECL)
   int ret = OB_SUCCESS;
   number::ObNumber nb;
   if (OB_FAIL(nb.from(reinterpret_cast<char *>(bind_param.buffer_), bind_param.length_, allocator))) {
-    LOG_WARN("decode param to number failed", K(ret), K(bind_param));
   } else {
     param.set_unumber(nb);
   }
@@ -528,15 +516,12 @@ int ObBindParamDecode::decode_datetime(DECODE_FUNC_ARG_DECL)
     if (MYSQL_TYPE_DATE == field_type) {
       value = ob_time.parts_[DT_DATE];
     } else if (OB_FAIL(ObTimeConverter::ob_time_to_datetime(ob_time, cvrt_ctx, value))){
-      LOG_WARN("convert obtime to datetime failed", K(ret), K(value), K(tm->year), K(tm->month),
-                K(tm->day), K(tm->hour), K(tm->minute), K(tm->second));
     }
   }
   if (OB_SUCC(ret)) {
     if (MYSQL_TYPE_TIMESTAMP == field_type) {
       int64_t ts_value = 0;
       if (OB_FAIL(ObTimeConverter::datetime_to_timestamp(value, &tz_info, ts_value))) {
-        LOG_WARN("datetime to timestamp failed", K(ret));
       } else {
         param.set_timestamp(ts_value);
       }
@@ -849,9 +834,7 @@ int ObMySQLPreparedStatement::init(ObMySQLConnection &conn, const ObString &sql,
     ret = -mysql_errno(conn_->get_handler());
     LOG_WARN("fail to prepare stmt", "info", mysql_error(conn_->get_handler()), K(ret));
   } else if (OB_FAIL(param_.init())) {
-    LOG_WARN("fail to init prepared result", K(ret));
   } else if (OB_FAIL(result_.init())) {
-    LOG_WARN("fail to init prepared result", K(ret));
   } else if (FALSE_IT(stmt_param_count_ = param_.get_stmt_param_count())) {
   } else if (FALSE_IT(result_column_count_ = result_.get_result_column_count())) {
   } else if (stmt_param_count_ > 0 && OB_FAIL(alloc_bind_params(stmt_param_count_, bind_params_))) {
@@ -917,7 +900,6 @@ int ObMySQLProcStatement::bind_param(const int64_t col_idx,
       buffer_type = static_cast<enum_field_types>(ob_type_to_mysql_type[param.get_type()]);
     }
     if (OB_FAIL(get_bind_param_by_idx(col_idx, bind_param))) {
-      LOG_WARN("fail to get bind param by idx", K(ret), K(col_idx));
     } else if (OB_ISNULL(bind_param)) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("fail to get bind param by idx", K(ret), K(col_idx), K(stmt_param_count_));
@@ -928,9 +910,7 @@ int ObMySQLProcStatement::bind_param(const int64_t col_idx,
                                                                 *bind_param,
                                                                 allocator,
                                                                 buffer_type))) {
-      LOG_WARN("fail to encode param", K(ret));
     } else if (OB_FAIL(param_.bind_param(*bind_param))) {
-      LOG_WARN("failed to bind param", K(ret), KPC(bind_param));
     }
   }
   return ret;
@@ -946,7 +926,6 @@ int ObMySQLProcStatement::bind_basic_type_by_pos(uint64_t position,
   int ret = OB_SUCCESS;
   ObBindParam *bind_param = NULL;
   if (OB_FAIL(get_bind_param_by_idx(position, bind_param))) {
-    LOG_WARN("fail to get bind param by idx", K(ret), K(position));
   } else if (OB_ISNULL(bind_param)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("fail to get bind param by idx", K(ret), K(position), K(stmt_param_count_));
@@ -959,13 +938,9 @@ int ObMySQLProcStatement::bind_basic_type_by_pos(uint64_t position,
     bind_param->is_null_ = 0;
     bind_param->length_ = param_size;
     if (OB_FAIL(in_out_map_.push_back(is_out_param))) {
-      LOG_WARN("failed to push back", K(ret));
     } else if (OB_FAIL(param_.bind_param(*bind_param))) {
-      LOG_WARN("failed tp bind param", K(ret), KPC(bind_param));
     } else if (stmt_param_count_ == position + 1) {
       if (OB_FAIL(param_.bind_param())) {
-        LOG_WARN("failed to bind param", K(ret),
-                 "info", mysql_stmt_error(stmt_), "info", mysql_error(conn_->get_handler()));
       }
     }
   }
@@ -1023,7 +998,6 @@ int ObMySQLProcStatement::bind_proc_param(ObIAllocator &allocator,
                                                     result,
                                                     is_sql,
                                                     basic_out_param))) {
-      LOG_WARN("bind parameters failed", K(ret));
     }
   } else {
     int64_t start_idx = routine_info.get_param_start_idx();
@@ -1032,9 +1006,7 @@ int ObMySQLProcStatement::bind_proc_param(ObIAllocator &allocator,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("result is NULL", K(ret));
       } else if (OB_FAIL(basic_out_param.push_back(std::make_pair(0, 0)))) {
-        LOG_WARN("push back failed", K(ret));
       } else if (OB_FAIL(bind_param(0, 0, true, tz_info, *result, routine_info, allocator))) {
-        LOG_WARN("failed to bind param", K(ret));
       }
     }
     int64_t start_pos = (routine_info.is_function() ? (is_sql ? 0 : 1) : 0);
@@ -1054,7 +1026,6 @@ int ObMySQLProcStatement::bind_proc_param(ObIAllocator &allocator,
           LOG_WARN("push back failed", K(ret), K(i));
         } else if (OB_FAIL(bind_param(i + start_pos - skip_cnt, i + (routine_info.is_function() ? 1 : 0), 
                                       is_output, tz_info, param, routine_info, allocator))) {
-          LOG_WARN("failed to bind param", K(ret));
         }
       }
     }
@@ -1063,9 +1034,7 @@ int ObMySQLProcStatement::bind_proc_param(ObIAllocator &allocator,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("result is NULL", K(ret));
       } else if (OB_FAIL(basic_out_param.push_back(std::make_pair(params.count() - skip_cnt, 0)))) {
-        LOG_WARN("push back failed", K(ret));
       } else if (OB_FAIL(bind_param(params.count() - skip_cnt, 0, true, tz_info, *result, routine_info, allocator))) {
-        LOG_WARN("failed to bind param", K(ret));
       }
     }
   }
@@ -1125,13 +1094,11 @@ int ObMySQLProcStatement::convert_proc_output_param_result(int64_t out_param_idx
           }
         }
         if (FAILEDx(get_ob_type(obj_type, static_cast<obmysql::EMySQLFieldType>(bind_param.buffer_type_)))) {
-          LOG_WARN("fail to get ob type", K(ret), K(bind_param));
         } else if (OB_FAIL(ObBindParamDecode::decode_map_[obj_type](bind_param.buffer_type_,
                                                                     tz_info,
                                                                     bind_param,
                                                                     *param,
                                                                     allocator))) {
-          LOG_WARN("failed to decode param", K(ret));
         }
       }
     }
@@ -1151,7 +1118,6 @@ int ObMySQLProcStatement::process_proc_output_params(ObIAllocator &allocator,
   int ret = OB_SUCCESS;
   const int64_t params_count = params.count();
   if (OB_FAIL(result_.init())) {
-    LOG_WARN("failed to init result_", K(ret));
   } else if (FALSE_IT(result_column_count_ = result_.get_result_column_count())) {
   } else if (result_column_count_ > 0
               && OB_FAIL(alloc_bind_params(result_column_count_, result_params_))) {
@@ -1163,7 +1129,6 @@ int ObMySQLProcStatement::process_proc_output_params(ObIAllocator &allocator,
     int64_t out_idx = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < basic_out_param.count(); i++) {
       if (OB_FAIL(get_bind_param_by_idx(basic_out_param.at(i).first, in_param))) {
-        LOG_WARN("failed to get param", K(ret), K(i));
       } else if (OB_ISNULL(in_param)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("in_param is NULL", K(ret), K(i));
@@ -1171,7 +1136,6 @@ int ObMySQLProcStatement::process_proc_output_params(ObIAllocator &allocator,
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("out_idx is error", K(ret), K(out_idx), K(result_column_count_));
       } else if (OB_FAIL(get_bind_result_param_by_idx(i, out_param))) {
-        LOG_WARN("fail to get bind result param by idx", K(ret), K(out_idx));
       } else if (OB_ISNULL(out_param) || OB_ISNULL(mysql_bind)) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("out_param is NULL", K(ret), K(out_idx), K(mysql_bind));
@@ -1244,7 +1208,6 @@ int ObMySQLProcStatement::process_proc_output_params(ObIAllocator &allocator,
         tmp_ret = mysql_stmt_fetch(stmt_);
         if (MYSQL_DATA_TRUNCATED == tmp_ret) {
           if (OB_FAIL(handle_data_truncated(allocator))) {
-            LOG_WARN("failed to handler data", K(ret));
           }
         } else {
           ret = -mysql_stmt_errno(stmt_);
@@ -1267,7 +1230,6 @@ int ObMySQLProcStatement::process_proc_output_params(ObIAllocator &allocator,
           const int64_t col_idx = basic_out_param.at(i).first;
           ObBindParam *bind_param = nullptr;
           if (OB_FAIL(get_bind_result_param_by_idx(i, bind_param))) {
-            LOG_WARN("fail to get bind param by idx", K(ret), K(col_idx), K_(stmt_param_count));
           } else if (OB_ISNULL(bind_param)) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("bind_param is NULL", K(ret));
@@ -1288,7 +1250,6 @@ int ObMySQLProcStatement::process_proc_output_params(ObIAllocator &allocator,
             } else if (OB_FAIL(convert_proc_output_param_result(basic_out_param.at(i).second, *tz_info,
                                                                 *bind_param, obj, 
                                                                 routine_info, allocator, is_return_value))) {
-              LOG_WARN("fail to convert proc output param result", K(ret));
             }
           }
         } // end for
@@ -1324,7 +1285,6 @@ int ObMySQLProcStatement::store_string_obj(ObObj &param,
   int ret = OB_SUCCESS;
   ObString dst(length, buffer);
   if (OB_FAIL(ob_write_string(allocator, dst, dst))) {
-    LOG_WARN("failed to write str", K(ret));
   } else {
     switch (obj_type) {
       case ObVarcharType:
@@ -1387,14 +1347,10 @@ int ObMySQLProcStatement::execute_proc(ObIAllocator &allocator,
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("tz info is null", K(ret));
   } else if (OB_FAIL(bind_proc_param(allocator, params, routine_info, udts, basic_out_param, tz_info, result, is_sql))) {
-    LOG_WARN("failed to bind proc param", K(ret));
   } else if (OB_FAIL(param_.bind_param())) {
-    LOG_WARN("failed to bind prepared input param", "info", mysql_error(conn_->get_handler()), K(ret));
   } else if (OB_FAIL(execute_stmt_v2_interface())) {
-    LOG_WARN("failed to execute PL", K(ret));
   } else if (OB_FAIL(process_proc_output_params(allocator, params, routine_info, udts, basic_out_param,
                                                 tz_info, result, is_sql))) {
-    LOG_WARN("fail to process proc output params", K(ret));
   }
   return ret;
 }
@@ -1410,7 +1366,6 @@ int ObMySQLProcStatement::close()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(close_mysql_stmt())) {
-    LOG_WARN("close mysql stmt failed", K(ret));
   }
   free_resouce();
   return ret;

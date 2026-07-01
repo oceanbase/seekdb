@@ -58,7 +58,6 @@ class ObLogValues : public ObLogicalOperator
     {
       int ret = common::OB_SUCCESS;
       if (OB_FAIL(row_store_.assign(row_store))) {
-        SQL_OPT_LOG(WARN, "fail to assign row store, ret=%d", K(ret));
       }
       return ret;
     }

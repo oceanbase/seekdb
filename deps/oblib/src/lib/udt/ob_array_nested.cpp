@@ -48,7 +48,6 @@ int ObArrayNested::get_data_binary(char *res_buf, int64_t buf_len)
   }
   if (OB_FAIL(ret)) {
   } else if (OB_FAIL(data_->get_data_binary(res_buf + pos,  buf_len - pos))) {
-    OB_LOG(WARN, "get data binary failed", K(ret), K(pos), K(length_), K(buf_len));
   }
   return ret;
 }
@@ -67,7 +66,6 @@ int ObArrayNested::get_raw_binary(char *res_buf, int64_t buf_len)
     MEMCPY(res_buf + pos, &length_, sizeof(length_));
     pos += sizeof(length_);
     if (OB_FAIL(get_data_binary(res_buf + pos,  buf_len - pos))) {
-      OB_LOG(WARN, "get data binary failed", K(ret), K(buf_len));
     }
   }
   return ret;
@@ -110,7 +108,6 @@ int ObArrayNested::insert_from(const ObIArrayType &src, uint32_t begin, uint32_t
     uint32_t pre_max_offset = data_container_->offset_at(length_);
     for (uint32_t i = 0; i < len && OB_SUCC(ret); ++i) {
       if (OB_FAIL(data_container_->offsets_.push_back(pre_max_offset + src.get_offsets()[begin + i] - last_offset))) {
-        OB_LOG(WARN, "failed to push value to array data", K(ret));
       } else {
         last_offset = src.get_offsets()[begin + i];
         pre_max_offset = data_container_->offset_at(data_container_->offsets_.size());
@@ -119,7 +116,6 @@ int ObArrayNested::insert_from(const ObIArrayType &src, uint32_t begin, uint32_t
     // insert nullbitmaps
     for (uint32_t i = 0; i < len && OB_SUCC(ret); ++i) {
       if (OB_FAIL(data_container_->null_bitmaps_.push_back(src.get_nullbitmap()[begin + i]))) {
-        OB_LOG(WARN, "failed to push null", K(ret));
       }
     }
     // insert data
@@ -128,7 +124,6 @@ int ObArrayNested::insert_from(const ObIArrayType &src, uint32_t begin, uint32_t
       uint32_t child_len = src.get_offsets()[begin + len - 1] - start;
       const ObIArrayType *child_arr = static_cast<const ObArrayNested&>(src).get_child_array();
       if (OB_FAIL(data_->insert_from(*child_arr, start, child_len))) {
-        OB_LOG(WARN, "failed to insert child array", K(ret));
       } else {
         length_ += len;
       }
@@ -174,7 +169,6 @@ int ObArrayNested::init(ObString &raw_data)
     length_ = *reinterpret_cast<uint32_t *>(raw_str);
     ObString data_str(raw_data.length() - sizeof(length_), raw_data.ptr() + sizeof(length_));
     if (OB_FAIL(init(length_, data_str))) {
-      LOG_WARN("init failed", K(ret), K(length_), K(raw_data));
     }
   }
   return ret;
@@ -209,7 +203,6 @@ int ObArrayNested::init(uint32_t length, ObString &data_binary)
         // init data
         ObString data_str(data_binary.length() - pos, binary_ptr + pos);
         if (OB_FAIL(data_->init(data_str))) {
-          OB_LOG(WARN, "data init failed", K(ret), K(pos), K(length_), K(data_binary.length()));
         }
       }
     }
@@ -249,7 +242,6 @@ int ObArrayNested::init(ObDatum *attrs, uint32_t attr_count, bool with_length)
     null_bitmaps_ = const_cast<uint8_t *>(reinterpret_cast<const uint8_t *>(attrs[idx++].get_string().ptr()));
     offsets_ = const_cast<uint32_t *>(reinterpret_cast<const uint32_t *>(attrs[idx++].get_string().ptr()));
     if (OB_FAIL(data_->init(attrs + idx, attr_count - idx, false))) {
-      OB_LOG(WARN, "failed to init attrs", K(ret), K(attr_count), K(count));
     }
     if ((with_length && (length_ != attrs[1].get_int_bytes() / sizeof(uint8_t) || length_ != attrs[2].get_int_bytes() / sizeof(uint32_t)))
         || (!with_length && (length_ != attrs[1].get_int_bytes() / sizeof(uint32_t)))) {
@@ -277,7 +269,6 @@ int ObArrayNested::print(ObStringBuffer &format_str, uint32_t begin, uint32_t pr
     ret = OB_INVALID_ARGUMENT;
     OB_LOG(WARN, "invalid argument", K(ret));
   } else if (OB_FAIL(format_str.append("["))) {
-    OB_LOG(WARN, "fail to append [", K(ret));
   } else {
     if (print_whole) {
       // print whole array
@@ -293,13 +284,11 @@ int ObArrayNested::print(ObStringBuffer &format_str, uint32_t begin, uint32_t pr
       } else if (null_bitmaps_[i]) {
           // value is null
           if (OB_FAIL(format_str.append("NULL"))) {
-            OB_LOG(WARN, "fail to append NULL to buffer", K(ret));
           }
       } else {
         uint32_t start = offset_at(i, offsets_);
         uint32_t elem_cnt = offsets_[i] - start;
         if (OB_FAIL(data_->print(format_str, start, elem_cnt, false))) {
-           OB_LOG(WARN, "fail to append string to format_str", K(ret));
         }
       }
     }
@@ -340,7 +329,6 @@ int ObArrayNested::print_element(ObStringBuffer &format_str, uint32_t begin, uin
         uint32_t start = offset_at(i, offsets_);
         uint32_t elem_cnt = offsets_[i] - start;
         if (OB_FAIL(data_->print_element(format_str, start, elem_cnt, false, delimiter, has_null_str, null_str))) {
-          OB_LOG(WARN, "fail to append string to format_str", K(ret));
         }
       }
     }
@@ -357,13 +345,11 @@ int ObArrayNested::print_element_at(ObStringBuffer &format_str, uint32_t idx) co
   } else if (null_bitmaps_[idx]) {
       // value is null
       if (OB_FAIL(format_str.append("NULL"))) {
-        OB_LOG(WARN, "fail to append NULL to buffer", K(ret));
       }
   } else {
     uint32_t start = offset_at(idx, offsets_);
     uint32_t elem_cnt = offsets_[idx] - start;
     if (OB_FAIL(data_->print(format_str, start, elem_cnt, false))) {
-        OB_LOG(WARN, "fail to append string to format_str", K(ret));
     }
   }
   return ret;
@@ -385,17 +371,13 @@ int ObArrayNested::push_back(const ObIArrayType &src, bool is_null)
     OB_LOG(WARN, "array element size exceed max", K(ret), K(length_), K(MAX_ARRAY_ELEMENT_SIZE));
   } else if (is_null) {
     if (OB_FAIL(push_null())) {
-      OB_LOG(WARN, "failed to push null", K(ret));
     }
   } else {
     uint32_t last_offset = data_container_->offset_at(length_);
     uint32_t cur_offset = last_offset + src.size();
     if (OB_FAIL(data_container_->null_bitmaps_.push_back(false))) {
-      OB_LOG(WARN, "failed to push null", K(ret));
     } else if (OB_FAIL(data_container_->offsets_.push_back(cur_offset))) {
-      OB_LOG(WARN, "failed to push null", K(ret));
     } else if (OB_FAIL(data_->insert_from(src, 0, src.size()))) {
-      OB_LOG(WARN, "failed to insert child array", K(ret));
     } else if (get_raw_binary_len() > MAX_ARRAY_SIZE) {
       ret = OB_SIZE_OVERFLOW;
       OB_LOG(WARN, "array data length exceed max", K(ret), K(get_raw_binary_len()), K(MAX_ARRAY_SIZE));
@@ -419,9 +401,7 @@ int ObArrayNested::push_null()
   } else {
     uint32_t last_offset =  data_container_->offset_at(length_);
     if (OB_FAIL(data_container_->null_bitmaps_.push_back(true))) {
-      OB_LOG(WARN, "failed to push null", K(ret));
     } else if (OB_FAIL(data_container_->offsets_.push_back(last_offset))) {
-      OB_LOG(WARN, "failed to push null", K(ret));
     } else if (get_raw_binary_len() > MAX_ARRAY_SIZE) {
       ret = OB_SIZE_OVERFLOW;
       OB_LOG(WARN, "array data length exceed max", K(ret), K(get_raw_binary_len()), K(MAX_ARRAY_SIZE));
@@ -456,9 +436,7 @@ int ObArrayNested::at(uint32_t idx, ObIArrayType &dest) const
     uint32_t child_len = get_offsets()[idx] - start;
     const ObIArrayType *child_arr = get_child_array();
     if (OB_FAIL(dest.insert_from(*child_arr, start, child_len))) {
-      OB_LOG(WARN, "failed to insert child array", K(ret), K(idx), K(start), K(child_len));
     } else if (OB_FAIL(dest.init())) {
-      OB_LOG(WARN, "failed to init array element", K(ret), K(idx), K(start), K(child_len));
     }    
   }
   return ret;
@@ -482,7 +460,6 @@ int ObArrayNested::flatten(ObArrayAttr *attrs, uint32_t attr_count, uint32_t &at
     attrs[attr_idx].length_ = sizeof(uint32_t) * length_;
     attr_idx++;
     if (OB_FAIL(data_->flatten(attrs, attr_count, attr_idx))) {
-      OB_LOG(WARN, "failed to flatten data", K(ret), K(attr_count), K(attr_idx));
     }
   }
   return ret;
@@ -518,7 +495,6 @@ int ObArrayNested::compare_at(uint32_t left_begin, uint32_t left_len,
         ret = OB_ERR_ARRAY_TYPE_MISMATCH;
         OB_LOG(WARN, "invalid array type", K(ret), K(right.get_format()), K(this->get_format()));
       } else if (OB_FAIL(get_child_array()->compare_at(l_start, l_child_len, r_start, r_child_len, *right_nested->get_child_array(), cmp_ret))) {
-        OB_LOG(WARN, "failed to do child array compare", K(ret), K(l_start), K(l_child_len), K(r_start), K(r_child_len));
       }
     }
   }
@@ -555,7 +531,6 @@ int ObArrayNested::contains_all(const ObIArrayType &other, bool &bret) const
           if (OB_FAIL(get_child_array()->compare_at(l_start, l_child_len, r_start, r_child_len, 
                                                     *right_data->get_child_array(),
                                                     cmp_ret))) {
-            OB_LOG(WARN, "failed to do nested array contains", K(ret));
           } else if (cmp_ret == 0) {
             found = true;
           }
@@ -590,7 +565,6 @@ int ObArrayNested::overlaps(const ObIArrayType &other, bool &bret) const
           if (OB_FAIL(get_child_array()->compare_at(l_start, l_child_len, r_start, r_child_len, 
                                                     *right_data->get_child_array(),
                                                     cmp_ret))) {
-            OB_LOG(WARN, "failed to do nested array contains", K(ret));
           } else if (cmp_ret == 0) {
             bret = true;
           }
@@ -621,7 +595,6 @@ int ObArrayNested::clone_empty(ObIAllocator &alloc, ObIArrayType *&output, bool 
     if (OB_SUCC(ret)) {
       ObIArrayType *arr_child = NULL;
       if (OB_FAIL(get_child_array()->clone_empty(alloc, arr_child, read_only))) {
-        OB_LOG(WARN, "failed to clone child empty array", K(ret));
       } else {
         arr_ptr->set_element_type(this->element_type_);
         arr_ptr->set_child_array(arr_child);
@@ -638,7 +611,6 @@ int ObArrayNested::distinct(ObIAllocator &alloc, ObIArrayType *&output) const
   int ret = OB_SUCCESS;
   ObIArrayType *arr_obj = NULL;
   if (OB_FAIL(clone_empty(alloc, arr_obj, false))) {
-    OB_LOG(WARN, "clone empty failed", K(ret));
   } else if (contain_null() && OB_FAIL(arr_obj->push_null())) {
     OB_LOG(WARN, "push null failed", K(ret));
   } else if (this->length_ == 0) {
@@ -652,9 +624,7 @@ int ObArrayNested::distinct(ObIAllocator &alloc, ObIArrayType *&output) const
       ret = OB_ERR_ARRAY_TYPE_MISMATCH;
       OB_LOG(WARN, "invalid array type", K(ret), K(inner_arr->get_format()));
     } else if (OB_FAIL(elem_set.create(length_, ObMemAttr("ArrayDistSet")))) {
-      OB_LOG(WARN, "failed to create cellid set", K(ret), K(length_));
     } else if (OB_FAIL(inner_arr->clone_empty(alloc, child_obj, false))) {
-      OB_LOG(WARN, "clone empty failed", K(ret));
     } else {
       for (uint32_t i = 0; i < length_ && OB_SUCC(ret); ++i) {
         uint32_t idx = 0;
@@ -662,23 +632,17 @@ int ObArrayNested::distinct(ObIAllocator &alloc, ObIArrayType *&output) const
         if (is_null(i)) {
           // do nothing
         } else if (OB_FAIL(at(i, *child_obj))) {
-          OB_LOG(WARN, "get element failed", K(ret), K(i), K(length_));
         } else if (OB_FAIL(child_obj->hash(hash_val))) {
-          OB_LOG(WARN, "get element hash value failed", K(ret), K(i), K(length_));
         } else if (OB_FAIL(elem_set.get_refactored(hash_val, idx))) {
           if (ret == OB_HASH_NOT_EXIST) {
             if (OB_FAIL(arr_obj_ptr->push_back(*child_obj))) {
-              OB_LOG(WARN, "failed to add elemen", K(ret));
             } else if (OB_FAIL(elem_set.set_refactored(hash_val, i))) {
-              OB_LOG(WARN, "failed to add elemen into set", K(ret));
             } 
           } else if (ret == OB_HASH_EXIST) {
             // duplicate element, double check
             bool bret = false;
             if (OB_FAIL(arr_obj_ptr->init())) {
-              OB_LOG(WARN, "failed to init array", K(ret));
             } else if (OB_FAIL(ObArrayUtil::contains(*arr_obj_ptr, *child_obj, bret))) {
-              OB_LOG(WARN, "array contains failed", K(ret));
             } else if (!bret && OB_FAIL(arr_obj_ptr->push_back(*child_obj))) {
               OB_LOG(WARN, "failed to add elemen", K(ret));
             }
@@ -714,13 +678,10 @@ int ObArrayNested::except(ObIAllocator &alloc, ObIArrayType *arr2, ObIArrayType 
   uint64_t hash_val = 0;
 
   if (OB_FAIL(clone_empty(alloc, arr_ptr, false))) {
-    OB_LOG(WARN, "clone empty failed", K(ret));
   } else if (this->size() == 0) {
     output = arr_ptr;
   } else if (OB_FAIL(distinct(alloc, arr1_distinct))) {
-    OB_LOG(WARN, "failed to get distinct array", K(ret));
   } else if (OB_FAIL(arr1_distinct->init())) {
-    OB_LOG(WARN, "failed to init array", K(ret));
   } else if (OB_ISNULL(arr_bin_ptr = dynamic_cast<ObArrayNested *>(arr_ptr))
             || OB_ISNULL(arr1_bin_ptr = dynamic_cast<ObArrayNested *>(arr1_distinct))
             || OB_ISNULL(arr2_bin_ptr)) {
@@ -734,23 +695,18 @@ int ObArrayNested::except(ObIAllocator &alloc, ObIArrayType *arr2, ObIArrayType 
   } else if (arr2_bin_ptr->size() == 0) {
     output = arr1_distinct;
   } else if (OB_FAIL(inner_arr->clone_empty(alloc, child_obj, false))) {
-    OB_LOG(WARN, "clone empty failed", K(ret));
   } else if (OB_FAIL(elem_set.create(arr2_bin_ptr->length_, 
                                   ObMemAttr("ArrayDistSet")))) {
-    OB_LOG(WARN, "failed to create cellid set", K(ret), K(arr2_bin_ptr->length_));
   } else {
     for (uint32_t i = 0; i < arr2_bin_ptr->length_ && OB_SUCC(ret); ++i) {
       hash_val = 0;
       if (arr2->is_null(i)) {
         arr2_contain_null = true;
       } else if (OB_FAIL(arr2_bin_ptr->at(i, *child_obj))) {
-        OB_LOG(WARN, "get element failed", K(ret), K(i), K(arr2_bin_ptr->length_));
       } else if (OB_FAIL(child_obj->hash(hash_val))) {
-        OB_LOG(WARN, "get element hash value failed", K(ret), K(i), K(arr2_bin_ptr->length_));
       } else if (OB_FAIL(elem_set.exist_refactored(hash_val))) {
         if (ret == OB_HASH_NOT_EXIST) {
           if (OB_FAIL(elem_set.set_refactored(hash_val))) {
-            OB_LOG(WARN, "failed to add elemen into set", K(ret));
           }
         } else if (ret == OB_HASH_EXIST) {
           // duplicate element, double check when arr1 
@@ -770,23 +726,18 @@ int ObArrayNested::except(ObIAllocator &alloc, ObIArrayType *arr2, ObIArrayType 
           if (!arr2_contain_null && !arr1_contain_null) {
             arr1_contain_null = true;
             if (OB_FAIL(arr_bin_ptr->push_null())) {
-              OB_LOG(WARN, "failed to add elemen", K(ret));
             }
           }
         } else if (OB_FAIL(arr1_bin_ptr->at(i, *child_obj))) {
-          OB_LOG(WARN, "get element failed", K(ret), K(i), K(arr1_bin_ptr->length_));
         } else if (OB_FAIL(child_obj->hash(hash_val))) {
-          OB_LOG(WARN, "get element hash value failed", K(ret), K(i), K(arr1_bin_ptr->length_));
         } else if (OB_FAIL(elem_set.exist_refactored(hash_val))) {
           if (ret == OB_HASH_NOT_EXIST) {
             if (OB_FAIL(arr_bin_ptr->push_back(*child_obj))) {
-              OB_LOG(WARN, "failed to add elemen", K(ret));
             }
           } else if (ret == OB_HASH_EXIST) {
             // double check
             bool bret = false;
             if (OB_FAIL(ObArrayUtil::contains(*arr2_bin_ptr, *child_obj, bret))) {
-              OB_LOG(WARN, "array contains failed", K(ret));
             } else if (!bret && OB_FAIL(arr_bin_ptr->push_back(*child_obj))) {
               OB_LOG(WARN, "failed to add elemen", K(ret));
             }
@@ -817,7 +768,6 @@ int ObArrayNested::unionize(ObIAllocator &alloc, ObIArrayType **arr, uint32_t ar
   uint64_t hash_val = 0;
 
   if (OB_FAIL(inner_arr->clone_empty(alloc, child_obj, false))) {
-    OB_LOG(WARN, "clone empty failed", K(ret));
   }
   for (int64_t i = 0; i < arr_cnt && OB_SUCC(ret); ++i) {
     if (OB_ISNULL(arr_bin_ptr = dynamic_cast<ObArrayNested *>(arr[i]))) {
@@ -835,27 +785,20 @@ int ObArrayNested::unionize(ObIAllocator &alloc, ObIArrayType **arr, uint32_t ar
           if (!arr_contain_null) {
             arr_contain_null = true;
             if (OB_FAIL(this->push_null())) {
-              OB_LOG(WARN, "push null failed", K(ret));
             }
           }
         } else if (OB_FAIL(arr_bin_ptr->at(j, *child_obj))) {
-          OB_LOG(WARN, "get element failed", K(ret), K(j), K(arr_bin_ptr->length_));
         } else if (OB_FAIL(child_obj->hash(hash_val))) {
-          OB_LOG(WARN, "get element hash value failed", K(ret), K(j), K(arr_bin_ptr->length_));
         } else if (OB_FAIL(elem_set.exist_refactored(hash_val))) {
           if (ret == OB_HASH_NOT_EXIST) {
             if (OB_FAIL(this->push_back(*child_obj))) {
-              OB_LOG(WARN, "failed to add elemen", K(ret));
             } else if (OB_FAIL(elem_set.set_refactored(hash_val))) {
-              OB_LOG(WARN, "failed to add elemen into set", K(ret));
             }
           } else if (ret == OB_HASH_EXIST) {
             // double check
             bool bret = false;
             if (OB_FAIL(this->init())) {
-              OB_LOG(WARN, "failed to init array", K(ret));
             } else if (OB_FAIL(ObArrayUtil::contains(*this, *child_obj, bret))) {
-              OB_LOG(WARN, "array contains failed", K(ret));
             } else if (!bret && OB_FAIL(this->push_back(*child_obj))) {
               OB_LOG(WARN, "failed to add elemen", K(ret));
             }
@@ -882,14 +825,11 @@ int ObArrayNested::intersect(ObIAllocator &alloc, ObIArrayType **arr, uint32_t a
   ObArrayNested *arr1_bin_ptr = NULL;
 
   if (OB_FAIL(arr[0]->distinct(alloc, arr1_distinct))) {
-    OB_LOG(WARN, "failed to get distinct array", K(ret));
   } else if (OB_FAIL(arr1_distinct->init())) {
-    OB_LOG(WARN, "failed to init array", K(ret));
   } else if (OB_ISNULL(arr1_bin_ptr = dynamic_cast<ObArrayNested *>(arr1_distinct))) {
     ret = OB_ERR_ARRAY_TYPE_MISMATCH;
     OB_LOG(WARN, "invalid array type", K(ret), K(arr1_distinct->get_format()));
   } else if (OB_FAIL(inner_arr->clone_empty(alloc, child_obj, false))) {
-    OB_LOG(WARN, "clone empty failed", K(ret));
   }
   for (uint32_t i = 0; i < arr1_bin_ptr->length_ && OB_SUCC(ret); ++i) {
     bool bret = true;
@@ -905,7 +845,6 @@ int ObArrayNested::intersect(ObIAllocator &alloc, ObIArrayType **arr, uint32_t a
         OB_LOG(WARN, "push null failed", K(ret));
       }
     } else if (OB_FAIL(arr1_bin_ptr->at(i, *child_obj))) {
-      OB_LOG(WARN, "get element failed", K(ret), K(i), K(arr1_bin_ptr->length_));
     } else {
       for (int64_t i = 1; i < arr_cnt && OB_SUCC(ret) && bret; ++i) {
         if (OB_ISNULL(arr_bin_ptr = dynamic_cast<ObArrayNested *>(arr[i]))) {

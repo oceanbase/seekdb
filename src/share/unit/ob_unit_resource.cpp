@@ -359,7 +359,6 @@ int ObUnitResource::check_net_bandwidth_supported() const
   bool is_during_upgrade = false;
   if (OB_FAIL(check_net_bandwidth_supported(*this, false/*need_check_user_spec*/,
                                             is_during_upgrade))) {
-    LOG_WARN("failed to check_net_bandwidth supported", KR(ret), KPC(this));
   }
   return ret;
 }
@@ -382,7 +381,6 @@ int ObUnitResource::init_and_check_net_bandwidth_(const ObUnitResource &user_spe
   bool is_during_upgrade = false;
   if (OB_FAIL(check_net_bandwidth_supported(user_spec, true/*need_check_user_spec*/,
                                             is_during_upgrade))) {
-    LOG_WARN("failed to check_net_bandwidth_supported", KR(ret), K(user_spec));
   } else if (is_during_upgrade) {
     // during upgrade, set DEFAULT value
     max_net_bandwidth_ = DEFAULT_NET_BANDWIDTH;
@@ -649,7 +647,6 @@ int ObUnitResource::update_and_check_net_bandwidth_(const ObUnitResource &user_s
   bool is_during_upgrade = false;
   if (OB_FAIL(check_net_bandwidth_supported(user_spec, true/*need_check_user_spec*/,
                                             is_during_upgrade))) {
-    LOG_WARN("failed to check_net_bandwidth_supported", KR(ret), K(user_spec));
   } else if (is_during_upgrade) {
     // during upgrade, max_net_bandwidth_ & net_bandiwidth_weigth_ keep unchanged
   } else {

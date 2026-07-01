@@ -136,7 +136,6 @@ int ObLobWriteBuffer::move_data_for_write(
     // src and dst is same, no need move
     LOG_DEBUG("src and dst is same, so not move", K(move_src_byte_offset), K(move_dst_byte_offset), K(total_move_byte_len));
   } else if (OB_FAIL(move_to_remain_buffer(remain_buf, move_src_byte_offset, total_move_byte_len, real_move_byte_len, real_move_char_len))) {
-    LOG_WARN("move_to_remain_buffer fail", K(ret), K(move_src_byte_offset), K(total_move_byte_len), K(real_move_byte_len), K(real_move_char_len));
   } else {
     if (real_move_byte_len > 0) {
       MEMMOVE(buffer_ptr() + move_dst_byte_offset, buffer_ptr() + move_src_byte_offset, real_move_byte_len);
@@ -195,15 +194,12 @@ int ObLobWriteBuffer::byte_write(
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("write not at start pos", K(ret), K(write_byte_offset), K(write_old_byte_len), K(write_data));
     } else if (OB_FAIL(set_data(write_data.ptr(), write_data.length()))) {
-      LOG_WARN("set_data fail", K(ret));
     }
   } else if (write_byte_offset + write_data.length() > buffer_size()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("out of buffer range", K(ret), K(write_byte_offset), K(buffer_size()), K(write_data)); 
   } else if (OB_FAIL(move_data_for_write(write_byte_offset, write_old_byte_len, write_data.length(), remain_buf))) {
-    LOG_WARN("move_data_for_write fail", K(ret), K(write_byte_offset), K(write_old_byte_len), K(write_data));
   } else if (OB_FAIL(do_write(write_byte_offset, write_data))) {
-    LOG_WARN("do_write fail", K(ret), K(write_byte_offset));
   }
   return ret;
 }
@@ -220,19 +216,15 @@ int ObLobWriteBuffer::char_write(
   int64_t write_old_byte_len = write_char_len;
   if (! is_char()) {
     if (OB_FAIL(byte_write(write_byte_offset, write_old_byte_len, write_data, remain_buf))) {
-      LOG_WARN("byte_write fail", K(ret), K(coll_type_), K(write_byte_offset), K(write_old_byte_len), K(write_data));
     }
   } else if (use_buffer()) {
     if (OB_FAIL(get_byte_range(write_char_offset, write_char_len, write_byte_offset, write_old_byte_len))) {
-      LOG_WARN("get_byte_range fail", K(ret), K(write_char_offset), K(write_char_len), K(coll_type_), K(inner_buffer_));
     } else if (OB_FAIL(byte_write(write_byte_offset, write_old_byte_len, write_data, remain_buf))) {
-      LOG_WARN("byte_write fail", K(ret), K(coll_type_), K(write_byte_offset), K(write_old_byte_len));
     }
   } else if (write_char_offset > 0) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("write not at start pos", K(ret), K(write_char_offset), K(write_char_len), K(write_data));
   } else if (OB_FAIL(set_data(write_data.ptr(), write_data.length()))) {
-    LOG_WARN("set_data fail", K(ret));
   }
   return ret;
 }
@@ -281,9 +273,7 @@ int ObLobWriteBuffer::byte_fill_zero(
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("should be use_buffer mode", K(ret));
   } else if (OB_FAIL(move_data_for_write(fill_byte_offset, fill_old_byte_len, fill_new_byte_len))) {
-    LOG_WARN("move_data_for_write fail", K(ret));
   } else if (OB_FAIL(fill_zero_data(fill_byte_offset, fill_new_byte_len, fill_char_len, space))){
-    LOG_WARN("fill_zero_data fail", K(ret));
   }
   return ret;
 }
@@ -297,12 +287,9 @@ int ObLobWriteBuffer::char_fill_zero(
   int64_t fill_old_byte_len = fill_char_len;
   if (! is_char()) {
     if (OB_FAIL(byte_fill_zero(fill_byte_offset, fill_old_byte_len, fill_char_len))) {
-      LOG_WARN("byte_fill_zero fail", K(ret), K(coll_type_), K(fill_char_offset), K(fill_char_len), K(fill_byte_offset), K(fill_old_byte_len));
     }
   } else if (OB_FAIL(get_byte_range(fill_char_offset, fill_char_len, fill_byte_offset, fill_old_byte_len))) {
-    LOG_WARN("get_byte_range fail", K(ret), K(fill_char_offset), K(fill_char_len), K(coll_type_), K(inner_buffer_));
   } else if (OB_FAIL(byte_fill_zero(fill_byte_offset, fill_old_byte_len, fill_char_len))) {
-    LOG_WARN("byte_fill_zero fail", K(ret));
   }
   return ret;
 }
@@ -347,10 +334,8 @@ int ObLobWriteBuffer::append(char *data_ptr, int64_t data_byte_len, int64_t &rea
 
   if (! use_buffer()) {
     if (OB_FAIL(set_data(data_ptr, data_byte_len, real_write_byte_len))) {
-      LOG_WARN("set_data fail", K(ret), K(data_byte_len), K(real_write_byte_len));
     }
   } else if (OB_FAIL(align_write_postion(data_ptr, data_byte_len, inner_buffer_.remain(), write_byte_len, write_char_len))) {
-    LOG_WARN("align_write_postion fail", K(ret), K(data_byte_len), K(inner_buffer_));
   } else if (inner_buffer_.write(data_ptr, write_byte_len) != write_byte_len) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("write data to inner buffer fail", K(ret), K(data_byte_len), K(write_byte_len), K(inner_buffer_));
@@ -366,7 +351,6 @@ int ObLobWriteBuffer::append(char *data_ptr, int64_t data_byte_len)
   int ret = OB_SUCCESS;
   int64_t real_write_byte_len = 0;
   if (OB_FAIL(append(data_ptr, data_byte_len, real_write_byte_len))) {
-    LOG_WARN("append fail", K(ret), K(data_byte_len), KP(data_ptr));
   } else if (real_write_byte_len != data_byte_len) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("write fail", K(ret), K(real_write_byte_len), K(data_byte_len), KP(data_ptr));
@@ -380,9 +364,7 @@ int ObLobWriteBuffer::char_append(ObString &data, int64_t write_char_offset, int
   int64_t write_byte_offset = 0;
   int64_t write_byte_len = 0;
   if (OB_FAIL(get_byte_range(data.ptr(), data.length(), write_char_offset, write_char_len, write_byte_offset, write_byte_len))) {
-    LOG_WARN("get_byte_range fail", K(ret), K(write_char_offset), K(write_char_len), K(coll_type_), K(inner_buffer_));
   } else if (OB_FAIL(append(data.ptr() + write_byte_offset, write_byte_len))) {
-    LOG_WARN("append fail", K(ret), K(write_byte_offset), K(write_byte_len), K(write_char_offset), K(write_char_len));
   }
   return ret;
 }
@@ -393,7 +375,6 @@ int ObLobWriteBuffer::set_data(char *data_ptr, int64_t data_byte_len, int64_t &r
   int64_t char_len = 0;
   int64_t byte_len = 0;
   if (OB_FAIL(align_write_postion(data_ptr, data_byte_len, max_byte_len_, byte_len, char_len))) {
-    LOG_WARN("align_write_postion fail", K(ret), K(data_byte_len), KP(data_ptr));
   } else if (char_len != -1 && OB_FAIL(set_char_len(char_len))) {
     LOG_WARN("set_char_len fail", K(ret), K(char_len), K(data_byte_len), K(byte_len));
   } else {
@@ -410,7 +391,6 @@ int ObLobWriteBuffer::set_data(char *data_ptr, int64_t data_byte_len)
   int ret = OB_SUCCESS;
   int64_t real_set_byte_len = 0;
   if (OB_FAIL(set_data(data_ptr, data_byte_len, real_set_byte_len))) {
-    LOG_WARN("set_data fail", K(ret), K(data_ptr), KP(data_ptr));
   } else if (real_set_byte_len != data_byte_len) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("write fail", K(ret), K(real_set_byte_len), K(data_byte_len), KP(data_ptr));
@@ -437,7 +417,6 @@ int ObLobWriteBuffer::to_lob_meta_info(ObLobMetaInfo &meta_info) const
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(get_char_len(meta_info.char_len_))) {
-    LOG_WARN("get_char_len fail", K(ret), KPC(this));
   } else {
     meta_info.byte_len_ = inner_buffer_.length();
     meta_info.lob_data_ = inner_buffer_;

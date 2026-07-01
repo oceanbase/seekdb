@@ -67,7 +67,6 @@ int ObExprArrayDistinct::calc_result_type1(ObExprResType &type,
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("invalid param type", K(ret), K(type1.get_type()));
   } else if (OB_FAIL(ObArrayExprUtils::get_coll_type_by_subschema_id(exec_ctx, type1.get_subschema_id(), coll_type))) {
-    LOG_WARN("failed to get array type by subschema id", K(ret), K(type1.get_subschema_id()));
   } else if (coll_type->type_id_ != ObNestedType::OB_ARRAY_TYPE && coll_type->type_id_ != ObNestedType::OB_VECTOR_TYPE) {
     ret = OB_ERR_INVALID_TYPE_FOR_OP;
     LOG_WARN("invalid collection type", K(ret), K(coll_type->type_id_));
@@ -89,19 +88,14 @@ int ObExprArrayDistinct::eval_array_distinct(const ObExpr &expr, ObEvalCtx &ctx,
   ObDatum *datum = NULL;
   bool bret = false;
   if (OB_FAIL(expr.args_[0]->eval(ctx, datum))) {
-    LOG_WARN("failed to eval args", K(ret));
   } else if (datum->is_null()) {
     res.set_null();
   } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, meta_id, datum->get_string(), arr_obj))) {
-    LOG_WARN("construct array obj failed", K(ret));
   } else if (OB_FAIL(arr_obj->distinct(tmp_allocator, arr_res))) {
-    LOG_WARN("array distinct failed", K(ret));
   } else if (OB_FAIL(arr_res->init())) {
-    LOG_WARN("array init failed", K(ret));
   } else {
     ObString res_str;
     if (OB_FAIL(ObArrayExprUtils::set_array_res(arr_res, arr_res->get_raw_binary_len(), expr, ctx, res_str))) {
-      LOG_WARN("get array binary string failed", K(ret));
     } else {
       res.set_string(res_str);
     }
@@ -121,7 +115,6 @@ int ObExprArrayDistinct::eval_array_distinct_batch(const ObExpr &expr, ObEvalCtx
   ObIArrayType *arr_obj = NULL;
   ObIArrayType *arr_res = NULL;
   if (OB_FAIL(expr.args_[0]->eval_batch(ctx, skip, batch_size))) {
-    LOG_WARN("eval date_unit_datum failed", K(ret));
   } else {
     ObDatumVector in_array = expr.args_[0]->locate_expr_datumvector(ctx);
     for (int64_t j = 0; OB_SUCC(ret) && j < batch_size; ++j) {
@@ -133,27 +126,20 @@ int ObExprArrayDistinct::eval_array_distinct_batch(const ObExpr &expr, ObEvalCtx
       if (in_array.at(j)->is_null()) {
         res_datum.at(j)->set_null();
       } else if (OB_FAIL(ObArrayExprUtils::get_array_obj(tmp_allocator, ctx, meta_id, in_array.at(j)->get_string(), arr_obj))) {
-        LOG_WARN("construct array obj failed", K(ret));
       } else if (OB_FAIL(arr_obj->distinct(tmp_allocator, arr_res))) {
-        LOG_WARN("array distinct failed", K(ret));
       } else if (OB_FAIL(arr_res->init())) {
-        LOG_WARN("array init failed", K(ret));
       } else {
         int32_t res_size = arr_res->get_raw_binary_len();
         char *res_buf = nullptr;
         int64_t res_buf_len = 0;
         ObTextStringDatumResult output_result(expr.datum_meta_.type_, &expr, &ctx, res_datum.at(j));
         if (OB_FAIL(output_result.init_with_batch_idx(res_size, j))) {
-          LOG_WARN("fail to init result", K(ret), K(res_size));
         } else if (OB_FAIL(output_result.get_reserved_buffer(res_buf, res_buf_len))) {
-          LOG_WARN("fail to get reserver buffer", K(ret));
         } else if (res_buf_len < res_size) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("get invalid res buf len", K(ret), K(res_buf_len), K(res_size));
         } else if (OB_FAIL(arr_res->get_raw_binary(res_buf, res_buf_len))) {
-          LOG_WARN("get array raw binary failed", K(ret), K(res_buf_len), K(res_size));
         } else if (OB_FAIL(output_result.lseek(res_size, 0))) {
-          LOG_WARN("failed to lseek res.", K(ret), K(output_result), K(res_size));
         } else {
           output_result.set_result();
           arr_res->clear();
@@ -169,7 +155,6 @@ int ObExprArrayDistinct::eval_array_distinct_vector(const ObExpr &expr, ObEvalCt
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(expr.args_[0]->eval_vector(ctx, skip, bound))) {
-    LOG_WARN("fail to eval params", K(ret));
   } else {
     ObEvalCtx::TempAllocGuard tmp_alloc_g(ctx);
     common::ObArenaAllocator &tmp_allocator = tmp_alloc_g.get_allocator();
@@ -190,7 +175,6 @@ int ObExprArrayDistinct::eval_array_distinct_vector(const ObExpr &expr, ObEvalCt
       } else {
         ObString left = left_vec->get_string(idx);
         if (OB_FAIL(ObNestedVectorFunc::construct_param(tmp_allocator, ctx, left_meta_id, left, l_arr_obj))) {
-          LOG_WARN("construct array obj failed", K(ret));
         }
       }
       if (OB_FAIL(ret)) {
@@ -198,19 +182,14 @@ int ObExprArrayDistinct::eval_array_distinct_vector(const ObExpr &expr, ObEvalCt
         res_vec->set_null(idx);
         eval_flags.set(idx);
       } else if (OB_FAIL(l_arr_obj->distinct(tmp_allocator, res_obj))) {
-        LOG_WARN("array distinct failed", K(ret));
       } else if (OB_FAIL(res_obj->init())) {
-        LOG_WARN("array init failed", K(ret));
       } else if (res_format == VEC_DISCRETE) {
         if (OB_FAIL(ObArrayExprUtils::set_array_res<ObDiscreteFormat>(res_obj, expr, ctx, static_cast<ObDiscreteFormat *>(res_vec), idx))) {
-          LOG_WARN("set array res failed", K(ret));
         }
       } else if (res_format == VEC_UNIFORM) {
         if (OB_FAIL(ObArrayExprUtils::set_array_res<ObUniformFormat<false>>(res_obj, expr, ctx, static_cast<ObUniformFormat<false> *>(res_vec), idx))) {
-          LOG_WARN("set array res failed", K(ret));
         }
       } else if (OB_FAIL(ObArrayExprUtils::set_array_res<ObVectorBase>(res_obj, expr, ctx, static_cast<ObVectorBase *>(res_vec), idx))) {
-        LOG_WARN("set array res failed", K(ret));
       } 
       if (OB_SUCC(ret) && !is_null_res) {
         eval_flags.set(idx);

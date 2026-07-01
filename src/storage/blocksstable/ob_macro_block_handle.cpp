@@ -51,7 +51,6 @@ ObMacroBlockHandle& ObMacroBlockHandle::operator=(const ObMacroBlockHandle &othe
     macro_id_ = other.macro_id_;
     if (macro_id_.is_valid()) {
       if (OB_FAIL(OB_SERVER_BLOCK_MGR.inc_ref(macro_id_))) {
-        LOG_ERROR("failed to inc macro block ref cnt", K(ret), K(macro_id_));
       }
       if (OB_FAIL(ret)) {
         macro_id_.reset();
@@ -77,7 +76,6 @@ void ObMacroBlockHandle::reset_macro_id()
   int ret = OB_SUCCESS;
   if (macro_id_.is_valid()) {
     if (OB_FAIL(OB_STORAGE_OBJECT_MGR.dec_ref(macro_id_))) {
-      LOG_ERROR("failed to dec macro block ref cnt", K(ret), K(macro_id_));
     } else {
       macro_id_.reset();
     }
@@ -90,7 +88,6 @@ int ObMacroBlockHandle::report_bad_block() const
   int ret = OB_SUCCESS;
   int io_errno = 0;
   if (OB_FAIL(io_handle_.get_fs_errno(io_errno))) {
-    LOG_WARN("fail to get io errno, ", K(macro_id_), K(ret));
   } else if (0 != io_errno) {
     LOG_ERROR("fail to io macro block, ", K(macro_id_), K(ret), K(io_errno));
     char error_msg[common::OB_MAX_ERROR_MSG_LEN];
@@ -101,12 +98,10 @@ int ObMacroBlockHandle::report_bad_block() const
                                 ret,
                                 io_errno,
                                 strerror(io_errno)))){
-      LOG_WARN("error msg is too long, ", K(macro_id_), K(ret), K(sizeof(error_msg)), K(io_errno));
     } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.report_bad_block(macro_id_,
                                                             ret,
                                                             error_msg,
                                                             GCONF.data_dir))) {
-      LOG_WARN("fail to report bad block, ", K(macro_id_), K(ret), "erro_type", ret, K(error_msg));
     }
   }
   return ret;
@@ -146,9 +141,7 @@ int ObMacroBlockHandle::async_read(const ObMacroBlockReadInfo &read_info)
     }
 
     if (FAILEDx(ObIOManager::get_instance().aio_read(io_info, io_handle_))) {
-      LOG_WARN("Fail to aio_read", K(read_info), K(ret));
     } else if (OB_FAIL(set_macro_block_id(read_info.macro_block_id_))) {
-      LOG_WARN("failed to set macro block id", K(ret));
     }
   }
   return ret;
@@ -178,11 +171,9 @@ int ObMacroBlockHandle::async_write(const ObMacroBlockWriteInfo &write_info)
 
     io_info.flag_.set_write();
     if (FAILEDx(ObIOManager::get_instance().aio_write(io_info, io_handle_))) {
-      LOG_WARN("Fail to aio_write", K(ret), K_(macro_id), K(write_info));
     } else {
       int tmp_ret = OB_SUCCESS;
       if (OB_TMP_FAIL(OB_SERVER_BLOCK_MGR.update_write_time(macro_id_))) {
-        LOG_WARN("fail to update write time for macro block", K(tmp_ret), K(macro_id_));
       }
       FLOG_INFO("Async write macro block", K(macro_id_), K(io_info.fd_));
     }
@@ -203,7 +194,6 @@ int ObMacroBlockHandle::wait(const int64_t wait_timeout_ms)
       LOG_WARN("fail to wait block io, may be retry", K(macro_id_), K(ret));
       int tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = report_bad_block())) {
-        LOG_WARN("fail to report bad block", K(tmp_ret), K(ret));
       }
       io_handle_.reset();
     }
@@ -226,7 +216,6 @@ int ObMacroBlockHandle::set_macro_block_id(const MacroBlockId &macro_block_id)
     macro_id_ = macro_block_id;
     if (macro_id_.is_valid()) {
       if (OB_FAIL(OB_SERVER_BLOCK_MGR.inc_ref(macro_id_))) {
-        LOG_ERROR("failed to inc macro block ref cnt", K(ret), K(macro_id_));
       }
       if (OB_FAIL(ret)) {
         macro_id_.reset();
@@ -255,10 +244,8 @@ int ObStorageObjectsHandle::add(const MacroBlockId &macro_id)
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(macro_id_list_.push_back(macro_id))) {
-    LOG_WARN("failed to add macro id", K(ret));
   } else {
     if (OB_FAIL(OB_STORAGE_OBJECT_MGR.inc_ref(macro_id))) {
-      LOG_ERROR("failed to inc macro block ref cnt", K(ret), K(macro_id));
     }
 
     if (OB_FAIL(ret)) {
@@ -289,7 +276,6 @@ int ObStorageObjectsHandle::reserve(const int64_t block_cnt)
   int ret = OB_SUCCESS;
   if (block_cnt > 0) {
     if (OB_FAIL(macro_id_list_.reserve(block_cnt))) {
-      LOG_WARN("fail to reserve macro id list", K(ret));
     }
   }
   return ret;

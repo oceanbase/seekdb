@@ -49,8 +49,6 @@ public:
                             const sql::ObBitVector &skip, const sql::EvalBound &bound,
                             char *agg_cell, const RowSelector row_sel = RowSelector{}) override
   {
-    SQL_LOG(DEBUG, "implicit first row", K(agg_col_id),
-            K(*agg_ctx.aggr_infos_.at(agg_col_id).expr_), K(bound));
     int ret = OB_SUCCESS;
     ObEvalCtx &ctx = agg_ctx.eval_ctx_;
     NotNullBitVector &not_nulls = agg_ctx.locate_notnulls_bitmap(agg_col_id, agg_cell);
@@ -77,7 +75,6 @@ public:
             null_cell = true;
           } else if (aggr_info.expr_->is_nested_expr()) {
             if(OB_FAIL(ObArrayExprUtils::get_collection_payload(agg_ctx.allocator_, ctx, *aggr_info.expr_, i, payload, data_len))) {
-              SQL_LOG(WARN, "get collection payload failed", K(ret));
             }
           } else {
             data_vec->get_payload(i, payload, data_len);
@@ -93,7 +90,6 @@ public:
           null_cell = true;
         } else if (aggr_info.expr_->is_nested_expr()) {
           if(OB_FAIL(ObArrayExprUtils::get_collection_payload(agg_ctx.allocator_, ctx, *aggr_info.expr_, row_sel.index(i), payload, data_len))) {
-            SQL_LOG(WARN, "get collection payload failed", K(ret));
           }
         } else {
           aggr_info.expr_->get_vector(ctx)->get_payload(row_sel.index(i), payload, data_len);
@@ -142,7 +138,6 @@ public:
         if (OB_FAIL(ObArrayExprUtils::get_collection_payload(agg_ctx.allocator_, agg_ctx.eval_ctx_,
                                                              *aggr_info.expr_, batch_idx,
                                                              compact_ptr, compact_data_len))) {
-          SQL_LOG(WARN, "get collection payload failed", K(ret));
         } else {
           agg_ctx.set_agg_cell(compact_ptr, compact_data_len, agg_col_idx, agg_cell);
         }
@@ -207,7 +202,6 @@ public:
                      const int32_t agg_col_id, char *agg_cell, void *tmp_res, int64_t &calc_info)
   {
     UNUSEDx(agg_ctx, columns, row_num, agg_col_id, agg_cell, tmp_res, calc_info);
-    SQL_LOG(DEBUG, "add_row do nothing");
     return OB_SUCCESS;
   }
 
@@ -217,7 +211,6 @@ public:
                               int64_t &calc_info)
   {
     UNUSEDx(agg_ctx, columns, row_num, agg_col_id, agg_cell, tmp_res, calc_info);
-    SQL_LOG(DEBUG, "add_nullable_row do nothing");
     return OB_SUCCESS;
   }
 

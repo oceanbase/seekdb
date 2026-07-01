@@ -56,11 +56,8 @@ ObMLogInfo &ObMLogInfo::operator=(const ObMLogInfo &src_schema)
     last_purge_rows_ = src_schema.last_purge_rows_;
     schema_version_ = src_schema.schema_version_;
     if (OB_FAIL(deep_copy_str(src_schema.purge_next_, purge_next_))) {
-      LOG_WARN("deep copy purge next failed", KR(ret), K(src_schema.purge_next_));
     } else if (OB_FAIL(deep_copy_str(src_schema.purge_job_, purge_job_))) {
-      LOG_WARN("deep copy purge job failed", KR(ret), K(src_schema.purge_job_));
     } else if (OB_FAIL(deep_copy_str(src_schema.last_purge_trace_id_, last_purge_trace_id_))) {
-      LOG_WARN("deep copy last purge trace id failed", KR(ret), K(src_schema.last_purge_trace_id_));
     }
   }
   return *this;
@@ -161,12 +158,10 @@ int ObMLogInfo::insert_mlog_info(ObISQLClient &sql_client, const ObMLogInfo &mlo
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(mlog_info));
   } else if (OB_FAIL(mlog_info.gen_insert_mlog_dml(dml))) {
-    LOG_WARN("fail to gen insert mlog dml", KR(ret), K(mlog_info));
   } else {
     ObDMLExecHelper exec(sql_client);
     int64_t affected_rows = 0;
     if (OB_FAIL(exec.exec_insert(OB_ALL_MLOG_TNAME, dml, affected_rows))) {
-      LOG_WARN("execute update failed", KR(ret));
     } else if (OB_UNLIKELY(!is_single_row(affected_rows))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("affected_rows unexpected to be one", KR(ret), K(affected_rows));
@@ -202,12 +197,10 @@ int ObMLogInfo::update_mlog_attribute(ObISQLClient &sql_client, const ObMLogInfo
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(mlog_info));
   } else if (OB_FAIL(mlog_info.gen_update_mlog_attribute_dml(dml))) {
-    LOG_WARN("fail to gen update mlog attribute dml", KR(ret), K(mlog_info));
   } else {
     ObDMLExecHelper exec(sql_client);
     int64_t affected_rows = 0;
     if (OB_FAIL(exec.exec_update(OB_ALL_MLOG_TNAME, dml, affected_rows))) {
-      LOG_WARN("execute update failed", KR(ret));
     } else if (OB_UNLIKELY(!is_single_row(affected_rows))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("affected_rows unexpected to be one", KR(ret), K(affected_rows));
@@ -247,12 +240,10 @@ int ObMLogInfo::update_mlog_last_purge_info(ObISQLClient &sql_client, const ObML
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid args", KR(ret), K(mlog_info));
   } else if (OB_FAIL(mlog_info.gen_update_mlog_last_purge_info_dml(dml))) {
-    LOG_WARN("fail to gen update mlog last purge info dml", KR(ret), K(mlog_info));
   } else {
     ObDMLExecHelper exec(sql_client);
     int64_t affected_rows = 0;
     if (OB_FAIL(exec.exec_update(OB_ALL_MLOG_TNAME, dml, affected_rows))) {
-      LOG_WARN("execute update failed", KR(ret));
     } else if (OB_UNLIKELY(!is_single_row(affected_rows))) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("affected_rows unexpected to be one", KR(ret), K(affected_rows));
@@ -270,7 +261,6 @@ int ObMLogInfo::drop_mlog_info(ObISQLClient &sql_client, const ObMLogInfo &mlog_
     LOG_WARN("invalid args", KR(ret), K(mlog_info));
   } else if (OB_FAIL(
                drop_mlog_info(sql_client, mlog_info.get_mlog_id()))) {
-    LOG_WARN("fail to drop mlog info", KR(ret), K(mlog_info));
   }
   return ret;
 }
@@ -286,12 +276,10 @@ int ObMLogInfo::drop_mlog_info(ObISQLClient &sql_client,
     
     ObDMLSqlSplicer dml;
     if (OB_FAIL(dml.add_pk_column("mlog_id", mlog_id))) {
-      LOG_WARN("add column failed", KR(ret));
     } else {
       ObDMLExecHelper exec(sql_client);
       int64_t affected_rows = 0;
       if (OB_FAIL(exec.exec_delete(OB_ALL_MLOG_TNAME, dml, affected_rows))) {
-        LOG_WARN("execute update failed", KR(ret));
       } else if (OB_UNLIKELY(!is_single_row(affected_rows))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("affected_rows unexpected to be one", KR(ret), K(affected_rows));
@@ -313,13 +301,11 @@ int ObMLogInfo::fetch_mlog_info(ObISQLClient &sql_client, uint64_t mlog_id,
     ObSqlString sql;
     if (OB_FAIL(sql.assign_fmt("SELECT * FROM %s WHERE mlog_id = %ld",
                                OB_ALL_MLOG_TNAME, mlog_id))) {
-      LOG_WARN("fail to assign sql", KR(ret));
     } else if (for_update && !nowait && OB_FAIL(sql.append(" for update"))) {
       LOG_WARN("fail to append sql", KR(ret));
     } else if (for_update && nowait && OB_FAIL(sql.append(" for update nowait"))) {
       LOG_WARN("fail to append sql", KR(ret));
     } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-      LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("result is null", KR(ret));
@@ -364,16 +350,13 @@ int ObMLogInfo::batch_fetch_mlog_ids(ObISQLClient &sql_client,
     ObSqlString sql;
     uint64_t mlog_id = OB_INVALID_ID;
     if (OB_FAIL(sql.assign_fmt("SELECT mlog_id FROM %s WHERE 0 = 0", OB_ALL_MLOG_TNAME))) {
-      LOG_WARN("fail to assign sql", KR(ret));
     } else if (OB_INVALID_ID != last_mlog_id &&
                OB_FAIL(sql.append_fmt(" and mlog_id > %ld", last_mlog_id))) {
       LOG_WARN("fail to append sql", KR(ret));
     } else if (OB_FAIL(sql.append(" order by mlog_id"))) {
-      LOG_WARN("fail to append sql", KR(ret));
     } else if (limit > 0 && OB_FAIL(sql.append_fmt(" limit %ld", limit))) {
       LOG_WARN("fail to append sql", KR(ret));
     } else if (OB_FAIL(sql_client.read(res, sql.ptr()))) {
-      LOG_WARN("execute sql failed", KR(ret), K(sql));
     } else if (OB_ISNULL(result = res.get_result())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("result is null", KR(ret));

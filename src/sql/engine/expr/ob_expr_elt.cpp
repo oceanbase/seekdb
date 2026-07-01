@@ -83,11 +83,9 @@ int ObExprElt::eval_elt(const ObExpr &expr, ObEvalCtx &ctx, ObDatum &expr_datum)
   ObDatum *first = NULL;
   ObDatum *d = NULL;
   if (OB_FAIL(expr.args_[0]->eval(ctx, first))) {
-    LOG_WARN("evaluate parameter failed", K(ret));
   } else if (first->is_null() || first->get_int() <= 0 || first->get_int() >= expr.arg_cnt_) {
     expr_datum.set_null();
   } else if (OB_FAIL(expr.args_[first->get_int()]->eval(ctx, d))) {
-    LOG_WARN("evaluate parameter failed", K(ret));
   } else {
     expr_datum.set_datum(*d);
   }

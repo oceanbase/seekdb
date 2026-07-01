@@ -113,7 +113,6 @@ int ObExprRbSelect::eval_rb_select(const ObExpr &expr,
     if (ob_is_null(type)) {
       is_null_result = true;
     } else if (OB_FAIL(arg->eval(ctx, datum))) {
-      LOG_WARN("fail to eval arg", K(ret), K(arg), K(i));
     } else if (datum->is_null()) {
       is_null_result = true;
     }
@@ -140,7 +139,6 @@ int ObExprRbSelect::eval_rb_select(const ObExpr &expr,
   } else {
     ObExpr *rb_arg = expr.args_[0];
     if (OB_FAIL(ObRbExprHelper::get_input_roaringbitmap(ctx, tmp_allocator, rb_arg, rb, is_null_result))) {
-      LOG_WARN("failed to get input roaringbitmap", K(ret));
     } else if (is_null_result) {
       // do nonthing
     } else if (limit == 0 || range_start > range_end) {
@@ -149,9 +147,7 @@ int ObExprRbSelect::eval_rb_select(const ObExpr &expr,
       ret = OB_ALLOCATE_MEMORY_FAILED;
       LOG_WARN("failed to create alloc memory to result roaringbitmap", K(ret));
     } else if (OB_FAIL(rb->subset(res_rb, limit, offset, reverse, range_start, range_end))) {
-      LOG_WARN("failed to subset roaringbitmap", K(ret));
     } else if (OB_FAIL(ObRbUtils::rb_serialize(tmp_allocator, res_rb_bin, res_rb))) {
-      LOG_WARN("failed to serialize roaringbitmap", K(ret));
     }
   }
   ObRbUtils::rb_destroy(rb);
@@ -163,7 +159,6 @@ int ObExprRbSelect::eval_rb_select(const ObExpr &expr,
   } else if (is_empty_bitmap && OB_FAIL(ObRbUtils::build_empty_binary(tmp_allocator, res_rb_bin))) {
     LOG_WARN("fail to build empty rb binary", K(ret));
   } else if (OB_FAIL(ObRbExprHelper::pack_rb_res(expr, ctx, res, res_rb_bin))) {
-    LOG_WARN("fail to pack roaringbitmap res", K(ret));
   }
 
   return ret;

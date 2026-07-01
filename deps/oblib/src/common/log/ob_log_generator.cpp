@@ -142,11 +142,7 @@ static int serialize_log_entry(char *buf, const int64_t len, int64_t &pos, ObLog
             buf, len, pos, log_data, data_len, ret);
   } else if (pos + entry.get_serialize_size() + data_len > len) {
     ret = OB_BUF_NOT_ENOUGH;
-    _OB_LOG(DEBUG, "pos[%ld] + entry.serialize_size[%ld] + data_len[%ld] > len[%ld]",
-            pos, entry.get_serialize_size(), data_len, len);
   } else if (OB_FAIL(entry.serialize(buf, len, pos))) {
-    _OB_LOG(ERROR, "entry.serialize(buf=%p, pos=%ld, capacity=%ld)=>%d",
-            buf, len, pos, ret);
   } else {
     MEMCPY(buf + pos, log_data, data_len);
     pos += data_len;
@@ -168,16 +164,11 @@ static int generate_log(char *buf, const int64_t len, int64_t &pos, ObLogCursor 
             buf, len, pos, log_data, data_len, helper.convert(cursor), ret);
   } else if (entry.get_serialize_size() + data_len > len) {
     ret = OB_LOG_TOO_LARGE;
-    _OB_LOG(WARN, "header[%ld] + data_len[%ld] > len[%ld]", entry.get_serialize_size(), data_len,
-            len);
   } else if (OB_FAIL(cursor.next_entry(entry, cmd, log_data, data_len))) {
     ObCStringHelper helper;
     _OB_LOG(ERROR, "cursor[%s].next_entry()=>%d", helper.convert(cursor), ret);
   } else if (OB_FAIL(serialize_log_entry(buf, len, pos, entry, log_data, data_len))) {
-    _OB_LOG(DEBUG, "serialize_log_entry(buf=%p, len=%ld, entry[id=%ld], data_len=%ld)=>%d",
-            buf, len, entry.seq_, data_len, ret);
   } else if (OB_FAIL(cursor.advance(entry))) {
-    _OB_LOG(ERROR, "cursor[id=%ld].advance(entry.id=%ld)=>%d", cursor.log_id_, entry.seq_, ret);
   }
   return ret;
 }
@@ -188,14 +179,11 @@ int ObLogGenerator:: do_write_log(const LogCommand cmd, const char *log_data,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(check_state())) {
-    _OB_LOG(ERROR, "check_state()=>%d", ret);
   } else if (OB_ISNULL(log_data) || data_len <= 0) {
     ret = OB_INVALID_ARGUMENT;
   } else if (is_frozen_) {
     ret = OB_STATE_NOT_MATCH;
     ObCStringHelper helper;
-    _OB_LOG(ERROR, "log_generator is frozen, cursor=[%s,%s]", helper.convert(start_cursor_),
-            helper.convert(end_cursor_));
   } else if (OB_FAIL(generate_log(log_buf_, log_buf_len_ - reserved_len, pos_,
                                   end_cursor_, cmd, log_data, data_len))
              && OB_BUF_NOT_ENOUGH != ret) {
@@ -216,14 +204,10 @@ int ObLogGenerator::switch_log()
   char *buf = empty_log_;
   int64_t buf_pos = 0;
   if (OB_FAIL(check_state())) {
-    _OB_LOG(ERROR, "check_state()=>%d", ret);
   } else if (OB_FAIL(serialization::encode_i64(buf, buf_len, buf_pos,
                                                end_cursor_.file_id_ + 1))) {
-    _OB_LOG(ERROR, "encode_i64(file_id_=%ld)=>%d", end_cursor_.file_id_, ret);
   } else if (OB_FAIL(do_write_log(OB_LOG_SWITCH_LOG, buf, buf_len, 0))) {
-    _OB_LOG(ERROR, "write(OB_LOG_SWITCH_LOG, len=%ld)=>%d", end_cursor_.file_id_, ret);
   } else {
-    _OB_LOG(INFO, "switch_log(file_id=%ld, log_id=%ld)", end_cursor_.file_id_, end_cursor_.log_id_);
   }
   return ret;
 }

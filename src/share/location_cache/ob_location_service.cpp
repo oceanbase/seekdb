@@ -93,7 +93,6 @@ int ObLocationService::nonblock_get(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", KR(ret), KP(GCTX.config_));
   } else if (OB_FAIL(location.init(cluster_id, ls_id, ObTimeUtility::current_time()))) {
-    LOG_WARN("location init error", KR(ret), K(cluster_id), K(ls_id));
   } else {
     ObLSReplicaLocation replica_location;
     common::ObReplicaProperty property;
@@ -101,9 +100,7 @@ int ObLocationService::nonblock_get(
                    GCTX.self_addr(), LEADER/*role*/, GCTX.config_->mysql_port/*sql_port*/,
                    REPLICA_TYPE_FULL/*replica_type*/, property/*not_used*/,
                    ObLSRestoreStatus(ObLSRestoreStatus::Status::NONE)/*restore_status*/, 1/*proposal_id*/))) {
-      LOG_WARN("fail to init", KR(ret));
     } else if (OB_FAIL(location.add_replica_location(replica_location))) {
-      LOG_WARN("fail to add replica locaiton", KR(ret), K(replica_location));
     }
   }
   return ret;
@@ -164,7 +161,6 @@ int ObLocationService::vtable_get(const uint64_t table_id,
   locations.reset();
   is_cache_hit = true;
   if (OB_FAIL(locations.push_back(GCTX.self_addr()))) {
-    LOG_WARN("fail to get location for virtual table", KR(ret));
   }
   return ret;
 }
@@ -228,9 +224,7 @@ int ObLocationService::check_ls_exist(
     schema::ObSchemaGetterGuard schema_guard;
     const ObSimpleTenantSchema *tenant_schema = NULL;
     if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
-      LOG_WARN("fail to get tenant schema guard", KR(ret));
     } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_schema))) {
-      LOG_WARN("fail to get tenant schema", KR(ret));
     } else if (OB_ISNULL(tenant_schema)) {
       ret = OB_TENANT_NOT_EXIST;
       LOG_WARN("tenant does not exist", KR(ret));

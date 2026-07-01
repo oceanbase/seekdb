@@ -43,7 +43,6 @@ int ObAllTracepointInfo::get_rows_from_tracepoint_info_list()
   ObString addr_ip;
   ObObj *cells = NULL;
   if (OB_FAIL(ObServerUtils::get_server_ip(allocator_, addr_ip))) {
-    SERVER_LOG(ERROR, "get server ip failed", K(ret));
   } else if (OB_ISNULL(cells = cur_row_.cells_)) {
     ret = OB_ERR_UNEXPECTED;
     SERVER_LOG(WARN, "cur row cell is NULL", K(ret));
@@ -107,7 +106,6 @@ int ObAllTracepointInfo::inner_get_next_row(ObNewRow *&row)
   ObObj *cells = cur_row_.cells_;
   if (!start_to_read_) {
     if (OB_FAIL(fill_scanner())) {
-      SERVER_LOG(WARN, "fill scanner failed", K(ret));
     } else {
       start_to_read_ = true;
     }
@@ -133,7 +131,6 @@ int ObAllTracepointInfo::fill_scanner()
     SERVER_LOG(WARN, "allocator_ or addr_ is null", K_(allocator), K_(addr), K(ret));
   } else {
     if (OB_FAIL(get_rows_from_tracepoint_info_list())) {
-      SERVER_LOG(WARN, "get rows from tracepoint_info_list failed", K(ret));
     } else {
       scanner_it_ = scanner_.begin();
       start_to_read_ = true;

@@ -76,7 +76,6 @@ int ObStorageLogReader::init(
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(file_handler_.init(log_dir, LOG_FILE_MAX_SIZE))) {
-      STORAGE_REDO_LOG(WARN, "Fail to create file handler.", K(ret));
     } else {
       cursor_ = cursor;
       pread_pos_ = cursor.offset_;
@@ -154,10 +153,8 @@ int ObStorageLogReader::get_finish_cursor(common::ObLogCursor &cursor) const
 int ObStorageLogReader::check_switch_file()
 {
   int ret = OB_SUCCESS;
-  STORAGE_REDO_LOG(INFO, "reach the end of log", K(cursor_.file_id_));
 
   if (OB_FAIL(close())) {
-    STORAGE_REDO_LOG(ERROR, "Fail to close file", K(ret));
   } else {
     // Even if the next file doesn't exist, we still make file id plus 1 and reset offset,
     // because writer needs to create new file and write slog according to this file id and offset
@@ -171,7 +168,6 @@ int ObStorageLogReader::check_switch_file()
     } else {
       ret = OB_EAGAIN;
       pread_pos_ = 0;
-      STORAGE_REDO_LOG(INFO, "Read log again", K(cursor_.file_id_), K(log_buffer_));
     }
   }
 
@@ -187,14 +183,11 @@ int ObStorageLogReader::open()
   bool is_exist = false;
 
   if (OB_FAIL(file_handler_.exist(cursor_.file_id_, is_exist))) {
-    STORAGE_REDO_LOG(WARN, "Fail to check file exist", K(ret), K(cursor_.file_id_));
   } else if (OB_UNLIKELY(!is_exist)) {
     ret = OB_READ_NOTHING;
     STORAGE_REDO_LOG(WARN, "Log file doesn't exist", K(ret), K(cursor_.file_id_));
   } else if (OB_FAIL(file_handler_.open(cursor_.file_id_, ObLogDefinition::LOG_READ_FLAG))) {
-    STORAGE_REDO_LOG(WARN, "Fail to open file", K(ret), K(cursor_.file_id_));
   } else {
-    STORAGE_REDO_LOG(INFO, "Successfully open slog file", K(cursor_.file_id_));
   }
 
   return ret;
@@ -205,7 +198,6 @@ int ObStorageLogReader::close()
   int ret = OB_SUCCESS;
 
   if (OB_FAIL(file_handler_.close())) {
-    STORAGE_REDO_LOG(WARN, "Fail to close file", K(ret), K(cursor_.file_id_));
   } else {
     STORAGE_REDO_LOG(INFO, "Successfully close file", K(ret), K(cursor_.file_id_));
   }
@@ -256,7 +248,6 @@ int ObStorageLogReader::get_next_log(
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(get_next_entry(entry))) {
-      STORAGE_REDO_LOG(WARN, "Log entry is not complete, ignore last log", K(ret));
     } else if (OB_UNLIKELY(log_buffer_.get_remain_data_len() < entry.data_len_)) {
       ret = OB_ERR_UNEXPECTED;
       STORAGE_REDO_LOG(WARN, "Length of this log is larger than remain length", K(ret));
@@ -264,7 +255,6 @@ int ObStorageLogReader::get_next_log(
       ret = OB_LAST_LOG_RUINNED;
       STORAGE_REDO_LOG(WARN, "Fail to check data integrity.", K(ret), K(cursor_));
     } else if (OB_FAIL(check_and_update_seq_number(entry))) {
-      STORAGE_REDO_LOG(WARN, "Fail to check and update sequence number", K(entry));
     }
   }
 
@@ -272,11 +262,9 @@ int ObStorageLogReader::get_next_log(
     batch_index_++;
     log_data = log_buffer_.get_data() + log_buffer_.get_position();
     if (OB_FAIL(disk_addr.set_file_addr(cursor_.file_id_, cursor_.offset_, entry.data_len_ + entry.get_serialize_size()))) {
-      STORAGE_REDO_LOG(WARN, "Fail to set file address", K(ret), K(cursor_));
     } else {
       log_buffer_.get_position() += entry.data_len_;
       cursor_.offset_ += entry.get_serialize_size() + entry.data_len_;
-      STORAGE_REDO_LOG(TRACE, "successfully get next log", K(entry), K(cursor_));
     }
   }
 
@@ -343,7 +331,6 @@ int ObStorageLogReader::check_and_update_seq_number(const ObStorageLogEntry &ent
   ObIRedoModule::parse_cmd(entry.cmd_, main_type, sub_type);
 
   if (0 == cursor_.log_id_ || ObRedoLogMainType::OB_REDO_LOG_SYS == main_type) {
-    STORAGE_REDO_LOG(INFO, "Skip check and update seq number", K(cursor_.log_id_), K(entry));
   } else if (OB_UNLIKELY(entry.seq_ != cursor_.log_id_)) {
     ret = OB_ERROR;
     STORAGE_REDO_LOG(WARN, "Log sequence is not continuous", K(ret), K(cursor_.log_id_), K(entry));
@@ -372,8 +359,6 @@ int ObStorageLogReader::load_buf()
     log_buffer_.get_position() = remain_size;
 
     if (OB_FAIL(file_handler_.read(log_buffer_.get_cur_pos(), read_count, pread_pos_, read_size))) {
-      STORAGE_REDO_LOG(WARN, "Fail to read log file", K(ret), K(cursor_.file_id_), K_(log_buffer),
-          K(read_count), K_(pread_pos), K(read_size), K(remain_size));
     } else if (0 == read_size) {
       ret = OB_READ_NOTHING;
     } else {
@@ -412,20 +397,14 @@ int ObStorageLogReader::read_log(
     ret = OB_INVALID_ARGUMENT;
     STORAGE_REDO_LOG(WARN, "Invalid arguments.", K(ret));
   } else if (OB_FAIL(handler.init(log_dir, 256 << 20))) {
-    STORAGE_REDO_LOG(WARN, "Fail to init log file handler.", K(ret));
   } else if (OB_FAIL(disk_addr.get_file_addr(file_id, offset, size))) {
-    STORAGE_REDO_LOG(WARN, "Fail to get file address.", K(ret), K(disk_addr));
   } else if (OB_FAIL(open(file_id, handler))) {
-    STORAGE_REDO_LOG(WARN, "Fail to open log file.", K(ret), K(file_id));
   } else if (OB_FAIL(handler.read(buf, size, offset, read_size))) {
-    STORAGE_REDO_LOG(WARN, "Fail to read data to buffer", K(ret), K(size), K(offset));
   } else if (OB_UNLIKELY(read_size < size)) {
     ret = OB_DATA_OUT_OF_RANGE;
     STORAGE_REDO_LOG(WARN, "Read size is not equal to data size", K(ret), K(disk_addr));
   } else if (OB_FAIL(get_entry(buf, entry))) {
-    STORAGE_REDO_LOG(WARN, "Fail to get entry.", K(ret), K(disk_addr));
   } else if (OB_FAIL(handler.close())) {
-    STORAGE_REDO_LOG(WARN, "Fail to close file", K(ret), K(disk_addr));
   } else {
     pos = entry.get_serialize_size();
     STORAGE_REDO_LOG(TRACE, "Successfully read targeted log", K(ret), K(disk_addr), K(buf_len));
@@ -439,12 +418,10 @@ int ObStorageLogReader::open(const int64_t file_id, ObLogFileHandler &handler)
   int ret = OB_SUCCESS;
   bool is_exist = false;
   if (OB_FAIL(handler.exist(file_id, is_exist))) {
-    STORAGE_REDO_LOG(WARN, "Fail to check file exist", K(ret), K(file_id));
   } else if (OB_UNLIKELY(!is_exist)) {
     ret = OB_READ_NOTHING;
     STORAGE_REDO_LOG(WARN, "Log file doesn't exist", K(ret), K(file_id));
   } else if (OB_FAIL(handler.open(file_id, ObLogDefinition::LOG_READ_FLAG))) {
-    STORAGE_REDO_LOG(WARN, "Fail to open file", K(ret), K(file_id));
   }
   return ret;
 }
@@ -461,7 +438,6 @@ int ObStorageLogReader::get_entry(void *buf, ObStorageLogEntry &entry)
     ret = OB_ERR_UNEXPECTED;
     STORAGE_REDO_LOG(WARN, "Entry header is ruined", K(ret), K(buf), K(entry));
   } else if (OB_FAIL(entry.check_data_integrity(reinterpret_cast<char *>(buf) + entry.get_serialize_size()))) {
-    STORAGE_REDO_LOG(WARN, "Log is ruined.", K(ret));
   }
 
   return ret;

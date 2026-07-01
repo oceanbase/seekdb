@@ -219,7 +219,6 @@ public:
       ret = OB_INVALID_ARGUMENT;
       COMMON_LOG(WARN, "invalid argument", K(ret), K(attr));
     } else if (OB_FAIL(array_alloc_.init(attr))) {
-      COMMON_LOG(ERROR, "array_alloc_ init error", K(ret), K(attr));
     } else {
       magic_code_ = MAGIC_CODE;
     }
@@ -323,7 +322,6 @@ public:
       }
     }
     if (tg.get_diff() > 100000) {
-      COMMON_LOG(INFO, "ObLinkHashMap insert and get cost too much time", K(tg));
     }
     return err_code_map(hash_ret);
   }

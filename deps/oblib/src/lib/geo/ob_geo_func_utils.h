@@ -102,7 +102,6 @@ int ObGeoFuncUtils::ob_geo_gc_union(lib::MemoryContext &mem_ctx,
             || OB_FAIL(gis_context.append_geo_arg(&(*mpols_res)))) {
           OB_LOG(WARN, "failed to append geo to ctx", K(ret));
         } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Union>::geo_func::eval(gis_context, func_result))) {
-          OB_LOG(WARN, "failed to do func union", K(ret));
         } else if (func_result->type() != ObGeoType::MULTIPOLYGON) {
           ret = OB_INVALID_ARGUMENT;
           OB_LOG(WARN, "result of func union might be invalid", K(ret), K(func_result->type()));
@@ -125,7 +124,6 @@ int ObGeoFuncUtils::ob_geo_gc_union(lib::MemoryContext &mem_ctx,
           || OB_FAIL(line_diff_context.append_geo_arg(mpols))) {
         OB_LOG(WARN, "failed to append geo to ctx", K(ret));
       } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Difference>::geo_func::eval(line_diff_context, func_result))) {
-        OB_LOG(WARN, "failed to do func difference", K(ret));
       } else if (func_result->type() != ObGeoType::MULTILINESTRING) {
         ret = OB_INVALID_ARGUMENT;
         OB_LOG(WARN, "result of func difference might be invalid", K(ret), K(func_result->type()));
@@ -148,7 +146,6 @@ int ObGeoFuncUtils::ob_geo_gc_union(lib::MemoryContext &mem_ctx,
           || OB_FAIL(point_diff_context.append_geo_arg(tmp_geo))) {
         OB_LOG(WARN, "failed to append geo to ctx", K(ret));
       } else if (OB_FAIL(ObGeoFunc<ObGeoFuncType::Difference>::geo_func::eval(point_diff_context, func_result))) {
-        OB_LOG(WARN, "failed to do func difference", K(ret));
       } else if (func_result->type() != ObGeoType::MULTIPOINT) {
         ret = OB_INVALID_ARGUMENT;
         OB_LOG(WARN, "result of func difference might be invalid", K(ret), K(func_result->type()));
@@ -193,7 +190,6 @@ int ObGeoFuncUtils::ob_geo_gc_split(ObIAllocator &allocator,
       ret = OB_ALLOCATE_MEMORY_FAILED;
       OB_LOG(WARN, "failed to allocate memory", K(ret));
     } else if (OB_FAIL(ob_geo_gc_split_inner(gc, *mpt, *ml, *mpo))) {
-      OB_LOG(WARN, "failed to falatten geometrycollection", K(ret));                                          
     }
   }
 
@@ -217,7 +213,6 @@ int ObGeoFuncUtils::ob_gc_prepare(const ObGeoEvalCtx &context,
   } else {
     ObGeoToTreeVisitor tree_visitor(&tmp_alloc);
     if (OB_FAIL(gc->do_visit(tree_visitor))) {
-      OB_LOG(WARN, "failed to transform gc to tree", K(ret));
     } else {
       gc_tree = static_cast<const GcTreeType *>(tree_visitor.get_geometry());
     }
@@ -233,10 +228,8 @@ int ObGeoFuncUtils::ob_gc_prepare(const ObGeoEvalCtx &context,
     ret = OB_ALLOCATE_MEMORY_FAILED;
     OB_LOG(WARN, "failed to allocate memory", K(ret));
   } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_split_inner(*gc_tree, *multi_point, *multi_line, *multi_poly))) {
-    OB_LOG(WARN, "failed to falatten geometrycollection", K(ret));                                          
   } else if (OB_FAIL(ObGeoFuncUtils::ob_geo_gc_union(context.get_mem_ctx(), *srs, multi_point,
                                                       multi_line, multi_poly))) {
-    OB_LOG(WARN, "failed to do gc union", K(ret));
   } else { /* do nothing */ }
   return ret;
 }
@@ -264,19 +257,16 @@ int ObGeoFuncUtils::ob_geo_gc_split_inner(const GcTreeType &gc,
     switch (gc[i].type()) {
       case ObGeoType::POINT: {
         if (OB_FAIL(mpt.push_back(*reinterpret_cast<typename MPT::value_type const *>(gc[i].val())))) {
-          OB_LOG(WARN, "failed to add point to multipoint", K(ret));
         }
         break;
       }
       case ObGeoType::LINESTRING: {
         if (OB_FAIL(ml.push_back(*reinterpret_cast<typename ML::value_type const *>(&gc[i])))) {
-          OB_LOG(WARN, "failed to add line to multiline", K(ret));
         }
         break;
       }
       case ObGeoType::POLYGON: {
         if (OB_FAIL(mpo.push_back(*reinterpret_cast<typename MPO::value_type const *>(&gc[i])))) {
-          OB_LOG(WARN, "failed to add polygon to multipoly", K(ret));
         }
         break;
       }
@@ -284,7 +274,6 @@ int ObGeoFuncUtils::ob_geo_gc_split_inner(const GcTreeType &gc,
         const MPT &tmp_mpt = *reinterpret_cast<MPT const *>(&gc[i]);
         for (uint64_t j = 0; j < tmp_mpt.size() && OB_SUCC(ret); j++) {
           if (OB_FAIL(mpt.push_back(tmp_mpt[j]))) {
-            OB_LOG(WARN, "failed to add point to multipoint", K(ret));
           }
         }
         break;
@@ -293,7 +282,6 @@ int ObGeoFuncUtils::ob_geo_gc_split_inner(const GcTreeType &gc,
         const ML &tmp_ml = *reinterpret_cast<ML const *>(&gc[i]);
         for (uint64_t j = 0; j < tmp_ml.size() && OB_SUCC(ret); j++) {
           if (OB_FAIL(ml.push_back(tmp_ml[j]))) {
-            OB_LOG(WARN, "failed to add line to multiline", K(ret));
           }
         }
         break;
@@ -302,7 +290,6 @@ int ObGeoFuncUtils::ob_geo_gc_split_inner(const GcTreeType &gc,
         const MPO &tmp_mpo = *reinterpret_cast<MPO const *>(&gc[i]);
         for (uint64_t j = 0; j < tmp_mpo.size() && OB_SUCC(ret); j++) {
           if (OB_FAIL(mpo.push_back(tmp_mpo[j]))) {
-            OB_LOG(WARN, "failed to add poly to multipoly", K(ret));
           }
         }
         break;
@@ -310,7 +297,6 @@ int ObGeoFuncUtils::ob_geo_gc_split_inner(const GcTreeType &gc,
       case ObGeoType::GEOMETRYCOLLECTION: {
         const GcTreeType &tmp_gc = *reinterpret_cast<GcTreeType const *>(&gc[i]);
         if (OB_FAIL(SMART_CALL(ob_geo_gc_split_inner(tmp_gc,mpt,ml,mpo)))) {
-          OB_LOG(WARN, "failed to faltten geometrycollection", K(ret), K(i));
         }
         break;
       }

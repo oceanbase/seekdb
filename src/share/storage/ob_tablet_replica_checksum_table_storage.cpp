@@ -47,7 +47,6 @@ int ObTabletReplicaChecksumTableStorage::init(ObSQLiteConnectionPool *pool)
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid pool", K(ret));
   } else if (OB_FAIL(create_table_if_not_exists())) {
-    LOG_WARN("failed to create table", K(ret));
   }
   if (OB_FAIL(ret)) {
     pool_ = NULL;
@@ -67,7 +66,6 @@ int ObTabletReplicaChecksumTableStorage::create_table_if_not_exists()
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(SQLITE_CREATE_TABLE_TABLET_REPLICA_CHECKSUM, nullptr))) {
-      LOG_WARN("failed to create table", K(ret));
     }
   }
   return ret;
@@ -105,11 +103,9 @@ int ObTabletReplicaChecksumTableStorage::batch_insert_or_update(const ObIArray<O
     } else {
       // Begin transaction for batch insert
       if (OB_FAIL(guard->begin_transaction())) {
-        LOG_WARN("failed to begin transaction", K(ret));
       } else {
         ObSQLiteStmt *stmt = nullptr;
         if (OB_FAIL(guard->prepare_execute(upsert_sql, stmt))) {
-          LOG_WARN("failed to prepare execute", K(ret));
         } else {
           common::ObArenaAllocator allocator;
           for (int64_t i = 0; OB_SUCC(ret) && i < items.count(); ++i) {
@@ -120,12 +116,10 @@ int ObTabletReplicaChecksumTableStorage::batch_insert_or_update(const ObIArray<O
             if (item.column_meta_.is_valid()) {
               if (OB_FAIL(ObTabletReplicaChecksumOperator::get_visible_column_meta(
                   item.column_meta_, allocator, column_checksums_str))) {
-                LOG_WARN("failed to get visible column meta", K(ret));
               } else {
                 // Serialize b_column_checksums using get_str_obj
                 common::ObObj obj;
                 if (OB_FAIL(item.column_meta_.get_str_obj(item.data_checksum_type_, allocator, obj, b_column_checksums_str))) {
-                  LOG_WARN("failed to get hex column meta str", K(ret));
                 }
               }
             }
@@ -152,7 +146,6 @@ int ObTabletReplicaChecksumTableStorage::batch_insert_or_update(const ObIArray<O
               };
 
               if (OB_FAIL(guard->step_execute(stmt, binder))) {
-                LOG_WARN("failed to step execute", K(ret), K(i));
               }
             }
           }
@@ -164,11 +157,9 @@ int ObTabletReplicaChecksumTableStorage::batch_insert_or_update(const ObIArray<O
           if (OB_FAIL(ret)) {
             int rollback_ret = guard->rollback();
             if (OB_SUCCESS != rollback_ret) {
-              LOG_WARN("failed to rollback", K(rollback_ret));
             }
           } else {
             if (OB_FAIL(guard->commit())) {
-              LOG_WARN("failed to commit", K(ret));
             }
           }
         }
@@ -199,11 +190,9 @@ int ObTabletReplicaChecksumTableStorage::batch_remove(
     } else {
       // Begin transaction for batch remove
       if (OB_FAIL(guard->begin_transaction())) {
-        LOG_WARN("failed to begin transaction", K(ret));
       } else {
         ObSQLiteStmt *stmt = nullptr;
         if (OB_FAIL(guard->prepare_execute(delete_sql, stmt))) {
-          LOG_WARN("failed to prepare execute", K(ret));
         } else {
           for (int64_t i = 0; OB_SUCC(ret) && i < replicas.count(); ++i) {
             const ObTabletReplica &replica = replicas.at(i);
@@ -213,7 +202,6 @@ int ObTabletReplicaChecksumTableStorage::batch_remove(
                 return OB_SUCCESS;
               };
               if (OB_FAIL(guard->step_execute(stmt, binder))) {
-                LOG_WARN("failed to step execute", K(ret), K(i));
               }
             }
           }
@@ -225,11 +213,9 @@ int ObTabletReplicaChecksumTableStorage::batch_remove(
           if (OB_FAIL(ret)) {
             int rollback_ret = guard->rollback();
             if (OB_SUCCESS != rollback_ret) {
-              LOG_WARN("failed to rollback", K(rollback_ret));
             }
           } else {
             if (OB_FAIL(guard->commit())) {
-              LOG_WARN("failed to commit", K(ret));
             }
           }
         }
@@ -264,7 +250,6 @@ int ObTabletReplicaChecksumTableStorage::remove_residual(const common::ObAddr &s
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("failed to acquire connection", K(ret));
     } else if (OB_FAIL(guard->execute(delete_sql, binder, &affected_rows))) {
-      LOG_WARN("failed to execute delete", K(ret));
     }
   }
   return ret;
@@ -292,7 +277,6 @@ int ObTabletReplicaChecksumTableStorage::batch_get(
         "       data_checksum_type, co_base_snapshot_version "
         "FROM __all_tablet_replica_checksum "
         "WHERE tablet_id IN ("))) {
-      LOG_WARN("failed to append sql", K(ret));
     } else {
       for (int64_t i = 0; OB_SUCC(ret) && i < pairs.count(); ++i) {
         const ObTabletLSPair &pair = pairs.at(i);
@@ -300,7 +284,6 @@ int ObTabletReplicaChecksumTableStorage::batch_get(
             "%s %ld",
             i == 0 ? "" : ",",
             pair.get_tablet_id().id()))) {
-          LOG_WARN("failed to append sql", K(ret));
         }
       }
       if (OB_SUCC(ret)) {
@@ -309,7 +292,6 @@ int ObTabletReplicaChecksumTableStorage::batch_get(
             ") AND compaction_scn %s %lu "
             "ORDER BY tablet_id;",
             op, compaction_scn.get_val_for_inner_table_field()))) {
-          LOG_WARN("failed to append sql", K(ret));
         }
       }
     }
@@ -353,7 +335,6 @@ int ObTabletReplicaChecksumTableStorage::batch_get(
 
         if (OB_SUCC(ret)) {
           if (OB_FAIL(items.push_back(item))) {
-            LOG_WARN("failed to push back item", K(ret));
           }
         }
         return ret;
@@ -444,7 +425,6 @@ int ObTabletReplicaChecksumTableStorage::range_get(const common::ObTabletID &sta
 
       if (OB_SUCC(ret)) {
         if (OB_FAIL(items.push_back(item))) {
-          LOG_WARN("failed to push back item", K(ret));
         } else {
           // Count distinct tablets
           if (last_tablet_id != item.tablet_id_) {
@@ -573,12 +553,10 @@ int ObTabletReplicaChecksumTableStorage::batch_check_checksum(const ObIArray<com
     if (OB_FAIL(sql.append("SELECT tablet_id FROM ("
         "SELECT tablet_id, row_count, data_checksum, b_column_checksums, compaction_scn "
         "FROM __all_tablet_replica_checksum WHERE tablet_id IN ("))) {
-      LOG_WARN("failed to append sql", K(ret));
     } else {
       // Build IN clause
       for (int64_t i = start_idx; OB_SUCC(ret) && i < end_idx; ++i) {
         if (OB_FAIL(sql.append_fmt("%s%ld", i == start_idx ? "" : ",", tablet_ids.at(i).id()))) {
-          LOG_WARN("failed to append tablet_id", K(ret));
         }
       }
       if (OB_SUCC(ret) && OB_FAIL(sql.append(")) as J GROUP BY J.tablet_id, J.compaction_scn "

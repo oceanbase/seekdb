@@ -37,7 +37,6 @@ int ObLogJoin::build_gi_partition_pruning()
   ObLogicalOperator *receive = NULL;
   ObLogicalOperator *transmit = NULL;
   if (OB_FAIL(get_child(first_child)->find_first_recursive(LOG_EXCHANGE, receive))) {
-    LOG_WARN("find granule iterator in right failed", K(ret));
   } else if (OB_UNLIKELY(NULL == receive || 1 != receive->get_num_of_child())
              || OB_ISNULL(transmit = receive->get_child(0))
              || OB_UNLIKELY(LOG_EXCHANGE != transmit->get_type())) {
@@ -45,7 +44,6 @@ int ObLogJoin::build_gi_partition_pruning()
     LOG_WARN("log exchange not found", K(ret));
   } else if (OB_FAIL(set_granule_repart_ref_table_id_recursively(get_child(second_child),
              static_cast<ObLogExchange *>(transmit)->get_repartition_ref_table_id()))) {
-    LOG_WARN("set granule repart table id failed", K(ret));
   }
   return ret;
 }
@@ -65,7 +63,6 @@ int ObLogJoin::set_granule_repart_ref_table_id_recursively(ObLogicalOperator *op
   } else {
     for (int64_t i = 0; i < op->get_num_of_child() && OB_SUCC(ret); i++) {
       if (OB_FAIL(SMART_CALL(set_granule_repart_ref_table_id_recursively(op->get_child(i), ref_table_id)))) {
-        LOG_WARN("set granule repart table id failed", K(ret));
       }
     }
   }
@@ -76,9 +73,7 @@ int ObLogJoin::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(append(all_exprs, join_conditions_))) {
-    LOG_WARN("failed to append exprs", K(ret));
   } else if (OB_FAIL(append_array_no_dup(all_exprs, join_filters_))) {
-    LOG_WARN("failed to append exprs", K(ret));
   } else if (can_enable_gi_partition_pruning() && OB_FAIL(generate_join_partition_id_expr())) {
     LOG_WARN("failed to generate join partition id expr", K(ret));
   } else if (NULL != partition_id_expr_ && OB_FAIL(all_exprs.push_back(partition_id_expr_))) {
@@ -86,7 +81,6 @@ int ObLogJoin::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
     // lateral derived table exec params may eliminate by group by, add exec_params to all_exprs here
     // otherwise, will report 4002 in cg
   } else if (OB_FAIL(append(all_exprs, nl_params_))) {
-    LOG_WARN("failed to append exprs", K(ret));
   } else {
     for (int64_t i = 0; OB_SUCC(ret) && i < nl_params_.count(); i++) {
       if (OB_ISNULL(nl_params_.at(i)) ||
@@ -94,12 +88,10 @@ int ObLogJoin::get_op_exprs(ObIArray<ObRawExpr*> &all_exprs)
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("get unexpected null", K(ret));
       } else if (OB_FAIL(all_exprs.push_back(nl_params_.at(i)->get_ref_expr()))) {
-        LOG_WARN("failed to push back exprs", K(ret));
       } else { /*do nothing*/ }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObLogicalOperator::get_op_exprs(all_exprs))) {
-        LOG_WARN("failed to get op exprs", K(ret));
       } else { /*do nothing*/ }
     }
   }
@@ -160,11 +152,9 @@ int ObLogJoin::get_plan_item_info(PlanText &plan_text,
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ObLogicalOperator::get_plan_item_info(plan_text, plan_item))) {
-    LOG_WARN("failed to get plan item info", K(ret));
   } else {
     BEGIN_BUF_PRINT;
     if (OB_FAIL(get_explain_name_internal(buf, buf_len, pos))) {
-      LOG_WARN("failed to get explain name", K(ret));
     } else {
       END_BUF_PRINT(plan_item.operation_, plan_item.operation_len_);
     }
@@ -176,15 +166,12 @@ int ObLogJoin::get_plan_item_info(PlanText &plan_text,
       EXPLAIN_PRINT_EXPRS(conds, type);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(BUF_PRINTF(", "))) {
-        LOG_WARN("BUF_PRINTF fails", K(ret));
       } else {
         EXPLAIN_PRINT_EXEC_EXPRS(nl_params_, type);
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(BUF_PRINTF(", "))) {
-        LOG_WARN("BUF_PRINTF fails", K(ret));
       } else if (OB_FAIL(BUF_PRINTF("use_batch=%s", can_use_batch_nlj_? "true" : "false"))) {
-        LOG_WARN("BUF_PRINTF fails", K(ret));
       } else { /* Do nothing */ }
     } else if (HASH_JOIN == get_join_algo()) {
       const ObIArray<ObRawExpr *> &equal_conds = get_equal_join_conditions();
@@ -192,7 +179,6 @@ int ObLogJoin::get_plan_item_info(PlanText &plan_text,
       EXPLAIN_PRINT_EXPRS(equal_conds, type);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(BUF_PRINTF(", "))) {
-        LOG_WARN("BUF_PRINTF fails", K(ret));
       } else {
         EXPLAIN_PRINT_EXPRS(other_conds, type);
       }
@@ -203,13 +189,11 @@ int ObLogJoin::get_plan_item_info(PlanText &plan_text,
       EXPLAIN_PRINT_EXPRS(equal_conds, type);
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(BUF_PRINTF(", "))) {
-        LOG_WARN("BUF_PRINTF fails", K(ret));
       } else {
         EXPLAIN_PRINT_EXPRS(other_conds, type);
       }
       if (OB_FAIL(ret)) {
       } else if (OB_FAIL(BUF_PRINTF("\n      "))) {
-        LOG_WARN("BUF_PRINTF fails", K(ret));
       } else {
         EXPLAIN_PRINT_MERGE_DIRECTIONS(merge_directions);
       }
@@ -240,9 +224,7 @@ int ObLogJoin::adjust_join_conds(ObIArray<ObRawExpr *> &dest_exprs)
       ObSEArray<ObRawExpr*, 4> left_columns;
       ObSEArray<ObRawExpr*, 4> right_columns;
       if (OB_FAIL(ObRawExprUtils::extract_column_exprs(lexpr, left_columns))) {
-        LOG_WARN("extract column exprs failed", K(ret), K(lexpr));
       } else if (OB_FAIL(ObRawExprUtils::extract_column_exprs(rexpr, right_columns))) {
-        LOG_WARN("extract column exprs failed", K(ret), K(rexpr));
       } else {
         bool is_conclude_gen_col = false;
         for (int64_t j = 0; OB_SUCC(ret) && !is_conclude_gen_col &&
@@ -275,7 +257,6 @@ int ObLogJoin::adjust_join_conds(ObIArray<ObRawExpr *> &dest_exprs)
           bool is_opposite = false;
           if (OB_FAIL(calc_equal_cond_opposite(
                 *cur_expr, is_opposite))) {
-            LOG_WARN("failed to calc equal condition opposite", K(ret));
           } else {
             LOG_INFO("do is_opposite", K(ret), K(is_opposite));
             // Before generating column replacement, determine whether the dependent expression
@@ -332,15 +313,12 @@ int ObLogJoin::inner_replace_op_exprs(ObRawExprReplacer &replacer)
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(replace_exprs_action(replacer, get_join_conditions()))) {
-    LOG_WARN("failed to extract subplan params in log join_conditions", K(ret));
   } else if (OB_FAIL(replace_exprs_action(replacer, get_join_filters()))) {
-    LOG_WARN("failed to extract subplan params in log join_filters", K(ret));
   } else {
     int64_t N = get_nl_params().count();
     for (int64_t i = 0; OB_SUCC(ret) && i < N; ++i) {
       ObRawExpr *&cur_expr = get_nl_params().at(i)->get_ref_expr();
       if (OB_FAIL(replace_expr_action(replacer, cur_expr))) {
-        LOG_WARN("failed to extract subplan params in log join_filters", K(ret));
       } else { /* Do nothing */ }
     }
   }
@@ -351,7 +329,6 @@ int ObLogJoin::est_ambient_card()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(ambient_card_.assign(join_path_->parent_->get_ambient_card()))) {
-    LOG_WARN("failed to assign ambient cards", K(ret));
   }
   // do nothing
   return ret;
@@ -380,20 +357,16 @@ int ObLogJoin::do_re_est_cost(EstimateCostInfo &param, double &card, double &op_
                                                        left_param, 
                                                        right_param,
                                                        true))) {
-    LOG_WARN("failed to get re estimate param", K(ret));
   } else if (OB_FAIL(SMART_CALL(left_child->re_est_cost(left_param,
                                               left_output_rows,
                                               left_cost)))) {
-    LOG_WARN("failed to re estimate cost", K(ret));
   } else if (OB_FAIL(SMART_CALL(right_child->re_est_cost(right_param,
                                               right_output_rows,
                                               right_cost)))) {
-    LOG_WARN("failed to re estimate cost", K(ret));
   } else if (OB_FAIL(join_path_->re_estimate_rows(param.join_filter_infos_,
                                                   left_output_rows, 
                                                   right_output_rows, 
                                                   card))) {
-    LOG_WARN("failed to re estimate rows", K(ret));
   } else if (NESTED_LOOP_JOIN == join_algo_) {
     if (OB_FAIL(join_path_->cost_nest_loop_join(parallel,
                                                 left_output_rows, 
@@ -403,7 +376,6 @@ int ObLogJoin::do_re_est_cost(EstimateCostInfo &param, double &card, double &op_
                                                 true,
                                                 op_cost, 
                                                 cost))) {
-      LOG_WARN("failed to cost nest loop join", K(*this), K(ret));
     }
   } else if(MERGE_JOIN == join_algo_) {
     if (OB_FAIL(join_path_->cost_merge_join(parallel,
@@ -414,7 +386,6 @@ int ObLogJoin::do_re_est_cost(EstimateCostInfo &param, double &card, double &op_
                                             true,
                                             op_cost, 
                                             cost))) {
-      LOG_WARN("failed to cost merge join", K(*this), K(ret));
     }
   } else if(HASH_JOIN == join_algo_) {
     if (OB_FAIL(join_path_->cost_hash_join(parallel,
@@ -425,7 +396,6 @@ int ObLogJoin::do_re_est_cost(EstimateCostInfo &param, double &card, double &op_
                                             true,
                                             op_cost, 
                                             cost))) {
-      LOG_WARN("failed to cost hash join", K(*this), K(ret));
     }
   } else {
     ret = OB_INVALID_ARGUMENT;
@@ -471,7 +441,6 @@ int ObLogJoin::print_outline_data(PlanText &plan_text)
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("unexpected NULL", K(ret), K(get_plan()), K(stmt), K(left_child), K(right_child), K(join_path));
     } else if (OB_FAIL(stmt->get_qb_name(qb_name))) {
-      LOG_WARN("fail to get qb_name", K(ret), K(stmt->get_stmt_id()));
     } else if (NESTED_LOOP_JOIN == get_join_algo()) {
       use_join_type = T_USE_NL;
     } else if (MERGE_JOIN == get_join_algo()) {
@@ -488,9 +457,7 @@ int ObLogJoin::print_outline_data(PlanText &plan_text)
       if (OB_FAIL(BUF_PRINTF("%s%s(@\"%.*s\" ", ObQueryHint::get_outline_indent(plan_text.is_oneline_),
                                                 ObHint::get_hint_name(T_LEADING),
                                                 qb_name.length(), qb_name.ptr()))) {
-        LOG_WARN("fail to print leading hint head", K(ret));
       } else if (OB_FAIL(print_leading_tables(*stmt, plan_text, this))) {
-        LOG_WARN("fail to print leading tables", K(ret));
       } else if (OB_FAIL(BUF_PRINTF(")"))) {
       } else {
         get_plan()->set_added_leading();
@@ -503,8 +470,6 @@ int ObLogJoin::print_outline_data(PlanText &plan_text)
                                                qb_name,
                                                right_child->get_table_set(),
                                                plan_text))) {
-      LOG_WARN("fail to print use join hint", K(ret));
-    // 3. print pq distribute hint
     } else if (ObJoinHint::need_print_dist_algo(get_dist_method()) &&
                OB_FAIL(print_join_hint_outline(*stmt,
                                                T_PQ_DISTRIBUTE,
@@ -567,11 +532,8 @@ int ObLogJoin::print_used_hint(PlanText &plan_text)
   if (is_late_mat()) {
     // need not print outline for late material join
   } else if (OB_FAIL(add_used_leading_hint(used_hints))) {
-    LOG_WARN("failed to add used leading hint", K(ret), K(get_join_algo()));
   } else if (OB_FAIL(append_used_join_hint(used_hints))) {
-    LOG_WARN("failed to append used hint", K(ret));
   } else if (OB_FAIL(append_used_join_filter_hint(used_hints))) {
-    LOG_WARN("failed to add used join filter hint", K(ret));
   } else {
     const ObHint *hint = NULL;
     for (int64_t i = 0; OB_SUCC(ret) && i < used_hints.count(); ++i) {
@@ -703,7 +665,6 @@ int ObLogJoin::append_used_join_hint(ObIArray<const ObHint*> &used_hints)
         } else if (!join_hint->is_match_local_algo(get_join_algo())) {
           /* do nothing */
         } else if (OB_FAIL(used_hints.push_back(join_hint))) {
-          LOG_WARN("failed to append pq distribute hint", K(ret));
         }
       }
     }
@@ -727,7 +688,6 @@ int ObLogJoin::append_used_join_hint(ObIArray<const ObHint*> &used_hints)
       } else if (0 == (get_dist_method() & join_hint->get_dist_algo())) {
         /* do nothing */
       } else if (OB_FAIL(used_hints.push_back(join_hint))) {
-        LOG_WARN("failed to append pq distribute hint", K(ret));
       } else {
         find = true;
       }
@@ -767,7 +727,6 @@ int ObLogJoin::print_leading_tables(const ObDMLStmt &stmt,
     LOG_WARN("unexpected op", K(ret), K(op), K(table_num));
   } else if (1 == table_num) {
     if (OB_FAIL(print_join_tables_in_hint(stmt, plan_text, op->get_table_set()))) {
-      LOG_WARN("fail to print join tables", K(ret));
     }
   } else if (OB_ISNULL(op = find_child_join(op)) || OB_UNLIKELY(LOG_JOIN != op->get_type())) {
     ret = OB_ERR_UNEXPECTED;
@@ -775,11 +734,9 @@ int ObLogJoin::print_leading_tables(const ObDMLStmt &stmt,
   } else if (OB_FAIL(BUF_PRINTF("("))) {
   } else if (OB_FAIL(SMART_CALL(print_leading_tables(stmt, plan_text,
                                                      op->get_child(first_child))))) {
-    LOG_WARN("fail to print leading tables", K(ret));
   } else if (OB_FAIL(BUF_PRINTF(" "))) {
   } else if (OB_FAIL(SMART_CALL(print_leading_tables(stmt, plan_text,
                                                      op->get_child(second_child))))) {
-    LOG_WARN("fail to print leading tables", K(ret));
   } else if (OB_FAIL(BUF_PRINTF(")"))) {
   } else { /* do nothing */ }
   return ret;
@@ -807,9 +764,7 @@ int ObLogJoin::print_join_hint_outline(const ObDMLStmt &stmt,
   if (OB_FAIL(BUF_PRINTF("%s%s(@\"%.*s\" ", ObQueryHint::get_outline_indent(plan_text.is_oneline_),
                                             ObHint::get_hint_name(print_type, is_enable_hint),
                                             qb_name.length(), qb_name.ptr()))) {
-    LOG_WARN("fail to print pq map hint head", K(ret));
   } else if (OB_FAIL(print_join_tables_in_hint(stmt, plan_text, table_set))) {
-    LOG_WARN("fail to print join tables", K(ret));
   } else if (NULL != algo_str && OB_FAIL(BUF_PRINTF(" %s", algo_str))) {
     LOG_WARN("fail to print distribute method", K(ret));
   } else if (OB_FAIL(BUF_PRINTF(")"))) {
@@ -834,12 +789,9 @@ int ObLogJoin::print_join_filter_hint_outline(const ObDMLStmt &stmt,
                                             ObHint::get_hint_name(is_part_hint ? T_PX_PART_JOIN_FILTER
                                                                               : T_PX_JOIN_FILTER),
                                             qb_name.length(), qb_name.ptr()))) {
-    LOG_WARN("fail to print pq map hint head", K(ret));
   } else if (OB_FAIL(print_outline_table(plan_text, stmt.get_table_item_by_id(filter_table_id)))) {
-    LOG_WARN("fail to print table", K(ret));
   } else if (OB_FAIL(BUF_PRINTF(" "))) {
   } else if (OB_FAIL(print_join_tables_in_hint(stmt, plan_text, left_table_set))) {
-    LOG_WARN("fail to print join tables", K(ret));
   } else if (filter_table_id != child_table_id &&
              (OB_FAIL(BUF_PRINTF(" ") || 
               OB_FAIL(child_table_hint.print_table_in_hint(plan_text))))) {
@@ -874,7 +826,6 @@ int ObLogJoin::print_join_tables_in_hint(const ObDMLStmt &stmt,
       } else if (!table_set.has_member(stmt.get_table_bit_index(table->table_id_))) {
         /* do nothing */
       } else if (OB_FAIL(join_tables.push_back(table))) {
-        LOG_WARN("failed to push back table", K(ret));
       }
     }
     auto cmp_func = [](const TableItem *lhs, const TableItem *rhs) {
@@ -891,7 +842,6 @@ int ObLogJoin::print_join_tables_in_hint(const ObDMLStmt &stmt,
         LOG_WARN("unexpected null", K(ret), K(table));
       } else if (!is_first_table && OB_FAIL(BUF_PRINTF(" "))) {
       } else if (OB_FAIL(print_outline_table(plan_text, table))) {
-        LOG_WARN("fail to print join table", K(ret));
       } else {
         is_first_table = false;
       }
@@ -953,7 +903,6 @@ int ObLogJoin::allocate_granule_pre(AllocGIContext &ctx)
         DIST_PARTITION_NONE == join_dist_algo_ ||
         DIST_NONE_PARTITION == join_dist_algo_) {
       if (OB_FAIL(ctx.set_pw_affinity_state())) {
-        LOG_WARN("set affinity state failed", K(ret), K(ctx));
       }
       LOG_TRACE("partition wise affinity", K(ret));
     }
@@ -984,7 +933,6 @@ int ObLogJoin::allocate_granule_post(AllocGIContext &ctx)
     if (ctx.is_op_set_pw(this)) {
       ctx.alloc_gi_ = true;
       if (OB_FAIL(allocate_granule_nodes_above(ctx))) {
-        LOG_WARN("allocate gi above table scan failed", K(ret));
       }
       IGNORE_RETURN ctx.reset_info();
     }
@@ -992,24 +940,20 @@ int ObLogJoin::allocate_granule_post(AllocGIContext &ctx)
     if (ctx.is_op_set_pw(this)) {
       ctx.alloc_gi_ = true;
       if (OB_FAIL(allocate_gi_recursively(ctx))) {
-        LOG_WARN("allocate gi above table scan failed", K(ret));
       }
       IGNORE_RETURN ctx.reset_info();
     }
 	} else if (DIST_NONE_PARTITION == join_dist_algo_) {
     if (OB_FAIL(set_granule_nodes_affinity(ctx, 0))) {
-      LOG_WARN("set granule nodes affinity failed", K(ret));
     }
     LOG_TRACE("set left child gi to affinity");
   } else if (DIST_PARTITION_NONE == join_dist_algo_) {
     if (OB_FAIL(set_granule_nodes_affinity(ctx, 1))) {
-      LOG_WARN("set granule nodes affinity failed", K(ret));
     }
     LOG_TRACE("set right child gi to affinity");
   } else if (DIST_BC2HOST_NONE == join_dist_algo_ && HASH_JOIN != join_algo_) {
     ObLogicalOperator *op = NULL;
     if (OB_FAIL(get_child(second_child)->find_first_recursive(LOG_GRANULE_ITERATOR, op))) {
-      LOG_WARN("find granule iterator in right failed", K(ret));
     } else if (NULL == op) {
       // granule iterator not found, do nothing
     } else {
@@ -1019,7 +963,6 @@ int ObLogJoin::allocate_granule_post(AllocGIContext &ctx)
     if (DIST_PULL_TO_LOCAL != join_dist_algo_) {
       ObLogicalOperator *op = NULL;
       if (OB_FAIL(get_child(second_child)->find_first_recursive(LOG_GRANULE_ITERATOR, op))) {
-        LOG_WARN("find granule iterator in right failed", K(ret));
       } else if (NULL == op) {
         // granule iterator not found, do nothing
       } else {
@@ -1033,7 +976,6 @@ int ObLogJoin::allocate_granule_post(AllocGIContext &ctx)
     // And nlj requests a part id from the left branch
     // Notify GI to enter partition pruning mode when iterating partition granule
     if (OB_FAIL(build_gi_partition_pruning())) {
-      LOG_WARN("fail determine right child partition id", K(ret));
     }
   }
 	return ret;
@@ -1061,14 +1003,12 @@ int ObLogJoin::is_left_unique(bool &left_unique) const
                                                      left_exprs,
                                                      right_exprs,
                                                      null_safe_info))) {
-    LOG_WARN("failed to get equal keys", K(ret));
   } else if (OB_FAIL(ObOptimizerUtil::is_exprs_unique(left_exprs,
                                                       left_child->get_table_set(),
                                                       left_child->get_fd_item_set(),
                                                       left_child->get_output_equal_sets(),
                                                       left_child->get_output_const_exprs(),
                                                       left_unique))) {
-    LOG_WARN("fail to check unique condition", K(ret));
   } else { /*do nothing*/ }
   return ret;
 }
@@ -1090,7 +1030,6 @@ int ObLogJoin::compute_table_set()
       set_table_set(&child->get_table_set());
     }
   } else if (OB_FAIL(ObLogicalOperator::compute_table_set())) {
-    LOG_WARN("failed to compute table set", K(ret));
   }
   return ret;
 }
@@ -1100,14 +1039,12 @@ int ObLogJoin::generate_join_partition_id_expr()
   int ret = OB_SUCCESS;
   ObLogicalOperator *op = NULL;
   if (OB_FAIL(get_child(first_child)->find_first_recursive(LOG_EXCHANGE, op))) {
-    LOG_WARN("find granule iterator in right failed", K(ret));
   } else if (NULL == op
              || NULL == op->get_child(0)
              || LOG_EXCHANGE != op->get_child(0)->get_type()) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("log exchange not found", K(ret));
   } else if (OB_FAIL(generate_pseudo_partition_id_expr(partition_id_expr_))) {
-    LOG_WARN("fail alloc partition id expr", K(ret));
   } else {
     static_cast<ObLogExchange *>(op->get_child(0))->set_partition_id_expr(partition_id_expr_);
   }
@@ -1121,7 +1058,6 @@ int ObLogJoin::compute_property(Path *path)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (OB_FAIL(ObLogicalOperator::compute_property(path))) {
-    LOG_WARN("failed to compute property", K(ret));
   } else if (OB_UNLIKELY(!path->is_join_path())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected join path", K(ret));
@@ -1134,19 +1070,16 @@ int ObLogJoin::allocate_startup_expr_post()
   int ret = OB_SUCCESS;
   if (INNER_JOIN == join_type_) {
     if (OB_FAIL(ObLogicalOperator::allocate_startup_expr_post())) {
-      LOG_WARN("failed to allocate startup expr post", K(ret));
     }
   } else if (LEFT_OUTER_JOIN == join_type_ ||
              LEFT_SEMI_JOIN == join_type_ ||
              LEFT_ANTI_JOIN == join_type_) {
     if (OB_FAIL(allocate_startup_expr_post(first_child))) {
-      LOG_WARN("failed to allocate startup expr post", K(ret));
     }
   } else if (RIGHT_OUTER_JOIN == join_type_ ||
              RIGHT_SEMI_JOIN == join_type_ ||
              RIGHT_ANTI_JOIN == join_type_) {
     if (OB_FAIL(allocate_startup_expr_post(second_child))) {
-      LOG_WARN("failed to allocate startup expr post", K(ret));
     }
   } else if (FULL_OUTER_JOIN == join_type_) {
     //do nothing
@@ -1186,14 +1119,11 @@ int ObLogJoin::allocate_startup_expr_post(int64_t child_idx)
           LOG_WARN("fail to push back non startup expr",K(ret));
         }
       } else if (OB_FAIL(new_startup_exprs.push_back(startup_exprs.at(i)))) {
-        LOG_WARN("failed to push back expr", K(ret));
       }
     }
     if (OB_SUCC(ret)) {
       if (OB_FAIL(ObOptimizerUtil::append_exprs_no_dup(get_startup_exprs(), new_startup_exprs))) {
-        LOG_WARN("failed to add startup exprs", K(ret));
       } else if (OB_FAIL(child->get_startup_exprs().assign(non_startup_exprs))) {
-        LOG_WARN("failed to assign exprs", K(ret));
       }
     }
   }

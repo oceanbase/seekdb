@@ -360,25 +360,18 @@ inline int compare_binary_key(const UnitKey &lhs, const UnitKey &rhs, int &compa
   int64_t pos = 0;
   if (OB_ISNULL(buffer = (char *)MdsAllocator::get_instance().alloc(buffer_size))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    MDS_LOG(WARN, "fail to alloc buffer", PRINT_WRAPPER);
   } else {
     if (OB_FAIL(lhs.mds_serialize((char *)buffer, buffer_size, pos))) {
-      MDS_LOG(WARN, "fail to serialize lhs", PRINT_WRAPPER);
     } else if (pos != lhs_serialize_size) {
       ret = OB_ERR_UNEXPECTED;
-      MDS_LOG(WARN, "serialize size is not as same as calculated", PRINT_WRAPPER);
     } else if (OB_FAIL(rhs.mds_serialize((char *)buffer, buffer_size, pos))) {
-      MDS_LOG(WARN, "fail to serialize rhs", PRINT_WRAPPER);
     } else if (pos != buffer_size) {
-      MDS_LOG(WARN, "serialize size is not as same as calculated", PRINT_WRAPPER);
     } else if (OB_FAIL(compare_mds_serialized_buffer(buffer,
                                                     lhs_serialize_size,
                                                     buffer + lhs_serialize_size,
                                                     rhs_serialize_size,
                                                     compare_result))) {
-      MDS_LOG(WARN, "serialize size is not as same as calculated", PRINT_WRAPPER);
     } else {
-      MDS_LOG(DEBUG, "compare binary key", PRINT_WRAPPER);
     }
     MdsAllocator::get_instance().free(buffer);
   }

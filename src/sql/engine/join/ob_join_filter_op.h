@@ -287,7 +287,6 @@ public:
     for (int64_t i = 0; i < join_filter_ops_.count() && OB_SUCC(ret); ++i) {
       ObJoinFilterOp *join_filter_op = join_filter_ops_.at(i);
       if (OB_FAIL(func(join_filter_op, std::forward<ARGS>(args)...))) {
-        SQL_LOG(WARN, "failed to do op");
       }
     }
     return ret;

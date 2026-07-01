@@ -57,12 +57,10 @@ int ObInfoSchemaQueryResponseTimeTable::set_ip(common::ObAddr* addr)
   if (NULL == addr) {
     ret = OB_ENTRY_NOT_EXIST;
   } else if (!addr_->ip_to_string(ipbuf, sizeof(ipbuf))) {
-    SERVER_LOG(ERROR, "ip to string failed");
     ret = OB_ERR_UNEXPECTED;
   } else {
     ipstr_ = ObString::make_string(ipbuf);
     if (OB_FAIL(ob_write_string(*allocator_, ipstr_, ipstr_))) {
-      SERVER_LOG(WARN, "failed to write string", K(ret));
     }
     port_ = addr_->get_port();
   }
@@ -73,7 +71,6 @@ int ObInfoSchemaQueryResponseTimeTable::inner_open()
 {
   int ret = OB_SUCCESS;
   if (OB_FAIL(set_ip(addr_))) {
-    SERVER_LOG(WARN, "can't get ip", K(ret));
   } else {
     start_to_read_ = true;
   }
@@ -99,9 +96,7 @@ int ObInfoSchemaQueryResponseTimeTable::inner_get_next_row(ObNewRow *&row)
         ret = OB_ERR_UNEXPECTED;
         SERVER_LOG(WARN, "t_query_resp_time_collector should not be null", K(ret));
       } else if (OB_FAIL(t_query_resp_time_collector->get_sum_value(time_collector_))) {
-        SERVER_LOG(WARN, "failed to get sum value",K(ret));
       } else if (OB_FAIL(process_row_data(row, cells))){
-        SERVER_LOG(WARN, "process row data of time collector failed", K(ret));
       }
     } else if (utility_iter_ == time_collector_.utility().bound_count() && sql_type_iter_ == static_cast<int32_t>(RespTimeSqlType::END) -1 ){
       ret = OB_ITER_END;
@@ -111,7 +106,6 @@ int ObInfoSchemaQueryResponseTimeTable::inner_get_next_row(ObNewRow *&row)
         utility_iter_ = 0;
       }
       if (OB_FAIL(process_row_data(row, cells))){
-        SERVER_LOG(WARN, "process row data of time collector failed", K(ret));
       }
     }
   }
@@ -148,7 +142,6 @@ int ObInfoSchemaQueryResponseTimeTable::process_row_data(ObNewRow *&row, ObObj* 
          case COUNT: {
           int64_t val = 0;
           if (OB_FAIL(time_collector_.get_count_val(static_cast<RespTimeSqlType>(sql_type_iter_), utility_iter_, val))) {
-            SERVER_LOG(WARN, "failed to get count val", K(ret), K(utility_iter_), K(sql_type_iter_));
           } else {
             cells[cell_idx].set_int(val);
           }
@@ -157,7 +150,6 @@ int ObInfoSchemaQueryResponseTimeTable::process_row_data(ObNewRow *&row, ObObj* 
         case TOTAL: {
           int64_t val = 0;
           if (OB_FAIL(time_collector_.get_total_time_val(static_cast<RespTimeSqlType>(sql_type_iter_), utility_iter_, val))) {
-            SERVER_LOG(WARN, "failed to get count val", K(ret), K(utility_iter_), K(sql_type_iter_));
           } else {
             cells[cell_idx].set_int(val);
           }

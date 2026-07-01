@@ -81,16 +81,12 @@ public:
     int64_t res_buf_len = 0;
     ObTextStringVectorResult<ResVec> str_result(expr.datum_meta_.type_, &expr, &ctx, res_vec, batch_idx);
     if (OB_FAIL(str_result.init_with_batch_idx(res_size, batch_idx))) {
-      SQL_ENG_LOG(WARN, "fail to init result", K(ret), K(res_size));
     } else if (OB_FAIL(str_result.get_reserved_buffer(res_buf, res_buf_len))) {
-      SQL_ENG_LOG(WARN, "fail to get reserver buffer", K(ret));
     } else if (res_buf_len < res_size) {
       ret = OB_ERR_UNEXPECTED;
       SQL_ENG_LOG(WARN, "get invalid res buf len", K(ret), K(res_buf_len), K(res_size));
     } else if (OB_FAIL(arr_obj->get_raw_binary(res_buf, res_buf_len))) {
-      SQL_ENG_LOG(WARN, "get array raw binary failed", K(ret), K(res_buf_len), K(res_size));
     } else if (OB_FAIL(str_result.lseek(res_size, 0))) {
-      SQL_ENG_LOG(WARN, "failed to lseek res.", K(ret), K(str_result), K(res_size));
     } else {
       str_result.set_result();
     }
@@ -378,7 +374,6 @@ public:
       int64_t cell_len = 0;
       if (OB_FAIL(ObArrayExprUtils::nested_expr_to_row(*coll_cell->expr_, *coll_cell->eval_ctx_, row_buf,
                                                        offset, row_idx, cell_len))) {
-        SQL_LOG(WARN, "nested expr to row failed", K(ret));
       } else {
         stored_row->update_var_offset(row_meta, col_idx, cell_len);
       }
@@ -411,7 +406,6 @@ public:
       int64_t cell_len = 0;
       if (OB_FAIL(ObArrayExprUtils::nested_expr_to_row(*coll_cell->expr_, *coll_cell->eval_ctx_, row_buf,
                                                        offset, row_idx, cell_len, &remain_size))) {
-        SQL_LOG(WARN, "nested expr to row failed", K(ret));
       } else {
         stored_row->update_var_offset(row_meta, col_idx, cell_len);
       }
@@ -435,7 +429,6 @@ public:
     for (int i = 0; OB_SUCC(ret) && i < size; i++) {
       int64_t row_idx = selector[i];
       if (OB_FAIL(column->to_row(row_meta, stored_rows[i], row_idx, col_idx))) {
-        SQL_LOG(WARN, "to row failed", K(ret));
       }
     }
     return ret;
@@ -451,7 +444,6 @@ public:
     for (int i = 0; OB_SUCC(ret) && i < size; i++) {
       int64_t row_idx = i;
       if (OB_FAIL(column->to_row(row_meta, stored_rows[i], row_idx, col_idx))) {
-        SQL_LOG(WARN, "to row failed", K(ret));
       }
     }
     return ret;

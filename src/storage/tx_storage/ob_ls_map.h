@@ -114,7 +114,6 @@ OB_INLINE void ObLSMap::revert_ls(ObLS *ls, ObLSGetMod mod) const
 {
   if (OB_NOT_NULL(ls)) {
     if (ls->get_ref_mgr().dec(mod)) {
-      STORAGE_LOG(INFO, "ObLSMap free ls", KP(ls), K(mod), K(ls->get_ls_id()));
       free_ls(ls);
     }
   }

@@ -33,7 +33,6 @@ int ObSequenceOptionBuilder::build_create_sequence_option(
   ObSequenceOption &option = opt_new;
 
   if (OB_FAIL(pre_check_sequence_option(opt_new))) {
-    LOG_WARN("fail pre check sequence option for create sequence", K(ret));
   }
 
   if (OB_SUCC(ret)) {
@@ -64,7 +63,6 @@ int ObSequenceOptionBuilder::build_create_sequence_option(
 
   if (OB_SUCC(ret)) {
     if (OB_FAIL(check_sequence_option(opt_bitset, option))) {
-      LOG_WARN("sequence option not valid", K(option), K(ret));
     }
   }
   return ret;
@@ -79,7 +77,6 @@ int ObSequenceOptionBuilder::build_alter_sequence_option(
   int ret = OB_SUCCESS;
   // If there is no setting in alter, the old value is used, that is, the option in schema (opt_old)
   if (OB_FAIL(opt_new.merge(opt_bitset, opt_old))) {
-    LOG_WARN("fail merge options", K(opt_new), K(opt_old), K(ret));
   } else if (!can_alter_start_with && opt_bitset.has_member(ObSequenceArg::START_WITH)) {
     // cannot alter starting sequence number
     ret = OB_ERR_ALTER_START_SEQ_NUMBER_NOT_ALLOWED;
@@ -87,17 +84,14 @@ int ObSequenceOptionBuilder::build_alter_sequence_option(
   } else if (can_alter_start_with && !opt_bitset.has_member(ObSequenceArg::START_WITH)) {
     if (opt_new.get_increment_by() >  static_cast<int64_t>(0)) {
       if (OB_FAIL(opt_new.set_start_with(opt_new.minvalue()))) {
-        LOG_WARN("fail assign min value as start with", K(opt_new));
       }
     } else {
       if (OB_FAIL(opt_new.set_start_with(opt_new.maxvalue()))) {
-        LOG_WARN("fail assign max value as start with", K(opt_new));
       }
     }
   }
   if (OB_SUCC(ret)) {
     if (OB_FAIL(check_sequence_option(opt_bitset, opt_new))) {
-      LOG_WARN("sequence option not valid", K(opt_new), K(ret));
     }
   }
   return ret;
@@ -138,11 +132,8 @@ int ObSequenceOptionBuilder::check_sequence_option(
   // value_range = option.get_max_value() - option.get_min_value()
   // cache_range = option.get_increment_by().abs() *  (option.get_cache_size() - 1)
   if (OB_FAIL(check_sequence_option_integer(opt_bitset, option))) {
-    LOG_WARN("fail check sequence options integer", K(option), K(ret));
   } else if (OB_FAIL(max.sub(option.get_min_value()).get_result(value_range))) {
-    LOG_WARN("fail calc number", K(ret));
   } else if (OB_FAIL(cache.sub(static_cast<int64_t>(1)).mul(option.get_increment_by().abs()).get_result(cache_range))) {
-    LOG_WARN("fail calc number", K(ret));
   } else if (option.get_increment_by() == static_cast<int64_t>(0)) {
     // INCREMENT must be a nonzero integer
     ret = OB_ERR_SEQ_INCREMENT_CAN_NOT_BE_ZERO;

@@ -44,7 +44,6 @@ int ObInterruptUtil::broadcast_px(ObIArray<ObDfo *> &dfos, int int_code)
   int tmp_ret = OB_SUCCESS;
   for (int64_t idx = 0; idx < dfos.count(); ++idx) {
     if (OB_SUCCESS != (tmp_ret = broadcast_dfo(dfos.at(idx), int_code))) {
-      LOG_WARN("fail interrupt dfo", K(idx), K(ret));
     }
   }
   return ret;
@@ -105,8 +104,6 @@ int ObInterruptUtil::interrupt_tasks(ObPxSqcMeta &sqc, int code)
   ObGlobalInterruptManager *manager = ObGlobalInterruptManager::getInstance();
   ObInterruptibleTaskID interrupt_id = sqc.get_interrupt_id().px_interrupt_id_;
   if(OB_FAIL(manager->interrupt(interrupt_id, int_code))) {
-    LOG_WARN("fail to send interrupt message to other server",
-             K(ret), K(int_code), K(interrupt_id));
   } else {
     LOG_INFO("success to send interrupt message to local tasks",
              K(int_code), K(interrupt_id));
@@ -129,10 +126,8 @@ void ObInterruptUtil::update_schema_error_code(ObExecContext *exec_ctx, int &cod
       LOG_WARN("invalid tenant_schema_version", K(ret), K(query_tenant_begin_schema_version));
     } else if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(
                  current_moment_schema_guard))) {
-      LOG_WARN("get tenant schema guard failed", K(ret));
     } else if (OB_FAIL(current_moment_schema_guard.get_schema_version(
                  current_moment_schema_version))) {
-      LOG_WARN("get schema version failed", K(ret));
     }
     // 1. First we will check current_moment_schema_version is equal to
     // query_tenant_begin_schema_version
@@ -187,10 +182,6 @@ int ObInterruptUtil::interrupt_qc(ObPxSqcMeta &sqc, int code, ObExecContext *exe
   } else if (OB_FAIL(manager->interrupt(sqc.get_qc_addr(),
                                         interrupt_id,
                                         int_code))) {
-    LOG_WARN("fail send interrupt signal to qc",
-              "addr", sqc.get_qc_addr(),
-              K(int_code),
-              K(ret));
   } else {
     LOG_TRACE("sqc notify qc to interrupt",
               "qc_addr", sqc.get_qc_addr(),
@@ -217,10 +208,6 @@ int ObInterruptUtil::interrupt_qc(ObPxTask &task, int code, ObExecContext *exec_
   } else if (OB_FAIL(manager->interrupt(task.get_qc_addr(),
                                         interrupt_id,
                                         int_code))) {
-    LOG_WARN("fail send interrupt signal to qc",
-              "addr", task.get_qc_addr(),
-              K(int_code),
-              K(ret));
   } else {
     LOG_TRACE("task notify qc to interrupt",
               "qc_addr", task.get_sqc_addr(),
