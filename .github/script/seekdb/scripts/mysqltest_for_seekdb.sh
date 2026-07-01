@@ -576,9 +576,13 @@ function obd_run_mysqltest {
                 obd_prepare_config
                 echo "config after change:"
                 cat $HOME/seekdb/tools/deploy/config.yaml
-                $obd cluster destroy $ob_name && $obd cluster deploy $ob_name -c $HOME/seekdb/tools/deploy/config.yaml && $obd cluster start $ob_name -f && $obd cluster display $ob_name
+                [[ -f $HOME/seekdb/tools/deploy/activate_obd.sh ]] && source $HOME/seekdb/tools/deploy/activate_obd.sh
+                $obd cluster destroy $ob_name -f 2>/dev/null || true
+                obd_cluster_deploy_and_start
             else
-                $obd cluster redeploy $ob_name
+                [[ -f $HOME/seekdb/tools/deploy/activate_obd.sh ]] && source $HOME/seekdb/tools/deploy/activate_obd.sh
+                $obd cluster destroy $ob_name -f 2>/dev/null || true
+                obd_cluster_deploy_and_start
             fi
             obd_init_cluster
             $mysqltest_cmd $INIT_FLIES --test-set=$TEST_CASES --sp-hint="$SP_HINT" $RESULT_ARGS $EXTRA_ARGS_WITHOUT_CASE 2>&1 | tee compare.out && ( exit ${PIPESTATUS[0]})
