@@ -398,29 +398,17 @@ function obd_prepare_bin {
 
 }
 
-function obd_ci_strip_obshell {
-    # mirror 保留 obshell；启动前删掉部署目录里的二进制，让 obshell_start 插件 skip
-    rm -f "$DATA_PATH"/observer*/bin/obshell 2>/dev/null || true
-}
-
-function obd_cluster_deploy_and_start {
-    [[ -f $HOME/seekdb/tools/deploy/activate_obd.sh ]] && source $HOME/seekdb/tools/deploy/activate_obd.sh
-    $obd cluster deploy $ob_name -c $HOME/seekdb/tools/deploy/config.yaml -f || return 1
-    obd_ci_strip_obshell
-    $obd cluster start $ob_name -f && $obd cluster display $ob_name
-}
-
 function obd_init_cluster {
     retries=$reboot_retries
     while (( $retries > 0 ))
     do
     if [[ "$retries" == "$reboot_retries" ]]
     then
-        obd_cluster_deploy_and_start
+        [[ -f $HOME/seekdb/tools/deploy/activate_obd.sh ]] && source $HOME/seekdb/tools/deploy/activate_obd.sh
+        $obd cluster deploy $ob_name -c $HOME/seekdb/tools/deploy/config.yaml -f && $obd cluster start $ob_name -f && $obd cluster display $ob_name
     else
         [[ -f $HOME/seekdb/tools/deploy/activate_obd.sh ]] && source $HOME/seekdb/tools/deploy/activate_obd.sh
-        $obd cluster destroy $ob_name -f 2>/dev/null || true
-        obd_cluster_deploy_and_start
+        $obd cluster redeploy $ob_name -f
     fi
     retries=`expr $retries - 1`
     ./obclient -h 127.1 -P $MYSQL_PORT -u root -A -e "alter system set_tp tp_no = 509, error_code = 4016, frequency = 1;"
@@ -576,13 +564,9 @@ function obd_run_mysqltest {
                 obd_prepare_config
                 echo "config after change:"
                 cat $HOME/seekdb/tools/deploy/config.yaml
-                [[ -f $HOME/seekdb/tools/deploy/activate_obd.sh ]] && source $HOME/seekdb/tools/deploy/activate_obd.sh
-                $obd cluster destroy $ob_name -f 2>/dev/null || true
-                obd_cluster_deploy_and_start
+                $obd cluster destroy $ob_name && $obd cluster deploy $ob_name -c $HOME/seekdb/tools/deploy/config.yaml && $obd cluster start $ob_name -f && $obd cluster display $ob_name
             else
-                [[ -f $HOME/seekdb/tools/deploy/activate_obd.sh ]] && source $HOME/seekdb/tools/deploy/activate_obd.sh
-                $obd cluster destroy $ob_name -f 2>/dev/null || true
-                obd_cluster_deploy_and_start
+                $obd cluster redeploy $ob_name
             fi
             obd_init_cluster
             $mysqltest_cmd $INIT_FLIES --test-set=$TEST_CASES --sp-hint="$SP_HINT" $RESULT_ARGS $EXTRA_ARGS_WITHOUT_CASE 2>&1 | tee compare.out && ( exit ${PIPESTATUS[0]})
@@ -775,8 +759,6 @@ export -f obd_prepare_global
 export -f obd_prepare_config
 export -f obd_run_mysqltest
 export -f obd_init_cluster
-export -f obd_ci_strip_obshell
-export -f obd_cluster_deploy_and_start
 export -f is_case_selector_arg
 
 function run {
