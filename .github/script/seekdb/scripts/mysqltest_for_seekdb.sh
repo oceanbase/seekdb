@@ -775,6 +775,8 @@ export -f obd_prepare_global
 export -f obd_prepare_config
 export -f obd_run_mysqltest
 export -f obd_init_cluster
+export -f obd_ci_strip_obshell
+export -f obd_cluster_deploy_and_start
 export -f is_case_selector_arg
 
 function run {
