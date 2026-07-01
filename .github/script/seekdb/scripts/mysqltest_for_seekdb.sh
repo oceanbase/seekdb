@@ -333,6 +333,24 @@ EOF
     fi
 }
 
+function copy_obshell_to_bin {
+    local bin_dir=$1
+    local obshell_src=""
+    for cand in \
+        "$HOME/seekdb/tools/deploy/bin/obshell" \
+        "$DEP_PATH/home/admin/oceanbase/bin/obshell"; do
+        if [[ -x "$cand" ]]; then
+            obshell_src="$cand"
+            break
+        fi
+    done
+    if [[ -n "$obshell_src" ]]; then
+        cp -f "$obshell_src" "$bin_dir/obshell" && chmod +x "$bin_dir/obshell"
+    else
+        echo "[WARN] obshell not found in deps, skip packaging obshell into mirror"
+    fi
+}
+
 function obd_prepare_bin {
     cd $HOME
     mkdir -p $DOWNLOAD_DIR/{bin,etc,admin} || return 1
@@ -361,6 +379,7 @@ function obd_prepare_bin {
     then
         cd $HOME/seekdb/tools/deploy && [[ -f copy.sh ]] && sh copy.sh
     fi
+    copy_obshell_to_bin "$DOWNLOAD_DIR/bin"
     if [[ -f "$HOME/seekdb/tools/deploy/obd/.observer_obd_plugin_version" ]]
     then
         obs_version=$(cat $HOME/seekdb/tools/deploy/obd/.observer_obd_plugin_version)
