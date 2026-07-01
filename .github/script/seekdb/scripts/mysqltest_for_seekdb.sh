@@ -285,6 +285,7 @@ EOF
     fi
     extra_conf="""$MYSQLRTEST_ARGS
     $CGROUP_CONFIG
+    start_obshell: false
 """
     conf=${conf//'{{%% PROXY_CONF %%}}'/"$extra_conf"}
     conf=${conf//'{{%% DEPLOY_PATH %%}}'/"$HOME/seekdb/tools/deploy"}
