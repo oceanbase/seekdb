@@ -18,7 +18,7 @@
 #ifndef OCEANBASE_SHARE_OB_SYS_TIME_ZONE_UTIL_H_
 #define OCEANBASE_SHARE_OB_SYS_TIME_ZONE_UTIL_H_
 #include "lib/string/ob_fixed_length_string.h"
-#include "lib/timezone/ob_timezone_info.h"
+#include "common/timezone/ob_timezone_info.h"
 namespace oceanbase
 {
 namespace share

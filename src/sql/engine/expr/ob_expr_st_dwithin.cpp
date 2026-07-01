@@ -15,7 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
-#include "lib/geo/ob_geo_func_register.h"
+#include "share/geo/ob_geo_func_register.h"
 #include "sql/engine/expr/ob_expr_st_dwithin.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
 

@@ -75,7 +75,7 @@
 #include "lib/utility/ob_defer.h"
 #include "lib/oblog/ob_syslog_rate_limiter.h"
 #include "lib/signal/ob_signal_handlers.h"
-#include "common/ob_common_utility.h"
+#include "lib/utility/ob_common_utility.h"
 #include "lib/oblog/ob_log_dba_event.h"
 
 // Undefine Windows min/max macros to avoid conflicts with std::min/std::max

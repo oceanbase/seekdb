@@ -18,7 +18,7 @@
 #include "ob_log_service.h"
 #include "share/rc/ob_module_provider.h"
 #include "ob_server_log_block_mgr.h"
-#include "share/allocator/ob_tenant_mutil_allocator_mgr.h"
+#include "logservice/ob_tenant_mutil_allocator_mgr.h"
 #include "share/rc/ob_tenant_module_init_ctx.h"
 #include "observer/ob_srv_network_frame.h"
 #include "storage/ob_file_system_router.h"
@@ -26,6 +26,7 @@
 #include "share/resource_manager/ob_resource_manager.h"       // ObResourceManager
 #include "share/ob_io_device_helper.h"
 #include "lib/ob_running_mode.h"
+#include "share/ob_share_util.h"  // relocated-definition owner
 
 namespace oceanbase
 {
@@ -792,3 +793,50 @@ int ObLogService::GetUnrecycableLogDiskSizeFunctor::operator()(ObLS *ls)
 
 }//end of namespace logservice
 }//end of namespace oceanbase
+
+// ===== definition moved from share/ob_share_util.cpp =====
+// removes share→logservice inverted include; declaration remains in share/ob_share_util.h, resolved at link time(transitional state, final state should split the class)
+namespace oceanbase
+{
+namespace share
+{
+
+// check_clog_disk_full_or_hang has been demoted to logservice::free function(see end of file)
+
+
+}  // namespace share
+}  // namespace oceanbase
+
+// from share::ObShareUtil demoted(A-setmember split)
+namespace oceanbase
+{
+namespace logservice
+{
+using namespace oceanbase::share;
+int check_clog_disk_full_or_hang(
+    bool &clog_disk_is_full,
+    bool &clog_disk_is_hang)
+{
+  int ret = OB_SUCCESS;
+  clog_disk_is_full = false;
+  clog_disk_is_hang = false;
+  int64_t clog_disk_last_working_time = OB_INVALID_TIMESTAMP;
+  const int64_t now = ObTimeUtility::current_time();
+  bool is_disk_enough = true;
+  logservice::ObLogService *log_service = share::g_mp->log_service();
+  if (OB_ISNULL(log_service)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", KR(ret), KP(log_service));
+  } else if (OB_FAIL(log_service->get_io_start_time(clog_disk_last_working_time))) {
+    LOG_WARN("get_io_start_time failed", KR(ret));
+  } else if (OB_FAIL(log_service->check_disk_space_enough(is_disk_enough))) {
+    LOG_WARN("check_disk_space_enough failed", KR(ret));
+  } else {
+    clog_disk_is_full = !is_disk_enough;
+    clog_disk_is_hang = OB_INVALID_TIMESTAMP != clog_disk_last_working_time
+                        && now - clog_disk_last_working_time > GCONF.log_storage_warning_tolerance_time;
+  }
+  return ret;
+}
+}
+}

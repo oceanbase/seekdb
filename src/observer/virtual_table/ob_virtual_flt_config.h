@@ -15,7 +15,7 @@
  */
 #ifndef OB_VIRTUAL_FLT_CONF_H_
 #define OB_VIRTUAL_FLT_CONF_H_
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "sql/monitor/flt/ob_flt_control_info_mgr.h"
 using namespace oceanbase::sql;
 namespace oceanbase

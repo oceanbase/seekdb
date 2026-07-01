@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 #include "ob_ddl_error_message_table_operator.h"
 #include "share/ob_dml_sql_splicer.h"
-#include "src/share/inner_table/ob_inner_table_schema_constants.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_ddl_sim_point.h"
 
 using namespace oceanbase::share;
@@ -105,48 +105,7 @@ int ObDDLErrorMessageTableOperator::get_index_task_info(
   return ret;
 }
 
-int ObDDLErrorMessageTableOperator::extract_index_key(const ObTableSchema &index_schema,
-    const blocksstable::ObDatumRowkey &index_key, char *buffer, const int64_t buffer_len)
-{
-  int ret = OB_SUCCESS;
-  if (!index_schema.is_valid() || !index_key.is_valid() || OB_ISNULL(buffer) || buffer_len <= 0) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid argument", K(ret), K(index_schema), K(index_key), KP(buffer), K(buffer_len));
-  } else {
-    const int64_t index_size = index_schema.get_index_column_num();
-    int64_t pos = 0;
-    MEMSET(buffer, 0, buffer_len);
-    for (int64_t i = 0; OB_SUCC(ret) && i < index_size; i++) {
-      const ObRowkeyColumn *column = index_schema.get_index_info().get_column(i);
-      if (OB_ISNULL(column)) {
-        ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("Failed to get index column description", K(i), K(ret));
-      } else if (IS_SHADOW_COLUMN(column->column_id_)) {
-        break;
-      } else {
-        const blocksstable::ObStorageDatum &datum = index_key.get_datum(i);
-        ObObj obj;
-        if (OB_FAIL(datum.to_obj(obj, column->get_meta_type()))) {
-          LOG_WARN("convert datum to obj failed", K(ret));
-        } else if (OB_FAIL(obj.print_plain_str_literal(buffer, buffer_len, pos))) {
-          LOG_WARN("fail to print_plain_str_literal", K(ret), KP(buffer));
-        } else if (OB_FAIL(databuff_printf(buffer,  buffer_len, pos, "-"))) {
-          LOG_WARN("databuff print failed", K(ret));
-        }
-      }
-    }
-    if (OB_SUCC(ret) && pos > 0) {
-      buffer[pos - 1] = '\0'; // overwrite the tail '-'
-    }
-    if (OB_SIZE_OVERFLOW == ret) {
-      buffer[buffer_len - 1] = '\0';
-      LOG_WARN("the index key length is larger than OB_TMP_BUF_SIZE_256", K(index_key), KP(buffer));
-      ret = OB_SUCCESS;
-    }
-  }
-
-  return ret;
-}
+// extract_index_key moved definition to storage/ddl/ob_ddl_common_storage_impl.cpp(accesses ObDatumRowkey/ObStorageDatum members)
 
 int ObDDLErrorMessageTableOperator::load_ddl_user_error(const int64_t task_id,
                                                         const uint64_t table_id,

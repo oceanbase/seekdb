@@ -18,13 +18,13 @@
 //    full check_status / interrupt / trace / big stack / per-op timeout) and waits,
 //    exactly reproducing the former loopback sync RPC (recv_request to self + wait).
 //  - async_call: fire-and-forget on the same tenant ReqWorker (no separate pool).
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
 #include "observer/ob_srv_task.h"
 #include "observer/omt/ob_multi_tenant.h"
 #include "observer/ob_server_struct.h"
 #include "lib/worker.h"
 #include "lib/lock/ob_futex.h"
-#include "common/ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 #include "lib/profile/ob_trace_id.h"
 
 namespace oceanbase {

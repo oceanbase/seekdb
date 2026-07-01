@@ -21,8 +21,8 @@
 #include "sql/engine/dml/ob_dml_service.h"
 #include "sql/engine/cmd/ob_table_direct_insert_service.h"
 #include "observer/table_load/ob_table_load_service.h"
-#include "share/schema/ob_table_param.h"
-#include "share/schema/ob_table_dml_param.h"
+#include "storage/access/ob_table_param.h"
+#include "storage/ob_table_dml_param.h"
 #include "storage/blocksstable/ob_datum_row_utils.h"
 
 using namespace oceanbase::common;

@@ -16,13 +16,13 @@
 
 #define USING_LOG_PREFIX SQL_REWRITE
 #include "sql/rewrite/ob_range_generator.h"
-#include "lib/timezone/ob_time_convert.h"
+#include "common/timezone/ob_time_convert.h"
 #include "lib/container/ob_array_serialization.h"
-#include "lib/geo/ob_geo_utils.h"
+#include "share/geo/ob_geo_utils.h"
 #include "lib/rc/ob_rc.h"
 #include "sql/resolver/dml/ob_dml_stmt.h"
 #include "sql/engine/expr/ob_expr_result_type_util.h"
-#include "common/ob_smart_call.h"
+#include "lib/utility/ob_smart_call.h"
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
 #include "src/share/object/ob_obj_cast_util.h"

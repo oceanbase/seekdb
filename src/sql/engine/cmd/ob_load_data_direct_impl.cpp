@@ -20,7 +20,7 @@
 #include "observer/table_load/ob_table_load_table_ctx.h"
 #include "observer/table_load/ob_table_load_task_scheduler.h"
 #include "observer/mysql/ob_query_driver.h"
-#include "share/stat/ob_dbms_stats_utils.h"
+#include "sql/optimizer/stat/ob_dbms_stats_utils.h"
 
 namespace oceanbase
 {

@@ -26,7 +26,7 @@
 #include "storage/blocksstable/ob_macro_block_meta_mgr.h"
 #include "storage/blocksstable/ob_datum_rowkey.h"
 #include "storage/blocksstable/ob_logic_macro_id.h"
-#include "share/scheduler/ob_dag_scheduler_config.h"
+#include "observer/scheduler/ob_dag_scheduler_config.h"
 #include "common/ob_learner_list.h"
 #include "storage/ob_tablet_ha_status.h"
 

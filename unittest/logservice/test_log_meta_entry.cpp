@@ -19,6 +19,7 @@
 #include "logservice/palf/log_meta.h"                    // LogMeta
 
 #include <gtest/gtest.h>
+#include "share/ob_cluster_version.h"
 
 namespace oceanbase
 {

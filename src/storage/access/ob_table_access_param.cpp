@@ -19,7 +19,7 @@
 #include "ob_table_access_param.h"
 #include "storage/ob_relative_table.h"
 #include "storage/tablet/ob_tablet.h"
-#include "share/schema/ob_table_dml_param.h"
+#include "storage/ob_table_dml_param.h"
 
 namespace oceanbase
 {

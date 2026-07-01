@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX  SQL_ENG
 
-#include "observer/ob_sql_client_decorator.h"
+#include "share/ob_sql_client_decorator.h"
 #include "sql/engine/cmd/ob_variable_set_executor.h"
 #include "rootserver/ob_rs_serial_call.h"
 #include "rootserver/ob_root_service.h"
@@ -700,7 +700,7 @@ int ObVariableSetExecutor::update_global_variables(ObExecContext &ctx,
       int64_t max_read_stale_time = 0;
       if (OB_FAIL(val.get_int(max_read_stale_time))) {
         LOG_WARN("fail to get int value", K(ret), K(val));
-      } else if (max_read_stale_time != ObSysVarFactory::INVALID_MAX_READ_STALE_TIME &&
+      } else if (max_read_stale_time != share::ObSysVarMeta::INVALID_MAX_READ_STALE_TIME &&
                  max_read_stale_time < GCONF.weak_read_version_refresh_interval) {
         ret = OB_INVALID_ARGUMENT;
         LOG_USER_ERROR(OB_INVALID_ARGUMENT,
@@ -1318,11 +1318,11 @@ int ObVariableSetExecutor::cascade_set_validate_password(ObExecContext &ctx,
   return ret;
 }
 
-int ObVariableSetExecutor::is_support(const share::ObSetVar &set_var)
+int ObVariableSetExecutor::is_support(const sql::ObSetVar &set_var)
 {
   int ret = OB_SUCCESS;
   ObSysVarClassType var_id = SYS_VAR_INVALID;
- if(SYS_VAR_INVALID == (var_id = ObSysVarFactory::find_sys_var_id_by_name(set_var.var_name_))) {
+ if(SYS_VAR_INVALID == (var_id = share::ObSysVarMeta::find_sys_var_id_by_name(set_var.var_name_))) {
     ret = OB_ERR_SYS_VARIABLE_UNKNOWN;
     LOG_WARN("unknown variable", K(set_var.var_name_), K(ret));
   } else if (((SYS_VAR_DEBUG <= var_id && SYS_VAR_STORED_PROGRAM_CACHE >= var_id) ||

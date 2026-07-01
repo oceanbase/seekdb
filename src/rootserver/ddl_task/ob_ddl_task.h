@@ -26,7 +26,7 @@
 #include "share/ob_rpc_struct.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/ob_ddl_common.h"
-#include "share/longops_mgr/ob_ddl_longops.h"
+#include "rootserver/ddl_task/ob_ddl_longops.h"
 #include "rootserver/ddl_task/ob_ddl_single_replica_executor.h"
 #include "sql/engine/px/ob_px_dtl_msg.h"
 

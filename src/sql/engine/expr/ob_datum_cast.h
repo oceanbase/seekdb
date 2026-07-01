@@ -19,12 +19,12 @@
 
 #include "common/object/ob_object.h"
 #include "common/ob_zerofill_info.h"
-#include "lib/timezone/ob_timezone_info.h"
-#include "lib/timezone/ob_time_convert.h"
+#include "common/timezone/ob_timezone_info.h"
+#include "common/timezone/ob_time_convert.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "lib/charset/ob_charset.h"
 #include "share/ob_errno.h"
-#include "share/datum/ob_datum.h"
+#include "common/datum/ob_datum.h"
 #include "share/object/ob_obj_cast.h"
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
@@ -33,6 +33,9 @@ namespace oceanbase
 {
 namespace sql
 {
+// demoted from common::ObObjCaster::get_zero_value: builds a zero-value ObObj for a type(uses this file's SET_RES macro)
+int get_obj_zero_value(const common::ObObjType expect_type, common::ObCollationType expect_cs_type, common::ObObj &zero_obj);
+
 class ObPhysicalPlanCtx;
 struct ObUserLoggingCtx;
 

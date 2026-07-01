@@ -67,9 +67,6 @@ public:
                           T * &allocated_schema);
   template <class T>
   static int deep_copy_schema(char *buf, const T &old_var, T *&new_var);
-  static int cascaded_generated_column(ObTableSchema &table_schema,
-                                       ObColumnSchemaV2 &column,
-                                       const bool resolve_dependencies);
   static bool is_virtual_generated_column(uint64_t flag);
   static bool is_stored_generated_column(uint64_t flag);
   static bool is_always_identity_column(uint64_t flag);
@@ -108,7 +105,6 @@ public:
   static bool is_spatial_generated_column(uint64_t flag);
   static bool is_generated_column(uint64_t flag) { return is_virtual_generated_column(flag) || is_stored_generated_column(flag); }
   static bool is_identity_column(uint64_t flag) { return is_always_identity_column(flag) || is_default_identity_column(flag) || is_default_on_null_identity_column(flag); }
-  static int add_column_to_table_schema(ObColumnSchemaV2 &column, ObTableSchema &table_schema);
   static int convert_sys_param_to_sysvar_schema(const ObSysParam &sysparam, ObSysVarSchema &sysvar_schema);
   static bool is_support_parallel_drop(const ObTableType table_type);
   static int get_tenant_int_variable(
@@ -218,11 +214,7 @@ public:
       const ObObjectID &table_id,
       ObSimpleTableSchemaV2 *&table_schema);
 
-  static int try_check_parallel_ddl_schema_in_sync(
-             const ObTimeoutCtx &ctx,
-             sql::ObSQLSessionInfo *session,
-             const int64_t schema_version,
-             const bool skip_consensus);
+  // try_check_parallel_ddl_schema_in_sync has been demoted to ObDDLExecutorUtil::(sql)
 
   // Use to check if the column of sys table (exclude core table) does exist
   // by querying __all_column when the column is not accessible.
@@ -419,18 +411,6 @@ private:
   bool check_mode_valid_(uint8_t mode) { return mode > MASK ? false : true; }
   uint64_t value_;
   DISALLOW_COPY_AND_ASSIGN(ObParallelDDLControlMode);
-};
-
-class ObTenantDDLCountGuard
-{
-public:
-  ObTenantDDLCountGuard () : had_inc_ddl_(false) {}
-  int try_inc_ddl_count(const int64_t cpu_quota_concurrency);
-  ~ObTenantDDLCountGuard();
-private:
-  
-  bool had_inc_ddl_;
-  DISALLOW_COPY_AND_ASSIGN(ObTenantDDLCountGuard);
 };
 
 } // end schema

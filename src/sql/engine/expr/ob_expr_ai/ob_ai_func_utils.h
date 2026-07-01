@@ -18,7 +18,7 @@
 #define OB_AI_FUNC_UTILS_H_
 
 #include "ob_ai_func.h"
-#include "share/vector_index/ob_json_helper.h"
+#include "observer/vector_index/ob_json_helper.h"
 #include "lib/encode/ob_base64_encode.h"
 
 namespace oceanbase 

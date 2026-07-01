@@ -18,14 +18,16 @@
 
 
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_service.h"
+#include "storage/ob_storage_rpc_arg.h"
 #include "share/rc/ob_module_provider.h"
 #include "lib/alloc/memory_dump.h"
 
 #include "share/ob_version.h"
 
 #include "share/ob_version.h"
-#include "share/deadlock/ob_deadlock_inner_table_service.h"
+#include "storage/deadlock/ob_deadlock_inner_table_service.h"
 #include "share/ob_tablet_replica_checksum_operator.h" // ObTabletReplicaChecksumItem
 
 #include "sql/optimizer/ob_storage_estimator.h"
@@ -51,6 +53,7 @@
 #include "share/ob_server_struct.h"    // GCTX
 #include "storage/tx_storage/ob_ls_service.h"  // ObLSService
 #include "share/ob_rpc_struct.h"  // ObCreateLSArg
+#include "share/schema/ob_multi_version_schema_service.h"  // hook registration
 
 namespace oceanbase
 {
@@ -2188,3 +2191,24 @@ int ObService::change_external_storage_dest(obcall::ObAdminSetConfigArg &arg)
 
 }// end namespace observer
 }// end namespace oceanbase
+
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+// mvss async schema refresh taskhook registration(removes share/schema → observer dependency, predecessor ob_tenant_freezer.cpp)
+static struct ObSubmitAsyncRefreshSchemaFnRegister
+{
+  ObSubmitAsyncRefreshSchemaFnRegister()
+  {
+    g_submit_async_refresh_schema_task_fn = [](const int64_t schema_version) -> int {
+      return OB_ISNULL(GCTX.ob_service_) ? OB_ERR_UNEXPECTED
+           : GCTX.ob_service_->submit_async_refresh_schema_task(schema_version);
+    };
+  }
+} g_submit_async_refresh_schema_fn_register;
+}  // namespace schema
+}  // namespace share
+}  // namespace oceanbase

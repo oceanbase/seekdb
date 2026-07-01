@@ -15,11 +15,12 @@
  */
 
 #include "object/ob_object.h"
+#include "storage/fts/ob_fts_struct.h"  // ObFTWordMap typedef(previously hidden behind a transitive include)
 #define USING_LOG_PREFIX STORAGE_FTS
 
 #include "storage/fts/ob_fts_plugin_helper.h"
 
-#include "lib/json_type/ob_json_tree.h"
+#include "common/json_type/ob_json_tree.h"
 #include "plugin/interface/ob_plugin_ftparser_intf.h"
 #include "plugin/sys/ob_plugin_helper.h"
 #include "share/ob_force_print_log.h"

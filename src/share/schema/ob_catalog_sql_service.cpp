@@ -19,7 +19,7 @@
 #include "lib/oblog/ob_log.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_sql_string.h"
-#include "lib/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "ob_routine_info.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"

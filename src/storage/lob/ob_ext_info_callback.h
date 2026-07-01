@@ -18,7 +18,7 @@
 #define OCEANBASE_STORAGE_OB_EXT_INFO_CALLBACK_
 
 #include "storage/memtable/mvcc/ob_mvcc_trans_ctx.h"
-#include "lib/json_type/ob_json_diff.h"
+#include "common/json_type/ob_json_diff.h"
 
 namespace oceanbase
 {

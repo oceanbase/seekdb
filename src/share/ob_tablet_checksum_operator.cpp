@@ -16,7 +16,10 @@
 
 #define USING_LOG_PREFIX SHARE
 
+#include "common/ob_timeout_ctx.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
 #include "share/ob_tablet_checksum_operator.h"
+#include "share/ob_freeze_info_proxy.h"  // ObFreezeInfo, previously hidden behind a transitive include(free within share)
 #include "share/rc/ob_module_provider.h"
 
 namespace oceanbase
@@ -394,7 +397,7 @@ int ObTabletChecksumOperator::insert_or_update_tablet_checksum_items_(
           ObString b_column_meta;
           share::ObFreezeInfo freeze_info;
           uint64_t compaction_data_version = 0;
-          if (OB_FAIL(share::g_mp->tenant_freeze_info_mgr()->get_lower_bound_freeze_info_before_snapshot_version(compaction_scn_val, freeze_info))) {
+          if (OB_FAIL(share::g_mp->get_lower_bound_freeze_info(compaction_scn_val, freeze_info))) {
             LOG_WARN("failed to get freeze info", K(ret), K(compaction_scn_val));
           } else if (FALSE_IT(compaction_data_version = freeze_info.data_version_)) {
           } else if (OB_FAIL(sql.append_fmt("(%lu, '%lu', %ld, %ld, ",

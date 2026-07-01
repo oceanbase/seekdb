@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_BLOOM_FILTER_TASK_H_
 #define OCEANBASE_STORAGE_OB_BLOOM_FILTER_TASK_H_
 
-#include "lib/queue/ob_dedup_queue.h"
+#include "lib/thread/ob_dedup_queue.h"
 #include "storage/ob_i_store.h"
 #include "storage/ob_i_table.h"
 #include "storage/blocksstable/ob_macro_block_id.h"

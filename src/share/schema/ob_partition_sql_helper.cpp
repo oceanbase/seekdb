@@ -16,7 +16,31 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_partition_sql_helper.h"
-#include "observer/omt/ob_tenant_timezone_mgr.h"
+
+#include <stdio.h>
+#include <string.h>
+
+#include "share/ob_tenant_timezone_mgr.h"
+#include "lib/net/ob_addr.h"
+#include "lib/ob_errno.h"
+#include "lib/oblog/ob_log_level.h"
+#include "lib/oblog/ob_log_print_kv.h"
+#include "lib/utility/ob_smart_var.h"
+#include "lib/utility/utility.h"
+#include "mysqlclient/ob_isql_client.h"
+#include "object/ob_object.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
+#include "share/ob_dml_sql_splicer.h"
+#include "share/schema/ob_schema_utils.h"
+#include "timezone/ob_timezone_info.h"
+
+namespace oceanbase {
+namespace common {
+class ObNewRow;
+class ObRowkey;
+template <class T> class ObIArray;
+}  // namespace common
+}  // namespace oceanbase
 
 namespace oceanbase
 {
@@ -850,7 +874,7 @@ int ObAddIncSubPartDMLGenerator::convert_to_dml(const PartInfo &part_info, ObDML
   }
   if (OB_SUCC(ret)) {
     const char *part_policy = nullptr;
-    if (OB_FAIL(ObStorageCacheGlobalPolicy::safely_get_str(part_info.part_storage_cache_policy_type_, part_policy))) {
+    if (OB_FAIL(storage::ObStorageCacheGlobalPolicy::safely_get_str(part_info.part_storage_cache_policy_type_, part_policy))) {
       LOG_WARN("get part policy failed", K(ret), K(part_info.part_storage_cache_policy_type_));
     } else if (OB_ISNULL(part_policy)) {
       ret = OB_ERR_UNEXPECTED;
@@ -886,10 +910,10 @@ int ObAddIncSubPartDMLGenerator::extract_part_info(PartInfo &part_info)
     part_info.sub_part_idx_ = sub_part_.get_sub_part_idx();
     part_info.partition_type_ = sub_part_.get_partition_type();
     part_info.tablet_id_ = sub_part_.get_tablet_id();
-    part_info.part_storage_cache_policy_type_ = ObStorageCacheGlobalPolicy::NONE_POLICY;
+    part_info.part_storage_cache_policy_type_ = storage::ObStorageCacheGlobalPolicy::NONE_POLICY;
 
     if (OB_FAIL(ret)) {
-    } else if (ObStorageCacheGlobalPolicy::is_valid(sub_part_.get_part_storage_cache_policy_type())) {
+    } else if (storage::ObStorageCacheGlobalPolicy::is_valid(sub_part_.get_part_storage_cache_policy_type())) {
       part_info.part_storage_cache_policy_type_ = sub_part_.get_part_storage_cache_policy_type();
     }
     if (OB_FAIL(ret)) {
@@ -955,7 +979,7 @@ int ObAddIncPartDMLGenerator::convert_to_dml(const PartInfo &part_info, ObDMLSql
   }
  if (OB_SUCC(ret)) {
     const char *part_policy = nullptr;
-    if (OB_FAIL(ObStorageCacheGlobalPolicy::safely_get_str(part_info.part_storage_cache_policy_type_, part_policy))) {
+    if (OB_FAIL(storage::ObStorageCacheGlobalPolicy::safely_get_str(part_info.part_storage_cache_policy_type_, part_policy))) {
       LOG_WARN("get part policy failed", K(ret), K(part_info.part_storage_cache_policy_type_));
     } else if (OB_ISNULL(part_policy)) {
       ret = OB_ERR_UNEXPECTED;
@@ -991,7 +1015,7 @@ int ObAddIncPartDMLGenerator::extract_part_info(PartInfo &part_info)
     part_info.part_idx_ = part_.get_part_idx();
     part_info.partition_type_ = part_.get_partition_type();
     part_info.tablet_id_ = part_.get_tablet_id();
-    part_info.part_storage_cache_policy_type_ = ObStorageCacheGlobalPolicy::NONE_POLICY;
+    part_info.part_storage_cache_policy_type_ = storage::ObStorageCacheGlobalPolicy::NONE_POLICY;
 
     if (OB_FAIL(ret)) {
     } else if (!ori_table_->is_interval_part() || !part_.get_part_name().empty()) {
@@ -1005,7 +1029,7 @@ int ObAddIncPartDMLGenerator::extract_part_info(PartInfo &part_info)
       part_info.external_location_ = part_.get_external_location();
     }
     if (OB_FAIL(ret)) {
-    } else if (ObStorageCacheGlobalPolicy::is_valid(part_.get_part_storage_cache_policy_type())) {
+    } else if (storage::ObStorageCacheGlobalPolicy::is_valid(part_.get_part_storage_cache_policy_type())) {
       part_info.part_storage_cache_policy_type_ = part_.get_part_storage_cache_policy_type();
     }
     if (OB_FAIL(ret)) {

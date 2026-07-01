@@ -18,7 +18,7 @@
 #define OB_ALL_VIRTUAL_OB_OBJ_LOCK_H_
 
 #include "storage/tablelock/ob_obj_lock.h"
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "storage/tx_storage/ob_ls_map.h"
 
 namespace oceanbase

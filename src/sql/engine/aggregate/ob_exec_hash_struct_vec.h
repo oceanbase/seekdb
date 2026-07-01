@@ -28,7 +28,7 @@
 #include "sql/engine/aggregate/ob_aggregate_processor.h"
 #include "sql/engine/basic/ob_compact_row.h"
 #include "sql/engine/basic/ob_temp_row_store.h"
-// #include "share/aggregate/processor.h"
+// #include "sql/engine/aggregate/processor.h"
 // This file contains many template functions that were originally defined in CPP, [because of the effect of UNITY merging compilation units, they compiled, but the implementation of template code needs to be defined in header files], therefore, closing UNITY resulted in observer failing to compile
 // To solve the compilation problem after closing UNITY, move it to the header file
 // But this function uses OZ, CK macros, these two macros internal log print used LOG_WARN, requirement must define USING_LOG_PREFIX
@@ -49,7 +49,7 @@ namespace share
 {
 namespace aggregate
 {
-using AggrRowPtr = char *; // #include "src/share/aggregate/agg_ctx.h" // this will result recursive include
+using AggrRowPtr = char *; // #include "sql/engine/aggregate/agg_ctx.h" // this will result recursive include
 }
 }
 namespace common{

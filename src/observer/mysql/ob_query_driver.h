@@ -20,7 +20,7 @@
 #include "share/ob_define.h"
 #include "lib/charset/ob_charset.h"
 #include "lib/string/ob_string.h"
-#include "deps/oblib/src/common/ob_field.h"
+#include "common/ob_field.h"
 #include "observer/ob_server_struct.h"
 
 namespace oceanbase

@@ -29,7 +29,7 @@
 #include "storage/meta_mem/ob_tablet_handle.h"
 #include "storage/access/ob_simple_rows_merger.h"
 #include "storage/access/ob_index_skip_scanner.h"
-#include "share/cache/ob_kvcache_pointer_swizzle.h"
+#include "storage/blocksstable/ob_kvcache_pointer_swizzle.h"
 namespace oceanbase
 {
 namespace storage

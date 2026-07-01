@@ -22,8 +22,8 @@
 #include "lib/hash_func/murmur_hash.h"
 #include "common/object/ob_obj_type.h"
 #include "common/ob_tablet_id.h"
-#include "storage/memtable/ob_multi_source_data.h"
-#include "storage/meta_mem/ob_storage_meta_cache.h"
+#include "storage/memtable/ob_i_multi_source_data_unit.h"  // inherits only pure interfaces(conf L2)
+#include "storage/meta_mem/ob_i_storage_meta_obj.h"  // inherits only pure interfaces(conf L2)
 
 namespace oceanbase
 {

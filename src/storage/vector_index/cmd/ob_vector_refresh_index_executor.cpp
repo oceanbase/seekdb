@@ -19,7 +19,7 @@
 #include "storage/vector_index/cmd/ob_vector_refresh_index_executor.h"
 #include "storage/vector_index/ob_vector_index_refresh.h"
 #include "pl/ob_pl.h"
-#include "share/ob_vec_index_builder_util.h"
+#include "sql/resolver/ddl/ob_vec_index_builder_util.h"
 
 namespace oceanbase {
 namespace storage {

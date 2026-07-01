@@ -277,8 +277,6 @@
 #define N_IF_EXISTS "if_exists"
 #define N_TABLE_NAME "table_name"
 #define N_DATABASE_NAME "database_name"
-#define N_DBLINK_ID "dblink_id"
-#define N_DBLINK_NAME "dblink_name"
 #define N_LINK_TABLE_ID "link_table_id"
 #define N_LINK_TABLE_NAME "link_table_name"
 #define N_QB_NAME "qb_name"

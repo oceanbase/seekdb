@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "share/throttle/ob_throttle_unit.h"
+#include "storage/throttle/ob_throttle_unit.h"
 
 #include "storage/tx/ob_trans_service.h"
 #include "storage/tx/ob_tx_log_operator.h"

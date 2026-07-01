@@ -14,92 +14,47 @@
  * limitations under the License.
  */
 
-
 #ifndef OCEANBASE_SQL_LOCAL_SESSION_VAR_H_
 #define OCEANBASE_SQL_LOCAL_SESSION_VAR_H_
 
-#include "share/system_variable/ob_sys_var_class_type.h"
-#include "lib/container/ob_se_array.h"
-#include "common/object/ob_object.h"
-#include "lib/container/ob_fixed_array.h"
-#include "lib/allocator/page_arena.h"
+#include "share/session/ob_local_session_var.h"
 
 namespace oceanbase
 {
-
-namespace share
-{
-  enum ObSysVarClassType;
-}
-
 namespace sql
 {
 class ObBasicSessionInfo;
 
-struct ObSessionSysVar {
-  OB_UNIS_VERSION(1);
+using share::ObLocalSessionVar;
+using share::ObSessionSysVar;
+
+class ObLocalSessionVarHelper
+{
 public:
-  TO_STRING_KV(K_(type), K_(val));
-  bool is_equal(const ObObj &other_val) const;
-  int64_t get_deep_copy_size() const;
+  static int load_session_vars(const ObBasicSessionInfo *session, ObLocalSessionVar &local_vars);
+  static int reserve_max_local_vars_capacity(ObLocalSessionVar &local_vars);
+  static int update_session_vars_with_local(const ObLocalSessionVar &local_vars,
+                                            ObBasicSessionInfo &session);
+  static int remove_vars_same_with_session(ObLocalSessionVar &local_vars,
+                                           const ObBasicSessionInfo *session);
+  static int get_different_vars_from_session(const ObLocalSessionVar &local_vars,
+                                             const ObBasicSessionInfo *session,
+                                             common::ObIArray<const ObSessionSysVar*> &local_diff_vars,
+                                             common::ObIArray<common::ObObj> &session_vals);
+  static int check_var_same_with_session(const ObBasicSessionInfo &session,
+                                         const ObSessionSysVar *local_var,
+                                         bool &is_same,
+                                         common::ObObj *diff_val = NULL);
   static int get_sys_var_val_str(const share::ObSysVarClassType var_type,
-                                 const ObObj &var_val,
+                                 const common::ObObj &var_val,
                                  common::ObIAllocator &allocator,
-                                 ObString &val_str);
+                                 common::ObString &val_str);
 
-  share::ObSysVarClassType type_;
-  ObObj val_;
-};
-
-class ObLocalSessionVar {
-  OB_UNIS_VERSION(1);
-public:
-  ObLocalSessionVar(common::ObIAllocator *alloc)
-    :alloc_(alloc),
-    local_session_vars_(alloc) {
-    }
-  ObLocalSessionVar ()
-    :alloc_(NULL) {
-    }
-  ~ObLocalSessionVar() { reset(); }
-  void set_allocator(common::ObIAllocator *allocator) {
-    alloc_ = allocator;
-    local_session_vars_.set_allocator(allocator);
-  }
-  void reset();
-  int set_local_var_capacity(int64_t sz);
-  template<class T>
-  int set_local_vars(T &var_array);
-  int add_local_var(share::ObSysVarClassType var_type, const ObObj &value);
-  int add_local_var(const ObSessionSysVar *var);
-  int get_local_var(share::ObSysVarClassType var_type, ObSessionSysVar *&sys_var) const;
-  int get_local_vars(common::ObIArray<const ObSessionSysVar *> &var_array) const;
-  int load_session_vars(const sql::ObBasicSessionInfo *session);
-  int reserve_max_local_vars_capacity();
-  int update_session_vars_with_local(sql::ObBasicSessionInfo &session) const;
-  int remove_vars_same_with_session(const ObBasicSessionInfo *session);
-  int get_different_vars_from_session(const ObBasicSessionInfo *session,
-                                      common::ObIArray<const ObSessionSysVar*> &local_diff_vars,
-                                      common::ObIArray<ObObj> &session_vals) const;
-  int check_var_same_with_session(const ObBasicSessionInfo &session,
-                                  const ObSessionSysVar *local_var,
-                                  bool &is_same,
-                                  ObObj *diff_val = NULL) const;
-  int deep_copy(const ObLocalSessionVar &other);
-  int assign(const ObLocalSessionVar &other);
-  bool operator == (const ObLocalSessionVar& other) const;
-  int64_t get_deep_copy_size() const ;
-  int64_t get_var_count() const { return local_session_vars_.count(); }
-  int gen_local_session_var_str(common::ObIAllocator &allocator, ObString &local_session_var_str) const;
-  int fill_local_session_var_from_str(const ObString &local_session_var_str);
-  DECLARE_TO_STRING;
 private:
-  const static share::ObSysVarClassType ALL_LOCAL_VARS[];
-  common::ObIAllocator *alloc_;
-  ObFixedArray<ObSessionSysVar *, common::ObIAllocator> local_session_vars_;
+  static const share::ObSysVarClassType ALL_LOCAL_VARS[];
 };
 
 } // namespace sql
-}//namespace oceanbase
+} // namespace oceanbase
 
-#endif /* _OB_OCEANBASE_SCHEMA_SCHEMA_STRUCT_H */
+#endif /* OCEANBASE_SQL_LOCAL_SESSION_VAR_H_ */

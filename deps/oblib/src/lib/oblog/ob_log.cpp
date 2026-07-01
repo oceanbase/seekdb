@@ -55,9 +55,10 @@ static inline ssize_t ob_writev(int fd, const struct iovec *iov, int iovcnt) {
 #include "lib/list/ob_list.h"
 #include "lib/utility/ob_fast_convert.h"
 #include "lib/allocator/ob_fifo_allocator.h"
-#include "common/ob_smart_var.h"
+#include "lib/utility/ob_smart_var.h"
 #include "lib/oblog/ob_log_compressor.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
+#include "lib/profile/ob_trace_id.h"
 
 using namespace oceanbase::lib;
 

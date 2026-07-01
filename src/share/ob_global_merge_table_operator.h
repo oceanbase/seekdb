@@ -17,11 +17,11 @@
 #ifndef OCEANBASE_SHARE_OB_GLOBAL_MERGE_TABLE_OPERATOR_
 #define OCEANBASE_SHARE_OB_GLOBAL_MERGE_TABLE_OPERATOR_
 
-#include "lib/mysqlclient/ob_isql_connection_pool.h"
+#include "common/mysqlclient/ob_isql_connection_pool.h"
 #include "lib/container/ob_iarray.h"
-#include "lib/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_isql_client.h"
 #include "common/ob_zone.h"
-#include "lib/mysqlclient/ob_mysql_transaction.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
 
 namespace oceanbase
 {

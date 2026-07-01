@@ -17,7 +17,6 @@
 #ifndef OB_EXTERNAL_OBJECT_CTX_H
 #define OB_EXTERNAL_OBJECT_CTX_H
 
-#include "sql/engine/cmd/ob_load_data_parser.h"
 
 namespace oceanbase
 {

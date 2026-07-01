@@ -18,7 +18,7 @@
 #define OCEANBASE_SHARE_SCHEMA_OB_PARTITION_SQL_HELPER_H_
 #include "share/ob_define.h"
 #include "lib/utility/ob_print_utils.h"
-#include "lib/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "lib/oblog/ob_log.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/string/ob_sql_string.h"

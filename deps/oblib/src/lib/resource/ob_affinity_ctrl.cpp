@@ -21,10 +21,7 @@
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/utility.h"
 #include "lib/oblog/ob_log.h"
-#include "share/ob_errno.h"
-#include "share/io/ob_io_manager.h"
-#include "share/resource_manager/ob_resource_plan_info.h"
-#include "share/resource_manager/ob_resource_manager.h"
+#include "lib/ob_errno.h"
 #include "lib/resource/ob_affinity_ctrl.h"
 
 using namespace oceanbase::common;

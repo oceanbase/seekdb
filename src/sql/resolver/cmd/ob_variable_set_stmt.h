@@ -20,7 +20,7 @@
 #include "lib/string/ob_string.h"
 #include "lib/container/ob_array.h"
 #include "sql/resolver/ddl/ob_ddl_stmt.h"
-#include "share/system_variable/ob_system_variable.h"
+#include "sql/session/ob_system_variable.h"
 #include "sql/resolver/cmd/ob_set_names_stmt.h"
 
 namespace oceanbase
@@ -35,7 +35,7 @@ public:
   public:
     VariableSetNode() : variable_name_(),
                         is_system_variable_(false),
-                        set_scope_(share::ObSetVar::SET_SCOPE_NEXT_TRANS),
+                        set_scope_(sql::ObSetVar::SET_SCOPE_NEXT_TRANS),
                         value_expr_(NULL),
                         is_set_default_(false),
                         set_names_stmt_(NULL)
@@ -46,7 +46,7 @@ public:
 
     common::ObString variable_name_;
     bool is_system_variable_;
-    share::ObSetVar::SetScopeType set_scope_;
+    sql::ObSetVar::SetScopeType set_scope_;
     ObRawExpr *value_expr_;
     bool is_set_default_;
     ObSetNamesStmt *set_names_stmt_;

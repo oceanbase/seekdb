@@ -16,11 +16,12 @@
 
 #define USING_LOG_PREFIX SERVER
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/mysql/obmp_stmt_prepare.h"
 #include "observer/mysql/ob_mysql_result_set.h"
 #include "lib/trace/ob_trace.h"
 
-#include "deps/oblib/src/rpc/obmysql/packet/ompk_prepare.h"
+#include "rpc/obmysql/packet/ompk_prepare.h"
 #include "rpc/obmysql/packet/ompk_field.h"
 #include "observer/omt/ob_tenant.h"
 #include "sql/ob_sql.h"

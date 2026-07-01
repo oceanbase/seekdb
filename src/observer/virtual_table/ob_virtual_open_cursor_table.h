@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_OPEN_CURSOR
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_OPEN_CURSOR
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "sql/session/ob_sql_session_mgr.h"
 
 /* __all_virtual_open_cursor 

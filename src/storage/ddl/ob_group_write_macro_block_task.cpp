@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 #include "storage/ddl/ob_group_write_macro_block_task.h"
+#include "storage/ddl/ob_ddl_storage_util.h"
 #include "storage/ddl/ob_ddl_independent_dag.h"
 #include "storage/ddl/ob_ddl_tablet_context.h"
 #include "storage/ddl/ob_cg_macro_block_writer.h"
@@ -290,7 +291,7 @@ int ObGroupCGBlockFileWriteTask::process()
     HEAP_VAR(ObDAGCGMacroBlockWriter, cg_writer) {
     if (OB_FAIL(ObDDLUtil::fill_writer_param(tablet_id_, slice_idx_, cg_idx_, ddl_dag_, 0/*max_batch_size*/, write_param))) {
       LOG_WARN("fill write param failed", K(ret));
-    } else if (OB_FAIL(ObDDLUtil::init_macro_block_seq(slice_idx_,
+    } else if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(slice_idx_,
                                                        write_param.start_sequence_))) {
       LOG_WARN("fail to initialize macro block seq", K(ret), K(write_param.direct_load_type_),
                                                      K(write_param.tablet_id_),

@@ -19,7 +19,7 @@
 
 #include "share/schema/ob_table_schema.h"
 #include "share/inner_table/ob_load_inner_table_schema.h"
-#include "src/share/ob_core_table_proxy.h"
+#include "share/ob_core_table_proxy.h"
 
 // this code should only run in unit test, but it is important, so we put it here
 

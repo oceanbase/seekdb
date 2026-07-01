@@ -18,14 +18,14 @@
 #define OB_DDL_ERROR_MESSAGE_REPORTER_H
 
 #include "lib/net/ob_addr.h"
-#include "lib/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "common/sql_mode/ob_sql_mode_utils.h"
 #include "common/rowkey/ob_store_rowkey.h"
 #include "share/ob_errno.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/ob_ddl_common.h"
 #include "share/schema/ob_table_schema.h"
-#include "storage/blocksstable/ob_datum_rowkey.h"
+namespace oceanbase { namespace blocksstable { class ObDatumRowkey; } }
 
 namespace oceanbase
 {

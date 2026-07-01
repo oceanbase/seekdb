@@ -17,8 +17,8 @@
 #ifndef SRC_OBSERVER_DBMS_SCHED_JOB_EXECUTOR_H_
 #define SRC_OBSERVER_DBMS_SCHED_JOB_EXECUTOR_H_
 
-#include "lib/mysqlclient/ob_mysql_proxy.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
+#include "lib/utility/ob_mod_define.h"
 #include "share/schema/ob_multi_version_schema_service.h"
 #include "observer/dbms_scheduler/ob_dbms_sched_table_operator.h"
 

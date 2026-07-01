@@ -36,7 +36,7 @@
 #include "sql/das/iter/ob_das_merge_iter.h"
 #include "sql/das/iter/ob_das_group_fold_iter.h"
 #include "sql/das/ob_das_domain_utils.h"
-#include "share/ob_fts_index_builder_util.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/rewrite/ob_range_generator.h"
 
 namespace oceanbase

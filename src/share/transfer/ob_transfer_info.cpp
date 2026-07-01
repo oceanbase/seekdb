@@ -16,13 +16,10 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "ob_transfer_info.h"
-#include "observer/ob_inner_sql_connection.h" // ObInnerSQLConnection
-#include "storage/tablelock/ob_lock_inner_connection_util.h" // ObInnerConnectionLockUtil
 
 using namespace oceanbase;
 using namespace share;
 using namespace common;
-using namespace palf;
 using namespace share::schema;
 using namespace share;
 using namespace transaction::tablelock;

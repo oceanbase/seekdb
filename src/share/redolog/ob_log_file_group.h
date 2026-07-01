@@ -23,7 +23,7 @@
 #include "lib/atomic/ob_atomic.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/hash/ob_hashmap.h"
-#include "common/storage/ob_io_device.h"
+#include "lib/restore/ob_io_device.h"
 #include "share/redolog/ob_log_definition.h"
 
 namespace oceanbase

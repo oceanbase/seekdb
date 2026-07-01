@@ -19,7 +19,7 @@
 
 #include "lib/ob_errno.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "ob_clock_generator.h"
+#include "lib/time/ob_clock_generator.h"
 #include "share/ob_errno.h"
 #include "storage/multi_data_source/compile_utility/mds_dummy_key.h"
 #include "storage/multi_data_source/mds_table_base.h"

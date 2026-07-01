@@ -27,8 +27,9 @@
 #include "lib/hash_func/murmur_hash.h"
 #include "sql/ob_sql_temp_table.h"
 #include "sql/plan_cache/ob_plan_cache_util.h"
+#include "share/config/ob_tenant_config_mgr.h"
 #include "sql/monitor/ob_sql_stat_record.h"
-#include "share/stat/ob_opt_ds_stat_cache.h"
+#include "sql/optimizer/stat/ob_opt_ds_stat_cache.h"
 #include "sql/ob_sql_ccl_rule_manager.h"
 
 namespace oceanbase
@@ -664,6 +665,8 @@ public:
   // if not found values in this array, just use local server's replica.
   common::ObFixedArray<ObDupTabConstraint, common::ObIAllocator> dup_table_replica_cons_;
 
+  // wether need late compilation
+  bool need_late_compile_;
   // Constants constraints passed from resolver
   // all_possible_const_param_constraints_ indicates all possible constant constraints in this sql
   // all_plan_const_param_constraints_ indicates all constant constraints existing in this sql

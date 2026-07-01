@@ -24,7 +24,7 @@
 #include "share/object/ob_obj_cast.h"
 #include "sql/parser/ob_item_type.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "lib/roaringbitmap/ob_roaringbitmap.h"
+#include "share/roaringbitmap/ob_roaringbitmap.h"
 
 using namespace oceanbase::common;
 

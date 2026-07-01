@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX STORAGE
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_ls_tablet_service.h"
 #include "share/rc/ob_module_provider.h"
 #include "share/schema/ob_tenant_schema_service.h"
@@ -43,15 +44,16 @@
 #include "observer/table_load/ob_table_load_coordinator.h"
 #include "observer/table_load/ob_table_load_store.h"
 #include "observer/table_load/ob_table_load_store_trans_px_writer.h"
-#include "share/ob_partition_split_query.h"
+#include "storage/ob_partition_split_query.h"
+#include "storage/ob_partition_split_query.h"
 #include "storage/concurrency_control/ob_data_validation_service.h"
-#include "share/scheduler/ob_partition_auto_split_helper.h"
+#include "observer/scheduler/ob_partition_auto_split_helper.h"
 #include "storage/concurrency_control/ob_data_validation_service.h"
 #include "storage/slog_ckpt/ob_tablet_replay_create_handler.h"
 #include "storage/tablet/ob_tablet_mds_table_mini_merger.h"
 #include "storage/ddl/ob_tablet_ddl_kv.h"
-#include "share/vector_index/ob_plugin_vector_index_service.h"
-#include "share/vector_index/ob_vector_index_util.h"
+#include "observer/vector_index/ob_plugin_vector_index_service.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 #include "storage/meta_mem/ob_tablet_pointer.h"
 #include "storage/truncate_info/ob_truncate_partition_filter.h"
 #include "storage/meta_store/ob_tenant_storage_meta_service.h"

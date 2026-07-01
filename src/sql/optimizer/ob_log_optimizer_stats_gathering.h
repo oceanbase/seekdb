@@ -19,7 +19,7 @@
 
 #include "sql/optimizer/ob_logical_operator.h"
 #include "sql/resolver/dml/ob_del_upd_stmt.h"
-#include "share/stat/ob_stat_define.h"
+#include "sql/optimizer/stat/ob_stat_define.h"
 
 namespace oceanbase
 {

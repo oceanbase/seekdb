@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SQL_DAS
 #include "sql/das/ob_das_utils.h"
 #include "pl/ob_pl.h"
-#include "share/ob_tablet_autoincrement_service.h"
+#include "storage/ob_tablet_autoincrement_service.h"
 #include "sql/das/ob_das_vec_define.h"
 namespace oceanbase
 {

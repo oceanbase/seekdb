@@ -22,7 +22,7 @@
 #include "lib/queue/ob_fixed_queue.h"
 #include "common/log/ob_log_generator.h"
 #include "common/log/ob_log_data_writer.h"
-#include "common/storage/ob_io_device.h"
+#include "lib/restore/ob_io_device.h"
 #include "share/redolog/ob_log_file_handler.h"
 #include "storage/slog/ob_storage_log_struct.h"
 #include "storage/slog/ob_storage_log_write_buffer.h"

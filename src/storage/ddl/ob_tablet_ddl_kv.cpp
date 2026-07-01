@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_tablet_ddl_kv.h"
+#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind a transitive include
 #include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/ddl/ob_ddl_merge_task.h"

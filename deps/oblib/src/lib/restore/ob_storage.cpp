@@ -16,7 +16,7 @@
 
 #include "ob_storage.h"
 #include "lib/restore/ob_object_device.h"
-#include "common/storage/ob_device_common.h"
+#include "lib/restore/ob_device_common.h"
 #include "lib/utility/ob_sort.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "lib/string/ob_sensitive_string.h"

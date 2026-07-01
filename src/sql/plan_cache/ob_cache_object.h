@@ -20,7 +20,7 @@
 #include "lib/container/ob_2d_array.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/list/ob_dlist.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/container/ob_fixed_array.h"
 #include "share/schema/ob_schema_struct.h"

@@ -25,6 +25,11 @@
 #endif
 #include <thread>
 #include "observer/ob_server.h"
+#include "storage/lob/ob_lob_manager.h"
+#include "storage/compaction/ob_tenant_freeze_info_mgr.h"
+#include "share/ob_freeze_info_proxy.h"
+namespace oceanbase { namespace observer { common::ObILobReadService * ObServer::lob_read_service() { return mods_lob_manager_; }
+int ObServer::get_lower_bound_freeze_info(const int64_t snapshot_version, share::ObFreezeInfo &freeze_info) { return OB_ISNULL(mods_tenant_freeze_info_mgr_) ? common::OB_NOT_INIT : mods_tenant_freeze_info_mgr_->get_lower_bound_freeze_info_before_snapshot_version(snapshot_version, freeze_info); } } }
 #include "rootserver/ob_rs_serial_call.h"
 #include "lib/alloc/memory_dump.h"
 #include "lib/oblog/ob_log_compressor.h"
@@ -34,9 +39,10 @@
 #include "lib/task/ob_timer_service.h" // ObTimerService
 #include "observer/ob_server_utils.h"
 #include "observer/ob_server_options.h"
+#include "share/ob_tenant_timezone_mgr.h"
+#include "logservice/ob_tenant_mutil_allocator_mgr.h"
+#include "share/object_storage/ob_device_connectivity.h"
 #include "observer/omt/ob_tenant.h"
-#include "observer/omt/ob_tenant_timezone_mgr.h"
-#include "share/allocator/ob_tenant_mutil_allocator_mgr.h"
 #include "share/resource_manager/ob_resource_manager.h"
 #include "share/sequence/ob_sequence_cache.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
@@ -47,24 +53,25 @@
 #include "storage/ob_tablet_autoinc_seq_rpc_handler.h"
 #include "sql/engine/px/ob_px_target_monitor.h"
 #include "share/ob_device_manager.h"
-#include "share/ob_tablet_autoincrement_service.h"
-#include "share/ob_tenant_mem_limit_getter.h"
+#include "storage/ob_tablet_autoincrement_service.h"
+#include "storage/tx_storage/ob_tenant_mem_limit_getter.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/tablet/ob_mds_schema_helper.h"
+#include "observer/schema/ob_schema_service_sql_impl.h"
 #include "storage/ob_file_system_router.h"
 #include "storage/tablelock/ob_table_lock_rpc_client.h"
-#include "share/stat/ob_opt_stat_manager.h" // for ObOptStatManager
 #include "share/catalog/ob_cached_catalog_meta_getter.h"
-#include "share/scheduler/ob_partition_auto_split_helper.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h" // for ObOptStatManager
+#include "observer/scheduler/ob_partition_auto_split_helper.h"
 #include "share/longops_mgr/ob_longops_mgr.h"
 #include "share/ob_ddl_sim_point.h"
 #include "storage/ddl/ob_ddl_redo_log_writer.h"
 #include "observer/ob_server_utils.h"
-#include "lib/xml/ob_libxml2_sax_handler.h"
-#include "share/vector_index/ob_plugin_vector_index_utils.h"
-#include "lib/roaringbitmap/ob_rb_memory_mgr.h"
+#include "common/xml/ob_libxml2_sax_handler.h"
+#include "observer/vector_index/ob_plugin_vector_index_utils.h"
+#include "share/roaringbitmap/ob_rb_memory_mgr.h"
 #include "storage/fts/dict/ob_ft_cache.h"
-#include "common/ob_target_specific.h"
+#include "lib/utility/ob_target_specific.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
 #include "plugin/sys/ob_plugin_mgr.h"
 #include "rpc/frame/ob_net_consts.h"
@@ -1943,9 +1950,26 @@ int ObServer::init_multi_tenant()
   return ret;
 }
 
+namespace
+{
+// ObSchemaService factory injection: implementation ObSchemaServiceSQLImpl lives in the observer layer(can legally call sql)。
+share::schema::ObSchemaService *create_schema_service_sql_impl()
+{
+  return OB_NEW(share::schema::ObSchemaServiceSQLImpl, ObModIds::OB_SCHEMA_SERVICE);
+}
+void destroy_schema_service_sql_impl(share::schema::ObSchemaService *schema_service)
+{
+  share::schema::ObSchemaServiceSQLImpl *tmp =
+      static_cast<share::schema::ObSchemaServiceSQLImpl *>(schema_service);
+  OB_DELETE(ObSchemaServiceSQLImpl, ObModIds::OB_SCHEMA_SERVICE, tmp);
+}
+} // anonymous namespace
+
 int ObServer::init_schema()
 {
   int ret = OB_SUCCESS;
+  share::schema::ObSchemaServiceFactory::register_creator(
+      create_schema_service_sql_impl, destroy_schema_service_sql_impl);
   if (OB_FAIL(schema_service_.init(&sql_proxy_, &config_,
                                    OB_MAX_VERSION_COUNT))) {
     LOG_WARN("init schema_service_ fail", KR(ret));

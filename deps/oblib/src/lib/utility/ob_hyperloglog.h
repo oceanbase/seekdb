@@ -18,6 +18,7 @@
 #define OCEANBASE_COMMON_OB_HYPERLOGLOG_H_
 
 #include "lib/ob_errno.h"
+#include <cmath>
 #include "lib/string/ob_string.h"
 #include "lib/container/ob_array.h"
 #include "lib/utility/ob_unify_serialize.h"

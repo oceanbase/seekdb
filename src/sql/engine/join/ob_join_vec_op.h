@@ -18,7 +18,7 @@
 #define OCEANBASE_SQL_ENGINE_JOIN_OB_JOIN_VEC_OP_
 
 #include "sql/engine/ob_operator.h"
-#include "share/vector/ob_fixed_length_vector.h"
+#include "sql/engine/vector/ob_fixed_length_vector.h"
 
 namespace oceanbase
 {

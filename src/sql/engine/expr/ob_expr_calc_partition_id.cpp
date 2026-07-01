@@ -18,7 +18,7 @@
 #include "ob_expr_calc_partition_id.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/expr/ob_expr_func_part_hash.h"
-#include "share/vector/expr_cmp_func.h"
+#include "sql/engine/vector/expr_cmp_func.h"
 
 namespace oceanbase
 {
@@ -110,10 +110,6 @@ static int64_t get_8_len_val(const char *payload)
 }
 
 static GetPayloadFunc FAST_CALC_PART_GET_VAL_FUNCS[2] = {get_64_len_val, get_8_len_val};
-
-REG_SER_FUNC_ARRAY(OB_SFA_FAST_CALC_PART_VEC,
-                   FAST_CALC_PART_GET_VAL_FUNCS,
-                   sizeof(FAST_CALC_PART_GET_VAL_FUNCS) / sizeof(void *));
 
 ERRSIM_POINT_DEF(ERRSIM_USE_FAST_CALC_PART);
 int ObExprCalcPartitionBase::cg_expr(ObExprCGCtx &expr_cg_ctx,

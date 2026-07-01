@@ -756,14 +756,14 @@ int ObMViewRefreshExecutor::set_collation_connection_var_(
   int ret = OB_SUCCESS;
    
   const ObTableSchema *mv_schema = nullptr;
-  sql::ObSessionSysVar *collation_connection_var = nullptr;
+  share::ObSessionSysVar *collation_connection_var = nullptr;
   if (OB_FAIL(schema_checker_.get_table_schema( mview_id, mv_schema))) {
     LOG_WARN("fail to get table schema", K(ret), K(mview_id));
   } else if (OB_ISNULL(mv_schema)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("mv schema is null", K(ret), KP(mv_schema));
   } else {
-    const sql::ObLocalSessionVar &session_vars = mv_schema->get_local_session_var();
+    const share::ObLocalSessionVar &session_vars = mv_schema->get_local_session_var();
     if (OB_FAIL(session_vars.get_local_var(ObSysVarClassType::SYS_VAR_COLLATION_CONNECTION,
                                            collation_connection_var))) {
       LOG_WARN("fail to get local session var", K(ret));

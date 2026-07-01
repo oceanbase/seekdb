@@ -20,7 +20,7 @@
 #include <locale>
 #include <codecvt>
 #include <cassert>
-#include "lib/utility/ob_test_util.h"
+#include "lib/thread/ob_test_util.h"
 using namespace oceanbase::common;
 
 class TestObObj: public ::testing::Test

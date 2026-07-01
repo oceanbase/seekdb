@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_SRC_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_PARAMETERS_TABLE_H_
 #define OCEANBASE_SRC_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_PARAMETERS_TABLE_H_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "share/schema/ob_routine_info.h"
 
 namespace oceanbase

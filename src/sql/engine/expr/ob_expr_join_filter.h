@@ -19,10 +19,12 @@
 #include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/engine/px/ob_px_bloom_filter.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_share_info.h"
+#include "sql/ob_sql_define.h"  // ObTMArray
 namespace oceanbase
 {
 namespace sql
 {
+class ObDynamicFilterExecutor;
 
 class ObP2PDatahubMsgBase;
 struct ObRowWithHash;

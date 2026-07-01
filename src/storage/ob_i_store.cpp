@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "ob_i_store.h"
+#include "storage/access/ob_table_param.h"  // ObColumnParam complete type(needed by relocated functions)
 #include "share/rc/ob_module_provider.h"
 #include "storage/tx/ob_trans_part_ctx.h"
 #include "storage/tx_storage/ob_ls_service.h"
@@ -25,11 +26,6 @@ namespace oceanbase
 {
 using namespace transaction;
 using namespace share;
-namespace common
-{
-OB_SERIALIZE_MEMBER(ObQueryFlag, flag_);
-}
-
 namespace storage
 {
 using namespace common;
@@ -442,3 +438,214 @@ int ObLockRowChecker::check_lock_row_valid(const blocksstable::ObDatumRow &row, 
 
 }
 }
+
+// definition moved from share/schema/ob_table_schema.cpp: uses ObMultiVersionRowkeyHelpper, share must not depend upward on storage
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+int ObMergeSchema::get_mulit_version_rowkey_column_ids(common::ObIArray<share::schema::ObColDesc> &column_ids) const
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(get_rowkey_column_ids(column_ids))) {
+    SHARE_SCHEMA_LOG(WARN, "failed to add rowkey cols", K(ret));
+  } else if (OB_FAIL(storage::ObMultiVersionRowkeyHelpper::add_extra_rowkey_cols(column_ids))) {
+    SHARE_SCHEMA_LOG(WARN, "failed to add extra rowkey cols", K(ret));
+  } else if (OB_FAIL(set_precision_to_column_desc(column_ids))) {
+    SHARE_SCHEMA_LOG(WARN, "failed to set precision to cols", K(ret));
+  }
+  return ret;
+}
+}  // namespace schema
+}  // namespace share
+}  // namespace oceanbase
+
+// definition moved from share/schema/ob_table_schema.cpp: accesses blocksstable typed members, share must not depend upward on storage
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+using blocksstable::ObSSTableColumnMeta;
+// get_orig_default_row has been demoted from ObTableSchema to storage free function(see end of file namespace storage), removes cross-module splitting of class members
+
+int ObTableSchema::init_column_meta_array(
+    common::ObIArray<blocksstable::ObSSTableColumnMeta> &meta_array) const
+{
+  int ret = OB_SUCCESS;
+  ObArray<ObColDesc> columns;
+  ObSSTableColumnMeta col_meta;
+  if (OB_FAIL(get_multi_version_column_descs(columns))) {
+    STORAGE_LOG(WARN, "fail to get store column ids", K(ret));
+  } else {
+    blocksstable::ObStorageDatum datum;
+    for (int64_t i = 0; OB_SUCC(ret) && i < columns.count(); ++i) {
+      const uint64_t col_id = columns.at(i).col_id_;
+      col_meta.column_id_ = col_id;
+      col_meta.column_checksum_ = 0;
+
+      if (common::OB_HIDDEN_TRANS_VERSION_COLUMN_ID == col_id ||
+          common::OB_HIDDEN_SQL_SEQUENCE_COLUMN_ID == col_id) {
+        col_meta.column_default_checksum_ = 0;
+      } else {
+        const ObColumnSchemaV2 *col_schema = get_column_schema(col_id);
+        if (OB_ISNULL(col_schema)) {
+          ret = OB_ERR_SYS;
+          STORAGE_LOG(ERROR, "col_schema must not null", K(ret), K(col_id));
+        } else if (!col_schema->is_valid()) {
+          ret = OB_ERR_SYS;
+          STORAGE_LOG(ERROR, "invalid col schema", K(ret), K(col_schema));
+        } else if (!col_schema->is_column_stored_in_sstable()
+                  && !is_storage_index_table()) {
+          ret = OB_ERR_UNEXPECTED;
+          STORAGE_LOG(WARN, "virtual generated column should be filtered already", K(ret), K(col_schema));
+        } else {
+          if (ob_is_large_text(col_schema->get_data_type())) {
+            col_meta.column_default_checksum_ = 0;
+          } else if (OB_FAIL(datum.from_obj_enhance(col_schema->get_orig_default_value()))) {
+            STORAGE_LOG(WARN, "Failed to transefer obj to datum", K(ret));
+          } else {
+            col_meta.column_default_checksum_ = datum.checksum(0);
+          }
+        }
+      }
+      if (OB_SUCC(ret) && OB_FAIL(meta_array.push_back(col_meta))) {
+        STORAGE_LOG(WARN, "Fail to push column meta", K(ret));
+      }
+    } // end for
+  }
+  return ret;
+}
+}  // namespace schema
+}  // namespace share
+}  // namespace oceanbase
+
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+int ObTableSchema::get_column_group_index(
+    const share::schema::ObColumnParam &param,
+    const bool need_calculate_cg_idx,
+    int32_t &cg_idx) const
+{
+  int ret = OB_SUCCESS;
+  const uint64_t column_id = param.get_column_id();
+  cg_idx = -1;
+  if (OB_UNLIKELY(1 >= column_group_cnt_ && !need_calculate_cg_idx)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("No column group exist", K(ret), K(need_calculate_cg_idx), K_(is_column_store_supported), K_(column_group_cnt));
+  } else if (param.is_virtual_gen_col()) {
+    cg_idx = -1;
+  } else if ((column_id < OB_END_RESERVED_COLUMN_ID_NUM || common::OB_MAJOR_REFRESH_MVIEW_OLD_NEW_COLUMN_ID == column_id) &&
+      common::OB_HIDDEN_SESS_CREATE_TIME_COLUMN_ID != column_id &&
+      common::OB_HIDDEN_SESSION_ID_COLUMN_ID != column_id &&
+      common::OB_HIDDEN_PK_INCREMENT_COLUMN_ID != column_id) { // this has its own column group now
+    if (common::OB_HIDDEN_TRANS_VERSION_COLUMN_ID == column_id ||
+        common::OB_HIDDEN_SQL_SEQUENCE_COLUMN_ID == column_id) {
+      if (need_calculate_cg_idx) {
+        cg_idx = OB_CS_COLUMN_REPLICA_ROWKEY_CG_IDX;
+      } else if (OB_FAIL(get_base_rowkey_column_group_index(cg_idx))) {
+        LOG_WARN("Fail to get base/rowkey column group index", K(ret), K(column_id));
+      }
+    } else {
+      // TODO: check the following
+      // TODO: after check, also see ObStorageSchema::get_column_group_index
+      // common::OB_HIDDEN_GROUP_IDX_COLUMN_ID == column_id
+      cg_idx = -1;
+    }
+  } else if (need_calculate_cg_idx) {
+    if (OB_FAIL(calc_column_group_index_(column_id, cg_idx))) {
+      LOG_WARN("Fail to calc_column_group_index", K(ret), K(column_id));
+    }
+  } else {
+    bool found = false;
+    int64_t cg_column_cnt = 0;
+    int32_t iter_cg_idx = 0;
+    uint64_t *cg_column_ids = nullptr;
+    for (int64_t i = 0; OB_SUCC(ret) && !found && i < column_group_cnt_; i++) {
+      if (OB_ISNULL(column_group_arr_[i])) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("column_group should not be null", K(ret), K(i), K_(column_group_cnt));
+      } else if (FALSE_IT(cg_column_cnt = column_group_arr_[i]->get_column_id_count())) {
+      } else if (0 == cg_column_cnt) {
+        if (column_group_arr_[i]->get_column_group_type() != DEFAULT_COLUMN_GROUP) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("Unexpected column group type", K(ret), KPC(column_group_arr_[i]));
+        }
+      } else if (1 < cg_column_cnt || column_group_arr_[i]->get_column_group_type() != ObColumnGroupType::SINGLE_COLUMN_GROUP) {
+        iter_cg_idx++;
+        // ignore column group with more than one column or not each column group cg
+      } else if (OB_ISNULL(cg_column_ids = column_group_arr_[i]->get_column_ids())) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("Unexpected error for null column ids", K(ret), KPC(column_group_arr_[i]));
+      } else if (cg_column_ids[0] != column_id) {
+        iter_cg_idx++;
+      } else {
+        cg_idx = iter_cg_idx;
+        found = true;
+      }
+    }
+
+    if (OB_SUCC(ret) && !found) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("Unexpected, can not find cg idx", K(ret), K(column_id), K_(max_used_column_group_id));
+    }
+  }
+  LOG_TRACE("[CS-Replica] get column group index", K(ret), K(need_calculate_cg_idx), K(param), K(cg_idx), KPC(this));
+  return ret;
+}
+}  // namespace schema
+}  // namespace share
+}  // namespace oceanbase
+
+
+// === demoted from ObTableSchema  storage free function(old member definition was split across modules, now fully moved out of the share class) ===
+namespace oceanbase
+{
+namespace storage
+{
+int get_orig_default_row(const share::schema::ObTableSchema &table_schema,
+                         const common::ObIArray<share::schema::ObColDesc> &column_ids,
+                         blocksstable::ObDatumRow &default_row)
+{
+  int ret = OB_SUCCESS;
+  const int64_t column_cnt = table_schema.get_column_count();
+  if (OB_UNLIKELY(!default_row.is_valid() || default_row.count_ != column_ids.count() || column_ids.count() > column_cnt + 2)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("Invalid argument", K(ret), K(column_cnt), K(default_row), K(column_ids.count()));
+  }
+  for (int64_t i = 0; OB_SUCC(ret) && i < column_ids.count(); ++i) {
+    if (column_ids.at(i).col_id_ == OB_HIDDEN_TRANS_VERSION_COLUMN_ID ||
+        column_ids.at(i).col_id_ == OB_HIDDEN_SQL_SEQUENCE_COLUMN_ID) {
+      default_row.storage_datums_[i].set_int(0);
+    } else {
+      bool found = false;
+      for (int64_t j = 0; OB_SUCC(ret) && !found && j < column_cnt; ++j) {
+        const share::schema::ObColumnSchemaV2 *column = table_schema.column_begin()[j];
+        if (NULL == column) {
+          ret = OB_ERR_UNEXPECTED;
+          LOG_WARN("column must not null", K(ret), K(j), K(column_cnt));
+        } else if (column->get_column_id() == column_ids.at(i).col_id_) {
+          if (OB_FAIL(default_row.storage_datums_[i].from_obj_enhance(column->get_orig_default_value()))) {
+            STORAGE_LOG(WARN, "Failed to transefer obj to datum", K(ret));
+          } else {
+            found = true;
+          }
+        }
+      }
+      if (OB_SUCC(ret) && !found) {
+        ret = OB_ERR_SYS;
+        LOG_WARN("column id not found", K(ret), K(column_ids.at(i)));
+      }
+    }
+  }
+  return ret;
+}
+} // namespace storage
+} // namespace oceanbase

@@ -18,7 +18,7 @@
 #define SRC_STORAGE_BLOCKSSTABLE_OB_MACRO_BLOCK_ID_H_
 
 #include "share/ob_define.h"
-#include "common/storage/ob_io_device.h"
+#include "lib/restore/ob_io_device.h"
 
 namespace oceanbase
 {

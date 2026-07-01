@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_ROOTSERVER_OB_FTS_INDEX_BUILD_TASK_H_
 #define OCEANBASE_ROOTSERVER_OB_FTS_INDEX_BUILD_TASK_H_
 
-#include "share/ob_domain_index_builder_util.h"
+#include "rootserver/ob_domain_index_builder_util.h"
 #include "src/share/ob_ddl_checksum.h"
 
 namespace oceanbase

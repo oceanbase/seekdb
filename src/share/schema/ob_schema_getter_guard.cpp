@@ -18,13 +18,65 @@
 
 
 #include "ob_schema_getter_guard.h"
+#include "ob_ai_model_schema_getter_guard.ipp"
+
+#include <openssl/ssl3.h>
+#include <openssl/x509.h>
+#include <string.h>
+
 #include "lib/encrypt/ob_encrypted_helper.h"
 #include "lib/net/ob_net_util.h"
-#include "share/schema/ob_part_mgr_util.h"
 #include "share/ob_schema_status_proxy.h"
-#include "sql/session/ob_sql_session_info.h"
 #include "share/catalog/ob_catalog_utils.h"
-#include "ob_ai_model_schema_getter_guard.ipp"
+#include "lib/alloc/alloc_struct.h"
+#include "lib/alloc/ob_iallocator.h"
+#include "lib/container/ob_iarray.h"
+#include "lib/ob_check_macros.h"
+#include "lib/oblog/ob_log_level.h"
+#include "lib/oblog/ob_log_print_kv.h"
+#include "lib/string/ob_string.h"
+#include "lib/utility/alloc_assist.h"
+#include "lib/utility/ob_backtrace.h"
+#include "lib/utility/ob_mod_define.h"
+#include "lib/utility/utility.h"
+#include "object/ob_object.h"
+#include "openssl/asn1.h"
+#include "openssl/crypto.h"
+#include "openssl/objects.h"
+#include "openssl/x509.h"
+#include "share/cache/ob_kv_storecache.h"
+#include "share/config/ob_server_config.h"
+#include "share/config/ob_tenant_config_mgr.h"
+#include "share/inner_table/ob_inner_table_schema.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
+#include "share/ob_errno.h"
+#include "share/ob_force_print_log.h"
+#include "share/ob_server_struct.h"
+#include "share/schema/ob_catalog_mgr.h"
+#include "share/schema/ob_catalog_schema_struct.h"
+#include "share/schema/ob_column_schema.h"
+#include "share/schema/ob_context_mgr.h"
+#include "share/schema/ob_directory_mgr.h"
+#include "share/schema/ob_location_mgr.h"
+#include "share/schema/ob_location_schema_struct.h"
+#include "share/schema/ob_mock_fk_parent_table_mgr.h"
+#include "share/schema/ob_multi_version_schema_service.h"
+#include "share/schema/ob_outline_mgr.h"
+#include "share/schema/ob_package_mgr.h"
+#include "share/schema/ob_priv_mgr.h"
+#include "share/schema/ob_routine_mgr.h"
+#include "share/schema/ob_schema_mgr.h"
+#include "share/schema/ob_schema_service.h"
+#include "share/schema/ob_sequence_mgr.h"
+#include "share/schema/ob_sys_variable_mgr.h"
+#include "share/schema/ob_table_schema.h"
+#include "share/schema/ob_trigger_info.h"
+#include "share/schema/ob_trigger_mgr.h"
+#include "share/schema/ob_udf.h"
+#include "share/schema/ob_udf_mgr.h"
+
+struct X509_name_st;
+
 namespace oceanbase
 {
 using namespace common;

@@ -19,7 +19,6 @@
 
 #include "share/ob_define.h"
 #include "share/schema/ob_schema_getter_guard.h"
-#include "sql/ob_sql_context.h"
 
 namespace oceanbase
 {

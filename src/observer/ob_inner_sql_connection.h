@@ -17,7 +17,8 @@
 #ifndef OCEANBASE_OBSERVER_OB_INNER_SQL_CONNECTION_H_
 #define OCEANBASE_OBSERVER_OB_INNER_SQL_CONNECTION_H_
 
-#include "lib/mysqlclient/ob_isql_connection.h"
+#include "common/mysqlclient/ob_isql_connection.h"
+#include "storage/tx/ob_multi_data_source.h"  // ObRegisterMdsFlag complete type(previously hidden behind the rpc_struct include chain)
 #include "lib/list/ob_dlist.h"
 #include "lib/container/ob_2d_array.h"
 #include "sql/session/ob_sql_session_info.h"
@@ -26,7 +27,7 @@
 #include "observer/ob_restore_sql_modifier.h"
 #include "observer/mysql/ob_query_retry_ctrl.h"
 #include "observer/ob_inner_sql_transmit_struct.h"
-#include "lib/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_isql_client.h"
 #include "share/location_cache/ob_location_service.h"
 #include "storage/tablelock/ob_table_lock_common.h"   //ObTableLockMode
 #include "sql/session/ob_sql_session_mgr.h"

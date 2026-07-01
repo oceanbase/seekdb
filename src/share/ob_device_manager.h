@@ -17,11 +17,12 @@
 #ifndef SRC_LIBRARY_SRC_COMMON_STORAGE_OB_DEVICE_MANAGER_H_
 #define SRC_LIBRARY_SRC_COMMON_STORAGE_OB_DEVICE_MANAGER_H_
 
-#include "common/storage/ob_io_device.h"
+#include "lib/restore/ob_io_device.h"
 #include "lib/allocator/ob_fifo_allocator.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/lock/ob_qsync_lock.h"
 #include "lib/restore/ob_storage_info.h"
+#include "share/config/ob_tenant_config_mgr.h"
 #include "share/config/ob_server_config.h"
 
 namespace oceanbase

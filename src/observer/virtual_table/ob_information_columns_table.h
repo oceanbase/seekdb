@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_COLUMNS_TABLE_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_COLUMNS_TABLE_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_table_schema.h"
 

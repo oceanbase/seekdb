@@ -19,9 +19,10 @@ endif()
 
 target_include_directories(
   oblib_base_without_pass INTERFACE
-  ${CMAKE_SOURCE_DIR}
-  ${CMAKE_SOURCE_DIR}/src
-  ${CMAKE_SOURCE_DIR}/src/plugin/include
+  # oblib exposes no src-reachable -I -- not even the repo root ${CMAKE_SOURCE_DIR}.
+  # So any include of src from oblib lib+unittests at compile time (both share/.. and full src/.. spellings)
+  # is file-not-found. oblib itself needs no repo root: 0 src/.. ; 2 deps/.. resolved via same-directory.
+  # src's repo root and src are provided by src's own base (see src/CMakeLists.txt); the grep guard becomes a redundant backstop.
   ${CMAKE_SOURCE_DIR}/deps/easy/src
   ${CMAKE_SOURCE_DIR}/deps/oblib/src
   ${CMAKE_SOURCE_DIR}/deps/oblib/src/common

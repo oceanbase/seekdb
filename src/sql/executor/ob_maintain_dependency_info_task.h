@@ -108,6 +108,12 @@ private:
   common::hash::ObHashSet<uint64_t, common::hash::ReadWriteDefendMode> sys_view_consistent_;
 };
 
+// demoted from share::schema::ObReferenceObjTable to sql free function(sql-bound: ObMaintainObjDepInfoTask/Queue; detached from the class through public getters)
+int process_reference_obj_table(share::schema::ObReferenceObjTable &ref_obj_table,
+                                const uint64_t dep_obj_id,
+                                const share::schema::ObTableSchema *view_schema,
+                                ObMaintainDepInfoTaskQueue &task_queue);
+
 }  // namespace sql
 }  // namespace oceanbase
 #endif /* OCEANBASE_SQL_EXECUTOR_MAINTAIN_DEPENDENCY_INFO_TASK_ */

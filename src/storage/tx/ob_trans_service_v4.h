@@ -182,9 +182,6 @@ int ask_tx_state_for_4377(const ObLSID ls_id,
 int handle_ask_tx_state_for_4377(const ObAskTxStateFor4377Msg &msg,
                                  bool &is_alive);
 
-
-// for dblink tx promotion
-
 TO_STRING_KV(K(is_inited_), KP(this));
 
 private:

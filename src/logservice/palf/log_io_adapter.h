@@ -17,8 +17,8 @@
 #ifndef OCEANBASE_LOGSERVICE_LOG_IO_ADAPTER_
 #define OCEANBASE_LOGSERVICE_LOG_IO_ADAPTER_
 
-#include "common/storage/ob_io_device.h"
-#include "common/storage/ob_device_common.h"
+#include "lib/restore/ob_io_device.h"
+#include "lib/restore/ob_device_common.h"
 #include "log_io_context.h"                                   // LogIOContext
 
 namespace oceanbase

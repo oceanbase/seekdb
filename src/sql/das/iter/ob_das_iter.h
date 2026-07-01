@@ -129,7 +129,8 @@ public:
                               ObIAllocator *alloc,
                               int64_t group_id) { return OB_NOT_IMPLEMENT; }
   int get_domain_id_merge_iter(ObDASDomainIdMergeIter *&domain_id_merge_iter);
-  virtual int get_diagnosis_info(ObDiagnosisManager* diagnosis_manager) override { return OB_SUCCESS; };
+  virtual int get_diagnosis_info(common::ObRowDiagnosisInfo *diagnosis_info) override
+  { UNUSED(diagnosis_info); return OB_SUCCESS; }
 protected:
   virtual int inner_init(ObDASIterParam &param) = 0;
   virtual int inner_reuse() = 0;

@@ -19,7 +19,7 @@
 
 #include "ob_compaction_suggestion.h" // for ObInfoRingArray
 #include "ob_partition_merge_progress.h"
-#include "share/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 #include "storage/compaction/ob_tablet_merge_ctx.h"
 namespace oceanbase
 {

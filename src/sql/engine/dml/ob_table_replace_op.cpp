@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "share/ob_fts_index_builder_util.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/dml/ob_table_replace_op.h"
 #include "sql/engine/dml/ob_dml_service.h"

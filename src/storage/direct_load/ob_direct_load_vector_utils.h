@@ -18,7 +18,7 @@
 
 #include "common/object/ob_obj_type.h"
 #include "common/ob_tablet_id.h"
-#include "share/vector/ob_i_vector.h"
+#include "sql/engine/vector/ob_i_vector.h"
 #include "sql/engine/ob_batch_rows.h"
 
 namespace oceanbase

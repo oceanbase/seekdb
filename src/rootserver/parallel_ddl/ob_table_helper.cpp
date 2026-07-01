@@ -25,13 +25,14 @@
 #include "share/ob_rpc_struct.h"
 #include "share/ob_debug_sync_point.h"
 #include "share/sequence/ob_sequence_option_builder.h" // ObSequenceOptionBuilder
-#include "share/ob_fts_index_builder_util.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
+#include "sql/engine/cmd/ob_partition_executor_utils.h"
 #include "rootserver/ob_location_ddl_service.h"
-#include "share/ob_dynamic_partition_manager.h"
+#include "rootserver/ob_dynamic_partition_manager.h"
 #include "share/schema/ob_table_sql_service.h"
 #include "share/schema/ob_sequence_sql_service.h"
 #include "share/schema/ob_multi_version_schema_service.h"
-#include "share/ob_index_builder_util.h"
+#include "sql/resolver/ddl/ob_index_builder_util.h"
 #include "sql/resolver/ob_resolver_utils.h"
 
 using namespace oceanbase::lib;
@@ -736,7 +737,7 @@ int ObTableHelper::inner_generate_table_schema_(const ObCreateTableArg &arg, ObT
     } else if (OB_ISNULL(transition_point = &part_array[part_num - 1]->get_high_bound_val())) {
       ret = OB_ERR_UNEXPECTED;
       LOG_WARN("transition_point is null", KR(ret), KPC(transition_point));
-    } else if (OB_FAIL(ObPartitionUtils::check_interval_partition_table(
+    } else if (OB_FAIL(sql::ObPartitionExecutorUtils::check_interval_partition_table(
                        *transition_point, new_table.get_interval_range()))) {
       LOG_WARN("fail to check_interval_partition_table", KR(ret), K(new_table));
     } else if (OB_FAIL(new_table.set_transition_point(*transition_point))) {

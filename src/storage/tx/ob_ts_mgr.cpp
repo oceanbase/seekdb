@@ -16,6 +16,7 @@
 
 #include "ob_ts_mgr.h"
 #include "ob_gts_rpc.h"
+#include "share/ob_share_util.h"  // relocated-definition owner
 
 namespace oceanbase
 {
@@ -540,3 +541,96 @@ int ObTsMgr::interrupt_gts_callback_for_ls_offline(const share::ObLSID ls_id)
 
 } // transaction
 } // oceanbase
+
+#define USING_LOG_PREFIX SHARE  // needed by LOG_* macros inside the relocated block; the file did not define it originally
+// ===== definition moved from share/ob_share_util.cpp =====
+// removes share→storage/tx inverted include; declaration remains in share/ob_share_util.h, resolved at link time(transitional state, final state should split the class)
+namespace oceanbase
+{
+namespace share
+{
+
+// get_tenant_gts has been demoted to storage::free function(see end of file)
+
+
+}  // namespace share
+}  // namespace oceanbase
+
+// ===== definition moved from src/share/backup/ob_backup_struct.cpp (ObBackupUtils -> ObTsMgr) =====
+namespace oceanbase
+{
+namespace transaction
+{
+
+int ObTsMgr::get_backup_scn(const uint64_t &tenant_id, share::SCN &scn)
+{
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("tenant id is invalid", KR(ret), K(tenant_id));
+  } else {
+    ret = OB_EAGAIN;
+    const transaction::MonotonicTs stc = transaction::MonotonicTs::current_time();
+    transaction::MonotonicTs unused_ts(0);
+    const int64_t start_time = ObTimeUtility::fast_current_time();
+    const int64_t TIMEOUT = 10 * 1000 * 1000; //10s
+    while (OB_EAGAIN == ret) {
+      if (ObTimeUtility::fast_current_time() - start_time > TIMEOUT) {
+        ret = OB_TIMEOUT;
+        LOG_WARN("stmt is timeout", KR(ret), K(start_time), K(TIMEOUT));
+      } else if (OB_FAIL(OB_TS_MGR.get_gts(stc, NULL,
+                                           scn, unused_ts))) {
+        if (OB_EAGAIN != ret) {
+          LOG_WARN("failed to get gts", KR(ret), K(tenant_id));
+        } else {
+          // waiting 10ms
+          ob_usleep(10L * 1000L);
+        }
+      }
+    }
+  }
+  LOG_INFO("get tenant gts", KR(ret), K(tenant_id), K(scn));
+  return ret;
+}
+
+}  // namespace transaction
+}  // namespace oceanbase
+#undef USING_LOG_PREFIX  // prevent unity-build leakage into later TUs
+
+// from share::ObShareUtil demoted(A-setmember split)
+#define USING_LOG_PREFIX SHARE
+namespace oceanbase
+{
+namespace transaction
+{
+using namespace oceanbase::share;
+int get_tenant_gts(SCN &gts_scn)
+{
+  int ret = OB_SUCCESS;
+  {
+    ret = OB_EAGAIN;
+    const transaction::MonotonicTs stc = transaction::MonotonicTs::current_time();
+    transaction::MonotonicTs unused_ts(0);
+    const int64_t start_time = ObTimeUtility::fast_current_time();
+    const int64_t TIMEOUT = GCONF.rpc_timeout;
+    while (OB_EAGAIN == ret) {
+      if (ObTimeUtility::fast_current_time() - start_time > TIMEOUT) {
+        ret = OB_TIMEOUT;
+        LOG_WARN("stmt is timeout", KR(ret), K(start_time), K(TIMEOUT));
+      } else if (OB_FAIL(OB_TS_MGR.get_gts(stc, NULL,
+                                           gts_scn, unused_ts))) {
+        if (OB_EAGAIN != ret) {
+          LOG_WARN("failed to get gts", KR(ret));
+        } else {
+          // waiting 10ms
+          ob_usleep(10L * 1000L);
+        }
+      }
+    }
+  }
+  LOG_INFO("get tenant gts", KR(ret), K(gts_scn));
+  return ret;
+}
+}
+}
+#undef USING_LOG_PREFIX

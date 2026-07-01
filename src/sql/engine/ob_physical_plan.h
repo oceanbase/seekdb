@@ -19,7 +19,7 @@
 #include "lib/container/ob_vector.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/list/ob_dlist.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "common/ob_field.h"
 #include "sql/ob_sql_context.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
@@ -404,6 +404,11 @@ public:
     is_late_materialized_ = is_late_mat;
   }
 
+  inline bool is_use_jit() const
+  {
+    return stat_.is_use_jit_;
+  }
+
   inline void set_is_dep_base_table(bool v) { is_dep_base_table_ = v; }
   inline bool is_dep_base_table() const { return is_dep_base_table_; }
 
@@ -585,7 +590,7 @@ private:
   TableLocationFixedArray table_locations_; // ordinary table's table location, participate in plan cache plan selection
   TableLocationFixedArray das_table_locations_; // DAS table's table location, used for calculating DAS partition information
 
-  ObString dummy_string_;  // for compatibility with the removed 3.x native PL entry member
+  ObString dummy_string_;  // for compatible with 3.x JIT func_ member
   PhyRowParamMap row_param_map_;
   bool is_update_uniq_index_;
   // Determine whether the base tables involved in this plan contain a global index

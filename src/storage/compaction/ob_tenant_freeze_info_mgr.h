@@ -25,7 +25,7 @@
 #include "lib/task/ob_timer.h"
 #include "share/ob_freeze_info_manager.h"
 #include "share/ob_freeze_info_proxy.h"
-#include "share/ob_snapshot_table_proxy.h"
+#include "rootserver/ob_snapshot_table_proxy.h"
 #include "share/scn.h"
 
 namespace oceanbase
@@ -184,8 +184,8 @@ private:
 
   void check_tenant_in_restore_with_mv_(
        bool &need_check_mview,
-       ObSchemaGetterGuard &schema_guard,
-       const ObSimpleTenantSchema *&tenant_schema);
+       share::ObSchemaGetterGuard &schema_guard,
+       const share::schema::ObSimpleTenantSchema *&tenant_schema);
 private:
   ReloadTask reload_task_;
   UpdateLSResvSnapshotTask update_reserved_snapshot_task_;

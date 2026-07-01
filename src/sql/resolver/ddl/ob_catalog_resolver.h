@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_SQL_OB_CATALOG_RESOLVER_H_
 #define OCEANBASE_SQL_OB_CATALOG_RESOLVER_H_
 #include "sql/resolver/ddl/ob_ddl_resolver.h"
+#include "share/catalog/ob_catalog_properties.h"
 
 namespace oceanbase
 {
@@ -41,6 +42,7 @@ private:
   int resolve_set_catalog(const ParseNode &parse_tree, obcall::ObCatalogDDLArg &arg);
   int resolve_catalog_name(const ParseNode &name_node, obcall::ObCatalogDDLArg &arg);
   int check_internal_catalog_ddl(const ObString &name, const stmt::StmtType &stmt_type);
+  static int resolve_catalog_type(const ParseNode &node, share::ObCatalogProperties::CatalogType &type);  // demoted from ObCatalogProperties
   int resolve_catalog_properties(const ParseNode &properties_node, obcall::ObCatalogDDLArg &arg);
   // disallow copy
   DISALLOW_COPY_AND_ASSIGN(ObCatalogResolver);

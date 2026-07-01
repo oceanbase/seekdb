@@ -19,7 +19,7 @@
 
 #include "lib/hash/ob_hashtable.h"
 #include "lib/hash/ob_hashutils.h"
-#include "lib/mysqlclient/ob_mysql_result.h"
+#include "common/mysqlclient/ob_mysql_result.h"
 #include "lib/string/ob_string.h"
 #include "sql/engine/ob_exec_context.h"
 #include "sql/ob_result_set.h"

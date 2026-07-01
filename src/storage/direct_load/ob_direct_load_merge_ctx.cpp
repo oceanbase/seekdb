@@ -17,7 +17,8 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/direct_load/ob_direct_load_merge_ctx.h"
-#include "share/ob_tablet_autoincrement_service.h"
+#include "storage/ddl/ob_ddl_storage_util.h"
+#include "storage/ob_tablet_autoincrement_service.h"
 #include "storage/direct_load/ob_direct_load_external_multi_partition_table.h"
 #include "storage/direct_load/ob_direct_load_insert_lob_table_ctx.h"
 #include "storage/direct_load/ob_direct_load_insert_table_ctx.h"
@@ -757,7 +758,7 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task(
     const ObLobId &min_insert_lob_id =
       static_cast<ObDirectLoadInsertLobTabletContext *>(insert_tablet_ctx_)
         ->get_min_insert_lob_id();
-    const int64_t last_parallel_idx = ObDDLUtil::get_parallel_idx(insert_tablet_ctx_->get_last_data_seq());
+    const int64_t last_parallel_idx = ObDDLStorageUtil::get_parallel_idx(insert_tablet_ctx_->get_last_data_seq());
     int64_t first_no_insert_front_idx = -1;
     if (OB_FAIL(range_splitter.split_range(tablet_id_, nullptr /*origin_table*/,
                                            max_parallel_degree, range_array_, allocator_))) {
@@ -820,12 +821,12 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task(
         parallel_idx = 0;
       }
       if (insert_front) {
-        if (OB_FAIL(ObDDLUtil::init_macro_block_seq(parallel_idx,
+        if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(parallel_idx,
                                                     data_seq))) {
           LOG_WARN("fail to init macro block seq", KR(ret), K(parallel_idx));
         }
       } else {
-        if (OB_FAIL(ObDDLUtil::init_macro_block_seq(last_parallel_idx + parallel_idx + 1,
+        if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(last_parallel_idx + parallel_idx + 1,
                                                     data_seq))) {
           LOG_WARN("fail to init macro block seq", KR(ret), K(last_parallel_idx), K(parallel_idx));
         }
@@ -880,7 +881,7 @@ int ObDirectLoadTabletMergeCtx::build_del_lob_task_for_dag(
     const ObDatumRange &range = range_array_.at(i);
     ObMacroDataSeq data_seq;
     ObDirectLoadPartitionDelLobTask *del_lob_task = nullptr;
-    if (OB_FAIL(ObDDLUtil::init_macro_block_seq(parallel_idx,
+    if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(parallel_idx,
                                                 data_seq))) {
       LOG_WARN("fail to init macro block seq", KR(ret), K(parallel_idx));
     } else if (OB_ISNULL(del_lob_task =

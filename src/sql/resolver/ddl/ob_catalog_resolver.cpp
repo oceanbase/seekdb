@@ -208,7 +208,7 @@ int ObCatalogResolver::resolve_catalog_properties(const ParseNode &properties_no
   if (OB_ISNULL(allocator_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
-  } else if (OB_FAIL(ObCatalogProperties::resolve_catalog_type(properties_node, type))) {
+  } else if (OB_FAIL(resolve_catalog_type(properties_node, type))) {
     LOG_WARN("failed to resolve catalog type", K(ret));
   } else {
     switch (type)
@@ -234,3 +234,41 @@ int ObCatalogResolver::resolve_catalog_properties(const ParseNode &properties_no
 
 } //end namespace sql
 } //end namespace oceanbase
+
+// from share::ObCatalogProperties demoted(parses ParseNode->CatalogType, A-set)
+namespace oceanbase
+{
+namespace sql
+{
+int ObCatalogResolver::resolve_catalog_type(const ParseNode &node, ObCatalogProperties::CatalogType &type)
+{
+  int ret = OB_SUCCESS;
+  type = ObCatalogProperties::CatalogType::INVALID_TYPE;
+  const ParseNode *type_node = NULL;
+  bool is_type_set = false;
+  for (int32_t i = 0; OB_SUCC(ret) && !is_type_set && i < node.num_child_; ++i) {
+    if (OB_NOT_NULL(node.children_[i]) && T_EXTERNAL_FILE_FORMAT_TYPE == node.children_[i]->type_) {
+      type_node = node.children_[i];
+      if (type_node->num_child_ != 1 || OB_ISNULL(type_node->children_[0])) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("unexpected parse node", K(ret));
+      } else {
+        ObString string_v = ObString(type_node->children_[0]->str_len_, type_node->children_[0]->str_value_).trim_space_only();
+        for (int i = 0; !is_type_set && i < static_cast<int>(ObCatalogProperties::CatalogType::MAX_TYPE); i++) {
+          if (0 == string_v.case_compare(ObCatalogProperties::CATALOG_TYPE_STR[i])) {
+            type = static_cast<ObCatalogProperties::CatalogType>(i);
+            is_type_set = true;
+          }
+        }
+        if (ObCatalogProperties::CatalogType::INVALID_TYPE == type) {
+          ret = OB_NOT_SUPPORTED;
+          LOG_USER_ERROR(OB_NOT_SUPPORTED, "this catalog type");
+          LOG_WARN("catalog type is not supported yet", K(ret), K(string_v));
+        }
+      }
+    }
+  }
+  return ret;
+}
+}  // namespace sql
+}  // namespace oceanbase

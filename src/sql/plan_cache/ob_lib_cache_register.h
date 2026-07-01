@@ -28,7 +28,7 @@ LIB_CACHE_OBJ_DEF(NS_SQLSTAT, "SQLSTAT", sql::ObSqlStatRecordKey, sql::ObSqlStat
 #ifndef OCEANBASE_SQL_PLAN_CACHE_OB_LIB_CACHE_REGISTER_
 #define OCEANBASE_SQL_PLAN_CACHE_OB_LIB_CACHE_REGISTER_
 
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "lib/alloc/alloc_struct.h"
 #include "sql/plan_cache/ob_pc_ref_handle.h"
 

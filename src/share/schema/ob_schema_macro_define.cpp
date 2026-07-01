@@ -16,7 +16,7 @@
 
 #include "ob_schema_macro_define.h"
 #include "share/schema/ob_column_schema.h"
-#include "src/share/schema/ob_table_schema.h"
+#include "share/schema/ob_table_schema.h"
 
 namespace oceanbase
 {

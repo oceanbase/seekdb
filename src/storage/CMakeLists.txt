@@ -1,4 +1,34 @@
+ob_set_subtarget(ob_storage vector_type
+  vector_type/ob_vector_add.cpp
+  vector_type/ob_vector_div.cpp
+  vector_type/ob_vector_l2_distance.cpp
+  vector_type/ob_vector_ip_distance.cpp
+  vector_type/ob_vector_cosine_distance.cpp
+  vector_type/ob_vector_l1_distance.cpp
+  vector_type/ob_vector_norm.cpp
+  vector_type/ob_vector_common_util.cpp
+  vector_type/ob_sparse_vector_ip_distance.cpp
+  vector_type/ob_vector_l2_similarity.cpp
+  vector_type/ob_vector_cosine_similarity.cpp
+  vector_type/ob_vector_ip_similarity.cpp
+)
+
+ob_set_subtarget(ob_storage deadlock
+  deadlock/ob_deadlock_detector_common_define.cpp
+  deadlock/ob_deadlock_detector_mgr.cpp
+  deadlock/ob_deadlock_detector_rpc.cpp
+  deadlock/ob_deadlock_inner_table_service.cpp
+  deadlock/ob_deadlock_key_wrapper.cpp
+  deadlock/ob_deadlock_message.cpp
+  deadlock/ob_lcl_scheme/ob_lcl_batch_sender_thread.cpp
+  deadlock/ob_lcl_scheme/ob_lcl_message.cpp
+  deadlock/ob_lcl_scheme/ob_lcl_node.cpp
+  deadlock/ob_lcl_scheme/ob_lcl_utils.cpp
+)
+
 ob_set_subtarget(ob_storage blocksstable
+  blocksstable/ob_kvcache_pointer_swizzle.cpp
+  blocksstable/ob_kvcache_pre_warmer.cpp
   blocksstable/ob_block_manager.cpp
   blocksstable/ob_macro_seq_generator.cpp
   blocksstable/ob_object_manager.cpp
@@ -292,6 +322,7 @@ ob_set_subtarget(ob_storage restore
 )
 
 ob_set_subtarget(ob_storage tablet
+  tablet/ob_batch_create_tablet_arg.cpp
   tablet/ob_batch_create_tablet_pretty_arg.cpp
   tablet/ob_full_tablet_creator.cpp
   tablet/ob_i_tablet_mds_interface.cpp
@@ -389,6 +420,7 @@ ob_set_subtarget(ob_storage tx
   tx/ob_defensive_check_mgr.cpp
   tx/ob_trans_result.cpp
   tx/ob_trans_rpc.cpp
+  tx/ob_tx_result_struct.cpp
   tx/ob_trans_service.cpp
   tx/ob_trans_service_v4.cpp
   tx/ob_tx_api.cpp
@@ -421,7 +453,23 @@ ob_set_subtarget(ob_storage tx
   tx/ob_multi_data_source_tx_buffer_node.cpp
 )
 
+ob_set_subtarget(ob_storage allocator
+  allocator/ob_fifo_arena.cpp
+  allocator/ob_memstore_allocator.cpp
+  allocator/ob_handle_list.cpp
+  allocator/ob_mds_allocator.cpp
+  allocator/ob_shared_memory_allocator_mgr.cpp
+  allocator/ob_tx_data_allocator.cpp
+  allocator/ob_tenant_vector_allocator.cpp
+)
+
+ob_set_subtarget(ob_storage throttle
+  throttle/ob_share_throttle_define.cpp
+  throttle/ob_throttle_common.cpp
+)
+
 ob_set_subtarget(ob_storage tx_storage
+  tx_storage/ob_tenant_mem_limit_getter.cpp
   tx_storage/ob_access_service.cpp
   tx_storage/ob_checkpoint_service.cpp
   tx_storage/ob_ls_freeze_thread.cpp
@@ -533,6 +581,7 @@ ob_set_subtarget(ob_storage access
   access/ob_rows_info.cpp
   access/ob_sample_iter_helper.cpp
   access/ob_table_read_info.cpp
+  access/ob_table_param.cpp
   access/ob_sample_filter.cpp
   access/ob_table_scan_range.cpp
   access/ob_table_access_param.cpp
@@ -550,6 +599,7 @@ ob_set_subtarget(ob_storage access
 )
 
 ob_set_subtarget(ob_storage ddl
+  ddl/ob_ddl_common_storage_impl.cpp
   ddl/ob_build_index_task.cpp
   ddl/ob_complement_data_task.cpp
   ddl/ob_tablet_split_task.cpp
@@ -612,6 +662,12 @@ ob_set_subtarget(ob_storage ddl
 )
 
 ob_set_subtarget(ob_storage common
+  ob_storage_rpc_arg.cpp
+  ob_order_perserving_encoder.cpp
+  ob_table_dml_param.cpp
+  ob_i_pre_warmer.cpp
+  ob_tablet_autoincrement_service.cpp
+  ob_partition_split_query.cpp
   ob_all_micro_block_range_iterator.cpp
   ob_bloom_filter_task.cpp
   ob_col_map.cpp
@@ -633,7 +689,6 @@ ob_set_subtarget(ob_storage common
   ob_storage_schema_util.cpp
   ob_storage_schema_recorder.cpp
   ob_storage_clog_recorder.cpp
-  ob_storage_leak_checker.cpp
   ob_storage_struct.cpp
   ob_tablet_ha_status.cpp
   ob_storage_ha_struct.cpp
@@ -677,6 +732,8 @@ ob_set_subtarget(ob_storage common_mixed
 )
 
 ob_set_subtarget(ob_storage compaction
+  compaction/ob_table_ckm_items.cpp
+  compaction/ob_batch_exec_dag.cpp
   compaction/ob_column_checksum_calculator.cpp
   compaction/ob_index_block_micro_iterator.cpp
   compaction/ob_i_compaction_filter.cpp
@@ -842,6 +899,8 @@ ob_set_subtarget(ob_storage direct_load_part
   direct_load/ob_direct_load_insert_data_table_ctx.cpp
   direct_load/ob_direct_load_insert_lob_table_ctx.cpp
   direct_load/ob_direct_load_insert_table_ctx.cpp
+  direct_load/ob_table_load_sql_statistics.cpp
+  direct_load/ob_table_load_dml_stat.cpp
   direct_load/ob_direct_load_insert_table_row_handler.cpp
   direct_load/ob_direct_load_insert_table_row_iterator.cpp
   direct_load/ob_direct_load_insert_table_row_writer.cpp

@@ -27,7 +27,7 @@
 #include "share/ob_display_list.h"   // ObDisplayList
 #include "common/ob_tablet_id.h" // ObTabletID
 #include "share/scn.h" // SCN
-#include "storage/tablelock/ob_table_lock_common.h" // ObTableLockOwnerID
+#include "storage/tablelock/ob_table_lock_owner_id.h" // ObTableLockOwnerID
 
 namespace oceanbase
 {

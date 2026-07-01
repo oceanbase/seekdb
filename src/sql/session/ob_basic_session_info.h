@@ -19,7 +19,7 @@
 
 #include "share/ob_define.h"
 #include "lib/atomic/ob_atomic.h"
-#include "lib/allocator/ob_pooled_allocator.h"
+#include "lib/objectpool/ob_pooled_allocator.h"
 #include "lib/allocator/page_arena.h"
 #include "lib/hash/ob_hashmap.h"
 #include "lib/list/ob_list.h"
@@ -27,7 +27,8 @@
 #include "lib/lock/ob_lock_guard.h"
 #include "lib/objectpool/ob_pool.h"
 #include "lib/oblog/ob_warning_buffer.h"
-#include "lib/timezone/ob_timezone_info.h"
+#include "lib/string/ob_sql_string.h"
+#include "common/timezone/ob_timezone_info.h"
 #include "rpc/ob_sql_request_operator.h"
 #include "share/ob_compatibility_control.h"
 #include "share/ob_debug_sync.h"
@@ -36,7 +37,7 @@
 #include "share/ob_time_zone_info_manager.h"
 #include "storage/tx/ob_trans_define.h"
 #include "rpc/obmysql/ob_mysql_packet.h"
-#include "share/system_variable/ob_system_variable_factory.h"
+#include "sql/session/ob_system_variable_factory.h"
 #include "share/system_variable/ob_system_variable_alias.h"
 #include "share/system_variable/ob_system_variable_init.h"
 #include "sql/session/ob_session_val_map.h"
@@ -55,14 +56,12 @@ namespace oceanbase
 namespace observer {
 class ObSMConnection;
 }
-namespace share {
-class ObSwitchCatalogHelper;
-}
 using sql::FLTControlInfo;
 namespace sql
 {
 class ObExprRegexpSessionVariables;
 class ObPCMemPctConf;
+class ObBasicSessionInfo;
 class ObPartitionHitInfo
 {
 public:
@@ -75,6 +74,30 @@ public:
 private:
   bool value_;
   bool freeze_;
+};
+
+class ObSwitchCatalogHelper
+{
+public:
+  ObSwitchCatalogHelper()
+    : old_catalog_id_(OB_INVALID_ID),
+      old_db_id_(OB_INVALID_ID),
+      old_database_name_(),
+      session_info_(nullptr)
+  {}
+  int set(uint64_t catalog_id,
+          uint64_t db_id,
+          const common::ObString& database_name,
+          ObBasicSessionInfo* session_info);
+  int restore();
+  bool is_set() { return OB_INVALID_ID != old_catalog_id_; }
+
+private:
+  uint64_t old_catalog_id_;
+  uint64_t old_db_id_;
+  common::ObSqlString old_database_name_;
+  ObBasicSessionInfo* session_info_;
+  DISALLOW_COPY_AND_ASSIGN(ObSwitchCatalogHelper);
 };
 
 struct ObSessionNLSParams //oracle nls parameters
@@ -167,9 +190,9 @@ public:
     LAST_STMT,
   };
   typedef common::ObPooledAllocator<common::hash::HashMapTypes<common::ObString,
-          share::ObBasicSysVar*>::AllocType, common::ObWrapperAllocator> SysVarNameValMapAllocer;
+          sql::ObBasicSysVar*>::AllocType, common::ObWrapperAllocator> SysVarNameValMapAllocer;
   typedef common::hash::ObHashMap<common::ObString,
-                                  share::ObBasicSysVar*,
+                                  sql::ObBasicSysVar*,
                                   common::hash::NoPthreadDefendMode,
                                   common::hash::hash_func<common::ObString>,
                                   common::hash::equal_to<common::ObString>,
@@ -431,8 +454,8 @@ public:
   int set_default_catalog_db(uint64_t catalog_id,
                              uint64_t db_id,
                              const common::ObString &database_name,
-                             share::ObSwitchCatalogHelper* switch_catalog_helper = NULL);
-  int set_internal_catalog_db(share::ObSwitchCatalogHelper* switch_catalog_helper = NULL);
+                             ObSwitchCatalogHelper* switch_catalog_helper = NULL);
+  int set_internal_catalog_db(ObSwitchCatalogHelper* switch_catalog_helper = NULL);
   bool is_in_external_catalog();
   int set_default_database(const common::ObString &database_name,
                            common::ObCollationType coll_type = common::CS_TYPE_INVALID);
@@ -931,8 +954,8 @@ public:
                                      const common::ObDataTypeCastParams &dtc_params,
                                      const share::ObSysVarClassType var_id,
                                      common::ObObj &val);
-  share::ObBasicSysVar *get_sys_var(const int64_t idx);
-  int64_t get_sys_var_count() const { return share::ObSysVarFactory::ALL_SYS_VARS_COUNT; }
+  sql::ObBasicSysVar *get_sys_var(const int64_t idx);
+  int64_t get_sys_var_count() const { return share::ObSysVarMeta::ALL_SYS_VARS_COUNT; }
   // deserialized scene need use base_value as baseline.
   int load_default_sys_variable(const bool print_info_log, const bool is_sys_tenant, bool is_deserialized = false);
   int load_essential_sys_vars_only(const bool print_info_log, const bool is_sys_tenant, bool is_deserialized = false);
@@ -995,10 +1018,10 @@ public:
   int get_sys_variable(const share::ObSysVarClassType sys_var_id, int64_t &val) const;
   int get_sys_variable(const share::ObSysVarClassType sys_var_id, uint64_t &val) const;
   int get_sys_variable(const share::ObSysVarClassType sys_var_id, bool &val) const;
-  int get_sys_variable(const share::ObSysVarClassType sys_var_id, share::ObBasicSysVar *&val) const;
+  int get_sys_variable(const share::ObSysVarClassType sys_var_id, sql::ObBasicSysVar *&val) const;
   /// @note get system variables by id is prefered
   int get_sys_variable_by_name(const common::ObString &var, common::ObObj &val) const;
-  int get_sys_variable_by_name(const common::ObString &var, share::ObBasicSysVar *&val) const;
+  int get_sys_variable_by_name(const common::ObString &var, sql::ObBasicSysVar *&val) const;
   int get_sys_variable_by_name(const common::ObString &var, int64_t &val) const;
   ///@}
 
@@ -1351,6 +1374,12 @@ public:
     }
   }
   void set_current_trace_id(common::ObCurTraceId::TraceId *trace_id);
+  // forbid use jit
+  int get_jit_enabled_mode(ObJITEnableMode &jit_mode) const
+  {
+    jit_mode = ObJITEnableMode::OFF;
+    return common::OB_SUCCESS;
+  }
 
   bool get_enable_exact_mode() const
   {
@@ -1527,23 +1556,23 @@ private:
   int get_charset_sys_var(share::ObSysVarClassType sys_var_id, common::ObCharsetType &cs_type) const;
   int get_collation_sys_var(share::ObSysVarClassType sys_var_id, common::ObCollationType &coll_type) const;
   int get_string_sys_var(share::ObSysVarClassType sys_var_id, common::ObString &str) const;
-  int create_sys_var(share::ObSysVarClassType sys_var_id, int64_t store_idx, share::ObBasicSysVar *&sys_var);
-//  int store_sys_var(int64_t store_idx, share::ObBasicSysVar *sys_var);
-  int inner_get_sys_var(const common::ObString &sys_var_name, int64_t &store_idx, share::ObBasicSysVar *&sys_var) const;
-  int inner_get_sys_var(const share::ObSysVarClassType sys_var_id, int64_t &store_idx, share::ObBasicSysVar *&sys_var) const;
-  int inner_get_sys_var(const common::ObString &sys_var_name, share::ObBasicSysVar *&sys_var) const
+  int create_sys_var(share::ObSysVarClassType sys_var_id, int64_t store_idx, sql::ObBasicSysVar *&sys_var);
+//  int store_sys_var(int64_t store_idx, sql::ObBasicSysVar *sys_var);
+  int inner_get_sys_var(const common::ObString &sys_var_name, int64_t &store_idx, sql::ObBasicSysVar *&sys_var) const;
+  int inner_get_sys_var(const share::ObSysVarClassType sys_var_id, int64_t &store_idx, sql::ObBasicSysVar *&sys_var) const;
+  int inner_get_sys_var(const common::ObString &sys_var_name, sql::ObBasicSysVar *&sys_var) const
   {
     int64_t store_idx = -1;
     return inner_get_sys_var(sys_var_name, store_idx, sys_var);
   }
-  int inner_get_sys_var(const share::ObSysVarClassType sys_var_id, share::ObBasicSysVar *&sys_var) const
+  int inner_get_sys_var(const share::ObSysVarClassType sys_var_id, sql::ObBasicSysVar *&sys_var) const
   {
     int64_t store_idx = -1;
     return inner_get_sys_var(sys_var_id, store_idx, sys_var);
   }
   int calc_need_serialize_vars(common::ObIArray<share::ObSysVarClassType> &sys_var_ids,
                                common::ObIArray<common::ObString> &user_var_names) const;
-  int deep_copy_sys_variable(share::ObBasicSysVar &sys_var,
+  int deep_copy_sys_variable(sql::ObBasicSysVar &sys_var,
                              const share::ObSysVarClassType sys_var_id,
                              const common::ObObj &src_val);
   int defragment_sys_variable_from(ObArray<std::pair<int64_t, ObObj>> &tmp_value);
@@ -1709,6 +1738,7 @@ public:
         ob_enable_transmission_checksum_(false),
         character_set_results_(ObCharsetType::CHARSET_INVALID),
         character_set_connection_(ObCharsetType::CHARSET_INVALID),
+        ob_enable_jit_(ObJITEnableMode::OFF),
         cursor_sharing_mode_(ObCursorSharingMode::FORCE_MODE),
         timestamp_(0),
         tx_isolation_(transaction::ObTxIsolationLevel::INVALID),
@@ -1773,6 +1803,7 @@ public:
       ob_enable_transmission_checksum_ = false;
       character_set_results_ = ObCharsetType::CHARSET_INVALID;
       character_set_connection_ = ObCharsetType::CHARSET_INVALID;
+      ob_enable_jit_ = ObJITEnableMode::OFF;
       cursor_sharing_mode_ = ObCursorSharingMode::FORCE_MODE;
       timestamp_ = 0;
       tx_isolation_ = transaction::ObTxIsolationLevel::INVALID;
@@ -1835,6 +1866,7 @@ public:
             ob_enable_transmission_checksum_ == other.ob_enable_transmission_checksum_ &&
             character_set_results_ == other.character_set_results_ &&
             character_set_connection_ == other.character_set_connection_ &&
+            ob_enable_jit_ == other.ob_enable_jit_ &&
             cursor_sharing_mode_ == other.cursor_sharing_mode_ &&
             timestamp_ == other.timestamp_ &&
             tx_isolation_ == other.tx_isolation_ &&
@@ -2005,6 +2037,7 @@ public:
     bool ob_enable_transmission_checksum_;
     ObCharsetType character_set_results_;
     ObCharsetType character_set_connection_;
+    ObJITEnableMode ob_enable_jit_;
     ObCursorSharingMode cursor_sharing_mode_;
 
     int64_t timestamp_;
@@ -2133,6 +2166,7 @@ private:
     DEF_SYS_VAR_CACHE_FUNCS(bool, ob_enable_transmission_checksum);
     DEF_SYS_VAR_CACHE_FUNCS(ObCharsetType, character_set_results);
     DEF_SYS_VAR_CACHE_FUNCS(ObCharsetType, character_set_connection);
+    DEF_SYS_VAR_CACHE_FUNCS(ObJITEnableMode, ob_enable_jit);
     DEF_SYS_VAR_CACHE_FUNCS(ObCursorSharingMode, cursor_sharing_mode);
     DEF_SYS_VAR_CACHE_FUNCS(int64_t, timestamp);
     DEF_SYS_VAR_CACHE_FUNCS(transaction::ObTxIsolationLevel, tx_isolation);
@@ -2209,7 +2243,7 @@ private:
         bool inc_ob_enable_transmission_checksum_:1;
         bool inc_character_set_results_:1;
         bool inc_character_set_connection_:1;
-        bool inc_reserved_:1; // ob_enable_jit
+        bool inc_ob_enable_jit_:1;
         bool inc_cursor_sharing_mode_:1;
         bool inc_timestamp_:1;
         bool inc_tx_isolation_:1;
@@ -2337,7 +2371,7 @@ private:
   // Double buffer optimization end.
   common::ObWrapperAllocator bucket_allocator_wrapper_;
   ObSessionValMap user_var_val_map_; // user variables
-  share::ObBasicSysVar *sys_vars_[share::ObSysVarFactory::ALL_SYS_VARS_COUNT]; // system variables
+  sql::ObBasicSysVar *sys_vars_[share::ObSysVarMeta::ALL_SYS_VARS_COUNT]; // system variables
   common::ObSEArray<int64_t, 32> influence_plan_var_indexs_;
   common::ObString sys_var_in_pc_str_;
   // configurations that will influence execution plan
@@ -2345,7 +2379,7 @@ private:
   bool is_first_gen_; // is first generate sys_var_in_pc_str_;
   bool is_first_gen_config_; // whether is first time t o generate config_in_pc_str_
   bool need_regenerate_sys_var_str_;
-  share::ObSysVarFactory sys_var_fac_;
+  sql::ObSysVarFactory sys_var_fac_;
   char trace_id_buff_[64];//Since the trace_id system variable is updated in the case of a slow query, a buffer is used to store its content, preventing frequent memory allocation
   int64_t next_frag_mem_point_; // Used to control memory fragmentation of sys var (repeatedly setting the same varchar value can cause memory fragmentation)
   int64_t sys_vars_encode_max_size_;

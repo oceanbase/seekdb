@@ -17,6 +17,7 @@
 #ifndef OCEABASE_STORAGE_LS_SERVICE_
 #define OCEABASE_STORAGE_LS_SERVICE_
 
+#include "storage/tablet/ob_batch_create_tablet_arg.h"
 #include "lib/guard/ob_shared_guard.h"
 #include "lib/allocator/ob_concurrent_fifo_allocator.h"          // ObConcurrentFIFOAllocator
 #include "storage/tx_storage/ob_ls_map.h"
@@ -24,6 +25,7 @@
 #include "storage/ls/ob_ls_meta_package.h"                      // ObLSMetaPackage
 #include "share/resource_limit_calculator/ob_resource_limit_calculator.h"
 #include "storage/mview/ob_major_mv_merge_info.h"
+#include "storage/tx/ob_tx_result_struct.h"
 
 namespace oceanbase
 {
@@ -270,4 +272,13 @@ int ObLSService::foreach_ls(FUNC &func)
 
 }
 }
+namespace oceanbase
+{
+namespace storage
+{
+// demoted from share::ObShareUtil(tenant-level query, gets the sys LS readable SCN through MTL ObLSService)
+int get_sys_ls_readable_scn(share::SCN &readable_scn);
+}
+}
+
 #endif

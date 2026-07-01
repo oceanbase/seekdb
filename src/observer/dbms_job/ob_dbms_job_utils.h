@@ -20,7 +20,7 @@
 #include "lib/ob_define.h"
 #include "lib/oblog/ob_log_module.h"
 #include "lib/utility/ob_print_utils.h"
-#include "lib/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_isql_client.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/queue/ob_priority_queue.h"
 

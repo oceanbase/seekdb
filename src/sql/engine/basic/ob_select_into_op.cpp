@@ -24,7 +24,7 @@
 #include "lib/charset/ob_charset_string_helper.h"
 #include "sql/engine/px/ob_px_sqc_handler.h"
 #include "sql/engine/expr/ob_expr_json_func_helper.h"
-#include "lib/udt/ob_collection_type.h"
+#include "common/udt/ob_collection_type.h"
 #include "share/config/ob_server_config.h"
 
 #ifndef OB_BUILD_EMBED_MODE

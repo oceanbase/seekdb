@@ -65,17 +65,11 @@ struct MdsFactory
   static int deep_copy_buffer_ctx(const transaction::ObTransID &trans_id,
                                   const BufferCtx &old_ctx,
                                   BufferCtx *&new_ctx,
-                                  ObIAllocator &allocator = share::g_mp->tenant_mds_service()->get_buffer_ctx_allocator(),
-                                  const char *alloc_file = __builtin_FILE(),
-                                  const char *alloc_func = __builtin_FUNCTION(),
-                                  const int64_t line = __builtin_LINE());
+                                  ObIAllocator &allocator = share::g_mp->tenant_mds_service()->get_buffer_ctx_allocator());
   static int create_buffer_ctx(const transaction::ObTxDataSourceType &data_source_type,
                                const transaction::ObTransID &trans_id,
                                BufferCtx *&buffer_ctx,
-                               ObIAllocator &allocator = share::g_mp->tenant_mds_service()->get_buffer_ctx_allocator(),
-                               const char *alloc_file = __builtin_FILE(),
-                               const char *alloc_func = __builtin_FUNCTION(),
-                               const int64_t line = __builtin_LINE());
+                               ObIAllocator &allocator = share::g_mp->tenant_mds_service()->get_buffer_ctx_allocator());
 private:
   // If type T has an init function, then first construct it using the default constructor, and then call its init function
   template <typename T, typename ...Args, ENABLE_IF_HAS(T, init, int(Args...))>

@@ -18,7 +18,7 @@
 
 #include "storage/fts/dict/ob_ft_dat_dict.h"
 
-#include "lib/alloc/alloc_assist.h"
+#include "lib/utility/alloc_assist.h"
 #include "lib/alloc/alloc_struct.h"
 #include "lib/allocator/ob_allocator.h"
 #include "lib/allocator/page_arena.h"

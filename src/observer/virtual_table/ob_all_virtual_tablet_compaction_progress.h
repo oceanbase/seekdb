@@ -16,7 +16,7 @@
 
 #ifndef OB_ALL_VIRTUAL_PARITION_COMPACTION_PROGRESS_H_
 #define OB_ALL_VIRTUAL_PARITION_COMPACTION_PROGRESS_H_
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "storage/compaction/ob_tenant_compaction_progress.h"
 
 namespace oceanbase

@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "obmp_stmt_execute.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"
 #include "observer/mysql/ob_mysql_result_set.h"

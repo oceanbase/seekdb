@@ -1,4 +1,5 @@
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
+#include "observer/ob_service.h"
 #include "share/rc/ob_module_provider.h"
 /*
  * Copyright (c) 2025 OceanBase.
@@ -20,8 +21,9 @@
 
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
 #include "rootserver/ob_split_partition_helper.h"
+#include "storage/ob_storage_rpc.h"
 #include "share/tablet/ob_tablet_to_table_history_operator.h"
-#include "src/share/scheduler/ob_partition_auto_split_helper.h"
+#include "observer/scheduler/ob_partition_auto_split_helper.h"
 #include "storage/compaction/ob_tenant_tablet_scheduler.h"
 #include "share/tablet/ob_tablet_to_ls_operator.h"
 #include "storage/ddl/ob_ddl_lock.h"

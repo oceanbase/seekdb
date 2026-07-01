@@ -18,9 +18,9 @@
 #define OCEANBASE_SQL_ENGINE_EXPR_OB_EXPR_UPDATE_XML_H
 
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "lib/xml/ob_multi_mode_interface.h"
-#include "lib/xml/ob_xml_tree.h"
-#include "lib/xml/ob_xpath.h"
+#include "common/xml/ob_multi_mode_interface.h"
+#include "common/xml/ob_xml_tree.h"
+#include "common/xml/ob_xpath.h"
 
 namespace oceanbase 
 {

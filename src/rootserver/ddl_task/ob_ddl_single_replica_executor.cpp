@@ -15,9 +15,11 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include <vector>
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
 #include "ob_ddl_single_replica_executor.h"
+#include "storage/ob_storage_rpc_arg.h"
 #include "rootserver/ob_root_service.h"
 #include "observer/ob_service.h"
 #include "share/ob_ddl_sim_point.h"

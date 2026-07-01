@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/tablet/ob_tablet_to_table_history_operator.h"
-#include "src/share/inner_table/ob_inner_table_schema_constants.h"
+#include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_dml_sql_splicer.h"                // ObDMLSqlSplicer
 #include "share/schema/ob_schema_service.h"
 

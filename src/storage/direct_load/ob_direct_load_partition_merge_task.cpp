@@ -16,6 +16,7 @@
 #define USING_LOG_PREFIX STORAGE
 
 #include "storage/direct_load/ob_direct_load_partition_merge_task.h"
+#include "storage/ddl/ob_ddl_storage_util.h"
 #include "observer/table_load/ob_table_load_table_ctx.h"
 #include "storage/direct_load/ob_direct_load_compare.h"
 #include "storage/direct_load/ob_direct_load_conflict_check.h"
@@ -104,7 +105,7 @@ int ObDirectLoadPartitionMergeTask::process()
       LOG_WARN("ddl agent should not be null", K(ret));
     }
     // For full import, regardless of whether a partition has data or not, a ddl object needs to be created to create a major sstable for that partition
-    else if (OB_FAIL(ObDDLUtil::init_macro_block_seq(parallel_idx_, block_start_seq))) {
+    else if (OB_FAIL(ObDDLStorageUtil::init_macro_block_seq(parallel_idx_, block_start_seq))) {
       LOG_WARN("fail to set parallel degree", KR(ret), K(parallel_idx_));
     } else if (OB_FAIL(insert_tablet_ctx_->open_sstable_slice(block_start_seq, parallel_idx_/*slice_idx*/, slice_id, ddl_agent))) {
       LOG_WARN("fail to open sstable slice ", KR(ret), K(block_start_seq));

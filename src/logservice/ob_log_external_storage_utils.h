@@ -17,8 +17,8 @@
 #define OCEABASE_LOGSERVICE_OB_LOG_EXTERNAL_STORAGE_UTILS_H_
 #include "lib/utility/ob_print_utils.h"                       // TO_STRING_KV
 #include "lib/container/ob_fixed_array.h"                     // ObFixedArray
-#include "common/storage/ob_device_common.h"                  // ObStorageAccessType
-#include "common/storage/ob_io_device.h"                      // ObIODevice
+#include "lib/restore/ob_device_common.h"                  // ObStorageAccessType
+#include "lib/restore/ob_io_device.h"                      // ObIODevice
 #include "share/io/ob_io_define.h"                            // ObIOHandle
 namespace oceanbase
 {

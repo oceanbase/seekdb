@@ -1160,10 +1160,6 @@ int ObTxDesc::merge_conflict_txs_(const ObIArray<ObTransIDAndAddr> &conflict_txs
 
 // get global trans type for session
 // 1. if xid is empty or xa_ctx is null, PLAIN is returned.
-// 2. if xid from session is equal to xid in desc and global_tx_type is DBLINK_TRANS,
-//    DBLINK_TRANS is returned.
-// 3. if xid from session is not equal to xid in desc and global_tx_type is DBLINK_TRANS,
-//    XA_TRANS is returned.
 ObGlobalTxType ObTxDesc::get_global_tx_type(const ObXATransID &xid) const
 {
   ObGlobalTxType tx_type = ObGlobalTxType::PLAIN;

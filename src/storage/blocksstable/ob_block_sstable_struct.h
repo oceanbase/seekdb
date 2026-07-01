@@ -19,7 +19,7 @@
 
 #include "common/log/ob_log_cursor.h"
 #include "common/ob_store_format.h"
-#include "lib/allocator/ob_mod_define.h"
+#include "lib/utility/ob_mod_define.h"
 #include "lib/compress/ob_compress_util.h"
 #include "lib/container/ob_iarray.h"
 #include "lib/container/ob_se_array.h"

@@ -25,7 +25,7 @@
 // #include "sql/engine/expr/ob_expr_operator.h"
 #include "sql/engine/expr/ob_batch_eval_util.h"
 // #include "share/ob_lob_access_utils.h"
-#include "lib/udt/ob_array_type.h"
+#include "common/udt/ob_array_type.h"
 #include "sql/engine/ob_subschema_ctx.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
 

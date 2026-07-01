@@ -25,7 +25,7 @@
 #include "lib/thread/ob_map_queue_thread_pool.h"
 #include "lib/thread/ob_thread_name.h"
 #include "lib/thread/ob_async_task_queue.h"
-#include "lib/queue/ob_dedup_queue.h"
+#include "lib/thread/ob_dedup_queue.h"
 #include "lib/queue/ob_lighty_queue.h"
 #include "lib/queue/ob_priority_queue.h"
 #include "lib/task/ob_timer.h"

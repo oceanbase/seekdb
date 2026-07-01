@@ -21,8 +21,8 @@
 #include "lib/net/ob_addr.h"
 #include "lib/allocator/ob_mem_leak_checker.h"
 
-#include "share/ob_virtual_table_iterator.h"
-#include "share/ob_scanner.h"
+#include "observer/virtual_table/ob_virtual_table_iterator.h"
+#include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
 
 namespace oceanbase

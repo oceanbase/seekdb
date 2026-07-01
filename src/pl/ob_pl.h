@@ -225,12 +225,12 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObPLFunctionBase);
 };
 
-class ObPLExecutableUnit : public ObPLCacheObject
+class ObPLCompileUnit : public ObPLCacheObject
 {
   friend class ::test::MockCacheObjectFactory;
 public:
-  ObPLExecutableUnit(sql::ObLibCacheNameSpace ns, lib::MemoryContext &mem_context);
-  virtual ~ObPLExecutableUnit();
+  ObPLCompileUnit(sql::ObLibCacheNameSpace ns, lib::MemoryContext &mem_context);
+  virtual ~ObPLCompileUnit();
 
   inline bool get_can_cached() { return can_cached_; }
   inline void set_can_cached(bool can_cached) { can_cached_ = can_cached; }
@@ -286,7 +286,7 @@ protected:
 
   int32_t stack_size_;
 
-  DISALLOW_COPY_AND_ASSIGN(ObPLExecutableUnit);
+  DISALLOW_COPY_AND_ASSIGN(ObPLCompileUnit);
 };
 
 class ObPLSymbolTable;
@@ -401,11 +401,11 @@ public:
   ObString routine_name_;
 };
 
-class ObPLFunction : public ObPLFunctionBase, public ObPLExecutableUnit
+class ObPLFunction : public ObPLFunctionBase, public ObPLCompileUnit
 {
 public:
   ObPLFunction(lib::MemoryContext &mem_context)
-  : ObPLFunctionBase(), ObPLExecutableUnit(sql::ObLibCacheNameSpace::NS_PRCR, mem_context),
+  : ObPLFunctionBase(), ObPLCompileUnit(sql::ObLibCacheNameSpace::NS_PRCR, mem_context),
     variables_(allocator_),
     variables_debuginfo_(allocator_),
     default_idxs_(allocator_),
@@ -447,7 +447,7 @@ public:
   inline ObFuncPtr get_action() const { return action_; }
   inline void set_action(ObFuncPtr action) { action_ = action; }
   // Resolved AST retained for the tree-walking interpreter (non-owning: lives on
-  // this func's allocator / the test's scope). NULL on the legacy codegen path.
+  // this func's allocator / the test's scope). NULL on the JIT path.
   inline ObPLFunctionAST *get_ast() const { return ast_; }
   inline void set_ast(ObPLFunctionAST *ast) { ast_ = ast; }
   inline const common::ObString &get_interface_name() const { return interface_name_; }
@@ -913,8 +913,7 @@ public:
            sql::ObExecContext &ctx,
            ObPLFunction *routine,
            bool is_function_or_trigger,
-           ObIAllocator *allocator = NULL,
-           const bool is_dblink = false);
+           ObIAllocator *allocator = NULL);
   void destory(sql::ObSQLSessionInfo &session_info, sql::ObExecContext &ctx, int &ret);
 
   inline ObPLCursorInfo& get_cursor_info() { return cursor_info_; }
@@ -1156,9 +1155,7 @@ public:
               bool inner_call = false,
               bool in_function = false,
               uint64_t loc = 0,
-              bool is_called_from_sql = false,
-              uint64_t dblink_id = OB_INVALID_ID,
-              const ObRoutineInfo *dblink_routine_info = NULL);
+              bool is_called_from_sql = false);
   int check_exec_priv(sql::ObExecContext &ctx,
                       const ObString &database_name,
                       ObPLFunction *routine);
@@ -1220,8 +1217,7 @@ public:
                           uint64_t line_num, /* call position line number, for call_stack info*/
                           int64_t argc,
                           common::ObObjParam **argv,
-                          int64_t *nocopy_argv,
-                          uint64_t dblink_id);
+                          int64_t *nocopy_argv);
 
   static int set_user_type_var(ObPLExecCtx *ctx,
                                int64_t var_index,
@@ -1241,7 +1237,7 @@ public:
   
   static int check_trigger_arg(ParamStore &params, const ObPLFunction &func, ObPLContext &pl_ctx, ObExecContext &ctx);
 
-  std::pair<common::ObBucketLock, common::ObBucketLock>& get_build_lock() { return build_lock_; }
+  std::pair<common::ObBucketLock, common::ObBucketLock>& get_jit_lock() { return jit_lock_; }
 
   static int check_session_alive(const ObBasicSessionInfo &session);
 
@@ -1258,7 +1254,7 @@ private:
   ObPLInterfaceService interface_service_;
 
   // first bucket is for deduplication, second bucket is for concurrency control
-  std::pair<common::ObBucketLock, common::ObBucketLock> build_lock_;
+  std::pair<common::ObBucketLock, common::ObBucketLock> jit_lock_;
 };
 
 class LinkPLStackGuard
@@ -1298,7 +1294,7 @@ public:
   // Restore exec_ctx.pl_stack_ctx_ to a pre-recorded snapshot. Idempotent:
   // becomes a no-op when the value already matches.
   //
-  // Why this exists (Windows /EHsc + SEH unwind): when the callee's PL entry
+  // Why this exists (Windows /EHsc + SEH unwind): when the callee's PL JIT
   // raises an SEH exception (RaiseException with OB_PL_SEH_EXCEPTION_CODE)
   // and the caller's PL personality dispatches it to a CONTINUE HANDLER,
   // the frames between throw and target are unwound by RtlUnwindEx. In

@@ -17,7 +17,7 @@
 #ifndef OB_ALL_VIRTUAL_ID_SERVICE_H_
 #define OB_ALL_VIRTUAL_ID_SERVICE_H_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "storage/tx/ob_id_service.h"
 #include "lib/container/ob_array.h"
 

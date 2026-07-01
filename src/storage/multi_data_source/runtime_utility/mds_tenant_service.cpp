@@ -18,6 +18,8 @@
 #include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tablet/ob_tablet_iterator.h"
+#include "storage/allocator/ob_mds_allocator.h"  // relocated-definition owner
+#include "storage/allocator/ob_tenant_vector_allocator.h"
 
 namespace oceanbase
 {
@@ -26,53 +28,6 @@ namespace storage
 {
 namespace mds
 {
-/********************FOR MEMORY LEAK DEBUG***************************/
-thread_local char __thread_mds_tag__[TAG_SIZE] = {0};
-TLOCAL(const char *, __thread_mds_alloc_type__) = nullptr;
-TLOCAL(const char *, __thread_mds_alloc_file__) = nullptr;
-TLOCAL(const char *, __thread_mds_alloc_func__) = nullptr;
-TLOCAL(uint32_t, __thread_mds_alloc_line__) = 0;
-
-void set_mds_mem_check_thread_local_info(const storage::mds::MdsWriter &writer,
-                                         const char *alloc_ctx_type,
-                                         const char *alloc_file,
-                                         const char *alloc_func,
-                                         const uint32_t alloc_line)
-{
-  int64_t pos = 0;
-  databuff_printf(__thread_mds_tag__, TAG_SIZE, pos, writer);
-  __thread_mds_alloc_type__ = alloc_ctx_type;
-  __thread_mds_alloc_file__ = alloc_file;
-  __thread_mds_alloc_func__ = alloc_func;
-  __thread_mds_alloc_line__ = alloc_line;
-}
-
-void set_mds_mem_check_thread_local_info(const share::ObLSID &ls_id,
-                                         const ObTabletID &tablet_id,
-                                         const char *data_type,
-                                         const char *alloc_file,
-                                         const char *alloc_func,
-                                         const uint32_t alloc_line)
-{
-  int64_t pos = 0;
-  databuff_printf(__thread_mds_tag__, TAG_SIZE, pos, ls_id);
-  databuff_printf(__thread_mds_tag__, TAG_SIZE, pos, ", ");
-  databuff_printf(__thread_mds_tag__, TAG_SIZE, pos, tablet_id);
-  __thread_mds_alloc_type__ = data_type;
-  __thread_mds_alloc_file__ = alloc_file;
-  __thread_mds_alloc_func__ = alloc_func;
-  __thread_mds_alloc_line__ = alloc_line;
-}
-
-void reset_mds_mem_check_thread_local_info()
-{
-  __thread_mds_tag__[0] = '\0';
-  __thread_mds_alloc_type__ = nullptr;
-  __thread_mds_alloc_file__ = nullptr;
-  __thread_mds_alloc_func__ = nullptr;
-  __thread_mds_alloc_line__ = 0;
-}
-/********************************************************************/
 
 int ObTenantMdsService::mtl_init(ObTenantMdsService *&mds_service)
 {
@@ -81,8 +36,6 @@ int ObTenantMdsService::mtl_init(ObTenantMdsService *&mds_service)
   if (mds_service->is_inited_) {
     ret = OB_INIT_TWICE;
     MDS_LOG(ERROR, "init mds tenant service twice!", KR(ret), KPC(mds_service));
-  } else if (MDS_FAIL(mds_service->memory_leak_debug_map_.init("MdsDebugMap"))) {
-    MDS_LOG(WARN, "init map failed", K(ret));
   } else if (MDS_FAIL(TG_CREATE_TENANT(lib::TGDefIDs::TenantMdsServiceRecyle, mds_service->recyle_timer_id_))) {
     MDS_LOG(WARN, "fail to create TenantMdsServiceRecyle timer", K(ret));
   } else if (MDS_FAIL(TG_START(mds_service->recyle_timer_id_))) {
@@ -143,7 +96,6 @@ void ObTenantMdsService::run_recyle_timer_task()
   ObCurTraceId::init(GCONF.self_addr_);
   if (REACH_TIME_INTERVAL(30_s)) {
     observer::ObMdsEventBuffer::dump_statistics();
-    dump_map_holding_item(5_min);
   }
   try_recycle_mds_table_task();
 }
@@ -422,67 +374,82 @@ int ObTenantMdsService::try_gc_mds_table_(ObTablet &tablet)
   #undef PRINT_WRAPPER
 }
 
-void ObTenantMdsService::record_alloc_backtrace(void *obj,
-                                                const char *tag,
-                                                const char *data_type,
-                                                const char *alloc_file,
-                                                const char *alloc_func,
-                                                const int64_t line)
-{
-#ifdef ENABLE_DEBUG_MDS_MEM_LEAK
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(memory_leak_debug_map_.insert(ObIntWarp((int64_t)obj),
-                                            ObMdsMemoryLeakDebugInfo(tag,
-                                                                     TAG_SIZE,
-                                                                     data_type,
-                                                                     alloc_file,
-                                                                     alloc_func,
-                                                                     line)))) {
-    MDS_LOG(WARN, "fail to insert lbt to map", KR(ret), KP(obj), K(data_type), K(alloc_file), K(alloc_func), K(line));
-  }
-#else
-  UNUSED(obj);
-  UNUSED(tag);
-  UNUSED(data_type);
-  UNUSED(alloc_file);
-  UNUSED(alloc_func);
-  UNUSED(line);
-#endif
-}
-
-void ObTenantMdsService::erase_alloc_backtrace(void *obj)
-{
-#ifdef ENABLE_DEBUG_MDS_MEM_LEAK
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(memory_leak_debug_map_.erase(ObIntWarp((int64_t)obj)))) {
-    MDS_LOG(WARN, "fail to erase record from map", KR(ret), KP(obj));
-  }
-#else
-  UNUSED(obj);
-#endif
-}
-
-void ObTenantMdsService::dump_map_holding_item(int64_t check_alive_time_threshold)
-{
-  int ret = OB_SUCCESS;
-  int64_t scan_cnt = 0;
-  auto op = [&scan_cnt, check_alive_time_threshold](const ObIntWarp &obj_wrapper,
-                                                    ObMdsMemoryLeakDebugInfo &debug_info) {
-    void *obj = (void *)(int64_t)obj_wrapper.get_value();
-    ++scan_cnt;
-    if (ObTimeUtility::fast_current_time() - debug_info.alloc_ts_ >= check_alive_time_threshold) {
-      MDS_LOG(INFO, "print item alloc backtrace",
-                    KP(obj), K(debug_info), K(ObTimeLiteralPrettyPrinter(check_alive_time_threshold)));
-    }
-    return true;
-  };
-  if (OB_FAIL(memory_leak_debug_map_.for_each(op))) {
-    MDS_LOG(WARN, "fail to do for_each", KR(ret));
-  } else {
-    MDS_LOG(INFO, "finish scan map holding items", K(scan_cnt));
-  }
-}
-
 }  // namespace mds
 }  // namespace storage
+}  // namespace oceanbase
+
+// ===== mds_allocator round 3(init, MDS macro/literal real user) =====
+namespace oceanbase
+{
+namespace share
+{
+
+int ObTenantMdsAllocator::init()
+{
+  int ret = OB_SUCCESS;
+  ObMemAttr mem_attr;
+  // TODO : @gengli new ctx id?
+
+  mem_attr.ctx_id_ = ObCtxIds::MDS_DATA_ID;
+  mem_attr.label_ = "MdsTable";
+  ObSharedMemAllocMgr *share_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
+  throttle_tool_ = &(share_mem_alloc_mgr->share_resource_throttle_tool());
+  MDS_TG(10_ms);
+  if (IS_INIT){
+    ret = OB_INIT_TWICE;
+    SHARE_LOG(WARN, "init tenant mds allocator twice", KR(ret), KPC(this));
+  } else if (OB_ISNULL(throttle_tool_)) {
+    ret = OB_ERR_UNEXPECTED;
+    SHARE_LOG(WARN, "throttle tool is unexpected null", KP(throttle_tool_), KP(share_mem_alloc_mgr));
+  } else if (MDS_FAIL(allocator_.init(OB_MALLOC_NORMAL_BLOCK_SIZE, block_alloc_, mem_attr))) {
+    MDS_LOG(WARN, "init vslice allocator failed", K(ret), K(OB_MALLOC_NORMAL_BLOCK_SIZE), KP(this), K(mem_attr));
+  } else {
+    allocator_.set_nway(MDS_ALLOC_CONCURRENCY);
+    is_inited_ = true;
+  }
+  return ret;
+}
+
+
+}  // namespace share
+}  // namespace oceanbase
+
+// ===== vector_allocator(MDS macro fn) =====
+namespace oceanbase
+{
+namespace share
+{
+
+int ObTenantVectorAllocator::init()
+{
+  int ret = OB_SUCCESS;
+
+  lib::ContextParam param;
+  param.set_mem_attr("VectorIndex", ObCtxIds::VECTOR_CTX_ID)
+    .set_properties(lib::ADD_CHILD_THREAD_SAFE | lib::ALLOC_THREAD_SAFE | lib::RETURN_MALLOC_DEFAULT)
+    .set_page_size(OB_MALLOC_MIDDLE_BLOCK_SIZE)
+    .set_label("VectorIndex")
+    .set_ablock_size(lib::INTACT_MIDDLE_AOBJECT_SIZE);
+  ObSharedMemAllocMgr *share_mem_alloc_mgr = share::g_mp->shared_mem_alloc_mgr();
+  throttle_tool_ = &(share_mem_alloc_mgr->share_resource_throttle_tool());
+  MDS_TG(10_ms);
+  if (IS_INIT){
+    ret = OB_INIT_TWICE;
+    SHARE_LOG(WARN, "init tenant vector allocator twice", KR(ret), KPC(this));
+  } else if (OB_ISNULL(throttle_tool_)) {
+    ret = OB_ERR_UNEXPECTED;
+    SHARE_LOG(WARN, "throttle tool is unexpected null", KP(throttle_tool_), KP(share_mem_alloc_mgr));
+  } else if (OB_FAIL(ROOT_CONTEXT->CREATE_CONTEXT(memory_context_, param))) {
+    SHARE_LOG(WARN, "create memory entity failed", K(ret));
+  } else if (OB_FAIL(ObVectorMemContext::init(memory_context_, throttle_tool_))) {
+    SHARE_LOG(WARN, "vector mem context init failed", K(ret));
+  } else {
+    is_inited_ = true;
+  }
+
+  return ret;
+}
+
+
+}  // namespace share
 }  // namespace oceanbase

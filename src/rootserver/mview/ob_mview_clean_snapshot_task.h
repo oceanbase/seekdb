@@ -17,7 +17,7 @@
 #pragma once
 
 #include "lib/task/ob_timer.h"
-#include "lib/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_isql_client.h"
 #include "rootserver/mview/ob_mview_timer_task.h"
 
 namespace oceanbase

@@ -21,7 +21,7 @@
 #include "sql/engine/ob_exec_context.h"
 #include "sql/engine/ob_physical_plan_ctx.h"
 #include "sql/session/ob_sql_session_info.h"
-#include "lib/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_isql_client.h"
 #include "observer/ob_inner_sql_connection.h"
 #include "observer/ob_inner_sql_connection_pool.h"
 

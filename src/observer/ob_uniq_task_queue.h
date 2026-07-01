@@ -23,7 +23,7 @@
 #include "lib/list/ob_dlink_node.h"
 #include "lib/thread/ob_thread_name.h"
 #include "lib/list/ob_dlist.h"
-#include "lib/queue/ob_dedup_queue.h"
+#include "lib/thread/ob_dedup_queue.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "lib/utility/ob_tracepoint.h"
 #include "lib/stat/ob_diagnostic_info_guard.h"

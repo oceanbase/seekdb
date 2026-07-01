@@ -117,10 +117,10 @@ private:
   const static int64_t DEFAULT_ARRAY_CNT = 200;
   int generate_tablet_status_map();
   int check_verification(
-    ObSchemaGetterGuard &schema_guard,
+    share::schema::ObSchemaGetterGuard &schema_guard,
     ObIArray<uint64_t> &unfinish_table_id_array);
   int check_table_merge_progress(
-    ObSchemaGetterGuard &schema_guard,
+    share::schema::ObSchemaGetterGuard &schema_guard,
     ObIArray<uint64_t> &unfinish_table_id_array);
   int get_tablet_ls_pairs(
     const uint64_t table_id,
@@ -138,7 +138,7 @@ private:
   int validate_index_ckm();
   int get_idx_ckm_and_validate(
     const uint64_t index_table_id,
-    ObSchemaGetterGuard &schema_guard,
+    share::schema::ObSchemaGetterGuard &schema_guard,
     compaction::ObTableCkmItems &data_table_ckm);
   int loop_index_ckm_validate_array();
   int update_finish_index_cnt_for_data_table(
@@ -155,7 +155,7 @@ private:
   bool is_extra_check_round() const { return 0 == (loop_cnt_ % 8); } // check every 8 rounds
   void print_unfinish_info(const int64_t cost_us);
   OB_INLINE int get_table_and_index_schema(
-    ObSchemaGetterGuard &schema_guard,
+    share::schema::ObSchemaGetterGuard &schema_guard,
     const uint64_t table_id,
     bool &is_table_valid,
     ObIArray<const ObSimpleTableSchemaV2 *> &index_schemas);

@@ -17,13 +17,16 @@
 #ifndef OCEANBASE_OBSERVER_OB_SERVICE_H_
 #define OCEANBASE_OBSERVER_OB_SERVICE_H_
 
+#include "storage/tablet/ob_batch_create_tablet_arg.h"
+#include "storage/tx/ob_tx_result_struct.h"
+#include "storage/ob_storage_rpc_arg.h"
 #include "observer/ob_server_schema_updater.h"
 #include "share/ob_rpc_struct.h"
 #include "observer/ob_server_struct.h"
 #include "storage/tablelock/ob_table_lock_rpc_struct.h"
 #include "observer/ob_uniq_task_queue.h"
 #include "observer/report/ob_tablet_table_updater.h"
-#include "src/share/schema/ob_standby_schema_refresh_trigger.h"
+#include "observer/ob_standby_schema_refresh_trigger.h"
 
 namespace oceanbase
 {

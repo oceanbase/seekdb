@@ -18,6 +18,7 @@
 #include "logservice/palf/log_meta.h"
 #undef private
 #include <gtest/gtest.h>
+#include "share/ob_cluster_version.h"
 
 char **global_argv = nullptr;
 namespace oceanbase

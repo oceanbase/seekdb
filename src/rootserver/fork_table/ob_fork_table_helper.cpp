@@ -17,15 +17,15 @@
 #define USING_LOG_PREFIX RS
 
 #include "rootserver/fork_table/ob_fork_table_helper.h"
+#include "common/mysqlclient/ob_isql_connection.h"
 #include "share/rc/ob_module_provider.h"
-#include "lib/mysqlclient/ob_isql_connection.h"
 #include "observer/ob_inner_sql_connection.h"
 #include "rootserver/ob_ddl_operator.h"
 #include "rootserver/truncate_info/ob_truncate_info_service.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "share/ob_autoincrement_service.h"
-#include "share/ob_fork_table_util.h"
-#include "share/vector_index/ob_vector_index_util.h"
+#include "rootserver/fork_table/ob_fork_table_util.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 #include "share/schema/ob_schema_utils.h"
 #include "share/tablet/ob_tablet_to_ls_operator.h"
 #include "storage/tablet/ob_tablet_fork_mds_helper.h"

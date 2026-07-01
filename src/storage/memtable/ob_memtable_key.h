@@ -23,7 +23,7 @@
 #include "lib/container/ob_iarray.h"
 #include "lib/oblog/ob_log_module.h"
 #include "share/schema/ob_table_schema.h"
-#include "share/schema/ob_table_param.h"
+#include "storage/access/ob_table_param.h"
 
 namespace oceanbase
 {

@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX RS
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_ddl_scheduler.h"
 #include "rootserver/ob_rs_serial_call.h"
 #include "rootserver/ddl_task/ob_drop_fts_index_task.h"
@@ -32,8 +33,8 @@
 #include "rootserver/ob_root_service.h" // for ObRootService
 #include "share/longops_mgr/ob_longops_mgr.h"
 #include "share/ob_ddl_sim_point.h"
-#include "share/scheduler/ob_partition_auto_split_helper.h"
-#include "share/ob_fts_index_builder_util.h"
+#include "observer/scheduler/ob_partition_auto_split_helper.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "storage/fts/dict/ob_gen_dic_loader.h"
 #include "rootserver/ddl_task/ob_vec_ivf_index_build_task.h"
 

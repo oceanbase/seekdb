@@ -26,7 +26,8 @@
 #include "sql/optimizer/ob_optimizer_util.h"
 #include "sql/resolver/dml/ob_select_resolver.h"
 #include "sql/resolver/dml/ob_inlist_resolver.h"
-#include "lib/enumset/ob_enum_set_meta.h"
+#include "sql/session/ob_local_session_var.h"
+#include "common/enumset/ob_enum_set_meta.h"
 #include "src/sql/resolver/dml/ob_inlist_resolver.h"
 
 namespace oceanbase
@@ -8591,7 +8592,7 @@ int ObRawExprUtils::extract_local_vars_for_gencol(ObRawExpr *expr,
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("get unexpected null", K(ret));
   } else if (FALSE_IT(gen_col.get_local_session_var().reset())) {
-  } else if (OB_FAIL(gen_col.get_local_session_var().reserve_max_local_vars_capacity())) {
+  } else if (OB_FAIL(ObLocalSessionVarHelper::reserve_max_local_vars_capacity(gen_col.get_local_session_var()))) {
     LOG_WARN("failed to reserve capacity", K(ret));
   } else if (OB_FAIL(expr->get_expr_dep_session_vars_recursively(
                                       session, gen_col.get_local_session_var()))) {

@@ -16,7 +16,9 @@
 
 #define USING_LOG_PREFIX BOOTSTRAP
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "rootserver/ob_bootstrap.h"
+//(removed deleted node_balancer)  // previously hidden behind a transitive include, make the dependency explicit
 #include "share/rc/ob_module_provider.h"
 
 #include "share/ob_global_stat_proxy.h"

@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_STORAGE_DICT_OB_DICT_H_
 #define OCEANBASE_STORAGE_DICT_OB_DICT_H_
-#include "lib/mysqlclient/ob_mysql_transaction.h"
+#include "common/mysqlclient/ob_mysql_transaction.h"
 #include "share/ob_dml_sql_splicer.h"
 
 namespace oceanbase

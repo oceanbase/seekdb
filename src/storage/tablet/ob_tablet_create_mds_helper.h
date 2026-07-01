@@ -17,6 +17,7 @@
 #ifndef OCEANBASE_STORAGE_OB_TABLET_CREATE_MDS_HELPER
 #define OCEANBASE_STORAGE_OB_TABLET_CREATE_MDS_HELPER
 
+#include "storage/tablet/ob_batch_create_tablet_arg.h"
 #include <stdint.h>
 #include "lib/worker.h"
 #include "lib/container/ob_iarray.h"

@@ -23,13 +23,13 @@
 
 #include "common/object/ob_obj_type.h"
 #include "lib/charset/ob_charset.h"
-#include "lib/number/ob_number_v2.h"
-#include "lib/timezone/ob_timezone_info.h"
-#include "ob_datum.h"
+#include "common/number/ob_number_v2.h"
+#include "common/timezone/ob_timezone_info.h"
+#include "common/datum/ob_datum.h"
 #include "ob_datum_util.h"
-#include "lib/json_type/ob_json_base.h" // for ObIJsonBase
-#include "lib/json_type/ob_json_bin.h" // for ObJsonBin
-#include "lib/wide_integer/ob_wide_integer.h"
+#include "common/json_type/ob_json_base.h" // for ObIJsonBase
+#include "common/json_type/ob_json_bin.h" // for ObJsonBin
+#include "common/wide_integer/ob_wide_integer.h"
 #include "share/ob_errno.h"
 
 namespace oceanbase

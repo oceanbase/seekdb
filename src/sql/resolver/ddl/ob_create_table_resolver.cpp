@@ -16,15 +16,15 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/ddl/ob_create_table_resolver.h"
-#include "share/ob_fts_index_builder_util.h"
+#include "sql/resolver/ddl/ob_fts_index_builder_util.h"
 #include "sql/rewrite/ob_transform_utils.h"
 #include "sql/optimizer/ob_optimizer_util.h"
-#include "share/ob_index_builder_util.h"
+#include "sql/resolver/ddl/ob_index_builder_util.h"
 #include "observer/ob_server.h"
 #include "sql/resolver/cmd/ob_help_resolver.h"
 #include "sql/optimizer/ob_optimizer_util.h"
-#include "share/vector_index/ob_vector_index_util.h"
-#include "share/ob_vec_index_builder_util.h"
+#include "observer/vector_index/ob_vector_index_util.h"
+#include "sql/resolver/ddl/ob_vec_index_builder_util.h"
 #include "share/table/ob_ttl_util.h"
 
 namespace oceanbase

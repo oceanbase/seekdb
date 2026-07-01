@@ -18,7 +18,7 @@
 #define OCEANBASE_LOGSERVICE_LOG_ITERATOR_
 
 #include <type_traits>
-#include "lib/alloc/alloc_assist.h"
+#include "lib/utility/alloc_assist.h"
 #include "lib/utility/ob_utility.h"
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/utility/ob_print_utils.h"     // TO_STRING_KV

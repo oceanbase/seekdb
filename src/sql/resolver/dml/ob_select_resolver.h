@@ -21,7 +21,7 @@
 #include "sql/resolver/dml/ob_dml_resolver.h"
 #include "sql/resolver/dml/ob_standard_group_checker.h"
 #include "sql/rewrite/ob_stmt_comparer.h"
-#include "common/ob_smart_call.h"
+#include "lib/utility/ob_smart_call.h"
 
 # define SYNTHETIC_FIELD_NAME "Name_exp_"
 

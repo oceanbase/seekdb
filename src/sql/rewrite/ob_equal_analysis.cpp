@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/rewrite/ob_equal_analysis.h"
-#include "common/ob_smart_call.h"
+#include "lib/utility/ob_smart_call.h"
 namespace oceanbase
 {
 using namespace common;

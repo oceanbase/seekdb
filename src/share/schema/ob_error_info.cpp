@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_error_info.h"
 #include "lib/oblog/ob_warning_buffer.h"
-#include "observer/ob_server_struct.h"
+#include "share/ob_server_struct.h"
 
 namespace oceanbase
 {

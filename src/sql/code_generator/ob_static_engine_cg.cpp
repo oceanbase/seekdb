@@ -113,7 +113,7 @@
 #include "sql/engine/opt_statistics/ob_optimizer_stats_gathering_op.h"
 #include "sql/engine/aggregate/ob_hash_distinct_vec_op.h"
 #include "sql/engine/aggregate/ob_scalar_aggregate_vec_op.h"
-#include "share/vector/expr_cmp_func.h"
+#include "sql/engine/vector/expr_cmp_func.h"
 #include "sql/engine/sort/ob_sort_vec_op.h"
 #include "sql/engine/set/ob_hash_union_vec_op.h"
 #include "sql/engine/set/ob_hash_intersect_vec_op.h"

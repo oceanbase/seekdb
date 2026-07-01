@@ -319,7 +319,7 @@ int ObTenantMajorFreeze::check_tenant_status() const
 {
   int ret = OB_SUCCESS;
   share::schema::ObSchemaGetterGuard schema_guard;
-  const ObSimpleTenantSchema *tenant_schema = nullptr;
+  const share::schema::ObSimpleTenantSchema *tenant_schema = nullptr;
   if (IS_NOT_INIT) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret));

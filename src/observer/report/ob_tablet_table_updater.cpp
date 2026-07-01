@@ -18,6 +18,7 @@
 
 
 #include "ob_tablet_table_updater.h"
+#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind the server_struct/tenant_base include chain, make the dependency explicit
 #include "share/tablet/ob_tablet_table_operator.h"  // for ObTabletOperator
 #include "observer/ob_service.h"                    // for is_mini_mode
 #include "share/ob_tablet_replica_checksum_operator.h" // for ObTabletReplicaChecksumItem

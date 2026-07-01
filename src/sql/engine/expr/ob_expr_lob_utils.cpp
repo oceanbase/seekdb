@@ -46,45 +46,7 @@ int ob_obj_read_lob_data(
 namespace sql
 {
 
-int ObTextStringObObjResult::init(int64_t res_len, ObIAllocator *allocator)
-{
-  int ret = OB_SUCCESS;
-  if (is_init_) {
-    LOG_WARN("Lob: textstring result init already", K(ret), K(*this));
-  } else if (OB_ISNULL(allocator) && OB_ISNULL(params_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Lob: invalid arguments", K(ret), K(type_), KP(params_), KP(allocator));
-  } else if (OB_ISNULL(res_obj_)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("Lob: invalid arguments", K(ret), K(type_), KP(res_obj_));
-  } else if (OB_FAIL(ObTextStringResult::calc_buffer_len(res_len))) {
-    LOG_WARN("Lob: calc buffer len failed", K(ret), K(type_), KP(res_len));
-  } else if (buff_len_ == 0) {
-    OB_ASSERT(has_lob_header_ == false); // empty result without header
-  } else {
-    buffer_ = OB_ISNULL(allocator)
-              ? static_cast<char*>(params_->alloc(buff_len_)) : static_cast<char*>(allocator->alloc(buff_len_));
-    if (OB_ISNULL(buffer_)) {
-      ret = OB_ALLOCATE_MEMORY_FAILED;
-      LOG_WARN("Lob: alloc buffer failed", K(ret), KP(params_), KP(allocator), K(buff_len_));
-    } else if (OB_FAIL(fill_temp_lob_header(res_len))) {
-      LOG_WARN("Lob: fill_temp_lob_header failed", K(ret), K(type_), K(res_len));
-    }
-    if (OB_SUCC(ret)) {
-      is_init_ = true;
-    }
-  }
-  return ret;
-}
 
-void ObTextStringObObjResult::set_result()
-{
-  res_obj_->set_lob_value(type_, buffer_, pos_);
-  if (is_lob_storage(type_) && has_lob_header_) {
-    // Notice: should not be null or nop
-    res_obj_->set_has_lob_header();
-  }
-}
 
 int ObTextStringHelper::build_text_iter(
     ObTextStringIter &text_iter,
@@ -111,22 +73,8 @@ int ObTextStringHelper::read_real_string_data(
     ObString &str,
     sql::ObExecContext *exec_ctx)
 {
-  int ret = OB_SUCCESS;
-  if (is_lob_storage(type)) {
-    
-    ObArenaAllocator *tmp_alloc_ptr = nullptr;
-    ObArenaAllocator tmp_allocator("ObLobRRSD", OB_MALLOC_NORMAL_BLOCK_SIZE);
-    {
-      tmp_alloc_ptr = &tmp_allocator;
-    }
-    ObTextStringIter str_iter(type, cs_type, str, has_lob_header);
-    if (OB_FAIL(build_text_iter(str_iter, exec_ctx, nullptr/*session*/, allocator, tmp_alloc_ptr))) {
-      LOG_WARN("Lob: init lob str iter failed ", K(ret), K(str_iter));
-    } else if (OB_FAIL(str_iter.get_full_data(str))) {
-      COMMON_LOG(WARN, "Lob: str iter get full data failed ", K(ret), K(str_iter));
-    }
-  }
-  return ret;
+  UNUSED(exec_ctx);
+  return common::lob_helper::read_real_string_data(allocator, type, cs_type, has_lob_header, str);
 }
 
 int ObTextStringHelper::read_real_string_data(

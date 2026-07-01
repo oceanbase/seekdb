@@ -17,7 +17,7 @@
 #define USING_LOG_PREFIX STORAGE
 #include "ob_datum_row.h"
 #include "storage/ob_i_store.h"
-#include "share/scheduler/ob_tenant_dag_scheduler.h"
+#include "observer/scheduler/ob_tenant_dag_scheduler.h"
 
 namespace oceanbase
 {

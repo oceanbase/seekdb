@@ -18,6 +18,8 @@
 #define OCEABASE_STORAGE_RPC
 
 #include "lib/net/ob_addr.h"
+#include "storage/ob_storage_rpc_arg.h"
+#include "storage/tx/ob_tx_result_struct.h"
 #include "lib/utility/ob_unify_serialize.h"
 #include "rpc/frame/ob_result_code.h"
 #include "common/ob_member.h"

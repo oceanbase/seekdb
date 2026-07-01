@@ -20,7 +20,7 @@
 #include "sql/engine/expr/ob_expr_subquery_ref.h"
 #include "sql/engine/expr/ob_expr_multiset.h"
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
-#include "share/vector/expr_cmp_func.h"
+#include "sql/engine/vector/expr_cmp_func.h"
 
 
 namespace oceanbase

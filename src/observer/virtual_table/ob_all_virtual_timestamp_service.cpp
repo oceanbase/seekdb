@@ -15,6 +15,7 @@
  */
 
 #include "observer/virtual_table/ob_all_virtual_timestamp_service.h"
+#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind the server_struct include chain, make the dependency explicit
 #include "share/rc/ob_module_provider.h"
 #include "storage/tx_storage/ob_ls_service.h"
 

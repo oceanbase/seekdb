@@ -13,6 +13,7 @@ ob_set_subtarget(ob_sql common
   ob_end_trans_cb_packet_param.cpp
   ob_phy_table_location.cpp
   ob_result_set.cpp
+  ob_scanner.cpp
   ob_spi.cpp
   ob_sql.cpp
   ob_sql_context.cpp
@@ -43,7 +44,141 @@ ob_set_subtarget(ob_sql common_mixed
   resolver/mv/ob_alter_mview_utils.cpp
 )
 
+ob_set_subtarget(ob_sql hybrid_search
+  hybrid_search/ob_query_parse.cpp
+  hybrid_search/ob_request_base.cpp
+  hybrid_search/ob_query_request.cpp
+  hybrid_search/ob_query_translator.cpp
+  hybrid_search/ob_hybrid_search_executor.cpp
+)
+
+ob_set_subtarget(ob_sql engine_vector_cmp
+  engine/vector/expr_cmp_func.cpp
+  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_0.cpp
+  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_1.cpp
+  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_2.cpp
+  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_3.cpp
+  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_4.cpp
+  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_5.cpp
+  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_6.cpp
+  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_7.cpp
+)
+
+ob_set_subtarget(ob_sql engine_vector_continuous
+  engine/vector/ob_continuous_base.cpp
+  engine/vector/ob_continuous_format.cpp
+  engine/vector/ob_continuous_vector.cpp
+)
+
+ob_set_subtarget(ob_sql engine_vector_discrete
+  engine/vector/ob_discrete_base.cpp
+  engine/vector/ob_discrete_format.cpp
+  engine/vector/ob_discrete_vector.cpp
+)
+
+ob_set_subtarget(ob_sql engine_vector_uniform
+  engine/vector/ob_uniform_base.cpp
+  engine/vector/ob_uniform_const_vector.cpp
+  engine/vector/ob_uniform_vector.cpp
+)
+
+ob_set_subtarget(ob_sql engine_vector_base
+  engine/vector/ob_vector_base.cpp
+)
+
+ob_set_subtarget(ob_sql engine_vector_fixed
+  engine/vector/ob_fixed_length_base.cpp
+  engine/vector/ob_fixed_length_vector.cpp
+  engine/vector/vector_basic_op.cpp
+)
+
+ob_set_subtarget(ob_sql optimizer_stat
+  optimizer/stat/ob_basic_stats_estimator.cpp
+  optimizer/stat/ob_column_store_refine_estimator.cpp
+  optimizer/stat/ob_dbms_stats_copy_table_stats.cpp
+  optimizer/stat/ob_dbms_stats_executor.cpp
+  optimizer/stat/ob_dbms_stats_export_import.cpp
+  optimizer/stat/ob_dbms_stats_gather.cpp
+  optimizer/stat/ob_dbms_stats_history_manager.cpp
+  optimizer/stat/ob_dbms_stats_lock_unlock.cpp
+  optimizer/stat/ob_dbms_stats_maintenance_window.cpp
+  optimizer/stat/ob_dbms_stats_preferences.cpp
+  optimizer/stat/ob_dbms_stats_utils.cpp
+  optimizer/stat/ob_hybrid_hist_estimator.cpp
+  optimizer/stat/ob_incremental_stat_estimator.cpp
+  optimizer/stat/ob_index_stats_estimator.cpp
+  optimizer/stat/ob_min_max_estimator.cpp
+  optimizer/stat/ob_opt_column_stat.cpp
+  optimizer/stat/ob_opt_column_stat_cache.cpp
+  optimizer/stat/ob_opt_ds_stat.cpp
+  optimizer/stat/ob_opt_ds_stat_cache.cpp
+  optimizer/stat/ob_opt_osg_column_stat.cpp
+  optimizer/stat/ob_opt_stat_gather_stat.cpp
+  optimizer/stat/ob_opt_stat_manager.cpp
+  optimizer/stat/ob_opt_stat_monitor_manager.cpp
+  optimizer/stat/ob_opt_stat_service.cpp
+  optimizer/stat/ob_opt_stat_sql_service.cpp
+  optimizer/stat/ob_opt_system_stat.cpp
+  optimizer/stat/ob_opt_system_stat_cache.cpp
+  optimizer/stat/ob_opt_table_stat.cpp
+  optimizer/stat/ob_opt_table_stat_cache.cpp
+  optimizer/stat/ob_stat_define.cpp
+  optimizer/stat/ob_stat_item.cpp
+  optimizer/stat/ob_stats_estimator.cpp
+  optimizer/stat/ob_topk_hist_estimator.cpp
+)
+
+set_source_files_properties(
+  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_0.cpp
+  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_1.cpp
+  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_2.cpp
+  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_3.cpp
+  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_4.cpp
+  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_5.cpp
+  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_6.cpp
+  engine/vector/expr_cmp_func_parts/expr_cmp_func_part_7.cpp
+  engine/vector/ob_uniform_vector.cpp
+  engine/aggregate/approx_count_distinct.cpp
+  engine/aggregate/approx_count_distinct_mysql.cpp
+  engine/aggregate/approx_count_distinct_synopsis.cpp
+  engine/aggregate/aggr_extra.cpp
+  engine/aggregate/count.cpp
+  engine/aggregate/group_concat.cpp
+  engine/aggregate/grouping.cpp
+  engine/aggregate/hybrid_hist.cpp
+  engine/aggregate/iaggregate.cpp
+  engine/aggregate/max.cpp
+  engine/aggregate/min.cpp
+  engine/aggregate/ob_aggregate_processor.cpp
+  engine/aggregate/processor.cpp
+  engine/aggregate/ob_exec_hash_struct_vec.cpp
+  engine/aggregate/ob_hash_groupby_vec_op.cpp
+  engine/aggregate/ob_hash_distinct_vec_op.cpp
+  engine/aggregate/ob_groupby_vec_op.cpp
+  engine/aggregate/ob_hash_agg_variant.cpp
+  engine/aggregate/ob_scalar_aggregate_vec_op.cpp
+  engine/aggregate/ob_merge_groupby_vec_op.cpp
+  engine/aggregate/rb_agg.cpp
+  engine/aggregate/single_row.cpp
+  engine/aggregate/single_row_count.cpp
+  engine/aggregate/single_row_count_sum.cpp
+  engine/aggregate/single_row_max.cpp
+  engine/aggregate/single_row_min.cpp
+  engine/aggregate/single_row_sum.cpp
+  engine/aggregate/str_prefix_max.cpp
+  engine/aggregate/sum.cpp
+  engine/aggregate/sum_opnsize.cpp
+  engine/aggregate/sys_bit.cpp
+  engine/aggregate/top_fre_hist.cpp
+  engine/expr/ob_expr_add.cpp
+  engine/expr/ob_expr_mul.cpp
+  engine/expr/ob_expr_eval_functions.cpp
+  engine/expr/ob_expr_in.cpp
+  engine/expr/ob_expr_array_sort.cpp
+  PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
+
 ob_set_subtarget(ob_sql das
+  das/ob_domain_id.cpp
   das/ob_das_context.cpp
   das/ob_das_define.cpp
   das/ob_das_delete_op.cpp
@@ -123,6 +258,10 @@ ob_set_subtarget(ob_sql dtl
 )
 
 ob_set_subtarget(ob_sql engine
+  engine/cmd/ob_redis_importer.cpp
+  engine/ob_ddl_common_sql_impl.cpp
+  engine/cmd/ob_timezone_importer.cpp
+  engine/cmd/ob_srs_importer.cpp
   engine/ob_des_exec_context.cpp
   engine/ob_exec_context.cpp
   engine/ob_exec_feedback_info.cpp
@@ -132,7 +271,6 @@ ob_set_subtarget(ob_sql engine
   engine/ob_phy_operator_type.cpp
   engine/ob_physical_plan.cpp
   engine/ob_physical_plan_ctx.cpp
-  engine/ob_serializable_function.cpp
   engine/ob_sql_mem_mgr_processor.cpp
   engine/ob_tenant_sql_memory_manager.cpp
   engine/prepare/ob_deallocate_executor.cpp
@@ -170,8 +308,23 @@ ob_set_subtarget(ob_sql engine
   engine/subquery/ob_subplan_filter_vec_op.cpp
 )
 
-ob_set_subtarget(ob_sql engine_aggregate
+ob_set_subtarget(ob_sql engine_aggregate_core
+  engine/aggregate/approx_count_distinct.cpp
+  engine/aggregate/approx_count_distinct_mysql.cpp
+  engine/aggregate/approx_count_distinct_synopsis.cpp
+  engine/aggregate/aggr_extra.cpp
+  engine/aggregate/count.cpp
+  engine/aggregate/group_concat.cpp
+  engine/aggregate/grouping.cpp
+  engine/aggregate/hybrid_hist.cpp
+  engine/aggregate/iaggregate.cpp
+  engine/aggregate/max.cpp
+  engine/aggregate/min.cpp
   engine/aggregate/ob_aggregate_processor.cpp
+  engine/aggregate/processor.cpp
+)
+
+ob_set_subtarget(ob_sql engine_aggregate_groupby
   engine/aggregate/ob_distinct_op.cpp
   engine/aggregate/ob_exec_hash_struct.cpp
   engine/aggregate/ob_groupby_op.cpp
@@ -182,6 +335,9 @@ ob_set_subtarget(ob_sql engine_aggregate
   engine/aggregate/ob_merge_groupby_op.cpp
   engine/aggregate/ob_scalar_aggregate_op.cpp
   engine/aggregate/ob_adaptive_bypass_ctrl.cpp
+)
+
+ob_set_subtarget(ob_sql engine_aggregate_vec
   engine/aggregate/ob_exec_hash_struct_vec.cpp
   engine/aggregate/ob_hash_groupby_vec_op.cpp
   engine/aggregate/ob_hash_distinct_vec_op.cpp
@@ -189,6 +345,21 @@ ob_set_subtarget(ob_sql engine_aggregate
   engine/aggregate/ob_hash_agg_variant.cpp
   engine/aggregate/ob_scalar_aggregate_vec_op.cpp
   engine/aggregate/ob_merge_groupby_vec_op.cpp
+)
+
+ob_set_subtarget(ob_sql engine_aggregate_scalar
+  engine/aggregate/rb_agg.cpp
+  engine/aggregate/single_row.cpp
+  engine/aggregate/single_row_count.cpp
+  engine/aggregate/single_row_count_sum.cpp
+  engine/aggregate/single_row_max.cpp
+  engine/aggregate/single_row_min.cpp
+  engine/aggregate/single_row_sum.cpp
+  engine/aggregate/str_prefix_max.cpp
+  engine/aggregate/sum.cpp
+  engine/aggregate/sum_opnsize.cpp
+  engine/aggregate/sys_bit.cpp
+  engine/aggregate/top_fre_hist.cpp
 )
 
 ob_set_subtarget(ob_sql engine_basic
@@ -526,7 +697,6 @@ ob_set_subtarget(ob_sql engine_expr
   engine/expr/ob_expr_vector.cpp
   engine/expr/ob_expr_vector_similarity.cpp
   engine/expr/ob_array_expr_utils.cpp
-  engine/expr/ob_array_cast.cpp
   engine/expr/ob_expr_vec_ivf_center_id.cpp
   engine/expr/ob_expr_vec_ivf_center_vector.cpp
   engine/expr/ob_expr_vec_ivf_flat_data_vector.cpp
@@ -822,6 +992,15 @@ ob_set_subtarget(ob_sql_extra ALONE
   engine/expr/vector_cast/vector_cast_compile/vector_cast_part4.cpp
   engine/expr/vector_cast/vector_cast_compile/vector_cast_part5.cpp
   engine/expr/vector_cast/vector_cast_compile/vector_cast_part6.cpp
+  engine/expr/vector_cast/vector_cast_compile/vector_cast_part7.cpp
+  engine/expr/vector_cast/vector_cast_compile/vector_cast_part8.cpp
+  engine/expr/vector_cast/vector_cast_compile/vector_cast_part9.cpp
+  engine/expr/vector_cast/vector_cast_compile/vector_cast_part10.cpp
+  engine/expr/vector_cast/vector_cast_compile/vector_cast_part11.cpp
+  engine/expr/vector_cast/vector_cast_compile/vector_cast_part12.cpp
+  engine/expr/vector_cast/vector_cast_compile/vector_cast_part13.cpp
+  engine/expr/vector_cast/vector_cast_compile/vector_cast_part14.cpp
+  engine/expr/vector_cast/vector_cast_compile/vector_cast_part15.cpp
   engine/expr/vector_cast/vector_cast_compile/vector_cast_all.cpp
   engine/expr/vector_cast/float_to_decimal_impl.cpp
   engine/expr/vector_cast/vector_cast.cpp
@@ -1001,6 +1180,7 @@ ob_set_subtarget(ob_sql monitor
   monitor/ob_phy_operator_monitor_info.cpp
   monitor/ob_phy_operator_stats.cpp
   monitor/ob_phy_plan_monitor_info.cpp
+  monitor/ob_sql_plan_monitor_node_list.cpp
   monitor/flt/ob_flt_control_info_mgr.cpp
   monitor/flt/ob_flt_extra_info.cpp
   monitor/flt/ob_flt_span_mgr.cpp
@@ -1123,6 +1303,8 @@ ob_set_subtarget(ob_sql printer
   printer/ob_raw_expr_printer.cpp
   printer/ob_select_stmt_printer.cpp
   printer/ob_update_stmt_printer.cpp
+  printer/ob_schema_printer.cpp
+  printer/ob_schema_printer_external_table.cpp
 )
 
 ob_set_subtarget(ob_sql resolver
@@ -1200,10 +1382,14 @@ ob_set_subtarget(ob_sql resolver_dcl
 )
 
 ob_set_subtarget(ob_sql resolver_ddl
+  resolver/ddl/ob_fts_index_builder_util.cpp
+  resolver/ddl/ob_vec_index_builder_util.cpp
+  resolver/ddl/ob_index_builder_util.cpp
   resolver/ddl/ob_alter_database_resolver.cpp
   resolver/ddl/ob_alter_database_stmt.cpp
   resolver/ddl/ob_alter_location_resolver.cpp
   resolver/ddl/ob_alter_outline_resolver.cpp
+  resolver/ddl/ob_alter_package_resolver.cpp
   resolver/ddl/ob_alter_routine_resolver.cpp
   resolver/ddl/ob_alter_sequence_resolver.cpp
   resolver/ddl/ob_alter_table_resolver.cpp
@@ -1404,6 +1590,8 @@ ob_set_subtarget(ob_sql session
   session/ob_user_resource_mgr.cpp
   session/ob_sess_info_verify.cpp
   session/ob_local_session_var.cpp
+  session/ob_system_variable.cpp
+  session/ob_system_variable_factory.cpp
 )
 
 ob_add_new_object_target(ob_sql ob_sql)
@@ -1414,6 +1602,7 @@ if (DETECT_RECURSION)
    PRIVATE -finstrument-functions
  )
 endif()
+
 
 ob_set_subtarget(ob_sql_simd common
   engine/basic/ob_pushdown_filter_simd.cpp

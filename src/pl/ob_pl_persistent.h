@@ -17,7 +17,7 @@
 #define OCEANBASE_PL_ROUTINE_STORAGE_H_
 
 #include "share/ob_define.h"
-#include "lib/mysqlclient/ob_isql_client.h"
+#include "common/mysqlclient/ob_isql_client.h"
 #include "ob_pl_stmt.h"
 #include "pl/ob_pl_allocator.h"
 #include "sql/resolver/expr/ob_raw_expr_util.h"

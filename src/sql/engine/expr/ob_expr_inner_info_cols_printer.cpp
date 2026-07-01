@@ -22,7 +22,7 @@
 #include "sql/engine/ob_exec_context.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "share/schema/ob_schema_struct.h"
-#include "share/schema/ob_schema_printer.h"
+#include "sql/printer/ob_schema_printer.h"
 #include "common/object/ob_obj_type.h"
 //#include "sql/engine/expr/ob_expr_promotion_util.h"
 

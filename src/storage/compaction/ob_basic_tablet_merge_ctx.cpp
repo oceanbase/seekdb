@@ -19,7 +19,7 @@
 #include "storage/compaction/ob_medium_compaction_func.h"
 #include "storage/tx_storage/ob_ls_service.h"
 #include "storage/tablet/ob_tablet_medium_info_reader.h"
-#include "share/scheduler/ob_dag_warning_history_mgr.h"
+#include "observer/scheduler/ob_dag_warning_history_mgr.h"
 #include "storage/ob_storage_schema_util.h"
 #include "storage/ob_gc_upper_trans_helper.h"
 #include "ob_medium_list_checker.h"

@@ -65,8 +65,8 @@ int ObMPUtils::add_changed_session_info(OMPKOK &ok_pkt, sql::ObSQLSessionInfo &s
         LOG_WARN("failed to check actully changed", K(ret), K(change_var), K(changed));
       } else if (changed) {
         ObStringKV str_kv;
-        share::ObBasicSysVar *sys_var_ptr = NULL;
-        if (OB_FAIL(ObSysVarFactory::get_sys_var_name_by_id(change_var.id_, str_kv.key_))) {
+        sql::ObBasicSysVar *sys_var_ptr = NULL;
+        if (OB_FAIL(share::ObSysVarMeta::get_sys_var_name_by_id(change_var.id_, str_kv.key_))) {
           LOG_WARN("failed to get sys variable name", K(ret), K(change_var));
         } else if (OB_FAIL(session.get_sys_variable(change_var.id_, sys_var_ptr))){
           LOG_WARN("failed to get sys variable", K(ret), K(change_var));
@@ -195,7 +195,7 @@ int ObMPUtils::add_cap_flag(OMPKOK &okp, sql::ObSQLSessionInfo &session)
       LOG_ERROR("sys var is NULL", K(i), "total", session.get_sys_var_count(), K(ret));
     } else if (sys_var->get_type() == SYS_VAR_OB_CAPABILITY_FLAG) {
       ObStringKV str_kv;
-      str_kv.key_ = ObSysVarFactory::get_sys_var_name_by_id(sys_var->get_type()); // shadow copy
+      str_kv.key_ = share::ObSysVarMeta::get_sys_var_name_by_id(sys_var->get_type()); // shadow copy
       if (OB_FAIL(get_plain_str_literal(allocator, sys_var->get_value(), str_kv.value_))) {
         LOG_WARN("fail to get sql literal", K(i), K(ret));
       } else if (OB_FAIL(okp.add_system_var(str_kv))) {
@@ -203,7 +203,7 @@ int ObMPUtils::add_cap_flag(OMPKOK &okp, sql::ObSQLSessionInfo &session)
       }
     } else if (sys_var->get_type() == SYS_VAR___OB_CLIENT_CAPABILITY_FLAG) {
       ObStringKV str_kv;
-      str_kv.key_ = ObSysVarFactory::get_sys_var_name_by_id(sys_var->get_type()); // shadow copy
+      str_kv.key_ = share::ObSysVarMeta::get_sys_var_name_by_id(sys_var->get_type()); // shadow copy
       if (OB_FAIL(get_plain_str_literal(allocator, sys_var->get_value(), str_kv.value_))) {
         LOG_WARN("fail to get sql literal", K(i), K(ret));
       } else if (OB_FAIL(okp.add_system_var(str_kv))) {
@@ -245,7 +245,7 @@ int ObMPUtils::add_nls_format(OMPKOK &okp, sql::ObSQLSessionInfo &session, const
             LOG_WARN("failed to check actully changed", K(ret), K(change_var), K(changed));
           } else if (changed) {
             ObStringKV str_kv;
-            str_kv.key_ = ObSysVarFactory::get_sys_var_name_by_id(change_var.id_); // shadow copy
+            str_kv.key_ = share::ObSysVarMeta::get_sys_var_name_by_id(change_var.id_); // shadow copy
             if (ObNLSFormatEnum::NLS_DATE == nls_enum) {
               str_kv.value_ = session.get_local_nls_date_format();
             } else if (ObNLSFormatEnum::NLS_TIMESTAMP == nls_enum) {
@@ -270,15 +270,15 @@ int ObMPUtils::add_nls_format(OMPKOK &okp, sql::ObSQLSessionInfo &session, const
     okp.set_state_changed(false);
 
     ObStringKV nls_date_str_kv;
-    nls_date_str_kv.key_ = ObSysVarFactory::get_sys_var_name_by_id(SYS_VAR_NLS_DATE_FORMAT); // shadow copy
+    nls_date_str_kv.key_ = share::ObSysVarMeta::get_sys_var_name_by_id(SYS_VAR_NLS_DATE_FORMAT); // shadow copy
     nls_date_str_kv.value_ = session.get_local_nls_date_format();
 
     ObStringKV nls_timestamp_str_kv;
-    nls_timestamp_str_kv.key_ = ObSysVarFactory::get_sys_var_name_by_id(SYS_VAR_NLS_TIMESTAMP_FORMAT); // shadow copy
+    nls_timestamp_str_kv.key_ = share::ObSysVarMeta::get_sys_var_name_by_id(SYS_VAR_NLS_TIMESTAMP_FORMAT); // shadow copy
     nls_timestamp_str_kv.value_ = session.get_local_nls_timestamp_format();
 
     ObStringKV nls_timestamp_tz_str_kv;
-    nls_timestamp_tz_str_kv.key_ = ObSysVarFactory::get_sys_var_name_by_id(SYS_VAR_NLS_TIMESTAMP_TZ_FORMAT); // shadow copy
+    nls_timestamp_tz_str_kv.key_ = share::ObSysVarMeta::get_sys_var_name_by_id(SYS_VAR_NLS_TIMESTAMP_TZ_FORMAT); // shadow copy
     nls_timestamp_tz_str_kv.value_ = session.get_local_nls_timestamp_tz_format();
 
     if (OB_FAIL(okp.add_system_var(nls_date_str_kv))) {
@@ -315,7 +315,7 @@ int ObMPUtils::add_session_info_on_connect(OMPKOK &okp, sql::ObSQLSessionInfo &s
       LOG_ERROR("sys var is NULL", K(i), "total", session.get_sys_var_count(), K(ret));
     } else {
       ObStringKV str_kv;
-      str_kv.key_ = ObSysVarFactory::get_sys_var_name_by_id(sys_var->get_type()); // shadow copy
+      str_kv.key_ = share::ObSysVarMeta::get_sys_var_name_by_id(sys_var->get_type()); // shadow copy
       if (OB_FAIL(sys_var->to_show_str(allocator, session, str_kv.value_))) {
         LOG_WARN("fail to get sql literal", K(i), K(ret));
       } else if (OB_FAIL(okp.add_system_var(str_kv))) {

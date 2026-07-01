@@ -30,6 +30,7 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/file/ob_file.h"
 #include "lib/file/file_directory_utils.h"
+#include "lib/charset/ob_template_helper.h"
 
 #define USING_LOG_PREFIX SQL
 

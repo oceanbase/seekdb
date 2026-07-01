@@ -16,7 +16,7 @@
 
 #ifndef OB_ALL_VIRTUAL_TABLET_COMPACTION_HISTORY_H_
 #define OB_ALL_VIRTUAL_TABLET_COMPACTION_HISTORY_H_
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "storage/compaction/ob_sstable_merge_info_mgr.h"
 #include "storage/compaction/ob_compaction_diagnose.h"
 #include "storage/compaction/ob_sstable_merge_history.h"

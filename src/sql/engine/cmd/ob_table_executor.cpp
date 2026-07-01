@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "sql/engine/cmd/ob_table_executor.h"
 #include "rootserver/ob_rs_serial_call.h"
 #include "rootserver/ob_root_service.h"
@@ -1742,7 +1743,7 @@ int ObCommentExecutor::execute(ObExecContext &ctx, ObAlterTableStmt &stmt)
       LOG_WARN("rpc proxy set comment failed", KR(ret), K(GCTX.self_addr()), K(set_comment_arg));
     } else {
       int64_t refresh_time = ObTimeUtility::current_time();
-      if (OB_FAIL(ObSchemaUtils::try_check_parallel_ddl_schema_in_sync(
+      if (OB_FAIL(ObDDLExecutorUtil::try_check_parallel_ddl_schema_in_sync(
           tctx, my_session, set_comment_res.schema_version_, false /*skip_consensus*/))) {
         LOG_WARN("fail to check paralleld ddl schema in sync", KR(ret), K(set_comment_res));
       }
@@ -1850,7 +1851,7 @@ int ObDropTableExecutor::execute(ObExecContext &ctx, ObDropTableStmt &stmt)
             LOG_WARN("rpc proxy parallel drop table failed", KR(ret), "dst", GCTX.self_addr());
           } else {
             int64_t refresh_time = ObTimeUtility::current_time();
-            if (!res.do_nothing_ && OB_FAIL(ObSchemaUtils::try_check_parallel_ddl_schema_in_sync(
+            if (!res.do_nothing_ && OB_FAIL(ObDDLExecutorUtil::try_check_parallel_ddl_schema_in_sync(
                                             ctx, my_session, res.schema_version_, false/*skip_consensus*/))) {
               LOG_WARN("fail to check paralleld ddl schema in sync", KR(ret), K(res));
             }
@@ -2034,7 +2035,7 @@ int ObTruncateTableExecutor::execute(ObExecContext &ctx, ObTruncateTableStmt &st
           } else if (!res.is_valid()) {
             ret = OB_ERR_UNEXPECTED;
             LOG_WARN("truncate invalid ddl_res", KR(ret), K(res));
-          } else if (OB_FAIL(ObSchemaUtils::try_check_parallel_ddl_schema_in_sync(
+          } else if (OB_FAIL(ObDDLExecutorUtil::try_check_parallel_ddl_schema_in_sync(
                      ctx, my_session, res.task_id_, false /*skip_consensus*/))) {
             LOG_WARN("fail to check parallel ddl schema in sync", KR(ret), K(res));
           }

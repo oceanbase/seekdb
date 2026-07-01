@@ -502,7 +502,7 @@ public:
                          bool is_cursor,
                          pl::ObPLBlockNS *secondary_namespace,
                          ObSPIPrepareResult &prepare_result,
-                         pl::ObPLAstUnit &func);
+                         pl::ObPLCompileUnitAST &func);
   static int spi_execute_with_expr_idx(pl::ObPLExecCtx *ctx,
                                        const char *ps_sql,
                                        int64_t type,
@@ -914,7 +914,7 @@ private:
 
 
   static int set_variable(pl::ObPLExecCtx *ctx,
-                          const share::ObSetVar::SetScopeType scope,
+                          const sql::ObSetVar::SetScopeType scope,
                           const ObString &name,
                           const ObObjParam &value,
                           bool is_default = false);
@@ -1274,7 +1274,7 @@ class ObPLPrepareEnvGuard
 {
 public:
  ObPLPrepareEnvGuard(ObSQLSessionInfo &session_info,
-                     pl::ObPLAstUnit &func,
+                     pl::ObPLCompileUnitAST &func,
                      int &ret);
   ~ObPLPrepareEnvGuard();
 private:

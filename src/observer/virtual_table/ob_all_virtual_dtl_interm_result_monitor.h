@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_ALL_DTL_INTERM_RESULT_MONITOR_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_ALL_DTL_INTERM_RESULT_MONITOR_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "lib/net/ob_addr.h"
 namespace oceanbase
 {

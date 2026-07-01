@@ -25,6 +25,7 @@
 #include "sql/resolver/mv/ob_outer_join_mjv_printer.h"
 #include "sql/resolver/mv/ob_union_all_mv_printer.h"
 #include "sql/rewrite/ob_transformer_impl.h"
+#include "sql/session/ob_local_session_var.h"
 
 namespace oceanbase
 {
@@ -534,9 +535,10 @@ int ObMVProvider::check_mview_dep_session_vars(const ObTableSchema &mv_schema,
   if (OB_UNLIKELY(!mv_schema.is_materialized_view())) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("unexpected table schema", K(ret), K(mv_schema));
-  } else if (OB_FAIL(mv_schema.get_local_session_var().get_different_vars_from_session(&session,
-                                                                                       local_diff_vars,
-                                                                                       cur_var_vals))) {
+  } else if (OB_FAIL(ObLocalSessionVarHelper::get_different_vars_from_session(mv_schema.get_local_session_var(),
+                                                                              &session,
+                                                                              local_diff_vars,
+                                                                              cur_var_vals))) {
     LOG_WARN("failed to check vars same with session ", K(ret), K(mv_schema.get_local_session_var()));
   } else if (local_diff_vars.empty()) {
     is_vars_matched = true;
@@ -562,11 +564,11 @@ int ObMVProvider::check_mview_dep_session_vars(const ObTableSchema &mv_schema,
       if (OB_ISNULL(sys_var = local_diff_vars.at(i))) {
         ret = OB_ERR_UNEXPECTED;
         LOG_WARN("unexpected null", K(ret), K(sys_var));
-      } else if (OB_FAIL(ObSysVarFactory::get_sys_var_name_by_id(sys_var->type_, var_name))) {
+      } else if (OB_FAIL(share::ObSysVarMeta::get_sys_var_name_by_id(sys_var->type_, var_name))) {
         LOG_WARN("get sysvar name failed", K(ret));
-      } else if (OB_FAIL(ObSessionSysVar::get_sys_var_val_str(sys_var->type_, sys_var->val_, alloc, local_var_val))) {
+      } else if (OB_FAIL(ObLocalSessionVarHelper::get_sys_var_val_str(sys_var->type_, sys_var->val_, alloc, local_var_val))) {
         LOG_WARN("failed to get sys var str", K(ret));
-      } else if (OB_FAIL(ObSessionSysVar::get_sys_var_val_str(sys_var->type_, cur_var_vals.at(i), alloc, cur_var_val))) {
+      } else if (OB_FAIL(ObLocalSessionVarHelper::get_sys_var_val_str(sys_var->type_, cur_var_vals.at(i), alloc, cur_var_val))) {
         LOG_WARN("failed to get sys var str", K(ret));
       } else {
         OPT_TRACE(i, ".", var_name, ",  old value:", local_var_val, ",  current value:", cur_var_val);

@@ -20,7 +20,8 @@
 #include "lib/utility/ob_print_utils.h"       // Print*
 #include "lib/utility/ob_unify_serialize.h"       // OB_UNIS_VERSION
 #include "share/ob_cluster_version.h"
-#include "storage/multi_data_source/buffer_ctx.h"
+#include "share/scn.h"
+namespace oceanbase { namespace storage { namespace mds { class BufferCtx; } } }
 
 namespace oceanbase
 {

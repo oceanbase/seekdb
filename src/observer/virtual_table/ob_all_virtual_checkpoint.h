@@ -17,7 +17,7 @@
 #ifndef OB_ALL_VIRTUAL_CHECKPOINT_H_
 #define OB_ALL_VIRTUAL_CHECKPOINT_H_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "storage/checkpoint/ob_checkpoint_executor.h"
 #include "storage/tx_storage/ob_ls_map.h"
 #include "observer/omt/ob_multi_tenant.h"

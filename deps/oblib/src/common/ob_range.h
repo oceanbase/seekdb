@@ -21,7 +21,6 @@
 #include "lib/utility/utility.h"
 #include "common/rowkey/ob_rowkey.h"
 #include "common/ob_string_buf.h"
-#include "share/ob_cluster_version.h"
 
 
 namespace oceanbase

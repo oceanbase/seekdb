@@ -22,9 +22,9 @@
 #include "lib/container/ob_iarray.h"
 #include "lib/string/ob_sql_string.h"
 #include "lib/string/ob_fixed_length_string.h"
+#include "observer/virtual_table/ob_virtual_table_projector.h"
 #include "lib/task/ob_timer.h"
 #include "lib/thread/ob_async_task_queue.h"
-#include "share/ob_virtual_table_projector.h"
 #include "share/ob_schema_status_proxy.h"
 #include "observer/ob_server_struct.h"
 

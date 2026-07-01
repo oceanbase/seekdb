@@ -14,15 +14,26 @@
  * limitations under the License.
  */
 
-#include "observer/omt/ob_tenant.h"            // ObTenant
-#include "src/share/ob_server_struct.h"
+#include <algorithm>
+#include <new>
+
 #include "share/ob_tenant_mgr.h"
+#include "lib/alloc/alloc_func.h"
+#include "lib/allocator/ob_malloc.h"
+#include "lib/container/ob_iarray.h"
+#include "lib/net/ob_addr.h"
+#include "lib/ob_define.h"
+#include "lib/oblog/ob_log_level.h"
+#include "lib/oblog/ob_log_print_kv.h"
+#include "lib/resource/ob_resource_mgr.h"
+#include "lib/utility/ob_mod_define.h"
+#include "rpc/ob_lock_wait_node.h"
+#include "share/config/ob_server_config.h"
+#include "share/config/ob_tenant_config_mgr.h"
+#include "share/ob_errno.h"
 
 namespace oceanbase
 {
-namespace lib
-{
-}
 
 namespace obcall
 {

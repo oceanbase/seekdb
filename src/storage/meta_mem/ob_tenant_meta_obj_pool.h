@@ -18,6 +18,8 @@
 #define OCEANBASE_STORAGE_OB_TENANT_META_OBJ_MGR_H_
 
 #include "lib/objectpool/ob_resource_pool.h"
+#include "share/config/ob_tenant_config_mgr.h"
+
 #include "share/config/ob_server_config.h"
 namespace oceanbase
 {

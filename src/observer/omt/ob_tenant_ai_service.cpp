@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SERVER_OMT
 #include "ob_tenant_ai_service.h"
-#include "share/ai_service/ob_ai_service_executor.h"
+#include "observer/ai_service/ob_ai_service_executor.h"
 #include "sql/privilege_check/ob_ai_model_priv_util.h"
 #include "sql/session/ob_sql_session_info.h"
 #include "sql/engine/ob_exec_context.h"

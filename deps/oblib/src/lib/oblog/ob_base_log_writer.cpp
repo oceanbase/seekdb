@@ -16,7 +16,7 @@
 
 #include "ob_base_log_writer.h"
 #include "lib/lock/ob_scond.h"
-#include "deps/oblib/src/lib/rc/context.h"
+#include "lib/rc/context.h"
 #include "lib/thread/ob_thread_name.h"
 
 using namespace oceanbase::lib;

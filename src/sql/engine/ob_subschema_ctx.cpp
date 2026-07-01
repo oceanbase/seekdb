@@ -16,9 +16,9 @@
 
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/ob_subschema_ctx.h"
-#include "deps/oblib/src/lib/udt/ob_udt_type.h"
-#include "deps/oblib/src/lib/udt/ob_array_utils.h"
-#include "lib/enumset/ob_enum_set_meta.h"
+#include "common/udt/ob_udt_type.h"
+#include "common/udt/ob_array_utils.h"
+#include "common/enumset/ob_enum_set_meta.h"
 #include "share/rc/ob_tenant_base.h"
 
 namespace oceanbase

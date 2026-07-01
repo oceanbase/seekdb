@@ -22,7 +22,7 @@
 #include "lib/allocator/page_arena.h"
 #include "lib/utility/ob_print_utils.h"
 #include "lib/list/ob_dlist.h"
-#include "src/share/datum/ob_datum.h"
+#include "common/datum/ob_datum.h"
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "sql/engine/basic/ob_temp_block_store.h"

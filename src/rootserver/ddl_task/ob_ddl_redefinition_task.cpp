@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_ddl_redefinition_task.h"
 #include "rootserver/ob_rs_serial_call.h"
 #include "rootserver/ddl_task/ob_sys_ddl_util.h" // for ObSysDDLSchedulerUtil
@@ -25,7 +26,7 @@
 #include "pl/sys_package/ob_dbms_stats.h"
 #include "storage/ob_partition_pre_split.h"
 #include "storage/ob_tablet_autoinc_seq_rpc_handler.h"
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
 #include "storage/mview/ob_mview_mds.h"
 #include "storage/mview/ob_mview_refresh_helper.h"
 

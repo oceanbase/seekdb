@@ -18,8 +18,8 @@
 #define OCEANBASE_SQL_OB_EXPR_ARRAY
 
 #include "sql/engine/expr/ob_expr_operator.h"
-#include "lib/geo/ob_geo_utils.h"
-#include "lib/udt/ob_array_utils.h"
+#include "share/geo/ob_geo_utils.h"
+#include "common/udt/ob_array_utils.h"
 
 
 namespace oceanbase

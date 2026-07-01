@@ -17,13 +17,15 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "share/catalog/ob_catalog_meta_getter.h"
-#include "src/share/catalog/ob_catalog_properties.h"
+#include "share/schema/ob_column_schema.h"  // ObColumnSchemaV2 complete type
+#include "share/catalog/ob_catalog_properties.h"
 
 namespace oceanbase
 {
 namespace share
 {
 
+using namespace oceanbase::share::schema;  // make the transitive using declaration explicit
 int ObCatalogMetaGetter::list_namespace_names(const uint64_t catalog_id, ObIArray<ObString> &ns_names)
 {
   int ret = OB_SUCCESS;

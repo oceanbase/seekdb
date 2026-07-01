@@ -234,8 +234,6 @@ int ObSqlTransControl::end_trans(ObSQLSessionInfo *session,
     ret = OB_INVALID_ARGUMENT;
     LOG_ERROR("invalid argument", K(ret), KPC(session));
   } else if (!is_explicit && !session->is_inner() && session->associated_xa()) {
-    // NOTE that not support dblink trans in this interface
-    // PLEASE handle implicit cases for dblink trans instead of this interface
     ret = OB_ERR_UNEXPECTED;
     LOG_ERROR("executing do end trans in xa", K(ret), K(session->get_xid()));
   } else {

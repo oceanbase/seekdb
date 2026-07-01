@@ -24,7 +24,7 @@
 #include "lib/random/ob_mysql_random.h"
 #include "lib/container/ob_iarray.h"
 
-#include "share/stat/ob_opt_stat_service.h"
+#include "sql/optimizer/stat/ob_opt_stat_service.h"
 #include "share/config/ob_config_manager.h"
 
 #include "share/tablet/ob_tablet_table_operator.h"
@@ -99,7 +99,7 @@ class ObServerOptions;
 class ObServer : public share::ObIModuleProvider
 {
 public:
-  static const int64_t DEFAULT_ETHERNET_SPEED = 10000 / 8 * 1024 * 1024; // change from default 1250m/s  10000Mbit to 1250MBps 10000Mbit
+  static const int64_t DEFAULT_ETHERNET_SPEED = common::OB_DEFAULT_ETHERNET_SPEED; // single source of truthin share/io/ob_io_define.h
   static const int64_t DISK_USAGE_REPORT_INTERVAL = 1000L * 1000L * 60L; // 1min
   static const uint64_t DEFAULT_CPU_FREQUENCY = 2500 * 1000; // 2500 * 1000 khz
   static ObServer &get_instance();
@@ -437,6 +437,8 @@ public:
   compaction::ObCompactionSuggestionMgr * compaction_suggestion_mgr() override { return mods_compaction_suggestion_mgr_; }
   compaction::ObDiagnoseTabletMgr * diagnose_tablet_mgr() override { return mods_diagnose_tablet_mgr_; }
   storage::ObLobManager * lob_manager() override { return mods_lob_manager_; }
+  common::ObILobReadService * lob_read_service() override;
+  int get_lower_bound_freeze_info(const int64_t snapshot_version, share::ObFreezeInfo &freeze_info) override;
   share::ObGlobalAutoIncService * global_auto_inc_service() override { return mods_global_auto_inc_service_; }
   share::detector::ObDeadLockDetectorMgr * dead_lock_detector_mgr() override { return mods_dead_lock_detector_mgr_; }
   transaction::ObTimestampService * timestamp_service() override { return mods_timestamp_service_; }

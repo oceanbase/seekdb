@@ -19,7 +19,7 @@
 
 #include "lib/allocator/page_arena.h"
 #include "lib/list/ob_dlist.h"
-#include "lib/mysqlclient/ob_isql_connection_pool.h"
+#include "common/mysqlclient/ob_isql_connection_pool.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "ob_inner_sql_connection.h"
 

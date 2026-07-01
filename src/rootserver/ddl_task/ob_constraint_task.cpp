@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX RS
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_constraint_task.h"
 #include "rootserver/ob_rs_serial_call.h"
 #include "share/ob_ddl_error_message_table_operator.h"

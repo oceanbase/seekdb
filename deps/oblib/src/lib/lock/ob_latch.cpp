@@ -15,8 +15,7 @@
  */
 
 #include "lib/lock/ob_latch.h"
-#include "share/rc/ob_tenant_base.h"
-#include "deps/oblib/src/lib/rc/context.h"
+#include "lib/rc/context.h"
 
 namespace oceanbase
 {

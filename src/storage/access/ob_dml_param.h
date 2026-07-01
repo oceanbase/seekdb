@@ -21,7 +21,7 @@
 #include "lib/container/ob_iarray.h"
 #include "common/ob_common_types.h"
 #include "storage/meta_mem/ob_tablet_handle.h"
-#include "share/datum/ob_datum.h"
+#include "common/datum/ob_datum.h"
 #include "sql/engine/basic/ob_pushdown_filter.h"
 #include "storage/tx/ob_trans_define_v4.h"
 

@@ -18,7 +18,7 @@
 #define OCEANBASE_ROOTSERVER_OB_DDL_REDEFINITION_TASK_H
 
 #include "rootserver/ddl_task/ob_ddl_task.h"
-#include "share/stat/ob_opt_stat_manager.h"
+#include "sql/optimizer/stat/ob_opt_stat_manager.h"
 
 namespace oceanbase
 {

@@ -19,7 +19,7 @@
  
  
 #include "sql/ob_sql_define.h"
-#include "lib/json_type/ob_json_base.h"
+#include "common/json_type/ob_json_base.h"
 #include "sql/privilege_check/ob_ai_model_priv_util.h"
 
 namespace oceanbase

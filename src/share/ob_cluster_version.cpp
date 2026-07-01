@@ -15,6 +15,7 @@
  */
 
 #include "ob_cluster_version.h"
+#include "share/config/ob_tenant_config_mgr.h"
 namespace oceanbase
 {
 namespace common

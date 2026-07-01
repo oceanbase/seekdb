@@ -19,10 +19,10 @@
 
 #include "sql/das/iter/ob_das_iter.h"
 #include "sql/das/iter/ob_das_scan_iter.h"
-#include "src/share/vector_index/ob_plugin_vector_index_service.h"
+#include "observer/vector_index/ob_plugin_vector_index_service.h"
 #include "sql/engine/expr/ob_expr_vector.h"
 #include "sql/das/iter/ob_das_vec_scan_utils.h"
-#include "src/share/vector_index/ob_vector_index_util.h"
+#include "observer/vector_index/ob_vector_index_util.h"
 
 namespace oceanbase
 {

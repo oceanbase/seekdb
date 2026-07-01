@@ -15,7 +15,7 @@
  */
 #pragma once
 
-#include "share/ob_order_perserving_encoder.h"
+#include "storage/ob_order_perserving_encoder.h"
 #include "share/table/ob_table_load_define.h"
 #include "sql/engine/basic/ob_chunk_datum_store.h"
 #include "storage/direct_load/ob_direct_load_external_row.h"

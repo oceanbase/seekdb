@@ -42,6 +42,7 @@ namespace rpc
 {
 class ObRequest;
 }
+namespace share { class ObResourcePlanManager; }
 namespace omt
 {
 
@@ -51,6 +52,9 @@ class ObTenantHandle;
 class ObTenantMeta;
 
 // This is the entry class of OMT module.
+// moved from share::ObResourcePlanManager and demoted(observer-bound)
+int refresh_global_background_cpu(share::ObResourcePlanManager &mgr);
+
 class ObMultiTenant : public common::ObTimerTask
 {
 public:

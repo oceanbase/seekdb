@@ -244,4 +244,13 @@ private:
 
 } // end namespace logservice
 } // end namespace oceanbase
+namespace oceanbase
+{
+namespace logservice
+{
+// demoted from share::ObShareUtil(checks whether the clog disk is full or hung, through MTL ObLogService)
+int check_clog_disk_full_or_hang(bool &clog_disk_is_full, bool &clog_disk_is_hang);
+}
+}
+
 #endif // OCEANBASE_LOGSERVICE_OB_LOG_SERVICE_

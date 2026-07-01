@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SERVER
 
 #include "observer/virtual_table/ob_tenant_virtual_outline.h"
+#include "sql/ob_sql_utils.h"
 #include "share/schema/ob_schema_getter_guard.h"
 namespace oceanbase
 {
@@ -228,7 +229,7 @@ int ObTenantVirtualOutline::fill_cells(const ObOutlineInfo *outline_info)
             cells[cell_idx].set_lob_value(ObLongTextType, "", 0);
             cells[cell_idx].set_collation_type(
                 ObCharset::get_default_collation(ObCharset::get_default_charset()));
-          } else if (OB_FAIL(outline_info->get_outline_sql(*allocator_, *session_, outline_sql))) {
+          } else if (OB_FAIL(ObSQLUtils::get_outline_sql(*outline_info, *allocator_, *session_, outline_sql))) {
             LOG_WARN("fail to get outline_sql", K(ret));
           } else {
             cells[cell_idx].set_lob_value(ObLongTextType, outline_sql.ptr(),

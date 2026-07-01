@@ -56,8 +56,8 @@ public:
                                    const ObSqlString &subquery_expr,
                                    common::ObObj &value_obj);
   static int check_and_convert_sys_var(ObExecContext &ctx,
-                                       const share::ObSetVar &set_var,
-                                       share::ObBasicSysVar &sys_var,
+                                       const sql::ObSetVar &set_var,
+                                       sql::ObBasicSysVar &sys_var,
                                        const common::ObObj &in_val,
                                        common::ObObj &out_val,
                                        bool is_set_stmt);
@@ -70,7 +70,7 @@ public:
   static int cast_value(ObExecContext &ctx,
                         const ObVariableSetStmt::VariableSetNode &var_node,
                         common::ObIAllocator &calc_buf,
-                        const share::ObBasicSysVar &sys_val,
+                        const sql::ObBasicSysVar &sys_val,
                         const common::ObObj &in_val,
                         common::ObObj &out_val);
   static int switch_to_session_variable(const common::ObExprCtx &expr_ctx,
@@ -112,7 +112,7 @@ private:
 
   int update_global_variables(ObExecContext &ctx,
                               ObDDLStmt &stmt,
-                              const share::ObSetVar &set_var,
+                              const sql::ObSetVar &set_var,
                               const common::ObObj &value_obj);
   int global_variable_timezone_formalize(ObExecContext &ctx, ObObj &val);
   int process_validate_password_hook(ObValidatePasswordCtx &ctx,
@@ -123,7 +123,7 @@ private:
                                     common::ObIAllocator &calc_buf,
                                     common::ObMySQLProxy &sql_proxy,
                                     const ObValidatePasswordCtx &password_ctx);
-  int is_support(const share::ObSetVar &set_var);
+  int is_support(const sql::ObSetVar &set_var);
   int do_set_names(ObExecContext &ctx, ObSetNamesStmt &stmt);
 private:
   DISALLOW_COPY_AND_ASSIGN(ObVariableSetExecutor);

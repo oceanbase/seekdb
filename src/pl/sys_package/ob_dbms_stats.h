@@ -17,13 +17,13 @@
 #ifndef OB_DBMS_STAT_H
 #define OB_DBMS_STAT_H
 
-#include "share/stat/ob_stat_define.h"
+#include "sql/optimizer/stat/ob_stat_define.h"
 #include "share/schema/ob_schema_struct.h"
 #include "sql/engine/ob_exec_context.h"
 #include "pl/ob_pl_type.h"
-#include "share/stat/ob_dbms_stats_preferences.h"
-#include "share/stat/ob_opt_stat_gather_stat.h"
-#include "share/stat/ob_dbms_stats_copy_table_stats.h"
+#include "sql/optimizer/stat/ob_dbms_stats_preferences.h"
+#include "sql/optimizer/stat/ob_opt_stat_gather_stat.h"
+#include "sql/optimizer/stat/ob_dbms_stats_copy_table_stats.h"
 
 namespace oceanbase
 {

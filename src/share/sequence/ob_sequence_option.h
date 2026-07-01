@@ -18,7 +18,7 @@
 #define __OB_SHARE_SEQUENCE_OB_SEQUENCE_OPTION_H__
 
 #include "lib/container/ob_bit_set.h"
-#include "lib/number/ob_number_v2.h"
+#include "common/number/ob_number_v2.h"
 
 namespace oceanbase
 {

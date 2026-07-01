@@ -18,7 +18,7 @@
 #define OCEANBASE_SHARE_SCHEMA_OB_SEQUENCE_SQL_SERVICE_H_
 
 #include "ob_ddl_sql_service.h"
-#include "lib/number/ob_number_v2.h"
+#include "common/number/ob_number_v2.h"
 #include "share/ob_rpc_struct.h"
 
 using namespace oceanbase::common::number;

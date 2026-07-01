@@ -19,13 +19,40 @@
 #include "ob_datum_funcs.h"
 #include "ob_datum_cmp_func_def.h"
 #include "common/object/ob_obj_funcs.h"
-#include "sql/engine/ob_serializable_function.h"
-#include "sql/engine/ob_bit_vector.h"
 #include "share/ob_cluster_version.h"
 #include "ob_datum_funcs_impl.h"
-#include "share/vector/expr_cmp_func.h"
+#include "share/vector/ob_vector_cmp_func_basic.h"
 
 namespace oceanbase {
+namespace common {
+namespace serialization {
+
+inline int64_t encoded_length(sql::serializable_function func)
+{
+  return encoded_length(reinterpret_cast<uint64_t>(func));
+}
+
+inline int encode(char *buf, const int64_t buf_len, int64_t &pos,
+                  sql::serializable_function func)
+{
+  return encode(buf, buf_len, pos, reinterpret_cast<uint64_t>(func));
+}
+
+inline int decode(const char *buf, const int64_t data_len, int64_t &pos,
+                  sql::serializable_function &func)
+{
+  int ret = OB_SUCCESS;
+  uint64_t ptr = 0;
+  ret = decode(buf, data_len, pos, ptr);
+  if (OB_SUCC(ret)) {
+    func = reinterpret_cast<sql::serializable_function>(ptr);
+  }
+  return ret;
+}
+
+} // end namespace serialization
+} // end namespace common
+
 using namespace sql;
 namespace common {
 
@@ -223,10 +250,9 @@ ObExprBasicFuncs* ObDatumFuncs::get_basic_func(const ObObjType type,
       // set row cmp funcs
       // FIXME: add precision here
     }
-    sql::ObDatumMeta meta(type, cs_type, scale, precision);
     NullSafeRowCmpFunc null_first_cmp = nullptr, null_last_cmp = nullptr;
-    // for inner enum, cmp function is null
-    VectorCmpExprFuncsHelper::get_cmp_set(meta, meta, null_first_cmp, null_last_cmp);
+    // for inner enum, cmp function is null(through pure forwarding,avoids depending on sql headers)
+    common::ob_vector_cmp_get_cmp_set(type, cs_type, scale, precision, null_first_cmp, null_last_cmp);
     res->row_null_first_cmp_ = null_first_cmp;
     res->row_null_last_cmp_ = null_last_cmp;
   } else {
@@ -278,263 +304,4 @@ OB_SERIALIZE_MEMBER(ObHashFunc, ser_hash_func_, ser_batch_hash_func_);
 } // end namespace common
 
 
-// register function serialization
-using namespace common;
-namespace sql
-{
-// NULLSAFE_TYPE_CMP_FUNCS is two dimension array, need to convert to index stable array first.
-static void *g_ser_type_cmp_funcs[ObMaxType][ObMaxType][2];
-static_assert(ObMaxType * ObMaxType * 2 == sizeof(NULLSAFE_TYPE_CMP_FUNCS) / sizeof(void *),
-              "unexpected size");
-bool g_ser_type_cmp_funcs_init = ObFuncSerialization::convert_NxN_array(
-    reinterpret_cast<void **>(g_ser_type_cmp_funcs),
-    reinterpret_cast<void **>(NULLSAFE_TYPE_CMP_FUNCS),
-    ObMaxType,
-    2,
-    0,
-    2);
-
-REG_SER_FUNC_ARRAY(OB_SFA_DATUM_NULLSAFE_CMP,
-                   g_ser_type_cmp_funcs,
-                   sizeof(g_ser_type_cmp_funcs) / sizeof(void *));
-
-static_assert(CS_TYPE_MAX * 2 * 2 == sizeof(NULLSAFE_STR_CMP_FUNCS) / sizeof(void *),
-              "unexpected size");
-REG_SER_FUNC_ARRAY(OB_SFA_DATUM_NULLSAFE_STR_CMP,
-                   NULLSAFE_STR_CMP_FUNCS,
-                   sizeof(NULLSAFE_STR_CMP_FUNCS) / sizeof(void*));
-
-static_assert(CS_TYPE_MAX * 2 * 2 == sizeof(NULLSAFE_TEXT_CMP_FUNCS) / sizeof(void *),
-              "unexpected size");
-REG_SER_FUNC_ARRAY(OB_SFA_DATUM_NULLSAFE_TEXT_CMP,
-                   NULLSAFE_TEXT_CMP_FUNCS,
-                   sizeof(NULLSAFE_TEXT_CMP_FUNCS) / sizeof(void*));
-
-static_assert(CS_TYPE_MAX * 2 * 2 == sizeof(NULLSAFE_TEXT_STR_CMP_FUNCS) / sizeof(void *),
-              "unexpected size");
-REG_SER_FUNC_ARRAY(OB_SFA_DATUM_NULLSAFE_TEXT_STR_CMP,
-                   NULLSAFE_TEXT_STR_CMP_FUNCS,
-                   sizeof(NULLSAFE_TEXT_STR_CMP_FUNCS) / sizeof(void*));
-
-static_assert(CS_TYPE_MAX * 2 * 2 == sizeof(NULLSAFE_STR_TEXT_CMP_FUNCS) / sizeof(void *),
-              "unexpected size");
-REG_SER_FUNC_ARRAY(OB_SFA_DATUM_NULLSAFE_STR_TEXT_CMP,
-                   NULLSAFE_STR_TEXT_CMP_FUNCS,
-                   sizeof(NULLSAFE_STR_TEXT_CMP_FUNCS) / sizeof(void*));
-
-static_assert(2 * 2 == sizeof(NULLSAFE_JSON_CMP_FUNCS) / sizeof(void *),
-              "unexpected size");
-REG_SER_FUNC_ARRAY(OB_SFA_DATUM_NULLSAFE_JSON_CMP,
-                   NULLSAFE_JSON_CMP_FUNCS,
-                   sizeof(NULLSAFE_JSON_CMP_FUNCS) / sizeof(void*));
-
-static_assert(2 * 2 == sizeof(NULLSAFE_GEO_CMP_FUNCS) / sizeof(void *),
-              "unexpected size");
-REG_SER_FUNC_ARRAY(OB_SFA_DATUM_NULLSAFE_GEO_CMP,
-                   NULLSAFE_GEO_CMP_FUNCS,
-                   sizeof(NULLSAFE_GEO_CMP_FUNCS) / sizeof(void*));
-
-static_assert(2 * 2 == sizeof(NULLSAFE_COLLECTION_CMP_FUNCS) / sizeof(void *),
-              "unexpected size");
-REG_SER_FUNC_ARRAY(OB_SFA_DATUM_NULLSAFE_COLLECTION_CMP,
-                   NULLSAFE_COLLECTION_CMP_FUNCS,
-                   sizeof(NULLSAFE_COLLECTION_CMP_FUNCS) / sizeof(void*));
-static_assert(2 * 2 == sizeof(NULLSAFE_ROARINGBITMAP_CMP_FUNCS) / sizeof(void *),
-              "unexpected size");
-REG_SER_FUNC_ARRAY(OB_SFA_DATUM_NULLSAFE_ROARINGBITMAP_CMP,
-                   NULLSAFE_ROARINGBITMAP_CMP_FUNCS,
-                   sizeof(NULLSAFE_ROARINGBITMAP_CMP_FUNCS) / sizeof(void*));
-
-static_assert(OB_NOT_FIXED_SCALE * 2 == sizeof(FIXED_DOUBLE_CMP_FUNCS) / sizeof(void *),
-              "unexpected size");
-REG_SER_FUNC_ARRAY(OB_SFA_FIXED_DOUBLE_NULLSAFE_CMP,
-                   FIXED_DOUBLE_CMP_FUNCS,
-                   sizeof(FIXED_DOUBLE_CMP_FUNCS) / sizeof(void *));
-
-static_assert(DECIMAL_INT_MAX * DECIMAL_INT_MAX * 2 == sizeof(DECINT_CMP_FUNCS) / sizeof(void *),
-              "unexpected size");
-
-REG_SER_FUNC_ARRAY(OB_SFA_DECIMAL_INT_NULLSAFE_CMP, DECINT_CMP_FUNCS,
-                   sizeof(DECINT_CMP_FUNCS) / sizeof(void *));
-
-// When new function add to ObExprBasicFuncs, EXPR_BASIC_FUNCS should split into
-// multi arrays for register.
-struct ExprBasicFuncSerPart1
-{
-  void from(ObExprBasicFuncs &funcs)
-  {
-    funcs_[0] = reinterpret_cast<void *>(funcs.default_hash_);
-    funcs_[1] = reinterpret_cast<void *>(funcs.murmur_hash_);
-    funcs_[2] = reinterpret_cast<void *>(funcs.xx_hash_);
-    funcs_[3] = reinterpret_cast<void *>(funcs.wy_hash_);
-    funcs_[4] = reinterpret_cast<void *>(funcs.null_first_cmp_);
-    funcs_[5] = reinterpret_cast<void *>(funcs.null_last_cmp_);
-
-  }
-
-  void *funcs_[6];
-};
-struct ExprBasicFuncSerPart2
-{
-  void *funcs_[6];
-  void from(ObExprBasicFuncs &funcs)
-  {
-    funcs_[0] = reinterpret_cast<void *>(funcs.default_hash_batch_);
-    funcs_[1] = reinterpret_cast<void *>(funcs.murmur_hash_batch_);
-    funcs_[2] = reinterpret_cast<void *>(funcs.xx_hash_batch_);
-    funcs_[3] = reinterpret_cast<void *>(funcs.wy_hash_batch_);
-    funcs_[4] = reinterpret_cast<void *>(funcs.murmur_hash_v2_);
-    funcs_[5] = reinterpret_cast<void *>(funcs.murmur_hash_v2_batch_);
-  }
-};
-
-static ExprBasicFuncSerPart1 EXPR_BASIC_FUNCS_PART1[ObMaxType];
-static ExprBasicFuncSerPart2 EXPR_BASIC_FUNCS_PART2[ObMaxType];
-static ExprBasicFuncSerPart1 EXPR_BASIC_STR_FUNCS_PART1[CS_TYPE_MAX][2][2];
-static ExprBasicFuncSerPart2 EXPR_BASIC_STR_FUNCS_PART2[CS_TYPE_MAX][2][2];
-static ExprBasicFuncSerPart1 EXPR_BASIC_JSON_FUNCS_PART1[2];
-static ExprBasicFuncSerPart2 EXPR_BASIC_JSON_FUNCS_PART2[2];
-static ExprBasicFuncSerPart1 EXPR_BASIC_GEO_FUNCS_PART1[2];
-static ExprBasicFuncSerPart2 EXPR_BASIC_GEO_FUNCS_PART2[2];
-static ExprBasicFuncSerPart1 EXPR_BASIC_FIXED_DOUBLE_FUNCS_PART1[OB_NOT_FIXED_SCALE];
-static ExprBasicFuncSerPart2 EXPR_BASIC_FIXED_DOUBLE_FUNCS_PART2[OB_NOT_FIXED_SCALE];
-static ExprBasicFuncSerPart1 EXPR_BASIC_DECINT_FUNCS_PART1[DECIMAL_INT_MAX];
-static ExprBasicFuncSerPart2 EXPR_BASIC_DECINT_FUNCS_PART2[DECIMAL_INT_MAX];
-
-static ExprBasicFuncSerPart1 EXPR_BASIC_UDT_FUNCS_PART1[1];
-static ExprBasicFuncSerPart2 EXPR_BASIC_UDT_FUNCS_PART2[1];
-static ExprBasicFuncSerPart1 EXPR_BASIC_COLLECTION_FUNCS_PART1[2];
-static ExprBasicFuncSerPart2 EXPR_BASIC_COLLECTION_FUNCS_PART2[2];
-
-static ExprBasicFuncSerPart1 EXPR_BASIC_ROARINGBITMAP_FUNCS_PART1[2];
-static ExprBasicFuncSerPart2 EXPR_BASIC_ROARINGBITMAP_FUNCS_PART2[2];
-bool split_basic_func_for_ser(void)
-{
-  for (int64_t i = 0; i < sizeof(EXPR_BASIC_FUNCS)/sizeof(ObExprBasicFuncs); i++) {
-    EXPR_BASIC_FUNCS_PART1[i].from(EXPR_BASIC_FUNCS[i]);
-    EXPR_BASIC_FUNCS_PART2[i].from(EXPR_BASIC_FUNCS[i]);
-  }
-  for (int64_t i = 0; i < sizeof(EXPR_BASIC_STR_FUNCS)/sizeof(ObExprBasicFuncs); i++) {
-    reinterpret_cast<ExprBasicFuncSerPart1 *>(EXPR_BASIC_STR_FUNCS_PART1)[i].from(
-        reinterpret_cast<ObExprBasicFuncs *>(EXPR_BASIC_STR_FUNCS)[i]);
-    reinterpret_cast<ExprBasicFuncSerPart2 *>(EXPR_BASIC_STR_FUNCS_PART2)[i].from(
-        reinterpret_cast<ObExprBasicFuncs *>(EXPR_BASIC_STR_FUNCS)[i]);
-  }
-  for (int64_t i = 0; i < sizeof(EXPR_BASIC_JSON_FUNCS)/sizeof(ObExprBasicFuncs); i++) {
-    EXPR_BASIC_JSON_FUNCS_PART1[i].from(EXPR_BASIC_JSON_FUNCS[i]);
-    EXPR_BASIC_JSON_FUNCS_PART2[i].from(EXPR_BASIC_JSON_FUNCS[i]);
-  }
-  for (int64_t i = 0; i < sizeof(EXPR_BASIC_GEO_FUNCS)/sizeof(ObExprBasicFuncs); i++) {
-    EXPR_BASIC_GEO_FUNCS_PART1[i].from(EXPR_BASIC_GEO_FUNCS[i]);
-    EXPR_BASIC_GEO_FUNCS_PART2[i].from(EXPR_BASIC_GEO_FUNCS[i]);
-  }
-  for (int64_t i = 0; i < sizeof(FIXED_DOUBLE_BASIC_FUNCS)/sizeof(ObExprBasicFuncs); i++) {
-    EXPR_BASIC_FIXED_DOUBLE_FUNCS_PART1[i].from(FIXED_DOUBLE_BASIC_FUNCS[i]);
-    EXPR_BASIC_FIXED_DOUBLE_FUNCS_PART2[i].from(FIXED_DOUBLE_BASIC_FUNCS[i]);
-  }
-
-  for (int64_t i = 0; i < sizeof(DECINT_BASIC_FUNCS)/sizeof(ObExprBasicFuncs); i++) {
-    EXPR_BASIC_DECINT_FUNCS_PART1[i].from(DECINT_BASIC_FUNCS[i]);
-    EXPR_BASIC_DECINT_FUNCS_PART2[i].from(DECINT_BASIC_FUNCS[i]);
-  }
-  for (int64_t i = 0; i < sizeof(EXPR_BASIC_UDT_FUNCS)/sizeof(ObExprBasicFuncs); i++) {
-    EXPR_BASIC_UDT_FUNCS_PART1[i].from(EXPR_BASIC_UDT_FUNCS[i]);
-    EXPR_BASIC_UDT_FUNCS_PART2[i].from(EXPR_BASIC_UDT_FUNCS[i]);
-  }
-  for (int64_t i = 0; i < sizeof(EXPR_BASIC_COLLECTION_FUNCS)/sizeof(ObExprBasicFuncs); i++) {
-    EXPR_BASIC_COLLECTION_FUNCS_PART1[i].from(EXPR_BASIC_COLLECTION_FUNCS[i]);
-    EXPR_BASIC_COLLECTION_FUNCS_PART2[i].from(EXPR_BASIC_COLLECTION_FUNCS[i]);
-  }
-  for (int64_t i = 0; i < sizeof(EXPR_BASIC_ROARINGBITMAP_FUNCS)/sizeof(ObExprBasicFuncs); i++) {
-    EXPR_BASIC_ROARINGBITMAP_FUNCS_PART1[i].from(EXPR_BASIC_ROARINGBITMAP_FUNCS[i]);
-    EXPR_BASIC_ROARINGBITMAP_FUNCS_PART2[i].from(EXPR_BASIC_ROARINGBITMAP_FUNCS[i]);
-  } 
-  return true;
-}
-bool g_split_basic_func_for_ser = split_basic_func_for_ser();
-
-static const int EXPR_BASIC_FUNC_MEMBER_CNT  = sizeof(ObExprBasicFuncs) / sizeof(void *);
-
-static_assert(ObMaxType * EXPR_BASIC_FUNC_MEMBER_CNT == sizeof(EXPR_BASIC_FUNCS) / sizeof(void *),
-              "unexpected size");
-REG_SER_FUNC_ARRAY(OB_SFA_EXPR_BASIC_PART1,
-                   EXPR_BASIC_FUNCS_PART1,
-                   sizeof(EXPR_BASIC_FUNCS_PART1) / sizeof(void *));
-
-REG_SER_FUNC_ARRAY(OB_SFA_EXPR_BASIC_PART2,
-                   EXPR_BASIC_FUNCS_PART2,
-                   sizeof(EXPR_BASIC_FUNCS_PART2) / sizeof(void *));
-
-static_assert(CS_TYPE_MAX * 2 * 2 * EXPR_BASIC_FUNC_MEMBER_CNT
-                == sizeof(EXPR_BASIC_STR_FUNCS) / sizeof(void *),
-              "unexpected size");
-REG_SER_FUNC_ARRAY(OB_SFA_EXPR_STR_BASIC_PART1,
-                   EXPR_BASIC_STR_FUNCS_PART1,
-                   sizeof(EXPR_BASIC_STR_FUNCS_PART1) / sizeof(void *));
-REG_SER_FUNC_ARRAY(OB_SFA_EXPR_STR_BASIC_PART2,
-                   EXPR_BASIC_STR_FUNCS_PART2,
-                   sizeof(EXPR_BASIC_STR_FUNCS_PART2) / sizeof(void *));
-
-static_assert(2 * EXPR_BASIC_FUNC_MEMBER_CNT == sizeof(EXPR_BASIC_JSON_FUNCS) / sizeof(void *),
-              "unexpected size");
-REG_SER_FUNC_ARRAY(OB_SFA_EXPR_JSON_BASIC_PART1,
-                   EXPR_BASIC_JSON_FUNCS_PART1,
-                   sizeof(EXPR_BASIC_JSON_FUNCS_PART1) / sizeof(void *));
-REG_SER_FUNC_ARRAY(OB_SFA_EXPR_JSON_BASIC_PART2,
-                   EXPR_BASIC_JSON_FUNCS_PART2,
-                   sizeof(EXPR_BASIC_JSON_FUNCS_PART2) / sizeof(void *));
-
-static_assert(2 * EXPR_BASIC_FUNC_MEMBER_CNT == sizeof(EXPR_BASIC_GEO_FUNCS) / sizeof(void *),
-              "unexpected size");
-REG_SER_FUNC_ARRAY(OB_SFA_EXPR_GEO_BASIC_PART1,
-                   EXPR_BASIC_GEO_FUNCS_PART1,
-                   sizeof(EXPR_BASIC_GEO_FUNCS_PART1) / sizeof(void *));
-REG_SER_FUNC_ARRAY(OB_SFA_EXPR_GEO_BASIC_PART2,
-                   EXPR_BASIC_GEO_FUNCS_PART2,
-                   sizeof(EXPR_BASIC_GEO_FUNCS_PART2) / sizeof(void *));
-
-static_assert(OB_NOT_FIXED_SCALE * EXPR_BASIC_FUNC_MEMBER_CNT
-                == sizeof(FIXED_DOUBLE_BASIC_FUNCS) / sizeof(void *),
-              "unexpected size");
-REG_SER_FUNC_ARRAY(OB_SFA_FIXED_DOUBLE_BASIC_PART1,
-                   EXPR_BASIC_FIXED_DOUBLE_FUNCS_PART1,
-                   sizeof(EXPR_BASIC_FIXED_DOUBLE_FUNCS_PART1) / sizeof(void *));
-REG_SER_FUNC_ARRAY(OB_SFA_FIXED_DOUBLE_BASIC_PART2,
-                   EXPR_BASIC_FIXED_DOUBLE_FUNCS_PART2,
-                   sizeof(EXPR_BASIC_FIXED_DOUBLE_FUNCS_PART2) / sizeof(void *));
-
-
-REG_SER_FUNC_ARRAY(OB_SFA_DECIMAL_INT_BASIC_PART1, EXPR_BASIC_DECINT_FUNCS_PART1,
-                   sizeof(EXPR_BASIC_DECINT_FUNCS_PART1) / sizeof(void *));
-
-REG_SER_FUNC_ARRAY(OB_SFA_DECIMAL_INT_BASIC_PART2, EXPR_BASIC_DECINT_FUNCS_PART2,
-                   sizeof(EXPR_BASIC_DECINT_FUNCS_PART2) / sizeof(void *));
-
-static_assert(1 * EXPR_BASIC_FUNC_MEMBER_CNT == sizeof(EXPR_BASIC_UDT_FUNCS) / sizeof(void *),
-              "unexpected size");
-REG_SER_FUNC_ARRAY(OB_SFA_EXPR_UDT_BASIC_PART1,
-                   EXPR_BASIC_UDT_FUNCS_PART1,
-                   sizeof(EXPR_BASIC_UDT_FUNCS_PART1) / sizeof(void *));
-REG_SER_FUNC_ARRAY(OB_SFA_EXPR_UDT_BASIC_PART2,
-                   EXPR_BASIC_UDT_FUNCS_PART2,
-                   sizeof(EXPR_BASIC_UDT_FUNCS_PART2) / sizeof(void *));
-
-static_assert(2 * EXPR_BASIC_FUNC_MEMBER_CNT == sizeof(EXPR_BASIC_COLLECTION_FUNCS) / sizeof(void *),
-              "unexpected size");
-REG_SER_FUNC_ARRAY(OB_SFA_EXPR_COLLECTION_BASIC_PART1,
-                   EXPR_BASIC_COLLECTION_FUNCS_PART1,
-                   sizeof(EXPR_BASIC_COLLECTION_FUNCS_PART1) / sizeof(void *));
-REG_SER_FUNC_ARRAY(OB_SFA_EXPR_COLLECTION_BASIC_PART2,
-                   EXPR_BASIC_COLLECTION_FUNCS_PART2,
-                   sizeof(EXPR_BASIC_COLLECTION_FUNCS_PART2) / sizeof(void *));
-static_assert(2 * EXPR_BASIC_FUNC_MEMBER_CNT == sizeof(EXPR_BASIC_ROARINGBITMAP_FUNCS) / sizeof(void *),
-              "unexpected size");
-REG_SER_FUNC_ARRAY(OB_SFA_EXPR_ROARINGBITMAP_BASIC_PART1,
-                   EXPR_BASIC_ROARINGBITMAP_FUNCS_PART1,
-                   sizeof(EXPR_BASIC_ROARINGBITMAP_FUNCS_PART1) / sizeof(void *));
-REG_SER_FUNC_ARRAY(OB_SFA_EXPR_ROARINGBITMAP_BASIC_PART2,
-                   EXPR_BASIC_ROARINGBITMAP_FUNCS_PART2,
-                   sizeof(EXPR_BASIC_ROARINGBITMAP_FUNCS_PART2) / sizeof(void *));
-
-} // end namespace sql
 } // end namespace oceanbase

@@ -1769,18 +1769,6 @@ static ObExpr::EvalVectorFunc g_expr_eval_vector_functions[] = {
   NULL, // ObExprAIRerank::eval_ai_rerank_vector,                        /* 229 */
 };
 
-REG_SER_FUNC_ARRAY(OB_SFA_SQL_EXPR_EVAL,
-                   g_expr_eval_functions,
-                   ARRAYSIZEOF(g_expr_eval_functions));
-
-REG_SER_FUNC_ARRAY(OB_SFA_SQL_EXPR_EVAL_BATCH,
-                   g_expr_eval_batch_functions,
-                   ARRAYSIZEOF(g_expr_eval_batch_functions));
-
-REG_SER_FUNC_ARRAY(OB_SFA_SQL_EXPR_EVAL_VECTOR,
-                   g_expr_eval_vector_functions,
-                   ARRAYSIZEOF(g_expr_eval_vector_functions));
-
 static ObExpr::EvalFunc g_decimal_int_eval_functions[] = {
   ObExprAdd::add_decimalint32,
   ObExprAdd::add_decimalint64,
@@ -2000,14 +1988,6 @@ static ObExpr::EvalBatchFunc g_decimal_int_eval_batch_functions[] = {
   ObExprDiv::decint_div_mysql_batch_fn<int512_t, int512_t>,
 };
 
-REG_SER_FUNC_ARRAY(OB_SFA_DECIMAL_INT_EXPR_EVAL,
-                   g_decimal_int_eval_functions,
-                   ARRAYSIZEOF(g_decimal_int_eval_functions));
-
-REG_SER_FUNC_ARRAY(OB_SFA_DECIMAL_INT_EXPR_EVAL_BATCH,
-                   g_decimal_int_eval_batch_functions,
-                   ARRAYSIZEOF(g_decimal_int_eval_batch_functions));
-
 static ObExpr::EvalFunc g_collection_eval_functions[] = {
   ObExprAdd::add_collection_collection_int8_t,
   ObExprAdd::add_collection_collection_int16_t,
@@ -2058,18 +2038,6 @@ static ObExpr::EvalVectorFunc g_collection_expr_eval_vector_functions[] = {
   ObExprAdd::add_collection_collection_uint64_t_vector,
   ObExprMinus::minus_collection_collection_uint64_t_vector,
 };
-
-REG_SER_FUNC_ARRAY(OB_SFA_COLLECTION_EXPR_EVAL,
-                   g_collection_eval_functions,
-                   ARRAYSIZEOF(g_collection_eval_functions));
-
-REG_SER_FUNC_ARRAY(OB_SFA_COLLECTION_EXPR_EVAL_BATCH,
-                   g_collection_eval_batch_functions,
-                   ARRAYSIZEOF(g_collection_eval_batch_functions));
-
-REG_SER_FUNC_ARRAY(OB_SFA_COLLECTION_EXPR_EVAL_VEC,
-                   g_collection_expr_eval_vector_functions,
-                   ARRAYSIZEOF(g_collection_expr_eval_vector_functions));
 
 } // end namespace sql
 } // end namespace oceanbase

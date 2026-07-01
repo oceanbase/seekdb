@@ -16,9 +16,9 @@
 
 #define USING_LOG_PREFIX SERVER
 #include "observer/virtual_table/ob_tenant_all_tables.h"
-#include "share/schema/ob_schema_printer.h"
+#include "sql/printer/ob_schema_printer.h"
 #include "share/ob_autoincrement_service.h"
-#include "observer/ob_sql_client_decorator.h"
+#include "share/ob_sql_client_decorator.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::share;

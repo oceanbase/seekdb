@@ -25,7 +25,7 @@
 #include "lib/list/ob_dlist.h"
 #include "lib/lock/ob_mutex.h"
 #include "lib/thread/threads.h"
-#include "common/ob_queue_thread.h"
+#include "lib/thread/ob_queue_thread.h"
 
 namespace oceanbase
 {

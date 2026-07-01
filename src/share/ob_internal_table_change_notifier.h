@@ -17,10 +17,10 @@
 #ifndef OCEANBASE_SHARE_OB_INTERNAL_TABLE_CHANGE_NOTIFIER_H_
 #define OCEANBASE_SHARE_OB_INTERNAL_TABLE_CHANGE_NOTIFIER_H_
 
+#include "share/ob_module_data_arg.h"
 #include "lib/function/ob_function.h"
 #include "lib/lock/ob_spin_lock.h"
 #include "logservice/ob_log_base_type.h"
-#include "share/ob_module_data_arg.h"
 
 namespace oceanbase
 {

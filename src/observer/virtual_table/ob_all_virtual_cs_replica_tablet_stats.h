@@ -19,7 +19,7 @@
 
 #include "common/row/ob_row.h"
 #include "lib/guard/ob_shared_guard.h"
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "storage/tablet/ob_tablet_iterator.h"
 #include "storage/tx_storage/ob_ls_map.h"
 #include "storage/ob_storage_ha_struct.h"

@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "share/vector/ob_i_vector.h"
+#include "sql/engine/vector/ob_i_vector.h"
 #include "storage/direct_load/ob_direct_load_table_data_desc.h"
 
 namespace oceanbase

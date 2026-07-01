@@ -1,4 +1,7 @@
 ob_set_subtarget(ob_logservice common
+  logrpc/ob_log_rpc_arg.cpp
+  ob_tenant_mutil_allocator.cpp
+  ob_tenant_mutil_allocator_mgr.cpp
   ob_append_callback.cpp
   ob_location_adapter.cpp
   ob_log_base_header.cpp

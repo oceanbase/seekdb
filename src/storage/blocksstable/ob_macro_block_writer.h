@@ -34,7 +34,7 @@
 #include "share/schema/ob_table_schema.h"
 #include "ob_bloom_filter_cache.h"
 #include "ob_micro_block_reader_helper.h"
-#include "share/cache/ob_kvcache_pre_warmer.h"
+#include "storage/blocksstable/ob_kvcache_pre_warmer.h"
 #include "ob_macro_block_bare_iterator.h"
 #include "ob_micro_block_checksum_helper.h"
 #include "storage/compaction/ob_compaction_memory_context.h"

@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SERVER
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "obmp_packet_sender.h"
 #include "rpc/obmysql/packet/ompk_error.h"
 #include "rpc/obmysql/packet/ompk_eof.h"

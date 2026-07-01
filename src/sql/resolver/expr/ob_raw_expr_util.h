@@ -22,12 +22,12 @@
 #include "sql/parser/parse_node.h"
 #include "lib/hash/ob_placement_hashmap.h"
 #include "share/schema/ob_column_schema.h"
-#include "share/system_variable/ob_system_variable.h"
+#include "sql/session/ob_system_variable.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "lib/hash/ob_hashset.h"
 #include "lib/allocator/ob_allocator.h"
-#include "lib/udt/ob_array_type.h"
+#include "common/udt/ob_array_type.h"
 #include "share/schema/ob_trigger_info.h"
 
 namespace oceanbase
@@ -788,7 +788,7 @@ public:
                                 common::ObIArray<ObUserVarIdentRawExpr*> *user_var_exprs = NULL);
   static int build_get_sys_var(ObRawExprFactory &expr_factory,
                                const common::ObString &var_name,
-                               share::ObSetVar::SetScopeType var_scope,
+                               sql::ObSetVar::SetScopeType var_scope,
                                ObRawExpr *&expr,
                                const ObSQLSessionInfo *session_info = NULL);
   static int get_package_var_ids(ObRawExpr *expr, uint64_t &package_id, int64_t &var_idx);

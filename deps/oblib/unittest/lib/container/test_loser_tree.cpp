@@ -15,7 +15,7 @@
  */
 
 #include "lib/container/ob_loser_tree.h"
-#include "deps/oblib/src/lib/rc/context.h"
+#include "lib/rc/context.h"
 #include <gtest/gtest.h>
 using namespace oceanbase::common;
 

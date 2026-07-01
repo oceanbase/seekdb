@@ -25,6 +25,7 @@
 #include "storage/tx_storage/ob_tenant_freezer.h"
 #include "storage/meta_store/ob_server_storage_meta_service.h"
 #include "storage/compaction/ob_compaction_schedule_util.h"
+#include "share/ob_tablet_replica_checksum_operator.h"  // verify_column_checksum real user FreezeInfoMgr
 
 namespace oceanbase
 {
@@ -754,3 +755,43 @@ int ObTenantFreezeInfoMgr::try_update_reserved_snapshot()
 
 } // storage
 } // oceanbase
+
+// ===== verify_column_checksum_between_diffrent_replica definition moved from share/ob_tablet_replica_checksum_operator.cpp(real user MTL FreezeInfoMgr) =====
+namespace oceanbase
+{
+namespace share
+{
+
+int ObTabletReplicaChecksumItem::verify_column_checksum_between_diffrent_replica(const ObTabletReplicaChecksumItem &other) const
+{
+  int ret = OB_SUCCESS;
+  ObFreezeInfo boundary_freeze_info;
+  ObFreezeInfo to_check_freeze_info;
+  if (OB_FAIL(share::g_mp->tenant_freeze_info_mgr()->get_lower_bound_freeze_info_before_snapshot_version(compaction_scn_.get_val_for_tx(), boundary_freeze_info))) {
+    if (OB_ENTRY_NOT_EXIST == ret) {
+      ret = OB_SUCCESS;
+    } else {
+      LOG_WARN("failed to get boundary freeze info", K(ret), K_(compaction_scn));
+    }
+  } else if (boundary_freeze_info.is_valid()) {
+    ret = OB_CHECKSUM_ERROR; // it is compacted in lob column checksum fixed version
+    LOG_WARN("failed to check column checksum", K(ret), K(boundary_freeze_info));
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (OB_FAIL(share::g_mp->tenant_freeze_info_mgr()->get_freeze_info_by_snapshot_version(compaction_scn_.get_val_for_tx(), to_check_freeze_info))) {
+    if (OB_ENTRY_NOT_EXIST == ret) {
+      ret = OB_SUCCESS;
+    } else {
+      LOG_WARN("failed to get freeze info", K(ret), K_(compaction_scn));
+    }
+  } else if (!to_check_freeze_info.is_valid()) {
+  } else {
+    ret = OB_CHECKSUM_ERROR; // it is compacted in lob column checksum fixed version
+    LOG_WARN("failed to check column checksum", K(ret), K(to_check_freeze_info));
+  }
+  return ret;
+}
+
+}  // namespace share
+}  // namespace oceanbase

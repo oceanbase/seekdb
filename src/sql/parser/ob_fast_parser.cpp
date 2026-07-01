@@ -1073,8 +1073,8 @@ char *ObFastParserBase::parse_strdup_with_replace_multi_byte_char(
   out_len = 0;
   int64_t len = 0;
   for (int64_t i = 0; i < dup_len; ++i) {
-    if (CHARSET_UTF8MB4 == charset_type_ || CHARSET_UTF16 == charset_type_) {
-     if (i + 2 < dup_len) {
+    if (CHARSET_UTF8MB4 == charset_type_) {
+      if (i + 2 < dup_len) {
         if (str[i] == (char)0xe3 && str[i+1] == (char)0x80 && str[i+2] == (char)0x80) {
           //utf8 multi byte space
           out_str[len++] = ' ';
@@ -1093,46 +1093,6 @@ char *ObFastParserBase::parse_strdup_with_replace_multi_byte_char(
       } else {
         out_str[len++] = str[i];
       }
-    } else if (ObCharset::is_gb_charset(charset_type_)) {
-      if (i + 1 < dup_len) {
-        if (str[i] == (char)0xa1 && str[i+1] == (char)0xa1) {//gbk multi byte space
-          out_str[len++] = ' ';
-          ++i;
-        } else if (str[i] == (char)0xa3 && str[i+1] == (char)0xa8) {
-          //gbk multi byte left parenthesis
-          out_str[len++] = '(';
-          ++i;
-        } else if (str[i] == (char)0xa3 && str[i+1] == (char)0xa9) {
-          //gbk multi byte right parenthesis
-          out_str[len++] = ')';
-          ++i;
-        } else {
-          out_str[len++] = str[i];
-        }
-      } else {
-        out_str[len++] = str[i];
-      }
-    } else if (
-       charset_type_ == 152
-       || charset_type_ == 153) {
-       if (i + 1 < dup_len) {
-         if (str[i] == (char)0xa1 && str[i+1] == (char)0x40) {//hkscs multi byte space
-           out_str[len++] = ' ';
-           ++i;
-         } else if (str[i] == (char)0xa1 && str[i+1] == (char)0x5d) {
-           //hkscs multi byte left parenthesis
-           out_str[len++] = '(';
-           ++i;
-         } else if (str[i] == (char)0xa1 && str[i+1] == (char)0x5e) {
-           //hkscs multi byte right parenthesis
-           out_str[len++] = ')';
-           ++i;
-         } else {
-           out_str[len++] = str[i];
-         }
-       } else {
-         out_str[len++] = str[i];
-       }
     } else {
       out_str[len++] = str[i];
     }

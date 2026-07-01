@@ -16,7 +16,7 @@
 
 #include "observer/virtual_table/ob_mysql_proc_table.h"
 
-#include "share/schema/ob_schema_printer.h"
+#include "sql/printer/ob_schema_printer.h"
 #include "sql/session/ob_sql_session_info.h"
 
 using namespace oceanbase::common;

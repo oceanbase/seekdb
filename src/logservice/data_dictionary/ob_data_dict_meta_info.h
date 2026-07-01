@@ -21,7 +21,7 @@
 #include "lib/utility/ob_unify_serialize.h" // NEED_SERIALIZE_AND_DESERIALIZE
 #include "lib/container/ob_se_array.h"
 #include "lib/utility/ob_print_utils.h" // TO_STRING_KV
-#include "lib/mysqlclient/ob_mysql_proxy.h" // ObMySQLProxy
+#include "common/mysqlclient/ob_mysql_proxy.h" // ObMySQLProxy
 #include "share/scn.h"
 
 

@@ -18,10 +18,10 @@
 #include "sql/engine/expr/ob_expr_rb_to_array.h"
 #include "sql/engine/expr/ob_expr_rb_func_helper.h"
 #include "sql/engine/expr/ob_array_expr_utils.h"
-#include "lib/roaringbitmap/ob_rb_utils.h"
+#include "share/roaringbitmap/ob_rb_utils.h"
 #include "sql/engine/expr/ob_expr.h" // for ObExpr
 #include "sql/engine/expr/ob_expr_lob_utils.h"
-#include "lib/roaringbitmap/ob_roaringbitmap.h"
+#include "share/roaringbitmap/ob_roaringbitmap.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;

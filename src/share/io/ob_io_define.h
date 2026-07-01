@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_LIB_STORAGE_IO_DEFINE
 #define OCEANBASE_LIB_STORAGE_IO_DEFINE
 
-#include "common/storage/ob_io_device.h"
+#include "lib/restore/ob_io_device.h"
 #include "lib/container/ob_array_iterator.h"
 #include "lib/container/ob_array_wrap.h"
 #include "lib/container/ob_heap.h"
@@ -28,8 +28,8 @@
 #include "lib/restore/ob_storage.h"
 #include "lib/thread/thread_mgr_interface.h"
 #include "lib/worker.h"
+#include "share/ob_define.h"
 #include "share/resource_manager/ob_resource_plan_info.h"
-#include "storage/ob_storage_checked_object_base.h"
 
 namespace oceanbase
 {
@@ -45,6 +45,8 @@ class ObBackupDeviceHelper;
 namespace common
 {
 
+// default NIC bandwidth 10000Mbit→1250MBps(moved down from observer ObServer:base vocabulary for IO scheduling)
+constexpr int64_t OB_DEFAULT_ETHERNET_SPEED = 10000 / 8 * 1024 * 1024;
 class ObObjectDevice;
 class ObIOCallbackManager;
 
@@ -540,7 +542,6 @@ public:
   ObIOGroupKey get_group_key() const;
   bool is_sys_module() const;
   oceanbase::share::ObFunctionType get_func_type() const;
-  bool is_local_clog_not_isolated();
   bool is_object_device_req() const;
   char *calc_io_buf();  // calc the aligned io_buf of raw_buf_, which interact with the operating system
   const ObIOFlag &get_flag() const;
@@ -636,7 +637,7 @@ public:
   IOReqList req_list_;
 };
 
-class ObIOHandle final : public storage::ObStorageCheckedObjectBase
+class ObIOHandle final
 {
 public:
   ObIOHandle();
@@ -663,8 +664,6 @@ public:
   int check_is_finished(bool &is_finished);
   void clear_io_callback();
   ObIOCallback *get_io_callback();
-  bool need_trace() const;
-  storage::ObStorageCheckID get_check_id() const { return storage::ObStorageCheckID::IO_HANDLE; }
   TO_STRING_KV_WITH_HELPER("io_result", helper.convert(result_));
 
 private:

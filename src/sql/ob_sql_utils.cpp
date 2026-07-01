@@ -15,7 +15,9 @@
  */
 
 #define USING_LOG_PREFIX SQL_OPT
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_sql_utils.h"
+#include "sql/executor/ob_maintain_dependency_info_task.h"
 #include "share/rc/ob_module_provider.h"
 #include "sql/ob_sql.h"
 #include "sql/engine/expr/ob_expr_func_part_hash.h"
@@ -24,8 +26,8 @@
 #include "sql/printer/ob_update_stmt_printer.h"
 #include "sql/printer/ob_delete_stmt_printer.h"
 #include "sql/rewrite/ob_transform_utils.h"
-#include "observer/omt/ob_tenant_timezone_mgr.h"
-#include "share/schema/ob_schema_printer.h"
+#include "share/ob_tenant_timezone_mgr.h"
+#include "sql/printer/ob_schema_printer.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"
 #include <openssl/md5.h>
 #include "share/resource_manager/ob_resource_manager.h"
@@ -33,6 +35,7 @@
 #include "sql/resolver/ddl/ob_create_view_resolver.h"
 extern "C" {
 #include "sql/parser/ob_non_reserved_keywords.h"
+#include "share/schema/ob_schema_struct.h"  // relocated-definition owner
 }
 using namespace oceanbase;
 using namespace oceanbase::sql;
@@ -1134,6 +1137,7 @@ bool ObSQLUtils::cause_implicit_commit(ParseResult &result)
         || T_SP_CREATE_TYPE_BODY == type
         || T_PACKAGE_CREATE == type
         || T_PACKAGE_CREATE_BODY == type
+        || T_PACKAGE_ALTER == type
         || T_PACKAGE_DROP == type
         || T_SF_CREATE == type
         || T_SF_DROP == type
@@ -3480,7 +3484,7 @@ int64_t ObSqlFatalErrExtraInfoGuard::to_string(char *buf, const int64_t buf_len)
   // Print plan execution system variable environment information
   if (!sys_var_values.empty()) {
     OZ (databuff_printf(buf, buf_len, pos, ",\nsys_vars:{"));
-    for (int i = 0; i < ObSysVarFactory::ALL_SYS_VARS_COUNT; ++i) {
+    for (int i = 0; i < share::ObSysVarMeta::ALL_SYS_VARS_COUNT; ++i) {
       if (!!(ObSysVariables::get_flags(i) & ObSysVarFlag::INFLUENCE_PLAN)) {
         ObString cur_var_value = sys_var_values.split_on(',');
         const char *sep_str = ",";
@@ -4387,7 +4391,8 @@ int ObSQLUtils::async_recompile_view(const share::schema::ObTableSchema &old_vie
         } else {
           LOG_WARN("failed to set table id", K(ret));
         }
-      } else if (OB_FAIL(select_stmt->get_ref_obj_table()->process_reference_obj_table( new_view_schema.get_table_id(), &new_view_schema, GCTX.sql_engine_->get_dep_info_queue()))) {
+      } else if (OB_FAIL(process_reference_obj_table(*select_stmt->get_ref_obj_table(),
+        new_view_schema.get_table_id(), &new_view_schema, GCTX.sql_engine_->get_dep_info_queue()))) {
         LOG_WARN("failed to process reference obj table", K(ret), K(new_view_schema), K(old_view_schema));
       }
     }
@@ -4916,3 +4921,193 @@ int ObSQLUtils::append_obj_param(ObSqlString & reconstruct_sql, const common::Ob
 
   return ret;
 }
+
+// ===== definition moved from share/schema/ob_schema_struct.cpp(ObOutlineInfo parser function) =====
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+
+// replace_question_mark moved to ObSQLUtils at the end of the file
+
+// replace_not_param moved to ObSQLUtils at the end of the file
+
+}  // namespace schema
+}  // namespace share
+}  // namespace oceanbase
+
+// ===== definition moved from share/schema/ob_schema_struct.cpp(gen_limit_sql, round 3) =====
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+
+// gen_limit_sql moved to ObSQLUtils at the end of the file
+
+}  // namespace schema
+}  // namespace share
+}  // namespace oceanbase
+
+// ===== definition moved from share/schema/ob_schema_struct.cpp(get_outline_sql, round 4) =====
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+
+// get_outline_sql moved to ObSQLUtils at the end of the file
+
+}  // namespace schema
+}  // namespace share
+}  // namespace oceanbase
+
+// ===== outline SQL helpers demoted from share::schema::ObOutlineInfo(A-set)=====
+namespace oceanbase
+{
+namespace sql
+{
+
+int ObSQLUtils::gen_limit_sql(const ObString &visible_signature,
+                                 const ObMaxConcurrentParam *concurrent_param,
+                                 const ObSQLSessionInfo &session,
+                                 ObIAllocator &allocator,
+                                 ObString &limit_sql)
+{
+  int ret = OB_SUCCESS;
+  ObString not_param_sql;
+  ObString last_token;
+  int64_t start_pos = 0;
+  int64_t cur_pos = 0;
+  int64_t question_mark_offset = 0;
+  ObSqlString string_helper;
+  ObParser parser(allocator, session.get_sql_mode());
+  ParseResult parse_result;
+  parse_result.param_node_num_ = 0;
+  ParamList *parser_param = NULL;
+  ParseNode *cur_node = NULL;
+
+  if (OB_ISNULL(concurrent_param)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid argument", K(ret), K(concurrent_param));
+  } else if (OB_FAIL(parser.parse(visible_signature, parse_result, FP_MODE))) {
+    LOG_WARN("fail to parser visible signature", K(ret), K(visible_signature));
+  } else {
+    parser_param = parse_result.param_nodes_;
+    not_param_sql.assign_ptr(parse_result.no_param_sql_, parse_result.no_param_sql_len_);
+  }
+
+  for(int64_t i = 0 ; OB_SUCC(ret) && i < parse_result.param_node_num_; ++i) {
+    if (OB_ISNULL(parser_param)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("parser param is NULL", K(ret));
+    } else if(OB_ISNULL(cur_node = parser_param->node_)) {
+      ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("node is NULL", K(ret));
+    } else {
+      cur_pos = cur_node->pos_;
+      if (T_QUESTIONMARK == cur_node->type_) {
+        if (OB_FAIL(replace_question_mark(not_param_sql, *concurrent_param, start_pos, cur_pos, question_mark_offset, string_helper))) {
+          LOG_WARN("fail to replace question mark", K(ret), K(start_pos), K(cur_pos));
+        }
+      } else {
+        if (OB_FAIL(replace_not_param(not_param_sql, *cur_node, start_pos, cur_pos, string_helper))) {
+          LOG_WARN("fail to replace not param", K(ret), K(start_pos), K(cur_pos));
+        }
+      }
+      start_pos = cur_pos + 1;
+      parser_param = parser_param->next_;
+    }
+  }
+
+  if (OB_FAIL(ret)) {
+  } else if (FALSE_IT(last_token.assign_ptr(not_param_sql.ptr() + start_pos, static_cast<ObString::obstr_size_t>(not_param_sql.length() - start_pos)))) {
+  } else if (OB_FAIL(string_helper.append_fmt("%.*s", last_token.length(), last_token.ptr()))) {
+    LOG_WARN("fail to append fmt", K(ret), K(not_param_sql), K(last_token), K(start_pos));
+  } else if (OB_FAIL(ob_write_string(allocator, string_helper.string(), limit_sql))) {
+    LOG_WARN("fail to deep copy string", K(ret), K(string_helper), K(limit_sql));
+  } else {/*do nothing*/}
+
+  return ret;
+}
+
+int ObSQLUtils::replace_question_mark(const ObString &not_param_sql,
+                                         const ObMaxConcurrentParam &concurrent_param,
+                                         int64_t start_pos,
+                                         int64_t cur_pos,
+                                         int64_t &question_mark_offset,
+                                         ObSqlString &string_helper)
+{
+  int ret = OB_SUCCESS;
+
+  ObArenaAllocator local_allocator;
+  ObFixedParam fixed_param;
+  bool is_found = false;
+  char *buf = NULL;
+  const int64_t buf_len = OB_MAX_VARCHAR_LENGTH;
+  int64_t pos = 0;
+
+  if (OB_FAIL(concurrent_param.get_fixed_param_with_offset(question_mark_offset, fixed_param, is_found))) {
+    LOG_WARN("fail to get fixed_param with offset", K(ret), K(question_mark_offset));
+  } else {
+    ObString before_token(cur_pos - start_pos, not_param_sql.ptr() + start_pos);
+    if (is_found) {
+      if (OB_UNLIKELY(NULL == (buf = static_cast<char *>(local_allocator.alloc(buf_len))))) {
+        ret = OB_ALLOCATE_MEMORY_FAILED;
+        LOG_ERROR("fail to alloc memory", K(ret), K(buf_len));
+      } else if (OB_FAIL(fixed_param.value_.print_sql_literal(buf, buf_len, pos))) {
+        LOG_WARN("fail print obj", K(fixed_param), K(ret), K(buf), K(buf_len), K(pos));
+      } else if (OB_FAIL(string_helper.append_fmt("%.*s%s", before_token.length(), before_token.ptr(), buf))) {
+        LOG_WARN("fail to append fmt", K(ret), K(before_token), K(buf));
+      } else {/*do nothing*/}
+    } else {
+      if (OB_FAIL(string_helper.append_fmt("%.*s%s", before_token.length(), before_token.ptr(), "?"))) {
+        LOG_WARN("fail to append fmt", K(ret), K(before_token));
+      }
+    }
+    ++question_mark_offset;
+  }
+
+  return ret;
+}
+
+int ObSQLUtils::replace_not_param(const ObString &not_param_sql,
+                                     const ParseNode &node,
+                                     int64_t start_pos,
+                                     int64_t cur_pos,
+                                     ObSqlString &string_helper)
+{
+  int ret = OB_SUCCESS;
+  ObString before_token(cur_pos - start_pos, not_param_sql.ptr() + start_pos);
+  ObString param_value(node.text_len_, node.raw_text_);
+  if (OB_FAIL(string_helper.append_fmt("%.*s%.*s",
+                                       before_token.length(), before_token.ptr(),
+                                       param_value.length(), param_value.ptr()))) {
+    LOG_WARN("fail to append fmt", K(ret), K(before_token), K(param_value));
+  }
+
+  return ret;
+}
+
+int ObSQLUtils::get_outline_sql(const share::schema::ObOutlineInfo &outline_info, ObIAllocator &allocator,
+                                   const ObSQLSessionInfo &session,
+                                   ObString &outline_sql)
+{
+  int ret = OB_SUCCESS;
+  bool is_need_filter_hint = true;
+  if (OB_FAIL(ObSQLUtils::construct_outline_sql(allocator,
+                                                session,
+                                                outline_info.get_outline_content_str(),
+                                                outline_info.get_sql_text_str(),
+                                                is_need_filter_hint,
+                                                outline_sql))) {
+    LOG_WARN("fail to construct outline sql", K(ret), K(outline_info.get_outline_content_str()), K(outline_info.get_sql_text_str()), K(outline_sql));
+  }
+  return ret;
+}
+}  // namespace sql
+}  // namespace oceanbase

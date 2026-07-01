@@ -18,6 +18,7 @@
 #include "sql/engine/px/p2p_datahub/ob_runtime_filter_msg.h"
 #include "sql/engine/px/p2p_datahub/ob_p2p_dh_mgr.h"
 #include "sql/engine/join/hash_join/ob_hash_join_vec_op.h"
+#include "sql/engine/basic/ob_pushdown_filter.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;

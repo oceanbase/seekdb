@@ -17,6 +17,7 @@
 #define USING_LOG_PREFIX SHARE
 
 #include "plugin/sys/ob_plugin_load_param.h"
+#include "share/config/ob_config_helper.h"  // relocated-definition owner
 
 using namespace oceanbase::common;
 
@@ -124,3 +125,29 @@ int ObPluginLoadParamParser::parse_item(const ObString &item_str, ObPluginLoadPa
 
 } // namespace plugin
 } // namespace oceanbase
+
+// ===== definition moved from src/share/config/ob_config_helper.cpp =====
+namespace oceanbase
+{
+namespace common
+{
+
+bool ObConfigPluginsLoadChecker::check(const ObConfigItem& t) const
+{
+  bool bret = false;
+  ObString plugins_load(t.str());
+  ObArray<ObPluginLoadParam> plugin_load_params;
+  ObMemAttr mem_attr("Config");
+  plugin_load_params.set_attr(mem_attr);
+  int ret = ObPluginLoadParamParser::parse(plugins_load, plugin_load_params);
+  if (OB_FAIL(ret)) {
+    OB_LOG_RET(WARN, OB_INVALID_CONFIG, "failed to parse plugins load config", K(plugins_load));
+    bret = false;
+  } else {
+    bret = true;
+  }
+  return bret;
+}
+
+}  // namespace common
+}  // namespace oceanbase

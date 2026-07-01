@@ -21,7 +21,6 @@
 #include "share/schema/ob_schema_struct.h"
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
-#include "observer/ob_server_struct.h"
 
 namespace oceanbase
 {
@@ -226,7 +225,7 @@ int ObLocationService::check_ls_exist(
     LOG_WARN("GCTX has null ptr", KR(ret), KP(GCTX.schema_service_), KP(GCTX.sql_proxy_));
   } else {
     schema::ObSchemaGetterGuard schema_guard;
-    const ObSimpleTenantSchema *tenant_schema = NULL;
+    const schema::ObSimpleTenantSchema *tenant_schema = NULL;
     if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
       LOG_WARN("fail to get tenant schema guard", KR(ret));
     } else if (OB_FAIL(schema_guard.get_tenant_info(tenant_schema))) {

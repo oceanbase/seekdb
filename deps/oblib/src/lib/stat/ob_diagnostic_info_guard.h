@@ -23,19 +23,12 @@
 
 #include "lib/utility/ob_macro_utils.h"
 #include "lib/ob_define.h"
+#include "lib/string/ob_string.h"
+#include <typeinfo>
 #include "lib/wait_event/ob_inner_sql_wait_type.h"
 
 namespace oceanbase
 {
-
-namespace observer
-{
-class ObInnerSqlWaitGuard;
-}
-namespace sql
-{
-class ObEndTransAsyncCallback;
-}
 
 namespace common
 {

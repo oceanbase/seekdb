@@ -16,7 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_RESV
 #include "sql/resolver/cmd/ob_event_resolver.h"
-#include "lib/timezone/ob_time_convert.h"
+#include "common/timezone/ob_time_convert.h"
 #include "sql/parser/ob_parser.h"
 #include "sql/resolver/ob_resolver_utils.h"
 #include "lib/oblog/ob_log_module.h"

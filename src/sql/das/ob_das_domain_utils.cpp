@@ -20,7 +20,7 @@
 #define USING_LOG_PREFIX SQL_DAS
 
 #include "ob_das_domain_utils.h"
-#include "lib/geo/ob_geo_utils.h"
+#include "share/geo/ob_geo_utils.h"
 #include "sql/das/ob_das_utils.h"
 #include "sql/das/ob_das_dml_vec_iter.h"
 #include "sql/engine/expr/ob_expr_lob_utils.h"

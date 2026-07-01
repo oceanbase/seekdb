@@ -16,7 +16,7 @@
 
 #include "ob_ingress_bw_alloc_service.h"
 #include "observer/ob_srv_network_frame.h"
-#include "observer/ob_ex_rpc.h"
+#include "share/ob_ex_rpc.h"
 #define USING_LOG_PREFIX RS
 
 namespace oceanbase

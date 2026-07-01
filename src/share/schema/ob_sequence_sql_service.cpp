@@ -15,13 +15,16 @@
  */
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
+#include "share/ob_unit_getter.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "ob_sequence_sql_service.h"
-#include "observer/ob_srv_network_frame.h"
-#include "observer/ob_sql_client_decorator.h"
+#include "share/ob_server_struct.h"
+#include "share/ob_sql_client_decorator.h"
 #include "share/sequence/ob_sequence_cache.h"
 
 namespace oceanbase
 {
+using namespace oceanbase::obcall;
 using namespace common;
 namespace share
 {

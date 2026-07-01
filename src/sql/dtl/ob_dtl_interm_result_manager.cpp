@@ -16,6 +16,7 @@
 
 #define USING_LOG_PREFIX SQL_DTL
 #include "ob_dtl_interm_result_manager.h"
+#include "observer/omt/ob_multi_tenant.h"  // previously hidden behind a transitive include(free within sql)
 #include "share/rc/ob_module_provider.h"
 #include "observer/virtual_table/ob_all_virtual_dtl_interm_result_monitor.h"
 

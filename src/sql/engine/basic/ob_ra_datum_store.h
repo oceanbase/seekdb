@@ -23,7 +23,7 @@
 #include "lib/utility/ob_print_utils.h"
 #include "lib/list/ob_dlist.h"
 #include "common/row/ob_row.h"
-#include "share/datum/ob_datum.h"
+#include "common/datum/ob_datum.h"
 #include "sql/engine/expr/ob_expr.h"
 #include "sql/engine/basic/ob_sql_mem_callback.h"
 

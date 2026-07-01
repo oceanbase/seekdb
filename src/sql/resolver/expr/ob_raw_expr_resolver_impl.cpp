@@ -26,6 +26,141 @@ namespace oceanbase
 using namespace common;
 namespace sql
 {
+
+namespace {
+static int change_json_expr_res_type_if_need(common::ObIAllocator &allocator, ObString &str, ParseNode &ret_node, int8_t json_expr_flag)
+{
+  INIT_SUCC(ret);
+  bool has_fun = false;
+  char* res_str = nullptr;
+  uint64_t name_len = 0;
+  if (OB_FAIL(ObJsonPath::get_path_item_method_str(allocator, str, res_str, name_len, has_fun))) {
+    LOG_WARN("get item method fail", K(ret));
+  } else if (has_fun) {
+    ObJsonPathFuncNode* func_node = static_cast<ObJsonPathFuncNode*> (allocator.alloc(sizeof(ObJsonPathFuncNode)));
+    if (OB_ISNULL(func_node)) {
+      ret = OB_ALLOCATE_MEMORY_FAILED;
+      LOG_WARN("allocate row buffer failed at member_node", K(ret));
+    } else {
+      func_node = new (func_node) ObJsonPathFuncNode(&allocator);
+      if ((OB_FAIL(func_node->init(res_str, name_len)))) {
+        // should not set error only pass set return type
+        ret = OB_SUCCESS;
+        allocator.free(func_node);
+        LOG_WARN("fail to append JsonPathNode(member_node)!", K(ret));
+      } else {
+        switch (func_node->get_node_type()) {
+          case JPN_BOOLEAN :
+          case JPN_BOOL_ONLY : {
+            if (json_expr_flag == OPT_JSON_QUERY && ret_node.int16_values_[OB_NODE_CAST_TYPE_IDX] == T_JSON) { // do nothing
+            } else {
+              ret_node.type_ = T_CAST_ARGUMENT;
+              ret_node.value_ = 0;
+              ret_node.int16_values_[OB_NODE_CAST_TYPE_IDX] = T_VARCHAR;
+              ret_node.int16_values_[OB_NODE_CAST_COLL_IDX] = 0;
+              ret_node.int32_values_[OB_NODE_CAST_C_LEN_IDX] = 20;
+              ret_node.length_semantics_ = 0;
+              ret_node.is_hidden_const_ = 1;
+            }
+            break;
+          }
+          case JPN_DATE : {
+            if (json_expr_flag == OPT_JSON_QUERY) { // do nothing
+            } else {
+              ret_node.type_ = T_CAST_ARGUMENT;
+              ret_node.value_ = 0;
+              ret_node.int16_values_[OB_NODE_CAST_TYPE_IDX] = T_DATETIME;
+              ret_node.int16_values_[OB_NODE_CAST_N_SCALE_IDX] = 0;
+              ret_node.param_num_ = 0;
+            }
+            break;
+          }
+          case JPN_DOUBLE : {
+            if (json_expr_flag == OPT_JSON_QUERY) { // do nothing
+            } else {
+              ret_node.type_ = T_CAST_ARGUMENT;
+              ret_node.value_ = 0;
+              ret_node.int16_values_[OB_NODE_CAST_TYPE_IDX] = T_DOUBLE;
+              ret_node.int16_values_[OB_NODE_CAST_N_PREC_IDX] = -1;
+              ret_node.int16_values_[OB_NODE_CAST_N_SCALE_IDX] = -85;  /* SCALE_UNKNOWN_YET */
+              ret_node.param_num_ = 0;
+            }
+            break;
+          }
+          case JPN_LENGTH :
+          case JPN_SIZE :
+          case JPN_NUM_ONLY :
+          case JPN_NUMBER : 
+          case JPN_FLOOR :
+          case JPN_CEILING : {
+            if (ret_node.type_ == T_NULL 
+            || (json_expr_flag == OPT_JSON_QUERY && ret_node.int16_values_[OB_NODE_CAST_TYPE_IDX] == T_JSON)) {
+              ret_node.value_ = 0;
+              ret_node.int16_values_[OB_NODE_CAST_TYPE_IDX] = T_VARCHAR;
+              ret_node.int16_values_[OB_NODE_CAST_COLL_IDX] = 0;
+              ret_node.int32_values_[OB_NODE_CAST_C_LEN_IDX] = 4000;
+              ret_node.length_semantics_ = 0;
+              ret_node.is_hidden_const_ = 1;
+            } else {
+              ret_node.value_ = 0;
+              ret_node.int16_values_[OB_NODE_CAST_TYPE_IDX] = T_NUMBER;
+              ret_node.int16_values_[OB_NODE_CAST_N_PREC_IDX] = -1;    /* precision */
+              ret_node.int16_values_[OB_NODE_CAST_N_SCALE_IDX] = -85;    /* scale */
+              ret_node.int16_values_[OB_NODE_CAST_NUMBER_TYPE_IDX] = NPT_EMPTY;    /* number type */
+              ret_node.param_num_ = 0;
+            }
+            ret_node.type_ = T_CAST_ARGUMENT;
+            break;
+          }
+          case JPN_TIMESTAMP : {
+            if (json_expr_flag == OPT_JSON_QUERY) { // do nothing
+            } else {
+              ret_node.type_ = T_CAST_ARGUMENT;
+              ret_node.value_ = 0;
+              ret_node.int16_values_[OB_NODE_CAST_TYPE_IDX] = T_TIMESTAMP_NANO;
+              ret_node.int16_values_[OB_NODE_CAST_N_SCALE_IDX] = 6;
+              ret_node.param_num_ = 0;
+            }
+            break;
+          }
+          case JPN_TYPE:
+          case JPN_STR_ONLY :
+          case JPN_STRING : {
+            if (json_expr_flag == OPT_JSON_QUERY && ret_node.int16_values_[OB_NODE_CAST_TYPE_IDX] == T_JSON) {
+            } else {
+              ret_node.type_ = T_CAST_ARGUMENT;
+              ret_node.value_ = 0;
+              ret_node.int16_values_[OB_NODE_CAST_TYPE_IDX] = T_VARCHAR;
+              ret_node.int16_values_[OB_NODE_CAST_COLL_IDX] = 0;
+              ret_node.int32_values_[OB_NODE_CAST_C_LEN_IDX] = 4000;
+              ret_node.length_semantics_ = 0;
+              ret_node.is_hidden_const_ = 1;
+            }
+          }
+          case JPN_UPPER:
+          case JPN_LOWER: {
+            if (json_expr_flag == OPT_JSON_QUERY && ret_node.int16_values_[OB_NODE_CAST_TYPE_IDX] == T_JSON) {
+            } else {
+              ret_node.type_ = T_CAST_ARGUMENT;
+              ret_node.value_ = 0;
+              ret_node.int16_values_[OB_NODE_CAST_TYPE_IDX] = T_VARCHAR;
+              ret_node.int16_values_[OB_NODE_CAST_COLL_IDX] = 0;
+              ret_node.int32_values_[OB_NODE_CAST_C_LEN_IDX] = 75;
+              ret_node.length_semantics_ = 0;
+              ret_node.is_hidden_const_ = 1;
+            }
+            break;
+          }
+          default : {
+            break;
+          }
+        }
+      }
+    }
+  }
+  return ret;
+}
+}  // anon, relocated from ObJsonPath (oblib->src relocation)
 ObRawExprResolverImpl::ObRawExprResolverImpl(ObExprResolveContext &ctx)
     : ctx_(ctx),
       is_contains_assignment_(false)
@@ -2504,7 +2639,7 @@ int ObRawExprResolverImpl::process_system_variable_node(const ParseNode *node, O
     ObString str;
     str.assign_ptr(const_cast<char *>(node->str_value_), static_cast<int32_t>(node->str_len_));
     if (OB_FAIL(ObRawExprUtils::build_get_sys_var(ctx_.expr_factory_, str,
-                                                  static_cast<share::ObSetVar::SetScopeType>(node->value_),
+                                                  static_cast<sql::ObSetVar::SetScopeType>(node->value_),
                                                   expr))) {
       LOG_WARN("failed to create expr", K(ret));
     } else {
@@ -5864,7 +5999,7 @@ int ObRawExprResolverImpl::process_json_query_node(const ParseNode *node, ObRawE
   if (OB_SUCC(ret)) {
     if (returning_type->type_ == T_NULL || returning_type->int16_values_[OB_NODE_CAST_TYPE_IDX] == T_JSON) {
       ObString path_str(node->children_[1]->text_len_, node->children_[1]->raw_text_);
-      if (OB_FAIL(ObJsonPath::change_json_expr_res_type_if_need(ctx_.expr_factory_.get_allocator(), path_str, const_cast<ParseNode&>(*returning_type), OPT_JSON_QUERY))) {
+      if (OB_FAIL(change_json_expr_res_type_if_need(ctx_.expr_factory_.get_allocator(), path_str, const_cast<ParseNode&>(*returning_type), OPT_JSON_QUERY))) {
         LOG_WARN("set return type by path item method fail", K(ret), K(path_str));
       }
     }
@@ -6006,7 +6141,7 @@ int ObRawExprResolverImpl::process_json_value_node(const ParseNode *node, ObRawE
     ObString default_val(7, "default");
     if (OB_NOT_NULL(returning_type->raw_text_) && (0 == default_val.case_compare(returning_type->raw_text_)) && node->children_[1]->text_len_ > 0) {
       ObString path_str(node->children_[1]->text_len_, node->children_[1]->raw_text_);
-      if (OB_FAIL(ObJsonPath::change_json_expr_res_type_if_need(ctx_.expr_factory_.get_allocator(), path_str, const_cast<ParseNode&>(*returning_type), OPT_JSON_VALUE))) {
+      if (OB_FAIL(change_json_expr_res_type_if_need(ctx_.expr_factory_.get_allocator(), path_str, const_cast<ParseNode&>(*returning_type), OPT_JSON_VALUE))) {
         LOG_WARN("set return type by path item method fail", K(ret), K(path_str));
       }
     }

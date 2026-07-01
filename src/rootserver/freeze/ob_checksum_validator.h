@@ -22,7 +22,7 @@
 #include "share/ob_zone_merge_info.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
 #include "rootserver/freeze/ob_major_freeze_util.h"
-#include "share/compaction/ob_table_ckm_items.h"
+#include "storage/compaction/ob_table_ckm_items.h"
 #include "rootserver/freeze/ob_major_merge_progress_util.h"
 
 namespace oceanbase

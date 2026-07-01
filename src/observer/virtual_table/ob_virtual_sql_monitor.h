@@ -16,7 +16,7 @@
 
 #ifndef OCEANBASE_OBSERVER_OB_VIRTUAL_SQL_MONITOR_H
 #define OCEANBASE_OBSERVER_OB_VIRTUAL_SQL_MONITOR_H
-#include "share/ob_virtual_table_projector.h"
+#include "observer/virtual_table/ob_virtual_table_projector.h"
 #include "lib/container/ob_se_array.h"
 #include "common/ob_range.h"
 #include "observer/mysql/ob_ra_queue.h"

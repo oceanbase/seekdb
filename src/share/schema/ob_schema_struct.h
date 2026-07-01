@@ -18,6 +18,7 @@
 #define _OB_OCEANBASE_SCHEMA_SCHEMA_STRUCT_H
 
 #include <stdint.h>
+#include "lib/container/ob_array_helper.h"  // ObArrayHelper, previously hidden behind a removed sql include chain, make the dependency explicit
 #include "lib/hash/ob_hashset.h"
 #include "lib/hash/ob_placement_hashset.h"
 #include "lib/net/ob_addr.h"
@@ -29,19 +30,17 @@
 #include "common/ob_store_format.h"
 #include "share/ob_duplicate_scope_define.h"
 #include "share/sequence/ob_sequence_option.h"
-#include "share/system_variable/ob_system_variable_factory.h"
+#include "share/system_variable/ob_sys_var_meta.h"
 #include "share/schema/ob_priv_type.h"
 #include "share/ob_priv_common.h"
 #include "lib/worker.h"
-#include "sql/parser/ob_item_type.h"
+#include "objit/common/ob_item_type.h"
 #include "share/ob_share_util.h"          // ObIDGenerator
 #include "share/cache/ob_kv_storecache.h" // ObKVCacheHandle
 #include "lib/hash/ob_pointer_hashmap.h"
 #include "lib/string/ob_sql_string.h"
-#include "sql/session/ob_local_session_var.h"
 #include "share/schema/ob_list_row_values.h" // ObListRowValues
 #include "share/storage_cache_policy/ob_storage_cache_common.h"
-#include "sql/engine/expr/ob_expr_like.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -66,7 +65,6 @@ namespace sql
 {
 class ObSQLSessionInfo;
 class ObPartitionExecutorUtils;
-class ObLocalSessionVar;
 }
 namespace rootserver
 {
@@ -1265,7 +1263,6 @@ typedef enum {
   TRIGGER_SCHEMA = 19,
   SYS_PRIV = 27,
   OBJ_PRIV = 28,
-  DBLINK_SCHEMA = 29,
   LINK_TABLE_SCHEMA = 30,
   FK_SCHEMA = 31,
   DIRECTORY_SCHEMA = 32,
@@ -1905,6 +1902,7 @@ public:
   bool is_oracle_only() const { return 0 != (flags_ & ObSysVarFlag::ORACLE_ONLY); }
   bool is_mysql_only() const { return 0 != (flags_ & ObSysVarFlag::MYSQL_ONLY); }
   bool is_read_only() const { return 0 != (flags_ & ObSysVarFlag::READONLY); }
+  bool is_null_value() const { return 0 != (flags_ & ObSysVarFlag::NULLABLE) && value_.empty(); } // decoupled from ObBasicSysVar::is_null_value(share/schema no longer depends on the sysvar behavior class)
   TO_STRING_KV(
                K_(name),
                K_(data_type),
@@ -1949,7 +1947,7 @@ public:
   int64_t get_convert_size() const;
   int add_sysvar_schema(const share::schema::ObSysVarSchema &sysvar_schema);
   int load_default_system_variable();
-  int64_t get_sysvar_count() const { return ObSysVarFactory::ALL_SYS_VARS_COUNT; }
+  int64_t get_sysvar_count() const { return ObSysVarMeta::ALL_SYS_VARS_COUNT; }
   int64_t get_real_sysvar_count() const;
   int get_sysvar_schema(const common::ObString &sysvar_name, const ObSysVarSchema *&sysvar_schema) const;
   int get_sysvar_schema(ObSysVarClassType var_type, const ObSysVarSchema *&sysvar_schema) const;
@@ -1959,12 +1957,12 @@ public:
   common::ObNameCaseMode get_name_case_mode() const { return name_case_mode_; }
   void set_name_case_mode(const common::ObNameCaseMode mode) { name_case_mode_ = mode; }
   TO_STRING_KV(K_(schema_version),
-               "sysvars", common::ObArrayWrap<ObSysVarSchema *>(sysvar_array_, ObSysVarFactory::ALL_SYS_VARS_COUNT),
+               "sysvars", common::ObArrayWrap<ObSysVarSchema *>(sysvar_array_, ObSysVarMeta::ALL_SYS_VARS_COUNT),
                K_(read_only), K_(name_case_mode));
 private:
   
   int64_t schema_version_;
-  ObSysVarSchema *sysvar_array_[ObSysVarFactory::ALL_SYS_VARS_COUNT];
+  ObSysVarSchema *sysvar_array_[ObSysVarMeta::ALL_SYS_VARS_COUNT];
   bool read_only_;
   common::ObNameCaseMode name_case_mode_;
 };
@@ -3180,8 +3178,6 @@ public:
       ObPartition &p,
       const ObRowkey &interval_range);
 
-  static int check_interval_partition_table(const ObRowkey &transition_point,
-                                            const ObRowkey &interval_range);
 
   /* --- calc tablet_ids/part_ids/sub_part_ids by partition columns --- */
 
@@ -5972,7 +5968,6 @@ public:
   inline const char *get_version() const { return extract_str(version_); }
   inline const common::ObString &get_version_str() const { return version_; }
   int get_visible_signature(common::ObString &visiable_signature) const;
-  int get_outline_sql(common::ObIAllocator &allocator, const sql::ObSQLSessionInfo &session, common::ObString &outline_sql) const;
   int get_hex_str_from_outline_params(common::ObString &hex_str, common::ObIAllocator &allocator) const;
   const ObOutlineParamsWrapper &get_outline_params_wrapper() const { return outline_params_wrapper_; }
   ObOutlineParamsWrapper &get_outline_params_wrapper() { return outline_params_wrapper_; }
@@ -5982,11 +5977,6 @@ public:
   int has_concurrent_limit_param(bool &has) const;
   int gen_valid_allocator();
   int add_param(const ObMaxConcurrentParam& src_param);
-  static int gen_limit_sql(const common::ObString &visible_signature,
-                           const ObMaxConcurrentParam *param,
-                           const sql::ObSQLSessionInfo &session,
-                           common::ObIAllocator &allocator,
-                           common::ObString &limit_sql);
   VIRTUAL_TO_STRING_KV(K_(database_id), K_(outline_id), K_(schema_version),
                        K_(name), K_(signature), K_(sql_id), K_(outline_content), K_(sql_text),
                        K_(owner_id), K_(owner), K_(used), K_(compatible),
@@ -5994,17 +5984,6 @@ public:
                        K_(format_sql_text), K_(format_sql_id), K_(format_outline));
   static bool is_sql_id_valid(const common::ObString &sql_id);
 private:
-  static int replace_question_mark(const common::ObString &not_param_sql,
-                                   const ObMaxConcurrentParam &concurrent_param,
-                                   int64_t start_pos,
-                                   int64_t cur_pos,
-                                   int64_t &question_mark_offset,
-                                   common::ObSqlString &string_helper);
-  static int replace_not_param(const common::ObString &not_param_sql,
-                               const ParseNode &node,
-                               int64_t start_pos,
-                               int64_t cur_pos,
-                               common::ObSqlString &string_helper);
 
 protected:
   

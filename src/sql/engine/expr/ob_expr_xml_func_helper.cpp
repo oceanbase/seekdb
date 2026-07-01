@@ -18,7 +18,7 @@
 #include "sql/engine/expr/ob_expr_xml_func_helper.h"
 #include "sql/engine/expr/ob_expr_sql_udt_utils.h"
 #include "sql/ob_spi.h"
-#include "lib/xml/ob_binary_aggregate.h"
+#include "common/xml/ob_binary_aggregate.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;

@@ -36,11 +36,11 @@ OBP20_EXTRA_INFO_DEF(OBP20_SVR_MAX_TYPE, 65535, EMySQLFieldType::MYSQL_TYPE_NOT_
 
 #ifndef __OBP20_EXTRA_INFO_H__
 #define __OBP20_EXTRA_INFO_H__
-#include "rpc/obmysql/ob_mysql_global.h"
+#include "common/mysqlclient/ob_mysql_global.h"
 #include "rpc/obmysql/ob_mysql_packet.h"
-#include "lib/utility/ob_proto_trans_util.h"
+#include "rpc/obmysql/ob_proto_trans_util.h"
 #include "common/object/ob_object.h"
-#include "deps/oblib/src/lib/string/ob_string_holder.h"
+#include "lib/string/ob_string_holder.h"
 
 namespace oceanbase {
 namespace obmysql {

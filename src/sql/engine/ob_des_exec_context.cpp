@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "sql/engine/ob_des_exec_context.h"
 
 using namespace oceanbase::common;

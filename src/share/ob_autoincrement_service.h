@@ -22,7 +22,7 @@
 #include "lib/hash/ob_hashmap.h"
 #include "lib/hash/ob_link_hashmap.h"
 #include "lib/allocator/ob_small_allocator.h"
-#include "lib/mysqlclient/ob_mysql_proxy.h"
+#include "common/mysqlclient/ob_mysql_proxy.h"
 #include "common/ob_timeout_ctx.h"
 #include "share/ob_autoincrement_param.h"
 #include "share/ob_gais_client.h"
@@ -341,7 +341,7 @@ public:
   int clear_global_autoinc_cache(const AutoincKey &key);
   ObGAISRequestRpc *get_gais_request_rpc() { return &gais_request_rpc_; }
 
-  int get_sequence_next_value(const ObSequenceSchema &schema, ObSequenceValue &nextval);
+  int get_sequence_next_value(const schema::ObSequenceSchema &schema, ObSequenceValue &nextval);
 
 private:
   bool is_inited_;
@@ -363,7 +363,7 @@ public:
            common::ObMySQLProxy *mysql_proxy,
            share::schema::ObMultiVersionSchemaService *schema_service);
   int get_handle(AutoincParam &param, CacheHandle *&handle);
-  int get_handle(const ObSequenceSchema &schema, ObSequenceValue &nextval);
+  int get_handle(const schema::ObSequenceSchema &schema, ObSequenceValue &nextval);
   void release_handle(CacheHandle *&handle);
 
   int sync_insert_value_global(AutoincParam &param);

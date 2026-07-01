@@ -22,11 +22,11 @@
 #include "common/object/ob_object.h"
 #include "lib/container/ob_vector.h"
 #include "lib/container/ob_2d_array.h"
-#include "lib/mysqlclient/ob_mysql_connection.h"
-#include "lib/geo/ob_s2adapter.h"
+#include "common/mysqlclient/ob_mysql_connection.h"
+#include "share/geo/ob_s2adapter.h"
 #include "share/partition_table/ob_partition_location.h"
 #include "share/ob_i_sql_expression.h"          // ObISqlExpression,ObExprCtx
-#include "share/schema/ob_table_param.h"        // ObColDesc
+#include "storage/access/ob_table_param.h"        // ObColDesc
 #include "share/schema/ob_multi_version_schema_service.h"     // ObMultiVersionSchemaService
 #include "share/ob_simple_batch.h"
 #include "sql/ob_phy_table_location.h"
@@ -35,6 +35,7 @@
 #include "sql/resolver/ob_stmt_type.h"
 #include "sql/optimizer/ob_phy_table_location_info.h"
 #include "sql/engine/expr/ob_expr_frame_info.h"
+#include "sql/session/ob_local_session_var.h"
 #include "sql/monitor/flt/ob_flt_span_mgr.h"
 #include "share/ob_compatibility_control.h"
 #include "sql/engine/cmd/ob_load_data_parser.h"
@@ -45,6 +46,7 @@ namespace share {
 }
 namespace sql
 {
+class ObRawExprFactory;  // fwd: previously re-exported through the share schema include chain
 class RowDesc;
 class ObSQLSessionInfo;
 class ObRawExpr;
@@ -730,6 +732,25 @@ private:
     common::ObCollationType collation_type_;
     common::ObTimeZoneInfo tz_info_;
   };
+public:
+  // --- from share::schema::ObOutlineInfo demoted  outline SQL construction helpers(A-set)---
+  static int gen_limit_sql(const common::ObString &visible_signature,
+                           const ObMaxConcurrentParam *param,
+                           const sql::ObSQLSessionInfo &session,
+                           common::ObIAllocator &allocator,
+                           common::ObString &limit_sql);
+  static int replace_question_mark(const common::ObString &not_param_sql,
+                                   const ObMaxConcurrentParam &concurrent_param,
+                                   int64_t start_pos,
+                                   int64_t cur_pos,
+                                   int64_t &question_mark_offset,
+                                   common::ObSqlString &string_helper);
+  static int replace_not_param(const common::ObString &not_param_sql,
+                               const ParseNode &node,
+                               int64_t start_pos,
+                               int64_t cur_pos,
+                               common::ObSqlString &string_helper);
+  static int get_outline_sql(const share::schema::ObOutlineInfo &outline_info, common::ObIAllocator &allocator, const ObSQLSessionInfo &session, common::ObString &outline_sql);
 }; // end of ObSQLUtils
 
 class ObSqlGeoUtils

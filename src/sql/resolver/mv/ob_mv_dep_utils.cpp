@@ -18,6 +18,7 @@
 #include "sql/resolver/mv/ob_mv_dep_utils.h"
 #include "share/ob_dml_sql_splicer.h"
 #include "share/schema/ob_dependency_info.h"
+#include "share/schema/ob_mview_info.h"  // relocated-definition owner
 
 namespace oceanbase
 {
@@ -393,6 +394,139 @@ int ObMVDepUtils::get_referring_mv_of_base_table(ObISQLClient &sql_client,
     }
   }
 
+  return ret;
+}
+int ObMVDepUtils::update_mview_data_attr(ObISQLClient &sql_client,
+                                        const uint64_t refresh_scn,
+                                        const uint64_t target_data_sync_scn,
+                                        ObMViewInfo &mview_info)
+{
+  int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
+  ObSEArray<ObMVDepInfo, 2> mv_dep_infos;
+  ObSEArray<uint64_t, 2> dep_mview_ids;
+  ObSchemaGetterGuard schema_guard;
+  uint64_t data_sync_scn = OB_INVALID_SCN_VAL;
+  bool is_synced = true, dep_mview = false, dep_base_table = false;
+  const bool nested_consistent_refresh = target_data_sync_scn == OB_INVALID_SCN_VAL ? false : true; 
+  if (OB_FAIL(GCTX.schema_service_->get_tenant_schema_guard(schema_guard))) {
+    LOG_WARN("fail to get tenant schema guard", K(ret));
+  } else if (OB_FAIL(ObMVDepUtils::get_mview_dep_infos(sql_client, mview_info.get_mview_id(), mv_dep_infos))) {
+    LOG_WARN("fail to get mv dep infos", K(ret), K(mview_info));
+  } else if (mv_dep_infos.count() <= 0) {
+    ret = OB_ERR_MVIEW_MISSING_DEPENDENCE;
+    const ObTableSchema *mview_table_schema = nullptr;
+    const ObDatabaseSchema *db_schema = nullptr;
+    uint64_t mview_table_id = mview_info.get_mview_id();
+    if (OB_TMP_FAIL(schema_guard.get_table_schema(mview_table_id, mview_table_schema))) {
+      LOG_WARN("fail to get table schema", KR(tmp_ret), K(mview_table_id));
+    } else if (OB_ISNULL(mview_table_schema)) {
+      tmp_ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("table schema is null", KR(tmp_ret), K(mview_table_id));
+    } else if (OB_TMP_FAIL(schema_guard.get_database_schema(
+                           mview_table_schema->get_database_id(), db_schema))) {
+      LOG_WARN("fail to get db schema", KR(tmp_ret),
+               K(mview_table_schema->get_database_id()));
+    } else if (OB_ISNULL(db_schema)) {
+      tmp_ret = OB_ERR_UNEXPECTED;
+      LOG_WARN("database not exist", KR(tmp_ret));
+    } else {
+      LOG_ERROR("This materialized view has invalid dependency info, please perform a complete refresh to recover", K(ret), K(mview_info));
+      LOG_USER_ERROR(OB_ERR_MVIEW_MISSING_DEPENDENCE, db_schema->get_database_name_str().ptr(), mview_table_schema->get_table_name_str().ptr());
+    }
+  } else {
+    ARRAY_FOREACH(mv_dep_infos, idx) {
+      ObMVDepInfo &dep_info = mv_dep_infos.at(idx);
+      const ObTableSchema *table_schema = nullptr;
+      if (OB_FAIL(schema_guard.get_table_schema(dep_info.p_obj_, table_schema))) {
+          LOG_WARN("fail to get table schema", K(ret));
+      } else if (OB_ISNULL(table_schema)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("table schema is null", KR(ret), K(dep_info.p_obj_));
+      } else if (table_schema->is_materialized_view()) {
+        if (OB_FAIL(dep_mview_ids.push_back(dep_info.p_obj_))) {
+          LOG_WARN("fail to push back dep mview id", K(ret));
+        }
+      }
+    }
+    if (OB_SUCC(ret)) {
+      if (dep_mview_ids.count () == mv_dep_infos.count()) {
+        dep_mview = true,  dep_base_table = false;
+      } else if (dep_mview_ids.count() == 0) {
+        dep_mview = false, dep_base_table = true;
+      } else {
+        dep_mview = true,  dep_base_table = true;
+      }
+    }
+  }
+  // get data_sync_scn and check sync
+  ObSEArray<ObMViewInfo, 2> dep_mview_infos;
+  if (OB_FAIL(ret)) {
+  } else if (OB_UNLIKELY(!dep_mview && !dep_base_table)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("mview no deps", K(ret), K(mview_info));
+  } else if (!dep_mview && dep_base_table) {
+    // onlys dep on base table
+    data_sync_scn = refresh_scn;
+    if (nested_consistent_refresh) {
+      data_sync_scn = min(data_sync_scn, target_data_sync_scn);
+    }
+    is_synced = true;
+  } else if (dep_mview) {
+    if (OB_FAIL(ObMViewInfo::bacth_fetch_mview_infos(sql_client,
+                refresh_scn, dep_mview_ids, dep_mview_infos))) {
+    LOG_WARN("fail to batch fetch mview info", K(ret));
+    } else {
+      is_synced = true;
+      bool dep_mview_data_sync_scn_is_equal = true;
+      // collect all dep mview's data_sync_scn and is_synced
+      ARRAY_FOREACH(dep_mview_infos, idx) {
+        const ObMViewInfo &tmp_mview_info = dep_mview_infos.at(idx);
+        // check all mview data sync scn is equal
+        if (dep_mview_data_sync_scn_is_equal &&
+            data_sync_scn != OB_INVALID_SCN_VAL &&
+            data_sync_scn != tmp_mview_info.get_data_sync_scn()) {
+          dep_mview_data_sync_scn_is_equal = false;
+        }
+        // check all dep mview is synced
+        if (is_synced && !tmp_mview_info.get_is_synced()) {
+          is_synced = false;
+          LOG_INFO("data not synced", K(tmp_mview_info));
+        }
+        // compute min_data_sync_scn
+        data_sync_scn = min(data_sync_scn, tmp_mview_info.get_data_sync_scn());
+      }
+      if (is_synced) {
+        if (!dep_mview_data_sync_scn_is_equal) {
+          is_synced = false;
+          LOG_INFO("data not synced", K(dep_mview_data_sync_scn_is_equal));
+        } else {
+          if (!nested_consistent_refresh) {
+            if (dep_base_table && data_sync_scn != refresh_scn) {
+              is_synced = false;
+            } else if (!dep_base_table) {
+              // only dep mview and all dep mview's scn is equal
+              is_synced = true;
+            }
+          } else if (data_sync_scn != target_data_sync_scn) {
+            is_synced = false;
+          }
+        }
+      }
+      LOG_DEBUG("check is synced", K(is_synced), K(dep_mview), K(dep_mview_data_sync_scn_is_equal),
+               K(dep_base_table), K(data_sync_scn), K(target_data_sync_scn));
+    }
+  }
+  if (nested_consistent_refresh && !is_synced) {
+    ret = OB_ERR_MVIEW_CAN_NOT_NESTED_CONSISTENT_REFRESH;
+    LOG_WARN("sync refresh failed", K(ret));
+  }
+  if (OB_SUCC(ret)) {
+    mview_info.set_data_sync_scn(data_sync_scn);
+    mview_info.set_is_synced(is_synced);
+    LOG_INFO("update mview data attr", K(ret), K(mview_info), K(dep_mview), K(dep_base_table),
+             K(data_sync_scn), K(target_data_sync_scn));
+  }
   return ret;
 }
 } // end of sql

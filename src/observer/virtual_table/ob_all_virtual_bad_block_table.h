@@ -18,8 +18,8 @@
 #define OB_ALL_VIRTUAL_BAD_BLOCK_TABLE_H
 
 #include "storage/blocksstable/ob_block_manager.h"
-#include "share/ob_virtual_table_scanner_iterator.h"
-#include "share/ob_scanner.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
+#include "sql/ob_scanner.h"
 #include "common/row/ob_row.h"
 
 namespace oceanbase

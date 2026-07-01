@@ -23,7 +23,7 @@
 #include "sql/engine/expr/ob_expr_null_safe_equal.h"
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
 #include "sql/engine/subquery/ob_subplan_filter_op.h"
-#include "share/vector/expr_cmp_func.h"
+#include "sql/engine/vector/expr_cmp_func.h"
 #include "sql/engine/expr/ob_expr_func_round.h"
 
 #include "common/object/ob_object.h"
@@ -4630,9 +4630,9 @@ ObObjType ObStringExprOperator::get_result_type_mysql(int64_t char_length) const
       col_blob       blob,
       col_count      bigint);
     create table t2 as
-    select repeat('啊',   512),
+    select repeat('CJK',   512),
            repeat('a',    513),
-           repeat('啊', 21845),
+           repeat('CJK', 21845),
            repeat('a',  21846),
            repeat(col_varchar, '512'),
            repeat(col_varchar, '513'),
@@ -4664,7 +4664,7 @@ ObObjType ObStringExprOperator::get_result_type_mysql(int64_t char_length) const
            repeat(col_text, 2),
            repeat(col_blob, 1),
            repeat(col_blob, 2),
-           repeat('啊', col_count),
+           repeat('CJK', col_count),
            repeat('a', col_count),
            repeat(col_varchar, col_count),
            repeat(col_varbinary, col_count),
@@ -4683,9 +4683,9 @@ ObObjType ObStringExprOperator::get_result_type_mysql(int64_t char_length) const
     +-----------------------------------+----------------+------+-----+---------+-------+
     | Field                             | Type           | Null | Key | Default | Extra |
     +-----------------------------------+----------------+------+-----+---------+-------+
-    | repeat('啊',   512)               | varchar(512)   | YES  |     | NULL    |       |
+    | repeat('CJK',   512)               | varchar(512)   | YES  |     | NULL    |       |
     | repeat('a',    513)               | text           | YES  |     | NULL    |       |
-    | repeat('啊', 21845)               | text           | YES  |     | NULL    |       |
+    | repeat('CJK', 21845)               | text           | YES  |     | NULL    |       |
     | repeat('a',  21846)               | longtext       | YES  |     | NULL    |       |
     | repeat(col_varchar, '512')        | varchar(512)   | YES  |     | NULL    |       |
     | repeat(col_varchar, '513')        | text           | YES  |     | NULL    |       |
@@ -4717,7 +4717,7 @@ ObObjType ObStringExprOperator::get_result_type_mysql(int64_t char_length) const
     | repeat(col_text, 2)               | longtext       | YES  |     | NULL    |       |
     | repeat(col_blob, 1)               | blob           | YES  |     | NULL    |       |
     | repeat(col_blob, 2)               | longblob       | YES  |     | NULL    |       |
-    | repeat('啊', col_count)           | longtext       | YES  |     | NULL    |       |
+    | repeat('CJK', col_count)           | longtext       | YES  |     | NULL    |       |
     | repeat('a', col_count)            | longtext       | YES  |     | NULL    |       |
     | repeat(col_varchar, col_count)    | longtext       | YES  |     | NULL    |       |
     | repeat(col_varbinary, col_count)  | longblob       | YES  |     | NULL    |       |
@@ -4740,7 +4740,7 @@ ObObjType ObStringExprOperator::get_result_type_mysql(int64_t char_length) const
    * do not care about the input data type, or whether the input is column or const.
    *
    * ATTENTION! we will ignore these exceptions:
-   * 1. repeat('啊', 21845) => text, repeat('a',  21846) => longtext. we can not
+   * 1. repeat('CJK', 21845) => text, repeat('a',  21846) => longtext. we can not
    *    understand the magic numbers 21845 and 21846.
    * 2. repeat(col_mediumtext, 1) => longtext, repeat(col_mediumblob, 1) => longblob.
    *    text or blob is enough, see:

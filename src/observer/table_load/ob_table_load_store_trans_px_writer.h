@@ -20,7 +20,7 @@
 #include "lib/hash/ob_hashset.h"
 #include "observer/table_load/ob_table_load_pre_sort_writer.h"
 #include "observer/table_load/ob_table_load_px_batch_rows.h"
-#include "src/share/table/ob_table_load_row_array.h"
+#include "observer/table_load/ob_table_load_row_array.h"
 #include "storage/direct_load/ob_direct_load_datum_row.h"
 #include "storage/direct_load/ob_direct_load_row_iterator.h"
 

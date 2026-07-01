@@ -16,9 +16,9 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "ob_time_zone_info_manager.h"
-#include "observer/ob_server.h"
-#include "observer/omt/ob_tenant_timezone_mgr.h"
-#include "observer/ob_sql_client_decorator.h"
+#include "lib/utility/ob_fast_convert.h"  // ObFastAtoi, previously hidden behind a transitive include(free within lib)
+#include "share/ob_tenant_timezone_mgr.h"
+#include "share/ob_sql_client_decorator.h"
 
 using namespace oceanbase::share;
 using namespace oceanbase::observer;

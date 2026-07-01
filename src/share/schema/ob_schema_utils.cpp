@@ -16,9 +16,11 @@
 
 #define USING_LOG_PREFIX SHARE_SCHEMA
 #include "ob_schema_utils.h"
-#include "sql/resolver/expr/ob_raw_expr_util.h"
-#include "sql/engine/cmd/ob_ddl_executor_util.h"
-#include "share/ob_fts_index_builder_util.h"
+#include "share/config/ob_tenant_config_mgr.h"  // TENANT_CONF/ObTenantConfigGuard(both are in share/config)
+#include "share/schema/ob_table_schema.h"
+#include "share/schema/ob_schema_getter_guard.h"
+#include "share/schema/ob_multi_version_schema_service.h"
+#include "share/ob_server_struct.h"
 namespace oceanbase
 {
 using namespace common;
@@ -66,120 +68,6 @@ int ObSchemaUtils::get_all_table_history_name(const char* &table_name,
   return ret;
 }
 
-int ObSchemaUtils::cascaded_generated_column(ObTableSchema &table_schema,
-                                             ObColumnSchemaV2 &column,
-                                             const bool resolve_dependencies)
-{
-  int ret = OB_SUCCESS;
-  ObString col_def;
-  ObArenaAllocator allocator(ObModIds::OB_SCHEMA);
-  ObItemType root_expr_type = T_INVALID;
-  ObArray<ObString> columns_names;
-  ObColumnSchemaV2 *col_schema = NULL;
-  if (column.is_generated_column()) {
-    // If the dependent column of the generated column has a change column, the current default value
-    // should be used instead of orig vaule
-    if (column.get_cur_default_value().is_null()) {
-      if (OB_FAIL(column.get_orig_default_value().get_string(col_def))) {
-        LOG_WARN("get orig default value failed", K(ret));
-      }
-    } else {
-      if (OB_FAIL(column.get_cur_default_value().get_string(col_def))) {
-        LOG_WARN("get cur default value failed", K(ret));
-      }
-    }
-
-    if (OB_SUCC(ret)) {
-      if (OB_FAIL(ObResolverUtils::resolve_generated_column_info(col_def, allocator,
-          root_expr_type, columns_names))) {
-        LOG_WARN("get generated column expr failed", K(ret));
-      } else if (T_FUN_SYS_VEC_IVF_CENTER_ID == root_expr_type) {
-        column.add_column_flag(GENERATED_VEC_IVF_CENTER_ID_COLUMN_FLAG);
-      } else if (T_FUN_SYS_VEC_IVF_CENTER_VECTOR == root_expr_type ||
-                 T_FUN_SYS_VEC_IVF_PQ_CENTER_VECTOR == root_expr_type) {
-        column.add_column_flag(GENERATED_VEC_IVF_CENTER_VECTOR_COLUMN_FLAG);
-      } else if (T_FUN_SYS_VEC_IVF_FLAT_DATA_VECTOR == root_expr_type ||
-                 T_FUN_SYS_VEC_IVF_SQ8_DATA_VECTOR == root_expr_type) {
-        column.add_column_flag(GENERATED_VEC_IVF_DATA_VECTOR_COLUMN_FLAG);
-      } else if (T_FUN_SYS_VEC_IVF_META_ID == root_expr_type) {
-        column.add_column_flag(GENERATED_VEC_IVF_META_ID_COLUMN_FLAG);
-      } else if (T_FUN_SYS_VEC_IVF_META_VECTOR == root_expr_type) {
-        column.add_column_flag(GENERATED_VEC_IVF_META_VECTOR_COLUMN_FLAG);
-      } else if (T_FUN_SYS_VEC_IVF_PQ_CENTER_ID == root_expr_type) {
-        column.add_column_flag(GENERATED_VEC_IVF_PQ_CENTER_ID_COLUMN_FLAG);
-      } else if (T_FUN_SYS_VEC_IVF_PQ_CENTER_IDS == root_expr_type) {
-        column.add_column_flag(GENERATED_VEC_IVF_PQ_CENTER_IDS_COLUMN_FLAG);
-      } else if (T_FUN_SYS_VEC_VID == root_expr_type) {
-        column.add_column_flag(GENERATED_VEC_VID_COLUMN_FLAG);
-      } else if (T_FUN_SYS_VEC_TYPE == root_expr_type) {
-        column.add_column_flag(GENERATED_VEC_TYPE_COLUMN_FLAG);
-      } else if (T_FUN_SYS_VEC_VECTOR == root_expr_type) {
-        column.add_column_flag(GENERATED_VEC_VECTOR_COLUMN_FLAG);
-      } else if (T_FUN_SYS_EMBEDDED_VEC == root_expr_type) {
-        column.add_column_flag(GENERATED_VEC_VECTOR_COLUMN_FLAG);
-      } else if (T_FUN_SYS_VEC_SCN == root_expr_type) {
-        column.add_column_flag(GENERATED_VEC_SCN_COLUMN_FLAG);
-      } else if (T_FUN_SYS_VEC_KEY == root_expr_type) {
-        column.add_column_flag(GENERATED_VEC_KEY_COLUMN_FLAG);
-      } else if (T_FUN_SYS_VEC_DATA == root_expr_type) {
-        column.add_column_flag(GENERATED_VEC_DATA_COLUMN_FLAG);
-      } else if (T_FUN_SYS_SPIV_DIM == root_expr_type) {
-        column.add_column_flag(GENERATED_VEC_SPIV_DIM_COLUMN_FLAG);
-      } else if (T_FUN_SYS_SPIV_VALUE == root_expr_type) {
-        column.add_column_flag(GENERATED_VEC_SPIV_VALUE_COLUMN_FLAG);
-      } else if (T_FUN_SYS_WORD_SEGMENT == root_expr_type) {
-        column.add_column_flag(GENERATED_FTS_WORD_SEGMENT_COLUMN_FLAG);
-      } else if (T_FUN_SYS_WORD_COUNT == root_expr_type) {
-        column.add_column_flag(GENERATED_FTS_WORD_COUNT_COLUMN_FLAG);
-      } else if (T_FUN_SYS_DOC_LENGTH == root_expr_type) {
-        column.add_column_flag(GENERATED_FTS_DOC_LENGTH_COLUMN_FLAG);
-      } else if (T_FUN_SYS_HYBRID_VEC_CHUNK == root_expr_type) {
-        column.add_column_flag(GENERATED_HYBRID_VEC_CHUNK_COLUMN_FLAG);
-      } else if (T_FUN_SYS_SPATIAL_CELLID == root_expr_type || T_FUN_SYS_SPATIAL_MBR == root_expr_type) {
-        column.add_column_flag(SPATIAL_INDEX_GENERATED_COLUMN_FLAG);
-      } else if (T_FUN_SYS_JSON_QUERY == root_expr_type) {
-        if (ObMulValueIndexBuilderUtil::is_multivalue_array_column(col_def)) {
-          column.add_column_flag(MULTIVALUE_INDEX_GENERATED_ARRAY_COLUMN_FLAG);
-        } else if (ObMulValueIndexBuilderUtil::is_multivalue_index_column(col_def)) {
-          column.add_column_flag(MULTIVALUE_INDEX_GENERATED_COLUMN_FLAG);
-        }
-      } else {
-        LOG_DEBUG("succ to resolve_generated_column_info", K(col_def), K(root_expr_type), K(columns_names), K(table_schema));
-      }
-    }
-    // TODO: materialized view
-    if (OB_SUCC(ret) && resolve_dependencies && !column.is_doc_id_column() && (table_schema.is_table()
-                                                || table_schema.is_tmp_table())) {
-      for (int64_t i = 0; OB_SUCC(ret) && i < columns_names.count(); ++i) {
-        if (OB_ISNULL(col_schema = table_schema.get_column_schema(columns_names.at(i)))) {
-          ret = OB_ERR_UNEXPECTED;
-          LOG_WARN("get column schema failed", K(columns_names.at(i)));
-        } else if (OB_FAIL(column.add_cascaded_column_id(col_schema->get_column_id()))) {
-          LOG_WARN("add cascaded column id failed", K(ret));
-        } else if (col_schema->get_udt_set_id() > 0) {
-          ObSEArray<ObColumnSchemaV2 *, 1> hidden_cols;
-          if (OB_FAIL(table_schema.get_column_schema_in_same_col_group(col_schema->get_column_id(), col_schema->get_udt_set_id(), hidden_cols))) {
-            LOG_WARN("get column schema in same col group failed", K(ret), K(col_schema->get_udt_set_id()));
-          } else {
-            for (int i = 0; i < hidden_cols.count() && OB_SUCC(ret); i++) {
-              uint64_t cascaded_column_id = hidden_cols.at(i)->get_column_id();
-              if (OB_FAIL(column.add_cascaded_column_id(cascaded_column_id))) {
-                LOG_WARN("add cascaded column id to generated column failed", K(ret), K(cascaded_column_id));
-              }
-            }
-          }
-        }
-        if (OB_SUCC(ret)) {
-          if (column.is_tbl_part_key_column()) {
-            col_schema->add_column_flag(TABLE_PART_KEY_COLUMN_ORG_FLAG);
-          }
-          col_schema->add_column_flag(GENERATED_DEPS_CASCADE_FLAG);
-        }
-      }
-    }
-  }
-  return ret;
-}
 
 bool ObSchemaUtils::is_virtual_generated_column(uint64_t flag)
 {
@@ -364,17 +252,6 @@ bool ObSchemaUtils::is_doc_length_column(const uint64_t flag)
 bool ObSchemaUtils::is_spatial_generated_column(uint64_t flag)
 {
   return flag & SPATIAL_INDEX_GENERATED_COLUMN_FLAG;
-}
-
-int ObSchemaUtils::add_column_to_table_schema(ObColumnSchemaV2 &column, ObTableSchema &table_schema)
-{
-  int ret = OB_SUCCESS;
-  if (OB_FAIL(cascaded_generated_column(table_schema, column, false))) {
-    LOG_WARN("cascaded generated column failed", K(ret));
-  } else if (OB_FAIL(table_schema.add_column(column))) {
-    LOG_WARN("add column to table schema failed", K(ret));
-  }
-  return ret;
 }
 
 int ObSchemaUtils::convert_sys_param_to_sysvar_schema(const ObSysParam &sysparam, ObSysVarSchema &sysvar_schema)
@@ -738,56 +615,7 @@ int64_t ObSchemaUtils::get_inner_table_sys_schema_version(ObIArray<ObTableSchema
   return sys_schema_version;
 }
 
-int ObSchemaUtils::try_check_parallel_ddl_schema_in_sync(
-    const ObTimeoutCtx &ctx,
-    sql::ObSQLSessionInfo *session,
-    const int64_t schema_version,
-    const bool skip_consensus)
-{
-  int ret = OB_SUCCESS;
-  int64_t start_time = ObTimeUtility::current_time();
-  ObMultiVersionSchemaService *schema_service = NULL;
-  int64_t consensus_timeout = 30 * 1000 * 1000L; // 30s
-  bool is_async = false;
-
-  consensus_timeout = GCONF._wait_interval_after_parallel_ddl;
-  is_async = (0 == GCONF._publish_schema_mode.case_compare(PUBLISH_SCHEMA_MODE_ASYNC));
-
-  if (OB_ISNULL(session) || OB_UNLIKELY(false
-      || schema_version <= 0
-      || consensus_timeout < 0)) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid arg", KR(ret), KP(session), K(schema_version), K(consensus_timeout));
-  } else if (OB_ISNULL(schema_service = GCTX.schema_service_)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("schema_service is null", KR(ret));
-  }
-  while (OB_SUCC(ret) && ctx.get_timeout() > 0 && !is_async) {
-    int64_t refreshed_schema_version = OB_INVALID_VERSION;
-    int64_t consensus_schema_version = OB_INVALID_VERSION;
-    if (OB_FAIL(ObDDLExecutorUtil::handle_session_exception(*session))) {
-      LOG_WARN("fail to handle session exception", KR(ret));
-    } else if (OB_FAIL(schema_service->get_tenant_refreshed_schema_version(refreshed_schema_version))) {
-      LOG_WARN("get refreshed schema_version fail", KR(ret));
-    } else if (OB_FAIL(schema_service->get_tenant_broadcast_consensus_version(consensus_schema_version))) {
-      LOG_WARN("get consensus schema_version fail", KR(ret));
-    } else if (refreshed_schema_version >= schema_version
-                && consensus_schema_version >= schema_version) {
-      break;
-    } else if (refreshed_schema_version >= schema_version
-                && (skip_consensus
-                    || ObTimeUtility::current_time() - start_time >= consensus_timeout)) {
-      break;
-    } else {
-      if (REACH_TIME_INTERVAL(1000 * 1000L)) { // 1s
-        LOG_WARN("schema version not sync", K(consensus_timeout),
-                 K(refreshed_schema_version), K(consensus_schema_version), K(schema_version));
-      }
-      ob_usleep(10 * 1000L); // 10ms
-    }
-  }
-  return ret;
-}
+// ObSchemaUtils::try_check_parallel_ddl_schema_in_sync moved definition to the upper-layer owner cpp(real upper-layer symbol user, declaration remains in this class header, transitional state)
 
 int ObSchemaUtils::build_column_group(
     const ObTableSchema &table_schema,
@@ -1553,6 +1381,7 @@ int ObParallelDDLControlMode::is_parallel_ddl(const ObParallelDDLType type, bool
   return ret;
 }
 
+// is_parallel_ddl_enable: restored back to share(omt::ObTenantConfigGuard/TENANT_CONF actually lives in share/config, originally misclassified as observer)
 int ObParallelDDLControlMode::is_parallel_ddl_enable(const ObParallelDDLType ddl_type, bool &is_parallel)
 {
   int ret = OB_SUCCESS;
@@ -1607,34 +1436,9 @@ int ObParallelDDLControlMode::generate_parallel_ddl_control_config_for_create_te
   return ret;
 }
 
-int ObTenantDDLCountGuard::try_inc_ddl_count(const int64_t cpu_quota_concurrency)
-{
-  int ret = OB_SUCCESS;
-  omt::ObMultiTenant *omt = GCTX.omt_;
-  if (OB_ISNULL(omt)) {
-    ret = OB_ERR_UNEXPECTED;
-    LOG_WARN("omt is null", KR(ret));
-  } else if (OB_FAIL(omt->inc_tenant_ddl_count( cpu_quota_concurrency))) {
-    LOG_WARN("fail to inc tenant ddl count", KR(ret));
-  } else {
-    had_inc_ddl_ = true;
-  }
-  return ret;
-}
+// try_inc_ddl_count moved definition to rootserver/ob_ddl_service.cpp(omt real-user hidden dependency)
 
-ObTenantDDLCountGuard::~ObTenantDDLCountGuard()
-{
-  int ret = OB_SUCCESS;
-  if (had_inc_ddl_) {
-    omt::ObMultiTenant *omt = GCTX.omt_;
-    if (OB_ISNULL(omt)) {
-      ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("omt is null", KR(ret));
-    } else if (OB_FAIL(omt->dec_tenant_ddl_count())) {
-      LOG_WARN("fail to dec tenant ddl count", KR(ret));
-    }
-  }
-}
+// destructor moved definition to rootserver/ob_ddl_service.cpp(omt real user)
 
 } // end schema
 } // end share

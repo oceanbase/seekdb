@@ -2025,6 +2025,24 @@
     "background_cn": "",
     "ref_url": ""
   },
+  "ob_enable_jit": {
+    "id": 10048,
+    "name": "ob_enable_jit",
+    "default_value": "0",
+    "base_value": "0",
+    "data_type": "enum",
+    "info": "JIT execution engine mode, default is AUTO",
+    "flags": "GLOBAL | SESSION | NEED_SERIALIZE | INFLUENCE_PLAN",
+    "enum_names": [
+      "OFF",
+      "AUTO",
+      "FORCE"
+    ],
+    "publish_version": "",
+    "info_cn": "",
+    "background_cn": "",
+    "ref_url": ""
+  },
   "ob_temp_tablespace_size_percentage": {
     "id": 10049,
     "name": "ob_temp_tablespace_size_percentage",
@@ -3142,19 +3160,6 @@
     "flags": "GLOBAL | SESSION",
     "publish_version": "400",
     "info_cn": "控制在insert into select下是否默认收集统计信息",
-    "background_cn": "",
-    "ref_url": ""
-  },
-  "_set_reverse_dblink_infos": {
-    "id": 10139,
-    "name": "_set_reverse_dblink_infos",
-    "default_value": "",
-    "base_value": "",
-    "data_type": "varchar",
-    "info": "used in the dblink write transaction, the TM side informs the RM side of the necessary information about establishing a reverse dblink by setting system variables",
-    "flags": "SESSION | ORACLE_ONLY",
-    "publish_version": "410",
-    "info_cn": "用于dblink写事务中, TM端通过设置系统变量的方式告知RM端关于建立反向dblink的必要信息",
     "background_cn": "",
     "ref_url": ""
   },

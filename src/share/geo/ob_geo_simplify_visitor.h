@@ -1,0 +1,75 @@
+/*
+ * Copyright (c) 2025 OceanBase.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#ifndef OCEANBASE_LIB_GEO_OB_GEO_SIMPLIFY_VISITOR_
+#define OCEANBASE_LIB_GEO_OB_GEO_SIMPLIFY_VISITOR_
+#include "share/geo/ob_geo_visitor.h"
+#include "share/geo/ob_geo_common.h"
+#include "share/geo/ob_geo_utils.h"
+
+namespace oceanbase
+{
+namespace common
+{
+class ObGeoSimplifyVisitor : public ObEmptyGeoVisitor
+{
+public:
+  explicit ObGeoSimplifyVisitor(double tolerance = 0.0, bool keep_collapsed = false)
+      : tolerance_(tolerance), keep_collapsed_(keep_collapsed)
+  {}
+
+  virtual ~ObGeoSimplifyVisitor()
+  {}
+
+  bool prepare(ObGeometry *geo) override;
+  int visit(ObCartesianPoint *geo) override;
+  int visit(ObCartesianLineString *geo) override;
+  int visit(ObCartesianPolygon *geo) override;
+  int visit(ObCartesianMultipoint *geo) override;
+  int visit(ObCartesianMultilinestring *geo) override;
+  int visit(ObCartesianMultipolygon *geo) override;
+  int visit(ObCartesianGeometrycollection *geo) override;
+
+  bool is_end(ObGeometry *geo) override
+  {
+    UNUSED(geo);
+    return true;
+  }
+
+  int finish(ObGeometry *geo) override;
+
+private:
+  static const uint32_t RING_MIN_POINT = 4;
+  static const uint32_t LINESTRING_MIN_POINT = 2;
+
+  template<typename POLYGON, typename RING>
+  int polygon_visit(POLYGON &geo);
+  template<typename LINE>
+  int multi_point_visit(LINE &geo, int32_t min_point);
+  template<typename LINE>
+  void quick_simplify(LINE &line, ObArray<bool> &kept_idx, int32_t &kept_sz, int32_t min_point, int32_t l,
+      int32_t r, double tolerance);
+  template<typename LINE>
+  void find_split_point(LINE &line, int32_t l, int32_t r, double max_distance, int32_t &split_idx);
+
+  double tolerance_;
+  bool keep_collapsed_;
+  DISALLOW_COPY_AND_ASSIGN(ObGeoSimplifyVisitor);
+};
+}  // namespace common
+}  // namespace oceanbase
+
+#endif

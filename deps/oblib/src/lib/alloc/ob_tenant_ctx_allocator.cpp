@@ -22,7 +22,7 @@
 #include "lib/alloc/memory_dump.h"
 #include "lib/alloc/memory_sanity.h"
 #include "lib/alloc/ob_malloc_callback.h"
-#include "common/ob_smart_var.h"
+#include "lib/utility/ob_smart_var.h"
 
 using namespace oceanbase::lib;
 using namespace oceanbase::common;

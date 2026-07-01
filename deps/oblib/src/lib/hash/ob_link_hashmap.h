@@ -191,7 +191,7 @@ public:
   private:
     int64_t loop_cnt_;
   };
-  static constexpr uint64 MAGIC_CODE = 0x0ceaba5e0ceaba5e;
+  static constexpr uint64_t MAGIC_CODE = 0x0ceaba5e0ceaba5e;
   static constexpr int64_t DEFAULT_MIN_SIZE = 1<<13;
 public:
   explicit ObLinkHashMap(int64_t min_size = DEFAULT_MIN_SIZE, int64_t max_size = INT64_MAX)

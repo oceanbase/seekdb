@@ -17,7 +17,7 @@
 #include "ob_trans_submit_log_cb.h"
 #include "share/rc/ob_module_provider.h"
 #include "ob_trans_part_ctx.h"
-#include "share/allocator/ob_shared_memory_allocator_mgr.h"
+#include "storage/allocator/ob_shared_memory_allocator_mgr.h"
 
 namespace oceanbase
 {

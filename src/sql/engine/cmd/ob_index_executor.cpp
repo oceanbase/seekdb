@@ -15,6 +15,7 @@
  */
 
 #define USING_LOG_PREFIX SQL_ENG
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_index_executor.h"
 #include "rootserver/ob_rs_serial_call.h"
 #include "rootserver/ob_root_service.h"
@@ -124,7 +125,7 @@ int ObCreateIndexExecutor::execute(ObExecContext &ctx, ObCreateIndexStmt &stmt)
         LOG_WARN("fail to parallel create index", KR(ret), "dst", GCTX.self_addr());
       } else {
         refresh_time = ObTimeUtility::current_time();
-        if (OB_FAIL(ObSchemaUtils::try_check_parallel_ddl_schema_in_sync(
+        if (OB_FAIL(ObDDLExecutorUtil::try_check_parallel_ddl_schema_in_sync(
             ctx, my_session, res.schema_version_, false /*skip_consensus*/))) {
           LOG_WARN("fail to check parallel ddl schema in sync", KR(ret), K(res));
         }

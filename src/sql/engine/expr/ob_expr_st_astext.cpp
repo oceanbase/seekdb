@@ -17,8 +17,8 @@
 #define USING_LOG_PREFIX SQL_ENG
 #include "sql/engine/expr/ob_expr_st_astext.h"
 #include "sql/engine/expr/ob_geo_expr_utils.h"
-#include "lib/geo/ob_geo_to_wkt_visitor.h"
-#include "lib/geo/ob_geo_3d.h"
+#include "share/geo/ob_geo_to_wkt_visitor.h"
+#include "share/geo/ob_geo_3d.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::sql;

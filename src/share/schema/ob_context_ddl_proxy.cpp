@@ -16,7 +16,6 @@
 
 #define USING_LOG_PREFIX SHARE
 #include "share/schema/ob_context_ddl_proxy.h"
-#include "share/schema/ob_schema_service_sql_impl.h"
 
 using namespace oceanbase::common;
 using namespace oceanbase::common::sqlclient;

@@ -18,7 +18,7 @@
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_TABLE_INDEX_
 
 #include "lib/container/ob_se_array.h"
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "common/ob_range.h"
 namespace oceanbase
 {

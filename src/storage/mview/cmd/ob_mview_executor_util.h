@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "lib/number/ob_number_v2.h"
+#include "common/number/ob_number_v2.h"
 #include "share/schema/ob_schema_struct.h"
 
 namespace oceanbase

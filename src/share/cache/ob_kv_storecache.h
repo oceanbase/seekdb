@@ -17,8 +17,6 @@
 #ifndef  OCEANBASE_COMMON_KV_STORE_CACHE_H_
 #define  OCEANBASE_COMMON_KV_STORE_CACHE_H_
 
-#include "storage/ob_storage_checked_object_base.h"
-#include "storage/ob_storage_leak_checker.h"
 #include "lib/lock/ob_mutex.h"
 #include "lib/task/ob_timer.h"
 #include "lib/utility/ob_macro_utils.h"
@@ -125,7 +123,6 @@ public:
   // wash memblock from cache synchronously
   virtual int sync_wash_mbs(const int64_t wash_size,
                             lib::ObICacheWasher::ObCacheMemBlock *&wash_blocks);
-  int set_storage_leak_check_mod(const char *check_mod);
   int get_cache_name(const int64_t cache_id, char *cache_name);
   int get_batch_data_block_cache_key(ObIArray<blocksstable::ObMicroBlockCacheKey> &keys) {
     return map_.get_batch_data_block_cache_key(DEFAULT_ONCE_BATCH_GET_BUCKET_NUM, keys);
@@ -261,7 +258,7 @@ private:
 };
 
 
-class ObKVCacheHandle : storage::ObStorageCheckedObjectBase
+class ObKVCacheHandle
 {
 public:
   ObKVCacheHandle();
@@ -273,15 +270,12 @@ public:
   int assign(const ObKVCacheHandle& other);
   inline ObKVMemBlockHandle* get_mb_handle() const { return hazptr_holder_.get_mb_handle(); }
   inline void set_hazptr_holder(HazptrHolder& hazptr_holder) { this->hazptr_holder_.move_from(hazptr_holder); }
-  bool need_trace() const;
-  storage::ObStorageCheckID get_check_id() const { return static_cast<storage::ObStorageCheckID>(0); }
   TO_STRING_KV(K_(hazptr_holder));
 
 private:
   template<class Key, class Value> friend class ObIKVCache;
   template<class Key, class Value> friend class ObKVCache;
   friend class ObKVCacheIterator;
-  friend class storage::ObStorageLeakChecker;
   friend class ObPointerSwizzleNode;
 
   HazptrHolder hazptr_holder_;
@@ -334,7 +328,6 @@ int ObIKVCache<Key, Value>::put_kvpair(ObKVCacheInstHandle &inst_handle, ObKVCac
         COMMON_LOG(WARN, "Fail to put kvpair to map, ", K(ret));
       }
     } else {
-      storage::ObStorageLeakChecker::get_instance().handle_hold(&handle);
     }
   }
   return ret;
@@ -510,7 +503,6 @@ int ObKVCache<Key, Value>::put_and_fetch(
       COMMON_LOG(WARN, "Fail to put kv to ObKVGlobalCache, ", K_(cache_id), K(ret));
     }
   } else {
-    storage::ObStorageLeakChecker::get_instance().handle_hold(&handle);
   }
   return ret;
 }
@@ -531,7 +523,6 @@ int ObKVCache<Key, Value>::get(const Key &key, const Value *&pvalue, ObKVCacheHa
       }
     } else {
       pvalue = reinterpret_cast<const Value*> (value);
-      storage::ObStorageLeakChecker::get_instance().handle_hold(&handle);
     }
   }
   return ret;
@@ -568,7 +559,6 @@ int ObKVCache<Key, Value>::alloc(const int64_t key_size, const int64_t value_siz
           inst_handle))) {
     COMMON_LOG(WARN, "failed to alloc", K(ret));
   } else {
-    storage::ObStorageLeakChecker::get_instance().handle_hold(&handle);
   }
 
   return ret;
@@ -635,7 +625,6 @@ int ObKVCacheIterator::get_next_kvpair(
   if (OB_SUCC(ret)) {
     key = reinterpret_cast<const Key*>(node.key_);
     value = reinterpret_cast<const Value*>(node.value_);
-    storage::ObStorageLeakChecker::get_instance().handle_hold(&handle);
   }
   return ret;
 }

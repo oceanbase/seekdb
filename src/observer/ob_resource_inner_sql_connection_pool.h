@@ -21,7 +21,7 @@
 #include "lib/lock/ob_spin_lock.h"
 #include "lib/lock/ob_thread_cond.h"
 #include "observer/ob_inner_sql_connection_pool.h"
-#include "lib/mysqlclient/ob_isql_connection.h"
+#include "common/mysqlclient/ob_isql_connection.h"
 
 namespace oceanbase
 {

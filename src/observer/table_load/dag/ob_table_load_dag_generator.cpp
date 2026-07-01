@@ -18,7 +18,7 @@
 
 #include "observer/table_load/dag/ob_table_load_dag_generator.h"
 #include "lib/queue/ob_fixed_queue.h"
-#include "lib/xml/ob_multi_mode_interface.h"
+#include "common/xml/ob_multi_mode_interface.h"
 #include "observer/table_load/dag/ob_table_load_dag.h"
 #include "observer/table_load/dag/ob_table_load_dag_exec_ctx.h"
 #include "observer/table_load/dag/ob_table_load_dag_task.h"

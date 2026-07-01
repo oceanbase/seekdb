@@ -229,10 +229,6 @@ void ObXAStatistics::reset()
   ATOMIC_STORE(&total_success_xa_2pc_commit_, 0);
   ATOMIC_STORE(&total_failure_xa_2pc_commit_, 0);
   ATOMIC_STORE(&total_xa_rollback_, 0);
-  ATOMIC_STORE(&total_success_dblink_promotion_, 0);
-  ATOMIC_STORE(&total_failure_dblink_promotion_, 0);
-  ATOMIC_STORE(&total_success_dblink_, 0);
-  ATOMIC_STORE(&total_failure_dblink_, 0);
 }
 
 

@@ -21,7 +21,7 @@
 #include "storage/ls/ob_ls_tablet_service.h"
 #include "storage/tx_storage/ob_ls_map.h"
 #include "storage/access/ob_table_scan_range.h"
-#include "share/stat/ob_stat_define.h"
+#include "sql/optimizer/stat/ob_stat_define.h"
 #include "storage/tx_storage/ob_ls_handle.h"
 
 namespace oceanbase

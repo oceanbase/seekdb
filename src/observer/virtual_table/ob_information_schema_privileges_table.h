@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_SCHEMA_PRIVILEGES_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_SCHEMA_PRIVILEGES_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "share/schema/ob_priv_type.h"
 
 namespace oceanbase

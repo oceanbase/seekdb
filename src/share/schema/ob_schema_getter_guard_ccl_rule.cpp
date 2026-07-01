@@ -18,7 +18,6 @@
 
 #include "share/schema/ob_schema_getter_guard.h"
 #include "share/schema/ob_schema_mgr.h"
-#include "sql/resolver/ob_schema_checker.h"
 #include "share/schema/ob_schema_struct.h"
 
 namespace oceanbase

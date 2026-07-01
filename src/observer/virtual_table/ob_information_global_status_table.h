@@ -17,7 +17,7 @@
 #ifndef OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_GLOBAL_STATUS_TABLE_
 #define OCEANBASE_OBSERVER_VIRTUAL_TABLE_OB_INFORMATION_GLOBAL_STATUS_TABLE_
 
-#include "share/ob_virtual_table_scanner_iterator.h"
+#include "observer/virtual_table/ob_virtual_table_scanner_iterator.h"
 #include "src/share/ob_server_struct.h"
 
 namespace oceanbase
