@@ -209,7 +209,7 @@ void BlockSet::add_free_block(ABlock *block, int nblocks, AChunk *chunk)
   abort_unless(NULL != block && !block->in_use_ && !block->is_washed_);
   int offset = chunk->blk_offset(block);
   chunk->mark_blk_offset_bit(offset);
-  block->alloc_bytes_ = common::ObTimeUtility::fast_current_time();
+  block->free_time_us_ = common::ObTimeUtility::fast_current_time();
 
 #if MEMCHK_LEVEL >= 1
   int expect_nblocks = chunk->blk_nblocks(block);
@@ -558,7 +558,7 @@ int64_t BlockSet::purge_free_blocks(const int64_t wash_size,
               (len & (ps - 1)) != 0) {
             _OB_LOG(DEBUG, "cannot be applied to non-multiple of page-size, page_size: %zd", ps);
             local_has_ignore = true;
-          } else if (delay_us > 0 && now - static_cast<int64_t>(block->alloc_bytes_) < delay_us) {
+          } else if (delay_us > 0 && now - block->free_time_us_ < delay_us) {
           } else {
             int result = 0;
             do {

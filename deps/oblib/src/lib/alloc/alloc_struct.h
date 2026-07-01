@@ -25,9 +25,9 @@
 #include "lib/utility/ob_platform_utils.h"
 #include "lib/ob_abort.h"
 #include "lib/utility/ob_macro_utils.h"
-#include "lib/utility/alloc_assist.h"
+#include "lib/alloc/alloc_assist.h"
 #include "lib/alloc/abit_set.h"
-#include "lib/utility/ob_mod_define.h"
+#include "lib/allocator/ob_mod_define.h"
 #include "lib/list/ob_dlink_node.h"
 #include "lib/atomic/ob_atomic.h"
 
@@ -303,7 +303,10 @@ struct ABlock {
     };
   };
 
-  uint64_t alloc_bytes_;
+  union {
+    uint64_t alloc_bytes_; // valid when in_use_
+    int64_t free_time_us_; // valid for dirty free blocks before purge
+  };
   uint32_t ablock_size_;
   union {
     ObjectSet *obj_set_;
