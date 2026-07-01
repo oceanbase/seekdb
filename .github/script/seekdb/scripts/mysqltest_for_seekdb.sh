@@ -285,7 +285,6 @@ EOF
     fi
     extra_conf="""$MYSQLRTEST_ARGS
     $CGROUP_CONFIG
-    start_obshell: false
 """
     conf=${conf//'{{%% PROXY_CONF %%}}'/"$extra_conf"}
     conf=${conf//'{{%% DEPLOY_PATH %%}}'/"$HOME/seekdb/tools/deploy"}
@@ -399,17 +398,29 @@ function obd_prepare_bin {
 
 }
 
+function obd_ci_strip_obshell {
+    # mirror 保留 obshell；启动前删掉部署目录里的二进制，让 obshell_start 插件 skip
+    rm -f "$DATA_PATH"/observer*/bin/obshell 2>/dev/null || true
+}
+
+function obd_cluster_deploy_and_start {
+    [[ -f $HOME/seekdb/tools/deploy/activate_obd.sh ]] && source $HOME/seekdb/tools/deploy/activate_obd.sh
+    $obd cluster deploy $ob_name -c $HOME/seekdb/tools/deploy/config.yaml -f || return 1
+    obd_ci_strip_obshell
+    $obd cluster start $ob_name -f && $obd cluster display $ob_name
+}
+
 function obd_init_cluster {
     retries=$reboot_retries
     while (( $retries > 0 ))
     do
     if [[ "$retries" == "$reboot_retries" ]]
     then
-        [[ -f $HOME/seekdb/tools/deploy/activate_obd.sh ]] && source $HOME/seekdb/tools/deploy/activate_obd.sh
-        $obd cluster deploy $ob_name -c $HOME/seekdb/tools/deploy/config.yaml -f && $obd cluster start $ob_name -f && $obd cluster display $ob_name
+        obd_cluster_deploy_and_start
     else
         [[ -f $HOME/seekdb/tools/deploy/activate_obd.sh ]] && source $HOME/seekdb/tools/deploy/activate_obd.sh
-        $obd cluster redeploy $ob_name -f
+        $obd cluster destroy $ob_name -f 2>/dev/null || true
+        obd_cluster_deploy_and_start
     fi
     retries=`expr $retries - 1`
     ./obclient -h 127.1 -P $MYSQL_PORT -u root -A -e "alter system set_tp tp_no = 509, error_code = 4016, frequency = 1;"
