@@ -20,9 +20,6 @@
 #include "lib/time/ob_time_utility.h"
 #ifdef _WIN32
 #include <windows.h>
-#ifndef MADV_DONTNEED
-#define MADV_DONTNEED 4
-#endif
 #endif
 
 // macOS sys/param.h defines isset macro which conflicts with method calls
@@ -33,8 +30,22 @@
 using namespace oceanbase;
 using namespace oceanbase::lib;
 
+#if defined(_WIN32) || defined(MADV_DONTNEED)
+#define OB_ALLOC_HAS_PAGE_PURGE 1
+#else
+#define OB_ALLOC_HAS_PAGE_PURGE 0
+#endif
+
 namespace
 {
+#if OB_ALLOC_HAS_PAGE_PURGE
+#ifdef _WIN32
+static const int OB_ALLOC_PURGE_ADVICE = 4;
+#else
+static const int OB_ALLOC_PURGE_ADVICE = MADV_DONTNEED;
+#endif
+#endif
+
 // Ordinary purge is driven opportunistically by alloc/free paths, not by a
 // background timer. Keep each round bounded so the caller pays a predictable
 // amount of work.
@@ -42,6 +53,36 @@ static const int64_t ORDINARY_PURGE_BUDGET = 4L << 20;
 static const int64_t ORDINARY_PURGE_MIN_INTERVAL_US = 1000L * 1000L;
 static const int64_t ORDINARY_PURGE_DELAY_US = 1000L * 1000L;
 static const int64_t ORDINARY_PURGE_MAX_BLOCKS = 64;
+
+#if OB_ALLOC_HAS_PAGE_PURGE
+#ifdef _WIN32
+inline int ob_madvise(void *addr, size_t length, int advice)
+{
+  // Use MEM_RESET instead of MEM_DECOMMIT: MEM_DECOMMIT truly decommits pages,
+  // causing ACCESS_VIOLATION on subsequent access. MEM_RESET keeps pages
+  // committed but lets the OS reclaim contents, matching MADV_DONTNEED.
+  if (advice == OB_ALLOC_PURGE_ADVICE) {
+    return ::VirtualAlloc(addr, length, MEM_RESET, PAGE_READWRITE) != NULL ? 0 : -1;
+  }
+  return 0;
+}
+#endif
+
+inline int ob_purge_memory(void *addr, size_t length)
+{
+  int result = 0;
+  if (length > 0) {
+    do {
+#ifdef _WIN32
+      result = ob_madvise(addr, length, OB_ALLOC_PURGE_ADVICE);
+#else
+      result = ::madvise(addr, length, OB_ALLOC_PURGE_ADVICE);
+#endif
+    } while (result == -1 && errno == EAGAIN);
+  }
+  return result;
+}
+#endif
 }
 
 BlockSet::BlockSet()
@@ -477,19 +518,6 @@ void BlockSet::free_chunk(AChunk *const chunk)
   }
 }
 
-#ifdef _WIN32
-inline int ob_madvise(void* addr, size_t length, int advice) {
-  // Use MEM_RESET instead of MEM_DECOMMIT: MEM_DECOMMIT truly decommits pages,
-  // causing ACCESS_VIOLATION on subsequent access. MEM_RESET keeps pages committed
-  // but tells the OS their contents are no longer needed — matching Linux
-  // madvise(MADV_DONTNEED) semantics where pages remain accessible.
-  if (advice == MADV_DONTNEED) {
-      return ::VirtualAlloc(addr, length, MEM_RESET, PAGE_READWRITE) != NULL ? 0 : -1;
-  }
-  return 0;
-}
-#endif
-
 int64_t BlockSet::sync_wash(int64_t wash_size)
 {
   bool has_ignore = false;
@@ -502,7 +530,7 @@ int64_t BlockSet::purge_free_blocks(const int64_t wash_size,
     bool *has_ignore,
     int64_t *scanned_blocks)
 {
-#if !defined(MADV_DONTNEED)
+#if !OB_ALLOC_HAS_PAGE_PURGE
   UNUSED(wash_size);
   UNUSED(delay_us);
   UNUSED(max_blocks_per_round);
@@ -560,14 +588,7 @@ int64_t BlockSet::purge_free_blocks(const int64_t wash_size,
             local_has_ignore = true;
           } else if (delay_us > 0 && now - block->free_time_us_ < delay_us) {
           } else {
-            int result = 0;
-            do {
-#ifndef _WIN32
-              result = ::madvise(data, len, MADV_DONTNEED);
-#else
-              result = ob_madvise(data, len, MADV_DONTNEED);
-#endif
-            } while (result == -1 && errno == EAGAIN);
+            int result = ob_purge_memory(data, len);
             if (-1 == result) {
               _OB_LOG_RET(WARN, OB_ERR_SYS, "madvise failed, errno: %d", errno);
               local_has_ignore = true;
@@ -640,7 +661,7 @@ int64_t BlockSet::purge_free_blocks(const int64_t wash_size,
 
 void BlockSet::maybe_ordinary_purge()
 {
-#if defined(MADV_DONTNEED)
+#if OB_ALLOC_HAS_PAGE_PURGE
   const int64_t now = common::ObTimeUtility::fast_current_time();
   const int64_t last_ts = ATOMIC_LOAD(&last_ordinary_purge_ts_);
   if (now - last_ts >= ORDINARY_PURGE_MIN_INTERVAL_US) {
