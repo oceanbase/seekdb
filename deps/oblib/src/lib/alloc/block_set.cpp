@@ -547,9 +547,13 @@ int64_t BlockSet::purge_free_blocks(const int64_t wash_size,
   int64_t scanned_blks = 0;
   int64_t related_chunks = 0;
   const int64_t now = delay_us > 0 ? common::ObTimeUtility::fast_current_time() : 0;
+  const int64_t max_scan_per_class = INT64_MAX == max_blocks_per_round
+      ? INT64_MAX
+      : BLOCKS_PER_CHUNK;
   int cls = avail_bm_.nbits() - 1;
   // Walk the existing dirty free lists by size class. This avoids scanning
-  // every 8K block in every chunk during ordinary allocation/free flows.
+  // every 8K block in every chunk during ordinary allocation/free flows. Full
+  // sync_wash uses INT64_MAX and must keep draining each list.
   while (washed_size < wash_size && scanned_blks < max_blocks_per_round &&
          cls >= 1 && (cls = avail_bm_.find_first_most_significant(cls)) != -1) {
     const int64_t len = cls * ABLOCK_SIZE;
@@ -567,7 +571,7 @@ int64_t BlockSet::purge_free_blocks(const int64_t wash_size,
       int64_t scan_cnt = 0;
       while (need_scan && OB_NOT_NULL(block) &&
              washed_size < wash_size && scanned_blks < max_blocks_per_round &&
-             scan_cnt++ < BLOCKS_PER_CHUNK) {
+             scan_cnt++ < max_scan_per_class) {
         ABlock *next = block->next_ != block ? block->next_ : nullptr;
         need_scan = OB_NOT_NULL(next) && next != head;
         scanned_blks++;
