@@ -1,10 +1,10 @@
 # SeekDB CI - 执行下沉版（Native）
-# setup 准备 observer → 4 个并行 mysqltest job（各独立容器）→ collect 合并结果
+# setup 准备 observer → mysqltest job（默认 4 片，vldb_2026 PR 只跑 minitest）→ collect 合并结果
 name: SeekDB CI 
 
 on:
   pull_request:
-    branches: [master, develop]
+    branches: [master, develop, vldb_2026]
     types: [opened, reopened, synchronize, ready_for_review]
     paths-ignore:
       - 'docs/**'
@@ -18,7 +18,8 @@ on:
   workflow_dispatch:
 
 env:
-  MYSQLTEST_SLICES: "4"
+  MYSQLTEST_SLICES: ${{ github.event_name == 'pull_request' && github.base_ref == 'vldb_2026' && '1' || '4' }}
+  SEEKDB_MYSQLTEST_ARGS: ${{ github.event_name == 'pull_request' && github.base_ref == 'vldb_2026' && 'testset=minitest' || '' }}
   cache-name: cache-deps
   SEEKDB_TASK_DIR: ${{ github.workspace }}/seekdb_build/${{ github.run_id }}
   SEEKDB_RESULT_NFS_ROOT: /data/storage/jenkins_on_k8s/results/seekdb
@@ -114,7 +115,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        slice: [0, 1, 2, 3]
+        slice: ${{ fromJSON(github.event_name == 'pull_request' && github.base_ref == 'vldb_2026' && '[0]' || '[0,1,2,3]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -153,6 +154,7 @@ jobs:
           export GITHUB_RUN_ID="${{ github.run_id }}" GITHUB_WORKSPACE="${{ github.workspace }}"
           export SEEKDB_TASK_DIR="${{ github.workspace }}/seekdb_build/${{ github.run_id }}/slice_${{ matrix.slice }}"
           export SLICE_IDX=${{ matrix.slice }} SLICES="${{ env.MYSQLTEST_SLICES }}"
+          export ARGV="${{ env.SEEKDB_MYSQLTEST_ARGS }}"
           export BRANCH="${{ github.ref_name }}" FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
           mkdir -p "$SEEKDB_TASK_DIR"
           .github/script/seekdb/mysqltest_slice.sh
@@ -206,7 +208,7 @@ jobs:
             echo "Saved to \`${{ env.SEEKDB_RESULT_NFS_ROOT }}/${{ github.run_id }}/attempt-${{ github.run_attempt }}/logs/slice_${{ matrix.slice }}/collected_log_${{ matrix.slice }}.tar.gz\`. Contents: \`obd_log/\`, \`mysqltest_log/\`, \`mysqltest_rec_log/\`, core dumps." >> "$GITHUB_STEP_SUMMARY"
           fi
   seekdb-collect:
-    # 仅在 4 个 mysqltest slice 都跑完（成功或失败）时执行；若 mysqltest 被 skip 则不跑
+    # 仅在 mysqltest slice 跑完（成功或失败）时执行；若 mysqltest 被 skip 则不跑
     if: ${{ always() && needs.seekdb-mysqltest.result != 'skipped' }}
     name: collect
     needs: seekdb-mysqltest
