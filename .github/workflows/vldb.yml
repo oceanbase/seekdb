@@ -1,0 +1,116 @@
+name: VLDB CI
+
+on:
+  pull_request:
+    branches: [vldb_2026]
+    types: [opened, reopened, synchronize, ready_for_review]
+  workflow_dispatch:
+
+env:
+  cache-name: cache-deps
+  VLDB_WORK_DIR: ${{ github.workspace }}/vldb_smoke
+
+jobs:
+  build-and-smoke:
+    name: build-seekdb-and-smoke
+    if: ${{ github.repository_owner == 'oceanbase' && (github.event_name != 'pull_request' || !github.event.pull_request.draft) }}
+    runs-on: arc-runner-k8s-ci-org
+    container:
+      image: harbor.oceanbase-dev.com/obrde-test/ob-actions-runner-worker:0.0.2
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache deps
+        uses: actions/cache@v4
+        with:
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-el9.x86_64-${{ hashFiles('deps/init/oceanbase.el9.x86_64.deps') }}
+          path: deps/3rd
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2.11
+        with:
+          max-size: 800M
+          save: false
+          key: vldb
+
+      - name: Compile seekdb
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GITHUB_WORKSPACE="${{ github.workspace }}"
+          export FORWARDING_HOST="${{ vars.FORWARDING_HOST || '' }}"
+          export PATH="$GITHUB_WORKSPACE/deps/3rd/usr/local/oceanbase/devtools/bin:$PATH"
+          [[ -n "$FORWARDING_HOST" ]] && echo "$FORWARDING_HOST mirrors.oceanbase.com" >> /etc/hosts 2>/dev/null || true
+
+          bash build.sh init
+          bash build.sh debug -DOB_USE_CCACHE=ON -DNEED_PARSER_CACHE=OFF
+          command -v ccache >/dev/null 2>&1 && ccache -z || true
+          make -C build_debug -j32 seekdb
+          command -v ccache >/dev/null 2>&1 && ccache -s || true
+
+          mkdir -p "$VLDB_WORK_DIR"
+          for cand in \
+            "$GITHUB_WORKSPACE/build_debug/src/observer/seekdb" \
+            "$GITHUB_WORKSPACE/build_debug/bin/observer/seekdb" \
+            "$GITHUB_WORKSPACE/build_debug/seekdb"; do
+            if [[ -x "$cand" ]]; then
+              cp -f "$cand" "$VLDB_WORK_DIR/seekdb"
+              chmod +x "$VLDB_WORK_DIR/seekdb"
+              break
+            fi
+          done
+          [[ -x "$VLDB_WORK_DIR/seekdb" ]] || { echo "seekdb binary not found"; exit 1; }
+          "$VLDB_WORK_DIR/seekdb" -V
+
+      - name: Start seekdb
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$VLDB_WORK_DIR"
+          ./seekdb
+          for i in $(seq 1 60); do
+            [[ -f run/seekdb.pid ]] && break
+            sleep 1
+          done
+          [[ -f run/seekdb.pid ]] || { echo "seekdb pid file not found"; tail -n 200 log/seekdb.log 2>/dev/null || true; exit 1; }
+          echo "seekdb pid: $(cat run/seekdb.pid)"
+
+      - name: Run smoke SQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLIENT=""
+          if [[ -x "${{ github.workspace }}/deps/3rd/u01/obclient/bin/obclient" ]]; then
+            CLIENT="${{ github.workspace }}/deps/3rd/u01/obclient/bin/obclient"
+          elif command -v obclient >/dev/null 2>&1; then
+            CLIENT="$(command -v obclient)"
+          elif command -v mysql >/dev/null 2>&1; then
+            CLIENT="$(command -v mysql)"
+          fi
+          [[ -n "$CLIENT" ]] || { echo "no mysql-compatible client found"; exit 1; }
+
+          for i in $(seq 1 90); do
+            if "$CLIENT" -h127.0.0.1 -P2881 -uroot -A -e "select 1;" > "$VLDB_WORK_DIR/sql.out" 2>&1; then
+              cat "$VLDB_WORK_DIR/sql.out"
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "failed to run smoke SQL"
+          cat "$VLDB_WORK_DIR/sql.out" 2>/dev/null || true
+          tail -n 200 "$VLDB_WORK_DIR/log/seekdb.log" 2>/dev/null || true
+          exit 1
+
+      - name: Stop seekdb
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          if [[ -f "$VLDB_WORK_DIR/run/seekdb.pid" ]]; then
+            PID="$(cat "$VLDB_WORK_DIR/run/seekdb.pid")"
+            kill "$PID"
+            sleep 5
+            kill -9 "$PID" 2>/dev/null || true
+          fi
