@@ -4,7 +4,7 @@ on:
   push:
     branches: [ master, develop ]
   pull_request:
-    branches: [ master, develop ]
+    branches: [ master, develop, vldb_2026 ]
     paths-ignore:
       - 'docs/**'
       - '.github/ISSUE_TEMPLATE/**'
