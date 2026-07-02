@@ -233,5 +233,8 @@ int ObExprFuncPartHash::eval_part_hash(
   return ret;
 }
 
+template int ObExprFuncPartHashBase::calc_value_for_mysql<ObObj>(const ObObj&, ObObj&, const ObObjType);
+template int ObExprFuncPartHashBase::calc_value_for_mysql<ObDatum>(const ObDatum&, ObDatum&, const ObObjType);
+
 }  // namespace sql
 }  // namespace oceanbase
