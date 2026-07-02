@@ -53,6 +53,7 @@ MySQL-compatible · Embedded or Server · Hybrid Vector + Full-text Search · CO
 🌿 FORK/MERGE sandboxes for safe agent exploration<br>
 🔍 Vector + full-text + scalar in one SQL query<br>
 🐬 Full ACID, MySQL protocol, works with LangChain/LlamaIndex/Dify
+VLDB test
 
 **English** | [中文版](README_CN.md) | [日本語](README_JP.md)
 
