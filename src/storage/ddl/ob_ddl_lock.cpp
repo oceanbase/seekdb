@@ -21,8 +21,10 @@
 #include "storage/tablelock/ob_lock_inner_connection_util.h"
 #include "storage/tablelock/ob_lock_utils.h"
 #include "lib/string/ob_sql_string.h"
+#include "lib/worker.h"
+#include "share/rc/ob_module_provider.h"
 #include "share/inner_table/ob_inner_table_schema_constants.h"
-#include "common/mysqlclient/ob_mysql_result.h"
+#include "lib/mysqlclient/ob_mysql_result.h"
 
 using namespace oceanbase::transaction::tablelock;
 using oceanbase::share::ObLSID;
@@ -42,6 +44,14 @@ bool ObDDLLock::need_lock(const ObTableSchema &table_schema)
       || ObInnerTableLockUtil::in_inner_table_lock_white_list(table_id);
 };
 
+int64_t ObDDLLock::get_default_timeout_us()
+{
+  const int64_t timeout_us = THIS_WORKER.is_timeout_ts_valid()
+      ? THIS_WORKER.get_timeout_remain()
+      : GCONF._ob_ddl_timeout;
+  return MAX(timeout_us, 1L);
+}
+
 int ObDDLLock::lock_for_add_drop_index_in_trans(
     const ObTableSchema &data_table_schema,
     const ObTableSchema &index_schema,
@@ -51,7 +61,7 @@ int ObDDLLock::lock_for_add_drop_index_in_trans(
   
   const uint64_t data_table_id = data_table_schema.get_table_id();
   const uint64_t index_table_id = index_schema.get_table_id();
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   ObSEArray<ObTabletID, 1> data_tablet_ids;
   ObInnerSQLConnection *iconn = nullptr;
   if (data_table_schema.is_user_hidden_table()) {
@@ -93,7 +103,7 @@ int ObDDLLock::lock_for_add_drop_index(
   
   const uint64_t data_table_id = data_table_schema.get_table_id();
   const uint64_t index_table_id = index_schema.get_table_id();
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   ObSEArray<ObTabletID, 1> data_tablet_ids;
   ObInnerSQLConnection *iconn = nullptr;
   if (OB_UNLIKELY(data_table_schema.is_user_hidden_table() || data_table_id != index_schema.get_data_table_id())) {
@@ -148,7 +158,7 @@ int ObDDLLock::unlock_for_add_drop_index(
   int ret = OB_SUCCESS;
   
   const uint64_t data_table_id = data_table_schema.get_table_id();
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   ObSEArray<ObTabletID, 1> data_tablet_ids;
   bool some_lock_not_exist = false;
   if (!need_lock(data_table_schema) || data_table_schema.is_user_hidden_table()) {
@@ -180,7 +190,7 @@ int ObDDLLock::lock_for_rebuild_index(
   int ret = OB_SUCCESS;
   
   const uint64_t data_table_id = data_table_schema.get_table_id();
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   ObSEArray<ObTabletID, 1> data_tablet_ids;
   ObInnerSQLConnection *iconn = nullptr;
   if (data_table_schema.is_user_hidden_table()) {
@@ -217,7 +227,7 @@ int ObDDLLock::unlock_for_rebuild_index(
   int ret = OB_SUCCESS;
   
   const uint64_t data_table_id = data_table_schema.get_table_id();
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   ObSEArray<ObTabletID, 1> data_tablet_ids;
   bool some_lock_not_exist = false;
   if (!need_lock(data_table_schema) || data_table_schema.is_user_hidden_table()) {
@@ -251,7 +261,7 @@ int ObDDLLock::lock_for_split_partition(
   int ret = OB_SUCCESS;
   
   const uint64_t table_id = table_schema.get_table_id();
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   const bool lock_src_and_dst_od = nullptr == ls_id && nullptr != src_tablet_ids;
   const bool lock_dst_table_lock = nullptr != ls_id && nullptr == src_tablet_ids && ls_id->is_valid();
   if (OB_UNLIKELY(!(lock_src_and_dst_od ^ lock_dst_table_lock))) {
@@ -314,7 +324,7 @@ int ObDDLLock::unlock_for_split_partition(
   int ret = OB_SUCCESS;
   
   const uint64_t table_id = table_schema.get_table_id();
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   bool some_lock_not_exist = false;
   ObArray<ObTabletID> tablet_ids;
   if (OB_FAIL(append(tablet_ids, src_tablet_ids))) {
@@ -354,7 +364,7 @@ int ObDDLLock::replace_tablet_lock_for_split(const ObTableSchema &table_schema,
     ObMySQLTransaction &trans) 
 {
   int ret = OB_SUCCESS;
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   bool some_lock_not_exist = false;
   uint64_t table_id =OB_INVALID_ID;
 
@@ -392,7 +402,7 @@ int ObDDLLock::replace_table_lock_for_split(
 
     
     const uint64_t table_id = table_schema.get_table_id();
-    const int64_t timeout_us = DEFAULT_TIMEOUT;
+    const int64_t timeout_us = get_default_timeout_us();
     ObUnLockTableRequest req;
     for (int64_t i = 0; OB_SUCC(ret) && i < main_split_owner_ids.count(); ++i) {
       req.reset();
@@ -452,7 +462,7 @@ int ObDDLLock::lock_for_modify_auto_part_size_in_trans(const uint64_t data_table
 {
   int ret = OB_SUCCESS;
   const ObArray<ObTabletID> no_tablet_ids;
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   if (OB_FAIL(ObOnlineDDLLock::lock_table_in_trans(data_table_id, EXCLUSIVE, timeout_us, trans))) {
     LOG_WARN("failed to lock data table", K(ret));
   } else if (OB_FAIL(lock_table_lock_in_trans(data_table_id, no_tablet_ids, ROW_SHARE, timeout_us, trans))) {
@@ -472,7 +482,7 @@ int ObDDLLock::lock_for_modify_truncate_info_in_trans(const uint64_t global_inde
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   if (OB_FAIL(ObOnlineDDLLock::lock_table_in_trans(global_index_table_id, EXCLUSIVE, timeout_us, trans))) {
     LOG_WARN("failed to lock online ddl table", K(ret));
   }
@@ -486,7 +496,7 @@ int ObDDLLock::lock_for_add_lob_in_trans(
   int ret = OB_SUCCESS;
   
   const uint64_t data_table_id = data_table_schema.get_table_id();
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   ObSEArray<ObTabletID, 1> data_tablet_ids;
   if (!need_lock(data_table_schema)) {
     LOG_INFO("skip ddl lock", K(data_table_id));
@@ -507,7 +517,7 @@ int ObDDLLock::lock_for_online_drop_column_in_trans(const ObTableSchema &table_s
   int ret = OB_SUCCESS;
   
   const uint64_t table_id = table_schema.get_table_id();
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   ObSEArray<ObTabletID, 1> tablet_ids;
   if (!need_lock(table_schema)) {
     LOG_INFO("skip ddl lock for non-user table", K(table_schema.get_table_id()));
@@ -530,7 +540,7 @@ int ObDDLLock::lock_for_drop_lob(
   int ret = OB_SUCCESS;
   
   const uint64_t data_table_id = data_table_schema.get_table_id();
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   ObSEArray<ObTabletID, 1> data_tablet_ids;
   if (!need_lock(data_table_schema)) {
     LOG_INFO("skip ddl lock", K(data_table_id));
@@ -553,7 +563,7 @@ int ObDDLLock::unlock_for_drop_lob(
   int ret = OB_SUCCESS;
   
   const uint64_t data_table_id = data_table_schema.get_table_id();
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   bool some_lock_not_exist = false;
   ObSEArray<ObTabletID, 1> data_tablet_ids;
   if (!need_lock(data_table_schema)) {
@@ -577,7 +587,7 @@ int ObDDLLock::lock_for_add_partition_in_trans(
   
   const uint64_t table_id = table_schema.get_table_id();
   const ObArray<ObTabletID> no_tablet_ids;
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   if (table_schema.is_global_index_table()) {
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not support to add partition to global index", K(ret));
@@ -602,7 +612,7 @@ int ObDDLLock::lock_table_and_global_indexes_for_fork(
   int ret = OB_SUCCESS;
   
   const uint64_t table_id = table_schema.get_table_id();
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   ObSEArray<ObTabletID, 1> tablet_ids;
   ObSEArray<const share::schema::ObSimpleTableSchemaV2 *, 4> index_schemas;
 
@@ -651,7 +661,7 @@ int ObDDLLock::unlock_table_and_global_indexes_for_fork(
   int ret = OB_SUCCESS;
   
   const uint64_t table_id = table_schema.get_table_id();
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   ObSEArray<ObTabletID, 1> tablet_ids;
   ObSEArray<const share::schema::ObSimpleTableSchemaV2 *, 4> index_schemas;
   bool some_lock_not_exist = false;
@@ -702,7 +712,7 @@ int ObDDLLock::lock_dst_table_and_global_indexes_for_fork(
 {
   int ret = OB_SUCCESS;
   const ObLSID ls_id(share::SYS_LS);
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   ObSEArray<ObTabletID, 1> data_tablet_ids;
   ObSEArray<ObTabletID, 4> all_tablet_ids;
 
@@ -877,7 +887,7 @@ int ObDDLLock::lock_for_common_ddl_in_trans(
   int ret = OB_SUCCESS;
   
   const uint64_t table_id = table_schema.get_table_id();
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   ObSEArray<ObTabletID, 1> tablet_ids;
   if (!need_lock(table_schema)) {
     LOG_INFO("skip ddl lock for non-user table", K(table_schema.get_table_id()));
@@ -899,7 +909,7 @@ int ObDDLLock::lock_for_common_ddl(
   int ret = OB_SUCCESS;
   
   const uint64_t table_id = table_schema.get_table_id();
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   if (!need_lock(table_schema)) {
     LOG_INFO("skip ddl lock for non-user table", K(table_schema.get_table_id()));
   } else if (OB_FAIL(do_table_lock(table_id, ROW_EXCLUSIVE, lock_owner, timeout_us, true/*is_lock*/, trans))) {
@@ -918,7 +928,7 @@ int ObDDLLock::unlock_for_common_ddl(
   int ret = OB_SUCCESS;
   
   const uint64_t table_id = table_schema.get_table_id();
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   bool some_lock_not_exist = false;
   if (!need_lock(table_schema)) {
     LOG_INFO("skip ddl lock for non-user table", K(table_schema.get_table_id()));
@@ -939,7 +949,7 @@ int ObDDLLock::lock_for_offline_ddl(
   int ret = OB_SUCCESS;
   
   const uint64_t table_id = table_schema.get_table_id();
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   if (!need_lock(table_schema)) {
     LOG_INFO("skip ddl lock for non-user table", K(table_id));
   } else if (OB_FAIL(do_table_lock(table_id, EXCLUSIVE, lock_owner, timeout_us, true/*is_lock*/, trans))) {
@@ -958,7 +968,7 @@ int ObDDLLock::unlock_for_offline_ddl(const uint64_t table_id,
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   if (OB_FAIL(do_table_lock(table_id, EXCLUSIVE, lock_owner, timeout_us, false/*is_lock*/, trans))) {
     LOG_WARN("failed to lock table lock", K(ret));
   } else if (nullptr != hidden_tablet_ids_alone) {
@@ -977,7 +987,7 @@ int ObDDLLock::lock_table_in_trans(
   int ret = OB_SUCCESS;
   
   const uint64_t table_id = table_schema.get_table_id();
-  const int64_t timeout_us = DEFAULT_TIMEOUT;
+  const int64_t timeout_us = get_default_timeout_us();
   ObInnerSQLConnection *iconn = nullptr;
   if (!need_lock(table_schema)) {
     LOG_INFO("skip ddl lock for non-user table", K(table_id));
