@@ -38,12 +38,8 @@ using namespace oceanbase::lib;
 
 namespace
 {
-#if OB_ALLOC_HAS_PAGE_PURGE
-#ifdef _WIN32
-static const int OB_ALLOC_PURGE_ADVICE = 4;
-#else
+#if OB_ALLOC_HAS_PAGE_PURGE && !defined(_WIN32)
 static const int OB_ALLOC_PURGE_ADVICE = MADV_DONTNEED;
-#endif
 #endif
 
 // Ordinary purge is driven opportunistically by alloc/free paths, not by a
@@ -55,30 +51,27 @@ static const int64_t ORDINARY_PURGE_DELAY_US = 1000L * 1000L;
 static const int64_t ORDINARY_PURGE_MAX_BLOCKS = 64;
 
 #if OB_ALLOC_HAS_PAGE_PURGE
-#ifdef _WIN32
-inline int ob_madvise(void *addr, size_t length, int advice)
-{
-  // Use MEM_RESET instead of MEM_DECOMMIT: MEM_DECOMMIT truly decommits pages,
-  // causing ACCESS_VIOLATION on subsequent access. MEM_RESET keeps pages
-  // committed but lets the OS reclaim contents, matching MADV_DONTNEED.
-  if (advice == OB_ALLOC_PURGE_ADVICE) {
-    return ::VirtualAlloc(addr, length, MEM_RESET, PAGE_READWRITE) != NULL ? 0 : -1;
-  }
-  return 0;
-}
-#endif
-
-inline int ob_purge_memory(void *addr, size_t length)
+inline int ob_purge_memory(void *addr, size_t length, int &error_code)
 {
   int result = 0;
+  error_code = 0;
   if (length > 0) {
-    do {
 #ifdef _WIN32
-      result = ob_madvise(addr, length, OB_ALLOC_PURGE_ADVICE);
+    // Use MEM_RESET instead of MEM_DECOMMIT: MEM_DECOMMIT truly decommits pages,
+    // causing ACCESS_VIOLATION on subsequent access. MEM_RESET keeps pages
+    // committed but lets the OS reclaim contents, matching MADV_DONTNEED.
+    if (NULL == ::VirtualAlloc(addr, length, MEM_RESET, PAGE_READWRITE)) {
+      result = -1;
+      error_code = static_cast<int>(::GetLastError());
+    }
 #else
+    do {
       result = ::madvise(addr, length, OB_ALLOC_PURGE_ADVICE);
-#endif
     } while (result == -1 && errno == EAGAIN);
+    if (-1 == result) {
+      error_code = errno;
+    }
+#endif
   }
   return result;
 }
@@ -592,9 +585,10 @@ int64_t BlockSet::purge_free_blocks(const int64_t wash_size,
             local_has_ignore = true;
           } else if (delay_us > 0 && now - block->free_time_us_ < delay_us) {
           } else {
-            int result = ob_purge_memory(data, len);
+            int error_code = 0;
+            int result = ob_purge_memory(data, len, error_code);
             if (-1 == result) {
-              _OB_LOG_RET(WARN, OB_ERR_SYS, "madvise failed, errno: %d", errno);
+              _OB_LOG_RET(WARN, OB_ERR_SYS, "page purge failed, error_code: %d", error_code);
               local_has_ignore = true;
             } else {
               if (head == block) {
