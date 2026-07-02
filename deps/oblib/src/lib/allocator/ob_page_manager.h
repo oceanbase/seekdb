@@ -56,11 +56,6 @@ public:
   // IBlockMgr interface
   virtual ABlock *alloc_block(uint64_t size, const ObMemAttr &attr) override;
   virtual void free_block(ABlock *block) override;
-  virtual int64_t sync_wash(int64_t wash_size) override
-  {
-    UNUSED(wash_size);
-    return 0;
-  }
   int64_t get_used() const { return used_; }
   static void set_thread_local_instance(ObPageManager &instance) { tl_instance_ = &instance; }
 private:

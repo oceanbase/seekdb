@@ -407,19 +407,8 @@ ObLabelItem ObTenantCtxAllocatorV2::get_label_usage(ObLabel &label) const
 
 int64_t ObTenantCtxAllocator::sync_wash_(int64_t wash_size)
 {
-  int64_t washed_size = 0;
-
-  auto stat = obj_mgr_.get_stat();
-  const double min_utilization = 0.95;
-  int64_t min_memory_fragment = 64LL << 20;
-  if (stat.payload_ * min_utilization > stat.used_ ||
-      stat.payload_ - stat.used_ >= min_memory_fragment) {
-    washed_size = obj_mgr_.sync_wash(wash_size);
-  }
-  if (washed_size != 0 && REACH_TIME_INTERVAL(1 * 1000 * 1000)) {
-    _OB_LOG(INFO, "[MEM][WASH] ctx_id: %ld, washed_size: %ld", ctx_id_, washed_size);
-  }
-  return washed_size;
+  UNUSED(wash_size);
+  return 0;
 }
 
 int64_t ObTenantCtxAllocator::sync_wash()

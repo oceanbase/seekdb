@@ -50,7 +50,6 @@ public:
   void set_tenant_ctx_allocator(ObTenantCtxAllocator &allocator);
   void reset();
   void set_locker(ISetLocker *locker) { locker_ = locker; }
-  int64_t sync_wash(int64_t wash_size=INT64_MAX);
   bool check_has_unfree();
   ObTenantCtxAllocator *get_tenant_ctx_allocator() const { return  tallocator_; }
   void set_chunk_mgr(IChunkMgr *chunk_mgr) { chunk_mgr_ = chunk_mgr; }
@@ -70,9 +69,7 @@ private:
       int64_t &merged_blocks);
   int64_t purge_free_blocks(const int64_t wash_size,
       const int64_t delay_us,
-      const int64_t max_blocks_per_round,
-      bool *has_ignore,
-      int64_t *scanned_blocks = nullptr);
+      const int64_t max_blocks_per_round);
   void maybe_ordinary_purge();
   AChunk *alloc_chunk(const uint64_t size, const ObMemAttr &attr);
   bool add_chunk(const ObMemAttr &attr);

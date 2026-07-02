@@ -508,42 +508,25 @@ void BlockSet::free_chunk(AChunk *const chunk)
   }
 }
 
-int64_t BlockSet::sync_wash(int64_t wash_size)
-{
-  bool has_ignore = false;
-  return purge_free_blocks(wash_size, 0, INT64_MAX, &has_ignore);
-}
-
 int64_t BlockSet::purge_free_blocks(const int64_t wash_size,
     const int64_t delay_us,
-    const int64_t max_blocks_per_round,
-    bool *has_ignore,
-    int64_t *scanned_blocks)
+    const int64_t max_blocks_per_round)
 {
 #if !OB_ALLOC_HAS_PAGE_PURGE
   UNUSED(wash_size);
   UNUSED(delay_us);
   UNUSED(max_blocks_per_round);
-  UNUSED(has_ignore);
-  if (OB_NOT_NULL(scanned_blocks)) {
-    *scanned_blocks = 0;
-  }
   return 0;
 #else
   const ssize_t ps = get_page_size();
-  bool local_has_ignore = false;
   int64_t washed_size = 0;
   int64_t washed_blks = 0;
   int64_t scanned_blks = 0;
   int64_t related_chunks = 0;
   const int64_t now = delay_us > 0 ? common::ObTimeUtility::fast_current_time() : 0;
-  const int64_t max_scan_per_class = INT64_MAX == max_blocks_per_round
-      ? INT64_MAX
-      : BLOCKS_PER_CHUNK;
   int cls = avail_bm_.nbits() - 1;
   // Walk the existing dirty free lists by size class. This avoids scanning
-  // every 8K block in every chunk during ordinary allocation/free flows. Full
-  // sync_wash uses INT64_MAX and must keep draining each list.
+  // every 8K block in every chunk during ordinary allocation/free flows.
   while (washed_size < wash_size && scanned_blks < max_blocks_per_round &&
          cls >= 1 && (cls = avail_bm_.find_first_most_significant(cls)) != -1) {
     const int64_t len = cls * ABLOCK_SIZE;
@@ -561,14 +544,13 @@ int64_t BlockSet::purge_free_blocks(const int64_t wash_size,
       int64_t scan_cnt = 0;
       while (need_scan && OB_NOT_NULL(block) &&
              washed_size < wash_size && scanned_blks < max_blocks_per_round &&
-             scan_cnt++ < max_scan_per_class) {
+             scan_cnt++ < BLOCKS_PER_CHUNK) {
         ABlock *next = block->next_ != block ? block->next_ : nullptr;
         need_scan = OB_NOT_NULL(next) && next != head;
         scanned_blks++;
         AChunk *chunk = block->chunk();
         if (chunk->is_hugetlb_) {
           _OB_LOG(DEBUG, "cannot be applied to Huge TLB pages");
-          local_has_ignore = true;
         } else {
         #if MEMCHK_LEVEL >= 1
           abort_unless(!block->in_use_ && !block->is_washed_);
@@ -579,14 +561,12 @@ int64_t BlockSet::purge_free_blocks(const int64_t wash_size,
           if ((reinterpret_cast<uint64_t>(data) & (ps - 1)) != 0 ||
               (len & (ps - 1)) != 0) {
             _OB_LOG(DEBUG, "cannot be applied to non-multiple of page-size, page_size: %zd", ps);
-            local_has_ignore = true;
           } else if (delay_us > 0 && now - block->free_time_us_ < delay_us) {
           } else {
             int error_code = 0;
             int result = ob_purge_memory(data, len, error_code);
             if (-1 == result) {
               _OB_LOG_RET(WARN, OB_ERR_SYS, "page purge failed, error_code: %d", error_code);
-              local_has_ignore = true;
             } else {
               if (head == block) {
                 head = next;
@@ -628,22 +608,11 @@ int64_t BlockSet::purge_free_blocks(const int64_t wash_size,
     }
     cls--;
   }
-#if MEMCHK_LEVEL >= 1
-  if (wash_size == INT64_MAX && !local_has_ignore) {
-    abort_unless(-1 == avail_bm_.find_first_significant(1));
-  }
-#endif
   if (washed_size > 0) {
     UNUSED(ATOMIC_FAA(&total_hold_, -washed_size));
     UNUSED(ATOMIC_FAA(&total_payload_, -washed_size));
     tallocator_->dec_hold(washed_size);
     tallocator_->update_wash_stat(related_chunks, washed_blks, washed_size);
-  }
-  if (OB_NOT_NULL(has_ignore)) {
-    *has_ignore = local_has_ignore;
-  }
-  if (OB_NOT_NULL(scanned_blocks)) {
-    *scanned_blocks = scanned_blks;
   }
 #if MEMCHK_LEVEL >= 1
   if (0 == washed_size && ABLOCK_SIZE & (ps - 1)) {
@@ -663,8 +632,7 @@ void BlockSet::maybe_ordinary_purge()
     ATOMIC_STORE(&last_ordinary_purge_ts_, now);
     (void)purge_free_blocks(ORDINARY_PURGE_BUDGET,
         ORDINARY_PURGE_DELAY_US,
-        ORDINARY_PURGE_MAX_BLOCKS,
-        nullptr);
+        ORDINARY_PURGE_MAX_BLOCKS);
   }
 #endif
 }

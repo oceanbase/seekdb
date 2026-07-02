@@ -101,14 +101,6 @@ private:
         OB_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "tenant ctx allocator is null", K(ctx_id_));
       }
     }
-    virtual int64_t sync_wash(int64_t wash_size) override
-    {
-      int64_t washed_size = 0;
-      if (ta_.ref_allocator() != nullptr) {
-        washed_size = ta_->sync_wash(wash_size);
-      }
-      return washed_size;
-    }
     void set_tenant_ctx(const int64_t ctx_id)
     {
       
