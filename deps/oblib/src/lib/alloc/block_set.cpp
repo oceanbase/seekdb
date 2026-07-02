@@ -38,9 +38,6 @@ using namespace oceanbase::lib;
 
 namespace
 {
-#if OB_ALLOC_HAS_PAGE_PURGE && !defined(_WIN32)
-static const int OB_ALLOC_PURGE_ADVICE = MADV_DONTNEED;
-#endif
 
 // Ordinary purge is driven opportunistically by alloc/free paths, not by a
 // background timer. Keep each round bounded so the caller pays a predictable
@@ -66,7 +63,7 @@ inline int ob_purge_memory(void *addr, size_t length, int &error_code)
     }
 #else
     do {
-      result = ::madvise(addr, length, OB_ALLOC_PURGE_ADVICE);
+      result = ::madvise(addr, length, MADV_DONTNEED);
     } while (result == -1 && errno == EAGAIN);
     if (-1 == result) {
       error_code = errno;
