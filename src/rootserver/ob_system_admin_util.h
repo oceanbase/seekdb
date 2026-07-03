@@ -141,18 +141,6 @@ private:
   DISALLOW_COPY_AND_ASSIGN(ObAdminRefreshMemStat);
 };
 
-class ObAdminWashMemFragmentation : public ObAdminCallServer
-{
-public:
-  explicit ObAdminWashMemFragmentation(const ObSystemAdminCtx &ctx) : ObAdminCallServer(ctx) {}
-  virtual ~ObAdminWashMemFragmentation() {}
-
-  int execute(const obcall::ObAdminWashMemFragmentationArg &arg);
-  virtual int call_server(const common::ObAddr &server);
-private:
-  DISALLOW_COPY_AND_ASSIGN(ObAdminWashMemFragmentation);
-};
-
 class ObAdminClearMergeError: public ObSystemAdminUtil
 {
 public:

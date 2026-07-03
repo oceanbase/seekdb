@@ -1575,11 +1575,6 @@ int ObService::refresh_memory_stat()
   return ObMemoryDump::get_instance().generate_mod_stat_task();
 }
 
-int ObService::wash_memory_fragmentation()
-{
-  return OB_NOT_SUPPORTED;
-}
-
 int ObService::build_split_tablet_data_start_request(const obcall::ObTabletSplitStartArg &arg,  obcall::ObTabletSplitStartResult &res)
 {
   int ret = OB_SUCCESS;

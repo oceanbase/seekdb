@@ -1,4 +1,4 @@
-#include "share/ob_ex_rpc.h"
+#include "observer/ob_ex_rpc.h"
 #include "share/rc/ob_module_provider.h"
 /*
  * Copyright (c) 2025 OceanBase.
@@ -31,7 +31,6 @@
 #include "pl/pl_cache/ob_pl_cache_mgr.h"
 #include "share/cache/ob_cache_name_define.h"
 #include "observer/omt/ob_multi_tenant.h"
-#include "observer/ob_service.h"
 namespace oceanbase
 {
 using namespace common;
@@ -280,34 +279,6 @@ int ObAdminRefreshMemStat::call_server(const ObAddr &server)
     LOG_WARN("invalid server", K(server), KR(ret));
   } else if (OB_FAIL(GCTX.ob_service_->refresh_memory_stat())) {
     LOG_WARN("notify refresh memory stat failed", KR(ret), K(server));
-  }
-  return ret;
-}
-
-int ObAdminWashMemFragmentation::execute(const ObAdminWashMemFragmentationArg &arg)
-{
-  LOG_INFO("execute sync wash fragment");
-  int ret = OB_SUCCESS;
-  if (!ctx_.is_inited()) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (OB_FAIL(call_all(arg))) {
-    LOG_WARN("execute notify sync wash fragment failed", K(ret));
-  }
-  return ret;
-}
-
-int ObAdminWashMemFragmentation::call_server(const ObAddr &server)
-{
-  int ret = OB_SUCCESS;
-  if (!ctx_.is_inited()) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", K(ret));
-  } else if (!server.is_valid()) {
-    ret = OB_INVALID_ARGUMENT;
-    LOG_WARN("invalid server", K(server), K(ret));
-  } else if (OB_FAIL(GCTX.ob_service_->wash_memory_fragmentation())) {
-    LOG_WARN("notify sync wash fragment failed", K(ret), K(server));
   }
   return ret;
 }

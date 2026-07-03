@@ -19,8 +19,8 @@
 
 #include "sql/resolver/cmd/ob_system_cmd_stmt.h"
 #include "share/ob_rpc_struct.h"
-#include "observer/scheduler/ob_sys_task_stat.h"
-#include "sql/engine/cmd/ob_redis_importer.h"
+#include "share/scheduler/ob_sys_task_stat.h"
+#include "share/table/ob_redis_importer.h"
 
 namespace oceanbase
 {
@@ -135,6 +135,7 @@ public:
   int32_t file_id_;
 };
 
+
 class ObFlushDagWarningsStmt : public ObSystemCmdStmt
 {
 public:
@@ -142,6 +143,7 @@ public:
   virtual ~ObFlushDagWarningsStmt() {}
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_));
 };
+
 
 class ObAdminMergeStmt: public ObSystemCmdStmt
 {
@@ -156,6 +158,9 @@ private:
   obcall::ObAdminMergeArg rpc_arg_;
 };
 
+
+
+
 class ObRefreshMemStatStmt : public ObSystemCmdStmt
 {
 public:
@@ -167,19 +172,6 @@ public:
   TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
 private:
   obcall::ObAdminRefreshMemStatArg rpc_arg_;
-};
-
-class ObWashMemFragmentationStmt : public ObSystemCmdStmt
-{
-public:
-  ObWashMemFragmentationStmt() : ObSystemCmdStmt(stmt::T_WASH_MEMORY_FRAGMENTATION) {}
-  virtual ~ObWashMemFragmentationStmt() {}
-
-  obcall::ObAdminWashMemFragmentationArg &get_rpc_arg() { return rpc_arg_; }
-
-  TO_STRING_KV(N_STMT_TYPE, ((int)stmt_type_), K_(rpc_arg));
-private:
-  obcall::ObAdminWashMemFragmentationArg rpc_arg_;
 };
 
 class ObRefreshIOCalibraitonStmt : public ObSystemCmdStmt
@@ -240,6 +232,10 @@ public:
   ObUpgradeVirtualSchemaStmt() : ObSystemCmdStmt(stmt::T_UPGRADE_VIRTUAL_SCHEMA) {}
   virtual ~ObUpgradeVirtualSchemaStmt() {}
 };
+
+
+
+
 
 class ObCancelTaskStmt : public ObSystemCmdStmt
 {
@@ -355,6 +351,9 @@ public:
     {}
 };
 
+
+
+
 class ObResetConfigStmt : public ObSystemCmdStmt
 {
 public:
@@ -365,6 +364,7 @@ public:
 private:
   obcall::ObAdminSetConfigArg rpc_arg_;
 };
+
 
 } // end namespace sql
 } // end namespace oceanbase
