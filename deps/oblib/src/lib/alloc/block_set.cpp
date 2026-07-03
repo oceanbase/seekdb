@@ -30,12 +30,6 @@
 using namespace oceanbase;
 using namespace oceanbase::lib;
 
-#if defined(_WIN32) || defined(MADV_DONTNEED)
-#define OB_ALLOC_HAS_PAGE_WASH 1
-#else
-#define OB_ALLOC_HAS_PAGE_WASH 0
-#endif
-
 namespace
 {
 
@@ -47,13 +41,12 @@ static const int64_t ORDINARY_WASH_MIN_INTERVAL_US = 1000L * 1000L;
 static const int64_t ORDINARY_WASH_DELAY_US = 1000L * 1000L;
 static const int64_t ORDINARY_WASH_MAX_BLOCKS = 64;
 
-#if OB_ALLOC_HAS_PAGE_WASH
+#ifdef _WIN32
 inline int ob_wash_memory(void *addr, size_t length, int &error_code)
 {
   int result = 0;
   error_code = 0;
   if (length > 0) {
-#ifdef _WIN32
     // Use MEM_RESET instead of MEM_DECOMMIT: MEM_DECOMMIT truly decommits pages,
     // causing ACCESS_VIOLATION on subsequent access. MEM_RESET keeps pages
     // committed but lets the OS reclaim contents, matching MADV_DONTNEED.
@@ -61,19 +54,28 @@ inline int ob_wash_memory(void *addr, size_t length, int &error_code)
       result = -1;
       error_code = static_cast<int>(::GetLastError());
     }
-#else
+  }
+  return result;
+}
+
+#elif defined(MADV_DONTNEED)
+
+inline int ob_wash_memory(void *addr, size_t length, int &error_code)
+{
+  int result = 0;
+  error_code = 0;
+  if (length > 0) {
     do {
       result = ::madvise(addr, length, MADV_DONTNEED);
     } while (result == -1 && errno == EAGAIN);
     if (-1 == result) {
       error_code = errno;
     }
-#endif
   }
   return result;
 }
-#endif
-}
+#endif // MADVICE
+} // namespace
 
 BlockSet::BlockSet()
     : tallocator_(NULL),
@@ -376,12 +378,6 @@ int64_t BlockSet::wash_free_blocks(const int64_t wash_size,
     const int64_t delay_us,
     const int64_t max_blocks_per_round)
 {
-#if !OB_ALLOC_HAS_PAGE_WASH
-  UNUSED(wash_size);
-  UNUSED(delay_us);
-  UNUSED(max_blocks_per_round);
-  return 0;
-#else
   const ssize_t ps = get_page_size();
   int64_t washed_size = 0;
   int64_t washed_blks = 0;
@@ -470,12 +466,11 @@ int64_t BlockSet::wash_free_blocks(const int64_t wash_size,
   }
 #endif
   return washed_size;
-#endif
 }
 
 void BlockSet::maybe_ordinary_wash()
 {
-#if OB_ALLOC_HAS_PAGE_WASH
+#if defined(_WIN32) || defined(MADV_DONTNEED)
   const int64_t now = common::ObTimeUtility::fast_current_time();
   const int64_t last_ts = last_ordinary_wash_ts_;
   if (now - last_ts >= ORDINARY_WASH_MIN_INTERVAL_US) {
