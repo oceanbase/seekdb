@@ -959,7 +959,7 @@ uint64_t get_sort(uint count, ...)
   const char wild_prefix = '\\';
   va_list args;
   va_start(args,count);
-  ulong sort=0;
+  uint64_t sort = 0;
 
   // Should not use this function with more than 8 arguments for compare.
   if (count <= 8) {
