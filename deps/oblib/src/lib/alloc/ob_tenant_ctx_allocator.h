@@ -82,7 +82,6 @@ public:
   }
   bool resource_handle_valid() const { return resource_handle_.is_valid(); }
   void dec_hold(const int64_t size);
-  bool restore_purged_hold(const int64_t size, const ObMemAttr &attr);
   // statistic related
   int set_tenant_memory_mgr()
   {
@@ -416,7 +415,6 @@ public:
   AChunk *alloc_chunk(const int64_t size, const ObMemAttr &attr);
   void free_chunk(AChunk *chunk, const ObMemAttr &attr);
   void dec_hold(const int64_t size);
-  bool restore_purged_hold(const int64_t size, const ObMemAttr &attr);
   int set_idle(const int64_t size, const bool reserve = false);
   IBlockMgr &get_block_mgr() { return obj_mgr_; }
   IChunkMgr &get_chunk_mgr() { return chunk_mgr_; }

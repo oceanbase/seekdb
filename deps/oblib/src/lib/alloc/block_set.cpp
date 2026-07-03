@@ -31,24 +31,24 @@ using namespace oceanbase;
 using namespace oceanbase::lib;
 
 #if defined(_WIN32) || defined(MADV_DONTNEED)
-#define OB_ALLOC_HAS_PAGE_PURGE 1
+#define OB_ALLOC_HAS_PAGE_WASH 1
 #else
-#define OB_ALLOC_HAS_PAGE_PURGE 0
+#define OB_ALLOC_HAS_PAGE_WASH 0
 #endif
 
 namespace
 {
 
-// Ordinary purge is driven opportunistically by alloc/free paths, not by a
+// Ordinary wash is driven opportunistically by alloc/free paths, not by a
 // background timer. Keep each round bounded so the caller pays a predictable
 // amount of work.
-static const int64_t ORDINARY_PURGE_BUDGET = 4L << 20;
-static const int64_t ORDINARY_PURGE_MIN_INTERVAL_US = 1000L * 1000L;
-static const int64_t ORDINARY_PURGE_DELAY_US = 1000L * 1000L;
-static const int64_t ORDINARY_PURGE_MAX_BLOCKS = 64;
+static const int64_t ORDINARY_WASH_BUDGET = 4L << 20;
+static const int64_t ORDINARY_WASH_MIN_INTERVAL_US = 1000L * 1000L;
+static const int64_t ORDINARY_WASH_DELAY_US = 1000L * 1000L;
+static const int64_t ORDINARY_WASH_MAX_BLOCKS = 64;
 
-#if OB_ALLOC_HAS_PAGE_PURGE
-inline int ob_purge_memory(void *addr, size_t length, int &error_code)
+#if OB_ALLOC_HAS_PAGE_WASH
+inline int ob_wash_memory(void *addr, size_t length, int &error_code)
 {
   int result = 0;
   error_code = 0;
@@ -81,9 +81,8 @@ BlockSet::BlockSet()
       chunk_mgr_(NULL),
       clist_(NULL),
       avail_bm_(BLOCKS_PER_CHUNK+1, avail_bm_buf_),
-      purged_avail_bm_(BLOCKS_PER_CHUNK+1, purged_avail_bm_buf_),
       total_hold_(0), total_payload_(0), total_used_(0),
-      last_ordinary_purge_ts_(0)
+      last_ordinary_wash_ts_(0)
 {
 }
 
@@ -105,8 +104,7 @@ void BlockSet::reset()
   //MEMSET(block_list_, 0, sizeof(block_list_));
   clist_ = nullptr;
   avail_bm_.clear();
-  purged_avail_bm_.clear();
-  last_ordinary_purge_ts_ = 0;
+  last_ordinary_wash_ts_ = 0;
 }
 
 void BlockSet::set_tenant_ctx_allocator(ObTenantCtxAllocator &allocator)
@@ -153,7 +151,7 @@ ABlock *BlockSet::alloc_block(const uint64_t size, const ObMemAttr &attr)
     block->hold(&payload);
     UNUSED(ATOMIC_FAA(&total_used_, payload));
     if (!block->is_large_) {
-      maybe_ordinary_purge();
+      maybe_ordinary_wash();
     }
   }
 
@@ -205,10 +203,9 @@ void BlockSet::free_block(ABlock *const block)
       if (head != NULL) {
         head->in_use_ = false;
         if (0 == chunk->using_cnt_) {
-          // The whole chunk is leaving BlockSet. Remove every dirty/purged
-          // free-list reference first; after this handoff only chunk-level
-          // cache/direct-free paths can touch it, so block-level purge will
-          // not see this chunk again.
+          // The whole chunk is leaving BlockSet. Remove dirty free-list
+          // references first. Washed spans are no longer reusable and are not
+          // linked in BlockSet lists.
           int offset = 0;
           do {
             ABlock *unused_block = chunk->offset2blk(offset);
@@ -216,9 +213,7 @@ void BlockSet::free_block(ABlock *const block)
             bool is_last = chunk->is_last_blk_offset(offset, &next_offset);
             abort_unless(!unused_block->in_use_);
             // head is the newly formed free span and has not been inserted yet.
-            if (unused_block->is_washed_) {
-              take_off_purged_block(unused_block, chunk->blk_nblocks(unused_block), chunk);
-            } else if (head != unused_block) {
+            if (!unused_block->is_washed_ && head != unused_block) {
               take_off_free_block(unused_block, chunk->blk_nblocks(unused_block), chunk);
             }
             if (is_last) break;
@@ -228,7 +223,7 @@ void BlockSet::free_block(ABlock *const block)
         } else {
           int head_nblocks = chunk->blk_nblocks(head);
           add_free_block(head, head_nblocks, chunk);
-          maybe_ordinary_purge();
+          maybe_ordinary_wash();
         }
       }
     }
@@ -280,10 +275,6 @@ ABlock* BlockSet::get_free_block(const int cls, const ObMemAttr &attr)
   }
 
   if (block == NULL && ffs < 0) {
-    block = get_purged_block(cls, attr);
-  }
-
-  if (block == NULL && ffs < 0) {
     if (add_chunk(attr)) {
       block = get_free_block(cls, attr);
     }
@@ -310,133 +301,6 @@ void BlockSet::take_off_free_block(ABlock *block, int nblocks, AChunk *chunk)
     avail_bm_.unset(nblocks);
     block_list_[nblocks] = NULL;
   }
-}
-
-void BlockSet::add_purged_block(ABlock *block, int nblocks, AChunk *chunk)
-{
-  abort_unless(NULL != block && !block->in_use_ && block->is_washed_);
-  int offset = chunk->blk_offset(block);
-  chunk->mark_blk_offset_bit(offset);
-
-#if MEMCHK_LEVEL >= 1
-  int expect_nblocks = chunk->blk_nblocks(block);
-  abort_unless(nblocks == expect_nblocks);
-#endif
-  ABlock *&blist = purged_block_list_[nblocks];
-  if (purged_avail_bm_.isset(nblocks)) {
-    block->prev_ = blist->prev_;
-    block->next_ = blist;
-    block->prev_->next_ = block;
-    block->next_->prev_ = block;
-  } else {
-    block->prev_ = block->next_ = block;
-    blist = block;
-    purged_avail_bm_.set(nblocks);
-  }
-}
-
-ABlock* BlockSet::get_purged_block(const int cls, const ObMemAttr &attr)
-{
-  ABlock *block = NULL;
-  const int ffs = purged_avail_bm_.find_first_significant(cls);
-  if (ffs >= 0 && OB_NOT_NULL(purged_block_list_[ffs]) && OB_NOT_NULL(tallocator_)) {
-    const int64_t restore_size = cls * ABLOCK_SIZE;
-    if (tallocator_->restore_purged_hold(restore_size, attr)) {
-      block = purged_block_list_[ffs];
-      AChunk *chunk = block->chunk();
-      take_off_purged_block(block, ffs, chunk);
-
-      UNUSED(ATOMIC_FAA(&total_hold_, restore_size));
-      UNUSED(ATOMIC_FAA(&total_payload_, restore_size));
-      abort_unless(chunk->washed_size_ >= static_cast<uint64_t>(restore_size));
-      chunk->washed_size_ -= restore_size;
-
-      int64_t related_chunks = 0;
-      int64_t washed_blks = 0;
-      if (ffs == cls) {
-        abort_unless(chunk->washed_blks_ > 0);
-        chunk->washed_blks_--;
-        washed_blks = -1;
-        if (0 == chunk->washed_blks_) {
-          related_chunks = -1;
-        }
-      } else {
-        ABlock *next_block = new (block + cls) ABlock();
-        next_block->is_washed_ = true;
-        add_purged_block(next_block, ffs - cls, chunk);
-      }
-      tallocator_->update_wash_stat(related_chunks, washed_blks, -restore_size);
-      block->is_washed_ = false;
-      block->in_use_ = true;
-    }
-  }
-  return block;
-}
-
-void BlockSet::take_off_purged_block(ABlock *block, int nblocks, AChunk *chunk)
-{
-  abort_unless(NULL != block && !block->in_use_ && block->is_washed_);
-
-#if MEMCHK_LEVEL >= 1
-  int expect_nblocks = chunk->blk_nblocks(block);
-  abort_unless(nblocks == expect_nblocks);
-#endif
-  if (block->next_ != block) {
-    block->next_->prev_ = block->prev_;
-    block->prev_->next_ = block->next_;
-    if (block == purged_block_list_[nblocks]) {
-      purged_block_list_[nblocks] = block->next_;
-    }
-  } else {
-    purged_avail_bm_.unset(nblocks);
-    purged_block_list_[nblocks] = NULL;
-  }
-}
-
-ABlock *BlockSet::merge_with_adjacent_purged_blocks(ABlock *block,
-    int &nblocks,
-    AChunk *chunk,
-    int64_t &merged_blocks)
-{
-  // The current block has already been madvise'd. Neighboring purged spans
-  // were accounted before, so this helper only coalesces list metadata and
-  // reports how many span entries disappeared.
-  abort_unless(NULL != block && NULL != chunk && !block->in_use_ && block->is_washed_);
-  ABlock *head = block;
-  merged_blocks = 0;
-  int offset = chunk->blk_offset(block);
-  int prev_offset = -1;
-  if (!chunk->is_first_blk_offset(offset, &prev_offset)) {
-    ABlock *prev_block = chunk->offset2blk(prev_offset);
-    if (!prev_block->in_use_ && prev_block->is_washed_) {
-      const int prev_nblocks = offset - prev_offset;
-    #if MEMCHK_LEVEL >= 1
-      abort_unless(prev_nblocks == chunk->blk_nblocks(prev_block));
-    #endif
-      take_off_purged_block(prev_block, prev_nblocks, chunk);
-      block->clear_magic_code();
-      chunk->unmark_blk_offset_bit(offset);
-      head = prev_block;
-      nblocks += prev_nblocks;
-      offset = prev_offset;
-      merged_blocks++;
-    }
-  }
-
-  int next_offset = -1;
-  if (!chunk->is_last_blk_offset(offset, &next_offset)) {
-    ABlock *next_block = chunk->offset2blk(next_offset);
-    if (!next_block->in_use_ && next_block->is_washed_) {
-      const int next_nblocks = chunk->blk_nblocks(next_block);
-      take_off_purged_block(next_block, next_nblocks, chunk);
-      next_block->clear_magic_code();
-      chunk->unmark_blk_offset_bit(next_offset);
-      nblocks += next_nblocks;
-      merged_blocks++;
-    }
-  }
-
-  return head;
 }
 
 AChunk *BlockSet::alloc_chunk(const uint64_t size, const ObMemAttr &attr)
@@ -503,16 +367,16 @@ void BlockSet::free_chunk(AChunk *const chunk)
       tallocator_->update_wash_stat(-1, -chunk->washed_blks_, -chunk->washed_size_);
     }
     // The chunk manager only caches or frees whole chunks. Cached chunks are
-    // outside BlockSet, so they will not receive block-level purge later.
+    // outside BlockSet, so they will not receive block-level wash later.
     chunk_mgr_->free_chunk(chunk, attr_);
   }
 }
 
-int64_t BlockSet::purge_free_blocks(const int64_t wash_size,
+int64_t BlockSet::wash_free_blocks(const int64_t wash_size,
     const int64_t delay_us,
     const int64_t max_blocks_per_round)
 {
-#if !OB_ALLOC_HAS_PAGE_PURGE
+#if !OB_ALLOC_HAS_PAGE_WASH
   UNUSED(wash_size);
   UNUSED(delay_us);
   UNUSED(max_blocks_per_round);
@@ -564,38 +428,24 @@ int64_t BlockSet::purge_free_blocks(const int64_t wash_size,
           } else if (delay_us > 0 && now - block->free_time_us_ < delay_us) {
           } else {
             int error_code = 0;
-            int result = ob_purge_memory(data, len, error_code);
+            int result = ob_wash_memory(data, len, error_code);
             if (-1 == result) {
-              _OB_LOG_RET(WARN, OB_ERR_SYS, "page purge failed, error_code: %d", error_code);
+              _OB_LOG_RET(WARN, OB_ERR_SYS, "page wash failed, error_code: %d", error_code);
             } else {
               if (head == block) {
                 head = next;
               }
               take_off_free_block(block, cls, chunk);
               block->is_washed_ = true;
-              // Keep the purged list compact for future large-block reuse.
-              // Only len is newly washed; adjacent purged spans were already
-              // reflected in chunk->washed_size_.
-              int merged_nblocks = cls;
-              int64_t merged_blocks = 0;
-              ABlock *merged_block = merge_with_adjacent_purged_blocks(block,
-                  merged_nblocks,
-                  chunk,
-                  merged_blocks);
-              add_purged_block(merged_block, merged_nblocks, chunk);
+              // Washed spans stay in chunk metadata only; BlockSet never
+              // reuses them after page wash.
               if (0 == chunk->washed_blks_) {
                 abort_unless(0 == chunk->washed_size_);
                 related_chunks++;
               }
               chunk->washed_size_ += len;
-              const int64_t washed_blk_delta = 1 - merged_blocks;
-              if (washed_blk_delta >= 0) {
-                chunk->washed_blks_ += washed_blk_delta;
-              } else {
-                abort_unless(chunk->washed_blks_ >= static_cast<uint64_t>(-washed_blk_delta));
-                chunk->washed_blks_ -= static_cast<uint64_t>(-washed_blk_delta);
-              }
-              washed_blks += washed_blk_delta;
+              chunk->washed_blks_++;
+              washed_blks++;
               washed_size += len;
             }
           }
@@ -623,16 +473,16 @@ int64_t BlockSet::purge_free_blocks(const int64_t wash_size,
 #endif
 }
 
-void BlockSet::maybe_ordinary_purge()
+void BlockSet::maybe_ordinary_wash()
 {
-#if OB_ALLOC_HAS_PAGE_PURGE
+#if OB_ALLOC_HAS_PAGE_WASH
   const int64_t now = common::ObTimeUtility::fast_current_time();
-  const int64_t last_ts = ATOMIC_LOAD(&last_ordinary_purge_ts_);
-  if (now - last_ts >= ORDINARY_PURGE_MIN_INTERVAL_US) {
-    ATOMIC_STORE(&last_ordinary_purge_ts_, now);
-    (void)purge_free_blocks(ORDINARY_PURGE_BUDGET,
-        ORDINARY_PURGE_DELAY_US,
-        ORDINARY_PURGE_MAX_BLOCKS);
+  const int64_t last_ts = ATOMIC_LOAD(&last_ordinary_wash_ts_);
+  if (now - last_ts >= ORDINARY_WASH_MIN_INTERVAL_US) {
+    ATOMIC_STORE(&last_ordinary_wash_ts_, now);
+    (void)wash_free_blocks(ORDINARY_WASH_BUDGET,
+        ORDINARY_WASH_DELAY_US,
+        ORDINARY_WASH_MAX_BLOCKS);
   }
 #endif
 }
