@@ -5,14 +5,15 @@ DROP DATABASE IF EXISTS fts_large_bench;
 CREATE DATABASE fts_large_bench;
 USE fts_large_bench;
 
+SET NAMES utf8mb4;
 SET ob_query_timeout = 100000000000;
 SET ob_trx_timeout = 100000000000;
 
 CREATE TABLE docs (
-  id       BIGINT AUTO_INCREMENT PRIMARY KEY,
-  category INT NOT NULL,
-  title    VARCHAR(256) NOT NULL,
-  content  TEXT NOT NULL,
-  FULLTEXT INDEX fti_all(title, content) WITH PARSER ik,
-  FULLTEXT INDEX fti_content(content) WITH PARSER ik
-) COMMENT='FTS large benchmark table';
+  id         BIGINT AUTO_INCREMENT PRIMARY KEY,
+  category   INT NOT NULL,
+  title      VARCHAR(256) NOT NULL,
+  content    TEXT NOT NULL,
+  title_en   VARCHAR(256) NOT NULL,
+  content_en TEXT NOT NULL
+) DEFAULT CHARSET = utf8mb4 COMMENT='FTS large benchmark table';

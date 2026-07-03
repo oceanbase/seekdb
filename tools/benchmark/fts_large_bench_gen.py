@@ -56,6 +56,8 @@ def esc(s: str) -> str:
 
 def make_row(i: int) -> tuple:
     cat = CATEGORIES[i % len(CATEGORIES)]
+    title_en = f"{TITLES_EN[i % len(TITLES_EN)]} #{i}"
+    body_en = f"{CONTENT_EN[i % len(CONTENT_EN)]} row={i}. Benchmark document for beng parser."
     if i % 3 == 0:
         title = f"{TITLES_EN[i % len(TITLES_EN)]} #{i}"
         body = f"{CONTENT_EN[i % len(CONTENT_EN)]} row={i}. " + CONTENT_CN[i % len(CONTENT_CN)]
@@ -69,7 +71,7 @@ def make_row(i: int) -> tuple:
             f"{CONTENT_EN[i % len(CONTENT_EN)]} "
             f"混合文档 row={i}，用于压测 MATCH 与 TOKENIZE。"
         )
-    return cat, title, body
+    return cat, title, body, title_en, body_en
 
 
 def main() -> int:
@@ -89,15 +91,18 @@ def main() -> int:
 
     batch_vals = []
     for i in range(args.rows):
-        cat, title, body = make_row(i)
-        batch_vals.append(f"({cat}, '{esc(title)}', '{esc(body)}')")
+        cat, title, body, title_en, body_en = make_row(i)
+        batch_vals.append(
+            f"({cat}, '{esc(title)}', '{esc(body)}', "
+            f"'{esc(title_en)}', '{esc(body_en)}')"
+        )
         if len(batch_vals) >= args.batch:
-            print("INSERT INTO docs (category, title, content) VALUES")
+            print("INSERT INTO docs (category, title, content, title_en, content_en) VALUES")
             print(",\n".join(batch_vals) + ";")
             batch_vals = []
 
     if batch_vals:
-        print("INSERT INTO docs (category, title, content) VALUES")
+        print("INSERT INTO docs (category, title, content, title_en, content_en) VALUES")
         print(",\n".join(batch_vals) + ";")
 
     print("COMMIT;")
