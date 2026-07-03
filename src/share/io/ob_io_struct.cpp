@@ -2116,6 +2116,14 @@ int ObIOFaultDetector::get_device_health_status(ObDeviceHealthStatus &dhs,
   dhs = DEVICE_HEALTH_NORMAL;
   device_abnormal_time = 0;
 
+#ifdef __APPLE__
+  // macOS uses a synchronous pread/pwrite based libaio emulation. Its timing
+  // semantics are not reliable enough for data-disk hung detection.
+  is_device_warning_ = false;
+  last_device_warning_ts_ = 0;
+  return ret;
+#endif
+
   if (is_device_warning_ && last_device_warning_ts_ > 0) {
     const int64_t period = ObTimeUtility::fast_current_time() - last_device_warning_ts_;
     if (period > io_config_.read_failure_black_list_interval_) {
@@ -2138,6 +2146,11 @@ int ObIOFaultDetector::get_device_health_status(ObDeviceHealthStatus &dhs,
 int ObIOFaultDetector::record_timing_task(const int64_t first_id, const int64_t second_id)
 {
   int ret = OB_SUCCESS;
+#ifdef __APPLE__
+  UNUSED(first_id);
+  UNUSED(second_id);
+  return ret;
+#else
   RetryTask *retry_task = nullptr;
   if (OB_ISNULL(retry_task = op_alloc(RetryTask))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
@@ -2165,6 +2178,7 @@ int ObIOFaultDetector::record_timing_task(const int64_t first_id, const int64_t 
     }
   }
   return ret;
+#endif
 }
 
 int ObIOFaultDetector::set_detect_task_io_info_(
@@ -2186,14 +2200,24 @@ int ObIOFaultDetector::set_detect_task_io_info_(
 
 bool ObIOFaultDetector::is_supported_detect_read_(const ObIOFd &fd)
 {
+#ifdef __APPLE__
+  UNUSED(fd);
+  bool bret = false;
+#else
+  UNUSED(fd);
   bool bret = true;
-  int ret = OB_SUCCESS;
+#endif
   return bret;
 }
 
 void ObIOFaultDetector::record_io_timeout(const ObIOResult &result, const ObIORequest &req)
 {
   int ret = OB_SUCCESS;
+#ifdef __APPLE__
+  UNUSED(result);
+  UNUSED(req);
+  UNUSED(ret);
+#else
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("io fault detector not init", K(ret), K(is_inited_));
@@ -2225,11 +2249,17 @@ void ObIOFaultDetector::record_io_timeout(const ObIOResult &result, const ObIORe
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not supported io mode", K(ret), K(result));
   }
+#endif
 }
 
 void ObIOFaultDetector::record_io_error(const ObIOResult &result, const ObIORequest &req)
 {
   int ret = OB_SUCCESS;
+#ifdef __APPLE__
+  UNUSED(result);
+  UNUSED(req);
+  UNUSED(ret);
+#else
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("io fault detector not init", K(ret), K(is_inited_));
@@ -2248,6 +2278,7 @@ void ObIOFaultDetector::record_io_error(const ObIOResult &result, const ObIORequ
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("not supported io mode", K(ret), K(result));
   }
+#endif
 }
 
 int ObIOFaultDetector::record_read_failure_(const ObIOResult &result, const ObIORequest &req)
