@@ -477,9 +477,9 @@ void BlockSet::maybe_ordinary_wash()
 {
 #if OB_ALLOC_HAS_PAGE_WASH
   const int64_t now = common::ObTimeUtility::fast_current_time();
-  const int64_t last_ts = ATOMIC_LOAD(&last_ordinary_wash_ts_);
+  const int64_t last_ts = last_ordinary_wash_ts_;
   if (now - last_ts >= ORDINARY_WASH_MIN_INTERVAL_US) {
-    ATOMIC_STORE(&last_ordinary_wash_ts_, now);
+    last_ordinary_wash_ts_ = now;
     (void)wash_free_blocks(ORDINARY_WASH_BUDGET,
         ORDINARY_WASH_DELAY_US,
         ORDINARY_WASH_MAX_BLOCKS);
