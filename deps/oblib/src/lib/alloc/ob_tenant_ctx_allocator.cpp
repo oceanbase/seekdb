@@ -38,11 +38,6 @@ ObTenantCtxAllocatorV2::~ObTenantCtxAllocatorV2()
   allocator_ = NULL;
 }
 
-int64_t ObTenantCtxAllocatorV2::sync_wash(int64_t wash_size)
-{
-  return allocator_->sync_wash_(wash_size);
-}
-
 void ObTenantCtxAllocatorV2::set_req_chunkmgr_parallel(int32_t parallel)
 {
   allocator_->set_req_chunkmgr_parallel_(parallel);
@@ -376,17 +371,6 @@ ObLabelItem ObTenantCtxAllocatorV2::get_label_usage(ObLabel &label) const
     return OB_SUCCESS;
   });
   return item;
-}
-
-int64_t ObTenantCtxAllocator::sync_wash_(int64_t wash_size)
-{
-  UNUSED(wash_size);
-  return 0;
-}
-
-int64_t ObTenantCtxAllocator::sync_wash()
-{
-  return ObMallocAllocator::get_instance()->sync_wash(ctx_id_, INT64_MAX);
 }
 
 void ObTenantCtxAllocatorV2::update_wash_stat(int64_t related_chunks, int64_t blocks, int64_t size)

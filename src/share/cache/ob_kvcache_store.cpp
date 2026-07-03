@@ -22,8 +22,6 @@
 #include "share/cache/ob_kvcache_hazard_domain.h"
 #include "share/config/ob_server_config.h"
 #include "lib/stat/ob_diagnose_info.h"
-#include "lib/stat/ob_diagnostic_info_guard.h"
-#include "lib/statistic_event/ob_stat_event.h"
 #include "ob_kvcache_store.h"
 
 namespace oceanbase
@@ -74,14 +72,8 @@ int ObIKVCacheStore::alloc_kvpair(
     const enum ObKVCachePolicy policy)
 {
   int ret = OB_SUCCESS;
-  
-  int64_t washed_size;
-  if (OB_SUCC(alloc_kvpair_without_retry(key_size, value_size, kvpair, hazptr_holder, policy))) {
-  } else if (OB_ALLOCATE_MEMORY_FAILED != ret) {
-    COMMON_LOG(WARN, "failed to allocate kvpair", K(key_size), K(value_size), K(policy));
-  } else if (0 >= (washed_size = ObMallocAllocator::get_instance()->sync_wash(0, INT64_MAX))) {
-    COMMON_LOG(WARN, "failed to sync wash");
-  } else if (OB_FAIL(alloc_kvpair_without_retry(key_size, value_size, kvpair, hazptr_holder, policy))) {
+
+  if (OB_FAIL(alloc_kvpair_without_retry(key_size, value_size, kvpair, hazptr_holder, policy))) {
     COMMON_LOG(WARN, "failed to allocate kvpair", K(key_size), K(value_size), K(policy));
   }
 
@@ -657,8 +649,8 @@ int ObKVCacheStore::try_flush_washable_mb(ObICacheWasher::ObCacheMemBlock*& wash
         }
         COMMON_LOG(INFO, "can not find enough memory block to wash", K(ret), K(size_washed), K(size_to_wash));
       }
-      EVENT_ADD(ObStatEventIds::KVCACHE_SYNC_WASH_TIME, ObTimeUtility::current_time() - start);
-      EVENT_INC(ObStatEventIds::KVCACHE_SYNC_WASH_COUNT);
+      EVENT_ADD(KVCACHE_SYNC_WASH_TIME, ObTimeUtility::current_time() - start);
+      EVENT_INC(KVCACHE_SYNC_WASH_COUNT);
     }
 
     if (OB_FAIL(ret)) {

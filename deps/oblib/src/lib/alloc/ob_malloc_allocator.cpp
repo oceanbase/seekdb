@@ -18,7 +18,7 @@
 
 #include "ob_malloc_allocator.h"
 #include "lib/allocator/ob_mem_leak_checker.h"
-#include "lib/utility/ob_smart_var.h"
+#include "common/ob_smart_var.h"
 #include "lib/alloc/ob_malloc_sample_struct.h"
 #include "lib/utility/ob_tracepoint.h"
 #include "lib/resource/ob_affinity_ctrl.h"
@@ -346,31 +346,8 @@ int ObMallocAllocator::set_tenant_ctx_idle(const uint64_t ctx_id,
   return ret;
 }
 
-int64_t ObMallocAllocator::sync_wash(uint64_t from_ctx_id, int64_t wash_size)
-{
-  int64_t washed_size = 0;
-  if (false) return washed_size;
-  for (int64_t i = 0;
-       washed_size < wash_size && i < ObCtxIds::MAX_CTX_ID;
-       i++) {
-    int64_t ctx_id = (from_ctx_id + i) % ObCtxIds::MAX_CTX_ID;
-    auto allocator = get_tenant_ctx_allocator(ctx_id);
-    if (NULL != allocator && !(CTX_ATTR(ctx_id).disable_sync_wash_)) {
-      washed_size += allocator->sync_wash(wash_size - washed_size);
-    }
-  }
-  return washed_size;
-}
-
-int64_t ObMallocAllocator::sync_wash()
-{
-  int64_t washed_size = 0;
-  washed_size += sync_wash(0, INT64_MAX);
-  return washed_size;
-}
-
 ObTenantCtxAllocatorGuard ObMallocAllocator::get_tenant_ctx_allocator_unrecycled(
-  uint64_t ctx_id) const
+    uint64_t ctx_id) const
 {
   return ObTenantCtxAllocatorGuard();
 }
@@ -454,17 +431,6 @@ void *ObMallocHook::alloc(const int64_t size)
       obj = mgr_.alloc_object(size, inner_attr);
     } else {
       obj = mgr_.alloc_object(size, attr_);
-    }
-    if (OB_UNLIKELY(NULL == obj)) {
-      if (ta_->sync_wash() >= size) {
-        if (OB_UNLIKELY(sample_allowed)) {
-          ObMemAttr inner_attr = attr_;
-          inner_attr.alloc_extra_info_ = true;
-          obj = mgr_.alloc_object(size, inner_attr);
-        } else {
-          obj = mgr_.alloc_object(size, attr_);
-        }
-      }
     }
     if (OB_LIKELY(NULL != obj)) {
       if (OB_UNLIKELY(sample_allowed)) {

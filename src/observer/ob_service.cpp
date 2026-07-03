@@ -18,16 +18,14 @@
 
 
 
-#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_service.h"
-#include "storage/ob_storage_rpc_arg.h"
 #include "share/rc/ob_module_provider.h"
 #include "lib/alloc/memory_dump.h"
 
 #include "share/ob_version.h"
 
 #include "share/ob_version.h"
-#include "storage/deadlock/ob_deadlock_inner_table_service.h"
+#include "share/deadlock/ob_deadlock_inner_table_service.h"
 #include "share/ob_tablet_replica_checksum_operator.h" // ObTabletReplicaChecksumItem
 
 #include "sql/optimizer/ob_storage_estimator.h"
@@ -53,7 +51,6 @@
 #include "share/ob_server_struct.h"    // GCTX
 #include "storage/tx_storage/ob_ls_service.h"  // ObLSService
 #include "share/ob_rpc_struct.h"  // ObCreateLSArg
-#include "share/schema/ob_multi_version_schema_service.h"  // hook registration
 
 namespace oceanbase
 {
@@ -658,7 +655,7 @@ int ObService::handle_ls_freeze_req_(const share::ObLSID &ls_id,
           if (OB_EAGAIN == ret) {
             ret = OB_SUCCESS;
           } else {
-            LOG_ERROR("fail to freeze tablet", K(ret), K(ls_id), K(tablet_id));
+            LOG_WARN("fail to freeze tablet", K(ret), K(ls_id), K(tablet_id));
           }
         } else {
           LOG_INFO("succeed to freeze tablet", K(ret), K(ls_id), K(tablet_id));
@@ -669,7 +666,7 @@ int ObService::handle_ls_freeze_req_(const share::ObLSID &ls_id,
           if (OB_EAGAIN == ret) {
             ret = OB_SUCCESS;
           } else {
-            LOG_ERROR("fail to freeze ls", K(ret), K(ls_id), K(tablet_id));
+            LOG_WARN("fail to freeze ls", K(ret), K(ls_id), K(tablet_id));
           }
         } else {
           LOG_INFO("succeed to freeze ls", K(ret), K(ls_id), K(tablet_id));
@@ -697,7 +694,7 @@ int ObService::tenant_freeze_()
         if (OB_ENTRY_EXIST == ret) {
           ret = OB_SUCCESS;
         } else {
-          LOG_ERROR("fail to freeze tenant", K(ret));
+          LOG_WARN("fail to freeze tenant", K(ret));
         }
       } else {
         LOG_INFO("succeed to freeze tenant", K(ret));
@@ -1091,7 +1088,7 @@ int ObService::switch_schema(
       THIS_WORKER.set_timeout_ts(origin_timeout_ts);
       int64_t tmp_ret = OB_SUCCESS;
       if (OB_SUCCESS != (tmp_ret = schema_service->set_tenant_received_broadcast_version(schema_version))) {
-        LOG_ERROR("failt to update received schema version", KR(tmp_ret), K(schema_version));
+        LOG_WARN("failt to update received schema version", KR(tmp_ret), K(schema_version));
         ret = OB_SUCC(ret) ? tmp_ret : ret;
       }
       if (THIS_WORKER.is_timeout_ts_valid()
@@ -1580,8 +1577,7 @@ int ObService::refresh_memory_stat()
 
 int ObService::wash_memory_fragmentation()
 {
-  ObMallocAllocator::get_instance()->sync_wash();
-  return OB_SUCCESS;
+  return OB_NOT_SUPPORTED;
 }
 
 int ObService::build_split_tablet_data_start_request(const obcall::ObTabletSplitStartArg &arg,  obcall::ObTabletSplitStartResult &res)
@@ -2191,24 +2187,3 @@ int ObService::change_external_storage_dest(obcall::ObAdminSetConfigArg &arg)
 
 }// end namespace observer
 }// end namespace oceanbase
-
-namespace oceanbase
-{
-namespace share
-{
-namespace schema
-{
-// mvss async schema refresh taskhook registration(removes share/schema → observer dependency, predecessor ob_tenant_freezer.cpp)
-static struct ObSubmitAsyncRefreshSchemaFnRegister
-{
-  ObSubmitAsyncRefreshSchemaFnRegister()
-  {
-    g_submit_async_refresh_schema_task_fn = [](const int64_t schema_version) -> int {
-      return OB_ISNULL(GCTX.ob_service_) ? OB_ERR_UNEXPECTED
-           : GCTX.ob_service_->submit_async_refresh_schema_task(schema_version);
-    };
-  }
-} g_submit_async_refresh_schema_fn_register;
-}  // namespace schema
-}  // namespace share
-}  // namespace oceanbase

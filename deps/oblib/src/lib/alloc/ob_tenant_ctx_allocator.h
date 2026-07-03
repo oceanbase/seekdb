@@ -182,7 +182,6 @@ private:
   {
     return allocator_;
   }
-  int64_t sync_wash(int64_t wash_size);
   ObTenantResourceMgrHandle &get_resource_handle() { return resource_handle_; }
   int64_t inc_ref_cnt(int64_t cnt) { return ATOMIC_FAA(&ref_cnt_, cnt); }
   int64_t get_ref_cnt() const { return ATOMIC_LOAD(&ref_cnt_); }
@@ -423,8 +422,6 @@ public:
   using VisitFunc = std::function<int(ObLabel &label,
                                       common::LabelItem *l_item)>;
   int iter_label(VisitFunc func) const { return ctx_allocator_.iter_label(func); }
-  int64_t sync_wash(int64_t wash_size) { return ctx_allocator_.sync_wash(wash_size); }
-  int64_t sync_wash();
   bool check_has_unfree(char *first_label, char *first_bt)
   {
     bool has_unfree = obj_mgr_.check_has_unfree();
@@ -443,7 +440,6 @@ public:
 private:
   void get_chunks_(AChunk **chunks, int cap, int &cnt) { using_list_.get_chunks(chunks, cap, cnt); }
   void set_req_chunkmgr_parallel_(int32_t parallel) { req_chunk_mgr_.set_parallel(parallel); }
-  int64_t sync_wash_(int64_t wash_size);
   int64_t inc_ref_cnt(int64_t cnt) { return ctx_allocator_.inc_ref_cnt(cnt); }
   int64_t get_ref_cnt() const { return ctx_allocator_.get_ref_cnt(); }
   AChunk *pop_chunk();
@@ -486,9 +482,7 @@ public:
       nobj = allocator.realloc_object(obj, size, inner_attr);
       if (OB_ISNULL(nobj)) {
         int64_t total_size = 0;
-        if (g_alloc_failed_ctx().need_wash_block()) {
-          total_size += ta.sync_wash();
-        } else if (g_alloc_failed_ctx().need_wash_chunk()) {
+        if (g_alloc_failed_ctx().need_wash_chunk()) {
           total_size += CHUNK_MGR.sync_wash();
         }
         if (total_size > 0) {
