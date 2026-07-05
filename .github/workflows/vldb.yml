@@ -115,15 +115,59 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          WS="${{ github.workspace }}"
+          if [[ ! -f "$WS/build.sh" ]] && [[ -f "$(pwd)/build.sh" ]]; then
+            WORKSPACE="$(pwd)"
+          else
+            WORKSPACE="$WS"
+          fi
+          if grep -q 'dep_create.sh' "$WORKSPACE/build.sh" 2>/dev/null; then
+            DEP_PATH="$WORKSPACE/deps/3rd"
+          else
+            DEP_PATH="$WORKSPACE/rpm/.dep_create/var"
+          fi
+          export LD_LIBRARY_PATH="$DEP_PATH/u01/obclient/lib:${LD_LIBRARY_PATH:-}"
+
           CLIENT=""
-          if [[ -x "${{ github.workspace }}/deps/3rd/u01/obclient/bin/obclient" ]]; then
-            CLIENT="${{ github.workspace }}/deps/3rd/u01/obclient/bin/obclient"
-          elif command -v obclient >/dev/null 2>&1; then
+          for cand in \
+            "$DEP_PATH/u01/obclient/bin/obclient" \
+            "$WORKSPACE/deps/3rd/u01/obclient/bin/obclient" \
+            "$WORKSPACE/rpm/.dep_create/var/u01/obclient/bin/obclient" \
+            "$WORKSPACE/tools/deploy/obclient"; do
+            if [[ -x "$cand" ]]; then
+              CLIENT="$cand"
+              break
+            fi
+          done
+          if [[ -z "$CLIENT" ]]; then
+            for root in "$WORKSPACE/deps/3rd" "$WORKSPACE/rpm/.dep_create/var"; do
+              [[ -d "$root" ]] || continue
+              cand="$(find "$root" -maxdepth 8 -path '*/bin/obclient' -type f -print -quit 2>/dev/null || true)"
+              if [[ -n "$cand" ]]; then
+                chmod +x "$cand" 2>/dev/null || true
+                if [[ -x "$cand" ]]; then
+                  CLIENT="$cand"
+                  break
+                fi
+              fi
+            done
+          fi
+          if [[ -z "$CLIENT" ]] && command -v obclient >/dev/null 2>&1; then
             CLIENT="$(command -v obclient)"
-          elif command -v mysql >/dev/null 2>&1; then
+          elif [[ -z "$CLIENT" ]] && command -v mysql >/dev/null 2>&1; then
             CLIENT="$(command -v mysql)"
           fi
-          [[ -n "$CLIENT" ]] || { echo "no mysql-compatible client found"; exit 1; }
+          if [[ -z "$CLIENT" ]]; then
+            echo "no mysql-compatible client found"
+            echo "WORKSPACE=$WORKSPACE"
+            echo "DEP_PATH=$DEP_PATH"
+            for root in "$WORKSPACE/deps/3rd" "$WORKSPACE/rpm/.dep_create/var"; do
+              [[ -d "$root" ]] || continue
+              find "$root" -maxdepth 6 -path '*/bin/obclient' -type f -print 2>/dev/null || true
+            done
+            exit 1
+          fi
+          echo "mysql-compatible client: $CLIENT"
 
           for i in $(seq 1 90); do
             if "$CLIENT" -h127.0.0.1 -P2881 -uroot -A -e "select 1;" > "$VLDB_WORK_DIR/sql.out" 2>&1; then
