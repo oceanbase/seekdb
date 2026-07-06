@@ -60,7 +60,7 @@ render_template_entry:
   artifacts:
     paths:
       - template_entry.yml
-    expire_in: 1 day
+    expire_in: 10 days
   rules:
     - if: $CI_PIPELINE_SOURCE == "web"
     - if: $CI_PIPELINE_SOURCE == "trigger"
