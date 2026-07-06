@@ -44,9 +44,6 @@ namespace common
 // Warning diagnosis log LEVEL_WARN is an alias of WDIAG, show as "WDIAG" in log file
 #define OB_LOG_LEVEL_WARN 4
 #define OB_LOG_LEVEL_WDIAG 4
-// Compile-time-only tag for ordinary LOG_WARN diagnostics. It prints as WDIAG
-// when enabled, and can be compiled out without changing explicit WARN logs.
-#define OB_LOG_LEVEL_DIAG_WARN OB_LOG_LEVEL_WARN
 
 #define OB_LOG_LEVEL_TRACE 5
 #define OB_LOG_LEVEL_DEBUG 6

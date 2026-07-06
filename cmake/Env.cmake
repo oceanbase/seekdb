@@ -40,14 +40,6 @@ ob_define(OB_BUILD_STANDALONE OFF)
 ob_define(OB_BUILD_LITE ON)
 ob_define(DEFAULT_LOG_LEVEL OB_LOG_LEVEL_WARN)
 ob_define(DEFAULT_LOG_FILE_SIZE_MB 256)
-ob_define(OB_LOG_COMPILE_HIDE_DIAG_WARN OFF)
-if(NOT DEFINED OB_LOG_COMPILE_LEVEL)
-  if(OB_LOG_COMPILE_HIDE_DIAG_WARN)
-    set(OB_LOG_COMPILE_LEVEL OB_LOG_LEVEL_ERROR)
-  else()
-    set(OB_LOG_COMPILE_LEVEL OB_LOG_LEVEL_DEBUG)
-  endif()
-endif()
 
 # 'ENABLE_PERF_MODE' use for offline system insight performance test
 # PERF_MODE macro controls many special code path in system

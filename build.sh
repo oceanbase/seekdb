@@ -23,8 +23,6 @@ MAKE_ARGS=(-j $CPU_CORES)
 NEED_MAKE=false
 NEED_INIT=false
 ANDROID_BUILD=false
-LOG_COMPILE_LEVEL=""
-HIDE_DIAG_WARN_LOG=false
 LLD_OPTION=ON
 ASAN_OPTION=ON
 STATIC_LINK_LGPL_DEPS_OPTION=ON
@@ -51,8 +49,6 @@ function usage
     echo -e "\nOPTIONS:"
     echo -e "\tBuildType => debug(default), release, errsim, dissearray, rpm"
     echo -e "\t--android  => Cross-compile for Android NDK (arm64-v8a)"
-    echo -e "\t--hide-warn-log => Compile out WARN/TRACE/DEBUG diagnostics; keep ERROR/INFO/DBA"
-    echo -e "\t--log-compile-level=N => Compile-time log threshold (0-6, default 6=all)"
     echo -e "\tMakeOptions => Options to make command, default: -j N"
 
     echo -e "\nExamples:"
@@ -64,9 +60,6 @@ function usage
 
     echo -e "\n\t# Build for Android with release mode."
     echo -e "\t./build.sh release --android --init"
-
-    echo -e "\n\t# Build release with slim logs: keep ERROR/INFO/DBA only."
-    echo -e "\t./build.sh release --hide-warn-log --make"
 
     echo -e "\n\t# Build with rpm mode and make with default arguments."
     echo -e "\t./build.sh rpm --make"
@@ -82,12 +75,6 @@ function parse_args
         elif [[ "$i" == "--android" ]]
         then
             ANDROID_BUILD=true
-        elif [[ "$i" == "--hide-warn-log" || "$i" == "--hide-diag-warn-log" ]]
-        then
-            HIDE_DIAG_WARN_LOG=true
-        elif [[ "$i" == "--log-compile-level="* ]]
-        then
-            LOG_COMPILE_LEVEL="${i#*=}"
         elif [[ "$i" == "--make" ]]
         then
             NEED_MAKE=make
@@ -211,20 +198,7 @@ function do_build
       echo_log "Android NDK: $ANDROID_NDK_HOME"
     fi
 
-    LOG_CMAKE_ARGS=()
-    if [[ -n "$LOG_COMPILE_LEVEL" ]]; then
-      LOG_CMAKE_ARGS+=("-DOB_LOG_COMPILE_LEVEL=$LOG_COMPILE_LEVEL")
-      echo_log "OB_LOG_COMPILE_LEVEL=$LOG_COMPILE_LEVEL (logs with level > $LOG_COMPILE_LEVEL will be eliminated at compile time)"
-    elif [[ $HIDE_DIAG_WARN_LOG == true ]]; then
-      LOG_CMAKE_ARGS+=("-DOB_LOG_COMPILE_LEVEL=OB_LOG_LEVEL_ERROR")
-      echo_log "OB_LOG_COMPILE_LEVEL=OB_LOG_LEVEL_ERROR (release slim keeps ERROR/INFO/DBA logs)"
-    fi
-    if [[ $HIDE_DIAG_WARN_LOG == true ]]; then
-      LOG_CMAKE_ARGS+=("-DOB_LOG_COMPILE_HIDE_DIAG_WARN=ON")
-      echo_log "OB_LOG_COMPILE_HIDE_DIAG_WARN=ON (ordinary LOG_WARN diagnostics will be eliminated at compile time)"
-    fi
-
-    ${CMAKE_COMMAND} ${TOPDIR} ${ANDROID_CMAKE_ARGS} "${LOG_CMAKE_ARGS[@]}" "$@"
+    ${CMAKE_COMMAND} ${TOPDIR} ${ANDROID_CMAKE_ARGS} "$@"
     if [ $? -ne 0 ]; then
       echo_err "Failed to generate Makefile"
       exit 1
