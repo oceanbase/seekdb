@@ -400,13 +400,12 @@ int64_t BlockSet::wash_free_blocks(const int64_t wash_size,
     if (nullptr == head) {
     } else {
       ABlock *block = head;
-      bool need_scan = true;
       int64_t scan_cnt = 0;
-      while (need_scan && OB_NOT_NULL(block) &&
+      while (OB_NOT_NULL(block) &&
              washed_size < wash_size && scanned_blks < max_blocks_per_round &&
              scan_cnt++ < BLOCKS_PER_CHUNK) {
         ABlock *next = block->next_ != block ? block->next_ : nullptr;
-        need_scan = OB_NOT_NULL(next) && next != head;
+        const bool has_more = OB_NOT_NULL(next) && next != head;
         scanned_blks++;
         AChunk *chunk = block->chunk();
         if (chunk->is_hugetlb_) {
@@ -446,10 +445,7 @@ int64_t BlockSet::wash_free_blocks(const int64_t wash_size,
             }
           }
         }
-        block = next;
-        if (OB_ISNULL(head)) {
-          need_scan = false;
-        }
+        block = has_more ? next : nullptr;
       }
     }
     cls--;
