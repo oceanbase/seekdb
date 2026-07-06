@@ -38,7 +38,7 @@ ob_define(OB_CC "")
 ob_define(OB_CXX "")
 ob_define(OB_BUILD_STANDALONE OFF)
 ob_define(OB_BUILD_LITE ON)
-ob_define(DEFAULT_LOG_LEVEL OB_LOG_LEVEL_WARN)
+ob_define(DEFAULT_LOG_LEVEL OB_LOG_LEVEL_ERROR)
 ob_define(DEFAULT_LOG_FILE_SIZE_MB 256)
 
 # 'ENABLE_PERF_MODE' use for offline system insight performance test
