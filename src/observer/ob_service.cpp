@@ -135,11 +135,16 @@ TelemetryTask::TelemetryTask(bool embed_mode)
   : embed_mode_(embed_mode)
 {}
 
-void TelemetryTask::runTimerTask()
+int TelemetryTask::report_(bool embed_mode)
 {
   const char *env_reporter = std::getenv("REPORTER");
-  const char *reporter = env_reporter ? env_reporter : (embed_mode_ ? "embed" : "server");
-  share::report_telemetry(reporter, "bootstraped");
+  const char *reporter = env_reporter ? env_reporter : (embed_mode ? "embed" : "server");
+  return share::report_telemetry(reporter, "bootstraped");
+}
+
+int TelemetryTask::report()
+{
+  return report_(embed_mode_);
 }
 
 //////////////////////////////////////
@@ -243,9 +248,9 @@ int ObService::start(bool embed_mode)
     }
     if (OB_SUCC(ret)) {
       telemetry_task_.embed_mode_ = embed_mode;
-      if (OB_SUCCESS != TG_SCHEDULE(lib::TGDefIDs::ServerGTimer, telemetry_task_,
-          1L * 1000 * 1000, false)) {
-        FLOG_ERROR("fail to schedule telemetry task");
+      int tmp_ret = OB_SUCCESS;
+      if (OB_SUCCESS != (tmp_ret = telemetry_task_.report())) {
+        FLOG_WARN("fail to report bootstrap telemetry synchronously", KR(tmp_ret));
       }
     }
     need_bootstrap_ = false;

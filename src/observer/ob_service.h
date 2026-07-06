@@ -57,11 +57,13 @@ private:
   bool is_inited_;
 };
 
-class TelemetryTask : public common::ObTimerTask {
+class TelemetryTask {
 public:
   TelemetryTask(bool embed_mode);
-  virtual void runTimerTask() override;
+  int report();
   bool embed_mode_;
+private:
+  static int report_(bool embed_mode);
 };
 
 class ObService
