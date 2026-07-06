@@ -18,14 +18,16 @@
 
 
 
+#include "lib/stat/ob_diagnostic_info_guard.h"
 #include "ob_service.h"
+#include "storage/ob_storage_rpc_arg.h"
 #include "share/rc/ob_module_provider.h"
 #include "lib/alloc/memory_dump.h"
 
 #include "share/ob_version.h"
 
 #include "share/ob_version.h"
-#include "share/deadlock/ob_deadlock_inner_table_service.h"
+#include "storage/deadlock/ob_deadlock_inner_table_service.h"
 #include "share/ob_tablet_replica_checksum_operator.h" // ObTabletReplicaChecksumItem
 
 #include "sql/optimizer/ob_storage_estimator.h"
@@ -51,6 +53,7 @@
 #include "share/ob_server_struct.h"    // GCTX
 #include "storage/tx_storage/ob_ls_service.h"  // ObLSService
 #include "share/ob_rpc_struct.h"  // ObCreateLSArg
+#include "share/schema/ob_multi_version_schema_service.h"  // hook registration
 
 namespace oceanbase
 {
@@ -128,11 +131,16 @@ TelemetryTask::TelemetryTask(bool embed_mode)
   : embed_mode_(embed_mode)
 {}
 
-void TelemetryTask::runTimerTask()
+int TelemetryTask::report_(bool embed_mode)
 {
   const char *env_reporter = std::getenv("REPORTER");
-  const char *reporter = env_reporter ? env_reporter : (embed_mode_ ? "embed" : "server");
-  share::report_telemetry(reporter, "bootstraped");
+  const char *reporter = env_reporter ? env_reporter : (embed_mode ? "embed" : "server");
+  return share::report_telemetry(reporter, "bootstraped");
+}
+
+int TelemetryTask::report()
+{
+  return report_(embed_mode_);
 }
 
 //////////////////////////////////////
@@ -233,9 +241,9 @@ int ObService::start(bool embed_mode)
     }
     if (OB_SUCC(ret)) {
       telemetry_task_.embed_mode_ = embed_mode;
-      if (OB_SUCCESS != TG_SCHEDULE(lib::TGDefIDs::ServerGTimer, telemetry_task_,
-          1L * 1000 * 1000, false)) {
-        FLOG_ERROR("fail to schedule telemetry task");
+      int tmp_ret = OB_SUCCESS;
+      if (OB_SUCCESS != (tmp_ret = telemetry_task_.report())) {
+        FLOG_WARN("fail to report bootstrap telemetry synchronously", KR(tmp_ret));
       }
     }
     need_bootstrap_ = false;
@@ -1575,6 +1583,12 @@ int ObService::refresh_memory_stat()
   return ObMemoryDump::get_instance().generate_mod_stat_task();
 }
 
+int ObService::wash_memory_fragmentation()
+{
+  ObMallocAllocator::get_instance()->sync_wash();
+  return OB_SUCCESS;
+}
+
 int ObService::build_split_tablet_data_start_request(const obcall::ObTabletSplitStartArg &arg,  obcall::ObTabletSplitStartResult &res)
 {
   int ret = OB_SUCCESS;
@@ -2182,3 +2196,24 @@ int ObService::change_external_storage_dest(obcall::ObAdminSetConfigArg &arg)
 
 }// end namespace observer
 }// end namespace oceanbase
+
+namespace oceanbase
+{
+namespace share
+{
+namespace schema
+{
+// mvss async schema refresh taskhook registration(removes share/schema → observer dependency, predecessor ob_tenant_freezer.cpp)
+static struct ObSubmitAsyncRefreshSchemaFnRegister
+{
+  ObSubmitAsyncRefreshSchemaFnRegister()
+  {
+    g_submit_async_refresh_schema_task_fn = [](const int64_t schema_version) -> int {
+      return OB_ISNULL(GCTX.ob_service_) ? OB_ERR_UNEXPECTED
+           : GCTX.ob_service_->submit_async_refresh_schema_task(schema_version);
+    };
+  }
+} g_submit_async_refresh_schema_fn_register;
+}  // namespace schema
+}  // namespace share
+}  // namespace oceanbase
