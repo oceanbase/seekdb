@@ -55,7 +55,7 @@ int ObDDLMergeTaskUtils::check_idempodency(const ObIArray<ObDDLBlockMeta> &input
     ret = OB_NOT_SUPPORTED;
     LOG_WARN("shared storage mode do not need idempodency checker", K(ret), K(lbt()));
   } else if (input_metas.count() > 0 && OB_FAIL(id_checksum_map.create(input_metas.count(), ObMemAttr("DDL_MER_IDEM")))) {
-    LOG_WARN("failed to create checksum map", K(ret), K(input_metas.count()));
+    LOG_ERROR("failed to create checksum map", K(ret), K(input_metas.count()));
   }
   for (int64_t i = 0; OB_SUCC(ret) && i < input_metas.count(); ++i) {
     ObDDLBlockMeta block_meta = input_metas.at(i);
@@ -78,7 +78,7 @@ int ObDDLMergeTaskUtils::check_idempodency(const ObIArray<ObDDLBlockMeta> &input
     } else {
       if (checksum != block_meta.block_meta_->val_.data_checksum_) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("unequal checksum", K(ret), KPC(block_meta.block_meta_));
+        LOG_ERROR("unequal checksum", K(ret), KPC(block_meta.block_meta_));
       }
     }
   }
@@ -266,7 +266,7 @@ int ObDDLMergeTaskUtils::freeze_ddl_kv(const ObLSID &ls_id,
   } else if (!ddl_kv_mgr_handle.get_obj()->can_freeze()) {
     ret = OB_EAGAIN;
     if (REACH_TIME_INTERVAL(10 * 1000 * 1000)) {
-      LOG_WARN("cannot freeze now", K(tablet_id));
+      LOG_ERROR("cannot freeze now", K(tablet_id));
     }
   } else if (OB_FAIL(ddl_kv_mgr_handle.get_obj()->freeze_ddl_kv(
       start_scn, snapshot_version, tenant_data_version, SCN::min_scn()/*freeze_scn*/,
@@ -490,7 +490,7 @@ int ObDDLMergeTaskUtils::update_tablet_table_store(ObDDLTabletMergeDagParamV2 &d
       } else if (OB_FAIL(ls_handle.get_ls()->update_tablet_table_store(target_tablet_id, table_store_param, new_tablet_handle))) {
         LOG_WARN("failed to update tablet table store", K(ret), K(target_tablet_id), K(table_store_param));
       } else if (for_major && OB_FAIL(share::g_mp->tablet_table_updater()->submit_tablet_update_task(target_ls_id, target_tablet_id))) {
-        LOG_WARN("fail to submit tablet update task", K(ret), K(dag_merge_param));
+        LOG_ERROR("fail to submit tablet update task", K(ret), K(dag_merge_param));
       }
     }
   }

@@ -2305,7 +2305,7 @@ int ObTabletTableStore::build_ha_new_table_store_(
   } else if (OB_FAIL(build_ha_ddl_tables_(allocator, tablet, param, old_store))) {
     LOG_WARN("failed to build ha ddl tables", K(ret), K(param), K(old_store));
   } else if (!meta_major_table.empty() && OB_FAIL(build_meta_major_table(allocator, nullptr/*new sstable*/, old_store.meta_major_tables_))) {
-    LOG_WARN("failed to build meta major table", K(ret), K(old_store));
+    LOG_ERROR("failed to build meta major table", K(ret), K(old_store));
   } else if (OB_FAIL(build_major_checksum_info(old_store, NULL/*param*/, allocator))) {
     LOG_WARN("failed to build major checksum info", KR(ret), K(param));
   } else if (OB_FAIL(build_memtable_array(tablet))) {

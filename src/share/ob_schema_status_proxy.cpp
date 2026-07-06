@@ -208,7 +208,7 @@ int ObSchemaStatusProxy::set_tenant_schema_status(
     bool is_commit = (OB_SUCCESS == ret);
     int tmp_ret = trans.end(is_commit);
     if (OB_SUCCESS != tmp_ret) {
-      LOG_WARN("fail to commit transaction", K(tmp_ret), K(ret), K(is_commit));
+      LOG_ERROR("fail to commit transaction", K(tmp_ret), K(ret), K(is_commit));
       if (OB_SUCC(ret)) {
         ret = tmp_ret;
       }

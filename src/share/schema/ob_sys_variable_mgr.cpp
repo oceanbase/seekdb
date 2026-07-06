@@ -299,7 +299,7 @@ int ObSysVariableMgr::del_sys_variable()
     // sys variable schema is null, no need to del
   } else if (FALSE_IT(schema_to_del = sys_variable_infos_.begin() == sys_variable_infos_.end() ? NULL : *sys_variable_infos_.begin())) {
   } else if (OB_NOT_NULL(schema_to_del) && OB_FAIL(sys_variable_infos_.remove(sys_variable_infos_.begin()))) {
-    LOG_WARN("failed to remove sys_variable schema, ", K(ret));
+    LOG_ERROR("failed to remove sys_variable schema, ", K(ret));
   } else if (OB_ISNULL(schema_to_del)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("removed sys_variable schema return NULL, ", K(ret));

@@ -71,7 +71,7 @@ int MdsTableBase::init(const ObTabletID tablet_id,
       debug_info_.init_trace_id_ = *ObCurTraceId::get_trace_id();
       debug_info_.init_ts_ = ObClockGenerator::getClock();
       if (MDS_FAIL(register_to_mds_table_mgr())) {
-        MDS_LOG(WARN, "fail to register mds table", KR(ret), K(*this), K(ls_id), K(tablet_id));
+        MDS_LOG(ERROR, "fail to register mds table", KR(ret), K(*this), K(ls_id), K(tablet_id));
       }
     }
   }
@@ -86,7 +86,7 @@ int MdsTableBase::register_to_mds_table_mgr()
     ret = OB_BAD_NULL_ERROR;
     MDS_LOG(WARN, "mds_table_mgr ptr is null", KR(ret), K(*this));
   } else if (MDS_FAIL(mgr_handle_.get_mds_table_mgr()->register_to_mds_table_mgr(this))) {
-    MDS_LOG(WARN, "fail to register mds table", KR(ret), K(*this));
+    MDS_LOG(ERROR, "fail to register mds table", KR(ret), K(*this));
   } else {
     report_construct_event_();
   }
@@ -197,7 +197,7 @@ int MdsTableBase::merge(const int64_t construct_sequence, const share::SCN &flus
   param.exec_mode_ = compaction::EXEC_MODE_LOCAL;
   if (OB_FAIL(compaction::ObScheduleDagFunc::schedule_mds_table_merge_dag(param))) {
     if (OB_EAGAIN != ret && OB_SIZE_OVERFLOW != ret) {
-      MDS_LOG(WARN, "failed to schedule mds table merge dag", K(ret), K(param));
+      MDS_LOG(ERROR, "failed to schedule mds table merge dag", K(ret), K(param));
     }
   } else {
     MDS_LOG(DEBUG, "succeeded to schedule mds table merge dag", K(ret), K(param));

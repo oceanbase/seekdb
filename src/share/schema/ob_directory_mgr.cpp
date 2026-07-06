@@ -156,7 +156,7 @@ int ObDirectoryMgr::add_directory(const ObDirectorySchema &schema)
   }
   if ((directory_infos_.count() != directory_name_map_.item_count()
       || directory_infos_.count() != directory_id_map_.item_count())) {
-    LOG_WARN("schema is inconsistent with its map", K(ret),
+    LOG_ERROR("schema is inconsistent with its map", K(ret),
              K(directory_infos_.count()),
              K(directory_name_map_.item_count()),
              K(directory_id_map_.item_count()));
@@ -200,7 +200,7 @@ int ObDirectoryMgr::del_directory(const ObTenantDirectoryId &id)
       ret = OB_SUCCESS;
       LOG_INFO("failed to remove directory schema, item may not exist", K(ret));
     } else {
-      LOG_WARN("failed to remove directory schema", K(ret));
+      LOG_ERROR("failed to remove directory schema", K(ret));
     }
   } else if (OB_ISNULL(schema)) {
     // if item can be found, schema should not be null

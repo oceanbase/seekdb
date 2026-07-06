@@ -796,7 +796,7 @@ int ObDDLIndependentDag::generate_tablet_write_macro_block_tasks(
     // merge_task
     else if (is_incremental_major_direct_load(direct_load_type_) && wait_dump &&
              OB_FAIL(init_tablet_merge_task(tablet_id, for_major, data_merge_task, lob_merge_task))) {
-      LOG_WARN("fail to init tablet merge task", KR(ret));
+      LOG_ERROR("fail to init tablet merge task", KR(ret));
     } else if (nullptr != data_merge_task &&
                OB_FAIL(write_macro_block_tasks.push_back(data_merge_task))) {
       LOG_WARN("fail to push back", KR(ret));

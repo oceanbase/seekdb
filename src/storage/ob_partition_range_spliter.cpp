@@ -1143,7 +1143,7 @@ int ObPartitionMultiRangeSpliterHelper::deepcopy_rowkey(const ObDatumRowkey &row
   if constexpr (std::is_same_v<ObStoreRowkey, ObTemplateRowkey>) {
     if (for_compaction) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Fail to deepcopy rowkey, type must be datum rowkey when for compaction", KR(ret));
+      LOG_ERROR("Fail to deepcopy rowkey, type must be datum rowkey when for compaction", KR(ret));
     } else if (rowkey.is_min_rowkey()) {
       target.set_min();
     } else if (rowkey.is_max_rowkey()) {
@@ -1159,7 +1159,7 @@ int ObPartitionMultiRangeSpliterHelper::deepcopy_rowkey(const ObDatumRowkey &row
     ObDatumRowkey tmp_rowkey;
     if (!for_compaction) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("Fail to deepcopy rowkey, type must be store rowkey when not for compaction", KR(ret));
+      LOG_ERROR("Fail to deepcopy rowkey, type must be store rowkey when not for compaction", KR(ret));
     } else if (rowkey.is_min_rowkey()) {
       target.set_min_rowkey();
     } else if (rowkey.is_max_rowkey()) {

@@ -79,7 +79,7 @@ int ObStorageLogWriter::init(
   } else if (OB_FAIL(ObLogPolicyParser::parse_log_write_policy(log_file_spec.log_write_policy_,
       log_write_policy_))) {
     ret = OB_INVALID_ARGUMENT;
-    STORAGE_REDO_LOG(WARN, "Fail to parse log write policy", K(ret), K(log_file_spec));
+    STORAGE_REDO_LOG(ERROR, "Fail to parse log write policy", K(ret), K(log_file_spec));
   } else if (OB_FAIL(nop_log_.init(ObLogConstants::LOG_FILE_ALIGN_SIZE))) {
     STORAGE_REDO_LOG(WARN, "Fail to init nop log", K(ret));
   } else if (OB_FAIL(batch_write_buf_.init(ObLogConstants::LOG_FILE_ALIGN_SIZE, buf_size))) {

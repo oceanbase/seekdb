@@ -1481,7 +1481,7 @@ int ObSetConfigResolver::convert_param_value(ObAdminSetConfigItem &item)
     if (item.value_.str().empty()) {
       // do nothing
     } else if (OB_FAIL(dest.set(item.value_.str()))) {
-      LOG_WARN("failed to set backup dest", K(ret));
+      LOG_ERROR("failed to set backup dest", K(ret));
       if (OB_INVALID_BACKUP_DEST == ret) {
         // let config checker return the actual error info
         ret = OB_SUCCESS;

@@ -1758,7 +1758,7 @@ int ObDMLResolver::resolve_into_variables(const ParseNode *node,
             if (OB_SUCC(ret) && !is_compatible) {
               if (into_pl_type.is_udt_type()) {
                 ret = OB_ERR_INVALID_TYPE_FOR_OP;
-                LOG_WARN("inconsistent datatypes", K(ret), K(into_pl_type));
+                LOG_ERROR("inconsistent datatypes", K(ret), K(into_pl_type));
               } else {
                 ret = OB_ERR_LOCAL_COLL_IN_SQL;
                 LOG_WARN("local collection types not allowed in SQL statements",
@@ -1819,7 +1819,7 @@ int ObDMLResolver::resolve_into_variables(const ParseNode *node,
               ret = OB_ERR_INTO_EXPR_ILLEGAL;
               LOG_USER_ERROR(OB_ERR_INTO_EXPR_ILLEGAL, access_expr->get_orig_access_idxs().at(access_expr->get_orig_access_idxs().count() - 1).var_name_.length(),
                              access_expr->get_orig_access_idxs().at(access_expr->get_orig_access_idxs().count() - 1).var_name_.ptr());
-              LOG_WARN("inconsistent datatypes", K(ret));
+              LOG_ERROR("inconsistent datatypes", K(ret));
             }
           }
         } else {
@@ -1913,7 +1913,7 @@ int ObDMLResolver::resolve_into_variables(const ParseNode *node,
             if (OB_SUCC(ret) && !is_compatible) {
               if (into_pl_type.is_udt_type()) {
                 ret = OB_ERR_INVALID_TYPE_FOR_OP;
-                LOG_WARN("inconsistent datatypes", K(ret), K(into_pl_type));
+                LOG_ERROR("inconsistent datatypes", K(ret), K(into_pl_type));
               } else {
                 ret = OB_ERR_LOCAL_COLL_IN_SQL;
                 LOG_WARN("local collection types not allowed in SQL statements",

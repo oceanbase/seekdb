@@ -62,7 +62,7 @@ int ObDbmsStatsExecutor::gather_table_stats(ObExecContext &ctx,
   } else if (!param.is_temp_table_ && !param.is_async_gather_ &&
              OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(
                  ctx, backup_trans, param, ObTimeUtility::current_time(), true))) {
-    LOG_WARN("failed to backup opt stats", K(ret));
+    LOG_ERROR("failed to backup opt stats", K(ret));
   } else if (OB_FAIL(
                  prepare_gather_stats(ctx, param, partition_id_block_map, partition_id_skip_rate_map, gather_helper))) {
     LOG_WARN("failed to prepare gather stats", K(ret));
@@ -959,7 +959,7 @@ int ObDbmsStatsExecutor::set_table_stats(ObExecContext &ctx,
       ////before update, we need record history stats.
     } else if (!param.table_param_.is_temp_table_ &&
                OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(ctx, trans, param.table_param_, ObTimeUtility::current_time()))) {
-      LOG_WARN("failed to backup opt stats", K(ret));
+      LOG_ERROR("failed to backup opt stats", K(ret));
     } else if (OB_FAIL(mgr.update_table_stat(trans.get_connection(),
                                              &table_stat,
                                              param.table_param_.is_index_stat_))) {
@@ -1214,7 +1214,7 @@ int ObDbmsStatsExecutor::delete_table_stats(ObExecContext &ctx,
       LOG_WARN("fail to start transaction", K(ret));
     } else if (!param.is_temp_table_ &&
                OB_FAIL(ObDbmsStatsHistoryManager::backup_opt_stats(ctx, trans, param, ObTimeUtility::current_time()))) {
-      LOG_WARN("failed to backup opt stats", K(ret));
+      LOG_ERROR("failed to backup opt stats", K(ret));
     } else if (OB_FAIL(ObOptStatManager::get_instance().delete_table_stat(table_id,
                                                                           part_ids,
                                                                           cascade_columns,
@@ -1587,7 +1587,7 @@ int ObDbmsStatsExecutor::update_online_stat(ObExecContext &ctx,
                                                                      old_trx_lock_timeout,
                                                                      need_reset_trx_lock_timeout))) {
           ret = COVER_SUCC(tmp_ret);
-          LOG_WARN("failed to restore session", K(tmp_ret));
+          LOG_ERROR("failed to restore session", K(tmp_ret));
         }
       }
       //update stat cache

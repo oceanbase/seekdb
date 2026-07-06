@@ -95,7 +95,7 @@ void ObBasicScheduleTabletFunc::schedule_freeze_dag(const bool force)
   } else {
     freeze_param_.loop_cnt_ = get_loop_cnt();
     if (OB_TMP_FAIL(ObScheduleDagFunc::schedule_batch_freeze_dag(freeze_param_))) {
-      LOG_WARN_RET(tmp_ret, "failed to schedule batch force freeze tablets dag", K(freeze_param_));
+      LOG_ERROR_RET(tmp_ret, "failed to schedule batch force freeze tablets dag", K(freeze_param_));
       // most tablets will clear failed since the capacity of ObTenantTabletStatMgr is limited
     } else {
       LOG_INFO("success to schedule batch freeze dag", KR(tmp_ret), K_(freeze_param));
@@ -144,7 +144,7 @@ int ObBasicScheduleTabletFunc::check_with_schedule_scn(
                 weak_read_ts_ready &&
                 tablet.get_snapshot_version() >= schedule_scn);
     if (!can_merge && OB_FAIL(check_need_force_freeze(tablet, schedule_scn, need_force_freeze))) {
-      LOG_WARN("failed to check need force freeze", KR(ret), K(tablet_id), K(schedule_scn));
+      LOG_ERROR("failed to check need force freeze", KR(ret), K(tablet_id), K(schedule_scn));
     } else if (need_force_freeze) {
       tablet_cnt_.force_freeze_cnt_++;
       int tmp_ret = OB_SUCCESS;

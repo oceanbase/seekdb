@@ -2759,7 +2759,7 @@ int ObDMLService::handle_after_processing_multi_row(ObDMLModifyRowsList *dml_mod
     OB_FAIL(dml_op->last_store_row_.init(dml_op->get_exec_ctx().get_allocator(), dml_op->get_child()->get_spec().output_.count()))) {
     LOG_WARN("failed to init shadow stored row", K(ret));
   } else if (!is_iter_end && OB_FAIL(dml_op->last_store_row_.shadow_copy(dml_op->get_child()->get_spec().output_, dml_op->get_eval_ctx()))) {
-    LOG_WARN("failed to backup the datum ptr of child operator", K(ret));
+    LOG_ERROR("failed to backup the datum ptr of child operator", K(ret));
   } else {
     ObDMLModifyRowsList::iterator row_iter = dml_modify_rows->begin();
     for (; OB_SUCC(ret) && row_iter != dml_modify_rows->end(); row_iter++) {

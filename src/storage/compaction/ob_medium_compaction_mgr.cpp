@@ -242,7 +242,7 @@ int ObTabletMediumCompactionInfoRecorder::inner_replay_clog(
         ret = OB_SUCCESS;
         LOG_INFO("skip reply medium info", KR(ret), K(replay_medium_info));
       } else {
-        LOG_WARN("failed to replay medium info", K(ret), K(replay_medium_info));
+        LOG_ERROR("failed to replay medium info", K(ret), K(replay_medium_info));
       }
     } else {
       FLOG_INFO("success to save medium info", K(ret), K_(tablet_id), K_(ls_id), K(scn), K(replay_medium_info), K(max_saved_version_));
@@ -399,7 +399,7 @@ int ObTabletMediumCompactionInfoRecorder::submit_log(
       *mds_ctx_))) {
     LOG_WARN("failed to save medium info on mds table", K(ret), K_(tablet_id), KPC(medium_info_));
   } else if (OB_FAIL(write_clog(clog_buf, clog_len))) {
-    LOG_WARN("fail to submit log", K(ret), K_(tablet_id), K(medium_info_));
+    LOG_ERROR("fail to submit log", K(ret), K_(tablet_id), K(medium_info_));
     int tmp_ret = OB_SUCCESS;
     if (OB_TMP_FAIL(submit_trans_on_mds_table(false))) {
       LOG_ERROR("failed to dec ref on memtable", K(tmp_ret), K_(ls_id), K_(tablet_id));

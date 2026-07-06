@@ -345,7 +345,7 @@ int ObTabletCreateMdsHelper::create_tablets(
     const ObCreateTabletInfo &info = arg.tablets_.at(i);
     if (is_pure_data_tablets(info)) {
       if (CLICK_FAIL(build_pure_data_tablet(arg, info, for_replay, scn, ctx, tablet_id_array))) {
-        LOG_WARN("failed to build pure data tablet", K(ret), K(info));
+        LOG_ERROR("failed to build pure data tablet", K(ret), K(info));
       }
     } else if (is_mixed_tablets(info)) {
       if (CLICK_FAIL(build_mixed_tablets(arg, info, for_replay, scn, ctx, tablet_id_array))) {
@@ -714,7 +714,7 @@ int ObTabletCreateMdsHelper::build_pure_data_tablet(
       need_create_empty_major_sstable, clog_checkpoint_scn, mds_checkpoint_scn, arg.create_type_,
       micro_index_clustered, has_cs_replica, split_src_tablet_id, data_format_version, tablet_handle,
       fork_tablet_info))) {
-    LOG_WARN("failed to do create tablet", K(ret), K(ls_id), K(data_tablet_id), "arg", PRETTY_ARG(arg));
+    LOG_ERROR("failed to do create tablet", K(ret), K(ls_id), K(data_tablet_id), "arg", PRETTY_ARG(arg));
   }
 
   if (OB_FAIL(ret)) {
@@ -812,7 +812,7 @@ int ObTabletCreateMdsHelper::build_mixed_tablets(
         need_create_empty_major_sstable, clog_checkpoint_scn, mds_checkpoint_scn, arg.create_type_,
         micro_index_clustered, has_cs_replica, split_src_tablet_id, data_format_version, tablet_handle,
         fork_tablet_info))) {
-      LOG_WARN("failed to do create tablet", K(ret), K(ls_id), K(tablet_id), K(data_tablet_id), "arg", PRETTY_ARG(arg));
+      LOG_ERROR("failed to do create tablet", K(ret), K(ls_id), K(tablet_id), K(data_tablet_id), "arg", PRETTY_ARG(arg));
     }
 
     if (OB_FAIL(ret)) {
@@ -918,7 +918,7 @@ int ObTabletCreateMdsHelper::build_pure_aux_tablets(
         need_create_empty_major_sstable, clog_checkpoint_scn, mds_checkpoint_scn, arg.create_type_,
         micro_index_clustered, has_cs_replica, split_src_tablet_id, data_format_version, tablet_handle,
         fork_tablet_info))) {
-      LOG_WARN("failed to do create tablet", K(ret), K(ls_id), K(tablet_id), K(data_tablet_id), "arg", PRETTY_ARG(arg));
+      LOG_ERROR("failed to do create tablet", K(ret), K(ls_id), K(tablet_id), K(data_tablet_id), "arg", PRETTY_ARG(arg));
     }
 
     if (OB_FAIL(ret)) {
@@ -1032,7 +1032,7 @@ int ObTabletCreateMdsHelper::build_bind_hidden_tablets(
         need_create_empty_major_sstable, clog_checkpoint_scn, mds_checkpoint_scn, arg.create_type_,
         micro_index_clustered, has_cs_replica, split_src_tablet_id, data_format_version, tablet_handle,
         fork_tablet_info))) {
-      LOG_WARN("failed to do create tablet", K(ret), K(ls_id), K(tablet_id), K(orig_tablet_id), "arg", PRETTY_ARG(arg));
+      LOG_ERROR("failed to do create tablet", K(ret), K(ls_id), K(tablet_id), K(orig_tablet_id), "arg", PRETTY_ARG(arg));
     }
 
     if (OB_FAIL(ret)) {
@@ -1068,7 +1068,7 @@ int ObTabletCreateMdsHelper::rollback_remove_tablets(
       MDS_TG(10_ms);
       const common::ObTabletID &tablet_id = tablet_id_array.at(i);
       if (CLICK_FAIL(ls->get_tablet_svr()->rollback_remove_tablet(ls_id, tablet_id, transfer_start_scn))) {
-        LOG_WARN("failed to rollback remove tablet", K(ret), K(ls_id), K(tablet_id));
+        LOG_ERROR("failed to rollback remove tablet", K(ret), K(ls_id), K(tablet_id));
       }
     }
   }
@@ -1121,9 +1121,9 @@ int ObTabletCreateMdsHelper::set_tablet_status(
     const share::ObLSID &ls_id = tablet->get_tablet_meta().ls_id_;
     const common::ObTabletID &tablet_id = tablet->get_tablet_meta().tablet_id_;
     if (CLICK_FAIL(replay_executor.init(ctx, scn, for_old_mds, data))) {
-      LOG_WARN("failed to init replay executor", K(ret));
+      LOG_ERROR("failed to init replay executor", K(ret));
     } else if (CLICK_FAIL(replay_executor.execute(scn, ls_id, tablet_id))) {
-      LOG_WARN("failed to replay mds data", K(ret));
+      LOG_ERROR("failed to replay mds data", K(ret));
     }
   } else if (CLICK_FAIL(ls_tablet_service->set_tablet_status(tablet->get_tablet_meta().tablet_id_, data, user_ctx))) {
     LOG_WARN("failed to set mds data", K(ret));

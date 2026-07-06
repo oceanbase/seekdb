@@ -413,7 +413,7 @@ void ObPLContext::register_after_begin_autonomous_session_for_deadlock_(ObSQLSes
       }
     }
   } else {
-    DETECT_LOG_RET(WARN, OB_ERR_UNEXPECTED, "not register to deadlock", K(last_trans_id), K(now_trans_id));
+    DETECT_LOG_RET(ERROR, OB_ERR_UNEXPECTED, "not register to deadlock", K(last_trans_id), K(now_trans_id));
   }
 }
 
@@ -803,11 +803,11 @@ int ObPLContext::end_autonomous(ObExecContext &ctx, sql::ObSQLSessionInfo &sessi
       session_info.is_in_transaction() ? implicit_end_trans(session_info, ctx, true) : OB_SUCCESS;
   int switch_trans_ret = session_info.end_autonomous_session(saved_session_);
   if (OB_SUCCESS != end_trans_ret) {
-    LOG_WARN("failed to rollback trans", K(end_trans_ret));
+    LOG_ERROR("failed to rollback trans", K(end_trans_ret));
     ret = end_trans_ret;
   }
   if (OB_SUCCESS != switch_trans_ret) {
-    LOG_WARN("failed to switch trans", K(switch_trans_ret));
+    LOG_ERROR("failed to switch trans", K(switch_trans_ret));
     ret = switch_trans_ret;
   }
   session_info.set_has_pl_implicit_savepoint(saved_has_implicit_savepoint_);

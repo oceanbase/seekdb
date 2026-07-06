@@ -187,7 +187,7 @@ int ObRootMinorFreeze::init_params_by_ls_or_tablet(share::ObLSID ls_id,
     // get ls id by tablet_id
     if (tablet_id.is_ls_inner_tablet()) {
       ret = OB_NOT_SUPPORTED;
-      LOG_WARN("can not minor freeze inner tablet without specifying ls id", K(ls_id), K(tablet_id));
+      LOG_ERROR("can not minor freeze inner tablet without specifying ls id", K(ls_id), K(tablet_id));
     } else if (OB_FAIL(GCTX.location_service_->get(tablet_id, expire_renew_time, is_cache_hit, ls_id))) {
       LOG_WARN("fail to get ls id according to tablet_id", K(ret), K(tablet_id));
     }

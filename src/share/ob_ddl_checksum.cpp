@@ -186,7 +186,7 @@ int ObDDLChecksumOperator::get_column_checksum(const ObSqlString &sql,
         if (OB_FAIL(result->next())) {
           if (OB_ITER_END == ret) {
             if (0 != column_id && OB_FAIL(column_checksum_map.set_refactored(column_id, column_checksum))) {
-              LOG_WARN("fail to set column checksum to map", K(ret));
+              LOG_ERROR("fail to set column checksum to map", K(ret));
             }
             break;
           } else {
@@ -253,7 +253,7 @@ int ObDDLChecksumOperator::get_part_column_checksum(const uint64_t table_id,
           if (OB_FAIL(result->next())) {
             if (OB_ITER_END == ret) {
               if (0 != column_id && OB_FAIL(column_checksum_map.set_refactored(column_id, column_checksum, true))) {
-                LOG_WARN("fail to set column checksum to map", K(ret));
+                LOG_ERROR("fail to set column checksum to map", K(ret));
               }
               break;
             } else {
@@ -597,7 +597,7 @@ int ObDDLChecksumOperator::check_column_checksum(
       } else if (data_table_column_checksum != iter->second) {
         ret = OB_CHECKSUM_ERROR;
         // In most cases, this checksum error is caused by unique constraint violation in user data, so we do not print error here.
-        LOG_WARN("column checksum is not equal", K(ret), K(data_table_id), K(index_table_id),
+        LOG_ERROR("column checksum is not equal", K(ret), K(data_table_id), K(index_table_id),
             "column_id", iter->first, K(data_table_column_checksum),
             "index_table_column_checksum", iter->second);
       }
@@ -651,7 +651,7 @@ int ObDDLChecksumOperator::check_column_checksum_without_execution_id(const uint
       } else if (data_table_column_checksum != iter->second) {
         ret = OB_CHECKSUM_ERROR;
         // In most cases, this checksum error is caused by unique constraint violation in user data, so we do not print error here.
-        LOG_WARN("column checksum is not equal", K(ret), K(data_table_id), K(index_table_id),
+        LOG_ERROR("column checksum is not equal", K(ret), K(data_table_id), K(index_table_id),
             "column_id", iter->first, K(data_table_column_checksum),
             "index_table_column_checksum", iter->second);
       }

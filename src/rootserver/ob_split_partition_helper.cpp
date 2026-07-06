@@ -352,7 +352,7 @@ int ObSplitPartitionHelper::prepare_start_args_(const ObIArray<ObTableSchema *> 
     for (int64_t i = 0; OB_SUCC(ret) && i < ls_ids.count(); i++) {
       if (OB_UNLIKELY(ls_id != ls_ids.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("src tablet ls mismatched", KR(ret), K(ls_id), K(ls_ids));
+        LOG_ERROR("src tablet ls mismatched", KR(ret), K(ls_id), K(ls_ids));
       }
     }
   }
@@ -952,7 +952,7 @@ int ObSplitPartitionHelper::clean_split_src_and_dst_tablet(
     for (int64_t i = 0; OB_SUCC(ret) && i < ls_ids.count(); i++) {
       if (OB_UNLIKELY(ls_id != ls_ids.at(i))) {
         ret = OB_ERR_UNEXPECTED;
-        LOG_WARN("src tablet ls mismatched", KR(ret), K(ls_id), K(ls_ids));
+        LOG_ERROR("src tablet ls mismatched", KR(ret), K(ls_id), K(ls_ids));
       }
     }
   }

@@ -1917,7 +1917,7 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
               LOG_WARN("Failed to check check_sync_ddl_user", K(ret));
             } else if (is_sync_ddl_user) {
               ret = OB_IGNORE_SQL_IN_RESTORE;
-              LOG_WARN("Cannot support for sync ddl user to alter primary zone", K(ret), K(session_info_->get_user_name()));
+              LOG_ERROR("Cannot support for sync ddl user to alter primary zone", K(ret), K(session_info_->get_user_name()));
             } else if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::PRIMARY_ZONE))) {
               SQL_RESV_LOG(WARN, "failed to add member to bitset!", K(ret));
             }
@@ -2240,7 +2240,7 @@ int ObDDLResolver::resolve_table_option(const ParseNode *option_node, const bool
             LOG_WARN("Failed to check sync_dll_user", K(ret));
           } else if (is_sync_ddl_user) {
             ret = OB_IGNORE_SQL_IN_RESTORE;
-            LOG_WARN("Cannot support for sync ddl user to alter locality",
+            LOG_ERROR("Cannot support for sync ddl user to alter locality",
                      K(ret), K(session_info_->get_user_name()));
           } else if (OB_FAIL(alter_table_bitset_.add_member(ObAlterTableArg::LOCALITY))) {
             SQL_RESV_LOG(WARN, "fail to add member to bitset!", K(ret));
@@ -5746,7 +5746,7 @@ int ObDDLResolver::resolve_range_partition_elements(ParseNode *node,
           LOG_WARN("expr_list_node->type_ is not T_EXPR_LIST", K(ret));
         } else if (expr_num != expr_list_node->num_child_) {
           ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-          LOG_WARN("Inconsistency in usage of column lists for partitioning near", K(ret), K(expr_num), "num_child", expr_list_node->num_child_);
+          LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret), K(expr_num), "num_child", expr_list_node->num_child_);
         } else {
           if (OB_NOT_NULL(element_node->children_[PART_ID_NODE])) {
             // PART_ID is deprecated in 4.0, we just ignore and show warnings here.
@@ -6323,7 +6323,7 @@ int ObDDLResolver::resolve_list_partition_elements(ParseNode *node,
               } else if ((is_all_expr_list && expr_list_node->children_[j]->type_ != T_EXPR_LIST) ||
                          (!is_all_expr_list && expr_list_node->children_[j]->type_ == T_EXPR_LIST)) {
                 ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-                LOG_WARN("Inconsistency in usage of column lists for partitioning near", K(ret));
+                LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret));
               } else if (OB_FAIL(ObResolverUtils::resolve_partition_list_value_expr(params_,
                                                                                     *(expr_list_node->children_[j]),
                                                                                     partition_name,
@@ -6372,7 +6372,7 @@ int ObDDLResolver::resolve_list_partition_elements(ParseNode *node,
               if (expr_num > 1 && !is_all_expr_list) {
                 if (row_expr->get_param_count() != expr_num) {
                   ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-                  LOG_WARN("Inconsistency in usage of column lists for partitioning near", K(ret), K(expr_num));
+                  LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret), K(expr_num));
                 }
               }
             }
@@ -7304,7 +7304,7 @@ int ObDDLResolver::resolve_split_partition_list_value(const ParseNode *node,
       } else if ((is_all_expr_list && node->children_[j]->type_ != T_EXPR_LIST) ||
                  (!is_all_expr_list && node->children_[j]->type_ == T_EXPR_LIST)) {
         ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-        LOG_WARN("Inconsistency in usage of column lists for partitioning near", K(ret));
+        LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret));
       } else if (!in_tablegroup && OB_FAIL(ObResolverUtils::resolve_partition_list_value_expr(params_,
                                                                                               *(node->children_[j]),
                                                                                               part_name,
@@ -7336,7 +7336,7 @@ int ObDDLResolver::resolve_split_partition_list_value(const ParseNode *node,
     } else if (part_func_exprs.count() > 1 && !is_all_expr_list) {
       if (row_expr->get_param_count() != part_func_exprs.count()) {
         ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-        LOG_WARN("Inconsistency in usage of column lists for partitioning near", K(ret));
+        LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret));
       }
     }
 
@@ -9867,7 +9867,7 @@ int ObDDLResolver::resolve_range_partition_elements(ObPartitionedStmt *stmt,
         LOG_WARN("get unexpected node", K(expr_list_node));
       } else if (part_func_exprs.count() != expr_list_node->num_child_) {
         ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-        LOG_WARN("Inconsistency in usage of column lists for partitioning near", K(ret));
+        LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret));
       } else if (OB_FAIL(resolve_partition_name(element_node->children_[PARTITION_NAME_NODE],
                                                 partition_name, partition))) {
         LOG_WARN("failed to resolve partition name", K(ret));
@@ -9946,7 +9946,7 @@ int ObDDLResolver::resolve_range_subpartition_elements(ObPartitionedStmt *stmt,
         LOG_WARN("get unexpected node", K(ret), K(element_node), K(expr_list_node));
       } else if (part_func_exprs.count() != expr_list_node->num_child_) {
         ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-        LOG_WARN("Inconsistency in usage of column lists for partitioning near", K(ret));
+        LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret));
       } else if (OB_FAIL(resolve_partition_name(element_node->children_[PARTITION_NAME_NODE],
                                                 partition_name, subpartition))) {
         LOG_WARN("failed to resolve partition name", K(ret));
@@ -10248,7 +10248,7 @@ int ObDDLResolver::resolve_list_partition_value_node(ParseNode &expr_list_node,
         if ((is_all_expr_list && expr_list_node.children_[i]->type_ != T_EXPR_LIST) ||
             (!is_all_expr_list && expr_list_node.children_[i]->type_ == T_EXPR_LIST)) {
           ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-          LOG_WARN("Inconsistency in usage of column lists for partitioning near", K(ret));
+          LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret));
         } else if (OB_ISNULL(expr_list_node.children_[i])) {
           ret = OB_ERR_UNEXPECTED;
           LOG_WARN("node is null", K(ret));
@@ -10277,7 +10277,7 @@ int ObDDLResolver::resolve_list_partition_value_node(ParseNode &expr_list_node,
       if (part_func_exprs.count() > 1 && !is_all_expr_list) {
         if (row_expr->get_param_count() != part_func_exprs.count()) {
           ret = OB_ERR_PARTITION_COLUMN_LIST_ERROR;
-          LOG_WARN("Inconsistency in usage of column lists for partitioning near", K(ret));
+          LOG_ERROR("Inconsistency in usage of column lists for partitioning near", K(ret));
         }
       }
     }

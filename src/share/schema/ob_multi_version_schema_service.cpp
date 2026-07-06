@@ -1981,7 +1981,7 @@ int ObMultiVersionSchemaService::async_refresh_schema(const int64_t schema_versi
             if (OB_EAGAIN == ret || OB_SIZE_OVERFLOW == ret) {
               ret = OB_SUCCESS;
             } else {
-              LOG_WARN("fail to submit async refresh schema task",
+              LOG_ERROR("fail to submit async refresh schema task",
                        KR(ret), K(schema_version));
             }
           }

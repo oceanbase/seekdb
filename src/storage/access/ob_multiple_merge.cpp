@@ -1149,7 +1149,7 @@ void ObMultipleMerge::report_tablet_stat()
     if (!tablet_stat.is_valid()) {
       // do nothing
     } else if (OB_TMP_FAIL(share::g_mp->tenant_tablet_stat_mgr()->report_stat(tablet_stat, report_succ))) {
-      STORAGE_LOG_RET(WARN, tmp_ret, "failed to report tablet stat", K(tmp_ret), K(tablet_stat));
+      STORAGE_LOG_RET(ERROR, tmp_ret, "failed to report tablet stat", K(tmp_ret), K(tablet_stat));
     }
   }
 }

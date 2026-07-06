@@ -203,7 +203,7 @@ int ObLSTabletService::replay(
       LOG_INFO("replace timeout errno", KR(ret), K(replayer_executor));
       ret = OB_EAGAIN;
     } else {
-      LOG_WARN("failed to replay", K(ret), K(replayer_executor));
+      LOG_ERROR("failed to replay", K(ret), K(replayer_executor));
     }
   }
 
@@ -1612,7 +1612,7 @@ int ObLSTabletService::update_tablet_restore_status(
       LOG_WARN("failed to check can change status", K(ret), K(current_status), K(restore_status), KPC(tablet));
     } else if (!can_change) {
       ret = OB_ERR_UNEXPECTED;
-      LOG_WARN("can not change restore status", K(ret), K(current_status), K(restore_status), KPC(tablet));
+      LOG_ERROR("can not change restore status", K(ret), K(current_status), K(restore_status), KPC(tablet));
     } else if (OB_FAIL(tablet->tablet_meta_.ha_status_.set_restore_status(restore_status))) {
       LOG_WARN("failed to set restore status", K(ret), K(restore_status), KPC(tablet));
     } else if (need_to_set_split_data_complete
@@ -1641,7 +1641,7 @@ int ObLSTabletService::update_tablet_restore_status(
       if (OB_FAIL(ret)) {
         int tmp_ret = OB_SUCCESS;
         if (OB_SUCCESS != (tmp_ret = tablet->tablet_meta_.ha_status_.set_restore_status(current_status))) {
-          LOG_WARN("failed to set restore status", K(tmp_ret), K(current_status), KPC(tablet));
+          LOG_ERROR("failed to set restore status", K(tmp_ret), K(current_status), KPC(tablet));
           ob_abort();
         }
         tablet->tablet_meta_.split_info_.set_data_incomplete(current_split_data_incomplete_status);
@@ -3797,7 +3797,7 @@ int ObLSTabletService::trim_rebuild_tablet(
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), K(tablet_id));
   } else if (is_rollback && OB_FAIL(rollback_rebuild_tablet(tablet_id))) {
-    LOG_WARN("failed to rollback tablet rebuilt", K(ret), K(is_rollback), K(tablet_id));
+    LOG_ERROR("failed to rollback tablet rebuilt", K(ret), K(is_rollback), K(tablet_id));
   } else if (!is_rollback && OB_FAIL(trim_old_tablets(tablet_id))) {
     LOG_WARN("failed to trim old tablets", K(ret), K(is_rollback), K(tablet_id));
   }
@@ -3839,10 +3839,10 @@ int ObLSTabletService::create_or_update_migration_tablet(
       LOG_WARN("failed to check tablet existence", K(ls_id), K(tablet_id));
     } else if (b_exist
         && OB_FAIL(migrate_update_tablet(mig_tablet_param))) {
-      LOG_WARN("failed to update tablet meta", K(ret), K(tablet_id), K(mig_tablet_param));
+      LOG_ERROR("failed to update tablet meta", K(ret), K(tablet_id), K(mig_tablet_param));
     } else if (!b_exist
         && OB_FAIL(migrate_create_tablet(mig_tablet_param, tablet_handle))) {
-      LOG_WARN("failed to migrate create tablet", K(ret), K(mig_tablet_param));
+      LOG_ERROR("failed to migrate create tablet", K(ret), K(mig_tablet_param));
     }
   }
 
@@ -3886,10 +3886,10 @@ int ObLSTabletService::rebuild_create_tablet(
       LOG_WARN("fail to check tablet existence", K(ls_id), K(tablet_id));
     } else if (!b_exist &&
         OB_FAIL(migrate_create_tablet(mig_tablet_param, new_tablet_handle))) {
-      LOG_WARN("failed to rebuild create tablet", K(ret), K(tablet_id), K(mig_tablet_param));
+      LOG_ERROR("failed to rebuild create tablet", K(ret), K(tablet_id), K(mig_tablet_param));
     } else if (b_exist && !keep_old &&
         OB_FAIL(migrate_update_tablet(mig_tablet_param))) {
-      LOG_WARN("failed to rebuild create tablet", K(ret), K(tablet_id), K(mig_tablet_param));
+      LOG_ERROR("failed to rebuild create tablet", K(ret), K(tablet_id), K(mig_tablet_param));
     } else if (b_exist && keep_old) {
       if (OB_FAIL(ObTabletCreateDeleteHelper::check_and_get_tablet(key, old_tablet_handle,
           ObTabletCommon::DEFAULT_GET_TABLET_DURATION_US,
@@ -4072,7 +4072,7 @@ int ObLSTabletService::safe_create_cas_tablet(
     LOG_WARN("fail to write update tablet slog", K(ret), K(ls_id), K(tablet_id), K(addr));
   } else if (FALSE_IT(time_guard.click("WrSlog"))) {
   } else if (OB_FAIL(refresh_tablet_addr(ls_id, tablet_id, param, tablet_handle))) {
-    LOG_WARN("failed to refresh tablet addr", K(ret), K(ls_id), K(tablet_id), K(param), K(lbt()));
+    LOG_ERROR("failed to refresh tablet addr", K(ret), K(ls_id), K(tablet_id), K(param), K(lbt()));
     ob_usleep(1_s);
     ob_abort();
   } else {
@@ -4102,7 +4102,7 @@ int ObLSTabletService::safe_create_cas_empty_shell(
   } else if (FALSE_IT(param.tablet_addr_ = addr)) {
   } else if (FALSE_IT(time_guard.click("WrSlog"))) {
   } else if (OB_FAIL(refresh_tablet_addr(ls_id, tablet_id, param, tablet_handle))) {
-    LOG_WARN("failed to refresh tablet addr", K(ret), K(ls_id), K(tablet_id), K(param), K(lbt()));
+    LOG_ERROR("failed to refresh tablet addr", K(ret), K(ls_id), K(tablet_id), K(param), K(lbt()));
     ob_usleep(1_s);
     ob_abort();
   } else {
@@ -4402,7 +4402,7 @@ int ObLSTabletService::insert_tablet_rows(
         }
 #endif
       } else if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-        LOG_WARN("Failed to insert rows to tablet", K(ret), K(rows_info));
+        LOG_ERROR("Failed to insert rows to tablet", K(ret), K(rows_info));
       }
     }
   }
@@ -4483,7 +4483,7 @@ int ObLSTabletService::put_tablet_rows(
                                  *run_ctx.col_descs_,
                                  rows_info))) {
       if (OB_TRY_LOCK_ROW_CONFLICT != ret) {
-        LOG_WARN("Failed to insert rows to tablet", K(ret), K(rows_info));
+        LOG_ERROR("Failed to insert rows to tablet", K(ret), K(rows_info));
       }
     }
   }
@@ -7796,7 +7796,7 @@ int ObLSTabletService::insert_rows_wrap(
             } else if (OB_FAIL(dml_split_ctx.dst_tablet_handle_.get_obj()->insert_rows(
                   dml_split_ctx.dst_relative_table_, store_ctx, check_exist, col_descs,
                   tmp_rows_info))) {
-              LOG_WARN("fail to insert splitted tablet", K(ret), K(i), K(dst_row_count), K(tmp_rows_info.need_find_all_duplicate_key()));
+              LOG_ERROR("fail to insert splitted tablet", K(ret), K(i), K(dst_row_count), K(tmp_rows_info.need_find_all_duplicate_key()));
               if (OB_ERR_PRIMARY_KEY_DUPLICATE != ret) {
                 // do nothing
               } else if (tmp_rows_info.need_find_all_duplicate_key()) {

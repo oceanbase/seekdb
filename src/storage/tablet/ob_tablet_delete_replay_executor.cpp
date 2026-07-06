@@ -70,7 +70,7 @@ int ObTabletDeleteReplayExecutor::do_replay_(ObTabletHandle &tablet_handle)
     data.tablet_status_ = ObTabletStatus::DELETED;
     data.data_type_ = ObTabletMdsUserDataType::REMOVE_TABLET;
     if (CLICK_FAIL(replay_to_mds_table_(tablet_handle, data, user_ctx, scn_, for_old_mds_))) {
-      LOG_WARN("failed to replay to tablet", K(ret));
+      LOG_ERROR("failed to replay to tablet", K(ret));
     }
   }
 

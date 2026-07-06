@@ -366,7 +366,7 @@ int ObMPStmtPrexecute::before_process()
     send_error_packet(ret, NULL);
     if (OB_ERR_PREPARE_STMT_CHECKSUM == ret) {
       force_disconnect();
-      LOG_WARN("prepare stmt checksum error, disconnect connection", K(ret));
+      LOG_ERROR("prepare stmt checksum error, disconnect connection", K(ret));
     }
     OZ (flush_buffer(true));
   }

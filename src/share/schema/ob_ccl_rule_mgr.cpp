@@ -223,7 +223,7 @@ int ObCCLRuleMgr::del_ccl_rule_from_ccl_rule_infos(const ObTenantCCLRuleId &id,
       // if item does not exist, regard it as succeeded, schema will be refreshed later
       ret = OB_SUCCESS;
     } else {
-      LOG_WARN("failed to remove ccl_rule schema", K(ret));
+      LOG_ERROR("failed to remove ccl_rule schema", K(ret));
     }
   } else if (OB_ISNULL(schema)) {
     // if item can be found, schema should not be null

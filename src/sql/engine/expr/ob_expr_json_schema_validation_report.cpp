@@ -167,11 +167,11 @@ int ObExprJsonSchemaValidationReport::raise_validation_report(ObIAllocator &allo
   ObJsonBoolean* schema_result = nullptr;
   if (OB_ISNULL(report_obj = OB_NEWx(ObJsonObject, &allocator, &allocator))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to init schema report.", K(ret));
+    LOG_ERROR("fail to init schema report.", K(ret));
   } else if (OB_FALSE_IT(validation_report = report_obj)) { 
   } else if (OB_ISNULL(schema_result = OB_NEWx(ObJsonBoolean, &allocator, is_valid))) {
     ret = OB_ALLOCATE_MEMORY_FAILED;
-    LOG_WARN("fail to init schema report result.", K(ret));
+    LOG_ERROR("fail to init schema report result.", K(ret));
   } else if (OB_FAIL(report_obj->add(ObJsonSchemaReportItem::RESULT, schema_result, false, true, false))) {
     LOG_WARN("fail to add schema result.", K(ret));
   } else if (!is_valid) { // if not valid, need to describe the reason in detail

@@ -49,7 +49,7 @@ int ObFileCommonHeader::check_header_checksum() const
   int16_t checksum = calc_header_checksum();
   if (OB_UNLIKELY(0 != checksum)) {
     ret = OB_CHECKSUM_ERROR;
-    COMMON_LOG(WARN, "check header checksum failed", K(ret), K(checksum), KPC(this));
+    COMMON_LOG(ERROR, "check header checksum failed", K(ret), K(checksum), KPC(this));
   }
 
   return ret;
@@ -82,7 +82,7 @@ int ObFileCommonHeader::check_payload_checksum(const char *buf, const int64_t le
     int64_t payload_checksum = ob_crc64(buf, len);
     if (OB_UNLIKELY(payload_checksum != payload_checksum_)) {
       ret = OB_CHECKSUM_ERROR;
-      COMMON_LOG(WARN, "payload checksum error", K(ret), K(payload_checksum), K_(payload_checksum));
+      COMMON_LOG(ERROR, "payload checksum error", K(ret), K(payload_checksum), K_(payload_checksum));
     }
   }
   return ret;

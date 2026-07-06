@@ -225,7 +225,7 @@ int ObTransformGroupByPushdown::try_push_down_groupby_into_union(
 
   if (OB_SUCC(ret) && !trans_happened && try_trans_helper.is_filled()
       && OB_FAIL(try_trans_helper.recover(stmt->get_query_ctx()))) {
-    LOG_WARN("failed to recover params", K(ret));
+    LOG_ERROR("failed to recover params", K(ret));
   }
   return ret;
 }

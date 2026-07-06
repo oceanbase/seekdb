@@ -251,7 +251,7 @@ int ObMajorMergeProgressChecker::check_table_merge_progress(
           LOG_WARN("failed to get table pairs", K(ret), KPC(simple_schema));
         }
       } else if (table_compaction_info.is_uncompacted() && OB_FAIL(update_table_compaction_info_by_tablet(cur_tablet_ls_pair_array, table_compaction_info))) {
-        LOG_WARN("failed to check table compaction finish", K(ret));
+        LOG_ERROR("failed to check table compaction finish", K(ret));
       } else if (table_compaction_info.is_compacted()) {
         table_compaction_info.set_verified();
       }
@@ -648,7 +648,7 @@ int ObMajorMergeProgressChecker::check_index_and_rest_table()
   } else if (0 == progress_.table_cnt_[INITIAL]
       && fts_group_array_.need_check_fts()
       && OB_FAIL(handle_fts_checksum())) {
-    LOG_WARN("failed to handle fts checksum", KR(ret), "compaction_scn", get_compaction_scn(), K_(progress));
+    LOG_ERROR("failed to handle fts checksum", KR(ret), "compaction_scn", get_compaction_scn(), K_(progress));
   } else if (progress_.is_merge_finished()) {
     LOG_INFO("progress is check finished", KR(ret), K_(progress));
   } else if (progress_.only_remain_special_table_to_verified() || table_ids_.empty()) {
@@ -1009,7 +1009,7 @@ int ObMajorMergeProgressChecker::get_idx_ckm_and_validate(
         *sql_proxy_,
         data_table_ckm,
         index_table_ckm))) {
-        LOG_WARN("failed to validate checksum", KR(ret), "data_table_id", data_table_ckm.get_table_id(),
+        LOG_ERROR("failed to validate checksum", KR(ret), "data_table_id", data_table_ckm.get_table_id(),
           K(index_table_id), K(data_table_ckm), K(index_table_ckm));
         if (OB_ITEM_NOT_MATCH == ret) {
           (void) uncompact_info_.add_skip_verify_table(index_table_id);

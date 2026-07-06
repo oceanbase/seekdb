@@ -341,7 +341,7 @@ int ObTabletMergeDag::get_tablet_and_compat_mode()
     } else if (FALSE_IT(inc_sstable_cnt = tmp_tablet_handle.get_obj()->get_minor_table_count() + (is_exist ? 1 : 0))) {
     } else if (ObPartitionMergePolicy::is_sstable_count_not_safe(inc_sstable_cnt)) {
       ret = OB_TOO_MANY_SSTABLE;
-      LOG_WARN("Too many sstables in tablet, cannot schdule mini compaction, retry later",
+      LOG_ERROR("Too many sstables in tablet, cannot schdule mini compaction, retry later",
             K(ret), K_(ls_id), K_(tablet_id), K(inc_sstable_cnt), K(tmp_tablet_handle.get_obj()));
       ObPartitionMergePolicy::diagnose_table_count_unsafe(MINI_MERGE, ObDiagnoseTabletType::TYPE_MINI_MERGE,
           *tmp_tablet_handle.get_obj());
@@ -350,7 +350,7 @@ int ObTabletMergeDag::get_tablet_and_compat_mode()
 
   int tmp_ret = OB_SUCCESS;
   if (OB_SUCC(ret) && OB_TMP_FAIL(collect_compaction_param(tmp_tablet_handle))) { // it's OK to use old tablet handle
-    LOG_WARN("failed to collect compaction param", K(tmp_ret), K_(param));
+    LOG_ERROR("failed to collect compaction param", K(tmp_ret), K_(param));
   }
   return ret;
 }

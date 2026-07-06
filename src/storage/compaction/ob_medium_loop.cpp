@@ -90,7 +90,7 @@ int ObMediumLoop::loop()
       if (OB_SIZE_OVERFLOW == tmp_ret) {
         break;
       } else if (!schedule_ignore_error(tmp_ret)) {
-        LOG_WARN("failed to schedule ls merge", K(tmp_ret), K(ls_id));
+        LOG_ERROR("failed to schedule ls merge", K(tmp_ret), K(ls_id));
       }
     }
     if (OB_SUCC(ret) && ls_tablet_iter_.need_report_scn()) {
@@ -115,7 +115,7 @@ int ObMediumLoop::loop_in_ls(
   const ObLSID &ls_id = ls_handle.get_ls()->get_ls_id();
   if (OB_FAIL(func.switch_ls(ls_handle))) {
     if (OB_STATE_NOT_MATCH != ret) {
-      LOG_WARN("failed to switch ls", KR(ret), K(ls_id), K(func));
+      LOG_ERROR("failed to switch ls", KR(ret), K(ls_id), K(func));
     } else {
       ls_tablet_iter_.update_merge_finish(false);
       schedule_stats_.all_ls_weak_read_ts_ready_ = false;
@@ -142,7 +142,7 @@ int ObMediumLoop::loop_in_ls(
         // do nothing
       } else if (OB_TMP_FAIL(func.schedule_tablet(tablet_handle, tablet_merge_finish))) {
         if (OB_STATE_NOT_MATCH != tmp_ret) {
-          LOG_WARN("failed to schedule tablet", KR(tmp_ret), K(ls_id), K(tablet_id));
+          LOG_ERROR("failed to schedule tablet", KR(tmp_ret), K(ls_id), K(tablet_id));
         }
         ls_tablet_iter_.update_merge_finish(false);
       } else {
@@ -253,7 +253,7 @@ int ObScheduleNewMediumLoop::loop()
       LOG_WARN("failed to get ls", K(ret), K(ls_id));
     } else if (OB_FAIL(func.switch_ls(ls_handle))) {
       if (OB_STATE_NOT_MATCH != ret) {
-        LOG_WARN("failed to switch ls", KR(ret), K(ls_id), K(ls_id));
+        LOG_ERROR("failed to switch ls", KR(ret), K(ls_id), K(ls_id));
       } else {
         LOG_WARN("not support schedule medium for ls", K(ret), K(ls_id), K(tablet_id), K(func));
       }

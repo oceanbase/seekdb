@@ -108,7 +108,7 @@ int ObDDLTabletScheduler::init(const uint64_t table_id,
   } else if (OB_FAIL(tablet_scheduled_times_statistic_.create(ref_data_table_tablets.count(), ObModIds::OB_SSTABLE_CREATE_INDEX))) {
     LOG_WARN("fail to create tablet scheduled count statistic map", K(ret), K(ref_data_table_tablets.count()));
   } else if (!tablet_id_to_execution_id_map_.created() && OB_FAIL(tablet_id_to_execution_id_map_.create(tablets.count(), ObModIds::OB_SSTABLE_CREATE_INDEX))) {
-    LOG_WARN("fail to create tablet id to execution id map", K(ret), K(tablets.count()));
+    LOG_ERROR("fail to create tablet id to execution id map", K(ret), K(tablets.count()));
   } else if (OB_FAIL(ObDDLChecksumOperator::get_local_index_tablet_finish_status(ref_data_table_id,
     table_id,
     task_id,
@@ -830,7 +830,7 @@ int ObDDLTabletScheduler::check_target_ls_tasks_completion_status(const share::O
     for (int64_t i = 0; i < running_tablet_queue.count() && OB_SUCC(ret); i++) {
       if (OB_FAIL(tablet_finished_map.get_refactored(running_tablet_queue.at(i).id(), is_finished_status))) {
         if (OB_HASH_NOT_EXIST == ret) {
-          LOG_WARN("tablet checksum is not exist", K(ret), K(running_tablet_queue.at(i)), K(is_finished_status));
+          LOG_ERROR("tablet checksum is not exist", K(ret), K(running_tablet_queue.at(i)), K(is_finished_status));
           is_finished_status = false;
           ret = OB_SUCCESS;
           break;

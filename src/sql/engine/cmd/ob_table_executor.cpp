@@ -1853,7 +1853,7 @@ int ObDropTableExecutor::execute(ObExecContext &ctx, ObDropTableStmt &stmt)
             int64_t refresh_time = ObTimeUtility::current_time();
             if (!res.do_nothing_ && OB_FAIL(ObDDLExecutorUtil::try_check_parallel_ddl_schema_in_sync(
                                             ctx, my_session, res.schema_version_, false/*skip_consensus*/))) {
-              LOG_WARN("fail to check paralleld ddl schema in sync", KR(ret), K(res));
+              LOG_ERROR("fail to check paralleld ddl schema in sync", KR(ret), K(res));
             }
             int64_t end_time = ObTimeUtility::current_time();
             LOG_INFO("[parallel_drop_table]", KR(ret),

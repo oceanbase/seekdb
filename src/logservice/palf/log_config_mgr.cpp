@@ -2150,7 +2150,7 @@ int LogConfigMgr::wait_log_barrier_(const LogConfigChangeArgs &args,
     } else if (curr_ts_us - last_wait_barrier_time_us_ > MAX_WAIT_BARRIER_TIME_US_FOR_STABLE_LOG) {
       if (last_wait_committed_end_lsn_ == first_committed_end_lsn) {
         ret = OB_LOG_NOT_SYNC;
-        PALF_LOG(WARN, "waiting for log barrier failed, committed_end_lsn havn't been advanced", KR(ret),
+        PALF_LOG(ERROR, "waiting for log barrier failed, committed_end_lsn havn't been advanced", KR(ret),
             K_(palf_id), K_(self), K_(last_wait_barrier_time_us), K_(last_wait_committed_end_lsn));
         last_wait_barrier_time_us_ = OB_INVALID_TIMESTAMP;
         last_wait_committed_end_lsn_.reset();

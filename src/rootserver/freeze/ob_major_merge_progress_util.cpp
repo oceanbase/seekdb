@@ -213,7 +213,7 @@ int ObTabletLSPairCache::try_refresh(const bool force_refresh/* = false*/)
 {
   int ret = OB_SUCCESS;
   if ((force_refresh || !map_.created()) && OB_FAIL(rebuild_map_by_tablet_cnt())) {
-    LOG_WARN("failed to rebuild map by tablet cnt", KR(ret), K(force_refresh));
+    LOG_ERROR("failed to rebuild map by tablet cnt", KR(ret), K(force_refresh));
   } else if (force_refresh) {
     if (OB_FAIL(refresh())) {
       LOG_WARN("failed to refresh", KR(ret));

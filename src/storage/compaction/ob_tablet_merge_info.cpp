@@ -205,7 +205,7 @@ int ObTabletMergeInfo::create_sstable(
         // error occurred
       } else if (is_reused_small_sst && OB_FAIL(sstable_builder_.build_reused_small_sst_merge_res(sstable->get_macro_read_size(),
                         sstable->get_macro_offset(), res))) {
-        LOG_WARN("fail to close index builder for reused small sstable", K(ret), KPC(sstable));
+        LOG_ERROR("fail to close index builder for reused small sstable", K(ret), KPC(sstable));
       } else if (OB_FAIL(ctx.get_macro_seq_by_stage(GET_NEW_ROOT_MACRO_SEQ, new_root_macro_seq))) {
         LOG_WARN("failed to get macro seq", KR(ret), K(new_root_macro_seq), K(ctx));
       } else if (FALSE_IT(res.root_macro_seq_ = new_root_macro_seq)) {
@@ -215,14 +215,14 @@ int ObTabletMergeInfo::create_sstable(
         if (OB_FAIL(ObTabletCreateDeleteHelper::create_sstable<ObCOSSTableV2>(param, 
                                                                               ctx.mem_ctx_.get_allocator(), 
                                                                               merge_table_handle))) {
-          LOG_WARN("fail to create sstable", K(ret), K(param));
+          LOG_ERROR("fail to create sstable", K(ret), K(param));
           CTX_SET_DIAGNOSE_LOCATION(ctx);
         }
       } else if (NULL == cg_schema) { // not co major merge, only need to create one sstable
         if (OB_FAIL(ObTabletCreateDeleteHelper::create_sstable(param, 
                                                                ctx.mem_ctx_.get_allocator(), 
                                                                merge_table_handle))) {
-          LOG_WARN("fail to create sstable", K(ret), K(param));
+          LOG_ERROR("fail to create sstable", K(ret), K(param));
           CTX_SET_DIAGNOSE_LOCATION(ctx);
         }
       } else if (NULL != cg_schema && 0 == param.data_blocks_cnt()) { // skip to create normal cg sstable that is empty
@@ -236,7 +236,7 @@ int ObTabletMergeInfo::create_sstable(
         if (OB_FAIL(ObTabletCreateDeleteHelper::create_sstable(param, 
                                                                tmp_allocator, 
                                                                tmp_handle))) {
-          LOG_WARN("fail to create sstable", K(ret), K(param));
+          LOG_ERROR("fail to create sstable", K(ret), K(param));
           CTX_SET_DIAGNOSE_LOCATION(ctx);
         } else if (OB_FAIL(tmp_handle.get_sstable(sstable))) {
           STORAGE_LOG(WARN, "Failed to get sstable", K(ret));

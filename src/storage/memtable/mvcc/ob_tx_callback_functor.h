@@ -135,7 +135,7 @@ public:
     int ret = OB_SUCCESS;
     if (checksumer_ && callback->get_scn() >= checksum_scn_
         && OB_FAIL(callback->calc_checksum(checksum_scn_, checksumer_))) {
-      TRANS_LOG(WARN, "calc checksum callback failed", K(ret), K(*callback));
+      TRANS_LOG(ERROR, "calc checksum callback failed", K(ret), K(*callback));
     } else if (OB_FAIL(callback->checkpoint_callback())) {
       TRANS_LOG(ERROR, "row remove callback failed", K(ret), K(*callback));
     } else {
@@ -331,7 +331,7 @@ public:
       if (cond_for_remove(callback, ret)) {
         if (checksumer_ && callback->get_scn() >= checksum_scn_
             && OB_FAIL(callback->calc_checksum(checksum_scn_, checksumer_))) {
-          TRANS_LOG(WARN, "calc checksum callback failed", K(ret), K(*callback));
+          TRANS_LOG(ERROR, "calc checksum callback failed", K(ret), K(*callback));
         } else if (need_remove_data_ && OB_FAIL(callback->rollback_callback())) {
           TRANS_LOG(WARN, "rollback callback failed", K(ret), K(*callback));
         } else if (!need_remove_data_ && OB_FAIL(callback->checkpoint_callback())) {
@@ -616,13 +616,13 @@ public:
     int ret = OB_SUCCESS;
     if (NULL == checksumer_) {
       ret = OB_ERR_UNEXPECTED;
-      TRANS_LOG(WARN, "checksumer is lost", K(ret), K(*callback));
+      TRANS_LOG(ERROR, "checksumer is lost", K(ret), K(*callback));
     } else if (callback->get_scn() > target_scn_) {
       ret = OB_ERR_UNEXPECTED;
       TRANS_LOG(ERROR, "callback is begind the target, should iter end", K(ret), K(*callback));
     } else if (callback->get_scn() >= checksum_scn_
                && OB_FAIL(callback->calc_checksum(checksum_scn_, checksumer_))) {
-      TRANS_LOG(WARN, "calc checksum callback failed", K(ret), K(*callback));
+      TRANS_LOG(ERROR, "calc checksum callback failed", K(ret), K(*callback));
     } else {
       checksum_last_scn_ = callback->get_scn();
     }
